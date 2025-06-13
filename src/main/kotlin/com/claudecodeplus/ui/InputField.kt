@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +23,7 @@ fun InputField(
     value: String,
     onValueChange: (String) -> Unit,
     onSendMessage: () -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -41,13 +42,14 @@ fun InputField(
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
+                enabled = enabled,
                 modifier = Modifier
                     .weight(1f)
                     .focusRequester(focusRequester)
                     .onKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown) {
                             when {
-                                event.key == Key.Enter && !event.isShiftPressed -> {
+                                event.key == Key.Enter && !event.isShiftPressed && enabled -> {
                                     onSendMessage()
                                     true
                                 }
@@ -86,11 +88,11 @@ fun InputField(
             
             IconButton(
                 onClick = onSendMessage,
-                enabled = value.isNotBlank(),
+                enabled = value.isNotBlank() && enabled,
                 modifier = Modifier.align(Alignment.Bottom)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Send,
+                    imageVector = Icons.AutoMirrored.Filled.Send,
                     contentDescription = "发送",
                     tint = if (value.isNotBlank()) 
                         MaterialTheme.colorScheme.primary 

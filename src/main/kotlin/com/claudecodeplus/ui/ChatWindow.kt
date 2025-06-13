@@ -14,7 +14,6 @@ import com.intellij.ui.JBColor
 import javax.swing.JComponent
 
 class ChatWindow(private val project: Project) {
-    
     fun createComponent(): JComponent {
         return ComposePanel().apply {
             setBounds(0, 0, 400, 600)
@@ -75,10 +74,10 @@ class ChatWindow(private val project: Project) {
                             isUser = true,
                             timestamp = System.currentTimeMillis()
                         )
-                        // TODO: 发送消息到 Claude Code
                         inputText = ""
                     }
                 },
+                enabled = true,
                 modifier = Modifier.fillMaxWidth()
             )
         }
