@@ -1,0 +1,46 @@
+<idea-plugin>
+    <id>com.claudecodeplus</id>
+    <name>Claude Code Plus</name>
+    <vendor email="support@claudecodeplus.com" url="https://github.com/your-username/claude-code-plus">Claude Code Plus Team</vendor>
+    
+    <description><![CDATA[
+    Claude Code Plus - An enhanced UI for Claude Code CLI
+    
+    This plugin provides a JetBrains AI-like chat interface for Claude Code, with features including:
+    - Smart file reference with @ completion
+    - Automatic path resolution
+    - Markdown rendering
+    - Code highlighting
+    - Multi-session management
+    ]]></description>
+    
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+    <depends>org.jetbrains.kotlin</depends>
+    
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- 服务声明 -->
+        <applicationService serviceImplementation="com.claudecodeplus.service.ClaudeCodeService"/>
+        
+        <!-- 工具窗口 -->
+        <toolWindow id="ClaudeCodePlus"
+                    anchor="right"
+                    factoryClass="com.claudecodeplus.toolwindow.ClaudeCodeToolWindowFactory"
+                    icon="/icons/claude-code.svg"/>
+        
+        <!-- 文件补全提供器 -->
+        <completion.contributor language="TEXT" 
+                              implementationClass="com.claudecodeplus.completion.FileCompletionContributor"/>
+    </extensions>
+    
+    <actions>
+        <!-- 打开聊天窗口的动作 -->
+        <action id="ClaudeCodePlus.ShowChat"
+                class="com.claudecodeplus.action.ShowChatAction"
+                text="Open Claude Code Chat"
+                description="Open Claude Code chat window">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift C"/>
+        </action>
+    </actions>
+</idea-plugin>
