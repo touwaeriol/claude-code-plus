@@ -30,3 +30,28 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Plugin Development ###
+runIde-console.log
+logs/
+
+### Gradle ###
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+### IntelliJ Platform Plugin ###
+.intellijPlatform/
+
+### IDEA specific ###
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/dictionaries
+.idea/httpRequests
+.idea/jarRepositories.xml
+.idea/libraries
+.idea/modules.xml
+.idea/*.iml
+*.iml
+*.ipr
+*.iws
