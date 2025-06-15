@@ -3,6 +3,8 @@ package com.claudecodeplus.toolwindow
 import com.claudecodeplus.service.ClaudeCodeService
 import com.claudecodeplus.ui.SimpleChatWindow
 import com.claudecodeplus.ui.MarkdownChatWindow
+import com.claudecodeplus.ui.IntelliJMarkdownChatWindow
+import com.intellij.openapi.application.ApplicationInfo
 import com.claudecodeplus.util.ProjectPathDebugger
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
@@ -36,12 +38,35 @@ class ClaudeCodeToolWindowFactory : ToolWindowFactory {
         // 获取服务实例
         val service = project.service<ClaudeCodeService>()
         
-        // 创建聊天窗口 - 使用支持 Markdown 的版本
-        val chatWindow = MarkdownChatWindow(project, service)
-        
-        // 创建内容
-        val contentFactory = ContentFactory.getInstance()
-        val content = contentFactory.createContent(chatWindow.createComponent(), "", false)
+        // 创建聊天窗口 - 选择合适的实现
+        val content = try {
+            // 尝试使用 IntelliJ Markdown 组件（如果可用）
+            val markdownAvailable = try {
+                Class.forName("org.intellij.plugins.markdown.ui.preview.jcef.MarkdownJCEFHtmlPanel")
+                true
+            } catch (e: ClassNotFoundException) {
+                false
+            }
+            
+            if (markdownAvailable) {
+                LOG.info("使用 IntelliJ Markdown 渲染器")
+                val chatWindow = IntelliJMarkdownChatWindow(project, service)
+                val component = chatWindow.createComponent()
+                
+                // 保存引用以便清理
+                toolWindow.setDisposer { chatWindow.dispose() }
+                
+                ContentFactory.getInstance().createContent(component, "", false)
+            } else {
+                LOG.info("使用自定义 Markdown 渲染器")
+                val chatWindow = MarkdownChatWindow(project, service)
+                ContentFactory.getInstance().createContent(chatWindow.createComponent(), "", false)
+            }
+        } catch (e: Exception) {
+            LOG.error("创建 Markdown 聊天窗口失败，使用简单版本", e)
+            val chatWindow = SimpleChatWindow(project, service)
+            ContentFactory.getInstance().createContent(chatWindow.createComponent(), "", false)
+        }
         
         // 添加到工具窗口
         toolWindow.contentManager.addContent(content)
