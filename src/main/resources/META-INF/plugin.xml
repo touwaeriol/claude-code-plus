@@ -15,32 +15,53 @@
     ]]></description>
     
     <depends>com.intellij.modules.platform</depends>
-    <depends>com.intellij.modules.java</depends>
-    <depends>org.jetbrains.kotlin</depends>
+    <depends>com.intellij.modules.lang</depends>
+    
+    <!-- 版本兼容性配置 -->
+    <idea-version since-build="243.0" until-build="252.*"/>
+    
+    <!-- 此插件支持 K2 mode -->
     
     <extensions defaultExtensionNs="com.intellij">
         <!-- 服务声明 -->
         <applicationService serviceImplementation="com.claudecodeplus.service.ClaudeCodeService"/>
+        <applicationService serviceImplementation="com.claudecodeplus.service.ClaudeHttpClient"/>
+        <applicationService serviceImplementation="com.claudecodeplus.service.ClaudeWebSocketClient"/>
+        
+        <!-- 通知组 -->
+        <notificationGroup id="Claude Code Plus" displayType="BALLOON" key="notification.group.claude.code.plus"/>
         
         <!-- 工具窗口 -->
-        <toolWindow id="ClaudeCodePlus"
-                    anchor="right"
+        <toolWindow id="ClaudeCode" 
+                    anchor="right" 
                     factoryClass="com.claudecodeplus.toolwindow.ClaudeCodeToolWindowFactory"
                     icon="/icons/claude-code.svg"/>
+                    
+        <!-- 启动活动 -->
+        <projectActivity implementation="com.claudecodeplus.startup.ProjectStartupLogger"/>
         
-        <!-- 文件补全提供器 -->
-        <completion.contributor language="TEXT" 
-                              implementationClass="com.claudecodeplus.completion.FileCompletionContributor"/>
+        <!-- 完成贡献者 -->
+        <!-- 使用 "any" 以便在所有文件类型中都能使用，或者使用 PlainText -->
+        <completion.contributor 
+            language="any"
+            implementationClass="com.claudecodeplus.completion.FileReferenceCompletionContributor"/>
     </extensions>
     
     <actions>
-        <!-- 打开聊天窗口的动作 -->
-        <action id="ClaudeCodePlus.ShowChat"
-                class="com.claudecodeplus.action.ShowChatAction"
-                text="Open Claude Code Chat"
-                description="Open Claude Code chat window">
+        <!-- 测试动作 -->
+        <action id="com.claudecodeplus.action.TestCompletionAction"
+                class="com.claudecodeplus.action.TestCompletionAction"
+                text="Test Completion Config"
+                description="Test auto-completion configuration">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
-            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift C"/>
+        </action>
+        
+        <!-- 显示日志动作 -->
+        <action id="com.claudecodeplus.action.ShowLogsAction"
+                class="com.claudecodeplus.action.ShowLogsAction"
+                text="Show Claude Code Logs"
+                description="Show Claude Code Plus session logs">
+            <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="com.claudecodeplus.action.TestCompletionAction"/>
         </action>
     </actions>
 </idea-plugin>
