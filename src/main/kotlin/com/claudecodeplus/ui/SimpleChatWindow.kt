@@ -127,7 +127,7 @@ class SimpleChatWindow(
                     
                     // 显示日志文件位置（临时显示给用户）
                     if (currentLogFile != null) {
-                        val logMessage = "日志文件已创建: ${currentLogFile?.name}"
+                        val logMessage = "日志文件: ${currentLogFile?.absolutePath}"
                         SwingUtilities.invokeLater {
                             val doc = messageArea.styledDocument
                             val infoStyle = javax.swing.text.SimpleAttributeSet().apply {
