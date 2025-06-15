@@ -34,6 +34,8 @@ bin/
 ### Plugin Development ###
 runIde-console.log
 logs/
+pty-logs/
+*.log
 
 ### Gradle ###
 .gradle/
@@ -55,3 +57,70 @@ build/
 *.iml
 *.ipr
 *.iws
+
+### Python ###
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+venv.bak/
+virtualenv/
+.venv/
+
+# PyCharm
+.idea/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Environments
+.env
+.env.local
+.env.*.local
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Sphinx documentation
+docs/_build/
+
+### Temporary files ###
+*.tmp
+*.temp
+*~
