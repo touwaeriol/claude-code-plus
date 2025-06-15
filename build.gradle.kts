@@ -55,6 +55,11 @@ dependencies {
     implementation("org.graalvm.polyglot:polyglot:24.1.1")
     implementation("org.graalvm.polyglot:python:24.1.1")
     
+    // Markdown 支持
+    implementation("org.commonmark:commonmark:0.21.0")
+    implementation("org.commonmark:commonmark-ext-gfm-tables:0.21.0")
+    implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.21.0")
+    
     // 测试依赖
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")

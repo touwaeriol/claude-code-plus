@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./find_ide_logs.sh:*)",
+      "Bash(bash find_ide_logs.sh)"
+    ],
+    "deny": []
+  }
+}
