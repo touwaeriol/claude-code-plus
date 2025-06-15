@@ -310,6 +310,42 @@ class SimpleChatWindow(
     }
     
     private fun appendMessage(sender: String, message: String) {
+        // 系统消息只记录到日志，不显示在界面上
+        if (sender == "System") {
+            // 记录到日志
+            currentLogFile?.let { logFile ->
+                ResponseLogger.logRawContent(logFile, sender, message)
+            }
+            return
+        }
+        
+        // 错误消息记录到日志并显示在界面上
+        if (sender == "Error") {
+            // 记录到日志
+            currentLogFile?.let { logFile ->
+                ResponseLogger.logRawContent(logFile, sender, message)
+            }
+            
+            // 显示错误消息
+            SwingUtilities.invokeLater {
+                val doc = messageArea.styledDocument
+                val errorStyle = javax.swing.text.SimpleAttributeSet().apply {
+                    javax.swing.text.StyleConstants.setBold(this, true)
+                    javax.swing.text.StyleConstants.setForeground(this, JBColor.RED)
+                }
+                
+                // 添加错误信息
+                doc.insertString(doc.length, "Error: ", errorStyle)
+                doc.insertString(doc.length, message, null)
+                doc.insertString(doc.length, "\n\n", null)
+                
+                // 滚动到底部
+                messageArea.caretPosition = doc.length
+            }
+            return
+        }
+        
+        // 只显示用户和 Claude 的消息
         SwingUtilities.invokeLater {
             val doc = messageArea.styledDocument
             val senderStyle = javax.swing.text.SimpleAttributeSet().apply {
@@ -318,8 +354,6 @@ class SimpleChatWindow(
                     when(sender) {
                         "You" -> JBColor(java.awt.Color(0, 128, 0), java.awt.Color(0, 192, 0))
                         "Claude" -> JBColor(java.awt.Color(0, 0, 128), java.awt.Color(64, 128, 255))
-                        "System" -> JBColor.GRAY
-                        "Error" -> JBColor.RED
                         else -> JBColor.BLACK
                     }
                 )
