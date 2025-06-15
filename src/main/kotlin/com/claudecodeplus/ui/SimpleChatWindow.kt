@@ -64,6 +64,15 @@ class SimpleChatWindow(
                         clearMessages()
                     }
                 })
+                
+                addSeparator()
+                
+                add(JButton("日志").apply {
+                    toolTipText = "显示日志文件位置"
+                    addActionListener {
+                        showLogInfo()
+                    }
+                })
             }
             add(toolbar, BorderLayout.NORTH)
             
@@ -115,6 +124,21 @@ class SimpleChatWindow(
                 // 创建新的会话日志
                 try {
                     currentLogFile = ResponseLogger.createSessionLog(project = project)
+                    
+                    // 显示日志文件位置（临时显示给用户）
+                    if (currentLogFile != null) {
+                        val logMessage = "日志文件已创建: ${currentLogFile?.name}"
+                        SwingUtilities.invokeLater {
+                            val doc = messageArea.styledDocument
+                            val infoStyle = javax.swing.text.SimpleAttributeSet().apply {
+                                javax.swing.text.StyleConstants.setItalic(this, true)
+                                javax.swing.text.StyleConstants.setForeground(this, JBColor.GRAY)
+                            }
+                            doc.insertString(doc.length, logMessage, infoStyle)
+                            doc.insertString(doc.length, "\n\n", null)
+                        }
+                    }
+                    
                     appendMessage("System", "正在连接到 Claude SDK 服务器...")
                     appendMessage("System", "日志文件: ${currentLogFile?.absolutePath}")
                     appendMessage("System", "日志文件存在: ${currentLogFile?.exists()}")
@@ -460,6 +484,35 @@ class SimpleChatWindow(
             val doc = messageArea.styledDocument
             doc.remove(0, doc.length)
             appendMessage("System", "聊天记录已清空")
+        }
+    }
+    
+    private fun showLogInfo() {
+        SwingUtilities.invokeLater {
+            val doc = messageArea.styledDocument
+            val infoStyle = javax.swing.text.SimpleAttributeSet().apply {
+                javax.swing.text.StyleConstants.setItalic(this, true)
+                javax.swing.text.StyleConstants.setForeground(this, JBColor.GRAY)
+            }
+            
+            if (currentLogFile != null) {
+                val logInfo = buildString {
+                    appendLine("=== 日志文件信息 ===")
+                    appendLine("文件名: ${currentLogFile?.name}")
+                    appendLine("完整路径: ${currentLogFile?.absolutePath}")
+                    appendLine("文件存在: ${currentLogFile?.exists()}")
+                    appendLine("文件大小: ${currentLogFile?.length() ?: 0} 字节")
+                    appendLine("日志目录: ${currentLogFile?.parent}")
+                }
+                
+                doc.insertString(doc.length, logInfo, infoStyle)
+                doc.insertString(doc.length, "\n", null)
+            } else {
+                doc.insertString(doc.length, "日志文件尚未创建\n\n", infoStyle)
+            }
+            
+            // 滚动到底部
+            messageArea.caretPosition = doc.length
         }
     }
 }
