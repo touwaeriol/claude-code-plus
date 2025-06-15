@@ -36,6 +36,7 @@ dependencies {
     
     // Markdown 渲染
     implementation("org.jetbrains:markdown:0.5.2")
+    implementation("org.commonmark:commonmark:0.21.0")
     
     // JSON 处理
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
@@ -55,8 +56,7 @@ dependencies {
     implementation("org.graalvm.polyglot:polyglot:24.1.1")
     implementation("org.graalvm.polyglot:python:24.1.1")
     
-    // Markdown 支持 - 使用 IntelliJ 平台的 Markdown 插件
-    // 注意：这些依赖由 IntelliJ 平台提供，通过 intellijPlatform.bundledPlugins 配置
+    // Markdown 支持由 IntelliJ 平台的 Markdown 插件提供
     
     // 测试依赖
     testImplementation(kotlin("test"))

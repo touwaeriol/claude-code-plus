@@ -35,8 +35,8 @@ private class FileReferenceCompletionProvider : CompletionProvider<CompletionPar
         context: ProcessingContext,
         result: CompletionResultSet
     ) {
-        // 添加调试信息
-        CompletionDebugger.debugCompletionContext(parameters, result, "FileReferenceCompletionProvider")
+        // 添加调试信息（已禁用）
+        // CompletionDebugger.debugCompletionContext(parameters, result, "FileReferenceCompletionProvider")
         
         val position = parameters.position
         val document = parameters.editor.document

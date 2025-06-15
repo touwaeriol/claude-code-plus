@@ -16,7 +16,7 @@
     
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.lang</depends>
-    <depends optional="true" config-file="">org.intellij.plugins.markdown</depends>
+    <depends>org.intellij.plugins.markdown</depends>
     
     <!-- 版本兼容性配置 -->
     <idea-version since-build="243.0" until-build="252.*"/>

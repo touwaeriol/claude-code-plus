@@ -6,6 +6,7 @@ import com.intellij.openapi.diagnostic.logger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flow
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 
@@ -133,26 +134,30 @@ class ClaudeCodeService {
         newSession: Boolean = false,
         options: Map<String, Any>? = null
     ): Flow<ClaudeHttpClient.StreamChunk> {
-        return try {
-            // 优先使用 WebSocket
-            wsClient.sendMessageStream(message, newSession, options)
-                .map { wsChunk ->
-                    // 将 WebSocket 的 StreamChunk 转换为 HttpClient 的 StreamChunk
-                    ClaudeHttpClient.StreamChunk(
-                        type = wsChunk.type,
-                        content = wsChunk.content,
-                        error = wsChunk.error,
-                        session_id = wsChunk.session_id,
-                        message_type = wsChunk.message_type
-                    )
-                }
-        } catch (e: Exception) {
-            LOG.warn("WebSocket stream failed, falling back to HTTP", e)
+        LOG.info("Sending message: $message")
+        return flow {
             try {
-                httpClient.sendMessageStream(message, newSession, options)
-            } catch (httpError: Exception) {
-                LOG.error("Failed to send message stream via HTTP", httpError)
-                emptyFlow()
+                // 使用 WebSocket
+                wsClient.sendMessageStream(message, newSession, options)
+                    .collect { wsChunk ->
+                        // 将 WebSocket 的 StreamChunk 转换为 HttpClient 的 StreamChunk
+                        emit(ClaudeHttpClient.StreamChunk(
+                            type = wsChunk.type,
+                            content = wsChunk.content,
+                            error = wsChunk.error,
+                            session_id = wsChunk.session_id,
+                            message_type = wsChunk.message_type
+                        ))
+                    }
+            } catch (e: Exception) {
+                LOG.error("WebSocket stream failed: ${e.message}", e)
+                emit(ClaudeHttpClient.StreamChunk(
+                    type = "error",
+                    content = null,
+                    error = "WebSocket error: ${e.message}",
+                    session_id = null,
+                    message_type = null
+                ))
             }
         }
     }

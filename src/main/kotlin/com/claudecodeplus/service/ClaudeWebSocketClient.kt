@@ -9,6 +9,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.*
 import java.util.concurrent.TimeUnit
 
@@ -151,18 +152,41 @@ class ClaudeWebSocketClient {
         webSocket?.send(json) ?: throw IllegalStateException("WebSocket not connected")
         
         // 接收响应
-        while (true) {
-            val chunk = messageChannel.receive()
-            
-            if (chunk.type == "done") {
-                break
+        try {
+            while (true) {
+                val chunk = withTimeoutOrNull(30000) { // 30秒超时
+                    messageChannel.receive()
+                }
+                
+                if (chunk == null) {
+                    LOG.warn("Timeout waiting for WebSocket response")
+                    emit(StreamChunk(
+                        type = "error",
+                        content = null,
+                        error = "Timeout waiting for response",
+                        session_id = currentSessionId,
+                        message_type = null
+                    ))
+                    break
+                }
+                
+                emit(chunk)
+                
+                // 如果是错误或完成消息，结束循环
+                if (chunk.type == "error" || chunk.type == "done" || 
+                    (chunk.type == "text" && chunk.content?.contains("</response>") == true)) {
+                    break
+                }
             }
-            
-            emit(chunk)
-            
-            if (chunk.type == "error") {
-                break
-            }
+        } catch (e: Exception) {
+            LOG.error("Error receiving WebSocket response", e)
+            emit(StreamChunk(
+                type = "error",
+                content = null,
+                error = "Error receiving response: ${e.message}",
+                session_id = currentSessionId,
+                message_type = null
+            ))
         }
     }
     

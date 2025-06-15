@@ -59,8 +59,8 @@ class FileReferenceEditorField(
                 val text = editor.document.text
                 val caretOffset = editor.caretModel.offset
                 
-                // 调试日志
-                println("[FileReferenceEditorField] Document changed: newFragment='${event.newFragment}', caretOffset=$caretOffset")
+                // 调试日志（已禁用）
+                // println("[FileReferenceEditorField] Document changed: newFragment='${event.newFragment}', caretOffset=$caretOffset")
                 
                 // 检查是否输入了 @ 符号
                 if (event.newFragment.toString() == "@") {
@@ -69,12 +69,12 @@ class FileReferenceEditorField(
                         caretOffset == 0 ||  // 空文档中输入 @
                         (caretOffset > 1 && text.length >= caretOffset - 1 && text[caretOffset - 2] in " \n\t\r")
                     
-                    println("[FileReferenceEditorField] @ detected at offset $caretOffset, hasValidPrefix=$hasValidPrefix")
+                    // println("[FileReferenceEditorField] @ detected at offset $caretOffset, hasValidPrefix=$hasValidPrefix")
                     
                     if (hasValidPrefix) {
                         // 触发自动完成
                         com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
-                            println("[FileReferenceEditorField] Triggering auto-completion")
+                            // println("[FileReferenceEditorField] Triggering auto-completion")
                             AutoPopupController.getInstance(project).scheduleAutoPopup(editor)
                         }
                     }

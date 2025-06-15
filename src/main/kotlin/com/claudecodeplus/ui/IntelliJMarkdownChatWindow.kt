@@ -7,8 +7,9 @@ import com.intellij.util.ui.JBUI
 import com.intellij.ui.JBColor
 import com.claudecodeplus.service.ClaudeCodeService
 import com.claudecodeplus.util.ResponseLogger
-import org.intellij.plugins.markdown.ui.preview.html.MarkdownUtil
 import org.intellij.plugins.markdown.ui.preview.jcef.MarkdownJCEFHtmlPanel
+import org.commonmark.parser.Parser
+import org.commonmark.renderer.html.HtmlRenderer
 import java.awt.BorderLayout
 import javax.swing.*
 import kotlinx.coroutines.*
@@ -16,6 +17,9 @@ import java.io.File
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.fileChooser.FileChooserFactory
+import com.intellij.openapi.fileChooser.FileSaverDescriptor
+import com.intellij.openapi.vfs.VirtualFileWrapper
 
 /**
  * 使用 IntelliJ Markdown 组件的聊天窗口
@@ -29,6 +33,10 @@ class IntelliJMarkdownChatWindow(
     
     companion object {
         private val LOG = logger<IntelliJMarkdownChatWindow>()
+        
+        // CommonMark 解析器和渲染器
+        private val parser = Parser.builder().build()
+        private val renderer = HtmlRenderer.builder().build()
     }
     
     private val inputField = FileReferenceEditorField(project) { text ->
@@ -42,17 +50,11 @@ class IntelliJMarkdownChatWindow(
     private var currentLogFile: File? = null
     private var forceNewSession = false
     private val messages = mutableListOf<ChatMessage>()
+    private var isFirstMessage = true  // 标记是否是第一条消息
     
-    // 使用 MarkdownJCEFHtmlPanel 或退回到简单实现
-    private val markdownPanel: JComponent = try {
-        // 尝试创建 JCEF 面板
-        val panel = MarkdownJCEFHtmlPanel(project, null)
-        Disposer.register(this, panel)
-        panel.component
-    } catch (e: Exception) {
-        LOG.warn("无法创建 JCEF Markdown 面板，使用简单实现", e)
-        // 退回到 JEditorPane
-        createFallbackPanel()
+    // 使用 MarkdownJCEFHtmlPanel
+    private val markdownPanel: MarkdownJCEFHtmlPanel = MarkdownJCEFHtmlPanel(project, null).also {
+        Disposer.register(this, it)
     }
     
     data class ChatMessage(
@@ -99,7 +101,7 @@ class IntelliJMarkdownChatWindow(
             add(toolbar, BorderLayout.NORTH)
             
             // Markdown 显示区域
-            val scrollPane = JBScrollPane(markdownPanel).apply {
+            val scrollPane = JBScrollPane(markdownPanel.component).apply {
                 border = JBUI.Borders.empty()
             }
             add(scrollPane, BorderLayout.CENTER)
@@ -132,12 +134,6 @@ class IntelliJMarkdownChatWindow(
         return panel
     }
     
-    private fun createFallbackPanel(): JComponent {
-        return JEditorPane().apply {
-            contentType = "text/html"
-            isEditable = false
-        }
-    }
     
     private fun initializeSession() {
         scope.launch {
@@ -150,8 +146,8 @@ class IntelliJMarkdownChatWindow(
                     addSystemMessage(logMessage)
                 }
                 
-                // 显示欢迎消息
-                val welcomeMarkdown = """
+                // 添加欢迎消息到消息列表
+                messages.add(ChatMessage("System", """
                     # 欢迎使用 Claude Code Plus
                     
                     这是一个支持 **Markdown** 渲染的聊天界面。
@@ -165,9 +161,9 @@ class IntelliJMarkdownChatWindow(
                     ---
                     
                     正在连接到 Claude SDK 服务器...
-                """.trimIndent()
+                """.trimIndent()))
                 
-                updateMarkdownDisplay(welcomeMarkdown)
+                updateDisplay()
                 
                 // 检查服务器健康状态
                 val isHealthy = service.checkServiceHealth()
@@ -195,11 +191,20 @@ class IntelliJMarkdownChatWindow(
                     inputField.isEnabled = true
                     
                     // 更新欢迎消息
-                    val connectedMarkdown = welcomeMarkdown.replace(
-                        "正在连接到 Claude SDK 服务器...",
-                        "✅ 已连接到 Claude SDK 服务器，可以开始对话了！"
-                    )
-                    updateMarkdownDisplay(connectedMarkdown)
+                    if (messages.isNotEmpty() && messages.last().sender == "System") {
+                        val lastMessage = messages.last()
+                        val updatedContent = lastMessage.content.replace(
+                            "正在连接到 Claude SDK 服务器...",
+                            "✅ 已连接到 Claude SDK 服务器，可以开始对话了！"
+                        )
+                        messages[messages.size - 1] = ChatMessage("System", updatedContent, lastMessage.timestamp)
+                        updateDisplay()
+                    }
+                    
+                    // 添加测试消息
+                    LOG.info("Adding test messages")
+                    addUserMessage("测试用户消息")
+                    addAssistantMessage("测试助手回复")
                     
                 } else {
                     addErrorMessage("无法连接到 Claude SDK 服务器。请确保服务器已在端口 18080 上运行。")
@@ -240,7 +245,16 @@ class IntelliJMarkdownChatWindow(
                 
                 var isFirstChunk = true
                 
-                service.sendMessageStream(message, forceNewSession, options).collect { chunk ->
+                // 第一条消息或强制新会话时使用新会话
+                val useNewSession = isFirstMessage || forceNewSession
+                if (isFirstMessage) {
+                    isFirstMessage = false
+                }
+                
+                LOG.info("Starting to collect message stream (newSession=$useNewSession)")
+                service.sendMessageStream(message, useNewSession, options).collect { chunk ->
+                    LOG.info("Received chunk: type=${chunk.type}, content length=${chunk.content?.length}, error=${chunk.error}")
+                    
                     // 记录响应块
                     currentLogFile?.let { logFile ->
                         ResponseLogger.logResponseChunk(
@@ -260,7 +274,7 @@ class IntelliJMarkdownChatWindow(
                     }
                     
                     when (chunk.type) {
-                        "text" -> {
+                        "text", "message" -> {
                             chunk.content?.let { content ->
                                 if (isFirstChunk) {
                                     isFirstChunk = false
@@ -272,7 +286,14 @@ class IntelliJMarkdownChatWindow(
                             }
                         }
                         "error" -> {
+                            LOG.error("Error chunk received: ${chunk.error}")
                             addErrorMessage(chunk.error ?: "Unknown error")
+                        }
+                        "done" -> {
+                            LOG.info("Stream completed")
+                        }
+                        else -> {
+                            LOG.warn("Unknown chunk type: ${chunk.type}")
                         }
                     }
                 }
@@ -305,7 +326,9 @@ class IntelliJMarkdownChatWindow(
     }
     
     private fun addUserMessage(content: String) {
+        LOG.info("Adding user message: $content")
         messages.add(ChatMessage("You", content))
+        LOG.info("Total messages: ${messages.size}")
         updateDisplay()
     }
     
@@ -335,6 +358,7 @@ class IntelliJMarkdownChatWindow(
     
     private fun updateDisplay() {
         val markdown = buildMarkdown()
+        LOG.info("Built markdown (${markdown.length} chars): ${markdown.take(200)}...")
         updateMarkdownDisplay(markdown)
     }
     
@@ -357,6 +381,10 @@ class IntelliJMarkdownChatWindow(
                     sb.append("### ❌ Error\n\n")
                     sb.append("> ${message.content}\n\n")
                 }
+                "System" -> {
+                    sb.append(message.content)
+                    sb.append("\n\n")
+                }
             }
             sb.append("---\n\n")
         }
@@ -365,41 +393,40 @@ class IntelliJMarkdownChatWindow(
     }
     
     private fun updateMarkdownDisplay(markdown: String) {
+        LOG.info("Updating markdown display with ${markdown.length} chars")
         SwingUtilities.invokeLater {
-            when (markdownPanel) {
-                is JEditorPane -> {
-                    // 退回方案：转换为 HTML
-                    val html = convertMarkdownToHtml(markdown)
-                    markdownPanel.text = html
-                    markdownPanel.caretPosition = 0
-                }
-                else -> {
-                    // 使用 IntelliJ Markdown 面板
-                    try {
-                        val method = markdownPanel.javaClass.getMethod("setHtml", String::class.java, Int::class.java)
-                        val html = MarkdownUtil.generateMarkdownHtml(markdown, project)
-                        method.invoke(markdownPanel, html, 0)
-                    } catch (e: Exception) {
-                        LOG.error("更新 Markdown 显示失败", e)
-                    }
-                }
+            try {
+                // 使用正确的 API 生成 HTML
+                val htmlContent = convertMarkdownToHtml(markdown)
+                LOG.info("Converted to HTML: ${htmlContent.take(200)}...")
+                
+                val updatedHtml = """
+                    <html>
+                    <head>
+                        <style>
+                            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+                            pre { background-color: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto; }
+                            code { background-color: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
+                        </style>
+                    </head>
+                    <body>
+                        <div id="root">
+                            $htmlContent
+                        </div>
+                    </body>
+                    </html>
+                """.trimIndent()
+                
+                LOG.info("Setting HTML to panel")
+                markdownPanel.setHtml(updatedHtml, 0)
+                LOG.info("HTML set successfully")
+            } catch (e: Exception) {
+                LOG.error("更新 Markdown 显示失败", e)
+                e.printStackTrace()
             }
         }
     }
     
-    private fun convertMarkdownToHtml(markdown: String): String {
-        // 简单的 Markdown 到 HTML 转换
-        return markdown
-            .replace(Regex("^### (.+)$", RegexOption.MULTILINE), "<h3>$1</h3>")
-            .replace(Regex("^## (.+)$", RegexOption.MULTILINE), "<h2>$1</h2>")
-            .replace(Regex("^# (.+)$", RegexOption.MULTILINE), "<h1>$1</h1>")
-            .replace(Regex("\\*\\*(.+?)\\*\\*"), "<b>$1</b>")
-            .replace(Regex("\\*(.+?)\\*"), "<i>$1</i>")
-            .replace(Regex("^> (.+)$", RegexOption.MULTILINE), "<blockquote>$1</blockquote>")
-            .replace(Regex("^---$", RegexOption.MULTILINE), "<hr>")
-            .replace("\n\n", "<br><br>")
-            .let { "<html><body style='font-family: sans-serif; margin: 10px;'>$it</body></html>" }
-    }
     
     private fun clearMessages() {
         messages.clear()
@@ -408,7 +435,15 @@ class IntelliJMarkdownChatWindow(
     
     private fun startNewSession() {
         forceNewSession = true
-        addSystemMessage("下一条消息将开始新的对话会话")
+        isFirstMessage = true  // 重置为第一条消息
+        messages.clear()  // 清空消息历史
+        // 重新添加欢迎消息
+        messages.add(ChatMessage("System", """
+            # 新会话已开始
+            
+            可以开始新的对话了！
+        """.trimIndent()))
+        updateDisplay()
     }
     
     private fun showLogInfo() {
@@ -422,7 +457,7 @@ class IntelliJMarkdownChatWindow(
             """.trimIndent()
             
             JOptionPane.showMessageDialog(
-                markdownPanel,
+                markdownPanel.component,
                 logInfo,
                 "日志信息",
                 JOptionPane.INFORMATION_MESSAGE
@@ -432,22 +467,29 @@ class IntelliJMarkdownChatWindow(
     
     private fun exportConversation() {
         val markdown = buildMarkdown()
-        val fileChooser = JFileChooser().apply {
-            selectedFile = java.io.File("conversation_${System.currentTimeMillis()}.md")
-        }
+        val descriptor = FileSaverDescriptor(
+            "导出对话",
+            "选择保存位置",
+            "md"
+        )
         
-        if (fileChooser.showSaveDialog(markdownPanel) == JFileChooser.APPROVE_OPTION) {
+        val dialog = FileChooserFactory.getInstance().createSaveFileDialog(descriptor, project)
+        val virtualFile = project.baseDir
+        val result = dialog.save(virtualFile, "conversation_${System.currentTimeMillis()}.md")
+        
+        result?.let { wrapper ->
             try {
-                fileChooser.selectedFile.writeText(markdown)
+                val file = wrapper.file
+                file.writeText(markdown)
                 JOptionPane.showMessageDialog(
-                    markdownPanel,
-                    "对话已导出到：${fileChooser.selectedFile.absolutePath}",
+                    markdownPanel.component,
+                    "对话已导出到：${file.absolutePath}",
                     "导出成功",
                     JOptionPane.INFORMATION_MESSAGE
                 )
             } catch (e: Exception) {
                 JOptionPane.showMessageDialog(
-                    markdownPanel,
+                    markdownPanel.component,
                     "导出失败：${e.message}",
                     "错误",
                     JOptionPane.ERROR_MESSAGE
@@ -463,6 +505,26 @@ class IntelliJMarkdownChatWindow(
         ResponseLogger.cleanOldLogs(50, project)
         scope.cancel()
         service.clearSession()
+    }
+    
+    private fun convertMarkdownToHtml(markdown: String): String {
+        return try {
+            val document = parser.parse(markdown)
+            renderer.render(document)
+        } catch (e: Exception) {
+            LOG.error("转换 Markdown 到 HTML 失败", e)
+            // 失败时返回原始文本
+            "<pre>${markdown.escapeHtml()}</pre>"
+        }
+    }
+    
+    private fun String.escapeHtml(): String {
+        return this
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&#39;")
     }
 }
 
