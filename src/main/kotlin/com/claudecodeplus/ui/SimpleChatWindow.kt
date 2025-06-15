@@ -273,12 +273,34 @@ class SimpleChatWindow(
                 
                 // 确保最终消息已添加
                 if (responseBuilder.isNotEmpty()) {
+                    val fullResponse = responseBuilder.toString()
+                    
+                    // 记录完整响应到日志
+                    currentLogFile?.let { logFile ->
+                        ResponseLogger.logFullResponse(
+                            logFile,
+                            fullResponse,
+                            true,
+                            null
+                        )
+                    }
+                    
                     SwingUtilities.invokeLater {
-                        finalizeLastMessage(currentSender, responseBuilder.toString())
+                        finalizeLastMessage(currentSender, fullResponse)
                     }
                 }
                 
             } catch (e: Exception) {
+                // 记录错误到日志
+                currentLogFile?.let { logFile ->
+                    ResponseLogger.logFullResponse(
+                        logFile,
+                        "Error: ${e.message}",
+                        false,
+                        e.stackTraceToString()
+                    )
+                }
+                
                 SwingUtilities.invokeLater {
                     appendMessage("Error", "发送消息失败: ${e.message}")
                 }
