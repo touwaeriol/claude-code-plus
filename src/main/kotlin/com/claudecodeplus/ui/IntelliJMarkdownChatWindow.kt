@@ -20,6 +20,8 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.fileChooser.FileChooserFactory
 import com.intellij.openapi.fileChooser.FileSaverDescriptor
 import com.intellij.openapi.vfs.VirtualFileWrapper
+import com.intellij.psi.search.FilenameIndex
+import com.intellij.psi.search.GlobalSearchScope
 
 /**
  * 使用 IntelliJ Markdown 组件的聊天窗口
@@ -201,10 +203,6 @@ class IntelliJMarkdownChatWindow(
                         updateDisplay()
                     }
                     
-                    // 添加测试消息
-                    LOG.info("Adding test messages")
-                    addUserMessage("测试用户消息")
-                    addAssistantMessage("测试助手回复")
                     
                 } else {
                     addErrorMessage("无法连接到 Claude SDK 服务器。请确保服务器已在端口 18080 上运行。")
@@ -222,6 +220,9 @@ class IntelliJMarkdownChatWindow(
         
         scope.launch {
             try {
+                // 处理文件引用，构建增强消息
+                val enhancedMessage = buildEnhancedMessage(message)
+                
                 val responseBuilder = StringBuilder()
                 val projectPath = project.basePath
                 val allTools = listOf(
@@ -238,9 +239,9 @@ class IntelliJMarkdownChatWindow(
                     "allowed_tools" to allTools
                 )
                 
-                // 记录请求
+                // 记录请求（使用增强后的消息）
                 currentLogFile?.let { logFile ->
-                    ResponseLogger.logRequest(logFile, "MESSAGE", message, options)
+                    ResponseLogger.logRequest(logFile, "MESSAGE", enhancedMessage, options)
                 }
                 
                 var isFirstChunk = true
@@ -252,7 +253,7 @@ class IntelliJMarkdownChatWindow(
                 }
                 
                 LOG.info("Starting to collect message stream (newSession=$useNewSession)")
-                service.sendMessageStream(message, useNewSession, options).collect { chunk ->
+                service.sendMessageStream(enhancedMessage, useNewSession, options).collect { chunk ->
                     LOG.info("Received chunk: type=${chunk.type}, content length=${chunk.content?.length}, error=${chunk.error}")
                     
                     // 记录响应块
@@ -369,12 +370,16 @@ class IntelliJMarkdownChatWindow(
             when (message.sender) {
                 "You" -> {
                     sb.append("### 👤 You\n\n")
-                    sb.append(message.content.escapeMarkdown())
+                    // 处理用户消息中的文件引用，转换为超链接
+                    val processedContent = processFileReferences(message.content)
+                    sb.append(processedContent)
                     sb.append("\n\n")
                 }
                 "Claude" -> {
                     sb.append("### 🤖 Claude\n\n")
-                    sb.append(message.content)
+                    // Claude 的消息可能包含文件路径，也进行处理
+                    val processedContent = processFilePathsInResponse(message.content)
+                    sb.append(processedContent)
                     sb.append("\n\n")
                 }
                 "Error" -> {
@@ -387,6 +392,128 @@ class IntelliJMarkdownChatWindow(
                 }
             }
             sb.append("---\n\n")
+        }
+        
+        return sb.toString()
+    }
+    
+    private fun processFileReferences(content: String): String {
+        // 匹配 @文件路径 格式
+        val pattern = "@([^\\s]+(?:\\.[^\\s]+)?)"
+        val regex = Regex(pattern)
+        
+        return regex.replace(content) { matchResult ->
+            val filePath = matchResult.groupValues[1]
+            val resolvedPath = resolveFilePath(filePath)
+            
+            if (resolvedPath != null) {
+                // 转换为 Markdown 链接格式
+                "[@$filePath](file://${resolvedPath.replace(" ", "%20")})"
+            } else {
+                // 如果无法解析，保持原样但转义
+                "@${filePath.escapeMarkdown()}"
+            }
+        }
+    }
+    
+    private fun processFilePathsInResponse(content: String): String {
+        // 识别常见的文件路径模式
+        val patterns = listOf(
+            // 相对路径：src/main/kotlin/Example.kt
+            "(?:^|\\s)((?:src|test|build|docs)/[^\\s:]+\\.[^\\s:]+)",
+            // 绝对路径：/Users/xxx/project/file.kt
+            "(?:^|\\s)(/[^\\s:]+\\.[^\\s:]+)",
+            // 文件名带行号：Example.kt:42
+            "(?:^|\\s)([^/\\s]+\\.[^\\s:]+):(\\d+)"
+        )
+        
+        var result = content
+        for (pattern in patterns) {
+            val regex = Regex(pattern)
+            result = regex.replace(result) { matchResult ->
+                val prefix = if (matchResult.value.startsWith(" ")) " " else ""
+                val filePath = matchResult.groupValues[1]
+                val lineNumber = if (matchResult.groupValues.size > 2) matchResult.groupValues[2] else null
+                
+                val resolvedPath = resolveFilePath(filePath)
+                if (resolvedPath != null) {
+                    val link = if (lineNumber != null) {
+                        "$prefix[$filePath:$lineNumber](file://${resolvedPath.replace(" ", "%20")}:$lineNumber)"
+                    } else {
+                        "$prefix[$filePath](file://${resolvedPath.replace(" ", "%20")})"
+                    }
+                    link
+                } else {
+                    matchResult.value
+                }
+            }
+        }
+        
+        return result
+    }
+    
+    private fun resolveFilePath(filePath: String): String? {
+        // 如果是绝对路径，直接返回
+        if (filePath.startsWith("/")) {
+            val file = File(filePath)
+            return if (file.exists()) filePath else null
+        }
+        
+        // 相对路径，基于项目根目录解析
+        val projectPath = project.basePath ?: return null
+        val file = File(projectPath, filePath)
+        if (file.exists()) {
+            return file.absolutePath
+        }
+        
+        // 如果直接路径不存在，尝试在项目中搜索
+        val scope = GlobalSearchScope.projectScope(project)
+        val psiFiles = FilenameIndex.getFilesByName(project, File(filePath).name, scope)
+        
+        for (psiFile in psiFiles) {
+            val virtualFile = psiFile.virtualFile
+            if (virtualFile.path.endsWith(filePath)) {
+                return virtualFile.path
+            }
+        }
+        
+        return null
+    }
+    
+    private fun buildEnhancedMessage(message: String): String {
+        // 提取 @文件引用
+        val pattern = "@([^\\s]+(?:\\.[^\\s]+)?)"
+        val regex = Regex(pattern)
+        val fileContents = mutableListOf<Pair<String, String>>()
+        
+        regex.findAll(message).forEach { matchResult ->
+            val filePath = matchResult.groupValues[1]
+            val resolvedPath = resolveFilePath(filePath)
+            
+            if (resolvedPath != null) {
+                try {
+                    val content = File(resolvedPath).readText()
+                    fileContents.add(filePath to content)
+                    LOG.info("Read file content for: $filePath")
+                } catch (e: Exception) {
+                    LOG.error("Failed to read file: $filePath", e)
+                }
+            }
+        }
+        
+        // 如果没有文件引用，直接返回原消息
+        if (fileContents.isEmpty()) {
+            return message
+        }
+        
+        // 构建增强消息
+        val sb = StringBuilder(message)
+        sb.append("\n\n")
+        
+        fileContents.forEach { (filePath, content) ->
+            sb.append("\n<file path=\"$filePath\">\n")
+            sb.append(content)
+            sb.append("\n</file>\n")
         }
         
         return sb.toString()
