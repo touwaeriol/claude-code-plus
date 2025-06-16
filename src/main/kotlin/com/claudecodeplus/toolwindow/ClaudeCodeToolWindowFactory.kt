@@ -1,7 +1,7 @@
 package com.claudecodeplus.toolwindow
 
 import com.claudecodeplus.service.ClaudeCodeService
-import com.claudecodeplus.ui.IntelliJMarkdownChatWindow
+import com.claudecodeplus.ui.SimpleMarkdownChatWindow
 import com.claudecodeplus.util.ProjectPathDebugger
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
@@ -35,9 +35,9 @@ class ClaudeCodeToolWindowFactory : ToolWindowFactory {
         // 获取服务实例
         val service = project.service<ClaudeCodeService>()
         
-        // 创建聊天窗口 - 使用 IntelliJ Markdown 渲染器
-        LOG.info("创建 IntelliJ Markdown 聊天窗口")
-        val chatWindow = IntelliJMarkdownChatWindow(project, service)
+        // 创建聊天窗口 - 使用简单的 JEditorPane 实现
+        LOG.info("创建简单 Markdown 聊天窗口")
+        val chatWindow = SimpleMarkdownChatWindow(project, service)
         val component = chatWindow.createComponent()
         
         // 保存引用以便清理
