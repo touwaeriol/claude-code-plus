@@ -54,6 +54,17 @@ class IntelliJMarkdownChatWindow(
     private val messages = mutableListOf<ChatMessage>()
     private var isFirstMessage = true  // 标记是否是第一条消息
     
+    // 防抖机制 - 基于官方实现
+    private val updateDebouncer = Timer(100) { 
+        pendingMarkdown?.let { markdown ->
+            if (!isUpdating) {
+                doUpdateMarkdownDisplay(markdown)
+            }
+        }
+    }
+    private var pendingMarkdown: String? = null
+    private var isUpdating = false
+    
     // 使用 MarkdownJCEFHtmlPanel
     private val markdownPanel: MarkdownJCEFHtmlPanel = MarkdownJCEFHtmlPanel(project, null).also {
         Disposer.register(this, it)
@@ -236,7 +247,7 @@ class IntelliJMarkdownChatWindow(
                 
                 val options = mapOf(
                     "cwd" to (projectPath ?: System.getProperty("user.dir")),
-                    "allowed_tools" to allTools
+                    "allowed_tools" to allTools.joinToString(",")
                 )
                 
                 // 记录请求（使用增强后的消息）
@@ -264,8 +275,8 @@ class IntelliJMarkdownChatWindow(
                             chunk.content,
                             chunk.error,
                             mapOf(
-                                "session_id" to (chunk.session_id ?: ""),
-                                "message_type" to (chunk.message_type ?: "")
+                                "session_id" to (chunk.sessionId ?: ""),
+                                "message_type" to (chunk.messageType ?: "")
                             )
                         )
                     }
@@ -330,7 +341,10 @@ class IntelliJMarkdownChatWindow(
         LOG.info("Adding user message: $content")
         messages.add(ChatMessage("You", content))
         LOG.info("Total messages: ${messages.size}")
-        updateDisplay()
+        
+        // 立即更新显示，不使用防抖
+        val markdown = buildMarkdown()
+        doUpdateMarkdownDisplay(markdown)
     }
     
     private fun addAssistantMessage(content: String) {
@@ -352,46 +366,116 @@ class IntelliJMarkdownChatWindow(
     
     private fun updateLastAssistantMessage(content: String) {
         if (messages.isNotEmpty() && messages.last().sender == "Claude") {
-            messages[messages.size - 1] = ChatMessage("Claude", content, messages.last().timestamp)
-            updateDisplay()
+            val lastMessage = messages.last()
+            messages[messages.size - 1] = ChatMessage("Claude", content, lastMessage.timestamp)
+            
+            // 增量更新 - 只更新最后一条消息
+            if (markdownPanel.component.isShowing) {
+                updateLastMessageIncremental(content)
+            } else {
+                // 如果组件不可见，使用完整更新
+                updateDisplay()
+            }
+        }
+    }
+    
+    private fun updateLastMessageIncremental(content: String) {
+        LOG.info("Incremental update for last message")
+        
+        SwingUtilities.invokeLater {
+            try {
+                // 处理文件路径
+                val processedContent = processFilePathsInResponse(content)
+                val htmlContent = convertMarkdownToHtml(processedContent)
+                
+                // 使用 JavaScript 增量更新
+                val escapedHtml = htmlContent
+                    .replace("\\", "\\\\")
+                    .replace("'", "\\'")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                
+                val script = """
+                    (function() {
+                        const messages = document.querySelectorAll('.message');
+                        if (messages.length > 0) {
+                            const lastMessage = messages[messages.length - 1];
+                            if (lastMessage.classList.contains('message-claude')) {
+                                const contentDiv = lastMessage.querySelector('.content');
+                                if (contentDiv) {
+                                    contentDiv.innerHTML = '$escapedHtml';
+                                    console.log('Updated last Claude message');
+                                }
+                            }
+                        }
+                    })();
+                """.trimIndent()
+                
+                // 执行 JavaScript
+                val cefBrowser = markdownPanel.javaClass.getDeclaredField("cefBrowser").apply {
+                    isAccessible = true
+                }.get(markdownPanel)
+                
+                cefBrowser?.javaClass?.getMethod("executeJavaScript", String::class.java, String::class.java, Int::class.java)
+                    ?.invoke(cefBrowser, script, "", 0)
+                
+                LOG.info("Incremental update completed")
+            } catch (e: Exception) {
+                LOG.error("增量更新失败，回退到完整更新", e)
+                updateDisplay()
+            }
         }
     }
     
     private fun updateDisplay() {
         val markdown = buildMarkdown()
         LOG.info("Built markdown (${markdown.length} chars): ${markdown.take(200)}...")
-        updateMarkdownDisplay(markdown)
+        
+        // 使用防抖机制
+        pendingMarkdown = markdown
+        updateDebouncer.restart()
     }
     
     private fun buildMarkdown(): String {
+        // 为了支持增量更新，生成更结构化的 HTML
         val sb = StringBuilder()
         
-        for (message in messages) {
+        for ((index, message) in messages.withIndex()) {
+            // 为每条消息创建独立的容器
+            sb.append("<div class=\"message message-${message.sender.lowercase()}\" data-index=\"$index\">\n")
+            
             when (message.sender) {
                 "You" -> {
-                    sb.append("### 👤 You\n\n")
-                    // 处理用户消息中的文件引用，转换为超链接
+                    sb.append("<div class=\"sender\">👤 You</div>\n")
+                    sb.append("<div class=\"content\">\n")
                     val processedContent = processFileReferences(message.content)
-                    sb.append(processedContent)
-                    sb.append("\n\n")
+                    sb.append(convertMarkdownToHtml(processedContent))
+                    sb.append("\n</div>\n")
                 }
                 "Claude" -> {
-                    sb.append("### 🤖 Claude\n\n")
-                    // Claude 的消息可能包含文件路径，也进行处理
+                    sb.append("<div class=\"sender\">🤖 Claude</div>\n")
+                    sb.append("<div class=\"content\">\n")
                     val processedContent = processFilePathsInResponse(message.content)
-                    sb.append(processedContent)
-                    sb.append("\n\n")
+                    sb.append(convertMarkdownToHtml(processedContent))
+                    sb.append("\n</div>\n")
                 }
                 "Error" -> {
-                    sb.append("### ❌ Error\n\n")
-                    sb.append("> ${message.content}\n\n")
+                    sb.append("<div class=\"sender error\">❌ Error</div>\n")
+                    sb.append("<div class=\"content\">\n")
+                    sb.append("<blockquote>${message.content.escapeHtml()}</blockquote>")
+                    sb.append("\n</div>\n")
                 }
                 "System" -> {
-                    sb.append(message.content)
-                    sb.append("\n\n")
+                    sb.append("<div class=\"content\">\n")
+                    sb.append(convertMarkdownToHtml(message.content))
+                    sb.append("\n</div>\n")
                 }
             }
-            sb.append("---\n\n")
+            
+            sb.append("</div>\n")
+            if (index < messages.size - 1) {
+                sb.append("<hr>\n")
+            }
         }
         
         return sb.toString()
@@ -519,38 +603,93 @@ class IntelliJMarkdownChatWindow(
         return sb.toString()
     }
     
-    private fun updateMarkdownDisplay(markdown: String) {
-        LOG.info("Updating markdown display with ${markdown.length} chars")
-        SwingUtilities.invokeLater {
-            try {
-                // 使用正确的 API 生成 HTML
-                val htmlContent = convertMarkdownToHtml(markdown)
-                LOG.info("Converted to HTML: ${htmlContent.take(200)}...")
-                
-                val updatedHtml = """
-                    <html>
-                    <head>
-                        <style>
-                            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-                            pre { background-color: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto; }
-                            code { background-color: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
-                        </style>
-                    </head>
-                    <body>
-                        <div id="root">
-                            $htmlContent
-                        </div>
-                    </body>
-                    </html>
-                """.trimIndent()
-                
-                LOG.info("Setting HTML to panel")
-                markdownPanel.setHtml(updatedHtml, 0)
-                LOG.info("HTML set successfully")
-            } catch (e: Exception) {
-                LOG.error("更新 Markdown 显示失败", e)
-                e.printStackTrace()
+    private fun doUpdateMarkdownDisplay(markdown: String) {
+        if (isUpdating) {
+            LOG.info("Already updating, skip this update")
+            return
+        }
+        
+        isUpdating = true
+        LOG.info("Starting markdown display update with ${markdown.length} chars")
+        
+        // 确保在 EDT 线程执行
+        if (SwingUtilities.isEventDispatchThread()) {
+            performUpdate(markdown)
+        } else {
+            SwingUtilities.invokeLater {
+                performUpdate(markdown)
             }
+        }
+    }
+    
+    private fun performUpdate(markdown: String) {
+        try {
+            // 使用正确的 API 生成 HTML
+            val htmlContent = convertMarkdownToHtml(markdown)
+            LOG.info("Converted to HTML: ${htmlContent.take(200)}...")
+            
+            val updatedHtml = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { 
+                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                            padding: 10px;
+                            line-height: 1.6;
+                        }
+                        pre { 
+                            background-color: #f5f5f5; 
+                            padding: 10px; 
+                            border-radius: 5px; 
+                            overflow-x: auto;
+                        }
+                        code { 
+                            background-color: #f5f5f5; 
+                            padding: 2px 4px; 
+                            border-radius: 3px;
+                            font-family: 'JetBrains Mono', monospace;
+                        }
+                        .message {
+                            margin-bottom: 20px;
+                        }
+                        .sender {
+                            font-weight: bold;
+                            margin-bottom: 5px;
+                        }
+                        .error {
+                            color: #d73a49;
+                        }
+                        blockquote {
+                            border-left: 4px solid #dfe2e5;
+                            margin: 0;
+                            padding-left: 16px;
+                            color: #6a737d;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div id="root">
+                        $htmlContent
+                    </div>
+                </body>
+                </html>
+            """.trimIndent()
+            
+            LOG.info("Setting HTML to panel")
+            markdownPanel.setHtml(updatedHtml, 0)
+            
+            // 强制刷新组件
+            markdownPanel.component.revalidate()
+            markdownPanel.component.repaint()
+            
+            LOG.info("HTML set successfully, UI refreshed")
+        } catch (e: Exception) {
+            LOG.error("更新 Markdown 显示失败", e)
+            e.printStackTrace()
+        } finally {
+            isUpdating = false
         }
     }
     
@@ -626,6 +765,9 @@ class IntelliJMarkdownChatWindow(
     }
     
     override fun dispose() {
+        // 停止防抖定时器
+        updateDebouncer.stop()
+        
         currentLogFile?.let { 
             ResponseLogger.closeSessionLog(it)
         }

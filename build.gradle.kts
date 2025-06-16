@@ -23,7 +23,7 @@ repositories {
 dependencies {
     // IntelliJ Platform dependencies
     intellijPlatform {
-        intellijIdeaCommunity("2025.1")
+        intellijIdeaCommunity("2025.1.2")
         
         bundledPlugins("com.intellij.java", "org.intellij.plugins.markdown")
         
@@ -45,9 +45,12 @@ dependencies {
     // ANSI 解析
     implementation("org.fusesource.jansi:jansi:2.4.1")
     
-    // HTTP客户端
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
+    // HTTP客户端 - 使用 Ktor
+    implementation("io.ktor:ktor-client-core:2.3.12")
+    implementation("io.ktor:ktor-client-cio:2.3.12")
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.12")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
+    implementation("io.ktor:ktor-client-logging:2.3.12")
     
     // PTY 支持 - 移除，使用 IntelliJ Platform 内置的
     // IntelliJ Platform 已经包含了 pty4j 和 JNA
@@ -104,13 +107,13 @@ intellijPlatform {
 
 tasks {
     withType<JavaCompile> {
-        sourceCompatibility = "17"
-        targetCompatibility = "17"
+        sourceCompatibility = "21"
+        targetCompatibility = "21"
     }
     
     withType<KotlinCompile> {
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_17)
+            jvmTarget.set(JvmTarget.JVM_21)
             freeCompilerArgs.addAll(
                 "-opt-in=kotlin.RequiresOptIn",
                 "-Xjvm-default=all",
@@ -137,6 +140,11 @@ tasks {
         if (System.getProperty("java.vendor")?.contains("GraalVM") == true) {
             environment("GRAALVM_HOME", System.getProperty("java.home"))
         }
+        
+        // 在 Apple Silicon Mac 上使用原生架构
+
+        systemProperty("idea.platform.arch", "aarch64")
+
     }
     
     
