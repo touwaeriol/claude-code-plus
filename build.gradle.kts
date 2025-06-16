@@ -45,12 +45,9 @@ dependencies {
     // ANSI 解析
     implementation("org.fusesource.jansi:jansi:2.4.1")
     
-    // HTTP客户端 - 使用 Ktor
-    implementation("io.ktor:ktor-client-core:2.3.12")
-    implementation("io.ktor:ktor-client-cio:2.3.12")
-    implementation("io.ktor:ktor-client-content-negotiation:2.3.12")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
-    implementation("io.ktor:ktor-client-logging:2.3.12")
+    // HTTP客户端
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
     
     // PTY 支持 - 移除，使用 IntelliJ Platform 内置的
     // IntelliJ Platform 已经包含了 pty4j 和 JNA

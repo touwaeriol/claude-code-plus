@@ -7,8 +7,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flow
-import io.ktor.client.request.*
-import io.ktor.http.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 
 /**
  * Claude Code 服务
@@ -70,10 +70,16 @@ class ClaudeCodeService {
         
         return try {
             // 发送初始化请求到服务器
-            val response = httpClient.client.post("${httpClient.baseUrl}/initialize") {
-                setBody(mapOf("config" to config))
-            }
-            response.status.isSuccess()
+            val request = okhttp3.Request.Builder()
+                .url("${httpClient.baseUrl}/initialize")
+                .post(
+                    com.google.gson.Gson().toJson(mapOf("config" to config))
+                        .toRequestBody("application/json".toMediaType())
+                )
+                .build()
+            
+            val response = httpClient.client.newCall(request).execute()
+            response.isSuccessful
         } catch (e: Exception) {
             LOG.error("Failed to initialize with config", e)
             false
@@ -108,7 +114,7 @@ class ClaudeCodeService {
     suspend fun sendMessage(
         message: String,
         newSession: Boolean = false,
-        options: Map<String, String>? = null
+        options: Map<String, Any>? = null
     ): String {
         return try {
             val response = httpClient.sendMessage(message, newSession, options)
@@ -126,7 +132,7 @@ class ClaudeCodeService {
     fun sendMessageStream(
         message: String,
         newSession: Boolean = false,
-        options: Map<String, String>? = null
+        options: Map<String, Any>? = null
     ): Flow<ClaudeHttpClient.StreamChunk> {
         LOG.info("Sending message: $message")
         return flow {
@@ -139,8 +145,8 @@ class ClaudeCodeService {
                             type = wsChunk.type,
                             content = wsChunk.content,
                             error = wsChunk.error,
-                            sessionId = wsChunk.session_id,
-                            messageType = wsChunk.message_type
+                            session_id = wsChunk.session_id,
+                            message_type = wsChunk.message_type
                         ))
                     }
             } catch (e: Exception) {
@@ -149,8 +155,8 @@ class ClaudeCodeService {
                     type = "error",
                     content = null,
                     error = "WebSocket error: ${e.message}",
-                    sessionId = null,
-                    messageType = null
+                    session_id = null,
+                    message_type = null
                 ))
             }
         }

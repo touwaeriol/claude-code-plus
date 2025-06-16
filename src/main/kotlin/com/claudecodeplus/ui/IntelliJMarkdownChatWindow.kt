@@ -22,6 +22,7 @@ import com.intellij.openapi.fileChooser.FileSaverDescriptor
 import com.intellij.openapi.vfs.VirtualFileWrapper
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
+import javax.swing.Timer
 
 /**
  * 使用 IntelliJ Markdown 组件的聊天窗口
@@ -247,7 +248,7 @@ class IntelliJMarkdownChatWindow(
                 
                 val options = mapOf(
                     "cwd" to (projectPath ?: System.getProperty("user.dir")),
-                    "allowed_tools" to allTools.joinToString(",")
+                    "allowed_tools" to allTools
                 )
                 
                 // 记录请求（使用增强后的消息）
@@ -275,8 +276,8 @@ class IntelliJMarkdownChatWindow(
                             chunk.content,
                             chunk.error,
                             mapOf(
-                                "session_id" to (chunk.sessionId ?: ""),
-                                "message_type" to (chunk.messageType ?: "")
+                                "session_id" to (chunk.session_id ?: ""),
+                                "message_type" to (chunk.message_type ?: "")
                             )
                         )
                     }
@@ -713,21 +714,34 @@ class IntelliJMarkdownChatWindow(
     }
     
     private fun showLogInfo() {
-        if (currentLogFile != null) {
+        val logFile = currentLogFile
+        if (logFile != null) {
             val logInfo = """
                 === 日志文件信息 ===
-                文件名: ${currentLogFile?.name}
-                完整路径: ${currentLogFile?.absolutePath}
-                文件存在: ${currentLogFile?.exists()}
-                文件大小: ${currentLogFile?.length() ?: 0} 字节
+                文件名: ${logFile.name}
+                完整路径: ${logFile.absolutePath}
+                文件存在: ${logFile.exists()}
+                文件大小: ${logFile.length()} 字节
             """.trimIndent()
             
-            JOptionPane.showMessageDialog(
-                markdownPanel.component,
-                logInfo,
-                "日志信息",
-                JOptionPane.INFORMATION_MESSAGE
-            )
+            // 使用 SwingUtilities 确保在 EDT 线程上执行
+            SwingUtilities.invokeLater {
+                JOptionPane.showMessageDialog(
+                    null, // 使用 null 作为父组件，避免组件未初始化的问题
+                    logInfo,
+                    "日志信息",
+                    JOptionPane.INFORMATION_MESSAGE
+                )
+            }
+        } else {
+            SwingUtilities.invokeLater {
+                JOptionPane.showMessageDialog(
+                    null,
+                    "尚未创建日志文件",
+                    "日志信息",
+                    JOptionPane.INFORMATION_MESSAGE
+                )
+            }
         }
     }
     
