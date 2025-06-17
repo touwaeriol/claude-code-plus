@@ -5,6 +5,8 @@ plugins {
     kotlin("jvm") version "2.1.0"
     id("org.jetbrains.intellij.platform") version "2.6.0"
     kotlin("plugin.serialization") version "2.1.0"
+    id("org.jetbrains.compose") version "1.8.0-alpha04"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.1.0"
     application
 }
 
@@ -13,6 +15,8 @@ version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
+    google()
+    maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
     
     // IntelliJ Platform Gradle Plugin Repositories Extension
     intellijPlatform {
@@ -34,9 +38,21 @@ dependencies {
     // 使用 IntelliJ Platform 的 Kotlin 标准库
     compileOnly(kotlin("stdlib"))
     
-    // Markdown 渲染
-    implementation("org.jetbrains:markdown:0.5.2")
-    implementation("org.commonmark:commonmark:0.21.0")
+    // Compose Desktop
+    implementation(compose.desktop.currentOs)
+    implementation(compose.ui)
+    implementation(compose.foundation)
+    implementation(compose.material3)
+    implementation(compose.runtime)
+    
+    // 暂时移除 Jewel，使用基础 Compose
+    // TODO: 后续添加 Jewel UI 框架支持
+    
+    // CommonMark - 与 IntelliJ 保持一致的版本
+    implementation("org.commonmark:commonmark:0.24.0")
+    implementation("org.commonmark:commonmark-ext-autolink:0.24.0")
+    implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.24.0")
+    implementation("org.commonmark:commonmark-ext-gfm-tables:0.24.0")
     
     // JSON 处理
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")

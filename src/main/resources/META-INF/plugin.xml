@@ -38,6 +38,12 @@
                     factoryClass="com.claudecodeplus.toolwindow.ClaudeCodeToolWindowFactory"
                     icon="/icons/claude-code.svg"/>
                     
+        <!-- Compose 版本的工具窗口 -->
+        <toolWindow id="ClaudeCodeCompose" 
+                    anchor="right" 
+                    factoryClass="com.claudecodeplus.toolwindow.ComposeToolWindowFactory"
+                    icon="/icons/claude-code.svg"/>
+                    
         <!-- 启动活动 -->
         <projectActivity implementation="com.claudecodeplus.startup.ProjectStartupLogger"/>
         
