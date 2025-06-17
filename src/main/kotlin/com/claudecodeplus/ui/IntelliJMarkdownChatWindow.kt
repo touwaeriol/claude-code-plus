@@ -23,6 +23,8 @@ import com.intellij.openapi.vfs.VirtualFileWrapper
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import javax.swing.Timer
+import com.intellij.openapi.wm.ToolWindow
+import com.intellij.openapi.wm.ToolWindowManager
 
 /**
  * 使用 IntelliJ Markdown 组件的聊天窗口
@@ -42,6 +44,17 @@ class IntelliJMarkdownChatWindow(
         private val renderer = HtmlRenderer.builder().build()
     }
     
+    // 查找工具窗口
+    private fun findToolWindow(): ToolWindow? {
+        return try {
+            val toolWindowManager = ToolWindowManager.getInstance(project)
+            toolWindowManager.getToolWindow("Claude Code Plus")
+        } catch (e: Exception) {
+            LOG.warn("Failed to find tool window", e)
+            null
+        }
+    }
+    
     private val inputField = FileReferenceEditorField(project) { text ->
         if (text.trim().isNotEmpty() && isInitialized) {
             sendMessage(text.trim())
@@ -55,8 +68,11 @@ class IntelliJMarkdownChatWindow(
     private val messages = mutableListOf<ChatMessage>()
     private var isFirstMessage = true  // 标记是否是第一条消息
     
-    // 防抖机制 - 基于官方实现
-    private val updateDebouncer = Timer(100) { 
+    // 维护完整的 Markdown 内容
+    private val markdownContent = StringBuilder()
+    
+    // 防抖机制 - 基于官方实现（降低防抖时间以提高响应速度）
+    private val updateDebouncer = Timer(20) { 
         pendingMarkdown?.let { markdown ->
             if (!isUpdating) {
                 doUpdateMarkdownDisplay(markdown)
@@ -69,6 +85,9 @@ class IntelliJMarkdownChatWindow(
     // 使用 MarkdownJCEFHtmlPanel
     private val markdownPanel: MarkdownJCEFHtmlPanel = MarkdownJCEFHtmlPanel(project, null).also {
         Disposer.register(this, it)
+        
+        // 设置初始内容以确保 JCEF 初始化
+        it.setHtml("<html><body><p>Loading...</p></body></html>", 0)
     }
     
     data class ChatMessage(
@@ -142,8 +161,10 @@ class IntelliJMarkdownChatWindow(
             add(inputPanel, BorderLayout.SOUTH)
         }
         
-        // 初始化会话
-        initializeSession()
+        // 延迟初始化，确保组件已完全加载
+        SwingUtilities.invokeLater {
+            initializeSession()
+        }
         
         return panel
     }
@@ -160,8 +181,8 @@ class IntelliJMarkdownChatWindow(
                     addSystemMessage(logMessage)
                 }
                 
-                // 添加欢迎消息到消息列表
-                messages.add(ChatMessage("System", """
+                // 添加欢迎消息
+                val welcomeMessage = """
                     # 欢迎使用 Claude Code Plus
                     
                     这是一个支持 **Markdown** 渲染的聊天界面。
@@ -175,9 +196,15 @@ class IntelliJMarkdownChatWindow(
                     ---
                     
                     正在连接到 Claude SDK 服务器...
-                """.trimIndent()))
+                """.trimIndent()
                 
-                updateDisplay()
+                messages.add(ChatMessage("System", welcomeMessage))
+                appendToMarkdown("System", welcomeMessage)
+                
+                // 延迟更新以确保组件已就绪
+                SwingUtilities.invokeLater {
+                    updateMarkdownDisplay()
+                }
                 
                 // 检查服务器健康状态
                 val isHealthy = service.checkServiceHealth()
@@ -212,7 +239,14 @@ class IntelliJMarkdownChatWindow(
                             "✅ 已连接到 Claude SDK 服务器，可以开始对话了！"
                         )
                         messages[messages.size - 1] = ChatMessage("System", updatedContent, lastMessage.timestamp)
-                        updateDisplay()
+                        
+                        // 重新构建 Markdown 内容
+                        rebuildMarkdownContent()
+                        
+                        // 延迟更新以确保组件已就绪
+                        SwingUtilities.invokeLater {
+                            updateMarkdownDisplay()
+                        }
                     }
                     
                     
@@ -293,9 +327,22 @@ class IntelliJMarkdownChatWindow(
                                     isFirstChunk = false
                                     // 开始新的助手消息
                                     messages.add(ChatMessage("Claude", "", System.currentTimeMillis()))
+                                    // 添加分隔符和发送者标识到 Markdown
+                                    if (markdownContent.isNotEmpty()) {
+                                        markdownContent.append("\n\n---\n\n")
+                                    }
+                                    markdownContent.append("🤖 **Claude**\n\n")
                                 }
                                 responseBuilder.append(content)
-                                updateLastAssistantMessage(responseBuilder.toString())
+                                // 直接更新 Markdown 内容，而不是通过 updateLastAssistantMessage
+                                updateLastMessageInMarkdown(responseBuilder.toString())
+                                // 更新消息列表
+                                if (messages.isNotEmpty() && messages.last().sender == "Claude") {
+                                    val lastMessage = messages.last()
+                                    messages[messages.size - 1] = ChatMessage("Claude", responseBuilder.toString(), lastMessage.timestamp)
+                                }
+                                // 更新显示
+                                updateMarkdownDisplay()
                             }
                         }
                         "error" -> {
@@ -343,19 +390,23 @@ class IntelliJMarkdownChatWindow(
         messages.add(ChatMessage("You", content))
         LOG.info("Total messages: ${messages.size}")
         
+        // 追加到 Markdown 内容
+        appendToMarkdown("You", content)
+        
         // 立即更新显示，不使用防抖
-        val markdown = buildMarkdown()
-        doUpdateMarkdownDisplay(markdown)
+        doUpdateMarkdownDisplay(markdownContent.toString())
     }
     
     private fun addAssistantMessage(content: String) {
         messages.add(ChatMessage("Claude", content))
-        updateDisplay()
+        appendToMarkdown("Claude", content)
+        updateMarkdownDisplay()
     }
     
     private fun addErrorMessage(content: String) {
         messages.add(ChatMessage("Error", content))
-        updateDisplay()
+        appendToMarkdown("Error", content)
+        updateMarkdownDisplay()
     }
     
     private fun addSystemMessage(content: String) {
@@ -370,62 +421,26 @@ class IntelliJMarkdownChatWindow(
             val lastMessage = messages.last()
             messages[messages.size - 1] = ChatMessage("Claude", content, lastMessage.timestamp)
             
-            // 增量更新 - 只更新最后一条消息
+            // 更新 Markdown 内容中的最后一条消息
+            updateLastMessageInMarkdown(content)
+            
+            // 更新显示
             if (markdownPanel.component.isShowing) {
-                updateLastMessageIncremental(content)
+                updateMarkdownDisplay()
             } else {
-                // 如果组件不可见，使用完整更新
-                updateDisplay()
+                // 如果组件不可见，延迟更新
+                SwingUtilities.invokeLater {
+                    updateMarkdownDisplay()
+                }
             }
         }
     }
     
     private fun updateLastMessageIncremental(content: String) {
         LOG.info("Incremental update for last message")
-        
-        SwingUtilities.invokeLater {
-            try {
-                // 处理文件路径
-                val processedContent = processFilePathsInResponse(content)
-                val htmlContent = convertMarkdownToHtml(processedContent)
-                
-                // 使用 JavaScript 增量更新
-                val escapedHtml = htmlContent
-                    .replace("\\", "\\\\")
-                    .replace("'", "\\'")
-                    .replace("\n", "\\n")
-                    .replace("\r", "\\r")
-                
-                val script = """
-                    (function() {
-                        const messages = document.querySelectorAll('.message');
-                        if (messages.length > 0) {
-                            const lastMessage = messages[messages.length - 1];
-                            if (lastMessage.classList.contains('message-claude')) {
-                                const contentDiv = lastMessage.querySelector('.content');
-                                if (contentDiv) {
-                                    contentDiv.innerHTML = '$escapedHtml';
-                                    console.log('Updated last Claude message');
-                                }
-                            }
-                        }
-                    })();
-                """.trimIndent()
-                
-                // 执行 JavaScript
-                val cefBrowser = markdownPanel.javaClass.getDeclaredField("cefBrowser").apply {
-                    isAccessible = true
-                }.get(markdownPanel)
-                
-                cefBrowser?.javaClass?.getMethod("executeJavaScript", String::class.java, String::class.java, Int::class.java)
-                    ?.invoke(cefBrowser, script, "", 0)
-                
-                LOG.info("Incremental update completed")
-            } catch (e: Exception) {
-                LOG.error("增量更新失败，回退到完整更新", e)
-                updateDisplay()
-            }
-        }
+        // 由于反射访问 cefBrowser 失败，直接使用完整更新
+        // MarkdownJCEFHtmlPanel 内部会处理增量更新优化
+        updateDisplay()
     }
     
     private fun updateDisplay() {
@@ -435,6 +450,92 @@ class IntelliJMarkdownChatWindow(
         // 使用防抖机制
         pendingMarkdown = markdown
         updateDebouncer.restart()
+    }
+    
+    private fun updateMarkdownDisplay() {
+        val markdown = markdownContent.toString()
+        LOG.info("Updating markdown display (${markdown.length} chars)")
+        
+        // 使用防抖机制
+        pendingMarkdown = markdown
+        updateDebouncer.restart()
+    }
+    
+    private fun appendToMarkdown(sender: String, content: String) {
+        // 添加分隔符（如果不是第一条消息）
+        if (markdownContent.isNotEmpty()) {
+            markdownContent.append("\n\n---\n\n")
+        }
+        
+        // 根据发送者添加不同的格式
+        when (sender) {
+            "You" -> {
+                markdownContent.append("👤 **You**\n\n")
+                val processedContent = processFileReferences(content)
+                markdownContent.append(processedContent)
+            }
+            "Claude" -> {
+                markdownContent.append("🤖 **Claude**\n\n")
+                val processedContent = processFilePathsInResponse(content)
+                markdownContent.append(processedContent)
+            }
+            "Error" -> {
+                markdownContent.append("❌ **Error**\n\n")
+                markdownContent.append("> $content")
+            }
+            "System" -> {
+                markdownContent.append(content)
+            }
+        }
+    }
+    
+    private fun updateLastMessageInMarkdown(newContent: String) {
+        // 找到最后一个 Claude 消息的位置
+        val lastClaudeIndex = markdownContent.lastIndexOf("🤖 **Claude**")
+        if (lastClaudeIndex != -1) {
+            // 找到消息内容的开始位置（跳过标题和换行）
+            val contentStart = markdownContent.indexOf("\n\n", lastClaudeIndex) + 2
+            
+            // 找到下一个分隔符或结尾
+            val nextSeparator = markdownContent.indexOf("\n\n---\n\n", contentStart)
+            val contentEnd = if (nextSeparator != -1) nextSeparator else markdownContent.length
+            
+            // 替换内容
+            val processedContent = processFilePathsInResponse(newContent)
+            markdownContent.replace(contentStart, contentEnd, processedContent)
+        }
+    }
+    
+    private fun rebuildMarkdownContent() {
+        markdownContent.clear()
+        messages.forEachIndexed { index, message ->
+            if (index > 0) {
+                markdownContent.append("\n\n---\n\n")
+            }
+            appendMessageToMarkdown(message)
+        }
+    }
+    
+    private fun appendMessageToMarkdown(message: ChatMessage) {
+        when (message.sender) {
+            "You" -> {
+                markdownContent.append("👤 **You**\n\n")
+                val processedContent = processFileReferences(message.content)
+                markdownContent.append(processedContent)
+            }
+            "Claude" -> {
+                markdownContent.append("🤖 **Claude**\n\n")
+                val processedContent = processFilePathsInResponse(message.content)
+                markdownContent.append(processedContent)
+            }
+            "Error" -> {
+                markdownContent.append("❌ **Error**\n\n")
+                markdownContent.append("> ${message.content}")
+            }
+            "System" -> {
+                markdownContent.append(message.content)
+            }
+        }
     }
     
     private fun buildMarkdown(): String {
@@ -615,7 +716,14 @@ class IntelliJMarkdownChatWindow(
         
         // 确保在 EDT 线程执行
         if (SwingUtilities.isEventDispatchThread()) {
-            performUpdate(markdown)
+            // 如果组件还未完全初始化，延迟执行
+            if (!markdownPanel.component.isShowing) {
+                SwingUtilities.invokeLater {
+                    performUpdate(markdown)
+                }
+            } else {
+                performUpdate(markdown)
+            }
         } else {
             SwingUtilities.invokeLater {
                 performUpdate(markdown)
@@ -625,7 +733,7 @@ class IntelliJMarkdownChatWindow(
     
     private fun performUpdate(markdown: String) {
         try {
-            // 使用正确的 API 生成 HTML
+            // 使用 CommonMark 将 Markdown 转换为 HTML
             val htmlContent = convertMarkdownToHtml(markdown)
             LOG.info("Converted to HTML: ${htmlContent.take(200)}...")
             
@@ -639,6 +747,7 @@ class IntelliJMarkdownChatWindow(
                             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                             padding: 10px;
                             line-height: 1.6;
+                            color: #333;
                         }
                         pre { 
                             background-color: #f5f5f5; 
@@ -652,15 +761,14 @@ class IntelliJMarkdownChatWindow(
                             border-radius: 3px;
                             font-family: 'JetBrains Mono', monospace;
                         }
-                        .message {
-                            margin-bottom: 20px;
+                        pre code {
+                            background-color: transparent;
+                            padding: 0;
                         }
-                        .sender {
-                            font-weight: bold;
-                            margin-bottom: 5px;
-                        }
-                        .error {
-                            color: #d73a49;
+                        hr {
+                            border: none;
+                            border-top: 1px solid #e1e4e8;
+                            margin: 20px 0;
                         }
                         blockquote {
                             border-left: 4px solid #dfe2e5;
@@ -668,22 +776,57 @@ class IntelliJMarkdownChatWindow(
                             padding-left: 16px;
                             color: #6a737d;
                         }
+                        a {
+                            color: #0366d6;
+                            text-decoration: none;
+                        }
+                        a:hover {
+                            text-decoration: underline;
+                        }
+                        h1, h2, h3, h4, h5, h6 {
+                            margin-top: 24px;
+                            margin-bottom: 16px;
+                            font-weight: 600;
+                            line-height: 1.25;
+                        }
+                        h1 { font-size: 2em; }
+                        h2 { font-size: 1.5em; }
+                        h3 { font-size: 1.25em; }
+                        table {
+                            border-collapse: collapse;
+                            width: 100%;
+                            margin: 16px 0;
+                        }
+                        table th,
+                        table td {
+                            padding: 6px 13px;
+                            border: 1px solid #dfe2e5;
+                        }
+                        table tr {
+                            background-color: #fff;
+                            border-top: 1px solid #c6cbd1;
+                        }
+                        table tr:nth-child(2n) {
+                            background-color: #f6f8fa;
+                        }
                     </style>
                 </head>
-                <body>
-                    <div id="root">
-                        $htmlContent
-                    </div>
-                </body>
+                <body><div data-md-root="true">$htmlContent</div></body>
                 </html>
             """.trimIndent()
             
             LOG.info("Setting HTML to panel")
-            markdownPanel.setHtml(updatedHtml, 0)
             
-            // 强制刷新组件
-            markdownPanel.component.revalidate()
-            markdownPanel.component.repaint()
+            // 使用同步更新确保内容显示
+            if (SwingUtilities.isEventDispatchThread()) {
+                markdownPanel.setHtml(updatedHtml, 0)
+                refreshUI()
+            } else {
+                SwingUtilities.invokeAndWait {
+                    markdownPanel.setHtml(updatedHtml, 0)
+                    refreshUI()
+                }
+            }
             
             LOG.info("HTML set successfully, UI refreshed")
         } catch (e: Exception) {
@@ -694,23 +837,59 @@ class IntelliJMarkdownChatWindow(
         }
     }
     
+    private fun refreshUI() {
+        // 获取包装容器
+        var container = markdownPanel.component.parent
+        
+        // 向上查找 JBScrollPane 或其他容器
+        while (container != null && container !is JBScrollPane) {
+            container = container.parent
+        }
+        
+        // 如果找到滚动面板，刷新它
+        container?.let { scrollPane ->
+            if (scrollPane.isShowing) {
+                scrollPane.validate()
+                scrollPane.repaint()
+            }
+        }
+        
+        // 刷新 JCEF 组件本身
+        if (markdownPanel.component.isShowing) {
+            markdownPanel.component.validate()
+            markdownPanel.component.repaint()
+        }
+        
+        // 获取工具窗口并刷新
+        findToolWindow()?.let { toolWindow ->
+            toolWindow.component.revalidate()
+            toolWindow.component.repaint()
+        }
+    }
+    
     
     private fun clearMessages() {
         messages.clear()
-        updateDisplay()
+        markdownContent.clear()
+        updateMarkdownDisplay()
     }
     
     private fun startNewSession() {
         forceNewSession = true
         isFirstMessage = true  // 重置为第一条消息
         messages.clear()  // 清空消息历史
+        markdownContent.clear()  // 清空 Markdown 内容
+        
         // 重新添加欢迎消息
-        messages.add(ChatMessage("System", """
+        val newSessionMessage = """
             # 新会话已开始
             
             可以开始新的对话了！
-        """.trimIndent()))
-        updateDisplay()
+        """.trimIndent()
+        
+        messages.add(ChatMessage("System", newSessionMessage))
+        appendToMarkdown("System", newSessionMessage)
+        updateMarkdownDisplay()
     }
     
     private fun showLogInfo() {
@@ -746,7 +925,7 @@ class IntelliJMarkdownChatWindow(
     }
     
     private fun exportConversation() {
-        val markdown = buildMarkdown()
+        val markdown = markdownContent.toString()
         val descriptor = FileSaverDescriptor(
             "导出对话",
             "选择保存位置",
