@@ -1,0 +1,48 @@
+{
+  "name": "claude-sdk-wrapper",
+  "version": "1.0.0",
+  "description": "Claude SDK Wrapper Server for IntelliJ Plugin",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "build:production": "npm run build && npm run bundle && node scripts/prepare-production.js",
+    "bundle": "node scripts/bundle.js",
+    "build:standalone": "npm run build && node scripts/create-standalone.js",
+    "start": "node dist/server.js",
+    "start:dev": "tsx src/server.ts",
+    "build:plugin": "npm run build && node scripts/build-for-plugin.js",
+    "check-node": "node scripts/check-node-version.js"
+  },
+  "keywords": [
+    "claude",
+    "sdk",
+    "wrapper"
+  ],
+  "author": "Claude Code Plus Team",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "latest",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "semver": "^7.5.4",
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0",
+    "ws": "^8.16.0",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.5",
+    "@types/uuid": "^9.0.7",
+    "@types/ws": "^8.5.10",
+    "@types/yargs": "^17.0.32",
+    "@yao-pkg/pkg": "^6.5.1",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
