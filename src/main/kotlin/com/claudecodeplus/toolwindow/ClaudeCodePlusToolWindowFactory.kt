@@ -55,8 +55,10 @@ import com.intellij.openapi.vfs.VirtualFile
 import java.nio.file.Paths
 import javax.swing.Timer
 import com.claudecodeplus.sdk.ClaudeAPIClient
-import com.claudecodeplus.sdk.ClaudeResponse
 import com.claudecodeplus.sdk.ClaudeOptions
+import com.claudecodeplus.sdk.NodeResourceExtractor
+import com.claudecodeplus.sdk.HealthStatus
+import com.intellij.openapi.application.PathManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
@@ -76,13 +78,70 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
     
     companion object {
         private val logger = com.intellij.openapi.diagnostic.Logger.getInstance(ClaudeCodePlusToolWindowFactory::class.java)
+        private var apiClient: ClaudeAPIClient? = null
+        private var initJob: Job? = null
+        
+        @JvmStatic
+        fun stopServices() {
+            logger.info("Stopping Claude Code Plus services...")
+            apiClient?.stop()
+            apiClient = null
+            initJob?.cancel()
+            initJob = null
+        }
+        
+        private fun initializeApiClient(project: Project) {
+            if (apiClient != null) return
+            
+            initJob = GlobalScope.launch {
+                try {
+                    // 获取 Node 服务路径
+                    val resourcePath = File(PathManager.getPluginsPath(), "claude-code-plus/claude-node")
+                    val nodeServicePath = if (resourcePath.exists()) {
+                        resourcePath.absolutePath
+                    } else {
+                        // 开发环境：使用项目中的资源
+                        val devPath = File(project.basePath, "src/main/resources/claude-node")
+                        if (devPath.exists()) {
+                            devPath.absolutePath
+                        } else {
+                            // 尝试从类路径提取
+                            val tempDir = File(System.getProperty("java.io.tmpdir"), "claude-code-plus-node")
+                            val extractor = NodeResourceExtractor()
+                            if (extractor.extractServerResources(tempDir)) {
+                                tempDir.absolutePath
+                            } else {
+                                throw RuntimeException("Failed to extract Node service resources")
+                            }
+                        }
+                    }
+                    
+                    logger.info("Initializing API client with Node service at: $nodeServicePath")
+                    
+                    // 创建并初始化客户端
+                    val client = ClaudeAPIClient(nodeServicePath)
+                    if (client.initialize()) {
+                        apiClient = client
+                        logger.info("API client initialized successfully")
+                    } else {
+                        logger.error("Failed to initialize API client")
+                    }
+                } catch (e: Exception) {
+                    logger.error("Error initializing API client", e)
+                }
+            }
+        }
     }
     
-    private val apiClient = ClaudeAPIClient()
     private var shouldStartNewSession = false
     private var currentStreamJob: kotlinx.coroutines.Job? = null
     
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
+        // 初始化 API 客户端
+        if (apiClient == null) {
+            initializeApiClient(project)
+        }
+        
         val contentFactory = ContentFactory.getInstance()
         val panel = createChatPanel(project)
         val content = contentFactory.createContent(panel, "", false)
@@ -147,8 +206,8 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         thread {
             try {
                 Thread.sleep(1000) // 等待界面初始化
-                val isHealthy = kotlinx.coroutines.runBlocking { apiClient.checkHealth() }
-                if (!isHealthy) {
+                val isHealthy = kotlinx.coroutines.runBlocking { apiClient?.checkHealth() ?: false }
+                if (isHealthy == false) {
                     ApplicationManager.getApplication().invokeLater {
                         Messages.showWarningDialog(
                             project,
@@ -384,8 +443,8 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                     
                     // 设置文件图标
                     val file = findFile(project, value)
-                    file?.let {
-                        val fileType = com.intellij.openapi.fileTypes.FileTypeManager.getInstance().getFileTypeByFile(it)
+                    file?.let { vFile ->
+                        val fileType = com.intellij.openapi.fileTypes.FileTypeManager.getInstance().getFileTypeByFile(vFile)
                         component.icon = fileType.icon
                     }
                 }
@@ -491,7 +550,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             // 同时调用服务端的 abort 接口
             GlobalScope.launch {
                 try {
-                    val aborted = apiClient.abortCurrentRequest()
+                    val aborted = apiClient?.abortCurrentRequest() ?: false
                     logger.info("Server abort result: $aborted")
                 } catch (e: Exception) {
                     logger.error("Failed to abort server request", e)
@@ -548,7 +607,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                             // 同时调用服务端的 abort 接口
                             GlobalScope.launch {
                                 try {
-                                    val aborted = apiClient.abortCurrentRequest()
+                                    val aborted = apiClient?.abortCurrentRequest() ?: false
                                     logger.info("Server abort result: $aborted")
                                 } catch (e: Exception) {
                                     logger.error("Failed to abort server request", e)
@@ -915,7 +974,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         currentStreamJob = GlobalScope.launch {
             try {
                 // 检查服务状态
-                val healthStatus = apiClient.checkHealth()
+                val healthStatus = apiClient?.checkHealth() ?: HealthStatus(false, false, 0)
                 if (!healthStatus.isHealthy) {
                     SwingUtilities.invokeLater {
                         // 移除"Generating..."
@@ -990,225 +1049,78 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                 
                 // 准备选项（使用 ClaudeOptions 数据类）
                 val options = ClaudeOptions(
-                    cwd = project.basePath ?: System.getProperty("user.dir"),
                     model = when (model) {
-                        "sonnet" -> "Sonnet"
-                        "opus" -> "Opus"
-                        else -> "Sonnet"
+                        "sonnet" -> "claude-3-5-sonnet-20241022"
+                        "opus" -> "claude-3-opus-20240229"
+                        else -> "claude-3-5-sonnet-20241022"
                     },
-                    mcpConfig = mcpConfig
+                    mcp = mcpConfig
                 )
                 
-                // 判断是否需要开启新会话
-                val startNewSession = shouldStartNewSession
-                if (shouldStartNewSession) {
-                    shouldStartNewSession = false  // 重置标志
-                }
-                
                 // 使用流式 API
-                try {
-                    apiClient.streamMessage(message, startNewSession, options.toMap())
-                        .catch { e ->
-                            if (e is CancellationException) {
-                                // 用户取消，显示提示
-                                SwingUtilities.invokeLater {
-                                    val currentContent = conversationContent.toString()
-                                    val generatingIndex = currentContent.lastIndexOf("_Generating..._")
-                                    if (generatingIndex >= 0) {
-                                        conversationContent.setLength(generatingIndex)
-                                        conversationContent.append(responseBuilder.toString())
-                                        conversationContent.append("\n\n*（已停止生成）*\n\n")
-                                        updateEditorContent(editor, conversationContent.toString())
-                                        scrollToBottom(editor)
-                                        
-                                        // 重新启用输入框
-                                        inputArea.isEnabled = true
-                                        inputArea.requestFocusInWindow()
-                                        
-                                        // 隐藏停止按钮
-                                        inputArea.getClientProperty("stopButton")?.let { btn ->
-                                            if (btn is JButton) {
-                                                btn.isVisible = false
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                throw e
-                            }
-                        }
-                        .collect { response ->
-                            // 检查是否已取消
-                            if (!isActive) return@collect
+                GlobalScope.launch(Dispatchers.IO) {
+                    try {
+                        apiClient?.streamMessage(message, options) { chunk ->
+                            // 处理每个数据块
+                            responseBuilder.append(chunk)
+                            hasContent = true
                             
-                            when (response.type) {
-                            "text" -> {
-                                response.content?.let { content ->
-                                    responseBuilder.append(content)
-                                    hasContent = true
-                                    
-                                    // 更新显示（移除"Generating..."并显示当前内容）
-                                    SwingUtilities.invokeLater {
-                                        val currentContent = conversationContent.toString()
-                                        val generatingIndex = currentContent.lastIndexOf("_Generating..._")
-                                        if (generatingIndex >= 0) {
-                                            conversationContent.setLength(generatingIndex)
-                                            conversationContent.append(responseBuilder.toString())
-                                            conversationContent.append("\n\n")
-                                            updateEditorContent(editor, conversationContent.toString())
-                                            scrollToBottom(editor)
-                                        }
-                                    }
-                                }
-                            }
-                            "tool_use" -> {
-                                response.content?.let { content ->
-                                    try {
-                                        val toolData = org.json.JSONObject(content)
-                                        val toolName = toolData.optString("name", "unknown")
-                                        val toolInput = toolData.optJSONObject("input")
-                                        
-                                        SwingUtilities.invokeLater {
-                                            // 紧凑模式显示
-                                            responseBuilder.append("\n`🔧 ")
-                                            responseBuilder.append(toolName)
-                                            
-                                            // 添加关键参数
-                                            if (toolInput != null) {
-                                                val keyParam = when(toolName) {
-                                                    "read", "read_file" -> toolInput.optString("path", "")
-                                                    "write", "write_file" -> toolInput.optString("path", "")
-                                                    "bash", "run_command" -> toolInput.optString("command", "")
-                                                    else -> ""
-                                                }
-                                                if (keyParam.isNotEmpty()) {
-                                                    responseBuilder.append(" → ${keyParam.substringAfterLast("/").take(30)}")
-                                                    if (keyParam.length > 30) responseBuilder.append("...")
-                                                }
-                                            }
-                                            responseBuilder.append("`")
-                                            
-                                            // 更新显示
-                                            val currentContent = conversationContent.toString()
-                                            val generatingIndex = currentContent.lastIndexOf("_Generating..._")
-                                            if (generatingIndex >= 0) {
-                                                conversationContent.setLength(generatingIndex)
-                                                conversationContent.append(responseBuilder.toString())
-                                                conversationContent.append("\n\n")
-                                                updateEditorContent(editor, conversationContent.toString())
-                                                scrollToBottom(editor)
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        // 解析失败时显示简单信息
-                                        SwingUtilities.invokeLater {
-                                            responseBuilder.append("\n`🔧 工具调用`")
-                                        }
-                                    }
-                                }
-                            }
-                            "tool_result" -> {
-                                response.content?.let { content ->
-                                    SwingUtilities.invokeLater {
-                                        // 紧凑显示工具结果
-                                        val resultPreview = content.lines().firstOrNull()?.take(50) ?: content.take(50)
-                                        responseBuilder.append(" ✓")
-                                        if (resultPreview.isNotEmpty() && content.length <= 100) {
-                                            responseBuilder.append(" `${resultPreview}`")
-                                        }
-                                        
-                                        // 更新显示
-                                        val currentContent = conversationContent.toString()
-                                        val generatingIndex = currentContent.lastIndexOf("_Generating..._")
-                                        if (generatingIndex >= 0) {
-                                            conversationContent.setLength(generatingIndex)
-                                            conversationContent.append(responseBuilder.toString())
-                                            conversationContent.append("\n\n")
-                                            updateEditorContent(editor, conversationContent.toString())
-                                            scrollToBottom(editor)
-                                        }
-                                    }
-                                }
-                            }
-                            "error" -> {
-                                val errorMessage = response.error ?: "Unknown error"
-                                SwingUtilities.invokeLater {
-                                    // 移除"Generating..."
-                                    val currentContent = conversationContent.toString()
-                                    val generatingIndex = currentContent.lastIndexOf("_Generating..._")
-                                    if (generatingIndex >= 0) {
-                                        conversationContent.setLength(generatingIndex)
-                                    }
-                                    
-                                    // 添加错误消息
-                                    conversationContent.append("> ❌ **错误**: $errorMessage\n\n")
-                                    
+                            SwingUtilities.invokeLater {
+                                val currentContent = conversationContent.toString()
+                                val generatingIndex = currentContent.lastIndexOf("_Generating..._")
+                                if (generatingIndex >= 0) {
+                                    conversationContent.setLength(generatingIndex)
+                                    conversationContent.append(responseBuilder.toString())
+                                    conversationContent.append("_")
                                     updateEditorContent(editor, conversationContent.toString())
                                     scrollToBottom(editor)
-                                    
-                                    // 显示错误对话框
-                                    Messages.showErrorDialog(
-                                        project,
-                                        "Claude API 错误: $errorMessage",
-                                        "API 错误"
-                                    )
-                                    
-                                    // 重新启用输入框
-                                    inputArea.isEnabled = true
-                                    inputArea.requestFocusInWindow()
-                                    
-                                    // 隐藏停止按钮
-                                    inputArea.getClientProperty("stopButton")?.let { btn ->
-                                        if (btn is JButton) {
-                                            btn.isVisible = false
-                                        }
-                                    }
                                 }
                             }
-                        }
-                    }
-                    
-                // 完成后添加分隔线，并重新启用输入框和隐藏停止按钮
-                if (hasContent) {
-                    SwingUtilities.invokeLater {
-                        conversationContent.append("---\n\n")
-                        updateEditorContent(editor, conversationContent.toString())
-                        scrollToBottom(editor)
+                        }?.collect()
                         
-                        // 重新启用输入框
-                        inputArea.isEnabled = true
-                        inputArea.requestFocusInWindow()
-                        
-                        // 隐藏停止按钮
-                        inputArea.getClientProperty("stopButton")?.let { btn ->
-                            if (btn is JButton) {
-                                btn.isVisible = false
-                            }
-                        }
-                    }
-                }
-                
-                } catch (e: Exception) {
-                    if (e !is CancellationException) {
+                        // 流完成后的处理
                         SwingUtilities.invokeLater {
-                            // 移除"Generating..."
                             val currentContent = conversationContent.toString()
                             val generatingIndex = currentContent.lastIndexOf("_Generating..._")
                             if (generatingIndex >= 0) {
                                 conversationContent.setLength(generatingIndex)
+                                conversationContent.append(responseBuilder.toString())
+                                conversationContent.append("\n\n")
+                                updateEditorContent(editor, conversationContent.toString())
+                                scrollToBottom(editor)
                             }
                             
-                            // 添加错误消息
-                            conversationContent.append("> ❌ **连接错误**: ${e.message}\n\n")
+                            // 重新启用输入
+                            inputArea.isEnabled = true
+                            inputArea.requestFocusInWindow()
                             
-                            updateEditorContent(editor, conversationContent.toString())
-                            scrollToBottom(editor)
-                            
-                            Messages.showErrorDialog(
-                                project,
-                                "无法连接到 Claude SDK 服务: ${e.message}",
-                                "连接错误"
-                            )
+                            // 隐藏停止按钮
+                            inputArea.getClientProperty("stopButton")?.let { btn ->
+                                if (btn is JButton) {
+                                    btn.isVisible = false
+                                }
+                            }
+                        }
+                        
+                    } catch (e: Exception) {
+                        SwingUtilities.invokeLater {
+                            val currentContent = conversationContent.toString()
+                            val generatingIndex = currentContent.lastIndexOf("_Generating..._")
+                            if (generatingIndex >= 0) {
+                                conversationContent.setLength(generatingIndex)
+                                if (responseBuilder.isNotEmpty()) {
+                                    conversationContent.append(responseBuilder.toString())
+                                }
+                                
+                                if (e is CancellationException) {
+                                    conversationContent.append("\n\n*（已停止生成）*\n\n")
+                                } else {
+                                    conversationContent.append("\n\n> ❌ **错误**: ${e.message}\n\n")
+                                }
+                                
+                                updateEditorContent(editor, conversationContent.toString())
+                                scrollToBottom(editor)
+                            }
                             
                             // 重新启用输入框
                             inputArea.isEnabled = true
@@ -1224,8 +1136,28 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                     }
                 }
             } catch (e: Exception) {
-                // 外层异常处理
-                logger.error("Stream error", e)
+                // 处理外层异常
+                SwingUtilities.invokeLater {
+                    val currentContent = conversationContent.toString()
+                    val generatingIndex = currentContent.lastIndexOf("_Generating..._")
+                    if (generatingIndex >= 0) {
+                        conversationContent.setLength(generatingIndex)
+                        conversationContent.append("> ❌ **错误**: ${e.message}\n\n")
+                        updateEditorContent(editor, conversationContent.toString())
+                        scrollToBottom(editor)
+                    }
+                    
+                    // 重新启用输入框
+                    inputArea.isEnabled = true
+                    inputArea.requestFocusInWindow()
+                    
+                    // 隐藏停止按钮
+                    inputArea.getClientProperty("stopButton")?.let { btn ->
+                        if (btn is JButton) {
+                            btn.isVisible = false
+                        }
+                    }
+                }
             }
         }
     }
