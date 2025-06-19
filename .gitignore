@@ -33,9 +33,7 @@ bin/
 
 ### Plugin Development ###
 runIde-console.log
-logs/
 pty-logs/
-*.log
 
 ### Gradle ###
 .gradle/
@@ -65,9 +63,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
@@ -120,7 +116,32 @@ htmlcov/
 # Sphinx documentation
 docs/_build/
 
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tsbuildinfo
+dist/
+claude-sdk-wrapper/node_modules/
+claude-sdk-wrapper/dist/
+src/main/resources/claude-node/node_modules/
+
+# Logs
+logs/
+*.log
+
 ### Temporary files ###
 *.tmp
 *.temp
 *~
+*.backup
+*.bak
+
+# Unix Socket files
+*.sock
+
+# Claude SDK specific
+.claude/
+
+

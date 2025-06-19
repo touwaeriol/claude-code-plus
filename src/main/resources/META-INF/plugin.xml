@@ -1,74 +1,61 @@
 <idea-plugin>
     <id>com.claudecodeplus</id>
     <name>Claude Code Plus</name>
-    <vendor email="support@claudecodeplus.com" url="https://github.com/your-username/claude-code-plus">Claude Code Plus Team</vendor>
+    <vendor>Claude Code Plus Team</vendor>
     
     <description><![CDATA[
-    Claude Code Plus - An enhanced UI for Claude Code CLI
+    Claude Code Plus - 基于 Claude SDK 的智能编程助手
     
-    This plugin provides a JetBrains AI-like chat interface for Claude Code, with features including:
-    - Smart file reference with @ completion
-    - Automatic path resolution
-    - Markdown rendering
-    - Code highlighting
-    - Multi-session management
+    主要功能：
+    - 与 Claude AI 进行智能对话
+    - 支持文件引用和代码补全
+    - MCP (Model Context Protocol) 服务配置
+    - 导出对话历史
+    - Markdown 格式的对话显示
     ]]></description>
     
     <depends>com.intellij.modules.platform</depends>
-    <depends>com.intellij.modules.lang</depends>
     <depends>org.intellij.plugins.markdown</depends>
     
-    <!-- 版本兼容性配置 -->
     <idea-version since-build="243.0" until-build="252.*"/>
     
-    <!-- 此插件支持 K2 mode -->
+    <application-components>
+        <component>
+            <implementation-class>com.claudecodeplus.ClaudeCodePlusApplicationComponent</implementation-class>
+        </component>
+    </application-components>
+    
+    <applicationListeners>
+        <listener class="com.claudecodeplus.listeners.ProjectLifecycleListener"
+                  topic="com.intellij.openapi.project.ProjectManagerListener"/>
+    </applicationListeners>
     
     <extensions defaultExtensionNs="com.intellij">
-        <!-- 服务声明 -->
-        <applicationService serviceImplementation="com.claudecodeplus.service.ClaudeCodeService"/>
-        <applicationService serviceImplementation="com.claudecodeplus.service.ClaudeHttpClient"/>
-        <applicationService serviceImplementation="com.claudecodeplus.service.ClaudeWebSocketClient"/>
-        
-        <!-- 通知组 -->
-        <notificationGroup id="Claude Code Plus" displayType="BALLOON" key="notification.group.claude.code.plus"/>
-        
         <!-- 工具窗口 -->
-        <toolWindow id="ClaudeCode" 
+        <toolWindow id="ClaudeCodePlus" 
                     anchor="right" 
-                    factoryClass="com.claudecodeplus.toolwindow.ClaudeCodeToolWindowFactory"
-                    icon="/icons/claude-code.svg"/>
+                    factoryClass="com.claudecodeplus.toolwindow.ClaudeCodePlusToolWindowFactory"/>
                     
-        <!-- Compose 版本的工具窗口 -->
-        <toolWindow id="ClaudeCodeCompose" 
-                    anchor="right" 
-                    factoryClass="com.claudecodeplus.toolwindow.ComposeToolWindowFactory"
-                    icon="/icons/claude-code.svg"/>
-                    
-        <!-- 启动活动 -->
-        <projectActivity implementation="com.claudecodeplus.startup.ProjectStartupLogger"/>
-        
-        <!-- 完成贡献者 -->
-        <!-- 使用 "any" 以便在所有文件类型中都能使用，或者使用 PlainText -->
-        <completion.contributor 
-            language="any"
-            implementationClass="com.claudecodeplus.completion.FileReferenceCompletionContributor"/>
+        <!-- Claude Code Plus 配置组 -->
+        <applicationConfigurable
+            parentId="tools"
+            id="com.claudecodeplus.settings"
+            displayName="Claude Code Plus"
+            groupId="tools"/>
+            
+        <!-- MCP 配置页面 -->
+        <applicationConfigurable 
+            parentId="com.claudecodeplus.settings"
+            instance="com.claudecodeplus.settings.McpConfigurable"
+            id="com.claudecodeplus.settings.McpConfigurable"
+            displayName="MCP"/>
+            
+        <!-- 应用级别服务 -->
+        <applicationService 
+            serviceImplementation="com.claudecodeplus.settings.McpSettingsService"/>
+            
+        <!-- 项目级别服务 -->
+        <projectService 
+            serviceImplementation="com.claudecodeplus.settings.ProjectMcpSettingsService"/>
     </extensions>
-    
-    <actions>
-        <!-- 测试动作 -->
-        <action id="com.claudecodeplus.action.TestCompletionAction"
-                class="com.claudecodeplus.action.TestCompletionAction"
-                text="Test Completion Config"
-                description="Test auto-completion configuration">
-            <add-to-group group-id="ToolsMenu" anchor="last"/>
-        </action>
-        
-        <!-- 显示日志动作 -->
-        <action id="com.claudecodeplus.action.ShowLogsAction"
-                class="com.claudecodeplus.action.ShowLogsAction"
-                text="Show Claude Code Logs"
-                description="Show Claude Code Plus session logs">
-            <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="com.claudecodeplus.action.TestCompletionAction"/>
-        </action>
-    </actions>
 </idea-plugin>
