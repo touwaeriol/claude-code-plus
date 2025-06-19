@@ -91,6 +91,17 @@ export class ClaudeService {
   }
 
   /**
+   * 健康检查
+   */
+  async checkHealth() {
+    return {
+      isHealthy: this.isInitialized && this.sdkLoaded,
+      isProcessing: this.isProcessing,
+      activeSessions: this.sessionManager.getActiveSessions().length
+    };
+  }
+  
+  /**
    * 获取服务状态
    */
   getStatus() {
