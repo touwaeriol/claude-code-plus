@@ -102,6 +102,13 @@ class ClaudeService {
             return { success: false, error: String(error) };
         }
     }
+    async checkHealth() {
+        return {
+            isHealthy: this.isInitialized && this.sdkLoaded,
+            isProcessing: this.isProcessing,
+            activeSessions: this.sessionManager.getActiveSessions().length
+        };
+    }
     getStatus() {
         return {
             initialized: this.isInitialized,
