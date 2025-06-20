@@ -144,4 +144,12 @@ logs/
 # Claude SDK specific
 .claude/
 
+# Test files
+test-*.js
+test-*.sh
+test-*.html
+test-*.log
+/package.json
+/package-lock.json
+
 
