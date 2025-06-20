@@ -1,4 +1,4 @@
-import { Logger } from 'winston';
+import winston from 'winston';
 import { SessionManager } from './sessionManager';
 
 export interface StreamChunk {
@@ -11,67 +11,24 @@ export interface StreamChunk {
 }
 
 export class ClaudeService {
-  private isInitialized = false;
   private isProcessing = false;
   private currentAbortController: AbortController | null = null;
-  private defaultOptions: any = {
-    system_prompt: 'You are a helpful assistant.',
-    max_turns: 20
-  };
 
   constructor(
-    private logger: Logger,
+    private logger: winston.Logger,
     public sessionManager: SessionManager
   ) {
-    this.logger.info('Claude Service initialized');
+    this.logger.info('Claude Service created');
   }
 
-  /**
-   * 初始化服务
-   */
-  initialize(config: any): { success: boolean; message?: string; error?: string } {
-    try {
-      this.logger.info(`Initializing with config: ${JSON.stringify(config)}`);
-      
-      if (config.system_prompt) {
-        this.defaultOptions.system_prompt = config.system_prompt;
-      }
-      if (config.max_turns) {
-        this.defaultOptions.max_turns = config.max_turns;
-      }
-      if (config.cwd) {
-        this.defaultOptions.cwd = config.cwd;
-      }
-      if (config.allowed_tools) {
-        this.defaultOptions.allowed_tools = config.allowed_tools;
-      }
-      if (config.permission_mode) {
-        this.defaultOptions.permission_mode = config.permission_mode;
-      }
-      if (config.max_thinking_tokens) {
-        this.defaultOptions.max_thinking_tokens = config.max_thinking_tokens;
-      }
-      if (config.model) {
-        this.defaultOptions.model = config.model;
-      }
-
-      this.isInitialized = true;
-      this.logger.info('Service initialized successfully');
-      return { success: true, message: 'Service initialized' };
-    } catch (error) {
-      this.logger.error(`Failed to initialize: ${error}`);
-      return { success: false, error: String(error) };
-    }
-  }
 
   /**
    * 健康检查
    */
   async checkHealth() {
     return {
-      isHealthy: this.isInitialized,
-      isProcessing: this.isProcessing,
-      activeSessions: this.sessionManager.getActiveSessions().length
+      isHealthy: true,
+      isProcessing: this.isProcessing
     };
   }
   
@@ -80,9 +37,8 @@ export class ClaudeService {
    */
   getStatus() {
     return {
-      initialized: this.isInitialized,
       sdk_available: false, // 暂时禁用
-      active_sessions: this.sessionManager.getActiveSessions().length,
+      has_active_session: this.sessionManager.getCurrentSession() !== null,
       is_processing: this.isProcessing
     };
   }
@@ -111,20 +67,10 @@ export class ClaudeService {
   ): AsyncGenerator<StreamChunk> {
     // 检查是否正在处理
     if (this.isProcessing) {
-      yield { type: 'error', error: 'Service is busy processing another request. Please wait or abort the current request.' };
+      yield { type: 'error', error: 'Service is busy. Only one request can be processed at a time.' };
       return;
     }
 
-    // 自动初始化
-    if (!this.isInitialized) {
-      this.logger.info('Service not initialized, attempting auto-initialization...');
-      const initConfig = customOptions?.cwd ? { cwd: customOptions.cwd } : {};
-      const initResult = this.initialize(initConfig);
-      if (!initResult.success) {
-        yield { type: 'error', error: `Failed to auto-initialize: ${initResult.error}` };
-        return;
-      }
-    }
 
     this.logger.info(`Stream processing message (session: ${sessionId}): ${message.substring(0, 100)}...`);
 

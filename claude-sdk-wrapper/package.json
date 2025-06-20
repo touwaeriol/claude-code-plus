@@ -26,9 +26,11 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/claude-code": "latest",
+    "@types/ws": "^8.18.1",
     "semver": "^7.5.4",
     "uuid": "^9.0.1",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "ws": "^8.18.2"
   },
   "devDependencies": {
     "@types/node": "^20.10.5",

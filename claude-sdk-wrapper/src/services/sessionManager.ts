@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Logger } from 'winston';
+import winston from 'winston';
 
 export interface Session {
   id: string;
@@ -9,20 +9,22 @@ export interface Session {
   is_first_message: boolean;
 }
 
+/**
+ * 单会话管理器 - 每个 Node 服务实例只支持一个会话
+ */
 export class SessionManager {
-  private sessions: Map<string, Session> = new Map();
+  private currentSession: Session | null = null;
   private sessionTimeout = 2 * 60 * 60 * 1000; // 2 hours
-  private defaultSessionId: string | null = null;
 
-  constructor(private logger: Logger) {
-    // 定期清理过期会话
+  constructor(private logger: winston.Logger) {
+    // 定期检查会话是否过期
     setInterval(() => {
-      this.cleanExpiredSessions();
-    }, 5 * 60 * 1000); // 每5分钟清理一次
+      this.checkSessionExpiry();
+    }, 5 * 60 * 1000); // 每5分钟检查一次
   }
 
   /**
-   * 创建新会话
+   * 创建新会话（会替换当前会话）
    */
   createSession(): string {
     const sessionId = uuidv4();
@@ -34,86 +36,89 @@ export class SessionManager {
       is_first_message: true
     };
     
-    this.sessions.set(sessionId, session);
+    // 如果已有会话，先记录
+    if (this.currentSession) {
+      this.logger.info(`Replacing existing session ${this.currentSession.id} with new session ${sessionId}`);
+    }
+    
+    this.currentSession = session;
     this.logger.info(`Created new session: ${sessionId}`);
     return sessionId;
   }
 
   /**
-   * 获取会话
+   * 获取当前会话
    */
   getSession(sessionId: string): Session | null {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
+    // 检查是否是当前会话
+    if (!this.currentSession || this.currentSession.id !== sessionId) {
+      this.logger.warn(`Session ${sessionId} not found or not current`);
       return null;
     }
 
     // 检查会话是否过期
-    if (Date.now() - session.last_activity.getTime() > this.sessionTimeout) {
+    if (Date.now() - this.currentSession.last_activity.getTime() > this.sessionTimeout) {
       this.logger.info(`Session ${sessionId} expired`);
-      this.sessions.delete(sessionId);
-      if (this.defaultSessionId === sessionId) {
-        this.defaultSessionId = null;
-      }
+      this.currentSession = null;
       return null;
     }
 
-    return session;
+    return this.currentSession;
   }
 
   /**
-   * 更新会话
+   * 更新当前会话
    */
   updateSession(sessionId: string, updates: Partial<Session>): void {
-    const session = this.sessions.get(sessionId);
-    if (session) {
-      Object.assign(session, updates, { last_activity: new Date() });
+    if (this.currentSession && this.currentSession.id === sessionId) {
+      Object.assign(this.currentSession, updates, { last_activity: new Date() });
     }
   }
 
   /**
-   * 获取或创建默认会话
+   * 获取或创建会话
    */
-  getOrCreateDefaultSession(): string {
-    if (this.defaultSessionId) {
-      const session = this.getSession(this.defaultSessionId);
-      if (session) {
-        return this.defaultSessionId;
+  getOrCreateSession(): string {
+    // 如果有当前会话且未过期，返回它
+    if (this.currentSession) {
+      const isExpired = Date.now() - this.currentSession.last_activity.getTime() > this.sessionTimeout;
+      if (!isExpired) {
+        return this.currentSession.id;
       }
     }
 
-    this.defaultSessionId = this.createSession();
-    this.logger.info(`Created new default session: ${this.defaultSessionId}`);
-    return this.defaultSessionId;
+    // 否则创建新会话
+    return this.createSession();
   }
 
   /**
-   * 清理过期会话
+   * 检查会话是否过期
    */
-  cleanExpiredSessions(): void {
-    const now = Date.now();
-    const expired: string[] = [];
-
-    for (const [id, session] of this.sessions) {
-      if (now - session.last_activity.getTime() > this.sessionTimeout) {
-        expired.push(id);
-      }
-    }
-
-    for (const id of expired) {
-      this.logger.info(`Cleaning expired session: ${id}`);
-      this.sessions.delete(id);
-      if (this.defaultSessionId === id) {
-        this.defaultSessionId = null;
+  private checkSessionExpiry(): void {
+    if (this.currentSession) {
+      const isExpired = Date.now() - this.currentSession.last_activity.getTime() > this.sessionTimeout;
+      if (isExpired) {
+        this.logger.info(`Session ${this.currentSession.id} expired, clearing`);
+        this.currentSession = null;
       }
     }
   }
 
   /**
-   * 获取活跃会话列表
+   * 获取当前会话（如果存在）
    */
-  getActiveSessions(): Session[] {
-    this.cleanExpiredSessions();
-    return Array.from(this.sessions.values());
+  getCurrentSession(): Session | null {
+    this.checkSessionExpiry();
+    return this.currentSession;
+  }
+
+  /**
+   * 清除当前会话
+   */
+  clearSession(): void {
+    if (this.currentSession) {
+      this.logger.info(`Clearing session ${this.currentSession.id}`);
+      this.currentSession = null;
+    }
   }
 }
