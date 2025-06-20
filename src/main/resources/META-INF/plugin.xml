@@ -35,12 +35,6 @@
         <toolWindow id="ClaudeCodePlus" 
                     anchor="right" 
                     factoryClass="com.claudecodeplus.toolwindow.ClaudeCodePlusToolWindowFactory"/>
-        
-        <!-- 测试工具窗口 -->
-        <toolWindow id="NodeServiceTest" 
-                    anchor="bottom" 
-                    secondary="true"
-                    factoryClass="com.claudecodeplus.toolwindow.TestNodeServiceToolWindow"/>
                     
         <!-- Claude Code Plus 配置组 -->
         <applicationConfigurable

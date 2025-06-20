@@ -88,90 +88,69 @@ class NodeServiceManager : Disposable {
                 logger.info("Server path: $serverPath")
                 
                 // 使用 IntelliJ 平台的 GeneralCommandLine
-                try {
-                    val commandLine = com.intellij.execution.configurations.GeneralCommandLine().apply {
-                        exePath = "node"
-                        addParameter(startJsFile.absolutePath)
-                        workDirectory = project.basePath?.let { File(it) } ?: File(".")
-                        
-                        // 设置环境变量
-                        environment["NODE_ENV"] = "production"
-                        environment["NODE_PATH"] = File(serverPath, "node_modules").absolutePath
-                        
-                        // 设置字符集
-                        charset = Charsets.UTF_8
+                val commandLine = GeneralCommandLine().apply {
+                    exePath = "node"
+                    addParameter(startJsFile.absolutePath)
+                    workDirectory = project.basePath?.let { File(it) } ?: File(".")
+                    
+                    // 设置环境变量
+                    environment["NODE_ENV"] = "production"
+                    environment["NODE_PATH"] = File(serverPath, "node_modules").absolutePath
+                    
+                    // 设置字符集
+                    charset = Charsets.UTF_8
+                }
+                
+                logger.info("Command line: ${commandLine.commandLineString}")
+                logger.info("Work directory: ${commandLine.workDirectory}")
+                
+                // 创建进程处理器
+                val processHandler = OSProcessHandler(commandLine)
+                
+                // 启动进程
+                processHandler.startNotify()
+                nodeProcess = processHandler.process
+                
+                logger.info("Node process started, PID: ${nodeProcess?.pid()}")
+                
+                // 添加进程监听器来捕获输出
+                processHandler.addProcessListener(object : ProcessListener {
+                    override fun startNotified(event: ProcessEvent) {
+                        logger.info("Process start notified")
                     }
                     
-                    logger.info("Command line: ${commandLine.commandLineString}")
-                    logger.info("Work directory: ${commandLine.workDirectory}")
+                    override fun processTerminated(event: ProcessEvent) {
+                        logger.info("Process terminated with exit code: ${event.exitCode}")
+                    }
                     
-                    // 创建进程处理器
-                    val processHandler = com.intellij.execution.process.OSProcessHandler(commandLine)
-                    
-                    // 启动进程
-                    processHandler.startNotify()
-                    nodeProcess = processHandler.process
-                    
-                    logger.info("Node process started, PID: ${nodeProcess?.pid()}")
-                    
-                    // 添加进程监听器来捕获输出
-                    processHandler.addProcessListener(object : com.intellij.execution.process.ProcessListener {
-                        override fun startNotified(event: com.intellij.execution.process.ProcessEvent) {
-                            logger.info("Process start notified")
-                        }
-                        
-                        override fun processTerminated(event: com.intellij.execution.process.ProcessEvent) {
-                            logger.info("Process terminated with exit code: ${event.exitCode}")
-                        }
-                        
-                        override fun onTextAvailable(event: com.intellij.execution.process.ProcessEvent, outputType: com.intellij.openapi.util.Key<*>) {
-                            val text = event.text.trim()
-                            if (text.isNotEmpty()) {
-                                when (outputType) {
-                                    com.intellij.execution.process.ProcessOutputTypes.STDOUT -> {
-                                        logger.info("[Node Stdout] $text")
-                                        if (text.contains("SOCKET_PATH:")) {
-                                            val path = text.substringAfter("SOCKET_PATH:").trim()
-                                            logger.info("Socket path detected: $path")
-                                        }
+                    override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                        val text = event.text.trim()
+                        if (text.isNotEmpty()) {
+                            when (outputType) {
+                                ProcessOutputTypes.STDOUT -> {
+                                    logger.info("[Node Stdout] $text")
+                                    if (text.contains("SOCKET_PATH:")) {
+                                        val path = text.substringAfter("SOCKET_PATH:").trim()
+                                        logger.info("Socket path detected: $path")
                                     }
-                                    com.intellij.execution.process.ProcessOutputTypes.STDERR -> {
-                                        if (text.startsWith("ERROR:")) {
-                                            val errorJson = text.substringAfter("ERROR:")
-                                            try {
-                                                val errorInfo = parseErrorInfo(errorJson)
-                                                logger.error("[Node Error] Stage: ${errorInfo.stage}, Message: ${errorInfo.message}")
-                                            } catch (e: Exception) {
-                                                logger.error("[Node Error] $errorJson")
-                                            }
-                                        } else {
-                                            logger.warn("[Node Stderr] $text")
+                                }
+                                ProcessOutputTypes.STDERR -> {
+                                    if (text.startsWith("ERROR:")) {
+                                        val errorJson = text.substringAfter("ERROR:")
+                                        try {
+                                            val errorInfo = parseErrorInfo(errorJson)
+                                            logger.error("[Node Error] Stage: ${errorInfo.stage}, Message: ${errorInfo.message}")
+                                        } catch (e: Exception) {
+                                            logger.error("[Node Error] $errorJson")
                                         }
+                                    } else {
+                                        logger.warn("[Node Stderr] $text")
                                     }
                                 }
                             }
                         }
-                    })
-                    
-                } catch (e: Exception) {
-                    logger.error("Failed to create command line", e)
-                    
-                    // 回退到 ProcessBuilder
-                    logger.info("Falling back to ProcessBuilder...")
-                    val command = listOf("node", startJsFile.absolutePath)
-                    
-                    val processBuilder = ProcessBuilder(command)
-                        .directory(project.basePath?.let { File(it) } ?: File("."))
-                        .redirectErrorStream(false)
-                    
-                    processBuilder.environment().apply {
-                        put("NODE_ENV", "production")
-                        put("NODE_PATH", File(serverPath, "node_modules").absolutePath)
                     }
-                    
-                    nodeProcess = processBuilder.start()
-                    logger.info("Node process started with ProcessBuilder, PID: ${nodeProcess?.pid()}")
-                }
+                })
                 
                 // 启动后立即开始读取输出
                 val reader = nodeProcess!!.inputStream.bufferedReader()
