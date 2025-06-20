@@ -1,5 +1,6 @@
 package com.claudecodeplus.listeners
 
+import com.claudecodeplus.sdk.NodeServiceManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManagerListener
 import com.intellij.openapi.diagnostic.Logger
@@ -15,9 +16,22 @@ class ProjectLifecycleListener : ProjectManagerListener {
         private val projectServices = mutableMapOf<Project, Any>()
     }
     
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun projectOpened(project: Project) {
         logger.info("Project opened: ${project.name}")
-        // API 客户端会在工具窗口创建时初始化
+        
+        // 启动 Node 服务
+        val nodeManager = NodeServiceManager.getInstance()
+        nodeManager.startService(project).thenAccept { port ->
+            if (port != null) {
+                logger.info("Node service started on port: $port")
+            } else {
+                logger.error("Failed to start Node service")
+            }
+        }.exceptionally { throwable ->
+            logger.error("Error starting Node service", throwable)
+            null
+        }
     }
     
     override fun projectClosing(project: Project) {

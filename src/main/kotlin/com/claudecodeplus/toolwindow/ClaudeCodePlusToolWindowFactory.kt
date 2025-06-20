@@ -54,13 +54,12 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import java.nio.file.Paths
 import javax.swing.Timer
-import com.claudecodeplus.sdk.ClaudeAPIClient
+import com.claudecodeplus.sdk.ClaudeAPIClientV5
 import com.claudecodeplus.sdk.ClaudeOptions
-import com.claudecodeplus.sdk.NodeResourceExtractor
 import com.claudecodeplus.sdk.HealthStatus
+import com.claudecodeplus.sdk.NodeServiceManager
 import com.intellij.openapi.application.PathManager
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import com.intellij.openapi.application.ApplicationManager
 import kotlin.concurrent.thread
@@ -70,6 +69,7 @@ import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.claudecodeplus.settings.McpConfigurable
 import com.claudecodeplus.settings.McpSettingsService
 import com.intellij.openapi.components.service
+import com.claudecodeplus.listeners.ProjectLifecycleListener
 
 /**
  * Claude Code Plus 工具窗口工厂实现
@@ -78,85 +78,23 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
     
     companion object {
         private val logger = com.intellij.openapi.diagnostic.Logger.getInstance(ClaudeCodePlusToolWindowFactory::class.java)
-        private var apiClient: ClaudeAPIClient? = null
-        private var initJob: Job? = null
+        private var apiClient: ClaudeAPIClientV5? = null
         
         @JvmStatic
         fun stopServices() {
             logger.info("Stopping Claude Code Plus services...")
-            apiClient?.stop()
+            apiClient?.disconnect()
             apiClient = null
-            initJob?.cancel()
-            initJob = null
         }
         
-        private fun initializeApiClient(project: Project) {
-            if (apiClient != null) return
-            
-            initJob = GlobalScope.launch {
-                try {
-                    // 获取 Node 服务路径
-                    val pluginPath = File(PathManager.getPluginsPath(), "claude-code-plus/claude-node")
-                    val nodeServicePath = when {
-                        // 生产环境：插件目录中的静态文件
-                        pluginPath.exists() -> {
-                            logger.info("Using Node service from plugin directory: $pluginPath")
-                            pluginPath.absolutePath
-                        }
-                        // 开发环境
-                        else -> {
-                            // 尝试多个可能的开发路径
-                            val possiblePaths = listOf(
-                                // 开发时的沙箱路径
-                                File(PathManager.getPluginsPath()).parentFile.resolve("claude-code-plus/claude-node"),
-                                // 项目根目录下的资源
-                                File(System.getProperty("user.dir"), "src/main/resources/claude-node"),
-                                // 如果当前项目就是插件项目
-                                File(project.basePath ?: "", "src/main/resources/claude-node"),
-                                // 临时目录（作为后备方案）
-                                File(System.getProperty("java.io.tmpdir"), "claude-code-plus-node")
-                            )
-                            
-                            var foundPath: File? = null
-                            for (path in possiblePaths) {
-                                logger.info("Checking for Node service at: ${path.absolutePath}")
-                                if (path.exists() && path.isDirectory && File(path, "start.js").exists()) {
-                                    foundPath = path
-                                    break
-                                }
-                            }
-                            
-                            if (foundPath != null) {
-                                logger.info("Using Node service from development path: ${foundPath.absolutePath}")
-                                foundPath.absolutePath
-                            } else {
-                                // 最后的尝试：从资源中提取
-                                val tempDir = File(System.getProperty("java.io.tmpdir"), "claude-code-plus-node")
-                                val extractor = NodeResourceExtractor()
-                                if (extractor.extractServerResources(tempDir)) {
-                                    logger.info("Extracted Node service to: ${tempDir.absolutePath}")
-                                    tempDir.absolutePath
-                                } else {
-                                    throw RuntimeException("Failed to find or extract Node service files")
-                                }
-                            }
-                        }
-                    }
-                    
-                    logger.info("Initializing API client with Node service at: $nodeServicePath")
-                    
-                    // 创建并初始化客户端
-                    val client = ClaudeAPIClient(nodeServicePath)
-                    if (client.initialize()) {
-                        apiClient = client
-                        logger.info("API client initialized successfully")
-                    } else {
-                        logger.error("Failed to initialize API client")
-                    }
-                } catch (e: Exception) {
-                    logger.error("Error initializing API client", e)
-                }
+        private fun getOrCreateApiClient(): ClaudeAPIClientV5 {
+            if (apiClient == null) {
+                val nodeManager = NodeServiceManager.getInstance()
+                val port = nodeManager.getServicePort() ?: 9925
+                logger.info("Creating API client with port: $port")
+                apiClient = ClaudeAPIClientV5(port)
             }
+            return apiClient!!
         }
     }
     
@@ -164,11 +102,6 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
     private var currentStreamJob: kotlinx.coroutines.Job? = null
     
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        // 初始化 API 客户端
-        if (apiClient == null) {
-            initializeApiClient(project)
-        }
-        
         val contentFactory = ContentFactory.getInstance()
         val panel = createChatPanel(project)
         val content = contentFactory.createContent(panel, "", false)
@@ -229,28 +162,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         })
         toolWindow.setAdditionalGearActions(gearActions)
         
-        // 检查服务是否在运行
-        thread {
-            try {
-                Thread.sleep(1000) // 等待界面初始化
-                val isHealthy = kotlinx.coroutines.runBlocking { apiClient?.checkHealth() ?: false }
-                if (isHealthy == false) {
-                    ApplicationManager.getApplication().invokeLater {
-                        Messages.showWarningDialog(
-                            project,
-                            "无法连接到 Claude SDK 服务。请确保服务正在运行。\n\n" +
-                            "手动启动方法：\n" +
-                            "1. 进入目录: src/main/resources/claude-node\n" +
-                            "2. 运行命令: node server-esm-wrapper.mjs --port 18080\n\n" +
-                            "默认地址: http://127.0.0.1:18080",
-                            "连接提示"
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                // 忽略错误
-            }
-        }
+        // 不再在启动时检查服务状态
     }
     
     
@@ -319,6 +231,25 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         // 存储引用以供工具窗口按钮使用
         panel.putClientProperty("editor", editor)
         panel.putClientProperty("conversationContent", conversationContent)
+        
+        // 插件启动后自动发送介绍消息
+        SwingUtilities.invokeLater {
+            // 延迟一点时间，确保 UI 完全初始化
+            Timer(1000) { _ ->
+                // 获取输入框引用
+                val inputArea = inputPanel.getClientProperty("inputArea") as? javax.swing.JTextArea
+                
+                inputArea?.let {
+                    // 设置介绍问题
+                    it.text = "请介绍一下你自己，包括你的功能和能力"
+                    // 自动发送消息
+                    sendMessageWithModel(it, "opus", editor, conversationContent, project)
+                }
+            }.apply {
+                isRepeats = false
+                start()
+            }
+        }
         
         return panel
     }
@@ -577,8 +508,8 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             // 同时调用服务端的 abort 接口
             GlobalScope.launch {
                 try {
-                    val aborted = apiClient?.abortCurrentRequest() ?: false
-                    logger.info("Server abort result: $aborted")
+                    getOrCreateApiClient().abort()
+                    logger.info("Server abort requested")
                 } catch (e: Exception) {
                     logger.error("Failed to abort server request", e)
                 }
@@ -634,8 +565,8 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                             // 同时调用服务端的 abort 接口
                             GlobalScope.launch {
                                 try {
-                                    val aborted = apiClient?.abortCurrentRequest() ?: false
-                                    logger.info("Server abort result: $aborted")
+                                    getOrCreateApiClient().abort()
+                                    logger.info("Server abort requested")
                                 } catch (e: Exception) {
                                     logger.error("Failed to abort server request", e)
                                 }
@@ -690,6 +621,9 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         SwingUtilities.invokeLater {
             inputArea.requestFocusInWindow()
         }
+        
+        // 存储输入框引用以供后续使用
+        inputPanel.putClientProperty("inputArea", inputArea)
         
         return inputPanel
     }
@@ -1000,70 +934,14 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         // 使用协程发送请求
         currentStreamJob = GlobalScope.launch {
             try {
-                // 检查服务状态
-                val healthStatus = apiClient?.checkHealth() ?: HealthStatus(false, false, 0)
-                if (!healthStatus.isHealthy) {
-                    SwingUtilities.invokeLater {
-                        // 移除"Generating..."
-                        val currentContent = conversationContent.toString()
-                        val generatingIndex = currentContent.lastIndexOf("_Generating..._")
-                        if (generatingIndex >= 0) {
-                            conversationContent.setLength(generatingIndex)
-                        }
-                        
-                        conversationContent.append("> ❌ **错误**: Claude SDK 服务未就绪\n\n")
-                        updateEditorContent(editor, conversationContent.toString())
-                        scrollToBottom(editor)
-                        
-                        Messages.showErrorDialog(
-                            project,
-                            "Claude SDK 服务未就绪，请检查服务是否已启动",
-                            "服务错误"
-                        )
-                        
-                        // 重新启用输入框
-                        inputArea.isEnabled = true
-                        inputArea.requestFocusInWindow()
-                        
-                        // 隐藏停止按钮
-                        inputArea.getClientProperty("stopButton")?.let { btn ->
-                            if (btn is JButton) {
-                                btn.isVisible = false
-                            }
-                        }
-                    }
-                    return@launch
-                }
+                // 获取或创建 API 客户端
+                val client = getOrCreateApiClient()
                 
-                if (healthStatus.isProcessing) {
+                // 确保客户端已连接
+                if (!client.connect()) {
                     SwingUtilities.invokeLater {
-                        // 移除"Generating..."
-                        val currentContent = conversationContent.toString()
-                        val generatingIndex = currentContent.lastIndexOf("_Generating..._")
-                        if (generatingIndex >= 0) {
-                            conversationContent.setLength(generatingIndex)
-                        }
-                        
-                        conversationContent.append("> ⚠️ **提示**: 服务正在处理其他请求，请稍后再试或中断当前请求\n\n")
-                        updateEditorContent(editor, conversationContent.toString())
-                        scrollToBottom(editor)
-                        
-                        Messages.showWarningDialog(
-                            project,
-                            "Claude SDK 服务正在处理其他请求\n请稍后再试或使用停止按钮中断当前请求",
-                            "服务繁忙"
-                        )
-                        
-                        // 重新启用输入框
+                        Messages.showErrorDialog(project, "无法连接到 Claude 服务", "Claude Code Plus")
                         inputArea.isEnabled = true
-                        inputArea.requestFocusInWindow()
-                        
-                        // 隐藏停止按钮
-                        inputArea.getClientProperty("stopButton")?.let { btn ->
-                            if (btn is JButton) {
-                                btn.isVisible = false
-                            }
-                        }
                     }
                     return@launch
                 }
@@ -1087,7 +965,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                 // 使用流式 API
                 GlobalScope.launch(Dispatchers.IO) {
                     try {
-                        apiClient?.streamMessage(message, options) { chunk ->
+                        client.streamMessage(message, options) { chunk ->
                             // 处理每个数据块
                             responseBuilder.append(chunk)
                             hasContent = true
@@ -1143,6 +1021,19 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                                     conversationContent.append("\n\n*（已停止生成）*\n\n")
                                 } else {
                                     conversationContent.append("\n\n> ❌ **错误**: ${e.message}\n\n")
+                                    
+                                    // 如果是连接错误，显示更详细的提示
+                                    if (e.message?.contains("无法连接到 Node.js 服务") == true) {
+                                        Messages.showErrorDialog(
+                                            project,
+                                            "无法连接到 Node.js 服务\n\n" +
+                                            "请手动启动 Node 服务：\n" +
+                                            "cd claude-sdk-wrapper\n" +
+                                            "node start.js\n\n" +
+                                            "Socket 路径: /tmp/claudecodeplus.sock",
+                                            "连接失败"
+                                        )
+                                    }
                                 }
                                 
                                 updateEditorContent(editor, conversationContent.toString())
