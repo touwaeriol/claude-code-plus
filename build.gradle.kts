@@ -36,6 +36,16 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.3")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.15.3")
     
+    // JSON-RPC 2.0
+    implementation("com.github.briandilley.jsonrpc4j:jsonrpc4j:1.6")
+    
+    // WebSocket
+    implementation("org.java-websocket:Java-WebSocket:1.5.6")
+    
+    // Vert.x
+    implementation("io.vertx:vertx-core:4.5.1")
+    implementation("io.vertx:vertx-web-client:4.5.1")
+    
     // 压缩文件处理
     implementation("org.apache.commons:commons-compress:1.25.0")
 }
