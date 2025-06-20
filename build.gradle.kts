@@ -135,10 +135,10 @@ tasks {
                 commandLine = listOf("npm", "ci", "--omit=optional")
             }
             
-            // 使用新的构建脚本编译并复制到 resources
+            // 使用新的 esbuild 构建脚本编译并复制到 resources
             exec {
                 workingDir = wrapperDir
-                commandLine = listOf("npm", "run", "build:plugin")
+                commandLine = listOf("npm", "run", "build:plugin:esbuild")
             }
             
             println("Node.js service built and copied to resources successfully!")
@@ -175,18 +175,59 @@ tasks {
     }
     
     // 处理资源时确保 Node 服务已构建
-    named("processResources") {
+    named<ProcessResources>("processResources") {
         dependsOn("buildNodeService")
     }
     
     // 准备沙箱时确保 Node 服务已构建
-    named("prepareSandbox") {
+    named<org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask>("prepareSandbox") {
         dependsOn("buildNodeService")
+        
+        // 使用 IntelliJ Platform 的方式添加文件到插件目录
+        from("src/main/resources/claude-node") {
+            into("claude-node")
+            exclude("**/*.ts", "**/*.map")  // 排除源文件
+        }
+        
+        doLast {
+            println("Node service files prepared in sandbox")
+        }
     }
     
     // 构建插件时也构建 Node 服务
     named("buildPlugin") {
         dependsOn("buildNodeService")
+    }
+    
+    // 在打包插件之前，确保静态文件被包含
+    register("preparePluginDistribution") {
+        dependsOn("prepareSandbox")
+        
+        doLast {
+            // 从沙箱复制文件到分发目录
+            val sandboxPluginDir = file("${layout.buildDirectory.get()}/idea-sandbox/${intellijPlatform.sandboxContainer.get()}/plugins/claude-code-plus")
+            val distDir = file("${layout.buildDirectory.get()}/distributions/temp-plugin")
+            
+            // 清理临时目录
+            delete(distDir)
+            
+            // 复制整个插件目录
+            copy {
+                from(sandboxPluginDir)
+                into(distDir.resolve("claude-code-plus"))
+            }
+            
+            // 创建新的 ZIP 文件
+            val zipFile = file("${layout.buildDirectory.get()}/distributions/claude-code-plus-1.0-SNAPSHOT-with-resources.zip")
+            
+            ant.withGroovyBuilder {
+                "zip"("destfile" to zipFile) {
+                    "fileset"("dir" to distDir)
+                }
+            }
+            
+            println("Created plugin distribution with resources: $zipFile")
+        }
     }
     
     // 清理时也清理 Node.js 资源

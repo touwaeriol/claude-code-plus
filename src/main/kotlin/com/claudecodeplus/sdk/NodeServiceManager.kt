@@ -6,19 +6,19 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
+import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.OSProcessHandler
+import com.intellij.execution.process.ProcessListener
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessOutputTypes
+import com.intellij.openapi.util.Key
 import java.io.File
 import java.io.IOException
-import java.net.ServerSocket
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.time.Duration
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Node.js 服务管理器
@@ -29,12 +29,11 @@ class NodeServiceManager : Disposable {
     
     private val logger = thisLogger()
     private var nodeProcess: Process? = null
-    private val serverPort = AtomicInteger(0)
+    private var socketPath: String? = null
     private val extractDir = lazy { createSecureTempDir() }
     
     companion object {
         fun getInstance(): NodeServiceManager = service()
-        private const val DEFAULT_PORT = 18080
         private const val HEALTH_CHECK_TIMEOUT = 30_000L // 30秒
         private const val SERVICE_START_TIMEOUT = 60_000L // 60秒
     }
@@ -50,45 +49,173 @@ class NodeServiceManager : Disposable {
                 // 1. 检查系统 Node.js 环境
                 checkNodeEnvironment()
                 
-                // 2. 查找可用端口
-                val port = findAvailablePort(DEFAULT_PORT)
-                serverPort.set(port)
+                // 2. Node 服务会自动创建 Unix Socket
                 
                 // 3. 提取服务代码
                 val serverPath = extractServerCode()
                 
-                // 4. 启动 Node 服务（使用系统 Node.js）
-                val command = listOf(
-                    "node",
-                    File(serverPath, "dist/server.js").absolutePath,
-                    "--port", port.toString(),
-                    "--host", "127.0.0.1"
-                )
+                // 验证文件是否存在
+                val startJsFile = File(serverPath, "start.js")
+                val bundleFile = File(serverPath, "server.bundle.js")
+                logger.info("Checking files:")
+                logger.info("  start.js exists: ${startJsFile.exists()}, path: ${startJsFile.absolutePath}")
+                logger.info("  start.js size: ${if (startJsFile.exists()) startJsFile.length() else "N/A"} bytes")
+                logger.info("  start.js readable: ${if (startJsFile.exists()) startJsFile.canRead() else "N/A"}")
+                logger.info("  start.js executable: ${if (startJsFile.exists()) startJsFile.canExecute() else "N/A"}")
+                logger.info("  server.bundle.js exists: ${bundleFile.exists()}, path: ${bundleFile.absolutePath}")
+                logger.info("  server.bundle.js size: ${if (bundleFile.exists()) bundleFile.length() else "N/A"} bytes")
                 
-                logger.info("Starting Node.js process: ${command.joinToString(" ")}")
-                
-                val processBuilder = ProcessBuilder(command)
-                    .directory(project.basePath?.let { File(it) } ?: File("."))
-                    .redirectErrorStream(true)
-                
-                // 设置环境变量
-                processBuilder.environment().apply {
-                    put("NODE_ENV", "production")
-                    put("NODE_PATH", File(serverPath, "node_modules").absolutePath)
+                if (!startJsFile.exists()) {
+                    throw RuntimeException("start.js not found at: ${startJsFile.absolutePath}")
                 }
                 
-                nodeProcess = processBuilder.start()
+                // 读取 start.js 的前几行进行验证
+                if (startJsFile.exists()) {
+                    try {
+                        val firstLines = startJsFile.readLines().take(5)
+                        logger.info("First 5 lines of start.js:")
+                        firstLines.forEachIndexed { index, line ->
+                            logger.info("  Line ${index + 1}: $line")
+                        }
+                    } catch (e: Exception) {
+                        logger.error("Failed to read start.js content", e)
+                    }
+                }
                 
-                // 5. 等待服务启动并进行健康检查
-                if (waitForServiceReady(port)) {
-                    logger.info("Node.js Claude SDK service started successfully on port $port")
-                    port
+                // 4. 启动 Node 服务（使用打包后的文件）
+                logger.info("Starting Node.js process...")
+                logger.info("Working directory: ${project.basePath ?: "."}")
+                logger.info("Server path: $serverPath")
+                
+                // 使用 IntelliJ 平台的 GeneralCommandLine
+                try {
+                    val commandLine = com.intellij.execution.configurations.GeneralCommandLine().apply {
+                        exePath = "node"
+                        addParameter(startJsFile.absolutePath)
+                        workDirectory = project.basePath?.let { File(it) } ?: File(".")
+                        
+                        // 设置环境变量
+                        environment["NODE_ENV"] = "production"
+                        environment["NODE_PATH"] = File(serverPath, "node_modules").absolutePath
+                        
+                        // 设置字符集
+                        charset = Charsets.UTF_8
+                    }
+                    
+                    logger.info("Command line: ${commandLine.commandLineString}")
+                    logger.info("Work directory: ${commandLine.workDirectory}")
+                    
+                    // 创建进程处理器
+                    val processHandler = com.intellij.execution.process.OSProcessHandler(commandLine)
+                    
+                    // 启动进程
+                    processHandler.startNotify()
+                    nodeProcess = processHandler.process
+                    
+                    logger.info("Node process started, PID: ${nodeProcess?.pid()}")
+                    
+                    // 添加进程监听器来捕获输出
+                    processHandler.addProcessListener(object : com.intellij.execution.process.ProcessListener {
+                        override fun startNotified(event: com.intellij.execution.process.ProcessEvent) {
+                            logger.info("Process start notified")
+                        }
+                        
+                        override fun processTerminated(event: com.intellij.execution.process.ProcessEvent) {
+                            logger.info("Process terminated with exit code: ${event.exitCode}")
+                        }
+                        
+                        override fun onTextAvailable(event: com.intellij.execution.process.ProcessEvent, outputType: com.intellij.openapi.util.Key<*>) {
+                            val text = event.text.trim()
+                            if (text.isNotEmpty()) {
+                                when (outputType) {
+                                    com.intellij.execution.process.ProcessOutputTypes.STDOUT -> {
+                                        logger.info("[Node Stdout] $text")
+                                        if (text.contains("SOCKET_PATH:")) {
+                                            val path = text.substringAfter("SOCKET_PATH:").trim()
+                                            logger.info("Socket path detected: $path")
+                                        }
+                                    }
+                                    com.intellij.execution.process.ProcessOutputTypes.STDERR -> {
+                                        if (text.startsWith("ERROR:")) {
+                                            val errorJson = text.substringAfter("ERROR:")
+                                            try {
+                                                val errorInfo = parseErrorInfo(errorJson)
+                                                logger.error("[Node Error] Stage: ${errorInfo.stage}, Message: ${errorInfo.message}")
+                                            } catch (e: Exception) {
+                                                logger.error("[Node Error] $errorJson")
+                                            }
+                                        } else {
+                                            logger.warn("[Node Stderr] $text")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    })
+                    
+                } catch (e: Exception) {
+                    logger.error("Failed to create command line", e)
+                    
+                    // 回退到 ProcessBuilder
+                    logger.info("Falling back to ProcessBuilder...")
+                    val command = listOf("node", startJsFile.absolutePath)
+                    
+                    val processBuilder = ProcessBuilder(command)
+                        .directory(project.basePath?.let { File(it) } ?: File("."))
+                        .redirectErrorStream(false)
+                    
+                    processBuilder.environment().apply {
+                        put("NODE_ENV", "production")
+                        put("NODE_PATH", File(serverPath, "node_modules").absolutePath)
+                    }
+                    
+                    nodeProcess = processBuilder.start()
+                    logger.info("Node process started with ProcessBuilder, PID: ${nodeProcess?.pid()}")
+                }
+                
+                // 启动后立即开始读取输出
+                val reader = nodeProcess!!.inputStream.bufferedReader()
+                val errorReader = nodeProcess!!.errorStream.bufferedReader()
+                
+                // 启动线程读取错误输出
+                Thread {
+                    try {
+                        var line: String?
+                        while (errorReader.readLine().also { line = it } != null) {
+                            // 检查是否是结构化的错误信息
+                            if (line!!.startsWith("ERROR:")) {
+                                val errorJson = line!!.substringAfter("ERROR:")
+                                
+                                // 尝试解析错误详情并格式化输出
+                                try {
+                                    val errorInfo = parseErrorInfo(errorJson)
+                                    logger.error("[Node Error] Stage: ${errorInfo.stage}, Message: ${errorInfo.message}")
+                                } catch (e: Exception) {
+                                    // 如果解析失败，直接输出原始 JSON
+                                    logger.error("[Node Error] $errorJson")
+                                }
+                            } else if (line!!.isNotBlank()) {
+                                // 其他非空的 stderr 输出，一行一次打印
+                                logger.warn("[Node Stderr] $line")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logger.debug("Error reading stderr", e)
+                    }
+                }.start()
+                
+                // 5. 等待服务启动并获取 socket 路径
+                val socket = waitForSocketPath()
+                if (socket != null) {
+                    socketPath = socket
+                    logger.info("Node.js Claude SDK service started successfully with socket: $socket")
+                    0 // 返回 0 表示成功（不再使用端口）
                 } else {
-                    throw RuntimeException("Failed to start Node.js service - health check timeout")
+                    throw RuntimeException("Failed to start Node.js service - socket path not found")
                 }
             } catch (e: Exception) {
                 logger.error("Failed to start Node.js service", e)
-                serverPort.set(0)
+                socketPath = null
                 throw e
             }
         }
@@ -117,7 +244,7 @@ class NodeServiceManager : Disposable {
             logger.warn("Error stopping Node.js service", e)
         } finally {
             nodeProcess = null
-            serverPort.set(0)
+            socketPath = null
             // 清理临时文件
             cleanupExtractDir()
         }
@@ -140,8 +267,8 @@ class NodeServiceManager : Disposable {
             
             // 检查版本兼容性
             val versionNumber = version.removePrefix("v").split(".")[0].toIntOrNull()
-            if (versionNumber == null || versionNumber < 14) {
-                throw RuntimeException("Node.js version $version is not supported. Minimum required: 14.0.0")
+            if (versionNumber == null || versionNumber < 18) {
+                throw RuntimeException("Node.js version $version is not supported. Minimum required: 18.0.0")
             }
             
             logger.info("Node.js environment check passed")
@@ -150,7 +277,7 @@ class NodeServiceManager : Disposable {
             logger.error("Node.js environment check failed", e)
             throw RuntimeException(
                 "Node.js 环境检查失败: ${e.message}\n" +
-                "请确保已安装 Node.js 14.0.0 或更高版本，并且在 PATH 中可用。\n" +
+                "请确保已安装 Node.js 18.0.0 或更高版本，并且在 PATH 中可用。\n" +
                 "下载地址: https://nodejs.org/"
             )
         }
@@ -162,7 +289,7 @@ class NodeServiceManager : Disposable {
     private fun extractServerCode(): File {
         val serverDir = File(extractDir.value, "server")
         
-        if (serverDir.exists() && File(serverDir, "dist/server.js").exists()) {
+        if (serverDir.exists() && File(serverDir, "server.bundle.js").exists()) {
             logger.info("Server code already extracted: ${serverDir.absolutePath}")
             return serverDir
         }
@@ -172,103 +299,149 @@ class NodeServiceManager : Disposable {
         logger.info("Extracting server code to: ${serverDir.absolutePath}")
         
         // 提取服务文件
-        extractResourceRecursively("/claude-node/server/", serverDir)
+        extractNodeServiceFiles(serverDir)
         
         return serverDir
     }
     
     /**
-     * 递归提取资源文件
+     * 提取 Node 服务文件
      */
-    private fun extractResourceRecursively(resourcePath: String, targetDir: File) {
-        // 这里需要根据实际的资源结构来实现
-        // 可以使用 ClassLoader 获取资源列表
-        val resourcePaths = listOf(
-            "package.json",
-            "dist/server.js",
-            "dist/services/claudeService.js",
-            "dist/services/sessionManager.js",
-            "dist/routes/httpRoutes.js",
-            "dist/routes/wsHandlers.js"
-            // 注意：node_modules 会在构建时打包进来
+    private fun extractNodeServiceFiles(targetDir: File) {
+        // 使用 esbuild 打包后的文件列表
+        val resourceFiles = listOf(
+            "server.bundle.js",
+            "start.js"
         )
         
-        resourcePaths.forEach { path ->
-            val resourceStream = javaClass.getResourceAsStream("$resourcePath$path")
+        logger.info("Extracting Node service files to: ${targetDir.absolutePath}")
+        
+        // 提取主文件
+        resourceFiles.forEach { filename ->
+            val resourcePath = "/claude-node/$filename"
+            logger.info("Attempting to extract resource: $resourcePath")
+            
+            val resourceStream = javaClass.getResourceAsStream(resourcePath)
             if (resourceStream != null) {
-                val targetFile = File(targetDir, path)
+                val targetFile = File(targetDir, filename)
                 targetFile.parentFile.mkdirs()
                 
+                var bytesWritten = 0L
                 resourceStream.use { input ->
                     targetFile.outputStream().use { output ->
-                        input.copyTo(output)
+                        bytesWritten = input.copyTo(output)
                     }
                 }
-            }
-        }
-        
-        // 特殊处理 node_modules（如果作为资源打包）
-        extractNodeModules(targetDir)
-    }
-    
-    /**
-     * 提取 node_modules
-     */
-    private fun extractNodeModules(serverDir: File) {
-        // 这里需要根据实际的打包方式来实现
-        // 可能需要从压缩包或其他格式中提取
-        val nodeModulesDir = File(serverDir, "node_modules")
-        if (!nodeModulesDir.exists()) {
-            nodeModulesDir.mkdirs()
-            // TODO: 实现 node_modules 的提取逻辑
-            logger.warn("node_modules extraction not yet implemented")
-        }
-    }
-    
-    
-    /**
-     * 等待服务准备就绪
-     */
-    private fun waitForServiceReady(port: Int): Boolean {
-        val startTime = System.currentTimeMillis()
-        val httpClient = HttpClient.newHttpClient()
-        
-        while (System.currentTimeMillis() - startTime < HEALTH_CHECK_TIMEOUT) {
-            try {
-                val response = httpClient.send(
-                    HttpRequest.newBuilder()
-                        .uri(URI.create("http://127.0.0.1:$port/health"))
-                        .timeout(Duration.ofSeconds(2))
-                        .GET()
-                        .build(),
-                    HttpResponse.BodyHandlers.ofString()
-                )
                 
-                if (response.statusCode() == 200) {
-                    return true
+                // 设置可执行权限（对于 start.js）
+                if (filename == "start.js") {
+                    val execResult = targetFile.setExecutable(true)
+                    logger.info("Set executable permission for $filename: $execResult")
                 }
-            } catch (e: Exception) {
-                // 继续等待
+                
+                logger.info("Extracted: $filename (${bytesWritten} bytes)")
+                logger.info("  Target file exists: ${targetFile.exists()}")
+                logger.info("  Target file size: ${targetFile.length()} bytes")
+                logger.info("  Target file path: ${targetFile.absolutePath}")
+            } else {
+                logger.error("Resource not found: $resourcePath")
+                
+                // 尝试列出所有可用的资源
+                try {
+                    logger.info("Attempting to list available resources:")
+                    val url = javaClass.getResource("/claude-node/")
+                    logger.info("Resource URL: $url")
+                    
+                    // 尝试另一种方式
+                    val classLoader = javaClass.classLoader
+                    logger.info("Using classloader: ${classLoader.javaClass.name}")
+                    
+                    // 尝试直接访问不带前导斜杠的路径
+                    val altStream = classLoader.getResourceAsStream("claude-node/$filename")
+                    if (altStream != null) {
+                        logger.info("Found resource using classloader without leading slash!")
+                        altStream.close()
+                    }
+                } catch (e: Exception) {
+                    logger.error("Error listing resources", e)
+                }
             }
-            
-            Thread.sleep(1000)
         }
-        return false
     }
     
     /**
-     * 查找可用端口
+     * 等待获取 socket 路径
      */
-    private fun findAvailablePort(startPort: Int): Int {
-        for (port in startPort until startPort + 100) {
+    private fun waitForSocketPath(): String? {
+        val startTime = System.currentTimeMillis()
+        val reader = nodeProcess?.inputStream?.bufferedReader() ?: return null
+        
+        // 使用 CompletableFuture 来等待 socket 路径
+        val socketPathFuture = CompletableFuture<String?>()
+        
+        // 启动一个线程来持续读取输出
+        val readThread = Thread {
             try {
-                ServerSocket(port).use { return port }
-            } catch (e: IOException) {
-                continue
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    logger.info("[Node Stdout] $line")
+                    
+                    // 查找 socket 路径输出
+                    if (line!!.contains("SOCKET_PATH:")) {
+                        val path = line!!.substringAfter("SOCKET_PATH:").trim()
+                        if (path.isNotEmpty()) {
+                            logger.info("Found socket path: $path")
+                            socketPathFuture.complete(path)
+                            break
+                        }
+                    }
+                }
+                // 如果读取结束还没找到，完成 future
+                socketPathFuture.complete(null)
+            } catch (e: Exception) {
+                logger.error("Error reading Node output", e)
+                socketPathFuture.completeExceptionally(e)
             }
         }
-        throw RuntimeException("No available port found starting from $startPort")
+        readThread.start()
+        
+        try {
+            // 等待 socket 路径或超时
+            val path = socketPathFuture.get(SERVICE_START_TIMEOUT, TimeUnit.MILLISECONDS)
+            if (path != null) {
+                return path
+            }
+        } catch (e: Exception) {
+            logger.error("Error waiting for socket path", e)
+        }
+        
+        // 检查进程是否还在运行
+        if (nodeProcess?.isAlive != true) {
+            logger.error("Node process terminated unexpectedly")
+            val exitCode = try {
+                nodeProcess?.exitValue()
+            } catch (e: Exception) {
+                null
+            }
+            logger.error("Node process exit code: $exitCode")
+            return null
+        }
+        
+        logger.error("Timeout waiting for socket path after ${SERVICE_START_TIMEOUT}ms")
+        return null
     }
+    
+    /**
+     * 解析错误信息
+     */
+    private fun parseErrorInfo(errorJson: String): ErrorInfo {
+        // 简单的 JSON 解析
+        val stage = errorJson.substringAfter("\"stage\":\"").substringBefore("\"")
+        val message = errorJson.substringAfter("\"message\":\"").substringBefore("\"")
+        return ErrorInfo(stage, message)
+    }
+    
+    data class ErrorInfo(val stage: String, val message: String)
     
     /**
      * 创建安全的临时目录
@@ -307,15 +480,15 @@ class NodeServiceManager : Disposable {
     }
     
     /**
-     * 获取服务端口
+     * 获取 socket 路径
      */
-    fun getServicePort(): Int = serverPort.get()
+    fun getSocketPath(): String? = socketPath
     
     /**
      * 检查服务是否运行
      */
     fun isServiceRunning(): Boolean {
-        return nodeProcess?.isAlive == true && serverPort.get() > 0
+        return nodeProcess?.isAlive == true && socketPath != null
     }
     
     /**
@@ -325,17 +498,9 @@ class NodeServiceManager : Disposable {
         if (!isServiceRunning()) return false
         
         return try {
-            val port = getServicePort()
-            val httpClient = HttpClient.newHttpClient()
-            
-            val request = HttpRequest.newBuilder()
-                .uri(URI.create("http://127.0.0.1:$port/health"))
-                .timeout(Duration.ofSeconds(5))
-                .GET()
-                .build()
-            
-            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
-            response.statusCode() == 200
+            // Unix Socket 通过检查进程和 socket 文件来验证健康状态
+            val socket = socketPath ?: return false
+            File(socket).exists() && nodeProcess?.isAlive == true
         } catch (e: Exception) {
             logger.debug("Health check failed", e)
             false

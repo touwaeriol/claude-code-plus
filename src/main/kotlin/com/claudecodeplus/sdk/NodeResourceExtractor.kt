@@ -31,33 +31,18 @@ class NodeResourceExtractor {
             // 提取所有资源 (现在所有文件都在根目录)
             println("[NodeResourceExtractor] 提取所有资源...")
             
-            // 提取 package.json
-            val packageResult = extractResource("/claude-node/package.json", File(targetDir, "package.json"))
-            println("[NodeResourceExtractor] package.json 提取结果: $packageResult")
-            
-            // 提取服务文件
-            val serverFiles = listOf("server.js", "server-esm-wrapper.mjs")
+            // 提取服务文件 (打包后只需要这两个文件)
+            val serverFiles = listOf("start.js", "server.bundle.js")
             serverFiles.forEach { fileName ->
                 val result = extractResource("/claude-node/$fileName", File(targetDir, fileName))
                 println("[NodeResourceExtractor] $fileName 提取结果: $result")
             }
             
-            // 提取 services 和 routes 目录
-            val servicesResult = extractDirectoryFromResources("/claude-node/services/", File(targetDir, "services"))
-            println("[NodeResourceExtractor] services 目录提取结果: $servicesResult")
-            
-            val routesResult = extractDirectoryFromResources("/claude-node/routes/", File(targetDir, "routes"))
-            println("[NodeResourceExtractor] routes 目录提取结果: $routesResult")
-            
-            // 提取 node_modules
-            val modulesResult = extractDirectoryFromResources("/claude-node/node_modules/", File(targetDir, "node_modules"))
-            println("[NodeResourceExtractor] node_modules 目录提取结果: $modulesResult")
-            
             // 列出提取的文件
             println("[NodeResourceExtractor] 提取的文件：")
-            targetDir.walk().forEach { file ->
+            targetDir.listFiles()?.forEach { file ->
                 if (file.isFile) {
-                    println("[NodeResourceExtractor]   - ${file.relativeTo(targetDir).path}")
+                    println("[NodeResourceExtractor]   - ${file.name} (${file.length()} 字节)")
                 }
             }
             

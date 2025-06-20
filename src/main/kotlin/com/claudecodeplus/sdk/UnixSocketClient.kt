@@ -72,7 +72,7 @@ class UnixSocketClient(private val nodeServicePath: String) {
             // 启动 Node 进程
             val command = listOf(
                 "node",
-                "$nodeServicePath/server-esm-wrapper.mjs"
+                "$nodeServicePath/start.js"
             )
             
             logger.info("Starting Node service: ${command.joinToString(" ")}")
@@ -87,12 +87,14 @@ class UnixSocketClient(private val nodeServicePath: String) {
             val stdoutReader = BufferedReader(InputStreamReader(process!!.inputStream))
             val stderrReader = BufferedReader(InputStreamReader(process!!.errorStream))
             
-            // 启动错误流读取
+            // 启动错误流读取（简单记录，不做处理）
             GlobalScope.launch {
                 try {
                     var line: String?
                     while (stderrReader.readLine().also { line = it } != null) {
-                        logger.warn("Node stderr: $line")
+                        if (line!!.isNotBlank()) {
+                            logger.warn("[Node Stderr] $line")
+                        }
                     }
                 } catch (e: Exception) {
                     logger.debug("Error stream closed")
@@ -103,6 +105,9 @@ class UnixSocketClient(private val nodeServicePath: String) {
             var line: String?
             var attempts = 0
             while (stdoutReader.readLine().also { line = it } != null && attempts < 50) {
+                logger.debug("Node output: $line")
+                
+                // 只查找 socket 路径，错误处理交给 NodeServiceManager
                 if (line!!.startsWith("SOCKET_PATH:")) {
                     socketPath = line!!.substringAfter("SOCKET_PATH:")
                     logger.info("Got socket path: $socketPath")
@@ -113,6 +118,13 @@ class UnixSocketClient(private val nodeServicePath: String) {
             }
             
             if (socketPath == null) {
+                // 检查进程是否异常退出
+                process?.let { proc ->
+                    if (!proc.isAlive) {
+                        val exitCode = proc.exitValue()
+                        logger.error("Node process exited with code: $exitCode")
+                    }
+                }
                 throw Exception("Failed to get socket path from Node service")
             }
             

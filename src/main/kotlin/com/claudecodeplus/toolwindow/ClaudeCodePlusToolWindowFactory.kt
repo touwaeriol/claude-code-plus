@@ -96,22 +96,49 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             initJob = GlobalScope.launch {
                 try {
                     // 获取 Node 服务路径
-                    val resourcePath = File(PathManager.getPluginsPath(), "claude-code-plus/claude-node")
-                    val nodeServicePath = if (resourcePath.exists()) {
-                        resourcePath.absolutePath
-                    } else {
-                        // 开发环境：使用项目中的资源
-                        val devPath = File(project.basePath, "src/main/resources/claude-node")
-                        if (devPath.exists()) {
-                            devPath.absolutePath
-                        } else {
-                            // 尝试从类路径提取
-                            val tempDir = File(System.getProperty("java.io.tmpdir"), "claude-code-plus-node")
-                            val extractor = NodeResourceExtractor()
-                            if (extractor.extractServerResources(tempDir)) {
-                                tempDir.absolutePath
+                    val pluginPath = File(PathManager.getPluginsPath(), "claude-code-plus/claude-node")
+                    val nodeServicePath = when {
+                        // 生产环境：插件目录中的静态文件
+                        pluginPath.exists() -> {
+                            logger.info("Using Node service from plugin directory: $pluginPath")
+                            pluginPath.absolutePath
+                        }
+                        // 开发环境
+                        else -> {
+                            // 尝试多个可能的开发路径
+                            val possiblePaths = listOf(
+                                // 开发时的沙箱路径
+                                File(PathManager.getPluginsPath()).parentFile.resolve("claude-code-plus/claude-node"),
+                                // 项目根目录下的资源
+                                File(System.getProperty("user.dir"), "src/main/resources/claude-node"),
+                                // 如果当前项目就是插件项目
+                                File(project.basePath ?: "", "src/main/resources/claude-node"),
+                                // 临时目录（作为后备方案）
+                                File(System.getProperty("java.io.tmpdir"), "claude-code-plus-node")
+                            )
+                            
+                            var foundPath: File? = null
+                            for (path in possiblePaths) {
+                                logger.info("Checking for Node service at: ${path.absolutePath}")
+                                if (path.exists() && path.isDirectory && File(path, "start.js").exists()) {
+                                    foundPath = path
+                                    break
+                                }
+                            }
+                            
+                            if (foundPath != null) {
+                                logger.info("Using Node service from development path: ${foundPath.absolutePath}")
+                                foundPath.absolutePath
                             } else {
-                                throw RuntimeException("Failed to extract Node service resources")
+                                // 最后的尝试：从资源中提取
+                                val tempDir = File(System.getProperty("java.io.tmpdir"), "claude-code-plus-node")
+                                val extractor = NodeResourceExtractor()
+                                if (extractor.extractServerResources(tempDir)) {
+                                    logger.info("Extracted Node service to: ${tempDir.absolutePath}")
+                                    tempDir.absolutePath
+                                } else {
+                                    throw RuntimeException("Failed to find or extract Node service files")
+                                }
                             }
                         }
                     }

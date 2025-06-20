@@ -15,6 +15,14 @@ function buildForPlugin() {
         // 1. 清理目标目录
         console.log('1. Cleaning target directory...');
         if (fs.existsSync(targetDir)) {
+            // 列出将要删除的文件
+            const existingFiles = fs.readdirSync(targetDir);
+            if (existingFiles.length > 0) {
+                console.log('   Removing existing files:');
+                existingFiles.forEach(file => {
+                    console.log(`   - ${file}`);
+                });
+            }
             fs.rmSync(targetDir, { recursive: true, force: true });
         }
         fs.mkdirSync(targetDir, { recursive: true });
@@ -23,7 +31,7 @@ function buildForPlugin() {
         console.log('2. Copying compiled JavaScript files...');
         
         // 复制主文件
-        const mainFiles = ['server.js'];
+        const mainFiles = ['server.js', 'server-esm-wrapper.mjs'];
         mainFiles.forEach(file => {
             const src = path.join(distDir, file);
             const dest = path.join(targetDir, file);
@@ -34,7 +42,7 @@ function buildForPlugin() {
         });
         
         // 复制服务和路由目录
-        const dirs = ['services', 'routes'];
+        const dirs = ['services', 'routes', 'utils'];
         dirs.forEach(dir => {
             const srcDir = path.join(distDir, dir);
             const destDir = path.join(targetDir, dir);
@@ -73,8 +81,20 @@ function buildForPlugin() {
             console.log('   ✓ package-lock.json');
         }
         
-        // 5. 创建启动脚本
-        console.log('5. Creating startup script...');
+        // 5. 复制 node_modules（包含所有依赖）
+        console.log('5. Copying node_modules...');
+        const nodeModulesSource = path.join(projectRoot, 'node_modules');
+        const nodeModulesTarget = path.join(targetDir, 'node_modules');
+        
+        if (fs.existsSync(nodeModulesSource)) {
+            fs.cpSync(nodeModulesSource, nodeModulesTarget, { recursive: true });
+            console.log('   ✓ node_modules (all dependencies included)');
+        } else {
+            console.error('   ✗ node_modules not found! Run npm install first.');
+        }
+        
+        // 6. 创建启动脚本
+        console.log('6. Creating startup script...');
         const startupScript = `#!/usr/bin/env node
 // Claude SDK Server Startup Script
 // This script ensures the server runs properly within the IntelliJ plugin environment
@@ -85,14 +105,7 @@ const { spawn } = require('child_process');
 // 确保工作目录正确
 process.chdir(__dirname);
 
-// 检查是否已安装依赖
-const fs = require('fs');
-if (!fs.existsSync('node_modules')) {
-    console.error('Dependencies not installed. Please run npm install first.');
-    process.exit(1);
-}
-
-// 启动服务器
+// 直接启动服务器（依赖已经打包）
 require('./server.js');
 `;
         
@@ -103,8 +116,8 @@ require('./server.js');
         fs.chmodSync(path.join(targetDir, 'start.js'), '755');
         console.log('   ✓ start.js');
         
-        // 6. 创建安装脚本（供插件使用）
-        console.log('6. Creating install script...');
+        // 7. 创建安装脚本（供插件使用）
+        console.log('7. Creating install script...');
         const installScript = `#!/usr/bin/env node
 // 安装依赖脚本
 
@@ -133,8 +146,8 @@ try {
         fs.chmodSync(path.join(targetDir, 'install.js'), '755');
         console.log('   ✓ install.js');
         
-        // 7. 复制检查脚本
-        console.log('7. Copying check scripts...');
+        // 8. 复制检查脚本
+        console.log('8. Copying check scripts...');
         const checkScript = path.join(projectRoot, 'scripts/check-node-version.js');
         if (fs.existsSync(checkScript)) {
             const scriptsDir = path.join(targetDir, 'scripts');
@@ -143,8 +156,8 @@ try {
             console.log('   ✓ scripts/check-node-version.js');
         }
         
-        // 8. 创建 README
-        console.log('8. Creating README...');
+        // 9. 创建 README
+        console.log('9. Creating README...');
         const readme = `# Claude SDK Node Service
 
 This is the compiled Node.js service for the Claude Code Plus IntelliJ plugin.

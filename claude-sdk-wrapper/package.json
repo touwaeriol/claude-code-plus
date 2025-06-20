@@ -8,13 +8,13 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
-    "build:production": "npm run build && npm run bundle && node scripts/prepare-production.js",
-    "bundle": "node scripts/bundle.js",
-    "build:standalone": "npm run build && node scripts/create-standalone.js",
+    "clean": "rimraf dist",
+    "clean:all": "rimraf dist ../src/main/resources/claude-node",
+    "build": "npm run clean && tsc",
     "start": "node dist/server.js",
     "start:dev": "tsx src/server.ts",
     "build:plugin": "npm run build && node scripts/build-for-plugin.js",
+    "build:plugin:esbuild": "npm run build && node scripts/esbuild-bundle.js",
     "check-node": "node scripts/check-node-version.js"
   },
   "keywords": [
@@ -33,6 +33,8 @@
   "devDependencies": {
     "@types/node": "^20.10.5",
     "@types/uuid": "^9.0.7",
+    "esbuild": "^0.25.5",
+    "rimraf": "^6.0.1",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   }
