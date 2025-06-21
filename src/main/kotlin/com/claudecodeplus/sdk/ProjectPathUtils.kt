@@ -33,7 +33,7 @@ object ProjectPathUtils {
         val dirName = normalizedPath
             .replace('\\', '-')  // Windows 路径分隔符
             .replace('/', '-')   // Unix 路径分隔符
-            .replace(':', '')    // Windows 盘符冒号
+            .replace(":", "")    // Windows 盘符冒号
         
         // Claude CLI 保留开头的 -，只移除结尾的 -
         return dirName.trimEnd('-')
