@@ -1,5 +1,6 @@
 import winston from 'winston';
 import { SessionManager } from './sessionManager';
+import { query, type SDKMessage } from './claudeCodeProxy';
 
 export interface StreamChunk {
   type: string;
@@ -20,6 +21,7 @@ export class ClaudeService {
   ) {
     this.logger.info('Claude Service created');
   }
+
 
 
   /**
@@ -71,8 +73,8 @@ export class ClaudeService {
       return;
     }
 
-
-    this.logger.info(`Stream processing message (session: ${sessionId}): ${message.substring(0, 100)}...`);
+    this.logger.info(`Stream processing message (session: ${sessionId}): ${message ? JSON.stringify(message).substring(0, 100) : 'empty'}...`);
+    this.logger.info(`Options: ${JSON.stringify(customOptions || {})}`);
 
     // 获取会话
     const session = this.sessionManager.getSession(sessionId);
@@ -86,12 +88,70 @@ export class ClaudeService {
     this.currentAbortController = new AbortController();
 
     try {
-      // 暂时返回模拟响应
-      yield { 
-        type: 'text', 
-        content: 'Claude SDK integration is temporarily disabled while we update the packaging configuration. The service is running correctly.',
-        session_id: sessionId 
+      // 构建查询参数
+      const queryOptions: any = {
+        prompt: message,
+        abortController: this.currentAbortController,
+        options: {
+          maxTurns: customOptions?.maxTurns || 1,
+          cwd: customOptions?.cwd || process.cwd(),
+          systemPrompt: customOptions?.system || undefined,
+          allowedTools: customOptions?.allowedTools || undefined,
+          permissionMode: customOptions?.permissionMode || undefined
+        }
       };
+
+      // 根据模型设置不同的系统提示
+      if (customOptions?.model) {
+        this.logger.info(`Using model: ${customOptions.model}`);
+        // 在系统提示中指定模型偏好
+        if (customOptions.model === 'Opus') {
+          queryOptions.options.systemPrompt = (queryOptions.options.systemPrompt || '') + '\n[Use Claude 4 Opus capabilities]';
+        } else if (customOptions.model === 'Sonnet') {
+          queryOptions.options.systemPrompt = (queryOptions.options.systemPrompt || '') + '\n[Use Claude 4 Sonnet capabilities]';
+        }
+      }
+
+      // 收集所有消息
+      const messages: SDKMessage[] = [];
+      let isFirstChunk = true;
+
+      // 使用 Claude Code SDK 的 query 函数
+      for await (const sdkMessage of query(queryOptions)) {
+        if (this.currentAbortController?.signal.aborted) {
+          break;
+        }
+
+        messages.push(sdkMessage);
+        this.logger.debug('Received SDK message:', JSON.stringify(sdkMessage));
+
+        // 处理不同类型的消息
+        if (sdkMessage.type === 'assistant') {
+          // Assistant 消息包含实际的响应内容
+          // 根据 SDK 文档，assistant 消息可能有不同的结构
+          const assistantMsg = sdkMessage as any;
+          const content = assistantMsg.text || assistantMsg.content || assistantMsg.message || '';
+          
+          if (content) {
+            // 流式发送内容
+            yield { 
+              type: 'text', 
+              content: content,
+              session_id: sessionId 
+            };
+          }
+        } else if (sdkMessage.type === 'result') {
+          // 结果消息包含会话的元数据
+          this.logger.info(`Session completed. Duration: ${(sdkMessage as any).duration_ms}ms`);
+          if ((sdkMessage as any).error) {
+            yield { 
+              type: 'error', 
+              error: (sdkMessage as any).error,
+              session_id: sessionId 
+            };
+          }
+        }
+      }
       
       // 更新会话信息
       this.sessionManager.updateSession(sessionId, {
@@ -101,7 +161,11 @@ export class ClaudeService {
 
     } catch (error: any) {
       this.logger.error(`Error in streamMessage: ${error}`);
-      yield { type: 'error', error: String(error) };
+      if (error.name === 'AbortError') {
+        yield { type: 'error', error: 'Request was aborted', session_id: sessionId };
+      } else {
+        yield { type: 'error', error: String(error), session_id: sessionId };
+      }
     } finally {
       // 清理状态
       this.isProcessing = false;
@@ -109,42 +173,4 @@ export class ClaudeService {
     }
   }
 
-  /**
-   * 获取单次完整响应
-   */
-  async getSingleResponse(
-    message: string,
-    sessionId: string,
-    customOptions?: any
-  ): Promise<{ success: boolean; response?: string; error?: string; session_id: string }> {
-    const responseChunks: string[] = [];
-    let error: string | null = null;
-
-    try {
-      for await (const chunk of this.streamMessage(message, sessionId, customOptions)) {
-        if (chunk.type === 'error') {
-          error = chunk.error || 'Unknown error';
-          break;
-        } else if (chunk.type === 'text') {
-          responseChunks.push(chunk.content || '');
-        }
-      }
-
-      if (error) {
-        return { success: false, error, session_id: sessionId };
-      }
-
-      return {
-        success: true,
-        response: responseChunks.join(''),
-        session_id: sessionId
-      };
-    } catch (err) {
-      return {
-        success: false,
-        error: String(err),
-        session_id: sessionId
-      };
-    }
-  }
 }

@@ -36,23 +36,19 @@
                     anchor="right" 
                     factoryClass="com.claudecodeplus.toolwindow.ClaudeCodePlusToolWindowFactory"/>
                     
-        <!-- Claude Code Plus 配置组 -->
+        <!-- Claude Code Plus 配置 -->
         <applicationConfigurable
             parentId="tools"
+            instance="com.claudecodeplus.settings.ClaudeCodePlusConfigurable"
             id="com.claudecodeplus.settings"
-            displayName="Claude Code Plus"
-            groupId="tools"/>
-            
-        <!-- MCP 配置页面 -->
-        <applicationConfigurable 
-            parentId="com.claudecodeplus.settings"
-            instance="com.claudecodeplus.settings.McpConfigurable"
-            id="com.claudecodeplus.settings.McpConfigurable"
-            displayName="MCP"/>
+            displayName="Claude Code Plus"/>
             
         <!-- 应用级别服务 -->
         <applicationService 
             serviceImplementation="com.claudecodeplus.settings.McpSettingsService"/>
+            
+        <applicationService 
+            serviceImplementation="com.claudecodeplus.sdk.NodeServiceManager"/>
             
         <!-- 项目级别服务 -->
         <projectService 

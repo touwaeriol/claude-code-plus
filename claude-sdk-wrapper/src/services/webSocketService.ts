@@ -33,20 +33,25 @@ export class WebSocketService {
 
             this.wss.on('connection', (ws) => {
                 this.logger.info('New WebSocket connection');
+                console.log('New WebSocket connection established');
 
                 // 发送欢迎消息
-                ws.send(JSON.stringify({
+                const welcomeMsg = JSON.stringify({
                     type: 'welcome',
                     data: {
                         message: 'Connected to Claude Code Plus service',
                         version: '1.0.0'
                     }
-                }));
+                });
+                console.log('Sending welcome message:', welcomeMsg);
+                ws.send(welcomeMsg);
 
                 // 处理消息
                 ws.on('message', async (message) => {
                     try {
                         const request = JSON.parse(message.toString());
+                        this.logger.info('Received message:', JSON.stringify(request));
+                        console.log('Received message:', JSON.stringify(request));
                         await this.handleMessage(ws, request);
                     } catch (error) {
                         this.logger.error('Error handling message:', error);
@@ -70,6 +75,7 @@ export class WebSocketService {
 
             this.logger.info(`WebSocket server started on port ${this.port}`);
             console.log(`WebSocket server listening on port ${this.port}`);
+            console.log('PORT:', this.port);
             
         } catch (error) {
             this.logger.error('Failed to start WebSocket server:', error);
@@ -127,7 +133,18 @@ export class WebSocketService {
      * 处理流式请求
      */
     private async handleStream(ws: WebSocket, data: any, id: string) {
-        const { message, options = {} } = data;
+        const { messages, message, options = {} } = data;
+        
+        // 兼容两种格式：messages 数组和 message 字符串
+        let messageText = '';
+        if (messages && Array.isArray(messages) && messages.length > 0) {
+            // 从 messages 数组中提取最后一条用户消息
+            const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+            messageText = lastUserMessage?.content || '';
+        } else if (message) {
+            // 直接使用 message 字符串
+            messageText = message;
+        }
 
         try {
             // 创建会话
@@ -141,7 +158,7 @@ export class WebSocketService {
             }));
 
             // 调用 Claude 服务
-            for await (const chunk of this.claudeService.streamMessage(message, sessionId, options)) {
+            for await (const chunk of this.claudeService.streamMessage(messageText, sessionId, options)) {
                 if (chunk.type === 'text') {
                     // 发送流数据块
                     ws.send(JSON.stringify({

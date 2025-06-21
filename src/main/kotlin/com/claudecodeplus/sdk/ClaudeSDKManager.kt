@@ -18,8 +18,12 @@ import java.nio.file.Paths
 import kotlin.concurrent.thread
 
 /**
- * Claude SDK Wrapper 进程管理器
+ * Claude SDK Wrapper 进程管理器 - 已废弃
+ * 现在直接使用 ClaudeCliWrapper 调用 claude 命令
+ * 
+ * @deprecated 使用 ClaudeCliWrapper 代替
  */
+@Deprecated("使用 ClaudeCliWrapper 代替", ReplaceWith("ClaudeCliWrapper"))
 @Service(Service.Level.APP)
 class ClaudeSDKManager : Disposable {
     

@@ -54,9 +54,28 @@ if (require.main === module) {
     // 服务器已经在 server.js 中启动
 }
 
-// 为 Claude SDK 创建 import.meta.url
-if (typeof global !== 'undefined' && !global.import) {
-    global.import = { meta: { url: 'file://' + __filename } };
+// 为 Claude SDK 创建 import.meta.url polyfill
+if (typeof global !== 'undefined') {
+    // 创建 import.meta polyfill
+    global.__filename = __filename;
+    global.__dirname = __dirname;
+    
+    // 劫持 require 来处理 Claude Code SDK
+    const Module = require('module');
+    const originalRequire = Module.prototype.require;
+    
+    Module.prototype.require = function(id) {
+        if (id === '@anthropic-ai/claude-code') {
+            // 返回一个模拟的模块，避免 import.meta.url 错误
+            return {
+                query: async function*() {
+                    throw new Error('Claude Code SDK not available in bundled environment');
+                },
+                SDKMessage: {}
+            };
+        }
+        return originalRequire.apply(this, arguments);
+    };
 }
 
 module.exports = server;
@@ -78,7 +97,9 @@ module.exports = server;
                 // Native 模块无法打包
                 'utf-8-validate',
                 'bufferutil',
-                '@mapbox/node-pre-gyp'
+                '@mapbox/node-pre-gyp',
+                // Claude Code SDK 在打包环境中有问题，不打包它
+                '@anthropic-ai/claude-code'
             ],
             minify: false,  // 暂时关闭代码压缩，确保功能正常
             treeShaking: true,  // 移除死代码

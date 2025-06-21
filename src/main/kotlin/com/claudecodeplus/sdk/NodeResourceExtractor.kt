@@ -11,9 +11,12 @@ import java.util.jar.JarFile
 import java.util.zip.ZipInputStream
 
 /**
- * Node.js 资源提取器
- * 负责从插件 JAR 中提取 Node.js 运行时和服务代码
+ * Node.js 资源提取器 - 已废弃
+ * 现在直接使用 ClaudeCliWrapper 调用 claude 命令
+ * 
+ * @deprecated 不再需要提取Node资源
  */
+@Deprecated("不再需要提取Node资源", level = DeprecationLevel.ERROR)
 class NodeResourceExtractor {
     
     private val logger = thisLogger()
