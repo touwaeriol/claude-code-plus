@@ -136,7 +136,14 @@ class SessionCache {
     private fun updateMetadata(sessionId: String, messages: List<ClaudeSessionManager.SessionMessage>) {
         val metadata = SessionMetadata(
             sessionId = sessionId,
-            projectPath = messages.firstOrNull()?.cwd ?: "",
+            projectPath = messages.firstOrNull()?.let { msg ->
+                when (msg) {
+                    is ClaudeSessionManager.SessionMessage.UserMessage -> msg.cwd
+                    is ClaudeSessionManager.SessionMessage.AssistantMessage -> msg.cwd
+                    is ClaudeSessionManager.SessionMessage.SystemMessage -> msg.cwd
+                    else -> null
+                }
+            } ?: "",
             createdAt = messages.firstOrNull()?.timestamp?.toLongOrNull() ?: System.currentTimeMillis(),
             lastModified = System.currentTimeMillis(),
             messageCount = messages.size,

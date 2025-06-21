@@ -1,5 +1,6 @@
 package com.claudecodeplus.sdk
 
+import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.intellij.openapi.diagnostic.thisLogger
@@ -20,12 +21,11 @@ import kotlin.io.path.*
 class OptimizedSessionManager {
     private val logger = thisLogger()
     private val objectMapper = jacksonObjectMapper()
+        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+        .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE)
     
     // 缓存管理器
     private val cache = SessionCache()
-    
-    // 文件监听器
-    private val watchers = mutableMapOf<String, SessionWatcher>()
     
     // 协程作用域
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -77,19 +77,22 @@ class OptimizedSessionManager {
     suspend fun getMostRecentSession(projectPath: String): SessionInfo? {
         // 1. 获取项目目录
         val projectDir = getProjectDirectory(projectPath)
+        logger.info("Looking for sessions in: $projectDir")
         
         // 2. 列出所有会话文件
         val sessionFiles = listSessionFiles(projectDir)
         
         if (sessionFiles.isEmpty()) {
-            logger.info("No session files found for project: $projectPath")
+            logger.info("No session files found for project: $projectPath in directory: $projectDir")
             return null
         }
+        
+        logger.info("Found ${sessionFiles.size} session files")
         
         // 3. 按修改时间排序，获取最新的
         val mostRecent = sessionFiles.sortedByDescending { it.modifiedTime }.first()
         
-        logger.info("Found most recent session: ${mostRecent.sessionId}")
+        logger.info("Found most recent session: ${mostRecent.sessionId} at ${mostRecent.path}")
         
         // 4. 读取并解析会话内容
         return loadSession(projectPath, mostRecent)
@@ -140,57 +143,13 @@ class OptimizedSessionManager {
         sessionFile.readLines()
             .filter { it.isNotBlank() }
             .forEach { line ->
-                try {
-                    val message = objectMapper.readValue<ClaudeSessionManager.SessionMessage>(line)
+                ClaudeSessionManager.parseSessionMessage(line)?.let { message ->
                     messages.add(message)
-                } catch (e: Exception) {
-                    logger.warn("Failed to parse session line: $line", e)
                 }
             }
         
+        logger.info("Read ${messages.size} messages from session file: ${sessionFile.fileName}")
         messages
-    }
-    
-    /**
-     * 监听会话更新
-     * 返回一个Flow，实时推送会话变化
-     */
-    fun watchSession(projectPath: String, sessionId: String): Flow<SessionUpdate> = flow {
-        val projectDir = getProjectDirectory(projectPath)
-        val sessionFile = projectDir.resolve("$sessionId.jsonl")
-        
-        if (!sessionFile.exists()) {
-            logger.warn("Session file not found for watching: $sessionFile")
-            return@flow
-        }
-        
-        // 创建文件监听器
-        val watcher = TailerSessionWatcher()
-        watchers[sessionId] = watcher
-        
-        // 发布会话开始事件
-        GlobalSessionEventBus.publishAsync(SessionEvent.SessionStarted)
-        
-        // 监听文件变化
-        watcher.watchSession(sessionFile)
-            .collect { message ->
-                // 发布新消息事件
-                GlobalSessionEventBus.publishAsync(SessionEvent.NewMessage(message))
-                
-                // 更新缓存
-                cache.appendMessages(sessionId, listOf(message))
-                
-                // 发送更新
-                emit(SessionUpdate.NewMessage(message))
-            }
-    }.catch { e ->
-        logger.error("Error in session watch", e)
-        GlobalSessionEventBus.publishAsync(SessionEvent.Error(e))
-        emit(SessionUpdate.Error(e))
-    }.onCompletion {
-        // 清理监听器
-        watchers.remove(sessionId)?.stop()
-        GlobalSessionEventBus.publishAsync(SessionEvent.SessionEnded)
     }
     
     /**
@@ -249,8 +208,8 @@ class OptimizedSessionManager {
         cache.getDisplayContent(messageId)?.let { return it }
         
         // 提取内容
-        val content = when (message.type) {
-            "assistant" -> {
+        val content = when (message) {
+            is ClaudeSessionManager.SessionMessage.AssistantMessage -> {
                 val rawContent = message.message?.content
                 when (rawContent) {
                     is String -> rawContent
@@ -269,14 +228,42 @@ class OptimizedSessionManager {
                     else -> null
                 }
             }
-            "user" -> {
+            is ClaudeSessionManager.SessionMessage.UserMessage -> {
                 when (val rawContent = message.message?.content) {
                     is String -> rawContent
+                    is List<*> -> {
+                        // 用户消息也可能包含工具结果等
+                        rawContent.mapNotNull { item ->
+                            when (item) {
+                                is Map<*, *> -> {
+                                    when (item["type"]) {
+                                        "text" -> item["text"] as? String
+                                        "tool_result" -> "[Tool Result: ${item["content"]}]"
+                                        else -> null
+                                    }
+                                }
+                                else -> null
+                            }
+                        }.joinToString("\n")
+                    }
                     else -> null
                 }
             }
-            "system" -> message.message?.content?.toString()
-            else -> null
+            is ClaudeSessionManager.SessionMessage.SystemMessage -> {
+                when (message.subtype) {
+                    "init" -> "Session initialized with model: ${message.model}"
+                    else -> "System: ${message.subtype}"
+                }
+            }
+            is ClaudeSessionManager.SessionMessage.SummaryMessage -> message.summary
+            is ClaudeSessionManager.SessionMessage.ResultMessage -> {
+                if (message.is_error == true) {
+                    "Error: ${message.result}"
+                } else {
+                    "Result: ${message.result}"
+                }
+            }
+            is ClaudeSessionManager.SessionMessage.UnknownMessage -> "Unknown message type: ${message.type}"
         }
         
         // 缓存提取的内容
@@ -284,11 +271,6 @@ class OptimizedSessionManager {
         
         return content
     }
-    
-    /**
-     * 订阅会话事件
-     */
-    fun subscribeToEvents(): Flow<SessionEvent> = GlobalSessionEventBus.subscribe()
     
     /**
      * 获取缓存统计
@@ -299,8 +281,6 @@ class OptimizedSessionManager {
      * 清理资源
      */
     fun cleanup() {
-        watchers.values.forEach { it.stop() }
-        watchers.clear()
         cache.cleanUp()
         scope.cancel()
     }
