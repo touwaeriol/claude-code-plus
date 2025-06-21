@@ -69,10 +69,6 @@ import com.claudecodeplus.settings.McpSettingsService
 import com.intellij.openapi.components.service
 import com.claudecodeplus.sdk.ClaudeSessionManager
 import com.claudecodeplus.sdk.OptimizedSessionManager
-import com.claudecodeplus.sdk.SessionEvent
-import com.claudecodeplus.sdk.GlobalSessionEventBus
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 
 /**
  * Claude Code Plus 工具窗口工厂实现
@@ -88,7 +84,6 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
     private var shouldStartNewSession = false  // 默认延续上一个会话
     private var currentStreamJob: kotlinx.coroutines.Job? = null
     private var currentSessionId: String? = null  // 当前会话ID
-    private var sessionWatchJob: kotlinx.coroutines.Job? = null  // 会话监听任务
     
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val contentFactory = ContentFactory.getInstance()
@@ -104,7 +99,6 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             override fun contentRemoved(event: com.intellij.ui.content.ContentManagerEvent) {
                 // 清理资源
                 currentStreamJob?.cancel()
-                sessionWatchJob?.cancel()
                 sessionManager.cleanup()
             }
         })
@@ -148,7 +142,6 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                         // 设置标志，下次请求时开启新会话
                         shouldStartNewSession = true
                         currentSessionId = null  // 清除当前会话ID
-                        sessionWatchJob?.cancel()  // 停止监听旧会话
                     }
                 }
             }
@@ -217,8 +210,9 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
 
 """.trimIndent()
         
-        conversationContent.append(welcomeMessage)
-        updateEditorContent(editor, conversationContent.toString())
+        // 先不添加欢迎消息，等待检查是否有历史记录
+        // conversationContent.append(welcomeMessage)
+        // updateEditorContent(editor, conversationContent.toString())
         
         // 创建滚动面板
         val scrollPane = JBScrollPane(editor.component)
@@ -344,7 +338,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         )
         
         // 创建多行输入框
-        val inputArea = javax.swing.JTextArea(3, 0)
+        val inputArea = javax.swing.JTextArea(1, 0)  // 初始高度为1行
         inputArea.font = Font("Dialog", Font.PLAIN, 14)
         inputArea.lineWrap = true
         inputArea.wrapStyleWord = true
@@ -368,12 +362,23 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         // 监听输入内容变化
         inputArea.document.addDocumentListener(object : javax.swing.event.DocumentListener {
             override fun insertUpdate(e: javax.swing.event.DocumentEvent) {
-                checkForFileReference(inputArea, project, filePopup, fileListModel, fileList)
+                SwingUtilities.invokeLater {
+                    checkForFileReference(inputArea, project, filePopup, fileListModel, fileList)
+                    adjustInputAreaHeight(inputArea, inputScrollPane)
+                }
             }
             override fun removeUpdate(e: javax.swing.event.DocumentEvent) {
-                filePopup.isVisible = false
+                SwingUtilities.invokeLater {
+                    // 删除内容后也检查是否还有 @ 符号需要处理
+                    checkForFileReference(inputArea, project, filePopup, fileListModel, fileList)
+                    adjustInputAreaHeight(inputArea, inputScrollPane)
+                }
             }
-            override fun changedUpdate(e: javax.swing.event.DocumentEvent) {}
+            override fun changedUpdate(e: javax.swing.event.DocumentEvent) {
+                SwingUtilities.invokeLater {
+                    adjustInputAreaHeight(inputArea, inputScrollPane)
+                }
+            }
         })
         
         // 自定义文件列表渲染器，显示文件图标和路径
@@ -551,6 +556,15 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         inputArea.addKeyListener(object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
                 when {
+                    // 优先处理文件选择
+                    e.keyCode == KeyEvent.VK_ENTER && filePopup.isVisible -> {
+                        e.consume()
+                        val selectedFile = fileList.selectedValue
+                        if (selectedFile != null) {
+                            insertFileReference(inputArea, selectedFile)
+                            filePopup.isVisible = false
+                        }
+                    }
                     e.keyCode == KeyEvent.VK_ENTER && !e.isShiftDown -> {
                         e.consume()
                         // 检查是否正在处理请求
@@ -574,6 +588,10 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                             }
                             sendMessageWithModel(inputArea, selectedModel, editor, conversationContent, project)
                         }
+                    }
+                    e.keyCode == KeyEvent.VK_ENTER && e.isShiftDown -> {
+                        // Shift+Enter 插入换行符，不消费事件让默认行为执行
+                        // 让系统处理换行，不要 consume 事件
                     }
                     e.keyCode == KeyEvent.VK_ESCAPE -> {
                         // 如果正在生成响应，ESC 键停止生成
@@ -615,14 +633,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                             fileList.selectedIndex = currentIndex - 1
                         }
                     }
-                    e.keyCode == KeyEvent.VK_ENTER && filePopup.isVisible -> {
-                        e.consume()
-                        val selectedFile = fileList.selectedValue
-                        if (selectedFile != null) {
-                            insertFileReference(inputArea, selectedFile)
-                            filePopup.isVisible = false
-                        }
-                    }
+                    // 删除键和ESC键的处理已经在其他地方，这里不需要特殊处理
                 }
             }
         })
@@ -657,24 +668,30 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         
         // 查找最近的 @ 符号
         var atPos = -1
-        for (i in caretPos - 1 downTo 0) {
-            if (text[i] == '@') {
-                // 检查 @ 前面是否是空白或行首
-                if (i == 0 || text[i - 1].isWhitespace()) {
-                    // 检查 @ 后面是否紧跟着空格或者光标就在@后面
-                    if (caretPos == i + 1 || (caretPos > i + 1 && !text[i + 1].isWhitespace())) {
+        // 检查边界条件：确保有文本内容
+        if (text.isNotEmpty() && caretPos > 0) {
+            // 从光标位置向前查找，包括光标当前位置之前的字符
+            val searchEnd = minOf(caretPos, text.length)
+            for (i in searchEnd - 1 downTo 0) {
+                if (text[i] == '@') {
+                    // 检查 @ 前面是否是空白或行首
+                    if (i == 0 || text[i - 1].isWhitespace() || text[i - 1] == '\n') {
                         atPos = i
+                        logger.debug("Found @ at position $i, caretPos=$caretPos, text='${text.substring(maxOf(0, i - 5), minOf(text.length, i + 5))}'")
                         break
                     }
+                } else if (text[i].isWhitespace() || text[i] == '\n') {
+                    // 遇到空白字符，停止查找
+                    break
                 }
-            } else if (text[i].isWhitespace() || text[i] == '\n') {
-                break
             }
         }
         
+        logger.debug("checkForFileReference: text.length=${text.length}, caretPos=$caretPos, atPos=$atPos")
+        
         if (atPos >= 0) {
-            val searchText = if (caretPos > atPos + 1) {
-                text.substring(atPos + 1, caretPos).trim()
+            val searchText = if (caretPos > atPos + 1 && atPos + 1 < text.length) {
+                text.substring(atPos + 1, minOf(caretPos, text.length)).trim()
             } else {
                 ""
             }
@@ -872,17 +889,15 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             // 准备发送给 API 的消息（包含文件内容）
             val apiMessage = prepareMessageWithFileContents(input, project)
             
-            // 如果没有会话监听，手动添加用户消息
-            if (sessionWatchJob == null || !sessionWatchJob!!.isActive) {
-                SwingUtilities.invokeLater {
-                    // 为用户消息添加背景容器的Markdown格式
-                    conversationContent.append(formatUserMessage(displayInput))
-                    conversationContent.append("\n\n")
-                    
-                    // 更新编辑器内容
-                    updateEditorContent(editor, conversationContent.toString())
-                    scrollToBottom(editor)
-                }
+            // 添加用户消息到对话框
+            SwingUtilities.invokeLater {
+                // 为用户消息添加背景容器的Markdown格式
+                conversationContent.append(formatUserMessage(displayInput))
+                conversationContent.append("\n\n")
+                
+                // 更新编辑器内容
+                updateEditorContent(editor, conversationContent.toString())
+                scrollToBottom(editor)
             }
             
             // 清空输入框
@@ -1001,43 +1016,31 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                                 }
                             }
                             
-                            // 如果没有会话监听，手动更新内容
-                            if (sessionWatchJob == null || !sessionWatchJob!!.isActive) {
-                                SwingUtilities.invokeLater {
-                                    val currentContent = conversationContent.toString()
-                                    val generatingIndex = currentContent.lastIndexOf("_Generating..._")
-                                    if (generatingIndex >= 0) {
-                                        conversationContent.setLength(generatingIndex)
-                                        conversationContent.append(responseBuilder.toString())
-                                        conversationContent.append("_")
-                                        updateEditorContent(editor, conversationContent.toString())
-                                        scrollToBottom(editor)
-                                    }
+                            // 实时更新内容
+                            SwingUtilities.invokeLater {
+                                val currentContent = conversationContent.toString()
+                                val generatingIndex = currentContent.lastIndexOf("_Generating..._")
+                                if (generatingIndex >= 0) {
+                                    conversationContent.setLength(generatingIndex)
+                                    conversationContent.append(responseBuilder.toString())
+                                    conversationContent.append("_")
+                                    updateEditorContent(editor, conversationContent.toString())
+                                    scrollToBottom(editor)
                                 }
                             }
                         }
                         
                         // 流完成后的处理
                         SwingUtilities.invokeLater {
-                            // 如果没有会话监听，手动更新最终内容
-                            if (sessionWatchJob == null || !sessionWatchJob!!.isActive) {
-                                val currentContent = conversationContent.toString()
-                                val generatingIndex = currentContent.lastIndexOf("_Generating..._")
-                                if (generatingIndex >= 0) {
-                                    conversationContent.setLength(generatingIndex)
-                                    conversationContent.append(responseBuilder.toString())
-                                    conversationContent.append("\n\n")
-                                    updateEditorContent(editor, conversationContent.toString())
-                                    scrollToBottom(editor)
-                                }
-                            } else {
-                                // 有会话监听，只需要移除 "Generating..." 提示
-                                val currentContent = conversationContent.toString()
-                                val generatingIndex = currentContent.lastIndexOf("_Generating..._")
-                                if (generatingIndex >= 0) {
-                                    conversationContent.setLength(generatingIndex)
-                                    updateEditorContent(editor, conversationContent.toString())
-                                }
+                            // 更新最终内容
+                            val currentContent = conversationContent.toString()
+                            val generatingIndex = currentContent.lastIndexOf("_Generating..._")
+                            if (generatingIndex >= 0) {
+                                conversationContent.setLength(generatingIndex)
+                                conversationContent.append(responseBuilder.toString())
+                                conversationContent.append("\n\n")
+                                updateEditorContent(editor, conversationContent.toString())
+                                scrollToBottom(editor)
                             }
                             
                             // 聚焦到输入框
@@ -1061,11 +1064,11 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                             // 更新会话ID（如果是新会话）
                             if (currentSessionId == null) {
                                 GlobalScope.launch {
+                                    // 获取最新的会话ID
                                     val sessionInfo = sessionManager.getMostRecentSession(project.basePath ?: "")
                                     sessionInfo?.let {
                                         currentSessionId = it.sessionId
-                                        // 开始监听新会话文件
-                                        startSessionWatching(project.basePath ?: "", currentSessionId!!, editor, conversationContent)
+                                        logger.info("Updated current session ID: $currentSessionId")
                                     }
                                 }
                             }
@@ -1202,6 +1205,31 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                 
                 if (sessionInfo == null) {
                     logger.info("No previous session found for project: $projectPath")
+                    // 如果没有历史记录，显示欢迎消息
+                    val editor = panel.getClientProperty("editor") as? EditorEx
+                    val conversationContent = panel.getClientProperty("conversationContent") as? StringBuilder
+                    
+                    if (editor != null && conversationContent != null) {
+                        SwingUtilities.invokeLater {
+                            val projectName = project.name
+                            val welcomeMessage = """
+欢迎使用 Claude Code Plus！
+
+**当前项目**: $projectName  
+**项目路径**: `$projectPath`
+
+您可以：
+- 输入消息与 Claude 对话
+- 使用 `@` 引用项目中的文件
+- 使用 `Shift+Enter` 换行，`Enter` 发送消息
+
+---
+
+""".trimIndent()
+                            conversationContent.append(welcomeMessage)
+                            updateEditorContent(editor, conversationContent.toString())
+                        }
+                    }
                     return@launch
                 }
                 
@@ -1219,8 +1247,8 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                     // 处理历史消息
                     sessionInfo.messages.forEach { message ->
                         GlobalScope.launch {
-                            when (message.type) {
-                                "user" -> {
+                            when (message) {
+                                is ClaudeSessionManager.SessionMessage.UserMessage -> {
                                     val content = sessionManager.extractDisplayContent(message)
                                     if (!content.isNullOrBlank()) {
                                         SwingUtilities.invokeLater {
@@ -1230,7 +1258,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                                         }
                                     }
                                 }
-                                "assistant" -> {
+                                is ClaudeSessionManager.SessionMessage.AssistantMessage -> {
                                     val content = sessionManager.extractDisplayContent(message)
                                     if (!content.isNullOrBlank()) {
                                         SwingUtilities.invokeLater {
@@ -1240,6 +1268,9 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                                         }
                                     }
                                 }
+                                else -> {
+                                    // 忽略其他类型的消息
+                                }
                             }
                         }
                     }
@@ -1248,9 +1279,6 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                     scrollToBottom(editor)
                 }
                 
-                // 启动会话文件监听
-                startSessionWatching(projectPath, currentSessionId!!, editor, conversationContent)
-                
             } catch (e: Exception) {
                 logger.error("Error loading session history", e)
             }
@@ -1258,79 +1286,73 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
     }
     
     /**
-     * 启动会话文件监听
+     * 自动调整输入框高度
      */
-    private fun startSessionWatching(
-        projectPath: String,
-        sessionId: String,
-        editor: EditorEx,
-        conversationContent: StringBuilder
-    ) {
-        // 取消之前的监听任务
-        sessionWatchJob?.cancel()
-        
-        sessionWatchJob = GlobalScope.launch {
-            try {
-                // 使用优化后的监听方法
-                sessionManager.watchSession(projectPath, sessionId)
-                    .collect { update ->
-                        when (update) {
-                            is OptimizedSessionManager.SessionUpdate.NewMessage -> {
-                                val message = update.message
-                                GlobalScope.launch {
-                                    val content = sessionManager.extractDisplayContent(message)
-                                    if (!content.isNullOrBlank()) {
-                                        SwingUtilities.invokeLater {
-                                            when (message.type) {
-                                                "user" -> {
-                                                    conversationContent.append(formatUserMessage(content))
-                                                    conversationContent.append("\n\n")
-                                                }
-                                                "assistant" -> {
-                                                    conversationContent.append(content)
-                                                    conversationContent.append("\n\n")
-                                                }
-                                            }
-                                            updateEditorContent(editor, conversationContent.toString())
-                                            scrollToBottom(editor)
-                                        }
-                                    }
-                                }
-                            }
-                            is OptimizedSessionManager.SessionUpdate.Compressed -> {
-                                logger.info("Session compressed, ${update.messageCount} messages")
-                                // 可以在UI中显示压缩通知
-                            }
-                            is OptimizedSessionManager.SessionUpdate.Error -> {
-                                logger.error("Session watching error", update.error)
-                            }
-                        }
-                    }
-            } catch (e: Exception) {
-                logger.error("Error watching session", e)
-            }
-        }
-        
-        // 订阅全局事件总线
-        GlobalScope.launch {
-            sessionManager.subscribeToEvents()
-                .onEach { event ->
-                    when (event) {
-                        is SessionEvent.SessionStarted -> {
-                            logger.info("Session started")
-                        }
-                        is SessionEvent.SessionEnded -> {
-                            logger.info("Session ended")
-                        }
-                        is SessionEvent.Error -> {
-                            logger.error("Session event error", event.error)
-                        }
-                        else -> {
-                            // 处理其他事件
+    private fun adjustInputAreaHeight(inputArea: javax.swing.JTextArea, scrollPane: JScrollPane) {
+        SwingUtilities.invokeLater {
+            // 计算文本行数（考虑文本换行）
+            val text = inputArea.text
+            val lines = if (text.isEmpty()) {
+                1
+            } else {
+                // 计算实际行数，包括换行符和自动换行
+                val fm = inputArea.getFontMetrics(inputArea.font)
+                val width = inputArea.width - inputArea.insets.left - inputArea.insets.right
+                
+                var lineCount = 1
+                var currentLineWidth = 0
+                
+                text.forEach { char ->
+                    if (char == '\n') {
+                        lineCount++
+                        currentLineWidth = 0
+                    } else {
+                        val charWidth = fm.charWidth(char)
+                        currentLineWidth += charWidth
+                        if (width > 0 && currentLineWidth > width) {
+                            lineCount++
+                            currentLineWidth = charWidth
                         }
                     }
                 }
-                .launchIn(this)
+                lineCount
+            }
+            
+            // 限制最大高度为10行
+            val maxLines = 10
+            val minLines = 1
+            val targetLines = lines.coerceIn(minLines, maxLines)
+            
+            // 计算高度
+            val fontMetrics = inputArea.getFontMetrics(inputArea.font)
+            val lineHeight = fontMetrics.height
+            val textHeight = targetLines * lineHeight
+            
+            // 设置输入框的首选行数
+            inputArea.rows = targetLines
+            
+            // 计算 scrollPane 的高度（包括边距）
+            val insets = inputArea.insets
+            val scrollPaneHeight = textHeight + insets.top + insets.bottom + 8 // 额外边距
+            
+            // 设置 scrollPane 的首选大小和最小大小
+            scrollPane.preferredSize = java.awt.Dimension(scrollPane.width, scrollPaneHeight)
+            scrollPane.minimumSize = java.awt.Dimension(100, scrollPaneHeight)
+            
+            // 如果行数超过最大值，显示滚动条
+            if (lines > maxLines) {
+                scrollPane.verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_ALWAYS
+            } else {
+                scrollPane.verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_NEVER
+            }
+            
+            // 重新布局父组件
+            scrollPane.parent?.revalidate()
+            scrollPane.parent?.repaint()
+            
+            // 滚动到光标位置
+            inputArea.caretPosition = inputArea.text.length
         }
     }
+    
 }
