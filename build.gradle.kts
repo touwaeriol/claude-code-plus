@@ -36,18 +36,8 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.3")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.15.3")
     
-    // JSON-RPC 2.0
-    implementation("com.github.briandilley.jsonrpc4j:jsonrpc4j:1.6")
-    
-    // WebSocket
-    implementation("org.java-websocket:Java-WebSocket:1.5.6")
-    
-    // Vert.x
-    implementation("io.vertx:vertx-core:4.5.1")
-    implementation("io.vertx:vertx-web-client:4.5.1")
-    
-    // 压缩文件处理
-    implementation("org.apache.commons:commons-compress:1.25.0")
+    // Kotlin 协程
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 }
 
 // IntelliJ 平台配置
@@ -63,28 +53,6 @@ intellijPlatform {
     }
 }
 
-// 辅助函数：检查系统 Node.js 可用性
-fun checkNodeAvailability(): Boolean {
-    return try {
-        val process = ProcessBuilder("node", "--version").start()
-        val exitCode = process.waitFor()
-        exitCode == 0
-    } catch (e: Exception) {
-        false
-    }
-}
-
-// 辅助函数：获取 Node.js 版本
-fun getNodeVersion(): String? {
-    return try {
-        val process = ProcessBuilder("node", "--version").start()
-        if (process.waitFor() == 0) {
-            process.inputStream.bufferedReader().readText().trim()
-        } else null
-    } catch (e: Exception) {
-        null
-    }
-}
 
 tasks {
     withType<JavaCompile> {
@@ -98,76 +66,6 @@ tasks {
         }
     }
     
-    // 检查 Node.js 环境
-    register("checkNodeEnvironment") {
-        description = "Check Node.js environment availability"
-        group = "verification"
-        
-        doLast {
-            println("Checking Node.js environment...")
-            
-            if (checkNodeAvailability()) {
-                val version = getNodeVersion()
-                println("✅ Node.js found: $version")
-                
-                // 检查版本是否满足最低要求
-                val versionNumber = version?.removePrefix("v")?.split(".")?.get(0)?.toIntOrNull()
-                if (versionNumber != null && versionNumber >= 18) {
-                    println("✅ Node.js version meets minimum requirement (>=18.0.0)")
-                } else {
-                    println("⚠️  Node.js version may be too old, recommend >=18.0.0 (Claude SDK 要求)")
-                }
-            } else {
-                println("❌ Node.js not found in PATH")
-                println("Please install Node.js 18.0.0 or higher")
-                throw GradleException("Node.js is required but not found")
-            }
-        }
-    }
-    
-    // 构建 Node.js 服务
-    register("buildNodeService") {
-        description = "Build Node.js service code for embedding"
-        group = "build"
-        dependsOn("checkNodeEnvironment")
-        
-        doLast {
-            val wrapperDir = file("claude-sdk-wrapper")
-            if (!wrapperDir.exists()) {
-                throw GradleException("claude-sdk-wrapper directory not found")
-            }
-            
-            println("Building Node.js service...")
-            
-            // 安装依赖
-            exec {
-                workingDir = wrapperDir
-                commandLine = listOf("npm", "ci", "--omit=optional")
-            }
-            
-            // 使用新的 esbuild 构建脚本编译并复制到 resources
-            exec {
-                workingDir = wrapperDir
-                commandLine = listOf("npm", "run", "build:plugin:esbuild")
-            }
-            
-            println("Node.js service built and copied to resources successfully!")
-        }
-    }
-    
-    // 清理 Node.js 资源
-    register("cleanNodeResources") {
-        description = "Clean Node.js resources"
-        group = "build"
-        
-        doLast {
-            val nodeDir = file("src/main/resources/claude-node")
-            if (nodeDir.exists()) {
-                nodeDir.deleteRecursively()
-                println("Cleaned Node.js resources")
-            }
-        }
-    }
     
     runIde {
         jvmArgs(
@@ -179,35 +77,6 @@ tasks {
         enabled = false
     }
     
-    // 编译 Kotlin 代码时自动构建 Node 服务
-    named("compileKotlin") {
-        dependsOn("buildNodeService")
-    }
-    
-    // 处理资源时确保 Node 服务已构建
-    named<ProcessResources>("processResources") {
-        dependsOn("buildNodeService")
-    }
-    
-    // 准备沙箱时确保 Node 服务已构建
-    named<org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask>("prepareSandbox") {
-        dependsOn("buildNodeService")
-        
-        // 使用 IntelliJ Platform 的方式添加文件到插件目录
-        from("src/main/resources/claude-node") {
-            into("claude-node")
-            exclude("**/*.ts", "**/*.map")  // 排除源文件
-        }
-        
-        doLast {
-            println("Node service files prepared in sandbox")
-        }
-    }
-    
-    // 构建插件时也构建 Node 服务
-    named("buildPlugin") {
-        dependsOn("buildNodeService")
-    }
     
     // 在打包插件之前，确保静态文件被包含
     register("preparePluginDistribution") {
@@ -240,8 +109,4 @@ tasks {
         }
     }
     
-    // 清理时也清理 Node.js 资源
-    named("clean") {
-        dependsOn("cleanNodeResources")
-    }
 }

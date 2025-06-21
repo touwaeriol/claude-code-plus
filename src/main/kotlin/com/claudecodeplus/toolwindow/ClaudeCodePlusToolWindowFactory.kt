@@ -54,10 +54,10 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import java.nio.file.Paths
 import javax.swing.Timer
-import com.claudecodeplus.sdk.ClaudeAPIClientV5
-import com.claudecodeplus.sdk.ClaudeOptions
-import com.claudecodeplus.sdk.HealthStatus
-import com.claudecodeplus.sdk.NodeServiceManager
+import com.claudecodeplus.sdk.ClaudeCliWrapper
+import com.claudecodeplus.sdk.MessageType
+import com.claudecodeplus.sdk.SDKMessage
+import kotlinx.coroutines.flow.collect
 import com.intellij.openapi.application.PathManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
@@ -78,23 +78,12 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
     
     companion object {
         private val logger = com.intellij.openapi.diagnostic.Logger.getInstance(ClaudeCodePlusToolWindowFactory::class.java)
-        private var apiClient: ClaudeAPIClientV5? = null
+        private val cliWrapper = ClaudeCliWrapper()
         
         @JvmStatic
         fun stopServices() {
             logger.info("Stopping Claude Code Plus services...")
-            apiClient?.disconnect()
-            apiClient = null
-        }
-        
-        private fun getOrCreateApiClient(): ClaudeAPIClientV5 {
-            if (apiClient == null) {
-                val nodeManager = NodeServiceManager.getInstance()
-                val port = nodeManager.getServicePort() ?: 9925
-                logger.info("Creating API client with port: $port")
-                apiClient = ClaudeAPIClientV5(port)
-            }
-            return apiClient!!
+            // 不再需要停止任何服务，因为直接调用CLI
         }
     }
     
@@ -106,6 +95,8 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         val panel = createChatPanel(project)
         val content = contentFactory.createContent(panel, "", false)
         toolWindow.contentManager.addContent(content)
+        
+        // 不再需要初始化连接，直接使用CLI
         
         // 添加标题栏按钮
         val titleActions = mutableListOf<AnAction>()
@@ -471,23 +462,47 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         agentLabel.font = Font("Dialog", Font.PLAIN, 11)
         
         val modelOptions = arrayOf(
-            "claude-4-opus",
-            "claude-4-sonnet"
+            "Claude 4 Opus",
+            "Claude 4 Sonnet"
         )
         
         val modelCombo = JComboBox(modelOptions)
         modelCombo.preferredSize = java.awt.Dimension(140, 28)
         modelCombo.font = Font("Dialog", Font.PLAIN, 12)
-        modelCombo.selectedIndex = 0  // 默认选择 claude-4-opus
+        modelCombo.selectedIndex = 0  // 默认选择 Claude 4 Opus
         modelCombo.toolTipText = "选择AI模型"
         modelCombo.putClientProperty("JComboBox.isTableCellEditor", true)
         
         // 存储模型选择器的引用，以便在事件处理器中访问
         inputArea.putClientProperty("modelCombo", modelCombo)
         
+        // 发送按钮
+        val sendButton = JButton("发送")
+        sendButton.preferredSize = java.awt.Dimension(70, 28)
+        sendButton.font = Font("Dialog", Font.PLAIN, 12)
+        sendButton.cursor = Cursor(Cursor.HAND_CURSOR)
+        sendButton.toolTipText = "发送消息 (Enter)"
+        sendButton.isFocusPainted = false
+        sendButton.putClientProperty("JButton.buttonType", "textured")
+        sendButton.addActionListener {
+            val message = inputArea.text.trim()
+            if (message.isNotEmpty() && currentStreamJob?.isActive != true) {
+                val selectedModel = when(modelCombo.selectedItem?.toString()) {
+                    "Claude 4 Opus" -> "opus"
+                    "Claude 4 Sonnet" -> "sonnet"
+                    else -> "opus"
+                }
+                sendMessageWithModel(inputArea, selectedModel, editor, conversationContent, project)
+            }
+        }
+        
+        // 存储发送按钮的引用
+        inputArea.putClientProperty("sendButton", sendButton)
+        
         rightPanel.add(agentIcon)
         rightPanel.add(agentLabel)
         rightPanel.add(modelCombo)
+        rightPanel.add(sendButton)
         
         // 中间：停止按钮（默认隐藏）
         val centerPanel = JPanel(FlowLayout(FlowLayout.CENTER, 0, 0))
@@ -505,18 +520,14 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             // 取消当前的流式任务
             currentStreamJob?.cancel()
             
-            // 同时调用服务端的 abort 接口
-            GlobalScope.launch {
-                try {
-                    getOrCreateApiClient().abort()
-                    logger.info("Server abort requested")
-                } catch (e: Exception) {
-                    logger.error("Failed to abort server request", e)
-                }
-            }
+            // CLI 方式不需要服务端 abort，直接取消协程即可
+            logger.info("Stream cancelled by stop button")
             
+            // 切换按钮状态：隐藏停止按钮，显示发送按钮
             stopButton.isVisible = false
-            inputArea.isEnabled = true
+            inputArea.getClientProperty("sendButton")?.let { btn ->
+                if (btn is JButton) btn.isVisible = true
+            }
             inputArea.requestFocusInWindow()
         }
         
@@ -535,12 +546,12 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                 when {
                     e.keyCode == KeyEvent.VK_ENTER && !e.isShiftDown -> {
                         e.consume()
-                        // 检查是否正在生成中（输入框被禁用）
-                        if (!inputArea.isEnabled) {
+                        // 检查是否正在处理请求
+                        if (currentStreamJob?.isActive == true) {
                             // 显示提示信息
                             javax.swing.JOptionPane.showMessageDialog(
                                 inputArea,
-                                "AI 正在生成响应中...\n请使用 ESC 键或停止按钮来中断生成",
+                                "AI 正在生成响应中...\n请使用停止按钮来中断生成",
                                 "提示",
                                 javax.swing.JOptionPane.INFORMATION_MESSAGE
                             )
@@ -550,8 +561,8 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                         if (message.isNotEmpty()) {
                             val combo = inputArea.getClientProperty("modelCombo") as? JComboBox<*>
                             val selectedModel = when(combo?.selectedItem?.toString()) {
-                                "claude-4-opus" -> "opus"
-                                "claude-4-sonnet" -> "sonnet"
+                                "Claude 4 Opus" -> "opus"
+                                "Claude 4 Sonnet" -> "sonnet"
                                 else -> "opus"  // 默认使用 opus
                             }
                             sendMessageWithModel(inputArea, selectedModel, editor, conversationContent, project)
@@ -559,25 +570,24 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                     }
                     e.keyCode == KeyEvent.VK_ESCAPE -> {
                         // 如果正在生成响应，ESC 键停止生成
-                        if (!inputArea.isEnabled) {
+                        if (currentStreamJob?.isActive == true) {
                             currentStreamJob?.cancel()
                             
-                            // 同时调用服务端的 abort 接口
-                            GlobalScope.launch {
-                                try {
-                                    getOrCreateApiClient().abort()
-                                    logger.info("Server abort requested")
-                                } catch (e: Exception) {
-                                    logger.error("Failed to abort server request", e)
-                                }
-                            }
+                            // CLI 方式不需要服务端 abort，直接取消协程即可
+                            logger.info("Stream cancelled by user")
                             
                             inputArea.getClientProperty("stopButton")?.let { btn ->
                                 if (btn is JButton) {
                                     btn.isVisible = false
                                 }
                             }
-                            inputArea.isEnabled = true
+                            // 切换按钮状态：隐藏停止按钮，显示发送按钮
+                            inputArea.getClientProperty("stopButton")?.let { btn ->
+                                if (btn is JButton) btn.isVisible = false
+                            }
+                            inputArea.getClientProperty("sendButton")?.let { btn ->
+                                if (btn is JButton) btn.isVisible = true
+                            }
                             inputArea.requestFocusInWindow()
                         } else {
                             // 否则关闭文件弹出菜单
@@ -846,8 +856,8 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
     ) {
         val input = inputArea.text.trim()
         if (input.isNotEmpty()) {
-            // 禁用输入区域
-            inputArea.isEnabled = false
+            // 清空输入区域
+            inputArea.text = ""
             
             // 处理文件引用以显示
             val displayInput = processFileReferences(input, project)
@@ -932,43 +942,58 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         currentStreamJob?.cancel()
         
         // 使用协程发送请求
+        // 切换按钮状态：隐藏发送按钮，显示停止按钮
+        SwingUtilities.invokeLater {
+            inputArea.getClientProperty("sendButton")?.let { btn ->
+                if (btn is JButton) btn.isVisible = false
+            }
+            inputArea.getClientProperty("stopButton")?.let { btn ->
+                if (btn is JButton) {
+                    btn.isVisible = true
+                    btn.isEnabled = true
+                }
+            }
+        }
+        
         currentStreamJob = GlobalScope.launch {
             try {
-                // 获取或创建 API 客户端
-                val client = getOrCreateApiClient()
-                
-                // 确保客户端已连接
-                if (!client.connect()) {
-                    SwingUtilities.invokeLater {
-                        Messages.showErrorDialog(project, "无法连接到 Claude 服务", "Claude Code Plus")
-                        inputArea.isEnabled = true
-                    }
-                    return@launch
-                }
-                
                 val responseBuilder = StringBuilder()
                 var hasContent = false
                 
                 // 获取 MCP 配置
                 val mcpConfig = getMcpConfigForProject(project)
                 
-                // 准备选项（使用 ClaudeOptions 数据类）
-                val options = ClaudeOptions(
+                // 准备选项
+                val options = ClaudeCliWrapper.QueryOptions(
                     model = when (model) {
-                        "sonnet" -> "claude-3-5-sonnet-20241022"
-                        "opus" -> "claude-3-opus-20240229"
-                        else -> "claude-3-5-sonnet-20241022"
+                        "sonnet" -> "claude-4-sonnet-20250514"
+                        "opus" -> "claude-opus-4-20250514"
+                        else -> "claude-opus-4-20250514"
                     },
-                    mcp = mcpConfig
+                    mcpServers = mcpConfig,
+                    cwd = project.basePath
                 )
                 
                 // 使用流式 API
-                GlobalScope.launch(Dispatchers.IO) {
                     try {
-                        client.streamMessage(message, options) { chunk ->
-                            // 处理每个数据块
-                            responseBuilder.append(chunk)
-                            hasContent = true
+                        logger.info("Sending message to Claude CLI: $message")
+                        logger.info("Using model: ${options.model}")
+                        
+                        val stream = cliWrapper.query(message, options)
+                        stream.collect { sdkMessage ->
+                            when (sdkMessage.type) {
+                                MessageType.TEXT -> {
+                                    val text = sdkMessage.data.text ?: ""
+                                    responseBuilder.append(text)
+                                    hasContent = true
+                                }
+                                MessageType.ERROR -> {
+                                    throw Exception(sdkMessage.data.error ?: "Unknown error")
+                                }
+                                else -> {
+                                    // 忽略其他类型的响应
+                                }
+                            }
                             
                             SwingUtilities.invokeLater {
                                 val currentContent = conversationContent.toString()
@@ -981,7 +1006,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                                     scrollToBottom(editor)
                                 }
                             }
-                        }?.collect()
+                        }
                         
                         // 流完成后的处理
                         SwingUtilities.invokeLater {
@@ -995,14 +1020,18 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                                 scrollToBottom(editor)
                             }
                             
-                            // 重新启用输入
-                            inputArea.isEnabled = true
+                            // 聚焦到输入框
                             inputArea.requestFocusInWindow()
                             
-                            // 隐藏停止按钮
+                            // 切换按钮状态：隐藏停止按钮，显示发送按钮
                             inputArea.getClientProperty("stopButton")?.let { btn ->
                                 if (btn is JButton) {
                                     btn.isVisible = false
+                                }
+                            }
+                            inputArea.getClientProperty("sendButton")?.let { btn ->
+                                if (btn is JButton) {
+                                    btn.isVisible = true
                                 }
                             }
                         }
@@ -1041,18 +1070,22 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                             }
                             
                             // 重新启用输入框
-                            inputArea.isEnabled = true
+                            // 输入框保持启用状态
                             inputArea.requestFocusInWindow()
                             
-                            // 隐藏停止按钮
+                            // 切换按钮状态：隐藏停止按钮，显示发送按钮
                             inputArea.getClientProperty("stopButton")?.let { btn ->
                                 if (btn is JButton) {
                                     btn.isVisible = false
                                 }
                             }
+                            inputArea.getClientProperty("sendButton")?.let { btn ->
+                                if (btn is JButton) {
+                                    btn.isVisible = true
+                                }
+                            }
                         }
                     }
-                }
             } catch (e: Exception) {
                 // 处理外层异常
                 SwingUtilities.invokeLater {
@@ -1065,8 +1098,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                         scrollToBottom(editor)
                     }
                     
-                    // 重新启用输入框
-                    inputArea.isEnabled = true
+                    // 聚焦到输入框
                     inputArea.requestFocusInWindow()
                     
                     // 隐藏停止按钮

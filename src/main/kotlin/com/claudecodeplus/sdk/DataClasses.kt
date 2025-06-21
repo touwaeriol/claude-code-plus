@@ -18,8 +18,3 @@ data class ClaudeOptions(
     val system: String? = null,
     val mcp: Any? = null
 )
-
-/**
- * JSON-RPC 异常
- */
-class JsonRpcException(val code: Int, message: String) : Exception(message)

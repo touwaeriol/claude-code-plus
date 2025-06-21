@@ -13,9 +13,12 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
 /**
- * Node.js 服务管理器
- * 负责管理内嵌的 Node.js Claude SDK 服务的生命周期
+ * Node.js 服务管理器 - 已废弃
+ * 现在直接使用 ClaudeCliWrapper 调用 claude 命令
+ * 
+ * @deprecated 使用 ClaudeCliWrapper 代替
  */
+@Deprecated("使用 ClaudeCliWrapper 代替", ReplaceWith("ClaudeCliWrapper"))
 @Service(Service.Level.APP)
 class NodeServiceManager : Disposable {
 
@@ -113,8 +116,14 @@ class NodeServiceManager : Disposable {
                                     val port = portStr.toIntOrNull()
                                     if (port != null && !portFuture.isDone) {
                                         servicePort = port
+                                        logger.info("Detected Node service port: $port")
                                         portFuture.complete(port)
                                     }
+                                }
+                                
+                                // 记录 WebSocket 服务启动信息
+                                if (line.contains("WebSocket server listening on port")) {
+                                    logger.info("WebSocket server is ready!")
                                 }
                             }
                         }
