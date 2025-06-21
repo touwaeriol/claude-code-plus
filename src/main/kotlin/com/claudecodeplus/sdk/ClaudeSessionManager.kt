@@ -1,7 +1,10 @@
 package com.claudecodeplus.sdk
 
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.fasterxml.jackson.module.kotlin.treeToValue
 import com.intellij.openapi.diagnostic.thisLogger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
@@ -32,6 +35,8 @@ import kotlin.io.path.*
 class ClaudeSessionManager {
     private val logger = thisLogger()
     private val objectMapper = jacksonObjectMapper()
+        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+        .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE)
     
     companion object {
         private val CLAUDE_HOME = Paths.get(System.getProperty("user.home"), ".claude")
@@ -39,29 +44,148 @@ class ClaudeSessionManager {
         
         // 监听间隔（毫秒）
         private const val WATCH_INTERVAL = 500L
+        
+        // 共享的 ObjectMapper 实例
+        private val sharedObjectMapper = jacksonObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+            .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE)
+        
+        /**
+         * 解析 JSON 行为具体的 SessionMessage 类型
+         */
+        fun parseSessionMessage(json: String): SessionMessage? {
+            return try {
+                val node = sharedObjectMapper.readTree(json)
+                val type = node.get("type")?.asText() ?: return null
+                
+                when (type) {
+                    "user" -> sharedObjectMapper.treeToValue<SessionMessage.UserMessage>(node)
+                    "assistant" -> sharedObjectMapper.treeToValue<SessionMessage.AssistantMessage>(node)
+                    "system" -> sharedObjectMapper.treeToValue<SessionMessage.SystemMessage>(node)
+                    "summary" -> sharedObjectMapper.treeToValue<SessionMessage.SummaryMessage>(node)
+                    "result" -> sharedObjectMapper.treeToValue<SessionMessage.ResultMessage>(node)
+                    else -> SessionMessage.UnknownMessage(
+                        type = type,
+                        uuid = node.get("uuid")?.asText(),
+                        timestamp = node.get("timestamp")?.asText(),
+                        sessionId = node.get("sessionId")?.asText(),
+                        compressed = node.get("compressed")?.asBoolean(),
+                        data = sharedObjectMapper.treeToValue<Map<String, Any>>(node)
+                    )
+                }
+            } catch (e: Exception) {
+                thisLogger().warn("Failed to parse session message: $json", e)
+                null
+            }
+        }
     }
     
-    data class SessionMessage(
-        val parentUuid: String? = null,
-        val isSidechain: Boolean? = null,
-        val userType: String? = null,
-        val cwd: String? = null,
-        val sessionId: String? = null,
-        val version: String? = null,
-        val type: String,  // "user" or "assistant"
-        val message: Message? = null,
-        val uuid: String? = null,
-        val timestamp: String? = null,
-        val requestId: String? = null,
-        val compressed: Boolean? = null  // 标记是否为压缩后的消息
-    )
+    // 基础消息类
+    sealed class SessionMessage {
+        abstract val type: String
+        abstract val uuid: String?
+        abstract val timestamp: String?
+        abstract val sessionId: String?
+        abstract val compressed: Boolean?
+        
+        // 用户消息
+        data class UserMessage(
+            override val type: String = "user",
+            override val uuid: String? = null,
+            override val timestamp: String? = null,
+            override val sessionId: String? = null,
+            override val compressed: Boolean? = null,
+            val parentUuid: String? = null,
+            val isSidechain: Boolean? = null,
+            val userType: String? = null,
+            val cwd: String? = null,
+            val version: String? = null,
+            val message: Message? = null,
+            val toolUseResult: Any? = null  // 可能是字符串或Map
+        ) : SessionMessage()
+        
+        // AI 响应消息
+        data class AssistantMessage(
+            override val type: String = "assistant",
+            override val uuid: String? = null,
+            override val timestamp: String? = null,
+            override val sessionId: String? = null,
+            override val compressed: Boolean? = null,
+            val parentUuid: String? = null,
+            val isSidechain: Boolean? = null,
+            val userType: String? = null,
+            val cwd: String? = null,
+            val version: String? = null,
+            val message: Message? = null,
+            val requestId: String? = null,
+            val isApiErrorMessage: Boolean? = null
+        ) : SessionMessage()
+        
+        // 系统消息（初始化、错误等）
+        data class SystemMessage(
+            override val type: String = "system",
+            override val uuid: String? = null,
+            override val timestamp: String? = null,
+            override val sessionId: String? = null,
+            override val compressed: Boolean? = null,
+            val subtype: String? = null,
+            val cwd: String? = null,
+            val version: String? = null,
+            val tools: List<String>? = null,
+            val mcp_servers: List<Map<String, Any>>? = null,
+            val model: String? = null,
+            val permissionMode: String? = null,
+            val apiKeySource: String? = null
+        ) : SessionMessage()
+        
+        // 摘要消息
+        data class SummaryMessage(
+            override val type: String = "summary",
+            override val uuid: String? = null,
+            override val timestamp: String? = null,
+            override val sessionId: String? = null,
+            override val compressed: Boolean? = null,
+            val summary: String? = null,
+            val leafUuid: String? = null
+        ) : SessionMessage()
+        
+        // 结果消息
+        data class ResultMessage(
+            override val type: String = "result",
+            override val uuid: String? = null,
+            override val timestamp: String? = null,
+            override val sessionId: String? = null,
+            override val compressed: Boolean? = null,
+            val subtype: String? = null,
+            val duration_ms: Long? = null,
+            val duration_api_ms: Long? = null,
+            val num_turns: Int? = null,
+            val result: String? = null,
+            val is_error: Boolean? = null,
+            val total_cost_usd: Double? = null,
+            val usage: Map<String, Any>? = null
+        ) : SessionMessage()
+        
+        // 未知类型（兜底）
+        data class UnknownMessage(
+            override val type: String,
+            override val uuid: String? = null,
+            override val timestamp: String? = null,
+            override val sessionId: String? = null,
+            override val compressed: Boolean? = null,
+            val data: Map<String, Any>? = null
+        ) : SessionMessage()
+    }
     
     data class Message(
         val role: String? = null,
         val content: Any? = null,  // String or List<ContentBlock>
         val id: String? = null,
         val type: String? = null,
-        val model: String? = null
+        val model: String? = null,
+        val stop_reason: String? = null,
+        val stop_sequence: String? = null,
+        val usage: Map<String, Any>? = null
     )
     
     data class SessionState(
@@ -161,12 +285,9 @@ class ClaudeSessionManager {
                 var line: String?
                 while (file.readLine().also { line = it } != null) {
                     if (!line.isNullOrBlank()) {
-                        try {
-                            val message = objectMapper.readValue<SessionMessage>(line!!)
+                        parseSessionMessage(line!!)?.let { message ->
                             state.messageCache.add(message)
                             state.lastLineCount++
-                        } catch (e: Exception) {
-                            logger.warn("Failed to parse session line: $line", e)
                         }
                     }
                 }
@@ -183,135 +304,11 @@ class ClaudeSessionManager {
     }
     
     /**
-     * 高性能监听会话文件变化
-     * 使用轮询而不是 WatchService，因为需要处理文件重写的情况
-     */
-    fun watchSessionFile(projectPath: String, sessionId: String): Flow<SessionMessage> = flow {
-        val projectDir = getProjectSessionDir(projectPath) ?: return@flow
-        val sessionFile = projectDir.resolve("$sessionId.jsonl")
-        
-        if (!sessionFile.exists()) {
-            logger.warn("Session file not found for watching: $sessionFile")
-            return@flow
-        }
-        
-        val state = sessionStates.getOrPut(sessionId) { SessionState() }
-        
-        // 初始化状态
-        state.lastFileSize = sessionFile.fileSize()
-        state.lastModified = sessionFile.getLastModifiedTime().toMillis()
-        
-        withContext(Dispatchers.IO) {
-            while (currentCoroutineContext().isActive) {
-                try {
-                    val currentSize = sessionFile.fileSize()
-                    val currentModified = sessionFile.getLastModifiedTime().toMillis()
-                    
-                    // 检测文件变化
-                    when {
-                        // 文件被重写（压缩）
-                        currentSize < state.lastFileSize -> {
-                            logger.info("Session file was compressed, reloading")
-                            handleFileRewrite(sessionFile, state)
-                        }
-                        // 文件有新增内容
-                        currentSize > state.lastFileSize -> {
-                            handleNewContent(sessionFile, state, currentSize)?.let { messages ->
-                                messages.forEach { emit(it) }
-                            }
-                        }
-                        // 文件被修改但大小未变（可能是编辑）
-                        currentModified > state.lastModified -> {
-                            logger.debug("File modified but size unchanged")
-                            state.lastModified = currentModified
-                        }
-                    }
-                    
-                } catch (e: Exception) {
-                    logger.error("Error in session watch loop", e)
-                }
-                
-                delay(WATCH_INTERVAL)
-            }
-        }
-    }
-    
-    /**
-     * 处理文件重写（上下文压缩）
-     */
-    private suspend fun handleFileRewrite(sessionFile: Path, state: SessionState) {
-        state.messageCache.clear()
-        state.lastFileSize = 0
-        state.lastLineCount = 0
-        
-        // 重新读取整个文件
-        try {
-            sessionFile.readLines()
-                .filter { it.isNotBlank() }
-                .forEach { line ->
-                    try {
-                        val message = objectMapper.readValue<SessionMessage>(line)
-                        state.messageCache.add(message.copy(compressed = true))
-                    } catch (e: Exception) {
-                        logger.warn("Failed to parse compressed session line: $line", e)
-                    }
-                }
-            
-            state.lastFileSize = sessionFile.fileSize()
-            state.lastModified = sessionFile.getLastModifiedTime().toMillis()
-            
-            logger.info("Reloaded ${state.messageCache.size} messages after compression")
-        } catch (e: Exception) {
-            logger.error("Error handling file rewrite", e)
-        }
-    }
-    
-    /**
-     * 处理新增内容
-     */
-    private fun handleNewContent(
-        sessionFile: Path, 
-        state: SessionState, 
-        currentSize: Long
-    ): List<SessionMessage>? {
-        val newMessages = mutableListOf<SessionMessage>()
-        
-        try {
-            RandomAccessFile(sessionFile.toFile(), "r").use { file ->
-                // 跳到上次读取的位置
-                file.seek(state.lastFileSize)
-                
-                var line: String?
-                while (file.readLine().also { line = it } != null) {
-                    if (!line.isNullOrBlank()) {
-                        try {
-                            val message = objectMapper.readValue<SessionMessage>(line!!)
-                            state.messageCache.add(message)
-                            newMessages.add(message)
-                            state.lastLineCount++
-                        } catch (e: Exception) {
-                            logger.warn("Failed to parse new session line: $line", e)
-                        }
-                    }
-                }
-                
-                state.lastFileSize = currentSize
-                state.lastModified = sessionFile.getLastModifiedTime().toMillis()
-            }
-            
-            return if (newMessages.isNotEmpty()) newMessages else null
-        } catch (e: Exception) {
-            logger.error("Error reading new content", e)
-            return null
-        }
-    }
-    
-    /**
      * 提取显示内容
      */
     fun extractDisplayContent(message: SessionMessage): String? {
-        return when (message.type) {
-            "assistant" -> {
+        return when (message) {
+            is SessionMessage.AssistantMessage -> {
                 // AI 响应
                 val content = message.message?.content
                 when (content) {
@@ -332,18 +329,51 @@ class ClaudeSessionManager {
                     else -> null
                 }
             }
-            "user" -> {
+            is SessionMessage.UserMessage -> {
                 // 用户输入
                 when (val content = message.message?.content) {
                     is String -> content
+                    is List<*> -> {
+                        // 用户消息也可能包含工具结果等
+                        content.mapNotNull { item ->
+                            when (item) {
+                                is Map<*, *> -> {
+                                    when (item["type"]) {
+                                        "text" -> item["text"] as? String
+                                        "tool_result" -> "[Tool Result: ${item["content"]}]"
+                                        else -> null
+                                    }
+                                }
+                                else -> null
+                            }
+                        }.joinToString("\n")
+                    }
                     else -> null
                 }
             }
-            "system" -> {
-                // 系统消息，如压缩通知
-                message.message?.content?.toString()
+            is SessionMessage.SystemMessage -> {
+                // 系统消息
+                when (message.subtype) {
+                    "init" -> "Session initialized with model: ${message.model}"
+                    else -> "System: ${message.subtype}"
+                }
             }
-            else -> null
+            is SessionMessage.SummaryMessage -> {
+                // 摘要消息
+                message.summary
+            }
+            is SessionMessage.ResultMessage -> {
+                // 结果消息
+                if (message.is_error == true) {
+                    "Error: ${message.result}"
+                } else {
+                    "Result: ${message.result}"
+                }
+            }
+            is SessionMessage.UnknownMessage -> {
+                // 未知消息
+                "Unknown message type: ${message.type}"
+            }
         }
     }
     

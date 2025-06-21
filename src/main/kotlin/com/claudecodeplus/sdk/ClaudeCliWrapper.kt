@@ -1,11 +1,14 @@
 package com.claudecodeplus.sdk
 
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.intellij.openapi.diagnostic.thisLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
@@ -27,6 +30,8 @@ import java.io.InputStreamReader
 class ClaudeCliWrapper {
     private val logger = thisLogger()
     private val objectMapper = jacksonObjectMapper()
+        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+        .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE)
     
     // 存储当前运行的进程，用于终止响应
     private val currentProcess = AtomicReference<Process?>(null)
@@ -118,58 +123,96 @@ class ClaudeCliWrapper {
         // 这个环境变量会被 Claude CLI 识别，用于统计和跟踪
         processBuilder.environment()["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kotlin"
         
-        withContext(Dispatchers.IO) {
-            val process = processBuilder.start()
-            currentProcess.set(process)
-            
-            // 关闭输入流
-            process.outputStream.close()
-            
-            // 读取输出
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val errorReader = BufferedReader(InputStreamReader(process.errorStream))
-            
-            // 启动错误流读取
-            val errorBuilder = StringBuilder()
-            Thread {
-                errorReader.useLines { lines ->
-                    lines.forEach { line ->
-                        errorBuilder.appendLine(line)
-                        logger.warn("Claude CLI stderr: $line")
-                    }
+        val process = processBuilder.start()
+        currentProcess.set(process)
+        
+        // 关闭输入流
+        process.outputStream.close()
+        
+        // 读取输出
+        val reader = BufferedReader(InputStreamReader(process.inputStream))
+        val errorReader = BufferedReader(InputStreamReader(process.errorStream))
+        
+        // 启动错误流读取
+        val errorBuilder = StringBuilder()
+        Thread {
+            errorReader.useLines { lines ->
+                lines.forEach { line ->
+                    errorBuilder.appendLine(line)
+                    logger.warn("Claude CLI stderr: $line")
                 }
-            }.start()
-            
-            try {
-                reader.useLines { lines ->
-                    lines.forEach { line ->
-                        // 检查协程是否被取消
-                        coroutineContext.ensureActive()
+            }
+        }.start()
+        
+        try {
+            reader.useLines { lines ->
+                lines.forEach { line ->
+                    // 检查协程是否被取消
+                    coroutineContext.ensureActive()
                         
                         if (line.trim().isNotEmpty()) {
                             try {
-                                val message = objectMapper.readValue<SDKMessage>(line)
-                                emit(message)
-                            } catch (e: Exception) {
-                                // 解析失败，可能是非JSON输出
-                                logger.warn("Failed to parse line: $line")
+                                // 解析 Claude CLI 的 JSON 输出
+                                val jsonNode = objectMapper.readTree(line)
+                                val type = jsonNode.get("type")?.asText()
+                                
+                                when (type) {
+                                    "assistant" -> {
+                                        // 提取助手消息
+                                        val content = jsonNode.get("message")?.get("content")
+                                        if (content != null && content.isArray) {
+                                            content.forEach { item ->
+                                                if (item.get("type")?.asText() == "text") {
+                                                    val text = item.get("text")?.asText()
+                                                    if (!text.isNullOrEmpty()) {
+                                                        emit(SDKMessage(
+                                                            type = MessageType.TEXT,
+                                                            data = MessageData(text = text)
+                                                        ))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    "error" -> {
+                                        // 错误消息
+                                        val error = jsonNode.get("error")?.asText() ?: "Unknown error"
+                                        emit(SDKMessage(
+                                            type = MessageType.ERROR,
+                                            data = MessageData(error = error)
+                                        ))
+                                    }
+                                    "system" -> {
+                                        // 系统消息，如初始化
+                                        logger.debug("System message: $line")
+                                    }
+                                    "result" -> {
+                                        // 结果消息，表示对话结束
+                                        logger.debug("Result message: $line")
+                                    }
+                                    else -> {
+                                        logger.debug("Unknown message type: $type")
+                                    }
                             }
+                        } catch (e: Exception) {
+                            // 解析失败，可能是非JSON输出
+                            logger.warn("Failed to parse line: $line", e)
                         }
                     }
                 }
-                
-                // 等待进程结束
-                val exitCode = process.waitFor()
-                if (exitCode != 0) {
-                    val errorMessage = errorBuilder.toString()
-                    throw RuntimeException("Claude process exited with code $exitCode. Error: $errorMessage")
-                }
-            } finally {
-                currentProcess.set(null)
-                process.destroy()
             }
+            
+            // 等待进程结束
+            val exitCode = process.waitFor()
+            if (exitCode != 0) {
+                val errorMessage = errorBuilder.toString()
+                throw RuntimeException("Claude process exited with code $exitCode. Error: $errorMessage")
+            }
+        } finally {
+            currentProcess.set(null)
+            process.destroy()
         }
-    }
+    }.flowOn(Dispatchers.IO)
     
     /**
      * 终止当前正在运行的查询
