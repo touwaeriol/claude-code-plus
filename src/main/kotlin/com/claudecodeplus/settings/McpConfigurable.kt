@@ -12,8 +12,6 @@ import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import java.awt.BorderLayout
 import java.awt.Font
-import java.awt.GridBagConstraints
-import java.awt.GridBagLayout
 import javax.swing.*
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule

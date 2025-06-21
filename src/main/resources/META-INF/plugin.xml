@@ -19,16 +19,7 @@
     
     <idea-version since-build="243.0" until-build="252.*"/>
     
-    <application-components>
-        <component>
-            <implementation-class>com.claudecodeplus.ClaudeCodePlusApplicationComponent</implementation-class>
-        </component>
-    </application-components>
     
-    <applicationListeners>
-        <listener class="com.claudecodeplus.listeners.ProjectLifecycleListener"
-                  topic="com.intellij.openapi.project.ProjectManagerListener"/>
-    </applicationListeners>
     
     <extensions defaultExtensionNs="com.intellij">
         <!-- 工具窗口 -->
@@ -46,9 +37,6 @@
         <!-- 应用级别服务 -->
         <applicationService 
             serviceImplementation="com.claudecodeplus.settings.McpSettingsService"/>
-            
-        <applicationService 
-            serviceImplementation="com.claudecodeplus.sdk.NodeServiceManager"/>
             
         <!-- 项目级别服务 -->
         <projectService 

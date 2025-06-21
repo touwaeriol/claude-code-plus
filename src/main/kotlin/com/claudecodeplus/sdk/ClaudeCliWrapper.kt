@@ -7,23 +7,36 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.coroutineContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
 /**
  * Claude CLI 包装器
  * 直接调用 claude 命令行工具，避免通过 Node.js 服务中转
+ * 
+ * 工作原理：
+ * 1. 通过 ProcessBuilder 直接调用系统中的 claude CLI 命令
+ * 2. 使用 --output-format stream-json 参数获取流式 JSON 输出
+ * 3. 解析 JSON 流并转换为 Kotlin Flow，支持实时响应
+ * 4. 通过环境变量 CLAUDE_CODE_ENTRYPOINT 标识调用来源
  */
 class ClaudeCliWrapper {
     private val logger = thisLogger()
     private val objectMapper = jacksonObjectMapper()
+    
+    // 存储当前运行的进程，用于终止响应
+    private val currentProcess = AtomicReference<Process?>(null)
     
     data class QueryOptions(
         val model: String? = null,
         val maxTurns: Int? = null,
         val customSystemPrompt: String? = null,
         val appendSystemPrompt: String? = null,
-        val permissionMode: String = "default",
+        val permissionMode: String = "default",  // "default" 正常权限检查，"skip" 跳过所有权限检查
         val allowedTools: List<String> = emptyList(),
         val disallowedTools: List<String> = emptyList(),
         val mcpServers: Map<String, Any>? = null,
@@ -51,11 +64,17 @@ class ClaudeCliWrapper {
         options.maxTurns?.let { args.addAll(listOf("--max-turns", it.toString())) }
         options.model?.let { args.addAll(listOf("--model", it)) }
         
-        if (options.continueConversation) {
-            args.add("--continue")
+        // 会话管理：resume 和 continue 是互斥的
+        when {
+            options.resume != null -> {
+                // 恢复特定会话
+                args.addAll(listOf("--resume", options.resume))
+            }
+            options.continueConversation -> {
+                // 继续当前会话
+                args.add("--continue")
+            }
         }
-        
-        options.resume?.let { args.addAll(listOf("--resume", it)) }
         
         if (options.allowedTools.isNotEmpty()) {
             args.addAll(listOf("--allowedTools", options.allowedTools.joinToString(",")))
@@ -69,9 +88,14 @@ class ClaudeCliWrapper {
             args.addAll(listOf("--mcp-config", objectMapper.writeValueAsString(mapOf("mcpServers" to it))))
         }
         
-        if (options.permissionMode != "default") {
-            args.addAll(listOf("--permission-mode", options.permissionMode))
+        // 权限控制
+        // Claude CLI 使用 --dangerously-skip-permissions 来跳过权限检查
+        // 根据 permissionMode 值来决定是否添加该参数
+        if (options.permissionMode == "skip") {
+            args.add("--dangerously-skip-permissions")
         }
+        // 注意：Claude CLI 当前不支持细粒度的权限模式控制
+        // 只能通过 allowedTools 和 disallowedTools 来控制工具权限
         
         options.fallbackModel?.let {
             if (options.model == it) {
@@ -90,11 +114,13 @@ class ClaudeCliWrapper {
         val processBuilder = ProcessBuilder("claude", *args.toTypedArray())
         options.cwd?.let { processBuilder.directory(java.io.File(it)) }
         
-        // 设置环境变量
+        // 设置环境变量，标识调用来源
+        // 这个环境变量会被 Claude CLI 识别，用于统计和跟踪
         processBuilder.environment()["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kotlin"
         
         withContext(Dispatchers.IO) {
             val process = processBuilder.start()
+            currentProcess.set(process)
             
             // 关闭输入流
             process.outputStream.close()
@@ -117,6 +143,9 @@ class ClaudeCliWrapper {
             try {
                 reader.useLines { lines ->
                     lines.forEach { line ->
+                        // 检查协程是否被取消
+                        coroutineContext.ensureActive()
+                        
                         if (line.trim().isNotEmpty()) {
                             try {
                                 val message = objectMapper.readValue<SDKMessage>(line)
@@ -136,9 +165,46 @@ class ClaudeCliWrapper {
                     throw RuntimeException("Claude process exited with code $exitCode. Error: $errorMessage")
                 }
             } finally {
+                currentProcess.set(null)
                 process.destroy()
             }
         }
+    }
+    
+    /**
+     * 终止当前正在运行的查询
+     * @return 是否成功终止
+     */
+    fun terminate(): Boolean {
+        val process = currentProcess.getAndSet(null)
+        return if (process != null && process.isAlive) {
+            logger.info("Terminating Claude process...")
+            // 先尝试正常终止
+            process.destroy()
+            
+            // 给进程一点时间来清理
+            try {
+                if (!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                    // 如果2秒后还没结束，强制终止
+                    logger.warn("Process did not terminate gracefully, forcing termination")
+                    process.destroyForcibly()
+                }
+            } catch (e: InterruptedException) {
+                // 如果等待被中断，强制终止
+                process.destroyForcibly()
+            }
+            true
+        } else {
+            false
+        }
+    }
+    
+    /**
+     * 检查是否有正在运行的查询
+     */
+    fun isRunning(): Boolean {
+        val process = currentProcess.get()
+        return process != null && process.isAlive
     }
     
     /**

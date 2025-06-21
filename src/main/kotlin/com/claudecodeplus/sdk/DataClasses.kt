@@ -1,20 +1,32 @@
 package com.claudecodeplus.sdk
 
 /**
- * 健康状态
+ * 消息类型枚举
  */
-data class HealthStatus(
-    val isHealthy: Boolean,
-    val isProcessing: Boolean
+enum class MessageType {
+    TEXT,
+    ERROR,
+    TOOL_USE,
+    TOOL_RESULT,
+    START,
+    END
+}
+
+/**
+ * SDK 消息数据类
+ */
+data class SDKMessage(
+    val type: MessageType,
+    val data: MessageData
 )
 
 /**
- * Claude 选项
+ * 消息数据内容
  */
-data class ClaudeOptions(
-    val model: String = "claude-3-5-sonnet-20241022",
-    val maxTokens: Int = 4096,
-    val temperature: Double = 0.7,
-    val system: String? = null,
-    val mcp: Any? = null
+data class MessageData(
+    val text: String? = null,
+    val error: String? = null,
+    val toolName: String? = null,
+    val toolInput: Any? = null,
+    val toolResult: Any? = null
 )

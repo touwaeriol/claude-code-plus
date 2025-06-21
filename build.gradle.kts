@@ -38,6 +38,22 @@ dependencies {
     
     // Kotlin 协程
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactive:1.7.3")
+    
+    // 文件监听和IO优化
+    implementation("commons-io:commons-io:2.15.1")
+    
+    // 高性能缓存
+    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+    
+    // 响应式编程
+    implementation("io.reactivex.rxjava3:rxkotlin:3.0.1")
+    
+    // 测试依赖
+    testImplementation(kotlin("test"))
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    testImplementation("io.mockk:mockk:1.13.8")
 }
 
 // IntelliJ 平台配置
@@ -75,6 +91,23 @@ tasks {
     
     buildSearchableOptions {
         enabled = false
+    }
+    
+    test {
+        useJUnitPlatform()
+    }
+    
+    // 创建一个任务来复制依赖到 build/dependencies
+    register<Copy>("copyDependencies") {
+        from(configurations.runtimeClasspath)
+        into("build/dependencies")
+    }
+    
+    // 创建一个运行测试的任务
+    register<JavaExec>("runCliWrapperTest") {
+        dependsOn("compileTestKotlin")
+        mainClass.set("com.claudecodeplus.test.TestCliWrapperSimpleKt")
+        classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
     }
     
     
