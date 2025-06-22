@@ -28,5 +28,6 @@ data class MessageData(
     val error: String? = null,
     val toolName: String? = null,
     val toolInput: Any? = null,
-    val toolResult: Any? = null
+    val toolResult: Any? = null,
+    val sessionId: String? = null  // 从 system 消息中获取
 )

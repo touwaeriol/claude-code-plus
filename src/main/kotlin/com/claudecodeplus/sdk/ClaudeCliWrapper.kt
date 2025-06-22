@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import com.intellij.openapi.diagnostic.thisLogger
+import java.util.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -28,7 +28,9 @@ import java.io.InputStreamReader
  * 4. 通过环境变量 CLAUDE_CODE_ENTRYPOINT 标识调用来源
  */
 class ClaudeCliWrapper {
-    private val logger = thisLogger()
+    companion object {
+        private val logger = Logger.getLogger(ClaudeCliWrapper::class.java.name)
+    }
     private val objectMapper = jacksonObjectMapper()
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
         .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE)
@@ -139,7 +141,7 @@ class ClaudeCliWrapper {
             errorReader.useLines { lines ->
                 lines.forEach { line ->
                     errorBuilder.appendLine(line)
-                    logger.warn("Claude CLI stderr: $line")
+                    logger.warning("Claude CLI stderr: $line")
                 }
             }
         }.start()
@@ -159,19 +161,35 @@ class ClaudeCliWrapper {
                                 when (type) {
                                     "assistant" -> {
                                         // 提取助手消息
+                                        logger.fine("Processing assistant message: $line")
                                         val content = jsonNode.get("message")?.get("content")
-                                        if (content != null && content.isArray) {
-                                            content.forEach { item ->
-                                                if (item.get("type")?.asText() == "text") {
-                                                    val text = item.get("text")?.asText()
-                                                    if (!text.isNullOrEmpty()) {
-                                                        emit(SDKMessage(
-                                                            type = MessageType.TEXT,
-                                                            data = MessageData(text = text)
-                                                        ))
+                                        if (content != null) {
+                                            if (content.isArray) {
+                                                content.forEach { item ->
+                                                    if (item.get("type")?.asText() == "text") {
+                                                        val text = item.get("text")?.asText()
+                                                        if (!text.isNullOrEmpty()) {
+                                                            logger.fine("Emitting text message: ${text.take(50)}...")
+                                                            emit(SDKMessage(
+                                                                type = MessageType.TEXT,
+                                                                data = MessageData(text = text)
+                                                            ))
+                                                        }
                                                     }
                                                 }
+                                            } else if (content.isTextual) {
+                                                // 处理直接的文本内容
+                                                val text = content.asText()
+                                                if (text.isNotEmpty()) {
+                                                    logger.fine("Emitting direct text message: ${text.take(50)}...")
+                                                    emit(SDKMessage(
+                                                        type = MessageType.TEXT,
+                                                        data = MessageData(text = text)
+                                                    ))
+                                                }
                                             }
+                                        } else {
+                                            logger.warning("Assistant message has no content: $jsonNode")
                                         }
                                     }
                                     "error" -> {
@@ -184,19 +202,27 @@ class ClaudeCliWrapper {
                                     }
                                     "system" -> {
                                         // 系统消息，如初始化
-                                        logger.debug("System message: $line")
+                                        logger.fine("System message: $line")
+                                        // 提取会话ID
+                                        val sessionId = jsonNode.get("session_id")?.asText()
+                                        if (sessionId != null) {
+                                            emit(SDKMessage(
+                                                type = MessageType.START,
+                                                data = MessageData(sessionId = sessionId)
+                                            ))
+                                        }
                                     }
                                     "result" -> {
                                         // 结果消息，表示对话结束
-                                        logger.debug("Result message: $line")
+                                        logger.fine("Result message: $line")
                                     }
                                     else -> {
-                                        logger.debug("Unknown message type: $type")
+                                        logger.fine("Unknown message type: $type")
                                     }
                             }
                         } catch (e: Exception) {
                             // 解析失败，可能是非JSON输出
-                            logger.warn("Failed to parse line: $line", e)
+                            logger.log(java.util.logging.Level.WARNING, "Failed to parse line: $line", e)
                         }
                     }
                 }
@@ -229,7 +255,7 @@ class ClaudeCliWrapper {
             try {
                 if (!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
                     // 如果2秒后还没结束，强制终止
-                    logger.warn("Process did not terminate gracefully, forcing termination")
+                    logger.warning("Process did not terminate gracefully, forcing termination")
                     process.destroyForcibly()
                 }
             } catch (e: InterruptedException) {
