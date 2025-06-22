@@ -110,6 +110,52 @@ tasks {
         classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
     }
     
+    // 创建运行独立测试应用的任务
+    register<JavaExec>("runTestApp") {
+        group = "verification"
+        description = "Run the standalone test application for UI components"
+        
+        dependsOn("classes")
+        classpath = sourceSets["main"].runtimeClasspath
+        mainClass.set("com.claudecodeplus.test.StandaloneTestAppKt")
+        
+        // 传递项目路径作为参数
+        args = listOf(projectDir.absolutePath)
+        
+        // 设置工作目录
+        workingDir = projectDir
+        
+        // JVM 参数
+        jvmArgs = listOf("-Xmx512m")
+        
+        // 确保能看到输出
+        standardOutput = System.out
+        errorOutput = System.err
+    }
+    
+    // 创建运行文件索引构建器的任务
+    register<JavaExec>("runFileIndexBuilder") {
+        group = "verification"
+        description = "Run the file index builder tool"
+        
+        dependsOn("classes")
+        classpath = sourceSets["main"].runtimeClasspath
+        mainClass.set("com.claudecodeplus.test.FileIndexBuilder")
+        
+        // 传递项目路径作为参数
+        args = listOf(projectDir.absolutePath)
+        
+        // 设置工作目录
+        workingDir = projectDir
+        
+        // JVM 参数
+        jvmArgs = listOf("-Xmx256m")
+        
+        // 确保能看到输出
+        standardOutput = System.out
+        errorOutput = System.err
+    }
+    
     
     // 在打包插件之前，确保静态文件被包含
     register("preparePluginDistribution") {
