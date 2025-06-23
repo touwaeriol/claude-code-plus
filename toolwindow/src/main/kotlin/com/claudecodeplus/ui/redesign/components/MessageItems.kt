@@ -115,23 +115,19 @@ fun AssistantMessageItem(message: EnhancedMessage) {
                 )
             }
             
-            // 状态指示器
-            when (message.status) {
-                MessageStatus.STREAMING -> {
-                    Text(
-                        "▌",
-                        style = JewelTheme.defaultTextStyle.copy(
-                            color = Color(0xFF59A869)
-                        )
+            // 流式状态指示器
+            if (message.isStreaming) {
+                Text(
+                    "▌",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        color = Color(0xFF59A869)
                     )
-                }
-                MessageStatus.FAILED -> {
-                    Text(
-                        "❌",
-                        style = JewelTheme.defaultTextStyle
-                    )
-                }
-                else -> {}
+                )
+            } else if (message.isError) {
+                Text(
+                    "❌",
+                    style = JewelTheme.defaultTextStyle
+                )
             }
         }
         
@@ -238,7 +234,7 @@ private fun ContextReferences(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 when (context) {
-                    is ContextReference.File -> {
+                    is ContextReference.FileReference -> {
                         Text("📄", style = JewelTheme.defaultTextStyle)
                         Text(
                             context.path,
@@ -257,7 +253,7 @@ private fun ContextReferences(
                             )
                         }
                     }
-                    is ContextReference.Symbol -> {
+                    is ContextReference.SymbolReference -> {
                         Text("🔷", style = JewelTheme.defaultTextStyle)
                         Text(
                             "${context.name} (${context.type})",
@@ -267,7 +263,7 @@ private fun ContextReferences(
                             )
                         )
                     }
-                    is ContextReference.Terminal -> {
+                    is ContextReference.TerminalReference -> {
                         Text("💻", style = JewelTheme.defaultTextStyle)
                         Text(
                             "终端输出",
@@ -277,17 +273,17 @@ private fun ContextReferences(
                             )
                         )
                     }
-                    is ContextReference.Problems -> {
+                    is ContextReference.ProblemsReference -> {
                         Text("⚠️", style = JewelTheme.defaultTextStyle)
                         Text(
-                            "${context.problems.size} 个问题",
+                            "问题列表",
                             style = JewelTheme.defaultTextStyle.copy(
                                 color = Color(0xFFE55765),
                                 fontSize = JewelTheme.defaultTextStyle.fontSize * 0.9f
                             )
                         )
                     }
-                    is ContextReference.Git -> {
+                    is ContextReference.GitReference -> {
                         Text("🔀", style = JewelTheme.defaultTextStyle)
                         Text(
                             "Git ${context.type}",
@@ -297,10 +293,30 @@ private fun ContextReferences(
                             )
                         )
                     }
-                    is ContextReference.Folder -> {
+                    is ContextReference.FolderReference -> {
                         Text("📁", style = JewelTheme.defaultTextStyle)
                         Text(
-                            "${context.path} (${context.fileCount} 文件)",
+                            context.path,
+                            style = JewelTheme.defaultTextStyle.copy(
+                                color = Color(0xFF3574F0),
+                                fontSize = JewelTheme.defaultTextStyle.fontSize * 0.9f
+                            )
+                        )
+                    }
+                    ContextReference.SelectionReference -> {
+                        Text("✂️", style = JewelTheme.defaultTextStyle)
+                        Text(
+                            "选中内容",
+                            style = JewelTheme.defaultTextStyle.copy(
+                                color = Color(0xFF3574F0),
+                                fontSize = JewelTheme.defaultTextStyle.fontSize * 0.9f
+                            )
+                        )
+                    }
+                    ContextReference.WorkspaceReference -> {
+                        Text("🗂️", style = JewelTheme.defaultTextStyle)
+                        Text(
+                            "工作空间",
                             style = JewelTheme.defaultTextStyle.copy(
                                 color = Color(0xFF3574F0),
                                 fontSize = JewelTheme.defaultTextStyle.fontSize * 0.9f
@@ -395,16 +411,16 @@ private fun ToolCallItem(toolCall: ToolCall) {
     ) {
         // 图标
         Text(
-            when (toolCall.tool) {
-                ToolType.SEARCH_FILES -> "🔍"
-                ToolType.READ_FILE -> "📖"
-                ToolType.EDIT_FILE -> "✏️"
-                ToolType.RUN_COMMAND -> "💻"
-                ToolType.SEARCH_SYMBOLS -> "🔷"
-                ToolType.GET_PROBLEMS -> "⚠️"
-                ToolType.GIT_OPERATION -> "🔀"
-                ToolType.WEB_SEARCH -> "🌐"
-                ToolType.OTHER -> "🔧"
+            when {
+                toolCall.name.contains("search", ignoreCase = true) -> "🔍"
+                toolCall.name.contains("read", ignoreCase = true) -> "📖"
+                toolCall.name.contains("edit", ignoreCase = true) -> "✏️"
+                toolCall.name.contains("run", ignoreCase = true) || toolCall.name.contains("command", ignoreCase = true) -> "💻"
+                toolCall.name.contains("symbol", ignoreCase = true) -> "🔷"
+                toolCall.name.contains("problem", ignoreCase = true) -> "⚠️"
+                toolCall.name.contains("git", ignoreCase = true) -> "🔀"
+                toolCall.name.contains("web", ignoreCase = true) -> "🌐"
+                else -> "🔧"
             },
             style = JewelTheme.defaultTextStyle
         )
@@ -415,7 +431,7 @@ private fun ToolCallItem(toolCall: ToolCall) {
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                toolCall.displayName,
+                toolCall.name,
                 style = JewelTheme.defaultTextStyle.copy(
                     color = Color.White
                 )

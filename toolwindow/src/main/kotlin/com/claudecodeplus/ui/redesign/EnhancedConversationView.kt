@@ -35,6 +35,16 @@ fun EnhancedConversationView(
     val isLoading = remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     
+    // 将 AIModel 转换为 AiModel
+    fun getAiModel(aiModel: AIModel): AiModel? {
+        return when (aiModel.id) {
+            "claude-opus-4-20250514" -> AiModel.OPUS
+            "claude-3-5-sonnet-20241022" -> AiModel.SONNET
+            "claude-3-5-sonnet-20240620" -> AiModel.SONNET_35
+            else -> null
+        }
+    }
+    
     // 会话状态
     var sessionId by remember { mutableStateOf<String?>(null) }
     
@@ -106,7 +116,7 @@ fun EnhancedConversationView(
                         role = MessageRole.USER,
                         content = text,
                         contexts = contexts,
-                        model = currentModel.displayName
+                        model = getAiModel(currentModel)
                     )
                     messages.add(userMessage)
                     
@@ -128,8 +138,8 @@ fun EnhancedConversationView(
                             val assistantMessage = EnhancedMessage(
                                 role = MessageRole.ASSISTANT,
                                 content = "",
-                                model = currentModel.displayName,
-                                status = MessageStatus.STREAMING
+                                model = getAiModel(currentModel),
+                                isStreaming = true
                             )
                             messages.add(assistantMessage)
                             val messageIndex = messages.lastIndex
@@ -154,7 +164,7 @@ fun EnhancedConversationView(
                                     }
                                     com.claudecodeplus.sdk.MessageType.ERROR -> {
                                         messages[messageIndex] = messages[messageIndex].copy(
-                                            status = MessageStatus.FAILED
+                                            isError = true
                                         )
                                         messages.add(
                                             EnhancedMessage(
@@ -165,7 +175,7 @@ fun EnhancedConversationView(
                                     }
                                     com.claudecodeplus.sdk.MessageType.END -> {
                                         messages[messageIndex] = messages[messageIndex].copy(
-                                            status = MessageStatus.COMPLETE
+                                            isStreaming = false
                                         )
                                     }
                                     else -> {
@@ -226,39 +236,42 @@ private suspend fun buildPromptWithContext(
     
     contexts.forEach { context ->
         when (context) {
-            is ContextReference.File -> {
+            is ContextReference.FileReference -> {
                 contextBuilder.appendLine("\n文件：${context.path}")
                 context.lines?.let {
                     contextBuilder.appendLine("行范围：${it.first}-${it.last}")
                 }
-                context.preview?.let {
-                    contextBuilder.appendLine("内容预览：\n$it")
-                }
             }
-            is ContextReference.Symbol -> {
+            is ContextReference.SymbolReference -> {
                 contextBuilder.appendLine("\n符号：${context.name} (${context.type})")
-                contextBuilder.appendLine("位置：${context.file}:${context.line}")
-                context.preview?.let {
-                    contextBuilder.appendLine("代码：\n$it")
+                context.location?.let {
+                    contextBuilder.appendLine("位置：$it")
                 }
             }
-            is ContextReference.Terminal -> {
+            is ContextReference.TerminalReference -> {
                 contextBuilder.appendLine("\n终端输出：")
-                contextBuilder.appendLine(context.content)
-            }
-            is ContextReference.Problems -> {
-                contextBuilder.appendLine("\n问题列表：")
-                context.problems.forEach { problem ->
-                    contextBuilder.appendLine("- [${problem.severity}] ${problem.file}:${problem.line} - ${problem.message}")
+                contextBuilder.appendLine("最近 ${context.lines} 行")
+                context.filter?.let {
+                    contextBuilder.appendLine("过滤器：$it")
                 }
             }
-            is ContextReference.Git -> {
-                contextBuilder.appendLine("\nGit ${context.type}：")
-                contextBuilder.appendLine(context.content)
+            is ContextReference.ProblemsReference -> {
+                contextBuilder.appendLine("\n问题列表")
+                context.severity?.let {
+                    contextBuilder.appendLine("严重级别：$it")
+                }
             }
-            is ContextReference.Folder -> {
+            is ContextReference.GitReference -> {
+                contextBuilder.appendLine("\nGit ${context.type}")
+            }
+            is ContextReference.FolderReference -> {
                 contextBuilder.appendLine("\n文件夹：${context.path}")
-                contextBuilder.appendLine("包含 ${context.fileCount} 个文件")
+            }
+            ContextReference.SelectionReference -> {
+                contextBuilder.appendLine("\n编辑器选中内容")
+            }
+            ContextReference.WorkspaceReference -> {
+                contextBuilder.appendLine("\n工作空间")
             }
         }
     }

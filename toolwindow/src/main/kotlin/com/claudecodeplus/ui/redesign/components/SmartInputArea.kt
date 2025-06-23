@@ -244,7 +244,7 @@ private fun SelectedContexts(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 when (context) {
-                    is ContextReference.File -> {
+                    is ContextReference.FileReference -> {
                         Text("📄", style = JewelTheme.defaultTextStyle)
                         Text(
                             context.path.substringAfterLast('/'),
@@ -253,7 +253,7 @@ private fun SelectedContexts(
                             )
                         )
                     }
-                    is ContextReference.Symbol -> {
+                    is ContextReference.SymbolReference -> {
                         Text("🔷", style = JewelTheme.defaultTextStyle)
                         Text(
                             context.name,
@@ -262,7 +262,7 @@ private fun SelectedContexts(
                             )
                         )
                     }
-                    is ContextReference.Terminal -> {
+                    is ContextReference.TerminalReference -> {
                         Text("💻", style = JewelTheme.defaultTextStyle)
                         Text(
                             "终端",
@@ -524,29 +524,28 @@ private fun insertContext(
         val contextReference = when (suggestion.type) {
             ContextType.FILE -> {
                 val file = suggestion.data as? FileContext
-                ContextReference.File(
+                ContextReference.FileReference(
                     path = file?.path ?: "",
-                    preview = file?.preview
+                    lines = null
                 )
             }
             ContextType.SYMBOL -> {
                 val symbol = suggestion.data as? SymbolContext
-                ContextReference.Symbol(
+                ContextReference.SymbolReference(
                     name = symbol?.name ?: "",
                     type = symbol?.type ?: SymbolType.VARIABLE,
-                    file = symbol?.file ?: "",
-                    line = symbol?.line ?: 0
+                    location = symbol?.file
                 )
             }
             ContextType.TERMINAL -> {
-                ContextReference.Terminal(
-                    content = "",
-                    timestamp = System.currentTimeMillis()
+                ContextReference.TerminalReference(
+                    lines = 50,
+                    filter = null
                 )
             }
             else -> {
                 // TODO: 处理其他类型
-                ContextReference.File(path = "")
+                ContextReference.FileReference(path = "")
             }
         }
         
