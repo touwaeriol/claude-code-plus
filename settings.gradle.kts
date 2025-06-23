@@ -17,3 +17,11 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "claude-code-plus"
+
+// 子模块配置
+include(
+    "cli-wrapper",
+    "toolwindow", 
+    "plugin",
+    "toolwindow-test"
+)

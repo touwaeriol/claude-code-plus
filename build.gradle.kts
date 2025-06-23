@@ -2,190 +2,37 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "2.1.0"
-    id("org.jetbrains.intellij.platform") version "2.6.0"
+    kotlin("jvm") version "2.1.0" apply false
+    id("org.jetbrains.intellij.platform") version "2.6.0" apply false
+    id("org.jetbrains.compose") version "1.7.1" apply false
 }
 
 group = "com.claudecodeplus"
 version = "1.0-SNAPSHOT"
 
-repositories {
-    mavenCentral()
+// 配置所有子项目
+subprojects {
+    apply(plugin = "kotlin")
     
-    // IntelliJ Platform Gradle Plugin Repositories Extension
-    intellijPlatform {
-        defaultRepositories()
-        marketplace()
-    }
-}
-
-dependencies {
-    // IntelliJ Platform dependencies
-    intellijPlatform {
-        intellijIdeaCommunity("2025.1.2")
-        
-        // 添加 Markdown 插件依赖
-        bundledPlugin("org.intellij.plugins.markdown")
+    repositories {
+        mavenCentral()
+        google()
+        maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
+        maven("https://packages.jetbrains.team/maven/p/kpm/public")
+        maven("https://www.jetbrains.com/intellij-repository/releases")
+        maven("https://cache-redirector.jetbrains.com/intellij-dependencies")
     }
     
-    // 使用 IntelliJ Platform 的 Kotlin 标准库
-    compileOnly(kotlin("stdlib"))
-    
-    // JSON 处理
-    implementation("org.json:json:20231013")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.15.3")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.15.3")
-    
-    // Kotlin 协程
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactive:1.7.3")
-    
-    // 文件监听和IO优化
-    implementation("commons-io:commons-io:2.15.1")
-    
-    // 高性能缓存
-    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
-    
-    // 响应式编程
-    implementation("io.reactivex.rxjava3:rxkotlin:3.0.1")
-    
-    // 测试依赖
-    testImplementation(kotlin("test"))
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
-    testImplementation("io.mockk:mockk:1.13.8")
-}
-
-// IntelliJ 平台配置
-intellijPlatform {
-    pluginConfiguration {
-        name = "Claude Code Plus"
-        version = "1.0-SNAPSHOT"
-        
-        ideaVersion {
-            sinceBuild = "243"
-            untilBuild = "252.*"
-        }
-    }
-}
-
-
-tasks {
-    withType<JavaCompile> {
-        sourceCompatibility = "17"
-        targetCompatibility = "17"
-    }
-    
-    withType<KotlinCompile> {
+    // 通用的 Kotlin 编译配置
+    tasks.withType<KotlinCompile> {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
     
-    
-    runIde {
-        jvmArgs(
-            "-Xmx2048m"
-        )
+    // 通用的 Java 编译配置
+    tasks.withType<JavaCompile> {
+        sourceCompatibility = "17"
+        targetCompatibility = "17"
     }
-    
-    buildSearchableOptions {
-        enabled = false
-    }
-    
-    test {
-        useJUnitPlatform()
-    }
-    
-    // 创建一个任务来复制依赖到 build/dependencies
-    register<Copy>("copyDependencies") {
-        from(configurations.runtimeClasspath)
-        into("build/dependencies")
-    }
-    
-    // 创建一个运行测试的任务
-    register<JavaExec>("runCliWrapperTest") {
-        dependsOn("compileTestKotlin")
-        mainClass.set("com.claudecodeplus.test.TestCliWrapperSimpleKt")
-        classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
-    }
-    
-    // 创建运行独立测试应用的任务
-    register<JavaExec>("runTestApp") {
-        group = "verification"
-        description = "Run the standalone test application for UI components"
-        
-        dependsOn("classes")
-        classpath = sourceSets["main"].runtimeClasspath
-        mainClass.set("com.claudecodeplus.test.StandaloneTestAppKt")
-        
-        // 传递项目路径作为参数
-        args = listOf(projectDir.absolutePath)
-        
-        // 设置工作目录
-        workingDir = projectDir
-        
-        // JVM 参数
-        jvmArgs = listOf("-Xmx512m")
-        
-        // 确保能看到输出
-        standardOutput = System.out
-        errorOutput = System.err
-    }
-    
-    // 创建运行文件索引构建器的任务
-    register<JavaExec>("runFileIndexBuilder") {
-        group = "verification"
-        description = "Run the file index builder tool"
-        
-        dependsOn("classes")
-        classpath = sourceSets["main"].runtimeClasspath
-        mainClass.set("com.claudecodeplus.test.FileIndexBuilder")
-        
-        // 传递项目路径作为参数
-        args = listOf(projectDir.absolutePath)
-        
-        // 设置工作目录
-        workingDir = projectDir
-        
-        // JVM 参数
-        jvmArgs = listOf("-Xmx256m")
-        
-        // 确保能看到输出
-        standardOutput = System.out
-        errorOutput = System.err
-    }
-    
-    
-    // 在打包插件之前，确保静态文件被包含
-    register("preparePluginDistribution") {
-        dependsOn("prepareSandbox")
-        
-        doLast {
-            // 从沙箱复制文件到分发目录
-            val sandboxPluginDir = file("${layout.buildDirectory.get()}/idea-sandbox/${intellijPlatform.sandboxContainer.get()}/plugins/claude-code-plus")
-            val distDir = file("${layout.buildDirectory.get()}/distributions/temp-plugin")
-            
-            // 清理临时目录
-            delete(distDir)
-            
-            // 复制整个插件目录
-            copy {
-                from(sandboxPluginDir)
-                into(distDir.resolve("claude-code-plus"))
-            }
-            
-            // 创建新的 ZIP 文件
-            val zipFile = file("${layout.buildDirectory.get()}/distributions/claude-code-plus-1.0-SNAPSHOT-with-resources.zip")
-            
-            ant.withGroovyBuilder {
-                "zip"("destfile" to zipFile) {
-                    "fileset"("dir" to distDir)
-                }
-            }
-            
-            println("Created plugin distribution with resources: $zipFile")
-        }
-    }
-    
 }
