@@ -8,8 +8,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.claudecodeplus.ui.models.AIModel
-import com.claudecodeplus.ui.models.AIModels
+import com.claudecodeplus.ui.models.AiModel
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.DefaultButton
 import org.jetbrains.jewel.ui.component.Text
@@ -19,8 +18,8 @@ import org.jetbrains.jewel.ui.component.Text
  */
 @Composable
 fun ConversationControlBar(
-    currentModel: AIModel,
-    onModelChange: (AIModel) -> Unit,
+    currentModel: AiModel,
+    onModelChange: (AiModel) -> Unit,
     onClearChat: () -> Unit,
     onShowHistory: () -> Unit,
     modifier: Modifier = Modifier
@@ -64,8 +63,8 @@ fun ConversationControlBar(
  */
 @Composable
 private fun ModelSelector(
-    currentModel: AIModel,
-    onModelChange: (AIModel) -> Unit,
+    currentModel: AiModel,
+    onModelChange: (AiModel) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -117,7 +116,7 @@ private fun ModelSelector(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            AIModels.DEFAULT_MODELS.forEach { model ->
+            listOf(AiModel.OPUS, AiModel.SONNET, AiModel.SONNET_35).forEach { model ->
                 JewelDropdownMenuItem(
                     onClick = {
                         onModelChange(model)
@@ -154,34 +153,14 @@ private fun ModelSelector(
                                 )
                             )
                             
-                            // 显示模型能力
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.padding(top = 4.dp)
-                            ) {
-                                model.capabilities.take(3).forEach { capability ->
-                                    Text(
-                                        when (capability) {
-                                            com.claudecodeplus.ui.models.ModelCapability.DEEP_REASONING -> "深度推理"
-                                            com.claudecodeplus.ui.models.ModelCapability.CODE_GENERATION -> "代码生成"
-                                            com.claudecodeplus.ui.models.ModelCapability.CODE_REVIEW -> "代码审查"
-                                            com.claudecodeplus.ui.models.ModelCapability.REFACTORING -> "重构"
-                                            com.claudecodeplus.ui.models.ModelCapability.DEBUGGING -> "调试"
-                                            com.claudecodeplus.ui.models.ModelCapability.FAST_RESPONSE -> "快速响应"
-                                        },
-                                        style = JewelTheme.defaultTextStyle.copy(
-                                            color = Color(0xFF59A869),
-                                            fontSize = JewelTheme.defaultTextStyle.fontSize * 0.8f
-                                        ),
-                                        modifier = Modifier
-                                            .background(
-                                                Color(0xFF59A869).copy(alpha = 0.2f),
-                                                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp)
-                                            )
-                                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
+                            // 显示模型特点 - 简化显示
+                            Text(
+                                model.description,
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    color = Color(0xFF59A869),
+                                    fontSize = JewelTheme.defaultTextStyle.fontSize * 0.8f
+                                )
+                            )
                         }
                     }
                 }

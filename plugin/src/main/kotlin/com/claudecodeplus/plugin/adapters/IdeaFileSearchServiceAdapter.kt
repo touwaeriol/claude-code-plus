@@ -1,7 +1,7 @@
 package com.claudecodeplus.plugin.adapters
 
 import com.claudecodeplus.ui.services.FileSearchService
-import com.claudecodeplus.ui.services.FileInfo
+import com.claudecodeplus.ui.services.SimpleFileInfo
 import com.claudecodeplus.idea.IdeaFileSearchService
 
 /**
@@ -11,9 +11,9 @@ class IdeaFileSearchServiceAdapter(
     private val ideaFileSearchService: IdeaFileSearchService
 ) : FileSearchService {
     
-    override suspend fun searchFiles(query: String, limit: Int): List<FileInfo> {
+    override suspend fun searchFiles(query: String, limit: Int): List<SimpleFileInfo> {
         return ideaFileSearchService.searchFiles(query, limit).map { fileResult ->
-            FileInfo(
+            SimpleFileInfo(
                 name = fileResult.fileName,
                 path = fileResult.filePath,
                 relativePath = fileResult.relativePath,

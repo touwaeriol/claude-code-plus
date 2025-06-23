@@ -11,7 +11,7 @@ interface FileSearchService {
      * @param limit 返回结果数量限制
      * @return 匹配的文件列表
      */
-    suspend fun searchFiles(query: String, limit: Int = 20): List<FileInfo>
+    suspend fun searchFiles(query: String, limit: Int = 20): List<SimpleFileInfo>
     
     /**
      * 获取文件内容
@@ -22,9 +22,9 @@ interface FileSearchService {
 }
 
 /**
- * 文件信息
+ * 简单文件信息（用于文件搜索服务）
  */
-data class FileInfo(
+data class SimpleFileInfo(
     val name: String,
     val path: String,
     val relativePath: String,

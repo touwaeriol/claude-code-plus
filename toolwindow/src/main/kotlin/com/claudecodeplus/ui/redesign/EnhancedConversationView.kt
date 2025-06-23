@@ -31,19 +31,11 @@ fun EnhancedConversationView(
 ) {
     val scope = rememberCoroutineScope()
     val messages = remember { mutableStateListOf<EnhancedMessage>() }
-    var currentModel by remember { mutableStateOf(AIModels.CLAUDE_4_OPUS) }
+    var currentModel by remember { mutableStateOf(AiModel.OPUS) }
     val isLoading = remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     
-    // 将 AIModel 转换为 AiModel
-    fun getAiModel(aiModel: AIModel): AiModel? {
-        return when (aiModel.id) {
-            "claude-opus-4-20250514" -> AiModel.OPUS
-            "claude-3-5-sonnet-20241022" -> AiModel.SONNET
-            "claude-3-5-sonnet-20240620" -> AiModel.SONNET_35
-            else -> null
-        }
-    }
+    // 不再需要转换函数
     
     // 会话状态
     var sessionId by remember { mutableStateOf<String?>(null) }
@@ -116,7 +108,7 @@ fun EnhancedConversationView(
                         role = MessageRole.USER,
                         content = text,
                         contexts = contexts,
-                        model = getAiModel(currentModel)
+                        model = currentModel
                     )
                     messages.add(userMessage)
                     
@@ -127,7 +119,7 @@ fun EnhancedConversationView(
                         try {
                             // 准备查询选项
                             val options = ClaudeCliWrapper.QueryOptions(
-                                model = currentModel.id,
+                                model = currentModel.cliName,
                                 resume = sessionId
                             )
                             
@@ -138,7 +130,7 @@ fun EnhancedConversationView(
                             val assistantMessage = EnhancedMessage(
                                 role = MessageRole.ASSISTANT,
                                 content = "",
-                                model = getAiModel(currentModel),
+                                model = currentModel,
                                 isStreaming = true
                             )
                             messages.add(assistantMessage)
@@ -244,21 +236,21 @@ private suspend fun buildPromptWithContext(
             }
             is ContextReference.SymbolReference -> {
                 contextBuilder.appendLine("\n符号：${context.name} (${context.type})")
-                context.location?.let {
-                    contextBuilder.appendLine("位置：$it")
-                }
+                contextBuilder.appendLine("文件：${context.file}")
+                contextBuilder.appendLine("行号：${context.line}")
             }
             is ContextReference.TerminalReference -> {
                 contextBuilder.appendLine("\n终端输出：")
                 contextBuilder.appendLine("最近 ${context.lines} 行")
-                context.filter?.let {
-                    contextBuilder.appendLine("过滤器：$it")
+                if (context.isError) {
+                    contextBuilder.appendLine("错误输出")
                 }
             }
             is ContextReference.ProblemsReference -> {
                 contextBuilder.appendLine("\n问题列表")
+                contextBuilder.appendLine("问题数：${context.problems.size}")
                 context.severity?.let {
-                    contextBuilder.appendLine("严重级别：$it")
+                    contextBuilder.appendLine("过滤级别：$it")
                 }
             }
             is ContextReference.GitReference -> {

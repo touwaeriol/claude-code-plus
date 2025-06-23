@@ -15,7 +15,7 @@ import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.sdk.MessageType
 import com.claudecodeplus.ui.jewel.components.*
 import com.claudecodeplus.ui.models.*
-import com.claudecodeplus.core.interfaces.FileIndexService
+import com.claudecodeplus.ui.services.FileIndexService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -474,6 +474,7 @@ private fun sendMessage(
                     MessageType.TOOL_USE -> {
                         val toolCall = ToolCall(
                             name = sdkMessage.data.toolName ?: "unknown",
+                            displayName = sdkMessage.data.toolName ?: "unknown",
                             parameters = sdkMessage.data.toolInput as? Map<String, Any> ?: emptyMap(),
                             status = ToolCallStatus.RUNNING
                         )
@@ -494,10 +495,15 @@ private fun sendMessage(
                         if (lastToolCall != null) {
                             val updatedToolCall = lastToolCall.copy(
                                 status = ToolCallStatus.SUCCESS,
-                                result = ToolResult(
-                                    output = sdkMessage.data.toolResult?.toString() ?: "",
-                                    error = sdkMessage.data.error
-                                ),
+                                result = if (sdkMessage.data.error != null) {
+                                    ToolResult.Failure(
+                                        error = sdkMessage.data.error ?: "Unknown error"
+                                    )
+                                } else {
+                                    ToolResult.Success(
+                                        output = sdkMessage.data.toolResult?.toString() ?: ""
+                                    )
+                                },
                                 endTime = System.currentTimeMillis()
                             )
                             toolCalls[toolCalls.lastIndex] = updatedToolCall
@@ -521,6 +527,7 @@ private fun sendMessage(
                         val errorMsg = sdkMessage.data.error ?: "Unknown error"
                         val errorMessage = assistantMessage.copy(
                             content = "❌ 错误: $errorMsg",
+                            status = MessageStatus.FAILED,
                             isError = true,
                             isStreaming = false
                         )
@@ -533,6 +540,7 @@ private fun sendMessage(
                         val finalMessage = assistantMessage.copy(
                             content = responseBuilder.toString(),
                             toolCalls = toolCalls.toList(),
+                            status = MessageStatus.COMPLETE,
                             isStreaming = false
                         )
                         currentMessages[currentMessages.lastIndex] = finalMessage
@@ -547,6 +555,7 @@ private fun sendMessage(
         } catch (e: Exception) {
             val errorMessage = assistantMessage.copy(
                 content = "❌ 错误: ${e.message}",
+                status = MessageStatus.FAILED,
                 isError = true,
                 isStreaming = false
             )

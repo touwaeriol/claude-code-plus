@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolCallStatus
+import com.claudecodeplus.ui.models.ToolResult
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import androidx.compose.material.LocalContentColor
@@ -164,32 +165,66 @@ private fun ToolCallItem(
                         )
                     )
                     
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 200.dp)
-                            .background(Color(0xFF2B2B2B), RoundedCornerShape(4.dp))
-                            .padding(8.dp)
-                    ) {
-                        Text(
-                            result.output,
-                            style = JewelTheme.defaultTextStyle.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 12.sp
-                            ),
-                            modifier = Modifier.verticalScroll(rememberScrollState())
-                        )
-                    }
-                    
-                    // 错误信息
-                    result.error?.let { error ->
-                        Text(
-                            "错误: $error",
-                            style = JewelTheme.defaultTextStyle.copy(
-                                fontSize = 12.sp,
-                                color = Color(0xFFFF6B6B)
+                    when (result) {
+                        is ToolResult.Success -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 200.dp)
+                                    .background(Color(0xFF2B2B2B), RoundedCornerShape(4.dp))
+                                    .padding(8.dp)
+                            ) {
+                                Text(
+                                    result.output,
+                                    style = JewelTheme.defaultTextStyle.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 12.sp
+                                    ),
+                                    modifier = Modifier.verticalScroll(rememberScrollState())
+                                )
+                            }
+                        }
+                        is ToolResult.Failure -> {
+                            Text(
+                                "错误: ${result.error}",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFFF6B6B)
+                                )
                             )
-                        )
+                        }
+                        is ToolResult.FileSearchResult -> {
+                            Text(
+                                "找到 ${result.files.size} 个文件 (总计 ${result.totalCount})",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 12.sp
+                                )
+                            )
+                        }
+                        is ToolResult.FileReadResult -> {
+                            Text(
+                                "读取文件: ${result.lineCount} 行",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 12.sp
+                                )
+                            )
+                        }
+                        is ToolResult.FileEditResult -> {
+                            Text(
+                                "编辑文件: 修改行 ${result.changedLines}",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 12.sp
+                                )
+                            )
+                        }
+                        is ToolResult.CommandResult -> {
+                            Text(
+                                "命令执行: 退出码 ${result.exitCode}, 耗时 ${result.duration}ms",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 12.sp
+                                )
+                            )
+                        }
                     }
                 }
                 

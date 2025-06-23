@@ -35,7 +35,7 @@ interface ContextProvider {
     /**
      * 获取 Git 信息
      */
-    suspend fun getGitInfo(type: GitContextType): GitContext
+    suspend fun getGitInfo(type: GitRefType): GitContext
     
     /**
      * 获取文件夹信息

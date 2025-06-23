@@ -153,7 +153,7 @@ class IdeaContextProvider(private val project: Project) : ContextProvider {
         emptyList()
     }
     
-    override suspend fun getGitInfo(type: GitContextType): GitContext = withContext(Dispatchers.IO) {
+    override suspend fun getGitInfo(type: GitRefType): GitContext = withContext(Dispatchers.IO) {
         // TODO: 实现 Git 信息获取
         GitContext(type, "Git 功能尚未实现")
     }

@@ -534,13 +534,14 @@ private fun insertContext(
                 ContextReference.SymbolReference(
                     name = symbol?.name ?: "",
                     type = symbol?.type ?: SymbolType.VARIABLE,
-                    location = symbol?.file
+                    file = symbol?.file ?: "",
+                    line = symbol?.line ?: 0
                 )
             }
             ContextType.TERMINAL -> {
                 ContextReference.TerminalReference(
-                    lines = 50,
-                    filter = null
+                    content = "",
+                    lines = 50
                 )
             }
             else -> {

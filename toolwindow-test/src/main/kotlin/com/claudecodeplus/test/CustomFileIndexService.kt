@@ -1,8 +1,8 @@
 package com.claudecodeplus.test
 
-import com.claudecodeplus.ui.jewel.FileIndexService
-import com.claudecodeplus.ui.jewel.FileInfo
-import com.claudecodeplus.ui.jewel.SymbolInfo
+import com.claudecodeplus.ui.services.FileIndexService
+import com.claudecodeplus.ui.services.FileInfo
+import com.claudecodeplus.ui.services.SymbolInfo
 import com.claudecodeplus.ui.models.SymbolType
 import kotlinx.coroutines.*
 import java.io.File

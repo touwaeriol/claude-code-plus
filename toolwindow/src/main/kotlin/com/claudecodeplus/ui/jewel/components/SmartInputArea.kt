@@ -273,7 +273,10 @@ private fun ContextMenu(
             }
         }
         
-        DropdownMenuItem(onClick = { onSelect(ContextReference.TerminalReference()) }) {
+        DropdownMenuItem(onClick = { onSelect(ContextReference.TerminalReference(
+            content = "",
+            lines = 50
+        )) }) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("💻")
                 Column {
