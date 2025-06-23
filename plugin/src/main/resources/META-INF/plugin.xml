@@ -1,0 +1,45 @@
+<idea-plugin>
+    <id>com.claudecodeplus</id>
+    <name>Claude Code Plus</name>
+    <vendor>Claude Code Plus Team</vendor>
+    
+    <description><![CDATA[
+    Claude Code Plus - 基于 Claude SDK 的智能编程助手
+    
+    主要功能：
+    - 与 Claude AI 进行智能对话
+    - 支持文件引用和代码补全
+    - MCP (Model Context Protocol) 服务配置
+    - 导出对话历史
+    - Markdown 格式的对话显示
+    ]]></description>
+    
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.intellij.plugins.markdown</depends>
+    
+    <idea-version since-build="243.0" until-build="252.*"/>
+    
+    
+    
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- 工具窗口 -->
+        <toolWindow id="ClaudeCodePlus" 
+                    anchor="right" 
+                    factoryClass="com.claudecodeplus.toolwindow.ClaudeCodePlusToolWindowFactory"/>
+                    
+        <!-- Claude Code Plus 配置 -->
+        <applicationConfigurable
+            parentId="tools"
+            instance="com.claudecodeplus.settings.ClaudeCodePlusConfigurable"
+            id="com.claudecodeplus.settings"
+            displayName="Claude Code Plus"/>
+            
+        <!-- 应用级别服务 -->
+        <applicationService 
+            serviceImplementation="com.claudecodeplus.settings.McpSettingsService"/>
+            
+        <!-- 项目级别服务 -->
+        <projectService 
+            serviceImplementation="com.claudecodeplus.settings.ProjectMcpSettingsService"/>
+    </extensions>
+</idea-plugin>
