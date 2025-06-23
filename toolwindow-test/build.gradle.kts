@@ -4,8 +4,8 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
     kotlin("jvm")
-    id("org.jetbrains.compose") version "1.7.1"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.1.0"
+    id("org.jetbrains.compose") version "1.8.0-alpha04"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.1.10"
 }
 
 group = "com.claudecodeplus"
@@ -24,13 +24,27 @@ dependencies {
     // 依赖其他模块
     implementation(project(":cli-wrapper"))
     implementation(project(":toolwindow"))  // toolwindow 通过 api 传递了 Compose 和 Jewel 依赖
-    
+
     // Kotlin 标准库
     implementation(kotlin("stdlib"))
-    
+
     // Kotlin 协程
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     
+    // Compose Desktop
+    implementation(compose.desktop.currentOs)
+    implementation(compose.runtime)
+    implementation(compose.foundation)
+    implementation(compose.animation)
+    implementation(compose.ui)
+    implementation(compose.material)
+    
+    // Jewel UI - 显式添加以确保类路径正确
+    val jewelVersion = "0.28.0-251.26137"
+    implementation("org.jetbrains.jewel:jewel-foundation:$jewelVersion")
+    implementation("org.jetbrains.jewel:jewel-ui:$jewelVersion")
+    implementation("org.jetbrains.jewel:jewel-int-ui-standalone:$jewelVersion")
+
     // 测试依赖
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
@@ -40,7 +54,22 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "com.claudecodeplus.test.RedesignedToolwindowTestKt"
+        mainClass = "com.claudecodeplus.test.JewelChatTestAppKt"
+
+        buildTypes.release.proguard {
+            isEnabled.set(false)
+        }
+
+        nativeDistributions {
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            packageName = "ComposeJewelTestApp"
+            packageVersion = "1.0.0"
+
+            macOS {
+                // macOS 特定配置
+                bundleID = "com.claudecodeplus.test"
+            }
+        }
     }
 }
 
@@ -49,174 +78,83 @@ tasks {
         sourceCompatibility = "17"
         targetCompatibility = "17"
     }
-    
+
     withType<KotlinCompile> {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
-    
+
     test {
         useJUnitPlatform()
     }
-    
-    // 创建运行独立测试应用的任务
-    register<JavaExec>("runTestApp") {
-        group = "verification"
-        description = "Run the standalone test application for UI components"
-        
-        dependsOn("classes")
-        classpath = sourceSets["main"].runtimeClasspath
-        mainClass.set("com.claudecodeplus.test.StandaloneTestAppKt")
-        
-        // 传递项目路径作为参数
-        args = listOf(projectDir.parent)
-        
-        // 设置工作目录
-        workingDir = file(projectDir.parent)
-        
-        // JVM 参数
-        jvmArgs = listOf("-Xmx512m")
-        
-        // 确保能看到输出
-        standardOutput = System.out
-        errorOutput = System.err
-    }
-    
-    // 创建运行文件索引构建器的任务
-    register<JavaExec>("runFileIndexBuilder") {
-        group = "verification"
-        description = "Run the file index builder tool"
-        
-        dependsOn("classes")
-        classpath = sourceSets["main"].runtimeClasspath
-        mainClass.set("com.claudecodeplus.test.FileIndexBuilder")
-        
-        // 传递项目路径作为参数
-        args = listOf(projectDir.parent)
-        
-        // 设置工作目录
-        workingDir = file(projectDir.parent)
-        
-        // JVM 参数
-        jvmArgs = listOf("-Xmx256m")
-        
-        // 确保能看到输出
-        standardOutput = System.out
-        errorOutput = System.err
-    }
-    
-    // 创建运行 CLI Wrapper 测试的任务
-    register<JavaExec>("runCliWrapperTest") {
-        group = "verification"
-        description = "Run the CLI wrapper test"
-        
-        dependsOn("classes")
-        classpath = sourceSets["main"].runtimeClasspath
-        mainClass.set("com.claudecodeplus.test.TestCliWrapperSimpleKt")
-        
-        workingDir = file(projectDir.parent)
-        
-        standardOutput = System.out
-        errorOutput = System.err
-    }
-    
-    // 创建运行 Jewel UI 测试应用的任务
-    register<JavaExec>("runJewelTestApp") {
-        group = "verification"
-        description = "Run the Jewel UI test application"
-        
-        dependsOn("classes")
-        classpath = sourceSets["main"].runtimeClasspath
-        mainClass.set("com.claudecodeplus.test.JewelTestAppKt")
-        
-        // 传递项目路径作为参数
-        args = listOf(projectDir.parent)
-        
-        // 设置工作目录
-        workingDir = file(projectDir.parent)
-        
-        // JVM 参数 - Compose 需要更多内存
-        jvmArgs = listOf(
-            "-Xmx1024m",
-            "--add-opens", "java.desktop/sun.awt=ALL-UNNAMED",
-            "--add-opens", "java.desktop/java.awt.event=ALL-UNNAMED"
-        )
-        
-        // 确保能看到输出
-        standardOutput = System.out
-        errorOutput = System.err
-    }
+
     
     // 创建运行简单 Compose 测试的任务
-    register<JavaExec>("runSimpleComposeTest") {
+    register<JavaExec>("runSimpleComposeApp") {
         group = "verification"
         description = "Run the simple Compose test application"
-        
+
         dependsOn("classes")
         classpath = sourceSets["main"].runtimeClasspath
-        mainClass.set("com.claudecodeplus.test.SimpleComposeTestKt")
-        
+        mainClass.set("com.claudecodeplus.test.SimpleComposeAppKt")
+
+        // 设置工作目录为 claude-code-plus 项目根目录
+        workingDir = file(projectDir.parent)
+
+        // 通过系统属性传递项目根目录路径
+        systemProperty("project.root", projectDir.parent)
+
         // JVM 参数
         jvmArgs = listOf(
-            "-Xmx512m",
+            "-Xmx1024m",
             "--add-opens", "java.desktop/sun.awt=ALL-UNNAMED",
-            "--add-opens", "java.desktop/java.awt.event=ALL-UNNAMED"
+            "--add-opens", "java.desktop/java.awt.event=ALL-UNNAMED",
+            "--add-opens", "java.desktop/sun.font=ALL-UNNAMED",
+            "--add-opens", "java.desktop/java.awt=ALL-UNNAMED",
+            "--add-opens", "java.desktop/sun.java2d=ALL-UNNAMED",
+            "-Dproject.root=${projectDir.parent}",
+            "-Djava.awt.headless=false"
         )
-        
+
         // 确保能看到输出
         standardOutput = System.out
         errorOutput = System.err
     }
     
-    // 创建运行 Material UI 测试应用的任务
-    register<JavaExec>("runMaterialTestApp") {
+    // 创建运行 Compose 版本的任务
+    register<JavaExec>("runComposeJewelTestApp") {
         group = "verification"
-        description = "Run the Material UI test application"
-        
+        description = "Run the Compose Jewel test application"
+
         dependsOn("classes")
         classpath = sourceSets["main"].runtimeClasspath
-        mainClass.set("com.claudecodeplus.test.MaterialTestAppKt")
-        
-        // 传递项目路径作为参数
-        args = listOf(projectDir.parent)
-        
-        // 设置工作目录
+        mainClass.set("com.claudecodeplus.test.ComposeJewelTestAppKt")
+
+        // 设置工作目录为 claude-code-plus 项目根目录
         workingDir = file(projectDir.parent)
-        
-        // JVM 参数 - Compose 需要更多内存
-        jvmArgs = listOf(
-            "-Xmx1024m",
-            "--add-opens", "java.desktop/sun.awt=ALL-UNNAMED",
-            "--add-opens", "java.desktop/java.awt.event=ALL-UNNAMED"
-        )
-        
-        // 确保能看到输出
-        standardOutput = System.out
-        errorOutput = System.err
-    }
-    
-    // 创建运行 Jewel 消息测试的任务
-    register<JavaExec>("runJewelMessageTest") {
-        group = "verification"
-        description = "Run the Jewel message test application"
-        
-        dependsOn("classes")
-        classpath = sourceSets["main"].runtimeClasspath
-        mainClass.set("com.claudecodeplus.test.JewelMessageTestKt")
-        
-        // 设置工作目录
-        workingDir = file(projectDir.parent)
-        
+
+        // 通过系统属性传递项目根目录路径
+        systemProperty("project.root", projectDir.parent)
+
         // JVM 参数
         jvmArgs = listOf(
             "-Xmx1024m",
             "--add-opens", "java.desktop/sun.awt=ALL-UNNAMED",
-            "--add-opens", "java.desktop/java.awt.event=ALL-UNNAMED"
+            "--add-opens", "java.desktop/java.awt.event=ALL-UNNAMED",
+            "--add-opens", "java.desktop/sun.font=ALL-UNNAMED",
+            "--add-opens", "java.desktop/java.awt=ALL-UNNAMED",
+            "--add-opens", "java.desktop/sun.java2d=ALL-UNNAMED",
+            "-Dproject.root=${projectDir.parent}",
+            "-Djava.awt.headless=false",
+            "-Dskiko.library.path=${System.getProperty("java.io.tmpdir")}"
         )
-        
+
         // 确保能看到输出
         standardOutput = System.out
         errorOutput = System.err
     }
+
+
+
 }
