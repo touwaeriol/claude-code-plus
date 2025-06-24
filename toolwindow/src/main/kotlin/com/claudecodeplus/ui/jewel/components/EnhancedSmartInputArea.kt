@@ -85,10 +85,11 @@ fun EnhancedSmartInputArea(
         if (newText.length > oldText.length && cursorPosition > 0) {
             val insertedChar = newText[cursorPosition - 1]
             if (insertedChar == '@') {
-                // 检查@前是否有非空白字符
+                // 检查@前后是否都没有字符（或只有空白字符）
                 val hasCharBefore = cursorPosition > 1 && !newText[cursorPosition - 2].isWhitespace()
+                val hasCharAfter = cursorPosition < newText.length && !newText[cursorPosition].isWhitespace()
                 
-                if (!hasCharBefore) {
+                if (!hasCharBefore && !hasCharAfter) {
                     showSuggestions = true
                     suggestionQuery = ""
                     atPosition = cursorPosition - 1
@@ -105,8 +106,12 @@ fun EnhancedSmartInputArea(
             
             if (queryStart <= newText.length) {
                 val query = newText.substring(queryStart, queryEnd)
-                // 如果包含冒号，说明已经是完整的引用
-                if (query.contains(':')) {
+                // 检查是否已经是完整的引用格式
+                val referencePattern = """^(file|folder|symbol|terminal|problems|git|code|https?|selection|workspace)://.*""".toRegex()
+                if (query.matches(referencePattern)) {
+                    showSuggestions = false
+                } else if (query.contains("://")) {
+                    // 包含 :// 但不是已知类型，也关闭建议
                     showSuggestions = false
                 } else {
                     suggestionQuery = query
@@ -122,14 +127,14 @@ fun EnhancedSmartInputArea(
             val afterAt = textFieldValue.text.substring(atPosition + 1 + suggestionQuery.length)
             
             val referenceText = when (reference) {
-                is ContextReference.FileReference -> "@file:${reference.path}"
-                is ContextReference.FolderReference -> "@folder:${reference.path}"
-                is ContextReference.SymbolReference -> "@symbol:${reference.name}"
-                is ContextReference.TerminalReference -> "@terminal"
-                is ContextReference.ProblemsReference -> "@problems"
-                is ContextReference.GitReference -> "@git:${reference.ref}"
-                ContextReference.SelectionReference -> "@selection"
-                ContextReference.WorkspaceReference -> "@workspace"
+                is ContextReference.FileReference -> "@file://${reference.path}"
+                is ContextReference.FolderReference -> "@folder://${reference.path}"
+                is ContextReference.SymbolReference -> "@symbol://${reference.name}"
+                is ContextReference.TerminalReference -> "@terminal://"
+                is ContextReference.ProblemsReference -> "@problems://"
+                is ContextReference.GitReference -> "@git://${reference.ref}"
+                ContextReference.SelectionReference -> "@selection://"
+                ContextReference.WorkspaceReference -> "@workspace://"
             }
             
             val newText = beforeAt + referenceText + " " + afterAt
@@ -305,6 +310,20 @@ class ContextReferenceVisualTransformation(
                     startIndex + reference.length
                 )
             }
+        }
+        
+        // 也高亮显示其他可能的引用格式（即使不在 contexts 中）
+        val referencePattern = """@(file|folder|symbol|terminal|problems|git|code|https?|selection|workspace)://[^\s]+""".toRegex()
+        referencePattern.findAll(text.text).forEach { match ->
+            builder.addStyle(
+                SpanStyle(
+                    background = Color(0xFF1E88E5).copy(alpha = 0.3f),
+                    color = Color(0xFF64B5F6),
+                    textDecoration = TextDecoration.Underline
+                ),
+                match.range.first,
+                match.range.last + 1
+            )
         }
         
         return TransformedText(
