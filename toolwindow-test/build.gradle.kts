@@ -129,7 +129,7 @@ tasks {
 
         dependsOn("classes")
         classpath = sourceSets["main"].runtimeClasspath
-        mainClass.set("com.claudecodeplus.test.ComposeJewelTestAppKt")
+        mainClass.set("com.claudecodeplus.test.JewelChatTestAppKt")
 
         // 设置工作目录为 claude-code-plus 项目根目录
         workingDir = file(projectDir.parent)

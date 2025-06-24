@@ -13,6 +13,8 @@ import androidx.compose.material.DropdownMenuItem
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material.LocalContentColor
 import androidx.compose.material.LocalTextStyle
+import androidx.compose.ui.unit.sp
+import org.jetbrains.jewel.foundation.theme.JewelTheme
 
 /**
  * 模型选择器组件
@@ -49,8 +51,8 @@ fun ModelSelector(
                         Text(currentModel.displayName)
                         Text(
                             currentModel.description,
-                            style = LocalTextStyle.current.copy(
-                                fontSize = LocalTextStyle.current.fontSize * 0.8f,
+                            style = JewelTheme.defaultTextStyle.copy(
+                                fontSize = 11.sp,
                                 color = LocalContentColor.current.copy(alpha = 0.6f)
                             )
                         )
@@ -78,8 +80,8 @@ fun ModelSelector(
                             )
                             Text(
                                 model.description,
-                                style = LocalTextStyle.current.copy(
-                                    fontSize = LocalTextStyle.current.fontSize * 0.8f,
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 11.sp,
                                     color = Color.Gray
                                 )
                             )
