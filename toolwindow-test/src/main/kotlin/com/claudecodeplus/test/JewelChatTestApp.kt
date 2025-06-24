@@ -21,7 +21,9 @@ fun main() = application {
     val workingDirectory = System.getProperty("project.root", System.getProperty("user.dir"))
     
     // 创建 CLI Wrapper
+    println("DEBUG: Creating ClaudeCliWrapper...")
     val cliWrapper = ClaudeCliWrapper()
+    println("DEBUG: ClaudeCliWrapper created successfully")
     
     // 创建文件索引服务
     val fileIndexService = CustomFileIndexService()

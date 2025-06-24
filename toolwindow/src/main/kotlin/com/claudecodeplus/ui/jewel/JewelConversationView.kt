@@ -103,7 +103,7 @@ fun JewelConversationView(
         Divider(orientation = Orientation.Horizontal)
         
         // 输入区域
-        SmartInputArea(
+        EnhancedSmartInputArea(
             text = inputText,
             onTextChange = { inputText = it },
             onSend = {
@@ -446,6 +446,10 @@ private fun sendMessage(
             // 构建包含上下文的消息
             val messageWithContext = buildMessageWithContext(inputText, contexts)
             
+            println("DEBUG: Sending message to Claude CLI: $messageWithContext")
+            println("DEBUG: Using model: ${model.cliName}")
+            println("DEBUG: Working directory: $workingDirectory")
+            
             // 调用 CLI
             val options = ClaudeCliWrapper.QueryOptions(
                 model = model.cliName,
@@ -456,10 +460,13 @@ private fun sendMessage(
             val responseBuilder = StringBuilder()
             val toolCalls = mutableListOf<ToolCall>()
             
+            println("DEBUG: Starting to collect messages from Claude CLI...")
             cliWrapper.query(messageWithContext, options).collect { sdkMessage ->
+                println("DEBUG: Received message type: ${sdkMessage.type}")
                 when (sdkMessage.type) {
                     MessageType.TEXT -> {
                         sdkMessage.data.text?.let { text ->
+                            println("DEBUG: Received text: $text")
                             responseBuilder.append(text)
                             // 更新消息内容
                             val updatedMessage = assistantMessage.copy(
@@ -553,6 +560,8 @@ private fun sendMessage(
                 }
             }
         } catch (e: Exception) {
+            println("DEBUG: Error occurred: ${e.message}")
+            e.printStackTrace()
             val errorMessage = assistantMessage.copy(
                 content = "❌ 错误: ${e.message}",
                 status = MessageStatus.FAILED,
@@ -562,6 +571,7 @@ private fun sendMessage(
             currentMessages[currentMessages.lastIndex] = errorMessage
             onMessageUpdate(currentMessages.toList())
         } finally {
+            println("DEBUG: Finished processing message")
             onGeneratingChange(false)
         }
     }
