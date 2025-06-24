@@ -19,10 +19,17 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.ContextReference
+import com.claudecodeplus.ui.models.SymbolType
+import com.claudecodeplus.ui.models.GitRefType
+import com.claudecodeplus.ui.models.Problem
+import com.claudecodeplus.ui.models.ProblemSeverity
 import org.jetbrains.jewel.ui.component.*
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
@@ -132,7 +139,7 @@ fun EnhancedSmartInputArea(
                 is ContextReference.SymbolReference -> "@symbol://${reference.name}"
                 is ContextReference.TerminalReference -> "@terminal://"
                 is ContextReference.ProblemsReference -> "@problems://"
-                is ContextReference.GitReference -> "@git://${reference.ref}"
+                is ContextReference.GitReference -> "@git://${reference.type.name.lowercase()}"
                 ContextReference.SelectionReference -> "@selection://"
                 ContextReference.WorkspaceReference -> "@workspace://"
             }
@@ -181,7 +188,6 @@ fun EnhancedSmartInputArea(
                         fontSize = 14.sp
                     ),
                     cursorBrush = SolidColor(Color.White),
-                    visualTransformation = ContextReferenceVisualTransformation(inlineContexts),
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 40.dp, max = 120.dp)
@@ -219,18 +225,21 @@ fun EnhancedSmartInputArea(
                                 }
                                 else -> false
                             }
+                        },
+                    decorationBox = { innerTextField ->
+                        Box {
+                            // 占位符
+                            if (textFieldValue.text.isEmpty()) {
+                                Text(
+                                    "输入消息... 使用 @ 引用上下文",
+                                    color = Color(0xFF7F7F7F),
+                                    fontSize = 14.sp
+                                )
+                            }
+                            innerTextField()
                         }
+                    }
                 )
-                
-                // 占位符
-                if (textFieldValue.text.isEmpty()) {
-                    Text(
-                        "输入消息... 使用 @ 引用上下文",
-                        color = Color(0xFF7F7F7F),
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(12.dp)
-                    )
-                }
                 
                 // 建议菜单
                 if (showSuggestions) {
@@ -287,51 +296,6 @@ fun EnhancedSmartInputArea(
     }
 }
 
-/**
- * 上下文引用的视觉转换，用于高亮显示
- */
-class ContextReferenceVisualTransformation(
-    private val contexts: Map<String, ContextReference>
-) : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        val builder = AnnotatedString.Builder(text)
-        
-        // 为每个上下文引用添加样式
-        contexts.keys.forEach { reference ->
-            val startIndex = text.indexOf(reference)
-            if (startIndex >= 0) {
-                builder.addStyle(
-                    SpanStyle(
-                        background = Color(0xFF1E88E5).copy(alpha = 0.3f),
-                        color = Color(0xFF64B5F6),
-                        textDecoration = TextDecoration.Underline
-                    ),
-                    startIndex,
-                    startIndex + reference.length
-                )
-            }
-        }
-        
-        // 也高亮显示其他可能的引用格式（即使不在 contexts 中）
-        val referencePattern = """@(file|folder|symbol|terminal|problems|git|code|https?|selection|workspace)://[^\s]+""".toRegex()
-        referencePattern.findAll(text.text).forEach { match ->
-            builder.addStyle(
-                SpanStyle(
-                    background = Color(0xFF1E88E5).copy(alpha = 0.3f),
-                    color = Color(0xFF64B5F6),
-                    textDecoration = TextDecoration.Underline
-                ),
-                match.range.first,
-                match.range.last + 1
-            )
-        }
-        
-        return TransformedText(
-            builder.toAnnotatedString(),
-            OffsetMapping.Identity
-        )
-    }
-}
 
 /**
  * 建议菜单
@@ -366,19 +330,19 @@ private fun SuggestionMenu(
                     when (name) {
                         "文件" -> {
                             // TODO: 打开文件选择对话框
-                            onSelect(ContextReference.FileReference("/example/file.kt", null))
+                            onSelect(ContextReference.FileReference("/example/file.kt", null, null))
                         }
                         "文件夹" -> {
                             // TODO: 打开文件夹选择对话框
-                            onSelect(ContextReference.FolderReference("/example/folder"))
+                            onSelect(ContextReference.FolderReference("/example/folder", 0, 0))
                         }
                         "符号" -> {
                             // TODO: 打开符号搜索对话框
-                            onSelect(ContextReference.SymbolReference("ExampleClass", "class", null))
+                            onSelect(ContextReference.SymbolReference("ExampleClass", SymbolType.CLASS, "/example/file.kt", 1, null))
                         }
-                        "终端" -> onSelect(ContextReference.TerminalReference("", 50))
-                        "问题" -> onSelect(ContextReference.ProblemsReference)
-                        "Git" -> onSelect(ContextReference.GitReference("status"))
+                        "终端" -> onSelect(ContextReference.TerminalReference("", 50, System.currentTimeMillis(), false))
+                        "问题" -> onSelect(ContextReference.ProblemsReference(emptyList(), null))
+                        "Git" -> onSelect(ContextReference.GitReference(GitRefType.STATUS, "status content"))
                         "选中内容" -> onSelect(ContextReference.SelectionReference)
                         "工作空间" -> onSelect(ContextReference.WorkspaceReference)
                     }
