@@ -1,7 +1,14 @@
 package com.claudecodeplus.ui.jewel
 
+import androidx.compose.runtime.*
 import androidx.compose.ui.awt.ComposePanel
 import com.claudecodeplus.sdk.ClaudeCliWrapper
+import com.claudecodeplus.sdk.MessageType
+import com.claudecodeplus.ui.models.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 import org.jetbrains.jewel.intui.standalone.theme.darkThemeDefinition
@@ -18,8 +25,8 @@ import java.awt.BorderLayout
 class JewelChatPanel(
     private val cliWrapper: ClaudeCliWrapper = ClaudeCliWrapper(),
     private val workingDirectory: String = System.getProperty("user.dir"),
-    themeStyle: JewelThemeStyle = JewelThemeStyle.SYSTEM,
-    isSystemDark: Boolean = true,
+    themeStyle: JewelThemeStyle = JewelThemeStyle.LIGHT,
+    isSystemDark: Boolean = false,
     themeConfig: JewelThemeConfig = JewelThemeConfig.DEFAULT
 ) : JPanel(BorderLayout()) {
     
@@ -68,19 +75,296 @@ class JewelChatPanel(
                 JewelThemeStyle.LIGHT, JewelThemeStyle.HIGH_CONTRAST_LIGHT -> {
                     JewelTheme.lightThemeDefinition()
                 }
-                else -> JewelTheme.darkThemeDefinition() // 默认暗色
+                else -> JewelTheme.lightThemeDefinition() // 默认亮色
             }
             
             IntUiTheme(
                 theme = theme,
                 styling = ComponentStyling.provide()
             ) {
-                JewelConversationView(
-                    cliWrapper = cliWrapper,
-                    workingDirectory = workingDirectory,
-                    fileIndexService = null // TODO: 在插件中提供 IDEA 的实现
-                )
+                ChatPanelContent()
             }
+        }
+    }
+    
+    @Composable
+    private fun ChatPanelContent() {
+        // 聊天状态
+        var messages by remember { mutableStateOf(listOf<EnhancedMessage>()) }
+        var inputText by remember { mutableStateOf("") }
+        var contexts by remember { mutableStateOf(listOf<ContextReference>()) }
+        var isGenerating by remember { mutableStateOf(false) }
+        var currentSessionId by remember { mutableStateOf<String?>(null) }
+        var currentJob by remember { mutableStateOf<Job?>(null) }
+        
+        val scope = rememberCoroutineScope()
+        
+        // 初始欢迎消息
+        LaunchedEffect(Unit) {
+            messages = listOf(
+                EnhancedMessage(
+                    role = MessageRole.ASSISTANT,
+                    content = "你好！我是Claude，很高兴为您提供代码和技术方面的帮助。您可以询问任何关于编程、代码审查、调试或技术问题。",
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+        }
+        
+        JewelConversationView(
+            messages = messages,
+            inputText = inputText,
+            onInputChange = { inputText = it },
+            onSend = {
+                if (inputText.isNotBlank() && !isGenerating) {
+                    sendMessage(
+                        scope = scope,
+                        inputText = inputText,
+                        contexts = contexts,
+                        cliWrapper = cliWrapper,
+                        workingDirectory = workingDirectory,
+                        currentSessionId = currentSessionId,
+                        onMessageUpdate = { messages = it },
+                        onInputClear = { inputText = "" },
+                        onContextsClear = { contexts = emptyList() },
+                        onGeneratingChange = { isGenerating = it },
+                        onSessionIdUpdate = { currentSessionId = it },
+                        onJobUpdate = { currentJob = it }
+                    )
+                }
+            },
+            onStop = {
+                currentJob?.cancel()
+                isGenerating = false
+            },
+            contexts = contexts,
+            onContextAdd = { context ->
+                contexts = contexts + context
+            },
+            onContextRemove = { context ->
+                contexts = contexts - context
+            },
+            isGenerating = isGenerating
+        )
+    }
+    
+    /**
+     * 发送消息的逻辑
+     */
+    private fun sendMessage(
+        scope: CoroutineScope,
+        inputText: String,
+        contexts: List<ContextReference>,
+        cliWrapper: ClaudeCliWrapper,
+        workingDirectory: String,
+        currentSessionId: String?,
+        onMessageUpdate: (List<EnhancedMessage>) -> Unit,
+        onInputClear: () -> Unit,
+        onContextsClear: () -> Unit,
+        onGeneratingChange: (Boolean) -> Unit,
+        onSessionIdUpdate: (String?) -> Unit,
+        onJobUpdate: (Job?) -> Unit
+    ) {
+        // 构建包含上下文的消息
+        val messageWithContext = buildMessageWithContext(inputText, contexts)
+        
+        // 创建用户消息
+        val userMessage = EnhancedMessage(
+            role = MessageRole.USER,
+            content = inputText,
+            contexts = contexts,
+            timestamp = System.currentTimeMillis()
+        )
+        
+        val currentMessages = mutableListOf<EnhancedMessage>()
+        onMessageUpdate(currentMessages)
+        currentMessages.add(userMessage)
+        onMessageUpdate(currentMessages.toList())
+        
+        onInputClear()
+        onContextsClear()
+        onGeneratingChange(true)
+        
+        // 创建 AI 响应消息
+        val assistantMessage = EnhancedMessage(
+            role = MessageRole.ASSISTANT,
+            content = "",
+            timestamp = System.currentTimeMillis(),
+            isStreaming = true
+        )
+        
+        currentMessages.add(assistantMessage)
+        onMessageUpdate(currentMessages.toList())
+        
+        // 启动协程处理 AI 响应
+        val job = scope.launch {
+            try {
+                println("DEBUG: Sending message to Claude CLI: $messageWithContext")
+                println("DEBUG: Working directory: $workingDirectory")
+                
+                // 调用 CLI
+                val options = ClaudeCliWrapper.QueryOptions(
+                    model = "sonnet", // 默认使用 Sonnet 模型
+                    cwd = workingDirectory,
+                    resume = currentSessionId
+                )
+                
+                val responseBuilder = StringBuilder()
+                val toolCalls = mutableListOf<ToolCall>()
+                
+                println("DEBUG: Starting to collect messages from Claude CLI...")
+                cliWrapper.query(messageWithContext, options).collect { sdkMessage ->
+                    println("DEBUG: Received message type: ${sdkMessage.type}")
+                    when (sdkMessage.type) {
+                        MessageType.TEXT -> {
+                            sdkMessage.data.text?.let { text ->
+                                println("DEBUG: Received text: $text")
+                                responseBuilder.append(text)
+                                // 更新消息内容
+                                val updatedMessage = assistantMessage.copy(
+                                    content = responseBuilder.toString(),
+                                    toolCalls = toolCalls.toList()
+                                )
+                                currentMessages[currentMessages.lastIndex] = updatedMessage
+                                onMessageUpdate(currentMessages.toList())
+                            }
+                        }
+                        
+                        MessageType.TOOL_USE -> {
+                            val toolCall = ToolCall(
+                                name = sdkMessage.data.toolName ?: "unknown",
+                                displayName = sdkMessage.data.toolName ?: "unknown",
+                                parameters = sdkMessage.data.toolInput as? Map<String, Any> ?: emptyMap(),
+                                status = ToolCallStatus.RUNNING
+                            )
+                            toolCalls.add(toolCall)
+                            
+                            // 更新消息显示工具调用
+                            val updatedMessage = assistantMessage.copy(
+                                content = responseBuilder.toString(),
+                                toolCalls = toolCalls.toList()
+                            )
+                            currentMessages[currentMessages.lastIndex] = updatedMessage
+                            onMessageUpdate(currentMessages.toList())
+                        }
+                        
+                        MessageType.TOOL_RESULT -> {
+                            // 更新工具调用结果
+                            val lastToolCall = toolCalls.lastOrNull()
+                            if (lastToolCall != null) {
+                                val updatedToolCall = lastToolCall.copy(
+                                    status = ToolCallStatus.SUCCESS,
+                                    result = if (sdkMessage.data.error != null) {
+                                        ToolResult.Failure(
+                                            error = sdkMessage.data.error ?: "Unknown error"
+                                        )
+                                    } else {
+                                        ToolResult.Success(
+                                            output = sdkMessage.data.toolResult?.toString() ?: ""
+                                        )
+                                    },
+                                    endTime = System.currentTimeMillis()
+                                )
+                                toolCalls[toolCalls.lastIndex] = updatedToolCall
+                                
+                                val updatedMessage = assistantMessage.copy(
+                                    content = responseBuilder.toString(),
+                                    toolCalls = toolCalls.toList()
+                                )
+                                currentMessages[currentMessages.lastIndex] = updatedMessage
+                                onMessageUpdate(currentMessages.toList())
+                            }
+                        }
+                        
+                        MessageType.START -> {
+                            sdkMessage.data.sessionId?.let { id ->
+                                onSessionIdUpdate(id)
+                            }
+                        }
+                        
+                        MessageType.ERROR -> {
+                            val errorMsg = sdkMessage.data.error ?: "Unknown error"
+                            val errorMessage = assistantMessage.copy(
+                                content = "❌ 错误: $errorMsg",
+                                status = MessageStatus.FAILED,
+                                isError = true,
+                                isStreaming = false
+                            )
+                            currentMessages[currentMessages.lastIndex] = errorMessage
+                            onMessageUpdate(currentMessages.toList())
+                        }
+                        
+                        MessageType.END -> {
+                            // 完成流式传输
+                            val finalMessage = assistantMessage.copy(
+                                content = responseBuilder.toString(),
+                                toolCalls = toolCalls.toList(),
+                                status = MessageStatus.COMPLETE,
+                                isStreaming = false
+                            )
+                            currentMessages[currentMessages.lastIndex] = finalMessage
+                            onMessageUpdate(currentMessages.toList())
+                        }
+                        
+                        else -> {
+                            // 忽略其他消息类型
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                println("DEBUG: Error occurred: ${e.message}")
+                e.printStackTrace()
+                val errorMessage = assistantMessage.copy(
+                    content = "❌ 错误: ${e.message}",
+                    status = MessageStatus.FAILED,
+                    isError = true,
+                    isStreaming = false
+                )
+                currentMessages[currentMessages.lastIndex] = errorMessage
+                onMessageUpdate(currentMessages.toList())
+            } finally {
+                println("DEBUG: Finished processing message")
+                onGeneratingChange(false)
+            }
+        }
+        
+        onJobUpdate(job)
+    }
+    
+    /**
+     * 构建包含上下文的消息
+     */
+    private fun buildMessageWithContext(
+        message: String,
+        contexts: List<ContextReference>
+    ): String {
+        if (contexts.isEmpty()) {
+            return message
+        }
+        
+        val contextStrings = contexts.map { context ->
+            when (context) {
+                is ContextReference.FileReference -> {
+                    "文件: ${context.path}" + 
+                        if (context.lines != null) " (行 ${context.lines})" else ""
+                }
+                is ContextReference.FolderReference -> "文件夹: ${context.path}"
+                is ContextReference.SymbolReference -> "符号: ${context.name} (${context.type})"
+                is ContextReference.TerminalReference -> "终端输出 (最近 ${context.lines} 行)"
+                is ContextReference.ProblemsReference -> {
+                    val severity = context.severity?.name ?: "所有"
+                    "问题 ($severity)"
+                }
+                is ContextReference.GitReference -> "Git ${context.type.name}"
+                ContextReference.SelectionReference -> "选中的代码"
+                ContextReference.WorkspaceReference -> "整个工作空间"
+            }
+        }
+        
+        return buildString {
+            appendLine("上下文引用:")
+            contextStrings.forEach { appendLine("- $it") }
+            appendLine()
+            append(message)
         }
     }
     
