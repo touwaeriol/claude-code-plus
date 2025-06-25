@@ -58,8 +58,8 @@ fun GeneratingIndicator(
     
     Row(
         modifier = modifier
-            .background(Color(0xFFE8E8E8), RoundedCornerShape(6.dp))
-            .border(1.dp, Color(0xFFD0D0D0), RoundedCornerShape(6.dp))
+            .background(JewelTheme.globalColors.panelBackground, RoundedCornerShape(6.dp))
+            .border(1.dp, JewelTheme.globalColors.borders.normal, RoundedCornerShape(6.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -72,7 +72,7 @@ fun GeneratingIndicator(
             Text(
                 "Generating",
                 style = JewelTheme.defaultTextStyle.copy(
-                    color = Color(0xFF555555),
+                    color = JewelTheme.globalColors.text.normal,
                     fontSize = 12.sp
                 )
             )
@@ -80,7 +80,7 @@ fun GeneratingIndicator(
             Text(
                 ".".repeat(dotCount),
                 style = JewelTheme.defaultTextStyle.copy(
-                    color = Color(0xFF555555),
+                    color = JewelTheme.globalColors.text.normal,
                     fontSize = 12.sp
                 ),
                 modifier = Modifier.width(12.dp) // 固定宽度避免跳动
@@ -96,7 +96,7 @@ fun GeneratingIndicator(
             Text(
                 "Stop",
                 style = JewelTheme.defaultTextStyle.copy(
-                    color = Color(0xFF666666),
+                    color = JewelTheme.globalColors.text.normal,
                     fontSize = 11.sp
                 ),
                 modifier = Modifier
@@ -108,11 +108,11 @@ fun GeneratingIndicator(
             Text(
                 "Accept all ⌘↩",
                 style = JewelTheme.defaultTextStyle.copy(
-                    color = Color.White,
+                    color = JewelTheme.globalColors.text.normal,
                     fontSize = 11.sp
                 ),
                 modifier = Modifier
-                    .background(Color(0xFF4A90E2), RoundedCornerShape(4.dp))
+                    .background(JewelTheme.globalColors.borders.focused, RoundedCornerShape(4.dp))
                     .padding(horizontal = 8.dp, vertical = 3.dp)
                     .clickable { onAcceptAll() }
             )
@@ -358,12 +358,18 @@ fun EnhancedSmartInputArea(
     
     // 快捷键动作处理器
     val handleKeyboardAction = { action: KeyboardAction ->
+        println("DEBUG: handleKeyboardAction called with action: $action")
         when (action) {
             is KeyboardAction.SendMessage -> {
+                println("DEBUG: Processing SendMessage action")
                 if (textValue.text.isNotBlank()) {
+                    println("DEBUG: Text is not blank, calling onSend()")
                     onSend()
                     textValue = TextFieldValue("")
                     onTextChange("")
+                    println("DEBUG: SendMessage completed")
+                } else {
+                    println("DEBUG: Text is blank, not sending")
                 }
             }
             
@@ -425,8 +431,8 @@ fun EnhancedSmartInputArea(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF2B2B2B), RoundedCornerShape(12.dp))
-                .border(1.dp, Color(0xFF5C5C5C), RoundedCornerShape(12.dp))
+                .background(JewelTheme.globalColors.panelBackground, RoundedCornerShape(12.dp))
+                .border(1.dp, JewelTheme.globalColors.borders.normal, RoundedCornerShape(12.dp))
                 .padding(12.dp)
         ) {
             Column(
@@ -457,7 +463,7 @@ fun EnhancedSmartInputArea(
                                 "Add Context",
                                 style = JewelTheme.defaultTextStyle.copy(
                                     fontSize = 11.sp,
-                                    color = Color(0xFF9CA3AF)
+                                    color = JewelTheme.globalColors.text.disabled
                                 )
                             )
                         }
@@ -496,36 +502,48 @@ fun EnhancedSmartInputArea(
                                 }
                             }
                         },
-                        enabled = enabled && !isGenerating,
+                        enabled = enabled, // 允许在生成期间继续输入
                         textStyle = TextStyle(
-                            color = Color.White,
+                            color = JewelTheme.globalColors.text.normal,
                             fontSize = 13.sp,
                             lineHeight = 18.sp
                         ),
-                        cursorBrush = SolidColor(Color.White),
+                        cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Default // 改为Default以支持多行
+                        ),
+                        singleLine = false, // 明确设置为多行模式
+
                         modifier = Modifier
                             .fillMaxSize()
                             .focusRequester(focusRequester)
                             .onKeyEvent { event ->
-                                // 特殊处理Enter键逻辑
-                                if (event.key == Key.Enter && event.type == KeyEventType.KeyDown) {
-                                    if (event.isShiftPressed) {
-                                        // Shift+Enter: 让系统处理换行
-                                        false
-                                    } else {
-                                        // 单独Enter: 发送消息
-                                        if (textValue.text.isNotBlank() && enabled && !isGenerating && !showContextMenu) {
-                                            handleKeyboardAction(KeyboardAction.SendMessage)
+                                when {
+                                    // 处理Escape键 - 取消生成
+                                    event.key == Key.Escape && event.type == KeyEventType.KeyDown -> {
+                                        if (isGenerating) {
+                                            onStop?.invoke()
+                                            true // 消费事件
+                                        } else {
+                                            false
                                         }
-                                        true // 消费事件，阻止默认换行
                                     }
-                                } else {
-                                    // 处理其他快捷键
-                                    val action = shortcutManager.handleKeyEvent(event, currentState)
-                                    if (action != null && action !is KeyboardAction.SendMessage && action !is KeyboardAction.InsertNewLine) {
-                                        handleKeyboardAction(action)
-                                        true
-                                    } else {
+                                    
+                                    // 只处理单独Enter键的KeyDown事件用于发送
+                                    event.key == Key.Enter && !event.isShiftPressed && event.type == KeyEventType.KeyDown -> {
+                                        // 生成期间不允许发送新消息
+                                        if (isGenerating) {
+                                            false // 让系统处理换行
+                                        } else if (textValue.text.isNotBlank() && enabled && !showContextMenu) {
+                                            handleKeyboardAction(KeyboardAction.SendMessage)
+                                            true // 消费事件，阻止默认换行
+                                        } else {
+                                            false // 让系统处理换行
+                                        }
+                                    }
+                                    
+                                    else -> {
+                                        // 所有其他情况都不拦截，包括Shift+Enter
                                         false
                                     }
                                 }
@@ -539,7 +557,7 @@ fun EnhancedSmartInputArea(
                                     Text(
                                         "Plan, search, build anything",
                                         style = JewelTheme.defaultTextStyle.copy(
-                                            color = Color(0xFF7F7F7F),
+                                            color = JewelTheme.globalColors.text.disabled,
                                             fontSize = 13.sp,
                                             lineHeight = 18.sp
                                         )
@@ -588,7 +606,7 @@ fun EnhancedSmartInputArea(
                             Text(
                                 selectedModel.displayName,
                                 style = JewelTheme.defaultTextStyle.copy(
-                                    color = Color(0xFF9CA3AF),
+                                    color = JewelTheme.globalColors.text.disabled,
                                     fontSize = 11.sp
                                 )
                             )
@@ -596,7 +614,7 @@ fun EnhancedSmartInputArea(
                             Text(
                                 if (showModelMenu) "▲" else "▼",
                                 style = JewelTheme.defaultTextStyle.copy(
-                                    color = Color(0xFF9CA3AF),
+                                    color = JewelTheme.globalColors.text.disabled,
                                     fontSize = 8.sp
                                 )
                             )
@@ -607,8 +625,8 @@ fun EnhancedSmartInputArea(
                             Column(
                                 modifier = Modifier
                                     .offset(y = (-60).dp)
-                                    .background(Color(0xFF3C3C3C), RoundedCornerShape(8.dp))
-                                    .border(1.dp, Color(0xFF5C5C5C), RoundedCornerShape(8.dp))
+                                    .background(JewelTheme.globalColors.panelBackground, RoundedCornerShape(8.dp))
+                                    .border(1.dp, JewelTheme.globalColors.borders.normal, RoundedCornerShape(8.dp))
                                     .padding(4.dp)
                             ) {
                                 ClaudeModel.values().forEach { model ->
@@ -725,7 +743,7 @@ private fun ContextChip(
     Row(
         modifier = modifier
             .background(
-                Color(0xFF3C3C3C),
+                JewelTheme.globalColors.panelBackground,
                 RoundedCornerShape(8.dp)
             )
             .padding(horizontal = 6.dp, vertical = 3.dp),
@@ -738,7 +756,7 @@ private fun ContextChip(
                 Text(
                     context.path.substringAfterLast('/'),
                     style = JewelTheme.defaultTextStyle.copy(
-                        color = Color.White,
+                        color = JewelTheme.globalColors.text.normal,
                         fontSize = 10.sp
                     )
                 )
@@ -748,7 +766,7 @@ private fun ContextChip(
                 Text(
                     context.name,
                     style = JewelTheme.defaultTextStyle.copy(
-                        color = Color.White,
+                        color = JewelTheme.globalColors.text.normal,
                         fontSize = 10.sp
                     )
                 )
@@ -758,7 +776,7 @@ private fun ContextChip(
                 Text(
                     "终端",
                     style = JewelTheme.defaultTextStyle.copy(
-                        color = Color.White,
+                        color = JewelTheme.globalColors.text.normal,
                         fontSize = 10.sp
                     )
                 )
@@ -770,7 +788,7 @@ private fun ContextChip(
         Text(
             "×",
             style = JewelTheme.defaultTextStyle.copy(
-                color = Color(0xFF9CA3AF),
+                color = JewelTheme.globalColors.text.disabled,
                 fontSize = 10.sp
             ),
             modifier = Modifier.clickable { onRemove(context) }
@@ -799,15 +817,15 @@ private fun ContextMenu(
     Column(
         modifier = Modifier
             .widthIn(min = 240.dp)
-            .background(Color(0xFF3C3C3C), RoundedCornerShape(8.dp))
-            .border(1.dp, Color(0xFF5C5C5C), RoundedCornerShape(8.dp))
+            .background(JewelTheme.globalColors.panelBackground, RoundedCornerShape(8.dp))
+            .border(1.dp, JewelTheme.globalColors.borders.normal, RoundedCornerShape(8.dp))
             .padding(4.dp)
     ) {
         if (suggestions.isEmpty()) {
             Text(
                 "没有找到匹配项",
                 style = JewelTheme.defaultTextStyle.copy(
-                    color = Color(0xFF9CA3AF),
+                    color = JewelTheme.globalColors.text.disabled,
                     fontSize = 12.sp
                 ),
                 modifier = Modifier.padding(8.dp)
@@ -834,7 +852,7 @@ private fun ContextMenu(
                         Text(
                             suggestion.title,
                             style = JewelTheme.defaultTextStyle.copy(
-                                color = Color.White,
+                                color = JewelTheme.globalColors.text.normal,
                                 fontSize = 12.sp
                             )
                         )
@@ -842,7 +860,7 @@ private fun ContextMenu(
                             Text(
                                 it,
                                 style = JewelTheme.defaultTextStyle.copy(
-                                    color = Color(0xFF9CA3AF),
+                                    color = JewelTheme.globalColors.text.disabled,
                                     fontSize = 10.sp
                                 )
                             )
