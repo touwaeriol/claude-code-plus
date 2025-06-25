@@ -188,3 +188,61 @@ MIT License
 
 - [Claude Code SDK Python](https://github.com/anthropics/claude-code-sdk-python) - 官方 Python SDK
 - [Claude Code CLI](https://github.com/anthropics/claude-code) - 官方命令行工具
+
+## 架构设计原则
+
+### 业务逻辑分离
+
+**重要：**`toolwindow-test` 模块不应该包含任何业务逻辑，所有业务逻辑都应该在 `toolwindow` 模块中实现。
+
+#### 模块职责划分
+
+- **`toolwindow` 模块**：
+  - 包含所有 UI 组件的完整实现
+  - 包含与 Claude API 交互的业务逻辑
+  - 包含消息处理、会话管理、错误处理等核心功能
+  - 提供可复用的聊天应用组件 (`JewelChatApp`)
+
+- **`toolwindow-test` 模块**：
+  - **仅负责**：创建测试窗口和基本的测试环境
+  - **仅使用**：`toolwindow` 模块提供的现成组件
+  - **不包含**：任何业务逻辑、API 调用、消息处理等功能
+  - **目的**：提供独立的测试环境，验证 UI 组件的功能
+
+#### 示例对比
+
+❌ **错误做法**（在测试应用中包含业务逻辑）：
+```kotlin
+// toolwindow-test 中不应该有这样的代码
+fun sendMessage(...) {
+    val response = cliWrapper.sendMessage(...)
+    // 处理响应逻辑...
+}
+```
+
+✅ **正确做法**（测试应用只使用现成组件）：
+```kotlin
+// toolwindow-test 中应该这样使用
+JewelChatApp(
+    cliWrapper = cliWrapper,
+    workingDirectory = workingDirectory,
+    themeProvider = themeProvider,
+    showToolbar = true,
+    onThemeChange = { newTheme -> /* 简单的主题切换 */ }
+)
+```
+
+#### 好处
+
+1. **代码复用**：业务逻辑只需要在一个地方实现
+2. **测试简化**：测试应用专注于 UI 测试，不需要维护复杂的业务逻辑
+3. **维护性**：修改业务逻辑时只需要修改 `toolwindow` 模块
+4. **插件集成**：插件可以直接使用 `toolwindow` 模块的组件，无需重复实现
+
+#### 主题配置
+
+测试应用支持主题配置，但使用的是 `toolwindow` 模块提供的主题系统：
+
+- **主题提供者**：使用 `DefaultJewelThemeProvider` 或 `PluginJewelThemeProvider`
+- **主题工具**：通过 `JewelThemeUtils.getThemeDefinition()` 获取主题
+- **主题切换**：通过 `JewelChatApp` 组件的 `onThemeChange` 回调处理
