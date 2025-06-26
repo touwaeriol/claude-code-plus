@@ -362,6 +362,8 @@ fun EnhancedSmartInputArea(
         when (action) {
             is KeyboardAction.SendMessage -> {
                 println("DEBUG: Processing SendMessage action")
+                println("DEBUG: Current text: '${textValue.text}'")
+                println("DEBUG: Text is blank: ${textValue.text.isBlank()}")
                 if (textValue.text.isNotBlank()) {
                     println("DEBUG: Text is not blank, calling onSend()")
                     onSend()
@@ -518,10 +520,13 @@ fun EnhancedSmartInputArea(
                             .fillMaxSize()
                             .focusRequester(focusRequester)
                             .onKeyEvent { event ->
+                                println("DEBUG: Key event received - key: ${event.key}, type: ${event.type}, shift: ${event.isShiftPressed}")
                                 when {
                                     // 处理Escape键 - 取消生成
                                     event.key == Key.Escape && event.type == KeyEventType.KeyDown -> {
+                                        println("DEBUG: Escape key pressed")
                                         if (isGenerating) {
+                                            println("DEBUG: Stopping generation")
                                             onStop?.invoke()
                                             true // 消费事件
                                         } else {
@@ -531,19 +536,29 @@ fun EnhancedSmartInputArea(
                                     
                                     // 只处理单独Enter键的KeyDown事件用于发送
                                     event.key == Key.Enter && !event.isShiftPressed && event.type == KeyEventType.KeyDown -> {
+                                        println("DEBUG: Enter key pressed (no shift)")
                                         // 生成期间不允许发送新消息
                                         if (isGenerating) {
+                                            println("DEBUG: Currently generating, treating as newline")
                                             false // 让系统处理换行
                                         } else if (textValue.text.isNotBlank() && enabled && !showContextMenu) {
+                                            println("DEBUG: Sending message")
                                             handleKeyboardAction(KeyboardAction.SendMessage)
                                             true // 消费事件，阻止默认换行
                                         } else {
+                                            println("DEBUG: Text blank or disabled, treating as newline")
                                             false // 让系统处理换行
                                         }
                                     }
                                     
+                                    // Shift+Enter - 换行
+                                    event.key == Key.Enter && event.isShiftPressed -> {
+                                        println("DEBUG: Shift+Enter pressed - allowing newline")
+                                        false // 让系统处理换行
+                                    }
+                                    
                                     else -> {
-                                        // 所有其他情况都不拦截，包括Shift+Enter
+                                        // 所有其他情况都不拦截
                                         false
                                     }
                                 }
