@@ -5,8 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -29,6 +31,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.*
@@ -486,9 +489,27 @@ fun EnhancedSmartInputArea(
                             textValue = newValue
                             onTextChange(newText)
                             
-                            // 检测 @ 符号
+                            // ============================================================================
+                            // 【重要】@ 符号上下文菜单触发逻辑 - 请勿随意修改！！！
+                            // ============================================================================
+                            // 用户需求：当输入@时，如果@前后均没有字符，则显示上下文选择框
+                            // 检测逻辑：
+                            // 1. 新增了@字符
+                            // 2. @前面没有字符（或前面是空格/换行）
+                            // 3. @后面没有字符（光标在@后面）
+                            // ============================================================================
                             if (newText.length > oldText.length && newText.last() == '@') {
-                                handleKeyboardAction(KeyboardAction.OpenContextMenu)
+                                val atPosition = newText.lastIndexOf('@')
+                                val beforeAt = if (atPosition > 0) newText[atPosition - 1] else ' '
+                                val afterAt = if (atPosition < newText.length - 1) newText[atPosition + 1] else ' '
+                                
+                                // 检查@前后是否都是空白字符或边界
+                                val isValidAtTrigger = (beforeAt.isWhitespace() || atPosition == 0) && 
+                                                      (afterAt.isWhitespace() || atPosition == newText.length - 1)
+                                
+                                if (isValidAtTrigger) {
+                                    handleKeyboardAction(KeyboardAction.OpenContextMenu)
+                                }
                             }
                             
                             // 更新搜索查询
@@ -519,49 +540,85 @@ fun EnhancedSmartInputArea(
                         modifier = Modifier
                             .fillMaxSize()
                             .focusRequester(focusRequester)
-                            .onKeyEvent { event ->
-                                println("DEBUG: Key event received - key: ${event.key}, type: ${event.type}, shift: ${event.isShiftPressed}")
-                                when {
-                                    // 处理Escape键 - 取消生成
-                                    event.key == Key.Escape && event.type == KeyEventType.KeyDown -> {
-                                        println("DEBUG: Escape key pressed")
-                                        if (isGenerating) {
-                                            println("DEBUG: Stopping generation")
-                                            onStop?.invoke()
-                                            true // 消费事件
-                                        } else {
+                            // ============================================================================
+                            // 【重要】分层键盘事件处理架构 - 请勿随意修改！！！
+                            // ============================================================================
+                            // 设计原则：按优先级分层处理键盘事件，避免冲突
+                            // 1. 第一层：文件搜索弹窗（如果显示） - 最高优先级
+                            // 2. 第二层：主输入框的特殊键盘操作（Enter发送、Shift+Enter换行）
+                            // 3. 第三层：系统默认行为
+                            // 
+                            // 优势：
+                            // - 清晰的事件优先级
+                            // - 避免多个组件争抢同一个键盘事件
+                            // - 便于调试和维护
+                            // ============================================================================
+                            .onPreviewKeyEvent { event ->
+                                println("DEBUG: Preview key event - key: ${event.key}, type: ${event.type}, shift: ${event.isShiftPressed}, contextMenu: $showContextMenu")
+                                
+                                // 第一层：如果文件搜索弹窗打开，所有键盘事件由弹窗处理
+                                if (showContextMenu) {
+                                    println("DEBUG: Context menu is open, letting it handle keyboard events")
+                                    false // 让文件搜索弹窗处理所有键盘事件
+                                } else {
+                                    // 第二层：主输入框的特殊键盘操作
+                                    when {
+                                        // 处理Escape键 - 取消生成
+                                        event.key == Key.Escape && event.type == KeyEventType.KeyDown -> {
+                                            println("DEBUG: Escape key pressed")
+                                            if (isGenerating) {
+                                                println("DEBUG: Stopping generation")
+                                                onStop?.invoke()
+                                                true // 消费事件
+                                            } else {
+                                                false
+                                            }
+                                        }
+                                        
+                                        // 【核心逻辑1】处理单独Enter键用于发送消息
+                                        // 只有在没有上下文菜单时才处理
+                                        event.key == Key.Enter && !event.isShiftPressed && event.type == KeyEventType.KeyDown -> {
+                                            println("DEBUG: Enter key pressed (no shift)")
+                                            println("DEBUG: Text: '${textValue.text}'")
+                                            println("DEBUG: Text is blank: ${textValue.text.isBlank()}")
+                                            
+                                            // 生成期间不允许发送新消息
+                                            if (isGenerating) {
+                                                println("DEBUG: Currently generating, treating as newline")
+                                                false // 让系统处理换行
+                                            } else if (textValue.text.isNotBlank() && enabled) {
+                                                println("DEBUG: Sending message")
+                                                handleKeyboardAction(KeyboardAction.SendMessage)
+                                                true // 消费事件，阻止默认换行
+                                            } else {
+                                                println("DEBUG: Text blank or disabled, treating as newline")
+                                                false // 让系统处理换行
+                                            }
+                                        }
+                                        
+                                        // 【核心逻辑2】处理Shift+Enter换行
+                                        event.key == Key.Enter && event.isShiftPressed && event.type == KeyEventType.KeyDown -> {
+                                            println("DEBUG: Shift+Enter pressed - inserting newline")
+                                            // 手动插入换行符到光标位置
+                                            val newText = textValue.text.substring(0, textValue.selection.start) +
+                                                          "\n" + 
+                                                          textValue.text.substring(textValue.selection.end)
+                                            val newCursorPos = textValue.selection.start + 1
+                                            textValue = TextFieldValue(
+                                                text = newText,
+                                                selection = TextRange(newCursorPos)
+                                            )
+                                            onTextChange(newText)
+                                            true // 消费事件，防止重复处理
+                                        }
+                                        
+                                        else -> {
+                                            // 第三层：所有其他情况都不拦截，让系统正常处理
                                             false
                                         }
                                     }
-                                    
-                                    // 只处理单独Enter键的KeyDown事件用于发送
-                                    event.key == Key.Enter && !event.isShiftPressed && event.type == KeyEventType.KeyDown -> {
-                                        println("DEBUG: Enter key pressed (no shift)")
-                                        // 生成期间不允许发送新消息
-                                        if (isGenerating) {
-                                            println("DEBUG: Currently generating, treating as newline")
-                                            false // 让系统处理换行
-                                        } else if (textValue.text.isNotBlank() && enabled && !showContextMenu) {
-                                            println("DEBUG: Sending message")
-                                            handleKeyboardAction(KeyboardAction.SendMessage)
-                                            true // 消费事件，阻止默认换行
-                                        } else {
-                                            println("DEBUG: Text blank or disabled, treating as newline")
-                                            false // 让系统处理换行
-                                        }
-                                    }
-                                    
-                                    // Shift+Enter - 换行
-                                    event.key == Key.Enter && event.isShiftPressed -> {
-                                        println("DEBUG: Shift+Enter pressed - allowing newline")
-                                        false // 让系统处理换行
-                                    }
-                                    
-                                    else -> {
-                                        // 所有其他情况都不拦截
-                                        false
-                                    }
                                 }
+                            }
                             },
                         decorationBox = { innerTextField ->
                             Box(
@@ -583,22 +640,56 @@ fun EnhancedSmartInputArea(
                         }
                     )
                     
-                    // 上下文菜单
+                    // ============================================================================
+                    // 【重要】上下文菜单位置说明 - 请勿随意修改！！！
+                    // ============================================================================
+                    // 1. 上下文菜单必须显示在输入框上方的原因：
+                    //    - 用户需求：菜单显示在上方而不是下方
+                    //    - 避免菜单遮挡输入框下方的其他UI元素
+                    // 2. offset(y = (-200).dp) 的含义：
+                    //    - 负值表示向上偏移200dp
+                    //    - 确保菜单显示在输入框上方有足够距离
+                    // ============================================================================
                     if (showContextMenu) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .offset(y = 30.dp)
+                                .offset(y = (-200).dp) // 负值向上偏移，显示在输入框上方
                         ) {
-                                                         ContextMenu(
-                                 suggestions = contextSuggestions,
-                                 onSelect = { suggestion ->
-                                     val mockContext = ContextReference.FileReference(suggestion.title, null, null)
-                                     onContextAdd(mockContext)
-                                     showContextMenu = false
-                                 },
-                                 onDismiss = { handleKeyboardAction(KeyboardAction.CloseContextMenu) }
-                             )
+                            ContextMenu(
+                                suggestions = contextSuggestions,
+                                onSelect = { suggestion ->
+                                    // ============================================================================
+                                    // 【重要】文件选择后的处理逻辑 - 请勿随意修改！！！
+                                    // ============================================================================
+                                    // 用户需求：回车选中后在输入框中记录该上下文引用
+                                    // 实现：将@替换为文件引用标签，如 @CLAUDE.md
+                                    // ============================================================================
+                                    
+                                    // 找到最后一个@的位置
+                                    val atPosition = textValue.text.lastIndexOf('@')
+                                    if (atPosition >= 0) {
+                                        // 替换@为文件引用
+                                        val newText = textValue.text.substring(0, atPosition) + 
+                                                     "@${suggestion.title} " + 
+                                                     textValue.text.substring(atPosition + 1)
+                                        val newCursorPos = atPosition + suggestion.title.length + 2 // @文件名 + 空格
+                                        
+                                        textValue = TextFieldValue(
+                                            text = newText,
+                                            selection = TextRange(newCursorPos)
+                                        )
+                                        onTextChange(newText)
+                                        
+                                        // 同时添加到上下文中（用于实际处理）
+                                        val contextRef = ContextReference.FileReference(suggestion.title, null, null)
+                                        onContextAdd(contextRef)
+                                    }
+                                    
+                                    showContextMenu = false
+                                },
+                                onDismiss = { handleKeyboardAction(KeyboardAction.CloseContextMenu) }
+                            )
                         }
                     }
                 }
@@ -821,7 +912,8 @@ data class MockContextSuggestion(
 )
 
 /**
- * 上下文菜单 - 深色主题版本
+ * 文件搜索弹窗 - 替代原来的上下文菜单
+ * 用户需求：一旦进入上下选择，就弹出一个搜索列表进行搜索，回车选中后在输入框中记录该上下文引用
  */
 @Composable
 private fun ContextMenu(
@@ -829,16 +921,124 @@ private fun ContextMenu(
     onSelect: (MockContextSuggestion) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedIndex by remember { mutableIntStateOf(0) }
+    val focusRequester = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    
+    // 过滤后的文件列表
+    val filteredSuggestions = remember(searchQuery) {
+        if (searchQuery.isBlank()) {
+            suggestions
+        } else {
+            suggestions.filter { 
+                it.title.contains(searchQuery, ignoreCase = true) || 
+                it.subtitle?.contains(searchQuery, ignoreCase = true) == true 
+            }
+        }
+    }
+    
+    // 确保选中索引在有效范围内
+    LaunchedEffect(filteredSuggestions.size) {
+        selectedIndex = selectedIndex.coerceIn(0, (filteredSuggestions.size - 1).coerceAtLeast(0))
+    }
+    
+    // 请求搜索框焦点
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+    
     Column(
         modifier = Modifier
-            .widthIn(min = 240.dp)
+            .width(400.dp)
+            .heightIn(max = 300.dp)
             .background(JewelTheme.globalColors.panelBackground, RoundedCornerShape(8.dp))
             .border(1.dp, JewelTheme.globalColors.borders.normal, RoundedCornerShape(8.dp))
-            .padding(4.dp)
+            .padding(8.dp)
     ) {
-        if (suggestions.isEmpty()) {
+        // 搜索输入框
+        BasicTextField(
+            value = searchQuery,
+            onValueChange = { 
+                searchQuery = it
+                selectedIndex = 0 // 重置选择到第一项
+            },
+            textStyle = TextStyle(
+                color = JewelTheme.globalColors.text.normal,
+                fontSize = 13.sp
+            ),
+            cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(focusRequester)
+                .background(
+                    JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f),
+                    RoundedCornerShape(6.dp)
+                )
+                .border(1.dp, JewelTheme.globalColors.borders.normal, RoundedCornerShape(6.dp))
+                .padding(8.dp)
+                // ============================================================================
+                // 【重要】文件搜索弹窗键盘事件处理 - 请勿随意修改！！！
+                // ============================================================================
+                // 使用 onPreviewKeyEvent 确保最高优先级，避免被主输入框拦截
+                // 注意：主输入框的 onPreviewKeyEvent 会检查 showContextMenu 状态，
+                //      如果为true则不处理任何键盘事件，完全交给这里处理
+                // ============================================================================
+                .onPreviewKeyEvent { event ->
+                    println("DEBUG: File search dialog key event - key: ${event.key}, type: ${event.type}")
+                    when {
+                        // 处理方向键导航
+                        event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown -> {
+                            selectedIndex = (selectedIndex + 1).coerceAtMost(filteredSuggestions.size - 1)
+                            println("DEBUG: Navigation down, selectedIndex: $selectedIndex")
+                            true
+                        }
+                        event.key == Key.DirectionUp && event.type == KeyEventType.KeyDown -> {
+                            selectedIndex = (selectedIndex - 1).coerceAtLeast(0)
+                            println("DEBUG: Navigation up, selectedIndex: $selectedIndex")
+                            true
+                        }
+                        // 处理回车选择
+                        event.key == Key.Enter && event.type == KeyEventType.KeyDown -> {
+                            println("DEBUG: Enter pressed in file search, selectedIndex: $selectedIndex, listSize: ${filteredSuggestions.size}")
+                            if (filteredSuggestions.isNotEmpty() && selectedIndex < filteredSuggestions.size) {
+                                println("DEBUG: Selecting file: ${filteredSuggestions[selectedIndex].title}")
+                                onSelect(filteredSuggestions[selectedIndex])
+                                true
+                            } else {
+                                println("DEBUG: No valid selection")
+                                false
+                            }
+                        }
+                        // 处理Escape取消
+                        event.key == Key.Escape && event.type == KeyEventType.KeyDown -> {
+                            println("DEBUG: Escape pressed, dismissing file search")
+                            onDismiss()
+                            true
+                        }
+                        else -> false
+                    }
+                },
+            decorationBox = { innerTextField ->
+                if (searchQuery.isEmpty()) {
+                    Text(
+                        "搜索文件...",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            color = JewelTheme.globalColors.text.disabled,
+                            fontSize = 13.sp
+                        )
+                    )
+                }
+                innerTextField()
+            }
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // 文件列表
+        if (filteredSuggestions.isEmpty()) {
             Text(
-                "没有找到匹配项",
+                "没有找到匹配的文件",
                 style = JewelTheme.defaultTextStyle.copy(
                     color = JewelTheme.globalColors.text.disabled,
                     fontSize = 12.sp
@@ -846,34 +1046,57 @@ private fun ContextMenu(
                 modifier = Modifier.padding(8.dp)
             )
         } else {
-            suggestions.forEach { suggestion ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelect(suggestion) }
-                        .background(Color.Transparent, RoundedCornerShape(4.dp))
-                        .padding(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    // 图标
-                    Text(
-                        suggestion.icon,
-                        style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
-                    )
-                    
-                    // 内容
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            suggestion.title,
-                            style = JewelTheme.defaultTextStyle.copy(
-                                color = JewelTheme.globalColors.text.normal,
-                                fontSize = 12.sp
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                itemsIndexed(filteredSuggestions) { index, suggestion ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(suggestion) }
+                            .background(
+                                if (index == selectedIndex) 
+                                    JewelTheme.globalColors.borders.focused.copy(alpha = 0.3f)
+                                else 
+                                    Color.Transparent,
+                                RoundedCornerShape(4.dp)
                             )
+                            .padding(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // 文件图标
+                        Text(
+                            suggestion.icon,
+                            style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
                         )
-                        suggestion.subtitle?.let {
+                        
+                        // 文件信息
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                it,
+                                suggestion.title,
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    color = JewelTheme.globalColors.text.normal,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (index == selectedIndex) FontWeight.Medium else FontWeight.Normal
+                                )
+                            )
+                            suggestion.subtitle?.let {
+                                Text(
+                                    it,
+                                    style = JewelTheme.defaultTextStyle.copy(
+                                        color = JewelTheme.globalColors.text.disabled,
+                                        fontSize = 11.sp
+                                    )
+                                )
+                            }
+                        }
+                        
+                        // 选中指示器
+                        if (index == selectedIndex) {
+                            Text(
+                                "↵",
                                 style = JewelTheme.defaultTextStyle.copy(
                                     color = JewelTheme.globalColors.text.disabled,
                                     fontSize = 10.sp
@@ -884,31 +1107,56 @@ private fun ContextMenu(
                 }
             }
         }
+        
+        // 底部提示
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            "↑↓ 导航  ↵ 选择  Esc 取消",
+            style = JewelTheme.defaultTextStyle.copy(
+                color = JewelTheme.globalColors.text.disabled,
+                fontSize = 10.sp
+            ),
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
     }
 }
 
 /**
- * 模拟加载上下文建议
+ * 模拟加载上下文建议 - 主要支持文件选择
+ * 用户需求：目前支持 file 就行了
  */
 private suspend fun loadMockContextSuggestions(query: String): List<MockContextSuggestion> {
     // 模拟异步加载
     kotlinx.coroutines.delay(100)
     
+    // 主要提供文件选择选项，基于当前项目结构
     val allSuggestions = listOf(
-        MockContextSuggestion("📄", "example.kt", "/path/to/example.kt"),
-        MockContextSuggestion("📄", "test.java", "/path/to/test.java"),
-        MockContextSuggestion("📄", "readme.md", "/path/to/readme.md"),
-        MockContextSuggestion("🔷", "MyClass", "CLASS"),
-        MockContextSuggestion("🔷", "myFunction", "FUNCTION"),
-        MockContextSuggestion("🔷", "variable", "VARIABLE"),
-        MockContextSuggestion("💻", "终端输出", "最近的命令"),
-        MockContextSuggestion("📁", "工作区", "当前目录"),
-        MockContextSuggestion("🔀", "Git状态", "未提交的更改")
+        // 核心组件文件
+        MockContextSuggestion("📄", "EnhancedSmartInputArea.kt", "toolwindow/src/.../components/"),
+        MockContextSuggestion("📄", "JewelChatApp.kt", "toolwindow/src/.../jewel/"),
+        MockContextSuggestion("📄", "JewelConversationView.kt", "toolwindow/src/.../jewel/"),
+        MockContextSuggestion("📄", "ClaudeCliWrapper.kt", "cli-wrapper/src/.../sdk/"),
+        
+        // 配置文件
+        MockContextSuggestion("📄", "build.gradle.kts", "根目录构建配置"),
+        MockContextSuggestion("📄", "plugin.xml", "plugin/src/.../META-INF/"),
+        MockContextSuggestion("📄", "README.md", "项目说明文档"),
+        
+        // 测试文件
+        MockContextSuggestion("📄", "JewelChatTestApp.kt", "toolwindow-test/src/.../test/"),
+        MockContextSuggestion("📄", "ClaudeCliWrapperTest.kt", "cli-wrapper/src/.../test/"),
+        
+        // 其他选项（次要）
+        MockContextSuggestion("📁", "浏览文件", "打开文件选择器"),
+        MockContextSuggestion("🔍", "搜索文件", "按名称搜索文件"),
+        MockContextSuggestion("📋", "当前文件", "添加当前打开的文件")
     )
     
     return if (query.isBlank()) {
+        // 无查询时显示所有建议，文件优先
         allSuggestions
     } else {
+        // 有查询时按文件名和路径过滤
         allSuggestions.filter { 
             it.title.contains(query, ignoreCase = true) || 
             it.subtitle?.contains(query, ignoreCase = true) == true 

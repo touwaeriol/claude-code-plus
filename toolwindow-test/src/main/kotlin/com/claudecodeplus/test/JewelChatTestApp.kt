@@ -48,8 +48,8 @@ fun main() = application {
             // 使用 toolwindow 模块中的完整聊天应用组件
             // 这里不包含任何业务逻辑，只是简单地使用现成的组件
             JewelChatApp(
-                cliWrapper = cliWrapper,
-                workingDirectory = workingDirectory,
+                    cliWrapper = cliWrapper,
+                    workingDirectory = workingDirectory,
                 themeProvider = themeProvider,
                 showToolbar = true, // 测试应用显示工具栏用于主题切换
                 onThemeChange = { newTheme ->
@@ -59,4 +59,4 @@ fun main() = application {
             )
         }
     }
-} 
+}
