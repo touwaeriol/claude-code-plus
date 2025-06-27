@@ -1,3 +1,32 @@
+/*
+ * EnhancedSmartInputArea.kt
+ * 
+ * 智能输入框组件 - 包含复杂的键盘事件处理逻辑
+ * 
+ * 关键问题说明：
+ * ===============
+ * 
+ * 1. 键盘事件处理挑战：
+ *    - Compose BasicTextField 默认不支持 Enter 发送 + Shift+Enter 换行的组合
+ *    - 事件处理优先级复杂，容易导致事件冲突或重复处理
+ *    - 多行输入框的默认行为与聊天输入框需求不匹配
+ * 
+ * 2. 已解决的问题：
+ *    - 使用 onPreviewKeyEvent 确保事件优先级正确
+ *    - 手动实现 Shift+Enter 换行逻辑，包括光标定位
+ *    - 正确的事件消费策略，避免重复触发
+ * 
+ * 3. 重要提醒：
+ *    - 请勿随意修改键盘事件处理逻辑
+ *    - 修改前请先理解现有实现的技术背景
+ *    - 任何修改都需要完整测试 Enter 和 Shift+Enter 行为
+ * 
+ * 测试要求：
+ * - Enter 键：发送消息（文本非空时）
+ * - Shift+Enter：插入换行符并正确定位光标
+ * - 生成期间：Enter 应该换行而不是发送
+ */
+
 package com.claudecodeplus.ui.jewel.components
 
 import androidx.compose.animation.core.*
@@ -519,6 +548,24 @@ fun EnhancedSmartInputArea(
                         modifier = Modifier
                             .fillMaxSize()
                             .focusRequester(focusRequester)
+                            /*
+                             * 键盘事件处理说明 - 请勿随意修改此处逻辑！
+                             * 
+                             * 问题背景：
+                             * 1. 用户期望：Enter键发送消息，Shift+Enter换行
+                             * 2. BasicTextField默认行为：Enter键换行，无法区分Shift状态
+                             * 3. 事件优先级问题：onKeyEvent优先级低，系统处理在前
+                             * 
+                             * 解决方案：
+                             * 1. 使用onPreviewKeyEvent而非onKeyEvent - 确保在系统处理前拦截
+                             * 2. 手动处理Shift+Enter - BasicTextField不支持自动Shift+Enter换行
+                             * 3. 消费正确的事件 - 防止重复处理或误触发
+                             * 
+                             * 测试验证：
+                             * - Enter键能正确发送消息（文本非空时）
+                             * - Shift+Enter能正确插入换行符并定位光标
+                             * - 不会出现事件重复处理或冲突
+                             */
                             .onPreviewKeyEvent { event ->
                                 println("DEBUG: Key event received - key: ${event.key}, type: ${event.type}, shift: ${event.isShiftPressed}")
                                 when {
@@ -535,10 +582,19 @@ fun EnhancedSmartInputArea(
                                     }
                                     
                                     // 处理Enter键 - 根据Shift状态决定行为
+                                    // 注意：只处理KeyDown事件，避免KeyUp重复触发
                                     event.key == Key.Enter && event.type == KeyEventType.KeyDown -> {
                                         if (event.isShiftPressed) {
                                             println("DEBUG: Shift+Enter pressed - manually inserting newline")
-                                            // 手动插入换行符
+                                            /*
+                                             * 手动换行处理 - 必须手动实现的原因：
+                                             * BasicTextField的多行模式下，即使返回false让系统处理Shift+Enter，
+                                             * 系统也不会自动插入换行符。因此必须手动处理：
+                                             * 1. 获取当前光标位置
+                                             * 2. 在光标位置插入\n字符
+                                             * 3. 更新光标到换行符后的位置
+                                             * 4. 消费事件防止系统进一步处理
+                                             */
                                             val selection = textValue.selection
                                             val newText = textValue.text.substring(0, selection.start) + 
                                                          "\n" + 
