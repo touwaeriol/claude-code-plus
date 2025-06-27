@@ -519,7 +519,7 @@ fun EnhancedSmartInputArea(
                         modifier = Modifier
                             .fillMaxSize()
                             .focusRequester(focusRequester)
-                            .onKeyEvent { event ->
+                            .onPreviewKeyEvent { event ->
                                 println("DEBUG: Key event received - key: ${event.key}, type: ${event.type}, shift: ${event.isShiftPressed}")
                                 when {
                                     // 处理Escape键 - 取消生成
@@ -534,27 +534,34 @@ fun EnhancedSmartInputArea(
                                         }
                                     }
                                     
-                                    // 只处理单独Enter键的KeyDown事件用于发送
-                                    event.key == Key.Enter && !event.isShiftPressed && event.type == KeyEventType.KeyDown -> {
-                                        println("DEBUG: Enter key pressed (no shift)")
-                                        // 生成期间不允许发送新消息
-                                        if (isGenerating) {
-                                            println("DEBUG: Currently generating, treating as newline")
-                                            false // 让系统处理换行
-                                        } else if (textValue.text.isNotBlank() && enabled && !showContextMenu) {
-                                            println("DEBUG: Sending message")
-                                            handleKeyboardAction(KeyboardAction.SendMessage)
-                                            true // 消费事件，阻止默认换行
+                                    // 处理Enter键 - 根据Shift状态决定行为
+                                    event.key == Key.Enter && event.type == KeyEventType.KeyDown -> {
+                                        if (event.isShiftPressed) {
+                                            println("DEBUG: Shift+Enter pressed - manually inserting newline")
+                                            // 手动插入换行符
+                                            val selection = textValue.selection
+                                            val newText = textValue.text.substring(0, selection.start) + 
+                                                         "\n" + 
+                                                         textValue.text.substring(selection.end)
+                                            val newSelection = TextRange(selection.start + 1)
+                                            textValue = TextFieldValue(newText, newSelection)
+                                            onTextChange(newText)
+                                            true // 消费事件，防止系统处理
                                         } else {
-                                            println("DEBUG: Text blank or disabled, treating as newline")
-                                            false // 让系统处理换行
+                                            println("DEBUG: Enter key pressed (no shift)")
+                                            // 生成期间不允许发送新消息
+                                            if (isGenerating) {
+                                                println("DEBUG: Currently generating, treating as newline")
+                                                false // 让系统处理换行
+                                            } else if (textValue.text.isNotBlank() && enabled && !showContextMenu) {
+                                                println("DEBUG: Sending message")
+                                                handleKeyboardAction(KeyboardAction.SendMessage)
+                                                true // 消费事件，阻止默认换行
+                                            } else {
+                                                println("DEBUG: Text blank or disabled, treating as newline")
+                                                false // 让系统处理换行
+                                            }
                                         }
-                                    }
-                                    
-                                    // Shift+Enter - 换行
-                                    event.key == Key.Enter && event.isShiftPressed -> {
-                                        println("DEBUG: Shift+Enter pressed - allowing newline")
-                                        false // 让系统处理换行
                                     }
                                     
                                     else -> {
