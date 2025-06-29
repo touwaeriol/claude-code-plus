@@ -38,19 +38,76 @@ class ClaudeCliWrapper {
     // 存储当前运行的进程，用于终止响应
     private val currentProcess = AtomicReference<Process?>(null)
     
+    /**
+     * Claude CLI 查询选项
+     * 支持 Claude CLI 的所有参数，默认配置适合开发环境使用
+     */
     data class QueryOptions(
+        // 模型配置
+        /** 模型名称，如 'sonnet', 'opus' 或完整模型名 */
         val model: String? = null,
+        
+        /** 自动回退模型，当主模型过载时使用 */
+        val fallbackModel: String? = null,
+        
+        // 对话控制
+        /** 最大对话轮数 */
         val maxTurns: Int? = null,
+        
+        /** 自定义系统提示词（完全替换默认提示词） */
         val customSystemPrompt: String? = null,
+        
+        /** 追加系统提示词（在默认提示词后添加） */
         val appendSystemPrompt: String? = null,
-        val permissionMode: String = "default",  // "default" 正常权限检查，"skip" 跳过所有权限检查
-        val allowedTools: List<String> = emptyList(),
-        val disallowedTools: List<String> = emptyList(),
-        val mcpServers: Map<String, Any>? = null,
-        val cwd: String? = null,
+        
+        // 会话管理
+        /** 是否继续最近的对话 */
         val continueConversation: Boolean = false,
+        
+        /** 恢复指定会话ID的对话 */
         val resume: String? = null,
-        val fallbackModel: String? = null
+        
+        // 权限控制
+        /** 
+         * 权限模式：
+         * - "default": 正常权限检查（默认值）
+         * - "bypassPermissions": 跳过所有权限检查
+         * - "acceptEdits": 自动接受编辑操作
+         * - "plan": 计划模式
+         */
+        val permissionMode: String = "default",
+        
+        /** 权限提示工具名称 */
+        val permissionPromptToolName: String? = null,
+        
+        // 工具控制
+        /** 允许使用的工具列表，如 ["Bash(git:*)", "Edit"] */
+        val allowedTools: List<String> = emptyList(),
+        
+        /** 禁止使用的工具列表 */
+        val disallowedTools: List<String> = emptyList(),
+        
+        // MCP 服务器配置
+        /** MCP 服务器配置映射 */
+        val mcpServers: Map<String, Any>? = null,
+        
+        // 执行环境
+        /** 工作目录 */
+        val cwd: String? = null,
+        
+        /** 额外允许工具访问的目录列表 */
+        val addDirs: List<String> = emptyList(),
+        
+        // 输出控制
+        /** 是否启用调试模式 */
+        val debug: Boolean = false,
+        
+        /** 是否覆盖配置文件中的verbose设置 */
+        val verbose: Boolean? = null,
+        
+        // IDE 集成
+        /** 是否自动连接到IDE */
+        val autoConnectIde: Boolean = false
     )
     
     /**
@@ -62,27 +119,57 @@ class ClaudeCliWrapper {
     fun query(prompt: String, options: QueryOptions = QueryOptions()): Flow<SDKMessage> = flow {
         val args = mutableListOf<String>()
         
-        // 基础参数
-        args.addAll(listOf("--output-format", "stream-json", "--verbose"))
+        // 核心参数（必须在前面）
+        args.addAll(listOf("--output-format", "stream-json", "--dangerously-skip-permissions"))
         
-        // 可选参数
+        // 调试和verbose控制
+        if (options.debug) {
+            args.add("--debug")
+        }
+        
+        options.verbose?.let {
+            if (it) args.add("--verbose")
+        } ?: run {
+            // 默认启用verbose（stream-json需要）
+            args.add("--verbose")
+        }
+        
+        // 模型配置
+        options.model?.let { args.addAll(listOf("--model", it)) }
+        options.fallbackModel?.let {
+            if (options.model == it) {
+                throw IllegalArgumentException("Fallback model cannot be the same as the main model")
+            }
+            args.addAll(listOf("--fallback-model", it))
+        }
+        
+        // 系统提示词配置
         options.customSystemPrompt?.let { args.addAll(listOf("--system-prompt", it)) }
         options.appendSystemPrompt?.let { args.addAll(listOf("--append-system-prompt", it)) }
-        options.maxTurns?.let { args.addAll(listOf("--max-turns", it.toString())) }
-        options.model?.let { args.addAll(listOf("--model", it)) }
         
-        // 会话管理：resume 和 continue 是互斥的
+        // 对话控制
+        options.maxTurns?.let { args.addAll(listOf("--max-turns", it.toString())) }
+        
+        // 会话管理（resume 和 continue 是互斥的）
         when {
             options.resume != null -> {
-                // 恢复特定会话
                 args.addAll(listOf("--resume", options.resume))
             }
             options.continueConversation -> {
-                // 继续当前会话
                 args.add("--continue")
             }
         }
         
+        // 权限控制（注意：默认已添加 --dangerously-skip-permissions，但如果指定了其他权限模式则覆盖）
+        if (options.permissionMode != "default") {
+            args.addAll(listOf("--permission-mode", options.permissionMode))
+        }
+        
+        options.permissionPromptToolName?.let {
+            args.addAll(listOf("--permission-prompt-tool", it))
+        }
+        
+        // 工具控制
         if (options.allowedTools.isNotEmpty()) {
             args.addAll(listOf("--allowedTools", options.allowedTools.joinToString(",")))
         }
@@ -91,27 +178,22 @@ class ClaudeCliWrapper {
             args.addAll(listOf("--disallowedTools", options.disallowedTools.joinToString(",")))
         }
         
+        // MCP 服务器配置
         options.mcpServers?.let {
             args.addAll(listOf("--mcp-config", objectMapper.writeValueAsString(mapOf("mcpServers" to it))))
         }
         
-        // 权限控制
-        // Claude CLI 使用 --dangerously-skip-permissions 来跳过权限检查
-        // 根据 permissionMode 值来决定是否添加该参数
-        if (options.permissionMode == "skip") {
-            args.add("--dangerously-skip-permissions")
-        }
-        // 注意：Claude CLI 当前不支持细粒度的权限模式控制
-        // 只能通过 allowedTools 和 disallowedTools 来控制工具权限
-        
-        options.fallbackModel?.let {
-            if (options.model == it) {
-                throw IllegalArgumentException("Fallback model cannot be the same as the main model")
-            }
-            args.addAll(listOf("--fallback-model", it))
+        // 目录权限
+        if (options.addDirs.isNotEmpty()) {
+            args.addAll(listOf("--add-dir", *options.addDirs.toTypedArray()))
         }
         
-        // 添加提示词
+        // IDE 集成
+        if (options.autoConnectIde) {
+            args.add("--ide")
+        }
+        
+        // 提示词（必须在最后）
         if (prompt.isBlank()) {
             throw IllegalArgumentException("Prompt is required")
         }
@@ -154,8 +236,16 @@ class ClaudeCliWrapper {
                         
                         if (line.trim().isNotEmpty()) {
                             try {
+                                // 清理ANSI序列并记录日志
+                                val cleanLine = AnsiProcessor.cleanAnsiSequences(line)
+                                
+                                // 跳过空行和非JSON行
+                                if (cleanLine.trim().isEmpty() || !cleanLine.trim().startsWith("{")) {
+                                    return@forEach
+                                }
+                                
                                 // 解析 Claude CLI 的 JSON 输出
-                                val jsonNode = objectMapper.readTree(line)
+                                val jsonNode = objectMapper.readTree(cleanLine)
                                 val type = jsonNode.get("type")?.asText()
                                 
                                 when (type) {

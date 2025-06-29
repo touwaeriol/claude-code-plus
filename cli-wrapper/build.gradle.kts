@@ -17,6 +17,9 @@ dependencies {
     // 高性能缓存
     implementation("com.github.ben-manes.caffeine:caffeine:${rootProject.extra["caffeineVersion"]}")
     
+    // ANSI 处理
+    implementation("org.fusesource.jansi:jansi:2.4.1")
+    
     // 测试依赖
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:1.13.8")
