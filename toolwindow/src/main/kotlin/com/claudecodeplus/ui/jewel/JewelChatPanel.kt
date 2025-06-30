@@ -96,6 +96,7 @@ class JewelChatPanel(
         var isGenerating by remember { mutableStateOf(false) }
         var currentSessionId by remember { mutableStateOf<String?>(null) }
         var currentJob by remember { mutableStateOf<Job?>(null) }
+        var selectedModel by remember { mutableStateOf(AiModel.SONNET) }
         
         val scope = rememberCoroutineScope()
         
@@ -120,6 +121,7 @@ class JewelChatPanel(
                         scope = scope,
                         inputText = inputText,
                         contexts = contexts,
+                        selectedModel = selectedModel,
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
                         currentSessionId = currentSessionId,
@@ -143,7 +145,18 @@ class JewelChatPanel(
             onContextRemove = { context ->
                 contexts = contexts - context
             },
-            isGenerating = isGenerating
+            isGenerating = isGenerating,
+            selectedModel = selectedModel,
+            onModelChange = { selectedModel = it },
+            onClearChat = { 
+                messages = listOf(
+                    EnhancedMessage(
+                        role = MessageRole.ASSISTANT,
+                        content = "聊天记录已清空。有什么可以帮助您的吗？",
+                        timestamp = System.currentTimeMillis()
+                    )
+                )
+            }
         )
     }
     
@@ -154,6 +167,7 @@ class JewelChatPanel(
         scope: CoroutineScope,
         inputText: String,
         contexts: List<ContextReference>,
+        selectedModel: AiModel,
         cliWrapper: ClaudeCliWrapper,
         workingDirectory: String,
         currentSessionId: String?,
@@ -201,9 +215,9 @@ class JewelChatPanel(
                 println("DEBUG: Sending message to Claude CLI: $messageWithContext")
                 println("DEBUG: Working directory: $workingDirectory")
                 
-                // 调用 CLI
+                // 调用 CLI  
                 val options = ClaudeCliWrapper.QueryOptions(
-                    model = "sonnet", // 默认使用 Sonnet 模型
+                    model = selectedModel.cliName, // 使用选定的模型
                     cwd = workingDirectory,
                     resume = currentSessionId
                 )

@@ -6,9 +6,8 @@ import java.util.UUID
  * AI 模型枚举
  */
 enum class AiModel(val displayName: String, val cliName: String, val description: String) {
-    OPUS("Claude 4 Opus", "claude-opus-4-20250514", "深度推理，复杂任务"),
-    SONNET("Claude 4 Sonnet", "claude-3-5-sonnet-20241022", "平衡性能，日常编码"),
-    SONNET_35("Claude 3.5 Sonnet", "claude-3-5-sonnet-20241022", "快速响应，简单任务")
+    OPUS("Claude 4 Opus", "opus", "深度推理，复杂任务"),
+    SONNET("Claude 4 Sonnet", "sonnet", "平衡性能，日常编码")
 }
 
 /**

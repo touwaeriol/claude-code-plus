@@ -16,7 +16,6 @@ import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.Orientation
 import org.jetbrains.jewel.ui.component.VerticallyScrollableContainer
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.LocalContentColor
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -36,6 +35,9 @@ fun JewelConversationView(
     onContextAdd: (ContextReference) -> Unit = {},
     onContextRemove: (ContextReference) -> Unit = {},
     isGenerating: Boolean = false,
+    selectedModel: AiModel = AiModel.SONNET,
+    onModelChange: (AiModel) -> Unit = {},
+    onClearChat: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -43,6 +45,16 @@ fun JewelConversationView(
             .fillMaxSize()
             .background(JewelTheme.globalColors.panelBackground)
     ) {
+        // 聊天头部工具栏
+        ChatHeader(
+            onClearChat = onClearChat
+        )
+        
+        Divider(
+            orientation = Orientation.Horizontal,
+            modifier = Modifier.height(1.dp)
+        )
+        
         // 消息列表区域 - 使用 Jewel 的滚动容器
         Box(
             modifier = Modifier
@@ -89,6 +101,8 @@ fun JewelConversationView(
                 onContextRemove = onContextRemove,
                 isGenerating = isGenerating,
                 enabled = true,
+                selectedModel = selectedModel,
+                onModelChange = onModelChange,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -330,6 +344,38 @@ private fun buildToolCallDescription(toolCall: ToolCall): String {
             "网络搜索 \"$query${if (query.length > 20) "..." else ""}\""
         }
         else -> toolCall.name
+    }
+}
+
+/**
+ * 聊天头部工具栏
+ */
+@Composable
+private fun ChatHeader(
+    onClearChat: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(JewelTheme.globalColors.panelBackground)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            "Claude Assistant",
+            style = org.jetbrains.jewel.foundation.theme.JewelTheme.defaultTextStyle.copy(
+                fontSize = 16.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            )
+        )
+        
+        DefaultButton(
+            onClick = onClearChat
+        ) {
+            Text("清空对话")
+        }
     }
 }
 

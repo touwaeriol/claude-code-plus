@@ -32,9 +32,8 @@ fun ModelSelector(
             onClick = { 
                 // 简单的模型切换逻辑
                 val nextModel = when (currentModel) {
-                    AiModel.CLAUDE_35_SONNET -> AiModel.CLAUDE_35_HAIKU
-                    AiModel.CLAUDE_35_HAIKU -> AiModel.CLAUDE_35_SONNET
-                    else -> AiModel.CLAUDE_35_SONNET
+                    AiModel.SONNET -> AiModel.OPUS
+                    AiModel.OPUS -> AiModel.SONNET
                 }
                 onModelChange(nextModel)
             },
