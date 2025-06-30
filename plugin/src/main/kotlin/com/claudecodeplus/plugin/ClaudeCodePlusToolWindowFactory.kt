@@ -10,8 +10,7 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.sdk.OptimizedSessionManager
-import com.claudecodeplus.ui.redesign.EnhancedConversationView
-import com.claudecodeplus.ui.redesign.EnhancedConversationPanel
+import com.claudecodeplus.ui.jewel.JewelChatPanel
 import com.claudecodeplus.idea.IdeaProjectService
 import com.claudecodeplus.idea.IdeaFileSearchService
 import com.claudecodeplus.idea.IdeaContextProvider
@@ -36,12 +35,10 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         val projectService = IdeaProjectServiceAdapter(IdeaProjectService(project))
         val contextProvider = IdeaContextProvider(project)
         
-        // 创建增强的对话面板
-        val conversationPanel = EnhancedConversationPanel(
-            projectService = projectService,
-            contextProvider = contextProvider,
+        // 创建 Jewel 聊天面板  
+        val conversationPanel = JewelChatPanel(
             cliWrapper = cliWrapper,
-            isDarkTheme = true // TODO: 从 IDE 主题获取
+            workingDirectory = project.basePath ?: System.getProperty("user.dir")
         )
         
         val content = contentFactory.createContent(conversationPanel, "", false)
@@ -51,7 +48,6 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         toolWindow.addContentManagerListener(object : com.intellij.ui.content.ContentManagerListener {
             override fun contentRemoved(event: com.intellij.ui.content.ContentManagerEvent) {
                 // 清理资源
-                conversationPanel.cleanup()
                 sessionManager.cleanup()
             }
         })

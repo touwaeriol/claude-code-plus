@@ -4,7 +4,8 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 import org.jetbrains.jewel.ui.ComponentStyling
-import com.claudecodeplus.test.JewelChatTestApp
+import com.claudecodeplus.ui.jewel.JewelChatApp
+import com.claudecodeplus.sdk.ClaudeCliWrapper
 
 fun main() = application {
     val windowState = rememberWindowState(
@@ -18,7 +19,10 @@ fun main() = application {
         state = windowState
     ) {
         IntUiTheme {
-            JewelChatTestApp()
+            JewelChatApp(
+                cliWrapper = ClaudeCliWrapper(),
+                workingDirectory = System.getProperty("user.dir")
+            )
         }
     }
 } 

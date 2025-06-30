@@ -10,6 +10,10 @@ group = "com.claudecodeplus"
 version = "1.0-SNAPSHOT"
 
 dependencies {
+    // 项目依赖
+    implementation(project(":toolwindow"))
+    implementation(project(":cli-wrapper"))
+    
     // Compose Desktop
     implementation(compose.desktop.currentOs)
     implementation(compose.runtime)
