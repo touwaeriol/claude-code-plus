@@ -2,8 +2,6 @@ package com.claudecodeplus.ui.jewel
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +14,8 @@ import com.claudecodeplus.ui.models.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.Orientation
+import org.jetbrains.jewel.ui.component.VerticallyScrollableContainer
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.LocalContentColor
 import java.text.SimpleDateFormat
 import java.util.*
@@ -23,6 +23,7 @@ import java.util.*
 /**
  * 重新设计的对话视图
  * 集成了模型选择、Markdown 渲染、工具调用显示等功能
+ * 使用 Jewel 组件替代原生 Compose 组件以获得更好的 IntelliJ 集成
  */
 @Composable
 fun JewelConversationView(
@@ -42,29 +43,33 @@ fun JewelConversationView(
             .fillMaxSize()
             .background(JewelTheme.globalColors.panelBackground)
     ) {
-        // 消息列表区域 - 占据剩余空间
+        // 消息列表区域 - 使用 Jewel 的滚动容器
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(16.dp),
-                reverseLayout = false
+            VerticallyScrollableContainer(
+                scrollState = rememberScrollState(),
+                modifier = Modifier.fillMaxSize()
             ) {
-                items(messages) { message ->
-                    MessageBubble(message = message)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    messages.forEach { message ->
+                        MessageBubble(message = message)
+                    }
                 }
             }
         }
         
-        // 分隔线
+        // 分隔线 - 使用 Jewel 的 Divider
         Divider(
-            orientation = org.jetbrains.jewel.ui.Orientation.Horizontal,
-            modifier = Modifier.height(1.dp),
-            color = JewelTheme.globalColors.borders.normal
+            orientation = Orientation.Horizontal,
+            modifier = Modifier.height(1.dp)
         )
         
         // 输入区域 - 使用 EnhancedSmartInputArea
@@ -91,7 +96,7 @@ fun JewelConversationView(
 }
 
 /**
- * 消息气泡组件
+ * 消息气泡组件 - 使用 Jewel Text 组件
  */
 @Composable
 private fun MessageBubble(
@@ -137,18 +142,16 @@ private fun MessageBubble(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
+                                            // 使用 Jewel Text 组件
                                             Text(
                                                 "▌",
-                                                style = JewelTheme.defaultTextStyle.copy(
-                                                    color = Color(0xFF59A869)
-                                                )
+                                                color = Color(0xFF59A869),
+                                                fontSize = 12.sp
                                             )
                                             Text(
                                                 element.status,
-                                                style = JewelTheme.defaultTextStyle.copy(
-                                                    color = JewelTheme.globalColors.text.disabled,
-                                                    fontSize = 12.sp
-                                                )
+                                                color = JewelTheme.globalColors.text.disabled,
+                                                fontSize = 12.sp
                                             )
                                         }
                                     }
@@ -171,7 +174,7 @@ private fun MessageBubble(
                         }
                     }
                     
-                    // 流式状态指示器
+                    // 流式状态指示器 - 使用 Jewel Text
                     if (message.isStreaming) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -179,27 +182,22 @@ private fun MessageBubble(
                         ) {
                             Text(
                                 "▌",
-                                style = JewelTheme.defaultTextStyle.copy(
-                                    color = Color(0xFF59A869)
-                                )
+                                color = Color(0xFF59A869),
+                                fontSize = 12.sp
                             )
                             Text(
                                 "正在生成...",
-                                style = JewelTheme.defaultTextStyle.copy(
-                                    color = JewelTheme.globalColors.text.disabled,
-                                    fontSize = 12.sp
-                                )
+                                color = JewelTheme.globalColors.text.disabled,
+                                fontSize = 12.sp
                             )
                         }
                     }
                     
-                    // 时间戳
+                    // 时间戳 - 使用 Jewel Text
                     Text(
                         SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(message.timestamp)),
-                        style = JewelTheme.defaultTextStyle.copy(
-                            color = JewelTheme.globalColors.text.disabled,
-                            fontSize = 10.sp
-                        )
+                        color = JewelTheme.globalColors.text.disabled,
+                        fontSize = 10.sp
                     )
                 }
             }
@@ -222,13 +220,11 @@ private fun MessageBubble(
                         modifier = Modifier.fillMaxWidth()
                     )
                     
-                    // 时间戳
+                    // 时间戳 - 使用 Jewel Text
                     Text(
                         SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(message.timestamp)),
-                        style = JewelTheme.defaultTextStyle.copy(
-                            color = JewelTheme.globalColors.text.disabled,
-                            fontSize = 10.sp
-                        )
+                        color = JewelTheme.globalColors.text.disabled,
+                        fontSize = 10.sp
                     )
                 }
             }
@@ -237,7 +233,7 @@ private fun MessageBubble(
 }
 
 /**
- * 简洁的工具调用显示 - 类似 Cursor 的样式
+ * 简洁的工具调用显示 - 类似 Cursor 的样式，使用 Jewel Text
  */
 @Composable
 private fun SimpleToolCallDisplay(
@@ -249,7 +245,7 @@ private fun SimpleToolCallDisplay(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具图标
+        // 工具图标 - 使用 Jewel Text
         Text(
             when {
                 toolCall.name.contains("LS", ignoreCase = true) -> "📁"
@@ -263,27 +259,23 @@ private fun SimpleToolCallDisplay(
                 toolCall.name.contains("Git", ignoreCase = true) -> "🔀"
                 else -> "🔧"
             },
-            style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
+            fontSize = 12.sp
         )
         
-        // 工具调用描述
+        // 工具调用描述 - 使用 Jewel Text
         Text(
             buildToolCallDescription(toolCall),
-            style = JewelTheme.defaultTextStyle.copy(
-                color = JewelTheme.globalColors.text.disabled,
-                fontSize = 12.sp
-            )
+            color = JewelTheme.globalColors.text.disabled,
+            fontSize = 12.sp
         )
         
-        // 状态指示
+        // 状态指示 - 使用 Jewel Text
         when (toolCall.status) {
             ToolCallStatus.RUNNING -> {
                 Text(
                     "...",
-                    style = JewelTheme.defaultTextStyle.copy(
-                        color = Color(0xFF3574F0),
-                        fontSize = 12.sp
-                    )
+                    color = Color(0xFF3574F0),
+                    fontSize = 12.sp
                 )
             }
             ToolCallStatus.SUCCESS -> {
@@ -292,10 +284,8 @@ private fun SimpleToolCallDisplay(
             ToolCallStatus.FAILED -> {
                 Text(
                     "失败",
-                    style = JewelTheme.defaultTextStyle.copy(
-                        color = Color(0xFFE55765),
-                        fontSize = 12.sp
-                    )
+                    color = Color(0xFFE55765),
+                    fontSize = 12.sp
                 )
             }
             else -> {}
