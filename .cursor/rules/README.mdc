@@ -1,7 +1,7 @@
 ---
 description: 
 globs: 
-alwaysApply: true
+alwaysApply: false
 ---
 ---
 description: 开发规范和规则概览，确保 Cursor AI 始终能读取并遵循项目规范

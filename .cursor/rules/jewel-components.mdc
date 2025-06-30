@@ -5,6 +5,12 @@ alwaysApply: false
 ---
 # Jewel UI 组件完整使用规范
 
+## 📅 最新更新 (2025-06-30)
+- ✅ **组件列表完整性验证**: 已对比IntelliJ社区版源码，确认所有43个组件均已记录
+- ✅ **TextArea多版本API支持**: 新增TextFieldValue和TextFieldState两种用法
+- ✅ **ComboBox最佳实践**: 推荐使用ListComboBox，提供更简洁的API
+- ✅ **实际源码验证**: 所有示例代码均基于最新IntelliJ社区版实现
+
 ## 📖 快速导航目录
 
 ### 🔍 按功能查找
@@ -150,10 +156,27 @@ TextField(
 
 ### 4. TextArea 组件
 ```kotlin
-var text by remember { mutableStateOf("") }
+// 方式1：使用 TextFieldValue (推荐，更灵活的光标控制)
+var textValue by remember { mutableStateOf(TextFieldValue("")) }
 TextArea(
-    value = text,
-    onValueChange = { text = it },
+    value = textValue,
+    onValueChange = { textValue = it },
+    placeholder = { Text("多行文本输入") },
+    enabled = true,
+    readOnly = false,
+    maxLines = Int.MAX_VALUE,
+    modifier = Modifier
+        .fillMaxWidth()
+        .height(120.dp)
+)
+
+// 方式2：使用 TextFieldState (新版本API)
+val textState = remember { TextFieldState("") }
+TextArea(
+    state = textState,
+    enabled = true,
+    readOnly = false,
+    lineLimits = TextFieldLineLimits.MultiLine(),
     placeholder = { Text("多行文本输入") },
     modifier = Modifier
         .fillMaxWidth()
@@ -215,9 +238,26 @@ Divider(
 
 ### 1. ComboBox 组件
 ```kotlin
-val items = listOf("选项1", "选项2", "选项3")
-var selectedIndex by remember { mutableStateOf(0) }
+// ListComboBox - 推荐方式，更简单直接
+val items = listOf("Kotlin", "Java", "Python", "JavaScript")
+var selectedIndex by remember { mutableIntStateOf(0) }
 
+ListComboBox(
+    items = items,
+    selectedIndex = selectedIndex,
+    onSelectedItemChange = { selectedIndex = it },
+    modifier = Modifier.widthIn(max = 200.dp),
+    itemKeys = { _, item -> item },
+    itemContent = { item, isSelected, isActive ->
+        Text(
+            text = item,
+            color = if (isSelected) JewelTheme.globalColors.borders.focused 
+                   else JewelTheme.globalColors.text.normal
+        )
+    }
+)
+
+// 自定义ComboBox - 复杂场景使用
 ComboBox(
     selectedIndex = selectedIndex,
     onSelectedItemChange = { selectedIndex = it },

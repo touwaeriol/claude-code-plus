@@ -24,7 +24,7 @@
 
 #### ✅ 已完全优化的文件
 
-1. **toolwindow/src/main/kotlin/com/claudecodeplus/ui/jewel/JewelChatView.kt**
+1. **toolwindow/src/main/kotlin/com/claudecodeplus/ui/jewel/JewelConversationView.kt**
    - `LazyColumn` → `VerticallyScrollableContainer`
    - `BasicTextField` → `TextField`
    - `DefaultButton` → `Button`

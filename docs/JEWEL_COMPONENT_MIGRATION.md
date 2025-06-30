@@ -185,7 +185,7 @@ fun OriginalChatView() {
 ### 迁移后（Jewel）:
 ```kotlin
 @Composable
-fun JewelChatView() {
+fun JewelConversationView() {
     Column {
         VerticallyScrollableContainer(rememberScrollState()) {
             Column {

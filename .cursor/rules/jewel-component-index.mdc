@@ -5,6 +5,9 @@ alwaysApply: false
 ---
 # Jewel UI 组件索引目录
 
+## 📅 最新更新 (2025-06-30)
+✅ **完整性验证**: 已对比IntelliJ社区版源码，确认所有43个组件均完整记录，无遗漏
+
 ## 📖 详细规范文档
 当需要开发 UI 组件时，请查阅：**[Jewel 组件完整使用规范](mdc:jewel-components.mdc)**
 
