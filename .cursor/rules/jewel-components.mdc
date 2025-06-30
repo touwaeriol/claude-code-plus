@@ -1,0 +1,673 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Jewel UI 组件完整使用规范
+
+## 📖 快速导航目录
+
+### 🔍 按功能查找
+- [基础文本输入](mdc:#基础文本和输入组件) - Text, TextField, TextArea, InputField
+- [按钮组件](mdc:#按钮组件) - Button, IconButton, IconActionButton等
+- [选择控件](mdc:#选择和输入组件) - Checkbox, RadioButton, ComboBox等  
+- [显示导航](mdc:#显示和导航组件) - Icon, Tabs, Banner, Link等
+- [布局容器](mdc:#布局和容器组件) - ScrollableContainer, Divider等
+- [弹出菜单](mdc:#弹出和菜单组件) - Popup, ContextMenu, Tooltip等
+
+### 🔥 高频组件快速跳转
+- [Text](mdc:#text-组件) - 文本显示
+- [Button](mdc:#button-组件) - 标准按钮
+- [TextField](mdc:#textfield-组件) - 文本输入
+- [Icon](mdc:#icon-组件) - 图标显示
+- [ScrollableContainer](mdc:#scrollablecontainer-组件) - 滚动容器
+- [Divider](mdc:#divider-组件) - 分隔线
+
+### ⚗️ 实验性组件
+- [LazyTree](mdc:#lazytree-组件) - 树形控件 (需要 @ExperimentalJewelApi)
+- [EditableComboBox](mdc:#editablecombobox-组件) - 可编辑下拉框
+- [ListComboBox](mdc:#listcombobox-组件) - 列表下拉框
+
+---
+
+## 快速导入参考
+
+### 基础导入
+```kotlin
+import org.jetbrains.jewel.foundation.theme.JewelTheme
+import org.jetbrains.jewel.ui.component.*
+import org.jetbrains.jewel.ui.component.styling.*
+import org.jetbrains.jewel.ui.theme.*
+import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+```
+
+### 特殊功能导入
+```kotlin
+import org.jetbrains.jewel.foundation.ExperimentalJewelApi
+import org.jetbrains.jewel.foundation.lazy.*
+import org.jetbrains.jewel.ui.painter.PainterHint
+import org.jetbrains.jewel.ui.icon.IconKey
+```
+
+## 组件完整目录
+
+### 1. 基础文本和输入组件
+- **Text** - 基础文本显示
+- **TextField** - 单行文本输入
+- **TextArea** - 多行文本输入
+- **InputField** - 通用输入字段基础类
+
+### 2. 按钮组件
+- **Button** - 标准按钮
+- **IconButton** - 图标按钮
+- **IconActionButton** - 图标操作按钮
+- **ActionButton** - 操作按钮
+- **SelectableIconActionButton** - 可选择图标操作按钮
+- **ToggleableIconActionButton** - 可切换图标操作按钮
+
+### 3. 选择和输入组件
+- **Checkbox** - 复选框
+- **RadioButton** - 单选按钮
+- **ComboBox** - 下拉选择框
+- **EditableComboBox** - 可编辑下拉框
+- **ListComboBox** - 列表形式下拉框
+- **Slider** - 滑块
+
+### 4. 显示和导航组件
+- **Icon** - 图标显示
+- **Tabs** - 标签页
+- **TabStrip** - 标签条
+- **SegmentedControl** - 分段控制器
+- **SegmentedControlButton** - 分段控制按钮
+- **Link** - 链接
+- **Banner** - 横幅提示
+- **InlineBanner** - 内联横幅
+- **Chip** - 标签芯片
+
+### 5. 布局和容器组件
+- **ScrollableContainer** - 可滚动容器
+- **Scrollbar** - 滚动条
+- **SplitLayout** - 分割布局
+- **Divider** - 分隔线
+- **GroupHeader** - 分组标题
+- **SimpleListItem** - 简单列表项
+
+### 6. 列表和树组件
+- **LazyTree** - 延迟加载树组件
+
+### 7. 进度指示器
+- **CircularProgressIndicator** - 圆形进度指示器
+- **LinearProgressBar** - 线性进度条
+
+### 8. 弹出和菜单组件
+- **Popup** - 弹出框基础类
+- **PopupContainer** - 弹出容器
+- **PopupManager** - 弹出管理器
+- **ContextMenu** - 上下文菜单
+- **Menu** - 菜单
+- **MenuManager** - 菜单管理器
+- **Dropdown** - 下拉框基础类
+- **Tooltip** - 工具提示
+
+### 9. 系统和工具组件
+- **Typography** - 排版系统
+
+## 核心组件详细用法
+
+### 1. Text 组件
+```kotlin
+Text(
+    text = "Hello World",
+    style = JewelTheme.defaultTextStyle,
+    color = JewelTheme.contentColor,
+    modifier = Modifier.padding(8.dp)
+)
+```
+
+### 2. Button 组件
+```kotlin
+Button(
+    onClick = { /* 处理点击 */ },
+    modifier = Modifier.padding(8.dp)
+) {
+    Text("点击我")
+}
+```
+
+### 3. TextField 组件
+```kotlin
+var text by remember { mutableStateOf("") }
+TextField(
+    value = text,
+    onValueChange = { text = it },
+    placeholder = { Text("请输入内容") },
+    modifier = Modifier.fillMaxWidth()
+)
+```
+
+### 4. TextArea 组件
+```kotlin
+var text by remember { mutableStateOf("") }
+TextArea(
+    value = text,
+    onValueChange = { text = it },
+    placeholder = { Text("多行文本输入") },
+    modifier = Modifier
+        .fillMaxWidth()
+        .height(120.dp)
+)
+```
+
+### 5. Checkbox 组件
+```kotlin
+var checked by remember { mutableStateOf(false) }
+Checkbox(
+    checked = checked,
+    onCheckedChange = { checked = it },
+    text = "选择项"
+)
+```
+
+### 6. RadioButton 组件
+```kotlin
+var selected by remember { mutableStateOf(false) }
+RadioButton(
+    selected = selected,
+    onClick = { selected = true },
+    text = "单选项"
+)
+```
+
+### 7. Icon 组件
+```kotlin
+Icon(
+    key = IconKey.of("icons/example.svg"),
+    contentDescription = "示例图标",
+    modifier = Modifier.size(16.dp)
+)
+```
+
+### 8. ScrollableContainer 组件
+```kotlin
+ScrollableContainer(
+    modifier = Modifier.height(200.dp)
+) {
+    Column {
+        repeat(50) { index ->
+            Text("项目 $index", modifier = Modifier.padding(8.dp))
+        }
+    }
+}
+```
+
+### 9. Divider 组件
+```kotlin
+Divider(
+    orientation = Orientation.Horizontal,
+    modifier = Modifier.padding(vertical = 8.dp)
+)
+```
+
+## 高级组件
+
+### 1. ComboBox 组件
+```kotlin
+val items = listOf("选项1", "选项2", "选项3")
+var selectedIndex by remember { mutableStateOf(0) }
+
+ComboBox(
+    selectedIndex = selectedIndex,
+    onSelectedItemChange = { selectedIndex = it },
+    modifier = Modifier.fillMaxWidth()
+) {
+    items.forEachIndexed { index, item ->
+        ComboBoxItem(
+            selected = index == selectedIndex,
+            onClick = { selectedIndex = index }
+        ) {
+            Text(item)
+        }
+    }
+}
+```
+
+### 2. EditableComboBox 组件
+```kotlin
+@OptIn(ExperimentalJewelApi::class)
+@Composable
+fun EditableComboBoxExample() {
+    val textFieldState = rememberTextFieldState("初始值")
+    
+    EditableComboBox(
+        textFieldState = textFieldState,
+        modifier = Modifier.fillMaxWidth(),
+        popupContent = {
+            Column {
+                listOf("选项1", "选项2", "选项3").forEach { option ->
+                    Text(
+                        text = option,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { textFieldState.edit { replace(0, length, option) } }
+                            .padding(8.dp)
+                    )
+                }
+            }
+        }
+    )
+}
+```
+
+### 3. ListComboBox 组件
+```kotlin
+@OptIn(ExperimentalJewelApi::class)
+@Composable
+fun ListComboBoxExample() {
+    val items = listOf("Apple", "Banana", "Cherry")
+    var selectedIndex by remember { mutableStateOf(0) }
+    
+    ListComboBox(
+        items = items,
+        selectedIndex = selectedIndex,
+        onSelectedItemChange = { selectedIndex = it },
+        itemKeys = { index, item -> item },
+        modifier = Modifier.fillMaxWidth(),
+        itemContent = { item, isSelected, isActive ->
+            Text(
+                text = item,
+                color = if (isSelected) JewelTheme.selectionColors.content else JewelTheme.contentColor
+            )
+        }
+    )
+}
+```
+
+### 4. Slider 组件
+```kotlin
+var value by remember { mutableStateOf(0.5f) }
+Slider(
+    value = value,
+    onValueChange = { value = it },
+    valueRange = 0f..1f,
+    modifier = Modifier.fillMaxWidth()
+)
+```
+
+### 5. Tabs 组件
+```kotlin
+var selectedTab by remember { mutableStateOf(0) }
+val tabs = listOf("标签1", "标签2", "标签3")
+
+TabStrip {
+    tabs.forEachIndexed { index, title ->
+        Tab(
+            selected = selectedTab == index,
+            onClick = { selectedTab = index }
+        ) {
+            Text(title)
+        }
+    }
+}
+```
+
+### 6. Link 组件
+```kotlin
+Link(
+    text = "点击访问",
+    onClick = { /* 处理链接点击 */ },
+    modifier = Modifier.padding(8.dp)
+)
+```
+
+### 7. Banner 组件
+```kotlin
+Banner(
+    style = BannerStyle.INFO,
+    modifier = Modifier.fillMaxWidth()
+) {
+    Text("这是一个信息横幅")
+}
+```
+
+### 8. Chip 组件
+```kotlin
+var selected by remember { mutableStateOf(false) }
+Chip(
+    selected = selected,
+    onClick = { selected = !selected },
+    label = { Text("标签") }
+)
+```
+
+### 9. SegmentedControl 组件
+```kotlin
+var selectedIndex by remember { mutableStateOf(0) }
+val options = listOf("选项1", "选项2", "选项3")
+
+SegmentedControl {
+    options.forEachIndexed { index, option ->
+        SegmentedControlButton(
+            selected = selectedIndex == index,
+            onClick = { selectedIndex = index }
+        ) {
+            Text(option)
+        }
+    }
+}
+```
+
+### 10. LazyTree 组件
+```kotlin
+@OptIn(ExperimentalJewelApi::class)
+@Composable
+fun TreeExample() {
+    val treeState = rememberSelectableLazyListState()
+    
+    LazyTree(
+        tree = buildTree(),
+        state = treeState,
+        modifier = Modifier.fillMaxSize(),
+        onElementClick = { element -> /* 处理点击 */ },
+        onElementDoubleClick = { element -> /* 处理双击 */ }
+    ) { element ->
+        Text(element.data.toString())
+    }
+}
+```
+
+## 进度指示器
+
+### CircularProgressIndicator
+```kotlin
+// 确定进度
+CircularProgressIndicator(
+    progress = 0.7f,
+    modifier = Modifier.size(32.dp)
+)
+
+// 不确定进度
+CircularProgressIndicator(
+    modifier = Modifier.size(32.dp)
+)
+```
+
+### LinearProgressBar
+```kotlin
+// 确定进度
+LinearProgressBar(
+    progress = 0.5f,
+    modifier = Modifier.fillMaxWidth()
+)
+
+// 不确定进度
+LinearProgressBar(
+    modifier = Modifier.fillMaxWidth()
+)
+```
+
+## 特殊按钮组件
+
+### IconButton
+```kotlin
+IconButton(
+    onClick = { /* 处理点击 */ },
+    modifier = Modifier.size(24.dp)
+) {
+    Icon(IconKey.of("icons/settings.svg"), "设置")
+}
+```
+
+### IconActionButton
+```kotlin
+IconActionButton(
+    key = IconKey.of("icons/play.svg"),
+    contentDescription = "播放",
+    onClick = { /* 处理点击 */ }
+)
+```
+
+### SelectableIconActionButton
+```kotlin
+var selected by remember { mutableStateOf(false) }
+SelectableIconActionButton(
+    key = IconKey.of("icons/bookmark.svg"),
+    contentDescription = "书签",
+    selected = selected,
+    onClick = { selected = !selected }
+)
+```
+
+### ToggleableIconActionButton
+```kotlin
+var toggled by remember { mutableStateOf(false) }
+ToggleableIconActionButton(
+    key = IconKey.of("icons/favorite.svg"),
+    contentDescription = "收藏",
+    selected = toggled,
+    onClick = { toggled = !toggled }
+)
+```
+
+## 布局组件
+
+### SplitLayout
+```kotlin
+SplitLayout(
+    orientation = Orientation.Horizontal,
+    modifier = Modifier.fillMaxSize()
+) {
+    first {
+        Text("左侧面板", Modifier.padding(16.dp))
+    }
+    second {
+        Text("右侧面板", Modifier.padding(16.dp))
+    }
+}
+```
+
+### GroupHeader
+```kotlin
+GroupHeader {
+    Text("分组标题")
+}
+```
+
+### SimpleListItem
+```kotlin
+SimpleListItem(
+    text = "列表项",
+    selected = false,
+    icon = IconKey.of("icons/file.svg"),
+    onClick = { /* 处理点击 */ }
+)
+```
+
+## 弹出和菜单组件
+
+### PopupContainer
+```kotlin
+val popupManager = remember { PopupManager() }
+
+if (popupManager.isPopupVisible.value) {
+    PopupContainer(
+        onDismissRequest = { popupManager.setPopupVisible(false) },
+        horizontalAlignment = Alignment.Start
+    ) {
+        Column(Modifier.padding(8.dp)) {
+            Text("弹出内容")
+            Button(
+                onClick = { popupManager.setPopupVisible(false) }
+            ) {
+                Text("关闭")
+            }
+        }
+    }
+}
+```
+
+### ContextMenu
+```kotlin
+ContextMenu(
+    items = listOf(
+        MenuItem("复制") { /* 复制操作 */ },
+        MenuItem("粘贴") { /* 粘贴操作 */ },
+        MenuItem.Separator,
+        MenuItem("删除") { /* 删除操作 */ }
+    )
+)
+```
+
+### Tooltip
+```kotlin
+Tooltip(
+    tooltip = { Text("这是一个工具提示") }
+) {
+    Button(onClick = {}) {
+        Text("悬停查看提示")
+    }
+}
+```
+
+## 样式自定义
+
+### 主题访问
+```kotlin
+@Composable
+fun ThemedComponent() {
+    val colors = JewelTheme.defaultTextStyle
+    val buttonStyle = JewelTheme.buttonStyle
+    val textFieldStyle = JewelTheme.textFieldStyle
+    
+    // 使用主题样式
+}
+```
+
+### 自定义样式
+```kotlin
+@Composable
+fun CustomStyledButton() {
+    val customStyle = JewelTheme.buttonStyle.copy(
+        colors = JewelTheme.buttonStyle.colors.copy(
+            background = Color.Blue,
+            content = Color.White
+        )
+    )
+    
+    Button(
+        onClick = {},
+        style = customStyle
+    ) {
+        Text("自定义按钮")
+    }
+}
+```
+
+## 状态管理
+
+### 基本状态
+```kotlin
+@Composable
+fun StatefulComponent() {
+    var value by remember { mutableStateOf("") }
+    var checked by remember { mutableStateOf(false) }
+    var selectedIndex by remember { mutableStateOf(0) }
+    
+    // 使用状态
+}
+```
+
+### 交互源
+```kotlin
+@Composable
+fun ComponentWithInteractionSource() {
+    val interactionSource = remember { MutableInteractionSource() }
+    
+    Button(
+        onClick = {},
+        interactionSource = interactionSource
+    ) {
+        Text("按钮")
+    }
+}
+```
+
+## 最佳实践
+
+### 1. 性能优化
+- 使用 `remember` 缓存计算结果
+- 避免在 Composable 中进行重复计算
+- 合理使用 `LazyColumn` 和 `LazyRow`
+
+### 2. 状态管理
+- 状态提升到合适的层级
+- 使用 `rememberSaveable` 保存重要状态
+- 避免过度嵌套的状态
+
+### 3. 主题适配
+- 始终使用 `JewelTheme` 获取主题色彩
+- 支持暗色和亮色模式切换
+- 遵循 IntelliJ Platform 设计规范
+
+### 4. 无障碍支持
+- 为所有交互元素提供 `contentDescription`
+- 使用语义化的组件结构
+- 支持键盘导航
+
+## 迁移指南
+
+### 从 Material Design 迁移
+```kotlin
+// Material Design
+import androidx.compose.material3.*
+
+// Jewel 等价物
+import org.jetbrains.jewel.ui.component.*
+
+// 替换对照
+MaterialTheme -> JewelTheme
+androidx.compose.material3.Button -> org.jetbrains.jewel.ui.component.Button
+androidx.compose.material3.TextField -> org.jetbrains.jewel.ui.component.TextField
+androidx.compose.material3.Checkbox -> org.jetbrains.jewel.ui.component.Checkbox
+```
+
+### 组件迁移对照表
+| Material Design | Jewel 组件 | 说明 |
+|----------------|------------|------|
+| Button | Button | 功能相同，样式不同 |
+| OutlinedTextField | TextField | 使用 outline 参数 |
+| Checkbox | Checkbox | 基本相同 |
+| RadioButton | RadioButton | 基本相同 |
+| Slider | Slider | 基本相同 |
+| Tab | Tab | 需要配合 TabStrip |
+| Card | 无直接对应 | 使用 Surface 或自定义 |
+| FloatingActionButton | IconActionButton | 样式适配 IntelliJ |
+
+## 常见问题
+
+### Q: 如何处理主题切换？
+A: Jewel 自动跟随 IntelliJ IDEA 的主题设置，无需额外处理。
+
+### Q: 如何自定义组件样式？
+A: 使用对应的 Style 参数，或通过 `JewelTheme` 访问主题色彩。
+
+### Q: 为什么某些组件需要 @ExperimentalJewelApi？
+A: 这些是实验性 API，可能在未来版本中发生变化，使用时需要添加 `@OptIn(ExperimentalJewelApi::class)`。
+
+### Q: 如何处理复杂的状态管理？
+A: 建议使用 ViewModel 或其他状态管理库，将业务逻辑从 UI 层分离。
+
+## 示例项目结构
+```
+src/main/kotlin/
+├── ui/
+│   ├── components/     # 自定义组件
+│   ├── screens/        # 界面组件
+│   ├── theme/          # 主题配置
+│   └── utils/          # UI 工具类
+└── domain/             # 业务逻辑
+```
+
+这个规范涵盖了 Jewel UI 库的所有主要组件和使用方法，为 IntelliJ Platform 插件开发提供完整的 UI 组件解决方案。

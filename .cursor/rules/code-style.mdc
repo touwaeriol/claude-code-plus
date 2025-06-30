@@ -1,0 +1,267 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Kotlin 代码风格和最佳实践 - 当编写 Kotlin 代码时应用
+globs: **/*.kt, **/*.kts
+alwaysApply: false
+---
+
+# 代码风格和最佳实践
+
+## Kotlin 代码风格
+
+### 命名规范
+
+#### 类和接口
+```kotlin
+// ✅ 使用 PascalCase
+class MessageBubble
+interface ClaudeService
+data class EnhancedMessage
+```
+
+#### 函数和变量
+```kotlin
+// ✅ 使用 camelCase
+fun sendMessage()
+val inputText: String
+var isGenerating: Boolean
+```
+
+#### 常量
+```kotlin
+// ✅ 使用 SCREAMING_SNAKE_CASE
+const val MAX_MESSAGE_LENGTH = 1000
+const val DEFAULT_TIMEOUT = 30_000L
+```
+
+### 函数设计
+
+#### Composable 函数
+```kotlin
+// ✅ 推荐的 Composable 函数结构
+@Composable
+fun MessageBubble(
+    message: EnhancedMessage,
+    modifier: Modifier = Modifier, // 稳定参数放在最后
+    onAction: (MessageAction) -> Unit = {} // 可选回调
+) {
+    // 函数体...
+}
+```
+
+#### 参数顺序
+```kotlin
+// ✅ 参数顺序：必需参数 -> 可选参数 -> modifier -> 回调
+@Composable
+fun ChatView(
+    messages: List<Message>, // 必需参数
+    isLoading: Boolean = false, // 可选参数
+    modifier: Modifier = Modifier, // modifier
+    onSend: (String) -> Unit // 回调
+)
+```
+
+### 状态管理
+
+#### 使用 remember 和 mutableStateOf
+```kotlin
+// ✅ 正确的状态管理
+@Composable
+fun InputArea() {
+    var text by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    
+    // 组件内容...
+}
+```
+
+#### 状态提升
+```kotlin
+// ✅ 将状态提升到父组件
+@Composable
+fun ChatScreen() {
+    var messages by remember { mutableStateOf(emptyList<Message>()) }
+    var inputText by remember { mutableStateOf("") }
+    
+    ChatView(
+        messages = messages,
+        inputText = inputText,
+        onInputChange = { inputText = it },
+        onSend = { message -> 
+            messages = messages + message
+            inputText = ""
+        }
+    )
+}
+```
+
+### 性能优化
+
+#### 避免不必要的重组
+```kotlin
+// ✅ 使用稳定的数据类
+@Immutable
+data class MessageData(
+    val id: String,
+    val content: String,
+    val timestamp: Long
+)
+
+// ✅ 使用 derivedStateOf 减少重组
+@Composable
+fun MessageList(messages: List<Message>) {
+    val sortedMessages by remember {
+        derivedStateOf { messages.sortedBy { it.timestamp } }
+    }
+}
+```
+
+#### 使用 key 优化列表性能
+```kotlin
+// ✅ 为列表项提供稳定的 key
+messages.forEach { message ->
+    key(message.id) {
+        MessageBubble(message = message)
+    }
+}
+```
+
+## 错误处理
+
+### 异常处理
+```kotlin
+// ✅ 适当的异常处理
+suspend fun sendMessage(content: String): Result<Message> {
+    return try {
+        val response = claudeService.sendMessage(content)
+        Result.success(response)
+    } catch (e: Exception) {
+        logger.error("Failed to send message", e)
+        Result.failure(e)
+    }
+}
+```
+
+### 空值处理
+```kotlin
+// ✅ 使用安全调用和 elvis 操作符
+val fileName = file?.name ?: "untitled"
+val content = message?.content?.takeIf { it.isNotBlank() } ?: "Empty message"
+```
+
+## 代码组织
+
+### 文件结构
+```kotlin
+// ✅ 推荐的文件结构
+package com.claudecodeplus.ui.components
+
+// Imports 按类型分组
+import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+
+import org.jetbrains.jewel.ui.component.*
+import org.jetbrains.jewel.foundation.theme.JewelTheme
+
+import com.claudecodeplus.ui.models.*
+
+// 主要组件
+@Composable
+fun MainComponent() { ... }
+
+// 私有辅助组件
+@Composable
+private fun HelperComponent() { ... }
+
+// 数据类和工具函数
+data class ComponentState()
+private fun helperFunction() { ... }
+```
+
+### 导入组织
+```kotlin
+// ✅ 导入顺序：
+// 1. Kotlin 标准库
+// 2. Android/Compose 库
+// 3. 第三方库（Jewel）
+// 4. 项目内部包
+
+import kotlin.collections.*
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.*
+
+import org.jetbrains.jewel.ui.component.*
+
+import com.claudecodeplus.ui.models.*
+```
+
+## 注释和文档
+
+### KDoc 注释
+```kotlin
+/**
+ * 智能输入框组件，支持上下文引用和实时建议
+ * 
+ * @param text 当前输入的文本
+ * @param onTextChange 文本变化回调
+ * @param contexts 已选择的上下文列表
+ * @param isGenerating 是否正在生成响应
+ * @param modifier 组件修饰符
+ */
+@Composable
+fun EnhancedSmartInputArea(
+    text: String,
+    onTextChange: (String) -> Unit,
+    contexts: List<ContextReference> = emptyList(),
+    isGenerating: Boolean = false,
+    modifier: Modifier = Modifier
+) { ... }
+```
+
+### 内联注释
+```kotlin
+// ✅ 解释复杂逻辑的注释
+// 计算@符号位置，菜单显示在上方避免遮挡
+val menuOffset = calculateMenuOffset(atSymbolPosition)
+
+// 实时搜索文件建议，延迟50ms减少API调用
+scope.launch {
+    delay(50)
+    suggestions = searchFiles(query)
+}
+```
+
+## 提交规范
+
+### 提交信息格式
+```
+类型(范围): 简短描述
+
+详细描述（可选）
+
+关联 issue（可选）
+```
+
+例如：
+```
+feat(ui): 添加智能输入框组件
+
+- 支持@符号触发上下文选择
+- 集成文件搜索功能
+- 优化键盘交互体验
+
+closes #123
+```
+
+### 分支命名
+```
+feature/智能输入框
+bugfix/修复滚动问题
+refactor/重构主题系统
+```
