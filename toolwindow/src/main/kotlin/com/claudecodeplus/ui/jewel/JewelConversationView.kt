@@ -90,8 +90,6 @@ fun JewelConversationView(
     }
 }
 
-
-
 /**
  * 消息气泡组件
  */
@@ -116,16 +114,84 @@ private fun MessageBubble(
                     .padding(12.dp)
             ) {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        message.content,
-                        style = JewelTheme.defaultTextStyle.copy(
-                            color = JewelTheme.globalColors.text.normal,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp
-                        )
-                    )
+                    // 按时间顺序显示消息元素
+                    if (message.orderedElements.isNotEmpty()) {
+                        message.orderedElements.forEach { element ->
+                            when (element) {
+                                is MessageTimelineItem.ToolCallItem -> {
+                                    SimpleToolCallDisplay(element.toolCall)
+                                }
+                                is MessageTimelineItem.ContentItem -> {
+                                    if (element.content.isNotBlank()) {
+                                        MarkdownRenderer(
+                                            markdown = element.content,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
+                                is MessageTimelineItem.StatusItem -> {
+                                    if (element.isStreaming) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                "▌",
+                                                style = JewelTheme.defaultTextStyle.copy(
+                                                    color = Color(0xFF59A869)
+                                                )
+                                            )
+                                            Text(
+                                                element.status,
+                                                style = JewelTheme.defaultTextStyle.copy(
+                                                    color = JewelTheme.globalColors.text.disabled,
+                                                    fontSize = 12.sp
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // 向后兼容：如果没有orderedElements，回退到原来的显示方式
+                        // 先显示工具调用（按照添加顺序）
+                        message.toolCalls.forEach { toolCall ->
+                            SimpleToolCallDisplay(toolCall)
+                        }
+                        
+                        // 然后显示消息内容
+                        if (message.content.isNotBlank()) {
+                            MarkdownRenderer(
+                                markdown = message.content,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                    
+                    // 流式状态指示器
+                    if (message.isStreaming) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                "▌",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    color = Color(0xFF59A869)
+                                )
+                            )
+                            Text(
+                                "正在生成...",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    color = JewelTheme.globalColors.text.disabled,
+                                    fontSize = 12.sp
+                                )
+                            )
+                        }
+                    }
                     
                     // 时间戳
                     Text(
@@ -151,13 +217,9 @@ private fun MessageBubble(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        message.content,
-                        style = JewelTheme.defaultTextStyle.copy(
-                            color = JewelTheme.globalColors.text.normal,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp
-                        )
+                    MarkdownRenderer(
+                        markdown = message.content,
+                        modifier = Modifier.fillMaxWidth()
                     )
                     
                     // 时间戳
@@ -171,6 +233,113 @@ private fun MessageBubble(
                 }
             }
         }
+    }
+}
+
+/**
+ * 简洁的工具调用显示 - 类似 Cursor 的样式
+ */
+@Composable
+private fun SimpleToolCallDisplay(
+    toolCall: ToolCall,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // 工具图标
+        Text(
+            when {
+                toolCall.name.contains("LS", ignoreCase = true) -> "📁"
+                toolCall.name.contains("Read", ignoreCase = true) -> "📖"
+                toolCall.name.contains("Edit", ignoreCase = true) -> "✏️"
+                toolCall.name.contains("Write", ignoreCase = true) -> "📝"
+                toolCall.name.contains("Bash", ignoreCase = true) -> "💻"
+                toolCall.name.contains("Search", ignoreCase = true) -> "🔍"
+                toolCall.name.contains("Grep", ignoreCase = true) -> "🔍"
+                toolCall.name.contains("Web", ignoreCase = true) -> "🌐"
+                toolCall.name.contains("Git", ignoreCase = true) -> "🔀"
+                else -> "🔧"
+            },
+            style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
+        )
+        
+        // 工具调用描述
+        Text(
+            buildToolCallDescription(toolCall),
+            style = JewelTheme.defaultTextStyle.copy(
+                color = JewelTheme.globalColors.text.disabled,
+                fontSize = 12.sp
+            )
+        )
+        
+        // 状态指示
+        when (toolCall.status) {
+            ToolCallStatus.RUNNING -> {
+                Text(
+                    "...",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        color = Color(0xFF3574F0),
+                        fontSize = 12.sp
+                    )
+                )
+            }
+            ToolCallStatus.SUCCESS -> {
+                // 成功时不显示额外指示
+            }
+            ToolCallStatus.FAILED -> {
+                Text(
+                    "失败",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        color = Color(0xFFE55765),
+                        fontSize = 12.sp
+                    )
+                )
+            }
+            else -> {}
+        }
+    }
+}
+
+/**
+ * 构建工具调用的简洁描述
+ */
+private fun buildToolCallDescription(toolCall: ToolCall): String {
+    return when (toolCall.name) {
+        "LS" -> {
+            val path = toolCall.parameters["path"]?.toString() ?: "."
+            "列出文件 $path"
+        }
+        "Read" -> {
+            val path = toolCall.parameters["path"]?.toString() ?: 
+                     toolCall.parameters["target_file"]?.toString() ?: "文件"
+            "读取 ${path.substringAfterLast('/')}"
+        }
+        "Edit" -> {
+            val path = toolCall.parameters["path"]?.toString() ?: 
+                     toolCall.parameters["target_file"]?.toString() ?: "文件"
+            "编辑 ${path.substringAfterLast('/')}"
+        }
+        "Write" -> {
+            val path = toolCall.parameters["path"]?.toString() ?: 
+                     toolCall.parameters["target_file"]?.toString() ?: "文件"
+            "写入 ${path.substringAfterLast('/')}"
+        }
+        "Bash" -> {
+            val command = toolCall.parameters["command"]?.toString()?.take(30) ?: "命令"
+            "执行 $command${if (command.length > 30) "..." else ""}"
+        }
+        "Grep" -> {
+            val query = toolCall.parameters["query"]?.toString()?.take(20) ?: "搜索"
+            "搜索 \"$query${if (query.length > 20) "..." else ""}\""
+        }
+        "WebSearch" -> {
+            val query = toolCall.parameters["search_term"]?.toString()?.take(20) ?: "搜索"
+            "网络搜索 \"$query${if (query.length > 20) "..." else ""}\""
+        }
+        else -> toolCall.name
     }
 }
 

@@ -130,7 +130,7 @@ class ClaudeCliWrapper {
         options.verbose?.let {
             if (it) args.add("--verbose")
         } ?: run {
-            // 默认启用verbose（stream-json需要）
+            // 默认启用verbose方便后续分析和调试
             args.add("--verbose")
         }
         
@@ -229,10 +229,21 @@ class ClaudeCliWrapper {
         }.start()
         
         try {
+            // 设置协程取消监听器，自动终止进程
+            val cancelHandler = { 
+                logger.info("Coroutine cancelled, terminating process...")
+                terminate()
+            }
+            
             reader.useLines { lines ->
                 lines.forEach { line ->
-                    // 检查协程是否被取消
-                    coroutineContext.ensureActive()
+                    // 检查协程是否被取消，如果取消则自动终止进程
+                    try {
+                        coroutineContext.ensureActive()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        cancelHandler()
+                        throw e
+                    }
                         
                         if (line.trim().isNotEmpty()) {
                             try {
@@ -256,13 +267,36 @@ class ClaudeCliWrapper {
                                         if (content != null) {
                                             if (content.isArray) {
                                                 content.forEach { item ->
-                                                    if (item.get("type")?.asText() == "text") {
-                                                        val text = item.get("text")?.asText()
-                                                        if (!text.isNullOrEmpty()) {
-                                                            logger.fine("Emitting text message: ${text.take(50)}...")
+                                                    val itemType = item.get("type")?.asText()
+                                                    when (itemType) {
+                                                        "text" -> {
+                                                            val text = item.get("text")?.asText()
+                                                            if (!text.isNullOrEmpty()) {
+                                                                logger.fine("Emitting text message: ${text.take(50)}...")
+                                                                emit(SDKMessage(
+                                                                    type = MessageType.TEXT,
+                                                                    data = MessageData(text = text)
+                                                                ))
+                                                            }
+                                                        }
+                                                        "tool_use" -> {
+                                                            // 处理工具调用
+                                                            val toolName = item.get("name")?.asText()
+                                                            val toolInput = item.get("input")
+                                                            logger.fine("Emitting tool use: $toolName")
                                                             emit(SDKMessage(
-                                                                type = MessageType.TEXT,
-                                                                data = MessageData(text = text)
+                                                                type = MessageType.TOOL_USE,
+                                                                data = MessageData(
+                                                                    toolName = toolName,
+                                                                    toolInput = if (toolInput != null) {
+                                                                        // 将JsonNode转换为Map或String
+                                                                        if (toolInput.isObject) {
+                                                                            objectMapper.convertValue(toolInput, Map::class.java)
+                                                                        } else {
+                                                                            toolInput.asText()
+                                                                        }
+                                                                    } else null
+                                                                )
                                                             ))
                                                         }
                                                     }
@@ -281,6 +315,21 @@ class ClaudeCliWrapper {
                                         } else {
                                             logger.warning("Assistant message has no content: $jsonNode")
                                         }
+                                    }
+                                    "tool_result" -> {
+                                        // 处理工具执行结果
+                                        logger.fine("Processing tool result: $line")
+                                        val toolResult = jsonNode.get("content")
+                                        val error = jsonNode.get("error")?.asText()
+                                        emit(SDKMessage(
+                                            type = MessageType.TOOL_RESULT,
+                                            data = MessageData(
+                                                toolResult = toolResult?.let {
+                                                    if (it.isTextual) it.asText() else objectMapper.writeValueAsString(it)
+                                                },
+                                                error = error
+                                            )
+                                        ))
                                     }
                                     "error" -> {
                                         // 错误消息
@@ -305,6 +354,10 @@ class ClaudeCliWrapper {
                                     "result" -> {
                                         // 结果消息，表示对话结束
                                         logger.fine("Result message: $line")
+                                        emit(SDKMessage(
+                                            type = MessageType.END,
+                                            data = MessageData()
+                                        ))
                                     }
                                     else -> {
                                         logger.fine("Unknown message type: $type")
@@ -324,6 +377,11 @@ class ClaudeCliWrapper {
                 val errorMessage = errorBuilder.toString()
                 throw RuntimeException("Claude process exited with code $exitCode. Error: $errorMessage")
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 协程被取消，确保进程被终止
+            logger.info("Query cancelled, terminating process...")
+            terminate()
+            throw e
         } finally {
             currentProcess.set(null)
             process.destroy()
@@ -341,15 +399,17 @@ class ClaudeCliWrapper {
             // 先尝试正常终止
             process.destroy()
             
-            // 给进程一点时间来清理
+            // 给进程一点时间来清理，但缩短等待时间以提高响应速度
             try {
-                if (!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
-                    // 如果2秒后还没结束，强制终止
+                if (!process.waitFor(500, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    // 如果500毫秒后还没结束，强制终止
                     logger.warning("Process did not terminate gracefully, forcing termination")
                     process.destroyForcibly()
+                    // 再等待一点时间确保强制终止完成
+                    process.waitFor(200, java.util.concurrent.TimeUnit.MILLISECONDS)
                 }
             } catch (e: InterruptedException) {
-                // 如果等待被中断，强制终止
+                // 如果等待被中断，立即强制终止
                 process.destroyForcibly()
             }
             true

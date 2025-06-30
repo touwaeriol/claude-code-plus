@@ -90,6 +90,11 @@ fun JewelChatApp(
                 }
             },
             onStop = {
+                // 立即终止 CLI wrapper 进程
+                val terminated = cliWrapper.terminate()
+                println("DEBUG: CLI wrapper terminated: $terminated")
+                
+                // 取消协程任务
                 messageJob?.cancel()
                 isGenerating = false
             },
@@ -259,34 +264,141 @@ private fun sendMessage(
             onMessageUpdate(messagesWithAssistant)
             
             // 启动消息流
-            val messageFlow = cliWrapper.sendMessage(
-                message = inputText,
-                sessionId = currentSessionId
+            val messageFlow = cliWrapper.query(
+                prompt = inputText,
+                options = ClaudeCliWrapper.QueryOptions(
+                    model = "sonnet",
+                    resume = currentSessionId,
+                    cwd = workingDirectory
+                )
             )
             
             val responseBuilder = StringBuilder()
             val toolCalls = mutableListOf<ToolCall>()
+            val orderedElements = mutableListOf<MessageTimelineItem>()
             
-            messageFlow.collect { streamResponse ->
-                when (streamResponse) {
-                    is ClaudeCliWrapper.StreamResponse.Content -> {
+            messageFlow.collect { sdkMessage ->
+                when (sdkMessage.type) {
+                    com.claudecodeplus.sdk.MessageType.TEXT -> {
                         // 流式内容更新
-                        responseBuilder.append(streamResponse.content)
+                        sdkMessage.data.text?.let { text ->
+                            responseBuilder.append(text)
+                            
+                            // 如果已有内容元素，更新最后一个；否则添加新的
+                            val lastElement = orderedElements.lastOrNull()
+                            if (lastElement is MessageTimelineItem.ContentItem) {
+                                // 更新最后一个内容元素
+                                orderedElements[orderedElements.lastIndex] = lastElement.copy(
+                                    content = responseBuilder.toString()
+                                )
+                            } else {
+                                // 添加新的内容元素
+                                orderedElements.add(
+                                    MessageTimelineItem.ContentItem(
+                                        content = responseBuilder.toString(),
+                                        timestamp = System.currentTimeMillis()
+                                    )
+                                )
+                            }
+                            
+                            // 更新消息
+                            val updatedMessage = assistantMessage.copy(
+                                content = responseBuilder.toString(),
+                                toolCalls = toolCalls.toList(),
+                                orderedElements = orderedElements.toList()
+                            )
+                            val mutableMessages = messagesWithAssistant.toMutableList()
+                            mutableMessages[mutableMessages.lastIndex] = updatedMessage
+                            onMessageUpdate(mutableMessages.toList())
+                        }
+                    }
+                    
+                    com.claudecodeplus.sdk.MessageType.TOOL_USE -> {
+                        // 工具调用开始
+                        println("DEBUG: Tool use detected - ${sdkMessage.data.toolName}")
+                        val toolCall = ToolCall(
+                            name = sdkMessage.data.toolName ?: "unknown",
+                            displayName = sdkMessage.data.toolName ?: "unknown",
+                            parameters = sdkMessage.data.toolInput as? Map<String, Any> ?: emptyMap(),
+                            status = ToolCallStatus.RUNNING
+                        )
+                        toolCalls.add(toolCall)
+                        println("DEBUG: Added tool call, total: ${toolCalls.size}")
                         
-                        // 更新消息内容
+                        // 添加工具调用元素到有序列表
+                        orderedElements.add(
+                            MessageTimelineItem.ToolCallItem(
+                                toolCall = toolCall,
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                        
+                        // 更新消息显示工具调用
                         val updatedMessage = assistantMessage.copy(
                             content = responseBuilder.toString(),
-                            toolCalls = toolCalls.toList()
+                            toolCalls = toolCalls.toList(),
+                            orderedElements = orderedElements.toList()
                         )
                         val mutableMessages = messagesWithAssistant.toMutableList()
                         mutableMessages[mutableMessages.lastIndex] = updatedMessage
                         onMessageUpdate(mutableMessages.toList())
                     }
                     
-                    is ClaudeCliWrapper.StreamResponse.Error -> {
+                    com.claudecodeplus.sdk.MessageType.TOOL_RESULT -> {
+                        // 工具调用结果
+                        println("DEBUG: Tool result received")
+                        val lastToolCall = toolCalls.lastOrNull()
+                        if (lastToolCall != null) {
+                            println("DEBUG: Updating tool call result")
+                            val updatedToolCall = lastToolCall.copy(
+                                status = if (sdkMessage.data.error != null) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
+                                result = if (sdkMessage.data.error != null) {
+                                    ToolResult.Failure(
+                                        error = sdkMessage.data.error ?: "Unknown error"
+                                    )
+                                } else {
+                                    ToolResult.Success(
+                                        output = sdkMessage.data.toolResult?.toString() ?: ""
+                                    )
+                                },
+                                endTime = System.currentTimeMillis()
+                            )
+                            toolCalls[toolCalls.lastIndex] = updatedToolCall
+                            
+                            // 更新有序列表中对应的工具调用元素
+                            for (i in orderedElements.indices.reversed()) {
+                                val element = orderedElements[i]
+                                if (element is MessageTimelineItem.ToolCallItem && 
+                                    element.toolCall.id == lastToolCall.id) {
+                                    orderedElements[i] = element.copy(toolCall = updatedToolCall)
+                                    break
+                                }
+                            }
+                            
+                            val updatedMessage = assistantMessage.copy(
+                                content = responseBuilder.toString(),
+                                toolCalls = toolCalls.toList(),
+                                orderedElements = orderedElements.toList()
+                            )
+                            val mutableMessages = messagesWithAssistant.toMutableList()
+                            mutableMessages[mutableMessages.lastIndex] = updatedMessage
+                            onMessageUpdate(mutableMessages.toList())
+                        } else {
+                            println("DEBUG: No tool call found to update")
+                        }
+                    }
+                    
+                    com.claudecodeplus.sdk.MessageType.START -> {
+                        // 会话开始，获取会话ID
+                        sdkMessage.data.sessionId?.let { sessionId ->
+                            onSessionIdUpdate(sessionId)
+                        }
+                    }
+                    
+                    com.claudecodeplus.sdk.MessageType.ERROR -> {
                         // 错误处理
                         val errorMessage = assistantMessage.copy(
-                            content = "❌ 错误: ${streamResponse.error}",
+                            content = "❌ 错误: ${sdkMessage.data.error ?: "Unknown error"}",
                             status = MessageStatus.FAILED,
                             isError = true,
                             isStreaming = false
@@ -296,13 +408,14 @@ private fun sendMessage(
                         onMessageUpdate(mutableMessages.toList())
                     }
                     
-                    ClaudeCliWrapper.StreamResponse.Complete -> {
+                    com.claudecodeplus.sdk.MessageType.END -> {
                         // 完成流式传输
                         val finalMessage = assistantMessage.copy(
                             content = responseBuilder.toString(),
                             status = MessageStatus.COMPLETE,
                             isStreaming = false,
-                            toolCalls = toolCalls.toList()
+                            toolCalls = toolCalls.toList(),
+                            orderedElements = orderedElements.toList()
                         )
                         val mutableMessages = messagesWithAssistant.toMutableList()
                         mutableMessages[mutableMessages.lastIndex] = finalMessage
