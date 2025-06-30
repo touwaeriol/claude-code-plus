@@ -10,10 +10,22 @@ group = "com.claudecodeplus"
 version = "1.0-SNAPSHOT"
 
 dependencies {
-    // 依赖其他模块
-    implementation(project(":cli-wrapper"))
-    implementation(project(":toolwindow"))  // toolwindow 通过 api 传递了 Compose 和 Jewel 依赖
+    // Compose Desktop
+    implementation(compose.desktop.currentOs)
+    implementation(compose.runtime)
+    implementation(compose.foundation)
+    implementation(compose.animation)
+    implementation(compose.ui)
+    
+    // Jewel UI - 直接引入
+    val jewelVersion = rootProject.extra["jewelVersion"] as String
+    implementation("org.jetbrains.jewel:jewel-foundation:$jewelVersion")
+    implementation("org.jetbrains.jewel:jewel-ui:$jewelVersion")
+    implementation("org.jetbrains.jewel:jewel-int-ui-standalone:$jewelVersion")
 
+    // 协程
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:${rootProject.extra["coroutinesVersion"]}")
+    
     // 测试依赖
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:1.13.8")
@@ -21,7 +33,7 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "com.claudecodeplus.test.JewelChatTestAppKt"
+        mainClass = "MainKt"
 
         buildTypes.release.proguard {
             isEnabled.set(false)

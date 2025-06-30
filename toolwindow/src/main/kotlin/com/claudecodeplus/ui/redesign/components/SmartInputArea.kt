@@ -4,10 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -20,15 +19,19 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.ContextProvider
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.jewel.foundation.theme.JewelTheme
-import org.jetbrains.jewel.ui.component.IconButton
-import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.*
 
 /**
  * 支持的Claude模型
@@ -384,73 +387,57 @@ fun SmartInputArea(
                         .fillMaxWidth()
                         .height(dynamicHeight)
                 ) {
-                    BasicTextField(
-                        value = textValue,
-                        onValueChange = { newValue ->
-                            val oldText = textValue.text
-                            val newText = newValue.text
-                            textValue = newValue
+                    TextArea(
+                        value = textValue.text,
+                        onValueChange = { newText ->
+                            val newTextFieldValue = TextFieldValue(newText, TextRange(newText.length))
+                            textValue = newTextFieldValue
+                            onTextChange(newText)
                             
-                            // 检测 @ 符号
-                            if (newText.length > oldText.length && newText.last() == '@') {
-                                handleKeyboardAction(KeyboardAction.OpenContextMenu)
-                            }
-                            
-                            // 更新搜索查询
-                            if (showContextMenu && contextMenuPosition > 0) {
-                                val atIndex = newText.lastIndexOf('@', contextMenuPosition - 1)
-                                if (atIndex >= 0 && atIndex < newValue.selection.start) {
-                                    searchQuery = newText.substring(atIndex + 1, newValue.selection.start)
-                                    
-                                    // 更新建议
-                                    scope.launch {
-                                        contextSuggestions = loadContextSuggestions(contextProvider, searchQuery)
+                            // @ 符号检测和上下文处理
+                            if (newText.isNotEmpty() && newText.last() == '@') {
+                                showContextMenu = true
+                                contextMenuPosition = newText.length - 1
+                                searchQuery = ""
+                                loadContextSuggestions("")
+                            } else if (showContextMenu) {
+                                // 检查是否仍在@符号后搜索
+                                val cursorPos = newText.length
+                                val atIndex = newText.lastIndexOf('@', cursorPos - 1)
+                                if (atIndex >= 0) {
+                                    val searchText = newText.substring(atIndex + 1, cursorPos)
+                                    if (!searchText.contains(' ') && !searchText.contains('\n')) {
+                                        searchQuery = searchText
+                                        loadContextSuggestions(searchText)
+                                    } else {
+                                        showContextMenu = false
                                     }
+                                } else {
+                                    showContextMenu = false
                                 }
                             }
                         },
                         enabled = isEnabled && !isGenerating,
+                        placeholder = "输入消息或使用 @ 引用上下文...",
                         textStyle = TextStyle(
-                            color = Color(0xFF1F2937),
-                            fontSize = 13.sp,
+                            color = JewelTheme.globalColors.text.normal,
+                            fontSize = 14.sp,
                             lineHeight = 18.sp
                         ),
-                        cursorBrush = SolidColor(Color(0xFF6366F1)),
                         modifier = Modifier
                             .fillMaxSize()
                             .focusRequester(focusRequester)
-                            .onKeyEvent { event ->
-                                val action = shortcutManager.handleKeyEvent(event, currentState)
-                                if (action != null) {
-                                    // 特殊处理换行 - 让系统自行处理
-                                    if (action is KeyboardAction.InsertNewLine) {
-                                        false // 不消费事件，让系统处理
-                                    } else {
-                                        handleKeyboardAction(action)
-                                        true // 消费事件
-                                    }
-                                } else {
-                                    false // 不处理的按键事件
-                                }
-                            },
-                        decorationBox = { innerTextField ->
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.TopStart
-                            ) {
-                                if (textValue.text.isEmpty()) {
-                                    Text(
-                                        "Plan, search, build anything",
-                                        style = JewelTheme.defaultTextStyle.copy(
-                                            color = Color(0xFF9CA3AF),
-                                            fontSize = 13.sp,
-                                            lineHeight = 18.sp
-                                        )
-                                    )
-                                }
-                                innerTextField()
+                            .onPreviewKeyEvent { keyEvent ->
+                                handleKeyEvent(
+                                    keyEvent = keyEvent,
+                                    textValue = textValue,
+                                    showContextMenu = showContextMenu,
+                                    onSend = onSend,
+                                    onCloseMenu = { showContextMenu = false },
+                                    enabled = isEnabled,
+                                    isGenerating = isGenerating
+                                )
                             }
-                        }
                     )
                     
                     // 上下文菜单
@@ -493,7 +480,7 @@ fun SmartInputArea(
                             Text(
                                 selectedModel.displayName,
                                 style = JewelTheme.defaultTextStyle.copy(
-                                    color = Color(0xFF6B7280),
+                                    color = JewelTheme.globalColors.text.disabled,
                                     fontSize = 11.sp
                                 )
                             )
@@ -501,7 +488,7 @@ fun SmartInputArea(
                             Text(
                                 if (showModelMenu) "▲" else "▼",
                                 style = JewelTheme.defaultTextStyle.copy(
-                                    color = Color(0xFF6B7280),
+                                    color = JewelTheme.globalColors.text.disabled,
                                     fontSize = 8.sp
                                 )
                             )
@@ -597,16 +584,20 @@ fun SmartInputArea(
         
         // 已选择的上下文标签 - 在输入框外部
         if (contexts.isNotEmpty()) {
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
+            HorizontallyScrollableContainer(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                items(contexts) { context ->
-                    ContextChip(
-                        context = context,
-                        onRemove = { contexts.remove(it) }
-                    )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                ) {
+                    contexts.forEach { context ->
+                        ContextChip(
+                            context = context,
+                            onRemove = { contexts.remove(it) }
+                        )
+                    }
                 }
             }
         }
@@ -939,4 +930,49 @@ private fun insertContext(
         
         onInsert(newTextFieldValue, contextReference)
     }
+}
+
+/**
+ * 处理键盘事件
+ */
+private fun handleKeyEvent(
+    keyEvent: KeyEvent,
+    textValue: TextFieldValue,
+    showContextMenu: Boolean,
+    onSend: () -> Unit,
+    onCloseMenu: () -> Unit,
+    enabled: Boolean,
+    isGenerating: Boolean
+): Boolean {
+    return when {
+        // Enter 发送消息（非 Shift + Enter）
+        keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyDown -> {
+            if (!keyEvent.isShiftPressed && textValue.text.isNotBlank() && !showContextMenu && enabled && !isGenerating) {
+                onSend()
+                true
+            } else {
+                false
+            }
+        }
+        
+        // Escape 关闭上下文菜单
+        keyEvent.key == Key.Escape && keyEvent.type == KeyEventType.KeyDown -> {
+            if (showContextMenu) {
+                onCloseMenu()
+                true
+            } else {
+                false
+            }
+        }
+        
+        else -> false
+    }
+}
+
+/**
+ * 加载上下文建议（占位符实现）
+ */
+private fun loadContextSuggestions(query: String): List<ContextSuggestion> {
+    // TODO: 实现真实的上下文建议加载
+    return emptyList()
 }

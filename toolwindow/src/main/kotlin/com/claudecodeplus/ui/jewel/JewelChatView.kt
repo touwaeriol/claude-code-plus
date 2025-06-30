@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
@@ -19,14 +20,6 @@ import com.claudecodeplus.ui.models.MessageRole
 import kotlinx.coroutines.launch
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.TextStyle as ComposeTextStyle
-import androidx.compose.material.OutlinedTextField
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.unit.sp
 import org.jetbrains.jewel.ui.Orientation
 
 /**
@@ -52,7 +45,7 @@ fun JewelChatView(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF1E1E1E))
+            .background(JewelTheme.globalColors.panelBackground)
     ) {
         // 标题栏
         ChatHeader(
@@ -60,9 +53,12 @@ fun JewelChatView(
             themeConfig = themeConfig
         )
         
-        Divider(orientation = Orientation.Horizontal)
+        Divider(
+            orientation = Orientation.Horizontal,
+            modifier = Modifier.height(1.dp)
+        )
         
-        // 消息列表
+        // 消息列表 - 恢复 LazyColumn 以支持自动滚动
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -82,7 +78,10 @@ fun JewelChatView(
             }
         }
         
-        Divider(orientation = Orientation.Horizontal)
+        Divider(
+            orientation = Orientation.Horizontal,
+            modifier = Modifier.height(1.dp)
+        )
         
         // 输入区域
         ChatInputArea(
@@ -184,7 +183,7 @@ private fun ChatHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF2B2B2B))
+            .background(JewelTheme.globalColors.panelBackground)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -202,7 +201,7 @@ private fun ChatHeader(
             DefaultButton(
                 onClick = onClearChat
             ) {
-                Text("清除对话")
+                Text("清空对话")
             }
         }
     }
@@ -283,24 +282,33 @@ private fun ChatInputArea(
 ) {
     Row(
         modifier = modifier
-            .background(Color(0xFF2B2B2B))
+            .background(JewelTheme.globalColors.panelBackground)
             .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.Bottom
     ) {
-        BasicTextField(
+        TextArea(
             value = text,
             onValueChange = onTextChange,
             enabled = isEnabled,
-            textStyle = ComposeTextStyle(
-                color = Color.White,
-                fontSize = 14.sp
-            ),
+            placeholder = "输入消息... (Shift+Enter 换行，Enter 发送)",
             modifier = Modifier
                 .weight(1f)
-                .background(Color(0xFF3C3C3C), RoundedCornerShape(4.dp))
-                .border(1.dp, Color(0xFF5C5C5C), RoundedCornerShape(4.dp))
-                .padding(12.dp)
+                .heightIn(min = 60.dp, max = 150.dp)
+                .onPreviewKeyEvent { event ->
+                    when {
+                        // Enter 发送，Shift+Enter 换行
+                        event.key == Key.Enter && event.type == KeyEventType.KeyDown -> {
+                            if (!event.isShiftPressed && text.isNotBlank()) {
+                                onSend()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        else -> false
+                    }
+                }
         )
         
         DefaultButton(

@@ -4,90 +4,59 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Color
-import com.claudecodeplus.ui.models.AiModel
-import org.jetbrains.jewel.ui.component.*
-import androidx.compose.material.DropdownMenu
-import androidx.compose.material.DropdownMenuItem
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.material.LocalContentColor
-import androidx.compose.material.LocalTextStyle
 import androidx.compose.ui.unit.sp
+import com.claudecodeplus.ui.models.AiModel
 import org.jetbrains.jewel.foundation.theme.JewelTheme
+import org.jetbrains.jewel.ui.component.*
 
 /**
- * 模型选择器组件
- * 提供下拉选择 AI 模型的功能
+ * 模型选择器组件 - 简化版本
  */
 @Composable
 fun ModelSelector(
     currentModel: AiModel,
     onModelChange: (AiModel) -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    
     Row(
         modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text("🤖")
         
-        Box {
-            OutlinedButton(
-                onClick = { expanded = !expanded },
-                enabled = enabled,
-                modifier = Modifier.widthIn(min = 200.dp)
+        DefaultButton(
+            onClick = { 
+                // 简单的模型切换逻辑
+                val nextModel = when (currentModel) {
+                    AiModel.CLAUDE_35_SONNET -> AiModel.CLAUDE_35_HAIKU
+                    AiModel.CLAUDE_35_HAIKU -> AiModel.CLAUDE_35_SONNET
+                    else -> AiModel.CLAUDE_35_SONNET
+                }
+                onModelChange(nextModel)
+            },
+            enabled = enabled,
+            modifier = Modifier.widthIn(min = 200.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(currentModel.displayName)
-                        Text(
-                            currentModel.description,
-                            style = JewelTheme.defaultTextStyle.copy(
-                                fontSize = 11.sp,
-                                color = LocalContentColor.current.copy(alpha = 0.6f)
-                            )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(currentModel.displayName)
+                    Text(
+                        currentModel.description,
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 11.sp,
+                            color = JewelTheme.globalColors.text.disabled
                         )
-                    }
-                    Text(if (expanded) "▲" else "▼")
+                    )
                 }
-            }
-            
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.widthIn(min = 200.dp)
-            ) {
-                AiModel.values().forEach { model ->
-                    DropdownMenuItem(
-                        onClick = {
-                            onModelChange(model)
-                            expanded = false
-                        }
-                    ) {
-                        Column {
-                            Text(
-                                model.displayName,
-                                color = if (model == currentModel) Color.White else Color.LightGray
-                            )
-                            Text(
-                                model.description,
-                                style = JewelTheme.defaultTextStyle.copy(
-                                    fontSize = 11.sp,
-                                    color = Color.Gray
-                                )
-                            )
-                        }
-                    }
-                }
+                Text("↻")
             }
         }
     }

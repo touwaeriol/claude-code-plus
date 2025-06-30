@@ -181,7 +181,7 @@ fun CodeBlock(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedButton(
+                DefaultButton(
                     onClick = {
                         clipboardManager.setText(AnnotatedString(code))
                         onCopy()
@@ -194,7 +194,7 @@ fun CodeBlock(
                     )
                 }
                 
-                OutlinedButton(
+                DefaultButton(
                     onClick = { onInsert() }
                 ) {
                     Text(

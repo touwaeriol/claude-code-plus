@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.IconButton
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.*
 
 /**
  * 上下文类型
@@ -432,102 +433,58 @@ fun EnhancedSmartInputArea(
                 // 底部按钮行
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // 发送/停止按钮
                     if (isGenerating && onStop != null) {
-                        IconButton(
-                            onClick = { onStop() },
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(
-                                    Color(0xFFE55765),
-                                    RoundedCornerShape(8.dp)
-                                )
+                        DefaultButton(
+                            onClick = onStop,
+                            enabled = true
                         ) {
-                            Text(
-                                "⬛", 
-                                style = JewelTheme.defaultTextStyle.copy(
-                                    fontSize = 12.sp,
-                                    color = Color.White
-                                )
-                            )
+                            Text("停止")
                         }
                     } else {
-                        IconButton(
+                        DefaultButton(
                             onClick = {
-                                if (textValue.text.isNotBlank() && enabled) {
+                                if (textValue.text.isNotBlank()) {
                                     onSend()
-                                    // 清空输入框
                                     textValue = TextFieldValue("")
                                     onTextChange("")
                                 }
                             },
-                            enabled = enabled && textValue.text.isNotBlank(),
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(
-                                    if (enabled && textValue.text.isNotBlank()) 
-                                        JewelTheme.globalColors.borders.focused 
-                                    else 
-                                        JewelTheme.globalColors.borders.disabled,
-                                    RoundedCornerShape(8.dp)
-                                )
+                            enabled = enabled && textValue.text.isNotBlank()
                         ) {
-                            Text(
-                                "↗", 
-                                style = JewelTheme.defaultTextStyle.copy(
-                                    fontSize = 14.sp,
-                                    color = if (enabled && textValue.text.isNotBlank()) 
-                                        Color.White 
-                                    else 
-                                        JewelTheme.globalColors.text.disabled
-                                )
-                            )
+                            Text("发送")
                         }
                     }
                 }
             }
-        }
-        
-        // 上下文选择菜单 - 类似VSCode的简单定位策略
-        if (showContextMenu) {
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = if (shouldAlignRight) Alignment.TopEnd else Alignment.TopStart
-            ) {
-                Box(
-                    modifier = Modifier
-                        .offset(
-                            x = if (shouldAlignRight) (-20).dp else 20.dp, // 左右边距
-                            y = (-260).dp // 在输入框上方显示
-                        )
-                        .zIndex(100f)
-                ) {
-                    CursorStyleContextMenu(
+            
+            // 上下文菜单
+            if (showContextMenu) {
+                CursorStyleContextMenu(
+                    suggestions = contextSuggestions,
                     selectedType = selectedContextType,
-                    onTypeSelect = { type ->
-                        selectedContextType = type
+                    onTypeChange = { newType ->
+                        selectedContextType = newType
                         scope.launch {
-                            contextSuggestions = when (type) {
+                            contextSuggestions = when (newType) {
                                 ContextType.FILES -> loadFileSuggestions(searchQuery)
                                 else -> emptyList()
                             }
                         }
                     },
-                    suggestions = contextSuggestions,
-                    searchQuery = searchQuery,
-                    onSuggestionSelect = { suggestion ->
+                    onSuggestionClick = { suggestion ->
                         val mockContext = ContextReference.FileReference(
-                            suggestion.path ?: suggestion.title, 
-                            null, 
+                            suggestion.path ?: suggestion.title,
+                            null,
                             suggestion.subtitle
                         )
                         onContextAdd(mockContext)
                         showContextMenu = false
                         
-                        // 更新文本 - 替换@符号及其后的搜索文本
+                        // 更新文本
                         val currentText = textValue.text
                         val currentCursor = textValue.selection.start
                         val atIndex = currentText.lastIndexOf('@', currentCursor - 1)
@@ -541,93 +498,96 @@ fun EnhancedSmartInputArea(
                             onTextChange(newText)
                         }
                     },
-                        onClose = { showContextMenu = false }
-                    )
-                }
+                    onDismiss = { showContextMenu = false },
+                    shouldAlignRight = shouldAlignRight,
+                    modifier = Modifier
+                        .wrapContentHeight()
+                        .zIndex(1000f)
+                )
             }
         }
     }
 }
 
 /**
- * Cursor 风格的上下文选择菜单
+ * 类似 Cursor 的上下文选择菜单
  */
 @Composable
 private fun CursorStyleContextMenu(
-    selectedType: ContextType,
-    onTypeSelect: (ContextType) -> Unit,
     suggestions: List<ContextSuggestion>,
-    searchQuery: String,
-    onSuggestionSelect: (ContextSuggestion) -> Unit,
-    onClose: () -> Unit,
+    selectedType: ContextType,
+    onTypeChange: (ContextType) -> Unit,
+    onSuggestionClick: (ContextSuggestion) -> Unit,
+    onDismiss: () -> Unit,
+    shouldAlignRight: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
-            .width(380.dp) // 减小宽度，更适合跟随位置显示
+            .width(350.dp)
+            .height(300.dp)
             .background(
                 JewelTheme.globalColors.panelBackground,
-                RoundedCornerShape(8.dp)
+                RoundedCornerShape(12.dp)
             )
             .border(
                 1.dp,
                 JewelTheme.globalColors.borders.normal,
-                RoundedCornerShape(8.dp)
+                RoundedCornerShape(12.dp)
             )
     ) {
         Column(
-            modifier = Modifier.width(380.dp)
+            modifier = Modifier.fillMaxSize()
         ) {
-            // 顶部类型选择标签页
-            Row(
+            // 类型标签页
+            LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        JewelTheme.globalColors.panelBackground,
-                        RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
-                    )
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // 只显示Files类型，其他类型暂时隐藏
-                ContextTypeTab(
-                    type = ContextType.FILES,
-                    isSelected = selectedType == ContextType.FILES,
-                    onClick = { onTypeSelect(ContextType.FILES) }
-                )
+                items(ContextType.values()) { type ->
+                    ContextTypeTab(
+                        type = type,
+                        isSelected = type == selectedType,
+                        onClick = { onTypeChange(type) }
+                    )
+                }
             }
             
-            // 文件列表
-            if (selectedType == ContextType.FILES && suggestions.isNotEmpty()) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 200.dp)
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                    verticalArrangement = Arrangement.spacedBy(0.dp)
-                ) {
-                    items(suggestions) { suggestion ->
-                        FileItem(
-                            suggestion = suggestion,
-                            searchQuery = searchQuery,
-                            onClick = { onSuggestionSelect(suggestion) }
-                        )
-                    }
-                }
-            } else if (suggestions.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "没有找到匹配的文件",
-                        style = JewelTheme.defaultTextStyle.copy(
-                            fontSize = 12.sp,
-                            color = JewelTheme.globalColors.text.disabled
-                        )
+            Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
+            
+            // 建议列表
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                items(suggestions) { suggestion ->
+                    FileItem(
+                        suggestion = suggestion,
+                        onClick = { onSuggestionClick(suggestion) }
                     )
+                }
+                
+                if (suggestions.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "暂无建议",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    color = JewelTheme.globalColors.text.disabled
+                                )
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -635,22 +595,21 @@ private fun CursorStyleContextMenu(
 }
 
 /**
- * 上下文类型标签页
+ * 上下文类型标签
  */
 @Composable
 private fun ContextTypeTab(
     type: ContextType,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .background(
-                if (isSelected) 
-                    JewelTheme.globalColors.borders.focused 
-                else 
-                    Color.Transparent,
-                RoundedCornerShape(4.dp)
+                if (isSelected) JewelTheme.globalColors.borders.focused 
+                else Color.Transparent,
+                RoundedCornerShape(6.dp)
             )
             .clickable { onClick() }
             .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -668,11 +627,8 @@ private fun ContextTypeTab(
                 type.displayName,
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 11.sp,
-                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                    color = if (isSelected) 
-                        Color.White 
-                    else 
-                        JewelTheme.globalColors.text.normal
+                    color = if (isSelected) JewelTheme.globalColors.text.normal 
+                           else JewelTheme.globalColors.text.disabled
                 )
             )
         }
@@ -680,65 +636,56 @@ private fun ContextTypeTab(
 }
 
 /**
- * 文件条目组件
+ * 文件建议项
  */
 @Composable
 private fun FileItem(
     suggestion: ContextSuggestion,
-    searchQuery: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            .background(Color.Transparent, RoundedCornerShape(6.dp))
             .clickable { onClick() }
-            .background(
-                Color.Transparent,
-                RoundedCornerShape(4.dp)
-            )
-            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .padding(8.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 文件图标
             Text(
                 suggestion.icon,
-                style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
+                style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
             )
             
-            // 文件信息 - 单行显示文件名和路径
-            Row(
+            Column(
                 modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                // 文件名
                 Text(
                     suggestion.title,
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = JewelTheme.globalColors.text.normal
-                    )
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 
-                // 完整路径 - 灰色暗淡显示，支持省略
-                suggestion.path?.let { path ->
-                    if (path.isNotEmpty()) {
-                        Text(
-                            path,
-                            style = JewelTheme.defaultTextStyle.copy(
-                                fontSize = 10.sp,
-                                color = JewelTheme.globalColors.text.disabled.copy(alpha = 0.6f)
-                            ),
-                            overflow = TextOverflow.Ellipsis,
-                            maxLines = 1,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                    }
+                suggestion.subtitle?.let { subtitle ->
+                    Text(
+                        subtitle,
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 10.sp,
+                            color = JewelTheme.globalColors.text.disabled
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
@@ -746,61 +693,49 @@ private fun FileItem(
 }
 
 /**
- * 生成状态指示器
+ * 上下文标签芯片组件
  */
 @Composable
-fun GeneratingIndicator(
-    onStop: () -> Unit = {},
+fun ContextChip(
+    context: ContextReference,
+    onRemove: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var dotCount by remember { mutableStateOf(0) }
-    
-    LaunchedEffect(Unit) {
-        while (true) {
-            dotCount = (dotCount + 1) % 4
-            delay(500)
-        }
-    }
-    
-    Row(
+    Box(
         modifier = modifier
-            .background(JewelTheme.globalColors.panelBackground, RoundedCornerShape(6.dp))
-            .border(1.dp, JewelTheme.globalColors.borders.normal, RoundedCornerShape(6.dp))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            .background(
+                JewelTheme.globalColors.borders.normal,
+                RoundedCornerShape(4.dp)
+            )
+            .padding(6.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                "Generating",
-                style = JewelTheme.defaultTextStyle.copy(
-                    color = JewelTheme.globalColors.text.normal,
-                    fontSize = 12.sp
-                )
+                when (context) {
+                    is ContextReference.FileReference -> "📄"
+                    is ContextReference.GitReference -> "🔀"
+                    else -> "📎"
+                },
+                style = JewelTheme.defaultTextStyle.copy(fontSize = 10.sp)
             )
             
             Text(
-                ".".repeat(dotCount),
-                style = JewelTheme.defaultTextStyle.copy(
-                    color = JewelTheme.globalColors.text.normal,
-                    fontSize = 12.sp
-                ),
-                modifier = Modifier.width(12.dp)
+                when (context) {
+                    is ContextReference.FileReference -> context.path.substringAfterLast('/')
+                    is ContextReference.GitReference -> context.content
+                    else -> "未知"
+                },
+                style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
             )
+            
+            DefaultButton(
+                onClick = onRemove
+            ) {
+                Text("×", fontSize = 10.sp)
+            }
         }
-        
-        Text(
-            "Stop",
-            style = JewelTheme.defaultTextStyle.copy(
-                color = JewelTheme.globalColors.text.normal,
-                fontSize = 11.sp
-            ),
-            modifier = Modifier
-                .clickable { onStop() }
-                .padding(horizontal = 6.dp, vertical = 2.dp)
-        )
     }
 }

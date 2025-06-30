@@ -2,14 +2,14 @@ package com.claudecodeplus.ui.redesign
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.redesign.components.*
@@ -17,6 +17,8 @@ import com.claudecodeplus.ui.services.ContextProvider
 import com.claudecodeplus.ui.services.ProjectService
 import kotlinx.coroutines.launch
 import org.jetbrains.jewel.foundation.theme.JewelTheme
+import org.jetbrains.jewel.ui.component.*
+import org.jetbrains.jewel.ui.Orientation
 
 /**
  * 增强的对话视图
@@ -43,7 +45,7 @@ fun EnhancedConversationView(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(JewelTheme.defaultTextStyle.color)
+            .background(JewelTheme.globalColors.paneBackground)
     ) {
         // 顶部工具栏
         ConversationToolBar(
@@ -74,25 +76,39 @@ fun EnhancedConversationView(
         )
         
         // 消息列表
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        VerticallyScrollableContainer(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
-            // 欢迎消息
-            if (messages.isEmpty()) {
-                item {
-                    messages.add(createWelcomeMessage())
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                messages.forEach { message ->
+                    MessageItems(
+                        message = message,
+                        onRegenerate = { /* TODO: 重新生成 */ },
+                        onEdit = { /* TODO: 编辑消息 */ },
+                        onCopy = { /* TODO: 复制消息 */ }
+                    )
                 }
-            }
-            
-            items(messages) { message ->
-                when (message.role) {
-                    MessageRole.USER -> UserMessageItem(message)
-                    MessageRole.ASSISTANT -> AssistantMessageItem(message)
-                    MessageRole.SYSTEM -> SystemMessageItem(message)
-                    MessageRole.ERROR -> ErrorMessageItem(message)
+                
+                if (isLoading.value) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "生成中...",
+                            style = JewelTheme.defaultTextStyle.copy(
+                                color = JewelTheme.globalColors.text.disabled,
+                                fontSize = 14.sp
+                            )
+                        )
+                    }
                 }
             }
         }
