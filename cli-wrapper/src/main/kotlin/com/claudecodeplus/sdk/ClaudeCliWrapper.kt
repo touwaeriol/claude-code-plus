@@ -88,7 +88,7 @@ class ClaudeCliWrapper {
         /** 是否跳过所有权限检查（默认true，适合开发环境。设置为false可以启用权限检查） */
         val dangerouslySkipPermissions: Boolean = true,
         
-        /** 权限模式（仅在dangerouslySkipPermissions=false时生效） */
+        /** 权限模式 */
         val permissionMode: PermissionMode = PermissionMode.DEFAULT,
         
         /** 权限提示工具名称 */
@@ -174,12 +174,11 @@ class ClaudeCliWrapper {
             }
         }
         
-        // 权限控制
+        // 权限控制 - 两个独立的参数
         if (options.dangerouslySkipPermissions) {
             args.add("--dangerously-skip-permissions")
         }
         
-        // 权限模式（独立于dangerously-skip-permissions）
         if (options.permissionMode != PermissionMode.DEFAULT) {
             args.addAll(listOf("--permission-mode", options.permissionMode.cliValue))
         }
