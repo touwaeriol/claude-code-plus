@@ -142,19 +142,21 @@ fun EnhancedSmartInputArea(
             }
         }
         
-        // 主输入框容器 - 恢复统一背景和边框
+        // 主输入框容器 - 统一背景，包含所有控件
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(JewelTheme.globalColors.panelBackground, RoundedCornerShape(12.dp))
-                .border(1.dp, JewelTheme.globalColors.borders.normal, RoundedCornerShape(12.dp))
+                .background(
+                    JewelTheme.globalColors.panelBackground, // 使用Jewel主题的面板背景色
+                    RoundedCornerShape(12.dp)
+                )
                 .padding(12.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // 顶部工具栏：只有Add Context按钮（左）
+                // 顶部工具栏：Add Context按钮（左）
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Start,
@@ -186,7 +188,7 @@ fun EnhancedSmartInputArea(
                     }
                 }
                 
-                // 主输入框 - 使用TextArea自带的滚动功能，设置最大高度触发滚动
+                // 主输入框 - 去掉边框，使用透明背景
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -199,10 +201,11 @@ fun EnhancedSmartInputArea(
                             onTextChange(newValue.text)
                         },
                         enabled = enabled,
-                        undecorated = false, // 保留边框和滚动条
-                        maxLines = Int.MAX_VALUE, // 允许无限行数
+                        undecorated = true, // 去掉边框和装饰
+                        maxLines = Int.MAX_VALUE,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .background(Color.Transparent) // 透明背景
                             .focusRequester(focusRequester)
                             .onPreviewKeyEvent { keyEvent ->
                                 when {
@@ -246,7 +249,7 @@ fun EnhancedSmartInputArea(
                             ),
                             modifier = Modifier
                                 .align(Alignment.TopStart)
-                                .padding(JewelTheme.textAreaStyle.metrics.contentPadding)
+                                .padding(8.dp) // 减少内边距以匹配无装饰的TextArea
                         )
                     }
                 }
@@ -270,9 +273,9 @@ fun EnhancedSmartInputArea(
                             .size(24.dp)
                             .background(
                                 if (textValue.text.isNotBlank() && enabled && !isGenerating) 
-                                    Color(0xFF4CAF50) 
+                                    JewelTheme.globalColors.borders.focused // 使用主题的焦点颜色作为发送按钮激活色
                                 else 
-                                    Color(0xFF5C5C5C),
+                                    JewelTheme.globalColors.borders.disabled, // 使用主题的禁用边框色
                                 RoundedCornerShape(12.dp)
                             )
                             .clickable(enabled = textValue.text.isNotBlank() && enabled && !isGenerating) {
@@ -286,9 +289,9 @@ fun EnhancedSmartInputArea(
                             "↑",
                             style = JewelTheme.defaultTextStyle.copy(
                                 color = if (textValue.text.isNotBlank() && enabled && !isGenerating) 
-                                    Color.White 
+                                    JewelTheme.globalColors.text.normal // 正常文本颜色
                                 else 
-                                    Color(0xFF9CA3AF),
+                                    JewelTheme.globalColors.text.disabled, // 禁用文本颜色
                                 fontSize = 12.sp
                             )
                         )
@@ -393,12 +396,12 @@ private fun CompactModelSelector(
             Column(
                 modifier = Modifier
                     .background(
-                        JewelTheme.globalColors.panelBackground,
+                        JewelTheme.globalColors.panelBackground, // 与主容器相同的面板背景色
                         RoundedCornerShape(6.dp)
                     )
                     .border(
                         1.dp,
-                        JewelTheme.globalColors.borders.normal,
+                        JewelTheme.globalColors.borders.normal, // 使用主题的正常边框色
                         RoundedCornerShape(6.dp)
                     )
                     .padding(4.dp)
