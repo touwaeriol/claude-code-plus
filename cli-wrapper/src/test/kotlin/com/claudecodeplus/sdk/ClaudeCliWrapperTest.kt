@@ -131,7 +131,7 @@ class ClaudeCliWrapperTest {
             continueConversation = true,
             allowedTools = listOf("tool1", "tool2"),
             disallowedTools = listOf("tool3"),
-            permissionMode = "strict",
+            permissionMode = ClaudeCliWrapper.PermissionMode.BYPASS_PERMISSIONS,
             cwd = "/tmp"
         )
         
@@ -143,7 +143,7 @@ class ClaudeCliWrapperTest {
         assertTrue(options.continueConversation)
         assertEquals(listOf("tool1", "tool2"), options.allowedTools)
         assertEquals(listOf("tool3"), options.disallowedTools)
-        assertEquals("strict", options.permissionMode)
+        assertEquals(ClaudeCliWrapper.PermissionMode.BYPASS_PERMISSIONS, options.permissionMode)
         assertEquals("/tmp", options.cwd)
     }
     

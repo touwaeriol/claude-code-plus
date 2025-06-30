@@ -39,6 +39,23 @@ class ClaudeCliWrapper {
     private val currentProcess = AtomicReference<Process?>(null)
     
     /**
+     * 权限模式枚举
+     */
+    enum class PermissionMode(val cliValue: String) {
+        /** 正常权限检查（默认） */
+        DEFAULT("default"),
+        
+        /** 跳过权限检查 */
+        BYPASS_PERMISSIONS("bypassPermissions"),
+        
+        /** 自动接受编辑操作 */
+        ACCEPT_EDITS("acceptEdits"),
+        
+        /** 计划模式 */
+        PLAN("plan")
+    }
+    
+    /**
      * Claude CLI 查询选项
      * 支持 Claude CLI 的所有参数，默认配置适合开发环境使用
      */
@@ -68,14 +85,11 @@ class ClaudeCliWrapper {
         val resume: String? = null,
         
         // 权限控制
-        /** 
-         * 权限模式：
-         * - "default": 正常权限检查（默认值）
-         * - "bypassPermissions": 跳过所有权限检查
-         * - "acceptEdits": 自动接受编辑操作
-         * - "plan": 计划模式
-         */
-        val permissionMode: String = "default",
+        /** 是否跳过所有权限检查（默认true，适合开发环境。设置为false可以启用权限检查） */
+        val dangerouslySkipPermissions: Boolean = true,
+        
+        /** 权限模式（仅在dangerouslySkipPermissions=false时生效） */
+        val permissionMode: PermissionMode = PermissionMode.DEFAULT,
         
         /** 权限提示工具名称 */
         val permissionPromptToolName: String? = null,
@@ -120,7 +134,7 @@ class ClaudeCliWrapper {
         val args = mutableListOf<String>()
         
         // 核心参数（必须在前面）
-        args.addAll(listOf("--output-format", "stream-json", "--dangerously-skip-permissions"))
+        args.addAll(listOf("--output-format", "stream-json"))
         
         // 调试和verbose控制
         if (options.debug) {
@@ -160,9 +174,14 @@ class ClaudeCliWrapper {
             }
         }
         
-        // 权限控制（注意：默认已添加 --dangerously-skip-permissions，但如果指定了其他权限模式则覆盖）
-        if (options.permissionMode != "default") {
-            args.addAll(listOf("--permission-mode", options.permissionMode))
+        // 权限控制
+        if (options.dangerouslySkipPermissions) {
+            args.add("--dangerously-skip-permissions")
+        }
+        
+        // 权限模式（独立于dangerously-skip-permissions）
+        if (options.permissionMode != PermissionMode.DEFAULT) {
+            args.addAll(listOf("--permission-mode", options.permissionMode.cliValue))
         }
         
         options.permissionPromptToolName?.let {
