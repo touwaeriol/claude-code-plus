@@ -146,6 +146,38 @@ data class ToolCall(
 )
 
 /**
+ * 消息时间线元素 - 按时间顺序排列的消息组件
+ */
+sealed class MessageTimelineItem {
+    abstract val timestamp: Long
+    
+    /**
+     * 工具调用元素
+     */
+    data class ToolCallItem(
+        val toolCall: ToolCall,
+        override val timestamp: Long = toolCall.startTime
+    ) : MessageTimelineItem()
+    
+    /**
+     * 文本内容元素
+     */
+    data class ContentItem(
+        val content: String,
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : MessageTimelineItem()
+    
+    /**
+     * 状态元素（如"正在生成..."）
+     */
+    data class StatusItem(
+        val status: String,
+        val isStreaming: Boolean = false,
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : MessageTimelineItem()
+}
+
+/**
  * 工具执行结果
  */
 sealed class ToolResult {
@@ -198,7 +230,8 @@ data class EnhancedMessage(
     val model: AiModel? = null,
     val status: MessageStatus = MessageStatus.COMPLETE,
     val isStreaming: Boolean = false,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    val orderedElements: List<MessageTimelineItem> = emptyList()
 ) {
     // Backward compatibility properties
     val modelName: String? get() = model?.cliName
