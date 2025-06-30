@@ -106,27 +106,13 @@ fun EnhancedSmartInputArea(
     // 上下文建议
     var contextSuggestions by remember { mutableStateOf(emptyList<ContextSuggestion>()) }
     
-    // 估算@符号位置
-    val estimateCursorPosition: () -> Offset = {
-        // 如果显示上下文菜单，计算@符号位置；否则计算当前光标位置
-        val targetPosition = if (showContextMenu && contextMenuPosition >= 0) {
-            contextMenuPosition
-        } else {
-            textValue.selection.start.coerceAtMost(textValue.text.length)
-        }
-        
-        val textBeforeTarget = textValue.text.substring(0, targetPosition)
-        val lines = textBeforeTarget.split('\n')
-        val currentLineIndex = lines.size - 1
-        val currentLineText = lines.lastOrNull() ?: ""
-        
-        with(density) {
-            val charWidth = 8.dp.toPx()
-            val lineHeight = 20.dp.toPx()
-            val x = currentLineText.length * charWidth
-            val y = currentLineIndex * lineHeight
-            Offset(x, y)
-        }
+    // 简单的定位策略：参考VSCode等编辑器的做法
+    // 菜单显示在输入框下方，如果@符号在后半部分则右对齐
+    val shouldAlignRight = remember(contextMenuPosition, textValue.text) {
+        if (contextMenuPosition >= 0) {
+            val currentLine = textValue.text.substring(0, contextMenuPosition).split('\n').last()
+            currentLine.length > 20 // 如果当前行字符较多，右对齐显示
+        } else false
     }
     
     // 加载文件建议
@@ -505,23 +491,21 @@ fun EnhancedSmartInputArea(
             }
         }
         
-        // 上下文选择菜单 - 在@位置弹出
+        // 上下文选择菜单 - 类似VSCode的简单定位策略
         if (showContextMenu) {
-            // 计算@符号位置，菜单显示在上方
-            val cursorPos = estimateCursorPosition()
-            val (menuOffsetX, menuOffsetY) = with(density) {
-                val x = cursorPos.x.toDp().coerceAtLeast(0.dp)
-                val y = cursorPos.y.toDp() - 250.dp // 在@符号上方显示
-                x to y.coerceAtLeast(0.dp)
-            }
-            
             Box(
-                modifier = Modifier
-                    .wrapContentSize()
-                    .offset(x = menuOffsetX, y = menuOffsetY)
-                    .zIndex(100f)
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = if (shouldAlignRight) Alignment.TopEnd else Alignment.TopStart
             ) {
-                CursorStyleContextMenu(
+                Box(
+                    modifier = Modifier
+                        .offset(
+                            x = if (shouldAlignRight) (-20).dp else 20.dp, // 左右边距
+                            y = (-260).dp // 在输入框上方显示
+                        )
+                        .zIndex(100f)
+                ) {
+                    CursorStyleContextMenu(
                     selectedType = selectedContextType,
                     onTypeSelect = { type ->
                         selectedContextType = type
@@ -557,8 +541,9 @@ fun EnhancedSmartInputArea(
                             onTextChange(newText)
                         }
                     },
-                    onClose = { showContextMenu = false }
-                )
+                        onClose = { showContextMenu = false }
+                    )
+                }
             }
         }
     }
@@ -579,7 +564,7 @@ private fun CursorStyleContextMenu(
 ) {
     Box(
         modifier = modifier
-            .width(450.dp)
+            .width(380.dp) // 减小宽度，更适合跟随位置显示
             .background(
                 JewelTheme.globalColors.panelBackground,
                 RoundedCornerShape(8.dp)
@@ -591,7 +576,7 @@ private fun CursorStyleContextMenu(
             )
     ) {
         Column(
-            modifier = Modifier.width(450.dp)
+            modifier = Modifier.width(380.dp)
         ) {
             // 顶部类型选择标签页
             Row(
