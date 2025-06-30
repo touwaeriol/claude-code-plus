@@ -26,6 +26,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
 import com.claudecodeplus.ui.models.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -373,11 +375,10 @@ private fun CompactModelSelector(
     modifier: Modifier = Modifier
 ) {
     val models = listOf(AiModel.SONNET, AiModel.OPUS)
-    val selectedIndex = models.indexOf(currentModel).takeIf { it >= 0 } ?: 0
     var expanded by remember { mutableStateOf(false) }
     
-    // 使用简化的点击式选择器，类似下拉框但更紧凑
     Box(modifier = modifier) {
+        // 触发器按钮
         Text(
             text = "${currentModel.displayName} ⌃",
             style = JewelTheme.defaultTextStyle.copy(
@@ -388,42 +389,57 @@ private fun CompactModelSelector(
                 .clickable(enabled = enabled) {
                     expanded = !expanded
                 }
-                .padding(horizontal = 4.dp, vertical = 2.dp)
+                .padding(horizontal = 8.dp, vertical = 4.dp)
         )
         
-        // 简单的下拉菜单
+        // 使用 Popup 显示下拉菜单
         if (expanded) {
-            Column(
-                modifier = Modifier
-                    .background(
-                        JewelTheme.globalColors.panelBackground, // 与主容器相同的面板背景色
-                        RoundedCornerShape(6.dp)
-                    )
-                    .border(
-                        1.dp,
-                        JewelTheme.globalColors.borders.normal, // 使用主题的正常边框色
-                        RoundedCornerShape(6.dp)
-                    )
-                    .padding(4.dp)
+            Popup(
+                onDismissRequest = { expanded = false },
+                alignment = Alignment.TopStart,
+                offset = IntOffset(0, -100) // 向上偏移显示
             ) {
-                models.forEach { model ->
-                    Text(
-                        text = model.displayName,
-                        style = JewelTheme.defaultTextStyle.copy(
-                            fontSize = 11.sp,
-                            color = if (model == currentModel) 
-                                JewelTheme.globalColors.text.normal 
-                            else 
-                                JewelTheme.globalColors.text.disabled
-                        ),
-                        modifier = Modifier
-                            .clickable {
-                                onModelChange(model)
-                                expanded = false
-                            }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                            .fillMaxWidth()
-                    )
+                Column(
+                    modifier = Modifier
+                        .background(
+                            JewelTheme.globalColors.panelBackground,
+                            RoundedCornerShape(6.dp)
+                        )
+                        .border(
+                            1.dp,
+                            JewelTheme.globalColors.borders.normal,
+                            RoundedCornerShape(6.dp)
+                        )
+                        .widthIn(min = 150.dp)
+                ) {
+                    models.forEach { model ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onModelChange(model)
+                                    expanded = false
+                                }
+                                .background(
+                                    if (model == currentModel) 
+                                        JewelTheme.globalColors.borders.focused.copy(alpha = 0.1f)
+                                    else 
+                                        Color.Transparent
+                                )
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = model.displayName,
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 12.sp,
+                                    color = if (model == currentModel) 
+                                        JewelTheme.globalColors.text.normal 
+                                    else 
+                                        JewelTheme.globalColors.text.disabled
+                                )
+                            )
+                        }
+                    }
                 }
             }
         }
