@@ -32,7 +32,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:${rootProject.extra["coroutinesVersion"]}")
     
     // Markdown 解析
-    implementation("org.commonmark:commonmark:0.21.0")
+    implementation("org.commonmark:commonmark:0.25.0")
     
     // 测试依赖
     testImplementation(kotlin("test"))

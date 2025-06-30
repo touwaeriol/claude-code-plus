@@ -13,17 +13,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import androidx.compose.material.LocalContentColor
+import org.commonmark.parser.Parser
+import org.commonmark.node.*
 
 /**
  * Markdown 渲染器组件
- * 支持基本的 Markdown 格式渲染
+ * 使用 CommonMark 库进行解析
  */
 @Composable
 fun MarkdownRenderer(
@@ -31,7 +38,9 @@ fun MarkdownRenderer(
     onCodeAction: (code: String, language: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
-    val blocks = parseMarkdown(markdown)
+    val parser = remember { Parser.builder().build() }
+    val document = remember(markdown) { parser.parse(markdown) }
+    val blocks = remember(document) { parseCommonMarkDocument(document) }
     
     Column(
         modifier = modifier,
@@ -39,11 +48,12 @@ fun MarkdownRenderer(
     ) {
         blocks.forEach { block ->
             when (block) {
-                is MarkdownBlock.Text -> {
+                is MarkdownBlock.Paragraph -> {
                     SelectionContainer {
                         Text(
                             text = block.content,
-                            style = JewelTheme.defaultTextStyle
+                            style = JewelTheme.defaultTextStyle,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -82,7 +92,8 @@ fun MarkdownRenderer(
                     ) {
                         for ((index, item) in block.items.withIndex()) {
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
                             ) {
                                 Text(
                                     text = if (block.ordered) "${index + 1}." else "•",
@@ -91,7 +102,8 @@ fun MarkdownRenderer(
                                 SelectionContainer {
                                     Text(
                                         text = item,
-                                        style = JewelTheme.defaultTextStyle
+                                        style = JewelTheme.defaultTextStyle,
+                                        modifier = Modifier.weight(1f)
                                     )
                                 }
                             }
@@ -227,77 +239,162 @@ fun CodeBlock(
  * 简单的 Markdown 解析
  */
 private sealed class MarkdownBlock {
-    data class Text(val content: String) : MarkdownBlock()
-    data class Header(val level: Int, val content: String) : MarkdownBlock()
+    data class Paragraph(val content: AnnotatedString) : MarkdownBlock()
+    data class Header(val level: Int, val content: AnnotatedString) : MarkdownBlock()
     data class Code(val content: String, val language: String) : MarkdownBlock()
-    data class ListBlock(val items: List<String>, val ordered: Boolean) : MarkdownBlock()
-    data class Blockquote(val content: String) : MarkdownBlock()
+    data class ListBlock(val items: List<AnnotatedString>, val ordered: Boolean) : MarkdownBlock()
+    data class Blockquote(val content: AnnotatedString) : MarkdownBlock()
 }
 
-private fun parseMarkdown(markdown: String): List<MarkdownBlock> {
+/**
+ * 使用 CommonMark 解析 Markdown 文档
+ */
+private fun parseCommonMarkDocument(document: Node): List<MarkdownBlock> {
     val blocks = mutableListOf<MarkdownBlock>()
-    val lines = markdown.lines()
-    var i = 0
     
-    while (i < lines.size) {
-        val line = lines[i]
-        
-        when {
-            // 代码块
-            line.startsWith("```") -> {
-                val language = line.removePrefix("```").trim()
-                val codeLines = mutableListOf<String>()
-                i++
-                while (i < lines.size && !lines[i].startsWith("```")) {
-                    codeLines.add(lines[i])
-                    i++
-                }
-                blocks.add(MarkdownBlock.Code(codeLines.joinToString("\n"), language))
+    var child = document.firstChild
+    while (child != null) {
+        when (child) {
+            is Paragraph -> {
+                val content = parseInlineContent(child)
+                blocks.add(MarkdownBlock.Paragraph(content))
             }
             
-            // 标题
-            line.startsWith("#") -> {
-                val level = line.takeWhile { it == '#' }.length
-                val content = line.drop(level).trim()
-                blocks.add(MarkdownBlock.Header(level, content))
+            is Heading -> {
+                val content = parseInlineContent(child)
+                blocks.add(MarkdownBlock.Header(child.level, content))
             }
             
-            // 引用
-            line.startsWith(">") -> {
-                val content = line.removePrefix(">").trim()
+            is IndentedCodeBlock -> {
+                blocks.add(MarkdownBlock.Code(child.literal ?: "", ""))
+            }
+            
+            is FencedCodeBlock -> {
+                blocks.add(MarkdownBlock.Code(child.literal ?: "", child.info ?: ""))
+            }
+            
+            is BlockQuote -> {
+                val content = parseInlineContent(child)
                 blocks.add(MarkdownBlock.Blockquote(content))
             }
             
-            // 无序列表
-            line.trim().startsWith("- ") || line.trim().startsWith("* ") -> {
-                val items = mutableListOf<String>()
-                while (i < lines.size && (lines[i].trim().startsWith("- ") || lines[i].trim().startsWith("* "))) {
-                    items.add(lines[i].trim().removePrefix("- ").removePrefix("* "))
-                    i++
+            is BulletList -> {
+                val items = mutableListOf<AnnotatedString>()
+                var listItem = child.firstChild
+                while (listItem != null) {
+                    if (listItem is ListItem) {
+                        val content = parseInlineContent(listItem)
+                        items.add(content)
+                    }
+                    listItem = listItem.next
                 }
-                i--
                 blocks.add(MarkdownBlock.ListBlock(items, ordered = false))
             }
             
-            // 有序列表
-            line.trim().matches(Regex("^\\d+\\.\\s.*")) -> {
-                val items = mutableListOf<String>()
-                while (i < lines.size && lines[i].trim().matches(Regex("^\\d+\\.\\s.*"))) {
-                    items.add(lines[i].trim().substringAfter(". "))
-                    i++
+            is OrderedList -> {
+                val items = mutableListOf<AnnotatedString>()
+                var listItem = child.firstChild
+                while (listItem != null) {
+                    if (listItem is ListItem) {
+                        val content = parseInlineContent(listItem)
+                        items.add(content)
+                    }
+                    listItem = listItem.next
                 }
-                i--
                 blocks.add(MarkdownBlock.ListBlock(items, ordered = true))
             }
-            
-            // 普通文本
-            line.isNotBlank() -> {
-                blocks.add(MarkdownBlock.Text(line))
-            }
         }
-        
-        i++
+        child = child.next
     }
     
     return blocks
+}
+
+/**
+ * 解析内联内容为 AnnotatedString
+ */
+private fun parseInlineContent(node: Node): AnnotatedString {
+    return buildAnnotatedString {
+        fun visitNode(node: Node) {
+            when (node) {
+                is Text -> {
+                    append(node.literal)
+                }
+                
+                is Emphasis -> {
+                    val start = length
+                    var child = node.firstChild
+                    while (child != null) {
+                        visitNode(child)
+                        child = child.next
+                    }
+                    addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, length)
+                }
+                
+                is StrongEmphasis -> {
+                    val start = length
+                    var child = node.firstChild
+                    while (child != null) {
+                        visitNode(child)
+                        child = child.next
+                    }
+                    addStyle(SpanStyle(fontWeight = FontWeight.Bold), start, length)
+                }
+                
+                is Code -> {
+                    val start = length
+                    append(node.literal)
+                    addStyle(
+                        SpanStyle(
+                            fontFamily = FontFamily.Monospace,
+                            background = Color(0xFFE8E8E8),
+                            color = Color(0xFFE91E63)
+                        ), 
+                        start, 
+                        length
+                    )
+                }
+                
+                is Link -> {
+                    val start = length
+                    var child = node.firstChild
+                    while (child != null) {
+                        visitNode(child)
+                        child = child.next
+                    }
+                    addStyle(
+                        SpanStyle(
+                            color = Color(0xFF2196F3),
+                            textDecoration = TextDecoration.Underline
+                        ), 
+                        start, 
+                        length
+                    )
+                }
+                
+                is SoftLineBreak -> {
+                    append(" ")
+                }
+                
+                is HardLineBreak -> {
+                    append("\n")
+                }
+                
+                else -> {
+                    // 对于其他类型的节点，遍历其子节点
+                    var child = node.firstChild
+                    while (child != null) {
+                        visitNode(child)
+                        child = child.next
+                    }
+                }
+            }
+        }
+        
+        var child = node.firstChild
+        while (child != null) {
+            visitNode(child)
+            child = child.next
+        }
+    }
 }
