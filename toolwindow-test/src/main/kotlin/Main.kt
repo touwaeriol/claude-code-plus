@@ -15,6 +15,7 @@ import org.jetbrains.jewel.ui.ComponentStyling
 import com.claudecodeplus.ui.jewel.JewelChatApp
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.ui.models.AiModel
+import com.claudecodeplus.test.ContextSelectorTestApp
 
 @Composable
 @Preview
@@ -76,20 +77,17 @@ fun TestCallback(
 
 fun main() = application {
     val windowState = rememberWindowState(
-        width = 1000.dp,
-        height = 700.dp
+        width = 800.dp,
+        height = 600.dp
     )
     
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Jewel Chat Test",
+        title = "上下文选择器测试",
         state = windowState
     ) {
         IntUiTheme {
-            JewelChatApp(
-                cliWrapper = ClaudeCliWrapper(),
-                workingDirectory = System.getProperty("user.dir")
-            )
+            ContextSelectorTestApp()
         }
     }
 } 

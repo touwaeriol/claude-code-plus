@@ -30,7 +30,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.claudecodeplus.ui.models.*
-import com.claudecodeplus.ui.jewel.components.context.ContextTagList
+import com.claudecodeplus.ui.jewel.components.context.*
+import com.claudecodeplus.ui.services.FileSearchService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -38,6 +39,7 @@ import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.theme.textAreaStyle
 import org.jetbrains.jewel.ui.theme.scrollbarStyle
 import androidx.compose.foundation.rememberScrollState
+import kotlinx.coroutines.flow.flow
 
 /**
  * 增强的智能输入区域组件
@@ -55,6 +57,8 @@ fun EnhancedSmartInputArea(
     enabled: Boolean = true,
     selectedModel: AiModel = AiModel.OPUS,
     onModelChange: (AiModel) -> Unit = {},
+    fileSearchService: FileSearchService? = null,
+    projectService: com.claudecodeplus.ui.services.ProjectService? = null,
     modifier: Modifier = Modifier
 ) {
     var textValue by remember { mutableStateOf(TextFieldValue(text)) }
@@ -72,6 +76,32 @@ fun EnhancedSmartInputArea(
     val focusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    
+    // 上下文选择器状态
+    var showContextSelector by remember { mutableStateOf(false) }
+    
+    // 创建上下文搜索服务
+    val contextSearchService = remember(fileSearchService, projectService) {
+        RealContextSearchService(fileSearchService, projectService)
+    }
+    
+    // 检测@符号输入
+    fun detectAtSymbol(newText: String, cursor: Int): Boolean {
+        if (cursor == 0) return false
+        
+        // 检查光标前是否是@符号
+        val beforeCursor = newText.substring(0, cursor)
+        
+        // 检查@符号前面的字符（如果存在）是否为空格或换行
+        return if (beforeCursor.isNotEmpty() && beforeCursor.last() == '@') {
+            // @符号前面必须是空格、换行或字符串开头
+            beforeCursor.length == 1 || beforeCursor[beforeCursor.length - 2].let { 
+                it == ' ' || it == '\n' 
+            }
+        } else {
+            false
+        }
+    }
     
     // 动态高度计算
     val lineHeight = with(density) { 18.sp.toDp() }
@@ -125,7 +155,7 @@ fun EnhancedSmartInputArea(
                         modifier = Modifier
                             .background(Color.Transparent, RoundedCornerShape(6.dp))
                             .clickable(enabled = enabled && !isGenerating) {
-                                // 添加上下文功能
+                                showContextSelector = true
                             }
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         contentAlignment = Alignment.Center
@@ -155,8 +185,14 @@ fun EnhancedSmartInputArea(
                     TextArea(
                         value = textValue,
                         onValueChange = { newValue ->
+                            val oldCursor = textValue.selection.start
                             textValue = newValue
                             onTextChange(newValue.text)
+                            
+                            // 检测@符号输入
+                            if (detectAtSymbol(newValue.text, newValue.selection.start)) {
+                                showContextSelector = true
+                            }
                         },
                         enabled = enabled,
                         undecorated = true, // 去掉边框和装饰
@@ -192,6 +228,15 @@ fun EnhancedSmartInputArea(
                                             }
                                         }
                                     }
+                                    keyEvent.key == Key.Escape && keyEvent.type == KeyEventType.KeyDown -> {
+                                        // ESC键关闭上下文选择器
+                                        if (showContextSelector) {
+                                            showContextSelector = false
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    }
                                     else -> false
                                 }
                             }
@@ -208,6 +253,19 @@ fun EnhancedSmartInputArea(
                             modifier = Modifier
                                 .align(Alignment.TopStart)
                                 .padding(8.dp) // 减少内边距以匹配无装饰的TextArea
+                        )
+                    }
+                    
+                    // 上下文选择器弹出框
+                    if (showContextSelector) {
+                        SimpleContextSelectorPopup(
+                            onDismiss = { showContextSelector = false },
+                            onContextSelect = { context ->
+                                onContextAdd(context)
+                                showContextSelector = false
+                            },
+                            searchService = contextSearchService,
+                            modifier = Modifier.align(Alignment.TopStart)
                         )
                     }
                 }
@@ -438,4 +496,158 @@ private fun CompactModelSelector(
             }
         }
     }
+}
+
+/**
+ * 真实的上下文搜索服务实现
+ * 基于现有的UI服务进行适配
+ */
+class RealContextSearchService(
+    private val fileSearchService: FileSearchService? = null,
+    private val projectService: com.claudecodeplus.ui.services.ProjectService? = null
+) : ContextSearchService {
+    
+    override suspend fun searchFiles(query: String, maxResults: Int): List<FileSearchResult> {
+        return try {
+            val files = fileSearchService?.searchFiles(query, maxResults) ?: emptyList()
+            files.map { fileInfo ->
+                val contextItem = FileContextItem(
+                    name = fileInfo.name,
+                    relativePath = fileInfo.relativePath,
+                    absolutePath = fileInfo.path,
+                    isDirectory = fileInfo.isDirectory,
+                    fileType = fileInfo.name.substringAfterLast('.', "")
+                )
+                
+                // 计算搜索权重
+                val weight = when {
+                    fileInfo.name.equals(query, ignoreCase = true) -> 100
+                    fileInfo.name.startsWith(query, ignoreCase = true) -> 80
+                    fileInfo.name.contains(query, ignoreCase = true) -> 60
+                    fileInfo.path.contains(query, ignoreCase = true) -> 40
+                    else -> 20
+                }
+                
+                val matchType = when {
+                    fileInfo.name.equals(query, ignoreCase = true) -> FileSearchResult.MatchType.EXACT_NAME
+                    fileInfo.name.startsWith(query, ignoreCase = true) -> FileSearchResult.MatchType.PREFIX_NAME
+                    fileInfo.name.contains(query, ignoreCase = true) -> FileSearchResult.MatchType.CONTAINS_NAME
+                    else -> FileSearchResult.MatchType.PATH_MATCH
+                }
+                
+                FileSearchResult(contextItem, weight, matchType)
+            }.sortedByDescending { it.weight }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+    
+    override fun searchFilesFlow(query: String, maxResults: Int) = flow {
+        emit(searchFiles(query, maxResults))
+    }
+    
+    override suspend fun getRootFiles(maxResults: Int): List<FileContextItem> {
+        return try {
+            val files = fileSearchService?.searchFiles("", maxResults) ?: emptyList()
+            files.map { fileInfo ->
+                FileContextItem(
+                    name = fileInfo.name,
+                    relativePath = fileInfo.relativePath,
+                    absolutePath = fileInfo.path,
+                    isDirectory = fileInfo.isDirectory,
+                    fileType = fileInfo.name.substringAfterLast('.', "")
+                )
+            }.take(maxResults)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+    
+    override fun validateUrl(url: String): Boolean {
+        return try {
+            val urlPattern = Regex("^(https?|file)://[-a-zA-Z0-9+&@#/%?=~_|!:,.;]*[-a-zA-Z0-9+&@#/%=~_|]")
+            url.matches(urlPattern)
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    override suspend fun getWebInfo(url: String): WebContextItem? {
+        return if (validateUrl(url)) {
+            WebContextItem(
+                url = url,
+                title = null, // 暂时不获取网页标题
+                description = null
+            )
+        } else {
+            null
+        }
+    }
+    
+    override suspend fun getFileInfo(relativePath: String): FileContextItem? {
+        return try {
+            val content = fileSearchService?.getFileContent(relativePath)
+            if (content != null) {
+                val fileName = relativePath.substringAfterLast('/')
+                val absolutePath = projectService?.getProjectPath()?.let { projectPath -> 
+                    "$projectPath/$relativePath" 
+                } ?: relativePath
+                
+                FileContextItem(
+                    name = fileName,
+                    relativePath = relativePath,
+                    absolutePath = absolutePath,
+                    isDirectory = false,
+                    fileType = fileName.substringAfterLast('.', ""),
+                    size = content.length.toLong()
+                )
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
+
+/**
+ * 简化的上下文选择器弹出组件
+ * 封装了完整的上下文选择流程，直接返回ContextReference
+ */
+@Composable
+fun SimpleContextSelectorPopup(
+    onDismiss: () -> Unit,
+    onContextSelect: (ContextReference) -> Unit,
+    searchService: ContextSearchService,
+    modifier: Modifier = Modifier
+) {
+    var state by remember { mutableStateOf<ContextSelectionState>(ContextSelectionState.SelectingType) }
+    
+    ContextSelectorPopup(
+        visible = true,
+        anchorPosition = IntOffset.Zero, // 简化版不需要精确位置
+        state = state,
+        searchService = searchService,
+        onStateChange = { newState -> state = newState },
+        onResult = { result ->
+            when (result) {
+                is ContextSelectionResult.FileSelected -> {
+                    val contextRef = ContextReference.FileReference(
+                        path = result.item.relativePath
+                    )
+                    onContextSelect(contextRef)
+                }
+                is ContextSelectionResult.WebSelected -> {
+                    val contextRef = ContextReference.WebReference(
+                        url = result.item.url
+                    )
+                    onContextSelect(contextRef)
+                }
+                is ContextSelectionResult.Cancelled -> {
+                    onDismiss()
+                }
+            }
+        },
+        modifier = modifier
+    )
 }

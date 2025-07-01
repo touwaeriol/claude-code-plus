@@ -15,6 +15,7 @@ import com.claudecodeplus.idea.IdeaProjectService
 import com.claudecodeplus.idea.IdeaFileSearchService
 import com.claudecodeplus.idea.IdeaContextProvider
 import com.claudecodeplus.plugin.adapters.IdeaProjectServiceAdapter
+import com.claudecodeplus.plugin.adapters.IdeaFileSearchServiceAdapter
 import kotlinx.coroutines.*
 
 /**
@@ -34,11 +35,14 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         // 创建服务
         val projectService = IdeaProjectServiceAdapter(IdeaProjectService(project))
         val contextProvider = IdeaContextProvider(project)
+        val fileSearchService = IdeaFileSearchServiceAdapter(IdeaFileSearchService(project))
         
         // 创建 Jewel 聊天面板  
         val conversationPanel = JewelChatPanel(
             cliWrapper = cliWrapper,
-            workingDirectory = project.basePath ?: System.getProperty("user.dir")
+            workingDirectory = project.basePath ?: System.getProperty("user.dir"),
+            fileSearchService = fileSearchService,
+            projectService = projectService
         )
         
         val content = contentFactory.createContent(conversationPanel, "", false)
