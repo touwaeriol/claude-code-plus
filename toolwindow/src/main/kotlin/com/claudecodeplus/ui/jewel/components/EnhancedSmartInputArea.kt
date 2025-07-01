@@ -11,13 +11,17 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.Divider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextRange
@@ -32,6 +36,7 @@ import androidx.compose.ui.window.PopupProperties
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.jewel.components.context.*
 import com.claudecodeplus.ui.services.FileSearchService
+import com.claudecodeplus.ui.services.ProjectService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -40,6 +45,10 @@ import org.jetbrains.jewel.ui.theme.textAreaStyle
 import org.jetbrains.jewel.ui.theme.scrollbarStyle
 import androidx.compose.foundation.rememberScrollState
 import kotlinx.coroutines.flow.flow
+import org.jetbrains.jewel.ui.component.styling.ButtonStyle
+import org.jetbrains.jewel.ui.Orientation
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 
 /**
  * 增强的智能输入区域组件
@@ -176,13 +185,14 @@ fun EnhancedSmartInputArea(
                     }
                 }
                 
-                // 主输入框 - 去掉边框，使用透明背景
+                // 主输入框 - 改用支持输入法的组件
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = minHeight, max = maxHeight)
                 ) {
-                    TextArea(
+                    // 使用BasicTextField以获得更好的输入法支持
+                    BasicTextField(
                         value = textValue,
                         onValueChange = { newValue ->
                             val oldCursor = textValue.selection.start
@@ -195,11 +205,46 @@ fun EnhancedSmartInputArea(
                             }
                         },
                         enabled = enabled,
-                        undecorated = true, // 去掉边框和装饰
-                        maxLines = Int.MAX_VALUE,
+                        textStyle = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 14.sp,
+                            color = JewelTheme.globalColors.text.normal
+                        ),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                            imeAction = ImeAction.Send
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onSend = {
+                                if (textValue.text.isNotBlank() && enabled && !isGenerating) {
+                                    onSend()
+                                    textValue = TextFieldValue("")
+                                    onTextChange("")
+                                }
+                            }
+                        ),
+                        cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),
+                        decorationBox = { innerTextField ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.Transparent)
+                                    .padding(8.dp)
+                            ) {
+                                // Placeholder文本
+                                if (textValue.text.isEmpty()) {
+                                    Text(
+                                        "输入消息或使用 @ 引用上下文...",
+                                        style = JewelTheme.defaultTextStyle.copy(
+                                            color = JewelTheme.globalColors.text.disabled,
+                                            fontSize = 14.sp
+                                        )
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color.Transparent) // 透明背景
                             .focusRequester(focusRequester)
                             .onPreviewKeyEvent { keyEvent ->
                                 when {
@@ -241,20 +286,6 @@ fun EnhancedSmartInputArea(
                                 }
                             }
                     )
-                    
-                    // 手动实现placeholder - 调整位置与光标对齐
-                    if (textValue.text.isEmpty()) {
-                        Text(
-                            "输入消息或使用 @ 引用上下文...",
-                            style = JewelTheme.defaultTextStyle.copy(
-                                color = JewelTheme.globalColors.text.disabled,
-                                fontSize = 14.sp
-                            ),
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(8.dp) // 减少内边距以匹配无装饰的TextArea
-                        )
-                    }
                     
                     // 上下文选择器弹出框
                     if (showContextSelector) {
