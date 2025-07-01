@@ -75,8 +75,65 @@ e.keyCode == KeyEvent.VK_ESCAPE -> {
 
 ### 4. 多模型支持
 
-- Claude 4 Opus（默认）
-- Claude 4 Sonnet
+插件支持 Claude 的多个模型，用户可以根据需求选择不同的模型：
+
+#### 4.1 支持的模型
+
+- **Claude 4 Opus**（默认）- 最强大的模型，适合复杂任务
+- **Claude 4 Sonnet** - 平衡性能和速度的模型
+
+#### 4.2 模型选择器
+
+**位置**：输入框左下角的小巧按钮
+
+**交互方式**：
+- 点击按钮显示模型选择下拉菜单
+- 菜单向上弹出，不遮挡输入内容
+- 选择后立即切换，新消息将使用选定的模型
+
+**UI设计特点**：
+- 小巧无边框设计，与主题完美融合
+- 当前选中的模型会高亮显示
+- 使用 Jewel UI 的 Popup 组件实现
+
+#### 4.3 实现原理
+
+**模型参数传递**：
+```kotlin
+// 模型枚举定义
+enum class AiModel(val displayName: String, val cliName: String) {
+    OPUS("Claude 4 Opus", "opus"),
+    SONNET("Claude 4 Sonnet", "sonnet")
+}
+
+// 传递到 Claude CLI
+val command = listOf("claude", "--model", selectedModel.cliName, ...)
+```
+
+**状态管理**：
+```kotlin
+// 响应式模型状态
+var selectedModel by remember { mutableStateOf(AiModel.OPUS) }
+
+// 状态同步
+LaunchedEffect(currentModel) {
+    if (internalModel != currentModel) {
+        internalModel = currentModel
+    }
+}
+```
+
+#### 4.4 模型切换验证
+
+发送消息时会在调试日志中显示：
+```
+DEBUG: Selected model: Claude 4 Opus (CLI: opus)
+```
+
+Claude CLI 初始化时确认模型：
+```json
+{"model":"claude-opus-4-20250514","permissionMode":"bypassPermissions"}
+```
 
 ### 5. 会话管理
 
