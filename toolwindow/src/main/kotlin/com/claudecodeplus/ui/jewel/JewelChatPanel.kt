@@ -89,20 +89,23 @@ class JewelChatPanel(
     
     @Composable
     private fun ChatPanelContent() {
-        // 聊天状态
-        var messages by remember { mutableStateOf(listOf<EnhancedMessage>()) }
-        var inputText by remember { mutableStateOf("") }
-        var contexts by remember { mutableStateOf(listOf<ContextReference>()) }
-        var isGenerating by remember { mutableStateOf(false) }
-        var currentSessionId by remember { mutableStateOf<String?>(null) }
-        var currentJob by remember { mutableStateOf<Job?>(null) }
-        var selectedModel by remember { mutableStateOf(AiModel.SONNET) }
+        // 聊天状态 - 使用 remember 确保状态持久化
+        val messages = remember { mutableStateOf(listOf<EnhancedMessage>()) }
+        val inputText = remember { mutableStateOf("") }
+        val contexts = remember { mutableStateOf(listOf<ContextReference>()) }
+        val isGenerating = remember { mutableStateOf(false) }
+        val currentSessionId = remember { mutableStateOf<String?>(null) }
+        val currentJob = remember { mutableStateOf<Job?>(null) }
+        val selectedModel = remember { mutableStateOf(AiModel.OPUS) }
         
         val scope = rememberCoroutineScope()
         
+        // 添加调试输出
+        println("ChatPanelContent: selectedModel = ${selectedModel.value.displayName}")
+        
         // 初始欢迎消息
         LaunchedEffect(Unit) {
-            messages = listOf(
+            messages.value = listOf(
                 EnhancedMessage(
                     role = MessageRole.ASSISTANT,
                     content = "你好！我是Claude，很高兴为您提供代码和技术方面的帮助。您可以询问任何关于编程、代码审查、调试或技术问题。",
@@ -112,44 +115,52 @@ class JewelChatPanel(
         }
         
         JewelConversationView(
-            messages = messages,
-            inputText = inputText,
-            onInputChange = { inputText = it },
+            messages = messages.value,
+            inputText = inputText.value,
+            onInputChange = { inputText.value = it },
             onSend = {
-                if (inputText.isNotBlank() && !isGenerating) {
+                if (inputText.value.isNotBlank() && !isGenerating.value) {
                     sendMessage(
                         scope = scope,
-                        inputText = inputText,
-                        contexts = contexts,
-                        selectedModel = selectedModel,
+                        inputText = inputText.value,
+                        contexts = contexts.value,
+                        selectedModel = selectedModel.value,
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
-                        currentSessionId = currentSessionId,
-                        onMessageUpdate = { messages = it },
-                        onInputClear = { inputText = "" },
-                        onContextsClear = { contexts = emptyList() },
-                        onGeneratingChange = { isGenerating = it },
-                        onSessionIdUpdate = { currentSessionId = it },
-                        onJobUpdate = { currentJob = it }
+                        currentSessionId = currentSessionId.value,
+                        onMessageUpdate = { messages.value = it },
+                        onInputClear = { inputText.value = "" },
+                        onContextsClear = { contexts.value = emptyList() },
+                        onGeneratingChange = { isGenerating.value = it },
+                        onSessionIdUpdate = { currentSessionId.value = it },
+                        onJobUpdate = { currentJob.value = it }
                     )
                 }
             },
             onStop = {
-                currentJob?.cancel()
-                isGenerating = false
+                currentJob.value?.cancel()
+                isGenerating.value = false
             },
-            contexts = contexts,
+            contexts = contexts.value,
             onContextAdd = { context ->
-                contexts = contexts + context
+                contexts.value = contexts.value + context
             },
             onContextRemove = { context ->
-                contexts = contexts - context
+                contexts.value = contexts.value - context
             },
-            isGenerating = isGenerating,
-            selectedModel = selectedModel,
-            onModelChange = { selectedModel = it },
+            isGenerating = isGenerating.value,
+            selectedModel = selectedModel.value,
+            onModelChange = { model ->
+                println("=== JewelChatPanel.onModelChange CALLED ===")
+                println("DEBUG: Current selectedModel.value = ${selectedModel.value.displayName}")
+                println("DEBUG: New model parameter = ${model.displayName}")
+                println("DEBUG: About to update selectedModel.value")
+                selectedModel.value = model
+                println("DEBUG: After update selectedModel.value = ${selectedModel.value.displayName}")
+                println("=== JewelChatPanel.onModelChange FINISHED ===")
+            },
             onClearChat = { 
-                messages = listOf(
+                messages.value = listOf(
                     EnhancedMessage(
                         role = MessageRole.ASSISTANT,
                         content = "聊天记录已清空。有什么可以帮助您的吗？",
@@ -214,6 +225,7 @@ class JewelChatPanel(
             try {
                 println("DEBUG: Sending message to Claude CLI: $messageWithContext")
                 println("DEBUG: Working directory: $workingDirectory")
+                println("DEBUG: Selected model: ${selectedModel.displayName} (CLI: ${selectedModel.cliName})")
                 
                 // 调用 CLI  
                 val options = ClaudeCliWrapper.QueryOptions(

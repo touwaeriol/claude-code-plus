@@ -43,8 +43,12 @@ fun JewelChatApp(
     var isGenerating by remember { mutableStateOf(false) }
     var currentSessionId by remember { mutableStateOf<String?>(null) }
     var messageJob by remember { mutableStateOf<Job?>(null) }
+    var selectedModel by remember { mutableStateOf(AiModel.OPUS) }
     
     val scope = rememberCoroutineScope()
+    
+    // 添加调试输出
+    println("JewelChatApp: selectedModel = ${selectedModel.displayName}")
     
     Column(
         modifier = modifier
@@ -77,6 +81,7 @@ fun JewelChatApp(
                         scope = scope,
                         inputText = inputText,
                         contexts = contexts,
+                        selectedModel = selectedModel,
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
                         currentSessionId = currentSessionId,
@@ -106,6 +111,16 @@ fun JewelChatApp(
                 contexts = contexts - context
             },
             isGenerating = isGenerating,
+            selectedModel = selectedModel,
+            onModelChange = { model ->
+                println("=== JewelChatApp.onModelChange CALLED ===")
+                println("DEBUG: Current selectedModel = ${selectedModel.displayName}")
+                println("DEBUG: New model parameter = ${model.displayName}")
+                println("DEBUG: About to update selectedModel")
+                selectedModel = model
+                println("DEBUG: After update selectedModel = ${selectedModel.displayName}")
+                println("=== JewelChatApp.onModelChange FINISHED ===")
+            },
             modifier = Modifier.weight(1f)
         )
     }
@@ -216,6 +231,7 @@ private fun sendMessage(
     scope: CoroutineScope,
     inputText: String,
     contexts: List<ContextReference>,
+    selectedModel: AiModel,
     cliWrapper: ClaudeCliWrapper,
     workingDirectory: String,
     currentSessionId: String?,
@@ -263,15 +279,21 @@ private fun sendMessage(
             val messagesWithAssistant = updatedMessages + assistantMessage
             onMessageUpdate(messagesWithAssistant)
             
+            println("DEBUG: Sending message to Claude CLI: $messageWithContext")
+            println("DEBUG: Working directory: $workingDirectory")
+            println("DEBUG: Selected model: ${selectedModel.displayName} (CLI: ${selectedModel.cliName})")
+            
             // 启动消息流
             val messageFlow = cliWrapper.query(
                 prompt = inputText,
                 options = ClaudeCliWrapper.QueryOptions(
-                    model = "sonnet",
+                    model = selectedModel.cliName,
                     resume = currentSessionId,
                     cwd = workingDirectory
                 )
             )
+            
+            println("DEBUG: Starting to collect messages from Claude CLI...")
             
             val responseBuilder = StringBuilder()
             val toolCalls = mutableListOf<ToolCall>()

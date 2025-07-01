@@ -35,7 +35,7 @@ fun JewelConversationView(
     onContextAdd: (ContextReference) -> Unit = {},
     onContextRemove: (ContextReference) -> Unit = {},
     isGenerating: Boolean = false,
-    selectedModel: AiModel = AiModel.SONNET,
+    selectedModel: AiModel = AiModel.OPUS,
     onModelChange: (AiModel) -> Unit = {},
     onClearChat: () -> Unit = {},
     modifier: Modifier = Modifier
