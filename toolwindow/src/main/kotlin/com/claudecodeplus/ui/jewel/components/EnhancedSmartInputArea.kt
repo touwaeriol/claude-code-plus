@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.claudecodeplus.ui.models.*
+import com.claudecodeplus.ui.jewel.components.context.ContextTagList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -92,61 +93,12 @@ fun EnhancedSmartInputArea(
             )
         }
         
-        // 已选择的上下文显示
-        if (contexts.isNotEmpty()) {
-            HorizontallyScrollableContainer(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    contexts.forEach { context ->
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    JewelTheme.globalColors.borders.focused,
-                                    RoundedCornerShape(16.dp)
-                                )
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                                .clickable { onContextRemove(context) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    when (context) {
-                                        is ContextReference.FileReference -> "📄"
-                                        is ContextReference.GitReference -> "🔀"
-                                        else -> "📎"
-                                    },
-                                    style = JewelTheme.defaultTextStyle.copy(fontSize = 10.sp)
-                                )
-                                Text(
-                                    when (context) {
-                                        is ContextReference.FileReference -> context.path.substringAfterLast('/')
-                                        is ContextReference.GitReference -> context.content
-                                        else -> "未知"
-                                    },
-                                    style = JewelTheme.defaultTextStyle.copy(
-                                        fontSize = 11.sp,
-                                        color = JewelTheme.globalColors.text.normal
-                                    )
-                                )
-                                Text(
-                                    "×",
-                                    style = JewelTheme.defaultTextStyle.copy(
-                                        fontSize = 10.sp,
-                                        color = JewelTheme.globalColors.text.disabled
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // 已选择的上下文标签显示
+        ContextTagList(
+            contexts = contexts,
+            onRemove = onContextRemove,
+            modifier = Modifier.fillMaxWidth()
+        )
         
         // 主输入框容器 - 统一背景，包含所有控件
         Box(
