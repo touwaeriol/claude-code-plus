@@ -34,12 +34,27 @@ enum class MessageStatus {
  * 上下文引用类型
  */
 sealed class ContextReference {
+    /**
+     * 文件引用
+     * @param path 文件路径（可能是相对路径或绝对路径）
+     * @param fullPath 完整路径（用于悬停提示）
+     */
     data class FileReference(
         val path: String,
-        val lines: IntRange? = null,
-        val preview: String? = null
+        val fullPath: String = path
     ) : ContextReference()
     
+    /**
+     * Web引用
+     * @param url 完整URL
+     * @param title 网页标题（可选，用于悬停提示）
+     */
+    data class WebReference(
+        val url: String,
+        val title: String? = null
+    ) : ContextReference()
+    
+    // 保留原有类型兼容性（暂时未使用）
     data class FolderReference(
         val path: String,
         val fileCount: Int = 0,
