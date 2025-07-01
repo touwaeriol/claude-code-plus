@@ -89,9 +89,9 @@ fun ContextSelectorTestApp() {
             
             // 输入框
             BasicTextField(
-                value = textFieldValue.text,
-                onValueChange = { newText ->
-                    textFieldValue = textFieldValue.copy(text = newText)
+                value = textFieldValue,
+                onValueChange = { newValue ->
+                    textFieldValue = newValue
                 },
                 textStyle = JewelTheme.defaultTextStyle.copy(
                     color = JewelTheme.globalColors.text.normal

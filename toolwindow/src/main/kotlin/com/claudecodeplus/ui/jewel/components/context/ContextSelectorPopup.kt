@@ -170,13 +170,12 @@ fun detectAtTrigger(text: String, cursorPosition: Int): Boolean {
     val charAtCursor = text.getOrNull(cursorPosition - 1) ?: return false
     if (charAtCursor != '@') return false
     
-    // 检查@符号前面的字符
+    // 检查@符号前面的字符（前面必须是空格或在开头）
     val charBefore = text.getOrNull(cursorPosition - 2)
     if (charBefore != null && !charBefore.isWhitespace()) return false
     
-    // 检查@符号后面的字符
-    val charAfter = text.getOrNull(cursorPosition)
-    if (charAfter != null && !charAfter.isWhitespace()) return false
+    // @符号后面可以是任何字符（包括立即输入的内容）
+    // 不需要检查后面的字符，用户刚输入@时光标就在@后面
     
     return true
 }
