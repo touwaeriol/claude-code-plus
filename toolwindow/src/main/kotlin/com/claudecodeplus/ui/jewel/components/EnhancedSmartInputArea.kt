@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.claudecodeplus.ui.models.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -51,11 +52,14 @@ fun EnhancedSmartInputArea(
     onContextRemove: (ContextReference) -> Unit = {},
     isGenerating: Boolean = false,
     enabled: Boolean = true,
-    selectedModel: AiModel = AiModel.SONNET,
+    selectedModel: AiModel = AiModel.OPUS,
     onModelChange: (AiModel) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var textValue by remember { mutableStateOf(TextFieldValue(text)) }
+    
+    // 调试输出
+    println("EnhancedSmartInputArea: selectedModel = ${selectedModel.displayName}")
     
     // 同步外部text参数到内部状态
     LaunchedEffect(text) {
@@ -265,7 +269,10 @@ fun EnhancedSmartInputArea(
                     // 左下角模型选择器
                     CompactModelSelector(
                         currentModel = selectedModel,
-                        onModelChange = onModelChange,
+                        onModelChange = { model ->
+                            println("EnhancedSmartInputArea: Calling onModelChange with ${model.displayName}")
+                            onModelChange(model)
+                        },
                         enabled = enabled && !isGenerating
                     )
                     
@@ -365,7 +372,7 @@ fun GeneratingIndicator(
 }
 
 /**
- * 紧凑的模型选择器 - 显示在输入框左下角，使用下拉菜单实现
+ * 紧凑的模型选择器
  */
 @Composable
 private fun CompactModelSelector(
@@ -374,65 +381,100 @@ private fun CompactModelSelector(
     enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    val models = listOf(AiModel.SONNET, AiModel.OPUS)
-    var expanded by remember { mutableStateOf(false) }
+    // 内部状态管理 - 当 currentModel 改变时自动同步
+    var internalModel by remember(currentModel) { mutableStateOf(currentModel) }
+    var showDropdown by remember { mutableStateOf(false) }
+    val models = listOf(AiModel.OPUS, AiModel.SONNET)
+    
+    // 同步外部状态到内部状态
+    LaunchedEffect(currentModel) {
+        if (internalModel != currentModel) {
+            println("DEBUG: Syncing external model ${currentModel.displayName} to internal state")
+            internalModel = currentModel
+        }
+    }
+    
+    // 添加调试输出
+    println("CompactModelSelector: currentModel = ${currentModel.displayName}, internalModel = ${internalModel.displayName}, enabled = $enabled")
     
     Box(modifier = modifier) {
-        // 触发器按钮
-        Text(
-            text = "${currentModel.displayName} ⌃",
-            style = JewelTheme.defaultTextStyle.copy(
-                fontSize = 11.sp,
-                color = JewelTheme.globalColors.text.disabled
-            ),
+        // 主按钮 - 小巧设计
+        Box(
             modifier = Modifier
+                .background(
+                    JewelTheme.globalColors.panelBackground,
+                    RoundedCornerShape(4.dp)
+                )
                 .clickable(enabled = enabled) {
-                    expanded = !expanded
+                    println("DEBUG: Model selector clicked, showDropdown = $showDropdown")
+                    showDropdown = !showDropdown
                 }
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-        )
+                .padding(horizontal = 6.dp, vertical = 3.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = internalModel.displayName,
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 10.sp,
+                        color = JewelTheme.globalColors.text.normal
+                    )
+                )
+                Text(
+                    text = if (showDropdown) "▲" else "▼",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 8.sp,
+                        color = JewelTheme.globalColors.text.disabled
+                    )
+                )
+            }
+        }
         
-        // 使用 Popup 显示下拉菜单
-        if (expanded) {
+        // 使用 Popup 向上展开的小巧下拉列表
+        if (showDropdown) {
+            println("DEBUG: Showing dropdown with ${models.size} models")
             Popup(
-                onDismissRequest = { expanded = false },
                 alignment = Alignment.TopStart,
-                offset = IntOffset(0, -100) // 向上偏移显示
+                offset = IntOffset(0, -8), // 紧贴按钮向上
+                onDismissRequest = { showDropdown = false },
+                properties = PopupProperties(focusable = true)
             ) {
                 Column(
                     modifier = Modifier
                         .background(
                             JewelTheme.globalColors.panelBackground,
-                            RoundedCornerShape(6.dp)
+                            RoundedCornerShape(4.dp)
                         )
-                        .border(
-                            1.dp,
-                            JewelTheme.globalColors.borders.normal,
-                            RoundedCornerShape(6.dp)
-                        )
-                        .widthIn(min = 150.dp)
+                        .width(120.dp) // 固定小宽度
+                        .padding(2.dp)
                 ) {
                     models.forEach { model ->
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
+                                    println("DEBUG: Selected model ${model.displayName}")
+                                    internalModel = model
+                                    showDropdown = false
                                     onModelChange(model)
-                                    expanded = false
+                                    println("DEBUG: Called onModelChange with ${model.displayName}")
                                 }
                                 .background(
-                                    if (model == currentModel) 
-                                        JewelTheme.globalColors.borders.focused.copy(alpha = 0.1f)
+                                    if (model == internalModel) 
+                                        JewelTheme.globalColors.borders.focused.copy(alpha = 0.15f)
                                     else 
-                                        Color.Transparent
+                                        Color.Transparent,
+                                    RoundedCornerShape(2.dp)
                                 )
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 text = model.displayName,
                                 style = JewelTheme.defaultTextStyle.copy(
-                                    fontSize = 12.sp,
-                                    color = if (model == currentModel) 
+                                    fontSize = 10.sp,
+                                    color = if (model == internalModel) 
                                         JewelTheme.globalColors.text.normal 
                                     else 
                                         JewelTheme.globalColors.text.disabled
