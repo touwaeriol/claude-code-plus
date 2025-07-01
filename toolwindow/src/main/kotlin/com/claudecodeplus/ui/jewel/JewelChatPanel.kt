@@ -369,10 +369,12 @@ class JewelChatPanel(
         
         val contextStrings = contexts.map { context ->
             when (context) {
-                is ContextReference.FileReference -> {
-                    "文件: ${context.path}" + 
-                        if (context.lines != null) " (行 ${context.lines})" else ""
-                }
+                            is ContextReference.FileReference -> {
+                "文件: ${context.path}"
+            }
+            is ContextReference.WebReference -> {
+                "网页: ${context.title ?: context.url}"
+            }
                 is ContextReference.FolderReference -> "文件夹: ${context.path}"
                 is ContextReference.SymbolReference -> "符号: ${context.name} (${context.type})"
                 is ContextReference.TerminalReference -> "终端输出 (最近 ${context.lines} 行)"
