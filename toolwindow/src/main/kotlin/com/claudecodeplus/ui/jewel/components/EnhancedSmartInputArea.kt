@@ -57,7 +57,7 @@ fun EnhancedSmartInputArea(
     enabled: Boolean = true,
     selectedModel: AiModel = AiModel.OPUS,
     onModelChange: (AiModel) -> Unit = {},
-    fileSearchService: FileSearchService? = null,
+    fileIndexService: com.claudecodeplus.ui.services.FileIndexService? = null,
     projectService: com.claudecodeplus.ui.services.ProjectService? = null,
     modifier: Modifier = Modifier
 ) {
@@ -81,8 +81,8 @@ fun EnhancedSmartInputArea(
     var showContextSelector by remember { mutableStateOf(false) }
     
     // 创建上下文搜索服务
-    val contextSearchService = remember(fileSearchService, projectService) {
-        RealContextSearchService(fileSearchService, projectService)
+    val contextSearchService = remember(fileIndexService, projectService) {
+        RealContextSearchService(fileIndexService, projectService)
     }
     
     // 检测@符号输入
@@ -500,23 +500,23 @@ private fun CompactModelSelector(
 
 /**
  * 真实的上下文搜索服务实现
- * 基于现有的UI服务进行适配
+ * 基于新的FileIndexService接口
  */
 class RealContextSearchService(
-    private val fileSearchService: FileSearchService? = null,
+    private val fileIndexService: com.claudecodeplus.ui.services.FileIndexService? = null,
     private val projectService: com.claudecodeplus.ui.services.ProjectService? = null
 ) : ContextSearchService {
     
     override suspend fun searchFiles(query: String, maxResults: Int): List<FileSearchResult> {
         return try {
-            val files = fileSearchService?.searchFiles(query, maxResults) ?: emptyList()
+            val files = fileIndexService?.searchFiles(query, maxResults) ?: emptyList()
             files.map { fileInfo ->
                 val contextItem = FileContextItem(
                     name = fileInfo.name,
                     relativePath = fileInfo.relativePath,
-                    absolutePath = fileInfo.path,
+                    absolutePath = fileInfo.absolutePath,
                     isDirectory = fileInfo.isDirectory,
-                    fileType = fileInfo.name.substringAfterLast('.', "")
+                    fileType = fileInfo.fileType
                 )
                 
                 // 计算搜索权重
@@ -524,7 +524,7 @@ class RealContextSearchService(
                     fileInfo.name.equals(query, ignoreCase = true) -> 100
                     fileInfo.name.startsWith(query, ignoreCase = true) -> 80
                     fileInfo.name.contains(query, ignoreCase = true) -> 60
-                    fileInfo.path.contains(query, ignoreCase = true) -> 40
+                    fileInfo.relativePath.contains(query, ignoreCase = true) -> 40
                     else -> 20
                 }
                 
@@ -548,14 +548,14 @@ class RealContextSearchService(
     
     override suspend fun getRootFiles(maxResults: Int): List<FileContextItem> {
         return try {
-            val files = fileSearchService?.searchFiles("", maxResults) ?: emptyList()
+            val files = fileIndexService?.getRecentFiles(maxResults) ?: emptyList()
             files.map { fileInfo ->
                 FileContextItem(
                     name = fileInfo.name,
                     relativePath = fileInfo.relativePath,
-                    absolutePath = fileInfo.path,
+                    absolutePath = fileInfo.absolutePath,
                     isDirectory = fileInfo.isDirectory,
-                    fileType = fileInfo.name.substringAfterLast('.', "")
+                    fileType = fileInfo.fileType
                 )
             }.take(maxResults)
         } catch (e: Exception) {
@@ -586,7 +586,7 @@ class RealContextSearchService(
     
     override suspend fun getFileInfo(relativePath: String): FileContextItem? {
         return try {
-            val content = fileSearchService?.getFileContent(relativePath)
+            val content = fileIndexService?.getFileContent(relativePath)
             if (content != null) {
                 val fileName = relativePath.substringAfterLast('/')
                 val absolutePath = projectService?.getProjectPath()?.let { projectPath -> 

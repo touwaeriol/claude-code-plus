@@ -31,6 +31,8 @@ import org.jetbrains.jewel.ui.Orientation
 fun JewelChatApp(
     cliWrapper: ClaudeCliWrapper,
     workingDirectory: String,
+    fileIndexService: com.claudecodeplus.ui.services.FileIndexService? = null,
+    projectService: com.claudecodeplus.ui.services.ProjectService? = null,
     themeProvider: JewelThemeProvider = DefaultJewelThemeProvider(),
     modifier: Modifier = Modifier,
     showToolbar: Boolean = true,
@@ -121,6 +123,8 @@ fun JewelChatApp(
                 println("DEBUG: After update selectedModel = ${selectedModel.displayName}")
                 println("=== JewelChatApp.onModelChange FINISHED ===")
             },
+            fileIndexService = fileIndexService,
+            projectService = projectService,
             modifier = Modifier.weight(1f)
         )
     }

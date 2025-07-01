@@ -5,7 +5,7 @@ import androidx.compose.ui.awt.ComposePanel
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.sdk.MessageType
 import com.claudecodeplus.ui.models.*
-import com.claudecodeplus.ui.services.FileSearchService
+import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.ui.services.ProjectService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -27,7 +27,7 @@ import java.awt.BorderLayout
 class JewelChatPanel(
     private val cliWrapper: ClaudeCliWrapper = ClaudeCliWrapper(),
     private val workingDirectory: String = System.getProperty("user.dir"),
-    private val fileSearchService: FileSearchService? = null,
+    private val fileIndexService: FileIndexService? = null,
     private val projectService: ProjectService? = null,
     themeStyle: JewelThemeStyle = JewelThemeStyle.LIGHT,
     isSystemDark: Boolean = false,
@@ -172,7 +172,7 @@ class JewelChatPanel(
                     )
                 )
             },
-            fileSearchService = fileSearchService,
+            fileIndexService = fileIndexService,
             projectService = projectService
         )
     }

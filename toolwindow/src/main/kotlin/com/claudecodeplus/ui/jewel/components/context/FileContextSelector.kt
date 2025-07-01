@@ -2,10 +2,12 @@ package com.claudecodeplus.ui.jewel.components.context
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -24,10 +26,12 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.SolidColor
-import org.jetbrains.jewel.foundation.theme.JewelTheme
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 
 /**
  * 文件上下文选择器
@@ -238,25 +242,65 @@ private fun FileResultsList(
     listState: LazyListState,
     modifier: Modifier = Modifier
 ) {
+    val scope = rememberCoroutineScope()
+    
+    // 当选中索引改变时，自动滚动到可见区域
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex >= 0 && results.isNotEmpty()) {
+            scope.launch {
+                listState.animateScrollToItem(selectedIndex)
+            }
+        }
+    }
+    
     LazyColumn(
         state = listState,
-        verticalArrangement = Arrangement.spacedBy(1.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
         modifier = modifier
             .heightIn(max = (config.popupMaxHeight - 100).dp)
+            .focusable() // 确保组件可以获得焦点
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
                         Key.DirectionUp -> {
-                            onSelectedIndexChange((selectedIndex - 1).coerceAtLeast(0))
+                            val newIndex = (selectedIndex - 1).coerceAtLeast(0)
+                            onSelectedIndexChange(newIndex)
                             true
                         }
                         Key.DirectionDown -> {
-                            onSelectedIndexChange((selectedIndex + 1).coerceAtMost(results.size - 1))
+                            val newIndex = (selectedIndex + 1).coerceAtMost(results.size - 1)
+                            onSelectedIndexChange(newIndex)
                             true
                         }
                         Key.Enter -> {
-                            if (results.isNotEmpty() && selectedIndex < results.size) {
+                            if (results.isNotEmpty() && selectedIndex >= 0 && selectedIndex < results.size) {
                                 onFileSelected(results[selectedIndex].item)
+                            }
+                            true
+                        }
+                        Key.PageUp -> {
+                            // 向上翻页（一次5项）
+                            val newIndex = (selectedIndex - 5).coerceAtLeast(0)
+                            onSelectedIndexChange(newIndex)
+                            true
+                        }
+                        Key.PageDown -> {
+                            // 向下翻页（一次5项）
+                            val newIndex = (selectedIndex + 5).coerceAtMost(results.size - 1)
+                            onSelectedIndexChange(newIndex)
+                            true
+                        }
+                        Key.MoveHome -> {
+                            // 跳到第一项
+                            if (results.isNotEmpty()) {
+                                onSelectedIndexChange(0)
+                            }
+                            true
+                        }
+                        Key.MoveEnd -> {
+                            // 跳到最后一项
+                            if (results.isNotEmpty()) {
+                                onSelectedIndexChange(results.size - 1)
                             }
                             true
                         }
@@ -267,13 +311,16 @@ private fun FileResultsList(
                 }
             }
     ) {
-        items(results) { result ->
-            val isSelected = results.indexOf(result) == selectedIndex
+        itemsIndexed(results) { index, result ->
+            val isSelected = index == selectedIndex
             FileResultItem(
                 result = result,
                 isSelected = isSelected,
                 config = config,
-                onClick = { onFileSelected(result.item) },
+                onClick = { 
+                    onSelectedIndexChange(index) // 点击时更新选中索引
+                    onFileSelected(result.item) 
+                },
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -281,7 +328,7 @@ private fun FileResultsList(
 }
 
 /**
- * 文件结果项组件
+ * 文件结果项组件 - 紧凑单行显示
  */
 @Composable
 private fun FileResultItem(
@@ -294,7 +341,7 @@ private fun FileResultItem(
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
-            .height(config.itemHeight.dp)
+            .height(24.dp) // 减少高度到24dp
             .clip(RoundedCornerShape(3.dp))
             .clickable { onClick() }
             .then(
@@ -307,51 +354,64 @@ private fun FileResultItem(
                     Modifier
                 }
             )
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .padding(horizontal = 6.dp, vertical = 2.dp) // 减少内边距
     ) {
-        // 文件图标
+        // 文件图标 - 更小的图标
         Text(
             text = result.item.getIcon(),
-            style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp),
-            modifier = Modifier.padding(end = 8.dp)
+            style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp), // 减小图标字体
+            modifier = Modifier.padding(end = 6.dp) // 减少间距
         )
         
-        // 文件信息
-        Column(modifier = Modifier.weight(1f)) {
-            // 文件名（主显示）
+        // 文件名 - 主要信息
+        Text(
+            text = result.item.name,
+            style = JewelTheme.defaultTextStyle.copy(
+                fontSize = 11.sp,
+                color = JewelTheme.globalColors.text.normal,
+                fontWeight = FontWeight.Medium
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false) // 不填充所有空间
+        )
+        
+        // 路径分隔符和相对路径 - 次要信息
+        if (result.item.relativePath.isNotEmpty() && result.item.relativePath != result.item.name) {
             Text(
-                text = result.item.name,
+                text = " • ",
                 style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 11.sp,
-                    color = JewelTheme.globalColors.text.normal
+                    fontSize = 10.sp,
+                    color = JewelTheme.globalColors.text.disabled
                 ),
-                maxLines = 1
+                modifier = Modifier.padding(horizontal = 2.dp)
             )
             
-            // 相对路径（副显示）
-            if (result.item.relativePath.isNotEmpty()) {
-                Text(
-                    text = result.item.getPathDisplay(),
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 9.sp,
-                        color = JewelTheme.globalColors.text.disabled
-                    ),
-                    maxLines = 1
-                )
-            }
+            Text(
+                text = result.item.getPathDisplay(),
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 10.sp,
+                    color = JewelTheme.globalColors.text.disabled
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
         }
         
-        // 匹配类型指示器（调试时显示）
+        // 匹配类型指示器（仅在选中时显示）
         if (isSelected) {
             Text(
                 text = when (result.matchType) {
-                    FileSearchResult.MatchType.EXACT_NAME -> "="
-                    FileSearchResult.MatchType.PREFIX_NAME -> "^"
-                    FileSearchResult.MatchType.CONTAINS_NAME -> "~"
+                    FileSearchResult.MatchType.EXACT_NAME -> "✓"
+                    FileSearchResult.MatchType.PREFIX_NAME -> "▶"
+                    FileSearchResult.MatchType.CONTAINS_NAME -> "◦"
                     FileSearchResult.MatchType.PATH_MATCH -> "/"
                 },
                 style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 9.sp,
+                    fontSize = 8.sp,
                     color = JewelTheme.globalColors.text.disabled
                 ),
                 modifier = Modifier.padding(start = 4.dp)

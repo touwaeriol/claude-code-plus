@@ -38,7 +38,7 @@ fun JewelConversationView(
     selectedModel: AiModel = AiModel.OPUS,
     onModelChange: (AiModel) -> Unit = {},
     onClearChat: () -> Unit = {},
-    fileSearchService: com.claudecodeplus.ui.services.FileSearchService? = null,
+    fileIndexService: com.claudecodeplus.ui.services.FileIndexService? = null,
     projectService: com.claudecodeplus.ui.services.ProjectService? = null,
     modifier: Modifier = Modifier
 ) {
@@ -105,7 +105,7 @@ fun JewelConversationView(
                 enabled = true,
                 selectedModel = selectedModel,
                 onModelChange = onModelChange,
-                fileSearchService = fileSearchService,
+                fileIndexService = fileIndexService,
                 projectService = projectService,
                 modifier = Modifier.fillMaxWidth()
             )

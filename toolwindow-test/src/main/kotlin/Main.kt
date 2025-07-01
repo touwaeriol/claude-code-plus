@@ -16,6 +16,20 @@ import com.claudecodeplus.ui.jewel.JewelChatApp
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.ui.models.AiModel
 import com.claudecodeplus.test.ContextSelectorTestApp
+import com.claudecodeplus.test.SimpleFileIndexService
+import com.claudecodeplus.ui.services.ProjectService
+
+// 简单的ProjectService实现用于测试
+class TestProjectService(private val projectPath: String) : ProjectService {
+    override fun getProjectPath(): String = projectPath
+    override fun getProjectName(): String = projectPath.substringAfterLast('/')
+    override fun openFile(filePath: String, lineNumber: Int?) {
+        println("TestProjectService: 打开文件 $filePath:$lineNumber")
+    }
+    override fun showSettings(settingsId: String?) {
+        println("TestProjectService: 显示设置 $settingsId")
+    }
+}
 
 @Composable
 @Preview
@@ -81,13 +95,28 @@ fun main() = application {
         height = 600.dp
     )
     
+    // 创建测试服务
+    val workingDirectory = System.getProperty("user.dir")
+    val fileIndexService = remember { SimpleFileIndexService() }
+    val projectService = remember { TestProjectService(workingDirectory) }
+    
+    // 初始化文件索引服务
+    LaunchedEffect(Unit) {
+        fileIndexService.initialize(workingDirectory)
+    }
+    
     Window(
         onCloseRequest = ::exitApplication,
-        title = "上下文选择器测试",
+        title = "Claude Code Plus 聊天测试",
         state = windowState
     ) {
         IntUiTheme {
-            ContextSelectorTestApp()
+            JewelChatApp(
+                cliWrapper = ClaudeCliWrapper(),
+                workingDirectory = workingDirectory,
+                fileIndexService = fileIndexService,
+                projectService = projectService
+            )
         }
     }
 } 
