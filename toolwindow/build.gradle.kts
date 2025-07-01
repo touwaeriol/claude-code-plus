@@ -3,6 +3,7 @@ plugins {
     `java-library`  // 添加 java-library 插件以支持 api 配置
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
+    idea
 }
 
 group = "com.claudecodeplus"
@@ -44,3 +45,5 @@ compose.desktop {
         mainClass = "MainKt"
     }
 }
+
+// IDE configuration for source/javadoc download is handled by IDE settings
