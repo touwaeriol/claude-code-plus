@@ -40,6 +40,7 @@ fun JewelConversationView(
     onClearChat: () -> Unit = {},
     fileIndexService: com.claudecodeplus.ui.services.FileIndexService? = null,
     projectService: com.claudecodeplus.ui.services.ProjectService? = null,
+    inlineReferenceManager: InlineReferenceManager = InlineReferenceManager(),
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -107,6 +108,7 @@ fun JewelConversationView(
                 onModelChange = onModelChange,
                 fileIndexService = fileIndexService,
                 projectService = projectService,
+                inlineReferenceManager = inlineReferenceManager,
                 modifier = Modifier.fillMaxWidth()
             )
         }

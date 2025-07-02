@@ -46,6 +46,7 @@ fun JewelChatApp(
     var currentSessionId by remember { mutableStateOf<String?>(null) }
     var messageJob by remember { mutableStateOf<Job?>(null) }
     var selectedModel by remember { mutableStateOf(AiModel.OPUS) }
+    val inlineReferenceManager = remember { InlineReferenceManager() }
     
     val scope = rememberCoroutineScope()
     
@@ -89,10 +90,14 @@ fun JewelChatApp(
                         currentSessionId = currentSessionId,
                         currentMessages = messages,
                         onMessageUpdate = { messages = it },
-                        onInputClear = { inputText = "" },
+                        onInputClear = { 
+                            inputText = ""
+                            inlineReferenceManager.clear()
+                        },
                         onContextsClear = { contexts = emptyList() },
                         onGeneratingChange = { isGenerating = it },
-                        onSessionIdUpdate = { currentSessionId = it }
+                        onSessionIdUpdate = { currentSessionId = it },
+                        inlineReferenceManager = inlineReferenceManager
                     )
                 }
             },
@@ -125,6 +130,7 @@ fun JewelChatApp(
             },
             fileIndexService = fileIndexService,
             projectService = projectService,
+            inlineReferenceManager = inlineReferenceManager,
             modifier = Modifier.weight(1f)
         )
     }
@@ -244,14 +250,18 @@ private fun sendMessage(
     onInputClear: () -> Unit,
     onContextsClear: () -> Unit,
     onGeneratingChange: (Boolean) -> Unit,
-    onSessionIdUpdate: (String?) -> Unit
+    onSessionIdUpdate: (String?) -> Unit,
+    inlineReferenceManager: InlineReferenceManager
 ): Job {
     return scope.launch(Dispatchers.IO) {
         try {
             onGeneratingChange(true)
             
-            // 构建包含上下文的消息
-            val messageWithContext = buildMessageWithContext(inputText, contexts)
+            // 展开内联引用为完整路径
+            val expandedInputText = inlineReferenceManager.expandInlineReferences(inputText)
+            
+            // 构建包含上下文的消息 - 使用新的Markdown格式
+            val messageWithContext = buildFinalMessage(contexts, expandedInputText)
             
             // 添加用户消息
             val userMessage = EnhancedMessage(
@@ -472,43 +482,71 @@ private fun sendMessage(
 }
 
 /**
- * 构建包含上下文的消息
+ * 构建包含上下文的完整消息 - 只处理TAG类型上下文（Add Context按钮添加的）
  */
+private fun buildFinalMessage(contexts: List<ContextReference>, userMessage: String): String {
+    // 所有的上下文都是TAG类型（Add Context按钮添加的）
+    // @符号添加的上下文不会进入contexts列表，直接在userMessage中
+    
+    if (contexts.isEmpty()) {
+        return userMessage
+    }
+    
+    val contextSection = buildString {
+        appendLine("> **上下文资料**")
+        appendLine("> ")
+        
+        contexts.forEach { context ->
+            val contextLine = when (context) {
+                is ContextReference.FileReference -> {
+                    "> - 📄 `${context.path}`"
+                }
+                is ContextReference.WebReference -> {
+                    val title = context.title?.let { " ($it)" } ?: ""
+                    "> - 🌐 ${context.url}$title"
+                }
+                is ContextReference.FolderReference -> {
+                    "> - 📁 `${context.path}` (${context.fileCount}个文件)"
+                }
+                is ContextReference.SymbolReference -> {
+                    "> - 🔗 `${context.name}` (${context.type}) - ${context.file}:${context.line}"
+                }
+                is ContextReference.TerminalReference -> {
+                    val errorFlag = if (context.isError) " ⚠️" else ""
+                    "> - 💻 终端输出 (${context.lines}行)$errorFlag"
+                }
+                is ContextReference.ProblemsReference -> {
+                    val severityText = context.severity?.let { " [$it]" } ?: ""
+                    "> - ⚠️ 问题报告 (${context.problems.size}个)$severityText"
+                }
+                is ContextReference.GitReference -> {
+                    "> - 🔀 Git ${context.type}"
+                }
+                is ContextReference.SelectionReference -> {
+                    "> - ✏️ 当前选择内容"
+                }
+                is ContextReference.WorkspaceReference -> {
+                    "> - 🏠 当前工作区"
+                }
+            }
+            appendLine(contextLine)
+        }
+        
+        appendLine()
+    }
+    
+    return contextSection + userMessage
+}
+
+/**
+ * 构建包含上下文的消息 - 保留旧版本作为向后兼容
+ */
+@Deprecated("Use buildFinalMessage instead", ReplaceWith("buildFinalMessage(contexts, message)"))
 private fun buildMessageWithContext(
     message: String,
     contexts: List<ContextReference>
 ): String {
-    if (contexts.isEmpty()) {
-        return message
-    }
-    
-    val contextStrings = contexts.map { context ->
-        when (context) {
-            is ContextReference.FileReference -> {
-                "文件: ${context.path}"
-            }
-            is ContextReference.WebReference -> {
-                "网页: ${context.title ?: context.url}"
-            }
-            is ContextReference.FolderReference -> "文件夹: ${context.path}"
-            is ContextReference.SymbolReference -> "符号: ${context.name} (${context.type})"
-            is ContextReference.TerminalReference -> "终端输出 (最近 ${context.lines} 行)"
-            is ContextReference.ProblemsReference -> {
-                val severity = context.severity?.name ?: "所有"
-                "问题 ($severity)"
-            }
-            is ContextReference.GitReference -> "Git ${context.type.name}"
-            ContextReference.SelectionReference -> "选中的代码"
-            ContextReference.WorkspaceReference -> "整个工作空间"
-        }
-    }
-    
-    return buildString {
-        appendLine("上下文引用:")
-        contextStrings.forEach { appendLine("- $it") }
-        appendLine()
-        append(message)
-    }
+    return buildFinalMessage(contexts, message)
 }
 
 /**
