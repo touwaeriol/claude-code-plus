@@ -185,6 +185,22 @@ sealed class ContextReference {
         override val displayType: ContextDisplayType = ContextDisplayType.TAG
     ) : ContextReference()
     
+    /**
+     * 图片引用
+     * @param path 图片文件路径
+     * @param filename 文件名
+     * @param size 文件大小（字节）
+     * @param mimeType MIME类型（如 image/png）
+     * @param displayType 显示类型
+     */
+    data class ImageReference(
+        val path: String,
+        val filename: String,
+        val size: Long = 0,
+        val mimeType: String = "image/*",
+        override val displayType: ContextDisplayType = ContextDisplayType.TAG
+    ) : ContextReference()
+    
     object SelectionReference : ContextReference() {
         override val displayType: ContextDisplayType = ContextDisplayType.TAG
     }
