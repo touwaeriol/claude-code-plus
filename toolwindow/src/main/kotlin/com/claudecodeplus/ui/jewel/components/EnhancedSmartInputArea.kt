@@ -90,6 +90,9 @@ private fun buildFinalMessage(contexts: List<ContextReference>, userMessage: Str
                 is ContextReference.GitReference -> {
                     "> - 🔀 Git ${context.type}"
                 }
+                is ContextReference.ImageReference -> {
+                    "> - 🖼 `${context.filename}` (${context.size / 1024}KB)"
+                }
                 is ContextReference.SelectionReference -> {
                     "> - ✏️ 当前选择内容"
                 }
@@ -193,6 +196,7 @@ fun EnhancedSmartInputArea(
                 is ContextReference.TerminalReference -> "@terminal"
                 is ContextReference.ProblemsReference -> "@problems"
                 is ContextReference.GitReference -> "@git"
+                is ContextReference.ImageReference -> "@${context.filename}"
                 is ContextReference.SelectionReference -> "@selection"
                 is ContextReference.WorkspaceReference -> "@workspace"
             }
@@ -247,49 +251,17 @@ fun EnhancedSmartInputArea(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // 顶部工具栏：Add Context按钮（左）+ 上下文标签（右）
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Add Context 按钮
-                    Box(
-                        modifier = Modifier
-                            .background(Color.Transparent, RoundedCornerShape(6.dp))
-                            .clickable(enabled = enabled && !isGenerating) {
-                                showContextSelector = true
-                            }
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.Center
+                // 上下文标签显示区域（仅在有上下文时显示）
+                if (contexts.isNotEmpty()) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text("📎", style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp))
-                            Text(
-                                "Add Context",
-                                style = JewelTheme.defaultTextStyle.copy(
-                                    fontSize = 12.sp,
-                                    color = JewelTheme.globalColors.text.disabled
-                                )
+                        items(contexts) { context ->
+                            ContextTag(
+                                context = context,
+                                onRemove = { onContextRemove(context) }
                             )
-                        }
-                    }
-                    
-                    // 上下文标签显示 - 在同一行右侧
-                    if (contexts.isNotEmpty()) {
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            items(contexts) { context ->
-                                ContextTag(
-                                    context = context,
-                                    onRemove = { onContextRemove(context) }
-                                )
-                            }
                         }
                     }
                 }
@@ -333,23 +305,58 @@ fun EnhancedSmartInputArea(
                         ),
                         cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),
                         decorationBox = { innerTextField ->
-                            Box(
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .background(Color.Transparent)
-                                    .padding(8.dp)
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.Bottom
                             ) {
-                                // Placeholder文本
-                                if (textValue.text.isEmpty()) {
-                                    Text(
-                                        "输入消息或使用 @ 引用上下文...",
-                                        style = JewelTheme.defaultTextStyle.copy(
-                                            color = JewelTheme.globalColors.text.disabled,
-                                            fontSize = 14.sp
+                                // 输入框区域
+                                Box(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    // Placeholder文本
+                                    if (textValue.text.isEmpty()) {
+                                        Text(
+                                            "输入消息，使用 @ 内联引用文件，或 ⌘K 添加上下文...",
+                                            style = JewelTheme.defaultTextStyle.copy(
+                                                color = JewelTheme.globalColors.text.disabled,
+                                                fontSize = 14.sp
+                                            )
                                         )
-                                    )
+                                    }
+                                    innerTextField()
                                 }
-                                innerTextField()
+                                
+                                // 发送按钮区域
+                                if (isGenerating && onStop != null) {
+                                    // 生成中显示停止按钮
+                                    DefaultButton(
+                                        onClick = onStop,
+                                        enabled = true,
+                                        modifier = Modifier
+                                            .padding(start = 8.dp)
+                                            .size(32.dp)
+                                    ) {
+                                        Text("⏹", style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp))
+                                    }
+                                } else {
+                                    // 正常状态显示发送按钮
+                                    DefaultButton(
+                                        onClick = {
+                                            if (textValue.text.isNotBlank() && enabled && !isGenerating) {
+                                                onSend()
+                                            }
+                                        },
+                                        enabled = enabled && !isGenerating && textValue.text.isNotBlank(),
+                                        modifier = Modifier
+                                            .padding(start = 8.dp)
+                                            .size(32.dp)
+                                    ) {
+                                        Text("↑", style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp))
+                                    }
+                                }
                             }
                         },
                         modifier = Modifier
@@ -390,6 +397,17 @@ fun EnhancedSmartInputArea(
                                             false
                                         }
                                     }
+                                    // Ctrl+K 或 Cmd+K 快捷键打开上下文选择器（用于添加标签）
+                                    keyEvent.key == Key.K && keyEvent.type == KeyEventType.KeyDown && 
+                                    (keyEvent.isCtrlPressed || keyEvent.isMetaPressed) -> {
+                                        if (!showContextSelector && enabled && !isGenerating) {
+                                            showContextSelector = true
+                                            atSymbolPosition = null // 标记为非@符号触发
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    }
                                     else -> false
                                 }
                             }
@@ -407,7 +425,7 @@ fun EnhancedSmartInputArea(
                                     // @符号触发：将上下文内联插入到文本中
                                     handleAtTriggerContext(context)
                                 } else {
-                                    // Add Context按钮触发：添加到上下文列表（显示为标签）
+                                    // 其他触发方式：添加到上下文列表（显示为标签）
                                     val tagContext = when (context) {
                                         is ContextReference.FileReference -> context.copy(displayType = ContextDisplayType.TAG)
                                         is ContextReference.WebReference -> context.copy(displayType = ContextDisplayType.TAG)
@@ -424,10 +442,10 @@ fun EnhancedSmartInputArea(
                     }
                 }
                 
-                // 底部区域：模型选择器（左）+ 发送按钮（右）
+                // 底部区域：仅显示模型选择器
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // 左下角模型选择器
@@ -439,34 +457,6 @@ fun EnhancedSmartInputArea(
                         },
                         enabled = enabled && !isGenerating
                     )
-                    
-                    // 右下角发送按钮
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .background(
-                                if (textValue.text.isNotBlank() && enabled && !isGenerating) 
-                                    JewelTheme.globalColors.borders.focused // 使用主题的焦点颜色作为发送按钮激活色
-                                else 
-                                    JewelTheme.globalColors.borders.disabled, // 使用主题的禁用边框色
-                                RoundedCornerShape(12.dp)
-                            )
-                            .clickable(enabled = textValue.text.isNotBlank() && enabled && !isGenerating) {
-                                onSend()
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "↑",
-                            style = JewelTheme.defaultTextStyle.copy(
-                                color = if (textValue.text.isNotBlank() && enabled && !isGenerating) 
-                                    JewelTheme.globalColors.text.normal // 正常文本颜色
-                                else 
-                                    JewelTheme.globalColors.text.disabled, // 禁用文本颜色
-                                fontSize = 12.sp
-                            )
-                        )
-                    }
                 }
             }
         }

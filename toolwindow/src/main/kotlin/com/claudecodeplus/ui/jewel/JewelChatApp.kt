@@ -270,7 +270,8 @@ private fun sendMessage(
                 content = messageWithContext,
                 timestamp = System.currentTimeMillis(),
                 status = MessageStatus.COMPLETE,
-                isError = false
+                isError = false,
+                model = selectedModel // 添加模型信息
             )
             
             val updatedMessages = currentMessages + userMessage
@@ -521,6 +522,9 @@ private fun buildFinalMessage(contexts: List<ContextReference>, userMessage: Str
                 }
                 is ContextReference.GitReference -> {
                     "> - 🔀 Git ${context.type}"
+                }
+                is ContextReference.ImageReference -> {
+                    "> - 🖼 `${context.filename}` (${context.size / 1024}KB)"
                 }
                 is ContextReference.SelectionReference -> {
                     "> - ✏️ 当前选择内容"

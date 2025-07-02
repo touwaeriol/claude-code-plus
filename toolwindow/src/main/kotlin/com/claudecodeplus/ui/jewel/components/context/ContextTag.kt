@@ -125,6 +125,7 @@ private fun getDisplayText(context: ContextReference): String {
         is ContextReference.TerminalReference -> "@terminal"
         is ContextReference.ProblemsReference -> "@problems"
         is ContextReference.GitReference -> "@git"
+        is ContextReference.ImageReference -> "@${context.filename}"
         ContextReference.SelectionReference -> "@selection"
         ContextReference.WorkspaceReference -> "@workspace"
     }
@@ -152,6 +153,10 @@ private fun ContextTooltip(
         is ContextReference.TerminalReference -> "Terminal output (${context.lines} lines)"
         is ContextReference.ProblemsReference -> "Problems (${context.problems.size} items)"
         is ContextReference.GitReference -> "Git ${context.type.name}: ${context.content}"
+        is ContextReference.ImageReference -> {
+            val sizeKB = context.size / 1024
+            "${context.filename} (${sizeKB}KB) - ${context.mimeType}"
+        }
         ContextReference.SelectionReference -> "Selected code"
         ContextReference.WorkspaceReference -> "Entire workspace"
     }

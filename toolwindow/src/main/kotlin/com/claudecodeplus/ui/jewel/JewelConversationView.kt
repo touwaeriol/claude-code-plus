@@ -1,20 +1,27 @@
 package com.claudecodeplus.ui.jewel
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.jewel.components.*
+import com.claudecodeplus.ui.jewel.components.ChatInputArea
+import com.claudecodeplus.ui.jewel.components.UserMessageDisplay
+import com.claudecodeplus.ui.jewel.components.extractContextReferences
 import com.claudecodeplus.ui.models.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
-import org.jetbrains.jewel.ui.component.*
+import org.jetbrains.jewel.ui.component.DefaultButton
+import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.Orientation
 import org.jetbrains.jewel.ui.component.VerticallyScrollableContainer
+import org.jetbrains.jewel.ui.component.Text
 import androidx.compose.foundation.rememberScrollState
 import java.text.SimpleDateFormat
 import java.util.*
@@ -72,7 +79,7 @@ fun JewelConversationView(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     messages.forEach { message ->
                         MessageBubble(message = message)
@@ -87,28 +94,225 @@ fun JewelConversationView(
             modifier = Modifier.height(1.dp)
         )
         
-        // 输入区域 - 使用 EnhancedSmartInputArea
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(JewelTheme.globalColors.panelBackground)
-                .padding(8.dp)
-        ) {
-            EnhancedSmartInputArea(
-                text = inputText,
-                onTextChange = onInputChange,
-                onSend = onSend,
-                onStop = onStop,
-                contexts = contexts,
-                onContextAdd = onContextAdd,
-                onContextRemove = onContextRemove,
-                isGenerating = isGenerating,
-                enabled = true,
-                selectedModel = selectedModel,
-                onModelChange = onModelChange,
-                fileIndexService = fileIndexService,
-                projectService = projectService,
-                inlineReferenceManager = inlineReferenceManager,
+        // 输入区域 - 使用封装的 ChatInputArea 组件
+        ChatInputArea(
+            text = inputText,
+            onTextChange = onInputChange,
+            onSend = onSend,
+            onStop = onStop,
+            contexts = contexts,
+            onContextAdd = onContextAdd,
+            onContextRemove = onContextRemove,
+            isGenerating = isGenerating,
+            enabled = !isGenerating,
+            selectedModel = selectedModel,
+            onModelChange = onModelChange,
+            fileIndexService = fileIndexService,
+            projectService = projectService,
+            inlineReferenceManager = inlineReferenceManager,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+
+
+/**
+ * 简化的上下文显示组件 - 不包含删除功能
+ */
+@Composable
+private fun SimpleContextDisplay(
+    context: ContextReference,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .background(
+                JewelTheme.globalColors.panelBackground,
+                RoundedCornerShape(6.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // 类型图标
+        Text(
+            text = when (context) {
+                is ContextReference.FileReference -> "📄"
+                is ContextReference.WebReference -> "🌐"
+                is ContextReference.FolderReference -> "📁"
+                is ContextReference.SymbolReference -> "🔗"
+                is ContextReference.TerminalReference -> "💻"
+                is ContextReference.ProblemsReference -> "⚠️"
+                is ContextReference.GitReference -> "🔀"
+                is ContextReference.ImageReference -> "🖼"
+                ContextReference.SelectionReference -> "✏️"
+                ContextReference.WorkspaceReference -> "🏠"
+            },
+            style = JewelTheme.defaultTextStyle.copy(fontSize = 10.sp)
+        )
+        
+        // 显示文本
+        Text(
+            text = when (context) {
+                is ContextReference.FileReference -> {
+                    val filename = context.path.substringAfterLast('/')
+                        .ifEmpty { context.path.substringAfterLast('\\') }
+                        .ifEmpty { context.path }
+                    filename
+                }
+                is ContextReference.WebReference -> {
+                    context.title ?: context.url.substringAfterLast('/')
+                }
+                is ContextReference.FolderReference -> "${context.path.substringAfterLast('/')} (${context.fileCount}个文件)"
+                is ContextReference.SymbolReference -> context.name
+                is ContextReference.TerminalReference -> "终端输出"
+                is ContextReference.ProblemsReference -> "问题报告 (${context.problems.size}个)"
+                is ContextReference.GitReference -> "Git ${context.type.name}"
+                is ContextReference.ImageReference -> context.filename
+                ContextReference.SelectionReference -> "选择内容"
+                ContextReference.WorkspaceReference -> "工作区"
+            },
+            style = JewelTheme.defaultTextStyle.copy(
+                fontSize = 11.sp,
+                color = JewelTheme.globalColors.text.normal
+            )
+        )
+    }
+}
+
+
+
+/**
+ * 消息气泡组件 - 使用 Jewel Text 组件，优化显示格式
+ */
+@Composable
+private fun MessageBubble(
+    message: EnhancedMessage,
+    modifier: Modifier = Modifier
+) {
+    // 所有消息统一布局，不再左右区分
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                if (message.role == MessageRole.USER) 
+                    JewelTheme.globalColors.borders.focused.copy(alpha = 0.08f)
+                else 
+                    JewelTheme.globalColors.panelBackground,
+                RoundedCornerShape(8.dp)
+            )
+            .border(
+                1.dp,
+                if (message.role == MessageRole.USER)
+                    JewelTheme.globalColors.borders.focused.copy(alpha = 0.15f)
+                else
+                    JewelTheme.globalColors.borders.normal.copy(alpha = 0.1f),
+                RoundedCornerShape(8.dp)
+            )
+            .padding(
+                if (message.role == MessageRole.USER) 
+                    PaddingValues(12.dp)
+                else 
+                    PaddingValues(16.dp)
+            )
+    ) {
+        if (message.role != MessageRole.USER) {
+            // Assistant消息内容
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // 显示模型信息（如果有）
+                message.model?.let { model ->
+                    if (model.displayName.isNotEmpty()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "🤖"
+                            )
+                            Text(
+                                text = model.displayName
+                            )
+                        }
+                    }
+                }
+                
+                // 按时间顺序显示消息元素
+                println("DEBUG: Message has ${message.orderedElements.size} ordered elements")
+                if (message.orderedElements.isNotEmpty()) {
+                    message.orderedElements.forEach { element ->
+                        when (element) {
+                            is MessageTimelineItem.ToolCallItem -> {
+                                SimpleToolCallDisplay(element.toolCall)
+                            }
+                            is MessageTimelineItem.ContentItem -> {
+                                if (element.content.isNotBlank()) {
+                                    MarkdownRenderer(
+                                        markdown = element.content,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                            is MessageTimelineItem.StatusItem -> {
+                                if (element.isStreaming) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "▌"
+                                        )
+                                        Text(
+                                            text = element.status
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // 向后兼容：如果没有orderedElements，回退到原来的显示方式
+                    // 先显示工具调用（按照添加顺序）
+                    message.toolCalls.forEach { toolCall ->
+                        SimpleToolCallDisplay(toolCall)
+                    }
+                    
+                    // 然后显示消息内容
+                    if (message.content.isNotBlank()) {
+                        MarkdownRenderer(
+                            markdown = message.content,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                
+                // 流式状态指示器
+                if (message.isStreaming) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "▌"
+                        )
+                        Text(
+                            text = "正在生成..."
+                        )
+                    }
+                }
+                
+                // 时间戳
+                Text(
+                    text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(message.timestamp))
+                )
+            }
+        } else {
+            // User消息内容 - 使用新的用户消息显示组件
+            UserMessageDisplay(
+                message = message,
+                contexts = extractContextReferences(message.content),
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -116,145 +320,7 @@ fun JewelConversationView(
 }
 
 /**
- * 消息气泡组件 - 使用 Jewel Text 组件
- */
-@Composable
-private fun MessageBubble(
-    message: EnhancedMessage,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = if (message.role == MessageRole.USER) Arrangement.End else Arrangement.Start
-    ) {
-        if (message.role != MessageRole.USER) {
-            // Assistant消息 - 左对齐，占据更多空间
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .background(
-                        JewelTheme.globalColors.panelBackground,
-                        RoundedCornerShape(12.dp)
-                    )
-                    .padding(12.dp)
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    // 按时间顺序显示消息元素
-                    println("DEBUG: Message has ${message.orderedElements.size} ordered elements")
-                    if (message.orderedElements.isNotEmpty()) {
-                        message.orderedElements.forEach { element ->
-                            when (element) {
-                                is MessageTimelineItem.ToolCallItem -> {
-                                    SimpleToolCallDisplay(element.toolCall)
-                                }
-                                is MessageTimelineItem.ContentItem -> {
-                                    if (element.content.isNotBlank()) {
-                                        MarkdownRenderer(
-                                            markdown = element.content,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-                                }
-                                is MessageTimelineItem.StatusItem -> {
-                                    if (element.isStreaming) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            // 使用 Jewel Text 组件
-                                            Text(
-                                                "▌",
-                                                color = Color(0xFF59A869),
-                                                fontSize = 12.sp
-                                            )
-                                            Text(
-                                                element.status,
-                                                color = JewelTheme.globalColors.text.disabled,
-                                                fontSize = 12.sp
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        // 向后兼容：如果没有orderedElements，回退到原来的显示方式
-                        // 先显示工具调用（按照添加顺序）
-                        message.toolCalls.forEach { toolCall ->
-                            SimpleToolCallDisplay(toolCall)
-                        }
-                        
-                        // 然后显示消息内容
-                        if (message.content.isNotBlank()) {
-                            MarkdownRenderer(
-                                markdown = message.content,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                    
-                    // 流式状态指示器 - 使用 Jewel Text
-                    if (message.isStreaming) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                "▌",
-                                color = Color(0xFF59A869),
-                                fontSize = 12.sp
-                            )
-                            Text(
-                                "正在生成...",
-                                color = JewelTheme.globalColors.text.disabled,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                    
-                    // 时间戳 - 使用 Jewel Text
-                    Text(
-                        SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(message.timestamp)),
-                        color = JewelTheme.globalColors.text.disabled,
-                        fontSize = 10.sp
-                    )
-                }
-            }
-        } else {
-            // User消息 - 右对齐，较小宽度
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.75f)
-                    .background(
-                        JewelTheme.globalColors.borders.focused,
-                        RoundedCornerShape(12.dp)
-                    )
-                    .padding(12.dp)
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    MarkdownRenderer(
-                        markdown = message.content,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
-                    // 时间戳 - 使用 Jewel Text
-                    Text(
-                        SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(message.timestamp)),
-                        color = JewelTheme.globalColors.text.disabled,
-                        fontSize = 10.sp
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * 简洁的工具调用显示 - 类似 Cursor 的样式，使用 Jewel Text
+ * 简洁的工具调用显示 - 类似 Cursor 的样式
  */
 @Composable
 private fun SimpleToolCallDisplay(
@@ -267,9 +333,9 @@ private fun SimpleToolCallDisplay(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具图标 - 使用 Jewel Text
+        // 工具图标
         Text(
-            when {
+            text = when {
                 toolCall.name.contains("LS", ignoreCase = true) -> "📁"
                 toolCall.name.contains("Read", ignoreCase = true) -> "📖"
                 toolCall.name.contains("Edit", ignoreCase = true) -> "✏️"
@@ -280,78 +346,42 @@ private fun SimpleToolCallDisplay(
                 toolCall.name.contains("Web", ignoreCase = true) -> "🌐"
                 toolCall.name.contains("Git", ignoreCase = true) -> "🔀"
                 else -> "🔧"
-            },
-            fontSize = 12.sp
+            }
         )
         
-        // 工具调用描述 - 使用 Jewel Text
+        // 工具名称
         Text(
-            buildToolCallDescription(toolCall),
-            color = JewelTheme.globalColors.text.disabled,
-            fontSize = 12.sp
+            text = toolCall.name
         )
         
-        // 状态指示 - 使用 Jewel Text
+        // 状态指示
         when (toolCall.status) {
+            ToolCallStatus.PENDING -> {
+                Text(
+                    text = "⏳"
+                )
+            }
             ToolCallStatus.RUNNING -> {
                 Text(
-                    "...",
-                    color = Color(0xFF3574F0),
-                    fontSize = 12.sp
+                    text = "⚡"
                 )
             }
             ToolCallStatus.SUCCESS -> {
-                // 成功时不显示额外指示
+                Text(
+                    text = "✅"
+                )
             }
             ToolCallStatus.FAILED -> {
                 Text(
-                    "失败",
-                    color = Color(0xFFE55765),
-                    fontSize = 12.sp
+                    text = "❌"
                 )
             }
-            else -> {}
+            ToolCallStatus.CANCELLED -> {
+                Text(
+                    text = "🚫"
+                )
+            }
         }
-    }
-}
-
-/**
- * 构建工具调用的简洁描述
- */
-private fun buildToolCallDescription(toolCall: ToolCall): String {
-    return when (toolCall.name) {
-        "LS" -> {
-            val path = toolCall.parameters["path"]?.toString() ?: "."
-            "列出文件 $path"
-        }
-        "Read" -> {
-            val path = toolCall.parameters["path"]?.toString() ?: 
-                     toolCall.parameters["target_file"]?.toString() ?: "文件"
-            "读取 ${path.substringAfterLast('/')}"
-        }
-        "Edit" -> {
-            val path = toolCall.parameters["path"]?.toString() ?: 
-                     toolCall.parameters["target_file"]?.toString() ?: "文件"
-            "编辑 ${path.substringAfterLast('/')}"
-        }
-        "Write" -> {
-            val path = toolCall.parameters["path"]?.toString() ?: 
-                     toolCall.parameters["target_file"]?.toString() ?: "文件"
-            "写入 ${path.substringAfterLast('/')}"
-        }
-        "Bash" -> {
-            val command = toolCall.parameters["command"]?.toString()?.take(30) ?: "命令"
-            "执行 $command${if (command.length > 30) "..." else ""}"
-        }
-        "Grep" -> {
-            val query = toolCall.parameters["query"]?.toString()?.take(20) ?: "搜索"
-            "搜索 \"$query${if (query.length > 20) "..." else ""}\""
-        }
-        "WebSearch" -> {
-            val query = toolCall.parameters["search_term"]?.toString()?.take(20) ?: "搜索"
-            "网络搜索 \"$query${if (query.length > 20) "..." else ""}\""
-        }
-        else -> toolCall.name
     }
 }
 
@@ -367,23 +397,13 @@ private fun ChatHeader(
         modifier = modifier
             .fillMaxWidth()
             .background(JewelTheme.globalColors.panelBackground)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            "Claude Assistant",
-            style = org.jetbrains.jewel.foundation.theme.JewelTheme.defaultTextStyle.copy(
-                fontSize = 16.sp,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-            )
+            text = "Claude Code Plus"
         )
-        
-        DefaultButton(
-            onClick = onClearChat
-        ) {
-            Text("清空对话")
-        }
     }
 }
 

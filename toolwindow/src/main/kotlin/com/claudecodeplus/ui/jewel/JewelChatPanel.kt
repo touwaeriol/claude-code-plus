@@ -413,6 +413,9 @@ class JewelChatPanel(
                     is ContextReference.GitReference -> {
                         "> - 🔀 Git ${context.type}"
                     }
+                    is ContextReference.ImageReference -> {
+                        "> - 🖼 `${context.filename}` (${context.size / 1024}KB)"
+                    }
                     is ContextReference.SelectionReference -> {
                         "> - ✏️ 当前选择内容"
                     }
