@@ -49,6 +49,62 @@ import org.jetbrains.jewel.ui.component.styling.ButtonStyle
 import org.jetbrains.jewel.ui.Orientation
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+
+/**
+ * 构建包含上下文的完整消息
+ */
+private fun buildFinalMessage(contexts: List<ContextReference>, userMessage: String): String {
+    if (contexts.isEmpty()) {
+        return userMessage
+    }
+    
+    val contextSection = buildString {
+        appendLine("> **上下文资料**")
+        appendLine("> ")
+        
+        contexts.forEach { context ->
+            val contextLine = when (context) {
+                is ContextReference.FileReference -> {
+                    "> - 📄 `${context.path}`"
+                }
+                is ContextReference.WebReference -> {
+                    val title = context.title?.let { " ($it)" } ?: ""
+                    "> - 🌐 ${context.url}$title"
+                }
+                is ContextReference.FolderReference -> {
+                    "> - 📁 `${context.path}` (${context.fileCount}个文件)"
+                }
+                is ContextReference.SymbolReference -> {
+                    "> - 🔗 `${context.name}` (${context.type}) - ${context.file}:${context.line}"
+                }
+                is ContextReference.TerminalReference -> {
+                    val errorFlag = if (context.isError) " ⚠️" else ""
+                    "> - 💻 终端输出 (${context.lines}行)$errorFlag"
+                }
+                is ContextReference.ProblemsReference -> {
+                    val severityText = context.severity?.let { " [$it]" } ?: ""
+                    "> - ⚠️ 问题报告 (${context.problems.size}个)$severityText"
+                }
+                is ContextReference.GitReference -> {
+                    "> - 🔀 Git ${context.type}"
+                }
+                is ContextReference.SelectionReference -> {
+                    "> - ✏️ 当前选择内容"
+                }
+                is ContextReference.WorkspaceReference -> {
+                    "> - 🏠 当前工作区"
+                }
+            }
+            appendLine(contextLine)
+        }
+        
+        appendLine()
+    }
+    
+    return contextSection + userMessage
+}
 
 /**
  * 增强的智能输入区域组件
@@ -68,6 +124,7 @@ fun EnhancedSmartInputArea(
     onModelChange: (AiModel) -> Unit = {},
     fileIndexService: com.claudecodeplus.ui.services.FileIndexService? = null,
     projectService: com.claudecodeplus.ui.services.ProjectService? = null,
+    inlineReferenceManager: InlineReferenceManager = remember { InlineReferenceManager() },
     modifier: Modifier = Modifier
 ) {
     var textValue by remember { mutableStateOf(TextFieldValue(text)) }
@@ -88,6 +145,7 @@ fun EnhancedSmartInputArea(
     
     // 上下文选择器状态
     var showContextSelector by remember { mutableStateOf(false) }
+    var atSymbolPosition by remember { mutableStateOf<Int?>(null) }
     
     // 创建上下文搜索服务
     val contextSearchService = remember(fileIndexService, projectService) {
@@ -112,6 +170,49 @@ fun EnhancedSmartInputArea(
         }
     }
     
+    // 处理@符号触发的上下文选择
+    fun handleAtTriggerContext(context: ContextReference) {
+        val pos = atSymbolPosition
+        if (pos != null) {
+            // 生成内联上下文文本
+            val contextText = when (context) {
+                is ContextReference.FileReference -> {
+                    // 对于文件引用，使用内联引用管理器
+                    val inlineRef = InlineFileReference(
+                        displayName = context.path.substringAfterLast('/'),
+                        fullPath = context.fullPath,
+                        relativePath = context.path
+                    )
+                    // 添加到内联引用管理器
+                    inlineReferenceManager.addReference(inlineRef)
+                    inlineRef.getInlineText()
+                }
+                is ContextReference.WebReference -> "@${context.title ?: context.url.substringAfterLast('/')}"
+                is ContextReference.FolderReference -> "@${context.path.substringAfterLast('/')}"
+                is ContextReference.SymbolReference -> "@${context.name}"
+                is ContextReference.TerminalReference -> "@terminal"
+                is ContextReference.ProblemsReference -> "@problems"
+                is ContextReference.GitReference -> "@git"
+                is ContextReference.SelectionReference -> "@selection"
+                is ContextReference.WorkspaceReference -> "@workspace"
+            }
+            
+            // 替换@符号为上下文引用文本
+            val currentText = textValue.text
+            val newText = currentText.substring(0, pos) + contextText + currentText.substring(pos + 1)
+            val newCursorPos = pos + contextText.length
+            
+            textValue = TextFieldValue(
+                text = newText,
+                selection = TextRange(newCursorPos)
+            )
+            onTextChange(newText)
+            
+            // @符号添加的上下文不添加到标签列表中，只在消息文本中显示
+            // 不调用 onContextAdd()
+        }
+    }
+    
     // 动态高度计算
     val lineHeight = with(density) { 18.sp.toDp() }
     val minHeight = 40.dp
@@ -132,13 +233,6 @@ fun EnhancedSmartInputArea(
             )
         }
         
-        // 已选择的上下文标签显示
-        ContextTagList(
-            contexts = contexts,
-            onRemove = onContextRemove,
-            modifier = Modifier.fillMaxWidth()
-        )
-        
         // 主输入框容器 - 统一背景，包含所有控件
         Box(
             modifier = Modifier
@@ -153,10 +247,10 @@ fun EnhancedSmartInputArea(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // 顶部工具栏：Add Context按钮（左）
+                // 顶部工具栏：Add Context按钮（左）+ 上下文标签（右）
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Start,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Add Context 按钮
@@ -183,6 +277,21 @@ fun EnhancedSmartInputArea(
                             )
                         }
                     }
+                    
+                    // 上下文标签显示 - 在同一行右侧
+                    if (contexts.isNotEmpty()) {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            items(contexts) { context ->
+                                ContextTag(
+                                    context = context,
+                                    onRemove = { onContextRemove(context) }
+                                )
+                            }
+                        }
+                    }
                 }
                 
                 // 主输入框 - 改用支持输入法的组件
@@ -202,6 +311,7 @@ fun EnhancedSmartInputArea(
                             // 检测@符号输入
                             if (detectAtSymbol(newValue.text, newValue.selection.start)) {
                                 showContextSelector = true
+                                atSymbolPosition = newValue.selection.start - 1  // @符号的位置
                             }
                         },
                         enabled = enabled,
@@ -216,9 +326,8 @@ fun EnhancedSmartInputArea(
                         keyboardActions = KeyboardActions(
                             onSend = {
                                 if (textValue.text.isNotBlank() && enabled && !isGenerating) {
+                                    // 直接调用发送，不在这里构建消息
                                     onSend()
-                                    textValue = TextFieldValue("")
-                                    onTextChange("")
                                 }
                             }
                         ),
@@ -263,10 +372,8 @@ fun EnhancedSmartInputArea(
                                         } else {
                                             // Enter: 发送消息，阻止系统的换行处理
                                             if (textValue.text.isNotBlank() && enabled && !isGenerating) {
+                                                // 直接调用发送，不在这里构建消息
                                                 onSend()
-                                                // 清空输入框
-                                                textValue = TextFieldValue("")
-                                                onTextChange("")
                                                 true // 消费事件，防止换行
                                             } else {
                                                 true // 空内容时也阻止换行
@@ -277,6 +384,7 @@ fun EnhancedSmartInputArea(
                                         // ESC键关闭上下文选择器
                                         if (showContextSelector) {
                                             showContextSelector = false
+                                            atSymbolPosition = null
                                             true
                                         } else {
                                             false
@@ -290,10 +398,25 @@ fun EnhancedSmartInputArea(
                     // 上下文选择器弹出框
                     if (showContextSelector) {
                         SimpleContextSelectorPopup(
-                            onDismiss = { showContextSelector = false },
-                            onContextSelect = { context ->
-                                onContextAdd(context)
+                            onDismiss = { 
                                 showContextSelector = false
+                                atSymbolPosition = null
+                            },
+                            onContextSelect = { context ->
+                                if (atSymbolPosition != null) {
+                                    // @符号触发：将上下文内联插入到文本中
+                                    handleAtTriggerContext(context)
+                                } else {
+                                    // Add Context按钮触发：添加到上下文列表（显示为标签）
+                                    val tagContext = when (context) {
+                                        is ContextReference.FileReference -> context.copy(displayType = ContextDisplayType.TAG)
+                                        is ContextReference.WebReference -> context.copy(displayType = ContextDisplayType.TAG)
+                                        else -> context
+                                    }
+                                    onContextAdd(tagContext)
+                                }
+                                showContextSelector = false
+                                atSymbolPosition = null
                             },
                             searchService = contextSearchService,
                             modifier = Modifier.align(Alignment.TopStart)
@@ -330,8 +453,6 @@ fun EnhancedSmartInputArea(
                             )
                             .clickable(enabled = textValue.text.isNotBlank() && enabled && !isGenerating) {
                                 onSend()
-                                textValue = TextFieldValue("")
-                                onTextChange("")
                             },
                         contentAlignment = Alignment.Center
                     ) {
