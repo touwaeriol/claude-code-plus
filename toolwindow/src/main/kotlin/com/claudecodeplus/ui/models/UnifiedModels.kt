@@ -31,34 +31,129 @@ enum class MessageStatus {
 }
 
 /**
+ * 上下文显示类型
+ */
+enum class ContextDisplayType {
+    TAG,     // 显示为标签（Add Context按钮添加）
+    INLINE   // 内联显示（@符号触发添加）
+}
+
+/**
+ * 内联文件引用 - 用于管理@符号添加的文件引用
+ */
+data class InlineFileReference(
+    val displayName: String,    // 显示名称：ContextSelectorTestApp.kt
+    val fullPath: String,       // 完整路径：toolwindow-test/src/main/kotlin/com/claudecodeplus/test/ContextSelectorTestApp.kt
+    val relativePath: String    // 相对路径：src/main/kotlin/com/claudecodeplus/test/ContextSelectorTestApp.kt
+) {
+    /**
+     * 获取用于插入到文本中的显示文本
+     */
+    fun getInlineText(): String = "@$displayName"
+    
+    /**
+     * 获取发送时的完整路径文本
+     */
+    fun getFullPathText(): String = "@$relativePath"
+}
+
+/**
+ * 内联引用管理器 - 管理消息中的@符号引用
+ */
+class InlineReferenceManager {
+    private val referenceMap = mutableMapOf<String, InlineFileReference>()
+    
+    /**
+     * 添加内联引用
+     */
+    fun addReference(reference: InlineFileReference) {
+        referenceMap[reference.getInlineText()] = reference
+    }
+    
+    /**
+     * 移除内联引用
+     */
+    fun removeReference(inlineText: String) {
+        referenceMap.remove(inlineText)
+    }
+    
+    /**
+     * 获取所有引用
+     */
+    fun getAllReferences(): Map<String, InlineFileReference> = referenceMap.toMap()
+    
+    /**
+     * 清空所有引用
+     */
+    fun clear() {
+        referenceMap.clear()
+    }
+    
+    /**
+     * 展开消息中的内联引用为完整路径
+     */
+    fun expandInlineReferences(message: String): String {
+        val pattern = "@([\\w.-]+(?:\\.\\w+)?)".toRegex()
+        return pattern.replace(message) { matchResult ->
+            val inlineText = matchResult.value
+            val reference = referenceMap[inlineText]
+            reference?.getFullPathText() ?: inlineText
+        }
+    }
+    
+    /**
+     * 从消息中提取所有@符号引用
+     */
+    fun extractInlineReferences(message: String): List<String> {
+        val pattern = "@([\\w.-]+(?:\\.\\w+)?)".toRegex()
+        return pattern.findAll(message).map { it.value }.toList()
+    }
+    
+    /**
+     * 检查消息中是否包含未知的内联引用
+     */
+    fun hasUnknownReferences(message: String): List<String> {
+        val extracted = extractInlineReferences(message)
+        return extracted.filter { !referenceMap.containsKey(it) }
+    }
+}
+
+/**
  * 上下文引用类型
  */
 sealed class ContextReference {
+    abstract val displayType: ContextDisplayType
+    
     /**
      * 文件引用
      * @param path 文件路径（可能是相对路径或绝对路径）
      * @param fullPath 完整路径（用于悬停提示）
+     * @param displayType 显示类型
      */
     data class FileReference(
         val path: String,
-        val fullPath: String = path
+        val fullPath: String = path,
+        override val displayType: ContextDisplayType = ContextDisplayType.TAG
     ) : ContextReference()
     
     /**
      * Web引用
      * @param url 完整URL
      * @param title 网页标题（可选，用于悬停提示）
+     * @param displayType 显示类型
      */
     data class WebReference(
         val url: String,
-        val title: String? = null
+        val title: String? = null,
+        override val displayType: ContextDisplayType = ContextDisplayType.TAG
     ) : ContextReference()
     
     // 保留原有类型兼容性（暂时未使用）
     data class FolderReference(
         val path: String,
         val fileCount: Int = 0,
-        val totalSize: Long = 0
+        val totalSize: Long = 0,
+        override val displayType: ContextDisplayType = ContextDisplayType.TAG
     ) : ContextReference()
     
     data class SymbolReference(
@@ -66,28 +161,37 @@ sealed class ContextReference {
         val type: SymbolType,
         val file: String,
         val line: Int,
-        val preview: String? = null
+        val preview: String? = null,
+        override val displayType: ContextDisplayType = ContextDisplayType.TAG
     ) : ContextReference()
     
     data class TerminalReference(
         val content: String,
         val lines: Int = 50,
         val timestamp: Long = System.currentTimeMillis(),
-        val isError: Boolean = false
+        val isError: Boolean = false,
+        override val displayType: ContextDisplayType = ContextDisplayType.TAG
     ) : ContextReference()
     
     data class ProblemsReference(
         val problems: List<Problem>,
-        val severity: ProblemSeverity? = null
+        val severity: ProblemSeverity? = null,
+        override val displayType: ContextDisplayType = ContextDisplayType.TAG
     ) : ContextReference()
     
     data class GitReference(
         val type: GitRefType,
-        val content: String
+        val content: String,
+        override val displayType: ContextDisplayType = ContextDisplayType.TAG
     ) : ContextReference()
     
-    object SelectionReference : ContextReference()
-    object WorkspaceReference : ContextReference()
+    object SelectionReference : ContextReference() {
+        override val displayType: ContextDisplayType = ContextDisplayType.TAG
+    }
+    
+    object WorkspaceReference : ContextReference() {
+        override val displayType: ContextDisplayType = ContextDisplayType.TAG
+    }
 }
 
 /**
