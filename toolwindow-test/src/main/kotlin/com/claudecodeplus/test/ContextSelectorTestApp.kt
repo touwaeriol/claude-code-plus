@@ -23,6 +23,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import com.claudecodeplus.ui.jewel.components.context.*
 import com.claudecodeplus.ui.models.ContextReference
+import com.claudecodeplus.ui.models.ContextDisplayType
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 import org.jetbrains.jewel.ui.component.Text
@@ -284,24 +285,50 @@ private fun ContextTagTestArea(
                 onClick = {
                     onAddTest(ContextReference.FileReference(
                         path = "src/main/kotlin/example/Example.kt",
-                        fullPath = "/absolute/path/to/src/main/kotlin/example/Example.kt"
+                        fullPath = "/absolute/path/to/src/main/kotlin/example/Example.kt",
+                        displayType = ContextDisplayType.TAG
                     ))
                 }
             ) {
-                androidx.compose.material.Text("添加文件测试")
+                androidx.compose.material.Text("添加文件(TAG)")
+            }
+            
+            Button(
+                onClick = {
+                    onAddTest(ContextReference.FileReference(
+                        path = "src/main/kotlin/example/InlineExample.kt",
+                        fullPath = "/absolute/path/to/src/main/kotlin/example/InlineExample.kt",
+                        displayType = ContextDisplayType.INLINE
+                    ))
+                }
+            ) {
+                androidx.compose.material.Text("添加文件(INLINE)")
             }
             
             Button(
                 onClick = {
                     onAddTest(ContextReference.WebReference(
                         url = "https://github.com/JetBrains/compose-jb",
-                        title = "Compose Multiplatform | JetBrains"
+                        title = "Compose Multiplatform | JetBrains",
+                        displayType = ContextDisplayType.TAG
                     ))
                 }
             ) {
-                androidx.compose.material.Text("添加Web测试")
+                androidx.compose.material.Text("添加Web(TAG)")
             }
         }
+        
+        // 显示上下文分类统计
+        val tagContexts = contexts.filter { it.displayType == ContextDisplayType.TAG }
+        val inlineContexts = contexts.filter { it.displayType == ContextDisplayType.INLINE }
+        
+        Text(
+            text = "TAG类型: ${tagContexts.size}个, INLINE类型: ${inlineContexts.size}个",
+            style = JewelTheme.defaultTextStyle.copy(
+                fontSize = 10.sp,
+                color = JewelTheme.globalColors.text.disabled
+            )
+        )
         
         // 上下文标签显示
         ContextTagList(

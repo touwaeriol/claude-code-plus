@@ -265,7 +265,7 @@ class SimpleFileIndexService : FileIndexService {
     }
     
     override suspend fun getRecentFiles(maxResults: Int): List<IndexedFileInfo> {
-        return indexedFiles.sortedByDescending { it.lastModified }.take(maxResults)
+        return indexedFiles.sortedWith(compareByDescending { it.lastModified }).take(maxResults)
     }
     
     override suspend fun getFileContent(filePath: String): String? = withContext(Dispatchers.IO) {
