@@ -29,4 +29,28 @@
 1. 阅读 [需求文档](REQUIREMENTS.md) 了解项目目标
 2. 查看 [架构设计](ARCHITECTURE.md) 了解系统结构
 3. 参考 [Jewel 组件迁移](JEWEL_COMPONENT_MIGRATION.md) 进行 UI 开发
-4. 更新 [进度文档](进度文档.md) 记录开发进度 
+4. 更新 [进度文档](进度文档.md) 记录开发进度
+
+## 快速导航
+
+### 开发者指南
+如果您是新加入的开发者，建议按以下顺序阅读文档：
+
+1. **了解项目**：[ARCHITECTURE.md](ARCHITECTURE.md) → [FEATURES.md](FEATURES.md)
+2. **技术实现**：[TOOLWINDOW_REDESIGN.md](TOOLWINDOW_REDESIGN.md) → [JEWEL_COMPONENT_MIGRATION.md](JEWEL_COMPONENT_MIGRATION.md)
+3. **消息格式**：[CLAUDE_MESSAGE_TYPES.md](CLAUDE_MESSAGE_TYPES.md) → [CONTEXT_MESSAGE_FORMAT.md](CONTEXT_MESSAGE_FORMAT.md)
+4. **具体需求**：[REQUIREMENTS.md](REQUIREMENTS.md) → [CONTEXT_SELECTION_REQUIREMENTS.md](CONTEXT_SELECTION_REQUIREMENTS.md)
+
+### 功能开发
+- **上下文功能**：[CONTEXT_MESSAGE_FORMAT.md](CONTEXT_MESSAGE_FORMAT.md) - 完整的上下文系统设计
+- **UI 组件**：[JEWEL_COMPONENT_OPTIMIZATION.md](JEWEL_COMPONENT_OPTIMIZATION.md) - 组件开发指南
+- **消息处理**：[CLAUDE_MESSAGE_TYPES.md](CLAUDE_MESSAGE_TYPES.md) - 消息格式规范
+
+### 问题排查
+- **架构问题**：参考 [ARCHITECTURE.md](ARCHITECTURE.md)
+- **组件问题**：参考 [JEWEL_COMPONENT_MIGRATION.md](JEWEL_COMPONENT_MIGRATION.md)
+- **消息格式问题**：参考 [CONTEXT_MESSAGE_FORMAT.md](CONTEXT_MESSAGE_FORMAT.md)
+
+## 文档维护
+
+请在进行重要功能开发时及时更新相关文档，确保文档与代码保持同步。 

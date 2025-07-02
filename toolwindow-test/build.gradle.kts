@@ -37,7 +37,7 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "MainKt"
+        mainClass = "com.claudecodeplus.test.MainKt"
 
         buildTypes.release.proguard {
             isEnabled.set(false)
