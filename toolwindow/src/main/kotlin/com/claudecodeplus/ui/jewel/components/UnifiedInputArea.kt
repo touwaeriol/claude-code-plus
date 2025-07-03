@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
@@ -215,19 +217,32 @@ fun UnifiedInputArea(
                 )
             }
             InputAreaMode.DISPLAY -> {
-                // 显示模式：使用富文本显示内联引用
+                // 显示模式：使用和输入框相同的 Visual Transformation
                 if (value.text.isNotBlank()) {
-                    ClickableInlineText(
-                        text = value.text,
-                        onReferenceClick = { reference ->
-                            // 在显示模式下可以点击引用查看详情
-                            println("Reference clicked: ${reference.fullPath}")
-                        },
+                    // 创建一个只读的文本显示，使用相同的 Visual Transformation
+                    val visualTransformation = InlineReferenceVisualTransformation()
+                    val transformedText = visualTransformation.filter(AnnotatedString(value.text))
+                    
+                    ClickableText(
+                        text = transformedText.text,
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 13.sp,
                             lineHeight = 18.sp,
                             color = JewelTheme.globalColors.text.normal
                         ),
+                        onClick = { offset ->
+                            // 处理点击事件 - 将显示位置映射回原始位置
+                            val originalOffset = transformedText.offsetMapping.transformedToOriginal(offset)
+                            println("Clicked at display offset: $offset, original offset: $originalOffset")
+                            
+                            // 查找点击的引用
+                            val references = InlineReferenceDetector.extractReferences(value.text)
+                            references.forEach { ref ->
+                                if (originalOffset >= ref.startIndex && originalOffset < ref.endIndex) {
+                                    println("Reference clicked: ${ref.fullText}")
+                                }
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
