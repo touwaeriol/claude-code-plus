@@ -97,18 +97,19 @@ fun UnifiedInputArea(
     
     // 处理@符号触发的上下文选择
     fun handleAtTriggerContext(context: ContextReference, position: Int) {
-        // 生成内联引用格式
+        // 生成内联引用格式，并添加空格
         val contextText = generateInlineReference(context)
+        val contextTextWithSpace = "$contextText "  // 添加空格
         
         // 替换@符号位置的文本，确保索引在有效范围内
         val newText = if (position < value.text.length) {
-            value.text.substring(0, position) + contextText + 
+            value.text.substring(0, position) + contextTextWithSpace + 
             value.text.substring(position + 1)
         } else {
             // position等于text.length，说明@在最后
-            value.text.substring(0, position) + contextText
+            value.text.substring(0, position) + contextTextWithSpace
         }
-        val newCursor = position + contextText.length
+        val newCursor = position + contextTextWithSpace.length
         
         onValueChange(
             TextFieldValue(
@@ -357,20 +358,22 @@ fun UnifiedInputArea(
                     }
 
                     if (atSymbolPosition != null) {
-                        // @符号触发：安全地替换@
+                        // @符号触发：安全地替换@，并在引用后添加空格
                         val pos = atSymbolPosition!!
                         val currentText = value.text
                         if (pos < currentText.length && currentText[pos] == '@') {
-                            val newText = currentText.replaceRange(pos, pos + 1, contextText)
-                            val newCursor = pos + contextText.length
+                            val textWithSpace = "$contextText "  // 添加空格
+                            val newText = currentText.replaceRange(pos, pos + 1, textWithSpace)
+                            val newCursor = pos + textWithSpace.length
                             onValueChange(TextFieldValue(newText, TextRange(newCursor)))
                         }
                     } else {
-                        // 按钮或快捷键触发：插入文本
+                        // 按钮或快捷键触发：插入文本，并在引用后添加空格
                         val currentText = value.text
                         val cursorPosition = value.selection.start
-                        val newText = currentText.substring(0, cursorPosition) + contextText + currentText.substring(cursorPosition)
-                        val newCursor = cursorPosition + contextText.length
+                        val textWithSpace = "$contextText "  // 添加空格
+                        val newText = currentText.substring(0, cursorPosition) + textWithSpace + currentText.substring(cursorPosition)
+                        val newCursor = cursorPosition + textWithSpace.length
                         onValueChange(TextFieldValue(newText, TextRange(newCursor)))
                     }
 

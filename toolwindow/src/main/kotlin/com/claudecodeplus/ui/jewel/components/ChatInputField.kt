@@ -267,18 +267,19 @@ fun ChatInputField(
                     justSelectedContext = true  // 标记刚选择了上下文
                     
                     if (atSymbolPosition != null) {
-                        // @符号触发：生成内联引用格式
+                        // @符号触发：生成内联引用格式，并添加空格
                         val inlineRef = generateInlineReference(context)
+                        val inlineRefWithSpace = "$inlineRef "  // 添加空格
                         val currentText = value.text
                         val pos = atSymbolPosition!!
                         
-                        println("DEBUG: Generating inline reference: $inlineRef")
+                        println("DEBUG: Generating inline reference: $inlineRefWithSpace")
                         println("  Current text: '$currentText'")
                         println("  Position: $pos")
                         
-                        // 替换@符号为内联引用
-                        val newText = currentText.substring(0, pos) + inlineRef + currentText.substring(pos + 1)
-                        val newCursor = pos + inlineRef.length
+                        // 替换@符号为内联引用（带空格）
+                        val newText = currentText.substring(0, pos) + inlineRefWithSpace + currentText.substring(pos + 1)
+                        val newCursor = pos + inlineRefWithSpace.length
                         
                         println("DEBUG: New text after replacement: '$newText'")
                         
