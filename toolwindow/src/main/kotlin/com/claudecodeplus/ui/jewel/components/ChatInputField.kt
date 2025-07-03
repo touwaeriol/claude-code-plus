@@ -34,82 +34,38 @@ import org.jetbrains.jewel.ui.component.Text
 /**
  * 聊天输入框组件
  * 
- * @param text 当前输入文本
- * @param onTextChange 文本变化回调
+ * @param value 当前输入文本
+ * @param onValueChange 文本变化回调
  * @param onSend 发送消息回调
  * @param onContextAdd 添加上下文回调
  * @param enabled 是否启用输入
  * @param searchService 上下文搜索服务
  * @param inlineReferenceManager 内联引用管理器
  * @param focusRequester 焦点请求器
+ * @param onShowContextSelectorRequest 显示上下文选择器请求回调
  * @param modifier 修饰符
  */
 @Composable
 fun ChatInputField(
-    text: String,
-    onTextChange: (String) -> Unit,
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
     onSend: () -> Unit,
     onContextAdd: (ContextReference) -> Unit = {},
     enabled: Boolean = true,
     searchService: ContextSearchService? = null,
     inlineReferenceManager: InlineReferenceManager = remember { InlineReferenceManager() },
     focusRequester: FocusRequester = remember { FocusRequester() },
+    onShowContextSelectorRequest: (Int?) -> Unit,
+    onAtTriggerContext: (ContextReference, Int) -> Unit = { _, _ -> },
+    showContextSelector: Boolean = false,
+    onShowContextSelectorChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var textValue by remember { mutableStateOf(TextFieldValue(text)) }
-    var showContextSelector by remember { mutableStateOf(false) }
     var atSymbolPosition by remember { mutableStateOf<Int?>(null) }
-    
-    // 同步外部text参数到内部状态
-    LaunchedEffect(text) {
-        if (text != textValue.text) {
-            textValue = TextFieldValue(text, TextRange(text.length))
-        }
-    }
-    
-    // 检测@符号输入
+    var justSelectedContext by remember { mutableStateOf(false) }
+    // 检测@符号输入 - 使用可扩展的检测系统
     fun detectAtSymbol(newText: String, cursor: Int): Boolean {
-        if (cursor == 0) return false
-        val beforeCursor = newText.substring(0, cursor)
-        return if (beforeCursor.isNotEmpty() && beforeCursor.last() == '@') {
-            beforeCursor.length == 1 || beforeCursor[beforeCursor.length - 2].let { 
-                it == ' ' || it == '\n' 
-            }
-        } else {
-            false
-        }
-    }
-    
-    // 处理@符号触发的上下文选择
-    fun handleAtTriggerContext(context: ContextReference) {
-        val pos = atSymbolPosition
-        if (pos != null) {
-            val contextText = when (context) {
-                is ContextReference.FileReference -> {
-                    val inlineRef = InlineFileReference(
-                        displayName = context.path.substringAfterLast('/'),
-                        fullPath = context.fullPath,
-                        relativePath = context.path
-                    )
-                    inlineReferenceManager.addReference(inlineRef)
-                    inlineRef.getInlineText()
-                }
-                is ContextReference.WebReference -> "@${context.title ?: context.url.substringAfterLast('/')}"
-                is ContextReference.FolderReference -> "@${context.path.substringAfterLast('/')}"
-                is ContextReference.SymbolReference -> "@${context.name}"
-                is ContextReference.TerminalReference -> "@terminal"
-                is ContextReference.ProblemsReference -> "@problems"
-                is ContextReference.GitReference -> "@git"
-                is ContextReference.ImageReference -> "@${context.filename}"
-                is ContextReference.SelectionReference -> "@selection"
-                is ContextReference.WorkspaceReference -> "@workspace"
-            }
-            
-            val newText = textValue.text.replaceRange(pos, pos + 1, contextText)
-            val newCursor = pos + contextText.length
-            textValue = TextFieldValue(newText, TextRange(newCursor))
-            onTextChange(newText)
-        }
+        return InlineReferenceDetector.shouldTriggerContextSelector(newText, cursor)
     }
     
     Box(
@@ -118,15 +74,41 @@ fun ChatInputField(
             .heightIn(min = 32.dp, max = 120.dp)
     ) {
         BasicTextField(
-            value = textValue,
+            value = value,
             onValueChange = { newValue ->
-                textValue = newValue
-                onTextChange(newValue.text)
+                val oldValue = value
+                println("DEBUG: ChatInputField - onValueChange called")
+                println("  Old text: '${oldValue.text}'")
+                println("  New text: '${newValue.text}'")
+                println("  Cursor position: ${newValue.selection.start}")
+                println("  justSelectedContext: $justSelectedContext")
                 
-                // 检测@符号输入
-                if (detectAtSymbol(newValue.text, newValue.selection.start)) {
-                    showContextSelector = true
-                    atSymbolPosition = newValue.selection.start - 1
+                onValueChange(newValue)
+                
+                // 如果刚选择了上下文，跳过这次检测
+                if (justSelectedContext) {
+                    println("DEBUG: Skipping @ detection because justSelectedContext=true")
+                    justSelectedContext = false
+                    return@BasicTextField
+                }
+                
+                // 只在新输入@符号时触发，避免在已有引用时重复触发
+                val isNewAtSymbol = newValue.text.length > oldValue.text.length && 
+                                   newValue.selection.start > 0 &&
+                                   newValue.text.getOrNull(newValue.selection.start - 1) == '@'
+                
+                println("DEBUG: isNewAtSymbol = $isNewAtSymbol")
+                
+                if (isNewAtSymbol) {
+                    val shouldTrigger = detectAtSymbol(newValue.text, newValue.selection.start)
+                    println("DEBUG: detectAtSymbol returned: $shouldTrigger")
+                    
+                    if (shouldTrigger) {
+                        println("DEBUG: Triggering context selector!")
+                        onShowContextSelectorChange(true)
+                        atSymbolPosition = newValue.selection.start - 1
+                        onShowContextSelectorRequest(newValue.selection.start - 1)
+                    }
                 }
             },
             enabled = enabled,
@@ -140,11 +122,12 @@ fun ChatInputField(
             ),
             keyboardActions = KeyboardActions(
                 onSend = {
-                    if (textValue.text.isNotBlank() && enabled) {
+                    if (value.text.isNotBlank() && enabled) {
                         onSend()
                     }
                 }
             ),
+            visualTransformation = InlineReferenceVisualTransformation(),
             cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),
             decorationBox = { innerTextField ->
                 Box(
@@ -154,7 +137,7 @@ fun ChatInputField(
                         .padding(4.dp)
                 ) {
                     // Placeholder文本
-                    if (textValue.text.isEmpty()) {
+                    if (value.text.isEmpty()) {
                         Text(
                             "输入消息，使用 @ 内联引用文件，或 ⌘K 添加上下文...",
                             style = JewelTheme.defaultTextStyle.copy(
@@ -171,21 +154,75 @@ fun ChatInputField(
                 .focusRequester(focusRequester)
                 .onPreviewKeyEvent { keyEvent ->
                     when {
+                        // 处理退格键 - 整体删除引用
+                        keyEvent.key == Key.Backspace && keyEvent.type == KeyEventType.KeyDown -> {
+                            val processedValue = InlineReferenceInputProcessor.handleDelete(value, true)
+                            if (processedValue != null) {
+                                onValueChange(processedValue)
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        // 处理Delete键 - 整体删除引用
+                        keyEvent.key == Key.Delete && keyEvent.type == KeyEventType.KeyDown -> {
+                            val processedValue = InlineReferenceInputProcessor.handleDelete(value, false)
+                            if (processedValue != null) {
+                                onValueChange(processedValue)
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        // 处理左箭头 - 跳过引用内部
+                        keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown -> {
+                            if (!keyEvent.isShiftPressed) {
+                                val processedValue = InlineReferenceInputProcessor.handleCursorMovement(
+                                    value, 
+                                    InlineReferenceInputProcessor.CursorDirection.LEFT
+                                )
+                                if (processedValue != null) {
+                                    onValueChange(processedValue)
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        }
+                        // 处理右箭头 - 跳过引用内部
+                        keyEvent.key == Key.DirectionRight && keyEvent.type == KeyEventType.KeyDown -> {
+                            if (!keyEvent.isShiftPressed) {
+                                val processedValue = InlineReferenceInputProcessor.handleCursorMovement(
+                                    value, 
+                                    InlineReferenceInputProcessor.CursorDirection.RIGHT
+                                )
+                                if (processedValue != null) {
+                                    onValueChange(processedValue)
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        }
                         keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyDown -> {
                             if (keyEvent.isShiftPressed) {
                                 // Shift+Enter: 换行
-                                val currentText = textValue.text
-                                val currentSelection = textValue.selection
+                                val currentText = value.text
+                                val currentSelection = value.selection
                                 val newText = currentText.substring(0, currentSelection.start) + 
                                              "\n" + 
                                              currentText.substring(currentSelection.end)
                                 val newSelection = TextRange(currentSelection.start + 1)
-                                textValue = TextFieldValue(newText, newSelection)
-                                onTextChange(newText)
+                                val newValue = TextFieldValue(newText, newSelection)
+                                onValueChange(newValue)
                                 true
                             } else {
                                 // Enter: 发送消息
-                                if (textValue.text.isNotBlank() && enabled) {
+                                if (value.text.isNotBlank() && enabled) {
                                     onSend()
                                     true
                                 } else {
@@ -194,19 +231,15 @@ fun ChatInputField(
                             }
                         }
                         keyEvent.key == Key.Escape && keyEvent.type == KeyEventType.KeyDown -> {
-                            if (showContextSelector) {
-                                showContextSelector = false
-                                atSymbolPosition = null
-                                true
-                            } else {
-                                false
-                            }
+                            // Escape is handled by the popup's onDismissRequest, so we don't consume it here.
+                            false
                         }
                         keyEvent.key == Key.K && keyEvent.type == KeyEventType.KeyDown && 
                         (keyEvent.isCtrlPressed || keyEvent.isMetaPressed) -> {
-                            if (!showContextSelector && enabled) {
-                                showContextSelector = true
+                            if (enabled) {
+                                onShowContextSelectorChange(true)
                                 atSymbolPosition = null
+                                onShowContextSelectorRequest(null) // Request to show popup, position is null for non-@ trigger
                                 true
                             } else {
                                 false
@@ -217,17 +250,40 @@ fun ChatInputField(
                 }
         )
         
-        // 上下文选择器弹出框
+        // 上下文选择器弹出框 - 只在需要时显示
+        println("DEBUG: Context selector check - showContextSelector=$showContextSelector, searchService=${searchService != null}")
         if (showContextSelector && searchService != null) {
+            println("DEBUG: Showing ChatInputContextSelectorPopup")
             ChatInputContextSelectorPopup(
                 onDismiss = { 
-                    showContextSelector = false
+                    println("DEBUG: onDismiss called in ChatInputField")
+                    onShowContextSelectorChange(false)
                     atSymbolPosition = null
+                    onShowContextSelectorRequest(null)
                 },
                 onContextSelect = { context ->
+                    println("DEBUG: onContextSelect called with context: $context")
+                    println("  atSymbolPosition: $atSymbolPosition")
+                    justSelectedContext = true  // 标记刚选择了上下文
+                    
                     if (atSymbolPosition != null) {
-                        // @符号触发：内联插入
-                        handleAtTriggerContext(context)
+                        // @符号触发：生成内联引用格式
+                        val inlineRef = generateInlineReference(context)
+                        val currentText = value.text
+                        val pos = atSymbolPosition!!
+                        
+                        println("DEBUG: Generating inline reference: $inlineRef")
+                        println("  Current text: '$currentText'")
+                        println("  Position: $pos")
+                        
+                        // 替换@符号为内联引用
+                        val newText = currentText.substring(0, pos) + inlineRef + currentText.substring(pos + 1)
+                        val newCursor = pos + inlineRef.length
+                        
+                        println("DEBUG: New text after replacement: '$newText'")
+                        
+                        onValueChange(TextFieldValue(newText, TextRange(newCursor)))
+                        onAtTriggerContext(context, pos)
                     } else {
                         // 其他触发方式：添加到上下文列表
                         val tagContext = when (context) {
@@ -237,8 +293,11 @@ fun ChatInputField(
                         }
                         onContextAdd(tagContext)
                     }
-                    showContextSelector = false
+                    
+                    println("DEBUG: Setting showContextSelector = false via onShowContextSelectorChange")
+                    onShowContextSelectorChange(false)
                     atSymbolPosition = null
+                    onShowContextSelectorRequest(null)
                 },
                 searchService = searchService,
                 modifier = Modifier.align(Alignment.TopStart)

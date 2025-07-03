@@ -21,6 +21,8 @@ import org.jetbrains.jewel.ui.component.DefaultButton
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.Orientation
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 
 /**
  * Jewel 聊天应用主组件
@@ -40,7 +42,7 @@ fun JewelChatApp(
 ) {
     // 应用状态
     var messages by remember { mutableStateOf(listOf<EnhancedMessage>()) }
-    var inputText by remember { mutableStateOf("") }
+    var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
     var contexts by remember { mutableStateOf(listOf<ContextReference>()) }
     var isGenerating by remember { mutableStateOf(false) }
     var currentSessionId by remember { mutableStateOf<String?>(null) }
@@ -75,14 +77,14 @@ fun JewelChatApp(
         // 主要聊天界面
         JewelConversationView(
             messages = messages,
-            inputText = inputText,
-            onInputChange = { inputText = it },
+            textFieldValue = textFieldValue,
+            onValueChange = { textFieldValue = it },
             onSend = {
-                if (inputText.isNotBlank() && !isGenerating) {
+                if (textFieldValue.text.isNotBlank() && !isGenerating) {
                     messageJob?.cancel()
                     messageJob = sendMessage(
                         scope = scope,
-                        inputText = inputText,
+                        inputText = textFieldValue.text,
                         contexts = contexts,
                         selectedModel = selectedModel,
                         cliWrapper = cliWrapper,
@@ -90,8 +92,8 @@ fun JewelChatApp(
                         currentSessionId = currentSessionId,
                         currentMessages = messages,
                         onMessageUpdate = { messages = it },
-                        onInputClear = { 
-                            inputText = ""
+                        onInputClear = {
+                            textFieldValue = TextFieldValue("")
                             inlineReferenceManager.clear()
                         },
                         onContextsClear = { contexts = emptyList() },

@@ -23,6 +23,7 @@ import org.jetbrains.jewel.ui.Orientation
 import org.jetbrains.jewel.ui.component.VerticallyScrollableContainer
 import org.jetbrains.jewel.ui.component.Text
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.text.input.TextFieldValue
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -34,8 +35,8 @@ import java.util.*
 @Composable
 fun JewelConversationView(
     messages: List<EnhancedMessage>,
-    inputText: String,
-    onInputChange: (String) -> Unit,
+    textFieldValue: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
     onSend: () -> Unit,
     onStop: (() -> Unit)? = null,
     contexts: List<ContextReference> = emptyList(),
@@ -96,8 +97,8 @@ fun JewelConversationView(
         
         // 输入区域 - 使用封装的 ChatInputArea 组件
         ChatInputArea(
-            text = inputText,
-            onTextChange = onInputChange,
+            value = textFieldValue,
+            onValueChange = onValueChange,
             onSend = onSend,
             onStop = onStop,
             contexts = contexts,
@@ -191,34 +192,30 @@ private fun MessageBubble(
     message: EnhancedMessage,
     modifier: Modifier = Modifier
 ) {
-    // 所有消息统一布局，不再左右区分
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                if (message.role == MessageRole.USER) 
-                    JewelTheme.globalColors.borders.focused.copy(alpha = 0.08f)
-                else 
+    if (message.role == MessageRole.USER) {
+        // 对于用户消息，使用重构后的 UserMessageDisplay 组件
+        val contexts = extractContextReferences(message.content)
+        UserMessageDisplay(
+            message = message,
+            contexts = contexts,
+            modifier = modifier
+        )
+    } else {
+        // 助理消息保持现有布局
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .background(
                     JewelTheme.globalColors.panelBackground,
-                RoundedCornerShape(8.dp)
-            )
-            .border(
-                1.dp,
-                if (message.role == MessageRole.USER)
-                    JewelTheme.globalColors.borders.focused.copy(alpha = 0.15f)
-                else
+                    RoundedCornerShape(8.dp)
+                )
+                .border(
+                    1.dp,
                     JewelTheme.globalColors.borders.normal.copy(alpha = 0.1f),
-                RoundedCornerShape(8.dp)
-            )
-            .padding(
-                if (message.role == MessageRole.USER) 
-                    PaddingValues(12.dp)
-                else 
-                    PaddingValues(16.dp)
-            )
-    ) {
-        if (message.role != MessageRole.USER) {
-            // Assistant消息内容
+                    RoundedCornerShape(8.dp)
+                )
+                .padding(PaddingValues(16.dp))
+        ) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -248,73 +245,18 @@ private fun MessageBubble(
                                 SimpleToolCallDisplay(element.toolCall)
                             }
                             is MessageTimelineItem.ContentItem -> {
-                                if (element.content.isNotBlank()) {
-                                    MarkdownRenderer(
-                                        markdown = element.content,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
+                                MarkdownRenderer(element.content)
                             }
-                            is MessageTimelineItem.StatusItem -> {
-                                if (element.isStreaming) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Text(
-                                            text = "▌"
-                                        )
-                                        Text(
-                                            text = element.status
-                                        )
-                                    }
-                                }
+                            else -> {
+                                // 忽略其他类型的元素，例如 StatusItem
                             }
                         }
                     }
                 } else {
-                    // 向后兼容：如果没有orderedElements，回退到原来的显示方式
-                    // 先显示工具调用（按照添加顺序）
-                    message.toolCalls.forEach { toolCall ->
-                        SimpleToolCallDisplay(toolCall)
-                    }
-                    
-                    // 然后显示消息内容
-                    if (message.content.isNotBlank()) {
-                        MarkdownRenderer(
-                            markdown = message.content,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                    // 向后兼容，如果没有有序元素，则渲染整个内容
+                    MarkdownRenderer(message.content)
                 }
-                
-                // 流式状态指示器
-                if (message.isStreaming) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "▌"
-                        )
-                        Text(
-                            text = "正在生成..."
-                        )
-                    }
-                }
-                
-                // 时间戳
-                Text(
-                    text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(message.timestamp))
-                )
             }
-        } else {
-            // User消息内容 - 使用新的用户消息显示组件
-            UserMessageDisplay(
-                message = message,
-                contexts = extractContextReferences(message.content),
-                modifier = Modifier.fillMaxWidth()
-            )
         }
     }
 }

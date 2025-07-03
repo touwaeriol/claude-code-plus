@@ -42,12 +42,14 @@ fun ChatInputContextSelectorPopup(
                         path = result.item.relativePath
                     )
                     onContextSelect(contextRef)
+                    onDismiss() // 选择后关闭弹出框
                 }
                 is ContextSelectionResult.WebSelected -> {
                     val contextRef = ContextReference.WebReference(
                         url = result.item.url
                     )
                     onContextSelect(contextRef)
+                    onDismiss() // 选择后关闭弹出框
                 }
                 is ContextSelectionResult.Cancelled -> {
                     onDismiss()
