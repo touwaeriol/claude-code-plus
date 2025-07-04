@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm")
+    kotlin("plugin.serialization")
     `java-library`  // 添加 java-library 插件以支持 api 配置
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -34,6 +35,9 @@ dependencies {
     
     // Markdown 解析
     implementation("org.commonmark:commonmark:0.25.0")
+    
+    // JSON 序列化
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.1")
     
     // 测试依赖
     testImplementation(kotlin("test"))

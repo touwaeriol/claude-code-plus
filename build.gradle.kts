@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     kotlin("jvm") version "2.1.10" apply false
+    kotlin("plugin.serialization") version "2.1.10" apply false
     id("org.jetbrains.intellij.platform") version "2.6.0" apply false
     id("org.jetbrains.compose") version "1.8.0-alpha04" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.1.10" apply false

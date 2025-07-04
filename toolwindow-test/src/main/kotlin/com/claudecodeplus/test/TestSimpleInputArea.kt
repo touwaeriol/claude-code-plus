@@ -14,22 +14,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
 import com.claudecodeplus.ui.jewel.components.*
 import com.claudecodeplus.ui.models.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 import org.jetbrains.jewel.ui.component.DefaultButton
 import org.jetbrains.jewel.ui.component.Text
-import org.jetbrains.jewel.window.DecoratedWindow
-import org.jetbrains.jewel.window.styling.DecoratedWindowStyle
 
 fun main() = application {
-    IntUiTheme(isDark = true) {
-        DecoratedWindow(
-            onCloseRequest = ::exitApplication,
-            title = "测试简化输入区域",
-            style = DecoratedWindowStyle.dark()
-        ) {
+    Window(
+        onCloseRequest = ::exitApplication,
+        title = "测试简化输入区域",
+        state = rememberWindowState(
+            width = 800.dp,
+            height = 600.dp
+        )
+    ) {
+        IntUiTheme(isDark = true) {
             TestSimpleInputAreaContent()
         }
     }
@@ -73,8 +75,7 @@ private fun TestSimpleInputAreaContent() {
                     // 添加测试上下文
                     contexts = contexts + ContextReference.FileReference(
                         path = "src/main/kotlin/Main.kt",
-                        fullPath = "/project/src/main/kotlin/Main.kt",
-                        content = "// Main.kt content"
+                        fullPath = "/project/src/main/kotlin/Main.kt"
                     )
                 }
             ) {
