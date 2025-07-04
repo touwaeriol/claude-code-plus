@@ -15,4 +15,4 @@ echo "Compiling..."
 
 # 运行测试应用
 echo "Running test app..."
-./gradlew runTestApp --args="$PROJECT_PATH" --console=plain
+./gradlew :toolwindow-test:run --args="$PROJECT_PATH" --console=plain
