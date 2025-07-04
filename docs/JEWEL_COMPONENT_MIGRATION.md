@@ -285,4 +285,35 @@ Text(
 1. 按照优先级迁移组件（Text → Button → Container → Advanced）
 2. 测试主题切换功能
 3. 验证不同平台的行为一致性
-4. 更新相关文档和示例代码 
+4. 更新相关文档和示例代码
+
+## 迁移优化统计
+
+### 组件替换统计
+本项目已完成以下组件的全面替换：
+
+- **LazyColumn** → **VerticallyScrollableContainer**: 4个文件
+- **LazyRow** → **HorizontallyScrollableContainer**: 3个文件  
+- **BasicTextField** → **TextField**: 3个文件
+- **OutlinedButton** → **Button**: 2个文件
+- **Material DropdownMenu** → **Jewel Dropdown**: 1个文件
+
+### 已优化的核心文件
+
+1. **JewelConversationView.kt**
+   - 使用 `VerticallyScrollableContainer` 替代 `LazyColumn`
+   - 使用 `TextField` 替代 `BasicTextField`
+   - 完全使用 `JewelTheme.globalColors`
+
+2. **EnhancedSmartInputArea.kt**
+   - 优化了上下文菜单和建议系统
+   - 使用 Jewel 主题系统
+   - 提升了滚动性能
+
+3. **MarkdownRenderer.kt**
+   - 使用 Jewel 按钮组件
+   - 保持代码渲染功能完整性
+
+4. **ModelSelector.kt**
+   - 替换为 Jewel Dropdown
+   - 使用主题色彩系统 

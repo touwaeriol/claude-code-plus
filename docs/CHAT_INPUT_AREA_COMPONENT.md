@@ -170,11 +170,41 @@ ChatInputArea {
 - 停止模式：`onStopGeneration()` 回调
 - 键盘等价：Enter 键触发发送
 
+## UnifiedInputArea 统一组件
+
+### 组件重构
+
+为了确保输入和显示的完全视觉一致性，我们将 `ChatInputArea`（输入模式）和 `UserMessageDisplay`（显示模式）统一为单一的 `UnifiedInputArea` 组件。
+
+**重构架构**：
+```
+UnifiedInputArea (统一基础组件)
+├── InputAreaMode.INPUT  → ChatInputArea (包装器)
+└── InputAreaMode.DISPLAY → UserMessageDisplay (包装器)
+```
+
+**统一特性**：
+- **相同的边框和背景**: 统一的圆角矩形设计
+- **相同的布局结构**: 三行布局（上下文、内容、工具栏）
+- **相同的间距和内边距**: 8dp 统一内边距，6dp 行间距
+- **相同的字体和颜色**: 完全一致的文本样式
+
+**模式差异**：
+| 特性 | INPUT 模式 | DISPLAY 模式 |
+|------|------------|--------------|
+| Add Context 按钮 | ✅ 显示并可点击 | ❌ 隐藏 |
+| 上下文标签 | ✅ 可删除的标签 | ✅ 只读标签 |
+| 文本输入 | ✅ 多行可编辑输入框 | ✅ 只读文本显示 |
+| 模型选择 | ✅ 可切换的下拉选择器 | ✅ 只显示模型名称 |
+| 发送按钮 | ✅ 发送/停止按钮组合 | ❌ 隐藏 |
+| 图片选择 | ✅ 图片选择按钮 | ❌ 隐藏 |
+| 时间戳 | ❌ 不显示 | ✅ 显示消息时间 |
+
 ## 用户消息显示组件
 
 ### 设计理念
 
-用户消息显示组件 (`UserMessageDisplay.kt`) 复用了 ChatInputArea 的设计和布局，确保在对话界面中保持视觉一致性。
+用户消息显示组件 (`UserMessageDisplay.kt`) 现在作为 `UnifiedInputArea` 的包装器，复用了 ChatInputArea 的设计和布局，确保在对话界面中保持视觉一致性。
 
 ### 主要特点
 
