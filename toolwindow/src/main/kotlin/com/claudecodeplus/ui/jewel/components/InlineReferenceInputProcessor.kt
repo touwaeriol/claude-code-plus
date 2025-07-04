@@ -78,8 +78,16 @@ object InlineReferenceInputProcessor {
         val text = value.text
         val cursorPos = value.selection.start
         
+        // 如果没有选择范围（光标是一个点），才处理引用跳跃
+        if (!value.selection.collapsed) {
+            return null // 有选择范围时不处理
+        }
+        
         // 查找所有引用
         val references = findAllReferences(text)
+        if (references.isEmpty()) {
+            return null // 没有引用时不处理
+        }
         
         // 检查光标是否在引用内部
         val currentRef = references.find { ref ->
@@ -100,6 +108,7 @@ object InlineReferenceInputProcessor {
             }
         }
         
+        // 如果光标不在引用内部，让系统处理正常的光标移动
         return null
     }
     

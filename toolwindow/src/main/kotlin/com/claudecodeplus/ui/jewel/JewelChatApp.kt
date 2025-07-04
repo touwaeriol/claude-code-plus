@@ -42,13 +42,11 @@ fun JewelChatApp(
 ) {
     // 应用状态
     var messages by remember { mutableStateOf(listOf<EnhancedMessage>()) }
-    var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
     var contexts by remember { mutableStateOf(listOf<ContextReference>()) }
     var isGenerating by remember { mutableStateOf(false) }
     var currentSessionId by remember { mutableStateOf<String?>(null) }
     var messageJob by remember { mutableStateOf<Job?>(null) }
     var selectedModel by remember { mutableStateOf(AiModel.OPUS) }
-    val inlineReferenceManager = remember { InlineReferenceManager() }
     
     val scope = rememberCoroutineScope()
     
@@ -77,14 +75,12 @@ fun JewelChatApp(
         // 主要聊天界面
         JewelConversationView(
             messages = messages,
-            textFieldValue = textFieldValue,
-            onValueChange = { textFieldValue = it },
-            onSend = {
-                if (textFieldValue.text.isNotBlank() && !isGenerating) {
+            onSend = { textWithMarkdown ->
+                if (textWithMarkdown.isNotBlank() && !isGenerating) {
                     messageJob?.cancel()
                     messageJob = sendMessage(
                         scope = scope,
-                        inputText = textFieldValue.text,
+                        inputText = textWithMarkdown,
                         contexts = contexts,
                         selectedModel = selectedModel,
                         cliWrapper = cliWrapper,
@@ -92,14 +88,9 @@ fun JewelChatApp(
                         currentSessionId = currentSessionId,
                         currentMessages = messages,
                         onMessageUpdate = { messages = it },
-                        onInputClear = {
-                            textFieldValue = TextFieldValue("")
-                            inlineReferenceManager.clear()
-                        },
                         onContextsClear = { contexts = emptyList() },
                         onGeneratingChange = { isGenerating = it },
-                        onSessionIdUpdate = { currentSessionId = it },
-                        inlineReferenceManager = inlineReferenceManager
+                        onSessionIdUpdate = { currentSessionId = it }
                     )
                 }
             },
@@ -132,7 +123,6 @@ fun JewelChatApp(
             },
             fileIndexService = fileIndexService,
             projectService = projectService,
-            inlineReferenceManager = inlineReferenceManager,
             modifier = Modifier.weight(1f)
         )
     }
@@ -249,23 +239,18 @@ private fun sendMessage(
     currentSessionId: String?,
     currentMessages: List<EnhancedMessage>,
     onMessageUpdate: (List<EnhancedMessage>) -> Unit,
-    onInputClear: () -> Unit,
     onContextsClear: () -> Unit,
     onGeneratingChange: (Boolean) -> Unit,
-    onSessionIdUpdate: (String?) -> Unit,
-    inlineReferenceManager: InlineReferenceManager
+    onSessionIdUpdate: (String?) -> Unit
 ): Job {
     return scope.launch(Dispatchers.IO) {
         try {
             onGeneratingChange(true)
             
-            // 展开内联引用为完整路径
-            val expandedInputText = inlineReferenceManager.expandInlineReferences(inputText)
-            
             // 构建包含上下文的消息 - 使用新的Markdown格式
-            val messageWithContext = buildFinalMessage(contexts, expandedInputText)
+            val messageWithContext = buildFinalMessage(contexts, inputText)
             
-            // 添加用户消息
+            // 创建用户消息
             val userMessage = EnhancedMessage(
                 id = generateMessageId(),
                 role = MessageRole.USER,
@@ -273,12 +258,13 @@ private fun sendMessage(
                 timestamp = System.currentTimeMillis(),
                 status = MessageStatus.COMPLETE,
                 isError = false,
-                model = selectedModel // 添加模型信息
+                model = selectedModel
             )
             
-            val updatedMessages = currentMessages + userMessage
-            onMessageUpdate(updatedMessages)
-            onInputClear()
+            val currentMessagesMutable = currentMessages.toMutableList()
+            currentMessagesMutable.add(userMessage)
+            onMessageUpdate(currentMessagesMutable.toList())
+            
             onContextsClear()
             
             // 创建空的助手消息
@@ -293,7 +279,7 @@ private fun sendMessage(
                 toolCalls = emptyList()
             )
             
-            val messagesWithAssistant = updatedMessages + assistantMessage
+            val messagesWithAssistant = currentMessagesMutable + assistantMessage
             onMessageUpdate(messagesWithAssistant)
             
             println("DEBUG: Sending message to Claude CLI: $messageWithContext")

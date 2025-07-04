@@ -2,7 +2,6 @@ package com.claudecodeplus.ui.jewel
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.awt.ComposePanel
-import androidx.compose.ui.text.input.TextFieldValue
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.sdk.MessageType
 import com.claudecodeplus.ui.models.*
@@ -94,20 +93,15 @@ class JewelChatPanel(
     
     @Composable
     private fun ChatPanelContent() {
-        // 聊天状态 - 使用 remember 确保状态持久化
+        // 聊天状态
         val messages = remember { mutableStateOf(listOf<EnhancedMessage>()) }
-        val textFieldValue = remember { mutableStateOf(TextFieldValue("")) }
         val contexts = remember { mutableStateOf(listOf<ContextReference>()) }
         val isGenerating = remember { mutableStateOf(false) }
         val currentSessionId = remember { mutableStateOf<String?>(null) }
         val currentJob = remember { mutableStateOf<Job?>(null) }
         val selectedModel = remember { mutableStateOf(AiModel.OPUS) }
-        val inlineReferenceManager = remember { InlineReferenceManager() }
         
         val scope = rememberCoroutineScope()
-        
-        // 添加调试输出
-        println("ChatPanelContent: selectedModel = ${selectedModel.value.displayName}")
         
         // 初始欢迎消息
         LaunchedEffect(Unit) {
@@ -122,28 +116,21 @@ class JewelChatPanel(
         
         JewelConversationView(
             messages = messages.value,
-            textFieldValue = textFieldValue.value,
-            onValueChange = { textFieldValue.value = it },
-            onSend = {
-                if (textFieldValue.value.text.isNotBlank() && !isGenerating.value) {
+            onSend = { textWithMarkdown ->
+                if (textWithMarkdown.isNotBlank() && !isGenerating.value) {
                     sendMessage(
                         scope = scope,
-                        inputText = textFieldValue.value.text,
+                        textWithMarkdown = textWithMarkdown,
                         contexts = contexts.value,
                         selectedModel = selectedModel.value,
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
                         currentSessionId = currentSessionId.value,
                         onMessageUpdate = { messages.value = it },
-                        onInputClear = { 
-                            textFieldValue.value = TextFieldValue("")
-                            inlineReferenceManager.clear()
-                        },
                         onContextsClear = { contexts.value = emptyList() },
                         onGeneratingChange = { isGenerating.value = it },
                         onSessionIdUpdate = { currentSessionId.value = it },
-                        onJobUpdate = { currentJob.value = it },
-                        inlineReferenceManager = inlineReferenceManager
+                        onJobUpdate = { currentJob.value = it }
                     )
                 }
             },
@@ -179,8 +166,7 @@ class JewelChatPanel(
                 )
             },
             fileIndexService = fileIndexService,
-            projectService = projectService,
-            inlineReferenceManager = inlineReferenceManager
+            projectService = projectService
         )
     }
     
@@ -189,33 +175,25 @@ class JewelChatPanel(
      */
     private fun sendMessage(
         scope: CoroutineScope,
-        inputText: String,
+        textWithMarkdown: String,
         contexts: List<ContextReference>,
         selectedModel: AiModel,
         cliWrapper: ClaudeCliWrapper,
         workingDirectory: String,
         currentSessionId: String?,
         onMessageUpdate: (List<EnhancedMessage>) -> Unit,
-        onInputClear: () -> Unit,
         onContextsClear: () -> Unit,
         onGeneratingChange: (Boolean) -> Unit,
         onSessionIdUpdate: (String?) -> Unit,
-        onJobUpdate: (Job?) -> Unit,
-        inlineReferenceManager: InlineReferenceManager
+        onJobUpdate: (Job?) -> Unit
     ) {
-        // 展开内联引用为完整路径 - 使用新的展开方式
-        val expandedInputText = com.claudecodeplus.ui.jewel.components.expandInlineReferencesForAI(
-            inputText, 
-            workingDirectory
-        )
-        
         // 构建包含上下文的消息 - 使用新的Markdown格式
-        val messageWithContext = buildFinalMessage(contexts, expandedInputText)
+        val messageWithContext = buildFinalMessage(contexts, textWithMarkdown)
         
         // 创建用户消息
         val userMessage = EnhancedMessage(
             role = MessageRole.USER,
-            content = inputText,
+            content = textWithMarkdown, // <--- 使用带有Markdown的原始文本
             contexts = contexts,
             timestamp = System.currentTimeMillis()
         )
@@ -225,7 +203,6 @@ class JewelChatPanel(
         currentMessages.add(userMessage)
         onMessageUpdate(currentMessages.toList())
         
-        onInputClear()
         onContextsClear()
         onGeneratingChange(true)
         

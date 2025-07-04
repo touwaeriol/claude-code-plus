@@ -123,6 +123,7 @@ class InlineReferenceManager {
  */
 sealed class ContextReference {
     abstract val displayType: ContextDisplayType
+    abstract val uri: String
     
     /**
      * 文件引用
@@ -134,7 +135,10 @@ sealed class ContextReference {
         val path: String,
         val fullPath: String = path,
         override val displayType: ContextDisplayType = ContextDisplayType.TAG
-    ) : ContextReference()
+    ) : ContextReference() {
+        override val uri: String
+            get() = "file://$fullPath"
+    }
     
     /**
      * Web引用
@@ -146,7 +150,10 @@ sealed class ContextReference {
         val url: String,
         val title: String? = null,
         override val displayType: ContextDisplayType = ContextDisplayType.TAG
-    ) : ContextReference()
+    ) : ContextReference() {
+        override val uri: String
+            get() = url
+    }
     
     // 保留原有类型兼容性（暂时未使用）
     data class FolderReference(
@@ -154,7 +161,10 @@ sealed class ContextReference {
         val fileCount: Int = 0,
         val totalSize: Long = 0,
         override val displayType: ContextDisplayType = ContextDisplayType.TAG
-    ) : ContextReference()
+    ) : ContextReference() {
+        override val uri: String
+            get() = "folder://$path"
+    }
     
     data class SymbolReference(
         val name: String,
@@ -163,7 +173,10 @@ sealed class ContextReference {
         val line: Int,
         val preview: String? = null,
         override val displayType: ContextDisplayType = ContextDisplayType.TAG
-    ) : ContextReference()
+    ) : ContextReference() {
+        override val uri: String
+            get() = "symbol:$file#$name"
+    }
     
     data class TerminalReference(
         val content: String,
@@ -171,19 +184,28 @@ sealed class ContextReference {
         val timestamp: Long = System.currentTimeMillis(),
         val isError: Boolean = false,
         override val displayType: ContextDisplayType = ContextDisplayType.TAG
-    ) : ContextReference()
+    ) : ContextReference() {
+        override val uri: String
+            get() = "terminal:output?lines=$lines&ts=$timestamp"
+    }
     
     data class ProblemsReference(
         val problems: List<Problem>,
         val severity: ProblemSeverity? = null,
         override val displayType: ContextDisplayType = ContextDisplayType.TAG
-    ) : ContextReference()
+    ) : ContextReference() {
+        override val uri: String
+            get() = "problems:list?count=${problems.size}"
+    }
     
     data class GitReference(
         val type: GitRefType,
         val content: String,
         override val displayType: ContextDisplayType = ContextDisplayType.TAG
-    ) : ContextReference()
+    ) : ContextReference() {
+        override val uri: String
+            get() = "git:${type.name.lowercase()}"
+    }
     
     /**
      * 图片引用
@@ -199,14 +221,19 @@ sealed class ContextReference {
         val size: Long = 0,
         val mimeType: String = "image/*",
         override val displayType: ContextDisplayType = ContextDisplayType.TAG
-    ) : ContextReference()
+    ) : ContextReference() {
+        override val uri: String
+            get() = "file://$path"
+    }
     
     object SelectionReference : ContextReference() {
         override val displayType: ContextDisplayType = ContextDisplayType.TAG
+        override val uri: String = "selection:current"
     }
     
     object WorkspaceReference : ContextReference() {
         override val displayType: ContextDisplayType = ContextDisplayType.TAG
+        override val uri: String = "workspace:root"
     }
 }
 

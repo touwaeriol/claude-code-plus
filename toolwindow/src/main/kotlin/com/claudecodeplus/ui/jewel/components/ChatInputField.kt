@@ -174,9 +174,9 @@ fun ChatInputField(
                                 false
                             }
                         }
-                        // 处理左箭头 - 跳过引用内部
+                        // 处理左箭头 - 跳过引用内部（仅在没有修饰键时）
                         keyEvent.key == Key.DirectionLeft && keyEvent.type == KeyEventType.KeyDown -> {
-                            if (!keyEvent.isShiftPressed) {
+                            if (!keyEvent.isShiftPressed && !keyEvent.isCtrlPressed && !keyEvent.isMetaPressed) {
                                 val processedValue = InlineReferenceInputProcessor.handleCursorMovement(
                                     value, 
                                     InlineReferenceInputProcessor.CursorDirection.LEFT
@@ -188,12 +188,12 @@ fun ChatInputField(
                                     false
                                 }
                             } else {
-                                false
+                                false // 让系统处理快捷键（如 Cmd+←）
                             }
                         }
-                        // 处理右箭头 - 跳过引用内部
+                        // 处理右箭头 - 跳过引用内部（仅在没有修饰键时）
                         keyEvent.key == Key.DirectionRight && keyEvent.type == KeyEventType.KeyDown -> {
-                            if (!keyEvent.isShiftPressed) {
+                            if (!keyEvent.isShiftPressed && !keyEvent.isCtrlPressed && !keyEvent.isMetaPressed) {
                                 val processedValue = InlineReferenceInputProcessor.handleCursorMovement(
                                     value, 
                                     InlineReferenceInputProcessor.CursorDirection.RIGHT
@@ -205,7 +205,7 @@ fun ChatInputField(
                                     false
                                 }
                             } else {
-                                false
+                                false // 让系统处理快捷键（如 Cmd+→）
                             }
                         }
                         keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyDown -> {
