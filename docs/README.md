@@ -14,6 +14,13 @@
 - [**Jewel 组件迁移**](JEWEL_COMPONENT_MIGRATION.md) - 组件迁移指南和对照表
 - [**Claude 消息类型**](CLAUDE_MESSAGE_TYPES.md) - Claude 消息类型定义
 
+### 技术实现文档
+- [**富文本输入设计**](RICH_TEXT_INPUT_DESIGN.md) - 富文本输入系统设计与实现
+- [**富文本输入测试**](RICH_TEXT_INPUT_TEST.md) - 功能测试指南
+- [**注解迁移指南**](ANNOTATION_MIGRATION_GUIDE.md) - AnnotatedString 迁移方案
+- [**内联引用扩展**](INLINE_REFERENCE_EXTENSION.md) - 引用类型扩展指南
+- [**统一组件重构**](UNIFIED_COMPONENT_REFACTOR.md) - 组件架构重构记录
+
 ### 开发进度
 - [**进度文档**](进度文档.md) - 开发进度记录和功能实现追踪
 
