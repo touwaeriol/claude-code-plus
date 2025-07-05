@@ -30,6 +30,51 @@ import java.io.InputStreamReader
 class ClaudeCliWrapper {
     companion object {
         private val logger = Logger.getLogger(ClaudeCliWrapper::class.java.name)
+        
+        /**
+         * 查找 claude 命令的完整路径
+         */
+        private fun findClaudeCommand(): String {
+            // 1. 首先检查环境变量
+            System.getenv("CLAUDE_CLI_PATH")?.let { 
+                if (java.io.File(it).exists()) {
+                    logger.info("Using claude from CLAUDE_CLI_PATH: $it")
+                    return it
+                }
+            }
+            
+            // 2. 检查常见的安装路径
+            val commonPaths = listOf(
+                "/Users/${System.getProperty("user.name")}/.local/bin/claude",
+                "/usr/local/bin/claude",
+                "/opt/homebrew/bin/claude",
+                "/usr/bin/claude"
+            )
+            
+            for (path in commonPaths) {
+                if (java.io.File(path).exists()) {
+                    logger.info("Found claude at: $path")
+                    return path
+                }
+            }
+            
+            // 3. 尝试使用 which 命令查找
+            try {
+                val process = ProcessBuilder("which", "claude").start()
+                val reader = process.inputStream.bufferedReader()
+                val path = reader.readLine()?.trim()
+                if (!path.isNullOrEmpty() && java.io.File(path).exists()) {
+                    logger.info("Found claude using which: $path")
+                    return path
+                }
+            } catch (e: Exception) {
+                logger.warning("Failed to use which command: ${e.message}")
+            }
+            
+            // 4. 如果都找不到，返回默认值并警告
+            logger.warning("Could not find claude command, using default 'claude'")
+            return "claude"
+        }
     }
     private val objectMapper = jacksonObjectMapper()
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
@@ -131,22 +176,24 @@ class ClaudeCliWrapper {
      * @return 响应消息流
      */
     fun query(prompt: String, options: QueryOptions = QueryOptions()): Flow<SDKMessage> = flow {
+        val requestId = java.util.UUID.randomUUID().toString().take(8)
+        logger.info("🔵 [$requestId] 开始处理 Claude 查询请求")
+        logger.info("🔵 [$requestId] 提示词: ${prompt.take(100)}${if(prompt.length > 100) "..." else ""}")
+        logger.info("🔵 [$requestId] 选项: $options")
+        
         val args = mutableListOf<String>()
         
         // 核心参数（必须在前面）
         args.addAll(listOf("--output-format", "stream-json"))
+        logger.info("🔵 [$requestId] 添加核心参数: --output-format stream-json")
         
         // 调试和verbose控制
         if (options.debug) {
             args.add("--debug")
         }
         
-        options.verbose?.let {
-            if (it) args.add("--verbose")
-        } ?: run {
-            // 默认启用verbose方便后续分析和调试
-            args.add("--verbose")
-        }
+        // 总是启用 verbose 以获取 session_id
+        args.add("--verbose")
         
         // 模型配置
         options.model?.let { args.addAll(listOf("--model", it)) }
@@ -217,16 +264,36 @@ class ClaudeCliWrapper {
         }
         args.addAll(listOf("--print", prompt.trim()))
         
-        // 构建进程
-        val processBuilder = ProcessBuilder("claude", *args.toTypedArray())
-        options.cwd?.let { processBuilder.directory(java.io.File(it)) }
+        // 构建进程 - 尝试查找 claude 命令的完整路径
+        val claudeCommand = findClaudeCommand()
+        logger.info("🔵 [$requestId] 使用 Claude 命令: $claudeCommand")
+        logger.info("🔵 [$requestId] 完整命令行: $claudeCommand ${args.joinToString(" ")}")
         
-        // 设置环境变量，标识调用来源
-        // 这个环境变量会被 Claude CLI 识别，用于统计和跟踪
-        processBuilder.environment()["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kotlin"
+        val processBuilder = ProcessBuilder(claudeCommand, *args.toTypedArray())
+        options.cwd?.let { 
+            processBuilder.directory(java.io.File(it))
+            logger.info("🔵 [$requestId] 工作目录: $it")
+        }
         
+        // 设置环境变量
+        val env = processBuilder.environment()
+        
+        // 标识调用来源
+        env["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kotlin"
+        
+        // 确保 PATH 包含必要的目录
+        val currentPath = env["PATH"] ?: System.getenv("PATH") ?: ""
+        val additionalPaths = listOf(
+            "/Users/${System.getProperty("user.name")}/.local/bin",
+            "/usr/local/bin",
+            "/opt/homebrew/bin"
+        ).joinToString(":")
+        env["PATH"] = "$additionalPaths:$currentPath"
+        
+        logger.info("🔵 [$requestId] 启动 Claude CLI 进程...")
         val process = processBuilder.start()
         currentProcess.set(process)
+        logger.info("🔵 [$requestId] 进程已启动，PID: ${process.pid()}")
         
         // 关闭输入流
         process.outputStream.close()
@@ -234,6 +301,7 @@ class ClaudeCliWrapper {
         // 读取输出
         val reader = BufferedReader(InputStreamReader(process.inputStream))
         val errorReader = BufferedReader(InputStreamReader(process.errorStream))
+        logger.info("🔵 [$requestId] 开始读取输出流...")
         
         // 启动错误流读取
         val errorBuilder = StringBuilder()
@@ -470,12 +538,26 @@ class ClaudeCliWrapper {
     /**
      * 发送消息并获取流式响应
      * @param message 用户消息
-     * @param sessionId 会话ID（可选）
+     * @param sessionId 会话ID（可选，用于 --resume）
      * @return 响应流
      */
-    fun sendMessage(message: String, sessionId: String? = null): Flow<StreamResponse> = flow {
-        query(message, QueryOptions(resume = sessionId)).collect { sdkMessage ->
+    fun sendMessage(
+        message: String, 
+        sessionId: String? = null
+    ): Flow<StreamResponse> = flow {
+        val options = if (sessionId != null) {
+            QueryOptions(resume = sessionId)
+        } else {
+            QueryOptions()
+        }
+        
+        query(message, options).collect { sdkMessage ->
             when (sdkMessage.type) {
+                MessageType.START -> {
+                    sdkMessage.data.sessionId?.let {
+                        emit(StreamResponse.SessionStart(it))
+                    }
+                }
                 MessageType.TEXT -> {
                     sdkMessage.data.text?.let {
                         emit(StreamResponse.Content(it))
@@ -500,6 +582,7 @@ class ClaudeCliWrapper {
     sealed class StreamResponse {
         data class Content(val content: String) : StreamResponse()
         data class Error(val error: String) : StreamResponse()
+        data class SessionStart(val sessionId: String) : StreamResponse()
         object Complete : StreamResponse()
     }
     

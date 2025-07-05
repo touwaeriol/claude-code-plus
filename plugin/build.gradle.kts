@@ -35,6 +35,8 @@ dependencies {
         bundledPlugin("com.intellij.java")
     }
     
+    // Compose 运行时由 IntelliJ 平台提供，不需要显式添加
+    
     // 使用 IntelliJ Platform 的 Kotlin 标准库
     compileOnly(kotlin("stdlib"))
     

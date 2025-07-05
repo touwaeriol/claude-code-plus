@@ -392,10 +392,23 @@ data class EnhancedMessage(
     val status: MessageStatus = MessageStatus.COMPLETE,
     val isStreaming: Boolean = false,
     val isError: Boolean = false,
-    val orderedElements: List<MessageTimelineItem> = emptyList()
+    val orderedElements: List<MessageTimelineItem> = emptyList(),
+    val tokenUsage: TokenUsage? = null
 ) {
     // Backward compatibility properties
     val modelName: String? get() = model?.cliName
+    
+    /**
+     * Token 使用信息
+     */
+    data class TokenUsage(
+        val inputTokens: Int,
+        val outputTokens: Int,
+        val cacheCreationTokens: Int = 0,
+        val cacheReadTokens: Int = 0
+    ) {
+        val totalTokens: Int get() = inputTokens + outputTokens
+    }
 }
 
 // Context data classes for providers

@@ -24,8 +24,9 @@
     <extensions defaultExtensionNs="com.intellij">
         <!-- 工具窗口 -->
         <toolWindow id="ClaudeCodePlus" 
+                    displayName="Claude Code Plus"
                     anchor="right" 
-                    factoryClass="com.claudecodeplus.toolwindow.ClaudeCodePlusToolWindowFactory"/>
+                    factoryClass="com.claudecodeplus.plugin.ClaudeCodePlusToolWindowFactory"/>
                     
         <!-- Claude Code Plus 配置 -->
         <applicationConfigurable

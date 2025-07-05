@@ -15,6 +15,7 @@
 - [**Claude 消息类型**](CLAUDE_MESSAGE_TYPES.md) - Claude 消息类型定义
 
 ### 技术实现文档
+- [**会话管理设计**](SESSION_MANAGEMENT_DESIGN.md) - Claude Code 会话管理功能设计
 - [**富文本输入设计**](RICH_TEXT_INPUT_DESIGN.md) - 富文本输入系统设计与实现
 - [**富文本输入测试**](RICH_TEXT_INPUT_TEST.md) - 功能测试指南
 - [**注解迁移指南**](ANNOTATION_MIGRATION_GUIDE.md) - AnnotatedString 迁移方案

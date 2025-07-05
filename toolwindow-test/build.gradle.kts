@@ -26,6 +26,7 @@ dependencies {
     implementation("org.jetbrains.jewel:jewel-foundation:$jewelVersion")
     implementation("org.jetbrains.jewel:jewel-ui:$jewelVersion")
     implementation("org.jetbrains.jewel:jewel-int-ui-standalone:$jewelVersion")
+    implementation("org.jetbrains.jewel:jewel-int-ui-decorated-window:$jewelVersion")
 
     // 协程
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:${rootProject.extra["coroutinesVersion"]}")
@@ -54,4 +55,22 @@ compose.desktop {
             }
         }
     }
+}
+
+// 添加CLI测试任务
+tasks.register<JavaExec>("runSessionTest") {
+    mainClass.set("com.claudecodeplus.test.TestSessionCLIKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
+// 添加完整会话管理测试任务
+tasks.register<JavaExec>("runFullSessionTest") {
+    mainClass.set("com.claudecodeplus.test.TestFullSessionManagerKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
+// 添加会话面板测试任务
+tasks.register<JavaExec>("runSessionPanelTest") {
+    mainClass.set("com.claudecodeplus.test.TestSessionPanelOnlyKt")
+    classpath = sourceSets["main"].runtimeClasspath
 }
