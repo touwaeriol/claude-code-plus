@@ -261,20 +261,18 @@ fun ChatAppWithSessions(
                                 messages = messages + userMessage
                                 
                                 // 简化的会话管理策略：
-                                // 1. 有会话ID就使用 --resume，始终在同一会话中继续
-                                // 2. 没有会话ID就创建新会话
-                                val sessionIdForResume = if (currentSessionId != null) {
-                                    println("ChatAppWithSessions: Using --resume with session: $currentSessionId")
-                                    currentSessionId
-                                } else {
-                                    println("ChatAppWithSessions: Creating new session (no sessionId)")
-                                    null
-                                }
+                                // 暂时不使用 --resume，每次都创建新会话
+                                // TODO: 后续需要正确处理 Claude CLI 的会话ID映射
+                                println("ChatAppWithSessions: Sending message without resume (temporary fix)")
                                 
-                                // 调用 Claude CLI - 只使用 sessionId 参数
+                                // 创建助手消息用于累积响应
+                                var assistantMessageId = UUID.randomUUID().toString()
+                                var assistantContent = ""
+                                
+                                // 调用 Claude CLI - 不使用 sessionId 参数
                                 cliWrapper.sendMessage(
                                     message = markdownText,
-                                    sessionId = sessionIdForResume
+                                    sessionId = null  // 暂时不使用 resume
                                 ).collect { response ->
                                     when (response) {
                                         is com.claudecodeplus.sdk.ClaudeCliWrapper.StreamResponse.SessionStart -> {
@@ -285,15 +283,25 @@ fun ChatAppWithSessions(
                                             }
                                         }
                                         is com.claudecodeplus.sdk.ClaudeCliWrapper.StreamResponse.Content -> {
+                                            // 累积内容
+                                            assistantContent += response.content
+                                            
+                                            // 更新或创建助手消息
                                             val assistantMessage = EnhancedMessage(
-                                                id = UUID.randomUUID().toString(),
+                                                id = assistantMessageId,
                                                 role = MessageRole.ASSISTANT,
-                                                content = response.content,
+                                                content = assistantContent,
                                                 timestamp = System.currentTimeMillis(),
                                                 model = selectedModel,
                                                 contexts = emptyList()
                                             )
-                                            messages = messages + assistantMessage
+                                            
+                                            // 替换或添加消息
+                                            messages = if (messages.any { it.id == assistantMessageId }) {
+                                                messages.map { if (it.id == assistantMessageId) assistantMessage else it }
+                                            } else {
+                                                messages + assistantMessage
+                                            }
                                         }
                                         is com.claudecodeplus.sdk.ClaudeCliWrapper.StreamResponse.Error -> {
                                             val errorMessage = EnhancedMessage(

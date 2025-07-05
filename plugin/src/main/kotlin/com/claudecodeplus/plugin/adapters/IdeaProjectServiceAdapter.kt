@@ -1,28 +1,55 @@
 package com.claudecodeplus.plugin.adapters
 
 import com.claudecodeplus.ui.services.ProjectService
-import com.claudecodeplus.idea.IdeaProjectService
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
+import com.intellij.openapi.options.ShowSettingsUtil
+import com.intellij.openapi.diagnostic.Logger
 
 /**
- * 将 IdeaProjectService 适配到通用的 ProjectService 接口
+ * IntelliJ IDEA 的 ProjectService 实现
  */
 class IdeaProjectServiceAdapter(
-    private val ideaProjectService: IdeaProjectService
+    private val project: Project
 ) : ProjectService {
     
+    companion object {
+        private val logger = Logger.getInstance(IdeaProjectServiceAdapter::class.java)
+    }
+    
     override fun getProjectPath(): String {
-        return ideaProjectService.getProjectPath()
+        return project.basePath ?: ""
     }
     
     override fun getProjectName(): String {
-        return ideaProjectService.getProjectName()
+        return project.name
     }
     
     override fun openFile(filePath: String, lineNumber: Int?) {
-        ideaProjectService.openFile(filePath, lineNumber)
+        try {
+            val virtualFile = LocalFileSystem.getInstance().findFileByPath(filePath)
+            if (virtualFile != null) {
+                val descriptor = if (lineNumber != null && lineNumber > 0) {
+                    OpenFileDescriptor(project, virtualFile, lineNumber - 1, 0)
+                } else {
+                    OpenFileDescriptor(project, virtualFile)
+                }
+                FileEditorManager.getInstance(project).openTextEditor(descriptor, true)
+            } else {
+                logger.warn("File not found: $filePath")
+            }
+        } catch (e: Exception) {
+            logger.error("Error opening file: $filePath", e)
+        }
     }
     
     override fun showSettings(settingsId: String?) {
-        ideaProjectService.showSettings(settingsId)
+        if (settingsId != null) {
+            ShowSettingsUtil.getInstance().showSettingsDialog(project, settingsId)
+        } else {
+            ShowSettingsUtil.getInstance().showSettingsDialog(project)
+        }
     }
 }

@@ -184,8 +184,9 @@ class ClaudeCliWrapper {
         val args = mutableListOf<String>()
         
         // 核心参数（必须在前面）
+        args.add("--print")  // 必须使用 --print 才能获得非交互式输出
         args.addAll(listOf("--output-format", "stream-json"))
-        logger.info("🔵 [$requestId] 添加核心参数: --output-format stream-json")
+        logger.info("🔵 [$requestId] 添加核心参数: --print --output-format stream-json")
         
         // 调试和verbose控制
         if (options.debug) {
@@ -262,7 +263,7 @@ class ClaudeCliWrapper {
         if (prompt.isBlank()) {
             throw IllegalArgumentException("Prompt is required")
         }
-        args.addAll(listOf("--print", prompt.trim()))
+        args.add(prompt.trim())
         
         // 构建进程 - 尝试查找 claude 命令的完整路径
         val claudeCommand = findClaudeCommand()
@@ -335,9 +336,11 @@ class ClaudeCliWrapper {
                             try {
                                 // 清理ANSI序列并记录日志
                                 val cleanLine = AnsiProcessor.cleanAnsiSequences(line)
+                                logger.info("🔵 [$requestId] 收到行: ${cleanLine.take(200)}")
                                 
                                 // 跳过空行和非JSON行
                                 if (cleanLine.trim().isEmpty() || !cleanLine.trim().startsWith("{")) {
+                                    logger.info("🔵 [$requestId] 跳过非JSON行")
                                     return@forEach
                                 }
                                 
