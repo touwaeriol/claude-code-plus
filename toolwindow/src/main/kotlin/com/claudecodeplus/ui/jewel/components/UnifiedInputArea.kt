@@ -71,21 +71,33 @@ fun UnifiedInputArea(
     }
     
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                JewelTheme.globalColors.panelBackground,
-                RoundedCornerShape(8.dp)
-            )
-            .border(
-                1.dp,
-                JewelTheme.globalColors.borders.normal,
-                RoundedCornerShape(8.dp)
-            )
-            .clip(RoundedCornerShape(8.dp))
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // 生成状态指示器
+        if (mode == InputAreaMode.INPUT && isGenerating) {
+            GeneratingIndicator(
+                onStop = { onStop?.invoke() },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    JewelTheme.globalColors.panelBackground,
+                    RoundedCornerShape(8.dp)
+                )
+                .border(
+                    1.dp,
+                    JewelTheme.globalColors.borders.normal,
+                    RoundedCornerShape(8.dp)
+                )
+                .clip(RoundedCornerShape(8.dp))
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
         // 第一行：上下文标签
         if (contexts.isNotEmpty() || mode == InputAreaMode.INPUT) {
             FlowRow(
@@ -202,12 +214,28 @@ fun UnifiedInputArea(
             InputAreaMode.DISPLAY -> {
                 // 显示模式
                 message?.let { msg ->
-                    AnnotatedMessageDisplay(
-                        message = msg.content,
-                        timestamp = null, // 时间戳在底部显示
-                        onContextClick = onContextClick,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // 显示工具调用（如果有）
+                        if (msg.toolCalls.isNotEmpty()) {
+                            ToolCallDisplay(
+                                toolCalls = msg.toolCalls,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        
+                        // 显示消息内容
+                        if (msg.content.isNotBlank()) {
+                            AnnotatedMessageDisplay(
+                                message = msg.content,
+                                timestamp = null, // 时间戳在底部显示
+                                onContextClick = onContextClick,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -279,6 +307,7 @@ fun UnifiedInputArea(
                 }
             }
         }
+    }
     }
     
     // 监听上下文选择器状态，确保焦点管理

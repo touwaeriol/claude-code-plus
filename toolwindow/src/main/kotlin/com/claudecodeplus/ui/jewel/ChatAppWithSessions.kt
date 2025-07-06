@@ -317,6 +317,14 @@ fun ChatAppWithSessions(
                                         is com.claudecodeplus.sdk.ClaudeCliWrapper.StreamResponse.Complete -> {
                                             // 流结束
                                         }
+                                        is com.claudecodeplus.sdk.ClaudeCliWrapper.StreamResponse.ToolUse -> {
+                                            // 工具调用 - 暂时忽略
+                                            println("ChatAppWithSessions: Tool use - ${response.toolName}")
+                                        }
+                                        is com.claudecodeplus.sdk.ClaudeCliWrapper.StreamResponse.ToolResult -> {
+                                            // 工具结果 - 暂时忽略
+                                            println("ChatAppWithSessions: Tool result - ${response.toolName}")
+                                        }
                                     }
                                 }
                                 

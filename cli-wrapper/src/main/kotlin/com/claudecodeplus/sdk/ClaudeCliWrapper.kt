@@ -186,7 +186,8 @@ class ClaudeCliWrapper {
         // 核心参数（必须在前面）
         args.add("--print")  // 必须使用 --print 才能获得非交互式输出
         args.addAll(listOf("--output-format", "stream-json"))
-        logger.info("🔵 [$requestId] 添加核心参数: --print --output-format stream-json")
+        args.addAll(listOf("--input-format", "text"))  // 使用文本输入格式（默认）
+        logger.info("🔵 [$requestId] 添加核心参数: --print --output-format stream-json --input-format text")
         
         // 调试和verbose控制
         if (options.debug) {
@@ -448,6 +449,30 @@ class ClaudeCliWrapper {
                                             data = MessageData()
                                         ))
                                     }
+                                    "tool_use" -> {
+                                        // 工具使用消息
+                                        val toolName = jsonNode.get("tool_name")?.asText()
+                                        val toolInput = jsonNode.get("tool_input")
+                                        emit(SDKMessage(
+                                            type = MessageType.TOOL_USE,
+                                            data = MessageData(
+                                                toolName = toolName,
+                                                toolInput = toolInput
+                                            )
+                                        ))
+                                    }
+                                    "tool_result" -> {
+                                        // 工具结果消息
+                                        val toolName = jsonNode.get("tool_name")?.asText()
+                                        val toolResult = jsonNode.get("tool_result")
+                                        emit(SDKMessage(
+                                            type = MessageType.TOOL_RESULT,
+                                            data = MessageData(
+                                                toolName = toolName,
+                                                toolResult = toolResult
+                                            )
+                                        ))
+                                    }
                                     else -> {
                                         logger.fine("Unknown message type: $type")
                                     }
@@ -572,6 +597,18 @@ class ClaudeCliWrapper {
                 MessageType.END -> {
                     emit(StreamResponse.Complete)
                 }
+                MessageType.TOOL_USE -> {
+                    emit(StreamResponse.ToolUse(
+                        toolName = sdkMessage.data.toolName ?: "unknown",
+                        toolInput = sdkMessage.data.toolInput
+                    ))
+                }
+                MessageType.TOOL_RESULT -> {
+                    emit(StreamResponse.ToolResult(
+                        toolName = sdkMessage.data.toolName ?: "unknown", 
+                        result = sdkMessage.data.toolResult
+                    ))
+                }
                 else -> {
                     // 忽略其他类型
                 }
@@ -586,6 +623,8 @@ class ClaudeCliWrapper {
         data class Content(val content: String) : StreamResponse()
         data class Error(val error: String) : StreamResponse()
         data class SessionStart(val sessionId: String) : StreamResponse()
+        data class ToolUse(val toolName: String, val toolInput: Any?) : StreamResponse()
+        data class ToolResult(val toolName: String, val result: Any?) : StreamResponse()
         object Complete : StreamResponse()
     }
     
