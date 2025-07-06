@@ -1,7 +1,7 @@
 # Claude Code Plus 项目文档
 
 idea 平台代码拉取到了本地目录 /Users/erio/codes/idea/intellij-community，你可以阅读相关源代码
-插件版本为 25.1.2 ，对应 idea平台版本为 251.26094
+插件版本为 25.1.3 ，对应 idea平台版本为 251.26927
 
 使用 jenv 切换 jdk 版本
 
@@ -38,6 +38,24 @@ idea 平台代码拉取到了本地目录 /Users/erio/codes/idea/intellij-commun
 
 ### 开发进度
 - [进度文档](docs/进度文档.md) - 开发进度记录和功能实现追踪
+  - 最新更新：@ 上下文功能恢复和插件集成修复
+  - 架构说明：模块化设计和组件复用原则
+  - 版本兼容性：IntelliJ 2025.1.3 + Jewel 0.28.0-251.26137
+
+## 项目架构说明
+
+### 模块化设计
+1. **cli-wrapper**：Claude CLI 封装，提供流式 API
+2. **toolwindow**：UI 组件库（ChatView、UnifiedInputArea 等通用组件）
+3. **toolwindow-test**：独立测试应用，使用简单的文件系统实现
+4. **plugin**：IntelliJ IDEA 插件，使用平台 API 实现服务接口
+
+### 组件复用原则
+- UI 组件定义在 toolwindow 模块，保持平台无关性
+- 服务接口（FileIndexService、ProjectService）在 toolwindow 模块定义
+- 具体实现根据运行环境选择：
+  - 测试环境：SimpleFileIndexService（基于文件系统）
+  - 插件环境：使用 IntelliJ 平台 API（VirtualFile、PSI 等）
 
 ## 开发规范总结
 

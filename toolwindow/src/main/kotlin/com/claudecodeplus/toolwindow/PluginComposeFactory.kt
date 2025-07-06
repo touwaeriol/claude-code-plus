@@ -4,6 +4,8 @@ import androidx.compose.ui.awt.ComposePanel
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.jewel.ChatView
+import com.claudecodeplus.ui.services.FileIndexService
+import com.claudecodeplus.ui.services.ProjectService
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 import org.jetbrains.jewel.intui.standalone.theme.darkThemeDefinition
 import org.jetbrains.jewel.intui.standalone.theme.lightThemeDefinition
@@ -24,7 +26,9 @@ object PluginComposeFactory {
         cliWrapper: ClaudeCliWrapper,
         sessionManager: ClaudeSessionManager,
         workingDirectory: String,
-        project: Any? = null  // 改为 Any 类型，避免依赖 IntelliJ API
+        project: Any? = null,  // 改为 Any 类型，避免依赖 IntelliJ API
+        fileIndexService: FileIndexService? = null,
+        projectService: ProjectService? = null
     ): JComponent {
         return JPanel(BorderLayout()).apply {
             val composePanel = ComposePanel()
@@ -45,8 +49,8 @@ object PluginComposeFactory {
                     ChatView(
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
-                        fileIndexService = null,  // 在插件中可以通过其他方式提供
-                        projectService = null,    // 在插件中可以通过其他方式提供
+                        fileIndexService = fileIndexService,
+                        projectService = projectService,
                         sessionManager = sessionManager
                     )
                 }

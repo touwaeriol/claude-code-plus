@@ -7,6 +7,8 @@ import com.intellij.ui.content.ContentFactory
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.toolwindow.PluginComposeFactory
+import com.claudecodeplus.plugin.adapters.IdeaProjectServiceAdapter
+import com.claudecodeplus.plugin.adapters.SimpleFileIndexService
 import com.intellij.openapi.diagnostic.Logger
 
 /**
@@ -30,12 +32,18 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             val sessionManager = ClaudeSessionManager()
             val workingDirectory = project.basePath ?: System.getProperty("user.dir")
             
+            // 创建 IntelliJ 平台服务适配器
+            val projectService = IdeaProjectServiceAdapter(project)
+            val fileIndexService = SimpleFileIndexService(project)
+            
             // 使用 toolwindow 提供的 Compose 面板
             val composePanel = PluginComposeFactory.createComposePanel(
                 cliWrapper = cliWrapper,
                 sessionManager = sessionManager,
                 workingDirectory = workingDirectory,
-                project = project
+                project = project,
+                fileIndexService = fileIndexService,
+                projectService = projectService
             )
             
             // 创建内容并添加到工具窗口

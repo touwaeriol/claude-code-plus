@@ -6,7 +6,9 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.roots.ProjectRootManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.intellij.openapi.diagnostic.Logger
@@ -37,18 +39,40 @@ class SimpleFileIndexService(
         maxResults: Int,
         fileTypes: List<String>
     ): List<IndexedFileInfo> = withContext(Dispatchers.IO) {
+        if (query.isBlank()) return@withContext emptyList()
+        
         try {
             ReadAction.compute<List<IndexedFileInfo>, Exception> {
-                val psiFiles = FilenameIndex.getFilesByName(
-                    project, 
-                    query, 
-                    GlobalSearchScope.projectScope(project)
-                )
+                val results = mutableListOf<IndexedFileInfo>()
+                val queryLower = query.lowercase()
                 
-                psiFiles.take(maxResults).mapNotNull { psiFile ->
-                    createFileInfo(psiFile.virtualFile)
-                }.filter { file ->
-                    fileTypes.isEmpty() || fileTypes.contains(file.fileType.lowercase())
+                // 获取项目的所有源文件根目录
+                val contentRoots = ProjectRootManager.getInstance(project).contentRoots
+                
+                for (root in contentRoots) {
+                    VfsUtilCore.iterateChildrenRecursively(root, null) { virtualFile ->
+                        if (!virtualFile.isDirectory && 
+                            virtualFile.name.lowercase().contains(queryLower) &&
+                            results.size < maxResults) {
+                            
+                            createFileInfo(virtualFile)?.let { fileInfo ->
+                                if (fileTypes.isEmpty() || fileTypes.contains(fileInfo.fileType.lowercase())) {
+                                    results.add(fileInfo)
+                                }
+                            }
+                        }
+                        results.size < maxResults // 继续迭代直到达到最大结果数
+                    }
+                }
+                
+                // 按相关性排序：精确匹配 > 前缀匹配 > 包含匹配
+                results.sortedBy { file ->
+                    when {
+                        file.name.equals(query, ignoreCase = true) -> 0
+                        file.name.startsWith(query, ignoreCase = true) -> 1
+                        file.name.contains(query, ignoreCase = true) -> 2
+                        else -> 3
+                    }
                 }
             }
         } catch (e: Exception) {
