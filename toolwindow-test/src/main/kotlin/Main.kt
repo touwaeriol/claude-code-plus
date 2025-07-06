@@ -29,10 +29,10 @@ class TestProjectService(private val projectPath: String) : ProjectService {
 fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Claude Code Plus - 会话管理",
+        title = "Claude Code Plus - 简化版",
         state = rememberWindowState(
-            width = 1400.dp,
-            height = 900.dp
+            width = 1000.dp,
+            height = 800.dp
         )
     ) {
         IntUiTheme {
@@ -41,8 +41,8 @@ fun main() = application {
             val projectPath = System.getProperty("user.dir")
             val sessionManager = remember { com.claudecodeplus.session.ClaudeSessionManager() }
             
-            // 显示完整的会话管理界面
-            com.claudecodeplus.ui.jewel.ChatAppWithSessions(
+            // 显示简化的聊天界面
+            com.claudecodeplus.ui.jewel.SimpleChatApp(
                 cliWrapper = cliWrapper,
                 workingDirectory = projectPath,
                 fileIndexService = null, // 会话测试不需要文件索引

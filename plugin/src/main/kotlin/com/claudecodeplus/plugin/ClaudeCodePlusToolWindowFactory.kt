@@ -6,15 +6,12 @@ import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
-import com.claudecodeplus.plugin.adapters.IdeaProjectServiceAdapter
-import com.claudecodeplus.plugin.adapters.SimpleFileIndexService
-import com.claudecodeplus.plugin.PluginComposeFactory
-import com.intellij.util.ui.UIUtil
+import com.claudecodeplus.toolwindow.PluginComposeFactory
 import com.intellij.openapi.diagnostic.Logger
 
 /**
  * IntelliJ IDEA 工具窗口工厂
- * 负责创建并配置 Claude Code Plus 工具窗口
+ * 创建简化的聊天界面
  */
 class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
     
@@ -22,9 +19,6 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         private val logger = Logger.getInstance(ClaudeCodePlusToolWindowFactory::class.java)
     }
     
-    /**
-     * 创建工具窗口内容
-     */
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         logger.info("Creating Claude Code Plus tool window for project: ${project.basePath}")
         
@@ -34,22 +28,18 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             // 创建服务实例
             val cliWrapper = ClaudeCliWrapper()
             val sessionManager = ClaudeSessionManager()
-            val projectService = IdeaProjectServiceAdapter(project)
-            val fileIndexService = SimpleFileIndexService(project)
             val workingDirectory = project.basePath ?: System.getProperty("user.dir")
             
-            // 使用 PluginComposeFactory 创建 Compose UI
-            val compositePanel = PluginComposeFactory.createChatPanel(
+            // 使用 toolwindow 提供的 Compose 面板
+            val composePanel = PluginComposeFactory.createComposePanel(
                 cliWrapper = cliWrapper,
+                sessionManager = sessionManager,
                 workingDirectory = workingDirectory,
-                isDarkTheme = UIUtil.isUnderDarcula(),
-                fileIndexService = fileIndexService,
-                projectService = projectService,
-                sessionManager = sessionManager
+                project = project
             )
             
             // 创建内容并添加到工具窗口
-            val content = contentFactory.createContent(compositePanel, "Claude Chat", false)
+            val content = contentFactory.createContent(composePanel, "", false)
             toolWindow.contentManager.addContent(content)
             
             logger.info("Claude Code Plus tool window created successfully")
@@ -74,15 +64,9 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         }
     }
     
-    /**
-     * 配置工具窗口初始状态
-     */
     override fun init(toolWindow: ToolWindow) {
-        toolWindow.stripeTitle = "Claude Code Plus"
+        toolWindow.stripeTitle = "Claude AI"
     }
     
-    /**
-     * 是否应该可用
-     */
     override fun shouldBeAvailable(project: Project): Boolean = true
 }
