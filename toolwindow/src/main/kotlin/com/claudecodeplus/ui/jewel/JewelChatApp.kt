@@ -23,6 +23,7 @@ import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.Orientation
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import com.claudecodeplus.ui.services.SessionHistoryService
 
 /**
  * Jewel 聊天应用主组件
@@ -49,6 +50,26 @@ fun JewelChatApp(
     var selectedModel by remember { mutableStateOf(AiModel.OPUS) }
     
     val scope = rememberCoroutineScope()
+    val sessionHistoryService = remember { SessionHistoryService() }
+    
+    // 启动时加载历史会话
+    LaunchedEffect(Unit) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                // 加载最近50条消息，最多7天内的
+                val historicalMessages = sessionHistoryService.loadLatestSession(
+                    maxMessages = 50,
+                    maxDaysOld = 7
+                )
+                if (historicalMessages.isNotEmpty()) {
+                    messages = historicalMessages
+                    println("成功加载 ${historicalMessages.size} 条历史消息")
+                }
+            } catch (e: Exception) {
+                println("加载历史会话失败: ${e.message}")
+            }
+        }
+    }
     
     // 添加调试输出
     println("JewelChatApp: selectedModel = ${selectedModel.displayName}")
