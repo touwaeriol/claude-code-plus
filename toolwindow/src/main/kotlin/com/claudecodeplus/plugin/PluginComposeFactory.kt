@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.awt.ComposePanel
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
-import com.claudecodeplus.ui.jewel.ChatAppWithSessions
+import com.claudecodeplus.ui.jewel.ChatView
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.ui.services.ProjectService
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
@@ -59,7 +59,7 @@ object PluginComposeFactory {
             // 使用标准的 setContent 方法
             panel.setContent {
                 IntUiTheme(isDark = isDarkTheme) {
-                    ChatAppWithSessions(
+                    ChatView(
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
                         fileIndexService = fileIndexService,
@@ -72,7 +72,7 @@ object PluginComposeFactory {
             // 如果标准方法不存在，尝试反射
             trySetContentViaReflection(panel) {
                 IntUiTheme(isDark = isDarkTheme) {
-                    ChatAppWithSessions(
+                    ChatView(
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
                         fileIndexService = fileIndexService,

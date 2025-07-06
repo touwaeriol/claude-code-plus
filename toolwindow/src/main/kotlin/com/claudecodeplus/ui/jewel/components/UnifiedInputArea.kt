@@ -216,17 +216,9 @@ fun UnifiedInputArea(
                 message?.let { msg ->
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // 显示工具调用（如果有）
-                        if (msg.toolCalls.isNotEmpty()) {
-                            ToolCallDisplay(
-                                toolCalls = msg.toolCalls,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                        
-                        // 显示消息内容
+                        // 显示用户消息内容（仅支持上下文引用，不需要 Markdown）
                         if (msg.content.isNotBlank()) {
                             AnnotatedMessageDisplay(
                                 message = msg.content,
@@ -234,6 +226,22 @@ fun UnifiedInputArea(
                                 onContextClick = onContextClick,
                                 modifier = Modifier.fillMaxWidth()
                             )
+                        }
+                        
+                        // 显示上下文引用（如果有）
+                        if (msg.contexts.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                msg.contexts.forEach { context ->
+                                    ReadOnlyContextTag(
+                                        context = context,
+                                        modifier = Modifier
+                                    )
+                                }
+                            }
                         }
                     }
                 }

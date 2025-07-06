@@ -3,7 +3,7 @@ package com.claudecodeplus.toolwindow
 import androidx.compose.ui.awt.ComposePanel
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
-import com.claudecodeplus.ui.jewel.SimpleChatApp
+import com.claudecodeplus.ui.jewel.ChatView
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 import org.jetbrains.jewel.intui.standalone.theme.darkThemeDefinition
 import org.jetbrains.jewel.intui.standalone.theme.lightThemeDefinition
@@ -42,7 +42,7 @@ object PluginComposeFactory {
                 }
                 
                 IntUiTheme(isDark = isDark) {
-                    SimpleChatApp(
+                    ChatView(
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
                         fileIndexService = null,  // 在插件中可以通过其他方式提供

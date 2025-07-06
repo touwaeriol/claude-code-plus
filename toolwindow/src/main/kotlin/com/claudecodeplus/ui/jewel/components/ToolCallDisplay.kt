@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,7 +12,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -22,7 +20,6 @@ import com.claudecodeplus.ui.models.ToolCallStatus
 import com.claudecodeplus.ui.models.ToolResult
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
-import androidx.compose.material.LocalContentColor
 
 /**
  * 工具调用显示组件
@@ -34,21 +31,9 @@ fun ToolCallDisplay(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Color(0xFF1E1E1E).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-            .border(1.dp, Color(0xFF3C3C3C), RoundedCornerShape(8.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text(
-            "工具调用",
-            style = JewelTheme.defaultTextStyle.copy(
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                fontSize = 14.sp
-            )
-        )
-        
         toolCalls.forEach { toolCall ->
             ToolCallItem(toolCall)
         }
@@ -67,8 +52,10 @@ private fun ToolCallItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF2B2B2B), RoundedCornerShape(4.dp))
-            .border(1.dp, Color(0xFF3C3C3C), RoundedCornerShape(4.dp))
+            .background(
+                JewelTheme.globalColors.panelBackground.copy(alpha = 0.3f), 
+                RoundedCornerShape(4.dp)
+            )
     ) {
         // 头部（可点击展开/折叠）
         Row(
@@ -83,33 +70,44 @@ private fun ToolCallItem(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 状态图标
+                // 工具图标和名称
                 Text(
-                    when (toolCall.status) {
-                        ToolCallStatus.PENDING -> "⏳"
-                        ToolCallStatus.RUNNING -> "🔄"
-                        ToolCallStatus.SUCCESS -> "✅"
-                        ToolCallStatus.FAILED -> "❌"
-                        ToolCallStatus.CANCELLED -> "🚫"
-                    }
+                    text = getToolIcon(toolCall.name),
+                    style = JewelTheme.defaultTextStyle.copy(fontSize = 13.sp)
                 )
                 
-                // 工具名称
                 Text(
-                    getToolDisplayName(toolCall.name),
+                    toolCall.name,
                     style = JewelTheme.defaultTextStyle.copy(
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                        fontSize = 13.sp,
+                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.9f)
                     )
                 )
+                
+                // 状态
+                if (toolCall.status == ToolCallStatus.RUNNING) {
+                    Text(
+                        "运行中...",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 12.sp,
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+                        )
+                    )
+                }
                 
                 // 简要信息
-                Text(
-                    getToolBriefInfo(toolCall),
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 12.sp,
-                        color = LocalContentColor.current.copy(alpha = 0.6f)
+                val briefInfo = getToolBriefInfo(toolCall)
+                if (briefInfo.isNotBlank()) {
+                    Text(
+                        briefInfo,
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 12.sp,
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+                        ),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
-                )
+                }
             }
             
             // 展开/折叠图标
@@ -125,7 +123,7 @@ private fun ToolCallItem(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF1E1E1E))
+                    .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f))
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -142,7 +140,10 @@ private fun ToolCallItem(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFF2B2B2B), RoundedCornerShape(4.dp))
+                            .background(
+                                JewelTheme.globalColors.panelBackground,
+                                RoundedCornerShape(4.dp)
+                            )
                             .padding(8.dp)
                     ) {
                         Text(
@@ -171,7 +172,10 @@ private fun ToolCallItem(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(max = 200.dp)
-                                    .background(Color(0xFF2B2B2B), RoundedCornerShape(4.dp))
+                                    .background(
+                                        JewelTheme.globalColors.panelBackground,
+                                        RoundedCornerShape(4.dp)
+                                    )
                                     .padding(8.dp)
                             ) {
                                 Text(
@@ -189,7 +193,7 @@ private fun ToolCallItem(
                                 "错误: ${result.error}",
                                 style = JewelTheme.defaultTextStyle.copy(
                                     fontSize = 12.sp,
-                                    color = Color(0xFFFF6B6B)
+                                    color = androidx.compose.ui.graphics.Color(0xFFFF6B6B)
                                 )
                             )
                         }
@@ -240,7 +244,7 @@ private fun ToolCallItem(
                         "耗时: $duration",
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 11.sp,
-                            color = LocalContentColor.current.copy(alpha = 0.5f)
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)
                         )
                     )
                 }
@@ -250,16 +254,20 @@ private fun ToolCallItem(
 }
 
 /**
- * 获取工具的显示名称
+ * 获取工具图标
  */
-private fun getToolDisplayName(toolName: String): String {
-    return when (toolName) {
-        "bash" -> "🖥️ 执行命令"
-        "read_file" -> "📖 读取文件"
-        "write_file" -> "✏️ 写入文件"
-        "search" -> "🔍 搜索"
-        "list_files" -> "📁 列出文件"
-        else -> toolName
+private fun getToolIcon(toolName: String): String {
+    return when {
+        toolName.contains("LS", ignoreCase = true) -> "📁"
+        toolName.contains("Read", ignoreCase = true) -> "📖"
+        toolName.contains("Edit", ignoreCase = true) || toolName.contains("Write", ignoreCase = true) -> "✏️"
+        toolName.contains("Bash", ignoreCase = true) -> "💻"
+        toolName.contains("Search", ignoreCase = true) || toolName.contains("Grep", ignoreCase = true) -> "🔍"
+        toolName.contains("Web", ignoreCase = true) -> "🌐"
+        toolName.contains("Git", ignoreCase = true) -> "🔀"
+        toolName.contains("Task", ignoreCase = true) -> "🤖"
+        toolName.contains("Todo", ignoreCase = true) -> "📋"
+        else -> "🔧"
     }
 }
 
@@ -267,13 +275,27 @@ private fun getToolDisplayName(toolName: String): String {
  * 获取工具的简要信息
  */
 private fun getToolBriefInfo(toolCall: ToolCall): String {
-    return when (toolCall.name) {
-        "bash" -> toolCall.parameters["command"]?.toString()?.take(50) ?: ""
-        "read_file" -> toolCall.parameters["path"]?.toString()?.substringAfterLast('/') ?: ""
-        "write_file" -> toolCall.parameters["path"]?.toString()?.substringAfterLast('/') ?: ""
-        "search" -> "\"${toolCall.parameters["query"]}\"" 
-        "list_files" -> toolCall.parameters["path"]?.toString() ?: ""
-        else -> ""
+    return when {
+        toolCall.name.contains("Bash", ignoreCase = true) -> 
+            toolCall.parameters["command"]?.toString()?.take(50) ?: ""
+        toolCall.name.contains("Read", ignoreCase = true) -> 
+            toolCall.parameters["file_path"]?.toString()?.substringAfterLast('/') ?: 
+            toolCall.parameters["path"]?.toString()?.substringAfterLast('/') ?: ""
+        toolCall.name.contains("Write", ignoreCase = true) || toolCall.name.contains("Edit", ignoreCase = true) -> 
+            toolCall.parameters["file_path"]?.toString()?.substringAfterLast('/') ?: 
+            toolCall.parameters["path"]?.toString()?.substringAfterLast('/') ?: ""
+        toolCall.name.contains("Search", ignoreCase = true) || toolCall.name.contains("Grep", ignoreCase = true) -> 
+            "\"${toolCall.parameters["pattern"] ?: toolCall.parameters["query"] ?: ""}\""
+        toolCall.name.contains("LS", ignoreCase = true) -> 
+            toolCall.parameters["path"]?.toString() ?: ""
+        toolCall.name.contains("Task", ignoreCase = true) ->
+            toolCall.parameters["description"]?.toString()?.take(50) ?: ""
+        toolCall.name.contains("Web", ignoreCase = true) ->
+            toolCall.parameters["url"]?.toString()?.take(50) ?: ""
+        else -> {
+            // 尝试显示第一个参数
+            toolCall.parameters.values.firstOrNull()?.toString()?.take(50) ?: ""
+        }
     }
 }
 
