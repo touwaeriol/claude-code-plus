@@ -1,6 +1,6 @@
 plugins {
     kotlin("jvm")
-    kotlin("plugin.serialization") version "1.9.0"
+    kotlin("plugin.serialization")
     `java-library`  // 添加 java-library 插件以支持 api 配置
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")

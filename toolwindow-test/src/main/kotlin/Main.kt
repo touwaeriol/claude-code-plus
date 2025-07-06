@@ -10,6 +10,8 @@ import androidx.compose.ui.unit.dp
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.ui.services.ProjectService
+import com.claudecodeplus.ui.services.FileIndexService
+import kotlinx.coroutines.launch
 
 // 简单的ProjectService实现用于测试
 class TestProjectService(private val projectPath: String) : ProjectService {
@@ -41,11 +43,22 @@ fun main() = application {
             val projectPath = System.getProperty("user.dir")
             val sessionManager = remember { com.claudecodeplus.session.ClaudeSessionManager() }
             
+            // 创建文件索引服务并初始化
+            val fileIndexService = remember { SimpleFileIndexService() }
+            val coroutineScope = rememberCoroutineScope()
+            
+            // 初始化文件索引
+            LaunchedEffect(projectPath) {
+                coroutineScope.launch {
+                    fileIndexService.initialize(projectPath)
+                }
+            }
+            
             // 显示简化的聊天界面
             com.claudecodeplus.ui.jewel.ChatView(
                 cliWrapper = cliWrapper,
                 workingDirectory = projectPath,
-                fileIndexService = null, // 会话测试不需要文件索引
+                fileIndexService = fileIndexService,
                 projectService = remember { TestProjectService(projectPath) },
                 sessionManager = sessionManager,
                 modifier = Modifier.fillMaxSize()

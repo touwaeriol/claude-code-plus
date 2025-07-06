@@ -218,6 +218,8 @@ fun ChatView(
                 onContextRemove = { context ->
                     contexts = contexts - context
                 },
+                fileIndexService = fileIndexService,
+                projectService = projectService,
                 onSend = { markdownText ->
                     coroutineScope.launch {
                         isGenerating = true
@@ -456,8 +458,7 @@ fun ChatView(
                 selectedModel = selectedModel,
                 onModelChange = { selectedModel = it },
                 enabled = !isGenerating,
-                isGenerating = isGenerating,
-                fileIndexService = fileIndexService
+                isGenerating = isGenerating
             )
         }
     }
