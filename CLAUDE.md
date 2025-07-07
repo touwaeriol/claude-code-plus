@@ -30,6 +30,7 @@ idea 平台代码拉取到了本地目录 /Users/erio/codes/idea/intellij-commun
 - [需求文档](docs/REQUIREMENTS.md) - 项目功能需求和 UI 设计规范
 - [架构设计](docs/ARCHITECTURE.md) - 系统整体架构设计  
 - [功能特性](docs/FEATURES.md) - 项目功能特性列表
+- [部署指南](docs/DEPLOYMENT.md) - 双平台部署方式说明
 
 ### UI 开发文档
 - [工具窗口重设计](docs/TOOLWINDOW_REDESIGN.md) - 工具窗口UI重设计方案
@@ -47,14 +48,21 @@ idea 平台代码拉取到了本地目录 /Users/erio/codes/idea/intellij-commun
 ### 模块化设计
 1. **cli-wrapper**：Claude CLI 封装，提供流式 API
 2. **toolwindow**：UI 组件库（ChatView、UnifiedInputArea 等通用组件）
-3. **toolwindow-test**：独立测试应用，使用简单的文件系统实现
-4. **plugin**：IntelliJ IDEA 插件，使用平台 API 实现服务接口
+3. **desktop**：独立桌面应用，支持跨平台部署
+4. **jetbrains-plugin**：IntelliJ IDEA 插件，深度集成 IDE 功能
+
+### 双平台部署
+项目支持两种部署方式：
+- **IntelliJ IDEA 插件**（jetbrains-plugin）：适用于 JetBrains IDE 用户，提供完整的 IDE 集成体验
+- **独立桌面应用**（desktop）：适用于不使用 IDE 或需要轻量级工具的用户
+
+详细部署说明请查看：[部署指南](docs/DEPLOYMENT.md)
 
 ### 组件复用原则
 - UI 组件定义在 toolwindow 模块，保持平台无关性
 - 服务接口（FileIndexService、ProjectService）在 toolwindow 模块定义
 - 具体实现根据运行环境选择：
-  - 测试环境：SimpleFileIndexService（基于文件系统）
+  - 桌面应用：SimpleFileIndexService（基于文件系统）
   - 插件环境：使用 IntelliJ 平台 API（VirtualFile、PSI 等）
 
 ## 开发规范总结

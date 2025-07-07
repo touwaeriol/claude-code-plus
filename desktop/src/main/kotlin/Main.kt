@@ -1,4 +1,4 @@
-package com.claudecodeplus.test
+package com.claudecodeplus.desktop
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -13,25 +13,25 @@ import com.claudecodeplus.ui.services.ProjectService
 import com.claudecodeplus.ui.services.FileIndexService
 import kotlinx.coroutines.launch
 
-// 简单的ProjectService实现用于测试
-class TestProjectService(private val projectPath: String) : ProjectService {
+// 简单的ProjectService实现用于桌面应用
+class DesktopProjectService(private val projectPath: String) : ProjectService {
     override fun getProjectPath(): String = projectPath
     override fun getProjectName(): String = projectPath.substringAfterLast('/')
     override fun openFile(filePath: String, lineNumber: Int?) {
-        println("TestProjectService: 打开文件 $filePath:$lineNumber")
+        println("DesktopProjectService: 打开文件 $filePath:$lineNumber")
     }
     override fun showSettings(settingsId: String?) {
-        println("TestProjectService: 显示设置 $settingsId")
+        println("DesktopProjectService: 显示设置 $settingsId")
     }
 }
 
 /**
- * 主函数 - 完整会话管理功能测试
+ * Claude Code Plus 桌面应用主函数
  */
 fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Claude Code Plus - 测试版",
+        title = "Claude Code Plus",
         state = rememberWindowState(
             width = 1000.dp,
             height = 800.dp
@@ -59,7 +59,7 @@ fun main() = application {
                 cliWrapper = cliWrapper,
                 workingDirectory = projectPath,
                 fileIndexService = fileIndexService,
-                projectService = remember { TestProjectService(projectPath) },
+                projectService = remember { DesktopProjectService(projectPath) },
                 sessionManager = sessionManager,
                 modifier = Modifier.fillMaxSize()
             )

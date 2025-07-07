@@ -4,7 +4,7 @@
 
 ### 1. 启动应用
 ```bash
-./gradlew :toolwindow-test:run
+./gradlew :desktop:run
 ```
 
 ### 2. 测试输入框富文本功能

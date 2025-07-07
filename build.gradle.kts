@@ -36,8 +36,8 @@ subprojects {
         maven("https://cache-redirector.jetbrains.com/intellij-dependencies")
     }
     
-    // 通用依赖配置（plugin 模块会特殊处理）
-    if (project.name != "plugin" && project.name != "cli-wrapper" && project.name != "toolwindow") {
+    // 通用依赖配置（jetbrains-plugin 模块会特殊处理）
+    if (project.name != "jetbrains-plugin" && project.name != "cli-wrapper" && project.name != "toolwindow") {
         dependencies {
             val implementation by configurations
             val testImplementation by configurations

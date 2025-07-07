@@ -38,7 +38,7 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "com.claudecodeplus.test.MainKt"
+        mainClass = "com.claudecodeplus.desktop.MainKt"
 
         buildTypes.release.proguard {
             isEnabled.set(false)
@@ -46,12 +46,12 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "ComposeJewelTestApp"
+            packageName = "ClaudeCodePlus"
             packageVersion = "1.0.0"
 
             macOS {
                 // macOS 特定配置
-                bundleID = "com.claudecodeplus.test"
+                bundleID = "com.claudecodeplus.desktop"
             }
         }
     }
@@ -59,18 +59,18 @@ compose.desktop {
 
 // 添加CLI测试任务
 tasks.register<JavaExec>("runSessionTest") {
-    mainClass.set("com.claudecodeplus.test.TestSessionCLIKt")
+    mainClass.set("com.claudecodeplus.desktop.TestSessionCLIKt")
     classpath = sourceSets["main"].runtimeClasspath
 }
 
 // 添加完整会话管理测试任务
 tasks.register<JavaExec>("runFullSessionTest") {
-    mainClass.set("com.claudecodeplus.test.TestFullSessionManagerKt")
+    mainClass.set("com.claudecodeplus.desktop.TestFullSessionManagerKt")
     classpath = sourceSets["main"].runtimeClasspath
 }
 
 // 添加会话面板测试任务
 tasks.register<JavaExec>("runSessionPanelTest") {
-    mainClass.set("com.claudecodeplus.test.TestSessionPanelOnlyKt")
+    mainClass.set("com.claudecodeplus.desktop.TestSessionPanelOnlyKt")
     classpath = sourceSets["main"].runtimeClasspath
 }

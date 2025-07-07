@@ -8,6 +8,7 @@
 - [**需求文档**](REQUIREMENTS.md) - 项目功能需求和 UI 设计规范
 - [**架构设计**](ARCHITECTURE.md) - 系统整体架构和模块设计
 - [**功能特性**](FEATURES.md) - 功能特性列表和实现状态
+- [**部署指南**](DEPLOYMENT.md) - 双平台部署方式和功能对比
 
 ### UI 开发文档
 - [**工具窗口重设计**](TOOLWINDOW_REDESIGN.md) - 工具窗口 UI 重设计方案

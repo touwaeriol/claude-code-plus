@@ -43,7 +43,7 @@ enum class ContextDisplayType {
  */
 data class InlineFileReference(
     val displayName: String,    // 显示名称：ContextSelectorTestApp.kt
-    val fullPath: String,       // 完整路径：toolwindow-test/src/main/kotlin/com/claudecodeplus/test/ContextSelectorTestApp.kt
+    val fullPath: String,       // 完整路径：desktop/src/main/kotlin/com/claudecodeplus/test/ContextSelectorTestApp.kt
     val relativePath: String    // 相对路径：src/main/kotlin/com/claudecodeplus/test/ContextSelectorTestApp.kt
 ) {
     /**

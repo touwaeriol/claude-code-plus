@@ -60,6 +60,13 @@ interface FileIndexService {
     suspend fun getRecentFiles(maxResults: Int = 20): List<IndexedFileInfo>
     
     /**
+     * 获取最近修改的文件
+     * @param projectPath 项目路径
+     * @param limit 限制数量
+     */
+    suspend fun getRecentlyModifiedFiles(projectPath: String, limit: Int = 20): List<IndexedFileInfo>
+    
+    /**
      * 获取文件内容
      * @param filePath 文件路径（相对路径）
      * @return 文件内容，如果文件不存在返回null

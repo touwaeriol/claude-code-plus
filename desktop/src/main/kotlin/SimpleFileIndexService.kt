@@ -1,4 +1,4 @@
-package com.claudecodeplus.test
+package com.claudecodeplus.desktop
 
 import com.claudecodeplus.ui.services.*
 import com.claudecodeplus.ui.models.SymbolType

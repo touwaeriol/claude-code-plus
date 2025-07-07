@@ -228,7 +228,7 @@ interface ContextSearchService {
 
 ### 8. 测试环境实现
 
-#### 8.1 toolwindow-test 组件
+#### 8.1 desktop 组件
 - **MockFileIndexService**：模拟文件索引
 - **SimpleFileSearchService**：基础文件搜索
 - **TestContextProvider**：测试数据提供
