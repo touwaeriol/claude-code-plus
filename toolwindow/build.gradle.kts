@@ -12,7 +12,11 @@ version = "1.0-SNAPSHOT"
 
 dependencies {
     // 依赖 cli-wrapper 模块
-    implementation(project(":cli-wrapper"))
+    implementation(project(":cli-wrapper")) {
+        // 在插件环境下排除协程库
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-swing")
+    }
     
     // Compose Desktop - 使用 compileOnly 避免与 IntelliJ 平台冲突
     compileOnly(compose.desktop.currentOs)
@@ -30,8 +34,9 @@ dependencies {
     api("org.jetbrains.jewel:jewel-ui:$jewelVersion")
     api("org.jetbrains.jewel:jewel-int-ui-standalone:$jewelVersion")
 
-    // 协程
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:${rootProject.extra["coroutinesVersion"]}")
+    // 协程 - 使用 compileOnly 避免与 IntelliJ 平台冲突
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-swing:${rootProject.extra["coroutinesVersion"]}")
     
     // Markdown 解析
     implementation("org.commonmark:commonmark:0.25.0")
@@ -45,6 +50,9 @@ dependencies {
     // 测试依赖
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:1.13.8")
+    testImplementation(compose.desktop.currentOs)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:${rootProject.extra["coroutinesVersion"]}")
 }
 
 compose.desktop {

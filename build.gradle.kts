@@ -36,22 +36,24 @@ subprojects {
         maven("https://cache-redirector.jetbrains.com/intellij-dependencies")
     }
     
-    // 通用依赖配置
-    dependencies {
-        val implementation by configurations
-        val testImplementation by configurations
-        val testRuntimeOnly by configurations
-        
-        // Kotlin 标准库
-        implementation("org.jetbrains.kotlin:kotlin-stdlib:${rootProject.extra["kotlinVersion"]}")
-        
-        // 协程库
-        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
-        
-        // 测试依赖
-        testImplementation("org.junit.jupiter:junit-jupiter-api:${rootProject.extra["junitVersion"]}")
-        testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${rootProject.extra["junitVersion"]}")
-        testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${rootProject.extra["coroutinesVersion"]}")
+    // 通用依赖配置（plugin 模块会特殊处理）
+    if (project.name != "plugin" && project.name != "cli-wrapper" && project.name != "toolwindow") {
+        dependencies {
+            val implementation by configurations
+            val testImplementation by configurations
+            val testRuntimeOnly by configurations
+            
+            // Kotlin 标准库
+            implementation("org.jetbrains.kotlin:kotlin-stdlib:${rootProject.extra["kotlinVersion"]}")
+            
+            // 协程库
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
+            
+            // 测试依赖
+            testImplementation("org.junit.jupiter:junit-jupiter-api:${rootProject.extra["junitVersion"]}")
+            testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${rootProject.extra["junitVersion"]}")
+            testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${rootProject.extra["coroutinesVersion"]}")
+        }
     }
     
     // 通用的 Kotlin 编译配置

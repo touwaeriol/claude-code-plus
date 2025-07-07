@@ -6,6 +6,9 @@ group = "com.claudecodeplus"
 version = "1.0-SNAPSHOT"
 
 dependencies {
+    // 协程 - 使用 compileOnly，在插件环境由平台提供
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
+    
     // JSON 处理
     implementation("org.json:json:20231013")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.3")
@@ -23,4 +26,5 @@ dependencies {
     // 测试依赖
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:1.13.8")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
 }

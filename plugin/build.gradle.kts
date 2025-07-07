@@ -17,9 +17,15 @@ repositories {
 }
 
 dependencies {
-    // 依赖其他模块
-    implementation(project(":cli-wrapper"))
-    implementation(project(":toolwindow"))
+    // 依赖其他模块 - 按照官方方式排除整个 kotlinx 组
+    implementation(project(":cli-wrapper")) {
+        exclude(group = "org.jetbrains.kotlinx")
+    }
+    implementation(project(":toolwindow")) {
+        exclude(group = "org.jetbrains.kotlinx")
+        // 排除 Compose Material，使用 Jewel
+        exclude(group = "org.jetbrains.compose.material")
+    }
     
     // IntelliJ Platform dependencies
     intellijPlatform {
