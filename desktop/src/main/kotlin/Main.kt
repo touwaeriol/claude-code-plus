@@ -18,10 +18,10 @@ class DesktopProjectService(private val projectPath: String) : ProjectService {
     override fun getProjectPath(): String = projectPath
     override fun getProjectName(): String = projectPath.substringAfterLast('/')
     override fun openFile(filePath: String, lineNumber: Int?) {
-        println("DesktopProjectService: 打开文件 $filePath:$lineNumber")
+        // TODO: 实现打开文件功能
     }
     override fun showSettings(settingsId: String?) {
-        println("DesktopProjectService: 显示设置 $settingsId")
+        // TODO: 实现显示设置功能
     }
 }
 
