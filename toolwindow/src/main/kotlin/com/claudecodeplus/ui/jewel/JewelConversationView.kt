@@ -216,7 +216,7 @@ private fun MessageBubble(
                 message = message,
                 onContextClick = { uri ->
                     // 处理上下文点击
-                    println("Context clicked: $uri")
+                    // Context clicked: $uri
                     // TODO: 实现实际的点击处理逻辑
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -244,7 +244,7 @@ private fun MessageBubble(
                 }
                 
                 // 按时间顺序显示消息元素
-                println("DEBUG: Message has ${message.orderedElements.size} ordered elements")
+                // DEBUG: Message has ${message.orderedElements.size} ordered elements
                 if (message.orderedElements.isNotEmpty()) {
                     message.orderedElements.forEach { element ->
                         when (element) {
@@ -324,7 +324,7 @@ private fun SimpleToolCallDisplay(
     toolCall: ToolCall,
     modifier: Modifier = Modifier
 ) {
-    println("DEBUG: Rendering tool call: ${toolCall.name} with status: ${toolCall.status}")
+    // DEBUG: Rendering tool call: ${toolCall.name} with status: ${toolCall.status}
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,

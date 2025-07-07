@@ -150,7 +150,7 @@ class SessionHistoryService {
                 }
                 .maxByOrNull { it.lastModified() }
         } catch (e: Exception) {
-            println("获取最近会话文件失败: ${e.message}")
+            // 获取最近会话文件失败: ${e.message}
             null
         }
     }
@@ -216,7 +216,7 @@ class SessionHistoryService {
                 }
             }
         } catch (e: Exception) {
-            println("读取文件失败: ${e.message}")
+            // 读取文件失败: ${e.message}
         }
         
         return lines
@@ -348,10 +348,10 @@ class SessionHistoryService {
                 }
             }
             
-            println("加载了 ${messages.size} 条消息（从 ${lines.size} 行中）")
+            // 加载了 ${messages.size} 条消息（从 ${lines.size} 行中）
             
         } catch (e: Exception) {
-            println("加载会话历史失败: ${e.message}")
+            // 加载会话历史失败: ${e.message}
         }
         
         return messages
@@ -366,7 +366,7 @@ class SessionHistoryService {
         val currentDir = System.getProperty("user.dir") ?: return emptyList()
         val sessionFile = getLatestSessionFile(currentDir) ?: return emptyList()
         
-        println("加载历史会话: ${sessionFile.name}")
+        // 加载历史会话: ${sessionFile.name}
         return loadSessionHistory(sessionFile, maxMessages, maxDaysOld)
     }
     
@@ -391,7 +391,7 @@ class SessionHistoryService {
                 }
                 .sortedByDescending { it.lastModified }
         } catch (e: Exception) {
-            println("获取会话文件列表失败: ${e.message}")
+            // 获取会话文件列表失败: ${e.message}
             emptyList()
         }
     }

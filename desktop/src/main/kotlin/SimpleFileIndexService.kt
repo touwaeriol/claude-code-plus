@@ -52,10 +52,10 @@ class SimpleFileIndexService : FileIndexService {
             
             isReady = true
             lastIndexTime = System.currentTimeMillis()
-            println("SimpleFileIndexService: 索引完成，耗时 ${lastIndexTime - startTime}ms")
-            println("SimpleFileIndexService: 找到 ${indexedFiles.size} 个文件")
+            // 索引完成，耗时 ${lastIndexTime - startTime}ms
+            // 找到 ${indexedFiles.size} 个文件
         } catch (e: Exception) {
-            println("SimpleFileIndexService: 索引失败 - ${e.message}")
+            // 索引失败 - ${e.message}
             isReady = false
         }
     }
@@ -81,7 +81,7 @@ class SimpleFileIndexService : FileIndexService {
                 }
             } catch (e: Exception) {
                 // 忽略无法访问的文件
-                println("SimpleFileIndexService: 跳过文件 ${file.absolutePath} - ${e.message}")
+                // 跳过文件 ${file.absolutePath} - ${e.message}
             }
         }
     }
@@ -199,7 +199,7 @@ class SimpleFileIndexService : FileIndexService {
                 }
             }
         } catch (e: Exception) {
-            println("SimpleFileIndexService: 无法解析符号 ${file.absolutePath} - ${e.message}")
+            // 无法解析符号 ${file.absolutePath} - ${e.message}
         }
         
         return symbols
@@ -277,7 +277,7 @@ class SimpleFileIndexService : FileIndexService {
                 null
             }
         } catch (e: Exception) {
-            println("SimpleFileIndexService: 无法读取文件 $filePath - ${e.message}")
+            // 无法读取文件 $filePath - ${e.message}
             null
         }
     }

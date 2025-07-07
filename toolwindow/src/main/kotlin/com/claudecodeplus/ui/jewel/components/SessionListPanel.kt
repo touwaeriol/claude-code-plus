@@ -42,10 +42,10 @@ fun SessionListPanel(
     
     // 加载会话列表
     LaunchedEffect(projectPath) {
-        println("SessionListPanel: Loading sessions for project: $projectPath")
+        // SessionListPanel: Loading sessions for project: $projectPath
         isLoading = true
         sessions = sessionManager.getSessionList(projectPath)
-        println("SessionListPanel: Loaded ${sessions.size} sessions")
+        // SessionListPanel: Loaded ${sessions.size} sessions
         isLoading = false
     }
     
@@ -111,7 +111,7 @@ fun SessionListPanel(
                 .fillMaxSize()
                 .weight(1f)
         ) {
-            println("SessionListPanel render: isLoading=$isLoading, sessions.size=${sessions.size}")
+            // SessionListPanel render: isLoading=$isLoading, sessions.size=${sessions.size}
             when {
                 isLoading -> {
                     // 加载状态

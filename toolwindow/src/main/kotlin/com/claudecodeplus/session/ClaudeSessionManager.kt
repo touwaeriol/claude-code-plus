@@ -23,18 +23,18 @@ class ClaudeSessionManager {
      * 获取项目的会话列表
      */
     suspend fun getSessionList(projectPath: String): List<SessionInfo> = withContext(Dispatchers.IO) {
-        println("ClaudeSessionManager: Getting sessions for $projectPath")
+        // Getting sessions for $projectPath
         val sessionsDir = getSessionsDirectory(projectPath)
-        println("ClaudeSessionManager: Session directory: ${sessionsDir.absolutePath}")
-        println("ClaudeSessionManager: Directory exists: ${sessionsDir.exists()}")
+        // Session directory: ${sessionsDir.absolutePath}
+        // Directory exists: ${sessionsDir.exists()}
         
         if (!sessionsDir.exists()) {
-            println("ClaudeSessionManager: Directory does not exist, returning empty list")
+            // Directory does not exist, returning empty list
             return@withContext emptyList()
         }
         
         val files = sessionsDir.listFiles { file -> file.extension == "jsonl" }
-        println("ClaudeSessionManager: Found ${files?.size ?: 0} JSONL files")
+        // Found ${files?.size ?: 0} JSONL files
         
         files
             ?.mapNotNull { file ->

@@ -52,7 +52,7 @@ fun ChatView(
             // 尝试获取最近的会话
             val recentSession = sessionManager.getRecentSession(workingDirectory)
             if (recentSession != null) {
-                println("ChatView: Loading recent session ${recentSession.sessionId}")
+                // ChatView: Loading recent session ${recentSession.sessionId}
                 currentSession = recentSession
                 currentSessionId = recentSession.sessionId
                 
@@ -70,19 +70,19 @@ fun ChatView(
                     }
                     
                     messages = enhancedMessages
-                    println("ChatView: Loaded ${enhancedMessages.size} messages from recent session")
+                    // ChatView: Loaded ${enhancedMessages.size} messages from recent session
                 } catch (e: Exception) {
-                    println("ChatView: Error loading session messages: ${e.message}")
+                    // ChatView: Error loading session messages: ${e.message}
                     // 如果加载失败，保持空消息列表
                 }
             } else {
                 // 没有历史会话，创建新会话但不使用 resume
-                println("ChatView: No recent session found, will create new session on first message")
+                // ChatView: No recent session found, will create new session on first message
                 currentSessionId = null
                 currentSession = null
             }
         } catch (e: Exception) {
-            println("ChatView: Error during initialization: ${e.message}")
+            // ChatView: Error during initialization: ${e.message}
             e.printStackTrace()
         } finally {
             isLoadingSession = false
@@ -104,7 +104,7 @@ fun ChatView(
                 currentSession = null
                 contexts = emptyList()
                 messages = emptyList()
-                println("ChatView: Starting new session")
+                // ChatView: Starting new session
             }
         )
         
@@ -175,7 +175,7 @@ fun ChatView(
                                                 mode = InputAreaMode.DISPLAY,
                                                 message = message,
                                                 onContextClick = { uri ->
-                                                    println("Context clicked: $uri")
+                                                    // Context clicked: $uri
                                                     // 可以在这里处理文件点击等操作
                                                     if (uri.startsWith("file://") && projectService != null) {
                                                         val path = uri.removePrefix("file://")
@@ -251,7 +251,7 @@ fun ChatView(
                             // 如果有 currentSessionId 且不为空，使用 resume；否则创建新会话
                             val useResume = currentSessionId != null && currentSessionId!!.isNotEmpty()
                             
-                            println("ChatView: Sending message, useResume=$useResume, sessionId=$currentSessionId")
+                            // ChatView: Sending message, useResume=$useResume, sessionId=$currentSessionId
                             
                             cliWrapper.sendMessage(
                                 message = markdownText,
@@ -263,7 +263,7 @@ fun ChatView(
                                         if (currentSessionId == null) {
                                             currentSessionId = response.sessionId
                                             sessionIdToUse = response.sessionId
-                                            println("ChatView: New session created: $currentSessionId")
+                                            // ChatView: New session created: $currentSessionId
                                         }
                                     }
                                     is ClaudeCliWrapper.StreamResponse.Content -> {
@@ -303,7 +303,7 @@ fun ChatView(
                                     }
                                     is ClaudeCliWrapper.StreamResponse.Complete -> {
                                         // 流结束
-                                        println("ChatView: Message complete")
+                                        // ChatView: Message complete
                                         
                                         // 如果还有未添加的内容，添加到时间线
                                         if (currentContentBuilder.isNotEmpty()) {
@@ -335,7 +335,7 @@ fun ChatView(
                                     }
                                     is ClaudeCliWrapper.StreamResponse.ToolUse -> {
                                         // 工具调用
-                                        println("ChatView: Tool use - ${response.toolName}")
+                                        // ChatView: Tool use - ${response.toolName}
                                         
                                         // 如果有累积的内容，先添加到时间线
                                         if (currentContentBuilder.isNotEmpty()) {
@@ -391,7 +391,7 @@ fun ChatView(
                                     }
                                     is ClaudeCliWrapper.StreamResponse.ToolResult -> {
                                         // 工具结果
-                                        println("ChatView: Tool result - ${response.toolName}")
+                                        // ChatView: Tool result - ${response.toolName}
                                         // 更新对应的工具调用状态
                                         toolCalls.find { it.name == response.toolName }?.let { toolCall ->
                                             val index = toolCalls.indexOf(toolCall)
@@ -438,7 +438,7 @@ fun ChatView(
                             // 清空上下文
                             contexts = emptyList()
                         } catch (e: Exception) {
-                            println("ChatView: Error sending message: ${e.message}")
+                            // ChatView: Error sending message: ${e.message}
                             e.printStackTrace()
                             
                             val errorMessage = EnhancedMessage(

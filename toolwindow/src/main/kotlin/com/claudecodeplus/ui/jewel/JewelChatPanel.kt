@@ -148,13 +148,13 @@ class JewelChatPanel(
             isGenerating = isGenerating.value,
             selectedModel = selectedModel.value,
             onModelChange = { model ->
-                println("=== JewelChatPanel.onModelChange CALLED ===")
-                println("DEBUG: Current selectedModel.value = ${selectedModel.value.displayName}")
-                println("DEBUG: New model parameter = ${model.displayName}")
-                println("DEBUG: About to update selectedModel.value")
+                // === JewelChatPanel.onModelChange CALLED ===
+                // DEBUG: Current selectedModel.value = ${selectedModel.value.displayName}
+                // DEBUG: New model parameter = ${model.displayName}
+                // DEBUG: About to update selectedModel.value
                 selectedModel.value = model
-                println("DEBUG: After update selectedModel.value = ${selectedModel.value.displayName}")
-                println("=== JewelChatPanel.onModelChange FINISHED ===")
+                // DEBUG: After update selectedModel.value = ${selectedModel.value.displayName}
+                // === JewelChatPanel.onModelChange FINISHED ===
             },
             onClearChat = { 
                 messages.value = listOf(
@@ -220,9 +220,9 @@ class JewelChatPanel(
         // 启动协程处理 AI 响应
         val job = scope.launch {
             try {
-                println("DEBUG: Sending message to Claude CLI: $messageWithContext")
-                println("DEBUG: Working directory: $workingDirectory")
-                println("DEBUG: Selected model: ${selectedModel.displayName} (CLI: ${selectedModel.cliName})")
+                // DEBUG: Sending message to Claude CLI: $messageWithContext
+                // DEBUG: Working directory: $workingDirectory
+                // DEBUG: Selected model: ${selectedModel.displayName} (CLI: ${selectedModel.cliName})
                 
                 // 调用 CLI  
                 val options = ClaudeCliWrapper.QueryOptions(
@@ -234,13 +234,13 @@ class JewelChatPanel(
                 val responseBuilder = StringBuilder()
                 val toolCalls = mutableListOf<ToolCall>()
                 
-                println("DEBUG: Starting to collect messages from Claude CLI...")
+                // DEBUG: Starting to collect messages from Claude CLI...
                 cliWrapper.query(messageWithContext, options).collect { sdkMessage ->
-                    println("DEBUG: Received message type: ${sdkMessage.type}")
+                    // DEBUG: Received message type: ${sdkMessage.type}
                     when (sdkMessage.type) {
                         MessageType.TEXT -> {
                             sdkMessage.data.text?.let { text ->
-                                println("DEBUG: Received text: $text")
+                                // DEBUG: Received text: $text
                                 responseBuilder.append(text)
                                 // 更新消息内容
                                 val updatedMessage = assistantMessage.copy(
@@ -334,7 +334,7 @@ class JewelChatPanel(
                     }
                 }
             } catch (e: Exception) {
-                println("DEBUG: Error occurred: ${e.message}")
+                // DEBUG: Error occurred: ${e.message}
                 e.printStackTrace()
                 val errorMessage = assistantMessage.copy(
                     content = "❌ 错误: ${e.message}",
@@ -345,7 +345,7 @@ class JewelChatPanel(
                 currentMessages[currentMessages.lastIndex] = errorMessage
                 onMessageUpdate(currentMessages.toList())
             } finally {
-                println("DEBUG: Finished processing message")
+                // DEBUG: Finished processing message
                 onGeneratingChange(false)
             }
         }

@@ -100,7 +100,7 @@ private fun handleTextClick(
                 try {
                     uriHandler.openUri(contextUri)
                 } catch (e: Exception) {
-                    println("无法打开链接: $contextUri")
+                    // 无法打开链接: $contextUri
                     onContextClick(contextUri)
                 }
             }
@@ -109,7 +109,7 @@ private fun handleTextClick(
                 onContextClick(contextUri)
             }
             else -> {
-                println("未知的上下文类型: $contextUri")
+                // 未知的上下文类型: $contextUri
             }
         }
     }

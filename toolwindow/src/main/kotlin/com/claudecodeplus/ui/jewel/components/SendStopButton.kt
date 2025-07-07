@@ -183,7 +183,7 @@ private fun showImagePicker(onImageSelected: (File) -> Unit) {
             }
         }
     } catch (e: Exception) {
-        println("图片选择错误: ${e.message}")
+        // 图片选择错误: ${e.message}
         e.printStackTrace()
     }
 } 

@@ -63,16 +63,16 @@ fun JewelChatApp(
                 )
                 if (historicalMessages.isNotEmpty()) {
                     messages = historicalMessages
-                    println("成功加载 ${historicalMessages.size} 条历史消息")
+                    // 成功加载 ${historicalMessages.size} 条历史消息
                 }
             } catch (e: Exception) {
-                println("加载历史会话失败: ${e.message}")
+                // 加载历史会话失败: ${e.message}
             }
         }
     }
     
     // 添加调试输出
-    println("JewelChatApp: selectedModel = ${selectedModel.displayName}")
+    // JewelChatApp: selectedModel = ${selectedModel.displayName}
     
     Column(
         modifier = modifier
@@ -118,7 +118,7 @@ fun JewelChatApp(
             onStop = {
                 // 立即终止 CLI wrapper 进程
                 val terminated = cliWrapper.terminate()
-                println("DEBUG: CLI wrapper terminated: $terminated")
+                // DEBUG: CLI wrapper terminated: $terminated
                 
                 // 取消协程任务
                 messageJob?.cancel()
@@ -134,13 +134,13 @@ fun JewelChatApp(
             isGenerating = isGenerating,
             selectedModel = selectedModel,
             onModelChange = { model ->
-                println("=== JewelChatApp.onModelChange CALLED ===")
-                println("DEBUG: Current selectedModel = ${selectedModel.displayName}")
-                println("DEBUG: New model parameter = ${model.displayName}")
-                println("DEBUG: About to update selectedModel")
+                // === JewelChatApp.onModelChange CALLED ===
+                // DEBUG: Current selectedModel = ${selectedModel.displayName}
+                // DEBUG: New model parameter = ${model.displayName}
+                // DEBUG: About to update selectedModel
                 selectedModel = model
-                println("DEBUG: After update selectedModel = ${selectedModel.displayName}")
-                println("=== JewelChatApp.onModelChange FINISHED ===")
+                // DEBUG: After update selectedModel = ${selectedModel.displayName}
+                // === JewelChatApp.onModelChange FINISHED ===
             },
             fileIndexService = fileIndexService,
             projectService = projectService,
@@ -303,9 +303,9 @@ private fun sendMessage(
             val messagesWithAssistant = currentMessagesMutable + assistantMessage
             onMessageUpdate(messagesWithAssistant)
             
-            println("DEBUG: Sending message to Claude CLI: $messageWithContext")
-            println("DEBUG: Working directory: $workingDirectory")
-            println("DEBUG: Selected model: ${selectedModel.displayName} (CLI: ${selectedModel.cliName})")
+            // DEBUG: Sending message to Claude CLI: $messageWithContext
+            // DEBUG: Working directory: $workingDirectory
+            // DEBUG: Selected model: ${selectedModel.displayName} (CLI: ${selectedModel.cliName})
             
             // 启动消息流
             val messageFlow = cliWrapper.query(
@@ -317,7 +317,7 @@ private fun sendMessage(
                 )
             )
             
-            println("DEBUG: Starting to collect messages from Claude CLI...")
+            // DEBUG: Starting to collect messages from Claude CLI...
             
             val responseBuilder = StringBuilder()
             val toolCalls = mutableListOf<ToolCall>()
@@ -361,7 +361,7 @@ private fun sendMessage(
                     
                     com.claudecodeplus.sdk.MessageType.TOOL_USE -> {
                         // 工具调用开始
-                        println("DEBUG: Tool use detected - ${sdkMessage.data.toolName}")
+                        // DEBUG: Tool use detected - ${sdkMessage.data.toolName}
                         val toolCall = ToolCall(
                             name = sdkMessage.data.toolName ?: "unknown",
                             displayName = sdkMessage.data.toolName ?: "unknown",
@@ -369,7 +369,7 @@ private fun sendMessage(
                             status = ToolCallStatus.RUNNING
                         )
                         toolCalls.add(toolCall)
-                        println("DEBUG: Added tool call, total: ${toolCalls.size}")
+                        // DEBUG: Added tool call, total: ${toolCalls.size}
                         
                         // 添加工具调用元素到有序列表
                         orderedElements.add(
@@ -392,10 +392,10 @@ private fun sendMessage(
                     
                     com.claudecodeplus.sdk.MessageType.TOOL_RESULT -> {
                         // 工具调用结果
-                        println("DEBUG: Tool result received")
+                        // DEBUG: Tool result received
                         val lastToolCall = toolCalls.lastOrNull()
                         if (lastToolCall != null) {
-                            println("DEBUG: Updating tool call result")
+                            // DEBUG: Updating tool call result
                             val updatedToolCall = lastToolCall.copy(
                                 status = if (sdkMessage.data.error != null) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
                                 result = if (sdkMessage.data.error != null) {
@@ -430,7 +430,7 @@ private fun sendMessage(
                             mutableMessages[mutableMessages.lastIndex] = updatedMessage
                             onMessageUpdate(mutableMessages.toList())
                         } else {
-                            println("DEBUG: No tool call found to update")
+                            // DEBUG: No tool call found to update
                         }
                     }
                     
@@ -470,7 +470,7 @@ private fun sendMessage(
                 }
             }
         } catch (e: Exception) {
-            println("ERROR: ${e.message}")
+            // ERROR: ${e.message}
             e.printStackTrace()
             
             // 添加错误消息

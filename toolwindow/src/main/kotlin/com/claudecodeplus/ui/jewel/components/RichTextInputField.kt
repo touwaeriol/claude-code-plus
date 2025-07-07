@@ -106,7 +106,7 @@ fun RichTextInputField(
                     text = value.text,
                     onReferenceClick = { reference ->
                         // 点击引用时的处理（可以显示工具提示等）
-                        println("Clicked reference: ${reference.fullPath}")
+                        // Clicked reference: ${reference.fullPath}
                     },
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 14.sp,
