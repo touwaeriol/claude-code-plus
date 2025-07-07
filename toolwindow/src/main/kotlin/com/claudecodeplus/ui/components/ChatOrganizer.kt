@@ -12,6 +12,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogWindow
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.Orientation
@@ -218,7 +219,7 @@ private fun GroupItem(
         
         Text(
             text = name,
-            style = JewelTheme.typography.bodyMedium,
+            style = JewelTheme.defaultTextStyle,
             modifier = Modifier.weight(1f)
         )
         
@@ -255,18 +256,29 @@ private fun OrganizerToolbar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 搜索框
-        TextField(
-            value = searchQuery,
-            onValueChange = onSearchChange,
-            placeholder = { Text("搜索对话...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            modifier = Modifier.weight(1f).padding(end = 8.dp)
-        )
+        // 搜索框 - 使用简单的文本输入
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Search,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp).padding(end = 4.dp)
+            )
+            // 暂时使用Text作为占位，后续实现搜索功能
+            Text(
+                text = if (searchQuery.isEmpty()) "搜索对话..." else searchQuery,
+                color = if (searchQuery.isEmpty()) Color.Gray else JewelTheme.defaultTextStyle.color,
+                modifier = Modifier.weight(1f)
+            )
+        }
         
         // 操作按钮
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = onManageTags) {
+            OutlinedButton(onClick = onManageTags) {
                 Icon(Icons.Default.Star, contentDescription = null)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("管理标签")
@@ -296,7 +308,7 @@ private fun ChatTabList(
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         items(tabs, key = { it.id }) { tab ->
-            ChatTabCard(
+            ChatTabSurface(
                 tab = tab,
                 group = groups.find { it.id == tab.groupId },
                 onSelect = { onTabSelect(tab.id) },
@@ -312,7 +324,7 @@ private fun ChatTabList(
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChatTabCard(
+private fun ChatTabSurface(
     tab: ChatTab,
     group: ChatGroup?,
     onSelect: () -> Unit,
@@ -321,7 +333,7 @@ private fun ChatTabCard(
 ) {
     var showContextMenu by remember { mutableStateOf(false) }
     
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
@@ -347,8 +359,8 @@ private fun ChatTabCard(
                 
                 Text(
                     text = formatTime(tab.lastModified),
-                    style = JewelTheme.typography.labelSmall,
-                    color = JewelTheme.globalColors.infoContent
+                    style = JewelTheme.defaultTextStyle,
+                    color = Color.Gray
                 )
             }
             
@@ -358,16 +370,16 @@ private fun ChatTabCard(
             tab.summary?.let { summary ->
                 Text(
                     text = summary,
-                    style = JewelTheme.typography.bodySmall,
-                    color = JewelTheme.globalColors.infoContent,
+                    style = JewelTheme.defaultTextStyle,
+                    color = Color.Gray,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             } ?: tab.messages.lastOrNull()?.let { lastMessage ->
                 Text(
                     text = lastMessage.content,
-                    style = JewelTheme.typography.bodySmall,
-                    color = JewelTheme.globalColors.infoContent,
+                    style = JewelTheme.defaultTextStyle,
+                    color = Color.Gray,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -392,7 +404,7 @@ private fun ChatTabCard(
                                 .background(it.color, RoundedCornerShape(1.dp))
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(it.name, style = JewelTheme.typography.labelSmall)
+                        Text(it.name, style = JewelTheme.defaultTextStyle)
                     }
                 }
                 
@@ -402,50 +414,15 @@ private fun ChatTabCard(
                         onClick = {},
                         enabled = false
                     ) {
-                        Text(tag.name, style = JewelTheme.typography.labelSmall)
+                        Text(tag.name, style = JewelTheme.defaultTextStyle)
                     }
                 }
             }
         }
     }
     
-    // 右键菜单
-    DropdownMenu(
-        expanded = showContextMenu,
-        onDismissRequest = { showContextMenu = false }
-    ) {
-        DropdownMenuItem(onClick = {
-            onSelect()
-            showContextMenu = false
-        }) {
-            Text("打开")
-        }
-        
-        Divider(orientation = Orientation.Horizontal)
-        
-        DropdownMenuItem(onClick = {
-            // TODO: 实现移动到分组
-            showContextMenu = false
-        }) {
-            Text("移动到...")
-        }
-        
-        DropdownMenuItem(onClick = {
-            // TODO: 实现添加标签
-            showContextMenu = false
-        }) {
-            Text("添加标签...")
-        }
-        
-        Divider(orientation = Orientation.Horizontal)
-        
-        DropdownMenuItem(onClick = {
-            onDelete()
-            showContextMenu = false
-        }) {
-            Text("删除", color = JewelTheme.globalColors.errorContent)
-        }
-    }
+    // 右键菜单 - 暂时注释掉，后续实现
+    // TODO: 实现右键菜单功能
 }
 
 /**
@@ -481,16 +458,20 @@ private fun CreateGroupDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 分组名称
-            TextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("分组名称") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            Column {
+                Text("分组名称", style = JewelTheme.defaultTextStyle)
+                Spacer(modifier = Modifier.height(4.dp))
+                // 暂时使用文本显示，后续实现输入功能
+                Text(
+                    text = if (name.isEmpty()) "请输入分组名称" else name,
+                    color = if (name.isEmpty()) Color.Gray else JewelTheme.defaultTextStyle.color,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             
             // 颜色选择
             Column {
-                Text("选择颜色", style = JewelTheme.typography.labelMedium)
+                Text("选择颜色", style = JewelTheme.defaultTextStyle)
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 Row(
@@ -503,7 +484,7 @@ private fun CreateGroupDialog(
                                 .background(color, RoundedCornerShape(4.dp))
                                 .border(
                                     width = if (color == selectedColor) 2.dp else 0.dp,
-                                    color = JewelTheme.globalColors.outlines.focused,
+                                    color = Color.Black,
                                     shape = RoundedCornerShape(4.dp)
                                 )
                                 .clickable { selectedColor = color }
@@ -518,7 +499,7 @@ private fun CreateGroupDialog(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = onDismiss) {
+                OutlinedButton(onClick = onDismiss) {
                     Text("取消")
                 }
                 
