@@ -308,4 +308,11 @@ class SimpleFileIndexService : FileIndexService {
         indexedSymbols.clear()
         isReady = false
     }
+    
+    override suspend fun getRecentlyModifiedFiles(projectPath: String, limit: Int): List<IndexedFileInfo> {
+        return indexedFiles
+            .filter { it.absolutePath.startsWith(projectPath) }
+            .sortedByDescending { it.lastModified }
+            .take(limit)
+    }
 }

@@ -99,6 +99,11 @@ class SimpleFileIndexService(
         return emptyList()
     }
     
+    override suspend fun getRecentlyModifiedFiles(projectPath: String, limit: Int): List<IndexedFileInfo> {
+        // 暂不实现最近修改文件功能
+        return emptyList()
+    }
+    
     override suspend fun getFileContent(filePath: String): String? = withContext(Dispatchers.IO) {
         try {
             File(filePath).readText()

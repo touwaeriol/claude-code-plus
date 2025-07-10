@@ -38,7 +38,7 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "com.claudecodeplus.desktop.MainKt"
+        mainClass = "com.claudecodeplus.desktop.EnhancedMainKt"
 
         buildTypes.release.proguard {
             isEnabled.set(false)
