@@ -74,27 +74,89 @@ class OptimizedSessionManager {
      * 获取最新的会话
      * 实现提供的原理
      */
+    /**
+     * 获取指定项目的最新会话。
+     *
+     * 这个函数解决了多个项目路径可能映射到同一个会话存储目录的复杂问题。
+     * 例如 `/path/to/a-b` 和 `/path/to/a/b` 可能会生成相同的目录名。
+     * 
+     * 实现逻辑:
+     * 1. 根据 projectPath 计算出对应的会话目录。
+     * 2. 并发地检查目录中每个会话文件的归属：
+     *    a. **缓存优先**: 首先检查 `ownershipCache`，如果找到所有者，则直接比对，避免文件IO。
+     *    b. **文件读取**: 如果缓存未命中，则异步读取文件的第一行，解析出 `cwd` (current working directory) 作为其所有者。
+     *    c. **缓存更新**: 将新发现的所有权信息存入缓存，供后续快速查找。
+     * 3. 从所有权与当前 `projectPath` 匹配的会话中，选出修改时间最新的一个。
+     * 4. 加载并返回这个最新的会话。
+     *
+     * @param projectPath 要获取会话的项目的绝对路径。
+     * @return 如果找到匹配的会话，则返回 `SessionInfo`，否则返回 `null`。
+     */
     suspend fun getMostRecentSession(projectPath: String): SessionInfo? {
-        // 1. 获取项目目录
         val projectDir = getProjectDirectory(projectPath)
-        logger.info("Looking for sessions in: $projectDir")
-        
-        // 2. 列出所有会话文件
+        logger.info("正在为项目 '$projectPath' 在目录 '$projectDir' 中查找会话...")
+
         val sessionFiles = listSessionFiles(projectDir)
-        
         if (sessionFiles.isEmpty()) {
-            logger.info("No session files found for project: $projectPath in directory: $projectDir")
+            logger.info("目录 '$projectDir' 中没有找到任何会话文件。")
             return null
         }
-        
-        logger.info("Found ${sessionFiles.size} session files")
-        
-        // 3. 按修改时间排序，获取最新的
-        val mostRecent = sessionFiles.sortedByDescending { it.modifiedTime }.first()
-        
-        logger.info("Found most recent session: ${mostRecent.sessionId} at ${mostRecent.path}")
-        
-        // 4. 读取并解析会话内容
+
+        logger.info("在 '$projectDir' 中找到 ${sessionFiles.size} 个会话文件，正在并发验证所有权...")
+
+        // 使用协程并发处理所有文件，以提高效率
+        val matchingSessions = coroutineScope {
+            sessionFiles.map { fileInfo ->
+                async(Dispatchers.IO) { // 在IO线程池中执行每个文件的检查
+                    // 1. 缓存优先：检查所有权是否已被缓存
+                    val cachedOwner = cache.getOwner(fileInfo.sessionId)
+                    if (cachedOwner != null) {
+                        logger.debug("会话 ${fileInfo.sessionId} 的所有权已缓存: $cachedOwner")
+                        if (cachedOwner == projectPath) fileInfo else null
+                    } else {
+                        // 2. 缓存未命中：读取文件确定所有权
+                        try {
+                            logger.debug("缓存未命中，正在读取文件 ${fileInfo.path.fileName} 以确定所有权...")
+                            val firstLine = fileInfo.path.toFile().bufferedReader().use { it.readLine() }
+                            if (firstLine.isNullOrBlank()) {
+                                null
+                            } else {
+                                val message = ClaudeSessionManager.parseSessionMessage(firstLine)
+                                val actualOwner = if (message is ClaudeSessionManager.SessionMessage.SystemMessage && message.subtype == "init") {
+                                    message.cwd
+                                } else {
+                                    // 对于旧格式或无法识别的格式，无法确定所有者
+                                    null
+                                }
+
+                                if (actualOwner != null) {
+                                    // 3. 缓存更新：将新发现的所有权存入缓存
+                                    logger.info("已确定会话 ${fileInfo.sessionId} 的所有者为 '$actualOwner'，并已缓存。")
+                                    cache.putOwner(fileInfo.sessionId, actualOwner)
+                                } else {
+                                    logger.warn("无法从文件 ${fileInfo.path.fileName} 的第一行确定所有者。")
+                                }
+
+                                if (actualOwner == projectPath) fileInfo else null
+                            }
+                        } catch (e: Exception) {
+                            logger.warn("读取或解析文件 ${fileInfo.path.fileName} 的第一行失败。", e)
+                            null
+                        }
+                    }
+                }
+            }.mapNotNull { it.await() } // 等待所有检查完成并过滤掉不匹配的结果
+        }
+
+        if (matchingSessions.isEmpty()) {
+            logger.info("在目录 '$projectDir' 中没有找到专门属于项目 '$projectPath' 的会话文件。")
+            return null
+        }
+
+        // 4. 从匹配的会话中选出最新的一个
+        val mostRecent = matchingSessions.sortedByDescending { it.modifiedTime }.first()
+        logger.info("已找到该项目的最新会话: ${mostRecent.sessionId} (修改于 ${mostRecent.modifiedTime})，路径: ${mostRecent.path}")
+
         return loadSession(projectPath, mostRecent)
     }
     

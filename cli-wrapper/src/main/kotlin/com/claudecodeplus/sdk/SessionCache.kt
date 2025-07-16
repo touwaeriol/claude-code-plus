@@ -34,8 +34,36 @@ class SessionCache {
         .expireAfterAccess(Duration.ofMinutes(10)) // 10分钟未访问后过期
         .buildAsync()
     
+    /**
+     * 会话所有权缓存: sessionId -> projectPath (CWD)
+     * 
+     * 用于解决多个项目路径可能映射到同一个会话存储目录的问题。
+     * 缓存每个会话文件（由sessionId标识）的真实项目路径（即CWD）。
+     * 这样可以避免在每次需要确定会话归属时都重复读取和解析文件，从而显著提升性能。
+     */
+    private val ownershipCache: AsyncCache<String, String> = Caffeine.newBuilder()
+        .maximumSize(2000) // 缓存最近2000个会话的所有权
+        .expireAfterWrite(Duration.ofHours(24)) // 24小时后过期，强制重新验证
+        .buildAsync()
+
     // 文件读取位置缓存
     private val filePositions = ConcurrentHashMap<String, FilePosition>()
+
+    /**
+     * 获取会话所有者（带缓存）
+     */
+    suspend fun getOwner(sessionId: String): String? {
+        return ownershipCache.get(sessionId) { _, _ ->
+            CompletableFuture.completedFuture(null)
+        }.asDeferred().await()
+    }
+
+    /**
+     * 缓存会话所有者
+     */
+    fun putOwner(sessionId: String, projectPath: String) {
+        ownershipCache.put(sessionId, CompletableFuture.completedFuture(projectPath))
+    }
     
     data class SessionMetadata(
         val sessionId: String,

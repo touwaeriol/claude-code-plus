@@ -10,6 +10,9 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import kotlin.io.path.*
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 /**
  * 简单的文件索引服务实现
  * 用于测试环境，基于文件系统直接扫描
@@ -19,8 +22,17 @@ class SimpleFileIndexService : FileIndexService {
     private var rootPath: String = ""
     private var indexedFiles = mutableListOf<IndexedFileInfo>()
     private var indexedSymbols = mutableListOf<IndexedSymbolInfo>()
-    private var isReady = false
     private var lastIndexTime = 0L
+
+    // 通过 StateFlow 向 UI 层暴露索引服务的内部状态。
+    // UI 可以观察这些 Flow 来实时更新加载指示器和状态消息。
+    private val _isIndexing = MutableStateFlow(false)
+    val isIndexing = _isIndexing.asStateFlow()
+
+    private val _statusMessage = MutableStateFlow("就绪")
+    val statusMessage = _statusMessage.asStateFlow()
+
+    private var isReady = false
     
     // 支持的文件类型
     private val supportedExtensions = setOf(
@@ -40,6 +52,8 @@ class SimpleFileIndexService : FileIndexService {
     }
     
     override suspend fun indexPath(path: String, recursive: Boolean) = withContext(Dispatchers.IO) {
+        _isIndexing.value = true
+        _statusMessage.value = "正在索引项目..."
         val startTime = System.currentTimeMillis()
         indexedFiles.clear()
         indexedSymbols.clear()
@@ -52,11 +66,14 @@ class SimpleFileIndexService : FileIndexService {
             
             isReady = true
             lastIndexTime = System.currentTimeMillis()
-            // 索引完成，耗时 ${lastIndexTime - startTime}ms
-            // 找到 ${indexedFiles.size} 个文件
+            val duration = lastIndexTime - startTime
+            _statusMessage.value = "索引完成，耗时 ${duration}ms，找到 ${indexedFiles.size} 个文件"
         } catch (e: Exception) {
             // 索引失败 - ${e.message}
+            _statusMessage.value = "索引失败: ${e.message}"
             isReady = false
+        } finally {
+            _isIndexing.value = false
         }
     }
     
