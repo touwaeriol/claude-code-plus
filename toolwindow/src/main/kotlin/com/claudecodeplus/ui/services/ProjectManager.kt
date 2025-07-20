@@ -347,4 +347,78 @@ class ProjectManager {
             }
         }
     }
+    
+    /**
+     * 删除项目及其所有会话
+     */
+    suspend fun deleteProject(project: Project) {
+        println("删除项目: ${project.name}")
+        
+        // 1. 删除项目的会话目录
+        val encodedProjectId = encodePathToDirectoryName(project.id)
+        val basePath = File(System.getProperty("user.home"), ".claude/projects")
+        val projectDir = File(basePath, encodedProjectId)
+        
+        if (projectDir.exists() && projectDir.isDirectory) {
+            println("删除会话目录: ${projectDir.absolutePath}")
+            projectDir.deleteRecursively()
+        }
+        
+        // 2. 从项目列表中移除
+        _projects.value = _projects.value.filter { it.id != project.id }
+        
+        // 3. 从会话缓存中移除
+        val newSessionsMap = _sessions.value.toMutableMap()
+        newSessionsMap.remove(project.id)
+        _sessions.value = newSessionsMap
+        
+        // 4. 如果删除的是当前项目，切换到其他项目
+        if (_currentProject.value?.id == project.id) {
+            _currentProject.value = _projects.value.firstOrNull()
+            _currentSession.value = null
+        }
+        
+        // 5. 从 .claude.json 中移除项目（如果需要持久化）
+        updateClaudeConfig(project, remove = true)
+    }
+    
+    /**
+     * 删除单个会话
+     */
+    suspend fun deleteSession(session: ProjectSession, project: Project) {
+        println("删除会话: ${session.name}")
+        
+        // 1. 删除会话文件
+        val encodedProjectId = encodePathToDirectoryName(project.path)
+        val basePath = File(System.getProperty("user.home"), ".claude/projects")
+        val sessionsDir = File(basePath, encodedProjectId)
+        val sessionFileToDelete = File(sessionsDir, "${session.id}.jsonl")
+        
+        if (sessionFileToDelete.exists()) {
+            println("删除会话文件: ${sessionFileToDelete.absolutePath}")
+            sessionFileToDelete.delete()
+        }
+        
+        // 2. 从会话列表中移除
+        val projectSessions = _sessions.value[project.id]?.toMutableList() ?: mutableListOf()
+        projectSessions.removeAll { it.id == session.id }
+        
+        val newSessionsMap = _sessions.value.toMutableMap()
+        newSessionsMap[project.id] = projectSessions
+        _sessions.value = newSessionsMap
+        
+        // 3. 如果删除的是当前会话，清空当前会话
+        if (_currentSession.value?.id == session.id) {
+            _currentSession.value = null
+        }
+    }
+    
+    /**
+     * 更新 .claude.json 配置文件
+     */
+    private suspend fun updateClaudeConfig(project: Project, remove: Boolean = false) {
+        // 这里可以实现更新 .claude.json 的逻辑
+        // 目前暂时不实现，因为可能影响其他 Claude 实例
+        println("更新配置文件: ${project.path}, 移除: $remove")
+    }
 }
