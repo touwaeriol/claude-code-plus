@@ -32,21 +32,38 @@ fun ChatView(
     fileIndexService: FileIndexService? = null,
     projectService: ProjectService? = null,
     sessionManager: ClaudeSessionManager = ClaudeSessionManager(),
+    initialMessages: List<EnhancedMessage>? = null,
+    sessionId: String? = null,
     modifier: Modifier = Modifier
 ) {
     // 状态管理
-    var currentSessionId by remember { mutableStateOf<String?>(null) }
+    var currentSessionId by remember { mutableStateOf(sessionId) }
     var currentSession by remember { mutableStateOf<SessionInfo?>(null) }
     var contexts by remember { mutableStateOf(listOf<ContextReference>()) }
     var isGenerating by remember { mutableStateOf(false) }
     var selectedModel by remember { mutableStateOf(AiModel.OPUS) }
-    var messages by remember { mutableStateOf(listOf<EnhancedMessage>()) }
+    var messages by remember { mutableStateOf(initialMessages ?: listOf<EnhancedMessage>()) }
     var isLoadingSession by remember { mutableStateOf(false) }
     
     val coroutineScope = rememberCoroutineScope()
     
+    // 监听传入的 sessionId 和 messages 变化
+    LaunchedEffect(sessionId, initialMessages) {
+        if (sessionId != null) {
+            currentSessionId = sessionId
+        }
+        if (initialMessages != null) {
+            messages = initialMessages
+        }
+    }
+    
     // 初始化时加载最近会话或创建新会话
     LaunchedEffect(workingDirectory) {
+        // 如果已经有传入的消息和会话ID，不需要加载最近会话
+        if (sessionId != null && initialMessages != null) {
+            return@LaunchedEffect
+        }
+        
         isLoadingSession = true
         try {
             // 尝试获取最近的会话

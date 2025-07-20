@@ -19,6 +19,8 @@ import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.component.styling.TooltipStyle
 import org.jetbrains.jewel.ui.Orientation
 import com.claudecodeplus.ui.models.ChatTab
+import com.claudecodeplus.ui.models.EnhancedMessage
+import com.claudecodeplus.ui.models.AiModel
 import com.claudecodeplus.ui.services.ChatTabManager
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
@@ -65,14 +67,29 @@ fun MultiTabChatView(
         // 当前标签的聊天内容
         activeTabId?.let { id ->
             tabs.find { it.id == id }?.let { tab ->
-                Box(modifier = Modifier.fillMaxSize()) {
+                // 使用 key 确保切换标签时重新创建 ChatView
+                key(tab.id) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                    // 将 ChatMessage 转换为 EnhancedMessage
+                    val enhancedMessages = tab.messages.map { chatMessage ->
+                        EnhancedMessage(
+                            id = chatMessage.id,
+                            role = chatMessage.role,
+                            content = chatMessage.content,
+                            timestamp = chatMessage.timestamp.toEpochMilli(),
+                            model = AiModel.OPUS, // 默认模型
+                            contexts = emptyList()
+                        )
+                    }
+                    
                     com.claudecodeplus.ui.jewel.ChatView(
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
                         fileIndexService = fileIndexService,
                         projectService = projectService,
                         sessionManager = sessionManager,
-                        // TODO: 传递 session 相关参数
+                        initialMessages = enhancedMessages,
+                        sessionId = tab.sessionId,
                         modifier = Modifier.fillMaxSize()
                     )
                     
@@ -89,6 +106,7 @@ fun MultiTabChatView(
                             }
                         }
                     }
+                }
                 }
             }
         } ?: run {

@@ -20,7 +20,9 @@ import com.claudecodeplus.ui.components.MultiTabChatView
 import com.claudecodeplus.ui.components.GlobalSearchDialog
 import com.claudecodeplus.ui.components.ChatOrganizer
 import com.claudecodeplus.ui.services.ChatExportService
+import com.claudecodeplus.ui.services.ChatTabManager
 import com.claudecodeplus.ui.models.ExportFormat
+import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.components.ProjectListPanel
 import com.claudecodeplus.desktop.dialogs.NewProjectDialog
 import kotlinx.coroutines.launch
@@ -77,6 +79,75 @@ fun FrameWindowScope.EnhancedClaudeApp() {
     
     // UI 状态
     val uiState = remember { AppUiState() }
+    
+    // 在首次加载时，确保加载当前项目的会话
+    LaunchedEffect(Unit) {
+        projectManager.loadCurrentWorkingDirectoryProject()
+    }
+    
+    // 监听会话加载事件
+    LaunchedEffect(projectManager) {
+        projectManager.sessionLoadEvent.collect { event ->
+            println("收到会话加载事件: ${event.session.id} - ${event.session.name}")
+            // 加载会话历史
+            val session = event.session
+            val currentProject = projectManager.currentProject.value
+            if (currentProject != null) {
+                try {
+                    println("开始加载会话消息: sessionId=${session.id}, projectPath=${currentProject.path}")
+                    // 使用 sessionManager 加载会话消息
+                    val sessionMessages = sessionManager.readSessionMessagesFlow(
+                        sessionId = session.id,
+                        projectPath = currentProject.path,
+                        pageSize = 50
+                    )
+                    
+                    // 收集所有消息
+                    val allMessages = mutableListOf<EnhancedMessage>()
+                    sessionMessages.collect { messages ->
+                        allMessages.addAll(messages)
+                    }
+                    
+                    println("加载了 ${allMessages.size} 条消息")
+                    
+                    // 创建或切换到该会话的标签
+                    if (allMessages.isNotEmpty()) {
+                        val tabId = tabManager.createOrSwitchToSessionTab(session, allMessages)
+                        println("创建或切换到标签: $tabId")
+                    } else {
+                        println("会话没有消息")
+                    }
+                } catch (e: Exception) {
+                    println("加载会话历史失败: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+    
+    // 监听标签管理器事件
+    LaunchedEffect(tabManager) {
+        tabManager.events.collect { event ->
+            when (event) {
+                is ChatTabManager.TabEvent.SessionSwitchRequested -> {
+                    println("收到会话切换请求: ${event.sessionId}")
+                    // 查找对应的会话并更新 ProjectManager
+                    val currentProject = projectManager.currentProject.value
+                    if (currentProject != null) {
+                        val sessions = projectManager.sessions.value[currentProject.id]
+                        val session = sessions?.find { it.id == event.sessionId }
+                        if (session != null) {
+                            println("切换到会话: ${session.name}")
+                            projectManager.setCurrentSession(session, loadHistory = false)
+                        }
+                    }
+                }
+                else -> {
+                    // 忽略其他事件
+                }
+            }
+        }
+    }
     
     // 数据状态
     val currentProject by projectManager.currentProject

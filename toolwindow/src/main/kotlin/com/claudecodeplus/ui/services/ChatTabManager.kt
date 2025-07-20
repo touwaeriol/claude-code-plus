@@ -59,13 +59,63 @@ class ChatTabManager {
     }
     
     /**
+     * 从会话创建或切换到标签
+     */
+    fun createOrSwitchToSessionTab(session: ProjectSession, messages: List<EnhancedMessage>): String {
+        // 查找是否已有该会话的标签
+        val existingTab = _tabs.find { it.sessionId == session.id }
+        
+        // 将 EnhancedMessage 转换为 ChatMessage
+        val chatMessages = messages.map { enhancedMsg ->
+            ChatMessage(
+                id = enhancedMsg.id,
+                role = enhancedMsg.role,
+                content = enhancedMsg.content,
+                timestamp = Instant.ofEpochMilli(enhancedMsg.timestamp)
+            )
+        }
+        
+        if (existingTab != null) {
+            // 如果标签已存在，更新消息并切换到该标签
+            updateTab(existingTab.id) { tab ->
+                tab.copy(
+                    messages = chatMessages,
+                    status = ChatTab.TabStatus.ACTIVE,
+                    lastModified = Instant.now()
+                )
+            }
+            setActiveTab(existingTab.id)
+            return existingTab.id
+        } else {
+            // 创建新标签
+            val newTab = ChatTab(
+                title = session.name,
+                groupId = "default",
+                sessionId = session.id,
+                messages = chatMessages,
+                status = ChatTab.TabStatus.ACTIVE
+            )
+            _tabs.add(newTab)
+            setActiveTab(newTab.id)
+            _events.value = TabEvent.TabCreated(newTab.id)
+            return newTab.id
+        }
+    }
+    
+    /**
      * 设置活动标签
      */
     fun setActiveTab(tabId: String) {
-        if (_tabs.any { it.id == tabId }) {
+        val tab = _tabs.find { it.id == tabId }
+        if (tab != null) {
             _activeTabId.value = tabId
             updateRecentTabs(tabId)
             _events.value = TabEvent.TabActivated(tabId)
+            
+            // 如果标签有关联的会话，触发会话切换事件
+            tab.sessionId?.let { sessionId ->
+                _events.value = TabEvent.SessionSwitchRequested(sessionId)
+            }
         }
     }
     
@@ -251,6 +301,7 @@ class ChatTabManager {
         data class TabActivated(val tabId: String) : TabEvent()
         data class TabUpdated(val tabId: String) : TabEvent()
         data class CloseConfirmationNeeded(val tabId: String) : TabEvent()
+        data class SessionSwitchRequested(val sessionId: String) : TabEvent()
     }
 }
 

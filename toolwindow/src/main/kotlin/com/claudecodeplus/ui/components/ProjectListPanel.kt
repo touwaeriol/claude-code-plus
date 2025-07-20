@@ -19,6 +19,8 @@ import org.jetbrains.jewel.ui.Orientation
 import org.jetbrains.jewel.ui.component.DefaultButton
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.foundation.theme.JewelTheme
+import androidx.compose.ui.text.style.TextOverflow
 
 @Composable
 fun ProjectListPanel(
@@ -34,9 +36,11 @@ fun ProjectListPanel(
 
     Column(modifier = modifier.width(250.dp).fillMaxHeight().padding(8.dp)) {
         // --- 列表 ---
-        LazyColumn {
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
             items(projects) { project ->
-                Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     // 项目标题
                     Text(
                         text = project.name,
@@ -45,23 +49,28 @@ fun ProjectListPanel(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onProjectSelect(project) }
-                            .padding(4.dp)
+                            .padding(vertical = 4.dp, horizontal = 4.dp)
                     )
-
-                    Spacer(Modifier.height(4.dp))
 
                     // 会话列表
                     val projectSessions = sessions[project.id] ?: emptyList()
                     projectSessions.forEach { session ->
-                        Text(
-                            text = session.name,
-                            color = if (session.id == selectedSession?.id) Color.Blue else Color.Unspecified,
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 16.dp)
-                                .clickable { onSessionSelect(session) }
-                                .padding(4.dp)
-                        )
+                                .padding(start = 16.dp, end = 4.dp)
+                        ) {
+                            Text(
+                                text = session.name,
+                                color = if (session.id == selectedSession?.id) Color.Blue else Color.Unspecified,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSessionSelect(session) }
+                                    .padding(vertical = 2.dp, horizontal = 4.dp)
+                            )
+                        }
                     }
                 }
             }

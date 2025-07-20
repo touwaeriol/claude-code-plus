@@ -32,48 +32,127 @@ class ClaudeCliWrapper {
         private val logger = Logger.getLogger(ClaudeCliWrapper::class.java.name)
         
         /**
-         * 查找 claude 命令的完整路径
+         * 查找 Node.js 和 Claude CLI.js 的路径
          */
-        private fun findClaudeCommand(): String {
-            // 1. 首先检查环境变量
-            System.getenv("CLAUDE_CLI_PATH")?.let { 
+        private fun findNodeAndClaudePaths(): Pair<String, String> {
+            // 1. 查找 Node.js
+            val nodeCommand = findNodeCommand()
+            
+            // 2. 查找 Claude Code CLI.js
+            val claudeCliPath = findClaudeCliJs()
+            
+            return Pair(nodeCommand, claudeCliPath)
+        }
+        
+        /**
+         * 查找 Node.js 命令
+         */
+        private fun findNodeCommand(): String {
+            // 检查环境变量
+            System.getenv("NODE_PATH")?.let { 
                 if (java.io.File(it).exists()) {
-                    logger.info("Using claude from CLAUDE_CLI_PATH: $it")
                     return it
                 }
             }
             
-            // 2. 检查常见的安装路径
-            val commonPaths = listOf(
-                "/Users/${System.getProperty("user.name")}/.local/bin/claude",
-                "/usr/local/bin/claude",
-                "/opt/homebrew/bin/claude",
-                "/usr/bin/claude"
-            )
+            val osName = System.getProperty("os.name").lowercase()
             
-            for (path in commonPaths) {
-                if (java.io.File(path).exists()) {
-                    logger.info("Found claude at: $path")
-                    return path
+            // Windows 特定路径
+            if (osName.contains("windows")) {
+                val windowsPaths = listOf(
+                    "node.exe",
+                    "C:\\Program Files\\nodejs\\node.exe",
+                    "C:\\Program Files (x86)\\nodejs\\node.exe",
+                    "${System.getProperty("user.home")}\\AppData\\Local\\Programs\\nodejs\\node.exe"
+                )
+                
+                for (path in windowsPaths) {
+                    if (java.io.File(path).exists()) {
+                        logger.info("Found node at: $path")
+                        return path
+                    }
+                }
+                
+                // 尝试 where 命令
+                try {
+                    val process = ProcessBuilder("where", "node").start()
+                    val output = process.inputStream.bufferedReader().readText().trim()
+                    if (process.waitFor() == 0 && output.isNotEmpty()) {
+                        val nodePath = output.lines().first()
+                        logger.info("Found node via where: $nodePath")
+                        return nodePath
+                    }
+                } catch (e: Exception) {
+                    logger.fine("Failed to find node via where: ${e.message}")
+                }
+            } else {
+                // Unix/Mac 路径
+                val unixPaths = listOf(
+                    "/usr/local/bin/node",
+                    "/usr/bin/node",
+                    "/opt/homebrew/bin/node"
+                )
+                
+                for (path in unixPaths) {
+                    if (java.io.File(path).exists()) {
+                        logger.info("Found node at: $path")
+                        return path
+                    }
+                }
+                
+                // 尝试 which 命令
+                try {
+                    val process = ProcessBuilder("which", "node").start()
+                    val output = process.inputStream.bufferedReader().readText().trim()
+                    if (process.waitFor() == 0 && output.isNotEmpty()) {
+                        logger.info("Found node via which: $output")
+                        return output
+                    }
+                } catch (e: Exception) {
+                    logger.fine("Failed to find node via which: ${e.message}")
                 }
             }
             
-            // 3. 尝试使用 which 命令查找
-            try {
-                val process = ProcessBuilder("which", "claude").start()
-                val reader = process.inputStream.bufferedReader()
-                val path = reader.readLine()?.trim()
-                if (!path.isNullOrEmpty() && java.io.File(path).exists()) {
-                    logger.info("Found claude using which: $path")
-                    return path
+            // 默认值
+            return "node"
+        }
+        
+        /**
+         * 查找 Claude CLI.js 的路径
+         */
+        private fun findClaudeCliJs(): String {
+            val osName = System.getProperty("os.name").lowercase()
+            
+            if (osName.contains("windows")) {
+                // Windows npm 全局安装路径
+                val windowsPaths = listOf(
+                    "${System.getProperty("user.home")}\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\cli.js",
+                    "C:\\Users\\${System.getProperty("user.name")}\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\cli.js"
+                )
+                
+                for (path in windowsPaths) {
+                    if (java.io.File(path).exists()) {
+                        logger.info("Found claude cli.js at: $path")
+                        return path
+                    }
                 }
-            } catch (e: Exception) {
-                logger.warning("Failed to use which command: ${e.message}")
+            } else {
+                // Unix/Mac 路径
+                val unixPaths = listOf(
+                    "/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js",
+                    "/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js",
+                    "${System.getProperty("user.home")}/.npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js"
+                )
+                
+                for (path in unixPaths) {
+                    if (java.io.File(path).exists()) {
+                        logger.info("Found claude cli.js at: $path")
+                        return path
+                    }
+                }
             }
             
-            // 4. 如果都找不到，返回默认值并警告
-            logger.warning("Could not find claude command, using default 'claude'")
-            return "claude"
+            throw IllegalStateException("Could not find Claude Code cli.js. Please ensure @anthropic-ai/claude-code is installed globally via npm")
         }
     }
     private val objectMapper = jacksonObjectMapper()
@@ -266,12 +345,19 @@ class ClaudeCliWrapper {
         }
         args.add(prompt.trim())
         
-        // 构建进程 - 尝试查找 claude 命令的完整路径
-        val claudeCommand = findClaudeCommand()
-        logger.info("🔵 [$requestId] 使用 Claude 命令: $claudeCommand")
-        logger.info("🔵 [$requestId] 完整命令行: $claudeCommand ${args.joinToString(" ")}")
+        // 构建进程 - 使用 Node.js 运行 Claude CLI.js
+        val (nodeCommand, claudeCliPath) = findNodeAndClaudePaths()
+        logger.info("🔵 [$requestId] 使用 Node.js: $nodeCommand")
+        logger.info("🔵 [$requestId] Claude CLI.js 路径: $claudeCliPath")
         
-        val processBuilder = ProcessBuilder(claudeCommand, *args.toTypedArray())
+        // 构建命令：node cli.js [args]
+        val fullArgs = mutableListOf<String>()
+        fullArgs.add(claudeCliPath)
+        fullArgs.addAll(args)
+        
+        logger.info("🔵 [$requestId] 完整命令行: $nodeCommand ${fullArgs.joinToString(" ")}")
+        
+        val processBuilder = ProcessBuilder(nodeCommand, *fullArgs.toTypedArray())
         options.cwd?.let { 
             processBuilder.directory(java.io.File(it))
             logger.info("🔵 [$requestId] 工作目录: $it")

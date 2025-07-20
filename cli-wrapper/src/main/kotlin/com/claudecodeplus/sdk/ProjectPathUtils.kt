@@ -14,13 +14,13 @@ object ProjectPathUtils {
      * 将项目路径转换为 Claude CLI 使用的目录名
      * 
      * Claude CLI 的命名规则：
-     * 1. 将路径分隔符替换为 -
-     * 2. 保留开头的 - (Claude CLI 的实际行为)
-     * 3. 处理特殊字符
+     * 1. Windows 盘符冒号移除，盘符后加 -
+     * 2. 将路径分隔符替换为 -
+     * 3. 保留开头的 - (Unix 路径)
      * 
      * 例如：
      * - /home/erio/codes/claude-code-plus → -home-erio-codes-claude-code-plus
-     * - C:\Users\user\project → C-Users-user-project
+     * - C:\Users\user\project → C--Users-user-project
      * 
      * @param projectPath 项目的绝对路径
      * @return Claude CLI 使用的目录名
@@ -29,11 +29,21 @@ object ProjectPathUtils {
         // 规范化路径（处理不同操作系统的路径分隔符）
         val normalizedPath = Paths.get(projectPath).normalize().toString()
         
-        // 替换路径分隔符为 -
-        val dirName = normalizedPath
+        // Claude CLI 的实际编码规则：
+        // 1. 先移除 Windows 盘符冒号
+        // 2. 将所有路径分隔符替换为 -
+        // 3. Windows 路径会在盘符后产生双横线（例如 C:\Users → C--Users）
+        var dirName = normalizedPath
+        
+        // 处理 Windows 盘符（例如 "C:" → "C-"）
+        if (dirName.length >= 2 && dirName[1] == ':') {
+            dirName = dirName[0] + "-" + dirName.substring(2)
+        }
+        
+        // 替换路径分隔符
+        dirName = dirName
             .replace('\\', '-')  // Windows 路径分隔符
             .replace('/', '-')   // Unix 路径分隔符
-            .replace(":", "")    // Windows 盘符冒号
         
         // Claude CLI 保留开头的 -，只移除结尾的 -
         return dirName.trimEnd('-')
