@@ -152,6 +152,28 @@ class ProjectManager {
         return com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(path)
     }
 
+    fun findProjectForSession(sessionDirName: String): Project? {
+        // 优先使用新格式进行匹配
+        val projectByNewFormat = projects.value.find { project ->
+            encodePathToDirectoryName(project.path) == sessionDirName
+        }
+        if (projectByNewFormat != null) {
+            return projectByNewFormat
+        }
+
+        // 如果新格式未找到，则尝试匹配旧格式
+        return projects.value.find { project ->
+            // 旧格式 1: 移除了开头的 "-"
+            val oldEncodedPath = project.path.replace(File.separator, "-").let {
+                if (it.startsWith("-")) it.substring(1) else it
+            }
+            // 旧格式 2: 保留了开头的 "-"
+            val oldEncodedPathWithLeadingDash = project.path.replace(File.separator, "-")
+
+            oldEncodedPath == sessionDirName || oldEncodedPathWithLeadingDash == sessionDirName
+        }
+    }
+
     fun loadSessionsForProject(projectId: String) {
         if (_sessions.value.containsKey(projectId)) {
             println("项目会话已缓存，跳过加载: $projectId")

@@ -8,8 +8,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import androidx.compose.ui.window.DialogWindow
-import androidx.compose.ui.window.FrameWindowScope
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 import org.jetbrains.jewel.ui.component.*
@@ -24,7 +22,6 @@ import com.claudecodeplus.ui.services.ChatTabManager
 import com.claudecodeplus.ui.models.ExportFormat
 import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.components.ProjectListPanel
-import com.claudecodeplus.desktop.dialogs.NewProjectDialog
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -56,18 +53,10 @@ fun main() = application {
 }
 
 /**
- * 增强版应用主组件。
- *
- * 该组件是应用的核心UI入口，整合了所有主要功能，包括：
- * - **服务集成**: 从 `ServiceContainer` 获取所有必要的后端服务，如会话管理、项目管理等。
- * - **状态管理**: 管理应用的UI状态 (`AppUiState`) 和数据状态（如当前项目、会话、索引状态等）。
- * - **多标签聊天视图**: 使用 `MultiTabChatView` 来展示和管理多个聊天会话。
- * - **全局快捷键**: 通过 `onKeyEvent` 修饰符处理整个窗口的快捷键，如新建/关闭标签页、打开搜索等。
- * - **对话框管理**: 控制各种功能对话框（如项目组织器、全局搜索、导出）的显示和隐藏。
- * - **布局构建**: 使用 `Column` 和 `Row` 构建了经典的 IDE 式布局（左侧面板、主编辑区、顶部工具栏、底部状态栏）。
+ * 增强版应用主组件
  */
 @Composable
-fun FrameWindowScope.EnhancedClaudeApp() {
+fun EnhancedClaudeApp() {
     // 从服务容器获取服务
     val cliWrapper = ServiceContainer.cliWrapper
     val sessionManager = ServiceContainer.sessionManager
@@ -227,7 +216,8 @@ fun FrameWindowScope.EnhancedClaudeApp() {
                 onOrganize = { uiState.isOrganizerVisible = true },
                 onSearch = { uiState.isSearchVisible = true },
                 onTemplates = { uiState.isTemplatesVisible = true },
-                onExport = { uiState.isExportDialogVisible = true }
+                onExport = { uiState.isExportDialogVisible = true },
+                onSettings = { uiState.isSettingsVisible = true }
             )
             
             Divider(orientation = Orientation.Horizontal)
@@ -243,6 +233,7 @@ fun FrameWindowScope.EnhancedClaudeApp() {
                     selectedSession = currentSession,
                     onProjectSelect = { project -> projectManager.setCurrentProject(project) },
                     onSessionSelect = { session -> projectManager.setCurrentSession(session) },
+                    onCreateProject = { uiState.isNewProjectDialogVisible = true },
                     modifier = Modifier.fillMaxHeight()
                 )
 
@@ -270,11 +261,6 @@ fun FrameWindowScope.EnhancedClaudeApp() {
         )
     }
     
-    // 新建项目对话框
-    if (uiState.isNewProjectDialogVisible) {
-        // NewProjectDialog is disabled
-    }
-    
     // 对话框
     if (uiState.isOrganizerVisible) {
         ChatOrganizer(
@@ -299,10 +285,8 @@ fun FrameWindowScope.EnhancedClaudeApp() {
         )
     }
     
-    // TODO: PromptTemplateDialog
-    
     if (uiState.isExportDialogVisible) {
-        ExportDialog(
+        SimpleExportDialog(
             tabs = tabManager.tabs,
             exportService = exportService,
             onDismiss = { uiState.isExportDialogVisible = false }
@@ -319,7 +303,8 @@ private fun AppToolbar(
     onOrganize: () -> Unit,
     onSearch: () -> Unit,
     onTemplates: () -> Unit,
-    onExport: () -> Unit
+    onExport: () -> Unit,
+    onSettings: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -370,7 +355,7 @@ private fun AppToolbar(
                     Icon(Icons.Default.Share, contentDescription = "导出")
                 }
                 
-                IconButton(onClick = { /* TODO: 设置 */ }) {
+                IconButton(onClick = onSettings) {
                     Icon(Icons.Default.Settings, contentDescription = "设置")
                 }
             }
@@ -429,20 +414,23 @@ private fun StatusBar(
 }
 
 /**
- * 导出对话框
+ * 简化的导出对话框
  */
 @Composable
-private fun ExportDialog(
+private fun SimpleExportDialog(
     tabs: List<com.claudecodeplus.ui.models.ChatTab>,
     exportService: ChatExportService,
     onDismiss: () -> Unit
 ) {
     var selectedTabs by remember { mutableStateOf(setOf<String>()) }
     var exportFormat by remember { mutableStateOf(ExportFormat.MARKDOWN) }
-    var includeContext by remember { mutableStateOf(true) }
-    var includeTimestamps by remember { mutableStateOf(true) }
     
-    DialogWindow(
+    // 默认选择所有标签
+    LaunchedEffect(tabs) {
+        selectedTabs = tabs.map { it.id }.toSet()
+    }
+    
+    androidx.compose.ui.window.DialogWindow(
         onCloseRequest = onDismiss,
         title = "导出对话"
     ) {
@@ -482,56 +470,34 @@ private fun ExportDialog(
             
             Divider(orientation = Orientation.Horizontal)
             
-            // 导出选项
+            // 导出格式选择
+            Text("导出格式", style = JewelTheme.defaultTextStyle)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column {
-                    Text("导出格式", style = JewelTheme.defaultTextStyle)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = exportFormat == ExportFormat.MARKDOWN,
-                            onClick = { exportFormat = ExportFormat.MARKDOWN }
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Markdown")
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = exportFormat == ExportFormat.HTML,
-                            onClick = { exportFormat = ExportFormat.HTML }
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("HTML")
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = exportFormat == ExportFormat.JSON,
-                            onClick = { exportFormat = ExportFormat.JSON }
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("JSON")
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = exportFormat == ExportFormat.MARKDOWN,
+                        onClick = { exportFormat = ExportFormat.MARKDOWN }
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Markdown")
                 }
-                
-                Column {
-                    Text("包含内容", style = JewelTheme.defaultTextStyle)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = includeContext,
-                            onCheckedChange = { includeContext = it }
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("上下文")
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = includeTimestamps,
-                            onCheckedChange = { includeTimestamps = it }
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("时间戳")
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = exportFormat == ExportFormat.HTML,
+                        onClick = { exportFormat = ExportFormat.HTML }
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("HTML")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = exportFormat == ExportFormat.JSON,
+                        onClick = { exportFormat = ExportFormat.JSON }
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("JSON")
                 }
             }
             
@@ -550,6 +516,7 @@ private fun ExportDialog(
                 DefaultButton(
                     onClick = {
                         // TODO: 实现导出功能
+                        println("导出 ${selectedTabs.size} 个标签，格式: $exportFormat")
                         onDismiss()
                     },
                     enabled = selectedTabs.isNotEmpty()

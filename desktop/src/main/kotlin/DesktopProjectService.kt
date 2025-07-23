@@ -28,7 +28,8 @@ class DesktopProjectService(private val projectPath: String) : ProjectService {
     }
     
     override fun showSettings(settingsId: String?) {
-        // TODO: 实现显示设置功能 - 可以弹出设置对话框
+        // 通过 ServiceContainer 获取 UI 状态并显示设置对话框
+        com.claudecodeplus.desktop.di.ServiceContainer.appUiState.isSettingsVisible = true
         println("显示设置: ${settingsId ?: "通用设置"}")
     }
 }

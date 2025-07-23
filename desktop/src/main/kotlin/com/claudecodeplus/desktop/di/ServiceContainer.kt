@@ -2,6 +2,7 @@ package com.claudecodeplus.desktop.di
 
 import com.claudecodeplus.desktop.DesktopProjectService
 import com.claudecodeplus.desktop.SimpleFileIndexService
+import com.claudecodeplus.desktop.state.AppUiState
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.services.*
@@ -28,6 +29,9 @@ object ServiceContainer {
     val templateManager: PromptTemplateManager by lazy { PromptTemplateManager() }
     val contextTemplateManager: ContextTemplateManager by lazy { ContextTemplateManager() }
 
+    // UI 状态
+    val appUiState: AppUiState by lazy { AppUiState() }
+    
     // 桌面特定服务
     val fileIndexService: SimpleFileIndexService by lazy { SimpleFileIndexService() }
     lateinit var projectService: ProjectService

@@ -229,7 +229,9 @@ private fun TabItem(
             style = JewelTheme.defaultTextStyle,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false)
+            modifier = Modifier
+                .widthIn(max = 150.dp) // 限制最大宽度
+                .weight(1f, fill = false)
         )
         
         // 消息计数
