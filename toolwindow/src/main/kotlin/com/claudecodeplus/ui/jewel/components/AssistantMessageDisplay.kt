@@ -7,6 +7,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.*
+import com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay
+import com.claudecodeplus.ui.jewel.components.tools.TodoListDisplay
+import com.claudecodeplus.ui.jewel.components.tools.JumpingDots
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import java.text.SimpleDateFormat
@@ -50,10 +53,20 @@ fun AssistantMessageDisplay(
             message.orderedElements.forEach { element ->
                 when (element) {
                     is MessageTimelineItem.ToolCallItem -> {
-                        ToolCallDisplay(
-                            toolCalls = listOf(element.toolCall),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        // 使用新的紧凑工具调用显示
+                        if (element.toolCall.name.contains("TodoWrite", ignoreCase = true)) {
+                            // TodoWrite 使用专属展示
+                            TodoListDisplay(
+                                toolCall = element.toolCall,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            // 其他工具使用紧凑展示
+                            CompactToolCallDisplay(
+                                toolCalls = listOf(element.toolCall),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                     is MessageTimelineItem.ContentItem -> {
                         if (element.content.isNotBlank()) {
@@ -74,9 +87,22 @@ fun AssistantMessageDisplay(
             // 向后兼容：如果没有 orderedElements，使用旧的显示方式
             // 先显示工具调用
             if (message.toolCalls.isNotEmpty()) {
-                message.toolCalls.forEach { toolCall ->
-                    ToolCallDisplay(
-                        toolCalls = listOf(toolCall),
+                // 将工具按类型分组
+                val todoToolCalls = message.toolCalls.filter { it.name.contains("TodoWrite", ignoreCase = true) }
+                val otherToolCalls = message.toolCalls.filter { !it.name.contains("TodoWrite", ignoreCase = true) }
+                
+                // 显示 TodoWrite 工具
+                todoToolCalls.forEach { toolCall ->
+                    TodoListDisplay(
+                        toolCall = toolCall,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                
+                // 显示其他工具
+                if (otherToolCalls.isNotEmpty()) {
+                    CompactToolCallDisplay(
+                        toolCalls = otherToolCalls,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -103,27 +129,31 @@ fun AssistantMessageDisplay(
  */
 @Composable
 private fun StreamingIndicator(
-    status: String = "正在生成...",
+    status: String = "",
     modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(
-            text = "▌",
-            style = JewelTheme.defaultTextStyle.copy(
-                fontSize = 13.sp,
-                color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
-            )
+        // 使用跳动的点代替文字
+        JumpingDots(
+            dotSize = 5.dp,
+            dotSpacing = 3.dp,
+            jumpHeight = 3.dp,
+            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
         )
-        Text(
-            text = status,
-            style = JewelTheme.defaultTextStyle.copy(
-                fontSize = 13.sp,
-                color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+        
+        // 如果有自定义状态文字，显示它
+        if (status.isNotBlank()) {
+            Text(
+                text = status,
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 13.sp,
+                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)
+                )
             )
-        )
+        }
     }
 }
