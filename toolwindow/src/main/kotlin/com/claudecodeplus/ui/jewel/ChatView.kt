@@ -258,6 +258,30 @@ fun ChatView(
                             // 添加到消息列表
                             messages = messages + userMessage
                             
+                            // 如果是占位会话的第一条消息，立即更新会话名称和标签标题
+                            if ((messages.size == 1 || (messages.size == 2 && messages.firstOrNull()?.role == MessageRole.SYSTEM)) 
+                                && currentSessionId != null 
+                                && projectManager != null 
+                                && currentProject != null) {
+                                val sessionIdCopy = currentSessionId!!
+                                coroutineScope.launch {
+                                    projectManager.updateSessionName(
+                                        sessionId = sessionIdCopy,
+                                        projectId = currentProject.id,
+                                        firstMessage = markdownText
+                                    )
+                                    
+                                    // 同时更新标签标题
+                                    if (tabManager != null && currentTabId != null) {
+                                        tabManager.updateTabTitleFromFirstMessage(
+                                            tabId = currentTabId,
+                                            messageContent = markdownText,
+                                            project = currentProject
+                                        )
+                                    }
+                                }
+                            }
+                            
                             // 记录当前会话ID（如果是新会话，会在响应中创建）
                             var sessionIdToUse = currentSessionId
                             
@@ -272,10 +296,11 @@ fun ChatView(
                             var currentContentBuilder = StringBuilder()
                             
                             // 调用 Claude CLI
-                            // 如果有 currentSessionId 且不为空，使用 resume；否则创建新会话
-                            val useResume = currentSessionId != null && currentSessionId!!.isNotEmpty()
+                            // 对于占位会话（第一条消息），不传递 sessionId，让 Claude CLI 创建新会话
+                            val isPlaceholderSession = currentSessionId != null && messages.size == 1
+                            val useResume = currentSessionId != null && currentSessionId!!.isNotEmpty() && !isPlaceholderSession
                             
-                            // ChatView: Sending message, useResume=$useResume, sessionId=$currentSessionId
+                            // ChatView: Sending message, useResume=$useResume, sessionId=$currentSessionId, isPlaceholder=$isPlaceholderSession
                             
                             cliWrapper.sendMessage(
                                 message = markdownText,
@@ -284,13 +309,26 @@ fun ChatView(
                                 when (response) {
                                     is ClaudeCliWrapper.StreamResponse.SessionStart -> {
                                         // 新会话创建，保存会话ID
-                                        if (currentSessionId == null) {
+                                        if (currentSessionId == null || isPlaceholderSession) {
+                                            // 如果是占位会话，需要删除旧的占位会话文件
+                                            if (isPlaceholderSession && currentSessionId != null && projectManager != null && currentProject != null) {
+                                                val oldSessionId = currentSessionId
+                                                coroutineScope.launch {
+                                                    // 删除占位会话
+                                                    val sessions = projectManager.sessions.value[currentProject.id]
+                                                    val placeholderSession = sessions?.find { it.id == oldSessionId }
+                                                    if (placeholderSession != null) {
+                                                        projectManager.deleteSession(placeholderSession, currentProject)
+                                                    }
+                                                }
+                                            }
+                                            
                                             currentSessionId = response.sessionId
                                             sessionIdToUse = response.sessionId
                                             // ChatView: New session created: $currentSessionId
                                             
                                             // 如果是新项目的第一条消息，更新标签标题和关联会话ID
-                                            if (isFirstMessageForNewProject && tabManager != null && currentTabId != null) {
+                                            if ((isFirstMessageForNewProject || isPlaceholderSession) && tabManager != null && currentTabId != null) {
                                                 tabManager.updateTabTitleFromFirstMessage(
                                                     tabId = currentTabId,
                                                     messageContent = markdownText,
@@ -300,25 +338,6 @@ fun ChatView(
                                                 // 更新标签的会话ID
                                                 tabManager.updateTab(currentTabId) { tab ->
                                                     tab.copy(sessionId = response.sessionId)
-                                                }
-                                            }
-                                        } else if (messages.size <= 1 && projectManager != null && currentProject != null && currentSessionId != null) {
-                                            // 如果是占位会话的第一条消息，更新会话名称
-                                            val sessionIdCopy = currentSessionId!!
-                                            coroutineScope.launch {
-                                                projectManager.updateSessionName(
-                                                    sessionId = sessionIdCopy,
-                                                    projectId = currentProject.id,
-                                                    firstMessage = markdownText
-                                                )
-                                                
-                                                // 同时更新标签标题
-                                                if (tabManager != null && currentTabId != null) {
-                                                    tabManager.updateTabTitleFromFirstMessage(
-                                                        tabId = currentTabId,
-                                                        messageContent = markdownText,
-                                                        project = currentProject
-                                                    )
                                                 }
                                             }
                                         }
