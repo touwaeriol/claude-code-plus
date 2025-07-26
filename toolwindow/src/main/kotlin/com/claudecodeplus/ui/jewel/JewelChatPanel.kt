@@ -7,6 +7,7 @@ import com.claudecodeplus.sdk.MessageType
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.ui.services.ProjectService
+import com.claudecodeplus.ui.services.MessageProcessor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
@@ -59,6 +60,7 @@ class JewelChatPanel(
         }
     
     private val composePanel = ComposePanel()
+    private val messageProcessor = MessageProcessor()
     
     init {
         add(composePanel, BorderLayout.CENTER)
@@ -130,7 +132,8 @@ class JewelChatPanel(
                         onContextsClear = { contexts.value = emptyList() },
                         onGeneratingChange = { isGenerating.value = it },
                         onSessionIdUpdate = { currentSessionId.value = it },
-                        onJobUpdate = { currentJob.value = it }
+                        onJobUpdate = { currentJob.value = it },
+                        currentMessages = messages.value  // 传入当前消息列表
                     )
                 }
             },
@@ -185,7 +188,8 @@ class JewelChatPanel(
         onContextsClear: () -> Unit,
         onGeneratingChange: (Boolean) -> Unit,
         onSessionIdUpdate: (String?) -> Unit,
-        onJobUpdate: (Job?) -> Unit
+        onJobUpdate: (Job?) -> Unit,
+        currentMessages: List<EnhancedMessage> = emptyList()  // 添加当前消息列表参数
     ) {
         // 构建包含上下文的消息 - 使用新的Markdown格式
         val messageWithContext = buildFinalMessage(contexts, textWithMarkdown)
@@ -193,15 +197,14 @@ class JewelChatPanel(
         // 创建用户消息
         val userMessage = EnhancedMessage(
             role = MessageRole.USER,
-            content = textWithMarkdown, // <--- 使用带有Markdown的原始文本
+            content = textWithMarkdown, // 使用原始输入文本，不包含上下文标记
             contexts = contexts,
             timestamp = System.currentTimeMillis()
         )
         
-        val currentMessages = mutableListOf<EnhancedMessage>()
-        onMessageUpdate(currentMessages)
-        currentMessages.add(userMessage)
-        onMessageUpdate(currentMessages.toList())
+        val updatedMessages = currentMessages.toMutableList()
+        updatedMessages.add(userMessage)
+        onMessageUpdate(updatedMessages.toList())
         
         onContextsClear()
         onGeneratingChange(true)
@@ -214,8 +217,8 @@ class JewelChatPanel(
             isStreaming = true
         )
         
-        currentMessages.add(assistantMessage)
-        onMessageUpdate(currentMessages.toList())
+        updatedMessages.add(assistantMessage)
+        onMessageUpdate(updatedMessages.toList())
         
         // 启动协程处理 AI 响应
         val job = scope.launch {
@@ -237,99 +240,33 @@ class JewelChatPanel(
                 // DEBUG: Starting to collect messages from Claude CLI...
                 cliWrapper.query(messageWithContext, options).collect { sdkMessage ->
                     // DEBUG: Received message type: ${sdkMessage.type}
-                    when (sdkMessage.type) {
-                        MessageType.TEXT -> {
-                            sdkMessage.data.text?.let { text ->
-                                // DEBUG: Received text: $text
-                                responseBuilder.append(text)
-                                // 更新消息内容
-                                val updatedMessage = assistantMessage.copy(
-                                    content = responseBuilder.toString(),
-                                    toolCalls = toolCalls.toList()
-                                )
-                                currentMessages[currentMessages.lastIndex] = updatedMessage
-                                onMessageUpdate(currentMessages.toList())
-                            }
+                    
+                    // 使用 MessageProcessor 处理消息
+                    val result = messageProcessor.processMessage(
+                        sdkMessage = sdkMessage,
+                        currentMessage = assistantMessage,
+                        responseBuilder = responseBuilder,
+                        toolCalls = toolCalls
+                    )
+                    
+                    when (result) {
+                        is MessageProcessor.ProcessResult.Updated -> {
+                            updatedMessages[updatedMessages.lastIndex] = result.message
+                            onMessageUpdate(updatedMessages.toList())
                         }
-                        
-                        MessageType.TOOL_USE -> {
-                            val toolCall = ToolCall(
-                                name = sdkMessage.data.toolName ?: "unknown",
-                                displayName = sdkMessage.data.toolName ?: "unknown",
-                                parameters = sdkMessage.data.toolInput as? Map<String, Any> ?: emptyMap(),
-                                status = ToolCallStatus.RUNNING
-                            )
-                            toolCalls.add(toolCall)
-                            
-                            // 更新消息显示工具调用
-                            val updatedMessage = assistantMessage.copy(
-                                content = responseBuilder.toString(),
-                                toolCalls = toolCalls.toList()
-                            )
-                            currentMessages[currentMessages.lastIndex] = updatedMessage
-                            onMessageUpdate(currentMessages.toList())
+                        is MessageProcessor.ProcessResult.Complete -> {
+                            updatedMessages[updatedMessages.lastIndex] = result.message
+                            onMessageUpdate(updatedMessages.toList())
                         }
-                        
-                        MessageType.TOOL_RESULT -> {
-                            // 更新工具调用结果
-                            val lastToolCall = toolCalls.lastOrNull()
-                            if (lastToolCall != null) {
-                                val updatedToolCall = lastToolCall.copy(
-                                    status = ToolCallStatus.SUCCESS,
-                                    result = if (sdkMessage.data.error != null) {
-                                        ToolResult.Failure(
-                                            error = sdkMessage.data.error ?: "Unknown error"
-                                        )
-                                    } else {
-                                        ToolResult.Success(
-                                            output = sdkMessage.data.toolResult?.toString() ?: ""
-                                        )
-                                    },
-                                    endTime = System.currentTimeMillis()
-                                )
-                                toolCalls[toolCalls.lastIndex] = updatedToolCall
-                                
-                                val updatedMessage = assistantMessage.copy(
-                                    content = responseBuilder.toString(),
-                                    toolCalls = toolCalls.toList()
-                                )
-                                currentMessages[currentMessages.lastIndex] = updatedMessage
-                                onMessageUpdate(currentMessages.toList())
-                            }
+                        is MessageProcessor.ProcessResult.Error -> {
+                            updatedMessages[updatedMessages.lastIndex] = result.message
+                            onMessageUpdate(updatedMessages.toList())
                         }
-                        
-                        MessageType.START -> {
-                            sdkMessage.data.sessionId?.let { id ->
-                                onSessionIdUpdate(id)
-                            }
+                        is MessageProcessor.ProcessResult.SessionStart -> {
+                            onSessionIdUpdate(result.sessionId)
                         }
-                        
-                        MessageType.ERROR -> {
-                            val errorMsg = sdkMessage.data.error ?: "Unknown error"
-                            val errorMessage = assistantMessage.copy(
-                                content = "❌ 错误: $errorMsg",
-                                status = MessageStatus.FAILED,
-                                isError = true,
-                                isStreaming = false
-                            )
-                            currentMessages[currentMessages.lastIndex] = errorMessage
-                            onMessageUpdate(currentMessages.toList())
-                        }
-                        
-                        MessageType.END -> {
-                            // 完成流式传输
-                            val finalMessage = assistantMessage.copy(
-                                content = responseBuilder.toString(),
-                                toolCalls = toolCalls.toList(),
-                                status = MessageStatus.COMPLETE,
-                                isStreaming = false
-                            )
-                            currentMessages[currentMessages.lastIndex] = finalMessage
-                            onMessageUpdate(currentMessages.toList())
-                        }
-                        
-                        else -> {
-                            // 忽略其他消息类型
+                        MessageProcessor.ProcessResult.NoChange -> {
+                            // 不需要更新
                         }
                     }
                 }
@@ -342,8 +279,8 @@ class JewelChatPanel(
                     isError = true,
                     isStreaming = false
                 )
-                currentMessages[currentMessages.lastIndex] = errorMessage
-                onMessageUpdate(currentMessages.toList())
+                updatedMessages[updatedMessages.lastIndex] = errorMessage
+                onMessageUpdate(updatedMessages.toList())
             } finally {
                 // DEBUG: Finished processing message
                 onGeneratingChange(false)

@@ -24,14 +24,18 @@ import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.components.ProjectListPanel
 import com.claudecodeplus.ui.components.SessionListPanel
 import com.claudecodeplus.ui.components.ProjectTabBar
-import com.claudecodeplus.desktop.ui.dialogs.NewProjectDialog
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import com.claudecodeplus.ui.services.SessionHistoryService
+import com.claudecodeplus.ui.services.SessionLoader
+import com.claudecodeplus.ui.services.MessageProcessor
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.input.key.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import javax.swing.JFileChooser
+import java.io.File
 
 /**
  * Claude Code Plus 桌面应用主函数
@@ -74,9 +78,16 @@ fun EnhancedClaudeApp() {
     val uiState = remember { AppUiState() }
     val scope = rememberCoroutineScope()
     
+    // 创建流式加载服务
+    val sessionHistoryService = remember { SessionHistoryService() }
+    val messageProcessor = remember { MessageProcessor() }
+    val sessionLoader = remember { SessionLoader(sessionHistoryService, messageProcessor) }
+    
     // 在首次加载时，确保加载当前项目的会话
     LaunchedEffect(Unit) {
+        println("[DEBUG] LaunchedEffect - 准备加载当前工作目录项目")
         projectManager.loadCurrentWorkingDirectoryProject()
+        println("[DEBUG] LaunchedEffect - 调用 loadCurrentWorkingDirectoryProject 完成")
     }
     
     // 监听会话加载事件
@@ -89,44 +100,85 @@ fun EnhancedClaudeApp() {
             if (currentProject != null) {
                 try {
                     println("开始加载会话消息: sessionId=${session.id}, projectPath=${currentProject.path}")
-                    // 使用 sessionManager 加载会话消息
-                    val sessionMessages = sessionManager.readSessionMessagesFlow(
-                        sessionId = session.id,
-                        projectPath = currentProject.path,
-                        pageSize = 50
-                    )
                     
-                    // 收集所有消息
-                    val allMessages = mutableListOf<EnhancedMessage>()
-                    sessionMessages.collect { messages ->
-                        allMessages.addAll(messages)
+                    // 尝试获取会话文件
+                    println("查找会话文件，项目路径: ${currentProject.path}")
+                    val sessionFiles = sessionHistoryService.getSessionFiles(currentProject.path)
+                    println("找到 ${sessionFiles.size} 个会话文件")
+                    sessionFiles.forEach { 
+                        println("  - ${it.name} (${it.size} bytes)")
                     }
                     
-                    println("加载了 ${allMessages.size} 条消息")
-                    println("DEBUG: 传递的会话对象 - ID: ${session.id}, Name: '${session.name}', ProjectId: ${session.projectId}")
-                    
-                    // 检查会话名称是否是数字
-                    if (session.name.matches(Regex("\\d+"))) {
-                        println("警告：会话名称是纯数字！value='${session.name}', 消息数量=${allMessages.size}")
-                        // 打印调用栈以追踪问题来源
-                        println("调用栈：")
-                        Thread.currentThread().stackTrace.take(10).forEach { 
-                            println("  at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})")
-                        }
+                    val sessionFile = session.id?.let { id ->
+                        sessionFiles.find { it.name.startsWith(id) }?.file
                     }
                     
-                    // 创建或切换到该会话的标签
-                    if (allMessages.isNotEmpty()) {
-                        println("准备创建标签，传递的 session 对象:")
-                        println("  - session.id: ${session.id}")
-                        println("  - session.name: '${session.name}'")
-                        println("  - session.projectId: ${session.projectId}")
-                        println("  - allMessages.size: ${allMessages.size}")
+                    if (sessionFile != null) {
+                        println("使用流式加载会话文件: ${sessionFile.name}")
                         
-                        val tabId = tabManager.createOrSwitchToSessionTab(session, allMessages, currentProject)
-                        println("创建或切换到标签: $tabId")
+                        // 收集所有消息
+                        val allMessages = mutableListOf<EnhancedMessage>()
+                        
+                        // 使用新的流式加载
+                        sessionLoader.loadSessionAsMessageFlow(sessionFile, maxMessages = 50)
+                            .collect { result ->
+                                when (result) {
+                                    is SessionLoader.LoadResult.MessageCompleted -> {
+                                        allMessages.add(result.message)
+                                        println("加载消息: ${result.message.role} - ${result.message.content.take(50)}...")
+                                        
+                                        // 如果是助手消息，打印工具调用信息
+                                        if (result.message.toolCalls.isNotEmpty()) {
+                                            println("  工具调用: ${result.message.toolCalls.map { it.name }}")
+                                        }
+                                    }
+                                    is SessionLoader.LoadResult.LoadComplete -> {
+                                        println("历史会话加载完成，共 ${result.messages.size} 条消息")
+                                    }
+                                    is SessionLoader.LoadResult.Error -> {
+                                        println("加载历史会话出错: ${result.error}")
+                                    }
+                                    else -> {}
+                                }
+                            }
+                        
+                        println("加载了 ${allMessages.size} 条消息")
+                        println("DEBUG: 传递的会话对象 - ID: ${session.id}, Name: '${session.name}', ProjectId: ${session.projectId}")
+                        
+                        // 创建或切换到该会话的标签
+                        if (allMessages.isNotEmpty()) {
+                            println("准备创建标签，传递的 session 对象:")
+                            println("  - session.id: ${session.id}")
+                            println("  - session.name: '${session.name}'")
+                            println("  - session.projectId: ${session.projectId}")
+                            println("  - allMessages.size: ${allMessages.size}")
+                            
+                            val tabId = tabManager.createOrSwitchToSessionTab(session, allMessages, currentProject)
+                            println("创建或切换到标签: $tabId")
+                        } else {
+                            println("会话没有消息")
+                        }
                     } else {
-                        println("会话没有消息")
+                        println("未找到会话文件，使用原方法加载")
+                        // 使用原方法作为后备（仅当session.id不为null时）
+                        val sessionId = session.id
+                        if (sessionId != null) {
+                            val sessionMessages = sessionManager.readSessionMessagesFlow(
+                                sessionId = sessionId,
+                                projectPath = currentProject.path,
+                                pageSize = 50
+                            )
+                        
+                            val allMessages = mutableListOf<EnhancedMessage>()
+                            sessionMessages.collect { messages ->
+                                allMessages.addAll(messages)
+                            }
+                            
+                            if (allMessages.isNotEmpty()) {
+                                val tabId = tabManager.createOrSwitchToSessionTab(session, allMessages, currentProject)
+                                println("创建或切换到标签: $tabId")
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     println("加载会话历史失败: ${e.message}")
@@ -308,7 +360,31 @@ fun EnhancedClaudeApp() {
                         }
                     }
                 } else null,
-                onNewProject = { uiState.isNewProjectDialogVisible = true }
+                onNewProject = {
+                    // 直接弹出文件夹选择器
+                    val fileChooser = JFileChooser().apply {
+                        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                        dialogTitle = "选择项目文件夹"
+                        currentDirectory = File(System.getProperty("user.home"))
+                    }
+                    
+                    val result = fileChooser.showOpenDialog(null)
+                    if (result == JFileChooser.APPROVE_OPTION) {
+                        val selectedPath = fileChooser.selectedFile.absolutePath
+                        val projectName = fileChooser.selectedFile.name
+                        
+                        scope.launch {
+                            val project = projectManager.createProject(projectName, selectedPath)
+                            // 如果是新项目，创建新标签
+                            if (tabManager.tabs.none { it.projectId == project.id }) {
+                                tabManager.createNewTab(
+                                    title = "新对话",
+                                    project = project
+                                )
+                            }
+                        }
+                    }
+                }
             )
             
             Divider(orientation = Orientation.Horizontal)
@@ -321,7 +397,9 @@ fun EnhancedClaudeApp() {
                 var hoveredSessionId by remember { mutableStateOf<String?>(null) }
 
                 // 只显示当前项目的会话
+                println("[DEBUG] SessionListPanel - currentProject: ${currentProject?.id} (${currentProject?.name})")
                 currentProject?.let { project ->
+                    println("[DEBUG] 创建 SessionListPanel - project: ${project.id}, onCreateSession 不为 null: ${true}")
                     SessionListPanel(
                         projectManager = projectManager,
                         tabManager = tabManager,
@@ -344,12 +422,15 @@ fun EnhancedClaudeApp() {
                                 projectManager.setCurrentSession(newSession, loadHistory = false)
                             }
                         },
-                        modifier = Modifier.fillMaxHeight()
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(280.dp) // 固定宽度，更适合会话列表
                     )
 
                     Divider(orientation = Orientation.Vertical)
                 }
 
+                // 主聊天区域
                 MultiTabChatView(
                     tabManager = tabManager,
                     cliWrapper = cliWrapper,
@@ -375,22 +456,6 @@ fun EnhancedClaudeApp() {
     }
     
     // 对话框
-    if (uiState.isNewProjectDialogVisible) {
-        NewProjectDialog(
-            onConfirm = { projectName, projectPath ->
-                scope.launch {
-                    val newProject = projectManager.createProject(projectName, projectPath)
-                    // 创建新标签
-                    tabManager.createNewTab(
-                        title = "新对话",
-                        project = newProject
-                    )
-                    uiState.isNewProjectDialogVisible = false
-                }
-            },
-            onDismiss = { uiState.isNewProjectDialogVisible = false }
-        )
-    }
     
     if (uiState.isOrganizerVisible) {
         ChatOrganizer(

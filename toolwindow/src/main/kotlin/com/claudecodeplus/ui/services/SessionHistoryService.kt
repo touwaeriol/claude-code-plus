@@ -3,6 +3,9 @@ package com.claudecodeplus.ui.services
 import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.models.MessageRole
 import com.claudecodeplus.ui.models.AiModel
+import com.claudecodeplus.ui.models.ToolCall
+import com.claudecodeplus.ui.models.ToolCallStatus
+import com.claudecodeplus.ui.models.ToolResult
 import com.claudecodeplus.ui.models.ContextReference
 import kotlinx.serialization.*
 import kotlinx.serialization.json.*
@@ -14,8 +17,14 @@ import java.io.RandomAccessFile
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Instant
+import java.util.UUID
 import kotlin.io.path.exists
 import kotlin.io.path.listDirectoryEntries
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import com.claudecodeplus.sdk.SDKMessage
+import com.claudecodeplus.sdk.MessageType
+import com.claudecodeplus.sdk.MessageData
 
 /**
  * Claude Code 历史会话加载服务
@@ -129,9 +138,22 @@ class SessionHistoryService {
             return null
         }
         
-        // Claude Code 使用项目路径转换为目录名的规则：将路径中的 / 替换为 -
-        val projectDirName = projectPath.replace("/", "-")
+        // Claude Code 使用项目路径转换为目录名的规则：
+        // 例如: C:\Users\16790\IdeaProjects\claude-code-plus -> C--Users-16790-IdeaProjects-claude-code-plus
+        val projectDirName = if (projectPath.contains(":")) {
+            // Windows 路径
+            projectPath.replace(":", "-").replace("\\", "-")
+        } else {
+            // Unix 路径
+            projectPath.replace("/", "-")
+        }
         val projectSessionsPath = claudeProjectsPath.resolve(projectDirName)
+        
+        println("SessionHistoryService.getProjectSessionsPath:")
+        println("  - projectPath: $projectPath")
+        println("  - projectDirName: $projectDirName")
+        println("  - projectSessionsPath: $projectSessionsPath")
+        println("  - exists: ${projectSessionsPath.exists()}")
         
         return if (projectSessionsPath.exists()) projectSessionsPath else null
     }
@@ -174,6 +196,107 @@ class SessionHistoryService {
                 content["text"]?.jsonPrimitive?.content
             }
             else -> null
+        }
+    }
+    
+    /**
+     * 解析助手消息内容，返回文本和工具调用列表
+     */
+    private fun parseAssistantContent(content: JsonElement?): Pair<String, List<ToolCall>> {
+        val textParts = mutableListOf<String>()
+        val toolCalls = mutableListOf<ToolCall>()
+        
+        when (content) {
+            is JsonPrimitive -> {
+                // 简单字符串内容
+                textParts.add(content.content)
+            }
+            is JsonArray -> {
+                // 内容块数组
+                content.forEach { element ->
+                    if (element is JsonObject) {
+                        when (element["type"]?.jsonPrimitive?.content) {
+                            "text" -> {
+                                element["text"]?.jsonPrimitive?.content?.let { textParts.add(it) }
+                            }
+                            "tool_use" -> {
+                                parseToolUseBlock(element)?.let { toolCalls.add(it) }
+                            }
+                            // 忽略其他类型（如 tool_result）
+                        }
+                    }
+                }
+            }
+            is JsonObject -> {
+                // 单个对象（兼容旧格式）
+                content["text"]?.jsonPrimitive?.content?.let { textParts.add(it) }
+            }
+            else -> {
+                // 忽略其他类型
+            }
+        }
+        
+        return textParts.joinToString("\n") to toolCalls
+    }
+    
+    /**
+     * 解析工具使用块
+     */
+    private fun parseToolUseBlock(toolUse: JsonObject): ToolCall? {
+        return try {
+            val id = toolUse["id"]?.jsonPrimitive?.content
+            val name = toolUse["name"]?.jsonPrimitive?.content ?: return null
+            val input = toolUse["input"]?.let { inputElement ->
+                when (inputElement) {
+                    is JsonObject -> {
+                        // 将 JsonObject 转换为 Map<String, Any>
+                        inputElement.entries.associate { (key, value) ->
+                            key to parseJsonValue(value)
+                        }
+                    }
+                    else -> emptyMap()
+                }
+            } ?: emptyMap()
+            
+            ToolCall(
+                id = id ?: UUID.randomUUID().toString(),
+                name = name,
+                displayName = name,
+                parameters = input,
+                status = ToolCallStatus.SUCCESS, // 历史记录默认为成功
+                startTime = System.currentTimeMillis(),
+                endTime = System.currentTimeMillis()
+            )
+        } catch (e: Exception) {
+            // 解析工具调用失败: ${e.message}
+            null
+        }
+    }
+    
+    /**
+     * 递归解析 JSON 值为 Kotlin 类型
+     */
+    private fun parseJsonValue(element: JsonElement): Any {
+        return when (element) {
+            is JsonPrimitive -> {
+                when {
+                    element.isString -> element.content
+                    element.booleanOrNull != null -> element.boolean
+                    element.intOrNull != null -> element.int
+                    element.longOrNull != null -> element.long
+                    element.doubleOrNull != null -> element.double
+                    else -> element.content
+                }
+            }
+            is JsonArray -> {
+                element.map { parseJsonValue(it) }
+            }
+            is JsonObject -> {
+                element.entries.associate { (key, value) ->
+                    key to parseJsonValue(value)
+                }
+            }
+            is JsonNull -> ""
         }
     }
     
@@ -314,7 +437,11 @@ class SessionHistoryService {
                         }
                         is AssistantMessageEntry -> {
                             entry.message?.let { messageContent ->
-                                val content = parseMessageContent(messageContent.content) ?: return@let
+                                // 使用新的解析方法，同时获取文本和工具调用
+                                val (content, toolCalls) = parseAssistantContent(messageContent.content)
+                                
+                                // 如果没有内容（既没有文本也没有工具调用），跳过
+                                if (content.isBlank() && toolCalls.isEmpty()) return@let
                                 
                                 val timestamp = messageTimestamp ?: System.currentTimeMillis()
                                 
@@ -332,7 +459,8 @@ class SessionHistoryService {
                                         content = content,
                                         timestamp = timestamp,
                                         model = model,
-                                        contexts = emptyList()
+                                        contexts = emptyList(),
+                                        toolCalls = toolCalls  // 添加工具调用
                                     )
                                 )
                                 processedCount++
@@ -402,4 +530,206 @@ class SessionHistoryService {
         val size: Long,
         val lastModified: Long
     )
+    
+    /**
+     * 将历史会话转换为 SDKMessage 流
+     * 模拟实时消息流的过程，让工具调用经历正确的生命周期
+     * @param sessionFile 会话文件
+     * @param maxMessages 最大消息数
+     * @param maxDaysOld 最大天数
+     */
+    fun loadSessionHistoryAsFlow(
+        sessionFile: File,
+        maxMessages: Int = 50,
+        maxDaysOld: Int = 7
+    ): Flow<SDKMessage> = flow {
+        val cutoffTime = System.currentTimeMillis() - (maxDaysOld * 24 * 60 * 60 * 1000L)
+        var processedCount = 0
+        
+        try {
+            // 估算需要读取的行数
+            val estimatedLines = maxMessages * 6
+            val lines = readLastLines(sessionFile, estimatedLines)
+            
+            for (line in lines) {
+                if (line.isBlank()) continue
+                if (processedCount >= maxMessages) break
+                
+                try {
+                    val jsonObject = json.parseToJsonElement(line).jsonObject
+                    val type = jsonObject["type"]?.jsonPrimitive?.content ?: continue
+                    
+                    val entry = when (type) {
+                        "user" -> json.decodeFromJsonElement<UserMessageEntry>(jsonObject)
+                        "assistant" -> json.decodeFromJsonElement<AssistantMessageEntry>(jsonObject)
+                        else -> continue // 跳过其他类型
+                    }
+                    
+                    // 跳过元数据
+                    if (entry.isMeta == true) continue
+                    
+                    // 检查时间戳
+                    val messageTimestamp = entry.timestamp?.let {
+                        try {
+                            Instant.parse(it).toEpochMilli()
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    
+                    if (messageTimestamp != null && messageTimestamp < cutoffTime) continue
+                    
+                    when (entry) {
+                        is UserMessageEntry -> {
+                            // 发送用户消息作为特殊的SDKMessage
+                            entry.message?.let { messageContent ->
+                                val content = parseMessageContent(messageContent.content)
+                                if (!content.isNullOrBlank() && 
+                                    !content.contains("Caveat: The messages below were generated by the user") &&
+                                    !content.contains("<command-name>") && 
+                                    !content.contains("<local-command-stdout>")) {
+                                    
+                                    // 发送用户消息标记
+                                    emit(SDKMessage(
+                                        type = MessageType.START,
+                                        data = MessageData(
+                                            text = "USER_MESSAGE:$content",
+                                            sessionId = entry.uuid
+                                        )
+                                    ))
+                                }
+                            }
+                            processedCount++
+                        }
+                        is AssistantMessageEntry -> {
+                            entry.message?.let { messageContent ->
+                                // 转换助手消息为SDKMessage流
+                                val messagesFromAssistant = convertAssistantMessageToSDKMessages(messageContent.content)
+                                messagesFromAssistant.forEach { sdkMessage ->
+                                    emit(sdkMessage)
+                                }
+                                processedCount++
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    // 忽略解析失败的行
+                }
+            }
+            
+            // 发送结束消息
+            emit(SDKMessage(
+                type = MessageType.END,
+                data = MessageData()
+            ))
+            
+        } catch (e: Exception) {
+            // 发送错误消息
+            emit(SDKMessage(
+                type = MessageType.ERROR,
+                data = MessageData(error = "加载历史失败: ${e.message}")
+            ))
+        }
+    }
+    
+    /**
+     * 将助手消息内容转换为SDKMessage列表
+     * 按照正确的顺序生成文本、工具调用和工具结果消息
+     */
+    private fun convertAssistantMessageToSDKMessages(content: JsonElement?): List<SDKMessage> {
+        val messages = mutableListOf<SDKMessage>()
+        
+        when (content) {
+            is JsonPrimitive -> {
+                // 简单文本内容
+                messages.add(SDKMessage(
+                    type = MessageType.TEXT,
+                    data = MessageData(text = content.content)
+                ))
+            }
+            is JsonArray -> {
+                // 内容块数组，按顺序处理
+                content.forEach { element ->
+                    if (element is JsonObject) {
+                        when (element["type"]?.jsonPrimitive?.content) {
+                            "text" -> {
+                                element["text"]?.jsonPrimitive?.content?.let { text ->
+                                    messages.add(SDKMessage(
+                                        type = MessageType.TEXT,
+                                        data = MessageData(text = text)
+                                    ))
+                                }
+                            }
+                            "tool_use" -> {
+                                // 先发送工具调用开始消息
+                                val toolName = element["name"]?.jsonPrimitive?.content ?: "unknown"
+                                val toolInput = element["input"]?.let { inputElement ->
+                                    when (inputElement) {
+                                        is JsonObject -> {
+                                            inputElement.entries.associate { (key, value) ->
+                                                key to parseJsonValue(value)
+                                            }
+                                        }
+                                        else -> emptyMap()
+                                    }
+                                } ?: emptyMap()
+                                
+                                messages.add(SDKMessage(
+                                    type = MessageType.TOOL_USE,
+                                    data = MessageData(
+                                        toolName = toolName,
+                                        toolInput = toolInput
+                                    )
+                                ))
+                                
+                                // 模拟工具结果（历史消息中工具已经执行完成）
+                                // 注意：这里假设工具执行成功，因为历史消息中没有明确的结果信息
+                                messages.add(SDKMessage(
+                                    type = MessageType.TOOL_RESULT,
+                                    data = MessageData(
+                                        toolResult = "Tool execution completed"
+                                    )
+                                ))
+                            }
+                        }
+                    }
+                }
+            }
+            is JsonObject -> {
+                // 单个对象（兼容旧格式）
+                content["text"]?.jsonPrimitive?.content?.let { text ->
+                    messages.add(SDKMessage(
+                        type = MessageType.TEXT,
+                        data = MessageData(text = text)
+                    ))
+                }
+            }
+            null -> {
+                // 处理 null 情况，不添加任何消息
+            }
+        }
+        
+        return messages
+    }
+    
+    /**
+     * 从当前工作目录加载最近的会话（流式）
+     */
+    fun loadLatestSessionAsFlow(maxMessages: Int = 50, maxDaysOld: Int = 7): Flow<SDKMessage> {
+        val currentDir = System.getProperty("user.dir") ?: return flow { 
+            emit(SDKMessage(
+                type = MessageType.ERROR,
+                data = MessageData(error = "无法获取当前目录")
+            ))
+        }
+        
+        val sessionFile = getLatestSessionFile(currentDir) ?: return flow {
+            emit(SDKMessage(
+                type = MessageType.ERROR,
+                data = MessageData(error = "未找到会话文件")
+            ))
+        }
+        
+        return loadSessionHistoryAsFlow(sessionFile, maxMessages, maxDaysOld)
+    }
 }

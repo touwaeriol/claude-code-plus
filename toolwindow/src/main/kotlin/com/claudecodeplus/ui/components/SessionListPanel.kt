@@ -117,13 +117,17 @@ fun SessionListPanel(
             )
             
             // 新建会话按钮
+            println("[DEBUG] SessionListPanel - onCreateSession 是否为 null: ${onCreateSession == null}")
             if (onCreateSession != null) {
+                println("[DEBUG] 显示新建会话按钮")
                 DefaultButton(
                     onClick = onCreateSession,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                 ) {
                     Text("+ 新建会话")
                 }
+            } else {
+                println("[DEBUG] 不显示新建会话按钮，因为 onCreateSession 为 null")
             }
             
             // 会话列表
@@ -135,16 +139,16 @@ fun SessionListPanel(
                     var showTooltip by remember { mutableStateOf(false) }
                     
                     // 检查该会话是否已打开标签
-                    val hasOpenTab = openedTabs.any { it.sessionId == session.id }
-                    val isActiveTab = openedTabs.find { it.sessionId == session.id }?.id == activeTabId
-                    val isHovered = hoveredSessionId == session.id
+                    val hasOpenTab = session.id?.let { id -> openedTabs.any { it.sessionId == id } } ?: false
+                    val isActiveTab = session.id?.let { id -> openedTabs.find { it.sessionId == id }?.id == activeTabId } ?: false
+                    val isHovered = session.id?.let { it == hoveredSessionId } ?: false
                     
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .onPointerEvent(PointerEventType.Enter) {
                                 showTooltip = true
-                                onSessionHover?.invoke(session.id)
+                                session.id?.let { onSessionHover?.invoke(it) }
                             }
                             .onPointerEvent(PointerEventType.Exit) {
                                 showTooltip = false
@@ -163,7 +167,7 @@ fun SessionListPanel(
                                     },
                                     onDoubleClick = {
                                         // 双击切换到对应的标签
-                                        val tab = openedTabs.find { it.sessionId == session.id }
+                                        val tab = session.id?.let { id -> openedTabs.find { it.sessionId == id } }
                                         if (tab != null) {
                                             tabManager?.setActiveTab(tab.id)
                                         }

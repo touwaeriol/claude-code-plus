@@ -12,6 +12,5 @@ class AppUiState {
     var isSearchVisible by mutableStateOf(false)
     var isTemplatesVisible by mutableStateOf(false)
     var isExportDialogVisible by mutableStateOf(false)
-    var isNewProjectDialogVisible by mutableStateOf(false)
     var isSettingsVisible by mutableStateOf(false)
 }

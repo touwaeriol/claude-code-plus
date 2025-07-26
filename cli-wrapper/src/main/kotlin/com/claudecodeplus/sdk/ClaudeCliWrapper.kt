@@ -259,6 +259,7 @@ class ClaudeCliWrapper {
         logger.info("🔵 [$requestId] 开始处理 Claude 查询请求")
         logger.info("🔵 [$requestId] 提示词: ${prompt.take(100)}${if(prompt.length > 100) "..." else ""}")
         logger.info("🔵 [$requestId] 选项: $options")
+        logger.info("🔵 [$requestId] 会话ID: ${options.resume ?: "null (新会话)"}")
         
         val args = mutableListOf<String>()
         
@@ -292,15 +293,12 @@ class ClaudeCliWrapper {
         // 对话控制
         options.maxTurns?.let { args.addAll(listOf("--max-turns", it.toString())) }
         
-        // 会话管理（resume 和 continue 是互斥的）
-        when {
-            options.resume != null -> {
-                args.addAll(listOf("--resume", options.resume))
-            }
-            options.continueConversation -> {
-                args.add("--continue")
-            }
+        // 会话管理 - 只在有明确的会话ID时使用 --resume
+        if (options.resume != null && options.resume.isNotBlank()) {
+            args.addAll(listOf("--resume", options.resume))
+            logger.info("🔵 [$requestId] 恢复会话: ${options.resume}")
         }
+        // 不使用 --continue 参数
         
         // 权限控制 - 两个独立的参数
         if (options.dangerouslySkipPermissions) {
@@ -397,7 +395,19 @@ class ClaudeCliWrapper {
             errorReader.useLines { lines ->
                 lines.forEach { line ->
                     errorBuilder.appendLine(line)
-                    logger.warning("Claude CLI stderr: $line")
+                    // 根据错误类型使用不同的日志级别
+                    when {
+                        line.contains("[DEP0190]") -> {
+                            // Node.js 警告，使用 FINE 级别
+                            logger.fine("Node.js deprecation warning: $line")
+                        }
+                        line.contains("error", ignoreCase = true) -> {
+                            logger.severe("Claude CLI error: $line")
+                        }
+                        else -> {
+                            logger.warning("Claude CLI stderr: $line")
+                        }
+                    }
                 }
             }
         }.start()
@@ -521,10 +531,13 @@ class ClaudeCliWrapper {
                                         // 提取会话ID
                                         val sessionId = jsonNode.get("session_id")?.asText()
                                         if (sessionId != null) {
+                                            logger.info("🔵 [$requestId] 新会话已创建，ID: $sessionId")
                                             emit(SDKMessage(
                                                 type = MessageType.START,
                                                 data = MessageData(sessionId = sessionId)
                                             ))
+                                        } else {
+                                            logger.fine("System message without session_id: $jsonNode")
                                         }
                                     }
                                     "result" -> {
@@ -575,7 +588,26 @@ class ClaudeCliWrapper {
             val exitCode = process.waitFor()
             if (exitCode != 0) {
                 val errorMessage = errorBuilder.toString()
-                throw RuntimeException("Claude process exited with code $exitCode. Error: $errorMessage")
+                logger.severe("🔴 [$requestId] Claude CLI 进程异常退出")
+                logger.severe("🔴 [$requestId] 退出码: $exitCode")
+                logger.severe("🔴 [$requestId] 错误输出: $errorMessage")
+                logger.severe("🔴 [$requestId] 命令行参数: ${args.joinToString(" ")}")
+                
+                // 针对特定错误提供更友好的错误信息
+                val friendlyError = when {
+                    errorMessage.contains("[DEP0190]") -> {
+                        "Node.js 安全警告: $errorMessage\n这是 Claude CLI 的警告，不影响正常使用。"
+                    }
+                    errorMessage.contains("ENOENT") || errorMessage.contains("not found") -> {
+                        "找不到 Claude CLI。请确保已安装 @anthropic-ai/claude-code: npm install -g @anthropic-ai/claude-code"
+                    }
+                    errorMessage.contains("CLAUDE_API_KEY") -> {
+                        "未设置 CLAUDE_API_KEY 环境变量。请设置您的 Claude API 密钥。"
+                    }
+                    else -> errorMessage
+                }
+                
+                throw RuntimeException("Claude process exited with code $exitCode. Error: $friendlyError")
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             // 协程被取消，确保进程被终止

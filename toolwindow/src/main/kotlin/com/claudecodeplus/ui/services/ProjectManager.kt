@@ -360,16 +360,24 @@ class ProjectManager {
                     // 尝试获取 content（可能是字符串或数组）
                     val contentElement = messageJson?.get("content")
                     println("  - contentElement 类型: ${contentElement?.javaClass?.simpleName}")
+                    println("  - contentElement 内容: $contentElement")
                     
                     val content = when {
                         contentElement is kotlinx.serialization.json.JsonPrimitive -> {
+                            println("  - 处理 JsonPrimitive 类型")
                             contentElement.content
                         }
                         contentElement is kotlinx.serialization.json.JsonArray -> {
+                            println("  - 处理 JsonArray 类型，数组大小: ${contentElement.size}")
                             // 处理内容数组（如 [{"type":"text","text":"..."}]）
-                            contentElement.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
+                            val firstElement = contentElement.firstOrNull()
+                            println("  - 第一个元素: $firstElement")
+                            firstElement?.jsonObject?.get("text")?.jsonPrimitive?.content
                         }
-                        else -> null
+                        else -> {
+                            println("  - 未知的 content 类型")
+                            null
+                        }
                     }
                     
                     println("  - 提取的 content: '${content?.take(50)}...'")
@@ -488,13 +496,16 @@ class ProjectManager {
                             println("  - 发现纯数字会话名称: '${session.name}' (ID: ${session.id})")
                             
                             // 生成存储路径
-                            val sessionStoragePath = File(System.getProperty("user.home"), ".claude/sessions/${projectId.replace(":", "").replace("/", "_").replace("\\", "_")}")
-                            val sessionFile = File(sessionStoragePath, "${session.id}.jsonl")
+                            val encodedProjectId = encodePathToDirectoryName(projectId)
+                            val basePath = File(System.getProperty("user.home"), ".claude/projects")
+                            val sessionFile = session.id?.let { id ->
+                                File(basePath, "$encodedProjectId/${id}.jsonl")
+                            }
                             
-                            if (sessionFile.exists()) {
+                            if (sessionFile != null && sessionFile.exists()) {
                                 try {
                                     val lines = sessionFile.readLines()
-                                    val newName = generateSessionName(lines, session.id, session.createdAt)
+                                    val newName = generateSessionName(lines, session.id ?: "unknown", session.createdAt)
                                     
                                     // 如果新名称仍然是纯数字，使用默认名称
                                     val finalName = if (newName.matches(Regex("\\d+")) && newName.toIntOrNull()?.let { it in 50..10000 } == true) {
@@ -504,10 +515,10 @@ class ProjectManager {
                                                 val time = session.createdAt.substringAfter("T").substringBefore(".").substringBefore("Z")
                                                 "$date $time"
                                             } catch (e: Exception) {
-                                                session.id.take(8)
+                                                session.id?.take(8) ?: "unknown"
                                             }
                                         } else {
-                                            session.id.take(8)
+                                            session.id?.take(8) ?: "unknown"
                                         }
                                         "会话 $dateTime"
                                     } else {
@@ -523,7 +534,7 @@ class ProjectManager {
                                     println("    - 刷新失败: ${e.message}")
                                 }
                             } else {
-                                println("    - 会话文件不存在: ${sessionFile.absolutePath}")
+                                println("    - 会话文件不存在: ${sessionFile?.absolutePath ?: "无ID"}")
                             }
                         }
                     }
@@ -546,29 +557,34 @@ class ProjectManager {
      * 手动加载当前工作目录的项目和会话
      */
     fun loadCurrentWorkingDirectoryProject() {
+        println("[DEBUG] loadCurrentWorkingDirectoryProject 方法被调用")
         scope.launch {
-            // 硬编码 claude-code-plus 项目路径以确保正确加载
-            val claudeCodePlusPath = "C:/Users/16790/IdeaProjects/claude-code-plus"
-            println("手动加载 claude-code-plus 项目: $claudeCodePlusPath")
+            println("[DEBUG] 在协程中执行 loadCurrentWorkingDirectoryProject")
+            // 获取当前工作目录
+            val currentDir = System.getProperty("user.dir")
+            println("加载当前工作目录项目: $currentDir")
             
             // 清除缓存以强制重新加载
-            _sessions.value = _sessions.value.filterKeys { it != claudeCodePlusPath }.toMap()
+            _sessions.value = _sessions.value.filterKeys { it != currentDir }.toMap()
             
             // 检查是否已经有这个项目
             val existingProject = _projects.value.find { project ->
                 val normalizedProjectPath = project.path.replace('\\', '/')
-                normalizedProjectPath.equals(claudeCodePlusPath, ignoreCase = true)
+                val normalizedCurrentDir = currentDir.replace('\\', '/')
+                normalizedProjectPath.equals(normalizedCurrentDir, ignoreCase = true)
             }
             
             if (existingProject != null) {
-                println("claude-code-plus 项目已存在，直接加载会话")
+                println("项目已存在: ${existingProject.name}")
                 setCurrentProject(existingProject)
             } else {
-                println("claude-code-plus 项目不存在，添加到项目列表")
+                println("项目不存在，添加到项目列表")
+                // 从路径中提取项目名称
+                val projectName = currentDir.substringAfterLast(File.separator)
                 val newProject = Project(
-                    id = claudeCodePlusPath, 
-                    path = claudeCodePlusPath,
-                    name = "claude-code-plus"
+                    id = currentDir, 
+                    path = currentDir,
+                    name = projectName
                 )
                 _projects.value = _projects.value + newProject
                 setCurrentProject(newProject)
@@ -620,9 +636,11 @@ class ProjectManager {
         val encodedProjectId = encodePathToDirectoryName(project.path)
         val basePath = File(System.getProperty("user.home"), ".claude/projects")
         val sessionsDir = File(basePath, encodedProjectId)
-        val sessionFileToDelete = File(sessionsDir, "${session.id}.jsonl")
+        val sessionFileToDelete = session.id?.let { id ->
+            File(sessionsDir, "${id}.jsonl")
+        }
         
-        if (sessionFileToDelete.exists()) {
+        if (sessionFileToDelete != null && sessionFileToDelete.exists()) {
             println("删除会话文件: ${sessionFileToDelete.absolutePath}")
             sessionFileToDelete.delete()
         }
@@ -683,15 +701,7 @@ class ProjectManager {
         // 添加到项目列表
         _projects.value = _projects.value + newProject
         
-        // 创建项目的会话目录
-        val encodedProjectId = encodePathToDirectoryName(path)
-        val basePath = File(System.getProperty("user.home"), ".claude/projects")
-        val projectDir = File(basePath, encodedProjectId)
-        
-        if (!projectDir.exists()) {
-            println("创建会话目录: ${projectDir.absolutePath}")
-            projectDir.mkdirs()
-        }
+        // 不创建任何目录，所有文件操作由Claude CLI负责
         
         // 设置为当前项目
         setCurrentProject(newProject)
@@ -715,12 +725,11 @@ class ProjectManager {
     suspend fun createPlaceholderSession(projectId: String): ProjectSession {
         println("创建新的占位会话: projectId=$projectId")
         
-        val sessionId = java.util.UUID.randomUUID().toString()
         val timestamp = java.time.Instant.now().toString()
         
-        // 创建会话对象
+        // 创建会话对象，id为null表示占位会话
         val newSession = ProjectSession(
-            id = sessionId,
+            id = null, // 占位会话没有真实ID
             projectId = projectId,
             name = "新会话",
             createdAt = timestamp
@@ -734,21 +743,9 @@ class ProjectManager {
         newSessionsMap[projectId] = projectSessions
         _sessions.value = newSessionsMap
         
-        // 创建空的会话文件
-        val encodedProjectId = encodePathToDirectoryName(projectId)
-        val basePath = File(System.getProperty("user.home"), ".claude/projects")
-        val sessionsDir = File(basePath, encodedProjectId)
+        // 不创建任何文件，所有文件操作由Claude CLI负责
         
-        if (!sessionsDir.exists()) {
-            sessionsDir.mkdirs()
-        }
-        
-        val sessionFile = File(sessionsDir, "$sessionId.jsonl")
-        // 写入初始元数据
-        val metadata = """{"type":"metadata","sessionId":"$sessionId","timestamp":"$timestamp","isMeta":true}"""
-        sessionFile.writeText(metadata + "\n")
-        
-        println("创建占位会话成功: $sessionId")
+        println("创建占位会话成功（无ID）")
         return newSession
     }
     
@@ -758,7 +755,7 @@ class ProjectManager {
      * @param projectId 项目ID
      * @param firstMessage 第一条消息内容
      */
-    suspend fun updateSessionName(sessionId: String, projectId: String, firstMessage: String) {
+    suspend fun updateSessionName(sessionId: String?, projectId: String, firstMessage: String) {
         println("更新会话名称: sessionId=$sessionId, firstMessage=${firstMessage.take(50)}...")
         
         val projectSessions = _sessions.value[projectId]?.toMutableList() ?: return
@@ -798,7 +795,7 @@ class ProjectManager {
     /**
      * 更新会话ID（当占位会话获得真实的Claude会话ID时）
      */
-    suspend fun updateSessionId(oldSessionId: String, newSessionId: String, projectId: String) {
+    suspend fun updateSessionId(oldSessionId: String?, newSessionId: String, projectId: String) {
         println("更新会话ID: oldSessionId=$oldSessionId, newSessionId=$newSessionId")
         
         val projectSessions = _sessions.value[projectId]?.toMutableList() ?: return
@@ -813,18 +810,7 @@ class ProjectManager {
             newSessionsMap[projectId] = projectSessions
             _sessions.value = newSessionsMap
             
-            // 重命名会话文件
-            val encodedProjectId = encodePathToDirectoryName(projectId)
-            val basePath = File(System.getProperty("user.home"), ".claude/projects")
-            val sessionsDir = File(basePath, encodedProjectId)
-            
-            val oldFile = File(sessionsDir, "$oldSessionId.jsonl")
-            val newFile = File(sessionsDir, "$newSessionId.jsonl")
-            
-            if (oldFile.exists()) {
-                oldFile.renameTo(newFile)
-                println("会话文件已重命名: $oldSessionId.jsonl -> $newSessionId.jsonl")
-            }
+            // 不进行任何文件操作，所有文件由Claude CLI管理
             
             println("会话ID已更新")
         }

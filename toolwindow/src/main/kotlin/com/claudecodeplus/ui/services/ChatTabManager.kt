@@ -6,6 +6,9 @@ import com.claudecodeplus.ui.models.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import java.io.File
 import java.time.Instant
 import java.util.UUID
 
@@ -112,8 +115,10 @@ class ChatTabManager {
         messages: List<EnhancedMessage>,
         project: com.claudecodeplus.ui.models.Project? = null
     ): String {
-        // 查找是否已有该会话的标签
-        val existingTab = _tabs.find { it.sessionId == session.id }
+        // 查找是否已有该会话的标签（仅当session.id不为null时）
+        val existingTab = session.id?.let { id ->
+            _tabs.find { it.sessionId == id }
+        }
         
         // 将 EnhancedMessage 转换为 ChatMessage
         val chatMessages = messages.map { enhancedMsg ->
@@ -241,6 +246,23 @@ class ChatTabManager {
             _tabs[index] = update(_tabs[index]).copy(lastModified = Instant.now())
             _events.value = TabEvent.TabUpdated(tabId)
         }
+    }
+    
+    /**
+     * 链接Claude会话
+     * 在用户发送第一条消息时调用，关联Claude会话并更新标题
+     */
+    fun linkClaudeSession(tabId: String, sessionId: String, sessionTitle: String? = null) {
+        updateTab(tabId) { tab ->
+            tab.copy(
+                sessionId = sessionId,
+                isClaudeSessionLinked = true,
+                title = sessionTitle ?: tab.title
+            )
+        }
+        
+        // 触发会话链接事件
+        _events.value = TabEvent.SessionLinked(tabId, sessionId)
     }
     
     /**
@@ -456,6 +478,93 @@ class ChatTabManager {
         }
     }
     
+    /**
+     * 加载历史会话到标签（流式）
+     * @param tabId 标签ID
+     * @param sessionFile 会话文件
+     * @param sessionLoader 会话加载器
+     * @return 加载结果流
+     */
+    fun loadSessionHistoryToTab(
+        tabId: String,
+        sessionFile: File,
+        sessionLoader: SessionLoader
+    ): Flow<SessionLoadEvent> = flow {
+        val tab = _tabs.find { it.id == tabId }
+        if (tab == null) {
+            emit(SessionLoadEvent.Error("标签不存在: $tabId"))
+            return@flow
+        }
+        
+        // 清空当前消息
+        updateTab(tabId) { t ->
+            t.copy(
+                messages = emptyList(),
+                status = ChatTab.TabStatus.LOADING
+            )
+        }
+        
+        val loadedMessages = mutableListOf<ChatMessage>()
+        
+        // 使用 SessionLoader 加载历史
+        sessionLoader.loadSessionAsMessageFlow(sessionFile)
+            .collect { result ->
+                when (result) {
+                    is SessionLoader.LoadResult.MessageCompleted -> {
+                        // 转换为 ChatMessage
+                        val chatMessage = ChatMessage(
+                            id = result.message.id,
+                            role = result.message.role,
+                            content = result.message.content,
+                            timestamp = Instant.ofEpochMilli(result.message.timestamp)
+                        )
+                        loadedMessages.add(chatMessage)
+                        
+                        // 实时更新标签消息
+                        updateTab(tabId) { t ->
+                            t.copy(messages = loadedMessages.toList())
+                        }
+                        
+                        emit(SessionLoadEvent.MessageLoaded(result.message))
+                    }
+                    
+                    is SessionLoader.LoadResult.MessageUpdated -> {
+                        // 对于流式更新，可以选择性地更新最后一条消息
+                        emit(SessionLoadEvent.MessageUpdated(result.message))
+                    }
+                    
+                    is SessionLoader.LoadResult.LoadComplete -> {
+                        // 加载完成
+                        updateTab(tabId) { t ->
+                            t.copy(
+                                messages = loadedMessages.toList(),
+                                status = ChatTab.TabStatus.ACTIVE
+                            )
+                        }
+                        emit(SessionLoadEvent.LoadComplete(result.messages))
+                    }
+                    
+                    is SessionLoader.LoadResult.Error -> {
+                        // 错误处理
+                        updateTab(tabId) { t ->
+                            t.copy(status = ChatTab.TabStatus.ERROR)
+                        }
+                        emit(SessionLoadEvent.Error(result.error))
+                    }
+                }
+            }
+    }
+    
+    /**
+     * 会话加载事件
+     */
+    sealed class SessionLoadEvent {
+        data class MessageLoaded(val message: EnhancedMessage) : SessionLoadEvent()
+        data class MessageUpdated(val message: EnhancedMessage) : SessionLoadEvent()
+        data class LoadComplete(val messages: List<EnhancedMessage>) : SessionLoadEvent()
+        data class Error(val error: String) : SessionLoadEvent()
+    }
+    
     sealed class TabEvent {
         data class TabCreated(val tabId: String) : TabEvent()
         data class TabClosed(val tabId: String) : TabEvent()
@@ -464,6 +573,7 @@ class ChatTabManager {
         data class CloseConfirmationNeeded(val tabId: String) : TabEvent()
         data class SessionSwitchRequested(val sessionId: String) : TabEvent()
         data class TabTitleUpdateRequested(val tabId: String, val newTitle: String) : TabEvent()
+        data class SessionLinked(val tabId: String, val sessionId: String) : TabEvent()
     }
 }
 

@@ -47,6 +47,9 @@ dependencies {
     // Gson for JSON parsing
     implementation("com.google.code.gson:gson:2.10.1")
     
+    // Mordant for ANSI text parsing and rendering
+    implementation("com.github.ajalt.mordant:mordant:2.2.0")
+    
     // 测试依赖
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:1.13.8")

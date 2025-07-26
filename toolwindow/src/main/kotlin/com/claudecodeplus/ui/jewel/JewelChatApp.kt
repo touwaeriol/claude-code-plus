@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.DefaultButton
 import org.jetbrains.jewel.ui.component.Text
@@ -24,6 +25,8 @@ import org.jetbrains.jewel.ui.Orientation
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.claudecodeplus.ui.services.SessionHistoryService
+import com.claudecodeplus.ui.services.SessionLoader
+import com.claudecodeplus.ui.services.MessageProcessor
 
 /**
  * Jewel 聊天应用主组件
@@ -51,22 +54,48 @@ fun JewelChatApp(
     
     val scope = rememberCoroutineScope()
     val sessionHistoryService = remember { SessionHistoryService() }
+    val messageProcessor = remember { MessageProcessor() }
+    val sessionLoader = remember { SessionLoader(sessionHistoryService, messageProcessor) }
     
-    // 启动时加载历史会话
+    // 启动时加载历史会话（使用流式加载）
     LaunchedEffect(Unit) {
         scope.launch(Dispatchers.IO) {
             try {
-                // 加载最近50条消息，最多7天内的
-                val historicalMessages = sessionHistoryService.loadLatestSession(
-                    maxMessages = 50,
-                    maxDaysOld = 7
-                )
-                if (historicalMessages.isNotEmpty()) {
-                    messages = historicalMessages
-                    // 成功加载 ${historicalMessages.size} 条历史消息
+                // 获取最近的会话文件
+                val sessionFile = sessionHistoryService.getLatestSessionFile(workingDirectory)
+                if (sessionFile != null) {
+                    // 使用流式加载
+                    sessionLoader.loadSessionAsMessageFlow(sessionFile, maxMessages = 50)
+                        .collect { result ->
+                            when (result) {
+                                is SessionLoader.LoadResult.MessageCompleted -> {
+                                    // 每完成一条消息就更新UI
+                                    withContext(Dispatchers.Main) {
+                                        messages = messages + result.message
+                                    }
+                                }
+                                is SessionLoader.LoadResult.LoadComplete -> {
+                                    // 加载完成
+                                    println("历史会话加载完成，共 ${result.messages.size} 条消息")
+                                }
+                                is SessionLoader.LoadResult.Error -> {
+                                    println("加载历史会话出错: ${result.error}")
+                                }
+                                else -> {}
+                            }
+                        }
+                } else {
+                    // 使用旧方法作为后备
+                    val historicalMessages = sessionHistoryService.loadLatestSession(
+                        maxMessages = 50,
+                        maxDaysOld = 7
+                    )
+                    if (historicalMessages.isNotEmpty()) {
+                        messages = historicalMessages
+                    }
                 }
             } catch (e: Exception) {
-                // 加载历史会话失败: ${e.message}
+                println("加载历史会话失败: ${e.message}")
             }
         }
     }
@@ -275,11 +304,12 @@ private fun sendMessage(
             val userMessage = EnhancedMessage(
                 id = generateMessageId(),
                 role = MessageRole.USER,
-                content = messageWithContext,
+                content = inputText,  // 使用原始输入文本，不包含上下文标记
                 timestamp = System.currentTimeMillis(),
                 status = MessageStatus.COMPLETE,
                 isError = false,
-                model = selectedModel
+                model = selectedModel,
+                contexts = contexts  // 上下文单独保存
             )
             
             val currentMessagesMutable = currentMessages.toMutableList()
@@ -309,10 +339,10 @@ private fun sendMessage(
             
             // 启动消息流
             val messageFlow = cliWrapper.query(
-                prompt = inputText,
+                prompt = messageWithContext,  // 使用包含上下文的完整消息
                 options = ClaudeCliWrapper.QueryOptions(
                     model = selectedModel.cliName,
-                    resume = currentSessionId,
+                    resume = currentSessionId,  // 新建会话时为null是正常的
                     cwd = workingDirectory
                 )
             )

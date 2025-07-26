@@ -11,6 +11,7 @@ data class ChatTab(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
     val sessionId: String? = null,
+    val isClaudeSessionLinked: Boolean = false,  // 是否已关联Claude会话
     val projectId: String? = null,
     val projectName: String? = null,
     val projectPath: String? = null,
@@ -27,7 +28,9 @@ data class ChatTab(
         ACTIVE,
         INTERRUPTED,
         COMPLETED,
-        ARCHIVED
+        ARCHIVED,
+        LOADING,
+        ERROR
     }
 }
 

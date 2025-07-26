@@ -7,8 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.*
-import com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay
-import com.claudecodeplus.ui.jewel.components.tools.TodoListDisplay
+import com.claudecodeplus.ui.jewel.components.tools.SmartToolCallDisplay
 import com.claudecodeplus.ui.jewel.components.tools.JumpingDots
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
@@ -50,62 +49,78 @@ fun AssistantMessageDisplay(
         
         // 按时间顺序显示消息元素
         if (message.orderedElements.isNotEmpty()) {
+            // 收集所有工具调用以便批量显示
+            val toolCalls = mutableListOf<ToolCall>()
+            val contentItems = mutableListOf<MessageTimelineItem.ContentItem>()
+            
             message.orderedElements.forEach { element ->
                 when (element) {
                     is MessageTimelineItem.ToolCallItem -> {
-                        // 使用新的紧凑工具调用显示
-                        if (element.toolCall.name.contains("TodoWrite", ignoreCase = true)) {
-                            // TodoWrite 使用专属展示
-                            TodoListDisplay(
-                                toolCall = element.toolCall,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        } else {
-                            // 其他工具使用紧凑展示
-                            CompactToolCallDisplay(
-                                toolCalls = listOf(element.toolCall),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
+                        toolCalls.add(element.toolCall)
                     }
                     is MessageTimelineItem.ContentItem -> {
-                        if (element.content.isNotBlank()) {
-                            MarkdownRenderer(
-                                markdown = element.content,
+                        // 如果之前有工具调用，先显示它们
+                        if (toolCalls.isNotEmpty()) {
+                            SmartToolCallDisplay(
+                                toolCalls = toolCalls.toList(),
                                 modifier = Modifier.fillMaxWidth()
                             )
+                            toolCalls.clear()
                         }
+                        contentItems.add(element)
                     }
                     is MessageTimelineItem.StatusItem -> {
+                        // 如果之前有工具调用，先显示它们
+                        if (toolCalls.isNotEmpty()) {
+                            SmartToolCallDisplay(
+                                toolCalls = toolCalls.toList(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            toolCalls.clear()
+                        }
+                        // 显示之前的内容
+                        contentItems.forEach { item ->
+                            if (item.content.isNotBlank()) {
+                                MarkdownRenderer(
+                                    markdown = item.content,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                        contentItems.clear()
+                        
                         if (element.isStreaming) {
                             StreamingIndicator(status = element.status)
                         }
                     }
                 }
             }
+            
+            // 显示剩余的工具调用
+            if (toolCalls.isNotEmpty()) {
+                SmartToolCallDisplay(
+                    toolCalls = toolCalls,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            
+            // 显示剩余的内容
+            contentItems.forEach { item ->
+                if (item.content.isNotBlank()) {
+                    MarkdownRenderer(
+                        markdown = item.content,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
         } else {
             // 向后兼容：如果没有 orderedElements，使用旧的显示方式
-            // 先显示工具调用
+            // 使用智能工具调用显示
             if (message.toolCalls.isNotEmpty()) {
-                // 将工具按类型分组
-                val todoToolCalls = message.toolCalls.filter { it.name.contains("TodoWrite", ignoreCase = true) }
-                val otherToolCalls = message.toolCalls.filter { !it.name.contains("TodoWrite", ignoreCase = true) }
-                
-                // 显示 TodoWrite 工具
-                todoToolCalls.forEach { toolCall ->
-                    TodoListDisplay(
-                        toolCall = toolCall,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                
-                // 显示其他工具
-                if (otherToolCalls.isNotEmpty()) {
-                    CompactToolCallDisplay(
-                        toolCalls = otherToolCalls,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                SmartToolCallDisplay(
+                    toolCalls = message.toolCalls,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
             
             // 然后显示消息内容
