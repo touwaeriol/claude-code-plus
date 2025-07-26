@@ -794,4 +794,39 @@ class ProjectManager {
             else -> cleanContent.take(47) + "..."
         }
     }
+    
+    /**
+     * 更新会话ID（当占位会话获得真实的Claude会话ID时）
+     */
+    suspend fun updateSessionId(oldSessionId: String, newSessionId: String, projectId: String) {
+        println("更新会话ID: oldSessionId=$oldSessionId, newSessionId=$newSessionId")
+        
+        val projectSessions = _sessions.value[projectId]?.toMutableList() ?: return
+        val sessionIndex = projectSessions.indexOfFirst { it.id == oldSessionId }
+        
+        if (sessionIndex >= 0) {
+            val session = projectSessions[sessionIndex]
+            // 更新会话ID
+            projectSessions[sessionIndex] = session.copy(id = newSessionId)
+            
+            val newSessionsMap = _sessions.value.toMutableMap()
+            newSessionsMap[projectId] = projectSessions
+            _sessions.value = newSessionsMap
+            
+            // 重命名会话文件
+            val encodedProjectId = encodePathToDirectoryName(projectId)
+            val basePath = File(System.getProperty("user.home"), ".claude/projects")
+            val sessionsDir = File(basePath, encodedProjectId)
+            
+            val oldFile = File(sessionsDir, "$oldSessionId.jsonl")
+            val newFile = File(sessionsDir, "$newSessionId.jsonl")
+            
+            if (oldFile.exists()) {
+                oldFile.renameTo(newFile)
+                println("会话文件已重命名: $oldSessionId.jsonl -> $newSessionId.jsonl")
+            }
+            
+            println("会话ID已更新")
+        }
+    }
 }

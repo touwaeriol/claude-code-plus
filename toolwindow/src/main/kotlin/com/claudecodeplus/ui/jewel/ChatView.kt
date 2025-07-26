@@ -310,16 +310,17 @@ fun ChatView(
                                     is ClaudeCliWrapper.StreamResponse.SessionStart -> {
                                         // 新会话创建，保存会话ID
                                         if (currentSessionId == null || isPlaceholderSession) {
-                                            // 如果是占位会话，需要删除旧的占位会话文件
-                                            if (isPlaceholderSession && currentSessionId != null && projectManager != null && currentProject != null) {
-                                                val oldSessionId = currentSessionId
+                                            val oldSessionId = currentSessionId
+                                            
+                                            // 如果是占位会话，更新会话ID而不是删除
+                                            if (isPlaceholderSession && oldSessionId != null && projectManager != null && currentProject != null) {
                                                 coroutineScope.launch {
-                                                    // 删除占位会话
-                                                    val sessions = projectManager.sessions.value[currentProject.id]
-                                                    val placeholderSession = sessions?.find { it.id == oldSessionId }
-                                                    if (placeholderSession != null) {
-                                                        projectManager.deleteSession(placeholderSession, currentProject)
-                                                    }
+                                                    // 更新占位会话的ID为真实的Claude会话ID
+                                                    projectManager.updateSessionId(
+                                                        oldSessionId = oldSessionId,
+                                                        newSessionId = response.sessionId,
+                                                        projectId = currentProject.id
+                                                    )
                                                 }
                                             }
                                             
