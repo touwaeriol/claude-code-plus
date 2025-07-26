@@ -331,10 +331,18 @@ fun EnhancedClaudeApp() {
                         onSessionSelect = { session -> projectManager.setCurrentSession(session) },
                         onSessionHover = { sessionId -> hoveredSessionId = sessionId },
                         onCreateSession = { 
-                            tabManager.createNewTab(
-                                title = "新对话",
-                                project = project
-                            )
+                            scope.launch {
+                                // 创建占位会话
+                                val newSession = projectManager.createPlaceholderSession(project.id)
+                                // 创建新标签并关联会话
+                                tabManager.createNewTab(
+                                    title = newSession.name,
+                                    sessionId = newSession.id,
+                                    project = project
+                                )
+                                // 设置为当前会话
+                                projectManager.setCurrentSession(newSession, loadHistory = false)
+                            }
                         },
                         modifier = Modifier.fillMaxHeight()
                     )
@@ -349,6 +357,7 @@ fun EnhancedClaudeApp() {
                     fileIndexService = fileIndexService,
                     projectService = projectService,
                     sessionManager = sessionManager,
+                    projectManager = projectManager,
                     onTabHover = { sessionId -> hoveredSessionId = sessionId },
                     modifier = Modifier.weight(1f)
                 )

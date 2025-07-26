@@ -46,6 +46,7 @@ fun MultiTabChatView(
     fileIndexService: FileIndexService,
     projectService: ProjectService,
     sessionManager: ClaudeSessionManager,
+    projectManager: com.claudecodeplus.ui.services.ProjectManager? = null,
     onTabHover: ((String?) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -89,6 +90,7 @@ fun MultiTabChatView(
                                     name = tab.projectName ?: tab.projectId.substringAfterLast("/")
                                 )
                             } else null,
+                            projectManager = projectManager,
                             modifier = Modifier.fillMaxSize()
                         )
                         

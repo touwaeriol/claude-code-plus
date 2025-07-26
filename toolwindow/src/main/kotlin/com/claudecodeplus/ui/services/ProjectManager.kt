@@ -706,4 +706,92 @@ class ProjectManager {
         
         return newProject
     }
+    
+    /**
+     * 创建新的占位会话
+     * @param projectId 项目ID
+     * @return 创建的会话对象
+     */
+    suspend fun createPlaceholderSession(projectId: String): ProjectSession {
+        println("创建新的占位会话: projectId=$projectId")
+        
+        val sessionId = java.util.UUID.randomUUID().toString()
+        val timestamp = java.time.Instant.now().toString()
+        
+        // 创建会话对象
+        val newSession = ProjectSession(
+            id = sessionId,
+            projectId = projectId,
+            name = "新会话",
+            createdAt = timestamp
+        )
+        
+        // 添加到会话列表
+        val projectSessions = _sessions.value[projectId]?.toMutableList() ?: mutableListOf()
+        projectSessions.add(0, newSession) // 添加到列表开头
+        
+        val newSessionsMap = _sessions.value.toMutableMap()
+        newSessionsMap[projectId] = projectSessions
+        _sessions.value = newSessionsMap
+        
+        // 创建空的会话文件
+        val encodedProjectId = encodePathToDirectoryName(projectId)
+        val basePath = File(System.getProperty("user.home"), ".claude/projects")
+        val sessionsDir = File(basePath, encodedProjectId)
+        
+        if (!sessionsDir.exists()) {
+            sessionsDir.mkdirs()
+        }
+        
+        val sessionFile = File(sessionsDir, "$sessionId.jsonl")
+        // 写入初始元数据
+        val metadata = """{"type":"metadata","sessionId":"$sessionId","timestamp":"$timestamp","isMeta":true}"""
+        sessionFile.writeText(metadata + "\n")
+        
+        println("创建占位会话成功: $sessionId")
+        return newSession
+    }
+    
+    /**
+     * 更新会话名称（根据第一条消息）
+     * @param sessionId 会话ID
+     * @param projectId 项目ID
+     * @param firstMessage 第一条消息内容
+     */
+    suspend fun updateSessionName(sessionId: String, projectId: String, firstMessage: String) {
+        println("更新会话名称: sessionId=$sessionId, firstMessage=${firstMessage.take(50)}...")
+        
+        val projectSessions = _sessions.value[projectId]?.toMutableList() ?: return
+        val sessionIndex = projectSessions.indexOfFirst { it.id == sessionId }
+        
+        if (sessionIndex >= 0) {
+            val session = projectSessions[sessionIndex]
+            val newName = generateSessionNameFromContent(firstMessage)
+            
+            // 更新会话名称
+            projectSessions[sessionIndex] = session.copy(name = newName)
+            
+            val newSessionsMap = _sessions.value.toMutableMap()
+            newSessionsMap[projectId] = projectSessions
+            _sessions.value = newSessionsMap
+            
+            println("会话名称已更新: '$newName'")
+        }
+    }
+    
+    /**
+     * 从内容生成会话名称（简化版）
+     */
+    private fun generateSessionNameFromContent(content: String): String {
+        val cleanContent = content.trim()
+            .replace("\n", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        
+        return when {
+            cleanContent.isEmpty() -> "新会话"
+            cleanContent.length <= 50 -> cleanContent
+            else -> cleanContent.take(47) + "..."
+        }
+    }
 }

@@ -37,6 +37,7 @@ fun ChatView(
     tabManager: com.claudecodeplus.ui.services.ChatTabManager? = null,
     currentTabId: String? = null,
     currentProject: com.claudecodeplus.ui.models.Project? = null,
+    projectManager: com.claudecodeplus.ui.services.ProjectManager? = null,
     modifier: Modifier = Modifier
 ) {
     // 状态管理
@@ -299,6 +300,25 @@ fun ChatView(
                                                 // 更新标签的会话ID
                                                 tabManager.updateTab(currentTabId) { tab ->
                                                     tab.copy(sessionId = response.sessionId)
+                                                }
+                                            }
+                                        } else if (messages.size <= 1 && projectManager != null && currentProject != null && currentSessionId != null) {
+                                            // 如果是占位会话的第一条消息，更新会话名称
+                                            val sessionIdCopy = currentSessionId!!
+                                            coroutineScope.launch {
+                                                projectManager.updateSessionName(
+                                                    sessionId = sessionIdCopy,
+                                                    projectId = currentProject.id,
+                                                    firstMessage = markdownText
+                                                )
+                                                
+                                                // 同时更新标签标题
+                                                if (tabManager != null && currentTabId != null) {
+                                                    tabManager.updateTabTitleFromFirstMessage(
+                                                        tabId = currentTabId,
+                                                        messageContent = markdownText,
+                                                        project = currentProject
+                                                    )
                                                 }
                                             }
                                         }
