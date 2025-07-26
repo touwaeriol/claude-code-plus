@@ -153,5 +153,6 @@ data class ProjectSession(
     val id: String?, // 会话ID，新建会话时为null，发送第一条消息后由Claude CLI返回真实ID
     val projectId: String,
     val name: String,
-    val createdAt: String
+    val createdAt: String,
+    val lastModified: Long = System.currentTimeMillis() // 最后修改时间（毫秒时间戳）
 )

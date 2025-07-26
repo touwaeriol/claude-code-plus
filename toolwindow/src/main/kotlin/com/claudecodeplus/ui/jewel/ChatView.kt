@@ -304,7 +304,8 @@ fun ChatView(
                             
                             cliWrapper.sendMessage(
                                 message = markdownText,
-                                sessionId = if (useResume) currentSessionId else null
+                                sessionId = if (useResume) currentSessionId else null,
+                                cwd = workingDirectory
                             ).collect { response ->
                                 when (response) {
                                     is ClaudeCliWrapper.StreamResponse.SessionStart -> {

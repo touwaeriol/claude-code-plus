@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import javax.swing.JFileChooser
 import java.io.File
+import org.jetbrains.jewel.ui.component.CircularProgressIndicator
 
 /**
  * Claude Code Plus 桌面应用主函数
@@ -398,7 +399,8 @@ fun EnhancedClaudeApp() {
 
                 // 只显示当前项目的会话
                 println("[DEBUG] SessionListPanel - currentProject: ${currentProject?.id} (${currentProject?.name})")
-                currentProject?.let { project ->
+                val project = currentProject
+                if (project != null) {
                     println("[DEBUG] 创建 SessionListPanel - project: ${project.id}, onCreateSession 不为 null: ${true}")
                     SessionListPanel(
                         projectManager = projectManager,
@@ -427,6 +429,28 @@ fun EnhancedClaudeApp() {
                             .width(280.dp) // 固定宽度，更适合会话列表
                     )
 
+                    Divider(orientation = Orientation.Vertical)
+                } else {
+                    // 项目加载中的占位面板
+                    Column(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(280.dp)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            "正在加载项目...",
+                            style = JewelTheme.defaultTextStyle,
+                            color = JewelTheme.globalColors.text.disabled
+                        )
+                    }
+                    
                     Divider(orientation = Orientation.Vertical)
                 }
 

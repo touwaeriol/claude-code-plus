@@ -40,42 +40,18 @@ class MessageProcessor {
             }
             
             MessageType.TOOL_USE -> {
-                val toolCall = ToolCall(
-                    id = UUID.randomUUID().toString(),
-                    name = sdkMessage.data.toolName ?: "unknown",
-                    displayName = sdkMessage.data.toolName ?: "unknown",
-                    parameters = sdkMessage.data.toolInput as? Map<String, Any> ?: emptyMap(),
-                    status = ToolCallStatus.RUNNING,
-                    startTime = System.currentTimeMillis()
-                )
-                toolCalls.add(toolCall)
-                
-                ProcessResult.Updated(
-                    currentMessage.copy(
-                        content = responseBuilder.toString(),
-                        toolCalls = toolCalls.toList()
+                // 只有在 Claude 提供了 toolCallId 时才创建 ToolCall
+                val toolCallId = sdkMessage.data.toolCallId
+                if (toolCallId != null) {
+                    val toolCall = ToolCall(
+                        id = toolCallId,
+                        name = sdkMessage.data.toolName ?: "unknown",
+                        displayName = sdkMessage.data.toolName ?: "unknown",
+                        parameters = sdkMessage.data.toolInput as? Map<String, Any> ?: emptyMap(),
+                        status = ToolCallStatus.RUNNING,
+                        startTime = System.currentTimeMillis()
                     )
-                )
-            }
-            
-            MessageType.TOOL_RESULT -> {
-                // 更新最后一个工具调用的结果
-                val lastToolCall = toolCalls.lastOrNull()
-                if (lastToolCall != null) {
-                    val updatedToolCall = lastToolCall.copy(
-                        status = ToolCallStatus.SUCCESS,
-                        result = if (sdkMessage.data.error != null) {
-                            ToolResult.Failure(
-                                error = sdkMessage.data.error ?: "Unknown error"
-                            )
-                        } else {
-                            ToolResult.Success(
-                                output = sdkMessage.data.toolResult?.toString() ?: ""
-                            )
-                        },
-                        endTime = System.currentTimeMillis()
-                    )
-                    toolCalls[toolCalls.lastIndex] = updatedToolCall
+                    toolCalls.add(toolCall)
                     
                     ProcessResult.Updated(
                         currentMessage.copy(
@@ -84,6 +60,48 @@ class MessageProcessor {
                         )
                     )
                 } else {
+                    // 如果没有 toolCallId，记录警告但不创建 ToolCall
+                    println("WARNING: Tool use without id: ${sdkMessage.data.toolName}")
+                    ProcessResult.NoChange
+                }
+            }
+            
+            MessageType.TOOL_RESULT -> {
+                // 通过 toolCallId 查找对应的工具调用
+                val toolCallId = sdkMessage.data.toolCallId
+                if (toolCallId != null) {
+                    // 查找匹配的工具调用
+                    val toolCallIndex = toolCalls.indexOfFirst { it.id == toolCallId }
+                    if (toolCallIndex >= 0) {
+                        val toolCall = toolCalls[toolCallIndex]
+                        val updatedToolCall = toolCall.copy(
+                            status = if (sdkMessage.data.error != null) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
+                            result = if (sdkMessage.data.error != null) {
+                                ToolResult.Failure(
+                                    error = sdkMessage.data.error ?: "Unknown error"
+                                )
+                            } else {
+                                ToolResult.Success(
+                                    output = sdkMessage.data.toolResult?.toString() ?: ""
+                                )
+                            },
+                            endTime = System.currentTimeMillis()
+                        )
+                        toolCalls[toolCallIndex] = updatedToolCall
+                        
+                        ProcessResult.Updated(
+                            currentMessage.copy(
+                                content = responseBuilder.toString(),
+                                toolCalls = toolCalls.toList()
+                            )
+                        )
+                    } else {
+                        // 如果找不到匹配的工具调用，静默忽略
+                        ProcessResult.NoChange
+                    }
+                } else {
+                    // 如果没有 toolCallId，这是一个错误情况
+                    println("ERROR: Tool result without toolCallId")
                     ProcessResult.NoChange
                 }
             }

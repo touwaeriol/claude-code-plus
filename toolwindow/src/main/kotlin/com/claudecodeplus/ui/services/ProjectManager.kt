@@ -41,33 +41,122 @@ class ProjectManager {
     init {
         loadProjectsFromDisk()
     }
+    
+    /**
+     * 查找所有项目中最新修改的会话
+     */
+    private suspend fun findAndSelectLatestSession() {
+        println("开始查找所有项目中最新修改的会话...")
+        
+        var latestSession: ProjectSession? = null
+        var latestProject: Project? = null
+        var latestModifiedTime = 0L
+        
+        // 遍历所有项目，查找最新的会话
+        for (project in _projects.value) {
+            // 确保会话已加载
+            if (!_sessions.value.containsKey(project.id)) {
+                loadSessionsForProject(project.id, forceReload = true)
+                // 等待加载完成
+                kotlinx.coroutines.delay(100)
+            }
+            
+            val projectSessions = _sessions.value[project.id] ?: emptyList()
+            val latestInProject = projectSessions.firstOrNull() // 已按时间排序
+            
+            if (latestInProject != null && latestInProject.lastModified > latestModifiedTime) {
+                latestSession = latestInProject
+                latestProject = project
+                latestModifiedTime = latestInProject.lastModified
+            }
+        }
+        
+        // 如果找到了最新会话，切换到对应的项目和会话
+        if (latestSession != null && latestProject != null) {
+            println("找到最新会话: ${latestSession.name} in ${latestProject.name}")
+            println("最后修改时间: ${java.time.Instant.ofEpochMilli(latestSession.lastModified)}")
+            
+            _currentProject.value = latestProject
+            setCurrentSession(latestSession, loadHistory = true)
+        } else {
+            println("未找到任何会话")
+        }
+    }
 
     private fun loadProjectsFromDisk() {
         scope.launch {
-            val projectsFile = File(System.getProperty("user.home"), ".claude.json")
-            println("加载项目配置文件: ${projectsFile.absolutePath}")
-            println("配置文件是否存在: ${projectsFile.exists()}")
+            val claudeProjectsDir = File(System.getProperty("user.home"), ".claude/projects")
+            println("扫描Claude项目目录: ${claudeProjectsDir.absolutePath}")
+            println("目录是否存在: ${claudeProjectsDir.exists()}")
             
-            if (projectsFile.exists()) {
+            if (claudeProjectsDir.exists() && claudeProjectsDir.isDirectory) {
                 try {
-                    val configJson = projectsFile.readText()
-                    println("配置文件内容长度: ${configJson.length}")
+                    val projectDirs = claudeProjectsDir.listFiles { file -> file.isDirectory } ?: emptyArray()
+                    println("找到 ${projectDirs.size} 个目录")
                     
-                    // 尝试解析项目路径，即使完整配置解析失败
-                    val projectPaths = extractProjectPaths(configJson)
-                    if (projectPaths.isNotEmpty()) {
-                        println("找到 ${projectPaths.size} 个项目路径")
-                        val loadedProjects = projectPaths.map { path ->
-                            println("加载项目: $path")
-                            Project(id = path, path = path)
+                    val loadedProjects = mutableListOf<Project>()
+                    
+                    // 遍历每个目录，查找包含会话文件的项目
+                    for (projectDir in projectDirs) {
+                        val sessionFiles = projectDir.listFiles { file -> file.name.endsWith(".jsonl") } ?: emptyArray()
+                        
+                        if (sessionFiles.isNotEmpty()) {
+                            println("在 ${projectDir.name} 中找到 ${sessionFiles.size} 个会话文件")
+                            
+                            // 从会话文件中提取 cwd
+                            var projectPath: String? = null
+                            
+                            // 遍历会话文件，查找 cwd
+                            var foundCwd = false
+                            for (sessionFile in sessionFiles) {
+                                if (foundCwd) break
+                                
+                                try {
+                                    sessionFile.forEachLine { line ->
+                                        if (line.isBlank()) return@forEachLine
+                                        
+                                        try {
+                                            val jsonObject = json.parseToJsonElement(line).jsonObject
+                                            val cwd = jsonObject["cwd"]?.jsonPrimitive?.content
+                                            
+                                            if (cwd != null) {
+                                                projectPath = cwd
+                                                println("从 ${sessionFile.name} 中找到 cwd: $cwd")
+                                                foundCwd = true
+                                                return@forEachLine
+                                            }
+                                        } catch (e: Exception) {
+                                            // 忽略解析错误的行
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    println("读取会话文件失败: ${sessionFile.name}, 错误: ${e.message}")
+                                }
+                            }
+                            
+                            // 如果找到了项目路径，创建项目对象
+                            val foundProjectPath = projectPath
+                            if (foundProjectPath != null) {
+                                val project = Project(
+                                    id = foundProjectPath,
+                                    path = foundProjectPath,
+                                    name = foundProjectPath.substringAfterLast(File.separator)
+                                )
+                                loadedProjects.add(project)
+                                println("添加项目: ${project.name} (${project.path})")
+                            } else {
+                                println("警告：${projectDir.name} 中的会话文件没有包含 cwd 信息")
+                            }
                         }
+                    }
+                    
+                    if (loadedProjects.isNotEmpty()) {
                         _projects.value = loadedProjects
                         
                         // 优先选择当前工作目录的项目
                         val currentDir = System.getProperty("user.dir")
                         println("当前工作目录: $currentDir")
                         
-                        // 查找匹配的项目，考虑路径格式差异
                         val currentProject = loadedProjects.find { project ->
                             val normalizedProjectPath = project.path.replace('/', '\\')
                             val normalizedCurrentDir = currentDir.replace('/', '\\')
@@ -75,104 +164,48 @@ class ProjectManager {
                         } ?: loadedProjects.firstOrNull()
                         
                         if (currentProject != null) {
-                            println("找到匹配的当前项目: ${currentProject.id}")
+                            println("找到匹配的当前项目: ${currentProject.name}")
                         } else {
                             println("未找到匹配的当前项目，使用第一个项目")
                         }
                         
                         _currentProject.value = currentProject
                         
-                        // 自动加载当前项目的会话
-                        currentProject?.let { 
-                            println("自动加载当前项目的会话: ${it.id}")
-                            loadSessionsForProject(it.id) 
+                        // 加载所有项目的会话
+                        println("开始加载所有项目的会话...")
+                        loadedProjects.forEach { project ->
+                            loadSessionsForProject(project.id)
                         }
+                        
+                        // 延迟执行，确保会话加载完成
+                        kotlinx.coroutines.delay(500)
+                        findAndSelectLatestSession()
                     } else {
-                        println("无法从配置文件中提取项目路径")
-                        loadDefaultProject()
+                        println("没有找到有效的项目")
+                        // 不自动创建默认项目，等待用户手动创建
+                        _projects.value = emptyList()
+                        _currentProject.value = null
                     }
                 } catch (e: Exception) {
-                    // 在这里添加更明确的日志，以便调试
-                    println("Failed to load or parse .claude.json: ${e.message}")
+                    println("加载项目失败: ${e.message}")
                     e.printStackTrace()
-                    
-                    // 如果配置文件解析失败，至少加载当前项目
-                    loadDefaultProject()
+                    _projects.value = emptyList()
+                    _currentProject.value = null
                 }
             } else {
-                println("配置文件不存在")
-                // 如果配置文件不存在，加载当前项目
-                loadDefaultProject()
+                println("Claude项目目录不存在")
+                _projects.value = emptyList()
+                _currentProject.value = null
             }
         }
     }
 
-    private fun extractProjectPaths(jsonContent: String): List<String> {
-        // 使用正则表达式从 JSON 中提取项目路径
-        val projectPaths = mutableListOf<String>()
-        try {
-            // 尝试使用 Json 库只解析 projects 部分
-            val jsonElement = json.parseToJsonElement(jsonContent)
-            val jsonObject = jsonElement.jsonObject
-            val projectsElement = jsonObject["projects"]
-            if (projectsElement != null) {
-                val projectsObject = projectsElement.jsonObject
-                projectPaths.addAll(projectsObject.keys)
-            }
-        } catch (e: Exception) {
-            println("使用 JSON 解析失败，尝试正则表达式提取: ${e.message}")
-            // 如果 JSON 解析失败，使用正则表达式作为备用方案
-            val regex = """"C:/[^"]+"""".toRegex()
-            val matches = regex.findAll(jsonContent)
-            matches.forEach { match ->
-                val path = match.value.trim('"')
-                if (path.contains("IdeaProjects") && !projectPaths.contains(path)) {
-                    projectPaths.add(path)
-                }
-            }
-        }
-        return projectPaths
-    }
-    
-    private fun loadDefaultProject() {
-        // 获取当前工作目录作为默认项目
-        val currentDir = System.getProperty("user.dir")
-        println("加载默认项目: $currentDir")
-        
-        val project = Project(id = currentDir, path = currentDir)
-        _projects.value = listOf(project)
-        _currentProject.value = project
-        
-        // 加载项目的会话
-        loadSessionsForProject(project.id)
-    }
     
     private fun encodePathToDirectoryName(path: String): String {
         // 使用统一的路径编码方法，与OptimizedSessionManager保持一致
         return com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(path)
     }
 
-    fun findProjectForSession(sessionDirName: String): Project? {
-        // 优先使用新格式进行匹配
-        val projectByNewFormat = projects.value.find { project ->
-            encodePathToDirectoryName(project.path) == sessionDirName
-        }
-        if (projectByNewFormat != null) {
-            return projectByNewFormat
-        }
-
-        // 如果新格式未找到，则尝试匹配旧格式
-        return projects.value.find { project ->
-            // 旧格式 1: 移除了开头的 "-"
-            val oldEncodedPath = project.path.replace(File.separator, "-").let {
-                if (it.startsWith("-")) it.substring(1) else it
-            }
-            // 旧格式 2: 保留了开头的 "-"
-            val oldEncodedPathWithLeadingDash = project.path.replace(File.separator, "-")
-
-            oldEncodedPath == sessionDirName || oldEncodedPathWithLeadingDash == sessionDirName
-        }
-    }
 
     fun loadSessionsForProject(projectId: String, forceReload: Boolean = false) {
         if (!forceReload && _sessions.value.containsKey(projectId)) {
@@ -276,9 +309,10 @@ class ProjectManager {
                                 id = sessionId,
                                 projectId = projectId,
                                 name = finalSessionName,
-                                createdAt = timestamp
+                                createdAt = timestamp,
+                                lastModified = file.lastModified() // 使用文件的最后修改时间
                             )
-                            println("DEBUG: 创建后的 ProjectSession - ID: ${session.id}, Name: '${session.name}'")
+                            println("DEBUG: 创建后的 ProjectSession - ID: ${session.id}, Name: '${session.name}', LastModified: ${file.lastModified()}")
                             
                             // 额外检查：如果名称是纯数字，检查是否等于行数
                             if (session.name.matches(Regex("\\d+"))) {
@@ -296,12 +330,19 @@ class ProjectManager {
                             e.printStackTrace()
                             null
                         }
-                    }.sortedByDescending { it.createdAt }
+                    }.sortedByDescending { it.lastModified } // 按最后修改时间降序排序
 
                     println("成功加载 ${loadedSessions.size} 个会话")
                     val newSessionsMap = _sessions.value.toMutableMap()
                     newSessionsMap[projectId] = loadedSessions
                     _sessions.value = newSessionsMap
+                    
+                    // 如果是当前项目，自动选择最新修改的会话
+                    if (_currentProject.value?.id == projectId && loadedSessions.isNotEmpty()) {
+                        val latestSession = loadedSessions.first() // 已按最后修改时间排序，第一个是最新的
+                        println("自动选择最新会话: ${latestSession.name} (最后修改: ${java.time.Instant.ofEpochMilli(latestSession.lastModified)})")
+                        setCurrentSession(latestSession, loadHistory = false)
+                    }
                 } else {
                     println("会话目录不存在或不是目录")
                 }
@@ -528,7 +569,7 @@ class ProjectManager {
                                     println("    - 新名称: '$finalName'")
                                     fixedCount++
                                     
-                                    // 返回更新后的会话
+                                    // 返回更新后的会话（保持原有的 lastModified）
                                     return@map session.copy(name = finalName)
                                 } catch (e: Exception) {
                                     println("    - 刷新失败: ${e.message}")
@@ -732,7 +773,8 @@ class ProjectManager {
             id = null, // 占位会话没有真实ID
             projectId = projectId,
             name = "新会话",
-            createdAt = timestamp
+            createdAt = timestamp,
+            lastModified = System.currentTimeMillis()
         )
         
         // 添加到会话列表
@@ -815,4 +857,5 @@ class ProjectManager {
             println("会话ID已更新")
         }
     }
+    
 }

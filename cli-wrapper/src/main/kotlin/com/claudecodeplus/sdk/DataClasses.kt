@@ -29,5 +29,6 @@ data class MessageData(
     val toolName: String? = null,
     val toolInput: Any? = null,
     val toolResult: Any? = null,
-    val sessionId: String? = null  // 从 system 消息中获取
+    val sessionId: String? = null,  // 从 system 消息中获取
+    val toolCallId: String? = null  // 工具调用ID，用于匹配工具调用和结果
 )

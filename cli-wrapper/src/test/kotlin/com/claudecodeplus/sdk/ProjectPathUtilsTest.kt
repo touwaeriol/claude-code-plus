@@ -112,19 +112,4 @@ class ProjectPathUtilsTest {
         // 空路径应该无效
         assertFalse(ProjectPathUtils.isValidProjectPath(""))
     }
-    
-    @Test
-    fun testDirectoryNameToProjectPaths() {
-        // Unix 风格路径（带开头的 -）
-        val paths = ProjectPathUtils.directoryNameToProjectPaths("-home-user-project")
-        assertTrue(paths.contains("/home/user/project"))
-        
-        // Windows 风格路径测试
-        val winPaths = ProjectPathUtils.directoryNameToProjectPaths("C-Users-project")
-        assertTrue(winPaths.any { it.startsWith("C:") })
-        
-        // 实际的项目目录名测试
-        val actualPaths = ProjectPathUtils.directoryNameToProjectPaths("-home-erio-codes-claude-code-plus")
-        assertTrue(actualPaths.contains("/home/erio/codes/claude/code/plus"))
-    }
 }

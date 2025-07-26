@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.draw.clip
@@ -58,52 +59,56 @@ fun MultiTabChatView(
     Box(modifier = modifier) {
         activeTabId?.let { id ->
             tabs.find { it.id == id }?.let { tab ->
-                // 使用 key 确保切换标签时重新创建 ChatView
-                key(tab.id) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        // 将 ChatMessage 转换为 EnhancedMessage
-                        val enhancedMessages = tab.messages.map { chatMessage ->
-                            EnhancedMessage(
-                                id = chatMessage.id,
-                                role = chatMessage.role,
-                                content = chatMessage.content,
-                                timestamp = chatMessage.timestamp.toEpochMilli(),
-                                model = AiModel.OPUS, // 默认模型
-                                contexts = emptyList()
-                            )
-                        }
-                        
-                        com.claudecodeplus.ui.jewel.ChatView(
-                            cliWrapper = cliWrapper,
-                            workingDirectory = workingDirectory,
-                            fileIndexService = fileIndexService,
-                            projectService = projectService,
-                            sessionManager = sessionManager,
-                            initialMessages = enhancedMessages,
-                            sessionId = tab.sessionId,
-                            tabManager = tabManager,
-                            currentTabId = tab.id,
-                            currentProject = if (tab.projectId != null) {
-                                com.claudecodeplus.ui.models.Project(
-                                    id = tab.projectId,
-                                    path = tab.projectPath ?: tab.projectId,
-                                    name = tab.projectName ?: tab.projectId.substringAfterLast("/")
+                // 检查标签是否有有效的项目
+                if (tab.projectPath == null || tab.projectId == null) {
+                    // 没有项目时显示提示
+                    NoProjectView()
+                } else {
+                    // 使用 key 确保切换标签时重新创建 ChatView
+                    key(tab.id) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            // 将 ChatMessage 转换为 EnhancedMessage
+                            val enhancedMessages = tab.messages.map { chatMessage ->
+                                EnhancedMessage(
+                                    id = chatMessage.id,
+                                    role = chatMessage.role,
+                                    content = chatMessage.content,
+                                    timestamp = chatMessage.timestamp.toEpochMilli(),
+                                    model = AiModel.OPUS, // 默认模型
+                                    contexts = emptyList()
                                 )
-                            } else null,
-                            projectManager = projectManager,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                            }
+                            
+                            com.claudecodeplus.ui.jewel.ChatView(
+                                cliWrapper = cliWrapper,
+                                workingDirectory = tab.projectPath,
+                                fileIndexService = fileIndexService,
+                                projectService = projectService,
+                                sessionManager = sessionManager,
+                                initialMessages = enhancedMessages,
+                                sessionId = tab.sessionId,
+                                tabManager = tabManager,
+                                currentTabId = tab.id,
+                                currentProject = com.claudecodeplus.ui.models.Project(
+                                    id = tab.projectId,
+                                    path = tab.projectPath,
+                                    name = tab.projectName ?: tab.projectId.substringAfterLast("/")
+                                ),
+                                projectManager = projectManager,
+                                modifier = Modifier.fillMaxSize()
+                            )
                         
-                        // 标签状态指示器
-                        if (tab.status == ChatTab.TabStatus.INTERRUPTED) {
-                            Banner(
-                                message = "对话已中断",
-                                modifier = Modifier.align(Alignment.TopCenter)
-                            ) {
-                                OutlinedButton(onClick = {
-                                    // TODO: 恢复对话
-                                }) {
-                                    Text("继续对话")
+                            // 标签状态指示器
+                            if (tab.status == ChatTab.TabStatus.INTERRUPTED) {
+                                Banner(
+                                    message = "对话已中断",
+                                    modifier = Modifier.align(Alignment.TopCenter)
+                                ) {
+                                    OutlinedButton(onClick = {
+                                        // TODO: 恢复对话
+                                    }) {
+                                        Text("继续对话")
+                                    }
                                 }
                             }
                         }
@@ -157,6 +162,41 @@ fun EmptyTabsView(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("创建新对话")
             }
+        }
+    }
+}
+
+/**
+ * 无项目视图
+ */
+@Composable
+fun NoProjectView() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(
+                Icons.Default.Home,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = JewelTheme.globalColors.text.disabled
+            )
+            Text(
+                text = "请先选择一个项目",
+                style = JewelTheme.defaultTextStyle,
+                color = JewelTheme.globalColors.text.normal
+            )
+            Text(
+                text = "在左侧项目面板中选择或创建项目",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = JewelTheme.defaultTextStyle.fontSize * 0.9f
+                ),
+                color = JewelTheme.globalColors.text.disabled
+            )
         }
     }
 }

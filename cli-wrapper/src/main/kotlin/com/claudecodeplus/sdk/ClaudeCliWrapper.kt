@@ -469,11 +469,13 @@ class ClaudeCliWrapper {
                                                             // 处理工具调用
                                                             val toolName = item.get("name")?.asText()
                                                             val toolInput = item.get("input")
-                                                            logger.fine("Emitting tool use: $toolName")
+                                                            val toolCallId = item.get("id")?.asText()
+                                                            logger.fine("Emitting tool use: $toolName with id: $toolCallId")
                                                             emit(SDKMessage(
                                                                 type = MessageType.TOOL_USE,
                                                                 data = MessageData(
                                                                     toolName = toolName,
+                                                                    toolCallId = toolCallId,
                                                                     toolInput = if (toolInput != null) {
                                                                         // 将JsonNode转换为Map或String
                                                                         if (toolInput.isObject) {
@@ -500,6 +502,30 @@ class ClaudeCliWrapper {
                                             }
                                         } else {
                                             logger.warning("Assistant message has no content: $jsonNode")
+                                        }
+                                    }
+                                    "user" -> {
+                                        // 处理用户消息（主要是工具结果）
+                                        logger.fine("Processing user message: $line")
+                                        val content = jsonNode.get("message")?.get("content")
+                                        if (content != null && content.isArray) {
+                                            content.forEach { item ->
+                                                val itemType = item.get("type")?.asText()
+                                                if (itemType == "tool_result") {
+                                                    val toolUseId = item.get("tool_use_id")?.asText()
+                                                    val resultContent = item.get("content")?.asText()
+                                                    val error = item.get("error")?.asText()
+                                                    logger.fine("Emitting tool result for id: $toolUseId")
+                                                    emit(SDKMessage(
+                                                        type = MessageType.TOOL_RESULT,
+                                                        data = MessageData(
+                                                            toolCallId = toolUseId,
+                                                            toolResult = resultContent,
+                                                            error = error
+                                                        )
+                                                    ))
+                                                }
+                                            }
                                         }
                                     }
                                     "tool_result" -> {
@@ -552,10 +578,12 @@ class ClaudeCliWrapper {
                                         // 工具使用消息
                                         val toolName = jsonNode.get("tool_name")?.asText()
                                         val toolInput = jsonNode.get("tool_input")
+                                        val toolCallId = jsonNode.get("id")?.asText()
                                         emit(SDKMessage(
                                             type = MessageType.TOOL_USE,
                                             data = MessageData(
                                                 toolName = toolName,
+                                                toolCallId = toolCallId,
                                                 toolInput = toolInput
                                             )
                                         ))
@@ -689,12 +717,13 @@ class ClaudeCliWrapper {
      */
     fun sendMessage(
         message: String, 
-        sessionId: String? = null
+        sessionId: String? = null,
+        cwd: String? = null
     ): Flow<StreamResponse> = flow {
         val options = if (sessionId != null) {
-            QueryOptions(resume = sessionId)
+            QueryOptions(resume = sessionId, cwd = cwd)
         } else {
-            QueryOptions()
+            QueryOptions(cwd = cwd)
         }
         
         query(message, options).collect { sdkMessage ->

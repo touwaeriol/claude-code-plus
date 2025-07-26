@@ -73,32 +73,6 @@ object ProjectPathUtils {
     }
     
     /**
-     * 从 Claude 目录名反推可能的项目路径
-     * 注意：这个转换可能不是唯一的，仅用于调试
-     * 
-     * @param directoryName Claude 使用的目录名
-     * @return 可能的项目路径列表
-     */
-    fun directoryNameToProjectPaths(directoryName: String): List<String> {
-        val paths = mutableListOf<String>()
-        
-        // Unix 风格路径 - 处理开头的 -
-        if (directoryName.startsWith("-")) {
-            paths.add(directoryName.replace('-', '/'))
-        }
-        
-        // Windows 风格路径（尝试常见的盘符）
-        listOf("C", "D", "E").forEach { drive ->
-            if (directoryName.startsWith(drive, ignoreCase = true)) {
-                val pathPart = directoryName.substring(1).replace('-', '\\')
-                paths.add("$drive:$pathPart")
-            }
-        }
-        
-        return paths
-    }
-    
-    /**
      * 验证项目路径是否有效
      */
     fun isValidProjectPath(projectPath: String): Boolean {
