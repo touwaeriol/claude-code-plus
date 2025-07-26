@@ -45,23 +45,73 @@ class ChatTabManager {
     fun createNewTab(
         title: String = "新对话 ${_tabs.size + 1}",
         groupId: String? = "default",
-        sessionId: String? = null
+        sessionId: String? = null,
+        project: com.claudecodeplus.ui.models.Project? = null
     ): String {
+        println("\n=== ChatTabManager.createNewTab 调试 ===")
+        println("  - 输入 title: '$title'")
+        println("  - 输入 project: ${project?.name} (${project?.id})")
+        println("  - 输入 sessionId: $sessionId")
+        println("  - 当前标签数量: ${_tabs.size}")
+        
+        val projectShortName = project?.name?.let { name ->
+            // 生成项目简称：取前4个字符或使用首字母缩写
+            if (name.length <= 4) name
+            else name.split(" ", "-", "_").map { it.firstOrNull()?.uppercaseChar() ?: "" }.joinToString("")
+                .ifEmpty { name.take(4) }
+        }
+        
+        println("  - 生成的项目简称: $projectShortName")
+        
+        val tabTitle = if (projectShortName != null) {
+            "[$projectShortName] $title"
+        } else {
+            title
+        }
+        
+        println("  - 最终标签标题: '$tabTitle'")
+        
         val newTab = ChatTab(
-            title = title,
+            title = tabTitle,
             groupId = groupId,
-            sessionId = sessionId
+            sessionId = sessionId,
+            projectId = project?.id,
+            projectName = project?.name,
+            projectPath = project?.path
         )
+        
+        println("  - 创建的 ChatTab 对象:")
+        println("    - id: ${newTab.id}")
+        println("    - title: '${newTab.title}'")
+        println("    - projectId: ${newTab.projectId}")
+        println("    - projectName: ${newTab.projectName}")
+        
         _tabs.add(newTab)
+        println("  - 添加到 _tabs 后的数量: ${_tabs.size}")
+        
+        // 验证添加是否成功
+        val addedTab = _tabs.find { it.id == newTab.id }
+        if (addedTab != null) {
+            println("  - ✅ 验证：标签已成功添加")
+            println("  - 存储的标题: '${addedTab.title}'")
+        } else {
+            println("  - ❌ 错误：标签添加失败！")
+        }
+        println("=====================================\n")
+        
         setActiveTab(newTab.id)
         _events.value = TabEvent.TabCreated(newTab.id)
         return newTab.id
     }
     
     /**
-     * 从会话创建或切换到标签
+     * 从会话创建或切换到标签（包含项目信息）
      */
-    fun createOrSwitchToSessionTab(session: ProjectSession, messages: List<EnhancedMessage>): String {
+    fun createOrSwitchToSessionTab(
+        session: ProjectSession, 
+        messages: List<EnhancedMessage>,
+        project: com.claudecodeplus.ui.models.Project? = null
+    ): String {
         // 查找是否已有该会话的标签
         val existingTab = _tabs.find { it.sessionId == session.id }
         
@@ -87,17 +137,56 @@ class ChatTabManager {
             setActiveTab(existingTab.id)
             return existingTab.id
         } else {
-            // 创建新标签
+            // 创建新标签，包含项目信息
+            val projectShortName = project?.name?.let { name ->
+                // 生成项目简称：取前4个字符或使用首字母缩写
+                if (name.length <= 4) name
+                else name.split(" ", "-", "_").map { it.firstOrNull()?.uppercaseChar() ?: "" }.joinToString("")
+                    .ifEmpty { name.take(4) }
+            }
+            
+            println("DEBUG: 创建标签 - session.id: ${session.id}")
+            println("DEBUG: 创建标签 - session.name: '${session.name}'")
+            println("DEBUG: 创建标签 - session.projectId: ${session.projectId}")
+            println("DEBUG: 创建标签 - 项目: ${project?.name}")
+            
+            val tabTitle = if (projectShortName != null) {
+                "[$projectShortName] ${session.name}"
+            } else {
+                session.name
+            }
+            println("DEBUG: 最终标签标题: '$tabTitle'")
+            
             val newTab = ChatTab(
-                title = session.name,
+                title = tabTitle,
                 groupId = "default",
                 sessionId = session.id,
+                projectId = project?.id,
+                projectName = project?.name,
+                projectPath = project?.path,
                 messages = chatMessages,
                 status = ChatTab.TabStatus.ACTIVE
             )
             _tabs.add(newTab)
             setActiveTab(newTab.id)
             _events.value = TabEvent.TabCreated(newTab.id)
+            
+            // 调试：创建标签后再次检查
+            println("DEBUG: 标签创建完成，最终状态:")
+            println("  - newTab.id: ${newTab.id}")
+            println("  - newTab.title: '${newTab.title}'")
+            println("  - newTab.sessionId: ${newTab.sessionId}")
+            println("  - _tabs中的标签数量: ${_tabs.size}")
+            
+            // 检查 _tabs 中实际存储的标签
+            val addedTab = _tabs.find { it.id == newTab.id }
+            if (addedTab != null) {
+                println("  - 实际存储的标签标题: '${addedTab.title}'")
+                if (addedTab.title != newTab.title) {
+                    println("  - 警告：存储的标题与创建的标题不同！")
+                }
+            }
+            
             return newTab.id
         }
     }
@@ -295,6 +384,78 @@ class ChatTabManager {
         }
     }
     
+    /**
+     * 根据第一条消息更新标签标题
+     */
+    fun updateTabTitleFromFirstMessage(tabId: String, messageContent: String, project: com.claudecodeplus.ui.models.Project? = null) {
+        println("\n=== ChatTabManager.updateTabTitleFromFirstMessage 调试 ===")
+        println("  - tabId: $tabId")
+        println("  - messageContent: '${messageContent.take(100)}...'")
+        println("  - project: ${project?.name}")
+        
+        val tab = _tabs.find { it.id == tabId }
+        if (tab == null) {
+            println("  - ❌ 错误：找不到标签 ID: $tabId")
+            println("==========================================\n")
+            return
+        }
+        
+        println("  - 找到标签，当前标题: '${tab.title}'")
+        
+        // 生成会话名称（复用 ProjectManager 的逻辑）
+        val sessionName = generateSessionNameFromContent(messageContent)
+        println("  - 生成的会话名称: '$sessionName'")
+        
+        // 生成项目简称
+        val projectShortName = project?.name?.let { name ->
+            if (name.length <= 4) name
+            else name.split(" ", "-", "_").map { it.firstOrNull()?.uppercaseChar() ?: "" }.joinToString("")
+                .ifEmpty { name.take(4) }
+        }
+        println("  - 项目简称: $projectShortName")
+        
+        // 更新标签标题
+        val newTitle = if (projectShortName != null) {
+            "[$projectShortName] $sessionName"
+        } else {
+            sessionName
+        }
+        
+        println("  - 新标题: '$newTitle'")
+        
+        updateTab(tabId) { t ->
+            t.copy(title = newTitle)
+        }
+        
+        // 验证更新后的标题
+        val updatedTab = _tabs.find { it.id == tabId }
+        println("  - 更新后的标题: '${updatedTab?.title}'")
+        println("==========================================\n")
+        
+        _events.value = TabEvent.TabTitleUpdateRequested(tabId, newTitle)
+    }
+    
+    private fun generateSessionNameFromContent(content: String): String {
+        val cleanContent = content.trim()
+            .replace("\n", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        
+        return when {
+            cleanContent.isEmpty() -> "新对话"
+            cleanContent.length <= 30 -> cleanContent
+            cleanContent.contains("?") -> {
+                val questionPart = cleanContent.substringBefore("?") + "?"
+                if (questionPart.length <= 50) questionPart else questionPart.take(47) + "..."
+            }
+            cleanContent.contains("。") -> {
+                val sentencePart = cleanContent.substringBefore("。") + "。"
+                if (sentencePart.length <= 50) sentencePart else sentencePart.take(47) + "..."
+            }
+            else -> cleanContent.take(30) + if (cleanContent.length > 30) "..." else ""
+        }
+    }
+    
     sealed class TabEvent {
         data class TabCreated(val tabId: String) : TabEvent()
         data class TabClosed(val tabId: String) : TabEvent()
@@ -302,6 +463,7 @@ class ChatTabManager {
         data class TabUpdated(val tabId: String) : TabEvent()
         data class CloseConfirmationNeeded(val tabId: String) : TabEvent()
         data class SessionSwitchRequested(val sessionId: String) : TabEvent()
+        data class TabTitleUpdateRequested(val tabId: String, val newTitle: String) : TabEvent()
     }
 }
 

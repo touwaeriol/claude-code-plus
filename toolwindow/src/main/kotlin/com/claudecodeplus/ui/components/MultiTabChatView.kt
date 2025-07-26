@@ -31,9 +31,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.draw.clip
 
 /**
- * 多标签聊天视图
+ * 多标签聊天视图 - 已移除标签栏，只显示聊天内容
  */
 @Composable
 fun MultiTabChatView(
@@ -43,70 +46,66 @@ fun MultiTabChatView(
     fileIndexService: FileIndexService,
     projectService: ProjectService,
     sessionManager: ClaudeSessionManager,
+    onTabHover: ((String?) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val tabs = tabManager.tabs
     val activeTabId = tabManager.activeTabId
     val scope = rememberCoroutineScope()
     
-    Column(modifier = modifier) {
-        // 标签栏
-        ChatTabStrip(
-            tabs = tabs,
-            activeTabId = activeTabId,
-            onTabSelect = { tabManager.setActiveTab(it) },
-            onTabClose = { tabManager.closeTab(it) },
-            onNewTab = { tabManager.createNewTab() },
-            onTabRightClick = { tabId ->
-                // TODO: 显示右键菜单
-            }
-        )
-        
-        Divider(orientation = Orientation.Horizontal)
-        
-        // 当前标签的聊天内容
+    // 直接显示当前标签的聊天内容，不显示标签栏
+    Box(modifier = modifier) {
         activeTabId?.let { id ->
             tabs.find { it.id == id }?.let { tab ->
                 // 使用 key 确保切换标签时重新创建 ChatView
                 key(tab.id) {
                     Box(modifier = Modifier.fillMaxSize()) {
-                    // 将 ChatMessage 转换为 EnhancedMessage
-                    val enhancedMessages = tab.messages.map { chatMessage ->
-                        EnhancedMessage(
-                            id = chatMessage.id,
-                            role = chatMessage.role,
-                            content = chatMessage.content,
-                            timestamp = chatMessage.timestamp.toEpochMilli(),
-                            model = AiModel.OPUS, // 默认模型
-                            contexts = emptyList()
+                        // 将 ChatMessage 转换为 EnhancedMessage
+                        val enhancedMessages = tab.messages.map { chatMessage ->
+                            EnhancedMessage(
+                                id = chatMessage.id,
+                                role = chatMessage.role,
+                                content = chatMessage.content,
+                                timestamp = chatMessage.timestamp.toEpochMilli(),
+                                model = AiModel.OPUS, // 默认模型
+                                contexts = emptyList()
+                            )
+                        }
+                        
+                        com.claudecodeplus.ui.jewel.ChatView(
+                            cliWrapper = cliWrapper,
+                            workingDirectory = workingDirectory,
+                            fileIndexService = fileIndexService,
+                            projectService = projectService,
+                            sessionManager = sessionManager,
+                            initialMessages = enhancedMessages,
+                            sessionId = tab.sessionId,
+                            tabManager = tabManager,
+                            currentTabId = tab.id,
+                            currentProject = if (tab.projectId != null) {
+                                com.claudecodeplus.ui.models.Project(
+                                    id = tab.projectId,
+                                    path = tab.projectPath ?: tab.projectId,
+                                    name = tab.projectName ?: tab.projectId.substringAfterLast("/")
+                                )
+                            } else null,
+                            modifier = Modifier.fillMaxSize()
                         )
-                    }
-                    
-                    com.claudecodeplus.ui.jewel.ChatView(
-                        cliWrapper = cliWrapper,
-                        workingDirectory = workingDirectory,
-                        fileIndexService = fileIndexService,
-                        projectService = projectService,
-                        sessionManager = sessionManager,
-                        initialMessages = enhancedMessages,
-                        sessionId = tab.sessionId,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    
-                    // 标签状态指示器
-                    if (tab.status == ChatTab.TabStatus.INTERRUPTED) {
-                        Banner(
-                            message = "对话已中断",
-                            modifier = Modifier.align(Alignment.TopCenter)
-                        ) {
-                            OutlinedButton(onClick = {
-                                // TODO: 恢复对话
-                            }) {
-                                Text("继续对话")
+                        
+                        // 标签状态指示器
+                        if (tab.status == ChatTab.TabStatus.INTERRUPTED) {
+                            Banner(
+                                message = "对话已中断",
+                                modifier = Modifier.align(Alignment.TopCenter)
+                            ) {
+                                OutlinedButton(onClick = {
+                                    // TODO: 恢复对话
+                                }) {
+                                    Text("继续对话")
+                                }
                             }
                         }
                     }
-                }
                 }
             }
         } ?: run {
@@ -131,137 +130,10 @@ fun MultiTabChatView(
 }
 
 /**
- * 标签栏组件
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ChatTabStrip(
-    tabs: List<ChatTab>,
-    activeTabId: String?,
-    onTabSelect: (String) -> Unit,
-    onTabClose: (String) -> Unit,
-    onNewTab: () -> Unit,
-    onTabRightClick: (String) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .background(Color.White.copy(alpha = 0.95f))
-            .padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // 标签列表
-        LazyRow(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            items(tabs, key = { it.id }) { tab ->
-                TabItem(
-                    tab = tab,
-                    isActive = tab.id == activeTabId,
-                    onSelect = { onTabSelect(tab.id) },
-                    onClose = { onTabClose(tab.id) },
-                    onRightClick = { onTabRightClick(tab.id) }
-                )
-            }
-        }
-        
-        // 新建标签按钮
-        IconButton(
-            onClick = onNewTab,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        ) {
-            Icon(
-                Icons.Default.Add,
-                contentDescription = "新建标签"
-            )
-        }
-    }
-}
-
-/**
- * 标签项
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun TabItem(
-    tab: ChatTab,
-    isActive: Boolean,
-    onSelect: () -> Unit,
-    onClose: () -> Unit,
-    onRightClick: () -> Unit
-) {
-    val backgroundColor = if (isActive) {
-        Color(0xFF2675BF).copy(alpha = 0.3f)
-    } else {
-        Color.White
-    }
-    
-    Row(
-        modifier = Modifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-            .background(backgroundColor)
-            .combinedClickable(
-                onClick = onSelect,
-                onLongClick = onRightClick
-            )
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // 状态指示器
-        if (tab.status == ChatTab.TabStatus.INTERRUPTED) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .background(
-                        Color(0xFFFF9800),
-                        shape = RoundedCornerShape(3.dp)
-                    )
-            )
-        }
-        
-        // 标签标题
-        Text(
-            text = tab.title,
-            style = JewelTheme.defaultTextStyle,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .widthIn(max = 150.dp) // 限制最大宽度
-                .weight(1f, fill = false)
-        )
-        
-        // 消息计数
-        if (tab.messages.isNotEmpty()) {
-            Text(
-                text = "${tab.messages.size}",
-                style = JewelTheme.defaultTextStyle,
-                color = Color.Gray
-            )
-        }
-        
-        // 关闭按钮
-        IconButton(
-            onClick = { onClose() },
-            modifier = Modifier.size(16.dp)
-        ) {
-            Icon(
-                Icons.Default.Close,
-                contentDescription = "关闭标签",
-                modifier = Modifier.size(12.dp)
-            )
-        }
-    }
-}
-
-/**
  * 空标签视图
  */
 @Composable
-private fun EmptyTabsView(
+fun EmptyTabsView(
     onCreateTab: () -> Unit
 ) {
     Box(

@@ -154,4 +154,19 @@ data class ProjectSession(
     val projectId: String,
     val name: String,
     val createdAt: String
-)
+) {
+    init {
+        // 调试：检查会话名称是否是纯数字
+        if (name.matches(Regex("\\d+"))) {
+            println("警告：ProjectSession 构造函数接收到纯数字名称！")
+            println("  - id: $id")
+            println("  - projectId: $projectId")
+            println("  - name: '$name'")
+            println("  - createdAt: $createdAt")
+            println("  - 调用栈：")
+            Thread.currentThread().stackTrace.take(15).forEach { 
+                println("    at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})")
+            }
+        }
+    }
+}

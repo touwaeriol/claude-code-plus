@@ -174,8 +174,8 @@ class ProjectManager {
         }
     }
 
-    fun loadSessionsForProject(projectId: String) {
-        if (_sessions.value.containsKey(projectId)) {
+    fun loadSessionsForProject(projectId: String, forceReload: Boolean = false) {
+        if (!forceReload && _sessions.value.containsKey(projectId)) {
             println("项目会话已缓存，跳过加载: $projectId")
             return
         }
@@ -229,12 +229,68 @@ class ProjectManager {
                             val sessionName = generateSessionName(lines, sessionId, timestamp)
 
                             println("成功加载会话: $sessionId - $sessionName")
-                            ProjectSession(
+                            
+                            // 检查生成的会话名称是否是纯数字
+                            if (sessionName.matches(Regex("\\d+"))) {
+                                println("警告：generateSessionName 返回了纯数字名称！")
+                                println("  - sessionName: '$sessionName'")
+                                println("  - lines.size: ${lines.size}")
+                                println("  - 文件: ${file.name}")
+                                // 尝试查看前几行内容
+                                println("  - 前3行内容：")
+                                lines.take(3).forEachIndexed { index, line ->
+                                    println("    ${index + 1}: ${line.take(100)}...")
+                                }
+                            }
+                            
+                            // 检查并修正会话名称
+                            val validatedSessionName = if (sessionName.matches(Regex("\\d+")) && sessionName.toIntOrNull()?.let { it in 50..10000 } == true) {
+                                println("  - 检测到纯数字会话名称: '$sessionName'，使用默认名称")
+                                val dateTime = if (timestamp.isNotBlank()) {
+                                    try {
+                                        val date = timestamp.substringBefore("T")
+                                        val time = timestamp.substringAfter("T").substringBefore(".").substringBefore("Z")
+                                        "$date $time"
+                                    } catch (e: Exception) {
+                                        sessionId.take(8)
+                                    }
+                                } else {
+                                    sessionId.take(8)
+                                }
+                                "会话 $dateTime"
+                            } else {
+                                sessionName
+                            }
+                            
+                            val finalSessionName = validatedSessionName.take(50)
+                            println("DEBUG: 原始会话名称: '$sessionName', 验证后: '$validatedSessionName', 截断后: '$finalSessionName'")
+                            // 额外的调试信息
+                            println("DEBUG: 即将创建 ProjectSession:")
+                            println("  - sessionId: $sessionId")
+                            println("  - projectId: $projectId")
+                            println("  - name (finalSessionName): '$finalSessionName'")
+                            println("  - timestamp: $timestamp")
+                            println("  - lines.size: ${lines.size}")
+                            
+                            val session = ProjectSession(
                                 id = sessionId,
                                 projectId = projectId,
-                                name = sessionName.take(50), // 截断以避免过长
+                                name = finalSessionName,
                                 createdAt = timestamp
                             )
+                            println("DEBUG: 创建后的 ProjectSession - ID: ${session.id}, Name: '${session.name}'")
+                            
+                            // 额外检查：如果名称是纯数字，检查是否等于行数
+                            if (session.name.matches(Regex("\\d+"))) {
+                                val nameAsNumber = session.name.toIntOrNull()
+                                if (nameAsNumber == lines.size) {
+                                    println("严重错误：会话名称是文件行数！")
+                                    println("  - session.name: '${session.name}'")
+                                    println("  - lines.size: ${lines.size}")
+                                    println("  - 它们相等！")
+                                }
+                            }
+                            session
                         } catch (e: Exception) {
                             println("处理会话文件失败: ${file.name}, 错误: ${e.message}")
                             e.printStackTrace()
@@ -261,6 +317,19 @@ class ProjectManager {
         _currentSession.value = null
         loadSessionsForProject(project.id)
     }
+    
+    /**
+     * 强制重新加载所有项目的会话
+     */
+    fun reloadAllSessions() {
+        scope.launch {
+            println("强制重新加载所有会话...")
+            _sessions.value = emptyMap()
+            _projects.value.forEach { project ->
+                loadSessionsForProject(project.id, forceReload = true)
+            }
+        }
+    }
 
     fun setCurrentSession(session: ProjectSession, loadHistory: Boolean = true) {
         _currentSession.value = session
@@ -273,56 +342,112 @@ class ProjectManager {
     }
     
     private fun generateSessionName(lines: List<String>, sessionId: String, timestamp: String): String {
+        println("\n=== generateSessionName 调试 ===")
+        println("  - 输入 lines.size: ${lines.size}")
+        println("  - 输入 sessionId: $sessionId")
+        println("  - 输入 timestamp: $timestamp")
+        
         try {
-            // 从第一条用户消息中提取内容
-            val userMessageLine = lines.firstOrNull { it.contains("\"type\":\"user\"") }
-            if (userMessageLine != null) {
-                val messageJson = json.parseToJsonElement(userMessageLine).jsonObject["message"]?.jsonObject
-                val content = messageJson?.get("content")?.jsonPrimitive?.content
-                if (!content.isNullOrBlank()) {
-                    // 生成简短的会话名称
-                    val cleanContent = content.trim()
-                        .replace("\n", " ")
-                        .replace(Regex("\\s+"), " ")
+            // 查找第一条用户消息
+            var userMessageCount = 0
+            for ((index, line) in lines.withIndex()) {
+                if (line.contains("\"type\":\"user\"") && !line.contains("\"isMeta\":true")) {
+                    userMessageCount++
+                    println("  - 找到用户消息 #$userMessageCount at line $index")
                     
-                    return when {
-                        // 如果内容太短，直接使用
-                        cleanContent.length <= 30 -> cleanContent
-                        // 如果包含问号，截取到第一个问号
-                        cleanContent.contains("?") -> {
-                            val questionPart = cleanContent.substringBefore("?") + "?"
-                            if (questionPart.length <= 50) questionPart else questionPart.take(47) + "..."
+                    val messageJson = json.parseToJsonElement(line).jsonObject["message"]?.jsonObject
+                    
+                    // 尝试获取 content（可能是字符串或数组）
+                    val contentElement = messageJson?.get("content")
+                    println("  - contentElement 类型: ${contentElement?.javaClass?.simpleName}")
+                    
+                    val content = when {
+                        contentElement is kotlinx.serialization.json.JsonPrimitive -> {
+                            contentElement.content
                         }
-                        // 如果包含句号，截取到第一个句号
-                        cleanContent.contains("。") -> {
-                            val sentencePart = cleanContent.substringBefore("。") + "。"
-                            if (sentencePart.length <= 50) sentencePart else sentencePart.take(47) + "..."
+                        contentElement is kotlinx.serialization.json.JsonArray -> {
+                            // 处理内容数组（如 [{"type":"text","text":"..."}]）
+                            contentElement.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
                         }
-                        // 否则截取前30个字符
-                        else -> cleanContent.take(30) + "..."
+                        else -> null
+                    }
+                    
+                    println("  - 提取的 content: '${content?.take(50)}...'")
+                    
+                    if (!content.isNullOrBlank()) {
+                        // 跳过 Caveat 消息和命令消息
+                        if (content.startsWith("Caveat:") || 
+                            content.contains("<command-name>") || 
+                            content.contains("<local-command-stdout>") ||
+                            content.startsWith("[Request interrupted")) {
+                            println("  - 跳过特殊消息类型")
+                            continue
+                        }
+                        
+                        // 清理内容
+                        val cleanContent = content.trim()
+                            .replace("\n", " ")
+                            .replace(Regex("\\s+"), " ")
+                            .trim()
+                        
+                        println("  - 清理后的 content: '$cleanContent'")
+                        
+                        // 如果内容有意义（长度>=3），使用它（允许纯数字，因为有些会话可能就是讨论数字）
+                        if (cleanContent.length >= 3) {
+                            // 但如果是纯数字，需要特别处理
+                            if (cleanContent.matches(Regex("\\d+"))) {
+                                val numberValue = cleanContent.toIntOrNull()
+                                // 如果是可能的行数范围（50-10000），跳过
+                                if (numberValue != null && numberValue in 50..10000) {
+                                    println("  - 跳过可能是行数的纯数字: $cleanContent (值在 50-10000 范围内)")
+                                    continue
+                                }
+                                // 如果是小数字（<50），可能是真实的对话内容，但加上前缀
+                                if (numberValue != null && numberValue < 50) {
+                                    val result = "关于 $cleanContent 的讨论"
+                                    println("  - ✅ 返回带前缀的数字会话名称: '$result'")
+                                    println("=================================\n")
+                                    return result
+                                }
+                            }
+                            
+                            val result = when {
+                                cleanContent.length <= 50 -> cleanContent
+                                else -> cleanContent.take(47) + "..."
+                            }
+                            println("  - ✅ 返回会话名称: '$result'")
+                            println("=================================\n")
+                            return result
+                        }
                     }
                 }
             }
             
-            // 从 assistant 消息中查找摘要
+            // 尝试从摘要获取
+            println("  - 没有找到合适的用户消息，尝试从摘要获取")
             val summaryLine = lines.firstOrNull { it.contains("\"type\":\"summary\"") }
             if (summaryLine != null) {
+                println("  - 找到摘要行")
                 try {
                     val summaryJson = json.parseToJsonElement(summaryLine).jsonObject
                     val summary = summaryJson["summary"]?.jsonPrimitive?.content
-                    if (!summary.isNullOrBlank() && summary.length <= 50) {
-                        return summary
+                    if (!summary.isNullOrBlank()) {
+                        val result = if (summary.length <= 50) summary else summary.take(47) + "..."
+                        println("  - ✅ 从摘要返回: '$result'")
+                        println("=================================\n")
+                        return result
                     }
                 } catch (e: Exception) {
-                    // 忽略解析错误
+                    println("  - 解析摘要失败: ${e.message}")
                 }
             }
             
-            // 如果都失败了，使用时间戳生成名称
-            return if (timestamp.isNotBlank()) {
+            // 使用时间戳
+            println("  - 没有找到合适内容，使用时间戳生成默认名称")
+            val result = if (timestamp.isNotBlank()) {
                 try {
                     val date = timestamp.substringBefore("T")
-                    val time = timestamp.substringAfter("T").substringBefore(".")
+                    val time = timestamp.substringAfter("T").substringBefore(".").substringBefore("Z")
                     "会话 $date $time"
                 } catch (e: Exception) {
                     "会话 ${sessionId.take(8)}"
@@ -330,9 +455,90 @@ class ProjectManager {
             } else {
                 "会话 ${sessionId.take(8)}"
             }
+            println("  - ✅ 返回默认名称: '$result'")
+            println("=================================\n")
+            return result
         } catch (e: Exception) {
-            println("生成会话名称失败: ${e.message}")
-            return "会话 ${sessionId.take(8)}"
+            val result = "会话 ${sessionId.take(8)}"
+            println("  - ❌ 异常: ${e.message}")
+            println("  - ✅ 返回异常处理名称: '$result'")
+            println("=================================\n")
+            return result
+        }
+    }
+    
+    /**
+     * 刷新所有会话名称（修复纯数字标题问题）
+     */
+    fun refreshAllSessionNames() {
+        scope.launch {
+            println("\n=== 开始刷新所有会话名称 ===")
+            var fixedCount = 0
+            
+            // 遍历所有项目的会话
+            _sessions.value.forEach { (projectId, sessions) ->
+                val project = _projects.value.find { it.id == projectId }
+                println("刷新项目 ${project?.name ?: projectId} 的会话...")
+                
+                val updatedSessions = sessions.map { session ->
+                    // 检查是否是纯数字名称
+                    if (session.name.matches(Regex("\\d+"))) {
+                        val numberValue = session.name.toIntOrNull()
+                        if (numberValue != null && numberValue in 50..10000) {
+                            println("  - 发现纯数字会话名称: '${session.name}' (ID: ${session.id})")
+                            
+                            // 生成存储路径
+                            val sessionStoragePath = File(System.getProperty("user.home"), ".claude/sessions/${projectId.replace(":", "").replace("/", "_").replace("\\", "_")}")
+                            val sessionFile = File(sessionStoragePath, "${session.id}.jsonl")
+                            
+                            if (sessionFile.exists()) {
+                                try {
+                                    val lines = sessionFile.readLines()
+                                    val newName = generateSessionName(lines, session.id, session.createdAt)
+                                    
+                                    // 如果新名称仍然是纯数字，使用默认名称
+                                    val finalName = if (newName.matches(Regex("\\d+")) && newName.toIntOrNull()?.let { it in 50..10000 } == true) {
+                                        val dateTime = if (session.createdAt.isNotBlank()) {
+                                            try {
+                                                val date = session.createdAt.substringBefore("T")
+                                                val time = session.createdAt.substringAfter("T").substringBefore(".").substringBefore("Z")
+                                                "$date $time"
+                                            } catch (e: Exception) {
+                                                session.id.take(8)
+                                            }
+                                        } else {
+                                            session.id.take(8)
+                                        }
+                                        "会话 $dateTime"
+                                    } else {
+                                        newName
+                                    }
+                                    
+                                    println("    - 新名称: '$finalName'")
+                                    fixedCount++
+                                    
+                                    // 返回更新后的会话
+                                    return@map session.copy(name = finalName)
+                                } catch (e: Exception) {
+                                    println("    - 刷新失败: ${e.message}")
+                                }
+                            } else {
+                                println("    - 会话文件不存在: ${sessionFile.absolutePath}")
+                            }
+                        }
+                    }
+                    // 返回原会话（未修改）
+                    session
+                }
+                
+                // 更新会话列表
+                if (updatedSessions != sessions) {
+                    _sessions.value = _sessions.value + (projectId to updatedSessions)
+                }
+            }
+            
+            println("=== 会话名称刷新完成，共修复 $fixedCount 个会话 ===")
+            println("注意：标签标题需要在 TabManager 中单独更新\n")
         }
     }
     
@@ -442,5 +648,62 @@ class ProjectManager {
         // 这里可以实现更新 .claude.json 的逻辑
         // 目前暂时不实现，因为可能影响其他 Claude 实例
         println("更新配置文件: ${project.path}, 移除: $remove")
+    }
+    
+    
+    /**
+     * 创建新项目
+     * @param name 项目名称
+     * @param path 项目路径
+     * @return 创建的项目对象
+     */
+    suspend fun createProject(name: String, path: String): Project {
+        println("创建新项目: $name at $path")
+        
+        // 创建项目对象
+        val newProject = Project(
+            id = path,
+            path = path,
+            name = name
+        )
+        
+        // 检查项目是否已存在
+        val existingProject = _projects.value.find { project ->
+            val normalizedProjectPath = project.path.replace('\\', '/')
+            val normalizedNewPath = path.replace('\\', '/')
+            normalizedProjectPath.equals(normalizedNewPath, ignoreCase = true)
+        }
+        
+        if (existingProject != null) {
+            println("项目已存在，切换到该项目: ${existingProject.name}")
+            setCurrentProject(existingProject)
+            return existingProject
+        }
+        
+        // 添加到项目列表
+        _projects.value = _projects.value + newProject
+        
+        // 创建项目的会话目录
+        val encodedProjectId = encodePathToDirectoryName(path)
+        val basePath = File(System.getProperty("user.home"), ".claude/projects")
+        val projectDir = File(basePath, encodedProjectId)
+        
+        if (!projectDir.exists()) {
+            println("创建会话目录: ${projectDir.absolutePath}")
+            projectDir.mkdirs()
+        }
+        
+        // 设置为当前项目
+        setCurrentProject(newProject)
+        
+        // 初始化空的会话列表
+        val newSessionsMap = _sessions.value.toMutableMap()
+        newSessionsMap[path] = emptyList()
+        _sessions.value = newSessionsMap
+        
+        // 可选：更新 .claude.json（目前不实现）
+        // updateClaudeConfig(newProject, remove = false)
+        
+        return newProject
     }
 }

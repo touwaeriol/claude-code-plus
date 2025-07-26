@@ -22,7 +22,11 @@ import com.claudecodeplus.ui.services.ChatTabManager
 import com.claudecodeplus.ui.models.ExportFormat
 import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.components.ProjectListPanel
+import com.claudecodeplus.ui.components.SessionListPanel
+import com.claudecodeplus.ui.components.ProjectTabBar
+import com.claudecodeplus.desktop.ui.dialogs.NewProjectDialog
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.input.key.*
@@ -68,6 +72,7 @@ fun EnhancedClaudeApp() {
     
     // UI 状态
     val uiState = remember { AppUiState() }
+    val scope = rememberCoroutineScope()
     
     // 在首次加载时，确保加载当前项目的会话
     LaunchedEffect(Unit) {
@@ -98,10 +103,27 @@ fun EnhancedClaudeApp() {
                     }
                     
                     println("加载了 ${allMessages.size} 条消息")
+                    println("DEBUG: 传递的会话对象 - ID: ${session.id}, Name: '${session.name}', ProjectId: ${session.projectId}")
+                    
+                    // 检查会话名称是否是数字
+                    if (session.name.matches(Regex("\\d+"))) {
+                        println("警告：会话名称是纯数字！value='${session.name}', 消息数量=${allMessages.size}")
+                        // 打印调用栈以追踪问题来源
+                        println("调用栈：")
+                        Thread.currentThread().stackTrace.take(10).forEach { 
+                            println("  at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})")
+                        }
+                    }
                     
                     // 创建或切换到该会话的标签
                     if (allMessages.isNotEmpty()) {
-                        val tabId = tabManager.createOrSwitchToSessionTab(session, allMessages)
+                        println("准备创建标签，传递的 session 对象:")
+                        println("  - session.id: ${session.id}")
+                        println("  - session.name: '${session.name}'")
+                        println("  - session.projectId: ${session.projectId}")
+                        println("  - allMessages.size: ${allMessages.size}")
+                        
+                        val tabId = tabManager.createOrSwitchToSessionTab(session, allMessages, currentProject)
                         println("创建或切换到标签: $tabId")
                     } else {
                         println("会话没有消息")
@@ -205,6 +227,48 @@ fun EnhancedClaudeApp() {
                         }
                         true
                     }
+                    // Ctrl+R: 刷新会话名称
+                    event.type == KeyEventType.KeyDown && 
+                    event.key == Key.R && 
+                    event.isCtrlPressed && 
+                    !event.isShiftPressed -> {
+                        println("刷新所有会话名称...")
+                        scope.launch {
+                            projectManager.refreshAllSessionNames()
+                            
+                            // 等待刷新完成后，更新标签标题
+                            kotlinx.coroutines.delay(500)
+                            
+                            // 遍历所有标签，更新标题
+                            tabManager.tabs.forEach { tab ->
+                                if (tab.sessionId != null) {
+                                    // 查找对应的会话
+                                    val sessions = projectManager.sessions.value[tab.projectId]
+                                    val session = sessions?.find { it.id == tab.sessionId }
+                                    if (session != null) {
+                                        val project = projectManager.projects.value.find { it.id == tab.projectId }
+                                        val projectShortName = project?.name?.let { name ->
+                                            if (name.length <= 4) name
+                                            else name.split(" ", "-", "_").map { it.firstOrNull()?.uppercaseChar() ?: "" }.joinToString("")
+                                                .ifEmpty { name.take(4) }
+                                        }
+                                        
+                                        val newTitle = if (projectShortName != null) {
+                                            "[$projectShortName] ${session.name}"
+                                        } else {
+                                            session.name
+                                        }
+                                        
+                                        if (tab.title != newTitle) {
+                                            println("更新标签标题: '${tab.title}' -> '$newTitle'")
+                                            tabManager.renameTab(tab.id, newTitle)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        true
+                    }
                     else -> false
                 }
             }
@@ -222,22 +286,61 @@ fun EnhancedClaudeApp() {
             
             Divider(orientation = Orientation.Horizontal)
             
-            // 主内容区域：左侧项目面板 + 右侧聊天区域
+            // 项目标签栏
+            val projects by projectManager.projects.collectAsState()
+            val sessions by projectManager.sessions.collectAsState()
+            val currentProject by projectManager.currentProject
+            
+            // 计算每个项目的会话数量
+            val sessionCounts = remember(sessions) {
+                sessions.mapValues { (_, sessionList) -> sessionList.size }
+            }
+            
+            ProjectTabBar(
+                projects = projects,
+                currentProjectId = currentProject?.id,
+                sessionCounts = sessionCounts,
+                onProjectSelect = { project -> projectManager.setCurrentProject(project) },
+                onProjectClose = if (projects.size > 1) {
+                    { project ->
+                        scope.launch {
+                            projectManager.deleteProject(project)
+                        }
+                    }
+                } else null,
+                onNewProject = { uiState.isNewProjectDialogVisible = true }
+            )
+            
+            Divider(orientation = Orientation.Horizontal)
+            
+            // 主内容区域：左侧会话面板 + 右侧聊天区域
             Row(modifier = Modifier.fillMaxSize()) {
-                val currentProject by projectManager.currentProject
                 val currentSession by projectManager.currentSession
+                
+                // 悬停状态管理
+                var hoveredSessionId by remember { mutableStateOf<String?>(null) }
 
-                ProjectListPanel(
-                    projectManager = projectManager,
-                    selectedProject = currentProject,
-                    selectedSession = currentSession,
-                    onProjectSelect = { project -> projectManager.setCurrentProject(project) },
-                    onSessionSelect = { session -> projectManager.setCurrentSession(session) },
-                    onCreateProject = { uiState.isNewProjectDialogVisible = true },
-                    modifier = Modifier.fillMaxHeight()
-                )
+                // 只显示当前项目的会话
+                currentProject?.let { project ->
+                    SessionListPanel(
+                        projectManager = projectManager,
+                        tabManager = tabManager,
+                        currentProject = project,
+                        selectedSession = currentSession,
+                        hoveredSessionId = hoveredSessionId,
+                        onSessionSelect = { session -> projectManager.setCurrentSession(session) },
+                        onSessionHover = { sessionId -> hoveredSessionId = sessionId },
+                        onCreateSession = { 
+                            tabManager.createNewTab(
+                                title = "新对话",
+                                project = project
+                            )
+                        },
+                        modifier = Modifier.fillMaxHeight()
+                    )
 
-                Divider(orientation = Orientation.Vertical)
+                    Divider(orientation = Orientation.Vertical)
+                }
 
                 MultiTabChatView(
                     tabManager = tabManager,
@@ -246,6 +349,7 @@ fun EnhancedClaudeApp() {
                     fileIndexService = fileIndexService,
                     projectService = projectService,
                     sessionManager = sessionManager,
+                    onTabHover = { sessionId -> hoveredSessionId = sessionId },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -262,6 +366,23 @@ fun EnhancedClaudeApp() {
     }
     
     // 对话框
+    if (uiState.isNewProjectDialogVisible) {
+        NewProjectDialog(
+            onConfirm = { projectName, projectPath ->
+                scope.launch {
+                    val newProject = projectManager.createProject(projectName, projectPath)
+                    // 创建新标签
+                    tabManager.createNewTab(
+                        title = "新对话",
+                        project = newProject
+                    )
+                    uiState.isNewProjectDialogVisible = false
+                }
+            },
+            onDismiss = { uiState.isNewProjectDialogVisible = false }
+        )
+    }
+    
     if (uiState.isOrganizerVisible) {
         ChatOrganizer(
             tabManager = tabManager,

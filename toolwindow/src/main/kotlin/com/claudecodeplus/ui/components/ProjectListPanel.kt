@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.Tooltip
@@ -54,6 +55,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import java.awt.Cursor
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.foundation.gestures.detectTapGestures
 
 // 简单的上下文菜单组件
 @Composable
@@ -101,16 +105,23 @@ fun MenuItem(
 @Composable
 fun ProjectListPanel(
     projectManager: ProjectManager,
+    tabManager: com.claudecodeplus.ui.services.ChatTabManager? = null,
     selectedProject: Project?,
     selectedSession: ProjectSession?,
+    hoveredSessionId: String? = null,
     onProjectSelect: (Project) -> Unit,
     onSessionSelect: (ProjectSession) -> Unit,
+    onSessionHover: ((String?) -> Unit)? = null,
     onCreateProject: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val projects by projectManager.projects.collectAsState()
     val sessions by projectManager.sessions.collectAsState()
     val scope = rememberCoroutineScope()
+    
+    // 获取已打开的标签信息
+    val openedTabs = tabManager?.tabs ?: emptyList()
+    val activeTabId = tabManager?.activeTabId
     
     // 右键菜单状态
     var showProjectMenu by remember { mutableStateOf(false) }
@@ -171,6 +182,7 @@ fun ProjectListPanel(
                                             onProjectSelect(project) 
                                         },
                                         onLongClick = {
+                                            // 长按显示菜单（作为右键菜单的替代）
                                             menuProject = project
                                             showProjectMenu = true
                                         }
@@ -192,12 +204,23 @@ fun ProjectListPanel(
                                     Spacer(modifier = Modifier.width(4.dp))
                                 }
                                 
-                                // 项目名称
-                                Text(
-                                    text = project.name,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (project.id == selectedProject?.id) Color.Blue else Color.Unspecified
-                                )
+                                // 项目名称和路径
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = project.name,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (project.id == selectedProject?.id) Color.Blue else Color.Unspecified
+                                    )
+                                    Text(
+                                        text = project.path,
+                                        style = JewelTheme.defaultTextStyle.copy(
+                                            fontSize = JewelTheme.defaultTextStyle.fontSize * 0.85f,
+                                            color = JewelTheme.globalColors.text.disabled
+                                        ),
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                             
                             // 项目右键菜单
@@ -224,33 +247,84 @@ fun ProjectListPanel(
                             projectSessions.forEach { session ->
                                 var showTooltip by remember { mutableStateOf(false) }
                                 
+                                // 检查该会话是否已打开标签
+                                val hasOpenTab = openedTabs.any { it.sessionId == session.id }
+                                val isActiveTab = openedTabs.find { it.sessionId == session.id }?.id == activeTabId
+                                val isHovered = hoveredSessionId == session.id
+                                
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(start = 24.dp, end = 4.dp)
                                         .onPointerEvent(PointerEventType.Enter) {
                                             showTooltip = true
+                                            onSessionHover?.invoke(session.id)
                                         }
                                         .onPointerEvent(PointerEventType.Exit) {
                                             showTooltip = false
+                                            onSessionHover?.invoke(null)
                                         }
                                 ) {
-                                    Text(
-                                        text = session.name,
-                                        color = if (session.id == selectedSession?.id) Color.Blue else Color.Unspecified,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
+                                    Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .combinedClickable(
                                                 onClick = { onSessionSelect(session) },
                                                 onLongClick = {
+                                                    // 长按显示菜单（作为右键菜单的替代）
                                                     menuSession = session
                                                     showSessionMenu = true
+                                                },
+                                                onDoubleClick = {
+                                                    // 双击切换到对应的标签
+                                                    val tab = openedTabs.find { it.sessionId == session.id }
+                                                    if (tab != null) {
+                                                        tabManager?.setActiveTab(tab.id)
+                                                    }
                                                 }
                                             )
-                                            .padding(vertical = 2.dp, horizontal = 4.dp)
-                                    )
+                                            .background(
+                                                when {
+                                                    isActiveTab -> Color(0xFF2675BF).copy(alpha = 0.2f)
+                                                    isHovered -> Color(0xFFFFEB3B).copy(alpha = 0.2f) // 黄色高亮表示悬停
+                                                    hasOpenTab -> Color(0xFF4CAF50).copy(alpha = 0.1f)
+                                                    else -> Color.Transparent
+                                                },
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .padding(vertical = 2.dp, horizontal = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // 标签指示器
+                                        if (hasOpenTab) {
+                                            Icon(
+                                                imageVector = Icons.Default.Star, // 使用 Star 图标作为标签指示器
+                                                contentDescription = "已打开标签",
+                                                modifier = Modifier.size(14.dp),
+                                                tint = if (isActiveTab) Color(0xFF2675BF) else Color(0xFF4CAF50)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                        }
+                                        
+                                        val displayName = session.name.also { name ->
+                                            // 调试：检查会话列表中显示的名称
+                                            if (name.matches(Regex("\\d+"))) {
+                                                println("警告：会话列表显示纯数字名称！")
+                                                println("  - session.id: ${session.id}")
+                                                println("  - session.name: '$name'")
+                                                println("  - session.projectId: ${session.projectId}")
+                                            }
+                                        }
+                                        Text(
+                                            text = displayName,
+                                            color = if (session.id == selectedSession?.id) Color.Blue else Color.Unspecified,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        
+                                        // 移除三个点按钮，使用右键菜单代替
+                                    }
                                     
                                     // 显示完整文本的 Tooltip
                                     if (showTooltip && session.name.length > 30) {

@@ -34,6 +34,9 @@ fun ChatView(
     sessionManager: ClaudeSessionManager = ClaudeSessionManager(),
     initialMessages: List<EnhancedMessage>? = null,
     sessionId: String? = null,
+    tabManager: com.claudecodeplus.ui.services.ChatTabManager? = null,
+    currentTabId: String? = null,
+    currentProject: com.claudecodeplus.ui.models.Project? = null,
     modifier: Modifier = Modifier
 ) {
     // 状态管理
@@ -257,6 +260,9 @@ fun ChatView(
                             // 记录当前会话ID（如果是新会话，会在响应中创建）
                             var sessionIdToUse = currentSessionId
                             
+                            // 检查是否是新项目的第一条消息（标签没有关联会话ID）
+                            val isFirstMessageForNewProject = currentSessionId == null && messages.size == 1
+                            
                             // 创建助手消息用于累积响应
                             var assistantMessageId = UUID.randomUUID().toString()
                             var assistantContent = ""
@@ -281,6 +287,20 @@ fun ChatView(
                                             currentSessionId = response.sessionId
                                             sessionIdToUse = response.sessionId
                                             // ChatView: New session created: $currentSessionId
+                                            
+                                            // 如果是新项目的第一条消息，更新标签标题和关联会话ID
+                                            if (isFirstMessageForNewProject && tabManager != null && currentTabId != null) {
+                                                tabManager.updateTabTitleFromFirstMessage(
+                                                    tabId = currentTabId,
+                                                    messageContent = markdownText,
+                                                    project = currentProject
+                                                )
+                                                
+                                                // 更新标签的会话ID
+                                                tabManager.updateTab(currentTabId) { tab ->
+                                                    tab.copy(sessionId = response.sessionId)
+                                                }
+                                            }
                                         }
                                     }
                                     is ClaudeCliWrapper.StreamResponse.Content -> {
