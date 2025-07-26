@@ -39,6 +39,14 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "com.claudecodeplus.desktop.MainKt"
+        
+        // 设置 JVM 参数，确保使用 UTF-8 编码
+        jvmArgs(
+            "-Dfile.encoding=UTF-8",
+            "-Dsun.stdout.encoding=UTF-8", 
+            "-Dsun.stderr.encoding=UTF-8",
+            "-Dconsole.encoding=UTF-8"
+        )
 
         buildTypes.release.proguard {
             isEnabled.set(false)

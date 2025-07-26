@@ -38,6 +38,7 @@ fun SessionListPanel(
 ) {
     var sessions by remember { mutableStateOf<List<SessionInfo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var visitedSessionIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val coroutineScope = rememberCoroutineScope()
     
     // 加载会话列表
@@ -47,6 +48,13 @@ fun SessionListPanel(
         sessions = sessionManager.getSessionList(projectPath)
         // SessionListPanel: Loaded ${sessions.size} sessions
         isLoading = false
+    }
+    
+    // 当前会话变化时，自动添加到已访问列表
+    LaunchedEffect(currentSessionId) {
+        if (currentSessionId != null) {
+            visitedSessionIds = visitedSessionIds + currentSessionId
+        }
     }
     
     Column(
@@ -158,7 +166,11 @@ fun SessionListPanel(
                             SessionItem(
                                 session = session,
                                 isSelected = session.sessionId == currentSessionId,
-                                onClick = { onSessionSelect(session) },
+                                isVisited = visitedSessionIds.contains(session.sessionId),
+                                onClick = { 
+                                    visitedSessionIds = visitedSessionIds + session.sessionId
+                                    onSessionSelect(session) 
+                                },
                                 onDelete = { onDeleteSession(session) }
                             )
                         }
@@ -176,6 +188,7 @@ fun SessionListPanel(
 private fun SessionItem(
     session: SessionInfo,
     isSelected: Boolean,
+    isVisited: Boolean,
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -186,10 +199,10 @@ private fun SessionItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(
-                if (isSelected) {
-                    Color(0xFF1976D2).copy(alpha = 0.1f)
-                } else {
-                    Color.Transparent
+                when {
+                    isSelected -> Color(0xFF1976D2) // 深蓝色背景，当前选中
+                    isVisited -> Color(0xFF1976D2).copy(alpha = 0.1f) // 浅蓝色背景，已访问
+                    else -> Color.Transparent // 透明背景，未访问
                 }
             )
             .clickable { onClick() }
@@ -208,7 +221,8 @@ private fun SessionItem(
                 Text(
                     text = session.firstMessage ?: "新会话",
                     style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 14.sp
+                        fontSize = 14.sp,
+                        color = if (isSelected) Color.White else JewelTheme.globalColors.text.normal
                     ),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -224,21 +238,21 @@ private fun SessionItem(
                         text = formatSessionTime(session.lastModified),
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 12.sp,
-                            color = JewelTheme.globalColors.text.disabled
+                            color = if (isSelected) Color.White.copy(alpha = 0.8f) else JewelTheme.globalColors.text.disabled
                         )
                     )
                     Text(
                         text = "·",
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 12.sp,
-                            color = JewelTheme.globalColors.text.disabled
+                            color = if (isSelected) Color.White.copy(alpha = 0.8f) else JewelTheme.globalColors.text.disabled
                         )
                     )
                     Text(
                         text = "${session.messageCount} 条消息",
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 12.sp,
-                            color = JewelTheme.globalColors.text.disabled
+                            color = if (isSelected) Color.White.copy(alpha = 0.8f) else JewelTheme.globalColors.text.disabled
                         )
                     )
                 }

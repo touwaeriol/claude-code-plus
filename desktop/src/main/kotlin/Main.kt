@@ -202,7 +202,7 @@ fun EnhancedClaudeApp() {
                         val session = sessions?.find { it.id == event.sessionId }
                         if (session != null) {
                             println("切换到会话: ${session.name}")
-                            projectManager.setCurrentSession(session, loadHistory = false)
+                            projectManager.setCurrentSession(session, loadHistory = true)
                         }
                     }
                 }
@@ -408,7 +408,7 @@ fun EnhancedClaudeApp() {
                         currentProject = project,
                         selectedSession = currentSession,
                         hoveredSessionId = hoveredSessionId,
-                        onSessionSelect = { session -> projectManager.setCurrentSession(session) },
+                        onSessionSelect = { session -> projectManager.setCurrentSession(session, loadHistory = true) },
                         onSessionHover = { sessionId -> hoveredSessionId = sessionId },
                         onCreateSession = { 
                             scope.launch {

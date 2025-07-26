@@ -11,6 +11,7 @@ import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.session.models.*
 import com.claudecodeplus.ui.jewel.components.*
 import com.claudecodeplus.ui.models.*
+import java.time.Instant
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.ui.services.ProjectService
 import kotlinx.coroutines.launch
@@ -51,8 +52,8 @@ fun ChatView(
     
     val coroutineScope = rememberCoroutineScope()
     
-    // 监听传入的 sessionId 和 messages 变化
-    LaunchedEffect(sessionId, initialMessages) {
+    // 只在组件首次创建时设置初始值
+    LaunchedEffect(Unit) {
         if (sessionId != null) {
             currentSessionId = sessionId
         }
@@ -61,10 +62,17 @@ fun ChatView(
         }
     }
     
+    // 监听 sessionId 变化，但不重置消息
+    LaunchedEffect(sessionId) {
+        if (sessionId != null && sessionId != currentSessionId) {
+            currentSessionId = sessionId
+        }
+    }
+    
     // 初始化时加载最近会话或创建新会话
     LaunchedEffect(workingDirectory) {
-        // 如果已经有传入的消息和会话ID，不需要加载最近会话
-        if (sessionId != null && initialMessages != null) {
+        // 如果明确传入了 initialMessages（即使是空列表），就不加载最近会话
+        if (initialMessages != null) {
             return@LaunchedEffect
         }
         
@@ -337,9 +345,19 @@ fun ChatView(
                                                     project = currentProject
                                                 )
                                                 
-                                                // 更新标签的会话ID
+                                                // 更新标签的会话ID和消息列表
                                                 tabManager.updateTab(currentTabId) { tab ->
-                                                    tab.copy(sessionId = response.sessionId)
+                                                    tab.copy(
+                                                        sessionId = response.sessionId,
+                                                        messages = messages.map { msg ->
+                                                            ChatMessage(
+                                                                id = msg.id,
+                                                                role = msg.role,
+                                                                content = msg.content,
+                                                                timestamp = java.time.Instant.ofEpochMilli(msg.timestamp)
+                                                            )
+                                                        }
+                                                    )
                                                 }
                                             }
                                         }
@@ -409,6 +427,22 @@ fun ChatView(
                                         
                                         messages = messages.map { 
                                             if (it.id == assistantMessageId) finalMessage else it 
+                                        }
+                                        
+                                        // 响应完成后，同步一次标签中的消息列表
+                                        if (tabManager != null && currentTabId != null) {
+                                            tabManager.updateTab(currentTabId) { tab ->
+                                                tab.copy(
+                                                    messages = messages.map { msg ->
+                                                        ChatMessage(
+                                                            id = msg.id,
+                                                            role = msg.role,
+                                                            content = msg.content,
+                                                            timestamp = java.time.Instant.ofEpochMilli(msg.timestamp)
+                                                        )
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                     is ClaudeCliWrapper.StreamResponse.ToolUse -> {

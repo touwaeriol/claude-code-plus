@@ -60,6 +60,7 @@ subprojects {
     tasks.withType<KotlinCompile> {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
+            freeCompilerArgs.add("-Xjvm-default=all")
         }
     }
     
@@ -67,10 +68,18 @@ subprojects {
     tasks.withType<JavaCompile> {
         sourceCompatibility = "17"
         targetCompatibility = "17"
+        options.encoding = "UTF-8"
     }
     
     // 测试配置
     tasks.withType<Test> {
         useJUnitPlatform()
+        systemProperty("file.encoding", "UTF-8")
+    }
+    
+    // 设置 JVM 运行时编码
+    tasks.withType<JavaExec> {
+        systemProperty("file.encoding", "UTF-8")
+        jvmArgs("-Dfile.encoding=UTF-8")
     }
 }

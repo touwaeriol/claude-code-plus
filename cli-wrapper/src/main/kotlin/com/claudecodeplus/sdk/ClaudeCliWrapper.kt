@@ -367,6 +367,16 @@ class ClaudeCliWrapper {
         // 标识调用来源
         env["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kotlin"
         
+        // 设置编码相关的环境变量，确保子进程使用 UTF-8
+        env["LANG"] = "en_US.UTF-8"
+        env["LC_ALL"] = "en_US.UTF-8"
+        env["PYTHONIOENCODING"] = "utf-8"  // 如果 Node.js 调用了 Python
+        
+        // Windows 特定的编码设置
+        if (System.getProperty("os.name").lowercase().contains("windows")) {
+            env["CHCP"] = "65001"  // UTF-8 代码页
+        }
+        
         // 确保 PATH 包含必要的目录
         val currentPath = env["PATH"] ?: System.getenv("PATH") ?: ""
         val additionalPaths = listOf(
@@ -384,9 +394,9 @@ class ClaudeCliWrapper {
         // 关闭输入流
         process.outputStream.close()
         
-        // 读取输出
-        val reader = BufferedReader(InputStreamReader(process.inputStream))
-        val errorReader = BufferedReader(InputStreamReader(process.errorStream))
+        // 读取输出，指定 UTF-8 编码
+        val reader = BufferedReader(InputStreamReader(process.inputStream, "UTF-8"))
+        val errorReader = BufferedReader(InputStreamReader(process.errorStream, "UTF-8"))
         logger.info("🔵 [$requestId] 开始读取输出流...")
         
         // 启动错误流读取
