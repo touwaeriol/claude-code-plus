@@ -2,6 +2,8 @@ package com.claudecodeplus.ui.services
 
 import com.claudecodeplus.sdk.SDKMessage
 import com.claudecodeplus.ui.models.*
+import com.claudecodeplus.ui.utils.Constants
+import com.claudecodeplus.ui.utils.DefaultConfigs
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import java.io.File
@@ -25,8 +27,8 @@ class SessionLoader(
      */
     fun loadSessionAsMessageFlow(
         sessionFile: File,
-        maxMessages: Int = 50,
-        maxDaysOld: Int = 7
+        maxMessages: Int = DefaultConfigs.Session.MAX_MESSAGES,
+        maxDaysOld: Int = DefaultConfigs.Session.MAX_DAYS_OLD
     ): Flow<LoadResult> = flow {
         val messages = mutableListOf<EnhancedMessage>()
         var currentAssistantMessage: EnhancedMessage? = null
@@ -46,7 +48,7 @@ class SessionLoader(
                         com.claudecodeplus.sdk.MessageType.START -> {
                             val text = sdkMessage.data.text
                             when {
-                                text?.startsWith("USER_MESSAGE:") == true -> {
+                                text?.startsWith(Constants.Messages.USER_MESSAGE_PREFIX) == true -> {
                                     // 完成当前助手消息（如果有）
                                     currentAssistantMessage?.let { msg ->
                                         messages.add(msg)
@@ -60,7 +62,7 @@ class SessionLoader(
                                     // orderedElements 由 MessageProcessor 管理
                                     
                                     // 创建用户消息
-                                    val userContent = text.substring("USER_MESSAGE:".length)
+                                    val userContent = text.substring(Constants.Messages.USER_MESSAGE_PREFIX.length)
                                     val userMessage = EnhancedMessage(
                                         id = sdkMessage.data.sessionId ?: System.currentTimeMillis().toString(),
                                         role = MessageRole.USER,
@@ -71,9 +73,9 @@ class SessionLoader(
                                     emit(LoadResult.MessageCompleted(userMessage))
                                 }
                                 
-                                text?.startsWith("ASSISTANT_MESSAGE:") == true -> {
+                                text?.startsWith(Constants.Messages.ASSISTANT_MESSAGE_PREFIX) == true -> {
                                     // 提取消息ID
-                                    val messageId = text.substring("ASSISTANT_MESSAGE:".length)
+                                    val messageId = text.substring(Constants.Messages.ASSISTANT_MESSAGE_PREFIX.length)
                                     
                                     // 检查是否是同一消息的延续
                                     if (currentAssistantMessage?.id != messageId) {
@@ -100,7 +102,7 @@ class SessionLoader(
                                     // 如果是同一消息，继续使用当前状态
                                 }
                                 
-                                text?.startsWith("COMPACT_SUMMARY:") == true -> {
+                                text?.startsWith(Constants.Messages.COMPACT_SUMMARY_PREFIX) == true -> {
                                     // 完成当前助手消息（如果有）
                                     currentAssistantMessage?.let { msg ->
                                         messages.add(msg)
@@ -114,7 +116,7 @@ class SessionLoader(
                                     // orderedElements 由 MessageProcessor 管理
                                     
                                     // 创建压缩摘要消息
-                                    val summaryId = text.substring("COMPACT_SUMMARY:".length)
+                                    val summaryId = text.substring(Constants.Messages.COMPACT_SUMMARY_PREFIX.length)
                                     val summaryMessage = EnhancedMessage(
                                         id = summaryId,
                                         role = MessageRole.SYSTEM,

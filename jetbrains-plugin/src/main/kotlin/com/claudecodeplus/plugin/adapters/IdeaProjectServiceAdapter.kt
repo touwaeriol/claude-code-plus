@@ -1,6 +1,6 @@
 package com.claudecodeplus.plugin.adapters
 
-import com.claudecodeplus.ui.services.ProjectService
+import com.claudecodeplus.core.interfaces.ProjectService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.vfs.LocalFileSystem

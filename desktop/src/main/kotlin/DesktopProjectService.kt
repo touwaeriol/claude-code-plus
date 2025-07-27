@@ -1,6 +1,6 @@
 package com.claudecodeplus.desktop
 
-import com.claudecodeplus.ui.services.ProjectService
+import com.claudecodeplus.core.interfaces.ProjectService
 
 import java.awt.Desktop
 import java.io.File

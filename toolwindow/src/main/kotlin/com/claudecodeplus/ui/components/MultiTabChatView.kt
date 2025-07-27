@@ -25,7 +25,7 @@ import com.claudecodeplus.ui.services.ChatTabManager
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.services.FileIndexService
-import com.claudecodeplus.ui.services.ProjectService
+import com.claudecodeplus.core.interfaces.ProjectService
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons

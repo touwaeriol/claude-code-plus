@@ -5,7 +5,7 @@ import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.jewel.ChatView
 import com.claudecodeplus.ui.services.FileIndexService
-import com.claudecodeplus.ui.services.ProjectService
+import com.claudecodeplus.core.interfaces.ProjectService
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 import org.jetbrains.jewel.intui.standalone.theme.darkThemeDefinition
 import org.jetbrains.jewel.intui.standalone.theme.lightThemeDefinition

@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.jewel.components.context.*
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.FileIndexService
-import com.claudecodeplus.ui.services.ProjectService
+import com.claudecodeplus.core.interfaces.ProjectService
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import java.text.SimpleDateFormat

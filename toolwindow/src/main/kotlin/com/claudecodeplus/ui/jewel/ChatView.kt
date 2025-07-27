@@ -13,7 +13,7 @@ import com.claudecodeplus.ui.jewel.components.*
 import com.claudecodeplus.ui.models.*
 import java.time.Instant
 import com.claudecodeplus.ui.services.FileIndexService
-import com.claudecodeplus.ui.services.ProjectService
+import com.claudecodeplus.core.interfaces.ProjectService
 import kotlinx.coroutines.launch
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
