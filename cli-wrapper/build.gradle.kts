@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm")
+    kotlin("plugin.serialization")
 }
 
 group = "com.claudecodeplus"
@@ -10,8 +11,9 @@ dependencies {
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
     
     // JSON 处理
-    implementation("org.json:json:20231013")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.15.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
+    implementation("org.json:json:20231013") // 保留用于简单的 JSON 操作
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.15.3") // 暂时保留，稍后重构
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.15.3")
     
     // 文件监听和IO优化

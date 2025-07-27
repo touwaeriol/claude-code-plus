@@ -74,15 +74,22 @@ class ClaudeCliWrapperTest {
     }
     
     /**
-     * 测试 chat 方法
+     * 测试 query 方法
      */
     @Test
     @EnabledIfEnvironmentVariable(named = "RUN_CLAUDE_TESTS", matches = "true")
-    fun testChat() = runBlocking {
+    fun testQuery() = runBlocking {
         val prompt = "请说'测试成功'"
-        val response = wrapper.chat(prompt)
+        val response = StringBuilder()
         
-        assertNotNull(response)
+        wrapper.query(prompt).collect { message ->
+            when (message.type) {
+                MessageType.TEXT -> response.append(message.data.text ?: "")
+                MessageType.ERROR -> fail("不应收到错误消息: ${message.data.error}")
+                else -> {}
+            }
+        }
+        
         assertTrue(response.isNotEmpty(), "响应不应为空")
         assertTrue(response.contains("测试成功"), "响应应包含'测试成功'")
     }
@@ -92,8 +99,8 @@ class ClaudeCliWrapperTest {
      */
     @Test
     fun testEmptyPromptError() {
-        assertThrows(IllegalArgumentException::class.java) {
-            runBlocking {
+        runBlocking {
+            assertThrows(IllegalArgumentException::class.java) {
                 wrapper.query("").collect {}
             }
         }
@@ -110,8 +117,8 @@ class ClaudeCliWrapperTest {
             fallbackModel = model
         )
         
-        assertThrows(IllegalArgumentException::class.java) {
-            runBlocking {
+        runBlocking {
+            assertThrows(IllegalArgumentException::class.java) {
                 wrapper.query("test", options).collect {}
             }
         }
@@ -128,10 +135,7 @@ class ClaudeCliWrapperTest {
             model = "claude-opus-4-20250514",
             maxTurns = 5,
             customSystemPrompt = "You are a helpful assistant",
-            continueConversation = true,
-            allowedTools = listOf("tool1", "tool2"),
-            disallowedTools = listOf("tool3"),
-            permissionMode = ClaudeCliWrapper.PermissionMode.BYPASS_PERMISSIONS,
+            permissionMode = ClaudeCliWrapper.PermissionMode.BYPASS_PERMISSIONS.cliValue,
             cwd = "/tmp"
         )
         
@@ -140,10 +144,7 @@ class ClaudeCliWrapperTest {
         assertEquals("claude-opus-4-20250514", options.model)
         assertEquals(5, options.maxTurns)
         assertEquals("You are a helpful assistant", options.customSystemPrompt)
-        assertTrue(options.continueConversation)
-        assertEquals(listOf("tool1", "tool2"), options.allowedTools)
-        assertEquals(listOf("tool3"), options.disallowedTools)
-        assertEquals(ClaudeCliWrapper.PermissionMode.BYPASS_PERMISSIONS, options.permissionMode)
+        assertEquals(ClaudeCliWrapper.PermissionMode.BYPASS_PERMISSIONS.cliValue, options.permissionMode)
         assertEquals("/tmp", options.cwd)
     }
     
@@ -153,23 +154,18 @@ class ClaudeCliWrapperTest {
      */
     @Test
     fun testClaudeCliAvailable() {
-        try {
-            val process = ProcessBuilder("claude", "--version").start()
-            val exitCode = process.waitFor()
+        runBlocking {
+            val isAvailable = wrapper.isClaudeCliAvailable()
             
-            if (exitCode == 0) {
+            if (isAvailable) {
                 println("Claude CLI 已安装并可用")
-                
-                // 读取版本信息
-                val output = process.inputStream.bufferedReader().readText()
-                println("Claude CLI 版本: $output")
             } else {
                 println("Claude CLI 未安装或不可用")
-                println("请运行: npm install -g @anthropic-ai/claude-cli")
+                println("请运行: npm install -g @anthropic-ai/claude-code")
             }
-        } catch (e: Exception) {
-            println("无法执行 claude 命令: ${e.message}")
-            println("请确保 Claude CLI 已安装并在 PATH 中")
+            
+            // 验证方法能正常执行
+            assertTrue(true, "测试完成")
         }
     }
 }

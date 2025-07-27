@@ -15,7 +15,8 @@ data class SessionInfo(
     val messageCount: Int,
     val firstMessage: String? = null,
     val lastMessage: String? = null,
-    val projectPath: String
+    val projectPath: String,
+    val isCompactSummary: Boolean = false  // 标记是否为压缩会话
 )
 
 /**

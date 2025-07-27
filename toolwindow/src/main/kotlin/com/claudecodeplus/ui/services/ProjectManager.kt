@@ -137,10 +137,12 @@ class ProjectManager {
                             // 如果找到了项目路径，创建项目对象
                             val foundProjectPath = projectPath
                             if (foundProjectPath != null) {
+                                // 更智能的项目名称提取
+                                val projectName = extractProjectName(foundProjectPath)
                                 val project = Project(
                                     id = foundProjectPath,
                                     path = foundProjectPath,
-                                    name = foundProjectPath.substringAfterLast(File.separator)
+                                    name = projectName
                                 )
                                 loadedProjects.add(project)
                                 println("添加项目: ${project.name} (${project.path})")
@@ -249,14 +251,18 @@ class ProjectManager {
                                 return@mapNotNull null
                             }
 
-                            // 解析第一行来获取基本信息
-                            val firstLineJson = json.parseToJsonElement(lines.first()).jsonObject
-                            val sessionId = firstLineJson["sessionId"]?.jsonPrimitive?.content
-                            if (sessionId == null) {
-                                println("无法获取sessionId: ${file.name}")
-                                return@mapNotNull null
+                            // 使用文件名作为会话ID（这是Claude CLI的约定）
+                            val sessionId = file.nameWithoutExtension
+                            println("  使用文件名作为sessionId: $sessionId")
+                            
+                            // 尝试从第一行获取时间戳
+                            val timestamp = try {
+                                val firstLineJson = json.parseToJsonElement(lines.first()).jsonObject
+                                firstLineJson["timestamp"]?.jsonPrimitive?.content ?: ""
+                            } catch (e: Exception) {
+                                println("  无法解析第一行获取时间戳: ${e.message}")
+                                ""
                             }
-                            val timestamp = firstLineJson["timestamp"]?.jsonPrimitive?.content ?: ""
                             
                             // 生成会话名称
                             val sessionName = generateSessionName(lines, sessionId, timestamp)
@@ -621,7 +627,7 @@ class ProjectManager {
             } else {
                 println("项目不存在，添加到项目列表")
                 // 从路径中提取项目名称
-                val projectName = currentDir.substringAfterLast(File.separator)
+                val projectName = extractProjectName(currentDir)
                 val newProject = Project(
                     id = currentDir, 
                     path = currentDir,
@@ -856,6 +862,14 @@ class ProjectManager {
             
             println("会话ID已更新")
         }
+    }
+    
+    /**
+     * 从项目路径中提取更有意义的项目名称
+     */
+    private fun extractProjectName(projectPath: String): String {
+        // 直接返回最后一段目录名，保持与 cwd 一致
+        return projectPath.substringAfterLast(File.separator)
     }
     
 }

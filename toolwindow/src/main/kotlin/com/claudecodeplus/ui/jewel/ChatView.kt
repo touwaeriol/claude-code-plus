@@ -310,13 +310,15 @@ fun ChatView(
                             
                             // ChatView: Sending message, useResume=$useResume, sessionId=$currentSessionId, isPlaceholder=$isPlaceholderSession
                             
-                            cliWrapper.sendMessage(
-                                message = markdownText,
-                                sessionId = if (useResume) currentSessionId else null,
-                                cwd = workingDirectory
-                            ).collect { response ->
-                                when (response) {
-                                    is ClaudeCliWrapper.StreamResponse.SessionStart -> {
+                            val options = ClaudeCliWrapper.QueryOptions(
+                                resume = if (useResume) currentSessionId else null,
+                                cwd = workingDirectory,
+                                model = selectedModel?.cliName
+                            )
+                            
+                            cliWrapper.query(markdownText, options).collect { message ->
+                                when (message.type) {
+                                    com.claudecodeplus.sdk.MessageType.START -> {
                                         // 新会话创建，保存会话ID
                                         if (currentSessionId == null || isPlaceholderSession) {
                                             val oldSessionId = currentSessionId
@@ -327,14 +329,14 @@ fun ChatView(
                                                     // 更新占位会话的ID为真实的Claude会话ID
                                                     projectManager.updateSessionId(
                                                         oldSessionId = oldSessionId,
-                                                        newSessionId = response.sessionId,
+                                                        newSessionId = message.data.sessionId ?: "",
                                                         projectId = currentProject.id
                                                     )
                                                 }
                                             }
                                             
-                                            currentSessionId = response.sessionId
-                                            sessionIdToUse = response.sessionId
+                                            currentSessionId = message.data.sessionId
+                                            sessionIdToUse = message.data.sessionId
                                             // ChatView: New session created: $currentSessionId
                                             
                                             // 如果是新项目的第一条消息，更新标签标题和关联会话ID
@@ -348,24 +350,18 @@ fun ChatView(
                                                 // 更新标签的会话ID和消息列表
                                                 tabManager.updateTab(currentTabId) { tab ->
                                                     tab.copy(
-                                                        sessionId = response.sessionId,
-                                                        messages = messages.map { msg ->
-                                                            ChatMessage(
-                                                                id = msg.id,
-                                                                role = msg.role,
-                                                                content = msg.content,
-                                                                timestamp = java.time.Instant.ofEpochMilli(msg.timestamp)
-                                                            )
-                                                        }
+                                                        sessionId = message.data.sessionId ?: "",
+                                                        messages = messages
                                                     )
                                                 }
                                             }
                                         }
                                     }
-                                    is ClaudeCliWrapper.StreamResponse.Content -> {
+                                    com.claudecodeplus.sdk.MessageType.TEXT -> {
                                         // 累积内容
-                                        assistantContent += response.content
-                                        currentContentBuilder.append(response.content)
+                                        val text = message.data.text ?: ""
+                                        assistantContent += text
+                                        currentContentBuilder.append(text)
                                         
                                         // 更新或创建助手消息
                                         val assistantMessage = EnhancedMessage(
@@ -386,18 +382,18 @@ fun ChatView(
                                             messages + assistantMessage
                                         }
                                     }
-                                    is ClaudeCliWrapper.StreamResponse.Error -> {
+                                    com.claudecodeplus.sdk.MessageType.ERROR -> {
                                         val errorMessage = EnhancedMessage(
                                             id = UUID.randomUUID().toString(),
                                             role = MessageRole.ASSISTANT,
-                                            content = "错误: ${response.error}",
+                                            content = "错误: ${message.data.error ?: "未知错误"}",
                                             timestamp = System.currentTimeMillis(),
                                             model = selectedModel,
                                             contexts = emptyList()
                                         )
                                         messages = messages + errorMessage
                                     }
-                                    is ClaudeCliWrapper.StreamResponse.Complete -> {
+                                    com.claudecodeplus.sdk.MessageType.END -> {
                                         // 流结束
                                         // ChatView: Message complete
                                         
@@ -433,21 +429,15 @@ fun ChatView(
                                         if (tabManager != null && currentTabId != null) {
                                             tabManager.updateTab(currentTabId) { tab ->
                                                 tab.copy(
-                                                    messages = messages.map { msg ->
-                                                        ChatMessage(
-                                                            id = msg.id,
-                                                            role = msg.role,
-                                                            content = msg.content,
-                                                            timestamp = java.time.Instant.ofEpochMilli(msg.timestamp)
-                                                        )
-                                                    }
+                                                    messages = messages
                                                 )
                                             }
                                         }
                                     }
-                                    is ClaudeCliWrapper.StreamResponse.ToolUse -> {
+                                    com.claudecodeplus.sdk.MessageType.TOOL_USE -> {
                                         // 工具调用
-                                        // ChatView: Tool use - ${response.toolName}
+                                        val toolName = message.data.toolName ?: "unknown"
+                                        val toolCallId = message.data.toolCallId ?: UUID.randomUUID().toString()
                                         
                                         // 如果有累积的内容，先添加到时间线
                                         if (currentContentBuilder.isNotEmpty()) {
@@ -461,9 +451,10 @@ fun ChatView(
                                         }
                                         
                                         val toolCall = com.claudecodeplus.ui.models.ToolCall(
-                                            id = UUID.randomUUID().toString(),
-                                            name = response.toolName,
-                                            parameters = when (val input = response.toolInput) {
+                                            id = toolCallId,
+                                            name = toolName,
+                                            displayName = toolName,
+                                            parameters = when (val input = message.data.toolInput) {
                                                 is Map<*, *> -> {
                                                     @Suppress("UNCHECKED_CAST")
                                                     input as Map<String, Any>
@@ -501,16 +492,16 @@ fun ChatView(
                                             messages + assistantMessage
                                         }
                                     }
-                                    is ClaudeCliWrapper.StreamResponse.ToolResult -> {
+                                    com.claudecodeplus.sdk.MessageType.TOOL_RESULT -> {
                                         // 工具结果
-                                        // ChatView: Tool result - ${response.toolName}
+                                        val toolCallId = message.data.toolCallId
                                         // 更新对应的工具调用状态
-                                        toolCalls.find { it.name == response.toolName }?.let { toolCall ->
+                                        toolCalls.find { it.id == toolCallId }?.let { toolCall ->
                                             val index = toolCalls.indexOf(toolCall)
                                             val updatedToolCall = toolCall.copy(
                                                 status = com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS,
                                                 result = com.claudecodeplus.ui.models.ToolResult.Success(
-                                                    output = response.result?.toString() ?: "No output"
+                                                    output = message.data.toolResult?.toString() ?: "No output"
                                                 ),
                                                 endTime = System.currentTimeMillis()
                                             )
@@ -543,6 +534,9 @@ fun ChatView(
                                                 if (it.id == assistantMessageId) assistantMessage else it 
                                             }
                                         }
+                                    }
+                                    else -> {
+                                        // 忽略其他消息类型
                                     }
                                 }
                             }

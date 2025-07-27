@@ -51,7 +51,7 @@ class ContextRecommendationEngine(
      */
     suspend fun recommendContext(
         currentContext: List<ContextItem>,
-        recentMessages: List<ChatMessage>,
+        recentMessages: List<EnhancedMessage>,
         projectPath: String,
         limit: Int = 10
     ): List<ContextSuggestion> = withContext(Dispatchers.Default) {
@@ -140,7 +140,7 @@ class ContextRecommendationEngine(
      * 基于对话内容推荐
      */
     private suspend fun recommendBasedOnConversation(
-        recentMessages: List<ChatMessage>,
+        recentMessages: List<EnhancedMessage>,
         projectPath: String
     ): List<ContextSuggestion> = withContext(Dispatchers.Default) {
         val suggestions = mutableListOf<ContextSuggestion>()
@@ -364,7 +364,7 @@ class ContextRecommendationEngine(
         }
     }
     
-    private fun extractKeywords(messages: List<ChatMessage>): List<String> {
+    private fun extractKeywords(messages: List<EnhancedMessage>): List<String> {
         val keywords = mutableSetOf<String>()
         val stopWords = setOf("the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for")
         

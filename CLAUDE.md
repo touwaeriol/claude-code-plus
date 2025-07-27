@@ -35,6 +35,16 @@
 
 ### 组件实现状态
 
+#### ClaudeCliWrapper 重要更新
+- **命令切换**：从直接调用 `node cli.js` 改为使用 `claude` 命令
+  - 支持自定义命令路径：通过 `QueryOptions.customCommand` 参数
+  - 自动查找 claude 命令位置（Windows: claude.cmd, Unix: /usr/local/bin/claude 等）
+  - 保留了中断功能：通过 `terminate()` 方法终止进程
+- **参数映射调整**：
+  - `--custom-system-prompt` → `--append-system-prompt`
+  - `--mcp-servers` → `--mcp-config`
+  - 添加 `--print` 参数以使用非交互模式
+
 #### 已实现的核心组件
 - **工具展示组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/jewel/components/tools/`）
   - `LoadingIndicators.kt` - 各种加载动画组件（跳动点、脉冲点、旋转进度等）

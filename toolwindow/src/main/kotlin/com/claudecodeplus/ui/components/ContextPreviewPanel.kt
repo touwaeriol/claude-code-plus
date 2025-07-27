@@ -38,7 +38,7 @@ fun ContextPreviewPanel(
     templateManager: ContextTemplateManager,
     recommendationEngine: ContextRecommendationEngine? = null,
     projectPath: String,
-    recentMessages: List<ChatMessage> = emptyList(),
+    recentMessages: List<EnhancedMessage> = emptyList(),
     onContextChange: (List<ContextItem>) -> Unit,
     onOpenFile: (String) -> Unit,
     modifier: Modifier = Modifier

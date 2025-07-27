@@ -30,5 +30,6 @@ data class MessageData(
     val toolInput: Any? = null,
     val toolResult: Any? = null,
     val sessionId: String? = null,  // 从 system 消息中获取
-    val toolCallId: String? = null  // 工具调用ID，用于匹配工具调用和结果
+    val toolCallId: String? = null,  // 工具调用ID，用于匹配工具调用和结果
+    val model: String? = null  // 模型信息，用于历史会话加载
 )

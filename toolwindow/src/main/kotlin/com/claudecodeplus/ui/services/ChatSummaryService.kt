@@ -20,7 +20,7 @@ class ChatSummaryService(
      * 生成对话总结
      */
     suspend fun generateSummary(
-        messages: List<ChatMessage>,
+        messages: List<EnhancedMessage>,
         summaryType: SummaryType = SummaryType.CONCISE,
         options: SummaryOptions = SummaryOptions()
     ): ChatSummary = withContext(Dispatchers.IO) {
@@ -50,7 +50,7 @@ class ChatSummaryService(
      * 生成对话段落总结
      */
     suspend fun generateSegmentedSummary(
-        messages: List<ChatMessage>,
+        messages: List<EnhancedMessage>,
         segmentSize: Int = 10
     ): SegmentedSummary = withContext(Dispatchers.IO) {
         val segments = messages.chunked(segmentSize)
@@ -67,7 +67,7 @@ class ChatSummaryService(
                 endMessageId = segment.last().id,
                 summary = summary.summary,
                 keyPoints = summary.keyPoints ?: emptyList(),
-                timestamp = segment.last().timestamp
+                timestamp = Instant.ofEpochMilli(segment.last().timestamp)
             )
         }
         
@@ -82,7 +82,7 @@ class ChatSummaryService(
      * 生成进度总结
      */
     suspend fun generateProgressSummary(
-        messages: List<ChatMessage>,
+        messages: List<EnhancedMessage>,
         contextItems: List<ContextItem> = emptyList()
     ): ProgressSummary = withContext(Dispatchers.IO) {
         val prompt = buildProgressSummaryPrompt(messages, contextItems)
@@ -95,7 +95,7 @@ class ChatSummaryService(
      * 生成技术总结
      */
     suspend fun generateTechnicalSummary(
-        messages: List<ChatMessage>
+        messages: List<EnhancedMessage>
     ): TechnicalSummary = withContext(Dispatchers.IO) {
         val prompt = buildTechnicalSummaryPrompt(messages)
         val response = callClaude(prompt)
@@ -107,7 +107,7 @@ class ChatSummaryService(
      * 生成行动项总结
      */
     suspend fun extractActionItems(
-        messages: List<ChatMessage>
+        messages: List<EnhancedMessage>
     ): List<ActionItem> = withContext(Dispatchers.IO) {
         val prompt = buildActionItemsPrompt(messages)
         val response = callClaude(prompt)
@@ -119,7 +119,7 @@ class ChatSummaryService(
      * 生成决策点总结
      */
     suspend fun extractDecisionPoints(
-        messages: List<ChatMessage>
+        messages: List<EnhancedMessage>
     ): List<DecisionPoint> = withContext(Dispatchers.IO) {
         val prompt = buildDecisionPointsPrompt(messages)
         val response = callClaude(prompt)
@@ -130,7 +130,7 @@ class ChatSummaryService(
     /**
      * 自动总结长对话
      */
-    fun shouldAutoSummarize(messages: List<ChatMessage>): Boolean {
+    fun shouldAutoSummarize(messages: List<EnhancedMessage>): Boolean {
         return messages.size > 20 || 
                messages.sumOf { it.content.length } > 10000
     }
@@ -152,7 +152,7 @@ class ChatSummaryService(
     // 私有辅助方法
     
     private fun prepareConversation(
-        messages: List<ChatMessage>,
+        messages: List<EnhancedMessage>,
         options: SummaryOptions
     ): String {
         return buildString {
@@ -223,7 +223,7 @@ class ChatSummaryService(
     }
     
     private fun buildProgressSummaryPrompt(
-        messages: List<ChatMessage>,
+        messages: List<EnhancedMessage>,
         contextItems: List<ContextItem>
     ): String {
         return buildString {
@@ -257,7 +257,7 @@ class ChatSummaryService(
         }
     }
     
-    private fun buildTechnicalSummaryPrompt(messages: List<ChatMessage>): String {
+    private fun buildTechnicalSummaryPrompt(messages: List<EnhancedMessage>): String {
         return buildString {
             appendLine("请生成技术总结，分析以下对话中的技术内容：")
             appendLine()
@@ -278,7 +278,7 @@ class ChatSummaryService(
         }
     }
     
-    private fun buildActionItemsPrompt(messages: List<ChatMessage>): String {
+    private fun buildActionItemsPrompt(messages: List<EnhancedMessage>): String {
         return buildString {
             appendLine("请从以下对话中提取所有行动项：")
             appendLine()
@@ -297,7 +297,7 @@ class ChatSummaryService(
         }
     }
     
-    private fun buildDecisionPointsPrompt(messages: List<ChatMessage>): String {
+    private fun buildDecisionPointsPrompt(messages: List<EnhancedMessage>): String {
         return buildString {
             appendLine("请识别对话中的所有决策点：")
             appendLine()
@@ -335,7 +335,7 @@ class ChatSummaryService(
     
     private fun parseSummary(
         summaryText: String,
-        messages: List<ChatMessage>,
+        messages: List<EnhancedMessage>,
         summaryType: SummaryType
     ): ChatSummary {
         // 简单解析，实际应该使用结构化输出
@@ -366,8 +366,8 @@ class ChatSummaryService(
             summaryType = summaryType,
             messageCount = messages.size,
             timeRange = TimeRange(
-                start = messages.firstOrNull()?.timestamp ?: Instant.now(),
-                end = messages.lastOrNull()?.timestamp ?: Instant.now()
+                start = messages.firstOrNull()?.let { Instant.ofEpochMilli(it.timestamp) } ?: Instant.now(),
+                end = messages.lastOrNull()?.let { Instant.ofEpochMilli(it.timestamp) } ?: Instant.now()
             ),
             keyPoints = keyPoints.takeIf { it.isNotEmpty() },
             nextSteps = nextSteps.takeIf { it.isNotEmpty() },
@@ -375,7 +375,7 @@ class ChatSummaryService(
         )
     }
     
-    private fun parseProgressSummary(response: String, messages: List<ChatMessage>): ProgressSummary {
+    private fun parseProgressSummary(response: String, messages: List<EnhancedMessage>): ProgressSummary {
         // 简单解析实现
         val completedTasks = mutableListOf<String>()
         val inProgressTasks = mutableListOf<String>()
@@ -418,7 +418,7 @@ class ChatSummaryService(
         )
     }
     
-    private fun parseTechnicalSummary(response: String, messages: List<ChatMessage>): TechnicalSummary {
+    private fun parseTechnicalSummary(response: String, messages: List<EnhancedMessage>): TechnicalSummary {
         val languages = mutableSetOf<String>()
         val frameworks = mutableSetOf<String>()
         val features = mutableListOf<String>()
@@ -530,7 +530,7 @@ class ChatSummaryService(
     }
     
     private fun generateCacheKey(
-        messages: List<ChatMessage>,
+        messages: List<EnhancedMessage>,
         summaryType: SummaryType,
         options: SummaryOptions
     ): String {
@@ -693,6 +693,6 @@ enum class CodeQuality {
 }
 
 // 扩展函数
-fun List<ChatMessage>.needsSummary(): Boolean {
+fun List<EnhancedMessage>.needsSummary(): Boolean {
     return size > 20 || sumOf { it.content.length } > 10000
 }

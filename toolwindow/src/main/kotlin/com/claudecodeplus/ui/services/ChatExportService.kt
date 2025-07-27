@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.format.DateTimeFormatter
 import java.time.ZoneId
+import java.time.Instant
 
 /**
  * 对话导出服务
@@ -100,29 +101,47 @@ class ChatExportService {
                 appendLine("### $roleEmoji $roleName")
                 
                 if (config.includeTimestamps) {
-                    appendLine("*${formatTime(message.timestamp)}*")
+                    appendLine("*${formatTime(Instant.ofEpochMilli(message.timestamp))}*")
                     appendLine()
                 }
                 
                 // 消息内容
                 appendLine(message.content)
                 
-                // 附件
-                message.attachments.forEach { attachment ->
-                    when (attachment) {
-                        is MessageAttachment.File -> {
-                            appendLine()
-                            appendLine("📎 附件: [`${attachment.path.substringAfterLast('/')}`]($attachment.path)")
-                        }
-                        is MessageAttachment.Image -> {
-                            appendLine()
-                            appendLine("🖼️ 图片: ![${attachment.alt ?: "图片"}](${attachment.path})")
-                        }
-                        is MessageAttachment.CodeBlock -> {
-                            appendLine()
-                            appendLine("```${attachment.language}")
-                            appendLine(attachment.code)
-                            appendLine("```")
+                // 工具调用（替代附件）
+                if (message.toolCalls.isNotEmpty()) {
+                    appendLine()
+                    appendLine("#### 工具调用:")
+                    message.toolCalls.forEach { toolCall ->
+                        appendLine("- **${toolCall.name}** (${toolCall.status})")
+                        when (val result = toolCall.result) {
+                            is ToolResult.Success -> {
+                                if (result.output.isNotEmpty()) {
+                                    appendLine("  ```")
+                                    appendLine("  ${result.output.take(200)}${if (result.output.length > 200) "..." else ""}")
+                                    appendLine("  ```")
+                                }
+                            }
+                            is ToolResult.Failure -> {
+                                appendLine("  错误: ${result.error}")
+                            }
+                            is ToolResult.CommandResult -> {
+                                appendLine("  命令输出:")
+                                appendLine("  ```")
+                                appendLine("  ${result.output.take(200)}${if (result.output.length > 200) "..." else ""}")
+                                appendLine("  ```")
+                                appendLine("  退出码: ${result.exitCode}")
+                            }
+                            is ToolResult.FileSearchResult -> {
+                                appendLine("  找到 ${result.totalCount} 个文件")
+                            }
+                            is ToolResult.FileReadResult -> {
+                                appendLine("  读取 ${result.lineCount} 行")
+                            }
+                            is ToolResult.FileEditResult -> {
+                                appendLine("  修改行: ${result.changedLines}")
+                            }
+                            null -> {}
                         }
                     }
                 }
@@ -236,30 +255,54 @@ class ChatExportService {
                 if (config.includeTimestamps) {
                     appendLine("      \"timestamp\": \"${message.timestamp}\",")
                 }
-                appendLine("      \"attachments\": [")
-                message.attachments.forEachIndexed { attIndex, attachment ->
+                appendLine("      \"toolCalls\": [")
+                message.toolCalls.forEachIndexed { toolIndex, toolCall ->
                     append("        ")
-                    when (attachment) {
-                        is MessageAttachment.File -> {
-                            append("{ \"type\": \"file\", \"path\": \"${escapeJson(attachment.path)}\"")
-                            attachment.mimeType?.let {
-                                append(", \"mimeType\": \"$it\"")
-                            }
+                    append("{ \"id\": \"${toolCall.id}\", ")
+                    append("\"name\": \"${toolCall.name}\", ")
+                    append("\"status\": \"${toolCall.status}\"")
+                    when (val result = toolCall.result) {
+                        is ToolResult.Success -> {
+                            append(", \"result\": { ")
+                            append("\"type\": \"success\", ")
+                            append("\"output\": \"${escapeJson(result.output.take(200))}\"")
                             append(" }")
                         }
-                        is MessageAttachment.Image -> {
-                            append("{ \"type\": \"image\", \"path\": \"${escapeJson(attachment.path)}\"")
-                            attachment.alt?.let {
-                                append(", \"alt\": \"${escapeJson(it)}\"")
-                            }
+                        is ToolResult.Failure -> {
+                            append(", \"result\": { ")
+                            append("\"type\": \"failure\", ")
+                            append("\"error\": \"${escapeJson(result.error)}\"")
                             append(" }")
                         }
-                        is MessageAttachment.CodeBlock -> {
-                            append("{ \"type\": \"code\", \"language\": \"${attachment.language}\", ")
-                            append("\"code\": \"${escapeJson(attachment.code)}\" }")
+                        is ToolResult.CommandResult -> {
+                            append(", \"result\": { ")
+                            append("\"type\": \"command\", ")
+                            append("\"output\": \"${escapeJson(result.output.take(200))}\", ")
+                            append("\"exitCode\": ${result.exitCode}")
+                            append(" }")
                         }
+                        is ToolResult.FileSearchResult -> {
+                            append(", \"result\": { ")
+                            append("\"type\": \"file_search\", ")
+                            append("\"totalCount\": ${result.totalCount}")
+                            append(" }")
+                        }
+                        is ToolResult.FileReadResult -> {
+                            append(", \"result\": { ")
+                            append("\"type\": \"file_read\", ")
+                            append("\"lineCount\": ${result.lineCount}")
+                            append(" }")
+                        }
+                        is ToolResult.FileEditResult -> {
+                            append(", \"result\": { ")
+                            append("\"type\": \"file_edit\", ")
+                            append("\"changedLines\": \"${result.changedLines}\"")
+                            append(" }")
+                        }
+                        null -> {}
                     }
-                    if (attIndex < message.attachments.size - 1) append(",")
+                    append(" }")
+                    if (toolIndex < message.toolCalls.size - 1) append(",")
                     appendLine()
                 }
                 appendLine("      ]")

@@ -50,6 +50,16 @@ class ClaudeSessionManager {
                         .mapNotNull { parseMessage(it) }
                         .firstOrNull { it.type == "user" }
                     
+                    // 检查是否有压缩摘要标记
+                    val isCompactSummary = lines.any { line ->
+                        try {
+                            val json = gson.fromJson(line, Map::class.java)
+                            json["type"] == "summary" && json["isCompactSummary"] == true
+                        } catch (e: Exception) {
+                            false
+                        }
+                    }
+                    
                     SessionInfo(
                         sessionId = firstMessage?.sessionId ?: file.nameWithoutExtension,
                         filePath = file.absolutePath,
@@ -57,7 +67,8 @@ class ClaudeSessionManager {
                         messageCount = lines.size,
                         firstMessage = extractMessageText(firstUserMessage),
                         lastMessage = lines.lastOrNull()?.let { parseMessage(it) }?.let { extractMessageText(it) },
-                        projectPath = projectPath
+                        projectPath = projectPath,
+                        isCompactSummary = isCompactSummary
                     )
                 } catch (e: Exception) {
                     e.printStackTrace()

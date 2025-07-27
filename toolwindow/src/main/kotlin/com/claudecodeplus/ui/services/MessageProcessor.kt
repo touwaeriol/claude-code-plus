@@ -18,22 +18,45 @@ class MessageProcessor {
      * @param currentMessage 当前正在构建的消息
      * @param responseBuilder 响应内容构建器
      * @param toolCalls 工具调用列表
+     * @param orderedElements 有序元素列表（可选，如果未提供则从当前消息复制）
      * @return 更新后的消息，如果返回null表示消息还在构建中
      */
     fun processMessage(
         sdkMessage: SDKMessage,
         currentMessage: EnhancedMessage,
         responseBuilder: StringBuilder,
-        toolCalls: MutableList<ToolCall>
+        toolCalls: MutableList<ToolCall>,
+        orderedElements: MutableList<MessageTimelineItem>? = null
     ): ProcessResult {
+        // 如果没有提供 orderedElements，从当前消息复制
+        val elements = orderedElements ?: currentMessage.orderedElements.toMutableList()
         return when (sdkMessage.type) {
             MessageType.TEXT -> {
                 sdkMessage.data.text?.let { text ->
                     responseBuilder.append(text)
+                    
+                    // 更新或添加内容元素
+                    val lastElement = elements.lastOrNull()
+                    if (lastElement is MessageTimelineItem.ContentItem) {
+                        // 更新最后一个内容元素
+                        elements[elements.lastIndex] = lastElement.copy(
+                            content = responseBuilder.toString()
+                        )
+                    } else {
+                        // 添加新的内容元素
+                        elements.add(
+                            MessageTimelineItem.ContentItem(
+                                content = responseBuilder.toString(),
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                    
                     ProcessResult.Updated(
                         currentMessage.copy(
                             content = responseBuilder.toString(),
-                            toolCalls = toolCalls.toList()
+                            toolCalls = toolCalls.toList(),
+                            orderedElements = elements.toList()
                         )
                     )
                 } ?: ProcessResult.NoChange
@@ -53,10 +76,19 @@ class MessageProcessor {
                     )
                     toolCalls.add(toolCall)
                     
+                    // 添加工具调用到有序元素
+                    elements.add(
+                        MessageTimelineItem.ToolCallItem(
+                            toolCall = toolCall,
+                            timestamp = System.currentTimeMillis()
+                        )
+                    )
+                    
                     ProcessResult.Updated(
                         currentMessage.copy(
                             content = responseBuilder.toString(),
-                            toolCalls = toolCalls.toList()
+                            toolCalls = toolCalls.toList(),
+                            orderedElements = elements.toList()
                         )
                     )
                 } else {
@@ -89,10 +121,21 @@ class MessageProcessor {
                         )
                         toolCalls[toolCallIndex] = updatedToolCall
                         
+                        // 更新有序元素中对应的工具调用
+                        for (i in elements.indices.reversed()) {
+                            val element = elements[i]
+                            if (element is MessageTimelineItem.ToolCallItem && 
+                                element.toolCall.id == toolCallId) {
+                                elements[i] = element.copy(toolCall = updatedToolCall)
+                                break
+                            }
+                        }
+                        
                         ProcessResult.Updated(
                             currentMessage.copy(
                                 content = responseBuilder.toString(),
-                                toolCalls = toolCalls.toList()
+                                toolCalls = toolCalls.toList(),
+                                orderedElements = elements.toList()
                             )
                         )
                     } else {
@@ -123,6 +166,7 @@ class MessageProcessor {
                     currentMessage.copy(
                         content = responseBuilder.toString(),
                         toolCalls = toolCalls.toList(),
+                        orderedElements = elements.toList(),
                         status = MessageStatus.COMPLETE,
                         isStreaming = false
                     )

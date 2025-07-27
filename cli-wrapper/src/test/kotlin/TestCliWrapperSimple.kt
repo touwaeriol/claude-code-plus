@@ -11,11 +11,18 @@ import kotlinx.coroutines.withTimeout
 fun main() {
     val wrapper = ClaudeCliWrapper()
     
-    // 测试1：最简单的 chat 测试
-    println("=== 测试1：简单 chat ===")
+    // 测试1：最简单的查询测试
+    println("=== 测试1：简单查询 ===")
     runBlocking {
         try {
-            val result = wrapper.chat("What is 2+2? Just answer with the number.")
+            val result = StringBuilder()
+            wrapper.query("What is 2+2? Just answer with the number.").collect { message ->
+                when (message.type) {
+                    MessageType.TEXT -> result.append(message.data.text ?: "")
+                    MessageType.ERROR -> println("错误: ${message.data.error}")
+                    else -> {}
+                }
+            }
             println("结果: $result")
             println("✓ 测试通过\n")
         } catch (e: Exception) {
@@ -55,7 +62,14 @@ fun main() {
     runBlocking {
         try {
             withTimeout(5000) {
-                val result = wrapper.chat("What is the capital of France?")
+                val result = StringBuilder()
+                wrapper.query("What is the capital of France?").collect { message ->
+                    when (message.type) {
+                        MessageType.TEXT -> result.append(message.data.text ?: "")
+                        MessageType.ERROR -> println("错误: ${message.data.error}")
+                        else -> {}
+                    }
+                }
                 println("结果: $result")
                 println("✓ 测试通过\n")
             }
@@ -85,13 +99,13 @@ fun main() {
             // 等待1秒后终止
             delay(1000)
             println("\n\n终止查询...")
-            val terminated = wrapper.terminate()
-            println("终止成功: $terminated")
+            wrapper.terminate()
+            println("查询已终止")
             
             job.cancel()
             delay(100)
             
-            println("进程是否运行: ${wrapper.isRunning()}")
+            // 进程已终止
             println("✓ 测试通过\n")
         } catch (e: Exception) {
             println("✗ 错误: ${e.message}")

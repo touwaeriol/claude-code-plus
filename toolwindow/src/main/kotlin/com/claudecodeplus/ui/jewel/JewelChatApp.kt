@@ -11,9 +11,13 @@ import androidx.compose.ui.unit.sp
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.sdk.MessageType
 import com.claudecodeplus.ui.models.*
+import com.claudecodeplus.ui.services.SessionHistoryService
+import com.claudecodeplus.ui.services.MessageProcessor
+import com.claudecodeplus.ui.services.SessionLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -24,9 +28,6 @@ import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.Orientation
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
-import com.claudecodeplus.ui.services.SessionHistoryService
-import com.claudecodeplus.ui.services.SessionLoader
-import com.claudecodeplus.ui.services.MessageProcessor
 
 /**
  * Jewel 聊天应用主组件
@@ -42,7 +43,8 @@ fun JewelChatApp(
     themeProvider: JewelThemeProvider = DefaultJewelThemeProvider(),
     modifier: Modifier = Modifier,
     showToolbar: Boolean = true,
-    onThemeChange: ((JewelThemeStyle) -> Unit)? = null
+    onThemeChange: ((JewelThemeStyle) -> Unit)? = null,
+    onCompactCompleted: (() -> Unit)? = null  // 压缩完成回调
 ) {
     // 应用状态
     var messages by remember { mutableStateOf(listOf<EnhancedMessage>()) }
@@ -51,6 +53,9 @@ fun JewelChatApp(
     var currentSessionId by remember { mutableStateOf<String?>(null) }
     var messageJob by remember { mutableStateOf<Job?>(null) }
     var selectedModel by remember { mutableStateOf(AiModel.OPUS) }
+    var selectedPermissionMode by remember { mutableStateOf(PermissionMode.BYPASS_PERMISSIONS) }
+    // skipPermissions 默认为 true，不再可修改
+    val skipPermissions = true
     
     val scope = rememberCoroutineScope()
     val sessionHistoryService = remember { SessionHistoryService() }
@@ -64,7 +69,9 @@ fun JewelChatApp(
                 // 获取最近的会话文件
                 val sessionFile = sessionHistoryService.getLatestSessionFile(workingDirectory)
                 if (sessionFile != null) {
-                    // 使用流式加载
+                    println("找到历史会话文件: ${sessionFile.name}")
+                    
+                    // 使用流式加载，每条消息都经过与实时消息相同的处理流程
                     sessionLoader.loadSessionAsMessageFlow(sessionFile, maxMessages = 50)
                         .collect { result ->
                             when (result) {
@@ -74,6 +81,17 @@ fun JewelChatApp(
                                         messages = messages + result.message
                                     }
                                 }
+                                is SessionLoader.LoadResult.MessageUpdated -> {
+                                    // 消息更新（用于流式内容）
+                                    withContext(Dispatchers.Main) {
+                                        val index = messages.indexOfFirst { it.id == result.message.id }
+                                        if (index != -1) {
+                                            val updatedMessages = messages.toMutableList()
+                                            updatedMessages[index] = result.message
+                                            messages = updatedMessages
+                                        }
+                                    }
+                                }
                                 is SessionLoader.LoadResult.LoadComplete -> {
                                     // 加载完成
                                     println("历史会话加载完成，共 ${result.messages.size} 条消息")
@@ -81,21 +99,14 @@ fun JewelChatApp(
                                 is SessionLoader.LoadResult.Error -> {
                                     println("加载历史会话出错: ${result.error}")
                                 }
-                                else -> {}
                             }
                         }
                 } else {
-                    // 使用旧方法作为后备
-                    val historicalMessages = sessionHistoryService.loadLatestSession(
-                        maxMessages = 50,
-                        maxDaysOld = 7
-                    )
-                    if (historicalMessages.isNotEmpty()) {
-                        messages = historicalMessages
-                    }
+                    println("未找到历史会话文件")
                 }
             } catch (e: Exception) {
                 println("加载历史会话失败: ${e.message}")
+                e.printStackTrace()
             }
         }
     }
@@ -133,6 +144,8 @@ fun JewelChatApp(
                         inputText = textWithMarkdown,
                         contexts = contexts,
                         selectedModel = selectedModel,
+                        selectedPermissionMode = selectedPermissionMode,
+                        skipPermissions = skipPermissions,
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
                         currentSessionId = currentSessionId,
@@ -140,7 +153,8 @@ fun JewelChatApp(
                         onMessageUpdate = { messages = it },
                         onContextsClear = { contexts = emptyList() },
                         onGeneratingChange = { isGenerating = it },
-                        onSessionIdUpdate = { currentSessionId = it }
+                        onSessionIdUpdate = { currentSessionId = it },
+                        onCompactCompleted = onCompactCompleted
                     )
                 }
             },
@@ -171,6 +185,11 @@ fun JewelChatApp(
                 // DEBUG: After update selectedModel = ${selectedModel.displayName}
                 // === JewelChatApp.onModelChange FINISHED ===
             },
+            selectedPermissionMode = selectedPermissionMode,
+            onPermissionModeChange = { mode ->
+                selectedPermissionMode = mode
+            },
+            // skipPermissions 默认为 true，不再传递
             fileIndexService = fileIndexService,
             projectService = projectService,
             modifier = Modifier.weight(1f)
@@ -284,6 +303,8 @@ private fun sendMessage(
     inputText: String,
     contexts: List<ContextReference>,
     selectedModel: AiModel,
+    selectedPermissionMode: PermissionMode,
+    skipPermissions: Boolean,
     cliWrapper: ClaudeCliWrapper,
     workingDirectory: String,
     currentSessionId: String?,
@@ -291,7 +312,8 @@ private fun sendMessage(
     onMessageUpdate: (List<EnhancedMessage>) -> Unit,
     onContextsClear: () -> Unit,
     onGeneratingChange: (Boolean) -> Unit,
-    onSessionIdUpdate: (String?) -> Unit
+    onSessionIdUpdate: (String?) -> Unit,
+    onCompactCompleted: (() -> Unit)? = null
 ): Job {
     return scope.launch(Dispatchers.IO) {
         try {
@@ -343,7 +365,9 @@ private fun sendMessage(
                 options = ClaudeCliWrapper.QueryOptions(
                     model = selectedModel.cliName,
                     resume = currentSessionId,  // 新建会话时为null是正常的
-                    cwd = workingDirectory
+                    cwd = workingDirectory,
+                    permissionMode = selectedPermissionMode.cliName,
+                    skipPermissions = skipPermissions
                 )
             )
             
@@ -375,6 +399,18 @@ private fun sendMessage(
                                         timestamp = System.currentTimeMillis()
                                     )
                                 )
+                            }
+                            
+                            // 检查是否包含压缩完成标记
+                            if (text.contains("<local-command-stdout>Compacted. ctrl+r to see full summary</local-command-stdout>")) {
+                                // 压缩完成，触发会话刷新
+                                withContext(Dispatchers.Main) {
+                                    // 延迟一下让用户看到完成消息
+                                    delay(2000)
+                                    
+                                    // 调用压缩完成回调
+                                    onCompactCompleted?.invoke()
+                                }
                             }
                             
                             // 更新消息

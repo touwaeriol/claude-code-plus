@@ -18,6 +18,10 @@
    - [消息示例](#消息示例)
    - [设计原则](#设计原则)
    - [解析规则](#解析规则)
+9. [会话压缩](#会话压缩)
+   - [压缩流程](#压缩流程)
+   - [压缩命令格式](#压缩命令格式)
+   - [压缩后的会话结构](#压缩后的会话结构)
 
 ## 概述
 
@@ -165,10 +169,68 @@ interface SummaryMessage {
   uuid?: string
   sessionId?: string
   timestamp?: string
+  isCompactSummary?: boolean   // 是否为 /compact 命令生成的摘要
 }
 ```
 
 **注意：** Summary 消息不使用 content blocks。
+
+### 6. Compact Command Message (压缩命令消息)
+
+当用户使用 `/compact` 命令时，会产生特殊的用户和助手消息。
+
+#### 用户发起压缩命令
+```typescript
+// 用户消息中包含压缩命令
+{
+  type: "user",
+  message: {
+    role: "user",
+    content: [{
+      type: "text",
+      text: `<local-command>
+<command-name>/compact</command-name>
+<command-message>compact</command-message>
+</local-command>`
+    }]
+  }
+}
+```
+
+#### 助手确认压缩命令
+```typescript
+// 助手消息显示压缩状态
+{
+  type: "assistant",
+  message: {
+    role: "assistant",
+    content: [{
+      type: "text",
+      text: `<local-command>
+<command-name>/compact</command-name>
+<command-message>compact</command-message>
+<local-command-stdout>Compacted. ctrl+r to see full summary</local-command-stdout>
+</local-command>
+
+Caveat: Claude doesn't see your local commands; if a command makes changes to the directory it's viewing, ask Claude to use tools to see the result, or add the result to the conversation`
+    }]
+  }
+}
+```
+
+#### 压缩后的新会话
+压缩完成后，会创建一个新的会话文件，其中第一条消息是包含 `isCompactSummary: true` 标记的摘要消息：
+
+```typescript
+{
+  type: "summary",
+  summary: "压缩后的对话摘要内容...",
+  leafUuid: "原始对话的最后一条消息UUID",
+  isCompactSummary: true,      // 标记这是 /compact 命令生成的摘要
+  uuid: "新的UUID",
+  sessionId: "新的会话ID",
+  timestamp: "压缩时间"
+}
 
 ## 内容块类型 (Content Block Types)
 
@@ -504,6 +566,79 @@ Claude Code Plus 支持两种方式添加上下文：
 - 消息重新格式化
 - 自动化处理
 
+## 会话压缩
+
+### 压缩流程
+
+1. **用户触发**：用户在对话中输入 `/compact` 命令
+2. **命令执行**：Claude CLI 处理压缩命令，分析当前会话历史
+3. **生成摘要**：AI 生成对话的压缩摘要（约需 30 秒）
+4. **创建新会话**：系统创建新的会话文件，包含压缩后的摘要
+5. **会话切换**：用户可以选择切换到新的压缩会话继续对话
+
+### 压缩命令格式
+
+#### 用户输入压缩命令
+```json
+{
+  "type": "user",
+  "message": {
+    "content": [{
+      "type": "text",
+      "text": "<local-command>\n<command-name>/compact</command-name>\n<command-message>compact</command-message>\n</local-command>"
+    }]
+  }
+}
+```
+
+#### 系统确认压缩完成
+```json
+{
+  "type": "assistant",
+  "message": {
+    "content": [{
+      "type": "text",
+      "text": "<local-command>\n<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<local-command-stdout>Compacted. ctrl+r to see full summary</local-command-stdout>\n</local-command>\n\nCaveat: Claude doesn't see your local commands..."
+    }]
+  }
+}
+```
+
+### 压缩后的会话结构
+
+压缩完成后，新会话文件的结构：
+
+1. **摘要消息**（第一条消息）
+   ```json
+   {
+     "type": "summary",
+     "summary": "这是一个关于 Claude Code Plus 项目的对话。用户请求修复项目标签显示和会话计数问题...",
+     "leafUuid": "原始会话最后一条消息的UUID",
+     "isCompactSummary": true,
+     "uuid": "新生成的UUID",
+     "sessionId": "新的会话ID",
+     "timestamp": "2025-01-20T10:30:00Z"
+   }
+   ```
+
+2. **系统初始化消息**
+   ```json
+   {
+     "type": "system",
+     "subtype": "init",
+     // ... 标准系统初始化信息
+   }
+   ```
+
+3. **后续对话**：正常的 User-Assistant 消息交互
+
+### UI 处理建议
+
+1. **识别压缩会话**：通过 `isCompactSummary: true` 标记识别
+2. **特殊标记**：在会话列表中为压缩会话添加特殊图标或标记
+3. **摘要预览**：悬停时显示摘要内容的预览
+4. **自动切换**：压缩完成后提示用户是否切换到新会话
+
 ## 注意事项
 
 1. **消息顺序**：会话必须遵循 User-Assistant 交替的模式
@@ -511,6 +646,7 @@ Claude Code Plus 支持两种方式添加上下文：
 3. **时间戳**：所有消息都包含 ISO 8601 格式的时间戳
 4. **会话压缩**：当上下文过长时，系统会插入 Summary 消息并重写会话文件
 5. **版本兼容**：不同版本的 Claude Code 可能有细微的格式差异
+6. **压缩标记**：`/compact` 命令生成的摘要会包含 `isCompactSummary: true` 标记
 
 ## 参考资源
 

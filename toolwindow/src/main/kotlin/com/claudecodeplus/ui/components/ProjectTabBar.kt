@@ -29,6 +29,8 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.PointerIcon
 import java.awt.Cursor
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.offset
 
 /**
  * 项目标签栏组件
@@ -112,25 +114,27 @@ private fun ProjectTab(
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     
-    Box(
-        modifier = Modifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-            .background(
-                when {
-                    isActive -> JewelTheme.globalColors.outlines.focused.copy(alpha = 0.2f)
-                    isHovered -> JewelTheme.globalColors.outlines.focused.copy(alpha = 0.1f)
-                    else -> Color.Transparent
-                }
-            )
-            .combinedClickable(
-                onClick = onSelect,
-                onLongClick = {
-                    // 可以在这里添加右键菜单功能
-                }
-            )
-            .hoverable(interactionSource)
-            .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)))
+    // Tooltip 实现
+    Box {
+        Box(
+            modifier = Modifier
+                .height(32.dp)
+                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                .background(
+                    when {
+                        isActive -> JewelTheme.globalColors.outlines.focused.copy(alpha = 0.2f)
+                        isHovered -> JewelTheme.globalColors.outlines.focused.copy(alpha = 0.1f)
+                        else -> Color.Transparent
+                    }
+                )
+                .combinedClickable(
+                    onClick = onSelect,
+                    onLongClick = {
+                        // 可以在这里添加右键菜单功能
+                    }
+                )
+                .hoverable(interactionSource)
+                .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)))
     ) {
         Row(
             modifier = Modifier
@@ -186,15 +190,42 @@ private fun ProjectTab(
             }
         }
         
-        // 活动指示器
-        if (isActive) {
-            Box(
+            // 活动指示器
+            if (isActive) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(JewelTheme.globalColors.outlines.focused)
+                )
+            }
+        }
+        
+        // 鼠标悬停时显示完整路径
+        if (isHovered) {
+            androidx.compose.foundation.layout.Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(2.dp)
-                    .background(JewelTheme.globalColors.outlines.focused)
-            )
+                    .offset(y = 36.dp)
+                    .background(
+                        JewelTheme.globalColors.panelBackground,
+                        RoundedCornerShape(4.dp)
+                    )
+                    .border(
+                        1.dp,
+                        JewelTheme.globalColors.borders.normal,
+                        RoundedCornerShape(4.dp)
+                    )
+                    .padding(8.dp)
+            ) {
+                Text(
+                    text = project.path,
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 12.sp,
+                        color = JewelTheme.globalColors.text.normal
+                    )
+                )
+            }
         }
     }
 }

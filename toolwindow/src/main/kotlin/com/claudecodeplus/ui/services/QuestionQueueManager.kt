@@ -220,8 +220,7 @@ class QuestionQueueManager(
                 val response = withContext(Dispatchers.IO) {
                     val responseBuilder = StringBuilder()
                     val options = ClaudeCliWrapper.QueryOptions(
-                        resume = sessionId,
-                        continueConversation = sessionId == null
+                        resume = sessionId
                     )
                     
                     cliWrapper.query(fullQuestion, options).collect { message ->

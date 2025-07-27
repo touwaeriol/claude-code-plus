@@ -120,21 +120,11 @@ class ChatTabManager {
             _tabs.find { it.sessionId == id }
         }
         
-        // 将 EnhancedMessage 转换为 ChatMessage
-        val chatMessages = messages.map { enhancedMsg ->
-            ChatMessage(
-                id = enhancedMsg.id,
-                role = enhancedMsg.role,
-                content = enhancedMsg.content,
-                timestamp = Instant.ofEpochMilli(enhancedMsg.timestamp)
-            )
-        }
-        
         if (existingTab != null) {
             // 如果标签已存在，更新消息并切换到该标签
             updateTab(existingTab.id) { tab ->
                 tab.copy(
-                    messages = chatMessages,
+                    messages = messages,  // 直接使用 EnhancedMessage
                     status = ChatTab.TabStatus.ACTIVE,
                     lastModified = Instant.now()
                 )
@@ -169,7 +159,7 @@ class ChatTabManager {
                 projectId = project?.id,
                 projectName = project?.name,
                 projectPath = project?.path,
-                messages = chatMessages,
+                messages = messages,  // 直接使用 EnhancedMessage
                 status = ChatTab.TabStatus.ACTIVE
             )
             _tabs.add(newTab)
@@ -268,7 +258,7 @@ class ChatTabManager {
     /**
      * 添加消息到标签
      */
-    fun addMessage(tabId: String, message: ChatMessage) {
+    fun addMessage(tabId: String, message: EnhancedMessage) {
         updateTab(tabId) { tab ->
             tab.copy(messages = tab.messages + message)
         }
@@ -504,21 +494,15 @@ class ChatTabManager {
             )
         }
         
-        val loadedMessages = mutableListOf<ChatMessage>()
+        val loadedMessages = mutableListOf<EnhancedMessage>()
         
         // 使用 SessionLoader 加载历史
         sessionLoader.loadSessionAsMessageFlow(sessionFile)
             .collect { result ->
                 when (result) {
                     is SessionLoader.LoadResult.MessageCompleted -> {
-                        // 转换为 ChatMessage
-                        val chatMessage = ChatMessage(
-                            id = result.message.id,
-                            role = result.message.role,
-                            content = result.message.content,
-                            timestamp = Instant.ofEpochMilli(result.message.timestamp)
-                        )
-                        loadedMessages.add(chatMessage)
+                        // 直接使用 EnhancedMessage
+                        loadedMessages.add(result.message)
                         
                         // 实时更新标签消息
                         updateTab(tabId) { t ->

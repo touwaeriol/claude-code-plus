@@ -16,7 +16,7 @@ data class ChatTab(
     val projectName: String? = null,
     val projectPath: String? = null,
     val createdAt: Instant = Instant.now(),
-    val messages: List<ChatMessage> = emptyList(),
+    val messages: List<EnhancedMessage> = emptyList(),
     val context: List<ContextItem> = emptyList(),
     val groupId: String? = null,
     val tags: List<ChatTag> = emptyList(),

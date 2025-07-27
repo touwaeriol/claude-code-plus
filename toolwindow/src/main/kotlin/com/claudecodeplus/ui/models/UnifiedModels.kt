@@ -11,6 +11,16 @@ enum class AiModel(val displayName: String, val cliName: String, val description
 }
 
 /**
+ * 权限模式枚举
+ */
+enum class PermissionMode(val displayName: String, val cliName: String, val description: String) {
+    DEFAULT("默认", "default", "默认权限模式"),
+    ACCEPT_EDITS("接受编辑", "acceptEdits", "自动接受编辑操作"),
+    BYPASS_PERMISSIONS("绕过权限", "bypassPermissions", "绕过权限检查"),
+    PLAN("计划模式", "plan", "仅规划不执行")
+}
+
+/**
  * 消息角色
  */
 enum class MessageRole {
@@ -393,7 +403,8 @@ data class EnhancedMessage(
     val isStreaming: Boolean = false,
     val isError: Boolean = false,
     val orderedElements: List<MessageTimelineItem> = emptyList(),
-    val tokenUsage: TokenUsage? = null
+    val tokenUsage: TokenUsage? = null,
+    val isCompactSummary: Boolean = false  // 标记是否为压缩会话的摘要消息
 ) {
     // Backward compatibility properties
     val modelName: String? get() = model?.cliName

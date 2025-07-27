@@ -39,6 +39,9 @@ fun JewelConversationView(
     isGenerating: Boolean = false,
     selectedModel: AiModel = AiModel.OPUS,
     onModelChange: (AiModel) -> Unit = {},
+    selectedPermissionMode: PermissionMode = PermissionMode.BYPASS_PERMISSIONS,
+    onPermissionModeChange: (PermissionMode) -> Unit = {},
+    // skipPermissions 默认为 true，不再可修改
     onClearChat: () -> Unit = {},
     fileIndexService: com.claudecodeplus.ui.services.FileIndexService? = null,
     projectService: com.claudecodeplus.ui.services.ProjectService? = null,
@@ -100,6 +103,9 @@ fun JewelConversationView(
             enabled = !isGenerating,
             selectedModel = selectedModel,
             onModelChange = onModelChange,
+            selectedPermissionMode = selectedPermissionMode,
+            onPermissionModeChange = onPermissionModeChange,
+            // skipPermissions 默认为 true，不再传递
             fileIndexService = fileIndexService,
             projectService = projectService,
             modifier = Modifier.fillMaxWidth()
@@ -226,19 +232,21 @@ private fun MessageBubble(
             Column(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // 显示模型信息（如果有）
-                message.model?.let { model ->
-                    if (model.displayName.isNotEmpty()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = "🤖"
-                            )
-                            Text(
-                                text = model.displayName
-                            )
+                // 显示模型信息（如果有，且消息有内容）
+                if (message.content.isNotBlank() || message.orderedElements.isNotEmpty()) {
+                    message.model?.let { model ->
+                        if (model.displayName.isNotEmpty()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "🤖"
+                                )
+                                Text(
+                                    text = model.displayName
+                                )
+                            }
                         }
                     }
                 }

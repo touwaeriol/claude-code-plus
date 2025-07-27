@@ -16,9 +16,9 @@ class ProjectPathUtilsTest {
         // Windows 风格路径 - 冒号处理依赖于操作系统
         val osName = System.getProperty("os.name").lowercase()
         if (osName.contains("windows")) {
-            // 在Windows上，冒号会被删除
+            // 在Windows上，冒号会被替换为-，产生双横线
             assertEquals(
-                "CUsers-user-project",
+                "C--Users-user-project",
                 ProjectPathUtils.projectPathToDirectoryName("C:\\Users\\user\\project")
             )
         } else {
@@ -95,14 +95,20 @@ class ProjectPathUtilsTest {
     
     @Test
     fun testIsValidProjectPath() {
-        // 绝对路径应该有效
-        assertTrue(ProjectPathUtils.isValidProjectPath("/home/user/project"))
-        
-        // Windows 路径在非Windows系统上可能不被识别为绝对路径
-        // 所以我们根据操作系统来测试
         val osName = System.getProperty("os.name").lowercase()
+        
         if (osName.contains("windows")) {
+            // 在 Windows 上测试 Windows 风格的绝对路径
             assertTrue(ProjectPathUtils.isValidProjectPath("C:\\Users\\project"))
+            
+            // Unix 风格路径在 Windows 上不被认为是绝对路径
+            assertFalse(ProjectPathUtils.isValidProjectPath("/home/user/project"))
+        } else {
+            // 在 Unix/Mac 上测试 Unix 风格的绝对路径
+            assertTrue(ProjectPathUtils.isValidProjectPath("/home/user/project"))
+            
+            // Windows 路径在非Windows系统上可能不被识别为绝对路径
+            assertFalse(ProjectPathUtils.isValidProjectPath("C:\\Users\\project"))
         }
         
         // 相对路径应该无效

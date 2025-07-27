@@ -111,7 +111,7 @@ class ChatSessionStateManager {
     fun saveSessionSnapshot(
         sessionId: String,
         chatTabId: String,
-        messages: List<ChatMessage>,
+        messages: List<EnhancedMessage>,
         context: List<ContextItem>,
         currentInput: String?
     ) {
@@ -145,7 +145,7 @@ class ChatSessionStateManager {
     data class SessionSnapshot(
         val sessionId: String,
         val chatTabId: String,
-        val messages: List<ChatMessage>,
+        val messages: List<EnhancedMessage>,
         val context: List<ContextItem>,
         val currentInput: String?,
         val timestamp: Instant

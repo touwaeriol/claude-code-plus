@@ -217,16 +217,33 @@ private fun SessionItem(
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-                // 第一条消息预览
-                Text(
-                    text = session.firstMessage ?: "新会话",
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 14.sp,
-                        color = if (isSelected) Color.White else JewelTheme.globalColors.text.normal
-                    ),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                // 第一条消息预览，包含压缩标记
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // 压缩会话标记
+                    if (session.isCompactSummary) {
+                        Text(
+                            text = "🗜️",
+                            style = JewelTheme.defaultTextStyle.copy(
+                                fontSize = 14.sp,
+                                color = if (isSelected) Color.White else Color(0xFF1976D2)  // 蓝色
+                            )
+                        )
+                    }
+                    
+                    Text(
+                        text = session.firstMessage ?: "新会话",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 14.sp,
+                            color = if (isSelected) Color.White else JewelTheme.globalColors.text.normal
+                        ),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 
                 Spacer(Modifier.height(4.dp))
                 

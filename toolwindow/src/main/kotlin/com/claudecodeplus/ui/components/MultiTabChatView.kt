@@ -67,25 +67,13 @@ fun MultiTabChatView(
                     // 使用 key 确保切换标签时重新创建 ChatView
                     key(tab.id) {
                         Box(modifier = Modifier.fillMaxSize()) {
-                            // 将 ChatMessage 转换为 EnhancedMessage
-                            val enhancedMessages = tab.messages.map { chatMessage ->
-                                EnhancedMessage(
-                                    id = chatMessage.id,
-                                    role = chatMessage.role,
-                                    content = chatMessage.content,
-                                    timestamp = chatMessage.timestamp.toEpochMilli(),
-                                    model = AiModel.OPUS, // 默认模型
-                                    contexts = emptyList()
-                                )
-                            }
-                            
                             com.claudecodeplus.ui.jewel.ChatView(
                                 cliWrapper = cliWrapper,
                                 workingDirectory = tab.projectPath,
                                 fileIndexService = fileIndexService,
                                 projectService = projectService,
                                 sessionManager = sessionManager,
-                                initialMessages = enhancedMessages,
+                                initialMessages = tab.messages,  // 直接使用 EnhancedMessage
                                 sessionId = tab.sessionId,
                                 tabManager = tabManager,
                                 currentTabId = tab.id,

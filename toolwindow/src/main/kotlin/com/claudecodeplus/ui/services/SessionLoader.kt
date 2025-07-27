@@ -31,16 +31,21 @@ class SessionLoader(
         var currentAssistantMessage: EnhancedMessage? = null
         val responseBuilder = StringBuilder()
         val toolCalls = mutableListOf<ToolCall>()
+        // 注意：orderedElements 不再单独维护，由 MessageProcessor 管理
+        
+        // 跟踪正在处理的消息ID，以合并相同ID的消息
+        val assistantMessageMap = mutableMapOf<String, EnhancedMessage>()
         
         try {
             // 从会话历史服务获取 SDKMessage 流
             sessionHistoryService.loadSessionHistoryAsFlow(sessionFile, maxMessages, maxDaysOld)
                 .collect { sdkMessage ->
                     when (sdkMessage.type) {
-                        // 处理特殊的用户消息标记
+                        // 处理 START 消息（用户或助手）
                         com.claudecodeplus.sdk.MessageType.START -> {
-                            sdkMessage.data.text?.let { text ->
-                                if (text.startsWith("USER_MESSAGE:")) {
+                            val text = sdkMessage.data.text
+                            when {
+                                text?.startsWith("USER_MESSAGE:") == true -> {
                                     // 完成当前助手消息（如果有）
                                     currentAssistantMessage?.let { msg ->
                                         messages.add(msg)
@@ -51,6 +56,7 @@ class SessionLoader(
                                     currentAssistantMessage = null
                                     responseBuilder.clear()
                                     toolCalls.clear()
+                                    // orderedElements 由 MessageProcessor 管理
                                     
                                     // 创建用户消息
                                     val userContent = text.substring("USER_MESSAGE:".length)
@@ -63,6 +69,69 @@ class SessionLoader(
                                     messages.add(userMessage)
                                     emit(LoadResult.MessageCompleted(userMessage))
                                 }
+                                
+                                text?.startsWith("ASSISTANT_MESSAGE:") == true -> {
+                                    // 提取消息ID
+                                    val messageId = text.substring("ASSISTANT_MESSAGE:".length)
+                                    
+                                    // 检查是否是同一消息的延续
+                                    if (currentAssistantMessage?.id != messageId) {
+                                        // 完成之前的助手消息（如果有）
+                                        currentAssistantMessage?.let { msg ->
+                                            messages.add(msg)
+                                            emit(LoadResult.MessageCompleted(msg))
+                                        }
+                                        
+                                        // 开始新的助手消息
+                                        currentAssistantMessage = EnhancedMessage(
+                                            id = messageId,
+                                            role = MessageRole.ASSISTANT,
+                                            content = "",
+                                            timestamp = System.currentTimeMillis(),
+                                            isStreaming = false,
+                                            orderedElements = emptyList(),
+                                            model = parseModelFromString(sdkMessage.data.model)  // 设置模型信息
+                                        )
+                                        responseBuilder.clear()
+                                        toolCalls.clear()
+                                        // orderedElements 由 MessageProcessor 管理
+                                    }
+                                    // 如果是同一消息，继续使用当前状态
+                                }
+                                
+                                text?.startsWith("COMPACT_SUMMARY:") == true -> {
+                                    // 完成当前助手消息（如果有）
+                                    currentAssistantMessage?.let { msg ->
+                                        messages.add(msg)
+                                        emit(LoadResult.MessageCompleted(msg))
+                                    }
+                                    
+                                    // 重置状态
+                                    currentAssistantMessage = null
+                                    responseBuilder.clear()
+                                    toolCalls.clear()
+                                    // orderedElements 由 MessageProcessor 管理
+                                    
+                                    // 创建压缩摘要消息
+                                    val summaryId = text.substring("COMPACT_SUMMARY:".length)
+                                    val summaryMessage = EnhancedMessage(
+                                        id = summaryId,
+                                        role = MessageRole.SYSTEM,
+                                        content = "",  // 内容将在 TEXT 消息中填充
+                                        timestamp = System.currentTimeMillis(),
+                                        isCompactSummary = true  // 标记为压缩摘要
+                                    )
+                                    
+                                    // 暂存摘要消息，等待内容
+                                    currentAssistantMessage = summaryMessage
+                                }
+                                
+                                else -> {
+                                    // 其他类型的 START（如实时会话）
+                                    sdkMessage.data.sessionId?.let {
+                                        // 这可能是实时助手消息的开始
+                                    }
+                                }
                             }
                         }
                         // 处理文本消息的开始
@@ -73,7 +142,8 @@ class SessionLoader(
                                     role = MessageRole.ASSISTANT,
                                     content = "",
                                     timestamp = System.currentTimeMillis(),
-                                    isStreaming = false
+                                    isStreaming = false,
+                                    orderedElements = emptyList()
                                 )
                             }
                             
@@ -82,7 +152,8 @@ class SessionLoader(
                                 sdkMessage = sdkMessage,
                                 currentMessage = currentAssistantMessage!!,
                                 responseBuilder = responseBuilder,
-                                toolCalls = toolCalls
+                                toolCalls = toolCalls,
+                                // orderedElements 由 MessageProcessor 内部管理  // 传递可变列表
                             )
                             
                             when (result) {
@@ -101,7 +172,8 @@ class SessionLoader(
                                     role = MessageRole.ASSISTANT,
                                     content = "",
                                     timestamp = System.currentTimeMillis(),
-                                    isStreaming = false
+                                    isStreaming = false,
+                                    orderedElements = emptyList()
                                 )
                             }
                             
@@ -109,7 +181,8 @@ class SessionLoader(
                                 sdkMessage = sdkMessage,
                                 currentMessage = currentAssistantMessage!!,
                                 responseBuilder = responseBuilder,
-                                toolCalls = toolCalls
+                                toolCalls = toolCalls,
+                                // orderedElements 由 MessageProcessor 内部管理
                             )
                             
                             when (result) {
@@ -128,7 +201,8 @@ class SessionLoader(
                                     sdkMessage = sdkMessage,
                                     currentMessage = msg,
                                     responseBuilder = responseBuilder,
-                                    toolCalls = toolCalls
+                                    toolCalls = toolCalls,
+                                    // orderedElements 由 MessageProcessor 内部管理
                                 )
                                 
                                 when (result) {
@@ -153,6 +227,7 @@ class SessionLoader(
                             currentAssistantMessage = null
                             responseBuilder.clear()
                             toolCalls.clear()
+                            // orderedElements 由 MessageProcessor 管理
                             
                             // 加载完成
                             emit(LoadResult.LoadComplete(messages))
@@ -179,5 +254,18 @@ class SessionLoader(
         data class MessageCompleted(val message: EnhancedMessage) : LoadResult()
         data class LoadComplete(val messages: List<EnhancedMessage>) : LoadResult()
         data class Error(val error: String) : LoadResult()
+    }
+    
+    /**
+     * 从模型字符串解析出 AiModel
+     */
+    private fun parseModelFromString(modelString: String?): AiModel? {
+        if (modelString == null) return null
+        
+        return when {
+            modelString.contains("opus", ignoreCase = true) -> AiModel.OPUS
+            modelString.contains("sonnet", ignoreCase = true) -> AiModel.SONNET
+            else -> null
+        }
     }
 }

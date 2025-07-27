@@ -54,6 +54,9 @@ fun UnifiedInputArea(
     enabled: Boolean = true,
     selectedModel: AiModel = AiModel.OPUS,
     onModelChange: (AiModel) -> Unit = {},
+    selectedPermissionMode: PermissionMode = PermissionMode.BYPASS_PERMISSIONS,
+    onPermissionModeChange: (PermissionMode) -> Unit = {},
+    // skipPermissions 默认为 true，不再可修改
     fileIndexService: FileIndexService? = null,
     projectService: ProjectService? = null,
     onContextClick: (String) -> Unit = {}
@@ -218,18 +221,37 @@ fun UnifiedInputArea(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // 显示用户消息内容（仅支持上下文引用，不需要 Markdown）
-                        if (msg.content.isNotBlank()) {
-                            AnnotatedMessageDisplay(
-                                message = msg.content,
-                                timestamp = null, // 时间戳在底部显示
-                                onContextClick = onContextClick,
+                        // 检查是否是压缩命令消息
+                        val compactStatus = parseCompactCommandStatus(msg.content)
+                        
+                        if (compactStatus != null) {
+                            // 显示压缩命令组件
+                            CompactCommandDisplay(
+                                status = compactStatus,
+                                message = when (compactStatus) {
+                                    CompactCommandStatus.INITIATED -> "准备压缩当前会话"
+                                    CompactCommandStatus.PROCESSING -> "Claude 正在分析和压缩会话历史"
+                                    CompactCommandStatus.COMPLETED -> "新的会话已创建，包含之前对话的摘要"
+                                },
                                 modifier = Modifier.fillMaxWidth()
                             )
+                        } else if (isCompactCommandMessage(msg.content)) {
+                            // Caveat 消息，不显示
+                            // 这些是本地命令的元数据消息，用户不需要看到
+                        } else {
+                            // 显示普通用户消息内容
+                            if (msg.content.isNotBlank()) {
+                                AnnotatedMessageDisplay(
+                                    message = msg.content,
+                                    timestamp = null, // 时间戳在底部显示
+                                    onContextClick = onContextClick,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                         
                         // 显示上下文引用（如果有）
-                        if (msg.contexts.isNotEmpty()) {
+                        if (msg.contexts.isNotEmpty() && compactStatus == null) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -261,11 +283,22 @@ fun UnifiedInputArea(
             ) {
                 when (mode) {
                     InputAreaMode.INPUT -> {
+                        // 模型选择器
                         ChatInputModelSelector(
                             currentModel = selectedModel,
                             onModelChange = onModelChange,
                             enabled = enabled && !isGenerating
                         )
+                        
+                        // 权限模式选择器
+                        ChatInputPermissionSelector(
+                            currentPermissionMode = selectedPermissionMode,
+                            onPermissionModeChange = onPermissionModeChange,
+                            enabled = enabled && !isGenerating
+                        )
+                        
+                        // 跳过权限指示器（只读）
+                        SkipPermissionsIndicator()
                     }
                     InputAreaMode.DISPLAY -> {
                         message?.model?.let { model ->
