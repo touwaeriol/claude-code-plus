@@ -200,7 +200,8 @@ class SessionLoader(
                             val toolCallId = sdkMessage.data.toolCallId
                             println("[SessionLoader] 收到TOOL_RESULT: toolCallId=$toolCallId, currentAssistantMessage是否为null=${currentAssistantMessage == null}")
                             
-                            // 如果当前没有助手消息，尝试从已完成的消息中查找包含该工具调用的消息
+                            // 在历史模式下，currentAssistantMessage 应该还在
+                            // 如果为 null，说明可能是在非历史模式下或有其他问题
                             var targetMessage = currentAssistantMessage
                             if (targetMessage == null && toolCallId != null) {
                                 println("[SessionLoader] 当前助手消息为null，尝试从已完成消息中查找")
@@ -216,15 +217,39 @@ class SessionLoader(
                                 }
                             }
                             
+                            // 如果还是找不到，可能工具调用还在 toolCalls 列表中
+                            if (targetMessage == null && isHistoryMode && toolCallId != null) {
+                                println("[SessionLoader] 历史模式下仍未找到消息，检查本地toolCalls列表")
+                                val hasToolCall = toolCalls.any { it.id == toolCallId }
+                                if (hasToolCall) {
+                                    println("[SessionLoader] 在本地toolCalls中找到了工具调用，使用最后的助手消息")
+                                    // 找到最后一条助手消息
+                                    targetMessage = messages.lastOrNull { it.role == MessageRole.ASSISTANT }
+                                    if (targetMessage == null && currentAssistantMessage != null) {
+                                        // 如果messages中没有，但currentAssistantMessage存在，使用它
+                                        targetMessage = currentAssistantMessage
+                                    }
+                                }
+                            }
+                            
                             targetMessage?.let { msg ->
-                                // 创建一个新的工具调用列表，包含消息中的所有工具调用
-                                val messageToolCalls = msg.toolCalls.toMutableList()
+                                // 在历史模式下，使用当前的 toolCalls 列表
+                                // 在非历史模式下，使用消息中的 toolCalls
+                                val effectiveToolCalls = if (isHistoryMode && currentAssistantMessage != null) {
+                                    // 历史模式且当前助手消息存在，使用当前的 toolCalls
+                                    toolCalls
+                                } else {
+                                    // 否则使用消息中的 toolCalls
+                                    msg.toolCalls.toMutableList()
+                                }
+                                
+                                println("[SessionLoader] 处理TOOL_RESULT，使用的工具调用数：${effectiveToolCalls.size}，来源：${if (isHistoryMode && currentAssistantMessage != null) "当前toolCalls" else "消息toolCalls"}")
                                 
                                 val result = messageProcessor.processMessage(
                                     sdkMessage = sdkMessage,
                                     currentMessage = msg,
                                     responseBuilder = responseBuilder,
-                                    toolCalls = messageToolCalls,  // 使用消息自己的工具调用列表
+                                    toolCalls = effectiveToolCalls,
                                     // orderedElements 由 MessageProcessor 内部管理
                                 )
                                 

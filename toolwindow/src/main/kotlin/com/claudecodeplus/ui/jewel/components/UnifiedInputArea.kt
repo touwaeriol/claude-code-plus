@@ -56,7 +56,8 @@ fun UnifiedInputArea(
     onModelChange: (AiModel) -> Unit = {},
     selectedPermissionMode: PermissionMode = PermissionMode.BYPASS_PERMISSIONS,
     onPermissionModeChange: (PermissionMode) -> Unit = {},
-    // skipPermissions 默认为 true，不再可修改
+    skipPermissions: Boolean = true,
+    onSkipPermissionsChange: (Boolean) -> Unit = {},
     fileIndexService: FileIndexService? = null,
     projectService: ProjectService? = null,
     onContextClick: (String) -> Unit = {}
@@ -297,8 +298,12 @@ fun UnifiedInputArea(
                             enabled = enabled && !isGenerating
                         )
                         
-                        // 跳过权限指示器（只读）
-                        SkipPermissionsIndicator()
+                        // 跳过权限复选框
+                        SkipPermissionsCheckbox(
+                            checked = skipPermissions,
+                            onCheckedChange = onSkipPermissionsChange,
+                            enabled = enabled && !isGenerating
+                        )
                     }
                     InputAreaMode.DISPLAY -> {
                         message?.model?.let { model ->

@@ -213,6 +213,11 @@ class SessionHistoryService {
         val cutoffTime = System.currentTimeMillis() - (maxDaysOld * 24 * 60 * 60 * 1000L)
         var messageCount = 0
         
+        // 跟踪当前处理的助手消息的工具调用
+        val pendingToolCalls = mutableMapOf<String, String>() // toolCallId -> assistantMessageId
+        var lastAssistantMessageId: String? = null
+        var hasUnfinishedAssistantMessage = false
+        
         try {
             val estimatedLines = maxMessages * 6
             val lines = readLastLines(sessionFile, estimatedLines)
@@ -227,10 +232,65 @@ class SessionHistoryService {
                 
                 if (timestamp < cutoffTime) continue
                 
-                println("[SessionHistory] 处理消息: ${message::class.simpleName}")
+                println("[SessionHistory] 处理消息: ${message::class.simpleName}, uuid=${when(message) {
+                    is UserMessage -> message.uuid
+                    is AssistantMessage -> message.uuid
+                    else -> "unknown"
+                }}")
                 
                 when (message) {
                     is UserMessage -> {
+                        // 如果有未完成的助手消息，先发送END
+                        if (hasUnfinishedAssistantMessage) {
+                            emit(SDKMessage(
+                                type = MessageType.END,
+                                data = MessageData()
+                            ))
+                            hasUnfinishedAssistantMessage = false
+                            messageCount++ // 现在可以增加消息计数了
+                        }
+                        
+                        // 先检查是否是包含工具结果的用户消息
+                        if (message.message?.role == "user" && message.message?.content is ContentOrList.ListContent) {
+                            val contentList = (message.message?.content as ContentOrList.ListContent).value
+                            var hasToolResult = false
+                            
+                            // 检查并发送工具结果
+                            for (block in contentList) {
+                                when (block) {
+                                    is ToolResultBlock -> {
+                                        hasToolResult = true
+                                        // 解析工具结果内容
+                                        val resultContent = when (val content = block.content) {
+                                            is ContentOrString.StringValue -> content.value
+                                            is ContentOrString.JsonValue -> content.value.toString()
+                                            null -> ""
+                                        }
+                                        
+                                        println("[SessionHistory] 发送工具结果: toolCallId=${block.toolUseId}, resultLength=${resultContent.length}")
+                                        
+                                        // 发送工具结果
+                                        emit(SDKMessage(
+                                            type = MessageType.TOOL_RESULT,
+                                            data = MessageData(
+                                                toolCallId = block.toolUseId,
+                                                toolResult = resultContent,
+                                                error = if (block.isError == true) resultContent else null
+                                            )
+                                        ))
+                                    }
+                                    else -> {}
+                                }
+                            }
+                            
+                            // 如果这是工具结果消息，处理完成，继续下一条消息
+                            if (hasToolResult) {
+                                // 工具结果已经发送，不需要再处理为普通用户消息
+                                continue
+                            }
+                        }
+                        
+                        // 处理普通用户消息（非工具结果）
                         val content = extractUserContent(message)
                         println("[SessionHistory] UserMessage: content = ${content?.take(100)}")
                         if (content != null && !isSystemMessage(content)) {
@@ -251,6 +311,16 @@ class SessionHistoryService {
                     }
                     
                     is AssistantMessage -> {
+                        // 如果有未完成的助手消息，先发送END
+                        if (hasUnfinishedAssistantMessage) {
+                            emit(SDKMessage(
+                                type = MessageType.END,
+                                data = MessageData()
+                            ))
+                            hasUnfinishedAssistantMessage = false
+                            messageCount++
+                        }
+                        
                         val content = message.message?.content ?: continue
                         println("[DEBUG] AssistantMessage: id=${message.message?.id}, model=${message.message?.model}, content blocks=${content.size}")
                         
@@ -278,6 +348,7 @@ class SessionHistoryService {
                                     }
                                 }
                                 is ToolUseBlock -> {
+                                    println("[SessionHistory] 发送工具调用: toolName=${block.name}, toolCallId=${block.id}")
                                     emit(SDKMessage(
                                         type = MessageType.TOOL_USE,
                                         data = MessageData(
@@ -287,21 +358,16 @@ class SessionHistoryService {
                                         )
                                     ))
                                     
-                                    // 模拟工具执行结果
-                                    emit(SDKMessage(
-                                        type = MessageType.TOOL_RESULT,
-                                        data = MessageData(
-                                            toolResult = "Tool execution completed",
-                                            toolCallId = block.id
-                                        )
-                                    ))
+                                    // 记录工具调用，等待后续的工具结果
+                                    pendingToolCalls[block.id] = message.message?.id ?: ""
+                                    lastAssistantMessageId = message.message?.id
                                 }
                                 else -> {}
                             }
                         }
                         
-                        // 不发送 END，让下一个 START 或文件结束来触发
-                        messageCount++
+                        // 标记有未完成的助手消息
+                        hasUnfinishedAssistantMessage = true
                     }
                     
                     is SummaryMessage -> {
@@ -329,13 +395,21 @@ class SessionHistoryService {
                         }
                     }
                     
+                    
                     else -> {
                         // 忽略其他类型的消息（system, result等）
                     }
                 }
             }
             
-            // 不发送文件结束的 END，让会话保持开放状态
+            // 如果还有未完成的助手消息，发送END
+            if (hasUnfinishedAssistantMessage) {
+                emit(SDKMessage(
+                    type = MessageType.END,
+                    data = MessageData()
+                ))
+                messageCount++
+            }
             
         } catch (e: Exception) {
             emit(SDKMessage(

@@ -259,12 +259,18 @@ fun ChatInputPermissionSelector(
 }
 
 /**
- * 跳过权限指示器组件（只读，始终为真）
+ * 跳过权限复选框组件
  * 
+ * @param checked 是否选中
+ * @param onCheckedChange 选中状态变化回调
+ * @param enabled 是否启用
  * @param modifier 修饰符
  */
 @Composable
-fun SkipPermissionsIndicator(
+fun SkipPermissionsCheckbox(
+    checked: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -273,16 +279,19 @@ fun SkipPermissionsIndicator(
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Checkbox(
-            checked = true,
-            onCheckedChange = {}, // 空操作，因为不可更改
-            enabled = false
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled
         )
         Text(
             text = "跳过权限",
             style = JewelTheme.defaultTextStyle.copy(
                 fontSize = 9.sp,
-                color = JewelTheme.globalColors.text.disabled
-            )
+                color = if (enabled) JewelTheme.globalColors.text.normal else JewelTheme.globalColors.text.disabled
+            ),
+            modifier = Modifier.clickable(enabled = enabled) {
+                onCheckedChange(!checked)
+            }
         )
     }
 }

@@ -43,6 +43,11 @@ fun CompactToolCallDisplay(
     toolCalls: List<ToolCall>,
     modifier: Modifier = Modifier
 ) {
+    println("[CompactToolCallDisplay] 工具调用数量：${toolCalls.size}")
+    toolCalls.forEach { tool ->
+        println("  - ${tool.name} (${tool.id}): ${tool.status}, result=${tool.result?.let { it::class.simpleName } ?: "null"}")
+    }
+    
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -60,6 +65,8 @@ fun CompactToolCallDisplay(
 private fun CompactToolCallItem(
     toolCall: ToolCall
 ) {
+    println("[CompactToolCallItem] 渲染工具：${toolCall.name}, ID：${toolCall.id}")
+    
     var expanded by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
@@ -261,6 +268,18 @@ private fun CompactToolCallItem(
 private fun ToolCallDetails(
     toolCall: ToolCall
 ) {
+    println("[ToolCallDetails] 工具：${toolCall.name}, 结果：${toolCall.result?.let { it::class.simpleName } ?: "null"}")
+    
+    // 判断是否需要显示详细结果
+    val shouldShowDetails = shouldShowToolDetails(toolCall)
+    
+    println("[ToolCallDetails] shouldShowDetails for ${toolCall.name} = $shouldShowDetails")
+    
+    if (!shouldShowDetails) {
+        // 对于不需要显示详细结果的工具，不渲染任何内容
+        return
+    }
+    
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -272,9 +291,37 @@ private fun ToolCallDetails(
         
         // 直接显示结果
         toolCall.result?.let { result ->
-            formatToolResult(toolCall)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // 显示结果标题
+                Text(
+                    text = "执行结果:",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = JewelTheme.globalColors.text.normal
+                    )
+                )
+                
+                // 显示实际结果
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    formatToolResult(toolCall)
+                }
+            }
         }
     }
+}
+
+/**
+ * 判断是否需要显示工具的详细结果
+ */
+private fun shouldShowToolDetails(toolCall: ToolCall): Boolean {
+    // 所有工具都显示结果
+    return true
 }
 
 /**
@@ -395,20 +442,25 @@ private fun formatBytes(bytes: Long): String {
  */
 @Composable
 private fun formatToolResult(toolCall: ToolCall) {
+    println("[formatToolResult] 格式化工具结果：${toolCall.name}, 有结果：${toolCall.result != null}")
+    
     when {
         // Edit/MultiEdit 使用 Diff 展示
         toolCall.name.contains("Edit", ignoreCase = true) -> {
+            println("[formatToolResult] 使用 DiffResultDisplay")
             DiffResultDisplay(toolCall)
         }
         
         // Read/Write 使用内容预览
         toolCall.name.contains("Read", ignoreCase = true) ||
         toolCall.name.contains("Write", ignoreCase = true) -> {
+            println("[formatToolResult] 使用 FileContentPreview")
             FileContentPreview(toolCall)
         }
         
         // LS 使用文件列表展示
         toolCall.name.contains("LS", ignoreCase = true) -> {
+            println("[formatToolResult] 使用 FileListDisplay")
             FileListDisplay(toolCall)
         }
         
@@ -495,8 +547,15 @@ private fun FileContentPreview(toolCall: ToolCall) {
  */
 @Composable
 private fun FileListDisplay(toolCall: ToolCall) {
-    val result = toolCall.result ?: return
+    val result = toolCall.result
+    if (result == null) {
+        println("[FileListDisplay] 警告：LS工具结果为null")
+        return
+    }
+    
     val path = toolCall.parameters["path"]?.toString() ?: ""
+    
+    println("[FileListDisplay] 显示LS结果：path=$path, result=${result::class.simpleName}")
     
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -512,6 +571,7 @@ private fun FileListDisplay(toolCall: ToolCall) {
         
         // 文件列表
         if (result is ToolResult.Success) {
+            println("[FileListDisplay] LS结果内容长度：${result.output.length}")
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

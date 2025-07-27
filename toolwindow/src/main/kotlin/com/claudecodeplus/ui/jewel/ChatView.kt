@@ -47,6 +47,8 @@ fun ChatView(
     var contexts by remember { mutableStateOf(listOf<ContextReference>()) }
     var isGenerating by remember { mutableStateOf(false) }
     var selectedModel by remember { mutableStateOf(AiModel.OPUS) }
+    var selectedPermissionMode by remember { mutableStateOf(PermissionMode.BYPASS_PERMISSIONS) }
+    var skipPermissions by remember { mutableStateOf(true) }
     var messages by remember { mutableStateOf(initialMessages ?: listOf<EnhancedMessage>()) }
     var isLoadingSession by remember { mutableStateOf(false) }
     
@@ -247,6 +249,18 @@ fun ChatView(
                 onContextRemove = { context ->
                     contexts = contexts - context
                 },
+                selectedModel = selectedModel,
+                onModelChange = { model ->
+                    selectedModel = model
+                },
+                selectedPermissionMode = selectedPermissionMode,
+                onPermissionModeChange = { mode ->
+                    selectedPermissionMode = mode
+                },
+                skipPermissions = skipPermissions,
+                onSkipPermissionsChange = { skip ->
+                    skipPermissions = skip
+                },
                 fileIndexService = fileIndexService,
                 projectService = projectService,
                 onSend = { markdownText ->
@@ -313,7 +327,9 @@ fun ChatView(
                             val options = ClaudeCliWrapper.QueryOptions(
                                 resume = if (useResume) currentSessionId else null,
                                 cwd = workingDirectory,
-                                model = selectedModel?.cliName
+                                model = selectedModel?.cliName,
+                                permissionMode = selectedPermissionMode.cliName,
+                                skipPermissions = skipPermissions
                             )
                             
                             cliWrapper.query(markdownText, options).collect { message ->
@@ -561,8 +577,6 @@ fun ChatView(
                         }
                     }
                 },
-                selectedModel = selectedModel,
-                onModelChange = { selectedModel = it },
                 enabled = !isGenerating,
                 isGenerating = isGenerating
             )
