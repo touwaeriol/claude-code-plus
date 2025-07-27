@@ -6,6 +6,7 @@ import com.claudecodeplus.desktop.state.AppUiState
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.services.*
+import com.claudecodeplus.core.interfaces.ProjectService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

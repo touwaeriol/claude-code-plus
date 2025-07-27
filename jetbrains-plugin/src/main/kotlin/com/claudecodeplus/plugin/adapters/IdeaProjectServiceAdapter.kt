@@ -27,6 +27,15 @@ class IdeaProjectServiceAdapter(
         return project.name
     }
     
+    override fun getRelativePath(absolutePath: String): String {
+        val projectPath = getProjectPath()
+        return if (absolutePath.startsWith(projectPath)) {
+            absolutePath.removePrefix(projectPath).removePrefix("/").removePrefix("\\")
+        } else {
+            absolutePath
+        }
+    }
+    
     override fun openFile(filePath: String, lineNumber: Int?) {
         try {
             val virtualFile = LocalFileSystem.getInstance().findFileByPath(filePath)

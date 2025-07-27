@@ -44,7 +44,7 @@ fun JewelConversationView(
     // skipPermissions 默认为 true，不再可修改
     onClearChat: () -> Unit = {},
     fileIndexService: com.claudecodeplus.ui.services.FileIndexService? = null,
-    projectService: com.claudecodeplus.ui.services.ProjectService? = null,
+    projectService: com.claudecodeplus.core.interfaces.ProjectService? = null,
     modifier: Modifier = Modifier
 ) {
     Column(

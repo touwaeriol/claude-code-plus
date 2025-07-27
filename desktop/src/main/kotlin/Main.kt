@@ -458,7 +458,7 @@ fun EnhancedClaudeApp() {
                 MultiTabChatView(
                     tabManager = tabManager,
                     cliWrapper = cliWrapper,
-                    workingDirectory = currentProject?.path ?: projectService.getProjectPath(),
+                    workingDirectory = currentProject?.path ?: ServiceContainer.projectService.getProjectPath(),
                     fileIndexService = fileIndexService,
                     projectService = projectService,
                     sessionManager = sessionManager,

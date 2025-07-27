@@ -13,6 +13,14 @@ class DesktopProjectService(private val projectPath: String) : ProjectService {
     
     override fun getProjectName(): String = projectPath.substringAfterLast('/')
     
+    override fun getRelativePath(absolutePath: String): String {
+        return if (absolutePath.startsWith(projectPath)) {
+            absolutePath.removePrefix(projectPath).removePrefix("/").removePrefix("\\")
+        } else {
+            absolutePath
+        }
+    }
+    
     override fun openFile(filePath: String, lineNumber: Int?) {
         try {
             val file = File(filePath)

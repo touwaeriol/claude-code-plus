@@ -31,7 +31,7 @@ class IdeaProjectService(
         }
     }
     
-    fun openFile(filePath: String, lineNumber: Int? = null) {
+    override fun openFile(filePath: String, lineNumber: Int?) {
         val virtualFile = VirtualFileManager.getInstance().findFileByUrl("file://$filePath")
         if (virtualFile != null) {
             val descriptor = if (lineNumber != null) {
@@ -43,7 +43,7 @@ class IdeaProjectService(
         }
     }
     
-    fun showSettings(settingsId: String? = null) {
+    override fun showSettings(settingsId: String?) {
         if (settingsId != null) {
             ShowSettingsUtil.getInstance().showSettingsDialog(project, settingsId)
         } else {

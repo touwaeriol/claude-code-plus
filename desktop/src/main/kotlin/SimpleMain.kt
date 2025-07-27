@@ -71,7 +71,7 @@ fun SimpleClaudeApp() {
             MultiTabChatView(
                 tabManager = tabManager,
                 cliWrapper = cliWrapper,
-                workingDirectory = projectService.getProjectPath(),
+                workingDirectory = ServiceContainer.projectService.getProjectPath(),
                 fileIndexService = fileIndexService,
                 projectService = projectService,
                 sessionManager = sessionManager,
