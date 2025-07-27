@@ -12,7 +12,8 @@ import java.io.File
  */
 class SessionLoader(
     private val sessionHistoryService: SessionHistoryService,
-    private val messageProcessor: MessageProcessor
+    private val messageProcessor: MessageProcessor,
+    private val isHistoryMode: Boolean = true  // 默认为历史模式
 ) {
     
     /**
@@ -196,18 +197,49 @@ class SessionLoader(
                         
                         // 处理工具结果
                         com.claudecodeplus.sdk.MessageType.TOOL_RESULT -> {
-                            currentAssistantMessage?.let { msg ->
+                            val toolCallId = sdkMessage.data.toolCallId
+                            println("[SessionLoader] 收到TOOL_RESULT: toolCallId=$toolCallId, currentAssistantMessage是否为null=${currentAssistantMessage == null}")
+                            
+                            // 如果当前没有助手消息，尝试从已完成的消息中查找包含该工具调用的消息
+                            var targetMessage = currentAssistantMessage
+                            if (targetMessage == null && toolCallId != null) {
+                                println("[SessionLoader] 当前助手消息为null，尝试从已完成消息中查找")
+                                // 从后往前查找包含该工具调用的消息
+                                for (i in messages.indices.reversed()) {
+                                    val msg = messages[i]
+                                    if (msg.role == MessageRole.ASSISTANT && 
+                                        msg.toolCalls.any { it.id == toolCallId }) {
+                                        targetMessage = msg
+                                        println("[SessionLoader] 找到包含工具调用的消息: index=$i")
+                                        break
+                                    }
+                                }
+                            }
+                            
+                            targetMessage?.let { msg ->
+                                // 创建一个新的工具调用列表，包含消息中的所有工具调用
+                                val messageToolCalls = msg.toolCalls.toMutableList()
+                                
                                 val result = messageProcessor.processMessage(
                                     sdkMessage = sdkMessage,
                                     currentMessage = msg,
                                     responseBuilder = responseBuilder,
-                                    toolCalls = toolCalls,
+                                    toolCalls = messageToolCalls,  // 使用消息自己的工具调用列表
                                     // orderedElements 由 MessageProcessor 内部管理
                                 )
                                 
                                 when (result) {
                                     is MessageProcessor.ProcessResult.Updated -> {
-                                        currentAssistantMessage = result.message
+                                        // 如果是已完成的消息，需要更新消息列表中的对应项
+                                        if (currentAssistantMessage == null) {
+                                            val messageIndex = messages.indexOfFirst { it.id == msg.id }
+                                            if (messageIndex >= 0) {
+                                                messages[messageIndex] = result.message
+                                                println("[SessionLoader] 更新已完成消息: index=$messageIndex")
+                                            }
+                                        } else {
+                                            currentAssistantMessage = result.message
+                                        }
                                         emit(LoadResult.MessageUpdated(result.message))
                                     }
                                     else -> {}
@@ -217,20 +249,28 @@ class SessionLoader(
                         
                         // 消息结束
                         com.claudecodeplus.sdk.MessageType.END -> {
-                            // 完成当前消息
-                            currentAssistantMessage?.let { msg ->
-                                messages.add(msg)
-                                emit(LoadResult.MessageCompleted(msg))
+                            println("[SessionLoader] 收到END消息, isHistoryMode=$isHistoryMode")
+                            // 在历史模式下，不处理END消息的状态清理
+                            // 因为工具结果可能在END消息之后到达
+                            if (!isHistoryMode) {
+                                // 完成当前消息
+                                currentAssistantMessage?.let { msg ->
+                                    messages.add(msg)
+                                    emit(LoadResult.MessageCompleted(msg))
+                                }
+                                
+                                // 重置状态（仅在非历史模式下）
+                                currentAssistantMessage = null
+                                responseBuilder.clear()
+                                toolCalls.clear()
+                                // orderedElements 由 MessageProcessor 管理
+                                
+                                // 加载完成
+                                emit(LoadResult.LoadComplete(messages))
+                            } else {
+                                println("[SessionLoader] 历史模式下忽略END消息的状态清理，保持currentAssistantMessage=${currentAssistantMessage?.id}, toolCalls.size=${toolCalls.size}")
                             }
-                            
-                            // 重置状态
-                            currentAssistantMessage = null
-                            responseBuilder.clear()
-                            toolCalls.clear()
-                            // orderedElements 由 MessageProcessor 管理
-                            
-                            // 加载完成
-                            emit(LoadResult.LoadComplete(messages))
+                            // 历史模式下，保持状态以便处理后续的工具结果
                         }
                         
                         // 错误处理
@@ -240,6 +280,16 @@ class SessionLoader(
                         
                         else -> {}
                     }
+                }
+                
+                // 在历史模式下，处理完所有消息后需要完成最后的助手消息
+                if (isHistoryMode) {
+                    currentAssistantMessage?.let { msg ->
+                        messages.add(msg)
+                        emit(LoadResult.MessageCompleted(msg))
+                        println("[SessionLoader] 历史模式下完成最后的助手消息: id=${msg.id}")
+                    }
+                    emit(LoadResult.LoadComplete(messages))
                 }
         } catch (e: Exception) {
             emit(LoadResult.Error("加载会话失败: ${e.message}"))
