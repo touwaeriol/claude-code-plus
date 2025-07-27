@@ -17,8 +17,37 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 
+/**
+ * 会话加载事件
+ * 用于通知其他组件会话已被加载
+ */
 data class SessionLoadEvent(val session: ProjectSession)
 
+/**
+ * 项目管理器 - 项目和会话管理核心组件
+ * 
+ * 负责管理所有项目及其会话的加载、切换和状态维护。
+ * 这是桌面应用中项目列表和会话列表的数据源。
+ * 
+ * 主要功能：
+ * - 从磁盘加载项目列表（扫描 Claude 会话目录）
+ * - 管理每个项目的会话列表
+ * - 维护当前项目和当前会话状态
+ * - 自动选择最近使用的会话
+ * - 发布会话加载事件
+ * 
+ * 数据流：
+ * - projects: 所有项目列表（StateFlow）
+ * - sessions: 项目 ID 到会话列表的映射（StateFlow）
+ * - currentProject: 当前选中的项目
+ * - currentSession: 当前选中的会话
+ * - sessionLoadEvent: 会话加载事件流（SharedFlow）
+ * 
+ * 与 Claude CLI 的关系：
+ * - 读取 ~/.claude/projects/ 目录结构
+ * - 解析 JSONL 格式的会话文件
+ * - 保持与 CLI 的目录结构一致
+ */
 class ProjectManager {
     private val _projects = MutableStateFlow<List<Project>>(emptyList())
     val projects = _projects.asStateFlow()
@@ -44,6 +73,15 @@ class ProjectManager {
     
     /**
      * 查找所有项目中最新修改的会话
+     * 
+     * 在应用启动时调用，自动选择用户最近使用的会话。
+     * 这提供了更好的用户体验，用户可以继续上次的工作。
+     * 
+     * 处理流程：
+     * 1. 遍历所有项目
+     * 2. 加载每个项目的会话列表（如果未加载）
+     * 3. 找到最近修改的会话
+     * 4. 切换到对应的项目和会话
      */
     private suspend fun findAndSelectLatestSession() {
         println("开始查找所有项目中最新修改的会话...")

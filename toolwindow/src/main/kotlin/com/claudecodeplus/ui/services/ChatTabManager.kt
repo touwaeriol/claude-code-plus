@@ -13,7 +13,22 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * 多标签对话管理器
+ * 多标签对话管理器 - 会话标签管理核心组件
+ * 
+ * 负责管理所有会话标签的生命周期，包括创建、切换、关闭、分组等操作。
+ * 虽然在桌面应用中标签栏被隐藏，但该组件仍在后台管理所有会话状态。
+ * 
+ * 主要功能：
+ * - 标签生命周期管理（创建、激活、关闭）
+ * - 会话 ID 映射（将 Claude 会话 ID 与标签关联）
+ * - 标签分组管理（组织相关对话）
+ * - 最近使用记录（快速切换）
+ * - 事件通知（通过 StateFlow 发布标签事件）
+ * 
+ * 与其他组件的关系：
+ * - ProjectManager: 标签可以关联到特定项目
+ * - SessionLoader: 加载会话时需要找到对应的标签
+ * - ChatView: UI 通过该管理器获取当前活动标签
  */
 class ChatTabManager {
     private val _tabs = mutableStateListOf<ChatTab>()
@@ -44,6 +59,18 @@ class ChatTabManager {
     
     /**
      * 创建新标签
+     * 
+     * 创建一个新的聊天标签。如果提供了项目信息，会在标签标题中显示项目简称。
+     * 
+     * 标题格式：
+     * - 有项目: [项目简称] 标题
+     * - 无项目: 标题
+     * 
+     * @param title 标签标题，默认为 "新对话 N"
+     * @param groupId 所属分组 ID，默认为 "default"
+     * @param sessionId Claude 会话 ID，新建会话时为 null
+     * @param project 关联的项目信息
+     * @return 新创建标签的 ID
      */
     fun createNewTab(
         title: String = "新对话 ${_tabs.size + 1}",

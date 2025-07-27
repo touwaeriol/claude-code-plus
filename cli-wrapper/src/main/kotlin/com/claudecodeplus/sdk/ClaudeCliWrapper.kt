@@ -15,14 +15,38 @@ import java.io.InputStreamReader
 import kotlinx.serialization.json.*
 
 /**
- * Claude CLI 包装器
- * 使用 kotlinx.serialization 解析 Claude CLI 输出
+ * Claude CLI 包装器 - 核心组件
+ * 
+ * 这是与 Claude CLI 交互的核心类，负责将 Kotlin 代码与 Claude 命令行工具连接。
+ * 使用 kotlinx.serialization 解析 Claude CLI 输出。
+ * 
+ * 主要功能：
+ * - 自动查找和调用 Claude CLI 命令
+ * - 处理流式响应，支持实时显示 AI 生成的内容
+ * - 管理会话（新建、继续、恢复）
+ * - 支持中断响应（通过 terminate() 方法）
+ * - 处理工具调用（文件操作、代码执行等）
  * 
  * 工作原理：
  * 1. 通过 ProcessBuilder 直接调用系统中的 claude CLI 命令
  * 2. 使用 --output-format stream-json 参数获取流式 JSON 输出
  * 3. 使用 kotlinx.serialization 解析 JSON 流并转换为 Kotlin Flow
  * 4. 通过环境变量 CLAUDE_CODE_ENTRYPOINT 标识调用来源
+ * 
+ * 使用示例：
+ * ```kotlin
+ * val wrapper = ClaudeCliWrapper()
+ * val flow = wrapper.query(
+ *     prompt = "请帮我写一个快速排序算法",
+ *     options = QueryOptions(model = "opus")
+ * )
+ * flow.collect { message ->
+ *     when (message.type) {
+ *         MessageType.TEXT -> println(message.data.text)
+ *         MessageType.END -> println("完成")
+ *     }
+ * }
+ * ```
  */
 class ClaudeCliWrapper {
     companion object {
@@ -30,7 +54,14 @@ class ClaudeCliWrapper {
         
         /**
          * 查找 Claude 命令的路径
-         * 支持自定义命令路径，默认查找系统中的 claude 命令
+         * 
+         * 按以下优先级查找：
+         * 1. 用户提供的自定义命令路径
+         * 2. 系统特定的默认路径（Windows/Unix）
+         * 3. 使用系统命令（where/which）动态查找
+         * 
+         * @param customCommand 自定义的 claude 命令路径（可选）
+         * @return Claude 命令的完整路径
          */
         private fun findClaudeCommand(customCommand: String? = null): String {
             // 如果提供了自定义命令，直接使用
@@ -104,6 +135,11 @@ class ClaudeCliWrapper {
         
         /**
          * 检查命令是否可用
+         * 
+         * 通过尝试执行 “claude --version” 来验证命令是否存在且可执行
+         * 
+         * @param command 要检查的命令
+         * @return 如果命令可用返回 true，否则返回 false
          */
         private fun isCommandAvailable(command: String): Boolean {
             return try {
@@ -115,11 +151,21 @@ class ClaudeCliWrapper {
         }
     }
     
-    // 存储当前运行的进程，用于终止响应
+    /**
+     * 存储当前运行的进程引用
+     * 使用 AtomicReference 确保线程安全
+     * 主要用于实现中断功能（terminate 方法）
+     */
     private val currentProcess = AtomicReference<Process?>(null)
     
     /**
      * 权限模式枚举
+     * 
+     * 定义了 Claude CLI 支持的不同权限模式：
+     * - DEFAULT: 正常权限检查，每次操作都需要用户确认
+     * - BYPASS_PERMISSIONS: 跳过所有权限检查，适用于信任环境
+     * - ACCEPT_EDITS: 自动接受编辑操作，但其他操作仍需确认
+     * - PLAN: 计划模式，只生成计划不执行实际操作
      */
     enum class PermissionMode(val cliValue: String) {
         /** 正常权限检查（默认） */
@@ -137,35 +183,66 @@ class ClaudeCliWrapper {
     
     /**
      * Claude CLI 查询选项
+     * 
+     * 封装了所有可用的 Claude CLI 参数，用于控制 AI 的行为
      */
     data class QueryOptions(
-        // 模型配置
+        /**
+         * AI 模型配置
+         */
+        // 主模型（如 "opus", "sonnet" 等）
         val model: String? = null,
+        // 备用模型（当主模型不可用时使用）
         val fallbackModel: String? = null,
         
-        // 对话控制
+        /**
+         * 对话控制参数
+         */
+        // 最大对话轮数（限制多轮对话的次数）
         val maxTurns: Int? = null,
+        // 自定义系统提示词（追加到默认系统提示词后）
         val customSystemPrompt: String? = null,
         
-        // 会话管理
+        /**
+         * 会话管理
+         */
+        // 要恢复的会话 ID（用于继续之前的对话）
         val resume: String? = null,
         
-        // 权限设置
+        /**
+         * 权限设置
+         */
+        // 权限模式（见 PermissionMode 枚举）
         val permissionMode: String = PermissionMode.DEFAULT.cliValue,
-        val skipPermissions: Boolean = true,  // 是否跳过权限检查
+        // 是否跳过所有权限检查（快速操作，慎用）
+        val skipPermissions: Boolean = true,
         
-        // 工作目录
+        /**
+         * 环境配置
+         */
+        // 工作目录（AI 执行命令和文件操作的基础路径）
         val cwd: String? = null,
         
-        // MCP 服务器
+        /**
+         * MCP（Model Context Protocol）服务器配置
+         * 用于扩展 Claude 的能力，如添加数据库访问、API 调用等
+         */
         val mcpServers: Map<String, Any>? = null,
         
-        // 调试
+        /**
+         * 调试和统计
+         */
+        // 启用调试模式（输出更多日志信息）
         val debug: Boolean = false,
+        // 显示统计信息（token 使用量等）
         val showStats: Boolean = false,
+        // 请求 ID（用于跟踪和调试）
         val requestId: String? = null,
         
-        // 自定义命令路径
+        /**
+         * 高级配置
+         */
+        // 自定义 claude 命令路径（默认自动查找）
         val customCommand: String? = null
     )
     

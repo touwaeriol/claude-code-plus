@@ -9,8 +9,20 @@ import kotlinx.coroutines.flow.flow
 import java.io.File
 
 /**
- * 会话加载器
- * 负责加载和处理历史会话，支持流式处理
+ * 会话加载器 - 历史会话加载核心组件
+ * 
+ * 负责从 Claude CLI 的 JSONL 格式会话文件中加载历史会话，并转换为 UI 可用的消息格式。
+ * 支持流式处理，可以逐条加载消息，避免一次性加载大量数据造成内存压力。
+ * 
+ * 主要功能：
+ * - 解析 Claude CLI 的消息流格式
+ * - 处理多种消息类型（用户、助手、工具调用等）
+ * - 支持历史模式和实时模式的不同处理逻辑
+ * - 正确关联工具调用和其结果
+ * 
+ * 特殊设计：
+ * 在历史模式下，END 消息不会清理状态，因为 Claude CLI 中工具结果可能在 END 之后到达。
+ * 这确保了工具调用结果能正确显示在历史会话中。
  */
 class SessionLoader(
     private val sessionHistoryService: SessionHistoryService,
@@ -20,10 +32,21 @@ class SessionLoader(
     
     /**
      * 加载历史会话并转换为增强消息流
-     * @param sessionFile 会话文件
-     * @param maxMessages 最大消息数
-     * @param maxDaysOld 最大天数
-     * @return 增强消息流
+     * 
+     * 该方法是会话加载的核心入口，将 Claude CLI 的 JSONL 格式会话文件
+     * 转换为 UI 可以直接使用的 EnhancedMessage 流。
+     * 
+     * 处理流程：
+     * 1. 从 SessionHistoryService 获取 SDKMessage 流
+     * 2. 根据消息类型进行不同处理
+     * 3. 维护当前正在构建的助手消息
+     * 4. 将工具调用和结果正确关联
+     * 5. 通过 Flow 发射加载结果
+     * 
+     * @param sessionFile 会话文件（Claude CLI 生成的 JSONL 文件）
+     * @param maxMessages 最大消息数（限制加载的消息数量，默认 50）
+     * @param maxDaysOld 最大天数（只加载最近 N 天的消息，默认 7）
+     * @return 增强消息流，通过 LoadResult 封装不同的加载事件
      */
     fun loadSessionAsMessageFlow(
         sessionFile: File,

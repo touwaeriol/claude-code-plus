@@ -6,20 +6,43 @@ import com.claudecodeplus.ui.models.*
 import java.util.UUID
 
 /**
- * 通用消息处理器
- * 负责处理 SDKMessage 并更新 EnhancedMessage
- * 统一处理实时消息和历史消息
+ * 通用消息处理器 - 消息转换核心组件
+ * 
+ * 负责将 Claude CLI 返回的 SDKMessage 转换为 UI 使用的 EnhancedMessage。
+ * 统一处理实时消息和历史消息，确保一致的消息处理逻辑。
+ * 
+ * 主要职责：
+ * - 处理文本内容，构建完整的消息内容
+ * - 管理工具调用，创建和更新 ToolCall 对象
+ * - 关联工具调用结果，通过 toolCallId 匹配
+ * - 维护消息的有序元素列表（orderedElements）
+ * - 处理错误和完成状态
+ * 
+ * 设计模式：
+ * 使用无状态设计，所有状态通过参数传入，返回处理结果。
+ * 这使得处理器可以在多个上下文中安全地重用。
  */
 class MessageProcessor {
     
     /**
      * 处理消息流中的单个消息
-     * @param sdkMessage SDK消息
-     * @param currentMessage 当前正在构建的消息
-     * @param responseBuilder 响应内容构建器
-     * @param toolCalls 工具调用列表
-     * @param orderedElements 有序元素列表（可选，如果未提供则从当前消息复制）
-     * @return 更新后的消息，如果返回null表示消息还在构建中
+     * 
+     * 这是消息处理的核心方法，根据 SDKMessage 的类型执行不同的处理逻辑。
+     * 
+     * 处理的消息类型：
+     * - TEXT: 文本内容，累积到 responseBuilder 中
+     * - TOOL_USE: 工具调用开始，创建新的 ToolCall
+     * - TOOL_RESULT: 工具执行结果，更新对应的 ToolCall
+     * - ERROR: 错误消息，标记消息为失败状态
+     * - END: 消息结束，标记消息为完成状态
+     * - START: 会话开始，提取会话 ID
+     * 
+     * @param sdkMessage Claude CLI 返回的 SDK 消息
+     * @param currentMessage 当前正在构建的消息（通常是助手消息）
+     * @param responseBuilder 响应内容构建器，累积文本内容
+     * @param toolCalls 工具调用列表，存储所有的工具调用
+     * @param orderedElements 有序元素列表（可选），用于保持内容和工具调用的顺序
+     * @return ProcessResult - 封装处理结果，可能是更新、完成、错误等状态
      */
     fun processMessage(
         sdkMessage: SDKMessage,
