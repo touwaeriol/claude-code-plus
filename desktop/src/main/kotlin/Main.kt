@@ -42,6 +42,9 @@ import org.jetbrains.jewel.ui.component.CircularProgressIndicator
  * Claude Code Plus 桌面应用主函数
  */
 fun main() = application {
+    // 初始化日志系统
+    com.claudecodeplus.core.LogbackConfigurator.initialize()
+    
     val projectPath = System.getProperty("user.dir")
     
     // 在组合前直接初始化服务

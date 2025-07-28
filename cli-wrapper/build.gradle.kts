@@ -25,6 +25,11 @@ dependencies {
     // ANSI 处理
     implementation("org.fusesource.jansi:jansi:2.4.1")
     
+    // Kotlin 日志框架
+    implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")
+    implementation("org.slf4j:slf4j-api:2.0.9")
+    implementation("ch.qos.logback:logback-classic:1.4.14")
+    
     // 测试依赖
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:1.13.8")

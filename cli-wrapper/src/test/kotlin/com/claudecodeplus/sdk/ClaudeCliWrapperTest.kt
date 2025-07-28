@@ -99,8 +99,8 @@ class ClaudeCliWrapperTest {
      */
     @Test
     fun testEmptyPromptError() {
-        runBlocking {
-            assertThrows(IllegalArgumentException::class.java) {
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
                 wrapper.query("").collect {}
             }
         }
@@ -117,8 +117,8 @@ class ClaudeCliWrapperTest {
             fallbackModel = model
         )
         
-        runBlocking {
-            assertThrows(IllegalArgumentException::class.java) {
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
                 wrapper.query("test", options).collect {}
             }
         }

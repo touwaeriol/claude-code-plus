@@ -1,6 +1,6 @@
 package com.claudecodeplus.sdk
 
-import java.util.logging.Logger
+import com.claudecodeplus.core.LoggerFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -50,7 +50,7 @@ import kotlinx.serialization.json.*
  */
 class ClaudeCliWrapper {
     companion object {
-        private val logger = Logger.getLogger(ClaudeCliWrapper::class.java.name)
+        private val logger = LoggerFactory.getLogger(ClaudeCliWrapper::class.java)
         
         /**
          * 查找 Claude 命令的路径
@@ -98,7 +98,7 @@ class ClaudeCliWrapper {
                         return claudePath
                     }
                 } catch (e: Exception) {
-                    logger.fine("Failed to find claude via where: ${e.message}")
+                    logger.debug("Failed to find claude via where: ${e.message}")
                 }
             } else {
                 // Unix/Mac 路径
@@ -125,7 +125,7 @@ class ClaudeCliWrapper {
                         return output
                     }
                 } catch (e: Exception) {
-                    logger.fine("Failed to find claude via which: ${e.message}")
+                    logger.debug("Failed to find claude via which: ${e.message}")
                 }
             }
             
@@ -363,13 +363,13 @@ class ClaudeCliWrapper {
                     errorBuilder.appendLine(line)
                     when {
                         line.contains("[DEP0190]") -> {
-                            logger.fine("Node.js deprecation warning: $line")
+                            logger.debug("Node.js deprecation warning: $line")
                         }
                         line.contains("error", ignoreCase = true) -> {
-                            logger.severe("Claude CLI error: $line")
+                            logger.error("Claude CLI error: $line", RuntimeException("CLI Error"))
                         }
                         else -> {
-                            logger.warning("Claude CLI stderr: $line")
+                            logger.warn("Claude CLI stderr: $line")
                         }
                     }
                 }
@@ -408,7 +408,7 @@ class ClaudeCliWrapper {
                                 }
                             }
                         } catch (e: Exception) {
-                            logger.warning("解析消息失败: ${e.message}")
+                            logger.warn("解析消息失败: ${e.message}")
                         }
                     }
                 }
@@ -420,7 +420,7 @@ class ClaudeCliWrapper {
             
             if (exitCode != 0) {
                 val errorMsg = errorBuilder.toString()
-                logger.severe("Claude CLI 执行失败: $errorMsg")
+                logger.error("Claude CLI 执行失败: $errorMsg", RuntimeException("CLI Execution Failed"))
                 emit(SDKMessage(
                     type = MessageType.ERROR,
                     data = MessageData(error = "Claude CLI 执行失败: $errorMsg")
@@ -433,7 +433,7 @@ class ClaudeCliWrapper {
             }
             
         } catch (e: Exception) {
-            logger.severe("执行查询时发生错误: ${e.message}")
+            logger.error("执行查询时发生错误: ${e.message}", e)
             emit(SDKMessage(
                 type = MessageType.ERROR,
                 data = MessageData(error = e.message)
@@ -559,12 +559,12 @@ class ClaudeCliWrapper {
                 process.destroy()
                 logger.info("进程已终止")
             } catch (e: Exception) {
-                logger.severe("终止进程失败: ${e.message}")
+                logger.error("终止进程失败: ${e.message}", e)
                 try {
                     process.destroyForcibly()
                     logger.info("进程已强制终止")
                 } catch (e2: Exception) {
-                    logger.severe("强制终止进程失败: ${e2.message}")
+                    logger.error("强制终止进程失败: ${e2.message}", e2)
                 }
             }
         }
@@ -586,7 +586,7 @@ class ClaudeCliWrapper {
                 false
             }
         } catch (e: Exception) {
-            logger.warning("Claude CLI 不可用: ${e.message}")
+            logger.warn("Claude CLI 不可用: ${e.message}")
             false
         }
     }
