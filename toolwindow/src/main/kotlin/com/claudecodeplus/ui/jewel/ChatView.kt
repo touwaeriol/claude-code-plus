@@ -65,17 +65,29 @@ fun ChatView(
         }
     }
     
-    // 监听 sessionId 变化，但不重置消息
+    // 监听 sessionId 变化
     LaunchedEffect(sessionId) {
-        if (sessionId != null && sessionId != currentSessionId) {
+        // 如果是新会话（sessionId 为 null 或空），清空消息
+        if (sessionId == null || sessionId.isEmpty()) {
+            messages = emptyList()
+            currentSessionId = null
+            inputResetTrigger = System.currentTimeMillis()
+        } else if (sessionId != currentSessionId) {
+            // 切换到不同的会话
             currentSessionId = sessionId
-            // 当会话改变时，触发输入框重置
             inputResetTrigger = System.currentTimeMillis()
         }
     }
     
     // 初始化时加载最近会话或创建新会话
     LaunchedEffect(workingDirectory, sessionId) {
+        // 如果是新会话（没有 sessionId），清空消息并返回
+        if (sessionId == null || sessionId.isEmpty()) {
+            messages = emptyList()
+            currentSessionId = null
+            return@LaunchedEffect
+        }
+        
         // 如果明确传入了有内容的 initialMessages，使用它们
         if (initialMessages != null && initialMessages.isNotEmpty()) {
             messages = initialMessages
@@ -99,15 +111,24 @@ fun ChatView(
                 if (enhancedMessages.isNotEmpty()) {
                     messages = enhancedMessages
                     currentSessionId = sessionId
+                } else {
+                    // 没有消息，保持空列表
+                    messages = emptyList()
+                    currentSessionId = sessionId
                 }
             } catch (e: Exception) {
+                println("[ChatView] 加载会话失败: ${e.message}")
                 e.printStackTrace()
+                // 加载失败时清空消息
+                messages = emptyList()
+                currentSessionId = sessionId
             } finally {
                 isLoadingSession = false
             }
             return@LaunchedEffect
         }
         
+        // 没有 sessionId 的情况下，尝试加载最近会话
         isLoadingSession = true
         try {
             // 尝试获取最近的会话
@@ -133,18 +154,21 @@ fun ChatView(
                     messages = enhancedMessages
                     // ChatView: Loaded ${enhancedMessages.size} messages from recent session
                 } catch (e: Exception) {
-                    // ChatView: Error loading session messages: ${e.message}
-                    // 如果加载失败，保持空消息列表
+                    println("[ChatView] 未找到会话文件，使用原方法加载: ${e.message}")
+                    // 如果加载失败（比如会话文件不存在），保持空消息列表
+                    messages = emptyList()
                 }
             } else {
                 // 没有历史会话，创建新会话但不使用 resume
                 // ChatView: No recent session found, will create new session on first message
                 currentSessionId = null
                 currentSession = null
+                messages = emptyList()
             }
         } catch (e: Exception) {
             // ChatView: Error during initialization: ${e.message}
             e.printStackTrace()
+            messages = emptyList()
         } finally {
             isLoadingSession = false
         }
