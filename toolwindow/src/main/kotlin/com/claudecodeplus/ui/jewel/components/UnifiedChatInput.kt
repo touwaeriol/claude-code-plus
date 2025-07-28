@@ -146,7 +146,7 @@ fun UnifiedChatInput(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 60.dp, max = 200.dp)  // 限制高度范围
+                .heightIn(min = 60.dp, max = 320.dp)  // 限制高度范围，约15行（每行约20dp）
                 .padding(horizontal = 12.dp)
         ) {
             ChatInputField(
@@ -165,7 +165,8 @@ fun UnifiedChatInput(
                     atSymbolPosition = position
                 },
                 showPreview = false,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                maxHeight = 300  // 传递最大高度参数
             )
         }
         

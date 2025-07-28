@@ -22,8 +22,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.focus.onFocusChanged
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.VerticalScrollbar
 
 /**
  * 聊天输入框组件
@@ -46,18 +50,41 @@ fun ChatInputField(
     focusRequester: FocusRequester = remember { FocusRequester() },
     onShowContextSelector: (Int?) -> Unit,
     showPreview: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    maxHeight: Int = 200  // 增加最大高度
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    
+    // 计算是否需要滚动
+    val lineHeight = 20.dp  // 每行高度
+    val padding = 16.dp     // 上下内边距
+    val lineCount = value.text.lines().size
+    val estimatedHeight = lineHeight * lineCount + padding
+    val needsScroll = estimatedHeight > maxHeight.dp
+    
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 输入框 - 使用 BasicTextField 实现透明背景
+        // 输入框容器 - 使用 Box 包装以支持滚动条
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 40.dp, max = 120.dp)
+                .heightIn(min = 40.dp, max = maxHeight.dp)
         ) {
+            // 内部滚动容器
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (needsScroll) {
+                            Modifier.verticalScroll(scrollState)
+                        } else {
+                            Modifier
+                        }
+                    )
+            ) {
             // 占位符
             if (value.text.isEmpty()) {
                 Text(
@@ -82,7 +109,8 @@ fun ChatInputField(
                 enabled = enabled,
                 textStyle = TextStyle(
                     color = JewelTheme.globalColors.text.normal,
-                    fontSize = JewelTheme.defaultTextStyle.fontSize
+                    fontSize = JewelTheme.defaultTextStyle.fontSize,
+                    lineHeight = JewelTheme.defaultTextStyle.fontSize * 1.5
                 ),
                 cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),
                 keyboardOptions = KeyboardOptions(
@@ -92,6 +120,9 @@ fun ChatInputField(
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
                     .focusRequester(focusRequester)
+                    .onFocusChanged { focusState ->
+                        isFocused = focusState.isFocused
+                    }
                 .onPreviewKeyEvent { keyEvent ->
                     when {
                         // Enter 发送，Shift+Enter 换行
@@ -128,6 +159,17 @@ fun ChatInputField(
                     }
                 }
             )
+            }
+            
+            // 滚动条 - 仅在聚焦且内容超过最大高度时显示
+            if (isFocused && needsScroll) {
+                VerticalScrollbar(
+                    scrollState = scrollState,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 2.dp)
+                )
+            }
         }
         
         // 预览区域（可选）
