@@ -35,6 +35,13 @@ import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 import java.io.File
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.window.Popup
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.window.PopupProperties
 
 /**
  * 发送/停止按钮组合组件
@@ -84,12 +91,15 @@ fun SendStopButtonGroup(
 
 /**
  * 现代化发送/停止按钮
+ * 支持右键菜单和中断发送功能
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SendStopButton(
     isGenerating: Boolean,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    onInterruptAndSend: (() -> Unit)? = null,
     hasInput: Boolean = true,
     enabled: Boolean = true,
     modifier: Modifier = Modifier
@@ -97,11 +107,18 @@ fun SendStopButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     val isPressed by interactionSource.collectIsPressedAsState()
+    var showContextMenu by remember { mutableStateOf(false) }
+    
+    // 确定当前图标
+    val currentIcon = when {
+        isGenerating && !hasInput -> AllIconsKeys.Actions.Suspend  // 停止图标（方形）
+        else -> AllIconsKeys.General.ArrowUp  // 发送图标（向上箭头）
+    }
     
     // 颜色动画
     val targetColor = when {
-        !enabled || (!hasInput && !isGenerating) -> JewelTheme.globalColors.text.disabled.copy(alpha = 0.5f)
-        isGenerating -> Color(0xFFFF4444) // 红色停止按钮
+        !enabled -> JewelTheme.globalColors.text.disabled.copy(alpha = 0.5f)
+        isGenerating && !hasInput -> Color(0xFFFF4444) // 红色停止按钮
         else -> Color(0xFF007AFF) // 蓝色发送按钮
     }
     
@@ -129,36 +146,93 @@ fun SendStopButton(
         label = "shadow elevation"
     )
     
-    Box(
-        modifier = modifier
-            .scale(scale)
-            .shadow(
-                elevation = shadowElevation.dp,
-                shape = CircleShape,
-                clip = false
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .scale(scale)
+                .shadow(
+                    elevation = shadowElevation.dp,
+                    shape = CircleShape,
+                    clip = false
+                )
+                .clip(CircleShape)
+                .background(backgroundColor)
+                .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = null, // 自定义动画，不使用默认波纹
+                    enabled = enabled,
+                    onClick = {
+                        when {
+                            isGenerating && !hasInput -> onStop()  // 停止生成
+                            isGenerating && hasInput -> onSend()   // 添加到队列
+                            hasInput -> onSend()                   // 直接发送
+                        }
+                    },
+                    onLongClick = {
+                        // 长按或右键显示菜单（仅在正在生成且有输入时）
+                        if (isGenerating && hasInput && onInterruptAndSend != null) {
+                            showContextMenu = true
+                        }
+                    }
+                )
+                .hoverable(interactionSource, enabled),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                key = currentIcon,
+                contentDescription = when {
+                    isGenerating && !hasInput -> "Stop"
+                    else -> "Send"
+                },
+                modifier = Modifier.size(14.dp),
+                tint = Color.White
             )
-            .clip(CircleShape)
-            .background(backgroundColor)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null, // 自定义动画，不使用默认波纹
-                enabled = enabled && (hasInput || isGenerating)
+        }
+        
+        // 右键菜单
+        if (showContextMenu) {
+            Popup(
+                onDismissRequest = { showContextMenu = false },
+                alignment = Alignment.TopEnd
             ) {
-                if (isGenerating) {
-                    onStop()
-                } else {
-                    onSend()
+                Column(
+                    modifier = Modifier
+                        .background(JewelTheme.globalColors.panelBackground)
+                        .border(
+                            1.dp,
+                            JewelTheme.globalColors.borders.normal,
+                            RoundedCornerShape(4.dp)
+                        )
+                        .clip(RoundedCornerShape(4.dp))
+                        .padding(4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onSend()
+                                showContextMenu = false
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text("发送", style = JewelTheme.defaultTextStyle)
+                    }
+                    if (onInterruptAndSend != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onInterruptAndSend()
+                                    showContextMenu = false
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text("打断并发送", style = JewelTheme.defaultTextStyle)
+                        }
+                    }
                 }
             }
-            .hoverable(interactionSource, enabled && (hasInput || isGenerating)),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            key = if (isGenerating) AllIconsKeys.Actions.Suspend else AllIconsKeys.General.ArrowUp,
-            contentDescription = if (isGenerating) "Stop" else "Send",
-            modifier = Modifier.size(14.dp),
-            tint = Color.White
-        )
+        }
     }
 }
 

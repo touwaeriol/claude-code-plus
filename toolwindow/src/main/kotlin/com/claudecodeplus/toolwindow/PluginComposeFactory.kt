@@ -3,7 +3,7 @@ package com.claudecodeplus.toolwindow
 import androidx.compose.ui.awt.ComposePanel
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
-import com.claudecodeplus.ui.jewel.ChatView
+import com.claudecodeplus.ui.jewel.StandaloneChatView
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
@@ -46,7 +46,7 @@ object PluginComposeFactory {
                 }
                 
                 IntUiTheme(isDark = isDark) {
-                    ChatView(
+                    StandaloneChatView(
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
                         fileIndexService = fileIndexService,

@@ -60,6 +60,7 @@ fun UnifiedChatInput(
     onContextAdd: (ContextReference) -> Unit = {},
     onContextRemove: (ContextReference) -> Unit = {},
     onSend: (String) -> Unit = {},
+    onInterruptAndSend: ((String) -> Unit)? = null,
     onStop: (() -> Unit)? = null,
     isGenerating: Boolean = false,
     enabled: Boolean = true,
@@ -166,7 +167,15 @@ fun UnifiedChatInput(
                         textFieldValue = TextFieldValue("")
                     }
                 },
-                enabled = enabled && !isGenerating,
+                onInterruptAndSend = if (onInterruptAndSend != null) {
+                    {
+                        if (textFieldValue.text.isNotBlank()) {
+                            onInterruptAndSend(textFieldValue.text)
+                            textFieldValue = TextFieldValue("")
+                        }
+                    }
+                } else null,
+                enabled = enabled,  // 移除 !isGenerating 限制
                 focusRequester = focusRequester,
                 onShowContextSelector = { position ->
                     showContextSelector = true
@@ -197,6 +206,14 @@ fun UnifiedChatInput(
                 }
             },
             onStop = onStop ?: {},
+            onInterruptAndSend = if (onInterruptAndSend != null) {
+                {
+                    if (textFieldValue.text.isNotBlank()) {
+                        onInterruptAndSend(textFieldValue.text)
+                        textFieldValue = TextFieldValue("")
+                    }
+                }
+            } else null,
             enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
@@ -299,6 +316,7 @@ private fun BottomToolbar(
     hasInput: Boolean,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    onInterruptAndSend: (() -> Unit)? = null,
     enabled: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -349,6 +367,7 @@ private fun BottomToolbar(
                 isGenerating = isGenerating,
                 onSend = onSend,
                 onStop = onStop,
+                onInterruptAndSend = onInterruptAndSend,
                 hasInput = hasInput,
                 enabled = enabled,
                 modifier = Modifier.size(24.dp)

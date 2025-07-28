@@ -46,6 +46,7 @@ fun ChatInputField(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
     onSend: () -> Unit,
+    onInterruptAndSend: (() -> Unit)? = null,
     enabled: Boolean = true,
     focusRequester: FocusRequester = remember { FocusRequester() },
     onShowContextSelector: (Int?) -> Unit,
@@ -125,24 +126,34 @@ fun ChatInputField(
                     }
                 .onPreviewKeyEvent { keyEvent ->
                     when {
-                        // Enter 发送，Shift+Enter 换行
+                        // Enter 发送，Shift+Enter 换行，Alt+Enter 打断并发送
                         keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyDown -> {
-                            if (keyEvent.isShiftPressed) {
-                                // Shift+Enter: 插入换行
-                                val currentText = value.text
-                                val currentSelection = value.selection
-                                val newText = currentText.substring(0, currentSelection.start) + 
-                                             "\n" + 
-                                             currentText.substring(currentSelection.end)
-                                val newSelection = androidx.compose.ui.text.TextRange(currentSelection.start + 1)
-                                onValueChange(TextFieldValue(newText, newSelection))
-                                true
-                            } else {
-                                // Enter: 发送消息
-                                if (value.text.isNotBlank() && enabled) {
-                                    onSend()
+                            when {
+                                keyEvent.isShiftPressed -> {
+                                    // Shift+Enter: 插入换行
+                                    val currentText = value.text
+                                    val currentSelection = value.selection
+                                    val newText = currentText.substring(0, currentSelection.start) + 
+                                                 "\n" + 
+                                                 currentText.substring(currentSelection.end)
+                                    val newSelection = androidx.compose.ui.text.TextRange(currentSelection.start + 1)
+                                    onValueChange(TextFieldValue(newText, newSelection))
+                                    true
                                 }
-                                true
+                                keyEvent.isAltPressed -> {
+                                    // Alt+Enter: 打断并发送
+                                    if (value.text.isNotBlank() && onInterruptAndSend != null) {
+                                        onInterruptAndSend()
+                                    }
+                                    true
+                                }
+                                else -> {
+                                    // Enter: 普通发送
+                                    if (value.text.isNotBlank()) {
+                                        onSend()
+                                    }
+                                    true
+                                }
                             }
                         }
                         // Cmd+K / Ctrl+K 打开上下文选择器

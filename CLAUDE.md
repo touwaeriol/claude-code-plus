@@ -16,6 +16,7 @@
 #### 架构和设计文档
 *   **`架构设计.md`**: Claude Code Plus 的整体架构说明，详细介绍直接调用 Claude CLI 的设计，包括 ClaudeCliWrapper、UI 组件、数据模型和 MCP 支持。
 *   **`会话管理设计.md`**: 会话管理系统的设计方案，涵盖会话存储、数据模型以及与 Claude CLI 的集成计划。
+*   **`会话状态管理系统.md`**: 完整的会话状态管理实现文档，包括 SessionObject、SessionManager、配置持久化和并发支持的详细说明。
 *   **`Claude消息类型.md`**: Claude Code SDK 使用的 JSONL 消息类型和数据模型，包括用户、助手、系统、结果和摘要消息，以及内容块类型。
 
 #### 功能特性文档
@@ -60,6 +61,11 @@
   - `ChatTabManager.kt` - 标签管理服务（支持Claude会话链接状态跟踪）
   - `ProjectManager.kt` - 项目管理服务
   - `ChatOrganizer.kt` - 对话组织器
+  - `SessionObject.kt` - 会话状态容器（包含所有会话运行时数据）
+  - `SessionManager.kt` - 会话生命周期管理（支持多会话并发）
+  - `DefaultSessionConfig.kt` - 全局默认会话配置管理
+  - `SessionPersistenceService.kt` - 会话配置持久化服务
+  - `SessionMetadata.kt` - 会话元数据模型（用于配置序列化）
 
 - **上下文管理组件**
   - `ContextSelectorPopup.kt` - 上下文选择器弹窗

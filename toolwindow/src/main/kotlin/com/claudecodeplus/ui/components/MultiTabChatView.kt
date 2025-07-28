@@ -47,6 +47,7 @@ fun MultiTabChatView(
     fileIndexService: FileIndexService,
     projectService: ProjectService,
     sessionManager: ClaudeSessionManager,
+    sessionObjectManager: com.claudecodeplus.ui.services.SessionManager,
     projectManager: com.claudecodeplus.ui.services.ProjectManager? = null,
     onTabHover: ((String?) -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -73,6 +74,8 @@ fun MultiTabChatView(
                                 fileIndexService = fileIndexService,
                                 projectService = projectService,
                                 sessionManager = sessionManager,
+                                sessionObjectManager = sessionObjectManager,
+                                tabId = tab.id,
                                 initialMessages = tab.messages,  // 直接使用 EnhancedMessage
                                 sessionId = tab.sessionId,
                                 tabManager = tabManager,

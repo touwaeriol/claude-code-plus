@@ -3,7 +3,7 @@ package com.claudecodeplus.sdk
 import com.claudecodeplus.core.LoggerFactory
 import com.claudecodeplus.core.LogbackConfigurator
 import mu.KotlinLogging
-import org.junit.Test
+import org.junit.jupiter.api.Test
 
 /**
  * 日志系统测试

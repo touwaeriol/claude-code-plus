@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.awt.ComposePanel
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
-import com.claudecodeplus.ui.jewel.ChatView
+import com.claudecodeplus.ui.jewel.StandaloneChatView
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
@@ -15,7 +15,7 @@ import javax.swing.SwingUtilities
  * 为插件集成提供的 Compose UI 工厂
  * 这个类专门处理 IntelliJ 插件环境中的 Compose 集成
  */
-object PluginComposeFactory {
+object  PluginComposeFactory {
     
     /**
      * 创建聊天面板的 Compose UI
@@ -59,7 +59,7 @@ object PluginComposeFactory {
             // 使用标准的 setContent 方法
             panel.setContent {
                 IntUiTheme(isDark = isDarkTheme) {
-                    ChatView(
+                    StandaloneChatView(
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
                         fileIndexService = fileIndexService,
@@ -72,7 +72,7 @@ object PluginComposeFactory {
             // 如果标准方法不存在，尝试反射
             trySetContentViaReflection(panel) {
                 IntUiTheme(isDark = isDarkTheme) {
-                    ChatView(
+                    StandaloneChatView(
                         cliWrapper = cliWrapper,
                         workingDirectory = workingDirectory,
                         fileIndexService = fileIndexService,

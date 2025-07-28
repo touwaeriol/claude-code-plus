@@ -77,6 +77,7 @@ fun EnhancedClaudeApp() {
     val exportService = ServiceContainer.exportService
     val fileIndexService = ServiceContainer.fileIndexService
     val projectService = ServiceContainer.projectService
+    val sessionObjectManager = remember { com.claudecodeplus.ui.services.SessionManager() }
     
     // UI 状态
     val uiState = remember { AppUiState() }
@@ -465,6 +466,7 @@ fun EnhancedClaudeApp() {
                     fileIndexService = fileIndexService,
                     projectService = projectService,
                     sessionManager = sessionManager,
+                    sessionObjectManager = sessionObjectManager,
                     projectManager = projectManager,
                     onTabHover = { sessionId -> hoveredSessionId = sessionId },
                     modifier = Modifier.weight(1f)

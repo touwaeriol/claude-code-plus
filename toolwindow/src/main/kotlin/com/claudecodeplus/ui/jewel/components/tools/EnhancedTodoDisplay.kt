@@ -27,7 +27,7 @@ fun EnhancedTodoDisplay(
     modifier: Modifier = Modifier
 ) {
     val todos = parseTodos(toolCall)
-    var expanded by remember { mutableStateOf(true) }
+    var expanded by remember(toolCall.id) { mutableStateOf(true) }
     
     Column(
         modifier = modifier.fillMaxWidth(),

@@ -70,67 +70,15 @@ class ClaudeCliWrapper {
                 return customCommand
             }
             
+            // Windows 上使用 claude.cmd，其他平台使用 claude
             val osName = System.getProperty("os.name").lowercase()
-            
-            // Windows 特定路径
-            if (osName.contains("windows")) {
-                val windowsPaths = listOf(
-                    "claude.cmd",
-                    "claude.exe",
-                    "${System.getProperty("user.home")}\\AppData\\Roaming\\npm\\claude.cmd",
-                    "C:\\Program Files\\nodejs\\claude.cmd"
-                )
-                
-                for (path in windowsPaths) {
-                    if (java.io.File(path).exists()) {
-                        logger.info("Found claude at: $path")
-                        return path
-                    }
-                }
-                
-                // 尝试 where 命令
-                try {
-                    val process = ProcessBuilder("where", "claude").start()
-                    val output = process.inputStream.bufferedReader().readText().trim()
-                    if (process.waitFor() == 0 && output.isNotEmpty()) {
-                        val claudePath = output.lines().first()
-                        logger.info("Found claude via where: $claudePath")
-                        return claudePath
-                    }
-                } catch (e: Exception) {
-                    logger.debug("Failed to find claude via where: ${e.message}")
-                }
+            return if (osName.contains("windows")) {
+                logger.info("Using 'claude.cmd' command on Windows")
+                "claude.cmd"
             } else {
-                // Unix/Mac 路径
-                val unixPaths = listOf(
-                    "/usr/local/bin/claude",
-                    "/usr/bin/claude",
-                    "/opt/homebrew/bin/claude",
-                    "${System.getProperty("user.home")}/.npm-global/bin/claude"
-                )
-                
-                for (path in unixPaths) {
-                    if (java.io.File(path).exists()) {
-                        logger.info("Found claude at: $path")
-                        return path
-                    }
-                }
-                
-                // 尝试 which 命令
-                try {
-                    val process = ProcessBuilder("which", "claude").start()
-                    val output = process.inputStream.bufferedReader().readText().trim()
-                    if (process.waitFor() == 0 && output.isNotEmpty()) {
-                        logger.info("Found claude via which: $output")
-                        return output
-                    }
-                } catch (e: Exception) {
-                    logger.debug("Failed to find claude via which: ${e.message}")
-                }
+                logger.info("Using 'claude' command")
+                "claude"
             }
-            
-            // 默认值
-            return "claude"
         }
         
         /**
@@ -324,7 +272,10 @@ class ClaudeCliWrapper {
         
         logger.info("🔵 [$requestId] 完整命令行: $claudeCommand ${args.joinToString(" ")}")
         
-        val processBuilder = ProcessBuilder(claudeCommand, *args.toTypedArray())
+        // 直接执行命令，不使用 shell
+        val finalCommand = listOf(claudeCommand) + args
+        
+        val processBuilder = ProcessBuilder(finalCommand)
         options.cwd?.let { 
             processBuilder.directory(java.io.File(it))
             logger.info("🔵 [$requestId] 工作目录: $it")
@@ -336,6 +287,12 @@ class ClaudeCliWrapper {
         env["LANG"] = "en_US.UTF-8"
         env["LC_ALL"] = "en_US.UTF-8"
         env["PYTHONIOENCODING"] = "utf-8"
+        
+        // 确保 PATH 环境变量被继承（ProcessBuilder 默认会继承，但明确设置更安全）
+        val currentPath = System.getenv("PATH")
+        if (currentPath != null) {
+            env["PATH"] = currentPath
+        }
         
         // Windows 特定的编码设置
         if (System.getProperty("os.name").lowercase().contains("windows")) {
@@ -362,7 +319,7 @@ class ClaudeCliWrapper {
                 lines.forEach { line ->
                     errorBuilder.appendLine(line)
                     when {
-                        line.contains("[DEP0190]") -> {
+                        line.contains("[DEP0190]") || line.contains("DeprecationWarning") -> {
                             logger.debug("Node.js deprecation warning: $line")
                         }
                         line.contains("error", ignoreCase = true) -> {
@@ -418,14 +375,24 @@ class ClaudeCliWrapper {
             val exitCode = process.waitFor()
             logger.info("🔵 [$requestId] 进程退出，退出码: $exitCode")
             
-            if (exitCode != 0) {
-                val errorMsg = errorBuilder.toString()
+            // 检查是否有错误消息（排除 Node.js 的弃用警告）
+            val errorMsg = errorBuilder.toString()
+            val hasRealError = errorMsg.lines().any { line ->
+                line.isNotBlank() && 
+                !line.contains("[DEP0190]") && 
+                !line.contains("DeprecationWarning") &&
+                !line.contains("--trace-deprecation")
+            }
+            
+            // 只有在有真正的错误时才发送错误消息
+            if (exitCode != 0 && hasRealError) {
                 logger.error("Claude CLI 执行失败: $errorMsg", RuntimeException("CLI Execution Failed"))
                 emit(SDKMessage(
                     type = MessageType.ERROR,
                     data = MessageData(error = "Claude CLI 执行失败: $errorMsg")
                 ))
             } else {
+                // 即使退出码不是 0，但如果只是弃用警告，仍然视为成功
                 emit(SDKMessage(
                     type = MessageType.END,
                     data = MessageData()
@@ -557,17 +524,26 @@ class ClaudeCliWrapper {
             logger.info("正在终止进程...")
             try {
                 process.destroy()
-                logger.info("进程已终止")
+                logger.info("已发送终止信号")
             } catch (e: Exception) {
                 logger.error("终止进程失败: ${e.message}", e)
                 try {
                     process.destroyForcibly()
-                    logger.info("进程已强制终止")
+                    logger.info("已强制终止进程")
                 } catch (e2: Exception) {
                     logger.error("强制终止进程失败: ${e2.message}", e2)
                 }
+            } finally {
+                currentProcess.set(null)  // 立即清理引用
             }
         }
+    }
+    
+    /**
+     * 检查进程是否还在运行
+     */
+    fun isProcessAlive(): Boolean {
+        return currentProcess.get()?.isAlive == true
     }
     
     /**
