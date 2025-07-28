@@ -316,7 +316,7 @@ object ToolParser {
             }
         } catch (e: Exception) {
             logger.error("Error parsing tool $name: ${e.message}")
-            UnknownTool(name = name, parameters = input.toMap())
+            UnknownTool(toolName = name, parameters = input.toMap())
         }
     }
     
