@@ -23,9 +23,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolCallStatus
 import com.claudecodeplus.ui.models.ToolResult
+import com.claudecodeplus.sdk.ToolType
+import com.claudecodeplus.sdk.Tool
+import com.claudecodeplus.sdk.ToolParser
 import com.claudecodeplus.ui.jewel.components.tools.*
 import com.claudecodeplus.ui.jewel.components.tools.output.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -160,7 +164,7 @@ private fun CompactToolCallItem(
             ) {
                 // 工具图标
                 Text(
-                    text = getToolIcon(toolCall.name),
+                    text = getToolIcon(toolCall),
                     style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
                 )
                 
@@ -256,7 +260,10 @@ private fun CompactToolCallItem(
             enter = expandVertically(animationSpec = tween(200)) + fadeIn(),
             exit = shrinkVertically(animationSpec = tween(200)) + fadeOut()
         ) {
-            ToolCallDetails(toolCall)
+            ToolCallDetails(
+                toolCall = toolCall,
+                onClose = { expanded = false }
+            )
         }
     }
 }
@@ -266,7 +273,8 @@ private fun CompactToolCallItem(
  */
 @Composable
 private fun ToolCallDetails(
-    toolCall: ToolCall
+    toolCall: ToolCall,
+    onClose: () -> Unit = {}
 ) {
     println("[ToolCallDetails] 工具：${toolCall.name}, 结果：${toolCall.result?.let { it::class.simpleName } ?: "null"}")
     
@@ -284,33 +292,56 @@ private fun ToolCallDetails(
         modifier = Modifier
             .fillMaxWidth()
             .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.3f))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // 不再显示参数（已在 Tooltip 中显示）
-        
-        // 直接显示结果
-        toolCall.result?.let { result ->
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+        // 固定的顶部工具栏
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.6f))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 工具名称和图标
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // 显示结果标题
                 Text(
-                    text = "执行结果:",
+                    text = getToolIcon(toolCall),
+                    style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
+                )
+                Text(
+                    text = toolCall.name,
                     style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = JewelTheme.globalColors.text.normal
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 )
-                
-                // 显示实际结果
-                Box(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    formatToolResult(toolCall)
-                }
+            }
+            
+            // 关闭按钮
+            Text(
+                text = "✕",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 14.sp,
+                    color = JewelTheme.globalColors.text.normal
+                ),
+                modifier = Modifier
+                    .clickable { onClose() }
+                    .padding(4.dp)
+            )
+        }
+        
+        // 详细内容 - 直接显示结果，无需额外标题
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            // 直接显示结果
+            toolCall.result?.let { result ->
+                formatToolResult(toolCall)
             }
         }
     }
@@ -327,18 +358,12 @@ private fun shouldShowToolDetails(toolCall: ToolCall): Boolean {
 /**
  * 获取工具图标
  */
-private fun getToolIcon(toolName: String): String {
-    return when {
-        toolName.contains("LS", ignoreCase = true) -> "📁"
-        toolName.contains("Read", ignoreCase = true) -> "📖"
-        toolName.contains("Edit", ignoreCase = true) || toolName.contains("Write", ignoreCase = true) -> "✏️"
-        toolName.contains("Bash", ignoreCase = true) -> "💻"
-        toolName.contains("Search", ignoreCase = true) || toolName.contains("Grep", ignoreCase = true) -> "🔍"
-        toolName.contains("Web", ignoreCase = true) -> "🌐"
-        toolName.contains("Git", ignoreCase = true) -> "🔀"
-        toolName.contains("Task", ignoreCase = true) -> "🤖"
-        toolName.contains("Todo", ignoreCase = true) -> "📋"
-        else -> "🔧"
+private fun getToolIcon(toolCall: ToolCall): String {
+    // 优先使用新的 Tool 对象
+    return toolCall.tool?.icon ?: run {
+        // 回退到旧的 ToolType 系统
+        val toolType = ToolType.fromName(toolCall.name)
+        ToolType.getIcon(toolType)
     }
 }
 
@@ -482,64 +507,71 @@ private fun formatToolResult(toolCall: ToolCall) {
 }
 
 /**
+ * 通用的工具结果显示组件
+ * @param toolCall 工具调用信息
+ * @param limitHeight 是否限制高度
+ * @param maxHeight 最大高度（仅在 limitHeight = true 时生效）
+ */
+@Composable
+private fun ToolResultContent(
+    toolCall: ToolCall,
+    limitHeight: Boolean = false,
+    maxHeight: Dp = 200.dp
+) {
+    val result = toolCall.result ?: return
+    
+    if (result is ToolResult.Success) {
+        val modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(4.dp))
+            .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f))
+            .padding(8.dp)
+            .then(
+                if (limitHeight) {
+                    Modifier.heightIn(max = maxHeight)
+                } else {
+                    Modifier
+                }
+            )
+        
+        Box(modifier = modifier) {
+            val scrollState = if (limitHeight) rememberScrollState() else null
+            
+            Text(
+                text = result.output,
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
+                ),
+                modifier = if (scrollState != null) {
+                    Modifier.verticalScroll(scrollState)
+                } else {
+                    Modifier
+                }
+            )
+        }
+    } else if (result is ToolResult.Failure) {
+        Text(
+            text = "❌ ${result.error}",
+            style = JewelTheme.defaultTextStyle.copy(
+                fontSize = 12.sp,
+                color = Color(0xFFFF6B6B)
+            )
+        )
+    }
+}
+
+/**
  * 文件内容预览
  */
 @Composable
 private fun FileContentPreview(toolCall: ToolCall) {
-    val result = toolCall.result ?: return
-    val filePath = toolCall.parameters["file_path"]?.toString() ?: ""
-    val fileName = filePath.substringAfterLast('/').substringAfterLast('\\')
-    
-    Column(
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // 文件信息
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = "📄 $fileName",
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 12.sp,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
-                )
-            )
-            
-            if (result is ToolResult.Success) {
-                val lines = result.output.lines()
-                Text(
-                    text = "${lines.size} 行",
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 11.sp,
-                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
-                    )
-                )
-            }
-        }
-        
-        // 内容预览
-        if (result is ToolResult.Success) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 200.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f))
-                    .padding(8.dp)
-            ) {
-                Text(
-                    text = result.output,
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
-                    ),
-                    modifier = Modifier.verticalScroll(rememberScrollState())
-                )
-            }
-        }
-    }
+    // 使用通用组件，不限制高度
+    ToolResultContent(
+        toolCall = toolCall,
+        limitHeight = false
+    )
 }
 
 /**
@@ -547,51 +579,13 @@ private fun FileContentPreview(toolCall: ToolCall) {
  */
 @Composable
 private fun FileListDisplay(toolCall: ToolCall) {
-    val result = toolCall.result
-    if (result == null) {
-        println("[FileListDisplay] 警告：LS工具结果为null")
-        return
-    }
+    println("[FileListDisplay] 显示LS结果")
     
-    val path = toolCall.parameters["path"]?.toString() ?: ""
-    
-    println("[FileListDisplay] 显示LS结果：path=$path, result=${result::class.simpleName}")
-    
-    Column(
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // 路径信息
-        Text(
-            text = "📁 $path",
-            style = JewelTheme.defaultTextStyle.copy(
-                fontSize = 12.sp,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
-            )
-        )
-        
-        // 文件列表
-        if (result is ToolResult.Success) {
-            println("[FileListDisplay] LS结果内容长度：${result.output.length}")
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 200.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f))
-                    .padding(8.dp)
-            ) {
-                Text(
-                    text = result.output,
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
-                    ),
-                    modifier = Modifier.verticalScroll(rememberScrollState())
-                )
-            }
-        }
-    }
+    // 使用通用组件，不限制高度
+    ToolResultContent(
+        toolCall = toolCall,
+        limitHeight = false
+    )
 }
 
 /**
@@ -600,50 +594,32 @@ private fun FileListDisplay(toolCall: ToolCall) {
 @Composable
 private fun CommandResultDisplay(toolCall: ToolCall) {
     val result = toolCall.result ?: return
-    val command = toolCall.parameters["command"]?.toString() ?: ""
-    var showFullOutput by remember { mutableStateOf(false) }
     
-    Column(
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // 命令信息
-        Text(
-            text = "💻 $command",
-            style = JewelTheme.defaultTextStyle.copy(
-                fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace,
-                color = JewelTheme.globalColors.text.normal
-            ),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        
-        // 执行结果
-        when (result) {
-            is ToolResult.Success -> {
-                val output = result.output
-                val lines = output.lines()
-                
-                // 直接使用 ANSI 终端显示输出
-                AnsiOutputView(
-                    text = output,
-                    modifier = Modifier.fillMaxWidth(),
-                    onCopy = { copiedText ->
-                        // TODO: 实现复制到剪贴板
-                    }
-                )
-            }
-            is ToolResult.Failure -> {
-                Text(
-                    text = "❌ ${result.error}",
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 12.sp,
-                        color = Color(0xFFFF6B6B)
-                    )
-                )
-            }
-            else -> {}
+    // 执行结果
+    when (result) {
+        is ToolResult.Success -> {
+            val output = result.output
+            
+            // 直接使用 ANSI 终端显示输出 - 增加到30行以显示更多内容
+            AnsiOutputView(
+                text = output,
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 30,  // 从默认的10行增加到30行
+                onCopy = { copiedText ->
+                    // TODO: 实现复制到剪贴板
+                }
+            )
         }
+        is ToolResult.Failure -> {
+            Text(
+                text = "❌ ${result.error}",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 12.sp,
+                    color = Color(0xFFFF6B6B)
+                )
+            )
+        }
+        else -> {}
     }
 }
 
@@ -656,24 +632,13 @@ private fun DefaultResultDisplay(toolCall: ToolCall) {
     
     when (result) {
         is ToolResult.Success -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 150.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f))
-                    .padding(8.dp)
-            ) {
-                Text(
-                    text = result.output,
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
-                    ),
-                    modifier = Modifier.verticalScroll(rememberScrollState())
-                )
-            }
+            // 根据工具类型决定是否限制高度
+            val shouldLimitHeight = shouldLimitToolHeight(toolCall)
+            ToolResultContent(
+                toolCall = toolCall,
+                limitHeight = shouldLimitHeight,
+                maxHeight = 200.dp
+            )
         }
         is ToolResult.Failure -> {
             Text(
@@ -691,6 +656,18 @@ private fun DefaultResultDisplay(toolCall: ToolCall) {
             )
         }
         else -> {}
+    }
+}
+
+/**
+ * 判断工具是否应该限制高度
+ */
+private fun shouldLimitToolHeight(toolCall: ToolCall): Boolean {
+    // 优先使用新的 Tool 对象
+    return toolCall.tool?.shouldLimitHeight() ?: run {
+        // 回退到旧的 ToolType 系统
+        val toolType = ToolType.fromName(toolCall.name)
+        ToolType.shouldLimitHeight(toolType)
     }
 }
 

@@ -15,9 +15,15 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
-import org.jetbrains.jewel.ui.component.TextField
 
 /**
  * 聊天输入框组件
@@ -46,28 +52,46 @@ fun ChatInputField(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 输入框
-        TextField(
-            value = value,
-            onValueChange = { newValue ->
-                onValueChange(newValue)
-                
-                // 检测 @ 符号输入
-                if (detectAtSymbol(newValue.text, newValue.selection.start)) {
-                    onShowContextSelector(newValue.selection.start - 1)
-                }
-            },
-            enabled = enabled,
-            placeholder = {
-                Text(
-                    "输入消息，使用 [@名称](uri) 格式添加引用，或按 ⌘K...",
-                    color = JewelTheme.globalColors.text.disabled
-                )
-            },
+        // 输入框 - 使用 BasicTextField 实现透明背景
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 40.dp, max = 120.dp)
-                .focusRequester(focusRequester)
+        ) {
+            // 占位符
+            if (value.text.isEmpty()) {
+                Text(
+                    "输入消息，使用 [@名称](uri) 格式添加引用，或按 ⌘K...",
+                    color = JewelTheme.globalColors.text.disabled,
+                    style = JewelTheme.defaultTextStyle,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+            
+            // 输入框
+            BasicTextField(
+                value = value,
+                onValueChange = { newValue ->
+                    onValueChange(newValue)
+                    
+                    // 检测 @ 符号输入
+                    if (detectAtSymbol(newValue.text, newValue.selection.start)) {
+                        onShowContextSelector(newValue.selection.start - 1)
+                    }
+                },
+                enabled = enabled,
+                textStyle = TextStyle(
+                    color = JewelTheme.globalColors.text.normal,
+                    fontSize = JewelTheme.defaultTextStyle.fontSize
+                ),
+                cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Default
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+                    .focusRequester(focusRequester)
                 .onPreviewKeyEvent { keyEvent ->
                     when {
                         // Enter 发送，Shift+Enter 换行
@@ -103,7 +127,8 @@ fun ChatInputField(
                         else -> false
                     }
                 }
-        )
+            )
+        }
         
         // 预览区域（可选）
         if (showPreview && value.text.isNotBlank()) {

@@ -24,6 +24,16 @@
 *   **FR-2.5**：它必须包括一个发送按钮，在消息生成期间能智能地转变为停止按钮。
 *   **FR-2.6**：该组件必须是键盘友好的，支持发送消息（`Enter`）、添加换行符（`Shift+Enter`）和触​​发上下文选择的快捷键。
 
+#### 2.2.1 现代化UI设计要求
+
+*   **FR-2.7**：输入区域必须使用统一容器设计，所有子组件共享同一背景，避免视觉层次混乱。
+*   **FR-2.8**：布局必须分为三个清晰的区域：顶部工具栏（上下文标签）、中间输入区、底部选项栏（模型选择、权限、发送按钮）。
+*   **FR-2.9**：选择器组件必须使用现代化的悬浮卡片设计，支持图标和描述信息，悬浮时有背景色变化效果。
+*   **FR-2.10**：上下文标签必须使用胶囊形状设计（RoundedCornerShape(10.dp)），并显示类型图标（文件、网页等）。
+*   **FR-2.11**：所有交互元素必须有清晰的悬浮状态（200ms过渡动画）和禁用状态表现。
+*   **FR-2.12**：输入框获得焦点时，整个容器边框必须高亮显示，使用主题色的 focused 边框色。
+*   **FR-2.13**：颜色方案必须遵循统一规范：容器背景使用 `panelBackground`，边框使用 `1.dp, borders.normal`，悬浮效果使用 `primaryColor.copy(alpha = 0.1f)`。
+
 ### 2.3 基础聊天界面布局
 
 ```
@@ -115,8 +125,13 @@ toolwindow 模块
 ├── UI 组件层
 │   ├── ChatView.kt - 主聊天视图
 │   ├── UnifiedInputArea.kt - 统一输入区域  
+│   ├── UnifiedChatInput.kt - 新的统一输入组件（整合所有输入元素）
 │   ├── MultiTabChatView.kt - 多标签容器
 │   └── ChatOrganizer.kt - 对话管理器
+├── 现代化UI组件层
+│   ├── ModernSelectors.kt - 现代化选择器组件
+│   ├── PillContextTag.kt - 胶囊形上下文标签
+│   └── ToolbarSection.kt - 工具栏区域组件
 ├── 渲染组件层
 │   ├── MarkdownRenderer.kt - Markdown 渲染
 │   ├── ToolCallDisplay.kt - 工具调用显示

@@ -175,7 +175,21 @@ data class ToolUseBlock(
     val id: String,
     val name: String,
     val input: JsonObject
-) : ContentBlock()
+) : ContentBlock() {
+    /**
+     * 获取工具类型枚举，未知工具返回 UNKNOWN
+     */
+    @Deprecated("Use tool property instead", ReplaceWith("tool"))
+    val toolType: ToolType
+        get() = ToolType.fromName(name)
+    
+    /**
+     * 解析为具体的工具类型
+     */
+    val tool: Tool by lazy {
+        ToolParser.parse(name, input)
+    }
+}
 
 /**
  * 工具结果块
@@ -294,6 +308,111 @@ object ContentOrStringSerializer : KSerializer<ContentOrString> {
             is JsonPrimitive -> ContentOrString.StringValue(element.content)
             is JsonObject -> ContentOrString.JsonValue(element)
             else -> throw SerializationException("Unknown content type: $element")
+        }
+    }
+}
+
+// === 工具类型枚举 ===
+/**
+ * Claude 支持的工具类型
+ */
+enum class ToolType(val toolName: String, val description: String) {
+    // 文件操作工具
+    READ("Read", "读取文件内容"),
+    WRITE("Write", "写入文件"),
+    EDIT("Edit", "编辑文件"),
+    MULTI_EDIT("MultiEdit", "批量编辑文件"),
+    
+    // 文件系统工具
+    LS("LS", "列出目录内容"),
+    GLOB("Glob", "文件模式匹配"),
+    GREP("Grep", "搜索文件内容"),
+    
+    // 终端工具
+    BASH("Bash", "执行终端命令"),
+    
+    // Git 工具
+    GIT("Git", "Git 操作"),
+    
+    // 任务管理
+    TASK("Task", "任务管理"),
+    TODO_WRITE("TodoWrite", "待办事项管理"),
+    
+    // Web 工具
+    WEB_FETCH("WebFetch", "获取网页内容"),
+    WEB_SEARCH("WebSearch", "网络搜索"),
+    
+    // Jupyter 笔记本
+    NOTEBOOK_READ("NotebookRead", "读取 Jupyter 笔记本"),
+    NOTEBOOK_EDIT("NotebookEdit", "编辑 Jupyter 笔记本"),
+    
+    // MCP 工具
+    MCP_TOOL("mcp_", "MCP 扩展工具"),
+    
+    // 特殊工具
+    EXIT_PLAN_MODE("ExitPlanMode", "退出计划模式"),
+    LIST_MCP_RESOURCES("ListMcpResourcesTool", "列出 MCP 资源"),
+    READ_MCP_RESOURCE("ReadMcpResourceTool", "读取 MCP 资源"),
+    
+    // 未知工具
+    UNKNOWN("Unknown", "未识别的工具");
+    
+    companion object {
+        private val logger = org.slf4j.LoggerFactory.getLogger(ToolType::class.java)
+        
+        /**
+         * 根据工具名称获取工具类型
+         */
+        fun fromName(name: String): ToolType {
+            // 先尝试精确匹配
+            val exactMatch = values().find { it.toolName.equals(name, ignoreCase = true) }
+            if (exactMatch != null) return exactMatch
+            
+            // MCP 工具特殊处理
+            if (name.startsWith("mcp_", ignoreCase = true) || 
+                name.startsWith("mcp__", ignoreCase = true)) {
+                return MCP_TOOL
+            }
+            
+            // 包含匹配（用于处理变体）
+            val containsMatch = values().find { 
+                name.contains(it.toolName, ignoreCase = true) 
+            }
+            if (containsMatch != null) return containsMatch
+            
+            // 未识别的工具
+            logger.warn("Unknown tool: $name - will display as-is in UI")
+            return UNKNOWN
+        }
+        
+        /**
+         * 判断工具是否应该限制高度
+         */
+        fun shouldLimitHeight(toolType: ToolType): Boolean {
+            return when (toolType) {
+                WEB_FETCH, WEB_SEARCH -> true
+                else -> false
+            }
+        }
+        
+        /**
+         * 获取工具图标
+         */
+        fun getIcon(toolType: ToolType): String {
+            return when (toolType) {
+                READ -> "📖"
+                WRITE, EDIT, MULTI_EDIT -> "✏️"
+                LS -> "📁"
+                GLOB, GREP -> "🔍"
+                BASH -> "💻"
+                GIT -> "🔀"
+                TASK -> "🤖"
+                TODO_WRITE -> "📋"
+                WEB_FETCH, WEB_SEARCH -> "🌐"
+                NOTEBOOK_READ, NOTEBOOK_EDIT -> "📓"
+                MCP_TOOL -> "🔌"
+                else -> "🔧"
+            }
         }
     }
 }

@@ -72,9 +72,36 @@ fun ChatView(
     }
     
     // 初始化时加载最近会话或创建新会话
-    LaunchedEffect(workingDirectory) {
-        // 如果明确传入了 initialMessages（即使是空列表），就不加载最近会话
-        if (initialMessages != null) {
+    LaunchedEffect(workingDirectory, sessionId) {
+        // 如果明确传入了有内容的 initialMessages，使用它们
+        if (initialMessages != null && initialMessages.isNotEmpty()) {
+            messages = initialMessages
+            return@LaunchedEffect
+        }
+        
+        // 如果有 sessionId，尝试加载该会话的消息
+        if (sessionId != null && sessionId.isNotEmpty()) {
+            isLoadingSession = true
+            try {
+                val (sessionMessages, totalCount) = sessionManager.readSessionMessages(
+                    sessionId = sessionId,
+                    projectPath = workingDirectory,
+                    pageSize = 50
+                )
+                
+                val enhancedMessages = sessionMessages.mapNotNull { 
+                    it.toEnhancedMessage() 
+                }
+                
+                if (enhancedMessages.isNotEmpty()) {
+                    messages = enhancedMessages
+                    currentSessionId = sessionId
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                isLoadingSession = false
+            }
             return@LaunchedEffect
         }
         
@@ -126,21 +153,6 @@ fun ChatView(
             .fillMaxSize()
             .background(JewelTheme.globalColors.panelBackground)
     ) {
-        // 工具栏
-        ChatToolbar(
-            currentSession = currentSession,
-            onNewSession = {
-                // 创建新会话
-                currentSessionId = null
-                currentSession = null
-                contexts = emptyList()
-                messages = emptyList()
-                // ChatView: Starting new session
-            }
-        )
-        
-        Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
-        
         // 聊天内容区域
         Box(
             modifier = Modifier
@@ -238,10 +250,11 @@ fun ChatView(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .wrapContentHeight()  // 使用 wrapContentHeight 而不是固定高度
                 .padding(16.dp)
         ) {
-            UnifiedInputArea(
-                mode = InputAreaMode.INPUT,
+            // 使用新的统一输入组件
+            UnifiedChatInput(
                 contexts = contexts,
                 onContextAdd = { context ->
                     contexts = contexts + context
@@ -328,8 +341,7 @@ fun ChatView(
                                 resume = if (useResume) currentSessionId else null,
                                 cwd = workingDirectory,
                                 model = selectedModel?.cliName,
-                                permissionMode = selectedPermissionMode.cliName,
-                                skipPermissions = skipPermissions
+                                permissionMode = selectedPermissionMode.cliName
                             )
                             
                             cliWrapper.query(markdownText, options).collect { message ->
@@ -584,41 +596,3 @@ fun ChatView(
     }
 }
 
-/**
- * 聊天工具栏
- */
-@Composable
-private fun ChatToolbar(
-    currentSession: SessionInfo?,
-    onNewSession: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .background(JewelTheme.globalColors.panelBackground)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        // 当前会话信息或标题
-        Text(
-            text = if (currentSession != null) {
-                currentSession.firstMessage?.take(50) ?: "Claude AI Assistant"
-            } else {
-                "Claude AI Assistant"
-            },
-            style = JewelTheme.defaultTextStyle,
-            modifier = Modifier.weight(1f)
-        )
-        
-        // 新建会话按钮
-        IconButton(onClick = onNewSession) {
-            Icon(
-                key = AllIconsKeys.General.Add,
-                contentDescription = "新建会话",
-                modifier = Modifier.size(16.dp)
-            )
-        }
-    }
-}

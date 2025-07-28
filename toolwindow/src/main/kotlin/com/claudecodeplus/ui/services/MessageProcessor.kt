@@ -89,11 +89,33 @@ class MessageProcessor {
                 // 只有在 Claude 提供了 toolCallId 时才创建 ToolCall
                 val toolCallId = sdkMessage.data.toolCallId
                 if (toolCallId != null) {
+                    // 解析工具类型
+                    val toolName = sdkMessage.data.toolName ?: "unknown"
+                    val toolInput = sdkMessage.data.toolInput
+                    val tool = if (toolInput is Map<*, *>) {
+                        try {
+                            // 转换为 JsonObject 以使用 ToolParser
+                            val jsonObject = kotlinx.serialization.json.buildJsonObject {
+                                toolInput.forEach { (key, value) ->
+                                    if (key is String) {
+                                        put(key, kotlinx.serialization.json.JsonPrimitive(value.toString()))
+                                    }
+                                }
+                            }
+                            com.claudecodeplus.sdk.ToolParser.parse(toolName, jsonObject)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                    
                     val toolCall = ToolCall(
                         id = toolCallId,
-                        name = sdkMessage.data.toolName ?: "unknown",
-                        displayName = sdkMessage.data.toolName ?: "unknown",
-                        parameters = sdkMessage.data.toolInput as? Map<String, Any> ?: emptyMap(),
+                        name = toolName,
+                        tool = tool,
+                        displayName = toolName,
+                        parameters = toolInput as? Map<String, Any> ?: emptyMap(),
                         status = ToolCallStatus.RUNNING,
                         startTime = System.currentTimeMillis()
                     )
