@@ -300,6 +300,21 @@ class ClaudeCliWrapper {
         }
         
         logger.info("🔵 [$requestId] 启动 Claude CLI 进程...")
+        
+        // 检查是否有旧进程还在运行
+        currentProcess.get()?.let { oldProcess ->
+            if (oldProcess.isAlive) {
+                logger.warn("🔴 [$requestId] 警告：检测到旧进程仍在运行，PID: ${oldProcess.pid()}")
+                logger.warn("🔴 [$requestId] 将强制终止旧进程")
+                try {
+                    oldProcess.destroyForcibly()
+                    logger.info("🔴 [$requestId] 已强制终止旧进程")
+                } catch (e: Exception) {
+                    logger.error("🔴 [$requestId] 强制终止旧进程失败", e)
+                }
+            }
+        }
+        
         val process = processBuilder.start()
         currentProcess.set(process)
         logger.info("🔵 [$requestId] 进程已启动，PID: ${process.pid()}")
@@ -521,21 +536,33 @@ class ClaudeCliWrapper {
      */
     fun terminate() {
         currentProcess.get()?.let { process ->
-            logger.info("正在终止进程...")
+            logger.info("🔴 正在终止进程，PID: ${process.pid()}, isAlive: ${process.isAlive}")
             try {
                 process.destroy()
-                logger.info("已发送终止信号")
+                logger.info("🔴 已发送终止信号")
+                
+                // 等待进程结束，不设置超时
+                logger.info("🔴 等待进程结束...")
+                val exitCode = process.waitFor()
+                logger.info("🔴 进程已终止，退出码: $exitCode")
+                
             } catch (e: Exception) {
-                logger.error("终止进程失败: ${e.message}", e)
+                logger.error("🔴 终止进程失败: ${e.message}", e)
                 try {
                     process.destroyForcibly()
-                    logger.info("已强制终止进程")
+                    logger.info("🔴 已强制终止进程")
+                    // 再次等待进程结束
+                    val exitCode = process.waitFor()
+                    logger.info("🔴 进程已强制终止，退出码: $exitCode")
                 } catch (e2: Exception) {
-                    logger.error("强制终止进程失败: ${e2.message}", e2)
+                    logger.error("🔴 强制终止进程失败: ${e2.message}", e2)
                 }
             } finally {
                 currentProcess.set(null)  // 立即清理引用
+                logger.info("🔴 已清理进程引用")
             }
+        } ?: run {
+            logger.info("🔴 没有活动的进程需要终止")
         }
     }
     

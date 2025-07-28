@@ -17,6 +17,8 @@ import java.time.Instant
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -518,7 +520,7 @@ fun ChatView(
                             val isPlaceholderSession = sessionObject.hasSessionId && messages.size == 2
                             val useResume = sessionObject.hasSessionId && !isPlaceholderSession
                             
-                            // ChatView: Sending message, useResume=$useResume, sessionId=${sessionObject.sessionId}, isPlaceholder=$isPlaceholderSession
+                            println("[ChatView] 准备调用 Claude CLI, useResume=$useResume, sessionId=${sessionObject.sessionId}")
                             
                             val options = ClaudeCliWrapper.QueryOptions(
                                 resume = if (useResume) sessionObject.sessionId else null,
@@ -527,7 +529,9 @@ fun ChatView(
                                 permissionMode = selectedPermissionMode.cliName
                             )
                             
+                            println("[ChatView] 开始执行 cliWrapper.query")
                             cliWrapper.query(processedText, options).collect { message ->
+                                println("[ChatView] 收到消息类型: ${message.type}")
                                 when (message.type) {
                                     com.claudecodeplus.sdk.MessageType.START -> {
                                         // 新会话创建，保存会话ID
@@ -703,7 +707,12 @@ fun ChatView(
                                         )
                                         
                                         if (messages.any { it.id == assistantMessageId }) {
+                                            // 替换或添加消息（与正常发送的逻辑保持一致）
+                                        if (messages.any { it.id == assistantMessageId }) {
                                             sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
+                                        } else {
+                                            sessionObject.addMessage(assistantMessage)
+                                        }
                                         } else {
                                             sessionObject.addMessage(assistantMessage)
                                         }
@@ -746,7 +755,12 @@ fun ChatView(
                                                 orderedElements = orderedElements.toList()
                                             )
                                             
+                                            // 替换或添加消息（与正常发送的逻辑保持一致）
+                                        if (messages.any { it.id == assistantMessageId }) {
                                             sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
+                                        } else {
+                                            sessionObject.addMessage(assistantMessage)
+                                        }
                                         }
                                     }
                                     else -> {
@@ -849,26 +863,28 @@ fun ChatView(
                     }
                 },
                 onInterruptAndSend = { markdownText ->
-                    // 中断当前任务并立即发送
-                    sessionObject.interruptGeneration(cliWrapper)
+                    println("[ChatView] onInterruptAndSend 被调用，新消息: $markdownText")
                     
                     // 立即发送新消息
-                    val job = coroutineScope.launch {
-                        // 使用协程循环检查进程状态，而不是固定延迟
-                        var attempts = 0
-                        while (cliWrapper.isProcessAlive() && attempts < 10) {
-                            delay(100)  // 每100ms检查一次
-                            attempts++
-                        }
+                    coroutineScope.launch {
+                        println("[ChatView] 开始中断流程")
                         
-                        // 如果进程还在运行，再等一下
-                        if (cliWrapper.isProcessAlive()) {
-                            delay(200)
+                        // 1. 首先中断当前任务（在 IO 线程上执行，避免阻塞 UI）
+                        withContext(Dispatchers.IO) {
+                            sessionObject.interruptGeneration(cliWrapper)
                         }
+                        println("[ChatView] 进程已终止")
                         
-                        // 等待完成后才设置 isGenerating = true
-                        sessionObject.isGenerating = true
-                        try {
+                        // 2. 进程已结束，设置 isGenerating = false
+                        sessionObject.isGenerating = false
+                        println("[ChatView] 已设置 isGenerating = false")
+                        
+                        // 3. 现在开始新的查询
+                        println("[ChatView] 准备开始新查询: $markdownText")
+                        val job = coroutineScope.launch {
+                            sessionObject.isGenerating = true
+                            println("[ChatView] 新查询协程已启动，isGenerating = true")
+                            try {
                             // 复用原有的发送逻辑（从 onSend 复制的代码）
                             val processedText = if (markdownText.trim().startsWith("/")) {
                                 val parts = markdownText.trim().split(" ", limit = 2)
@@ -920,7 +936,9 @@ fun ChatView(
                                 permissionMode = selectedPermissionMode.cliName
                             )
                             
+                            println("[ChatView] [中断后] 准备调用 cliWrapper.query, processedText=$processedText")
                             cliWrapper.query(processedText, options).collect { message ->
+                                println("[ChatView] [中断后] 收到消息类型: ${message.type}")
                                 when (message.type) {
                                     com.claudecodeplus.sdk.MessageType.START -> {
                                         // 新会话创建，保存会话ID
@@ -946,7 +964,12 @@ fun ChatView(
                                             orderedElements = orderedElements.toList()
                                         )
                                         
-                                        sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
+                                        // 替换或添加消息（与正常发送的逻辑保持一致）
+                                        if (messages.any { it.id == assistantMessageId }) {
+                                            sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
+                                        } else {
+                                            sessionObject.addMessage(assistantMessage)
+                                        }
                                     }
                                     com.claudecodeplus.sdk.MessageType.ERROR -> {
                                         // 如果还没有创建助手消息，使用当前的 assistantMessageId
@@ -991,7 +1014,12 @@ fun ChatView(
                                             isStreaming = false
                                         )
                                         
-                                        sessionObject.replaceMessage(assistantMessageId) { finalMessage }
+                                        // 替换或添加消息（与正常发送的逻辑保持一致）
+                                        if (messages.any { it.id == assistantMessageId }) {
+                                            sessionObject.replaceMessage(assistantMessageId) { finalMessage }
+                                        } else {
+                                            sessionObject.addMessage(finalMessage)
+                                        }
                                     }
                                     com.claudecodeplus.sdk.MessageType.TOOL_USE -> {
                                         // 工具调用处理
@@ -1042,7 +1070,12 @@ fun ChatView(
                                             orderedElements = orderedElements.toList()
                                         )
                                         
-                                        sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
+                                        // 替换或添加消息（与正常发送的逻辑保持一致）
+                                        if (messages.any { it.id == assistantMessageId }) {
+                                            sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
+                                        } else {
+                                            sessionObject.addMessage(assistantMessage)
+                                        }
                                     }
                                     com.claudecodeplus.sdk.MessageType.TOOL_RESULT -> {
                                         // 工具结果
@@ -1079,7 +1112,12 @@ fun ChatView(
                                                 orderedElements = orderedElements.toList()
                                             )
                                             
+                                            // 替换或添加消息（与正常发送的逻辑保持一致）
+                                        if (messages.any { it.id == assistantMessageId }) {
                                             sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
+                                        } else {
+                                            sessionObject.addMessage(assistantMessage)
+                                        }
                                         }
                                     }
                                     else -> {
@@ -1111,10 +1149,10 @@ fun ChatView(
                             sessionObject.isGenerating = false
                             sessionObject.currentStreamJob = null
                         }
+                        }
+                        // 使用 startGenerating 确保状态正确管理
+                        sessionObject.startGenerating(job)
                     }
-                    // 不使用 startGenerating，因为它会立即设置 isGenerating = true
-                    // 而我们希望在等待期间不显示 "Generating..."
-                    sessionObject.currentStreamJob = job
                     
                     sessionObject.inputResetTrigger = System.currentTimeMillis() // 清空输入框
                     currentInputText = "" // 清空临时输入

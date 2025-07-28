@@ -198,7 +198,8 @@ class SessionObject(
             // 忽略终止异常
         }
         
-        isGenerating = false
+        // 注意：不要在这里设置 isGenerating = false
+        // 应该等到进程真正结束后再设置
     }
     
     /**
