@@ -70,7 +70,8 @@ fun UnifiedChatInput(
     skipPermissions: Boolean = true,
     onSkipPermissionsChange: (Boolean) -> Unit = {},
     fileIndexService: FileIndexService? = null,
-    projectService: ProjectService? = null
+    projectService: ProjectService? = null,
+    resetTrigger: Any? = null  // 添加重置触发器
 ) {
     val focusRequester = remember { FocusRequester() }
     var isFocused by remember { mutableStateOf(false) }
@@ -78,6 +79,13 @@ fun UnifiedChatInput(
     var showContextSelector by remember { mutableStateOf(false) }
     var atSymbolPosition by remember { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
+    
+    // 监听重置触发器，清空输入框
+    LaunchedEffect(resetTrigger) {
+        if (resetTrigger != null) {
+            textFieldValue = TextFieldValue("")
+        }
+    }
     
     // 动画状态
     val borderColor by animateColorAsState(

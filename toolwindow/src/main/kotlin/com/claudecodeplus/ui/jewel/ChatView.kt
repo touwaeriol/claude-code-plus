@@ -51,6 +51,7 @@ fun ChatView(
     var skipPermissions by remember { mutableStateOf(true) }
     var messages by remember { mutableStateOf(initialMessages ?: listOf<EnhancedMessage>()) }
     var isLoadingSession by remember { mutableStateOf(false) }
+    var inputResetTrigger by remember { mutableStateOf<Any?>(null) }
     
     val coroutineScope = rememberCoroutineScope()
     
@@ -68,6 +69,8 @@ fun ChatView(
     LaunchedEffect(sessionId) {
         if (sessionId != null && sessionId != currentSessionId) {
             currentSessionId = sessionId
+            // 当会话改变时，触发输入框重置
+            inputResetTrigger = System.currentTimeMillis()
         }
     }
     
@@ -276,6 +279,7 @@ fun ChatView(
                 },
                 fileIndexService = fileIndexService,
                 projectService = projectService,
+                resetTrigger = inputResetTrigger,
                 onSend = { markdownText ->
                     coroutineScope.launch {
                         isGenerating = true
