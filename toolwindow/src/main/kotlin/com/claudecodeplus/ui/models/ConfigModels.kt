@@ -154,5 +154,6 @@ data class ProjectSession(
     val projectId: String,
     val name: String,
     val createdAt: String,
-    val lastModified: Long = System.currentTimeMillis() // 最后修改时间（毫秒时间戳）
+    val lastModified: Long = System.currentTimeMillis(), // 最后修改时间（毫秒时间戳）
+    val cwd: String? = null // 会话的工作目录，从会话文件中解析得到
 )

@@ -6,7 +6,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 import com.claudecodeplus.session.models.SessionInfo
-import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.ui.services.DefaultSessionConfig
 import kotlinx.coroutines.Job
 
@@ -73,6 +72,13 @@ class SessionObject(
      * 问题队列
      */
     val questionQueue = mutableStateListOf<String>()
+    
+    // ========== 状态管理 ==========
+    
+    /**
+     * 消息加载状态
+     */
+    var messageLoadingState by mutableStateOf(MessageLoadingState.IDLE)
     
     // ========== UI 状态 ==========
     
@@ -186,20 +192,11 @@ class SessionObject(
     /**
      * 中断当前任务（强制停止）
      */
-    fun interruptGeneration(cliWrapper: ClaudeCliWrapper) {
-        // 先取消协程任务
+    fun interruptGeneration() {
+        // 取消协程任务
         currentStreamJob?.cancel()
         currentStreamJob = null
-        
-        // 终止 CLI 进程
-        try {
-            cliWrapper.terminate()
-        } catch (e: Exception) {
-            // 忽略终止异常
-        }
-        
-        // 注意：不要在这里设置 isGenerating = false
-        // 应该等到进程真正结束后再设置
+        isGenerating = false
     }
     
     /**
@@ -260,6 +257,8 @@ class SessionObject(
         sessionInfo = null
         currentSession = null
         isLoadingSession = false
+        // fileTracker = null // 已移除文件追踪器
+        messageLoadingState = MessageLoadingState.IDLE
     }
     
     /**
@@ -279,4 +278,34 @@ class SessionObject(
     override fun toString(): String {
         return "SessionObject(sessionId=$sessionId, messages=${messages.size}, isGenerating=$isGenerating, queue=${questionQueue.size})"
     }
+}
+
+/**
+ * 消息加载状态
+ */
+enum class MessageLoadingState {
+    /**
+     * 空闲状态
+     */
+    IDLE,
+    
+    /**
+     * 正在加载历史消息
+     */
+    LOADING_HISTORY,
+    
+    /**
+     * 历史消息加载完成
+     */
+    HISTORY_LOADED,
+    
+    /**
+     * 正在监听新消息
+     */
+    LISTENING,
+    
+    /**
+     * 加载失败
+     */
+    ERROR
 }

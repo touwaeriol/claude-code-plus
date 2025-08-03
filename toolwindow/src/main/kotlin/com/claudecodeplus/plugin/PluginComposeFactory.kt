@@ -2,7 +2,7 @@ package com.claudecodeplus.plugin
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.awt.ComposePanel
-import com.claudecodeplus.sdk.ClaudeCliWrapper
+import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.jewel.StandaloneChatView
 import com.claudecodeplus.ui.services.FileIndexService
@@ -23,7 +23,7 @@ object  PluginComposeFactory {
      */
     @JvmStatic
     fun createChatPanel(
-        cliWrapper: ClaudeCliWrapper,
+        unifiedSessionService: UnifiedSessionService,
         workingDirectory: String,
         isDarkTheme: Boolean,
         fileIndexService: FileIndexService? = null,
@@ -34,11 +34,11 @@ object  PluginComposeFactory {
         
         // 确保在 EDT 中设置内容
         if (SwingUtilities.isEventDispatchThread()) {
-            setComposeContent(composePanel, cliWrapper, workingDirectory, isDarkTheme, 
+            setComposeContent(composePanel, unifiedSessionService, workingDirectory, isDarkTheme, 
                             fileIndexService, projectService, sessionManager)
         } else {
             SwingUtilities.invokeLater {
-                setComposeContent(composePanel, cliWrapper, workingDirectory, isDarkTheme,
+                setComposeContent(composePanel, unifiedSessionService, workingDirectory, isDarkTheme,
                                 fileIndexService, projectService, sessionManager)
             }
         }
@@ -48,7 +48,7 @@ object  PluginComposeFactory {
     
     private fun setComposeContent(
         panel: ComposePanel,
-        cliWrapper: ClaudeCliWrapper,
+        unifiedSessionService: UnifiedSessionService,
         workingDirectory: String,
         isDarkTheme: Boolean,
         fileIndexService: FileIndexService?,
@@ -60,7 +60,7 @@ object  PluginComposeFactory {
             panel.setContent {
                 IntUiTheme(isDark = isDarkTheme) {
                     StandaloneChatView(
-                        cliWrapper = cliWrapper,
+                        unifiedSessionService = unifiedSessionService,
                         workingDirectory = workingDirectory,
                         fileIndexService = fileIndexService,
                         projectService = projectService,
@@ -73,7 +73,7 @@ object  PluginComposeFactory {
             trySetContentViaReflection(panel) {
                 IntUiTheme(isDark = isDarkTheme) {
                     StandaloneChatView(
-                        cliWrapper = cliWrapper,
+                        unifiedSessionService = unifiedSessionService,
                         workingDirectory = workingDirectory,
                         fileIndexService = fileIndexService,
                         projectService = projectService,

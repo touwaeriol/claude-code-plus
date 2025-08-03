@@ -72,6 +72,45 @@ class ProjectManager {
     }
     
     /**
+     * 根据指定的工作目录设置当前项目
+     * 如果找不到匹配的项目，则使用默认的最近会话选择逻辑
+     */
+    fun selectProjectByWorkingDirectory(workingDirectory: String) {
+        scope.launch {
+            // 等待项目加载完成
+            kotlinx.coroutines.delay(200)
+            
+            println("尝试根据工作目录选择项目: $workingDirectory")
+            
+            // 查找匹配的项目
+            val matchingProject = _projects.value.find { project ->
+                project.path == workingDirectory
+            }
+            
+            if (matchingProject != null) {
+                println("找到匹配的项目: ${matchingProject.name} (${matchingProject.path})")
+                _currentProject.value = matchingProject
+                
+                // 加载该项目的会话
+                if (!_sessions.value.containsKey(matchingProject.id)) {
+                    loadSessionsForProject(matchingProject.id, forceReload = true)
+                }
+                
+                // 选择该项目最近的会话
+                val projectSessions = _sessions.value[matchingProject.id] ?: emptyList()
+                val latestSession = projectSessions.firstOrNull()
+                if (latestSession != null) {
+                    setCurrentSession(latestSession, loadHistory = true)
+                    println("选择了项目的最新会话: ${latestSession.name}")
+                }
+            } else {
+                println("未找到匹配工作目录的项目，使用默认选择逻辑")
+                findAndSelectLatestSession()
+            }
+        }
+    }
+    
+    /**
      * 查找所有项目中最新修改的会话
      * 
      * 在应用启动时调用，自动选择用户最近使用的会话。
@@ -349,12 +388,17 @@ class ProjectManager {
                             println("  - timestamp: $timestamp")
                             println("  - lines.size: ${lines.size}")
                             
+                            // 提取会话的工作目录
+                            val sessionCwd = extractCwdFromSessionFile(lines)
+                            println("DEBUG: 从会话文件中提取的 cwd: '$sessionCwd'")
+                            
                             val session = ProjectSession(
                                 id = sessionId,
                                 projectId = projectId,
                                 name = finalSessionName,
                                 createdAt = timestamp,
-                                lastModified = file.lastModified() // 使用文件的最后修改时间
+                                lastModified = file.lastModified(), // 使用文件的最后修改时间
+                                cwd = sessionCwd
                             )
                             println("DEBUG: 创建后的 ProjectSession - ID: ${session.id}, Name: '${session.name}', LastModified: ${file.lastModified()}")
                             
@@ -385,7 +429,7 @@ class ProjectManager {
                     if (_currentProject.value?.id == projectId && loadedSessions.isNotEmpty()) {
                         val latestSession = loadedSessions.first() // 已按最后修改时间排序，第一个是最新的
                         println("自动选择最新会话: ${latestSession.name} (最后修改: ${java.time.Instant.ofEpochMilli(latestSession.lastModified)})")
-                        setCurrentSession(latestSession, loadHistory = false)
+                        setCurrentSession(latestSession, loadHistory = true)
                     }
                 } else {
                     println("会话目录不存在或不是目录")
@@ -420,8 +464,14 @@ class ProjectManager {
         _currentSession.value = session
         // 触发会话历史加载事件
         if (loadHistory) {
+            println("=== ProjectManager.setCurrentSession 发出会话加载事件 ===")
+            println("  - session.id: ${session.id}")
+            println("  - session.name: ${session.name}")
+            println("  - loadHistory: $loadHistory")
             scope.launch {
+                println("  - 发出 SessionLoadEvent")
                 _sessionLoadEvent.emit(SessionLoadEvent(session))
+                println("  - SessionLoadEvent 已发出")
             }
         }
     }
@@ -908,6 +958,31 @@ class ProjectManager {
     private fun extractProjectName(projectPath: String): String {
         // 直接返回最后一段目录名，保持与 cwd 一致
         return projectPath.substringAfterLast(File.separator)
+    }
+    
+    /**
+     * 从会话文件的行中提取 cwd 字段
+     */
+    private fun extractCwdFromSessionFile(lines: List<String>): String? {
+        // 遍历会话文件的行，查找第一个包含 cwd 的用户或助手消息
+        for (line in lines) {
+            try {
+                val jsonElement = json.parseToJsonElement(line)
+                if (jsonElement is kotlinx.serialization.json.JsonObject) {
+                    val type = jsonElement["type"]?.jsonPrimitive?.content
+                    if (type == "user" || type == "assistant") {
+                        val cwd = jsonElement["cwd"]?.jsonPrimitive?.content
+                        if (!cwd.isNullOrBlank()) {
+                            return cwd
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // 忽略无法解析的行
+                continue
+            }
+        }
+        return null
     }
     
 }

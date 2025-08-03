@@ -1,7 +1,7 @@
 package com.claudecodeplus.toolwindow
 
 import androidx.compose.ui.awt.ComposePanel
-import com.claudecodeplus.sdk.ClaudeCliWrapper
+import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.jewel.StandaloneChatView
 import com.claudecodeplus.ui.services.FileIndexService
@@ -23,7 +23,7 @@ object PluginComposeFactory {
      * 创建带会话管理的聊天 Compose 面板
      */
     fun createComposePanel(
-        cliWrapper: ClaudeCliWrapper,
+        unifiedSessionService: UnifiedSessionService,
         sessionManager: ClaudeSessionManager,
         workingDirectory: String,
         project: Any? = null,  // 改为 Any 类型，避免依赖 IntelliJ API
@@ -47,7 +47,7 @@ object PluginComposeFactory {
                 
                 IntUiTheme(isDark = isDark) {
                     StandaloneChatView(
-                        cliWrapper = cliWrapper,
+                        unifiedSessionService = unifiedSessionService,
                         workingDirectory = workingDirectory,
                         fileIndexService = fileIndexService,
                         projectService = projectService,

@@ -50,6 +50,13 @@ dependencies {
     // Mordant for ANSI text parsing and rendering
     implementation("com.github.ajalt.mordant:mordant:2.2.0")
     
+    // Hutool for file watching
+    implementation("cn.hutool:hutool-core:5.8.27")
+    
+    // Kotlin Logging
+    implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")
+    implementation("org.slf4j:slf4j-api:2.0.9")
+    
     // 测试依赖
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:1.13.8")

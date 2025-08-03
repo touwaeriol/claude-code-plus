@@ -2,51 +2,29 @@ package com.claudecodeplus.sdk
 
 import com.claudecodeplus.core.LoggerFactory
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.isActive
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.coroutineContext
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import kotlinx.serialization.json.*
 
 /**
- * Claude CLI 包装器 - 核心组件
+ * Claude CLI 包装器 - 简化版本
  * 
- * 这是与 Claude CLI 交互的核心类，负责将 Kotlin 代码与 Claude 命令行工具连接。
- * 使用 kotlinx.serialization 解析 Claude CLI 输出。
+ * 这是与 Claude CLI 交互的核心类，专注于CLI执行。
+ * 不再解析CLI输出，而是由统一的会话管理API处理会话文件监听。
  * 
  * 主要功能：
  * - 自动查找和调用 Claude CLI 命令
- * - 处理流式响应，支持实时显示 AI 生成的内容
  * - 管理会话（新建、继续、恢复）
  * - 支持中断响应（通过 terminate() 方法）
- * - 处理工具调用（文件操作、代码执行等）
+ * - 返回会话ID供文件监听使用
  * 
  * 工作原理：
  * 1. 通过 ProcessBuilder 直接调用系统中的 claude CLI 命令
- * 2. 使用 --output-format stream-json 参数获取流式 JSON 输出
- * 3. 使用 kotlinx.serialization 解析 JSON 流并转换为 Kotlin Flow
+ * 2. 启动 Claude CLI 进程并返回会话ID
+ * 3. 会话消息通过文件监听服务获取，不再解析CLI输出
  * 4. 通过环境变量 CLAUDE_CODE_ENTRYPOINT 标识调用来源
- * 
- * 使用示例：
- * ```kotlin
- * val wrapper = ClaudeCliWrapper()
- * val flow = wrapper.query(
- *     prompt = "请帮我写一个快速排序算法",
- *     options = QueryOptions(model = "opus")
- * )
- * flow.collect { message ->
- *     when (message.type) {
- *         MessageType.TEXT -> println(message.data.text)
- *         MessageType.END -> println("完成")
- *     }
- * }
- * ```
  */
 class ClaudeCliWrapper {
     companion object {
@@ -63,35 +41,34 @@ class ClaudeCliWrapper {
          * @param customCommand 自定义的 claude 命令路径（可选）
          * @return Claude 命令的完整路径
          */
-        private fun findClaudeCommand(customCommand: String? = null): String {
-            // 如果提供了自定义命令，直接使用
-            if (!customCommand.isNullOrBlank()) {
-                logger.info("Using custom claude command: $customCommand")
-                return customCommand
-            }
-            
-            // Windows 上使用 claude.cmd，其他平台使用 claude
+        /**
+         * 构建跨平台的 Claude 命令
+         * 
+         * @param args Claude 命令的参数
+         * @return 完整的命令列表，包含平台特定的包装器
+         */
+        private fun buildClaudeCommand(args: List<String>): List<String> {
             val osName = System.getProperty("os.name").lowercase()
             return if (osName.contains("windows")) {
-                logger.info("Using 'claude.cmd' command on Windows")
-                "claude.cmd"
+                // Windows: 通过 cmd /c 执行，这样可以正确找到 .cmd 文件
+                listOf("cmd", "/c", "claude") + args
             } else {
-                logger.info("Using 'claude' command")
-                "claude"
+                // Unix/Linux/macOS: 直接执行
+                listOf("claude") + args
             }
         }
         
         /**
-         * 检查命令是否可用
+         * 检查 Claude 命令是否可用
          * 
-         * 通过尝试执行 “claude --version” 来验证命令是否存在且可执行
+         * 通过尝试执行 "claude --version" 来验证命令是否存在且可执行
          * 
-         * @param command 要检查的命令
          * @return 如果命令可用返回 true，否则返回 false
          */
-        private fun isCommandAvailable(command: String): Boolean {
+        private fun isClaudeCommandAvailable(): Boolean {
             return try {
-                val process = ProcessBuilder(command, "--version").start()
+                val commandList = buildClaudeCommand(listOf("--version"))
+                val process = ProcessBuilder(commandList).start()
                 process.waitFor() == 0
             } catch (e: Exception) {
                 false
@@ -156,6 +133,8 @@ class ClaudeCliWrapper {
          */
         // 要恢复的会话 ID（用于继续之前的对话）
         val resume: String? = null,
+        // 指定新会话的 ID（用于预设会话标识符，便于监听）
+        val sessionId: String? = null,
         
         /**
          * 权限设置
@@ -178,6 +157,40 @@ class ClaudeCliWrapper {
         val mcpServers: Map<String, Any>? = null,
         
         /**
+         * 输出和格式控制
+         */
+        // 是否使用打印模式（非交互模式）
+        val print: Boolean = true,
+        // 输出格式（text, json, stream-json）
+        val outputFormat: String? = null,
+        // 输入格式（text, stream-json）
+        val inputFormat: String? = null,
+        // 详细模式
+        val verbose: Boolean? = null,
+        
+        /**
+         * 工具权限控制
+         */
+        // 允许的工具列表（如 "Bash(git:*) Edit"）
+        val allowedTools: List<String>? = null,
+        // 禁止的工具列表
+        val disallowedTools: List<String>? = null,
+        
+        /**
+         * 高级会话控制
+         */
+        // 继续最近的对话
+        val continueRecent: Boolean = false,
+        // 设置文件路径
+        val settingsFile: String? = null,
+        // 额外允许访问的目录
+        val additionalDirectories: List<String>? = null,
+        // 自动连接 IDE
+        val autoConnectIde: Boolean = false,
+        // 严格 MCP 配置模式
+        val strictMcpConfig: Boolean = false,
+        
+        /**
          * 调试和统计
          */
         // 启用调试模式（输出更多日志信息）
@@ -195,9 +208,20 @@ class ClaudeCliWrapper {
     )
     
     /**
-     * 执行查询，返回流式响应
+     * 查询结果数据类
      */
-    suspend fun query(prompt: String, options: QueryOptions = QueryOptions()): Flow<SDKMessage> = flow {
+    data class QueryResult(
+        val sessionId: String?,
+        val processId: Long,
+        val success: Boolean,
+        val errorMessage: String? = null
+    )
+    
+    /**
+     * 执行查询，返回简化的结果
+     * 只返回进程状态和会话ID，不再解析输出流
+     */
+    suspend fun query(prompt: String, options: QueryOptions = QueryOptions()): QueryResult {
         val requestId = options.requestId ?: System.currentTimeMillis().toString()
         
         // 验证输入
@@ -212,354 +236,194 @@ class ClaudeCliWrapper {
         
         logger.info("🔵 [$requestId] 开始查询: ${prompt.take(100)}...")
         
-        // 检查协程状态
-        coroutineContext.ensureActive()
-        
-        // 构建命令行参数
-        val args = mutableListOf<String>()
-        
-        // 添加 --print 参数以获取输出（非交互模式）
-        args.add("--print")
-        
-        // 根据选项添加 --dangerously-skip-permissions 参数
-        if (options.skipPermissions) {
-            args.add("--dangerously-skip-permissions")
-        }
-        
-        // 权限模式
-        args.addAll(listOf("--permission-mode", options.permissionMode))
-        
-        // 模型配置
-        options.model?.let { args.addAll(listOf("--model", it)) }
-        options.fallbackModel?.let { args.addAll(listOf("--fallback-model", it)) }
-        
-        // 会话管理
-        if (options.resume != null && options.resume.isNotBlank()) {
-            args.addAll(listOf("--resume", options.resume))
-        }
-        
-        // 对话控制
-        options.maxTurns?.let { args.addAll(listOf("--max-turns", it.toString())) }
-        
-        // 系统提示词
-        options.customSystemPrompt?.let { args.addAll(listOf("--append-system-prompt", it)) }
-        
-        // MCP 服务器配置
-        options.mcpServers?.let { servers ->
-            val json = Json.encodeToString(JsonObject.serializer(), buildJsonObject {
-                servers.forEach { (name, config) ->
-                    put(name, Json.encodeToJsonElement(config))
-                }
-            })
-            args.addAll(listOf("--mcp-config", json))
-        }
-        
-        // 调试选项
-        if (options.debug) args.add("--debug")
-        if (options.showStats) args.add("--show-stats")
-        
-        // 输出格式
-        args.addAll(listOf("--output-format", "stream-json", "--verbose"))
-        
-        // 添加用户提示
-        args.add(prompt)
-        
-        logger.info("🔵 [$requestId] 构建参数: ${args.joinToString(" ")}")
-        
-        val claudeCommand = withContext(Dispatchers.IO) {
-            findClaudeCommand(options.customCommand)
-        }
-        
-        logger.info("🔵 [$requestId] 完整命令行: $claudeCommand ${args.joinToString(" ")}")
-        
-        // 直接执行命令，不使用 shell
-        val finalCommand = listOf(claudeCommand) + args
-        
-        val processBuilder = ProcessBuilder(finalCommand)
-        options.cwd?.let { 
-            processBuilder.directory(java.io.File(it))
-            logger.info("🔵 [$requestId] 工作目录: $it")
-        }
-        
-        // 设置环境变量
-        val env = processBuilder.environment()
-        env["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kotlin"
-        env["LANG"] = "en_US.UTF-8"
-        env["LC_ALL"] = "en_US.UTF-8"
-        env["PYTHONIOENCODING"] = "utf-8"
-        
-        // 确保 PATH 环境变量被继承（ProcessBuilder 默认会继承，但明确设置更安全）
-        val currentPath = System.getenv("PATH")
-        if (currentPath != null) {
-            env["PATH"] = currentPath
-        }
-        
-        // Windows 特定的编码设置
-        if (System.getProperty("os.name").lowercase().contains("windows")) {
-            env["CHCP"] = "65001"  // UTF-8 代码页
-        }
-        
-        logger.info("🔵 [$requestId] 启动 Claude CLI 进程...")
-        
-        // 检查是否有旧进程还在运行
-        currentProcess.get()?.let { oldProcess ->
-            if (oldProcess.isAlive) {
-                logger.warn("🔴 [$requestId] 警告：检测到旧进程仍在运行，PID: ${oldProcess.pid()}")
-                logger.warn("🔴 [$requestId] 将强制终止旧进程")
-                try {
-                    oldProcess.destroyForcibly()
-                    logger.info("🔴 [$requestId] 已强制终止旧进程")
-                } catch (e: Exception) {
-                    logger.error("🔴 [$requestId] 强制终止旧进程失败", e)
-                }
+        return withContext(Dispatchers.IO) {
+            
+            // 检查协程状态
+            coroutineContext.ensureActive()
+            
+            // 构建命令行参数
+            val args = mutableListOf<String>()
+            
+            // 根据选项添加 --dangerously-skip-permissions 参数
+            if (options.skipPermissions) {
+                args.add("--dangerously-skip-permissions")
             }
-        }
-        
-        val process = processBuilder.start()
-        currentProcess.set(process)
-        logger.info("🔵 [$requestId] 进程已启动，PID: ${process.pid()}")
-        
-        // 关闭输入流
-        process.outputStream.close()
-        
-        // 读取输出，指定 UTF-8 编码
-        val reader = BufferedReader(InputStreamReader(process.inputStream, "UTF-8"))
-        val errorReader = BufferedReader(InputStreamReader(process.errorStream, "UTF-8"))
-        logger.info("🔵 [$requestId] 开始读取输出流...")
-        
-        // 启动错误流读取
-        val errorBuilder = StringBuilder()
-        Thread {
-            errorReader.useLines { lines ->
-                lines.forEach { line ->
-                    errorBuilder.appendLine(line)
-                    when {
-                        line.contains("[DEP0190]") || line.contains("DeprecationWarning") -> {
-                            logger.debug("Node.js deprecation warning: $line")
-                        }
-                        line.contains("error", ignoreCase = true) -> {
-                            logger.error("Claude CLI error: $line", RuntimeException("CLI Error"))
-                        }
-                        else -> {
-                            logger.warn("Claude CLI stderr: $line")
-                        }
+            
+            // 权限模式
+            args.addAll(listOf("--permission-mode", options.permissionMode))
+            
+            // 模型配置
+            options.model?.let { args.addAll(listOf("--model", it)) }
+            options.fallbackModel?.let { args.addAll(listOf("--fallback-model", it)) }
+            
+            // 会话管理
+            if (options.resume != null && options.resume.isNotBlank()) {
+                args.addAll(listOf("--resume", options.resume))
+            }
+            
+            // 新会话ID指定
+            if (options.sessionId != null && options.sessionId.isNotBlank()) {
+                args.addAll(listOf("--session-id", options.sessionId))
+            }
+            
+            // 对话控制
+            options.maxTurns?.let { args.addAll(listOf("--max-turns", it.toString())) }
+            
+            // 系统提示词
+            options.customSystemPrompt?.let { args.addAll(listOf("--append-system-prompt", it)) }
+            
+            // MCP 服务器配置
+            options.mcpServers?.let { servers ->
+                val json = Json.encodeToString(JsonObject.serializer(), buildJsonObject {
+                    servers.forEach { (name, config) ->
+                        put(name, Json.encodeToJsonElement(config))
                     }
+                })
+                args.addAll(listOf("--mcp-config", json))
+            }
+            
+            // 输出和格式控制
+            if (options.print) {
+                args.add("--print")
+            }
+            options.outputFormat?.let { args.addAll(listOf("--output-format", it)) }
+            options.inputFormat?.let { args.addAll(listOf("--input-format", it)) }
+            options.verbose?.let { 
+                if (it) args.add("--verbose")
+            }
+            
+            // 工具权限控制
+            options.allowedTools?.let { tools ->
+                if (tools.isNotEmpty()) {
+                    args.addAll(listOf("--allowedTools", tools.joinToString(" ")))
                 }
             }
-        }.start()
-        
-        try {
-            reader.useLines { lines ->
-                lines.forEach { line ->
-                    // 检查协程是否被取消
+            options.disallowedTools?.let { tools ->
+                if (tools.isNotEmpty()) {
+                    args.addAll(listOf("--disallowedTools", tools.joinToString(" ")))
+                }
+            }
+            
+            // 高级会话控制
+            if (options.continueRecent) {
+                args.add("--continue")
+            }
+            options.settingsFile?.let { args.addAll(listOf("--settings", it)) }
+            options.additionalDirectories?.let { dirs ->
+                if (dirs.isNotEmpty()) {
+                    args.addAll(listOf("--add-dir") + dirs)
+                }
+            }
+            if (options.autoConnectIde) {
+                args.add("--ide")
+            }
+            if (options.strictMcpConfig) {
+                args.add("--strict-mcp-config")
+            }
+            
+            // 调试选项
+            if (options.debug) args.add("--debug")
+            if (options.showStats) args.add("--show-stats")
+            
+            // 添加用户提示
+            args.add(prompt)
+            
+            logger.info("🔵 [$requestId] 构建参数: ${args.joinToString(" ")}")
+            
+            // 构建跨平台的完整命令
+            val finalCommand = buildClaudeCommand(args)
+            
+            logger.info("🔵 [$requestId] 完整命令行: ${finalCommand.joinToString(" ")}")
+            
+            val processBuilder = ProcessBuilder(finalCommand)
+            options.cwd?.let { 
+                processBuilder.directory(java.io.File(it))
+                logger.info("🔵 [$requestId] 工作目录: $it")
+            }
+            
+            // 设置环境变量
+            val env = processBuilder.environment()
+            env["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kotlin"
+            env["LANG"] = "en_US.UTF-8"
+            env["LC_ALL"] = "en_US.UTF-8"
+            env["PYTHONIOENCODING"] = "utf-8"
+            
+            // 确保 PATH 环境变量被继承（ProcessBuilder 默认会继承，但明确设置更安全）
+            val currentPath = System.getenv("PATH")
+            if (currentPath != null) {
+                env["PATH"] = currentPath
+            }
+            
+            // Windows 特定的编码设置
+            if (System.getProperty("os.name").lowercase().contains("windows")) {
+                env["CHCP"] = "65001"  // UTF-8 代码页
+            }
+            
+            logger.info("🔵 [$requestId] 启动 Claude CLI 进程...")
+            
+            // 检查是否有旧进程还在运行
+            currentProcess.get()?.let { oldProcess ->
+                if (oldProcess.isAlive) {
+                    logger.warn("🔴 [$requestId] 警告：检测到旧进程仍在运行，PID: ${oldProcess.pid()}")
+                    logger.warn("🔴 [$requestId] 将强制终止旧进程")
                     try {
-                        coroutineContext.ensureActive()
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        logger.info("Coroutine cancelled, terminating process...")
-                        terminate()
-                        throw e
-                    }
-                    
-                    if (line.trim().isNotEmpty()) {
-                        try {
-                            // 清理ANSI序列并记录日志
-                            val cleanLine = AnsiProcessor.cleanAnsiSequences(line)
-                            logger.info("🔵 [$requestId] 收到行: ${cleanLine.take(200)}")
-                            
-                            // 跳过空行和非JSON行
-                            if (cleanLine.trim().isEmpty() || !cleanLine.trim().startsWith("{")) {
-                                logger.info("🔵 [$requestId] 跳过非JSON行")
-                                return@forEach
-                            }
-                            
-                            // 使用新的序列化解析消息
-                            val message = parseClaudeMessage(cleanLine)
-                            if (message != null) {
-                                processMessage(message)?.let { sdkMessage ->
-                                    emit(sdkMessage)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            logger.warn("解析消息失败: ${e.message}")
-                        }
+                        oldProcess.destroyForcibly()
+                        logger.info("🔴 [$requestId] 已强制终止旧进程")
+                    } catch (e: Exception) {
+                        logger.error("🔴 [$requestId] 强制终止旧进程失败", e)
                     }
                 }
             }
             
-            // 等待进程结束
-            val exitCode = process.waitFor()
-            logger.info("🔵 [$requestId] 进程退出，退出码: $exitCode")
+            val process = processBuilder.start()
+            currentProcess.set(process)
+            logger.info("🔵 [$requestId] 进程已启动，PID: ${process.pid()}")
             
-            // 检查是否有错误消息（排除 Node.js 的弃用警告）
-            val errorMsg = errorBuilder.toString()
-            val hasRealError = errorMsg.lines().any { line ->
-                line.isNotBlank() && 
-                !line.contains("[DEP0190]") && 
-                !line.contains("DeprecationWarning") &&
-                !line.contains("--trace-deprecation")
-            }
+            // 简化版本：只启动进程，不解析输出
+            // 会话消息通过文件监听获取
+            logger.info("🔵 [$requestId] Claude CLI 进程已启动，会话消息将通过文件监听获取")
             
-            // 只有在有真正的错误时才发送错误消息
-            if (exitCode != 0 && hasRealError) {
-                logger.error("Claude CLI 执行失败: $errorMsg", RuntimeException("CLI Execution Failed"))
-                emit(SDKMessage(
-                    type = MessageType.ERROR,
-                    data = MessageData(error = "Claude CLI 执行失败: $errorMsg")
-                ))
-            } else {
-                // 即使退出码不是 0，但如果只是弃用警告，仍然视为成功
-                emit(SDKMessage(
-                    type = MessageType.END,
-                    data = MessageData()
-                ))
-            }
+            // 提取会话ID（优先使用新指定的 sessionId，其次是恢复的会话ID）
+            val sessionId = options.sessionId ?: options.resume
             
-        } catch (e: Exception) {
-            logger.error("执行查询时发生错误: ${e.message}", e)
-            emit(SDKMessage(
-                type = MessageType.ERROR,
-                data = MessageData(error = e.message)
-            ))
-            throw e
-        } finally {
-            process.destroy()
-            currentProcess.set(null)
-        }
-    }.flowOn(Dispatchers.IO)
-    
-    /**
-     * 处理 Claude 消息并转换为 SDK 消息
-     */
-    private suspend fun processMessage(message: ClaudeMessage): SDKMessage? {
-        return when (message) {
-            is AssistantMessage -> {
-                processAssistantMessage(message)
-            }
-            is UserMessage -> {
-                processUserMessage(message)
-            }
-            is SystemMessage -> {
-                // 系统消息可以包含会话ID
-                SDKMessage(
-                    type = MessageType.START,
-                    data = MessageData(sessionId = message.sessionId)
+            try {
+                // 等待进程完成
+                val exitCode = process.waitFor()
+                logger.info("🔵 [$requestId] 进程退出，退出码: $exitCode")
+                
+                QueryResult(
+                    sessionId = sessionId,
+                    processId = process.pid(),
+                    success = exitCode == 0,
+                    errorMessage = if (exitCode != 0) "Claude CLI 退出码: $exitCode" else null
                 )
-            }
-            is ResultMessage -> {
-                // 结果消息表示会话结束
-                SDKMessage(
-                    type = MessageType.END,
-                    data = MessageData(text = message.result)
+            } catch (e: Exception) {
+                logger.error("🔴 [$requestId] 进程执行失败", e)
+                QueryResult(
+                    sessionId = sessionId,
+                    processId = process.pid(),
+                    success = false,
+                    errorMessage = e.message
                 )
-            }
-            is SummaryMessage -> {
-                // 摘要消息通常不需要转发给UI
-                null
+            } finally {
+                currentProcess.set(null)
             }
         }
     }
     
     /**
-     * 处理助手消息
-     */
-    private suspend fun processAssistantMessage(message: AssistantMessage): SDKMessage? {
-        val content = message.message?.content ?: return null
-        
-        // 遍历内容块，逐个发送
-        for (block in content) {
-            when (block) {
-                is TextBlock -> {
-                    if (block.text.isNotEmpty()) {
-                        return SDKMessage(
-                            type = MessageType.TEXT,
-                            data = MessageData(text = block.text)
-                        )
-                    }
-                }
-                is ToolUseBlock -> {
-                    return SDKMessage(
-                        type = MessageType.TOOL_USE,
-                        data = MessageData(
-                            toolName = block.name,
-                            toolCallId = block.id,
-                            toolInput = block.input
-                        )
-                    )
-                }
-                else -> {
-                    // 忽略其他类型
-                }
-            }
-        }
-        
-        return null
-    }
-    
-    /**
-     * 处理用户消息（主要是工具结果）
-     */
-    private suspend fun processUserMessage(message: UserMessage): SDKMessage? {
-        val messageData = message.message ?: return null
-        
-        when (val content = messageData.content) {
-            is ContentOrList.ListContent -> {
-                // 遍历内容块
-                for (block in content.value) {
-                    if (block is ToolResultBlock) {
-                        val resultContent = when (block.content) {
-                            is ContentOrString.StringValue -> block.content.value
-                            is ContentOrString.JsonValue -> block.content.value.toString()
-                            null -> null
-                        }
-                        
-                        return SDKMessage(
-                            type = MessageType.TOOL_RESULT,
-                            data = MessageData(
-                                toolCallId = block.toolUseId,
-                                toolResult = resultContent,
-                                error = if (block.isError == true) resultContent else null
-                            )
-                        )
-                    }
-                }
-            }
-            else -> {
-                // 忽略简单文本内容
-            }
-        }
-        
-        return null
-    }
-    
-    /**
-     * 终止当前响应
+     * 终止当前进程
      */
     fun terminate() {
         currentProcess.get()?.let { process ->
-            logger.info("🔴 正在终止进程，PID: ${process.pid()}, isAlive: ${process.isAlive}")
+            logger.info("🔴 正在终止进程，PID: ${process.pid()}")
             try {
-                process.destroy()
-                logger.info("🔴 已发送终止信号")
-                
-                // 等待进程结束，不设置超时
-                logger.info("🔴 等待进程结束...")
-                val exitCode = process.waitFor()
-                logger.info("🔴 进程已终止，退出码: $exitCode")
-                
+                process.destroyForcibly()
+                logger.info("🔴 进程已终止")
             } catch (e: Exception) {
                 logger.error("🔴 终止进程失败: ${e.message}", e)
-                try {
-                    process.destroyForcibly()
-                    logger.info("🔴 已强制终止进程")
-                    // 再次等待进程结束
-                    val exitCode = process.waitFor()
-                    logger.info("🔴 进程已强制终止，退出码: $exitCode")
-                } catch (e2: Exception) {
-                    logger.error("🔴 强制终止进程失败: ${e2.message}", e2)
-                }
             } finally {
-                currentProcess.set(null)  // 立即清理引用
-                logger.info("🔴 已清理进程引用")
+                currentProcess.set(null)
             }
         } ?: run {
             logger.info("🔴 没有活动的进程需要终止")
@@ -578,8 +442,8 @@ class ClaudeCliWrapper {
      */
     suspend fun isClaudeCliAvailable(customCommand: String? = null): Boolean = withContext(Dispatchers.IO) {
         try {
-            val claudeCommand = findClaudeCommand(customCommand)
-            val process = ProcessBuilder(claudeCommand, "--version").start()
+            val commandList = buildClaudeCommand(listOf("--version"))
+            val process = ProcessBuilder(commandList).start()
             val exitCode = process.waitFor()
             if (exitCode == 0) {
                 val output = process.inputStream.bufferedReader().readText()

@@ -4,11 +4,14 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
-import com.claudecodeplus.sdk.ClaudeCliWrapper
+import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.toolwindow.PluginComposeFactory
 import com.claudecodeplus.plugin.adapters.IdeaProjectServiceAdapter
 import com.claudecodeplus.plugin.adapters.SimpleFileIndexService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import com.intellij.openapi.diagnostic.Logger
 
 /**
@@ -28,9 +31,10 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         
         try {
             // 创建服务实例
-            val cliWrapper = ClaudeCliWrapper()
-            val sessionManager = ClaudeSessionManager()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val workingDirectory = project.basePath ?: System.getProperty("user.dir")
+            val unifiedSessionService = UnifiedSessionService(scope, workingDirectory)
+            val sessionManager = ClaudeSessionManager()
             
             // 创建 IntelliJ 平台服务适配器
             val projectService = IdeaProjectServiceAdapter(project)
@@ -38,7 +42,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             
             // 使用 toolwindow 提供的 Compose 面板
             val composePanel = PluginComposeFactory.createComposePanel(
-                cliWrapper = cliWrapper,
+                unifiedSessionService = unifiedSessionService,
                 sessionManager = sessionManager,
                 workingDirectory = workingDirectory,
                 project = project,

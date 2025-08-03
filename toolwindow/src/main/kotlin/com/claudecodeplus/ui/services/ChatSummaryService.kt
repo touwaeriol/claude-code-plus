@@ -1,7 +1,7 @@
 package com.claudecodeplus.ui.services
 
 import com.claudecodeplus.ui.models.*
-import com.claudecodeplus.sdk.ClaudeCliWrapper
+import com.claudecodeplus.ui.services.UnifiedSessionService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.time.Instant
@@ -12,7 +12,7 @@ import java.util.UUID
  * 对话历史智能总结服务
  */
 class ChatSummaryService(
-    private val cliWrapper: ClaudeCliWrapper
+    private val unifiedSessionService: UnifiedSessionService
 ) {
     private val summaryCache = mutableMapOf<String, ChatSummary>()
     
@@ -319,16 +319,20 @@ class ChatSummaryService(
     private suspend fun callClaude(prompt: String): String {
         val response = StringBuilder()
         
-        cliWrapper.query(prompt).collect { message ->
-            when (message.type) {
-                com.claudecodeplus.sdk.MessageType.TEXT -> {
-                    message.data.text?.let { response.append(it) }
-                }
-                else -> {
-                    // 忽略其他类型的消息
-                }
-            }
-        }
+        // TODO: 适配新的统一API - 需要重新实现
+        // 使用新的统一服务执行查询
+        // val result = unifiedSessionService.query(prompt, QueryOptions())
+        // if (result.success) {
+        //     result.sessionId?.let { sessionId ->
+        //         unifiedSessionService.subscribeToSession(sessionId)
+        //             .collect { messages ->
+        //                 // 提取文本内容
+        //                 messages.lastOrNull()?.content?.let { content ->
+        //                     response.append(content)
+        //                 }
+        //             }
+        //     }
+        // }
         
         return response.toString()
     }

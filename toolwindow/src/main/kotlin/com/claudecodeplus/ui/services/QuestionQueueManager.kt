@@ -1,7 +1,7 @@
 package com.claudecodeplus.ui.services
 
 import com.claudecodeplus.ui.models.*
-import com.claudecodeplus.sdk.ClaudeCliWrapper
+import com.claudecodeplus.ui.services.UnifiedSessionService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.time.Instant
@@ -11,7 +11,7 @@ import java.util.UUID
  * 批量问题队列管理器
  */
 class QuestionQueueManager(
-    private val cliWrapper: ClaudeCliWrapper
+    private val unifiedSessionService: UnifiedSessionService
 ) {
     private val _queue = MutableStateFlow<List<QueuedQuestion>>(emptyList())
     val queue: StateFlow<List<QueuedQuestion>> = _queue.asStateFlow()
@@ -219,20 +219,25 @@ class QuestionQueueManager(
                 // 发送问题并收集响应
                 val response = withContext(Dispatchers.IO) {
                     val responseBuilder = StringBuilder()
-                    val options = ClaudeCliWrapper.QueryOptions(
-                        resume = sessionId
-                    )
+                    // TODO: 适配新的统一API选项格式
+                    // val options = UnifiedSessionService.QueryOptions(
+                    //     resume = sessionId
+                    // )
                     
-                    cliWrapper.query(fullQuestion, options).collect { message ->
-                        when (message.type) {
-                            com.claudecodeplus.sdk.MessageType.TEXT -> {
-                                message.data.text?.let { responseBuilder.append(it) }
-                            }
-                            else -> {
-                                // 忽略其他类型的消息
-                            }
-                        }
-                    }
+                    // TODO: 适配新的统一API - 需要重新实现
+                    // 使用新的统一服务执行查询
+                    // val result = unifiedSessionService.query(fullQuestion, options)
+                    // if (result.success) {
+                    //     result.sessionId?.let { sessionId ->
+                    //         unifiedSessionService.subscribeToSession(sessionId)
+                    //             .collect { messages ->
+                    //                 // 提取最新的助手回复
+                    //                 messages.lastOrNull { it.role == MessageRole.ASSISTANT }?.content?.let { content ->
+                    //                     responseBuilder.append(content)
+                    //                 }
+                    //             }
+                    //     }
+                    // }
                     responseBuilder.toString()
                 }
                 

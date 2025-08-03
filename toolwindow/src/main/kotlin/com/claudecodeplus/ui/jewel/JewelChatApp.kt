@@ -8,8 +8,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.sdk.ClaudeCliWrapper
-import com.claudecodeplus.sdk.MessageType
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.SessionHistoryService
 import com.claudecodeplus.ui.services.MessageProcessor
@@ -68,7 +68,7 @@ import com.claudecodeplus.ui.utils.DefaultConfigs
  */
 @Composable
 fun JewelChatApp(
-    cliWrapper: ClaudeCliWrapper,
+    unifiedSessionService: UnifiedSessionService,
     workingDirectory: String,
     fileIndexService: com.claudecodeplus.ui.services.FileIndexService? = null,
     projectService: com.claudecodeplus.core.interfaces.ProjectService? = null,
@@ -219,7 +219,7 @@ fun JewelChatApp(
                         selectedModel = selectedModel,
                         selectedPermissionMode = selectedPermissionMode,
                         skipPermissions = skipPermissions,
-                        cliWrapper = cliWrapper,
+                        unifiedSessionService = unifiedSessionService,
                         workingDirectory = workingDirectory,
                         currentSessionId = currentSessionId,
                         currentMessages = messages,
@@ -244,7 +244,7 @@ fun JewelChatApp(
                  * 发送终止信号，强制停止生成。
                  */
                 // 立即终止 CLI wrapper 进程
-                val terminated = cliWrapper.terminate()
+                unifiedSessionService.terminate()
                 // DEBUG: CLI wrapper terminated: $terminated
                 
                 // 取消协程任务
@@ -402,7 +402,7 @@ private fun sendMessage(
     selectedModel: AiModel,
     selectedPermissionMode: PermissionMode,
     skipPermissions: Boolean,
-    cliWrapper: ClaudeCliWrapper,
+    unifiedSessionService: UnifiedSessionService,
     workingDirectory: String,
     currentSessionId: String?,
     currentMessages: List<EnhancedMessage>,
@@ -465,133 +465,37 @@ private fun sendMessage(
             val toolCalls = mutableListOf<ToolCall>()
             val orderedElements = mutableListOf<MessageTimelineItem>()
             
-            cliWrapper.query(messageWithContext, options).collect { sdkMessage ->
-                when (sdkMessage.type) {
-                    com.claudecodeplus.sdk.MessageType.START -> {
-                        // 获取会话ID
-                        val sessionId = sdkMessage.data.sessionId
-                        if (sessionId != null && sessionId != currentSessionId) {
-                            onSessionIdUpdate(sessionId)
-                        }
-                    }
-                    
-                    com.claudecodeplus.sdk.MessageType.TEXT -> {
-                        // 处理文本消息
-                        val text = sdkMessage.data.text ?: ""
-                        responseBuilder.append(text)
-                        
-                        // 更新助手消息
-                        val updatedMessage = assistantMessage.copy(
-                            content = responseBuilder.toString(),
-                            status = MessageStatus.STREAMING,
-                            isStreaming = true,
-                            toolCalls = toolCalls.toList(),
-                            orderedElements = orderedElements.toList()
-                        )
-                        
-                        val mutableMessages = messagesWithAssistant.toMutableList()
-                        mutableMessages[mutableMessages.lastIndex] = updatedMessage
-                        onMessageUpdate(mutableMessages.toList())
-                    }
-                    
-                    com.claudecodeplus.sdk.MessageType.TOOL_USE -> {
-                        // 处理工具调用
-                        val toolName = sdkMessage.data.toolName ?: ""
-                        val toolInput = sdkMessage.data.toolInput ?: mapOf<String, Any?>()
-                        val toolId = sdkMessage.data.toolCallId ?: IdGenerator.generateToolCallId()
-                        
-                        val toolCall = ToolCall(
-                            id = toolId,
-                            name = toolName,
-                            parameters = toolInput as Map<String, Any>,
-                            status = ToolCallStatus.RUNNING
-                        )
-                        
-                        toolCalls.add(toolCall)
-                        orderedElements.add(MessageTimelineItem.ToolCallItem(toolCall))
-                        
-                        // 更新消息
-                        val updatedMessage = assistantMessage.copy(
-                            content = responseBuilder.toString(),
-                            status = MessageStatus.STREAMING,
-                            isStreaming = true,
-                            toolCalls = toolCalls.toList(),
-                            orderedElements = orderedElements.toList()
-                        )
-                        
-                        val mutableMessages = messagesWithAssistant.toMutableList()
-                        mutableMessages[mutableMessages.lastIndex] = updatedMessage
-                        onMessageUpdate(mutableMessages.toList())
-                    }
-                    
-                    com.claudecodeplus.sdk.MessageType.TOOL_RESULT -> {
-                        // 处理工具结果
-                        val toolId = sdkMessage.data.toolCallId
-                        val isError = false // 暂时默认为false，因为MessageData中没有isError字段
-                        val content = sdkMessage.data.toolResult?.toString() ?: ""
-                        
-                        // 更新对应的工具调用状态
-                        val index = toolCalls.indexOfFirst { it.id == toolId }
-                        if (index >= 0) {
-                            toolCalls[index] = toolCalls[index].copy(
-                                status = if (isError) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
-                                result = if (isError) ToolResult.Failure(content) else ToolResult.Success(content)
-                            )
-                            
-                            // 更新orderedElements中的对应元素
-                            val elementIndex = orderedElements.indexOfFirst { 
-                                it is MessageTimelineItem.ToolCallItem && it.toolCall.id == toolId 
+            // 使用新的统一API执行查询
+            val result = unifiedSessionService.query(messageWithContext, options)
+            
+            if (result.success) {
+                // 命令执行成功，更新会话ID
+                if (result.sessionId != null && result.sessionId != currentSessionId) {
+                    onSessionIdUpdate(result.sessionId)
+                }
+                
+                // 启用实时消息监听（通过文件监听获取响应）
+                result.sessionId?.let { sessionId ->
+                    scope.launch {
+                        // 订阅会话消息更新
+                        unifiedSessionService.subscribeToSession(sessionId)
+                            .collect { updatedMessages ->
+                                // 转换并更新消息列表
+                                onMessageUpdate(updatedMessages)
                             }
-                            if (elementIndex >= 0) {
-                                orderedElements[elementIndex] = MessageTimelineItem.ToolCallItem(toolCalls[index])
-                            }
-                        }
-                        
-                        // 更新消息
-                        val updatedMessage = assistantMessage.copy(
-                            content = responseBuilder.toString(),
-                            status = MessageStatus.STREAMING,
-                            isStreaming = true,
-                            toolCalls = toolCalls.toList(),
-                            orderedElements = orderedElements.toList()
-                        )
-                        
-                        val mutableMessages = messagesWithAssistant.toMutableList()
-                        mutableMessages[mutableMessages.lastIndex] = updatedMessage
-                        onMessageUpdate(mutableMessages.toList())
-                    }
-                    
-                    com.claudecodeplus.sdk.MessageType.ERROR -> {
-                        // 错误处理
-                        val errorMessage = assistantMessage.copy(
-                            content = "❌ 错误: ${sdkMessage.data.error ?: "Unknown error"}",
-                            status = MessageStatus.FAILED,
-                            isError = true,
-                            isStreaming = false
-                        )
-                        val mutableMessages = messagesWithAssistant.toMutableList()
-                        mutableMessages[mutableMessages.lastIndex] = errorMessage
-                        onMessageUpdate(mutableMessages.toList())
-                    }
-                    
-                    com.claudecodeplus.sdk.MessageType.END -> {
-                        // 完成流式传输
-                        val finalMessage = assistantMessage.copy(
-                            content = responseBuilder.toString(),
-                            status = MessageStatus.COMPLETE,
-                            isStreaming = false,
-                            toolCalls = toolCalls.toList(),
-                            orderedElements = orderedElements.toList()
-                        )
-                        val mutableMessages = messagesWithAssistant.toMutableList()
-                        mutableMessages[mutableMessages.lastIndex] = finalMessage
-                        onMessageUpdate(mutableMessages.toList())
-                    }
-                    
-                    else -> {
-                        // 忽略其他消息类型
                     }
                 }
+            } else {
+                // 命令执行失败
+                val errorMessage = EnhancedMessage(
+                    id = IdGenerator.generateMessageId(),
+                    role = MessageRole.ASSISTANT,
+                    content = "❌ 错误: ${result.errorMessage ?: "未知错误"}",
+                    timestamp = System.currentTimeMillis(),
+                    status = MessageStatus.FAILED,
+                    isError = true
+                )
+                onMessageUpdate(messagesWithAssistant + errorMessage)
             }
         } catch (e: Exception) {
             // 异常处理

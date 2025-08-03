@@ -101,10 +101,13 @@ class ChatTabManager {
         
         println("  - 最终标签标题: '$tabTitle'")
         
+        // 为新会话预先生成 sessionId（如果没有提供的话）
+        val finalSessionId = sessionId ?: UUID.randomUUID().toString()
+        
         val newTab = ChatTab(
             title = tabTitle,
             groupId = groupId,
-            sessionId = sessionId,
+            sessionId = finalSessionId,
             projectId = project?.id,
             projectName = project?.name,
             projectPath = project?.path

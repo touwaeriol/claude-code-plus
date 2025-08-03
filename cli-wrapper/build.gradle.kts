@@ -18,6 +18,8 @@ dependencies {
     
     // 文件监听和IO优化
     implementation("commons-io:commons-io:${rootProject.extra["commonsIoVersion"]}")
+    implementation("cn.hutool:hutool-core:5.8.27") // 文件监听
+    implementation("com.google.code.gson:gson:2.10.1") // JSON 解析
     
     // 高性能缓存
     implementation("com.github.ben-manes.caffeine:caffeine:${rootProject.extra["caffeineVersion"]}")

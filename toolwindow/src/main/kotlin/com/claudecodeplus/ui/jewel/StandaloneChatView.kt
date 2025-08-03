@@ -3,7 +3,7 @@ package com.claudecodeplus.ui.jewel
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import com.claudecodeplus.sdk.ClaudeCliWrapper
+import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.services.FileIndexService
@@ -19,7 +19,7 @@ import java.util.UUID
  */
 @Composable
 fun StandaloneChatView(
-    cliWrapper: ClaudeCliWrapper,
+    unifiedSessionService: UnifiedSessionService,
     workingDirectory: String,
     fileIndexService: FileIndexService? = null,
     projectService: ProjectService? = null,
@@ -33,7 +33,7 @@ fun StandaloneChatView(
     val defaultTabId = remember { "default-${UUID.randomUUID()}" }
     
     ChatView(
-        cliWrapper = cliWrapper,
+        unifiedSessionService = unifiedSessionService,
         workingDirectory = workingDirectory,
         fileIndexService = fileIndexService,
         projectService = projectService,

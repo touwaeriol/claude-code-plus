@@ -2,8 +2,8 @@ package com.claudecodeplus.ui.jewel
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.awt.ComposePanel
+import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.sdk.ClaudeCliWrapper
-import com.claudecodeplus.sdk.MessageType
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
@@ -27,7 +27,7 @@ import java.awt.BorderLayout
  * 基于 ClaudeCliWrapper 实现 AI 对话
  */
 class JewelChatPanel(
-    private val cliWrapper: ClaudeCliWrapper = ClaudeCliWrapper(),
+    private val unifiedSessionService: UnifiedSessionService,
     private val workingDirectory: String = System.getProperty("user.dir"),
     private val fileIndexService: FileIndexService? = null,
     private val projectService: ProjectService? = null,
@@ -126,7 +126,7 @@ class JewelChatPanel(
                         textWithMarkdown = textWithMarkdown,
                         contexts = contexts.value,
                         selectedModel = selectedModel.value,
-                        cliWrapper = cliWrapper,
+                        unifiedSessionService = unifiedSessionService,
                         workingDirectory = workingDirectory,
                         currentSessionId = currentSessionId.value,
                         onMessageUpdate = { messages.value = it },
@@ -182,7 +182,7 @@ class JewelChatPanel(
         textWithMarkdown: String,
         contexts: List<ContextReference>,
         selectedModel: AiModel,
-        cliWrapper: ClaudeCliWrapper,
+        unifiedSessionService: UnifiedSessionService,
         workingDirectory: String,
         currentSessionId: String?,
         onMessageUpdate: (List<EnhancedMessage>) -> Unit,
@@ -238,52 +238,52 @@ class JewelChatPanel(
                 val responseBuilder = StringBuilder()
                 val toolCalls = mutableListOf<ToolCall>()
                 
-                // DEBUG: Starting to collect messages from Claude CLI...
-                cliWrapper.query(messageWithContext, options).collect { sdkMessage ->
-                    // DEBUG: Received message type: ${sdkMessage.type}
+                // 使用新的统一API执行查询
+                val result = unifiedSessionService.query(messageWithContext, options)
+                
+                if (result.success) {
+                    // 命令执行成功，更新会话ID
+                    if (result.sessionId != null && result.sessionId != currentSessionId) {
+                        onSessionIdUpdate(result.sessionId)
+                    }
                     
-                    // 使用 MessageProcessor 处理消息
-                    val result = messageProcessor.processMessage(
-                        sdkMessage = sdkMessage,
-                        currentMessage = assistantMessage,
-                        responseBuilder = responseBuilder,
-                        toolCalls = toolCalls
-                    )
-                    
-                    when (result) {
-                        is MessageProcessor.ProcessResult.Updated -> {
-                            updatedMessages[updatedMessages.lastIndex] = result.message
-                            onMessageUpdate(updatedMessages.toList())
-                        }
-                        is MessageProcessor.ProcessResult.Complete -> {
-                            updatedMessages[updatedMessages.lastIndex] = result.message
-                            onMessageUpdate(updatedMessages.toList())
-                        }
-                        is MessageProcessor.ProcessResult.Error -> {
-                            updatedMessages[updatedMessages.lastIndex] = result.message
-                            onMessageUpdate(updatedMessages.toList())
-                        }
-                        is MessageProcessor.ProcessResult.SessionStart -> {
-                            onSessionIdUpdate(result.sessionId)
-                        }
-                        MessageProcessor.ProcessResult.NoChange -> {
-                            // 不需要更新
+                    // 启用实时消息监听（通过文件监听获取响应）
+                    result.sessionId?.let { sessionId ->
+                        scope.launch {
+                            // 订阅会话消息更新
+                            unifiedSessionService.subscribeToSession(sessionId)
+                                .collect { updatedMessages ->
+                                    // 转换并更新消息列表
+                                    onMessageUpdate(updatedMessages)
+                                }
                         }
                     }
+                } else {
+                    // 命令执行失败
+                    val errorMessage = EnhancedMessage(
+                        role = MessageRole.ASSISTANT,
+                        content = "❌ 错误: ${result.errorMessage ?: "未知错误"}",
+                        timestamp = System.currentTimeMillis(),
+                        status = MessageStatus.FAILED,
+                        isError = true
+                    )
+                    val errorMessages = currentMessages + userMessage + errorMessage
+                    onMessageUpdate(errorMessages)
                 }
             } catch (e: Exception) {
-                // DEBUG: Error occurred: ${e.message}
+                // 异常处理
                 e.printStackTrace()
-                val errorMessage = assistantMessage.copy(
-                    content = "❌ 错误: ${e.message}",
+                val errorMessage = EnhancedMessage(
+                    role = MessageRole.ASSISTANT,
+                    content = "❌ 发送消息时出错: ${e.message}",
+                    timestamp = System.currentTimeMillis(),
                     status = MessageStatus.FAILED,
-                    isError = true,
-                    isStreaming = false
+                    isError = true
                 )
-                updatedMessages[updatedMessages.lastIndex] = errorMessage
-                onMessageUpdate(updatedMessages.toList())
+                val errorMessages = currentMessages + userMessage + errorMessage
+                onMessageUpdate(errorMessages)
             } finally {
-                // DEBUG: Finished processing message
+                // 恢复生成状态
                 onGeneratingChange(false)
             }
         }
@@ -295,7 +295,7 @@ class JewelChatPanel(
     /**
      * 获取 CLI Wrapper
      */
-    fun getCliWrapper(): ClaudeCliWrapper = cliWrapper
+    fun getUnifiedSessionService(): UnifiedSessionService = unifiedSessionService
     
     
     /**
