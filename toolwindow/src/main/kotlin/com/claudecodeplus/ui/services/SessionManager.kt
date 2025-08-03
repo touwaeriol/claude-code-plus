@@ -2,9 +2,11 @@ package com.claudecodeplus.ui.services
 
 import com.claudecodeplus.ui.models.SessionObject
 import com.claudecodeplus.ui.models.EnhancedMessage
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -20,9 +22,23 @@ import java.util.concurrent.ConcurrentHashMap
  * - ChatTabManager 管理标签的 UI 层面（标题、分组等）
  * - SessionManager 管理会话的数据层面（消息、生成状态等）
  */
-class SessionManager {
+class SessionManager(
+    private val scope: CoroutineScope? = null,
+    private val enableFileWatching: Boolean = false
+) {
+    private val logger = KotlinLogging.logger {}
+    
     // 使用线程安全的 ConcurrentHashMap 存储所有会话
     private val sessions = ConcurrentHashMap<String, SessionObject>()
+    
+    // 文件监听服务（可选）
+    private val fileWatchService: SessionFileWatchService? = if (enableFileWatching && scope != null) {
+        SessionFileWatchService(scope).also {
+            logger.info { "File watching enabled for SessionManager" }
+        }
+    } else {
+        null
+    }
     
     // 当前活动会话 ID
     private val _activeSessionId = MutableStateFlow<String?>(null)
@@ -83,6 +99,8 @@ class SessionManager {
         sessions[tabId]?.let { session ->
             // 停止正在进行的生成
             session.stopGenerating()
+            
+            // 注意：文件追踪器现在由 UnifiedSessionService 管理，无需手动清理
             
             // 清理会话数据
             session.clearSession()
@@ -145,13 +163,18 @@ class SessionManager {
      */
     fun clearAllSessions() {
         // 停止所有正在进行的生成
-        sessions.values.forEach { it.stopGenerating() }
+        sessions.values.forEach { 
+            it.stopGenerating()
+        }
         
         // 清空所有会话
         sessions.clear()
         
         // 清空活动会话 ID
         _activeSessionId.value = null
+        
+        // 停止文件监听服务
+        fileWatchService?.stopAll()
         
         _events.value = SessionEvent.AllSessionsCleared
     }
@@ -210,4 +233,43 @@ class SessionManager {
         val totalQueuedQuestions: Int,
         val totalMessages: Int
     )
+    
+    // ========== 文件追踪相关方法 ==========
+    
+    /**
+     * 为会话关联文件追踪器
+     * 
+     * @param tabId 标签 ID
+     * @param sessionId Claude 会话 ID
+     * @param projectPath 项目路径
+     */
+    fun attachFileTracker(tabId: String, sessionId: String, projectPath: String) {
+        if (fileWatchService == null) {
+            logger.debug { "File watching is disabled, skipping tracker attachment" }
+            return
+        }
+        
+        sessions[tabId]?.let { session ->
+            // 更新会话ID（文件追踪现在由 UnifiedSessionService 管理）
+            session.sessionId = sessionId
+            
+            // 启动文件监听（如果启用）
+            fileWatchService?.let { watchService ->
+                watchService.startWatchingProject(projectPath)
+                logger.info { "Started file watching for session: $sessionId in project: $projectPath" }
+            }
+        }
+    }
+    
+    /**
+     * 获取文件监听服务
+     * 
+     * @return 文件监听服务实例，如果未启用返回 null
+     */
+    fun getFileWatchService(): SessionFileWatchService? = fileWatchService
+    
+    /**
+     * 检查是否启用了文件监听
+     */
+    fun isFileWatchingEnabled(): Boolean = fileWatchService != null
 }

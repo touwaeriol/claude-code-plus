@@ -44,12 +44,13 @@ fun main() = application {
 @Composable
 fun SimpleClaudeApp() {
     // 从服务容器获取服务
-    val cliWrapper = ServiceContainer.cliWrapper
+    val unifiedSessionServiceProvider = ServiceContainer.unifiedSessionServiceProvider
     val tabManager = ServiceContainer.tabManager
     val fileIndexService = ServiceContainer.fileIndexService
     val projectService = ServiceContainer.projectService
     val sessionManager = ServiceContainer.sessionManager
-    val sessionObjectManager = remember { com.claudecodeplus.ui.services.SessionManager() }
+    val scope = rememberCoroutineScope()
+    val sessionObjectManager = remember { com.claudecodeplus.ui.services.SessionManager(scope, true) }
     
     Box(modifier = Modifier.fillMaxSize()) {
         Column {
@@ -71,7 +72,7 @@ fun SimpleClaudeApp() {
             // 主聊天区域
             MultiTabChatView(
                 tabManager = tabManager,
-                cliWrapper = cliWrapper,
+                unifiedSessionServiceProvider = unifiedSessionServiceProvider,
                 workingDirectory = ServiceContainer.projectService.getProjectPath(),
                 fileIndexService = fileIndexService,
                 projectService = projectService,

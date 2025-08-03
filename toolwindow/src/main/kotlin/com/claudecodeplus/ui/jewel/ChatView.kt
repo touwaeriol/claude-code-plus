@@ -6,6 +6,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.session.models.*
@@ -37,7 +38,7 @@ import com.claudecodeplus.ui.services.SessionPersistenceService
  */
 @Composable
 fun ChatView(
-    cliWrapper: ClaudeCliWrapper,
+    unifiedSessionService: UnifiedSessionService,
     workingDirectory: String,
     fileIndexService: FileIndexService? = null,
     projectService: ProjectService? = null,
@@ -52,6 +53,18 @@ fun ChatView(
     projectManager: com.claudecodeplus.ui.services.ProjectManager? = null,
     modifier: Modifier = Modifier
 ) {
+    val coroutineScope = rememberCoroutineScope()
+    
+    // 添加调试信息
+    println("=== ChatView 组件开始渲染 ===")
+    println("tabId: $tabId")
+    println("sessionId: $sessionId")
+    println("workingDirectory: $workingDirectory")
+    println("initialMessages size: ${initialMessages?.size ?: 0}")
+    println("===============================")
+    
+    // CLI 调用现在通过 UnifiedSessionService 处理
+    
     // 获取或创建该标签的会话对象
     val sessionObject = remember(tabId) {
         sessionObjectManager.getOrCreateSession(tabId, sessionId, initialMessages ?: emptyList())
@@ -73,7 +86,9 @@ fun ChatView(
     var showQueueDialog by remember { mutableStateOf(false) }
     var currentInputText by remember { mutableStateOf("") }
     
-    val coroutineScope = rememberCoroutineScope()
+    // 文件监听触发器
+    var fileWatchTrigger by remember { mutableStateOf(0L) }
+    
     
     // 当组件被销毁时，保存输入状态
     DisposableEffect(tabId) {
@@ -138,6 +153,33 @@ fun ChatView(
                         sessionObject.messages = emptyList()
                     }
                 }
+            }
+        }
+    }
+    
+    // 文件监听：只在有 sessionId 且存在会话文件时启动
+    LaunchedEffect(sessionObject.sessionId, fileWatchTrigger) {
+        val currentSessionId = sessionObject.sessionId
+        
+        if (currentSessionId != null && currentSessionId.isNotEmpty()) {
+            // 检查会话文件是否存在
+            if (unifiedSessionService.sessionExists(currentSessionId)) {
+                println("[ChatView] 会话文件存在，开始订阅文件监听: $currentSessionId")
+                
+                try {
+                    // 订阅实时更新 - 这会自动加载初始消息并监听后续更新
+                    unifiedSessionService.subscribeToSession(currentSessionId)
+                        .collect { updatedMessages ->
+                            // 更新消息列表
+                            sessionObject.messages = updatedMessages
+                            println("[ChatView] 收到实时消息更新，消息数: ${updatedMessages.size}")
+                        }
+                } catch (e: Exception) {
+                    println("[ChatView] 文件监听订阅失败: ${e.message}")
+                    e.printStackTrace()
+                }
+            } else {
+                println("[ChatView] 会话文件不存在，跳过文件监听: $currentSessionId")
             }
         }
     }
@@ -469,8 +511,8 @@ fun ChatView(
                                 contexts = contexts
                             )
                             
-                            // 添加到消息列表
-                            sessionObject.addMessage(userMessage)
+                            // 添加到消息列表 - 注释掉，改为通过文件监听获取
+                            // sessionObject.addMessage(userMessage)
                             
                             // 如果是占位会话的第一条消息，立即更新会话名称和标签标题
                             // 现在包含了初始助手消息，所以要调整判断逻辑
@@ -515,258 +557,69 @@ fun ChatView(
                             // 不再立即添加空的助手消息，等待真正有内容时再添加
                             
                             // 调用 Claude CLI
-                            // 对于占位会话（第一条消息），不传递 sessionId，让 Claude CLI 创建新会话
-                            // 注意：现在 messages 包含了用户消息和初始助手消息，所以要检查 size == 2
-                            val isPlaceholderSession = sessionObject.hasSessionId && messages.size == 2
-                            val useResume = sessionObject.hasSessionId && !isPlaceholderSession
+                            // 现在总是使用预设的 sessionId（如果有的话）
+                            val currentSessionId = sessionObject.sessionId
                             
-                            println("[ChatView] 准备调用 Claude CLI, useResume=$useResume, sessionId=${sessionObject.sessionId}")
+                            println("[ChatView] 准备调用 Claude CLI, sessionId=$currentSessionId")
                             
+                            // 使用新的简化API执行CLI命令
                             val options = ClaudeCliWrapper.QueryOptions(
-                                resume = if (useResume) sessionObject.sessionId else null,
+                                sessionId = currentSessionId,  // 使用预设的 sessionId
                                 cwd = workingDirectory,
                                 model = selectedModel?.cliName,
                                 permissionMode = selectedPermissionMode.cliName
                             )
                             
-                            println("[ChatView] 开始执行 cliWrapper.query")
-                            cliWrapper.query(processedText, options).collect { message ->
-                                println("[ChatView] 收到消息类型: ${message.type}")
-                                when (message.type) {
-                                    com.claudecodeplus.sdk.MessageType.START -> {
-                                        // 新会话创建，保存会话ID
-                                        if (sessionObject.isNewSession || isPlaceholderSession) {
-                                            val oldSessionId = sessionObject.sessionId
-                                            
-                                            // 如果是占位会话，更新会话ID而不是删除
-                                            if (isPlaceholderSession && oldSessionId != null && projectManager != null && currentProject != null) {
-                                                coroutineScope.launch {
-                                                    // 更新占位会话的ID为真实的Claude会话ID
-                                                    projectManager.updateSessionId(
-                                                        oldSessionId = oldSessionId,
-                                                        newSessionId = message.data.sessionId ?: "",
-                                                        projectId = currentProject.id
-                                                    )
-                                                }
-                                            }
-                                            
-                                            sessionObject.updateSessionId(message.data.sessionId)
-                                            sessionIdToUse = message.data.sessionId
-                                            // ChatView: New session created: ${sessionObject.sessionId}
-                                            
-                                            // 如果是新项目的第一条消息，更新标签标题和关联会话ID
-                                            if ((isFirstMessageForNewProject || isPlaceholderSession) && tabManager != null && currentTabId != null) {
-                                                tabManager.updateTabTitleFromFirstMessage(
-                                                    tabId = currentTabId,
-                                                    messageContent = markdownText,
-                                                    project = currentProject
-                                                )
-                                                
-                                                // 更新标签的会话ID和消息列表
-                                                tabManager.updateTab(currentTabId) { tab ->
-                                                    tab.copy(
-                                                        sessionId = message.data.sessionId ?: "",
-                                                        messages = messages
-                                                    )
-                                                }
-                                            }
+                            println("[ChatView] 开始执行 CLI 命令")
+                            
+                            try {
+                                // 执行 CLI 命令
+                                val result = unifiedSessionService.query(processedText, options)
+                                
+                                if (result.success) {
+                                    // 命令执行成功，确认会话ID
+                                    val resultSessionId = result.sessionId ?: currentSessionId
+                                    sessionIdToUse = resultSessionId
+                                    
+                                    // 确保 sessionObject 中的 sessionId 是正确的
+                                    if (sessionObject.sessionId != resultSessionId) {
+                                        sessionObject.updateSessionId(resultSessionId)
+                                    }
+                                    
+                                    // 等待文件写入后触发文件监听
+                                    if (result.sessionId != null) {
+                                        coroutineScope.launch {
+                                            kotlinx.coroutines.delay(200) // 等待文件写入
+                                            // 触发文件监听检查
+                                            fileWatchTrigger = System.currentTimeMillis()
                                         }
                                     }
-                                    com.claudecodeplus.sdk.MessageType.TEXT -> {
-                                        // 累积内容
-                                        val text = message.data.text ?: ""
-                                        assistantContent += text
-                                        currentContentBuilder.append(text)
-                                        
-                                        // 更新或创建助手消息
-                                        val assistantMessage = EnhancedMessage(
-                                            id = assistantMessageId,
-                                            role = MessageRole.ASSISTANT,
-                                            content = assistantContent,
-                                            timestamp = System.currentTimeMillis(),
-                                            model = selectedModel,
-                                            contexts = emptyList(),
-                                            toolCalls = toolCalls.toList(),
-                                            orderedElements = orderedElements.toList()
-                                        )
-                                        
-                                        // 替换或添加消息
-                                        if (messages.any { it.id == assistantMessageId }) {
-                                            sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
-                                        } else {
-                                            sessionObject.addMessage(assistantMessage)
-                                        }
-                                    }
-                                    com.claudecodeplus.sdk.MessageType.ERROR -> {
-                                        // 如果还没有创建助手消息，使用当前的 assistantMessageId
-                                        val errorId = if (messages.any { it.id == assistantMessageId }) {
-                                            UUID.randomUUID().toString()
-                                        } else {
-                                            assistantMessageId
-                                        }
-                                        
-                                        val errorMessage = EnhancedMessage(
-                                            id = errorId,
-                                            role = MessageRole.ASSISTANT,
-                                            content = "错误: ${message.data.error ?: "未知错误"}",
-                                            timestamp = System.currentTimeMillis(),
-                                            model = selectedModel,
-                                            contexts = emptyList()
-                                        )
-                                        sessionObject.addMessage(errorMessage)
-                                    }
-                                    com.claudecodeplus.sdk.MessageType.END -> {
-                                        // 流结束
-                                        // ChatView: Message complete
-                                        
-                                        // 如果还有未添加的内容，添加到时间线
-                                        if (currentContentBuilder.isNotEmpty()) {
-                                            orderedElements.add(
-                                                MessageTimelineItem.ContentItem(
-                                                    content = currentContentBuilder.toString(),
-                                                    timestamp = System.currentTimeMillis()
-                                                )
-                                            )
-                                            currentContentBuilder.clear()
-                                        }
-                                        
-                                        // 最终更新消息
-                                        val finalMessage = EnhancedMessage(
-                                            id = assistantMessageId,
-                                            role = MessageRole.ASSISTANT,
-                                            content = assistantContent,
-                                            timestamp = System.currentTimeMillis(),
-                                            model = selectedModel,
-                                            contexts = emptyList(),
-                                            toolCalls = toolCalls.toList(),
-                                            orderedElements = orderedElements.toList(),
-                                            isStreaming = false
-                                        )
-                                        
-                                        sessionObject.replaceMessage(assistantMessageId) { finalMessage }
-                                        
-                                        // 响应完成后，同步一次标签中的消息列表
-                                        if (tabManager != null && currentTabId != null) {
-                                            tabManager.updateTab(currentTabId) { tab ->
-                                                tab.copy(
-                                                    messages = messages
-                                                )
-                                            }
-                                        }
-                                    }
-                                    com.claudecodeplus.sdk.MessageType.TOOL_USE -> {
-                                        // 工具调用
-                                        val toolName = message.data.toolName ?: "unknown"
-                                        val toolCallId = message.data.toolCallId ?: UUID.randomUUID().toString()
-                                        
-                                        // 如果有累积的内容，先添加到时间线
-                                        if (currentContentBuilder.isNotEmpty()) {
-                                            orderedElements.add(
-                                                MessageTimelineItem.ContentItem(
-                                                    content = currentContentBuilder.toString(),
-                                                    timestamp = System.currentTimeMillis()
-                                                )
-                                            )
-                                            currentContentBuilder.clear()
-                                        }
-                                        
-                                        val toolCall = com.claudecodeplus.ui.models.ToolCall(
-                                            id = toolCallId,
-                                            name = toolName,
-                                            displayName = toolName,
-                                            parameters = when (val input = message.data.toolInput) {
-                                                is Map<*, *> -> {
-                                                    @Suppress("UNCHECKED_CAST")
-                                                    input as Map<String, Any>
-                                                }
-                                                else -> mapOf("input" to (input ?: ""))
-                                            },
-                                            status = com.claudecodeplus.ui.models.ToolCallStatus.RUNNING,
-                                            startTime = System.currentTimeMillis()
-                                        )
-                                        toolCalls.add(toolCall)
-                                        
-                                        // 添加工具调用到时间线
-                                        orderedElements.add(
-                                            MessageTimelineItem.ToolCallItem(
-                                                toolCall = toolCall,
-                                                timestamp = toolCall.startTime
-                                            )
-                                        )
-                                        
-                                        // 更新助手消息，包含工具调用
-                                        val assistantMessage = EnhancedMessage(
-                                            id = assistantMessageId,
-                                            role = MessageRole.ASSISTANT,
-                                            content = assistantContent,
-                                            timestamp = System.currentTimeMillis(),
-                                            model = selectedModel,
-                                            contexts = emptyList(),
-                                            toolCalls = toolCalls.toList(),
-                                            orderedElements = orderedElements.toList()
-                                        )
-                                        
-                                        if (messages.any { it.id == assistantMessageId }) {
-                                            // 替换或添加消息（与正常发送的逻辑保持一致）
-                                        if (messages.any { it.id == assistantMessageId }) {
-                                            sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
-                                        } else {
-                                            sessionObject.addMessage(assistantMessage)
-                                        }
-                                        } else {
-                                            sessionObject.addMessage(assistantMessage)
-                                        }
-                                    }
-                                    com.claudecodeplus.sdk.MessageType.TOOL_RESULT -> {
-                                        // 工具结果
-                                        val toolCallId = message.data.toolCallId
-                                        // 更新对应的工具调用状态
-                                        toolCalls.find { it.id == toolCallId }?.let { toolCall ->
-                                            val index = toolCalls.indexOf(toolCall)
-                                            val updatedToolCall = toolCall.copy(
-                                                status = com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS,
-                                                result = com.claudecodeplus.ui.models.ToolResult.Success(
-                                                    output = message.data.toolResult?.toString() ?: "No output"
-                                                ),
-                                                endTime = System.currentTimeMillis()
-                                            )
-                                            toolCalls[index] = updatedToolCall
-                                            
-                                            // 更新时间线中的工具调用
-                                            val toolItemIndex = orderedElements.indexOfFirst { 
-                                                it is MessageTimelineItem.ToolCallItem && it.toolCall.id == toolCall.id 
-                                            }
-                                            if (toolItemIndex != -1) {
-                                                orderedElements[toolItemIndex] = MessageTimelineItem.ToolCallItem(
-                                                    toolCall = updatedToolCall,
-                                                    timestamp = updatedToolCall.startTime
-                                                )
-                                            }
-                                            
-                                            // 更新消息
-                                            val assistantMessage = EnhancedMessage(
-                                                id = assistantMessageId,
-                                                role = MessageRole.ASSISTANT,
-                                                content = assistantContent,
-                                                timestamp = System.currentTimeMillis(),
-                                                model = selectedModel,
-                                                contexts = emptyList(),
-                                                toolCalls = toolCalls.toList(),
-                                                orderedElements = orderedElements.toList()
-                                            )
-                                            
-                                            // 替换或添加消息（与正常发送的逻辑保持一致）
-                                        if (messages.any { it.id == assistantMessageId }) {
-                                            sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
-                                        } else {
-                                            sessionObject.addMessage(assistantMessage)
-                                        }
-                                        }
-                                    }
-                                    else -> {
-                                        // 忽略其他消息类型
-                                    }
+                                } else {
+                                    // 命令执行失败
+                                    val errorMessage = EnhancedMessage(
+                                        id = "error_${System.currentTimeMillis()}",
+                                        role = MessageRole.SYSTEM,
+                                        content = "错误: ${result.errorMessage ?: "未知错误"}",
+                                        timestamp = System.currentTimeMillis(),
+                                        toolCalls = emptyList(),
+                                        orderedElements = emptyList()
+                                    )
+                                    sessionObject.addMessage(errorMessage)
                                 }
+                            } catch (e: Exception) {
+                                // 处理异常
+                                val errorMessage = EnhancedMessage(
+                                    id = "error_${System.currentTimeMillis()}",
+                                    role = MessageRole.SYSTEM,
+                                    content = "执行失败: ${e.message}",
+                                    timestamp = System.currentTimeMillis(),
+                                    toolCalls = emptyList(),
+                                    orderedElements = emptyList()
+                                )
+                                sessionObject.addMessage(errorMessage)
+                            } finally {
+                                // 清理状态
+                                sessionObject.stopGenerating()
                             }
                             
                             // 清空上下文
@@ -805,56 +658,8 @@ fun ChatView(
                                 // 延迟一小段时间，确保UI更新
                                 coroutineScope.launch {
                                     delay(100)
-                                    // 递归调用 onSend 处理下一个问题
-                                    // 这里直接调用 onSend 的实现逻辑
-                                    val nextJob = coroutineScope.launch {
-                                        sessionObject.isGenerating = true
-                                        try {
-                                            // 复制完整的发送逻辑...
-                                            // 为了避免代码重复，应该提取为一个独立的函数
-                                            // 但为了保持改动最小，这里暂时这样处理
-                                            println("[ChatView] 自动处理队列中的下一个问题: $nextQuestion")
-                                            
-                                            // 检查是否是斜杠命令
-                                            val processedText = if (nextQuestion.trim().startsWith("/")) {
-                                                val parts = nextQuestion.trim().split(" ", limit = 2)
-                                                val command = parts[0].substring(1)
-                                                val args = if (parts.size > 1) parts[1] else ""
-                                                
-                                                val commandXml = """<command-name>/$command</command-name>
-<command-message>$command</command-message>
-<command-args>$args</command-args>"""
-                                                commandXml
-                                            } else {
-                                                nextQuestion
-                                            }
-                                            
-                                            // 创建用户消息
-                                            val userMessage = EnhancedMessage(
-                                                id = UUID.randomUUID().toString(),
-                                                role = MessageRole.USER,
-                                                content = nextQuestion,
-                                                timestamp = System.currentTimeMillis(),
-                                                model = sessionObject.selectedModel,
-                                                contexts = sessionObject.contexts
-                                            )
-                                            
-                                            sessionObject.addMessage(userMessage)
-                                            
-                                            // 后续逻辑与上面相同...
-                                            // 这里应该调用统一的发送函数
-                                        } catch (e: kotlinx.coroutines.CancellationException) {
-                                            println("[ChatView] 队列处理任务被取消")
-                                            throw e
-                                        } catch (e: Exception) {
-                                            println("[ChatView] 处理队列问题失败: ${e.message}")
-                                            e.printStackTrace()
-                                        } finally {
-                                            sessionObject.isGenerating = false
-                                            sessionObject.currentStreamJob = null
-                                        }
-                                    }
-                                    sessionObject.startGenerating(nextJob)
+                                    // TODO: 实现队列处理逻辑，使用新的统一API
+                                    println("[ChatView] 队列处理需要实现新的统一API调用")
                                 }
                             }
                         }
@@ -869,10 +674,8 @@ fun ChatView(
                     coroutineScope.launch {
                         println("[ChatView] 开始中断流程")
                         
-                        // 1. 首先中断当前任务（在 IO 线程上执行，避免阻塞 UI）
-                        withContext(Dispatchers.IO) {
-                            sessionObject.interruptGeneration(cliWrapper)
-                        }
+                        // 1. 中断当前任务
+                        sessionObject.interruptGeneration()
                         println("[ChatView] 进程已终止")
                         
                         // 2. 进程已结束，设置 isGenerating = false
@@ -930,202 +733,40 @@ fun ChatView(
                             
                             // 继续原有的发送逻辑（调用 Claude CLI）
                             val options = ClaudeCliWrapper.QueryOptions(
-                                resume = sessionObject.sessionId?.takeIf { it.isNotEmpty() },
+                                sessionId = sessionObject.sessionId?.takeIf { it.isNotEmpty() },
                                 cwd = workingDirectory,
                                 model = selectedModel?.cliName,
                                 permissionMode = selectedPermissionMode.cliName
                             )
                             
-                            println("[ChatView] [中断后] 准备调用 cliWrapper.query, processedText=$processedText")
-                            cliWrapper.query(processedText, options).collect { message ->
-                                println("[ChatView] [中断后] 收到消息类型: ${message.type}")
-                                when (message.type) {
-                                    com.claudecodeplus.sdk.MessageType.START -> {
-                                        // 新会话创建，保存会话ID
-                                        if (sessionObject.isNewSession) {
-                                            sessionObject.updateSessionId(message.data.sessionId)
-                                        }
+                            println("[ChatView] [中断后] 执行统一API调用")
+                            val result = unifiedSessionService.query(processedText, options)
+                            if (result.success) {
+                                val resultSessionId = result.sessionId ?: sessionObject.sessionId
+                                println("[ChatView] [中断后] 命令执行成功, sessionId: $resultSessionId")
+                                
+                                // 确认会话ID并启用实时监听
+                                if (resultSessionId != null) {
+                                    if (sessionObject.sessionId != resultSessionId) {
+                                        sessionObject.updateSessionId(resultSessionId)
                                     }
-                                    com.claudecodeplus.sdk.MessageType.TEXT -> {
-                                        // 累积内容
-                                        val text = message.data.text ?: ""
-                                        assistantContent += text
-                                        currentContentBuilder.append(text)
-                                        
-                                        // 更新助手消息
-                                        val assistantMessage = EnhancedMessage(
-                                            id = assistantMessageId,
-                                            role = MessageRole.ASSISTANT,
-                                            content = assistantContent,
-                                            timestamp = System.currentTimeMillis(),
-                                            model = selectedModel,
-                                            contexts = emptyList(),
-                                            toolCalls = toolCalls.toList(),
-                                            orderedElements = orderedElements.toList()
-                                        )
-                                        
-                                        // 替换或添加消息（与正常发送的逻辑保持一致）
-                                        if (messages.any { it.id == assistantMessageId }) {
-                                            sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
-                                        } else {
-                                            sessionObject.addMessage(assistantMessage)
-                                        }
-                                    }
-                                    com.claudecodeplus.sdk.MessageType.ERROR -> {
-                                        // 如果还没有创建助手消息，使用当前的 assistantMessageId
-                                        val errorId = if (messages.any { it.id == assistantMessageId }) {
-                                            UUID.randomUUID().toString()
-                                        } else {
-                                            assistantMessageId
-                                        }
-                                        
-                                        val errorMessage = EnhancedMessage(
-                                            id = errorId,
-                                            role = MessageRole.ASSISTANT,
-                                            content = "错误: ${message.data.error ?: "未知错误"}",
-                                            timestamp = System.currentTimeMillis(),
-                                            model = selectedModel,
-                                            contexts = emptyList()
-                                        )
-                                        sessionObject.addMessage(errorMessage)
-                                    }
-                                    com.claudecodeplus.sdk.MessageType.END -> {
-                                        // 流结束
-                                        if (currentContentBuilder.isNotEmpty()) {
-                                            orderedElements.add(
-                                                MessageTimelineItem.ContentItem(
-                                                    content = currentContentBuilder.toString(),
-                                                    timestamp = System.currentTimeMillis()
-                                                )
-                                            )
-                                            currentContentBuilder.clear()
-                                        }
-                                        
-                                        // 最终更新消息
-                                        val finalMessage = EnhancedMessage(
-                                            id = assistantMessageId,
-                                            role = MessageRole.ASSISTANT,
-                                            content = assistantContent,
-                                            timestamp = System.currentTimeMillis(),
-                                            model = selectedModel,
-                                            contexts = emptyList(),
-                                            toolCalls = toolCalls.toList(),
-                                            orderedElements = orderedElements.toList(),
-                                            isStreaming = false
-                                        )
-                                        
-                                        // 替换或添加消息（与正常发送的逻辑保持一致）
-                                        if (messages.any { it.id == assistantMessageId }) {
-                                            sessionObject.replaceMessage(assistantMessageId) { finalMessage }
-                                        } else {
-                                            sessionObject.addMessage(finalMessage)
-                                        }
-                                    }
-                                    com.claudecodeplus.sdk.MessageType.TOOL_USE -> {
-                                        // 工具调用处理
-                                        val toolName = message.data.toolName ?: "unknown"
-                                        val toolCallId = message.data.toolCallId ?: UUID.randomUUID().toString()
-                                        
-                                        if (currentContentBuilder.isNotEmpty()) {
-                                            orderedElements.add(
-                                                MessageTimelineItem.ContentItem(
-                                                    content = currentContentBuilder.toString(),
-                                                    timestamp = System.currentTimeMillis()
-                                                )
-                                            )
-                                            currentContentBuilder.clear()
-                                        }
-                                        
-                                        val toolCall = com.claudecodeplus.ui.models.ToolCall(
-                                            id = toolCallId,
-                                            name = toolName,
-                                            displayName = toolName,
-                                            parameters = when (val input = message.data.toolInput) {
-                                                is Map<*, *> -> {
-                                                    @Suppress("UNCHECKED_CAST")
-                                                    input as Map<String, Any>
-                                                }
-                                                else -> mapOf("input" to (input ?: ""))
-                                            },
-                                            status = com.claudecodeplus.ui.models.ToolCallStatus.RUNNING,
-                                            startTime = System.currentTimeMillis()
-                                        )
-                                        toolCalls.add(toolCall)
-                                        
-                                        orderedElements.add(
-                                            MessageTimelineItem.ToolCallItem(
-                                                toolCall = toolCall,
-                                                timestamp = toolCall.startTime
-                                            )
-                                        )
-                                        
-                                        val assistantMessage = EnhancedMessage(
-                                            id = assistantMessageId,
-                                            role = MessageRole.ASSISTANT,
-                                            content = assistantContent,
-                                            timestamp = System.currentTimeMillis(),
-                                            model = selectedModel,
-                                            contexts = emptyList(),
-                                            toolCalls = toolCalls.toList(),
-                                            orderedElements = orderedElements.toList()
-                                        )
-                                        
-                                        // 替换或添加消息（与正常发送的逻辑保持一致）
-                                        if (messages.any { it.id == assistantMessageId }) {
-                                            sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
-                                        } else {
-                                            sessionObject.addMessage(assistantMessage)
-                                        }
-                                    }
-                                    com.claudecodeplus.sdk.MessageType.TOOL_RESULT -> {
-                                        // 工具结果
-                                        val toolCallId = message.data.toolCallId
-                                        toolCalls.find { it.id == toolCallId }?.let { toolCall ->
-                                            val index = toolCalls.indexOf(toolCall)
-                                            val updatedToolCall = toolCall.copy(
-                                                status = com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS,
-                                                result = com.claudecodeplus.ui.models.ToolResult.Success(
-                                                    output = message.data.toolResult?.toString() ?: "No output"
-                                                ),
-                                                endTime = System.currentTimeMillis()
-                                            )
-                                            toolCalls[index] = updatedToolCall
-                                            
-                                            val toolItemIndex = orderedElements.indexOfFirst { 
-                                                it is MessageTimelineItem.ToolCallItem && it.toolCall.id == toolCall.id 
-                                            }
-                                            if (toolItemIndex != -1) {
-                                                orderedElements[toolItemIndex] = MessageTimelineItem.ToolCallItem(
-                                                    toolCall = updatedToolCall,
-                                                    timestamp = updatedToolCall.startTime
-                                                )
-                                            }
-                                            
-                                            val assistantMessage = EnhancedMessage(
-                                                id = assistantMessageId,
-                                                role = MessageRole.ASSISTANT,
-                                                content = assistantContent,
-                                                timestamp = System.currentTimeMillis(),
-                                                model = selectedModel,
-                                                contexts = emptyList(),
-                                                toolCalls = toolCalls.toList(),
-                                                orderedElements = orderedElements.toList()
-                                            )
-                                            
-                                            // 替换或添加消息（与正常发送的逻辑保持一致）
-                                        if (messages.any { it.id == assistantMessageId }) {
-                                            sessionObject.replaceMessage(assistantMessageId) { assistantMessage }
-                                        } else {
-                                            sessionObject.addMessage(assistantMessage)
-                                        }
-                                        }
-                                    }
-                                    else -> {
-                                        // 忽略其他消息类型
-                                    }
+                                    
+                                    // 注意：文件监听订阅现在由专门的 LaunchedEffect 管理，避免重复订阅
                                 }
+                            } else {
+                                println("[ChatView] [中断后] 命令执行失败: ${result.errorMessage}")
+                                
+                                // 显示错误消息
+                                val errorMessage = EnhancedMessage(
+                                    id = UUID.randomUUID().toString(),
+                                    role = MessageRole.ASSISTANT,
+                                    content = "执行命令时出错: ${result.errorMessage}",
+                                    timestamp = System.currentTimeMillis(),
+                                    model = selectedModel,
+                                    contexts = emptyList()
+                                )
+                                sessionObject.addMessage(errorMessage)
                             }
-                            
                             // 清空上下文
                             sessionObject.clearContexts()
                         } catch (e: kotlinx.coroutines.CancellationException) {

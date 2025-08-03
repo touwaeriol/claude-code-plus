@@ -22,6 +22,9 @@ object ServiceContainer {
     // 核心服务
     val cliWrapper: ClaudeCliWrapper by lazy { ClaudeCliWrapper() }
     val sessionManager: ClaudeSessionManager by lazy { ClaudeSessionManager() }
+    val unifiedSessionServiceProvider: UnifiedSessionServiceProvider by lazy { 
+        UnifiedSessionServiceProvider(applicationScope)
+    }
 
     // 项目与UI服务
     val projectManager: ProjectManager by lazy { ProjectManager() }
@@ -49,8 +52,10 @@ object ServiceContainer {
         // 在后台启动文件索引和默认标签创建
         applicationScope.launch {
             fileIndexService.initialize(projectPath)
+            // 等待项目管理器加载完成后再创建欢迎标签
             if (tabManager.tabs.isEmpty()) {
-                tabManager.createNewTab("欢迎使用 Claude Code Plus")
+                // 暂时不创建欢迎标签，让用户选择项目后再创建
+                // tabManager.createNewTab("欢迎使用 Claude Code Plus")
             }
         }
     }

@@ -22,7 +22,8 @@ import com.claudecodeplus.ui.models.ChatTab
 import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.models.AiModel
 import com.claudecodeplus.ui.services.ChatTabManager
-import com.claudecodeplus.sdk.ClaudeCliWrapper
+import com.claudecodeplus.ui.services.UnifiedSessionService
+import com.claudecodeplus.ui.services.UnifiedSessionServiceProvider
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
@@ -42,7 +43,7 @@ import androidx.compose.ui.draw.clip
 @Composable
 fun MultiTabChatView(
     tabManager: ChatTabManager,
-    cliWrapper: ClaudeCliWrapper,
+    unifiedSessionServiceProvider: UnifiedSessionServiceProvider,
     workingDirectory: String,
     fileIndexService: FileIndexService,
     projectService: ProjectService,
@@ -58,19 +59,42 @@ fun MultiTabChatView(
     
     // 直接显示当前标签的聊天内容，不显示标签栏
     Box(modifier = modifier) {
+        println("=== MultiTabChatView 调试信息 ===")
+        println("activeTabId: $activeTabId")
+        println("tabs.size: ${tabs.size}")
+        println("所有标签详情:")
+        tabs.forEachIndexed { index, tab ->
+            println("  [$index] id: ${tab.id}")
+            println("       title: '${tab.title}'")
+            println("       projectId: ${tab.projectId}")
+            println("       projectPath: ${tab.projectPath}")
+            println("       sessionId: ${tab.sessionId}")
+        }
+        
         activeTabId?.let { id ->
+            println("查找活动标签: $id")
             tabs.find { it.id == id }?.let { tab ->
+                println("找到标签: ${tab.title}")
+                println("tab.projectPath: ${tab.projectPath}")
+                println("tab.projectId: ${tab.projectId}")
+                println("tab.sessionId: ${tab.sessionId}")
+                
                 // 检查标签是否有有效的项目
                 if (tab.projectPath == null || tab.projectId == null) {
+                    println("标签没有项目信息，显示 NoProjectView")
                     // 没有项目时显示提示
                     NoProjectView()
                 } else {
+                    println("标签有项目信息，显示 ChatView")
                     // 使用 key 确保切换标签时重新创建 ChatView
                     key(tab.id) {
+                        // 根据当前标签的项目路径获取对应的 UnifiedSessionService
+                        val currentUnifiedSessionService = unifiedSessionServiceProvider.getServiceForProject(tab.projectPath)
+                        
                         Box(modifier = Modifier.fillMaxSize()) {
                             com.claudecodeplus.ui.jewel.ChatView(
-                                cliWrapper = cliWrapper,
-                                workingDirectory = tab.projectPath,
+                                unifiedSessionService = currentUnifiedSessionService,
+                                workingDirectory = tab.projectPath ?: workingDirectory, // 优先使用标签的项目路径，确保与UnifiedSessionService一致
                                 fileIndexService = fileIndexService,
                                 projectService = projectService,
                                 sessionManager = sessionManager,
@@ -105,12 +129,36 @@ fun MultiTabChatView(
                         }
                     }
                 }
+            } ?: run {
+                println("未找到活动标签")
             }
         } ?: run {
-            // 无标签时的空状态
-            EmptyTabsView(
-                onCreateTab = { tabManager.createNewTab() }
-            )
+            println("没有活动标签，显示 EmptyTabsView")
+            println("=== 强制显示聊天输入框测试 ===")
+            
+            // 临时：显示一个简单的测试界面
+            Column(
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "🧪 临时测试界面 🧪",
+                    style = JewelTheme.defaultTextStyle.copy(fontSize = JewelTheme.defaultTextStyle.fontSize * 1.5f)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("如果您看到这个界面，说明：")
+                Text("1. ✅ MultiTabChatView 组件正在渲染")
+                Text("2. ❌ 但没有活动标签 (activeTabId = null)")
+                Text("3. 🔧 需要修复标签创建和事件流程")
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                DefaultButton(
+                    onClick = { tabManager.createNewTab() }
+                ) {
+                    Text("创建测试标签")
+                }
+            }
         }
     }
     

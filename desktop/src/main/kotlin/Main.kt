@@ -26,9 +26,6 @@ import com.claudecodeplus.ui.components.SessionListPanel
 import com.claudecodeplus.ui.components.ProjectTabBar
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import com.claudecodeplus.ui.services.SessionHistoryService
-import com.claudecodeplus.ui.services.SessionLoader
-import com.claudecodeplus.ui.services.MessageProcessor
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.input.key.*
@@ -45,10 +42,12 @@ fun main() = application {
     // 初始化日志系统
     com.claudecodeplus.core.LogbackConfigurator.initialize()
     
-    val projectPath = System.getProperty("user.dir")
+    // 获取用户当前工作目录作为默认项目路径
+    // 注意：这是应用启动时的工作目录，通常是用户想要工作的项目目录
+    val defaultProjectPath = System.getProperty("user.dir")
     
     // 在组合前直接初始化服务
-    ServiceContainer.initialize(projectPath)
+    ServiceContainer.initialize(defaultProjectPath)
 
     Window(
         onCloseRequest = ::exitApplication,
@@ -59,7 +58,7 @@ fun main() = application {
         )
     ) {
         IntUiTheme {
-            EnhancedClaudeApp()
+            EnhancedClaudeApp(defaultProjectPath = defaultProjectPath)
         }
     }
 }
@@ -68,25 +67,21 @@ fun main() = application {
  * 增强版应用主组件
  */
 @Composable
-fun EnhancedClaudeApp() {
+fun EnhancedClaudeApp(defaultProjectPath: String) {
     // 从服务容器获取服务
-    val cliWrapper = ServiceContainer.cliWrapper
+    val unifiedSessionServiceProvider = ServiceContainer.unifiedSessionServiceProvider
     val sessionManager = ServiceContainer.sessionManager
     val projectManager = ServiceContainer.projectManager
     val tabManager = ServiceContainer.tabManager
     val exportService = ServiceContainer.exportService
     val fileIndexService = ServiceContainer.fileIndexService
     val projectService = ServiceContainer.projectService
-    val sessionObjectManager = remember { com.claudecodeplus.ui.services.SessionManager() }
     
     // UI 状态
     val uiState = remember { AppUiState() }
     val scope = rememberCoroutineScope()
+    val sessionObjectManager = remember { com.claudecodeplus.ui.services.SessionManager(scope, true) }
     
-    // 创建流式加载服务
-    val sessionHistoryService = remember { SessionHistoryService() }
-    val messageProcessor = remember { MessageProcessor() }
-    val sessionLoader = remember { SessionLoader(sessionHistoryService, messageProcessor) }
     
     // 在首次加载时，确保加载当前项目的会话
     LaunchedEffect(Unit) {
@@ -97,96 +92,40 @@ fun EnhancedClaudeApp() {
     
     // 监听会话加载事件
     LaunchedEffect(projectManager) {
+        println("=== 开始监听会话加载事件 ===")
         projectManager.sessionLoadEvent.collect { event ->
             println("收到会话加载事件: ${event.session.id} - ${event.session.name}")
-            // 加载会话历史
+            // 使用 UnifiedSessionService 加载会话历史
             val session = event.session
             val currentProject = projectManager.currentProject.value
-            if (currentProject != null) {
+            val sessionId = session.id
+            if (currentProject != null && sessionId != null) {
                 try {
-                    println("开始加载会话消息: sessionId=${session.id}, projectPath=${currentProject.path}")
+                    println("使用 UnifiedSessionService 加载会话: sessionId=${sessionId}, projectPath=${currentProject.path}")
                     
-                    // 尝试获取会话文件
-                    println("查找会话文件，项目路径: ${currentProject.path}")
-                    val sessionFiles = sessionHistoryService.getSessionFiles(currentProject.path)
-                    println("找到 ${sessionFiles.size} 个会话文件")
-                    sessionFiles.forEach { 
-                        println("  - ${it.name} (${it.size} bytes)")
-                    }
+                    // 使用新的统一会话服务加载历史消息（传递正确的项目路径）
+                    val unifiedSessionService = unifiedSessionServiceProvider.getServiceForProject(currentProject.path)
+                    val historicalMessages = unifiedSessionService.loadHistoricalSession(sessionId, currentProject.path)
                     
-                    val sessionFile = session.id?.let { id ->
-                        sessionFiles.find { it.name.startsWith(id) }?.file
-                    }
+                    println("加载了 ${historicalMessages.size} 条历史消息")
                     
-                    if (sessionFile != null) {
-                        println("使用流式加载会话文件: ${sessionFile.name}")
+                    if (historicalMessages.isNotEmpty()) {
+                        println("准备创建标签，传递的 session 对象:")
+                        println("  - session.id: ${session.id}")
+                        println("  - session.name: '${session.name}'")
+                        println("  - session.projectId: ${session.projectId}")
+                        println("  - historicalMessages.size: ${historicalMessages.size}")
                         
-                        // 收集所有消息
-                        val allMessages = mutableListOf<EnhancedMessage>()
-                        
-                        // 使用新的流式加载
-                        sessionLoader.loadSessionAsMessageFlow(sessionFile, maxMessages = 50)
-                            .collect { result ->
-                                when (result) {
-                                    is SessionLoader.LoadResult.MessageCompleted -> {
-                                        allMessages.add(result.message)
-                                        println("加载消息: ${result.message.role} - ${result.message.content.take(50)}...")
-                                        
-                                        // 如果是助手消息，打印工具调用信息
-                                        if (result.message.toolCalls.isNotEmpty()) {
-                                            println("  工具调用: ${result.message.toolCalls.map { it.name }}")
-                                        }
-                                    }
-                                    is SessionLoader.LoadResult.LoadComplete -> {
-                                        println("历史会话加载完成，共 ${result.messages.size} 条消息")
-                                    }
-                                    is SessionLoader.LoadResult.Error -> {
-                                        println("加载历史会话出错: ${result.error}")
-                                    }
-                                    else -> {}
-                                }
-                            }
-                        
-                        println("加载了 ${allMessages.size} 条消息")
-                        println("DEBUG: 传递的会话对象 - ID: ${session.id}, Name: '${session.name}', ProjectId: ${session.projectId}")
-                        
-                        // 创建或切换到该会话的标签
-                        if (allMessages.isNotEmpty()) {
-                            println("准备创建标签，传递的 session 对象:")
-                            println("  - session.id: ${session.id}")
-                            println("  - session.name: '${session.name}'")
-                            println("  - session.projectId: ${session.projectId}")
-                            println("  - allMessages.size: ${allMessages.size}")
-                            
-                            val tabId = tabManager.createOrSwitchToSessionTab(session, allMessages, currentProject)
-                            println("创建或切换到标签: $tabId")
-                        } else {
-                            println("会话没有消息")
-                        }
+                        val tabId = tabManager.createOrSwitchToSessionTab(session, historicalMessages, currentProject)
+                        println("创建或切换到标签: $tabId")
                     } else {
-                        println("未找到会话文件，使用原方法加载")
-                        // 使用原方法作为后备（仅当session.id不为null时）
-                        val sessionId = session.id
-                        if (sessionId != null) {
-                            val sessionMessages = sessionManager.readSessionMessagesFlow(
-                                sessionId = sessionId,
-                                projectPath = currentProject.path,
-                                pageSize = 50
-                            )
-                        
-                            val allMessages = mutableListOf<EnhancedMessage>()
-                            sessionMessages.collect { messages ->
-                                allMessages.addAll(messages)
-                            }
-                            
-                            if (allMessages.isNotEmpty()) {
-                                val tabId = tabManager.createOrSwitchToSessionTab(session, allMessages, currentProject)
-                                println("创建或切换到标签: $tabId")
-                            }
-                        }
+                        println("会话没有消息")
+                        // 仍然创建标签，但消息为空
+                        val tabId = tabManager.createOrSwitchToSessionTab(session, emptyList(), currentProject)
+                        println("创建空会话标签: $tabId")
                     }
                 } catch (e: Exception) {
-                    println("加载会话历史失败: ${e.message}")
+                    println("使用 UnifiedSessionService 加载会话历史失败: ${e.message}")
                     e.printStackTrace()
                 }
             }
@@ -233,7 +172,10 @@ fun EnhancedClaudeApp() {
                     event.type == KeyEventType.KeyDown && 
                     event.key == Key.T && 
                     event.isCtrlPressed -> {
-                        tabManager.createNewTab()
+                        tabManager.createNewTab(
+                            title = "新对话",
+                            project = currentProject
+                        )
                         true
                     }
                     // Ctrl+W: 关闭当前标签
@@ -333,7 +275,13 @@ fun EnhancedClaudeApp() {
         Column {
             // 顶部工具栏
             AppToolbar(
-                onNewTab = { tabManager.createNewTab() },
+                onNewTab = { 
+                    // 创建新标签时传递当前项目信息
+                    tabManager.createNewTab(
+                        title = "新对话",
+                        project = currentProject
+                    )
+                },
                 onOrganize = { uiState.isOrganizerVisible = true },
                 onSearch = { uiState.isSearchVisible = true },
                 onTemplates = { uiState.isTemplatesVisible = true },
@@ -425,7 +373,7 @@ fun EnhancedClaudeApp() {
                                     project = project
                                 )
                                 // 设置为当前会话
-                                projectManager.setCurrentSession(newSession, loadHistory = false)
+                                projectManager.setCurrentSession(newSession, loadHistory = true)
                             }
                         },
                         modifier = Modifier
@@ -458,11 +406,67 @@ fun EnhancedClaudeApp() {
                     Divider(orientation = Orientation.Vertical)
                 }
 
-                // 主聊天区域
+                // 调试信息和项目选择
+                LaunchedEffect(currentProject) {
+                    println("=== 当前项目调试信息 ===")
+                    println("currentProject: ${currentProject?.name} (${currentProject?.path})")
+                    println("defaultProjectPath: $defaultProjectPath")
+                    println("workingDirectory 将设置为: ${currentProject?.path ?: defaultProjectPath}")
+                    println("========================")
+                }
+                
+                // 右侧主要内容区域：直接显示聊天区域
                 MultiTabChatView(
                     tabManager = tabManager,
-                    cliWrapper = cliWrapper,
-                    workingDirectory = currentProject?.path ?: ServiceContainer.projectService.getProjectPath(),
+                    unifiedSessionServiceProvider = unifiedSessionServiceProvider,
+                    workingDirectory = run {
+                        // 基于会话的 cwd 确定工作目录（最直接的方式）
+                        val activeTab = tabManager.tabs.find { it.id == tabManager.activeTabId }
+                        val sessionId = activeTab?.sessionId
+                        
+                        // 通过会话ID查找会话的 cwd
+                        val sessionCwd = if (sessionId != null && currentProject != null) {
+                            val projectSessions = projectManager.sessions.value[currentProject?.id]
+                            val session = projectSessions?.find { it.id == sessionId }
+                            session?.cwd
+                        } else null
+                        
+                        val workingDir = when {
+                            // 方式1：直接使用会话的 cwd（最准确）
+                            !sessionCwd.isNullOrBlank() -> {
+                                println("=== 工作目录确定 ===")
+                                println("使用会话的 cwd: $sessionCwd")
+                                println("标签ID: ${activeTab?.id}")
+                                println("会话ID: $sessionId")
+                                println("==================")
+                                sessionCwd
+                            }
+                            // 方式2：fallback 到标签的项目路径
+                            !activeTab?.projectPath.isNullOrBlank() -> {
+                                println("=== 工作目录确定 ===")
+                                println("会话无 cwd，使用活动标签的项目路径: ${activeTab?.projectPath}")
+                                println("标签ID: ${activeTab?.id}")
+                                println("会话ID: $sessionId")
+                                println("==================")
+                                activeTab?.projectPath!!
+                            }
+                            // 方式3：fallback 到当前项目路径
+                            currentProject?.path != null -> {
+                                println("=== 工作目录确定 ===")
+                                println("使用当前项目路径: ${currentProject?.path}")
+                                println("==================")
+                                currentProject?.path!!
+                            }
+                            // 方式4：最后 fallback 到默认路径
+                            else -> {
+                                println("=== 工作目录确定 ===")
+                                println("使用默认项目路径: $defaultProjectPath")
+                                println("==================")
+                                defaultProjectPath
+                            }
+                        }
+                        workingDir
+                    },
                     fileIndexService = fileIndexService,
                     projectService = projectService,
                     sessionManager = sessionManager,
