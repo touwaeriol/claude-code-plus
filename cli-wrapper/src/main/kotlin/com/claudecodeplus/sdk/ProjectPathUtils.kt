@@ -16,10 +16,13 @@ object ProjectPathUtils {
      * Claude CLI 的命名规则：
      * 1. Windows 盘符冒号移除，盘符后加 -
      * 2. 将路径分隔符替换为 -
-     * 3. 保留开头的 - (Unix 路径)
+     * 3. 将点号 (.) 替换为 -
+     * 4. 将下划线 (_) 替换为 -
+     * 5. 保留开头的 - (Unix 路径)
      * 
      * 例如：
      * - /home/erio/codes/claude-code-plus → -home-erio-codes-claude-code-plus
+     * - /Users/erio/.claude-code-router → -Users-erio--claude-code-router
      * - C:\Users\user\project → C--Users-user-project
      * 
      * @param projectPath 项目的绝对路径
@@ -32,7 +35,9 @@ object ProjectPathUtils {
         // Claude CLI 的实际编码规则：
         // 1. 先移除 Windows 盘符冒号
         // 2. 将所有路径分隔符替换为 -
-        // 3. Windows 路径会在盘符后产生双横线（例如 C:\Users → C--Users）
+        // 3. 将点号替换为 -
+        // 4. 将下划线替换为 -
+        // 5. Windows 路径会在盘符后产生双横线（例如 C:\Users → C--Users）
         var dirName = normalizedPath
         
         // 处理 Windows 盘符（例如 "C:" → "C-"）
@@ -40,10 +45,12 @@ object ProjectPathUtils {
             dirName = dirName[0] + "-" + dirName.substring(2)
         }
         
-        // 替换路径分隔符
+        // 替换路径分隔符、点号和下划线
         dirName = dirName
             .replace('\\', '-')  // Windows 路径分隔符
             .replace('/', '-')   // Unix 路径分隔符
+            .replace('.', '-')   // 点号
+            .replace('_', '-')   // 下划线
         
         // Claude CLI 保留开头的 -，只移除结尾的 -
         return dirName.trimEnd('-')

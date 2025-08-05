@@ -101,8 +101,10 @@ class ChatTabManager {
         
         println("  - 最终标签标题: '$tabTitle'")
         
-        // 为新会话预先生成 sessionId（如果没有提供的话）
+        // 使用提供的 sessionId，如果没有提供则生成新的（主要用于兼容性）
         val finalSessionId = sessionId ?: UUID.randomUUID().toString()
+        
+        println("  - 使用的 sessionId: $finalSessionId (是否由外部提供: ${sessionId != null})")
         
         val newTab = ChatTab(
             title = tabTitle,
@@ -145,10 +147,8 @@ class ChatTabManager {
         messages: List<EnhancedMessage>,
         project: com.claudecodeplus.ui.models.Project? = null
     ): String {
-        // 查找是否已有该会话的标签（仅当session.id不为null时）
-        val existingTab = session.id?.let { id ->
-            _tabs.find { it.sessionId == id }
-        }
+        // 查找是否已有该会话的标签
+        val existingTab = _tabs.find { it.sessionId == session.id }
         
         if (existingTab != null) {
             // 如果标签已存在，更新消息并切换到该标签

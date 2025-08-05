@@ -22,9 +22,9 @@ class ProjectPathUtilsTest {
                 ProjectPathUtils.projectPathToDirectoryName("C:\\Users\\user\\project")
             )
         } else {
-            // 在非Windows系统上，normalize可能保留冒号，导致结果是 C-Users-user-project
+            // 在非Windows系统上，normalize可能保留冒号，但点号会被替换为-，导致结果是 C--Users-user-project
             assertEquals(
-                "C-Users-user-project",
+                "C--Users-user-project",
                 ProjectPathUtils.projectPathToDirectoryName("C:\\Users\\user\\project")
             )
         }
@@ -33,6 +33,18 @@ class ProjectPathUtilsTest {
         assertEquals(
             "-home-erio-codes-claude-code-plus",
             ProjectPathUtils.projectPathToDirectoryName("/home/erio/codes/claude-code-plus")
+        )
+        
+        // 测试包含点号的路径
+        assertEquals(
+            "-Users-erio--claude-code-router",
+            ProjectPathUtils.projectPathToDirectoryName("/Users/erio/.claude-code-router")
+        )
+        
+        // 测试包含下划线的路径
+        assertEquals(
+            "-Users-erio-codes-webstorm-analysis-claude-code",
+            ProjectPathUtils.projectPathToDirectoryName("/Users/erio/codes/webstorm/analysis_claude_code")
         )
         
         // 混合路径
