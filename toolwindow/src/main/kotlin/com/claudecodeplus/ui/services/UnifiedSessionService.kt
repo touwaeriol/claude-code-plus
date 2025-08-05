@@ -60,7 +60,7 @@ class UnifiedSessionService(
                     options.copy(cwd = workingDirectory, resume = sessionId, sessionId = null)
                 } else {
                     // 会话不存在，使用sessionId创建新会话
-                    options.copy(cwd = workingDirectory)
+                    options.copy(cwd = workingDirectory, sessionId = sessionId)
                 }
             }
             else -> {

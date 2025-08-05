@@ -76,15 +76,10 @@ class UnifiedSessionAPI(
         // 确保项目正在被监听
         startProject(projectPath)
         
-        // 启用实时更新（先清理旧的）
-        sessionLoader.disableRealtimeUpdates(sessionId, projectPath)
-        
         return flow {
             // 1. 首先发送当前所有历史消息
             val historical = loadHistoricalSession(sessionId, projectPath)
-            if (historical.isNotEmpty()) {
-                emit(historical)
-            }
+            emit(historical) // 即使为空也要发送，这样UI就有初始状态
             
             // 2. 然后订阅实时更新
             fileWatchService.subscribeToSession(sessionId).collect { newMessages ->

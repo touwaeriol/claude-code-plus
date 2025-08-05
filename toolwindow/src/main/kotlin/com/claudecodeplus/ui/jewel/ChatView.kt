@@ -17,9 +17,8 @@ import com.claudecodeplus.ui.services.SessionManager
 import java.time.Instant
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.flowOn
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -157,30 +156,38 @@ fun ChatView(
         }
     }
     
-    // 文件监听：只在有 sessionId 且存在会话文件时启动
-    LaunchedEffect(sessionObject.sessionId, fileWatchTrigger) {
-        val currentSessionId = sessionObject.sessionId
+    // 文件监听：使用稳定的 key 避免重复取消和重启
+    val stableSessionId = remember(sessionObject.sessionId) { 
+        println("[ChatView] remember 计算 stableSessionId: sessionObject.sessionId=${sessionObject.sessionId}")
+        sessionObject.sessionId 
+    }
+    
+    println("[ChatView] 每次重组检查: sessionObject.sessionId=${sessionObject.sessionId}, stableSessionId=$stableSessionId")
+    
+    // 使用 LaunchedEffect 但配合 rememberCoroutineScope 确保稳定性
+    val fileWatchScope = rememberCoroutineScope()
+    
+    LaunchedEffect(stableSessionId, fileWatchScope) {
+        println("[ChatView] LaunchedEffect 触发 - stableSessionId: $stableSessionId")
         
-        if (currentSessionId != null && currentSessionId.isNotEmpty()) {
-            // 检查会话文件是否存在
-            if (unifiedSessionService.sessionExists(currentSessionId)) {
-                println("[ChatView] 会话文件存在，开始订阅文件监听: $currentSessionId")
-                
-                try {
-                    // 订阅实时更新 - 这会自动加载初始消息并监听后续更新
-                    unifiedSessionService.subscribeToSession(currentSessionId)
-                        .collect { updatedMessages ->
-                            // 更新消息列表
-                            sessionObject.messages = updatedMessages
-                            println("[ChatView] 收到实时消息更新，消息数: ${updatedMessages.size}")
-                        }
-                } catch (e: Exception) {
-                    println("[ChatView] 文件监听订阅失败: ${e.message}")
-                    e.printStackTrace()
-                }
-            } else {
-                println("[ChatView] 会话文件不存在，跳过文件监听: $currentSessionId")
+        if (stableSessionId != null && stableSessionId.isNotEmpty()) {
+            println("[ChatView] 开始订阅文件监听: $stableSessionId (文件存在: ${unifiedSessionService.sessionExists(stableSessionId)})")
+            
+            try {
+                // 直接在当前协程作用域中订阅，利用 LaunchedEffect 的自动取消机制
+                unifiedSessionService.subscribeToSession(stableSessionId)
+                    .collect { updatedMessages ->
+                        sessionObject.messages = updatedMessages
+                        println("[ChatView] 收到实时消息更新，消息数: ${updatedMessages.size}")
+                    }
+            } catch (e: CancellationException) {
+                println("[ChatView] 文件监听订阅被正常取消: $stableSessionId")
+            } catch (e: Exception) {
+                println("[ChatView] 文件监听订阅失败: ${e.message}")
+                e.printStackTrace()
             }
+        } else {
+            println("[ChatView] sessionId 为空或无效，跳过文件监听: '$stableSessionId'")
         }
     }
     
@@ -586,14 +593,7 @@ fun ChatView(
                                         sessionObject.updateSessionId(resultSessionId)
                                     }
                                     
-                                    // 等待文件写入后触发文件监听
-                                    if (result.sessionId != null) {
-                                        coroutineScope.launch {
-                                            kotlinx.coroutines.delay(200) // 等待文件写入
-                                            // 触发文件监听检查
-                                            fileWatchTrigger = System.currentTimeMillis()
-                                        }
-                                    }
+                                    // 文件监听现在通过目录监听自动处理，无需手动重试
                                 } else {
                                     // 命令执行失败
                                     val errorMessage = EnhancedMessage(
