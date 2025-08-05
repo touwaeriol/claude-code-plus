@@ -143,17 +143,32 @@ data class McpConfig(
 
 // UI层使用的简化模型
 
+/**
+ * 项目数据模型
+ * 
+ * 重要说明：
+ * - id: Claude 项目目录名（如 "-Users-erio-codes-webstorm-analysis-claude-code"），
+ *       对应 ~/.claude/projects/ 下的实际目录名，是项目的唯一标识符
+ * - path: 项目的实际文件系统路径（如 "/Users/erio/codes/webstorm/analysis_claude_code"），
+ *       用于显示和文件操作
+ * - name: 项目显示名称，通常是路径的最后一段目录名
+ * 
+ * 设计理念：
+ * - 项目ID以 Claude CLI 的目录结构为准，确保会话文件能正确定位
+ * - 项目路径保持原始路径，便于用户理解和文件操作
+ * - 两者分离设计，避免路径转换的复杂性和错误
+ */
 data class Project(
-    val id: String, // 通常是项目路径
-    val path: String,
+    val id: String, // Claude 项目目录名（经过路径编码后的名称）
+    val path: String, // 项目的实际文件系统路径
     val name: String = path.substringAfterLast("/")
 )
 
 data class ProjectSession(
-    val id: String?, // 会话ID，新建会话时为null，发送第一条消息后由Claude CLI返回真实ID
+    val id: String, // 会话ID，现在在创建时就直接生成UUID
     val projectId: String,
     val name: String,
     val createdAt: String,
     val lastModified: Long = System.currentTimeMillis(), // 最后修改时间（毫秒时间戳）
-    val cwd: String? = null // 会话的工作目录，从会话文件中解析得到
+    val cwd: String // 会话的工作目录，从会话文件中解析得到，现在为必需字段
 )

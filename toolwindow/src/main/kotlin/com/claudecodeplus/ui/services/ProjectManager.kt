@@ -48,7 +48,9 @@ data class SessionLoadEvent(val session: ProjectSession)
  * - 解析 JSONL 格式的会话文件
  * - 保持与 CLI 的目录结构一致
  */
-class ProjectManager {
+class ProjectManager(
+    private val autoLoad: Boolean = true // 是否自动加载项目，false时需要手动选择
+) {
     private val _projects = MutableStateFlow<List<Project>>(emptyList())
     val projects = _projects.asStateFlow()
 
@@ -68,7 +70,12 @@ class ProjectManager {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     init {
-        loadProjectsFromDisk()
+        if (autoLoad) {
+            loadProjectsFromDisk()
+        } else {
+            // 手动模式下，只加载项目列表，不自动选择项目和会话
+            loadAvailableProjects()
+        }
     }
     
     /**
@@ -159,6 +166,47 @@ class ProjectManager {
             println("未找到任何会话")
         }
     }
+    
+    /**
+     * 从本地配置文件加载项目列表
+     * 用于手动选择模式
+     */
+    private fun loadAvailableProjects() {
+        scope.launch {
+            try {
+                println("从本地配置文件加载项目列表...")
+                val localConfigManager = com.claudecodeplus.ui.models.LocalConfigManager()
+                val localProjects = localConfigManager.getAllProjects()
+                
+                println("从本地配置加载到 ${localProjects.size} 个项目")
+                
+                val loadedProjects = localProjects.map { localProject ->
+                    Project(
+                        id = localProject.id,
+                        name = localProject.name,
+                        path = localProject.path
+                    )
+                }
+                
+                _projects.value = loadedProjects
+                
+                if (loadedProjects.isNotEmpty()) {
+                    println("项目列表加载完成:")
+                    loadedProjects.forEach { project ->
+                        println("  - ${project.name} (${project.path})")
+                    }
+                } else {
+                    println("本地配置中没有项目，显示空项目列表")
+                }
+                
+                println("等待用户手动选择项目")
+            } catch (e: Exception) {
+                println("从本地配置加载项目失败: ${e.message}")
+                e.printStackTrace()
+                _projects.value = emptyList()
+            }
+        }
+    }
 
     private fun loadProjectsFromDisk() {
         scope.launch {
@@ -169,26 +217,25 @@ class ProjectManager {
             if (claudeProjectsDir.exists() && claudeProjectsDir.isDirectory) {
                 try {
                     val projectDirs = claudeProjectsDir.listFiles { file -> file.isDirectory } ?: emptyArray()
-                    println("找到 ${projectDirs.size} 个目录")
+                    println("找到 ${projectDirs.size} 个Claude项目目录")
                     
                     val loadedProjects = mutableListOf<Project>()
                     
-                    // 遍历每个目录，查找包含会话文件的项目
+                    // 遍历每个 Claude 项目目录
                     for (projectDir in projectDirs) {
                         val sessionFiles = projectDir.listFiles { file -> file.name.endsWith(".jsonl") } ?: emptyArray()
+                        val projectDirectoryName = projectDir.name
                         
                         if (sessionFiles.isNotEmpty()) {
-                            println("在 ${projectDir.name} 中找到 ${sessionFiles.size} 个会话文件")
+                            println("处理项目目录: $projectDirectoryName (${sessionFiles.size} 个会话文件)")
                             
-                            // 从会话文件中提取 cwd
-                            var projectPath: String? = null
+                            // 从会话文件中提取真实的项目路径 (cwd)
+                            var realProjectPath: String? = null
                             
-                            // 遍历会话文件，查找 cwd
-                            var foundCwd = false
+                            // 尝试从会话文件中获取 cwd
                             for (sessionFile in sessionFiles) {
-                                if (foundCwd) break
-                                
                                 try {
+                                    var found = false
                                     sessionFile.forEachLine { line ->
                                         if (line.isBlank()) return@forEachLine
                                         
@@ -197,35 +244,38 @@ class ProjectManager {
                                             val cwd = jsonObject["cwd"]?.jsonPrimitive?.content
                                             
                                             if (cwd != null) {
-                                                projectPath = cwd
-                                                println("从 ${sessionFile.name} 中找到 cwd: $cwd")
-                                                foundCwd = true
-                                                return@forEachLine
+                                                realProjectPath = cwd
+                                                println("  从 ${sessionFile.name} 中提取到项目路径: $cwd")
+                                                found = true
+                                                return@forEachLine // 找到就退出当前文件的循环
                                             }
                                         } catch (e: Exception) {
                                             // 忽略解析错误的行
                                         }
                                     }
+                                    if (found) break // 找到项目路径后退出文件循环
                                 } catch (e: Exception) {
-                                    println("读取会话文件失败: ${sessionFile.name}, 错误: ${e.message}")
+                                    println("  读取会话文件失败: ${sessionFile.name}, 错误: ${e.message}")
                                 }
                             }
                             
-                            // 如果找到了项目路径，创建项目对象
-                            val foundProjectPath = projectPath
-                            if (foundProjectPath != null) {
-                                // 更智能的项目名称提取
-                                val projectName = extractProjectName(foundProjectPath)
-                                val project = Project(
-                                    id = foundProjectPath,
-                                    path = foundProjectPath,
-                                    name = projectName
-                                )
-                                loadedProjects.add(project)
-                                println("添加项目: ${project.name} (${project.path})")
-                            } else {
-                                println("警告：${projectDir.name} 中的会话文件没有包含 cwd 信息")
-                            }
+                            // 创建项目对象
+                            // 重要：使用目录名作为项目ID，实际路径作为项目path
+                            val projectPath = realProjectPath ?: "未知路径"
+                            val projectName = extractProjectName(projectPath)
+                            
+                            val project = Project(
+                                id = projectDirectoryName, // 使用 Claude 目录名作为项目ID
+                                path = projectPath,         // 使用真实文件系统路径
+                                name = projectName
+                            )
+                            
+                            loadedProjects.add(project)
+                            println("  添加项目: ${project.name}")
+                            println("    - 项目ID: ${project.id}")
+                            println("    - 项目路径: ${project.path}")
+                        } else {
+                            println("跳过空目录: $projectDirectoryName")
                         }
                     }
                     
@@ -237,8 +287,8 @@ class ProjectManager {
                         println("当前工作目录: $currentDir")
                         
                         val currentProject = loadedProjects.find { project ->
-                            val normalizedProjectPath = project.path.replace('/', '\\')
-                            val normalizedCurrentDir = currentDir.replace('/', '\\')
+                            val normalizedProjectPath = project.path.replace('\\', '/')
+                            val normalizedCurrentDir = currentDir.replace('\\', '/')
                             normalizedProjectPath.equals(normalizedCurrentDir, ignoreCase = true)
                         } ?: loadedProjects.firstOrNull()
                         
@@ -250,7 +300,7 @@ class ProjectManager {
                         
                         _currentProject.value = currentProject
                         
-                        // 加载所有项目的会话
+                        // 加载所有项目的会话（现在使用项目ID，不需要路径转换）
                         println("开始加载所有项目的会话...")
                         loadedProjects.forEach { project ->
                             loadSessionsForProject(project.id)
@@ -261,7 +311,6 @@ class ProjectManager {
                         findAndSelectLatestSession()
                     } else {
                         println("没有找到有效的项目")
-                        // 不自动创建默认项目，等待用户手动创建
                         _projects.value = emptyList()
                         _currentProject.value = null
                     }
@@ -279,11 +328,6 @@ class ProjectManager {
         }
     }
 
-    
-    private fun encodePathToDirectoryName(path: String): String {
-        // 使用统一的路径编码方法，与OptimizedSessionManager保持一致
-        return com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(path)
-    }
 
 
     fun loadSessionsForProject(projectId: String, forceReload: Boolean = false) {
@@ -295,27 +339,15 @@ class ProjectManager {
         scope.launch {
             try {
                 println("开始加载项目会话: $projectId")
-                val encodedProjectId = encodePathToDirectoryName(projectId)
-                println("编码后的项目ID: $encodedProjectId")
                 
-                // 尝试多种路径格式
+                // 简化后的逻辑：projectId 就是 Claude 目录名，直接使用
                 val basePath = File(System.getProperty("user.home"), ".claude/projects")
-                val possibleDirs = listOf(
-                    File(basePath, encodedProjectId),
-                    File(basePath, projectId.replace(":", "").replace("/", "-").replace("\\", "-"))
-                )
+                val sessionsDir = File(basePath, projectId)
                 
-                var sessionsDir: File? = null
-                for (dir in possibleDirs) {
-                    println("尝试会话目录: ${dir.absolutePath}")
-                    if (dir.exists() && dir.isDirectory) {
-                        sessionsDir = dir
-                        println("找到会话目录: ${dir.absolutePath}")
-                        break
-                    }
-                }
+                println("会话目录: ${sessionsDir.absolutePath}")
+                println("目录是否存在: ${sessionsDir.exists()}")
 
-                if (sessionsDir != null && sessionsDir.exists() && sessionsDir.isDirectory) {
+                if (sessionsDir.exists() && sessionsDir.isDirectory) {
                     val sessionFiles = sessionsDir.listFiles { _, name -> name.endsWith(".jsonl") } ?: emptyArray()
                     println("找到 ${sessionFiles.size} 个会话文件")
                     
@@ -391,6 +423,12 @@ class ProjectManager {
                             // 提取会话的工作目录
                             val sessionCwd = extractCwdFromSessionFile(lines)
                             println("DEBUG: 从会话文件中提取的 cwd: '$sessionCwd'")
+                            
+                            // 如果无法提取到有效的 cwd，跳过这个会话文件
+                            if (sessionCwd.isNullOrBlank()) {
+                                println("警告: 会话文件 ${file.name} 无法提取有效的工作目录，已跳过")
+                                return@mapNotNull null
+                            }
                             
                             val session = ProjectSession(
                                 id = sessionId,
@@ -630,11 +668,10 @@ class ProjectManager {
                         if (numberValue != null && numberValue in 50..10000) {
                             println("  - 发现纯数字会话名称: '${session.name}' (ID: ${session.id})")
                             
-                            // 生成存储路径
-                            val encodedProjectId = encodePathToDirectoryName(projectId)
+                            // 生成存储路径（projectId 现在就是目录名）
                             val basePath = File(System.getProperty("user.home"), ".claude/projects")
                             val sessionFile = session.id?.let { id ->
-                                File(basePath, "$encodedProjectId/${id}.jsonl")
+                                File(basePath, "$projectId/${id}.jsonl")
                             }
                             
                             if (sessionFile != null && sessionFile.exists()) {
@@ -699,8 +736,12 @@ class ProjectManager {
             val currentDir = System.getProperty("user.dir")
             println("加载当前工作目录项目: $currentDir")
             
-            // 清除缓存以强制重新加载
-            _sessions.value = _sessions.value.filterKeys { it != currentDir }.toMap()
+            // 生成对应的项目ID
+            val currentDirProjectId = com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(currentDir)
+            println("对应的项目ID: $currentDirProjectId")
+            
+            // 清除缓存以强制重新加载（使用项目ID作为键）
+            _sessions.value = _sessions.value.filterKeys { it != currentDirProjectId }.toMap()
             
             // 检查是否已经有这个项目
             val existingProject = _projects.value.find { project ->
@@ -717,8 +758,8 @@ class ProjectManager {
                 // 从路径中提取项目名称
                 val projectName = extractProjectName(currentDir)
                 val newProject = Project(
-                    id = currentDir, 
-                    path = currentDir,
+                    id = currentDirProjectId,  // 使用编码后的目录名作为ID
+                    path = currentDir,         // 使用原始路径
                     name = projectName
                 )
                 _projects.value = _projects.value + newProject
@@ -733,10 +774,9 @@ class ProjectManager {
     suspend fun deleteProject(project: Project) {
         println("删除项目: ${project.name}")
         
-        // 1. 删除项目的会话目录
-        val encodedProjectId = encodePathToDirectoryName(project.id)
+        // 1. 删除项目的会话目录（project.id 现在就是目录名）
         val basePath = File(System.getProperty("user.home"), ".claude/projects")
-        val projectDir = File(basePath, encodedProjectId)
+        val projectDir = File(basePath, project.id)
         
         if (projectDir.exists() && projectDir.isDirectory) {
             println("删除会话目录: ${projectDir.absolutePath}")
@@ -767,10 +807,9 @@ class ProjectManager {
     suspend fun deleteSession(session: ProjectSession, project: Project) {
         println("删除会话: ${session.name}")
         
-        // 1. 删除会话文件
-        val encodedProjectId = encodePathToDirectoryName(project.path)
+        // 1. 删除会话文件（使用 project.id 作为目录名）
         val basePath = File(System.getProperty("user.home"), ".claude/projects")
-        val sessionsDir = File(basePath, encodedProjectId)
+        val sessionsDir = File(basePath, project.id)
         val sessionFileToDelete = session.id?.let { id ->
             File(sessionsDir, "${id}.jsonl")
         }
@@ -813,10 +852,14 @@ class ProjectManager {
     suspend fun createProject(name: String, path: String): Project {
         println("创建新项目: $name at $path")
         
+        // 生成 Claude 目录名（项目ID）
+        val projectId = com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(path)
+        println("生成的项目ID（目录名）: $projectId")
+        
         // 创建项目对象
         val newProject = Project(
-            id = path,
-            path = path,
+            id = projectId,  // 使用编码后的目录名作为ID
+            path = path,     // 使用原始路径
             name = name
         )
         
@@ -841,15 +884,150 @@ class ProjectManager {
         // 设置为当前项目
         setCurrentProject(newProject)
         
-        // 初始化空的会话列表
+        // 初始化空的会话列表（使用项目ID作为键）
         val newSessionsMap = _sessions.value.toMutableMap()
-        newSessionsMap[path] = emptyList()
+        newSessionsMap[projectId] = emptyList()
         _sessions.value = newSessionsMap
         
         // 可选：更新 .claude.json（目前不实现）
         // updateClaudeConfig(newProject, remove = false)
         
         return newProject
+    }
+    
+    /**
+     * 手动选择项目（用于手动选择模式）
+     * @param projectId 项目ID
+     * @param loadSessions 是否加载该项目的历史会话，false时只显示新建会话选项
+     */
+    fun selectProject(projectId: String, loadSessions: Boolean = false) {
+        scope.launch {
+            val project = _projects.value.find { it.id == projectId }
+            if (project == null) {
+                println("项目不存在: $projectId")
+                return@launch
+            }
+            
+            println("手动选择项目: ${project.name} (loadSessions: $loadSessions)")
+            _currentProject.value = project
+            
+            if (loadSessions) {
+                // 从本地配置加载历史会话
+                loadSessionsFromLocalConfig(projectId)
+                
+                // 等待会话加载完成后选择最新会话
+                kotlinx.coroutines.delay(200)
+                val projectSessions = _sessions.value[projectId] ?: emptyList()
+                val latestSession = projectSessions.firstOrNull()
+                
+                if (latestSession != null) {
+                    setCurrentSession(latestSession, loadHistory = true)
+                }
+            } else {
+                // 不加载历史会话，清空当前会话列表，只提供新建会话的选项
+                val newSessionsMap = _sessions.value.toMutableMap()
+                newSessionsMap[projectId] = emptyList()
+                _sessions.value = newSessionsMap
+                
+                _currentSession.value = null
+                println("项目已选择，未加载历史会话，仅提供新建会话选项")
+            }
+        }
+    }
+    
+    /**
+     * 从本地配置加载项目的会话列表
+     */
+    private suspend fun loadSessionsFromLocalConfig(projectId: String) {
+        try {
+            println("从本地配置加载项目会话: $projectId")
+            val localConfigManager = com.claudecodeplus.ui.models.LocalConfigManager()
+            val localSessions = localConfigManager.getProjectSessions(projectId)
+            
+            println("从本地配置加载到 ${localSessions.size} 个会话")
+            
+            val loadedSessions = localSessions.map { localSession ->
+                ProjectSession(
+                    id = localSession.id,
+                    projectId = projectId,
+                    name = localSession.name,
+                    createdAt = localSession.createdAt,
+                    lastModified = localSession.lastAccessedAt?.let { 
+                        try {
+                            java.time.Instant.parse(it).toEpochMilli()
+                        } catch (e: Exception) {
+                            System.currentTimeMillis()
+                        }
+                    } ?: System.currentTimeMillis(),
+                    cwd = _projects.value.find { it.id == projectId }?.path ?: ""
+                )
+            }.sortedByDescending { it.lastModified }
+            
+            val newSessionsMap = _sessions.value.toMutableMap()
+            newSessionsMap[projectId] = loadedSessions
+            _sessions.value = newSessionsMap
+            
+            if (loadedSessions.isNotEmpty()) {
+                println("成功加载 ${loadedSessions.size} 个会话:")
+                loadedSessions.forEach { session ->
+                    println("  - ${session.name} (${session.id})")
+                }
+            } else {
+                println("该项目没有历史会话")
+            }
+        } catch (e: Exception) {
+            println("从本地配置加载会话失败: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+    
+    /**
+     * 手动选择项目并允许浏览文件夹
+     * @param projectPath 项目路径
+     */
+    fun selectProjectByPath(projectPath: String) {
+        scope.launch {
+            // 检查是否已存在该项目
+            val existingProject = _projects.value.find { it.path == projectPath }
+            if (existingProject != null) {
+                selectProject(existingProject.id, loadSessions = false)
+                return@launch
+            }
+            
+            // 创建新项目并添加到本地配置
+            val projectName = projectPath.substringAfterLast("/")
+            println("创建新项目: $projectName (路径: $projectPath)")
+            
+            try {
+                val localConfigManager = com.claudecodeplus.ui.models.LocalConfigManager()
+                val localProject = localConfigManager.addProject(projectPath, projectName)
+                
+                val newProject = Project(
+                    id = localProject.id,
+                    name = localProject.name,
+                    path = localProject.path
+                )
+                
+                // 添加到项目列表
+                val updatedProjects = _projects.value.toMutableList()
+                updatedProjects.add(newProject)
+                _projects.value = updatedProjects.sortedBy { it.name }
+                
+                // 选择新创建的项目
+                _currentProject.value = newProject
+                
+                // 不加载历史会话
+                val newSessionsMap = _sessions.value.toMutableMap()
+                newSessionsMap[localProject.id] = emptyList()
+                _sessions.value = newSessionsMap
+                
+                _currentSession.value = null
+                println("成功创建并选择新项目: $projectName (ID: ${localProject.id})")
+            } catch (e: Exception) {
+                println("创建项目失败: ${e.message}")
+                e.printStackTrace()
+            }
+        }
     }
     
     /**
@@ -860,16 +1038,32 @@ class ProjectManager {
     suspend fun createPlaceholderSession(projectId: String): ProjectSession {
         println("创建新的占位会话: projectId=$projectId")
         
+        // 从项目ID获取项目路径作为cwd
+        val project = _projects.value.find { it.id == projectId }
+        val projectPath = project?.path ?: throw IllegalArgumentException("无法找到项目: $projectId")
+        
         val timestamp = java.time.Instant.now().toString()
         
-        // 创建会话对象，id为null表示占位会话
+        // 创建会话对象，直接生成UUID作为会话ID
+        val sessionId = java.util.UUID.randomUUID().toString()
         val newSession = ProjectSession(
-            id = null, // 占位会话没有真实ID
+            id = sessionId, // 新建会话使用UUID作为ID
             projectId = projectId,
             name = "新会话",
             createdAt = timestamp,
-            lastModified = System.currentTimeMillis()
+            lastModified = System.currentTimeMillis(),
+            cwd = projectPath
         )
+        
+        try {
+            // 将新会话记录到本地配置中
+            val localConfigManager = com.claudecodeplus.ui.models.LocalConfigManager()
+            localConfigManager.addSession(projectId, sessionId, "新会话")
+            println("会话已记录到本地配置")
+        } catch (e: Exception) {
+            println("记录会话到本地配置失败: ${e.message}")
+            e.printStackTrace()
+        }
         
         // 添加到会话列表
         val projectSessions = _sessions.value[projectId]?.toMutableList() ?: mutableListOf()
@@ -881,7 +1075,7 @@ class ProjectManager {
         
         // 不创建任何文件，所有文件操作由Claude CLI负责
         
-        println("创建占位会话成功（无ID）")
+        println("创建占位会话成功: $sessionId")
         return newSession
     }
     
