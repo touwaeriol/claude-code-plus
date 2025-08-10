@@ -64,7 +64,8 @@ object LogbackConfigurator {
      * 确保日志目录存在
      */
     private fun ensureLogDirectoryExists() {
-        val logDir = Paths.get(System.getProperty("user.home"), ".claude-code-plus", "logs")
+        // 统一使用 ~/.claude-code-plus/log 目录
+        val logDir = Paths.get(System.getProperty("user.home"), ".claude-code-plus", "log")
         if (!Files.exists(logDir)) {
             try {
                 Files.createDirectories(logDir)
@@ -110,7 +111,7 @@ object LogbackConfigurator {
     <!-- 您可以修改此文件来自定义日志行为 -->
     
     <!-- 日志文件路径 -->
-    <property name="LOG_HOME" value="${'$'}{user.home}/.claude-code-plus/logs" />
+    <property name="LOG_HOME" value="${'$'}{user.home}/.claude-code-plus/log" />
     
     <!-- 控制台输出 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">

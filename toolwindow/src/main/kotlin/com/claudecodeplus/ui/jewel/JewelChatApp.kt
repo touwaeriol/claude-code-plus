@@ -474,17 +474,7 @@ private fun sendMessage(
                     onSessionIdUpdate(result.sessionId)
                 }
                 
-                // 启用实时消息监听（通过文件监听获取响应）
-                result.sessionId?.let { sessionId ->
-                    scope.launch {
-                        // 订阅会话消息更新
-                        unifiedSessionService.subscribeToSession(sessionId)
-                            .collect { updatedMessages ->
-                                // 转换并更新消息列表
-                                onMessageUpdate(updatedMessages)
-                            }
-                    }
-                }
+                // 文件监听现在由项目监听器自动处理，无需手动订阅
             } else {
                 // 命令执行失败
                 val errorMessage = EnhancedMessage(

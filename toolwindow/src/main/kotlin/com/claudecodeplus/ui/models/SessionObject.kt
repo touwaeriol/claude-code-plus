@@ -8,6 +8,11 @@ import androidx.compose.runtime.mutableStateListOf
 import com.claudecodeplus.session.models.SessionInfo
 import com.claudecodeplus.ui.services.DefaultSessionConfig
 import kotlinx.coroutines.Job
+import com.claudecodeplus.session.ClaudeSessionManager
+import com.claudecodeplus.session.models.ClaudeSessionMessage
+import com.claudecodeplus.session.models.toEnhancedMessage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 完整的会话对象，包含会话的所有状态
@@ -27,8 +32,12 @@ class SessionObject(
     initialMessages: List<EnhancedMessage> = emptyList(),
     initialModel: AiModel? = null,
     initialPermissionMode: PermissionMode? = null,
-    initialSkipPermissions: Boolean? = null
+    initialSkipPermissions: Boolean? = null,
+    private val project: Project? = null  // 关联的项目对象，用于获取cwd和项目信息
 ) {
+    // 兼容性属性：从project获取路径
+    private val projectPath: String? 
+        get() = project?.path
     // ========== 核心会话数据 ==========
     
     /**
@@ -79,6 +88,16 @@ class SessionObject(
      * 消息加载状态
      */
     var messageLoadingState by mutableStateOf(MessageLoadingState.IDLE)
+    
+    /**
+     * 当前运行的进程（用于中断功能）
+     */
+    var currentProcess by mutableStateOf<Process?>(null)
+    
+    /**
+     * 错误消息
+     */
+    var errorMessage by mutableStateOf<String?>(null)
     
     // ========== UI 状态 ==========
     
@@ -196,7 +215,53 @@ class SessionObject(
         // 取消协程任务
         currentStreamJob?.cancel()
         currentStreamJob = null
+        
+        // 终止进程
+        currentProcess?.let { process ->
+            try {
+                process.destroyForcibly()
+                println("Terminated process for session: $sessionId")
+            } catch (e: Exception) {
+                println("Error terminating process: ${e.message}")
+            }
+        }
+        currentProcess = null
+        
         isGenerating = false
+    }
+    
+    /**
+     * 处理历史消息加载（来自事件流）
+     */
+    fun processHistoryMessage(message: com.claudecodeplus.ui.models.EnhancedMessage) {
+        // 添加到消息列表，但不触发新消息通知
+        messages = messages + message
+    }
+    
+    /**
+     * 处理实时消息（来自事件流）
+     */
+    fun processNewMessage(message: com.claudecodeplus.ui.models.EnhancedMessage) {
+        // 添加到消息列表
+        messages = messages + message
+        
+        // EnhancedMessage 不包含 sessionId 属性，会话 ID 由其他途径获取
+        // 此处保留原有逻辑结构，但移除对 sessionId 属性的引用
+    }
+    
+    /**
+     * 设置错误消息
+     */
+    fun setError(error: String) {
+        errorMessage = error
+        isGenerating = false
+    }
+    
+    /**
+     * 清除错误消息
+     */
+    fun clearError() {
+        errorMessage = null
     }
     
     /**
@@ -273,6 +338,96 @@ class SessionObject(
      */
     fun restoreInputState(): String {
         return inputText
+    }
+    
+    /**
+     * 获取项目的工作目录（cwd）
+     * 用于Claude CLI执行时的工作目录
+     */
+    fun getProjectCwd(): String? {
+        return project?.path
+    }
+    
+    /**
+     * 从文件加载消息
+     * @param forceFullReload 是否强制全量重新加载，false 为增量更新
+     */
+    suspend fun loadNewMessages(forceFullReload: Boolean = false) {
+        val currentSessionId = sessionId
+        val currentProjectPath = projectPath
+        
+        println("[SessionObject] 📂 loadNewMessages 被调用")
+        println("[SessionObject] - sessionId: $currentSessionId")
+        println("[SessionObject] - projectPath: $currentProjectPath") 
+        println("[SessionObject] - forceFullReload: $forceFullReload")
+        println("[SessionObject] - 当前消息数量: ${messages.size}")
+        
+        if (currentSessionId.isNullOrEmpty() || currentProjectPath.isNullOrEmpty()) {
+            println("[SessionObject] ❌ 无法加载消息：sessionId=$currentSessionId, projectPath=$currentProjectPath")
+            return
+        }
+        
+        try {
+            println("[SessionObject] 📖 开始使用 ClaudeSessionManager 读取会话文件")
+            
+            // 使用 ClaudeSessionManager 读取会话文件
+            val sessionManager = ClaudeSessionManager()
+            val (sessionMessages, totalCount) = withContext(Dispatchers.IO) {
+                println("[SessionObject] 🔍 在 IO 线程中读取消息...")
+                
+                val result = if (forceFullReload) {
+                    println("[SessionObject] 🔄 执行全量重新加载")
+                    // 全量重新加载
+                    sessionManager.readSessionMessages(
+                        sessionId = currentSessionId,
+                        projectPath = currentProjectPath,
+                        pageSize = Int.MAX_VALUE  // 读取所有消息
+                    )
+                } else {
+                    // 增量加载：只读取比当前消息数量更多的消息
+                    val currentCount = messages.size
+                    val pageSize = if (currentCount > 0) currentCount + 50 else 100
+                    println("[SessionObject] 📈 执行增量加载 - currentCount: $currentCount, pageSize: $pageSize")
+                    
+                    sessionManager.readSessionMessages(
+                        sessionId = currentSessionId,
+                        projectPath = currentProjectPath,
+                        pageSize = pageSize
+                    )
+                }
+                
+                println("[SessionObject] 📊 读取结果 - sessionMessages: ${result.first.size}, totalCount: ${result.second}")
+                result
+            }
+            
+            println("[SessionObject] 🔄 转换为 EnhancedMessage...")
+            // 转换为 EnhancedMessage
+            val enhancedMessages = sessionMessages.mapNotNull { message ->
+                message.toEnhancedMessage() 
+            }
+            
+            println("[SessionObject] ✅ 转换完成 - enhancedMessages: ${enhancedMessages.size}")
+            
+            // 在主线程更新消息列表
+            withContext(Dispatchers.Main) {
+                println("[SessionObject] 🎯 在主线程中更新消息列表...")
+                println("[SessionObject] - 旧消息数量: ${messages.size}")
+                println("[SessionObject] - 新消息数量: ${enhancedMessages.size}")
+                println("[SessionObject] - 是否需要更新: ${forceFullReload || enhancedMessages.size != messages.size}")
+                
+                if (forceFullReload || enhancedMessages.size != messages.size) {
+                    // 只有在强制重载或消息数量变化时才更新
+                    messages = enhancedMessages
+                    val action = if (forceFullReload) "强制全量重载" else "增量更新"
+                    println("[SessionObject] ✅ $action 消息列表，共 ${enhancedMessages.size} 条消息")
+                } else {
+                    println("[SessionObject] ⏩ 消息无变化，跳过更新")
+                }
+            }
+        } catch (e: Exception) {
+            println("[SessionObject] ❌ 加载消息失败: ${e.message}")
+            e.printStackTrace()
+        }
     }
     
     override fun toString(): String {

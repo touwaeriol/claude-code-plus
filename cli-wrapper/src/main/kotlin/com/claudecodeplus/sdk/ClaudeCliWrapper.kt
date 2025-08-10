@@ -4,27 +4,34 @@ import com.claudecodeplus.core.LoggerFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.coroutineContext
 import kotlinx.serialization.json.*
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
 /**
- * Claude CLI 包装器 - 简化版本
+ * Claude CLI 包装器 - 事件驱动版本
  * 
- * 这是与 Claude CLI 交互的核心类，专注于CLI执行。
- * 不再解析CLI输出，而是由统一的会话管理API处理会话文件监听。
+ * 这是与 Claude CLI 交互的核心类，使用事件驱动架构替代文件监听。
+ * 参考 Claudia 项目的实现，直接监听 Claude CLI 进程的输出流。
  * 
  * 主要功能：
  * - 自动查找和调用 Claude CLI 命令
  * - 管理会话（新建、继续、恢复）
  * - 支持中断响应（通过 terminate() 方法）
- * - 返回会话ID供文件监听使用
+ * - 实时监听进程输出并发送事件
  * 
  * 工作原理：
  * 1. 通过 ProcessBuilder 直接调用系统中的 claude CLI 命令
- * 2. 启动 Claude CLI 进程并返回会话ID
- * 3. 会话消息通过文件监听服务获取，不再解析CLI输出
- * 4. 通过环境变量 CLAUDE_CODE_ENTRYPOINT 标识调用来源
+ * 2. 启动 Claude CLI 进程并监听 stdout/stderr
+ * 3. 解析输出流中的 JSONL 消息并发送事件
+ * 4. UI 组件监听事件来更新消息显示
+ * 5. 通过环境变量 CLAUDE_CODE_ENTRYPOINT 标识调用来源
  */
 class ClaudeCliWrapper {
     companion object {
@@ -147,8 +154,8 @@ class ClaudeCliWrapper {
         /**
          * 环境配置
          */
-        // 工作目录（AI 执行命令和文件操作的基础路径）
-        val cwd: String? = null,
+        // 工作目录（AI 执行命令和文件操作的基础路径）- 必须指定
+        val cwd: String,
         
         /**
          * MCP（Model Context Protocol）服务器配置
@@ -221,7 +228,7 @@ class ClaudeCliWrapper {
      * 执行查询，返回简化的结果
      * 只返回进程状态和会话ID，不再解析输出流
      */
-    suspend fun query(prompt: String, options: QueryOptions = QueryOptions()): QueryResult {
+    suspend fun query(prompt: String, options: QueryOptions): QueryResult {
         val requestId = options.requestId ?: System.currentTimeMillis().toString()
         
         // 验证输入
@@ -336,10 +343,14 @@ class ClaudeCliWrapper {
             logger.info("🔵 [$requestId] 完整命令行: ${finalCommand.joinToString(" ")}")
             
             val processBuilder = ProcessBuilder(finalCommand)
-            options.cwd?.let { 
-                processBuilder.directory(java.io.File(it))
-                logger.info("🔵 [$requestId] 工作目录: $it")
-            }
+            
+            // 详细记录工作目录设置
+            logger.info("🔵 [$requestId] QueryOptions.cwd: ${options.cwd}")
+            val cwdFile = java.io.File(options.cwd)
+            logger.info("🔵 [$requestId] 设置工作目录: ${options.cwd}")
+            logger.info("🔵 [$requestId] 工作目录是否存在: ${cwdFile.exists()}")
+            logger.info("🔵 [$requestId] 工作目录是否可读: ${cwdFile.canRead()}")
+            processBuilder.directory(cwdFile)
             
             // 设置环境变量
             val env = processBuilder.environment()
@@ -379,9 +390,49 @@ class ClaudeCliWrapper {
             currentProcess.set(process)
             logger.info("🔵 [$requestId] 进程已启动，PID: ${process.pid()}")
             
-            // 简化版本：只启动进程，不解析输出
-            // 会话消息通过文件监听获取
-            logger.info("🔵 [$requestId] Claude CLI 进程已启动，会话消息将通过文件监听获取")
+            // 启动输出监听协程
+            val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+            
+            // 启动 stdout 监听
+            scope.launch {
+                try {
+                    logger.info("🔵 [$requestId] 开始监听 stdout...")
+                    process.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+                        var line: String?
+                        while (reader.readLine().also { line = it } != null) {
+                            line?.let { currentLine ->
+                                logger.info("🔵 [$requestId] stdout 输出: $currentLine")
+                                if (currentLine.isNotBlank()) {
+                                    // 这里可以添加实时处理逻辑，比如发送到事件总线
+                                    processOutputLine(currentLine)
+                                }
+                            }
+                        }
+                    }
+                    logger.info("🔵 [$requestId] stdout 流结束")
+                } catch (e: Exception) {
+                    if (e.message?.contains("Stream closed") != true) {
+                        logger.error("🔴 [$requestId] Error reading stdout: ${e.message}", e)
+                    }
+                }
+            }
+            
+            // 启动 stderr 监听
+            scope.launch {
+                try {
+                    process.errorStream.bufferedReader().use { reader ->
+                        reader.lineSequence().forEach { line ->
+                            if (line.isNotBlank()) {
+                                logger.warn("🔴 [$requestId] stderr 输出: $line")
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e.message?.contains("Stream closed") != true) {
+                        logger.error("🔴 [$requestId] Error reading stderr: ${e.message}", e)
+                    }
+                }
+            }
             
             // 提取会话ID（优先使用新指定的 sessionId，其次是恢复的会话ID）
             val sessionId = options.sessionId ?: options.resume
@@ -407,6 +458,7 @@ class ClaudeCliWrapper {
                 )
             } finally {
                 currentProcess.set(null)
+                scope.cancel() // 清理监听协程
             }
         }
     }
@@ -435,6 +487,40 @@ class ClaudeCliWrapper {
      */
     fun isProcessAlive(): Boolean {
         return currentProcess.get()?.isAlive == true
+    }
+    
+    /**
+     * 输出行回调接口
+     */
+    private var outputLineCallback: ((String) -> Unit)? = null
+    
+    /**
+     * 设置输出行回调
+     */
+    fun setOutputLineCallback(callback: (String) -> Unit) {
+        this.outputLineCallback = callback
+    }
+    
+    /**
+     * 处理单行输出
+     * 可以在此处解析JSONL格式的输出或发送到事件总线
+     */
+    private fun processOutputLine(line: String) {
+        try {
+            // 首先调用回调函数（如果设置了）
+            outputLineCallback?.invoke(line)
+            
+            // 尝试解析JSONL格式
+            if (line.trim().startsWith("{") && line.trim().endsWith("}")) {
+                val json = Json.parseToJsonElement(line.trim())
+                if (json is JsonObject) {
+                    val type = json["type"]?.jsonPrimitive?.content
+                    logger.info("📡 解析到消息类型: $type")
+                }
+            }
+        } catch (e: Exception) {
+            logger.debug("解析输出行失败（这是正常的，因为不是所有行都是JSON）: ${e.message}")
+        }
     }
     
     /**

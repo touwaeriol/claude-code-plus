@@ -14,10 +14,21 @@ enum class MessageType {
 
 /**
  * SDK 消息数据类
+ * 更新以支持完整的 Claude CLI 消息格式和会话链接机制
  */
 data class SDKMessage(
     val type: MessageType,
-    val data: MessageData
+    val data: MessageData,
+    // 会话相关字段
+    val sessionId: String? = null,
+    val messageId: String? = null,
+    val parentId: String? = null,
+    val timestamp: String = "",
+    // 会话链接机制（leafUuid 用于跨会话文件链接）
+    val leafUuid: String? = null,
+    val parentUuid: String? = null,
+    // 消息内容（原始 JSON，用于复杂解析）
+    val content: String? = null
 )
 
 /**

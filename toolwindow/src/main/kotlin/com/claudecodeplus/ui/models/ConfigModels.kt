@@ -157,12 +157,89 @@ data class McpConfig(
  * - 项目ID以 Claude CLI 的目录结构为准，确保会话文件能正确定位
  * - 项目路径保持原始路径，便于用户理解和文件操作
  * - 两者分离设计，避免路径转换的复杂性和错误
+ * - 项目直接管理自己的Session对象生命周期
  */
-data class Project(
+class Project(
     val id: String, // Claude 项目目录名（经过路径编码后的名称）
     val path: String, // 项目的实际文件系统路径
     val name: String = path.substringAfterLast("/")
-)
+) {
+    // 项目的Sessions管理
+    private val _sessions = mutableMapOf<String, SessionObject>()
+    val sessions: Map<String, SessionObject> = _sessions
+    
+    /**
+     * 创建新的Session对象
+     */
+    fun createSession(
+        tabId: String,
+        initialSessionId: String? = null,
+        initialMessages: List<EnhancedMessage> = emptyList(),
+        initialModel: AiModel? = null,
+        initialPermissionMode: PermissionMode? = null,
+        initialSkipPermissions: Boolean? = null
+    ): SessionObject {
+        val sessionObject = SessionObject(
+            initialSessionId = initialSessionId,
+            initialMessages = initialMessages,
+            initialModel = initialModel,
+            initialPermissionMode = initialPermissionMode,
+            initialSkipPermissions = initialSkipPermissions,
+            project = this
+        )
+        _sessions[tabId] = sessionObject
+        return sessionObject
+    }
+    
+    /**
+     * 获取Session对象
+     */
+    fun getSession(tabId: String): SessionObject? {
+        return _sessions[tabId]
+    }
+    
+    /**
+     * 获取或创建Session对象
+     */
+    fun getOrCreateSession(
+        tabId: String,
+        initialSessionId: String? = null,
+        initialMessages: List<EnhancedMessage> = emptyList(),
+        initialModel: AiModel? = null,
+        initialPermissionMode: PermissionMode? = null,
+        initialSkipPermissions: Boolean? = null
+    ): SessionObject {
+        return _sessions[tabId] ?: createSession(
+            tabId = tabId,
+            initialSessionId = initialSessionId,
+            initialMessages = initialMessages,
+            initialModel = initialModel,
+            initialPermissionMode = initialPermissionMode,
+            initialSkipPermissions = initialSkipPermissions
+        )
+    }
+    
+    /**
+     * 移除Session对象
+     */
+    fun removeSession(tabId: String): SessionObject? {
+        return _sessions.remove(tabId)
+    }
+    
+    /**
+     * 获取所有Session对象
+     */
+    fun getAllSessions(): Collection<SessionObject> {
+        return _sessions.values
+    }
+    
+    /**
+     * 清空所有Session对象
+     */
+    fun clearAllSessions() {
+        _sessions.clear()
+    }
+}
 
 data class ProjectSession(
     val id: String, // 会话ID，现在在创建时就直接生成UUID

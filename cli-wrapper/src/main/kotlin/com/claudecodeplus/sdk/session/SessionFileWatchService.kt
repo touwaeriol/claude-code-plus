@@ -41,6 +41,9 @@ class SessionFileWatchService(
     // 消息流，用于发布文件变化事件
     private val messageFlow = MutableSharedFlow<FileChangeEvent>()
     
+    // 会话更新回调，用于通知项目管理器
+    var sessionUpdateCallback: ((String, String) -> Unit)? = null
+    
     /**
      * 文件变化事件
      */
@@ -54,26 +57,39 @@ class SessionFileWatchService(
      * 智能开始监听项目（最多3个）
      */
     fun startWatchingProject(projectPath: String) {
+        logger.info { "[FileWatch] 🚀 startWatchingProject 被调用 - projectPath: $projectPath" }
+        
         // 更新访问时间
         projectLastAccess[projectPath] = System.currentTimeMillis()
         
         if (projectWatchers.containsKey(projectPath)) {
-            logger.debug { "Project $projectPath is already being watched" }
+            logger.info { "[FileWatch] ⚠️ Project $projectPath is already being watched" }
             return
         }
         
         // 如果超过限制，移除最久未访问的项目
         if (projectWatchers.size >= MAX_WATCHED_PROJECTS) {
+            logger.info { "[FileWatch] 🧹 超过项目限制，清理最旧项目" }
             cleanupOldestProject()
         }
         
         val sessionsDir = getSessionsDirectory(projectPath)
+        logger.info { "[FileWatch] 📁 计算的会话目录路径: ${sessionsDir.absolutePath}" }
+        logger.info { "[FileWatch] 📁 会话目录是否存在: ${sessionsDir.exists()}" }
+        
         if (!sessionsDir.exists()) {
-            logger.info { "Creating sessions directory: ${sessionsDir.absolutePath}" }
+            logger.info { "[FileWatch] 🆕 创建会话目录: ${sessionsDir.absolutePath}" }
             sessionsDir.mkdirs()
         }
         
-        logger.info { "Starting to watch sessions directory: ${sessionsDir.absolutePath}" }
+        // 列出现有的会话文件
+        val existingFiles = sessionsDir.listFiles { file -> file.extension == "jsonl" }
+        logger.info { "[FileWatch] 📋 现有会话文件数量: ${existingFiles?.size ?: 0}" }
+        existingFiles?.take(5)?.forEach { file ->
+            logger.info { "[FileWatch] 📄 现有文件: ${file.name} (${file.lastModified()})" }
+        }
+        
+        logger.info { "[FileWatch] 👁️ 开始监听会话目录: ${sessionsDir.absolutePath}" }
         
         val monitor = WatchMonitor.create(
             sessionsDir.toPath(), 
@@ -85,24 +101,24 @@ class SessionFileWatchService(
         monitor.setWatcher(object : Watcher {
             override fun onModify(event: WatchEvent<*>, currentPath: Path) {
                 val fileName = event.context().toString()
-                logger.debug { "File modified: $fileName in $projectPath" }
+                logger.info { "[FileWatch] 📝 文件修改事件 - fileName: $fileName, projectPath: $projectPath, currentPath: $currentPath" }
                 handleFileChange(fileName, projectPath)
             }
             
             override fun onCreate(event: WatchEvent<*>, currentPath: Path) {
                 val fileName = event.context().toString()
-                logger.debug { "File created: $fileName in $projectPath" }
+                logger.info { "[FileWatch] 📄 文件创建事件 - fileName: $fileName, projectPath: $projectPath, currentPath: $currentPath" }
                 handleNewFile(fileName, projectPath)
             }
             
             override fun onDelete(event: WatchEvent<*>, currentPath: Path) {
                 val fileName = event.context().toString()
-                logger.debug { "File deleted: $fileName in $projectPath" }
+                logger.info { "[FileWatch] 🗑️ 文件删除事件 - fileName: $fileName, projectPath: $projectPath, currentPath: $currentPath" }
                 handleFileDelete(fileName, projectPath)
             }
             
             override fun onOverflow(event: WatchEvent<*>, currentPath: Path) {
-                logger.warn { "Watch event overflow in $projectPath" }
+                logger.warn { "[FileWatch] ⚠️ 监听事件溢出 - projectPath: $projectPath, currentPath: $currentPath" }
                 // 溢出时可能需要重新扫描目录
             }
         })
@@ -180,21 +196,42 @@ class SessionFileWatchService(
      * 处理文件变化
      */
     private fun handleFileChange(fileName: String, projectPath: String) {
-        if (!fileName.endsWith(".jsonl")) return
+        logger.info { "[FileWatch] handleFileChange called - fileName: $fileName, projectPath: $projectPath" }
+        
+        if (!fileName.endsWith(".jsonl")) {
+            logger.debug { "[FileWatch] 跳过非JSONL文件: $fileName" }
+            return
+        }
         
         val sessionId = fileName.removeSuffix(".jsonl")
+        logger.info { "[FileWatch] 处理会话文件变化 - sessionId: $sessionId" }
         
         scope.launch(Dispatchers.IO) {
             try {
+                logger.info { "[FileWatch] 开始处理文件变化 - sessionId: $sessionId, projectPath: $projectPath" }
                 val tracker = getOrCreateTracker(sessionId, projectPath)
                 val newMessages = tracker.readNewMessages()
                 
+                logger.info { "[FileWatch] 读取到新消息数量: ${newMessages.size} for session $sessionId" }
+                
                 if (newMessages.isNotEmpty()) {
-                    logger.debug { "Found ${newMessages.size} new messages for session $sessionId" }
+                    logger.info { "[FileWatch] 发送 ${newMessages.size} 条新消息到 messageFlow for session $sessionId" }
                     messageFlow.emit(FileChangeEvent(sessionId, projectPath, newMessages))
+                } else {
+                    logger.info { "[FileWatch] 没有新消息，跳过 messageFlow 发送 for session $sessionId" }
                 }
+                
+                // 通知项目管理器有会话更新（通过回调）
+                logger.info { "[FileWatch] 检查 sessionUpdateCallback - 是否存在: ${sessionUpdateCallback != null}" }
+                if (sessionUpdateCallback != null) {
+                    logger.info { "[FileWatch] 调用 sessionUpdateCallback - sessionId: $sessionId, projectPath: $projectPath" }
+                    sessionUpdateCallback?.invoke(sessionId, projectPath)
+                } else {
+                    logger.warn { "[FileWatch] sessionUpdateCallback 为空，无法通知项目管理器" }
+                }
+                
             } catch (e: Exception) {
-                logger.error(e) { "Error handling file change for $fileName" }
+                logger.error(e) { "[FileWatch] Error handling file change for $fileName" }
             }
         }
     }

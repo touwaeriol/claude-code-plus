@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
  * - ChatTabManager 管理标签的 UI 层面（标题、分组等）
  * - SessionManager 管理会话的数据层面（消息、生成状态等）
  */
-class SessionManager(
+class SessionManager (
     private val scope: CoroutineScope? = null,
     private val enableFileWatching: Boolean = false
 ) {
@@ -57,6 +57,7 @@ class SessionManager(
      * @param initialModel 初始 AI 模型（可选，默认使用全局默认值）
      * @param initialPermissionMode 初始权限模式（可选，默认使用全局默认值）
      * @param initialSkipPermissions 初始是否跳过权限（可选，默认使用全局默认值）
+     * @param project 关联的项目对象（必须）
      * @return 会话对象
      */
     fun getOrCreateSession(
@@ -65,7 +66,8 @@ class SessionManager(
         initialMessages: List<EnhancedMessage> = emptyList(),
         initialModel: com.claudecodeplus.ui.models.AiModel? = null,
         initialPermissionMode: com.claudecodeplus.ui.models.PermissionMode? = null,
-        initialSkipPermissions: Boolean? = null
+        initialSkipPermissions: Boolean? = null,
+        project: com.claudecodeplus.ui.models.Project
     ): SessionObject {
         return sessions.computeIfAbsent(tabId) {
             SessionObject(
@@ -73,7 +75,8 @@ class SessionManager(
                 initialMessages,
                 initialModel,
                 initialPermissionMode,
-                initialSkipPermissions
+                initialSkipPermissions,
+                project
             ).also {
                 _events.value = SessionEvent.SessionCreated(tabId, it)
             }

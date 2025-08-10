@@ -33,7 +33,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             // 创建服务实例
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val workingDirectory = project.basePath ?: System.getProperty("user.dir")
-            val unifiedSessionService = UnifiedSessionService(scope, workingDirectory)
+            val unifiedSessionService = UnifiedSessionService(scope)
             val sessionManager = ClaudeSessionManager()
             
             // 创建 IntelliJ 平台服务适配器

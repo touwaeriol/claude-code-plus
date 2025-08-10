@@ -35,7 +35,7 @@ class UnifiedSessionServiceProvider(
             ?: System.getProperty("user.dir")
         
         return serviceCache.computeIfAbsent(normalizedPath) { path ->
-            UnifiedSessionService(scope, path)
+            UnifiedSessionService(scope)
         }
     }
     

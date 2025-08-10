@@ -29,7 +29,7 @@ dependencies {
     
     // IntelliJ Platform dependencies
     intellijPlatform {
-        intellijIdeaCommunity("2025.1.3")
+        intellijIdeaCommunity("2025.1.4.1")
         
         // 添加 Markdown 插件依赖
         bundledPlugin("org.intellij.plugins.markdown")

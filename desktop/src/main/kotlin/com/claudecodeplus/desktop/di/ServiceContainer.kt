@@ -4,6 +4,7 @@ import com.claudecodeplus.desktop.DesktopProjectService
 import com.claudecodeplus.desktop.SimpleFileIndexService
 import com.claudecodeplus.desktop.state.AppUiState
 import com.claudecodeplus.sdk.ClaudeCliWrapper
+import com.claudecodeplus.sdk.session.UnifiedSessionAPI
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.services.*
 import com.claudecodeplus.core.interfaces.ProjectService
@@ -22,12 +23,13 @@ object ServiceContainer {
     // 核心服务
     val cliWrapper: ClaudeCliWrapper by lazy { ClaudeCliWrapper() }
     val sessionManager: ClaudeSessionManager by lazy { ClaudeSessionManager() }
+    val unifiedSessionAPI: UnifiedSessionAPI by lazy { UnifiedSessionAPI(applicationScope) }
     val unifiedSessionServiceProvider: UnifiedSessionServiceProvider by lazy { 
         UnifiedSessionServiceProvider(applicationScope)
     }
 
-    // 项目与UI服务
-    val projectManager: ProjectManager by lazy { ProjectManager() }
+    // 项目与UI服务 - 使用自动加载模式，传入 UnifiedSessionAPI 用于项目监听
+    val projectManager: ProjectManager by lazy { ProjectManager(autoLoad = true, sessionAPI = unifiedSessionAPI) }
     val tabManager: ChatTabManager by lazy { ChatTabManager() }
     val exportService: ChatExportService by lazy { ChatExportService() }
     val templateManager: PromptTemplateManager by lazy { PromptTemplateManager() }

@@ -15,8 +15,7 @@ import java.util.UUID
  * 结合 CLI 执行和文件监听，提供统一的会话管理 API
  */
 class UnifiedSessionService(
-    private val scope: CoroutineScope,
-    private val workingDirectory: String
+    private val scope: CoroutineScope
 ) {
     private val cliWrapper = ClaudeCliWrapper()
     private val sessionAPI = UnifiedSessionAPI(scope)
@@ -28,10 +27,7 @@ class UnifiedSessionService(
      */
     private val createdSessions = mutableSetOf<String>()
     
-    init {
-        // 自动开始监听当前项目
-        sessionAPI.startProject(workingDirectory)
-    }
+    // 移除自动监听，改为由 ProjectManager 在项目确定时启动
     
     /**
      * 执行查询
@@ -40,31 +36,34 @@ class UnifiedSessionService(
      */
     suspend fun query(
         prompt: String, 
-        options: ClaudeCliWrapper.QueryOptions = ClaudeCliWrapper.QueryOptions()
+        options: ClaudeCliWrapper.QueryOptions
     ): ClaudeCliWrapper.QueryResult {
+        // 使用传入的 cwd
+        val workingDir = options.cwd
+        
         val finalOptions = when {
             // 情况1：没有指定任何会话ID，创建新会话
             options.sessionId == null && options.resume == null -> {
                 val newSessionId = UUID.randomUUID().toString()
-                options.copy(cwd = workingDirectory, sessionId = newSessionId)
+                options.copy(cwd = workingDir, sessionId = newSessionId)
             }
             // 情况2：已指定resume参数，直接使用
             options.resume != null -> {
-                options.copy(cwd = workingDirectory)
+                options.copy(cwd = workingDir)
             }
             // 情况3：指定了sessionId，需要检查会话是否存在
             options.sessionId != null -> {
                 val sessionId = options.sessionId!!
-                if (sessionExists(sessionId)) {
+                if (sessionExists(sessionId, workingDir)) {
                     // 会话已存在，使用resume参数
-                    options.copy(cwd = workingDirectory, resume = sessionId, sessionId = null)
+                    options.copy(cwd = workingDir, resume = sessionId, sessionId = null)
                 } else {
                     // 会话不存在，使用sessionId创建新会话
-                    options.copy(cwd = workingDirectory, sessionId = sessionId)
+                    options.copy(cwd = workingDir, sessionId = sessionId)
                 }
             }
             else -> {
-                options.copy(cwd = workingDirectory)
+                options.copy(cwd = workingDir)
             }
         }
         
@@ -83,20 +82,21 @@ class UnifiedSessionService(
     }
     
     /**
-     * 订阅会话消息
+     * 订阅会话消息（需要指定项目路径）
      */
-    fun subscribeToSession(sessionId: String): Flow<List<EnhancedMessage>> {
-        return sessionAPI.subscribeToSession(sessionId, workingDirectory)
+    fun subscribeToSession(sessionId: String, projectPath: String): Flow<List<EnhancedMessage>> {
+        return sessionAPI.subscribeToSession(sessionId, projectPath)
             .map { messages ->
                 messageConverter.convertMessages(messages, sessionId)
             }
     }
     
     /**
-     * 加载历史会话
+     * 加载历史会话（使用当前目录）
      */
     suspend fun loadHistoricalSession(sessionId: String): List<EnhancedMessage> {
-        val messages = sessionAPI.loadHistoricalSession(sessionId, workingDirectory)
+        val workingDir = System.getProperty("user.dir")
+        val messages = sessionAPI.loadHistoricalSession(sessionId, workingDir)
         return messageConverter.convertMessages(messages, sessionId)
     }
     
@@ -113,12 +113,13 @@ class UnifiedSessionService(
      */
     suspend fun loadSession(
         sessionId: String,
+        projectPath: String,
         isCurrentTab: Boolean = false,
         isVisible: Boolean = false,
         isActive: Boolean = false
     ): List<EnhancedMessage> {
         val messages = sessionAPI.loadSession(
-            sessionId, workingDirectory, isCurrentTab, isVisible, isActive
+            sessionId, projectPath, isCurrentTab, isVisible, isActive
         )
         return messageConverter.convertMessages(messages, sessionId)
     }
@@ -127,14 +128,14 @@ class UnifiedSessionService(
      * 检查会话是否存在
      * 首先检查内存缓存，然后检查文件系统
      */
-    fun sessionExists(sessionId: String): Boolean {
+    fun sessionExists(sessionId: String, projectPath: String): Boolean {
         // 先检查内存中是否已知这个会话被创建
         if (createdSessions.contains(sessionId)) {
             return true
         }
         
         // 然后检查文件系统
-        val fileExists = sessionAPI.sessionExists(sessionId, workingDirectory)
+        val fileExists = sessionAPI.sessionExists(sessionId, projectPath)
         
         // 如果文件存在，也加入到内存缓存中
         if (fileExists) {
@@ -145,10 +146,10 @@ class UnifiedSessionService(
     }
     
     /**
-     * 获取所有会话
+     * 获取所有会话（指定项目路径）
      */
-    fun getAllSessions(): List<String> {
-        return sessionAPI.getProjectSessions(workingDirectory)
+    fun getAllSessions(projectPath: String): List<String> {
+        return sessionAPI.getProjectSessions(projectPath)
     }
     
     /**

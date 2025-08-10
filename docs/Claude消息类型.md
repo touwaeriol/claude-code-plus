@@ -639,6 +639,323 @@ Claude Code Plus 支持两种方式添加上下文：
 3. **摘要预览**：悬停时显示摘要内容的预览
 4. **自动切换**：压缩完成后提示用户是否切换到新会话
 
+## Claudia 项目消息序列化和反序列化实现
+
+### 消息解析核心逻辑
+
+基于对 Claudia 项目的深入研究，发现了完整的 JSONL 消息处理机制：
+
+#### 1. JSONL 流处理架构
+
+**Rust 后端流处理**：
+```rust
+// src-tauri/src/commands/claude.rs
+async fn spawn_claude_process(app: AppHandle, mut cmd: Command) -> Result<(), String> {
+    // 启动 Claude CLI 进程，使用 --output-format stream-json
+    let mut child = cmd
+        .arg("--output-format")
+        .arg("stream-json")
+        .spawn()?;
+
+    // 获取 stdout 和 stderr
+    let stdout = child.stdout.take().ok_or("Failed to get stdout")?;
+    let stderr = child.stderr.take().ok_or("Failed to get stderr")?;
+
+    // 创建异步读取器
+    let stdout_reader = BufReader::new(stdout);
+    let stderr_reader = BufReader::new(stderr);
+
+    // 逐行读取 JSONL 输出
+    let stdout_task = tokio::spawn(async move {
+        let mut lines = stdout_reader.lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            // 发送每一行到前端
+            let _ = app_handle.emit("claude-output", &line);
+        }
+    });
+}
+```
+
+#### 2. TypeScript 前端消息解析
+
+**消息类型定义**：
+```typescript
+// src/components/AgentExecution.tsx
+export interface ClaudeStreamMessage {
+  type: "system" | "assistant" | "user" | "result";
+  subtype?: string;
+  message?: {
+    content?: any[];
+    usage?: {
+      input_tokens: number;
+      output_tokens: number;
+    };
+  };
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+  [key: string]: any;
+}
+```
+
+**实时流解析**：
+```typescript
+// 监听来自 Rust 后端的事件
+const outputUnlisten = await listen<string>(`agent-output:${runId}`, (event) => {
+  try {
+    // 存储原始 JSONL
+    setRawJsonlOutput(prev => [...prev, event.payload]);
+    
+    // 解析并显示
+    const message = JSON.parse(event.payload) as ClaudeStreamMessage;
+    setMessages(prev => [...prev, message]);
+  } catch (err) {
+    console.error("Failed to parse message:", err, event.payload);
+  }
+});
+```
+
+#### 3. 消息渲染和处理
+
+**StreamMessage 组件处理逻辑**：
+```typescript
+// src/components/StreamMessage.tsx
+const StreamMessageComponent: React.FC<StreamMessageProps> = ({ message }) => {
+  // 处理不同消息类型
+  if (message.type === "assistant" && message.message) {
+    const msg = message.message;
+    
+    // 处理内容块数组
+    msg.content && Array.isArray(msg.content) && msg.content.map((content, idx) => {
+      // 文本内容 - 渲染为 Markdown
+      if (content.type === "text") {
+        return <ReactMarkdown>{content.text}</ReactMarkdown>;
+      }
+      
+      // 工具调用 - 渲染专用小部件
+      if (content.type === "tool_use") {
+        const toolName = content.name?.toLowerCase();
+        const input = content.input;
+        const toolId = content.id;
+        
+        // 获取工具结果
+        const toolResult = getToolResult(toolId);
+        
+        // 根据工具名称渲染不同的小部件
+        switch(toolName) {
+          case "read":
+            return <ReadWidget filePath={input.file_path} result={toolResult} />;
+          case "write":
+            return <WriteWidget filePath={input.file_path} content={input.content} result={toolResult} />;
+          case "bash":
+            return <BashWidget command={input.command} result={toolResult} />;
+          // ... 更多工具类型
+        }
+      }
+    });
+  }
+};
+```
+
+#### 4. 历史记录加载和度量计算
+
+**JSONL 文件读取和分析**：
+```rust
+// src-tauri/src/commands/agents.rs
+impl AgentRunMetrics {
+    /// 从 JSONL 内容计算运行指标
+    pub fn from_jsonl(jsonl_content: &str) -> Self {
+        let mut total_tokens = 0i64;
+        let mut cost_usd = 0.0f64;
+        let mut message_count = 0i64;
+        let mut start_time: Option<chrono::DateTime<chrono::Utc>> = None;
+        let mut end_time: Option<chrono::DateTime<chrono::Utc>> = None;
+
+        for line in jsonl_content.lines() {
+            if let Ok(json) = serde_json::from_str::<JsonValue>(line) {
+                message_count += 1;
+
+                // 提取时间戳
+                if let Some(timestamp_str) = json.get("timestamp").and_then(|t| t.as_str()) {
+                    if let Ok(timestamp) = chrono::DateTime::parse_from_rfc3339(timestamp_str) {
+                        let utc_time = timestamp.with_timezone(&chrono::Utc);
+                        if start_time.is_none() || utc_time < start_time.unwrap() {
+                            start_time = Some(utc_time);
+                        }
+                        if end_time.is_none() || utc_time > end_time.unwrap() {
+                            end_time = Some(utc_time);
+                        }
+                    }
+                }
+
+                // 提取 token 使用统计 - 检查顶层和嵌套的 message.usage
+                let usage = json
+                    .get("usage")
+                    .or_else(|| json.get("message").and_then(|m| m.get("usage")));
+
+                if let Some(usage) = usage {
+                    if let Some(input_tokens) = usage.get("input_tokens").and_then(|t| t.as_i64()) {
+                        total_tokens += input_tokens;
+                    }
+                    if let Some(output_tokens) = usage.get("output_tokens").and_then(|t| t.as_i64()) {
+                        total_tokens += output_tokens;
+                    }
+                }
+
+                // 提取成本信息
+                if let Some(cost) = json.get("cost").and_then(|c| c.as_f64()) {
+                    cost_usd += cost;
+                }
+            }
+        }
+
+        let duration_ms = match (start_time, end_time) {
+            (Some(start), Some(end)) => Some((end - start).num_milliseconds()),
+            _ => None,
+        };
+
+        Self {
+            duration_ms,
+            total_tokens: if total_tokens > 0 { Some(total_tokens) } else { None },
+            cost_usd: if cost_usd > 0.0 { Some(cost_usd) } else { None },
+            message_count: if message_count > 0 { Some(message_count) } else { None },
+        }
+    }
+}
+```
+
+#### 5. 会话历史加载
+
+**JSONL 历史记录读取**：
+```rust
+// src-tauri/src/commands/claude.rs
+#[tauri::command]
+pub async fn load_session_history(
+    session_id: String,
+    project_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    let claude_dir = get_claude_dir().map_err(|e| e.to_string())?;
+    let session_path = claude_dir
+        .join("projects")
+        .join(&project_id)
+        .join(format!("{}.jsonl", session_id));
+
+    if !session_path.exists() {
+        return Err(format!("Session file not found: {}", session_id));
+    }
+
+    let file = fs::File::open(&session_path)
+        .map_err(|e| format!("Failed to open session file: {}", e))?;
+
+    let reader = BufReader::new(file);
+    let mut messages = Vec::new();
+
+    for line in reader.lines() {
+        if let Ok(line) = line {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+                messages.push(json);
+            }
+        }
+    }
+
+    Ok(messages)
+}
+```
+
+#### 6. 工具调用结果映射
+
+**工具调用 ID 映射机制**：
+```typescript
+// src/components/StreamMessage.tsx
+const StreamMessageComponent = ({ message, streamMessages }) => {
+  // 状态：跟踪按工具调用 ID 映射的工具结果
+  const [toolResults, setToolResults] = useState<Map<string, any>>(new Map());
+  
+  // 从流消息中提取所有工具结果
+  useEffect(() => {
+    const results = new Map<string, any>();
+    
+    // 遍历所有消息查找工具结果
+    streamMessages.forEach(msg => {
+      if (msg.type === "user" && msg.message?.content && Array.isArray(msg.message.content)) {
+        msg.message.content.forEach((content: any) => {
+          if (content.type === "tool_result" && content.tool_use_id) {
+            results.set(content.tool_use_id, content);
+          }
+        });
+      }
+    });
+    
+    setToolResults(results);
+  }, [streamMessages]);
+  
+  // 获取特定工具调用 ID 的工具结果的辅助函数
+  const getToolResult = (toolId: string | undefined): any => {
+    if (!toolId) return null;
+    return toolResults.get(toolId) || null;
+  };
+};
+```
+
+### 关键发现和技术要点
+
+#### 1. Claude CLI 命令格式
+```bash
+# Claudia 使用的 Claude CLI 标准格式
+claude -p "用户提示" \
+  --system-prompt "系统提示" \
+  --model "sonnet" \
+  --output-format "stream-json" \
+  --verbose \
+  --dangerously-skip-permissions
+```
+
+#### 2. 会话文件路径规则
+```typescript
+// 项目路径编码规则
+const encoded_project = project_path.replace('/', "-");
+const session_file = `~/.claude/projects/${encoded_project}/${session_id}.jsonl`;
+```
+
+#### 3. 消息去重和过滤逻辑
+```typescript
+const displayableMessages = React.useMemo(() => {
+  return messages.filter((message, index) => {
+    // 跳过没有意义内容的元消息
+    if (message.isMeta && !message.leafUuid && !message.summary) {
+      return false;
+    }
+
+    // 跳过空用户消息
+    if (message.type === "user" && message.isMeta) return false;
+    
+    // 检查是否有可见内容
+    if (Array.isArray(msg.content)) {
+      let hasVisibleContent = false;
+      for (const content of msg.content) {
+        if (content.type === "text") {
+          hasVisibleContent = true;
+          break;
+        } else if (content.type === "tool_result") {
+          // 检查此工具结果是否会被小部件跳过
+          if (!willBeSkipped) {
+            hasVisibleContent = true;
+            break;
+          }
+        }
+      }
+      
+      if (!hasVisibleContent) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}, [messages]);
+```
+
 ## 注意事项
 
 1. **消息顺序**：会话必须遵循 User-Assistant 交替的模式
@@ -647,9 +964,13 @@ Claude Code Plus 支持两种方式添加上下文：
 4. **会话压缩**：当上下文过长时，系统会插入 Summary 消息并重写会话文件
 5. **版本兼容**：不同版本的 Claude Code 可能有细微的格式差异
 6. **压缩标记**：`/compact` 命令生成的摘要会包含 `isCompactSummary: true` 标记
+7. **流处理**：实时 JSONL 流需要逐行解析，每行都是完整的 JSON 对象
+8. **错误处理**：解析失败的行应该记录但不中断整个流处理过程
+9. **度量计算**：token 使用统计可能出现在顶层 `usage` 字段或嵌套的 `message.usage` 字段
 
 ## 参考资源
 
 - [Claude Code SDK Python 类型定义](https://github.com/anthropics/claude-code-sdk-python/blob/main/src/claude_code_sdk/types.py)
 - [Anthropic SDK 文档](https://docs.anthropic.com/claude/docs)
 - 本地会话文件示例：`~/.claude/projects/`
+- **Claudia 项目源码**：`/Users/erio/codes/webstorm/claudia` - 完整的消息处理实现参考

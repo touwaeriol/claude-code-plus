@@ -28,23 +28,28 @@ fun StandaloneChatView(
     sessionId: String? = null,
     modifier: Modifier = Modifier
 ) {
-    // 为简单用例创建默认的 SessionManager 和 tabId
-    val sessionObjectManager = remember { SessionManager() }
+    // 为简单用例创建默认的 tabId 和临时 Project
     val defaultTabId = remember { "default-${UUID.randomUUID()}" }
+    val tempProject = remember {
+        com.claudecodeplus.ui.models.Project(
+            id = "temp-${UUID.randomUUID()}",
+            name = "临时项目",
+            path = workingDirectory
+        )
+    }
     
-    ChatView(
+    ChatViewNew(
         unifiedSessionService = unifiedSessionService,
         workingDirectory = workingDirectory,
         fileIndexService = fileIndexService,
         projectService = projectService,
         sessionManager = sessionManager,
-        sessionObjectManager = sessionObjectManager,
         tabId = defaultTabId,
         initialMessages = initialMessages,
         sessionId = sessionId,
         tabManager = null,
         currentTabId = null,
-        currentProject = null,
+        currentProject = tempProject,
         projectManager = null,
         modifier = modifier
     )

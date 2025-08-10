@@ -19,6 +19,13 @@ class UnifiedSessionAPI(
     private val sessionLoader = SessionLoader(cache, fileWatchService, scope)
     private val resourceManager = SimpleResourceManager(fileWatchService, sessionLoader, scope)
     
+    // 会话更新回调，由外部设置
+    var sessionUpdateCallback: ((String, String) -> Unit)? = null
+        set(value) {
+            field = value
+            fileWatchService.sessionUpdateCallback = value
+        }
+    
     init {
         // 启动定时资源清理
         resourceManager.startPeriodicCleanup()

@@ -20,6 +20,7 @@ dependencies {
     implementation(compose.foundation)
     implementation(compose.animation)
     implementation(compose.ui)
+    implementation(compose.components.resources)
     
     // Jewel UI - 直接引入
     val jewelVersion = rootProject.extra["jewelVersion"] as String

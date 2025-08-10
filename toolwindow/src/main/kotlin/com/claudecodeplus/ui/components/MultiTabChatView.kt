@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.draw.clip
+import com.claudecodeplus.sdk.*
 
 /**
  * 多标签聊天视图 - 已移除标签栏，只显示聊天内容
@@ -48,7 +49,6 @@ fun MultiTabChatView(
     fileIndexService: FileIndexService,
     projectService: ProjectService,
     sessionManager: ClaudeSessionManager,
-    sessionObjectManager: com.claudecodeplus.ui.services.SessionManager,
     projectManager: com.claudecodeplus.ui.services.ProjectManager? = null,
     onTabHover: ((String?) -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -92,22 +92,22 @@ fun MultiTabChatView(
                         val currentUnifiedSessionService = unifiedSessionServiceProvider.getServiceForProject(tab.projectPath)
                         
                         Box(modifier = Modifier.fillMaxSize()) {
-                            com.claudecodeplus.ui.jewel.ChatView(
+                            // 使用新的事件驱动 ChatView，UI完全相同但底层为事件驱动架构
+                            com.claudecodeplus.ui.jewel.ChatViewNew(
                                 unifiedSessionService = currentUnifiedSessionService,
                                 workingDirectory = tab.projectPath ?: workingDirectory, // 优先使用标签的项目路径，确保与UnifiedSessionService一致
                                 fileIndexService = fileIndexService,
                                 projectService = projectService,
                                 sessionManager = sessionManager,
-                                sessionObjectManager = sessionObjectManager,
                                 tabId = tab.id,
                                 initialMessages = tab.messages,  // 直接使用 EnhancedMessage
                                 sessionId = tab.sessionId,
                                 tabManager = tabManager,
                                 currentTabId = tab.id,
                                 currentProject = com.claudecodeplus.ui.models.Project(
-                                    id = tab.projectId,
+                                    id = tab.projectId ?: "",
                                     path = tab.projectPath,
-                                    name = tab.projectName ?: tab.projectId.substringAfterLast("/")
+                                    name = tab.projectName ?: tab.projectId?.substringAfterLast("/") ?: "Unknown Project"
                                 ),
                                 projectManager = projectManager,
                                 modifier = Modifier.fillMaxSize()
@@ -174,6 +174,7 @@ fun MultiTabChatView(
         }
     }
 }
+
 
 /**
  * 空标签视图

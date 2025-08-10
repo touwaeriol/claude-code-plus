@@ -37,3 +37,11 @@ dependencies {
     testImplementation("io.mockk:mockk:1.13.8")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
 }
+
+// 添加运行测试的任务
+tasks.register<JavaExec>("runSerializationTest") {
+    group = "verification"
+    description = "Run Claude serialization system test"
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.claudecodeplus.sdk.serialization.TestMainKt")
+}

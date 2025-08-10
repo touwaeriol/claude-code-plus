@@ -50,7 +50,6 @@ fun SimpleClaudeApp() {
     val projectService = ServiceContainer.projectService
     val sessionManager = ServiceContainer.sessionManager
     val scope = rememberCoroutineScope()
-    val sessionObjectManager = remember { com.claudecodeplus.ui.services.SessionManager(scope, true) }
     
     Box(modifier = Modifier.fillMaxSize()) {
         Column {
@@ -77,7 +76,6 @@ fun SimpleClaudeApp() {
                 fileIndexService = fileIndexService,
                 projectService = projectService,
                 sessionManager = sessionManager,
-                sessionObjectManager = sessionObjectManager,
                 modifier = Modifier.weight(1f)
             )
         }

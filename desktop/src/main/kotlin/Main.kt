@@ -80,15 +80,9 @@ fun EnhancedClaudeApp(defaultProjectPath: String) {
     // UI 状态
     val uiState = remember { AppUiState() }
     val scope = rememberCoroutineScope()
-    val sessionObjectManager = remember { com.claudecodeplus.ui.services.SessionManager(scope, true) }
     
     
-    // 在首次加载时，确保加载当前项目的会话
-    LaunchedEffect(Unit) {
-        println("[DEBUG] LaunchedEffect - 准备加载当前工作目录项目")
-        projectManager.loadCurrentWorkingDirectoryProject()
-        println("[DEBUG] LaunchedEffect - 调用 loadCurrentWorkingDirectoryProject 完成")
-    }
+    // ProjectManager 现在会自动处理项目加载，无需手动调用
     
     // 监听会话加载事件
     LaunchedEffect(projectManager) {
@@ -99,7 +93,7 @@ fun EnhancedClaudeApp(defaultProjectPath: String) {
             val session = event.session
             val currentProject = projectManager.currentProject.value
             val sessionId = session.id
-            if (currentProject != null && sessionId != null) {
+            if (currentProject != null) {
                 try {
                     println("使用 UnifiedSessionService 加载会话: sessionId=${sessionId}, projectPath=${currentProject.path}")
                     
@@ -157,10 +151,19 @@ fun EnhancedClaudeApp(defaultProjectPath: String) {
     }
     
     // 数据状态
+    val projects by projectManager.projects.collectAsState()
     val currentProject by projectManager.currentProject
     val currentSession by projectManager.currentSession
     val isIndexing by fileIndexService.isIndexing.collectAsState()
     val statusMessage by fileIndexService.statusMessage.collectAsState()
+    
+    // 调试状态变化
+    LaunchedEffect(currentProject) {
+        println("[DEBUG] Main.kt - currentProject 状态变更: ${currentProject?.name} (id: ${currentProject?.id})")
+    }
+    
+    // 不再显示项目选择器，直接使用项目界面
+    val showProjectSelector = false
     
     // 全局快捷键
     Box(
@@ -291,191 +294,162 @@ fun EnhancedClaudeApp(defaultProjectPath: String) {
             
             Divider(orientation = Orientation.Horizontal)
             
-            // 项目标签栏
-            val projects by projectManager.projects.collectAsState()
-            val sessions by projectManager.sessions.collectAsState()
-            val currentProject by projectManager.currentProject
-            
-            // 计算每个项目的会话数量
-            val sessionCounts = remember(sessions) {
-                sessions.mapValues { (_, sessionList) -> sessionList.size }
-            }
-            
-            ProjectTabBar(
-                projects = projects,
-                currentProjectId = currentProject?.id,
-                sessionCounts = sessionCounts,
-                onProjectSelect = { project -> projectManager.setCurrentProject(project) },
-                onProjectClose = if (projects.size > 1) {
-                    { project ->
-                        scope.launch {
-                            projectManager.deleteProject(project)
-                        }
-                    }
-                } else null,
-                onNewProject = {
-                    // 直接弹出文件夹选择器
-                    val fileChooser = JFileChooser().apply {
-                        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-                        dialogTitle = "选择项目文件夹"
-                        currentDirectory = File(System.getProperty("user.home"))
-                    }
-                    
-                    val result = fileChooser.showOpenDialog(null)
-                    if (result == JFileChooser.APPROVE_OPTION) {
-                        val selectedPath = fileChooser.selectedFile.absolutePath
-                        val projectName = fileChooser.selectedFile.name
-                        
-                        scope.launch {
-                            val project = projectManager.createProject(projectName, selectedPath)
-                            // 如果是新项目，创建新标签
-                            if (tabManager.tabs.none { it.projectId == project.id }) {
-                                tabManager.createNewTab(
-                                    title = "新对话",
-                                    project = project
-                                )
-                            }
-                        }
-                    }
-                }
-            )
-            
-            Divider(orientation = Orientation.Horizontal)
-            
-            // 主内容区域：左侧会话面板 + 右侧聊天区域
-            Row(modifier = Modifier.fillMaxSize()) {
-                val currentSession by projectManager.currentSession
+            // 项目标签栏 - 只在选择了项目后显示
+            if (!showProjectSelector) {
+                val projects by projectManager.projects.collectAsState()
+                val sessions by projectManager.sessions.collectAsState()
+                val currentProject by projectManager.currentProject
                 
-                // 悬停状态管理
-                var hoveredSessionId by remember { mutableStateOf<String?>(null) }
-
-                // 只显示当前项目的会话
-                println("[DEBUG] SessionListPanel - currentProject: ${currentProject?.id} (${currentProject?.name})")
-                val project = currentProject
-                if (project != null) {
-                    println("[DEBUG] 创建 SessionListPanel - project: ${project.id}, onCreateSession 不为 null: ${true}")
-                    SessionListPanel(
-                        projectManager = projectManager,
-                        tabManager = tabManager,
-                        currentProject = project,
-                        selectedSession = currentSession,
-                        hoveredSessionId = hoveredSessionId,
-                        onSessionSelect = { session -> projectManager.setCurrentSession(session, loadHistory = true) },
-                        onSessionHover = { sessionId -> hoveredSessionId = sessionId },
-                        onCreateSession = { 
-                            scope.launch {
-                                // 创建占位会话
-                                val newSession = projectManager.createPlaceholderSession(project.id)
-                                // 创建新标签并关联会话
-                                tabManager.createNewTab(
-                                    title = newSession.name,
-                                    sessionId = newSession.id,
-                                    project = project
-                                )
-                                // 设置为当前会话
-                                projectManager.setCurrentSession(newSession, loadHistory = true)
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .width(280.dp) // 固定宽度，更适合会话列表
-                    )
-
-                    Divider(orientation = Orientation.Vertical)
-                } else {
-                    // 项目加载中的占位面板
-                    Column(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .width(280.dp)
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            "正在加载项目...",
-                            style = JewelTheme.defaultTextStyle,
-                            color = JewelTheme.globalColors.text.disabled
-                        )
-                    }
-                    
-                    Divider(orientation = Orientation.Vertical)
-                }
-
-                // 调试信息和项目选择
-                LaunchedEffect(currentProject) {
-                    println("=== 当前项目调试信息 ===")
-                    println("currentProject: ${currentProject?.name} (${currentProject?.path})")
-                    println("defaultProjectPath: $defaultProjectPath")
-                    println("workingDirectory 将设置为: ${currentProject?.path ?: defaultProjectPath}")
-                    println("========================")
+                // 计算每个项目的会话数量
+                val sessionCounts = remember(sessions) {
+                    sessions.mapValues { (_, sessionList) -> sessionList.size }
                 }
                 
-                // 右侧主要内容区域：直接显示聊天区域
-                MultiTabChatView(
-                    tabManager = tabManager,
-                    unifiedSessionServiceProvider = unifiedSessionServiceProvider,
-                    workingDirectory = run {
-                        // 基于会话的 cwd 确定工作目录（最直接的方式）
-                        val activeTab = tabManager.tabs.find { it.id == tabManager.activeTabId }
-                        val sessionId = activeTab?.sessionId
-                        
-                        // 通过会话ID查找会话的 cwd
-                        val sessionCwd = if (sessionId != null && currentProject != null) {
-                            val projectSessions = projectManager.sessions.value[currentProject?.id]
-                            val session = projectSessions?.find { it.id == sessionId }
-                            session?.cwd
-                        } else null
-                        
-                        val workingDir = when {
-                            // 方式1：直接使用会话的 cwd（最准确）
-                            !sessionCwd.isNullOrBlank() -> {
-                                println("=== 工作目录确定 ===")
-                                println("使用会话的 cwd: $sessionCwd")
-                                println("标签ID: ${activeTab?.id}")
-                                println("会话ID: $sessionId")
-                                println("==================")
-                                sessionCwd
-                            }
-                            // 方式2：fallback 到标签的项目路径
-                            !activeTab?.projectPath.isNullOrBlank() -> {
-                                println("=== 工作目录确定 ===")
-                                println("会话无 cwd，使用活动标签的项目路径: ${activeTab?.projectPath}")
-                                println("标签ID: ${activeTab?.id}")
-                                println("会话ID: $sessionId")
-                                println("==================")
-                                activeTab?.projectPath!!
-                            }
-                            // 方式3：fallback 到当前项目路径
-                            currentProject?.path != null -> {
-                                println("=== 工作目录确定 ===")
-                                println("使用当前项目路径: ${currentProject?.path}")
-                                println("==================")
-                                currentProject?.path!!
-                            }
-                            // 方式4：最后 fallback 到默认路径
-                            else -> {
-                                println("=== 工作目录确定 ===")
-                                println("使用默认项目路径: $defaultProjectPath")
-                                println("==================")
-                                defaultProjectPath
-                            }
+                ProjectTabBar(
+                    projects = projects,
+                    currentProjectId = currentProject?.id,
+                    sessionCounts = sessionCounts,
+                    onProjectSelect = { project -> 
+                        // 只在项目真正不同时才切换
+                        if (currentProject?.id != project.id) {
+                            println("✅ 用户切换项目: ${currentProject?.name} -> ${project.name}")
+                            projectManager.setCurrentProject(project)
                         }
-                        workingDir
                     },
-                    fileIndexService = fileIndexService,
-                    projectService = projectService,
-                    sessionManager = sessionManager,
-                    sessionObjectManager = sessionObjectManager,
-                    projectManager = projectManager,
-                    onTabHover = { sessionId -> hoveredSessionId = sessionId },
-                    modifier = Modifier.weight(1f)
+                    onProjectClose = if (projects.size > 1) {
+                        { project ->
+                            scope.launch {
+                                projectManager.deleteProject(project)
+                            }
+                        }
+                    } else null,
+                    onNewProject = {
+                        // 直接弹出文件夹选择器
+                        val fileChooser = JFileChooser().apply {
+                            fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                            dialogTitle = "选择项目文件夹"
+                            currentDirectory = File(System.getProperty("user.home"))
+                        }
+                        
+                        val result = fileChooser.showOpenDialog(null)
+                        if (result == JFileChooser.APPROVE_OPTION) {
+                            val selectedPath = fileChooser.selectedFile.absolutePath
+                            val projectName = fileChooser.selectedFile.name
+                            
+                            scope.launch {
+                                val project = projectManager.createProject(projectName, selectedPath)
+                                // 如果是新项目，创建新标签
+                                if (tabManager.tabs.none { it.projectId == project.id }) {
+                                    tabManager.createNewTab(
+                                        title = "新对话",
+                                        project = project
+                                    )
+                                }
+                            }
+                        }
+                    }
                 )
+                
+                Divider(orientation = Orientation.Horizontal)
             }
+            
+            // 主内容区域：直接显示会话管理界面
+            Row(modifier = Modifier.fillMaxSize()) {
+                    val currentSession by projectManager.currentSession
+                    
+                    // 悬停状态管理
+                    var hoveredSessionId by remember { mutableStateOf<String?>(null) }
+
+                    // 只显示当前项目的会话
+                    println("[DEBUG] SessionListPanel - currentProject: ${currentProject?.id} (${currentProject?.name})")
+                    println("[DEBUG] Main.kt - currentProject 来源: ${projectManager.currentProject.value?.name}")
+                    println("[DEBUG] Main.kt - projects.size: ${projects.size}")
+                    val project = currentProject
+                    if (project != null) {
+                        println("[DEBUG] 创建 SessionListPanel - project: ${project.id}, onCreateSession 不为 null: ${true}")
+                        SessionListPanel(
+                            projectManager = projectManager,
+                            tabManager = tabManager,
+                            currentProject = project,
+                            selectedSession = currentSession,
+                            hoveredSessionId = hoveredSessionId,
+                            onSessionSelect = { session -> projectManager.setCurrentSession(session, loadHistory = true) },
+                            onSessionHover = { sessionId -> hoveredSessionId = sessionId },
+                            onCreateSession = { 
+                                scope.launch {
+                                    // 创建占位会话
+                                    val newSession = projectManager.createPlaceholderSession(project.id)
+                                    // 创建新标签并关联会话
+                                    tabManager.createNewTab(
+                                        title = newSession.name,
+                                        sessionId = newSession.id,
+                                        project = project
+                                    )
+                                    // 设置为当前会话
+                                    projectManager.setCurrentSession(newSession, loadHistory = true)
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(280.dp) // 固定宽度，更适合会话列表
+                        )
+
+                        Divider(orientation = Orientation.Vertical)
+                    } else {
+                        // 项目加载中的占位面板 - 但不等待太久
+                        LaunchedEffect(Unit) {
+                            // 在500ms后尝试选择默认项目
+                            kotlinx.coroutines.delay(500)
+                            if (currentProject == null && projects.isNotEmpty()) {
+                                println("强制选择第一个项目: ${projects[0].name}")
+                                projectManager.setCurrentProject(projects[0])
+                            }
+                        }
+                        
+                        Column(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(280.dp)
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "正在加载项目...",
+                                style = JewelTheme.defaultTextStyle,
+                                color = JewelTheme.globalColors.text.disabled
+                            )
+                        }
+                        
+                        Divider(orientation = Orientation.Vertical)
+                    }
+
+                    // 调试信息和项目选择
+                    LaunchedEffect(currentProject) {
+                        println("=== 当前项目调试信息 ===")
+                        println("currentProject: ${currentProject?.name} (${currentProject?.path})")
+                        println("defaultProjectPath: $defaultProjectPath")
+                        println("workingDirectory 将设置为: ${currentProject?.path ?: defaultProjectPath}")
+                        println("========================")
+                    }
+                    
+                    // 右侧主要内容区域：直接显示聊天区域
+                    MultiTabChatView(
+                        tabManager = tabManager,
+                        unifiedSessionServiceProvider = unifiedSessionServiceProvider,
+                        workingDirectory = currentProject?.path ?: defaultProjectPath,
+                        fileIndexService = fileIndexService,
+                        projectService = projectService,
+                        sessionManager = sessionManager,
+                        projectManager = projectManager,
+                        onTabHover = { sessionId -> hoveredSessionId = sessionId },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
         }
         
         // 状态栏

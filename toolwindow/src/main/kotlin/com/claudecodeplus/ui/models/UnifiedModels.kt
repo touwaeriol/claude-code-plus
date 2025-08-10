@@ -799,7 +799,8 @@ sealed class ToolResult {
  * @param tokenUsage Token 使用统计
  * @param isCompactSummary 是否为压缩摘要
  */
-data class EnhancedMessage(
+data class
+EnhancedMessage(
     val id: String = UUID.randomUUID().toString(),
     val role: MessageRole,
     val content: String,
