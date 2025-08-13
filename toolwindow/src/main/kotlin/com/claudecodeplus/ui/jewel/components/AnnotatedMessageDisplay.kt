@@ -7,6 +7,7 @@
 package com.claudecodeplus.ui.jewel.components
 
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -47,22 +48,24 @@ fun AnnotatedMessageDisplay(
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         // 消息内容
-        ClickableText(
-            text = annotatedText,
-            style = JewelTheme.defaultTextStyle.copy(
-                fontSize = 13.sp,
-                lineHeight = 18.sp
-            ),
-            onClick = { offset ->
-                handleTextClick(
-                    annotatedText = annotatedText,
-                    offset = offset,
-                    uriHandler = uriHandler,
-                    onContextClick = onContextClick
-                )
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
+        SelectionContainer {
+            ClickableText(
+                text = annotatedText,
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                ),
+                onClick = { offset ->
+                    handleTextClick(
+                        annotatedText = annotatedText,
+                        offset = offset,
+                        uriHandler = uriHandler,
+                        onContextClick = onContextClick
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         
         // 时间戳（可选）
         timestamp?.let {

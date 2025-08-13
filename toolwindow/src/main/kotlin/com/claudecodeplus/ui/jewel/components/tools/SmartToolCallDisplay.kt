@@ -4,9 +4,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolCallStatus
 import com.claudecodeplus.ui.models.ToolType
+import org.jetbrains.jewel.foundation.theme.JewelTheme
+import org.jetbrains.jewel.ui.component.Text
 
 /**
  * 智能工具调用展示组件
@@ -23,9 +26,33 @@ fun SmartToolCallDisplay(
     }
     
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // 工具调用标题（只有在有工具调用时才显示）
+        if (toolCalls.isNotEmpty()) {
+            Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(bottom = 4.dp)
+            ) {
+                Text(
+                    text = "🔧",
+                    style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
+                )
+                Text(
+                    text = "工具调用 (${toolCalls.size})",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 12.sp,
+                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f),
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                    )
+                )
+            }
+        }
+        
         // 如果有TodoWrite工具，优先展示
         val todoWriteCalls = toolCalls.filter { it.name.contains("TodoWrite", ignoreCase = true) }
         if (todoWriteCalls.isNotEmpty()) {

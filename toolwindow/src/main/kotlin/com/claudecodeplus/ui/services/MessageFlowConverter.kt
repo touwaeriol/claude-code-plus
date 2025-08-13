@@ -51,6 +51,9 @@ class MessageFlowConverter {
         sessionMessages: List<ClaudeFileMessage>,
         sessionId: String
     ): List<EnhancedMessage> {
+        // 清除转换器的工具结果缓存，开始新的批量转换
+        enhancedConverter.clearToolResultsCache()
+        
         return sessionMessages.mapNotNull { message ->
             convertMessage(message, sessionId)
         }
@@ -86,9 +89,16 @@ class MessageFlowConverter {
         jsonlContent: String,
         sessionId: String
     ): List<EnhancedMessage> {
-        return jsonlContent.lines()
-            .filter { it.trim().isNotEmpty() }
-            .mapNotNull { convertFromJsonLine(it, sessionId) }
+        // 使用增强转换器的批量处理，它会正确处理工具调用关联
+        val enhancedMessages = enhancedConverter.convertFromJsonLines(jsonlContent)
+        
+        // 应用去重逻辑
+        return enhancedMessages.filter { message ->
+            isNewMessage(sessionId, message.id)
+        }.also { filteredMessages ->
+            logger.debug { "Converted ${filteredMessages.size} messages from JSONL content" }
+            logger.debug { "Tool results cached: ${enhancedConverter.getCachedToolResultsCount()}" }
+        }
     }
     
     /**

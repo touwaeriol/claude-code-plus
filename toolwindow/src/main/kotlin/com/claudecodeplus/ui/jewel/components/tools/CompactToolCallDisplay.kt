@@ -13,6 +13,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -92,62 +93,7 @@ private fun CompactToolCallItem(
             .background(backgroundColor)
             .hoverable(interactionSource)
     ) {
-        // 紧凑的单行显示 - 包裹在 Tooltip 中
-        Tooltip(
-            tooltip = {
-                // 悬浮时显示所有参数
-                Column(
-                    modifier = Modifier
-                        .widthIn(max = 400.dp)
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        "参数：",
-                        style = JewelTheme.defaultTextStyle.copy(
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    )
-                    
-                    if (toolCall.parameters.isEmpty()) {
-                        Text(
-                            "无参数",
-                            style = JewelTheme.defaultTextStyle.copy(
-                                fontSize = 11.sp,
-                                color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
-                            )
-                        )
-                    } else {
-                        toolCall.parameters.forEach { (key, value) ->
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    "$key:",
-                                    style = JewelTheme.defaultTextStyle.copy(
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = JewelTheme.globalColors.text.normal
-                                    ),
-                                    modifier = Modifier.widthIn(min = 80.dp)
-                                )
-                                Text(
-                                    formatTooltipValue(value),
-                                    style = JewelTheme.defaultTextStyle.copy(
-                                        fontSize = 11.sp,
-                                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.9f),
-                                        fontFamily = if (key == "command") FontFamily.Monospace else FontFamily.Default
-                                    ),
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        ) {
+        // 紧凑的单行显示
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -168,47 +114,38 @@ private fun CompactToolCallItem(
                     style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
                 )
                 
-                // 工具名称和参数（智能显示）
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.weight(1f)
+                // 工具名称和参数（智能内联显示）
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    val displayInfo = getToolDisplayInfo(toolCall)
-                    
-                    // 工具名称
+                    // 工具调用标题行，格式：🔧 ToolName parameter_value
+                    val inlineDisplay = getInlineToolDisplay(toolCall)
                     Text(
-                        text = toolCall.name,
+                        text = inlineDisplay,
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 13.sp,
                             color = JewelTheme.globalColors.text.normal,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
-                        )
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     
-                    // 参数值
-                    if (displayInfo.briefValue.isNotEmpty()) {
-                        Text(
-                            text = displayInfo.briefValue,
-                            style = JewelTheme.defaultTextStyle.copy(
-                                fontSize = 13.sp,
-                                color = JewelTheme.globalColors.text.normal
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    
-                    // 完整路径（如果有）
-                    if (displayInfo.fullPath.isNotEmpty() && displayInfo.fullPath != displayInfo.briefValue) {
-                        Text(
-                            text = displayInfo.fullPath,
-                            style = JewelTheme.defaultTextStyle.copy(
-                                fontSize = 11.sp,
-                                color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    // 如果有多个参数，在第二行显示摘要
+                    if (toolCall.parameters.size > 1) {
+                        val paramSummary = getParameterSummary(toolCall)
+                        if (paramSummary.isNotEmpty()) {
+                            Text(
+                                text = paramSummary,
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 11.sp,
+                                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
@@ -251,7 +188,6 @@ private fun CompactToolCallItem(
                     )
                 )
             }
-        }
         }
         
         // 展开的详细内容
@@ -334,14 +270,16 @@ private fun ToolCallDetails(
         }
         
         // 详细内容 - 直接显示结果，无需额外标题
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-        ) {
-            // 直接显示结果
-            toolCall.result?.let { result ->
-                formatToolResult(toolCall)
+        SelectionContainer {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp)
+            ) {
+                // 直接显示结果
+                toolCall.result?.let { result ->
+                    formatToolResult(toolCall)
+                }
             }
         }
     }
@@ -374,6 +312,138 @@ private data class ToolDisplayInfo(
     val briefValue: String = "",
     val fullPath: String = ""
 )
+
+/**
+ * 获取工具的内联显示格式，例如：LS ./desktop
+ */
+private fun getInlineToolDisplay(toolCall: ToolCall): String {
+    val toolName = toolCall.name
+    val primaryParam = getPrimaryParamValue(toolCall)
+    
+    return when {
+        // 对于单参数工具，直接显示：ToolName parameter
+        isSingleParamTool(toolName) && primaryParam != null -> {
+            when {
+                // 文件路径类工具，只显示文件名/目录名
+                toolName.contains("Read", ignoreCase = true) ||
+                toolName.contains("Write", ignoreCase = true) ||
+                toolName.contains("LS", ignoreCase = true) -> {
+                    val fileName = primaryParam.substringAfterLast('/').substringAfterLast('\\')
+                    "$toolName $fileName"
+                }
+                // URL类工具，显示域名
+                toolName.contains("Web", ignoreCase = true) -> {
+                    val domain = primaryParam
+                        .removePrefix("https://")
+                        .removePrefix("http://")
+                        .substringBefore("/")
+                    "$toolName $domain"
+                }
+                // Bash命令，截取命令的前面部分
+                toolName.contains("Bash", ignoreCase = true) -> {
+                    val command = if (primaryParam.length > 30) {
+                        primaryParam.take(27) + "..."
+                    } else {
+                        primaryParam
+                    }
+                    "$toolName $command"
+                }
+                // Glob工具显示匹配模式
+                toolName.contains("Glob", ignoreCase = true) -> {
+                    "$toolName $primaryParam"
+                }
+                // Grep/Search工具显示搜索内容
+                toolName.contains("Grep", ignoreCase = true) ||
+                toolName.contains("Search", ignoreCase = true) -> {
+                    val searchTerm = if (primaryParam.length > 25) {
+                        primaryParam.take(22) + "..."
+                    } else {
+                        primaryParam
+                    }
+                    "$toolName \"$searchTerm\""
+                }
+                else -> "$toolName $primaryParam"
+            }
+        }
+        // 对于多参数工具，显示工具名和主要参数
+        else -> {
+            if (primaryParam != null) {
+                val displayParam = if (primaryParam.length > 30) {
+                    primaryParam.take(27) + "..."
+                } else {
+                    primaryParam
+                }
+                "$toolName $displayParam"
+            } else {
+                toolName
+            }
+        }
+    }
+}
+
+/**
+ * 获取参数摘要（用于多参数工具的第二行显示）
+ */
+private fun getParameterSummary(toolCall: ToolCall): String {
+    if (toolCall.parameters.size <= 1) return ""
+    
+    return when {
+        // Edit工具显示编辑数量
+        toolCall.name.contains("Edit", ignoreCase = true) -> {
+            val editsCount = toolCall.parameters["edits"]?.let {
+                if (it is List<*>) it.size else 1
+            } ?: 1
+            "$editsCount 处修改"
+        }
+        // Search/Grep工具显示搜索范围
+        toolCall.name.contains("Search", ignoreCase = true) ||
+        toolCall.name.contains("Grep", ignoreCase = true) -> {
+            val glob = toolCall.parameters["glob"]?.toString()
+            val type = toolCall.parameters["type"]?.toString()
+            when {
+                glob != null -> "in $glob"
+                type != null -> ".$type files"
+                else -> "${toolCall.parameters.size - 1} 个参数"
+            }
+        }
+        // Glob工具显示匹配模式
+        toolCall.name.contains("Glob", ignoreCase = true) -> {
+            val pattern = toolCall.parameters["pattern"]?.toString()
+            if (pattern != null) "pattern: $pattern" else "${toolCall.parameters.size} 个参数"
+        }
+        // Task工具显示任务类型
+        toolCall.name.contains("Task", ignoreCase = true) -> {
+            val subagentType = toolCall.parameters["subagent_type"]?.toString()
+            if (subagentType != null) "agent: $subagentType" else "${toolCall.parameters.size} 个参数"
+        }
+        // WebFetch工具显示提示信息
+        toolCall.name.contains("WebFetch", ignoreCase = true) -> {
+            val prompt = toolCall.parameters["prompt"]?.toString()
+            if (prompt != null && prompt.length > 20) {
+                "query: ${prompt.take(17)}..."
+            } else {
+                prompt?.let { "query: $it" } ?: "${toolCall.parameters.size} 个参数"
+            }
+        }
+        // NotebookEdit工具显示操作类型
+        toolCall.name.contains("NotebookEdit", ignoreCase = true) -> {
+            val editMode = toolCall.parameters["edit_mode"]?.toString()
+            val cellType = toolCall.parameters["cell_type"]?.toString()
+            when {
+                editMode != null && cellType != null -> "$editMode $cellType cell"
+                editMode != null -> "$editMode cell"
+                else -> "${toolCall.parameters.size} 个参数"
+            }
+        }
+        // MCP工具显示服务器名称
+        toolCall.name.startsWith("mcp__", ignoreCase = true) -> {
+            val serverName = toolCall.name.substringAfter("mcp__").substringBefore("__")
+            "via $serverName"
+        }
+        // 其他工具显示参数数量
+        else -> "${toolCall.parameters.size} 个参数"
+    }
+}
 
 /**
  * 获取工具的显示信息
@@ -441,6 +511,501 @@ private fun formatValue(value: Any): String {
 }
 
 /**
+ * Glob 文件匹配结果显示
+ */
+@Composable
+private fun FileMatchResultDisplay(toolCall: ToolCall) {
+    val result = toolCall.result ?: return
+    
+    when (result) {
+        is ToolResult.Success -> {
+            val output = result.output
+            val lines = output.split('\n').filter { it.isNotBlank() }
+            
+            if (lines.isEmpty()) {
+                Text(
+                    text = "📂 未找到匹配的文件",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 12.sp,
+                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+                    )
+                )
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "📂 找到 ${lines.size} 个匹配文件：",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    )
+                    
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 200.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        lines.take(20).forEach { filePath ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "📄",
+                                    style = JewelTheme.defaultTextStyle.copy(fontSize = 10.sp)
+                                )
+                                Text(
+                                    text = filePath.substringAfterLast('/').ifEmpty { filePath },
+                                    style = JewelTheme.defaultTextStyle.copy(
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = JewelTheme.globalColors.text.normal
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                        
+                        if (lines.size > 20) {
+                            Text(
+                                text = "... 还有 ${lines.size - 20} 个文件",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 10.sp,
+                                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        is ToolResult.Failure -> {
+            Text(
+                text = "❌ ${result.error}",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 12.sp,
+                    color = Color(0xFFFF6B6B)
+                )
+            )
+        }
+        else -> {}
+    }
+}
+
+/**
+ * 搜索结果显示（Grep/Search）
+ */
+@Composable
+private fun SearchResultDisplay(toolCall: ToolCall) {
+    val result = toolCall.result ?: return
+    
+    when (result) {
+        is ToolResult.Success -> {
+            val output = result.output
+            val lines = output.split('\n').filter { it.isNotBlank() }
+            
+            if (lines.isEmpty()) {
+                Text(
+                    text = "🔍 未找到匹配的内容",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 12.sp,
+                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+                    )
+                )
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // 搜索统计
+                    val pattern = toolCall.parameters["pattern"]?.toString() ?: ""
+                    Text(
+                        text = "🔍 搜索 \"$pattern\" 找到 ${lines.size} 处匹配：",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    )
+                    
+                    // 搜索结果列表
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 300.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        lines.take(15).forEach { line ->
+                            val parts = line.split(':', limit = 3)
+                            if (parts.size >= 2) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    // 文件名
+                                    Text(
+                                        text = parts[0].substringAfterLast('/'),
+                                        style = JewelTheme.defaultTextStyle.copy(
+                                            fontSize = 10.sp,
+                                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f),
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        modifier = Modifier.width(120.dp)
+                                    )
+                                    
+                                    // 行号
+                                    if (parts.size >= 3) {
+                                        Text(
+                                            text = parts[1],
+                                            style = JewelTheme.defaultTextStyle.copy(
+                                                fontSize = 10.sp,
+                                                color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)
+                                            ),
+                                            modifier = Modifier.width(40.dp)
+                                        )
+                                        
+                                        // 匹配内容
+                                        Text(
+                                            text = parts[2].trim(),
+                                            style = JewelTheme.defaultTextStyle.copy(
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                color = JewelTheme.globalColors.text.normal
+                                            ),
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    } else {
+                                        Text(
+                                            text = parts[1],
+                                            style = JewelTheme.defaultTextStyle.copy(
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                color = JewelTheme.globalColors.text.normal
+                                            ),
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (lines.size > 15) {
+                            Text(
+                                text = "... 还有 ${lines.size - 15} 处匹配",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 10.sp,
+                                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        is ToolResult.Failure -> {
+            Text(
+                text = "❌ ${result.error}",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 12.sp,
+                    color = Color(0xFFFF6B6B)
+                )
+            )
+        }
+        else -> {}
+    }
+}
+
+/**
+ * 网页内容显示（WebFetch）
+ */
+@Composable
+private fun WebContentDisplay(toolCall: ToolCall) {
+    val result = toolCall.result ?: return
+    
+    when (result) {
+        is ToolResult.Success -> {
+            val url = toolCall.parameters["url"]?.toString() ?: ""
+            val content = result.output
+            
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // URL 标题
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🌐",
+                        style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
+                    )
+                    Text(
+                        text = url.removePrefix("https://").removePrefix("http://").substringBefore("/"),
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    )
+                }
+                
+                // 内容摘要
+                Text(
+                    text = if (content.length > 500) content.take(497) + "..." else content,
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 11.sp,
+                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f),
+                        lineHeight = 16.sp
+                    ),
+                    modifier = Modifier
+                        .heightIn(max = 200.dp)
+                        .verticalScroll(rememberScrollState())
+                )
+                
+                // 内容统计
+                Text(
+                    text = "内容长度：${content.length} 字符",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 10.sp,
+                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)
+                    )
+                )
+            }
+        }
+        is ToolResult.Failure -> {
+            Text(
+                text = "❌ ${result.error}",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 12.sp,
+                    color = Color(0xFFFF6B6B)
+                )
+            )
+        }
+        else -> {}
+    }
+}
+
+/**
+ * 子任务处理显示（Task）
+ */
+@Composable
+private fun SubTaskDisplay(toolCall: ToolCall) {
+    val result = toolCall.result ?: return
+    
+    when (result) {
+        is ToolResult.Success -> {
+            val output = result.output
+            val description = toolCall.parameters["description"]?.toString() ?: "执行任务"
+            
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "🔧 $description",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                )
+                
+                Text(
+                    text = if (output.length > 300) output.take(297) + "..." else output,
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
+                    ),
+                    modifier = Modifier
+                        .heightIn(max = 150.dp)
+                        .verticalScroll(rememberScrollState())
+                )
+            }
+        }
+        is ToolResult.Failure -> {
+            Text(
+                text = "❌ 任务执行失败：${result.error}",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 12.sp,
+                    color = Color(0xFFFF6B6B)
+                )
+            )
+        }
+        else -> {}
+    }
+}
+
+/**
+ * Jupyter 操作显示（NotebookEdit）
+ */
+@Composable
+private fun NotebookOperationDisplay(toolCall: ToolCall) {
+    val result = toolCall.result ?: return
+    
+    when (result) {
+        is ToolResult.Success -> {
+            val notebookPath = toolCall.parameters["notebook_path"]?.toString() ?: ""
+            val cellNumber = toolCall.parameters["cell_number"]?.toString()
+            val editMode = toolCall.parameters["edit_mode"]?.toString() ?: "replace"
+            
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // 操作标题
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "📓",
+                        style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
+                    )
+                    Text(
+                        text = "${editMode.uppercase()} ${notebookPath.substringAfterLast('/')}",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    )
+                }
+                
+                // 单元格信息
+                if (cellNumber != null) {
+                    Text(
+                        text = "Cell: $cellNumber",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 11.sp,
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+                        )
+                    )
+                }
+                
+                // 操作结果
+                val output = result.output
+                if (output.isNotEmpty()) {
+                    Text(
+                        text = if (output.length > 200) output.take(197) + "..." else output,
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
+                        ),
+                        modifier = Modifier
+                            .heightIn(max = 100.dp)
+                            .verticalScroll(rememberScrollState())
+                    )
+                } else {
+                    Text(
+                        text = "✅ 操作完成",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 11.sp,
+                            color = Color(0xFF4CAF50)
+                        )
+                    )
+                }
+            }
+        }
+        is ToolResult.Failure -> {
+            Text(
+                text = "❌ Notebook 操作失败：${result.error}",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 12.sp,
+                    color = Color(0xFFFF6B6B)
+                )
+            )
+        }
+        else -> {}
+    }
+}
+
+/**
+ * MCP 工具统一显示
+ */
+@Composable
+private fun MCPToolDisplay(toolCall: ToolCall) {
+    val result = toolCall.result ?: return
+    
+    when (result) {
+        is ToolResult.Success -> {
+            val toolName = toolCall.name
+            val serverName = toolName.substringAfter("mcp__").substringBefore("__")
+            val functionName = toolName.substringAfterLast("__")
+            
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // MCP 工具标题
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🔗",
+                        style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
+                    )
+                    Text(
+                        text = "$serverName.$functionName",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    )
+                }
+                
+                // 主要参数
+                val mainParams = toolCall.parameters.entries.take(2)
+                if (mainParams.isNotEmpty()) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        mainParams.forEach { (key, value) ->
+                            Text(
+                                text = "$key: ${formatValue(value)}",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 10.sp,
+                                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+                                )
+                            )
+                        }
+                    }
+                }
+                
+                // 结果摘要
+                val output = result.output
+                Text(
+                    text = if (output.length > 300) output.take(297) + "..." else output,
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
+                    ),
+                    modifier = Modifier
+                        .heightIn(max = 150.dp)
+                        .verticalScroll(rememberScrollState())
+                )
+            }
+        }
+        is ToolResult.Failure -> {
+            Text(
+                text = "❌ MCP 工具执行失败：${result.error}",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 12.sp,
+                    color = Color(0xFFFF6B6B)
+                )
+            )
+        }
+        else -> {}
+    }
+}
+
+/**
  * 格式化时间长度
  */
 private fun formatDuration(millis: Long): String {
@@ -497,6 +1062,37 @@ private fun formatToolResult(toolCall: ToolCall) {
         // TodoWrite 使用看板展示
         toolCall.name.contains("TodoWrite", ignoreCase = true) -> {
             EnhancedTodoDisplay(toolCall)
+        }
+        
+        // Glob 文件匹配结果展示
+        toolCall.name.contains("Glob", ignoreCase = true) -> {
+            FileMatchResultDisplay(toolCall)
+        }
+        
+        // Grep/Search 搜索结果展示
+        toolCall.name.contains("Grep", ignoreCase = true) ||
+        toolCall.name.contains("Search", ignoreCase = true) -> {
+            SearchResultDisplay(toolCall)
+        }
+        
+        // WebFetch 网页内容展示
+        toolCall.name.contains("WebFetch", ignoreCase = true) -> {
+            WebContentDisplay(toolCall)
+        }
+        
+        // Task 子任务处理展示
+        toolCall.name.contains("Task", ignoreCase = true) -> {
+            SubTaskDisplay(toolCall)
+        }
+        
+        // NotebookEdit Jupyter 操作展示
+        toolCall.name.contains("NotebookEdit", ignoreCase = true) -> {
+            NotebookOperationDisplay(toolCall)
+        }
+        
+        // MCP 工具统一展示（以 mcp__ 开头）
+        toolCall.name.startsWith("mcp__", ignoreCase = true) -> {
+            MCPToolDisplay(toolCall)
         }
         
         // 其他工具使用默认展示
@@ -632,13 +1228,33 @@ private fun DefaultResultDisplay(toolCall: ToolCall) {
     
     when (result) {
         is ToolResult.Success -> {
-            // 根据工具类型决定是否限制高度
-            val shouldLimitHeight = shouldLimitToolHeight(toolCall)
-            ToolResultContent(
-                toolCall = toolCall,
-                limitHeight = shouldLimitHeight,
-                maxHeight = 200.dp
-            )
+            // 对结果内容进行智能过滤和简化
+            val cleanedContent = cleanToolResultContent(result.output, toolCall.name)
+            
+            if (cleanedContent.isNotEmpty()) {
+                // 根据工具类型决定是否限制高度
+                val shouldLimitHeight = shouldLimitToolHeight(toolCall)
+                
+                // 创建简化后的工具调用对象
+                val simplifiedToolCall = toolCall.copy(
+                    result = ToolResult.Success(cleanedContent)
+                )
+                
+                ToolResultContent(
+                    toolCall = simplifiedToolCall,
+                    limitHeight = shouldLimitHeight,
+                    maxHeight = 200.dp
+                )
+            } else {
+                // 如果内容被完全过滤掉，显示简单的成功状态
+                Text(
+                    text = "✅ 执行成功",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 12.sp,
+                        color = Color(0xFF4CAF50)
+                    )
+                )
+            }
         }
         is ToolResult.Failure -> {
             Text(
@@ -685,5 +1301,188 @@ private fun formatTooltipValue(value: Any): String {
         is List<*> -> "[${value.size} items]"
         is Map<*, *> -> "{${value.size} entries}"
         else -> value.toString()
+    }
+}
+
+/**
+ * 清理工具结果内容，过滤技术噪音
+ */
+private fun cleanToolResultContent(content: String, toolName: String): String {
+    if (content.isBlank()) return ""
+    
+    // MCP 工具统一过滤
+    if (toolName.startsWith("mcp__", ignoreCase = true)) {
+        return cleanMcpToolResult(content, toolName)
+    }
+    
+    return when {
+        // 文件操作工具 - 只显示关键信息
+        toolName.contains("LS", ignoreCase = true) -> cleanLsOutput(content)
+        toolName.contains("Read", ignoreCase = true) -> cleanReadOutput(content)
+        toolName.contains("Write", ignoreCase = true) -> cleanWriteOutput(content)
+        toolName.contains("Edit", ignoreCase = true) -> cleanEditOutput(content)
+        
+        // 系统工具 - 过滤配置和技术信息
+        toolName.contains("Bash", ignoreCase = true) -> cleanBashOutput(content)
+        toolName.contains("info", ignoreCase = true) -> cleanInfoOutput(content)
+        
+        // 其他工具保持原有内容但限制长度
+        else -> if (content.length > 500) content.take(497) + "..." else content
+    }
+}
+
+/**
+ * 清理 MCP 工具结果
+ */
+private fun cleanMcpToolResult(content: String, toolName: String): String {
+    val serverName = toolName.substringAfter("mcp__").substringBefore("__")
+    val functionName = toolName.substringAfterLast("__")
+    
+    // 过滤常见的 MCP 技术输出
+    return when {
+        // 数据库操作结果
+        serverName.contains("postgres", ignoreCase = true) -> {
+            if (content.contains("rows affected", ignoreCase = true)) {
+                extractRowsAffected(content)
+            } else if (content.contains("error", ignoreCase = true)) {
+                "❌ 数据库操作失败"
+            } else {
+                "✅ 数据库操作成功"
+            }
+        }
+        
+        // Redis 操作结果
+        serverName.contains("redis", ignoreCase = true) -> {
+            if (content.contains("error", ignoreCase = true) || content.contains("fail", ignoreCase = true)) {
+                "❌ Redis 操作失败"
+            } else {
+                "✅ Redis 操作成功"
+            }
+        }
+        
+        // Excel 操作结果
+        serverName.contains("excel", ignoreCase = true) -> {
+            when {
+                functionName.contains("read", ignoreCase = true) -> "📊 Excel 文件读取完成"
+                functionName.contains("write", ignoreCase = true) -> "📝 Excel 文件写入完成"
+                functionName.contains("format", ignoreCase = true) -> "🎨 Excel 格式设置完成"
+                else -> "✅ Excel 操作完成"
+            }
+        }
+        
+        // 其他 MCP 工具的默认处理
+        else -> {
+            if (content.length > 200) {
+                // 尝试提取关键信息
+                val lines = content.lines().filter { it.trim().isNotEmpty() }
+                val keyLines = lines.filter { line ->
+                    !line.contains("[", ignoreCase = true) &&
+                    !line.contains("{", ignoreCase = true) &&
+                    !line.contains("server", ignoreCase = true) &&
+                    line.length < 100
+                }
+                
+                if (keyLines.isNotEmpty()) {
+                    keyLines.take(3).joinToString("\n")
+                } else {
+                    "✅ $functionName 执行完成"
+                }
+            } else {
+                content
+            }
+        }
+    }
+}
+
+/**
+ * 清理 LS 命令输出
+ */
+private fun cleanLsOutput(content: String): String {
+    val lines = content.lines().filter { it.trim().isNotEmpty() }
+    return if (lines.size > 10) {
+        "📁 ${lines.size} 个文件/目录\n${lines.take(10).joinToString("\n")}\n... 还有 ${lines.size - 10} 项"
+    } else {
+        content
+    }
+}
+
+/**
+ * 清理读文件输出
+ */
+private fun cleanReadOutput(content: String): String {
+    val lines = content.lines()
+    return if (lines.size > 20) {
+        "📄 文件内容 (${lines.size} 行)\n${lines.take(15).joinToString("\n")}\n... 还有 ${lines.size - 15} 行"
+    } else {
+        content
+    }
+}
+
+/**
+ * 清理写文件输出
+ */
+private fun cleanWriteOutput(content: String): String {
+    return when {
+        content.contains("successfully", ignoreCase = true) -> "✅ 文件写入成功"
+        content.contains("created", ignoreCase = true) -> "✅ 文件创建成功"
+        content.contains("error", ignoreCase = true) -> "❌ 文件操作失败"
+        else -> if (content.length > 100) "✅ 文件操作完成" else content
+    }
+}
+
+/**
+ * 清理编辑文件输出
+ */
+private fun cleanEditOutput(content: String): String {
+    return when {
+        content.contains("successfully", ignoreCase = true) -> "✅ 文件编辑成功"
+        content.contains("modified", ignoreCase = true) -> "✅ 文件修改完成"
+        content.contains("error", ignoreCase = true) -> "❌ 编辑失败"
+        else -> if (content.length > 100) "✅ 文件编辑完成" else content
+    }
+}
+
+/**
+ * 清理 Bash 命令输出
+ */
+private fun cleanBashOutput(content: String): String {
+    // 保持 Bash 输出，但限制长度
+    return if (content.length > 800) {
+        content.take(797) + "..."
+    } else {
+        content
+    }
+}
+
+/**
+ * 清理信息命令输出（如 MCP info）
+ */
+private fun cleanInfoOutput(content: String): String {
+    // 过滤掉大段的配置和服务器列表
+    val lines = content.lines().filter { line ->
+        !line.contains("[") && 
+        !line.contains("{") &&
+        !line.contains("server", ignoreCase = true) &&
+        !line.contains("config", ignoreCase = true) &&
+        line.trim().isNotEmpty()
+    }
+    
+    return if (lines.isEmpty()) {
+        "✅ 信息查询完成"
+    } else {
+        lines.take(5).joinToString("\n")
+    }
+}
+
+/**
+ * 从数据库输出中提取影响行数
+ */
+private fun extractRowsAffected(content: String): String {
+    val regex = "(\\d+)\\s+rows?\\s+affected".toRegex(RegexOption.IGNORE_CASE)
+    val match = regex.find(content)
+    return if (match != null) {
+        "✅ 操作成功，影响 ${match.groupValues[1]} 行"
+    } else {
+        "✅ 数据库操作完成"
     }
 }

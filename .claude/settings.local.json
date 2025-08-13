@@ -5,7 +5,8 @@
       "Bash(bash find_ide_logs.sh)",
       "Bash(arch)",
       "Rad",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(./gradlew:*)"
     ],
     "deny": []
   }

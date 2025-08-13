@@ -1,6 +1,7 @@
 package com.claudecodeplus.ui.jewel.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,21 +30,23 @@ fun AssistantMessageDisplay(
     ) {
         // 显示模型信息（如果有）
         message.model?.let { model ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "🤖",
-                    style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
-                )
-                Text(
-                    text = model.displayName,
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 12.sp,
-                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+            SelectionContainer {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "🤖",
+                        style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
                     )
-                )
+                    Text(
+                        text = model.displayName,
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 12.sp,
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+                        )
+                    )
+                }
             }
         }
         

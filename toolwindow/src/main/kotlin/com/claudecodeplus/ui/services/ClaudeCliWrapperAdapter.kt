@@ -78,9 +78,9 @@ class ClaudeCliWrapperAdapter(
     }
     
     /**
-     * 检查 CLI 是否可用
+     * 检查 Claude Code SDK 是否可用
      */
     suspend fun isClaudeCliAvailable(): Boolean {
-        return realWrapper.isClaudeCliAvailable()
+        return realWrapper.isClaudeCodeSdkAvailable()
     }
 }

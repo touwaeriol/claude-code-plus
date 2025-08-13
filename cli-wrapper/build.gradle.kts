@@ -45,3 +45,64 @@ tasks.register<JavaExec>("runSerializationTest") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.claudecodeplus.sdk.serialization.TestMainKt")
 }
+
+// 确保 Node.js 脚本和配置文件被包含在资源中
+tasks.named<Jar>("jar") {
+    from(".") {
+        include("claude-sdk-wrapper.js")
+        include("package.json")
+        include("README.md")
+        // 注意：不打包 node_modules，在运行时动态安装
+        exclude("node_modules/**")
+        exclude("**/*.log")
+        exclude("test-sdk.js")
+        into("nodejs")
+    }
+}
+
+// 创建分发包任务
+tasks.register<Zip>("createDistribution") {
+    group = "distribution"
+    description = "Create distribution package with Node.js runtime"
+    
+    from(".") {
+        include("claude-sdk-wrapper.js")
+        include("package.json")
+        include("README.md")
+        into("cli-wrapper")
+    }
+    
+    archiveFileName.set("claude-code-plus-nodejs-runtime.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+    
+    dependsOn("installNodeDependencies")
+}
+
+// 安装 Node.js 依赖的任务
+tasks.register<Exec>("installNodeDependencies") {
+    group = "build"
+    description = "Install Node.js dependencies for Claude Code SDK"
+    commandLine("npm", "install", "--production")
+    workingDir = file(".")
+    
+    inputs.file("package.json")
+    outputs.dir("node_modules")
+    
+    // 设置环境变量
+    environment("NODE_ENV", "production")
+}
+
+// 确保构建前安装 Node.js 依赖
+tasks.named("build") {
+    dependsOn("installNodeDependencies")
+}
+
+// 测试 SDK 集成的任务
+tasks.register<Exec>("testSdkIntegration") {
+    group = "verification"
+    description = "Test Claude Code SDK integration"
+    commandLine("node", "test-sdk.js")
+    workingDir = file(".")
+    
+    dependsOn("installNodeDependencies")
+}

@@ -14,6 +14,7 @@ import com.claudecodeplus.ui.jewel.components.*
 import com.claudecodeplus.ui.jewel.components.QueueIndicator
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.SessionManager
+import com.claudecodeplus.ui.services.EnhancedMessageConverter
 import java.time.Instant
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
@@ -36,10 +37,12 @@ import com.claudecodeplus.sdk.SessionHistoryLoader
 import com.claudecodeplus.ui.services.MessageConverter.toEnhancedMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonArray
 
 /**
  * 简单的JSON消息类用于解析Claude CLI输出
@@ -79,16 +82,28 @@ private fun parseClaudeJsonLine(jsonLine: String): SimpleClaudeMessage? {
                     }
                 }
                 jsonElement.containsKey("message") -> {
-                    // 从message对象中提取
+                    // 从message对象中提取，特别处理助手消息的content数组
                     val messageObj = jsonElement["message"]
                     when {
                         messageObj is JsonPrimitive -> messageObj.content
                         messageObj is JsonObject -> {
-                            messageObj["content"]?.jsonPrimitive?.content 
-                                ?: messageObj["text"]?.jsonPrimitive?.content
-                                ?: messageObj.toString()
+                            // 检查是否有content数组（助手消息格式）
+                            val contentElement = messageObj["content"]
+                            if (contentElement is JsonArray) {
+                                // 提取数组中的text内容
+                                contentElement.mapNotNull { element ->
+                                    if (element is JsonObject) {
+                                        element["text"]?.jsonPrimitive?.content
+                                    } else null
+                                }.joinToString("")
+                            } else {
+                                // 兜底：尝试其他字段
+                                messageObj["content"]?.jsonPrimitive?.content 
+                                    ?: messageObj["text"]?.jsonPrimitive?.content
+                                    ?: ""
+                            }
                         }
-                        else -> messageObj.toString()
+                        else -> ""
                     }
                 }
                 jsonElement.containsKey("text") -> {
@@ -105,8 +120,8 @@ private fun parseClaudeJsonLine(jsonLine: String): SimpleClaudeMessage? {
                     }
                 }
                 else -> {
-                    // 如果没有明确的内容字段，返回整个JSON作为内容
-                    jsonLine
+                    // 如果没有明确的内容字段，不显示原始JSON
+                    ""
                 }
             }
             
@@ -163,6 +178,9 @@ fun ChatViewNew(
 ) {
     val coroutineScope = rememberCoroutineScope()
     
+    // 用于消息转换的增强转换器
+    val messageConverter = remember { EnhancedMessageConverter() }
+    
     // 直接使用ClaudeCliWrapper实例
     val cliWrapper = remember { 
         com.claudecodeplus.sdk.ClaudeCliWrapper()
@@ -213,10 +231,21 @@ fun ChatViewNew(
         }
         
         val job = coroutineScope.launch {
+            // 添加一个助手消息占位符来显示响应（在try之外定义以便在finally中访问）
+            val assistantMessage = EnhancedMessage(
+                id = UUID.randomUUID().toString(),
+                role = MessageRole.ASSISTANT,
+                content = "", // 开始为空，会逐步添加内容
+                timestamp = System.currentTimeMillis(),
+                model = selectedModel,
+                isStreaming = true
+            )
+            
             try {
                 // 在协程开始时立即设置生成状态
                 sessionObject.isGenerating = true
                 println("[ChatViewNew] 设置 isGenerating = true")
+                
                 // 处理斜杠命令
                 val processedText = if (markdownText.trim().startsWith("/")) {
                     val parts = markdownText.trim().split(" ", limit = 2)
@@ -240,6 +269,9 @@ fun ChatViewNew(
                 )
                 sessionObject.addMessage(userMessage)
                 
+                // 然后添加助手消息到界面
+                sessionObject.addMessage(assistantMessage)
+                
                 // 判断是否为首次消息
                 val userMessageCount = messages.count { it.role == MessageRole.USER }
                 val isFirstMessage = userMessageCount == 1 // 刚添加了用户消息，所以现在是1表示首次
@@ -256,17 +288,6 @@ fun ChatViewNew(
                 println("[ChatViewNew] 发送消息: isFirstMessage=$isFirstMessage, sessionId=${sessionObject.sessionId}")
                 println("[ChatViewNew] 准备调用 ClaudeCliWrapper.query")
                 println("[ChatViewNew] options = $options")
-                
-                // 添加一个助手消息占位符来显示响应
-                val assistantMessage = EnhancedMessage(
-                    id = UUID.randomUUID().toString(),
-                    role = MessageRole.ASSISTANT,
-                    content = "", // 开始为空，会逐步添加内容
-                    timestamp = System.currentTimeMillis(),
-                    model = selectedModel,
-                    isStreaming = true
-                )
-                sessionObject.addMessage(assistantMessage)
                 
                 // 设置输出回调来处理Claude CLI的实时输出
                 cliWrapper.setOutputLineCallback { jsonLine ->
@@ -286,53 +307,71 @@ fun ChatViewNew(
                                 return@launch
                             }
                             
-                            // 尝试解析JSONL消息
-                            val message = parseClaudeJsonLine(jsonLine)
-                            if (message != null) {
-                                println("[ChatViewNew] 解析消息成功: type=${message.type}, content长度=${message.content?.length ?: 0}")
+                            // 解析JSON以检查消息类型，过滤系统初始化消息
+                            val json = Json { ignoreUnknownKeys = true; isLenient = true }
+                            val jsonObject = json.parseToJsonElement(jsonLine).jsonObject
+                            val messageType = jsonObject["type"]?.jsonPrimitive?.content
+                            val messageSubtype = jsonObject["subtype"]?.jsonPrimitive?.content
+                            
+                            // 过滤系统初始化消息和其他不需要显示的消息类型
+                            if (messageType == "system" && messageSubtype == "init") {
+                                println("[ChatViewNew] 过滤掉系统初始化消息")
+                                return@launch
+                            }
+                            
+                            if (messageType == "system" && messageSubtype != null) {
+                                println("[ChatViewNew] 过滤掉系统子类型消息: $messageSubtype")
+                                return@launch
+                            }
+                            
+                            // 使用增强消息转换器解析JSONL消息
+                            val enhancedMessage = messageConverter.convertFromJsonLine(jsonLine)
+                            if (enhancedMessage != null) {
+                                println("[ChatViewNew] 使用增强转换器解析消息成功: role=${enhancedMessage.role}, content长度=${enhancedMessage.content.length}, toolCalls=${enhancedMessage.toolCalls.size}")
                                 
-                                // 根据消息类型处理
-                                when (message.type?.lowercase()) {
-                                    "assistant", "text" -> {
-                                        // 更新助手消息内容
-                                        val content = extractContentFromMessage(message)
-                                        if (content.isNotEmpty()) {
-                                            println("[ChatViewNew] 更新助手消息内容: $content")
+                                // 根据消息角色处理，保持 Claude CLI 的原有顺序
+                                when (enhancedMessage.role) {
+                                    MessageRole.ASSISTANT -> {
+                                        // 处理助手消息
+                                        println("[ChatViewNew] 处理助手消息 - 内容: '${enhancedMessage.content.take(50)}...', 工具调用数: ${enhancedMessage.toolCalls.size}")
+                                        
+                                        if (enhancedMessage.content.isNotEmpty() || enhancedMessage.toolCalls.isNotEmpty()) {
+                                            // 如果是第一次收到这个助手消息，更新现有消息
                                             sessionObject.replaceMessage(assistantMessage.id) { existing ->
                                                 existing.copy(
-                                                    content = if (existing.content.isEmpty()) content else existing.content + content,
+                                                    content = if (enhancedMessage.content.isNotEmpty()) {
+                                                        if (existing.content.isEmpty()) enhancedMessage.content else existing.content + enhancedMessage.content
+                                                    } else existing.content,
+                                                    toolCalls = if (enhancedMessage.toolCalls.isNotEmpty()) {
+                                                        // 合并工具调用，避免重复
+                                                        val existingIds = existing.toolCalls.map { it.id }.toSet()
+                                                        val newCalls = enhancedMessage.toolCalls.filter { it.id !in existingIds }
+                                                        existing.toolCalls + newCalls
+                                                    } else existing.toolCalls,
                                                     timestamp = System.currentTimeMillis()
                                                 )
                                             }
                                         }
                                     }
-                                    "tool_use" -> {
-                                        println("[ChatViewNew] 收到工具调用消息")
-                                        // TODO: 处理工具调用消息
+                                    MessageRole.USER -> {
+                                        // 用户消息通常包含工具结果，需要更新助手消息中对应的工具调用
+                                        println("[ChatViewNew] 处理用户消息，检查工具结果更新")
+                                        
+                                        // EnhancedMessageConverter 已经解析了工具结果，现在需要将结果应用到助手消息的工具调用中
+                                        // 通过解析原始 JSON 来获取工具结果信息
+                                        updateToolCallsWithResults(jsonLine, assistantMessage.id, sessionObject)
                                     }
-                                    "tool_result" -> {
-                                        println("[ChatViewNew] 收到工具结果消息") 
-                                        // TODO: 处理工具结果消息
+                                    MessageRole.SYSTEM -> {
+                                        println("[ChatViewNew] 过滤掉系统消息")
+                                        // 系统消息不显示给用户
                                     }
-                                    "end" -> {
-                                        println("[ChatViewNew] 收到结束消息")
-                                        // 标记助手消息完成
-                                        sessionObject.replaceMessage(assistantMessage.id) { existing ->
-                                            existing.copy(isStreaming = false)
-                                        }
+                                    MessageRole.ERROR -> {
+                                        println("[ChatViewNew] 处理错误消息: ${enhancedMessage.content}")
+                                        // 可以选择显示错误消息，或者记录日志
                                     }
                                     else -> {
-                                        println("[ChatViewNew] 未处理的消息类型: ${message.type}，原始内容: $jsonLine")
-                                        // 对于未知类型，也尝试提取内容
-                                        val content = extractContentFromMessage(message)
-                                        if (content.isNotEmpty()) {
-                                            sessionObject.replaceMessage(assistantMessage.id) { existing ->
-                                                existing.copy(
-                                                    content = existing.content + content,
-                                                    timestamp = System.currentTimeMillis()
-                                                )
-                                            }
-                                        }
+                                        println("[ChatViewNew] 未处理的消息角色: ${enhancedMessage.role}，原始内容: $jsonLine")
+                                        // 对于未知类型，记录但不处理
                                     }
                                 }
                             } else {
@@ -362,6 +401,11 @@ fun ChatViewNew(
                 }
                 
                 println("[ChatViewNew] 查询完成: success=${result.success}, sessionId=${result.sessionId}")
+                
+                // 无论成功还是失败，都标记助手消息完成流式状态
+                sessionObject.replaceMessage(assistantMessage.id) { existing ->
+                    existing.copy(isStreaming = false)
+                }
                 
                 if (!result.success) {
                     val errorMessage = EnhancedMessage(
@@ -400,6 +444,11 @@ fun ChatViewNew(
             } finally {
                 sessionObject.isGenerating = false
                 sessionObject.currentStreamJob = null
+                
+                // 确保助手消息的流式状态被清除
+                sessionObject.replaceMessage(assistantMessage.id) { existing ->
+                    existing.copy(isStreaming = false)
+                }
             }
         }
         
@@ -519,5 +568,61 @@ fun ChatViewNew(
                 isGenerating = isGenerating  // 正确传递生成状态
             )
         }
+    }
+}
+
+/**
+ * 更新工具调用的结果
+ * 解析用户消息中的工具结果，并更新助手消息中对应工具调用的状态
+ */
+private fun updateToolCallsWithResults(jsonLine: String, assistantMessageId: String, sessionObject: SessionObject) {
+    try {
+        val json = Json { ignoreUnknownKeys = true; isLenient = true }
+        val jsonObject = json.parseToJsonElement(jsonLine).jsonObject
+        
+        // 检查是否是用户消息
+        if (jsonObject["type"]?.jsonPrimitive?.content == "user") {
+            val messageObj = jsonObject["message"]?.jsonObject
+            val contentArray = messageObj?.get("content")?.jsonArray
+            
+            contentArray?.forEach { contentElement ->
+                val contentObj = contentElement.jsonObject
+                if (contentObj["type"]?.jsonPrimitive?.content == "tool_result") {
+                    val toolUseId = contentObj["tool_use_id"]?.jsonPrimitive?.content
+                    val resultContent = contentObj["content"]?.jsonPrimitive?.content ?: ""
+                    val isError = contentObj["is_error"]?.jsonPrimitive?.content?.toBoolean() ?: false
+                    
+                    if (toolUseId != null) {
+                        println("[ChatViewNew] 更新工具结果: toolId=$toolUseId, isError=$isError, content=${resultContent.take(50)}...")
+                        
+                        // 更新助手消息中对应的工具调用
+                        sessionObject.replaceMessage(assistantMessageId) { existing ->
+                            val updatedToolCalls = existing.toolCalls.map { toolCall ->
+                                if (toolCall.id == toolUseId) {
+                                    val result = if (isError) {
+                                        ToolResult.Failure(resultContent)
+                                    } else {
+                                        ToolResult.Success(resultContent)
+                                    }
+                                    toolCall.copy(
+                                        status = if (isError) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
+                                        result = result,
+                                        endTime = System.currentTimeMillis()
+                                    )
+                                } else {
+                                    toolCall
+                                }
+                            }
+                            existing.copy(
+                                toolCalls = updatedToolCalls,
+                                timestamp = System.currentTimeMillis()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e: Exception) {
+        println("[ChatViewNew] 解析工具结果失败: ${e.message}")
     }
 }

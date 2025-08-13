@@ -156,14 +156,14 @@ fun CodeBlock(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF1E1E1E), RoundedCornerShape(8.dp))
-            .border(1.dp, Color(0xFF3C3C3C), RoundedCornerShape(8.dp))
+            .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+            .border(1.dp, JewelTheme.globalColors.borders.normal, RoundedCornerShape(8.dp))
     ) {
         // 头部工具栏
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF2B2B2B))
+                .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -173,7 +173,7 @@ fun CodeBlock(
                 text = language.ifEmpty { "text" },
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 12.sp,
-                    color = LocalContentColor.current.copy(alpha = 0.6f)
+                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
                 )
             )
             
@@ -219,7 +219,8 @@ fun CodeBlock(
                     style = JewelTheme.defaultTextStyle.copy(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 13.sp,
-                        lineHeight = 20.sp
+                        lineHeight = 20.sp,
+                        color = JewelTheme.globalColors.text.normal
                     )
                 )
             }
@@ -373,7 +374,7 @@ private fun parseInlineContent(node: Node): AnnotatedString {
                 }
                 
                 is SoftLineBreak -> {
-                    append(" ")
+                    append("\n")
                 }
                 
                 is HardLineBreak -> {

@@ -19,7 +19,7 @@ class UnifiedSessionService(
 ) {
     private val cliWrapper = ClaudeCliWrapper()
     private val sessionAPI = UnifiedSessionAPI(scope)
-    private val messageConverter = MessageFlowConverter()
+    private val messageConverter = EnhancedMessageConverter()
     
     /**
      * 内存中追踪已创建但可能还未写入磁盘的会话ID
@@ -160,10 +160,10 @@ class UnifiedSessionService(
     }
     
     /**
-     * 检查 CLI 是否可用
+     * 检查 Claude Code SDK 是否可用
      */
     suspend fun isCliAvailable(): Boolean {
-        return cliWrapper.isClaudeCliAvailable()
+        return cliWrapper.isClaudeCodeSdkAvailable()
     }
     
     /**

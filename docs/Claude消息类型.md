@@ -326,7 +326,7 @@ interface Usage {
 
 ## 工具调用流程
 
-工具调用遵循请求-响应模式：
+工具调用遵循请求-响应模式，**UI显示时需要将工具调用和结果组合展示**：
 
 1. **用户发起请求**
    ```json
@@ -345,7 +345,7 @@ interface Usage {
      "message": {
        "content": [{
          "type": "tool_use",
-         "id": "toolu_01abc...",
+         "id": "toolu_01abc123",
          "name": "TodoWrite",
          "input": {"todos": [...]}
        }]
@@ -359,8 +359,8 @@ interface Usage {
      "type": "user",
      "message": {
        "content": [{
-         "tool_use_id": "toolu_01abc...",
          "type": "tool_result",
+         "tool_use_id": "toolu_01abc123",  // 关联工具调用ID
          "content": "Todos have been modified successfully"
        }]
      }
@@ -376,6 +376,44 @@ interface Usage {
      }
    }
    ```
+
+### **关键实现要点：工具调用结果映射**
+
+**UI展示逻辑**：
+- 工具调用（`tool_use`）和工具结果（`tool_result`）通过 `id` 和 `tool_use_id` 关联
+- 在助手消息中显示工具调用时，需要查找后续消息中对应的工具结果
+- 工具调用状态应根据结果的存在性和成功性更新：
+  - `PENDING`: 尚未找到对应结果
+  - `SUCCESS`: 找到结果且 `is_error` 为 false 或未设置
+  - `FAILED`: 找到结果且 `is_error` 为 true
+
+**实现参考**（基于 Claudia 项目）：
+```typescript
+// 工具调用结果映射机制
+const [toolResults, setToolResults] = useState<Map<string, any>>(new Map());
+
+// 从所有消息中提取工具结果
+useEffect(() => {
+  const results = new Map<string, any>();
+  
+  streamMessages.forEach(msg => {
+    if (msg.type === "user" && msg.message?.content) {
+      msg.message.content.forEach((content: any) => {
+        if (content.type === "tool_result" && content.tool_use_id) {
+          results.set(content.tool_use_id, content);
+        }
+      });
+    }
+  });
+  
+  setToolResults(results);
+}, [streamMessages]);
+
+// 获取特定工具调用的结果
+const getToolResult = (toolId: string): any => {
+  return toolResults.get(toolId) || null;
+};
+```
 
 ## 实际示例
 
