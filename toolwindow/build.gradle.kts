@@ -40,6 +40,7 @@ dependencies {
     
     // Markdown 解析
     implementation("org.commonmark:commonmark:0.25.0")
+    implementation("org.commonmark:commonmark-ext-gfm-tables:0.25.0")
     
     // Kotlinx Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")

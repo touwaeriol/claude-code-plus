@@ -229,33 +229,15 @@ private fun ToolCallDetails(
             .fillMaxWidth()
             .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.3f))
     ) {
-        // 固定的顶部工具栏
+        // 简化的顶部工具栏，只保留关闭按钮
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.6f))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 工具名称和图标
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = getToolIcon(toolCall),
-                    style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
-                )
-                Text(
-                    text = toolCall.name,
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                )
-            }
-            
             // 关闭按钮
             Text(
                 text = "✕",
@@ -329,7 +311,7 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
                 toolName.contains("Write", ignoreCase = true) ||
                 toolName.contains("LS", ignoreCase = true) -> {
                     val fileName = primaryParam.substringAfterLast('/').substringAfterLast('\\')
-                    "$toolName $fileName"
+                    "$toolName($fileName)"
                 }
                 // URL类工具，显示域名
                 toolName.contains("Web", ignoreCase = true) -> {
@@ -337,7 +319,7 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
                         .removePrefix("https://")
                         .removePrefix("http://")
                         .substringBefore("/")
-                    "$toolName $domain"
+                    "$toolName($domain)"
                 }
                 // Bash命令，截取命令的前面部分
                 toolName.contains("Bash", ignoreCase = true) -> {
@@ -346,11 +328,11 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
                     } else {
                         primaryParam
                     }
-                    "$toolName $command"
+                    "$toolName($command)"
                 }
                 // Glob工具显示匹配模式
                 toolName.contains("Glob", ignoreCase = true) -> {
-                    "$toolName $primaryParam"
+                    "$toolName($primaryParam)"
                 }
                 // Grep/Search工具显示搜索内容
                 toolName.contains("Grep", ignoreCase = true) ||
@@ -360,9 +342,9 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
                     } else {
                         primaryParam
                     }
-                    "$toolName \"$searchTerm\""
+                    "$toolName($searchTerm)"
                 }
-                else -> "$toolName $primaryParam"
+                else -> "$toolName($primaryParam)"
             }
         }
         // 对于多参数工具，显示工具名和主要参数
@@ -373,7 +355,7 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
                 } else {
                     primaryParam
                 }
-                "$toolName $displayParam"
+                "$toolName($displayParam)"
             } else {
                 toolName
             }
@@ -1196,9 +1178,14 @@ private fun CommandResultDisplay(toolCall: ToolCall) {
         is ToolResult.Success -> {
             val output = result.output
             
+            // 过滤掉空行，只保留有内容的行
+            val cleanedOutput = output.lines()
+                .filter { it.trim().isNotEmpty() }
+                .joinToString("\n")
+            
             // 直接使用 ANSI 终端显示输出 - 增加到30行以显示更多内容
             AnsiOutputView(
-                text = output,
+                text = cleanedOutput,
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 30,  // 从默认的10行增加到30行
                 onCopy = { copiedText ->
@@ -1446,11 +1433,15 @@ private fun cleanEditOutput(content: String): String {
  * 清理 Bash 命令输出
  */
 private fun cleanBashOutput(content: String): String {
-    // 保持 Bash 输出，但限制长度
-    return if (content.length > 800) {
-        content.take(797) + "..."
+    // 去除空行，保持 Bash 输出，但限制长度
+    val cleanedContent = content.lines()
+        .filter { it.trim().isNotEmpty() }
+        .joinToString("\n")
+    
+    return if (cleanedContent.length > 800) {
+        cleanedContent.take(797) + "..."
     } else {
-        content
+        cleanedContent
     }
 }
 

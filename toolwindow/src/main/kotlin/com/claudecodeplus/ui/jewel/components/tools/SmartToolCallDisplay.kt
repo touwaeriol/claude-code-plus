@@ -13,97 +13,45 @@ import org.jetbrains.jewel.ui.component.Text
 
 /**
  * 智能工具调用展示组件
- * 根据工具类型和参数数量智能选择展示方式
+ * 按照新需求：简洁直观，每个工具调用独立显示，不进行分组
+ * FR-2.14: 工具调用必须直接展示，不使用分组标题或计数显示
  */
 @Composable
 fun SmartToolCallDisplay(
     toolCalls: List<ToolCall>,
     modifier: Modifier = Modifier
 ) {
-    // 对工具调用进行智能分组
-    val groupedCalls = remember(toolCalls) {
-        groupToolCalls(toolCalls)
-    }
+    // 如果没有工具调用，不显示任何内容
+    if (toolCalls.isEmpty()) return
     
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具调用标题（只有在有工具调用时才显示）
-        if (toolCalls.isNotEmpty()) {
-            Row(
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.padding(bottom = 4.dp)
-            ) {
-                Text(
-                    text = "🔧",
-                    style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
-                )
-                Text(
-                    text = "工具调用 (${toolCalls.size})",
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 12.sp,
-                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f),
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+        // 按照需求FR-2.14，去掉分组标题，直接显示每个工具调用
+        toolCalls.forEach { toolCall ->
+            when {
+                // TodoWrite 工具特殊展示
+                toolCall.name.contains("TodoWrite", ignoreCase = true) -> {
+                    EnhancedTodoDisplay(
+                        toolCall = toolCall,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                )
-            }
-        }
-        
-        // 如果有TodoWrite工具，优先展示
-        val todoWriteCalls = toolCalls.filter { it.name.contains("TodoWrite", ignoreCase = true) }
-        if (todoWriteCalls.isNotEmpty()) {
-            todoWriteCalls.forEach { toolCall ->
-                EnhancedTodoDisplay(toolCall)
-            }
-        }
-        
-        // 展示其他工具调用
-        val otherCalls = toolCalls.filterNot { it.name.contains("TodoWrite", ignoreCase = true) }
-        if (otherCalls.isNotEmpty()) {
-            // 如果工具数量较多，使用分组展示
-            if (otherCalls.size > 5) {
-                ToolGroupDisplay(otherCalls)
-            } else {
-                // 否则使用紧凑展示
-                CompactToolCallDisplay(otherCalls)
+                }
+                // 其他所有工具都使用统一的紧凑展示
+                else -> {
+                    CompactToolCallDisplay(
+                        toolCalls = listOf(toolCall),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }
 }
 
-/**
- * 对工具调用进行分组
- */
-private fun groupToolCalls(toolCalls: List<ToolCall>): Map<ToolType, List<ToolCall>> {
-    return toolCalls.groupBy { toolCall ->
-        when {
-            toolCall.name.contains("Read", ignoreCase = true) ||
-            toolCall.name.contains("Write", ignoreCase = true) ||
-            toolCall.name.contains("Edit", ignoreCase = true) ||
-            toolCall.name.contains("LS", ignoreCase = true) -> ToolType.READ_FILE
-            
-            toolCall.name.contains("Search", ignoreCase = true) ||
-            toolCall.name.contains("Grep", ignoreCase = true) ||
-            toolCall.name.contains("Glob", ignoreCase = true) -> ToolType.SEARCH_FILES
-            
-            toolCall.name.contains("Bash", ignoreCase = true) ||
-            toolCall.name.contains("Task", ignoreCase = true) ||
-            toolCall.name.contains("ExitPlanMode", ignoreCase = true) -> ToolType.RUN_COMMAND
-            
-            toolCall.name.contains("TodoWrite", ignoreCase = true) -> ToolType.OTHER
-            
-            toolCall.name.contains("Git", ignoreCase = true) -> ToolType.GIT_OPERATION
-            
-            toolCall.name.contains("Web", ignoreCase = true) -> ToolType.WEB_SEARCH
-            
-            else -> ToolType.OTHER
-        }
-    }
-}
 
 /**
  * 单参数工具列表

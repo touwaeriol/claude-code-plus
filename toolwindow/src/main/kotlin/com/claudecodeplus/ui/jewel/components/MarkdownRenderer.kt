@@ -27,6 +27,7 @@ import org.jetbrains.jewel.ui.component.*
 import androidx.compose.material.LocalContentColor
 import org.commonmark.parser.Parser
 import org.commonmark.node.*
+import org.commonmark.ext.gfm.tables.*
 
 /**
  * Markdown 渲染器组件
@@ -38,7 +39,11 @@ fun MarkdownRenderer(
     onCodeAction: (code: String, language: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
-    val parser = remember { Parser.builder().build() }
+    val parser = remember { 
+        Parser.builder()
+            .extensions(listOf(TablesExtension.create()))
+            .build() 
+    }
     val document = remember(markdown) { parser.parse(markdown) }
     val blocks = remember(document) { parseCommonMarkDocument(document) }
     
@@ -133,6 +138,14 @@ fun MarkdownRenderer(
                             )
                         }
                     }
+                }
+                
+                is MarkdownBlock.Table -> {
+                    MarkdownTable(
+                        headers = block.headers,
+                        rows = block.rows,
+                        alignments = block.alignments
+                    )
                 }
             }
         }
@@ -245,6 +258,18 @@ private sealed class MarkdownBlock {
     data class Code(val content: String, val language: String) : MarkdownBlock()
     data class ListBlock(val items: List<AnnotatedString>, val ordered: Boolean) : MarkdownBlock()
     data class Blockquote(val content: AnnotatedString) : MarkdownBlock()
+    data class Table(
+        val headers: List<AnnotatedString>,
+        val rows: List<List<AnnotatedString>>,
+        val alignments: List<TableCellAlignment>
+    ) : MarkdownBlock()
+}
+
+/**
+ * 表格单元格对齐方式
+ */
+private enum class TableCellAlignment {
+    LEFT, CENTER, RIGHT
 }
 
 /**
@@ -303,6 +328,57 @@ private fun parseCommonMarkDocument(document: Node): List<MarkdownBlock> {
                     listItem = listItem.next
                 }
                 blocks.add(MarkdownBlock.ListBlock(items, ordered = true))
+            }
+            
+            is TableBlock -> {
+                val headers = mutableListOf<AnnotatedString>()
+                val rows = mutableListOf<List<AnnotatedString>>()
+                val alignments = mutableListOf<TableCellAlignment>()
+                
+                // 解析表格头部
+                val head = child.firstChild as? TableHead
+                head?.let { headerNode ->
+                    var headerRow = headerNode.firstChild as? TableRow
+                    headerRow?.let { row ->
+                        var cell = row.firstChild
+                        while (cell != null) {
+                            if (cell is TableCell) {
+                                headers.add(parseInlineContent(cell))
+                                // 解析对齐方式
+                                val alignment = when (cell.alignment) {
+                                    TableCell.Alignment.LEFT -> TableCellAlignment.LEFT
+                                    TableCell.Alignment.CENTER -> TableCellAlignment.CENTER
+                                    TableCell.Alignment.RIGHT -> TableCellAlignment.RIGHT
+                                    else -> TableCellAlignment.LEFT
+                                }
+                                alignments.add(alignment)
+                            }
+                            cell = cell.next
+                        }
+                    }
+                }
+                
+                // 解析表格体
+                val body = head?.next as? TableBody
+                body?.let { bodyNode ->
+                    var bodyRow = bodyNode.firstChild
+                    while (bodyRow != null) {
+                        if (bodyRow is TableRow) {
+                            val rowCells = mutableListOf<AnnotatedString>()
+                            var cell = bodyRow.firstChild
+                            while (cell != null) {
+                                if (cell is TableCell) {
+                                    rowCells.add(parseInlineContent(cell))
+                                }
+                                cell = cell.next
+                            }
+                            rows.add(rowCells)
+                        }
+                        bodyRow = bodyRow.next
+                    }
+                }
+                
+                blocks.add(MarkdownBlock.Table(headers, rows, alignments))
             }
         }
         child = child.next
@@ -397,5 +473,140 @@ private fun parseInlineContent(node: Node): AnnotatedString {
             visitNode(child)
             child = child.next
         }
+    }
+}
+
+/**
+ * 表格渲染组件
+ */
+@Composable
+private fun MarkdownTable(
+    headers: List<AnnotatedString>,
+    rows: List<List<AnnotatedString>>,
+    alignments: List<TableCellAlignment>,
+    modifier: Modifier = Modifier
+) {
+    SelectionContainer {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .background(
+                    JewelTheme.globalColors.panelBackground.copy(alpha = 0.3f),
+                    RoundedCornerShape(8.dp)
+                )
+                .border(
+                    1.dp,
+                    JewelTheme.globalColors.borders.normal,
+                    RoundedCornerShape(8.dp)
+                )
+                .padding(1.dp)
+        ) {
+            // 表头
+            if (headers.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f))
+                        .padding(vertical = 8.dp)
+                ) {
+                    headers.forEachIndexed { index, header ->
+                        val alignment = alignments.getOrNull(index) ?: TableCellAlignment.LEFT
+                        TableCell(
+                            content = header,
+                            alignment = alignment,
+                            isHeader = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        // 添加分隔符
+                        if (index < headers.size - 1) {
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .fillMaxHeight()
+                                    .background(JewelTheme.globalColors.borders.normal)
+                            )
+                        }
+                    }
+                }
+                
+                // 表头分隔线
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(JewelTheme.globalColors.borders.normal)
+                )
+            }
+            
+            // 表格行
+            rows.forEachIndexed { rowIndex, row ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp)
+                ) {
+                    row.forEachIndexed { cellIndex, cell ->
+                        val alignment = alignments.getOrNull(cellIndex) ?: TableCellAlignment.LEFT
+                        TableCell(
+                            content = cell,
+                            alignment = alignment,
+                            isHeader = false,
+                            modifier = Modifier.weight(1f)
+                        )
+                        // 添加分隔符
+                        if (cellIndex < row.size - 1) {
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .fillMaxHeight()
+                                    .background(JewelTheme.globalColors.borders.normal.copy(alpha = 0.3f))
+                            )
+                        }
+                    }
+                }
+                
+                // 行分隔线（除了最后一行）
+                if (rowIndex < rows.size - 1) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(JewelTheme.globalColors.borders.normal.copy(alpha = 0.2f))
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 表格单元格组件
+ */
+@Composable
+private fun TableCell(
+    content: AnnotatedString,
+    alignment: TableCellAlignment,
+    isHeader: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val horizontalAlignment = when (alignment) {
+        TableCellAlignment.LEFT -> Alignment.CenterStart
+        TableCellAlignment.CENTER -> Alignment.Center
+        TableCellAlignment.RIGHT -> Alignment.CenterEnd
+    }
+    
+    Box(
+        modifier = modifier
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        contentAlignment = horizontalAlignment
+    ) {
+        Text(
+            text = content,
+            style = JewelTheme.defaultTextStyle.copy(
+                fontSize = 13.sp,
+                fontWeight = if (isHeader) FontWeight.Medium else FontWeight.Normal,
+                color = JewelTheme.globalColors.text.normal
+            )
+        )
     }
 }
