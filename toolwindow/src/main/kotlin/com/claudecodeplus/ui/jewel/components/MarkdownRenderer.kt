@@ -1,7 +1,13 @@
 package com.claudecodeplus.ui.jewel.components
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -153,7 +159,7 @@ fun MarkdownRenderer(
 }
 
 /**
- * 代码块组件
+ * 代码块组件 - 优化UI设计
  */
 @Composable
 fun CodeBlock(
@@ -165,77 +171,115 @@ fun CodeBlock(
 ) {
     val clipboardManager = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
     
-    Column(
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
             .border(1.dp, JewelTheme.globalColors.borders.normal, RoundedCornerShape(8.dp))
+            .hoverable(interactionSource)
     ) {
-        // 头部工具栏
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 语言标识
-            Text(
-                text = language.ifEmpty { "text" },
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 12.sp,
-                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
-                )
-            )
-            
-            // 操作按钮
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                DefaultButton(
-                    onClick = {
-                        clipboardManager.setText(AnnotatedString(code))
-                        onCopy()
-                        copied = true
-                    }
+        Column {
+            // 精简的头部 - 只显示语言标识
+            if (language.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = if (copied) "✓ 已复制" else "复制",
-                        fontSize = 12.sp
+                        text = language,
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 11.sp,
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+                        )
                     )
                 }
-                
-                DefaultButton(
-                    onClick = { onInsert() }
+            }
+            
+            // 代码内容
+            SelectionContainer {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(12.dp)
                 ) {
                     Text(
-                        text = "插入",
-                        fontSize = 12.sp
+                        text = code,
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp,
+                            lineHeight = 20.sp,
+                            color = JewelTheme.globalColors.text.normal
+                        )
                     )
                 }
             }
         }
         
-        // 代码内容
-        SelectionContainer {
-            Box(
+        // 右上角悬浮操作按钮 - 只在悬停时显示
+        AnimatedVisibility(
+            visible = isHovered,
+            enter = fadeIn(animationSpec = tween(200)),
+            exit = fadeOut(animationSpec = tween(200)),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(12.dp)
-            ) {
-                Text(
-                    text = code,
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
-                        lineHeight = 20.sp,
-                        color = JewelTheme.globalColors.text.normal
+                    .background(
+                        JewelTheme.globalColors.panelBackground.copy(alpha = 0.9f),
+                        RoundedCornerShape(4.dp)
                     )
-                )
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+            ) {
+                // 复制按钮
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickable {
+                            clipboardManager.setText(AnnotatedString(code))
+                            onCopy()
+                            copied = true
+                        }
+                        .background(
+                            if (copied) Color(0xFF4CAF50).copy(alpha = 0.2f) else Color.Transparent,
+                            RoundedCornerShape(3.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (copied) "✓" else "📋",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 12.sp,
+                            color = if (copied) Color(0xFF4CAF50) else JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+                        )
+                    )
+                }
+                
+                // 插入按钮
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickable { onInsert() }
+                        .background(Color.Transparent, RoundedCornerShape(3.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "⬇",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 12.sp,
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+                        )
+                    )
+                }
             }
         }
     }

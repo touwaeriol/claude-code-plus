@@ -97,9 +97,24 @@ fun EnhancedClaudeApp(defaultProjectPath: String) {
                 try {
                     println("使用 UnifiedSessionService 加载会话: sessionId=${sessionId}, projectPath=${currentProject.path}")
                     
-                    // 使用新的统一会话服务加载历史消息（传递正确的项目路径）
-                    val unifiedSessionService = unifiedSessionServiceProvider.getServiceForProject(currentProject.path)
-                    val historicalMessages = unifiedSessionService.loadHistoricalSession(sessionId, currentProject.path)
+                    // 使用SessionObject的loadNewMessages方法加载历史消息
+                    // 首先创建一个临时的SessionObject来加载历史消息
+                    val sessionObject = com.claudecodeplus.ui.models.SessionObject(
+                        initialSessionId = sessionId,
+                        project = currentProject
+                    )
+                    
+                    // 在协程中调用loadNewMessages加载历史消息
+                    sessionObject.loadNewMessages(forceFullReload = true)
+                    val historicalMessages = sessionObject.messages
+                    
+                    println("[DEBUG] 历史消息加载完成:")
+                    historicalMessages.forEach { msg ->
+                        println("  - ${msg.role}: ${msg.content.take(50)}... (工具调用: ${msg.toolCalls.size})")
+                        msg.toolCalls.forEach { toolCall ->
+                            println("    * ${toolCall.name}: ${toolCall.status} - ${toolCall.result?.let { "有结果" } ?: "无结果"}")
+                        }
+                    }
                     
                     println("加载了 ${historicalMessages.size} 条历史消息")
                     

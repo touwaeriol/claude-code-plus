@@ -16,12 +16,17 @@ import java.util.UUID
  * - OPUS: 适合复杂的编程任务、深度分析和架构设计
  * - SONNET: 适合日常编码、代码审查和一般问题解答
  */
-enum class AiModel(val displayName: String, val cliName: String, val description: String) {
+enum class AiModel(
+    val displayName: String, 
+    val cliName: String, 
+    val description: String,
+    val contextLength: Int // 上下文长度（tokens）
+) {
     // Opus 模型 - 最强大的模型，用于复杂任务
-    OPUS("Claude 4 Opus", "opus", "深度推理，复杂任务"),
+    OPUS("Claude 4 Opus", "opus", "深度推理，复杂任务", 200_000),
     
     // Sonnet 模型 - 平衡型模型，速度和能力兼备
-    SONNET("Claude 4 Sonnet", "sonnet", "平衡性能，日常编码")
+    SONNET("Claude 4 Sonnet", "sonnet", "平衡性能，日常编码", 200_000)
 }
 
 /**

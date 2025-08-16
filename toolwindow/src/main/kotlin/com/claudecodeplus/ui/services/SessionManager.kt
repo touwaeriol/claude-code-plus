@@ -22,23 +22,13 @@ import java.util.concurrent.ConcurrentHashMap
  * - ChatTabManager 管理标签的 UI 层面（标题、分组等）
  * - SessionManager 管理会话的数据层面（消息、生成状态等）
  */
-class SessionManager (
-    private val scope: CoroutineScope? = null,
-    private val enableFileWatching: Boolean = false
-) {
+class SessionManager {
     private val logger = KotlinLogging.logger {}
     
     // 使用线程安全的 ConcurrentHashMap 存储所有会话
+    // key 格式: "projectId:tabId"，这样可以支持跨项目的会话管理
     private val sessions = ConcurrentHashMap<String, SessionObject>()
     
-    // 文件监听服务（可选）
-    private val fileWatchService: SessionFileWatchService? = if (enableFileWatching && scope != null) {
-        SessionFileWatchService(scope).also {
-            logger.info { "File watching enabled for SessionManager" }
-        }
-    } else {
-        null
-    }
     
     // 当前活动会话 ID
     private val _activeSessionId = MutableStateFlow<String?>(null)
@@ -51,7 +41,8 @@ class SessionManager (
     /**
      * 获取或创建会话对象
      * 
-     * @param tabId 标签 ID（作为会话的唯一标识）
+     * @param projectId 项目 ID
+     * @param tabId 标签 ID
      * @param initialSessionId 初始的 Claude 会话 ID（可选）
      * @param initialMessages 初始消息列表（可选）
      * @param initialModel 初始 AI 模型（可选，默认使用全局默认值）
@@ -61,6 +52,7 @@ class SessionManager (
      * @return 会话对象
      */
     fun getOrCreateSession(
+        projectId: String,
         tabId: String,
         initialSessionId: String? = null,
         initialMessages: List<EnhancedMessage> = emptyList(),
@@ -69,37 +61,59 @@ class SessionManager (
         initialSkipPermissions: Boolean? = null,
         project: com.claudecodeplus.ui.models.Project
     ): SessionObject {
-        return sessions.computeIfAbsent(tabId) {
-            SessionObject(
+        val sessionKey = "$projectId:$tabId"
+        return sessions.computeIfAbsent(sessionKey) {
+            val newSession = SessionObject(
                 initialSessionId, 
                 initialMessages,
                 initialModel,
                 initialPermissionMode,
                 initialSkipPermissions,
                 project
-            ).also {
-                _events.value = SessionEvent.SessionCreated(tabId, it)
+            )
+            
+            // 如果提供了初始 sessionId 或消息，说明是恢复的会话
+            if (!initialSessionId.isNullOrEmpty() || initialMessages.isNotEmpty()) {
+                newSession.isFirstMessage = false
+                logger.info { "[SessionManager] 恢复会话 $sessionKey, sessionId=$initialSessionId, messages=${initialMessages.size}" }
+            } else {
+                logger.info { "[SessionManager] 创建新会话 $sessionKey" }
             }
+            
+            _events.value = SessionEvent.SessionCreated(sessionKey, newSession)
+            newSession
         }
     }
     
     /**
      * 获取会话对象（不创建）
      * 
+     * @param projectId 项目 ID
      * @param tabId 标签 ID
      * @return 会话对象，如果不存在返回 null
      */
-    fun getSession(tabId: String): SessionObject? {
-        return sessions[tabId]
+    fun getSession(projectId: String, tabId: String): SessionObject? {
+        return sessions["$projectId:$tabId"]
+    }
+    
+    /**
+     * 获取指定项目的所有会话
+     * 
+     * @param projectId 项目 ID
+     * @return 该项目的所有会话
+     */
+    fun getAllSessionsForProject(projectId: String): Map<String, SessionObject> {
+        return sessions.filterKeys { it.startsWith("$projectId:") }
+            .mapKeys { it.key.substringAfter(":") } // 移除项目ID前缀，只保留tabId
     }
     
     /**
      * 移除会话
      * 
-     * @param tabId 标签 ID
+     * @param sessionKey 会话键（格式: "projectId:tabId"）
      */
-    fun removeSession(tabId: String) {
-        sessions[tabId]?.let { session ->
+    fun removeSession(sessionKey: String) {
+        sessions[sessionKey]?.let { session ->
             // 停止正在进行的生成
             session.stopGenerating()
             
@@ -109,14 +123,14 @@ class SessionManager (
             session.clearSession()
             
             // 从存储中移除
-            sessions.remove(tabId)
+            sessions.remove(sessionKey)
             
             // 如果是当前活动会话，清空活动会话 ID
-            if (_activeSessionId.value == tabId) {
+            if (_activeSessionId.value == sessionKey) {
                 _activeSessionId.value = null
             }
             
-            _events.value = SessionEvent.SessionRemoved(tabId)
+            _events.value = SessionEvent.SessionRemoved(sessionKey)
         }
     }
     
@@ -151,6 +165,26 @@ class SessionManager (
     }
     
     /**
+     * 恢复会话历史
+     * 加载历史消息后更新会话状态
+     * 
+     * @param tabId 标签 ID
+     * @param sessionId Claude 会话 ID
+     * @param messages 历史消息列表
+     */
+    fun restoreSessionHistory(tabId: String, sessionId: String, messages: List<EnhancedMessage>) {
+        sessions[tabId]?.let { session ->
+            session.messages = messages
+            session.sessionId = sessionId
+            session.onHistoryLoaded()  // 标记历史已加载
+            logger.info { "[SessionManager] 恢复会话历史 $tabId: sessionId=$sessionId, messages=${messages.size}" }
+            _events.value = SessionEvent.SessionHistoryRestored(tabId, messages.size)
+        } ?: run {
+            logger.warn { "[SessionManager] 无法恢复会话历史，会话不存在: $tabId" }
+        }
+    }
+    
+    /**
      * 获取有待处理队列的会话
      * 
      * @return 有队列的会话列表
@@ -176,8 +210,6 @@ class SessionManager (
         // 清空活动会话 ID
         _activeSessionId.value = null
         
-        // 停止文件监听服务
-        fileWatchService?.stopAll()
         
         _events.value = SessionEvent.AllSessionsCleared
     }
@@ -223,6 +255,7 @@ class SessionManager (
         data class SessionCreated(val tabId: String, val session: SessionObject) : SessionEvent()
         data class SessionRemoved(val tabId: String) : SessionEvent()
         data class SessionActivated(val tabId: String) : SessionEvent()
+        data class SessionHistoryRestored(val tabId: String, val messageCount: Int) : SessionEvent()
         object AllSessionsCleared : SessionEvent()
     }
     
@@ -239,40 +272,5 @@ class SessionManager (
     
     // ========== 文件追踪相关方法 ==========
     
-    /**
-     * 为会话关联文件追踪器
-     * 
-     * @param tabId 标签 ID
-     * @param sessionId Claude 会话 ID
-     * @param projectPath 项目路径
-     */
-    fun attachFileTracker(tabId: String, sessionId: String, projectPath: String) {
-        if (fileWatchService == null) {
-            logger.debug { "File watching is disabled, skipping tracker attachment" }
-            return
-        }
-        
-        sessions[tabId]?.let { session ->
-            // 更新会话ID（文件追踪现在由 UnifiedSessionService 管理）
-            session.sessionId = sessionId
-            
-            // 启动文件监听（如果启用）
-            fileWatchService?.let { watchService ->
-                watchService.startWatchingProject(projectPath)
-                logger.info { "Started file watching for session: $sessionId in project: $projectPath" }
-            }
-        }
-    }
-    
-    /**
-     * 获取文件监听服务
-     * 
-     * @return 文件监听服务实例，如果未启用返回 null
-     */
-    fun getFileWatchService(): SessionFileWatchService? = fileWatchService
-    
-    /**
-     * 检查是否启用了文件监听
-     */
-    fun isFileWatchingEnabled(): Boolean = fileWatchService != null
+    // 文件监听功能已移除，改为事件驱动架构
 }

@@ -2,9 +2,9 @@ package com.claudecodeplus.ui.services
 
 import androidx.compose.runtime.mutableStateOf
 import com.claudecodeplus.ui.models.ClaudeConfig
+import com.claudecodeplus.ui.models.LocalConfigManager
 import com.claudecodeplus.ui.models.Project
 import com.claudecodeplus.ui.models.ProjectSession
-import com.claudecodeplus.sdk.session.UnifiedSessionAPI
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,8 +50,7 @@ data class SessionLoadEvent(val session: ProjectSession)
  * - 保持与 CLI 的目录结构一致
  */
 class ProjectManager(
-    private val autoLoad: Boolean = true, // 是否自动加载项目，false时需要手动选择
-    private val sessionAPI: UnifiedSessionAPI? = null // 用于启动项目文件监听
+    private val autoLoad: Boolean = true // 是否自动加载项目，false时需要手动选择
 ) {
     private val _projects = MutableStateFlow<List<Project>>(emptyList())
     val projects = _projects.asStateFlow()
@@ -97,8 +96,7 @@ class ProjectManager(
                 println("找到匹配的项目: ${matchingProject.name} (${matchingProject.path})")
                 _currentProject.value = matchingProject
                 
-                // 启动项目文件监听
-                sessionAPI?.startProject(matchingProject.path)
+                // 文件监听功能已移除
                 println("[ProjectManager] 已启动匹配项目监听: ${matchingProject.name} -> ${matchingProject.path}")
                 
                 // 加载该项目的会话
@@ -106,12 +104,28 @@ class ProjectManager(
                     loadSessionsForProject(matchingProject.id, forceReload = true)
                 }
                 
-                // 选择该项目最近的会话
+                // 优先选择配置文件中记录的最后选中会话
                 val projectSessions = _sessions.value[matchingProject.id] ?: emptyList()
-                val latestSession = projectSessions.firstOrNull()
-                if (latestSession != null) {
-                    setCurrentSession(latestSession, loadHistory = true)
-                    println("选择了项目的最新会话: ${latestSession.name}")
+                val localConfigManager = LocalConfigManager()
+                val lastSelectedSessionId = localConfigManager.getLastSelectedSession()
+                
+                val sessionToSelect = if (lastSelectedSessionId != null) {
+                    // 查找记录的最后选中会话
+                    val lastSelectedSession = projectSessions.find { it.id == lastSelectedSessionId }
+                    if (lastSelectedSession != null) {
+                        println("恢复最后选中的会话: ${lastSelectedSession.name} (${lastSelectedSessionId})")
+                        lastSelectedSession
+                    } else {
+                        println("最后选中的会话不存在，选择最新会话: $lastSelectedSessionId")
+                        projectSessions.firstOrNull()
+                    }
+                } else {
+                    println("没有记录的最后选中会话，选择最新会话")
+                    projectSessions.firstOrNull()
+                }
+                
+                if (sessionToSelect != null) {
+                    setCurrentSession(sessionToSelect, loadHistory = true)
                 }
             } else {
                 println("未找到匹配工作目录的项目，使用默认选择逻辑")
@@ -168,8 +182,7 @@ class ProjectManager(
                 println("当前无项目，切换到最新会话所在项目: ${latestProject.name}")
                 _currentProject.value = latestProject
                 
-                // 启动项目文件监听
-                sessionAPI?.startProject(latestProject.path)
+                // 文件监听功能已移除
                 println("[ProjectManager] 已启动最新项目监听: ${latestProject.name} -> ${latestProject.path}")
                 
                 setCurrentSession(latestSession, loadHistory = true)
@@ -442,14 +455,8 @@ class ProjectManager(
         _currentSession.value = null
         loadSessionsForProject(project.id)
         
-        // 启动项目文件监听（项目确定后立即启动）
-        sessionAPI?.startProject(project.path)
-        println("[ProjectManager] 已启动项目监听: ${project.name} -> ${project.path}")
-        
-        // 设置文件更新回调
-        sessionAPI?.sessionUpdateCallback = { sessionId, projectPath ->
-            onSessionFileChanged(sessionId, projectPath)
-        }
+        // 不再需要启动文件监听和设置回调
+        println("[ProjectManager] 已选择项目: ${project.name} -> ${project.path}")
     }
     
     /**
@@ -467,6 +474,15 @@ class ProjectManager(
 
     fun setCurrentSession(session: ProjectSession, loadHistory: Boolean = true) {
         _currentSession.value = session
+        
+        // 保存最后选中的会话到配置文件
+        try {
+            val localConfigManager = LocalConfigManager()
+            localConfigManager.saveLastSelectedSession(session.id)
+        } catch (e: Exception) {
+            println("[ProjectManager] 保存最后选中会话失败: ${e.message}")
+        }
+        
         // 触发会话历史加载事件
         if (loadHistory) {
             println("=== ProjectManager.setCurrentSession 发出会话加载事件 ===")
@@ -1150,8 +1166,7 @@ class ProjectManager(
     
     
     /**
-     * 文件变更回调
-     * 由 SessionFileWatchService 调用
+     * 处理会话消息更新
      */
     private fun onSessionFileChanged(sessionId: String, projectPath: String) {
         println("[ProjectManager] 🔔 收到文件变更回调 - sessionId: $sessionId, projectPath: $projectPath")

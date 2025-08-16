@@ -5,7 +5,7 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * 聊天标签页
+ * 聊天标签页 - 保持向后兼容的同时添加新架构支持
  */
 data class ChatTab(
     val id: String = UUID.randomUUID().toString(),
@@ -22,7 +22,11 @@ data class ChatTab(
     val tags: List<ChatTag> = emptyList(),
     val status: TabStatus = TabStatus.ACTIVE,
     val lastModified: Instant = Instant.now(),
-    val summary: String? = null
+    val summary: String? = null,
+    
+    // 新架构：Tab → Project → Session 绑定（可选）
+    var boundProject: Project? = null,
+    var activeSessionId: String? = null
 ) {
     enum class TabStatus {
         ACTIVE,
@@ -31,6 +35,48 @@ data class ChatTab(
         ARCHIVED,
         LOADING,
         ERROR
+    }
+    
+    /**
+     * 获取当前活动的会话对象（新架构）
+     * 通过 Project → Session 路径获取
+     */
+    fun getActiveSession(): SessionObject? {
+        return if (activeSessionId != null && boundProject != null) {
+            boundProject!!.getSession(activeSessionId!!)
+        } else null
+    }
+    
+    /**
+     * 获取或创建当前活动的会话（新架构）
+     */
+    fun getOrCreateActiveSession(
+        initialSessionId: String? = null,
+        initialMessages: List<EnhancedMessage> = emptyList()
+    ): SessionObject? {
+        return boundProject?.let { project ->
+            // 如果没有活动会话ID，生成一个
+            if (activeSessionId == null) {
+                activeSessionId = initialSessionId ?: sessionId ?: UUID.randomUUID().toString()
+            }
+            
+            project.getOrCreateSession(
+                tabId = activeSessionId!!,
+                initialSessionId = initialSessionId,
+                initialMessages = initialMessages
+            )
+        }
+    }
+    
+    /**
+     * 绑定到项目（新架构）
+     */
+    fun bindToProject(project: Project) {
+        boundProject = project
+        // 如果还没有活动会话，使用现有的sessionId或创建新的
+        if (activeSessionId == null) {
+            activeSessionId = sessionId ?: "default"
+        }
     }
 }
 

@@ -19,16 +19,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
 import com.claudecodeplus.ui.jewel.components.context.*
+import com.claudecodeplus.ui.jewel.components.tools.JumpingDots
 import org.jetbrains.jewel.foundation.theme.JewelTheme
+import org.jetbrains.jewel.ui.component.Text
 import kotlinx.coroutines.launch
 
 /**
@@ -72,19 +76,22 @@ fun UnifiedChatInput(
     onSkipPermissionsChange: (Boolean) -> Unit = {},
     fileIndexService: FileIndexService? = null,
     projectService: ProjectService? = null,
-    resetTrigger: Any? = null  // 添加重置触发器
+    resetTrigger: Any? = null,  // 添加重置触发器
+    sessionObject: SessionObject? = null  // 新增会话对象参数
 ) {
     val focusRequester = remember { FocusRequester() }
     var isFocused by remember { mutableStateOf(false) }
-    var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
-    var showContextSelector by remember { mutableStateOf(false) }
-    var atSymbolPosition by remember { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
+    
+    // 使用会话状态或回退到局部状态（兼容性）
+    val textFieldValue = sessionObject?.inputTextFieldValue ?: TextFieldValue("")
+    val showContextSelector = sessionObject?.showContextSelector ?: false
+    val atSymbolPosition = sessionObject?.atSymbolPosition
     
     // 监听重置触发器，清空输入框
     LaunchedEffect(resetTrigger) {
         if (resetTrigger != null) {
-            textFieldValue = TextFieldValue("")
+            sessionObject?.clearInput()
         }
     }
     
@@ -137,8 +144,10 @@ fun UnifiedChatInput(
             TopToolbar(
                 contexts = contexts,
                 onContextAdd = {
-                    showContextSelector = true
-                    atSymbolPosition = null
+                    sessionObject?.let { session ->
+                        session.showContextSelector = true
+                        session.atSymbolPosition = null
+                    }
                 },
                 onContextRemove = onContextRemove,
                 enabled = enabled && !isGenerating,
@@ -156,33 +165,46 @@ fun UnifiedChatInput(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 60.dp, max = 320.dp)  // 限制高度范围，约15行（每行约20dp）
-                .padding(horizontal = 12.dp)
         ) {
+            // 输入框外部的左上角generating状态指示器
+            if (isGenerating) {
+                GeneratingIndicator(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 12.dp, top = 8.dp)
+                        .zIndex(1f) // 确保在最上层显示
+                )
+            }
+            
             ChatInputField(
                 value = textFieldValue,
-                onValueChange = { textFieldValue = it },
+                onValueChange = { sessionObject?.updateInputText(it) },
                 onSend = {
                     if (textFieldValue.text.isNotBlank()) {
                         onSend(textFieldValue.text)
-                        textFieldValue = TextFieldValue("")
+                        sessionObject?.clearInput()
                     }
                 },
                 onInterruptAndSend = if (onInterruptAndSend != null) {
                     {
                         if (textFieldValue.text.isNotBlank()) {
                             onInterruptAndSend(textFieldValue.text)
-                            textFieldValue = TextFieldValue("")
+                            sessionObject?.clearInput()
                         }
                     }
                 } else null,
                 enabled = enabled,  // 移除 !isGenerating 限制
                 focusRequester = focusRequester,
                 onShowContextSelector = { position ->
-                    showContextSelector = true
-                    atSymbolPosition = position
+                    sessionObject?.let { session ->
+                        session.showContextSelector = true
+                        session.atSymbolPosition = position
+                    }
                 },
                 showPreview = false,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
                 maxHeight = 300  // 传递最大高度参数
             )
         }
@@ -202,7 +224,7 @@ fun UnifiedChatInput(
             onSend = {
                 if (textFieldValue.text.isNotBlank()) {
                     onSend(textFieldValue.text)
-                    textFieldValue = TextFieldValue("")
+                    sessionObject?.clearInput()
                 }
             },
             onStop = onStop ?: {},
@@ -210,14 +232,18 @@ fun UnifiedChatInput(
                 {
                     if (textFieldValue.text.isNotBlank()) {
                         onInterruptAndSend(textFieldValue.text)
-                        textFieldValue = TextFieldValue("")
+                        sessionObject?.clearInput()
                     }
                 }
             } else null,
             enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            // 传递上下文统计所需的参数
+            messageHistory = sessionObject?.messages ?: emptyList(),
+            inputText = textFieldValue.text,
+            contexts = contexts
         )
     }
     
@@ -230,12 +256,16 @@ fun UnifiedChatInput(
         
         ChatInputContextSelectorPopup(
             onDismiss = {
-                showContextSelector = false
-                atSymbolPosition = null
+                sessionObject?.let { session ->
+                    session.showContextSelector = false
+                    session.atSymbolPosition = null
+                }
                 focusRequester.requestFocus()
             },
             onContextSelect = { context ->
-                showContextSelector = false
+                sessionObject?.let { session ->
+                    session.showContextSelector = false
+                }
                 
                 if (atSymbolPosition != null) {
                     // @ 触发：生成内联引用
@@ -249,16 +279,16 @@ fun UnifiedChatInput(
                     val newText = currentText.replaceRange(pos, pos + 1, markdownLink)
                     val newPosition = pos + markdownLink.length
                     
-                    textFieldValue = TextFieldValue(
+                    sessionObject?.updateInputText(TextFieldValue(
                         newText,
                         androidx.compose.ui.text.TextRange(newPosition)
-                    )
+                    ))
                 } else {
                     // 按钮触发：添加到上下文列表
                     onContextAdd(context)
                 }
                 
-                atSymbolPosition = null
+                sessionObject?.atSymbolPosition = null
                 focusRequester.requestFocus()
             },
             searchService = searchService
@@ -318,7 +348,11 @@ private fun BottomToolbar(
     onStop: () -> Unit,
     onInterruptAndSend: (() -> Unit)? = null,
     enabled: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // 新增参数，用于上下文统计
+    messageHistory: List<EnhancedMessage> = emptyList(),
+    inputText: String = "",
+    contexts: List<ContextReference> = emptyList()
 ) {
     Row(
         modifier = modifier,
@@ -350,29 +384,18 @@ private fun BottomToolbar(
             )
         }
         
-        // 右侧：操作按钮
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 图片选择按钮（可选）
-            ImagePickerButton(
-                onImageSelected = { /* TODO: 处理图片选择 */ },
-                enabled = enabled && !isGenerating,
-                modifier = Modifier.size(24.dp)
-            )
-            
-            // 发送/停止按钮
-            SendStopButton(
-                isGenerating = isGenerating,
-                onSend = onSend,
-                onStop = onStop,
-                onInterruptAndSend = onInterruptAndSend,
-                hasInput = hasInput,
-                enabled = enabled,
-                modifier = Modifier.size(24.dp)
-            )
-        }
+        // 右侧：操作按钮和上下文统计
+        SendStopButtonGroup(
+            isGenerating = isGenerating,
+            onSend = onSend,
+            onStop = onStop,
+            hasInput = hasInput,
+            enabled = enabled,
+            currentModel = selectedModel,
+            messageHistory = messageHistory,
+            inputText = inputText,
+            contexts = contexts
+        )
     }
 }
 
@@ -484,5 +507,46 @@ private class UnifiedChatContextSearchService(
         } catch (e: Exception) {
             null
         }
+    }
+}
+
+/**
+ * Generating状态指示器组件 - 左上角显示
+ */
+@Composable
+private fun GeneratingIndicator(
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .background(
+                JewelTheme.globalColors.panelBackground.copy(alpha = 0.9f),
+                RoundedCornerShape(12.dp)
+            )
+            .border(
+                1.dp,
+                JewelTheme.globalColors.borders.normal.copy(alpha = 0.3f),
+                RoundedCornerShape(12.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 跳动的点动画
+        JumpingDots(
+            dotSize = 4.dp,
+            dotSpacing = 2.dp,
+            jumpHeight = 2.dp,
+            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+        )
+        
+        // "Generating..."文本
+        Text(
+            text = "Generating...",
+            style = JewelTheme.defaultTextStyle.copy(
+                fontSize = 11.sp,
+                color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+            )
+        )
     }
 }

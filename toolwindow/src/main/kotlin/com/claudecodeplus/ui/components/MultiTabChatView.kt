@@ -86,8 +86,9 @@ fun MultiTabChatView(
                     NoProjectView()
                 } else {
                     println("标签有项目信息，显示 ChatView")
-                    // 使用 key 确保切换标签时重新创建 ChatView
-                    key(tab.id) {
+                    // 移除强制重建，让组件自然保持状态
+                    // 只有当项目路径发生变化时才重建组件
+                    key("${tab.id}_${tab.projectPath}") {
                         // 根据当前标签的项目路径获取对应的 UnifiedSessionService
                         val currentUnifiedSessionService = unifiedSessionServiceProvider.getServiceForProject(tab.projectPath)
                         

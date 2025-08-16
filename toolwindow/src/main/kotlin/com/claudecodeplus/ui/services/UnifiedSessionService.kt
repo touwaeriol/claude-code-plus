@@ -1,12 +1,8 @@
 package com.claudecodeplus.ui.services
 
 import com.claudecodeplus.sdk.ClaudeCliWrapper
-import com.claudecodeplus.sdk.session.UnifiedSessionAPI
-import com.claudecodeplus.sdk.session.ClaudeFileMessage
 import com.claudecodeplus.ui.models.EnhancedMessage
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import java.util.UUID
 
 /**
@@ -18,8 +14,7 @@ class UnifiedSessionService(
     private val scope: CoroutineScope
 ) {
     private val cliWrapper = ClaudeCliWrapper()
-    private val sessionAPI = UnifiedSessionAPI(scope)
-    private val messageConverter = EnhancedMessageConverter()
+    // 移除已删除的消息转换器
     
     /**
      * 内存中追踪已创建但可能还未写入磁盘的会话ID
@@ -81,48 +76,6 @@ class UnifiedSessionService(
         return result
     }
     
-    /**
-     * 订阅会话消息（需要指定项目路径）
-     */
-    fun subscribeToSession(sessionId: String, projectPath: String): Flow<List<EnhancedMessage>> {
-        return sessionAPI.subscribeToSession(sessionId, projectPath)
-            .map { messages ->
-                messageConverter.convertMessages(messages, sessionId)
-            }
-    }
-    
-    /**
-     * 加载历史会话（使用当前目录）
-     */
-    suspend fun loadHistoricalSession(sessionId: String): List<EnhancedMessage> {
-        val workingDir = System.getProperty("user.dir")
-        val messages = sessionAPI.loadHistoricalSession(sessionId, workingDir)
-        return messageConverter.convertMessages(messages, sessionId)
-    }
-    
-    /**
-     * 加载历史会话（指定项目路径）
-     */
-    suspend fun loadHistoricalSession(sessionId: String, projectPath: String): List<EnhancedMessage> {
-        val messages = sessionAPI.loadHistoricalSession(sessionId, projectPath)
-        return messageConverter.convertMessages(messages, sessionId)
-    }
-    
-    /**
-     * 加载会话（智能策略）
-     */
-    suspend fun loadSession(
-        sessionId: String,
-        projectPath: String,
-        isCurrentTab: Boolean = false,
-        isVisible: Boolean = false,
-        isActive: Boolean = false
-    ): List<EnhancedMessage> {
-        val messages = sessionAPI.loadSession(
-            sessionId, projectPath, isCurrentTab, isVisible, isActive
-        )
-        return messageConverter.convertMessages(messages, sessionId)
-    }
     
     /**
      * 检查会话是否存在
@@ -134,22 +87,16 @@ class UnifiedSessionService(
             return true
         }
         
-        // 然后检查文件系统
-        val fileExists = sessionAPI.sessionExists(sessionId, projectPath)
-        
-        // 如果文件存在，也加入到内存缓存中
-        if (fileExists) {
-            createdSessions.add(sessionId)
-        }
-        
-        return fileExists
+        // 简化：直接返回 false，不再检查文件系统
+        return false
     }
     
     /**
      * 获取所有会话（指定项目路径）
      */
     fun getAllSessions(projectPath: String): List<String> {
-        return sessionAPI.getProjectSessions(projectPath)
+        // 简化：返回空列表
+        return emptyList()
     }
     
     /**
@@ -177,6 +124,6 @@ class UnifiedSessionService(
      * 关闭服务
      */
     fun shutdown() {
-        sessionAPI.shutdown()
+        // 简化：不再需要关闭 sessionAPI
     }
 }

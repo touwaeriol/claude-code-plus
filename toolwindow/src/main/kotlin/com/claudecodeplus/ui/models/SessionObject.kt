@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import com.claudecodeplus.session.models.SessionInfo
 import com.claudecodeplus.ui.services.DefaultSessionConfig
 import kotlinx.coroutines.Job
@@ -13,6 +15,11 @@ import com.claudecodeplus.session.models.ClaudeSessionMessage
 import com.claudecodeplus.session.models.toEnhancedMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonArray
 
 /**
  * 完整的会话对象，包含会话的所有状态
@@ -44,6 +51,13 @@ class SessionObject(
      * 会话 ID（Claude CLI 返回的会话标识）
      */
     var sessionId by mutableStateOf(initialSessionId)
+    
+    /**
+     * 是否为首次消息（用于二元会话策略）
+     * - true: 使用 startNewSession（不带 --resume）
+     * - false: 使用 resumeSession（带 --resume sessionId）
+     */
+    var isFirstMessage by mutableStateOf(true)
     
     /**
      * 消息列表
@@ -78,6 +92,21 @@ class SessionObject(
     var currentStreamJob by mutableStateOf<Job?>(null)
     
     /**
+     * 正在执行的工具调用状态
+     */
+    val runningToolCalls = mutableStateListOf<ToolCall>()
+    
+    /**
+     * 当前执行的任务描述
+     */
+    var currentTaskDescription by mutableStateOf<String?>(null)
+    
+    /**
+     * 任务执行开始时间
+     */
+    var taskStartTime by mutableStateOf<Long?>(null)
+    
+    /**
      * 问题队列
      */
     val questionQueue = mutableStateListOf<String>()
@@ -102,9 +131,22 @@ class SessionObject(
     // ========== UI 状态 ==========
     
     /**
-     * 输入框内容（用于切换会话时保存/恢复）
+     * 输入框内容（完整的TextFieldValue，包含光标位置等）
      */
-    var inputText by mutableStateOf("")
+    var inputTextFieldValue by mutableStateOf(TextFieldValue(""))
+    
+    /**
+     * 输入框文本内容（兼容性属性）
+     * 注意：设置此属性会重置光标位置，建议使用 updateInputText() 方法
+     */
+    var inputText: String
+        get() = inputTextFieldValue.text
+        set(value) { 
+            inputTextFieldValue = TextFieldValue(
+                text = value,
+                selection = TextRange(value.length) // 光标放到末尾
+            )
+        }
     
     /**
      * 选择的 AI 模型
@@ -130,6 +172,32 @@ class SessionObject(
      * 输入重置触发器
      */
     var inputResetTrigger by mutableStateOf<Any?>(null)
+    
+    /**
+     * 上下文选择器是否显示
+     */
+    var showContextSelector by mutableStateOf(false)
+    
+    /**
+     * @ 符号位置（用于内联引用）
+     */
+    var atSymbolPosition by mutableStateOf<Int?>(null)
+    
+    /**
+     * 滚动位置（用于恢复会话时的位置）
+     */
+    var scrollPosition by mutableStateOf(0f)
+    
+    /**
+     * 当前正在运行的Claude CLI进程
+     */
+    var claudeProcess by mutableStateOf<Process?>(null)
+    
+    /**
+     * 获取全局CLI Wrapper实例
+     */
+    private val cliWrapper: com.claudecodeplus.sdk.ClaudeCliWrapper
+        get() = GlobalCliWrapper.instance
     
     // ========== 状态查询方法 ==========
     
@@ -163,7 +231,44 @@ class SessionObject(
      * 更新会话 ID
      */
     fun updateSessionId(newSessionId: String?) {
+        val oldSessionId = sessionId
         sessionId = newSessionId
+        
+        // 如果设置了有效的会话 ID，说明已经不是首次消息
+        if (!newSessionId.isNullOrEmpty()) {
+            isFirstMessage = false
+        }
+        
+        // 如果会话ID发生变化，更新CLI回调注册
+        if (oldSessionId != newSessionId) {
+            updateCliCallback(newSessionId)
+        }
+        
+        // 如果设置了新的会话ID，需要更新本地配置
+        if (!newSessionId.isNullOrEmpty() && oldSessionId != newSessionId) {
+            try {
+                project?.let { proj ->
+                    val localConfigManager = LocalConfigManager()
+                    
+                    if (oldSessionId.isNullOrEmpty()) {
+                        // 新会话：直接更新当前会话的ID
+                        println("[SessionObject] 新会话获得ID，更新本地配置: null -> $newSessionId")
+                        // 这种情况下我们需要找到当前会话并更新其ID
+                        // 对于新会话，我们直接更新最新的"新会话"记录
+                        localConfigManager.updateNewSessionId(proj.id, newSessionId)
+                    } else {
+                        // 已有会话：更新会话ID
+                        localConfigManager.updateSessionId(proj.id, oldSessionId, newSessionId)
+                        println("[SessionObject] 本地配置已更新会话ID: $oldSessionId -> $newSessionId")
+                    }
+                } ?: run {
+                    println("[SessionObject] 无法更新本地配置：project 为 null")
+                }
+            } catch (e: Exception) {
+                println("[SessionObject] 更新本地配置失败: ${e.message}")
+                e.printStackTrace()
+            }
+        }
     }
     
     /**
@@ -171,6 +276,7 @@ class SessionObject(
      */
     fun addMessage(message: EnhancedMessage) {
         messages = messages + message
+        println("[SessionObject] 添加消息: role=${message.role}, content长度=${message.content.length}, 总消息数=${messages.size}")
     }
     
     /**
@@ -194,9 +300,11 @@ class SessionObject(
     /**
      * 开始生成
      */
-    fun startGenerating(job: Job) {
+    fun startGenerating(job: Job, taskDescription: String? = null) {
         currentStreamJob = job
         isGenerating = true
+        currentTaskDescription = taskDescription
+        taskStartTime = System.currentTimeMillis()
     }
     
     /**
@@ -206,6 +314,9 @@ class SessionObject(
         currentStreamJob?.cancel()
         currentStreamJob = null
         isGenerating = false
+        currentTaskDescription = null
+        taskStartTime = null
+        runningToolCalls.clear()
     }
     
     /**
@@ -228,6 +339,714 @@ class SessionObject(
         currentProcess = null
         
         isGenerating = false
+        currentTaskDescription = null
+        taskStartTime = null
+        runningToolCalls.clear()
+    }
+    
+    // ========== 工具调用状态管理 ==========
+    
+    /**
+     * 添加正在执行的工具调用
+     */
+    fun addRunningToolCall(toolCall: ToolCall) {
+        runningToolCalls.add(toolCall)
+    }
+    
+    /**
+     * 移除已完成的工具调用
+     */
+    fun removeRunningToolCall(toolCallId: String) {
+        runningToolCalls.removeAll { it.id == toolCallId }
+    }
+    
+    /**
+     * 更新工具调用状态
+     */
+    fun updateToolCallStatus(toolCallId: String, status: ToolCallStatus, result: ToolResult? = null) {
+        runningToolCalls.find { it.id == toolCallId }?.let { toolCall ->
+            val updatedToolCall = toolCall.copy(
+                status = status,
+                result = result,
+                endTime = if (status in listOf(ToolCallStatus.SUCCESS, ToolCallStatus.FAILED)) 
+                    System.currentTimeMillis() else null
+            )
+            
+            val index = runningToolCalls.indexOf(toolCall)
+            if (index >= 0) {
+                runningToolCalls[index] = updatedToolCall
+            }
+            
+            // 如果完成，从运行列表中移除
+            if (status in listOf(ToolCallStatus.SUCCESS, ToolCallStatus.FAILED)) {
+                removeRunningToolCall(toolCallId)
+            }
+        }
+    }
+    
+    /**
+     * 获取正在执行的工具调用数量
+     */
+    val runningToolCallsCount: Int
+        get() = runningToolCalls.size
+    
+    /**
+     * 检查是否有工具正在执行
+     */
+    val hasRunningToolCalls: Boolean
+        get() = runningToolCalls.isNotEmpty()
+    
+    // ========== CLI 子进程管理 ==========
+    
+    /**
+     * 初始化会话，注册CLI输出回调
+     */
+    init {
+        setupCliOutputHandling()
+    }
+    
+    /**
+     * 设置CLI输出处理
+     * 注册到全局CLI管理器，实现后台消息更新
+     */
+    private fun setupCliOutputHandling() {
+        GlobalCliWrapper.registerSessionCallback(sessionId) { jsonLine ->
+            println("[SessionObject] 收到CLI输出: sessionId=$sessionId, 内容=$jsonLine")
+            
+            try {
+                // 处理Claude CLI的实时输出，更新消息列表
+                processCliOutput(jsonLine)
+            } catch (e: Exception) {
+                println("[SessionObject] 处理CLI输出异常: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+    }
+    
+    /**
+     * 更新会话ID时重新注册回调
+     */
+    private fun updateCliCallback(newSessionId: String?) {
+        // 注销旧的回调
+        GlobalCliWrapper.unregisterSessionCallback(sessionId)
+        
+        // 注册新的回调
+        GlobalCliWrapper.registerSessionCallback(newSessionId) { jsonLine ->
+            println("[SessionObject] 收到CLI输出: sessionId=$newSessionId, 内容=$jsonLine")
+            
+            try {
+                processCliOutput(jsonLine)
+            } catch (e: Exception) {
+                println("[SessionObject] 处理CLI输出异常: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+    }
+    
+    /**
+     * 处理CLI输出，更新会话消息
+     * 这个方法在后台运行，不依赖UI状态
+     */
+    private fun processCliOutput(jsonLine: String) {
+        // 先尝试直接处理非JSON输出（可能是纯文本响应）
+        if (!jsonLine.trim().startsWith("{")) {
+            println("[SessionObject] 收到非JSON输出，直接添加到最后一条助手消息: $jsonLine")
+            updateLastAssistantMessage { existing ->
+                existing.copy(
+                    content = existing.content + jsonLine + "\n",
+                    timestamp = System.currentTimeMillis()
+                )
+            }
+            return
+        }
+        
+        // 解析JSON以检查消息类型，过滤系统初始化消息
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; isLenient = true }
+        val jsonObject = try {
+            json.parseToJsonElement(jsonLine).jsonObject
+        } catch (e: Exception) {
+            println("[SessionObject] JSON解析失败，跳过该消息: ${e.message}")
+            return
+        }
+        
+        val messageType = jsonObject["type"]?.jsonPrimitive?.content
+        val messageSubtype = jsonObject["subtype"]?.jsonPrimitive?.content
+        
+        // 过滤不需要在UI中显示的消息类型
+        when {
+            messageType == "system" && messageSubtype == "init" -> {
+                // 处理系统初始化消息，提取sessionId（参考Claudia项目）
+                // 尝试两种可能的字段名
+                val sessionId = jsonObject["session_id"]?.jsonPrimitive?.content 
+                    ?: jsonObject["sessionId"]?.jsonPrimitive?.content
+                
+                if (sessionId != null && this.sessionId != sessionId) {
+                    println("[SessionObject] 从system init消息更新sessionId: $sessionId")
+                    updateSessionId(sessionId)
+                } else if (sessionId != null) {
+                    println("[SessionObject] system init消息中的sessionId与当前相同: $sessionId")
+                } else {
+                    println("[SessionObject] system init消息中未找到sessionId字段")
+                    println("[SessionObject] 完整消息内容: $jsonLine")
+                }
+                println("[SessionObject] 过滤掉系统初始化消息（UI不显示）")
+                return
+            }
+            messageType == "result" -> {
+                println("[SessionObject] 收到结果摘要消息: ${jsonObject["subtype"]?.jsonPrimitive?.content}")
+                // 结果消息包含会话完成信息，在这里清除生成状态
+                isGenerating = false
+                currentTaskDescription = null
+                taskStartTime = null
+                
+                // 确保助手消息的流式状态被清除
+                val lastAssistantIndex = messages.indexOfLast { it.role == MessageRole.ASSISTANT }
+                if (lastAssistantIndex >= 0) {
+                    replaceMessage(messages[lastAssistantIndex].id) { existing ->
+                        existing.copy(isStreaming = false)
+                    }
+                }
+                
+                val sessionId = jsonObject["session_id"]?.jsonPrimitive?.content
+                if (sessionId != null && this.sessionId != sessionId) {
+                    println("[SessionObject] 从result消息更新sessionId: $sessionId")
+                    updateSessionId(sessionId)
+                }
+                return
+            }
+            messageType == "error" -> {
+                val errorMessage = jsonObject["message"]?.jsonPrimitive?.content ?: "未知错误"
+                println("[SessionObject] 收到错误消息: $errorMessage")
+                updateLastAssistantMessage { existing ->
+                    existing.copy(
+                        content = existing.content + "\n❌ 错误: $errorMessage\n",
+                        timestamp = System.currentTimeMillis()
+                    )
+                }
+                return
+            }
+            messageType == "system" && messageSubtype != null -> {
+                println("[SessionObject] 过滤掉系统子类型消息: $messageSubtype")
+                return
+            }
+        }
+        
+        // 首先检查是否是工具结果消息
+        if (messageType == "user") {
+            val messageObj = jsonObject["message"]?.jsonObject
+            val contentElement = messageObj?.get("content")
+            
+            // content 可能是字符串（历史消息）或数组（实时消息），需要兼容处理
+            var hasToolResult = false
+            
+            // 尝试处理数组格式的 content
+            if (contentElement is kotlinx.serialization.json.JsonArray) {
+                contentElement.forEach { arrayElement ->
+                    val contentObj = arrayElement.jsonObject
+                    if (contentObj["type"]?.jsonPrimitive?.content == "tool_result") {
+                        hasToolResult = true
+                        val toolUseId = contentObj["tool_use_id"]?.jsonPrimitive?.content
+                        val resultContent = contentObj["content"]?.jsonPrimitive?.content ?: ""
+                        val isError = contentObj["is_error"]?.jsonPrimitive?.content?.toBoolean() ?: false
+                        
+                        if (toolUseId != null) {
+                            println("[SessionObject] 处理工具结果: toolId=$toolUseId, isError=$isError, content=${resultContent.take(50)}...")
+                            
+                            // 更新最后一条助手消息中对应的工具调用
+                            updateLastAssistantMessage { existing ->
+                                val updatedToolCalls = existing.toolCalls.map { toolCall ->
+                                    if (toolCall.id == toolUseId) {
+                                        val result = if (isError) {
+                                            ToolResult.Failure(resultContent)
+                                        } else {
+                                            ToolResult.Success(resultContent)
+                                        }
+                                        toolCall.copy(
+                                            status = if (isError) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
+                                            result = result,
+                                            endTime = System.currentTimeMillis()
+                                        )
+                                    } else {
+                                        toolCall
+                                    }
+                                }
+                                existing.copy(
+                                    toolCalls = updatedToolCalls,
+                                    timestamp = System.currentTimeMillis()
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            // 如果是字符串格式的 content（历史消息），暂时不处理工具结果
+            // 因为历史消息中的工具结果通常已经在对应的消息中包含
+            
+            // 如果处理了工具结果，就不再继续处理其他内容
+            if (hasToolResult) {
+                return
+            }
+        }
+        
+        // 直接解析Claude CLI的实时消息格式
+        try {
+            println("[SessionObject] 🔍 开始解析Claude CLI实时消息, messageType=$messageType")
+            val enhancedMessage = parseClaudeCliMessage(jsonObject, jsonLine)
+            
+            if (enhancedMessage != null && (enhancedMessage.content.isNotEmpty() || enhancedMessage.toolCalls.isNotEmpty())) {
+                println("[SessionObject] ✅ Claude CLI消息解析成功: content长度=${enhancedMessage.content.length}, toolCalls=${enhancedMessage.toolCalls.size}")
+                
+                // 如果有工具调用，记录到正在执行列表
+                if (enhancedMessage.toolCalls.isNotEmpty()) {
+                    enhancedMessage.toolCalls.forEach { toolCall ->
+                        addRunningToolCall(toolCall)
+                    }
+                    
+                    // 直接添加新的助手消息（包含工具调用），保持消息顺序
+                    addMessage(enhancedMessage)
+                    println("[SessionObject] ✅ 已添加工具调用消息到消息列表")
+                } else if (enhancedMessage.content.isNotEmpty()) {
+                    // 检查最后一条消息是否是助手消息，如果是则合并文本内容
+                    val lastMessage = messages.lastOrNull()
+                    if (lastMessage?.role == MessageRole.ASSISTANT && lastMessage.toolCalls.isEmpty()) {
+                        // 合并到最后一条助手消息的文本内容
+                        updateLastMessage { existing ->
+                            existing.copy(
+                                content = existing.content + enhancedMessage.content,
+                                timestamp = System.currentTimeMillis()
+                            )
+                        }
+                        println("[SessionObject] ✅ 已合并文本内容到最后一条助手消息")
+                    } else {
+                        // 添加新的助手消息
+                        addMessage(enhancedMessage)
+                        println("[SessionObject] ✅ 已添加新的助手消息到消息列表")
+                    }
+                }
+            } else {
+                println("[SessionObject] ❌ Claude CLI消息解析结果为空: messageType=$messageType")
+                println("[SessionObject] 原始JSON前200字符: ${jsonLine.take(200)}")
+                if (enhancedMessage != null) {
+                    println("[SessionObject] enhancedMessage不为null但内容为空: content='${enhancedMessage.content}', toolCalls=${enhancedMessage.toolCalls.size}")
+                }
+            }
+        } catch (e: Exception) {
+            println("[SessionObject] ❌ Claude CLI消息解析失败: ${e.message}")
+            println("[SessionObject] 原始JSON: $jsonLine")
+            e.printStackTrace()
+        }
+    }
+    
+    /**
+     * 将历史消息格式转换为实时消息格式
+     * 将JSONL存储格式转换为Claude CLI直接输出格式
+     */
+    private fun convertHistoryToRealtime(sessionMessage: com.claudecodeplus.session.models.ClaudeSessionMessage): kotlinx.serialization.json.JsonObject? {
+        return try {
+            val json = kotlinx.serialization.json.Json { 
+                ignoreUnknownKeys = true
+                isLenient = true
+            }
+            
+            // 构造实时格式的JSON对象
+            kotlinx.serialization.json.buildJsonObject {
+                put("type", kotlinx.serialization.json.JsonPrimitive(sessionMessage.type ?: "assistant"))
+                
+                sessionMessage.message?.let { message ->
+                    put("message", kotlinx.serialization.json.buildJsonObject {
+                        put("id", kotlinx.serialization.json.JsonPrimitive(message.id ?: ""))
+                        put("type", kotlinx.serialization.json.JsonPrimitive("message"))
+                        put("role", kotlinx.serialization.json.JsonPrimitive(message.role ?: "assistant"))
+                        put("model", kotlinx.serialization.json.JsonPrimitive(message.model ?: ""))
+                        put("stop_reason", kotlinx.serialization.json.JsonNull)
+                        put("stop_sequence", kotlinx.serialization.json.JsonNull)
+                        
+                        // 处理content数组 - 这是关键部分
+                        message.content?.let { contentList ->
+                            put("content", kotlinx.serialization.json.buildJsonArray {
+                                when (contentList) {
+                                    is List<*> -> contentList.forEach { contentItem ->
+                                    try {
+                                        // 将content item转换为JsonElement
+                                        val contentJson = when (contentItem) {
+                                            is String -> {
+                                                // 如果是字符串，尝试解析为JSON
+                                                try {
+                                                    json.parseToJsonElement(contentItem)
+                                                } catch (e: Exception) {
+                                                    // 如果解析失败，作为文本内容处理
+                                                    kotlinx.serialization.json.buildJsonObject {
+                                                        put("type", kotlinx.serialization.json.JsonPrimitive("text"))
+                                                        put("text", kotlinx.serialization.json.JsonPrimitive(contentItem))
+                                                    }
+                                                }
+                                            }
+                                            is Map<*, *> -> {
+                                                // 如果是Map，转换为JsonObject
+                                                val gson = com.google.gson.Gson()
+                                                val jsonString = gson.toJson(contentItem)
+                                                json.parseToJsonElement(jsonString)
+                                            }
+                                            else -> {
+                                                // 其他类型，尝试序列化
+                                                val gson = com.google.gson.Gson()
+                                                val jsonString = gson.toJson(contentItem)
+                                                json.parseToJsonElement(jsonString)
+                                            }
+                                        }
+                                        add(contentJson)
+                                    } catch (e: Exception) {
+                                        println("[SessionObject] 转换content item失败: ${e.message}, item: $contentItem")
+                                        // 失败时创建一个基本的文本块
+                                        add(kotlinx.serialization.json.buildJsonObject {
+                                            put("type", kotlinx.serialization.json.JsonPrimitive("text"))
+                                            put("text", kotlinx.serialization.json.JsonPrimitive(contentItem.toString()))
+                                        })
+                                    }
+                                    }
+                                    else -> {
+                                        // 如果是其他类型，转换为文本块
+                                        add(kotlinx.serialization.json.buildJsonObject {
+                                            put("type", kotlinx.serialization.json.JsonPrimitive("text"))
+                                            put("text", kotlinx.serialization.json.JsonPrimitive(contentList.toString()))
+                                        })
+                                    }
+                                }
+                            })
+                        }
+                        
+                        // 处理usage信息
+                        message.usage?.let { usage ->
+                            put("usage", kotlinx.serialization.json.buildJsonObject {
+                                put("input_tokens", kotlinx.serialization.json.JsonPrimitive((usage["input_tokens"] as? Number)?.toInt() ?: 0))
+                                put("output_tokens", kotlinx.serialization.json.JsonPrimitive((usage["output_tokens"] as? Number)?.toInt() ?: 0))
+                                put("cache_creation_input_tokens", kotlinx.serialization.json.JsonPrimitive((usage["cache_creation_input_tokens"] as? Number)?.toInt() ?: 0))
+                                put("cache_read_input_tokens", kotlinx.serialization.json.JsonPrimitive((usage["cache_read_input_tokens"] as? Number)?.toInt() ?: 0))
+                                put("service_tier", kotlinx.serialization.json.JsonPrimitive((usage["service_tier"] as? String) ?: "standard"))
+                            })
+                        }
+                    })
+                }
+            }
+        } catch (e: Exception) {
+            println("[SessionObject] 历史消息格式转换失败: ${e.message}")
+            e.printStackTrace()
+            null
+        }
+    }
+    
+    /**
+     * 解析Claude CLI的实时消息格式
+     * 专门处理从Claude CLI直接输出的JSONL格式
+     */
+    private fun parseClaudeCliMessage(jsonObject: kotlinx.serialization.json.JsonObject, jsonLine: String): EnhancedMessage? {
+        return try {
+            val messageType = jsonObject["type"]?.jsonPrimitive?.content
+            println("[SessionObject] 解析Claude CLI消息: type=$messageType")
+            
+            when (messageType) {
+                "assistant" -> {
+                    // 解析助手消息
+                    val messageObj = jsonObject["message"]?.jsonObject
+                    val contentArray = messageObj?.get("content")?.jsonArray
+                    val role = messageObj?.get("role")?.jsonPrimitive?.content ?: "assistant"
+                    
+                    // 提取文本内容
+                    val textContent = contentArray?.mapNotNull { contentElement ->
+                        val contentObj = contentElement.jsonObject
+                        val type = contentObj["type"]?.jsonPrimitive?.content
+                        if (type == "text") {
+                            contentObj["text"]?.jsonPrimitive?.content
+                        } else null
+                    }?.joinToString("") ?: ""
+                    
+                    // 提取工具调用
+                    val toolCalls = contentArray?.mapNotNull { contentElement ->
+                        val contentObj = contentElement.jsonObject
+                        val type = contentObj["type"]?.jsonPrimitive?.content
+                        if (type == "tool_use") {
+                            val toolId = contentObj["id"]?.jsonPrimitive?.content ?: ""
+                            val toolName = contentObj["name"]?.jsonPrimitive?.content ?: ""
+                            val inputObj = contentObj["input"]?.jsonObject
+                            
+                            // 将输入参数转换为 Map，正确处理不同类型的 JSON 元素
+                            val parameters = inputObj?.mapValues { (_, value) ->
+                                when (value) {
+                                    is kotlinx.serialization.json.JsonPrimitive -> value.content
+                                    is kotlinx.serialization.json.JsonArray -> {
+                                        // 对于数组，转换为 List
+                                        value.map { element ->
+                                            when (element) {
+                                                is kotlinx.serialization.json.JsonPrimitive -> element.content
+                                                is kotlinx.serialization.json.JsonObject -> {
+                                                    // 对于对象，转换为 Map
+                                                    element.mapValues { (_, v) ->
+                                                        if (v is kotlinx.serialization.json.JsonPrimitive) v.content else v.toString()
+                                                    }
+                                                }
+                                                else -> element.toString()
+                                            }
+                                        }
+                                    }
+                                    is kotlinx.serialization.json.JsonObject -> {
+                                        // 对于对象，转换为 Map
+                                        value.mapValues { (_, v) ->
+                                            if (v is kotlinx.serialization.json.JsonPrimitive) v.content else v.toString()
+                                        }
+                                    }
+                                    else -> value.toString()
+                                }
+                            } ?: emptyMap()
+                            
+                            ToolCall(
+                                id = toolId,
+                                name = toolName,
+                                parameters = parameters,
+                                status = ToolCallStatus.RUNNING,
+                                result = null,
+                                startTime = System.currentTimeMillis(),
+                                endTime = null
+                            )
+                        } else null
+                    } ?: emptyList()
+                    
+                    // 提取token使用信息
+                    val usageObj = messageObj?.get("usage")?.jsonObject
+                    val tokenUsage = if (usageObj != null) {
+                        val inputTokens = usageObj["input_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                        val outputTokens = usageObj["output_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                        val cacheCreationTokens = usageObj["cache_creation_input_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                        val cacheReadTokens = usageObj["cache_read_input_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                        
+                        if (inputTokens > 0 || outputTokens > 0 || cacheCreationTokens > 0 || cacheReadTokens > 0) {
+                            EnhancedMessage.TokenUsage(
+                                inputTokens = inputTokens,
+                                outputTokens = outputTokens,
+                                cacheCreationTokens = cacheCreationTokens,
+                                cacheReadTokens = cacheReadTokens
+                            )
+                        } else null
+                    } else null
+                    
+                    println("[SessionObject] 助手消息解析结果: content='${textContent.take(50)}', toolCalls=${toolCalls.size}, tokenUsage=$tokenUsage")
+                    
+                    EnhancedMessage(
+                        id = java.util.UUID.randomUUID().toString(),
+                        role = MessageRole.ASSISTANT,
+                        content = textContent,
+                        timestamp = System.currentTimeMillis(),
+                        toolCalls = toolCalls,
+                        tokenUsage = tokenUsage,
+                        isStreaming = false
+                    )
+                }
+                
+                "user" -> {
+                    // 解析用户消息（通常不会在实时流中出现，但为了完整性）
+                    val messageObj = jsonObject["message"]?.jsonObject
+                    val contentArray = messageObj?.get("content")?.jsonArray
+                    
+                    val textContent = contentArray?.mapNotNull { contentElement ->
+                        val contentObj = contentElement.jsonObject
+                        val type = contentObj["type"]?.jsonPrimitive?.content
+                        if (type == "text") {
+                            contentObj["text"]?.jsonPrimitive?.content
+                        } else null
+                    }?.joinToString("") ?: ""
+                    
+                    println("[SessionObject] 用户消息解析结果: content='${textContent.take(50)}'")
+                    
+                    EnhancedMessage(
+                        id = java.util.UUID.randomUUID().toString(),
+                        role = MessageRole.USER,
+                        content = textContent,
+                        timestamp = System.currentTimeMillis(),
+                        toolCalls = emptyList(),
+                        tokenUsage = null,
+                        isStreaming = false
+                    )
+                }
+                
+                else -> {
+                    println("[SessionObject] 未知消息类型或无需处理: $messageType")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            println("[SessionObject] 解析Claude CLI消息异常: ${e.message}")
+            println("[SessionObject] 异常JSON: ${jsonLine.take(200)}")
+            e.printStackTrace()
+            null
+        }
+    }
+    
+    /**
+     * 更新指定工具调用的结果（用于历史消息处理）
+     */
+    private fun updateToolCallResult(toolUseId: String, resultContent: String, isError: Boolean) {
+        // 找到包含指定工具调用ID的消息
+        val messageIndex = messages.indexOfLast { message ->
+            message.toolCalls.any { it.id == toolUseId }
+        }
+        
+        if (messageIndex >= 0) {
+            val message = messages[messageIndex]
+            val updatedToolCalls = message.toolCalls.map { toolCall ->
+                if (toolCall.id == toolUseId) {
+                    val result = if (isError) {
+                        ToolResult.Failure(resultContent)
+                    } else {
+                        ToolResult.Success(resultContent)
+                    }
+                    toolCall.copy(
+                        status = if (isError) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
+                        result = result,
+                        endTime = System.currentTimeMillis()
+                    )
+                } else {
+                    toolCall
+                }
+            }
+            
+            val updatedMessage = message.copy(
+                toolCalls = updatedToolCalls,
+                timestamp = System.currentTimeMillis()
+            )
+            
+            // 更新消息列表
+            messages = messages.toMutableList().apply {
+                this[messageIndex] = updatedMessage
+            }
+            
+            println("[SessionObject] ✅ 已更新工具调用结果: toolId=$toolUseId, isError=$isError")
+        } else {
+            println("[SessionObject] ⚠️ 未找到工具调用ID为 $toolUseId 的消息")
+        }
+    }
+    
+    /**
+     * 更新最后一条助手消息
+     * 如果没有助手消息，创建一个新的
+     */
+    private fun updateLastAssistantMessage(updater: (EnhancedMessage) -> EnhancedMessage) {
+        val lastAssistantIndex = messages.indexOfLast { it.role == MessageRole.ASSISTANT }
+        
+        if (lastAssistantIndex >= 0) {
+            // 更新现有的助手消息
+            val updatedMessages = messages.toMutableList()
+            updatedMessages[lastAssistantIndex] = updater(updatedMessages[lastAssistantIndex])
+            messages = updatedMessages
+        } else {
+            // 创建新的助手消息
+            val newAssistantMessage = EnhancedMessage(
+                id = java.util.UUID.randomUUID().toString(),
+                role = MessageRole.ASSISTANT,
+                content = "",
+                timestamp = System.currentTimeMillis(),
+                model = selectedModel,
+                isStreaming = true
+            )
+            addMessage(updater(newAssistantMessage))
+        }
+    }
+    
+    /**
+     * 发送消息给Claude CLI（会话级别的方法）
+     * 这样CLI处理就完全在SessionObject内部，支持后台更新
+     */
+    suspend fun sendMessage(
+        markdownText: String,
+        workingDirectory: String
+    ): com.claudecodeplus.sdk.ClaudeCliWrapper.QueryResult {
+        println("[SessionObject] sendMessage 被调用: markdownText='$markdownText', isGenerating=$isGenerating")
+        
+        if (isGenerating) {
+            println("[SessionObject] 会话正在生成中，添加到队列")
+            addToQueue(markdownText)
+            inputResetTrigger = System.currentTimeMillis()
+            throw IllegalStateException("会话正在生成中，已添加到队列")
+        }
+        
+        // 设置生成状态（用户消息已在ChatViewNew中添加）
+        println("[SessionObject] 设置生成状态")
+        isGenerating = true
+        currentTaskDescription = "发送消息: ${markdownText.take(50)}..."
+        taskStartTime = System.currentTimeMillis()
+        
+        // 添加助手消息占位符
+        println("[SessionObject] 添加助手消息占位符")
+        val assistantMessage = EnhancedMessage(
+            id = java.util.UUID.randomUUID().toString(),
+            role = MessageRole.ASSISTANT,
+            content = "",
+            timestamp = System.currentTimeMillis(),
+            model = selectedModel,
+            isStreaming = true
+        )
+        addMessage(assistantMessage)
+        
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                
+                // 准备CLI选项
+                val projectCwd = getProjectCwd() ?: workingDirectory
+                val options = com.claudecodeplus.sdk.ClaudeCliWrapper.QueryOptions(
+                    sessionId = sessionId,
+                    cwd = projectCwd,
+                    model = selectedModel?.cliName,
+                    permissionMode = selectedPermissionMode.cliName
+                )
+                
+                println("[SessionObject] 发送消息: isFirstMessage=$isFirstMessage, sessionId=$sessionId")
+                
+                // 使用二元会话策略
+                val result = if (isFirstMessage) {
+                    println("[SessionObject] 🆕 启动新会话 (startNewSession)")
+                    markSessionStarted()
+                    cliWrapper.startNewSession(markdownText, options)
+                } else if (sessionId != null) {
+                    println("[SessionObject] 🔄 恢复会话 (resumeSession): $sessionId")
+                    cliWrapper.resumeSession(sessionId!!, markdownText, options)
+                } else {
+                    println("[SessionObject] ⚠️ 没有 sessionId，降级为新会话")
+                    cliWrapper.startNewSession(markdownText, options)
+                }
+                
+                println("[SessionObject] 查询完成: success=${result.success}, sessionId=${result.sessionId}")
+                
+                // 更新会话 ID（如果是新会话）
+                result.sessionId?.let { newSessionId ->
+                    if (sessionId != newSessionId) {
+                        println("[SessionObject] 🆔 更新会话 ID: $newSessionId")
+                        updateSessionId(newSessionId)
+                    }
+                }
+                
+                // 清空上下文
+                clearContexts()
+                
+                result
+            } catch (e: Exception) {
+                println("[SessionObject] 发送消息异常: ${e.message}")
+                e.printStackTrace()
+                
+                val errorMessage = EnhancedMessage(
+                    id = "error_${System.currentTimeMillis()}",
+                    role = MessageRole.SYSTEM,
+                    content = "发送失败: ${e.message}",
+                    timestamp = System.currentTimeMillis(),
+                    toolCalls = emptyList(),
+                    orderedElements = emptyList()
+                )
+                addMessage(errorMessage)
+                
+                throw e
+            } finally {
+                // 不在这里清除生成状态，而是在收到 result 消息时清除
+                // 这样可以确保界面正确显示生成状态直到真正完成
+                println("[SessionObject] sendMessage finally 块执行，但不清除生成状态")
+            }
+        }
     }
     
     /**
@@ -312,32 +1131,58 @@ class SessionObject(
      * 清空整个会话
      */
     fun clearSession() {
+        // 注销CLI回调
+        GlobalCliWrapper.unregisterSessionCallback(sessionId)
+        
         sessionId = null
         messages = emptyList()
         contexts = emptyList()
         isGenerating = false
         currentStreamJob = null
         questionQueue.clear()
-        inputText = ""
+        inputTextFieldValue = TextFieldValue("")
+        showContextSelector = false
+        atSymbolPosition = null
+        claudeProcess = null
         sessionInfo = null
         currentSession = null
         isLoadingSession = false
-        // fileTracker = null // 已移除文件追踪器
+        isFirstMessage = true  // 重置为首次消息状态
         messageLoadingState = MessageLoadingState.IDLE
+        runningToolCalls.clear()
+        currentTaskDescription = null
+        taskStartTime = null
+        scrollPosition = 0f
     }
     
     /**
      * 保存输入状态（切换会话时调用）
      */
-    fun saveInputState(text: String) {
-        inputText = text
+    fun saveInputState(textFieldValue: TextFieldValue) {
+        inputTextFieldValue = textFieldValue
     }
     
     /**
      * 恢复输入状态
      */
-    fun restoreInputState(): String {
-        return inputText
+    fun restoreInputState(): TextFieldValue {
+        return inputTextFieldValue
+    }
+    
+    /**
+     * 更新输入框状态
+     */
+    fun updateInputText(textFieldValue: TextFieldValue) {
+        inputTextFieldValue = textFieldValue
+    }
+    
+    /**
+     * 清空输入框
+     */
+    fun clearInput() {
+        inputTextFieldValue = TextFieldValue("")
+        showContextSelector = false
+        atSymbolPosition = null
     }
     
     /**
@@ -346,6 +1191,58 @@ class SessionObject(
      */
     fun getProjectCwd(): String? {
         return project?.path
+    }
+    
+    /**
+     * 标记会话已开始（发送了第一条消息）
+     */
+    fun markSessionStarted() {
+        isFirstMessage = false
+    }
+    
+    /**
+     * 从会话历史恢复时调用
+     * 加载历史消息后，会话不再是首次消息状态
+     */
+    fun onHistoryLoaded() {
+        isFirstMessage = false
+        messageLoadingState = MessageLoadingState.HISTORY_LOADED
+    }
+    
+    /**
+     * 保存当前会话状态（用于标签切换时保存状态）
+     */
+    fun saveSessionState(): SessionState {
+        return SessionState(
+            sessionId = sessionId,
+            messages = messages,
+            contexts = contexts,
+            isFirstMessage = isFirstMessage,
+            inputTextFieldValue = inputTextFieldValue,
+            selectedModel = selectedModel,
+            selectedPermissionMode = selectedPermissionMode,
+            skipPermissions = skipPermissions,
+            messageLoadingState = messageLoadingState,
+            scrollPosition = scrollPosition
+        )
+    }
+    
+    /**
+     * 恢复会话状态（用于标签切换回来时恢复状态）
+     */
+    fun restoreSessionState(state: SessionState) {
+        sessionId = state.sessionId
+        messages = state.messages
+        contexts = state.contexts
+        isFirstMessage = state.isFirstMessage
+        inputTextFieldValue = state.inputTextFieldValue
+        selectedModel = state.selectedModel
+        selectedPermissionMode = state.selectedPermissionMode
+        skipPermissions = state.skipPermissions
+        messageLoadingState = state.messageLoadingState
+        scrollPosition = state.scrollPosition
+        
+        println("[SessionObject] 会话状态已恢复: sessionId=$sessionId, messages=${messages.size}, scrollPosition=$scrollPosition")
     }
     
     /**
@@ -372,6 +1269,20 @@ class SessionObject(
             
             // 使用 ClaudeSessionManager 读取会话文件
             val sessionManager = ClaudeSessionManager()
+            
+            // 首先检查会话文件是否存在
+            val sessionFileExists = withContext(Dispatchers.IO) {
+                val sessionFilePath = sessionManager.getSessionFilePath(currentProjectPath, currentSessionId)
+                val sessionFile = java.io.File(sessionFilePath)
+                sessionFile.exists()
+            }
+            
+            if (!sessionFileExists) {
+                println("[SessionObject] ⚠️ 会话文件不存在，标记为新会话: sessionId=$currentSessionId")
+                isFirstMessage = true
+                return
+            }
+            
             val (sessionMessages, totalCount) = withContext(Dispatchers.IO) {
                 println("[SessionObject] 🔍 在 IO 线程中读取消息...")
                 
@@ -400,13 +1311,84 @@ class SessionObject(
                 result
             }
             
-            println("[SessionObject] 🔄 转换为 EnhancedMessage...")
-            // 转换为 EnhancedMessage
-            val enhancedMessages = sessionMessages.mapNotNull { message ->
-                message.toEnhancedMessage() 
+            println("[SessionObject] 🔄 逐条处理历史消息（模拟CLI流）...")
+            
+            // 清空现有消息，重新处理
+            if (forceFullReload) {
+                messages = emptyList()
             }
             
-            println("[SessionObject] ✅ 转换完成 - enhancedMessages: ${enhancedMessages.size}")
+            // 首先检查第一条消息以更新sessionId（如果需要）
+            val firstMessage = sessionMessages.firstOrNull()
+            if (firstMessage != null && this.sessionId != firstMessage.sessionId) {
+                println("[SessionObject] 📱 从历史消息更新sessionId: ${firstMessage.sessionId}")
+                updateSessionId(firstMessage.sessionId)
+            }
+            
+            // 逐条处理历史消息，使用统一的parseClaudeCliMessage解析器
+            sessionMessages.forEach { sessionMessage ->
+                try {
+                    println("[SessionObject] 📥 处理历史消息: ${sessionMessage.type} - ${sessionMessage.uuid?.take(8) ?: "unknown"}...")
+                    
+                    // 先检查是否是工具结果消息，需要特殊处理
+                    if (sessionMessage.type == "user" && sessionMessage.message?.content != null) {
+                        val contentList = sessionMessage.message.content
+                        var hasToolResult = false
+                        
+                        // 检查是否包含工具结果
+                        if (contentList is List<*>) {
+                            contentList.forEach { contentItem ->
+                                if (contentItem is Map<*, *>) {
+                                    val itemType = contentItem["type"] as? String
+                                    if (itemType == "tool_result") {
+                                        hasToolResult = true
+                                        val toolUseId = contentItem["tool_use_id"] as? String
+                                        val resultContent = contentItem["content"] as? String ?: ""
+                                        val isError = (contentItem["is_error"] as? Boolean) ?: false
+                                        
+                                        if (toolUseId != null) {
+                                            println("[SessionObject] 🔧 处理历史工具结果: toolId=$toolUseId, isError=$isError, content=${resultContent.take(50)}...")
+                                            
+                                            // 找到对应的工具调用消息并更新结果
+                                            updateToolCallResult(toolUseId, resultContent, isError)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // 如果处理了工具结果，就跳过常规处理
+                        if (hasToolResult) {
+                            return@forEach
+                        }
+                    }
+                    
+                    // 将历史格式转换为实时格式
+                    val realtimeFormat = convertHistoryToRealtime(sessionMessage)
+                    
+                    if (realtimeFormat != null) {
+                        println("[SessionObject] ✅ 历史消息格式转换成功")
+                        
+                        // 使用统一的实时消息解析器
+                        val enhancedMessage = parseClaudeCliMessage(realtimeFormat, realtimeFormat.toString())
+                        
+                        if (enhancedMessage != null && (enhancedMessage.content.isNotEmpty() || enhancedMessage.toolCalls.isNotEmpty())) {
+                            println("[SessionObject] ✅ 历史消息解析成功: content长度=${enhancedMessage.content.length}, toolCalls=${enhancedMessage.toolCalls.size}")
+                            addMessage(enhancedMessage)
+                        } else {
+                            println("[SessionObject] ⚠️ 历史消息解析结果为空或无有效内容")
+                        }
+                    } else {
+                        println("[SessionObject] ❌ 历史消息格式转换失败，跳过该消息")
+                    }
+                } catch (e: Exception) {
+                    println("[SessionObject] ❌ 处理历史消息异常: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+            
+            val enhancedMessages = messages
+            println("[SessionObject] ✅ 历史消息处理完成 - enhancedMessages: ${enhancedMessages.size}")
             
             // 在主线程更新消息列表
             withContext(Dispatchers.Main) {
@@ -420,6 +1402,11 @@ class SessionObject(
                     messages = enhancedMessages
                     val action = if (forceFullReload) "强制全量重载" else "增量更新"
                     println("[SessionObject] ✅ $action 消息列表，共 ${enhancedMessages.size} 条消息")
+                    
+                    // 如果加载了历史消息，更新会话状态
+                    if (enhancedMessages.isNotEmpty()) {
+                        onHistoryLoaded()
+                    }
                 } else {
                     println("[SessionObject] ⏩ 消息无变化，跳过更新")
                 }
@@ -464,3 +1451,19 @@ enum class MessageLoadingState {
      */
     ERROR
 }
+
+/**
+ * 会话状态快照（用于保存和恢复会话状态）
+ */
+data class SessionState(
+    val sessionId: String?,
+    val messages: List<EnhancedMessage>,
+    val contexts: List<ContextReference>,
+    val isFirstMessage: Boolean,
+    val inputTextFieldValue: androidx.compose.ui.text.input.TextFieldValue,
+    val selectedModel: AiModel,
+    val selectedPermissionMode: PermissionMode,
+    val skipPermissions: Boolean,
+    val messageLoadingState: MessageLoadingState,
+    val scrollPosition: Float = 0f
+)

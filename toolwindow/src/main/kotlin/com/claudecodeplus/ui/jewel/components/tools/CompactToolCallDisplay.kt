@@ -55,7 +55,7 @@ fun CompactToolCallDisplay(
     
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(1.dp)  // 减少工具调用之间的间距
     ) {
         toolCalls.forEach { toolCall ->
             CompactToolCallItem(toolCall)
@@ -89,7 +89,7 @@ private fun CompactToolCallItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(3.dp))  // 减少圆角半径
             .background(backgroundColor)
             .hoverable(interactionSource)
     ) {
@@ -98,7 +98,7 @@ private fun CompactToolCallItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { expanded = !expanded }
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 4.dp, vertical = 2.dp),  // 减少内边距
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -117,7 +117,7 @@ private fun CompactToolCallItem(
                 // 工具名称和参数（智能内联显示）
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
                     // 工具调用标题行，格式：🔧 ToolName parameter_value
                     val inlineDisplay = getInlineToolDisplay(toolCall)
@@ -152,7 +152,7 @@ private fun CompactToolCallItem(
             
             // 右侧状态和时间
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 执行时间（如果已完成）
@@ -227,41 +227,43 @@ private fun ToolCallDetails(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.3f))
+            .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.05f))  // 更淡的背景
     ) {
-        // 简化的顶部工具栏，只保留关闭按钮
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.6f))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
+        // 详细内容区域含关闭按钮
+        Box(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // 关闭按钮
-            Text(
-                text = "✕",
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 14.sp,
-                    color = JewelTheme.globalColors.text.normal
-                ),
-                modifier = Modifier
-                    .clickable { onClose() }
-                    .padding(4.dp)
-            )
-        }
-        
-        // 详细内容 - 直接显示结果，无需额外标题
-        SelectionContainer {
+            // 主内容
+            SelectionContainer {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 2.dp, vertical = 1.dp)  // 进一步减少内边距
+                        .padding(top = 18.dp) // 为关闭按钮留空间
+                ) {
+                    // 直接显示结果
+                    toolCall.result?.let { result ->
+                        formatToolResult(toolCall)
+                    }
+                }
+            }
+            
+            // 关闭按钮 - 浮动在右上角，更小更轻量
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp)
+                    .align(Alignment.TopEnd)
+                    .padding(2.dp)
             ) {
-                // 直接显示结果
-                toolCall.result?.let { result ->
-                    formatToolResult(toolCall)
-                }
+                Text(
+                    text = "✕",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 10.sp,  // 更小的字体
+                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)  // 更淡的颜色
+                    ),
+                    modifier = Modifier
+                        .clickable { onClose() }
+                        .padding(2.dp)  // 更小的点击区域
+                )
             }
         }
     }
@@ -269,10 +271,23 @@ private fun ToolCallDetails(
 
 /**
  * 判断是否需要显示工具的详细结果
+ * 修复：确保所有有结果的工具都可以展开显示
  */
 private fun shouldShowToolDetails(toolCall: ToolCall): Boolean {
-    // 所有工具都显示结果
-    return true
+    // 如果工具调用没有结果，不需要显示详细信息
+    if (toolCall.result == null) return false
+    
+    // 有结果的工具都应该可以显示详细结果
+    return when {
+        // 失败的工具 - 用户必须看到错误信息
+        toolCall.result is ToolResult.Failure -> true
+        
+        // 成功的工具 - 用户可以选择查看详细结果
+        toolCall.result is ToolResult.Success -> true
+        
+        // 其他类型的结果也显示
+        else -> true
+    }
 }
 
 /**
@@ -514,7 +529,7 @@ private fun FileMatchResultDisplay(toolCall: ToolCall) {
                 )
             } else {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
                         text = "📂 找到 ${lines.size} 个匹配文件：",
@@ -526,9 +541,9 @@ private fun FileMatchResultDisplay(toolCall: ToolCall) {
                     
                     Column(
                         modifier = Modifier
-                            .heightIn(max = 200.dp)
+                            .heightIn(max = 120.dp)  // 减少最大高度
                             .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         lines.take(20).forEach { filePath ->
                             Row(
@@ -600,7 +615,7 @@ private fun SearchResultDisplay(toolCall: ToolCall) {
                 )
             } else {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     // 搜索统计
                     val pattern = toolCall.parameters["pattern"]?.toString() ?: ""
@@ -615,9 +630,9 @@ private fun SearchResultDisplay(toolCall: ToolCall) {
                     // 搜索结果列表
                     Column(
                         modifier = Modifier
-                            .heightIn(max = 300.dp)
+                            .heightIn(max = 140.dp)  // 减少最大高度
                             .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         lines.take(15).forEach { line ->
                             val parts = line.split(':', limit = 3)
@@ -625,8 +640,8 @@ private fun SearchResultDisplay(toolCall: ToolCall) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 2.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        .padding(vertical = 1.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.Top
                                 ) {
                                     // 文件名
@@ -719,11 +734,11 @@ private fun WebContentDisplay(toolCall: ToolCall) {
             val content = result.output
             
             Column(
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 // URL 标题
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -741,14 +756,14 @@ private fun WebContentDisplay(toolCall: ToolCall) {
                 
                 // 内容摘要
                 Text(
-                    text = if (content.length > 500) content.take(497) + "..." else content,
+                    text = if (content.length > 400) content.take(397) + "..." else content,  // 减少字符数
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 11.sp,
                         color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f),
-                        lineHeight = 16.sp
+                        lineHeight = 15.sp  // 减少行高
                     ),
                     modifier = Modifier
-                        .heightIn(max = 200.dp)
+                        .heightIn(max = 100.dp)  // 减少最大高度
                         .verticalScroll(rememberScrollState())
                 )
                 
@@ -788,7 +803,7 @@ private fun SubTaskDisplay(toolCall: ToolCall) {
             val description = toolCall.parameters["description"]?.toString() ?: "执行任务"
             
             Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
                     text = "🔧 $description",
@@ -799,14 +814,14 @@ private fun SubTaskDisplay(toolCall: ToolCall) {
                 )
                 
                 Text(
-                    text = if (output.length > 300) output.take(297) + "..." else output,
+                    text = if (output.length > 250) output.take(247) + "..." else output,
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
                     ),
                     modifier = Modifier
-                        .heightIn(max = 150.dp)
+                        .heightIn(max = 100.dp)
                         .verticalScroll(rememberScrollState())
                 )
             }
@@ -838,11 +853,11 @@ private fun NotebookOperationDisplay(toolCall: ToolCall) {
             val editMode = toolCall.parameters["edit_mode"]?.toString() ?: "replace"
             
             Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 // 操作标题
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -880,7 +895,7 @@ private fun NotebookOperationDisplay(toolCall: ToolCall) {
                             color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
                         ),
                         modifier = Modifier
-                            .heightIn(max = 100.dp)
+                            .heightIn(max = 80.dp)
                             .verticalScroll(rememberScrollState())
                     )
                 } else {
@@ -921,11 +936,11 @@ private fun MCPToolDisplay(toolCall: ToolCall) {
             val functionName = toolName.substringAfterLast("__")
             
             Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 // MCP 工具标题
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -945,7 +960,7 @@ private fun MCPToolDisplay(toolCall: ToolCall) {
                 val mainParams = toolCall.parameters.entries.take(2)
                 if (mainParams.isNotEmpty()) {
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         mainParams.forEach { (key, value) ->
                             Text(
@@ -962,14 +977,14 @@ private fun MCPToolDisplay(toolCall: ToolCall) {
                 // 结果摘要
                 val output = result.output
                 Text(
-                    text = if (output.length > 300) output.take(297) + "..." else output,
+                    text = if (output.length > 200) output.take(197) + "..." else output,
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
                     ),
                     modifier = Modifier
-                        .heightIn(max = 150.dp)
+                        .heightIn(max = 100.dp)
                         .verticalScroll(rememberScrollState())
                 )
             }
@@ -1102,8 +1117,8 @@ private fun ToolResultContent(
         val modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(4.dp))
-            .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f))
-            .padding(8.dp)
+            .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.3f))
+            .padding(4.dp)
             .then(
                 if (limitHeight) {
                     Modifier.heightIn(max = maxHeight)
@@ -1183,11 +1198,11 @@ private fun CommandResultDisplay(toolCall: ToolCall) {
                 .filter { it.trim().isNotEmpty() }
                 .joinToString("\n")
             
-            // 直接使用 ANSI 终端显示输出 - 增加到30行以显示更多内容
+            // 直接使用 ANSI 终端显示输出 - 进一步减少显示行数节省空间
             AnsiOutputView(
                 text = cleanedOutput,
                 modifier = Modifier.fillMaxWidth(),
-                maxLines = 30,  // 从默认的10行增加到30行
+                maxLines = 8,  // 进一步减少到8行
                 onCopy = { copiedText ->
                     // TODO: 实现复制到剪贴板
                 }
@@ -1230,7 +1245,7 @@ private fun DefaultResultDisplay(toolCall: ToolCall) {
                 ToolResultContent(
                     toolCall = simplifiedToolCall,
                     limitHeight = shouldLimitHeight,
-                    maxHeight = 200.dp
+                    maxHeight = 120.dp
                 )
             } else {
                 // 如果内容被完全过滤掉，显示简单的成功状态
@@ -1319,7 +1334,7 @@ private fun cleanToolResultContent(content: String, toolName: String): String {
 }
 
 /**
- * 清理 MCP 工具结果
+ * 清理 MCP 工具结果 - 增强版，更精准的内容过滤
  */
 private fun cleanMcpToolResult(content: String, toolName: String): String {
     val serverName = toolName.substringAfter("mcp__").substringBefore("__")
@@ -1329,79 +1344,175 @@ private fun cleanMcpToolResult(content: String, toolName: String): String {
     return when {
         // 数据库操作结果
         serverName.contains("postgres", ignoreCase = true) -> {
-            if (content.contains("rows affected", ignoreCase = true)) {
-                extractRowsAffected(content)
-            } else if (content.contains("error", ignoreCase = true)) {
-                "❌ 数据库操作失败"
-            } else {
-                "✅ 数据库操作成功"
+            when {
+                content.contains("rows affected", ignoreCase = true) -> extractRowsAffected(content)
+                content.contains("SELECT", ignoreCase = true) -> {
+                    val lines = content.lines().filter { it.trim().isNotEmpty() }
+                    "📊 查询结果 (${lines.size} 行数据)"
+                }
+                content.contains("error", ignoreCase = true) -> "❌ 数据库操作失败"
+                functionName.contains("list", ignoreCase = true) -> {
+                    val count = content.lines().filter { it.trim().isNotEmpty() }.size
+                    "📋 列出 $count 项"
+                }
+                else -> "✅ 数据库操作成功"
             }
         }
         
         // Redis 操作结果
         serverName.contains("redis", ignoreCase = true) -> {
-            if (content.contains("error", ignoreCase = true) || content.contains("fail", ignoreCase = true)) {
-                "❌ Redis 操作失败"
-            } else {
-                "✅ Redis 操作成功"
+            when {
+                content.contains("error", ignoreCase = true) || content.contains("fail", ignoreCase = true) -> 
+                    "❌ Redis 操作失败"
+                functionName.contains("get", ignoreCase = true) && content.length > 50 ->
+                    "📤 获取数据 (${content.length} 字符)"
+                functionName.contains("set", ignoreCase = true) -> "📥 数据写入成功"
+                functionName.contains("search", ignoreCase = true) -> {
+                    val matches = content.lines().filter { it.trim().isNotEmpty() }.size
+                    "🔍 搜索到 $matches 项结果"
+                }
+                else -> "✅ Redis 操作成功"
             }
         }
         
         // Excel 操作结果
         serverName.contains("excel", ignoreCase = true) -> {
             when {
-                functionName.contains("read", ignoreCase = true) -> "📊 Excel 文件读取完成"
-                functionName.contains("write", ignoreCase = true) -> "📝 Excel 文件写入完成"
+                functionName.contains("read", ignoreCase = true) -> {
+                    if (content.contains("rows", ignoreCase = true)) {
+                        "📊 Excel 数据读取完成"
+                    } else {
+                        "📊 Excel 文件读取完成"
+                    }
+                }
+                functionName.contains("write", ignoreCase = true) -> "📝 Excel 数据写入完成"
                 functionName.contains("format", ignoreCase = true) -> "🎨 Excel 格式设置完成"
+                functionName.contains("create", ignoreCase = true) -> "📄 Excel 文件创建完成"
                 else -> "✅ Excel 操作完成"
             }
         }
         
-        // 其他 MCP 工具的默认处理
+        // XMind 操作结果
+        serverName.contains("xmind", ignoreCase = true) -> {
+            when {
+                functionName.contains("read", ignoreCase = true) -> "🧠 思维导图解析完成"
+                functionName.contains("search", ignoreCase = true) -> "🔍 思维导图搜索完成"
+                functionName.contains("extract", ignoreCase = true) -> "📤 节点提取完成"
+                else -> "✅ XMind 操作完成"
+            }
+        }
+        
+        // Gradle 类查找结果
+        serverName.contains("gradle", ignoreCase = true) -> {
+            when {
+                functionName.contains("find_class", ignoreCase = true) -> {
+                    if (content.contains("找到", ignoreCase = true)) {
+                        "🔍 类查找完成"
+                    } else {
+                        "❌ 未找到指定类"
+                    }
+                }
+                functionName.contains("get_source", ignoreCase = true) -> "📄 源码获取完成"
+                else -> "✅ Gradle 操作完成"
+            }
+        }
+        
+        // 其他 MCP 工具的智能处理
         else -> {
-            if (content.length > 200) {
-                // 尝试提取关键信息
-                val lines = content.lines().filter { it.trim().isNotEmpty() }
-                val keyLines = lines.filter { line ->
-                    !line.contains("[", ignoreCase = true) &&
-                    !line.contains("{", ignoreCase = true) &&
-                    !line.contains("server", ignoreCase = true) &&
-                    line.length < 100
+            when {
+                content.length > 500 -> {
+                    // 长内容，智能提取摘要
+                    val lines = content.lines().filter { it.trim().isNotEmpty() }
+                    val dataLines = lines.filter { line ->
+                        !line.contains("server", ignoreCase = true) &&
+                        !line.contains("config", ignoreCase = true) &&
+                        !line.contains("debug", ignoreCase = true) &&
+                        line.length < 120
+                    }
+                    
+                    if (dataLines.isNotEmpty()) {
+                        "${dataLines.take(2).joinToString("\n")}\n... (${lines.size} 行数据)"
+                    } else {
+                        "✅ $functionName 执行完成 (${lines.size} 行输出)"
+                    }
                 }
-                
-                if (keyLines.isNotEmpty()) {
-                    keyLines.take(3).joinToString("\n")
-                } else {
-                    "✅ $functionName 执行完成"
+                content.length > 100 -> {
+                    // 中等长度内容，保留关键信息
+                    val lines = content.lines().filter { it.trim().isNotEmpty() }.take(3)
+                    lines.joinToString("\n")
                 }
-            } else {
-                content
+                else -> content // 短内容保持原样
             }
         }
     }
 }
 
 /**
- * 清理 LS 命令输出
+ * 清理 LS 命令输出 - 增强版，更智能的分类统计
  */
 private fun cleanLsOutput(content: String): String {
     val lines = content.lines().filter { it.trim().isNotEmpty() }
-    return if (lines.size > 10) {
-        "📁 ${lines.size} 个文件/目录\n${lines.take(10).joinToString("\n")}\n... 还有 ${lines.size - 10} 项"
-    } else {
-        content
+    
+    if (lines.size <= 8) {
+        return content  // 内容不多，保持原样
+    }
+    
+    // 分析文件类型
+    val directories = lines.count { line ->
+        line.startsWith("d") || line.endsWith("/") || 
+        (!line.contains(".") && !line.contains(" "))
+    }
+    val files = lines.size - directories
+    
+    val summary = buildString {
+        append("📁 ")
+        if (directories > 0 && files > 0) {
+            append("${directories} 个目录, ${files} 个文件")
+        } else if (directories > 0) {
+            append("${directories} 个目录")
+        } else {
+            append("${files} 个文件")
+        }
+    }
+    
+    return buildString {
+        append(summary)
+        append("\n")
+        append(lines.take(6).joinToString("\n"))
+        if (lines.size > 6) {
+            append("\n... 还有 ${lines.size - 6} 项")
+        }
     }
 }
 
 /**
- * 清理读文件输出
+ * 清理读文件输出 - 增强版，智能内容摘要
  */
 private fun cleanReadOutput(content: String): String {
     val lines = content.lines()
-    return if (lines.size > 20) {
-        "📄 文件内容 (${lines.size} 行)\n${lines.take(15).joinToString("\n")}\n... 还有 ${lines.size - 15} 行"
-    } else {
-        content
+    
+    // 短文件内容，保持原样
+    if (lines.size <= 12 && content.length <= 800) {
+        return content
+    }
+    
+    // 长文件，显示摘要信息
+    val nonEmptyLines = lines.filter { it.trim().isNotEmpty() }
+    val fileType = when {
+        lines.any { it.trim().startsWith("{") || it.trim().startsWith("[") } -> "JSON"
+        lines.any { it.trim().startsWith("<") } -> "XML/HTML"
+        lines.any { it.contains("function") || it.contains("class") } -> "代码"
+        lines.any { it.startsWith("#") } -> "配置"
+        else -> "文本"
+    }
+    
+    return buildString {
+        append("📄 $fileType 文件内容 (${lines.size} 行, ${content.length} 字符)")
+        append("\n")
+        append(lines.take(8).joinToString("\n"))
+        if (lines.size > 8) {
+            append("\n... 还有 ${lines.size - 8} 行")
+        }
     }
 }
 
@@ -1430,18 +1541,59 @@ private fun cleanEditOutput(content: String): String {
 }
 
 /**
- * 清理 Bash 命令输出
+ * 清理 Bash 命令输出 - 增强版，更激进的过滤
  */
 private fun cleanBashOutput(content: String): String {
-    // 去除空行，保持 Bash 输出，但限制长度
-    val cleanedContent = content.lines()
-        .filter { it.trim().isNotEmpty() }
-        .joinToString("\n")
+    val lines = content.lines().filter { it.trim().isNotEmpty() }
     
-    return if (cleanedContent.length > 800) {
-        cleanedContent.take(797) + "..."
-    } else {
-        cleanedContent
+    // 对不同类型的命令输出采用不同的处理策略
+    return when {
+        // 文件列表类命令 (ls, find等)
+        lines.any { it.contains(".") && (it.contains("/") || it.contains("\\")) } -> {
+            val fileLines = lines.filter { 
+                it.contains(".") && (it.contains("/") || it.contains("\\"))
+            }
+            if (fileLines.size > 10) {
+                "📁 找到 ${fileLines.size} 个文件\n${fileLines.take(8).joinToString("\n")}\n... 还有 ${fileLines.size - 8} 个文件"
+            } else {
+                fileLines.joinToString("\n")
+            }
+        }
+        
+        // 统计信息类命令
+        lines.any { it.contains("total") || it.contains("count") || it.contains("=") } -> {
+            lines.filter { 
+                it.contains("total") || it.contains("count") || 
+                it.contains("=") || it.length < 50 
+            }.take(5).joinToString("\n")
+        }
+        
+        // 长输出内容，只保留关键信息
+        lines.size > 15 -> {
+            val keyLines = lines.filter { line ->
+                line.length < 100 && 
+                !line.startsWith("#") && 
+                !line.startsWith("//") &&
+                !line.trim().startsWith("*") &&
+                line.trim().isNotEmpty()
+            }.take(8)
+            
+            if (keyLines.isNotEmpty()) {
+                "${keyLines.joinToString("\n")}\n... (${lines.size - keyLines.size} 行省略)"
+            } else {
+                "✅ 命令执行完成 (${lines.size} 行输出)"
+            }
+        }
+        
+        // 短输出，保持原样但限制长度
+        else -> {
+            val cleanedContent = lines.joinToString("\n")
+            if (cleanedContent.length > 400) {
+                cleanedContent.take(397) + "..."
+            } else {
+                cleanedContent
+            }
+        }
     }
 }
 

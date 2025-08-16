@@ -68,20 +68,24 @@ fun ClaudeSessionMessage.toEnhancedMessage(): EnhancedMessage? {
         else -> return null
     }
     
-    val content = when (val c = message.content) {
-        is String -> c
-        is List<*> -> {
-            // 处理结构化内容
-            c.filterIsInstance<Map<*, *>>()
-                .mapNotNull { map ->
-                    if (map["type"] == "text") {
-                        map["text"] as? String
-                    } else null
-                }
-                .joinToString("\n")
-        }
-        else -> ""
+    // 处理内容和工具调用
+    val contentList = when (val c = message.content) {
+        is String -> listOf(mapOf("type" to "text", "text" to c))
+        is List<*> -> c.filterIsInstance<Map<*, *>>()
+        else -> emptyList()
     }
+    
+    // 提取文本内容
+    val textContent = contentList
+        .mapNotNull { map ->
+            if (map["type"] == "text") {
+                map["text"] as? String
+            } else null
+        }
+        .joinToString("\n")
+    
+    // 提取工具调用和结果
+    val toolCalls = extractToolCallsFromContent(contentList)
     
     // 解析模型
     val model = message.model?.let { modelStr ->
@@ -105,11 +109,75 @@ fun ClaudeSessionMessage.toEnhancedMessage(): EnhancedMessage? {
     return EnhancedMessage(
         id = uuid,
         role = role,
-        content = content,
+        content = textContent,
         timestamp = parseTimestamp(timestamp),
         model = model,
-        tokenUsage = tokenUsage
+        tokenUsage = tokenUsage,
+        toolCalls = toolCalls
     )
+}
+
+/**
+ * 从内容列表中提取工具调用和结果
+ */
+private fun extractToolCallsFromContent(contentList: List<Map<*, *>>): List<com.claudecodeplus.ui.models.ToolCall> {
+    val toolCalls = mutableListOf<com.claudecodeplus.ui.models.ToolCall>()
+    val toolResults = mutableMapOf<String, com.claudecodeplus.ui.models.ToolResult>()
+    
+    // 首先提取所有工具结果
+    contentList.forEach { map ->
+        if (map["type"] == "tool_result") {
+            val toolUseId = map["tool_use_id"] as? String ?: ""
+            val resultContent = map["content"] as? String ?: ""
+            val isError = map["is_error"] as? Boolean ?: false
+            
+            val result = if (isError) {
+                com.claudecodeplus.ui.models.ToolResult.Failure(resultContent)
+            } else {
+                com.claudecodeplus.ui.models.ToolResult.Success(resultContent)
+            }
+            
+            toolResults[toolUseId] = result
+        }
+    }
+    
+    // 然后提取工具调用并关联结果
+    contentList.forEach { map ->
+        if (map["type"] == "tool_use") {
+            val toolId = map["id"] as? String ?: ""
+            val toolName = map["name"] as? String ?: ""
+            val inputMap = map["input"] as? Map<*, *> ?: emptyMap<String, Any>()
+            
+            // 将输入参数转换为 Map<String, String>
+            val parameters = inputMap.mapKeys { (key, _) ->
+                key?.toString() ?: ""
+            }.mapValues { (_, value) ->
+                value?.toString() ?: ""
+            }
+            
+            // 查找对应的工具结果
+            val result = toolResults[toolId]
+            val status = when (result) {
+                is com.claudecodeplus.ui.models.ToolResult.Success -> com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS
+                is com.claudecodeplus.ui.models.ToolResult.Failure -> com.claudecodeplus.ui.models.ToolCallStatus.FAILED
+                else -> com.claudecodeplus.ui.models.ToolCallStatus.RUNNING
+            }
+            
+            val toolCall = com.claudecodeplus.ui.models.ToolCall(
+                id = toolId,
+                name = toolName,
+                parameters = parameters,
+                status = status,
+                result = result,
+                startTime = System.currentTimeMillis(),
+                endTime = if (result != null) System.currentTimeMillis() else null
+            )
+            
+            toolCalls.add(toolCall)
+        }
+    }
+    
+    return toolCalls
 }
 
 /**

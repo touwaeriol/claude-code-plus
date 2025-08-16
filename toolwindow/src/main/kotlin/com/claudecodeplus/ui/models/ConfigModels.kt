@@ -2,6 +2,9 @@ package com.claudecodeplus.ui.models
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * 主配置文件的数据模型，映射 ~/.claude.json 的完整结构。
@@ -164,42 +167,24 @@ class Project(
     val path: String, // 项目的实际文件系统路径
     val name: String = path.substringAfterLast("/")
 ) {
-    // 项目的Sessions管理
-    private val _sessions = mutableMapOf<String, SessionObject>()
-    val sessions: Map<String, SessionObject> = _sessions
-    
-    /**
-     * 创建新的Session对象
-     */
-    fun createSession(
-        tabId: String,
-        initialSessionId: String? = null,
-        initialMessages: List<EnhancedMessage> = emptyList(),
-        initialModel: AiModel? = null,
-        initialPermissionMode: PermissionMode? = null,
-        initialSkipPermissions: Boolean? = null
-    ): SessionObject {
-        val sessionObject = SessionObject(
-            initialSessionId = initialSessionId,
-            initialMessages = initialMessages,
-            initialModel = initialModel,
-            initialPermissionMode = initialPermissionMode,
-            initialSkipPermissions = initialSkipPermissions,
-            project = this
-        )
-        _sessions[tabId] = sessionObject
-        return sessionObject
+    // 使用全局会话管理器，而不是项目独立的会话存储
+    companion object {
+        private val globalSessionManager = com.claudecodeplus.ui.services.SessionManager()
     }
+    
+    val sessions: Map<String, SessionObject> 
+        get() = globalSessionManager.getAllSessionsForProject(this.id)
     
     /**
      * 获取Session对象
      */
     fun getSession(tabId: String): SessionObject? {
-        return _sessions[tabId]
+        return globalSessionManager.getSession(this.id, tabId)
     }
     
     /**
      * 获取或创建Session对象
+     * 如果是恢复已存在的会话，会主动加载历史消息和状态
      */
     fun getOrCreateSession(
         tabId: String,
@@ -209,35 +194,60 @@ class Project(
         initialPermissionMode: PermissionMode? = null,
         initialSkipPermissions: Boolean? = null
     ): SessionObject {
-        return _sessions[tabId] ?: createSession(
+        // 使用全局会话管理器
+        val sessionObject = globalSessionManager.getOrCreateSession(
+            projectId = this.id,
             tabId = tabId,
             initialSessionId = initialSessionId,
             initialMessages = initialMessages,
             initialModel = initialModel,
             initialPermissionMode = initialPermissionMode,
-            initialSkipPermissions = initialSkipPermissions
+            initialSkipPermissions = initialSkipPermissions,
+            project = this
         )
+        
+        // 如果有sessionId，说明是恢复会话，需要加载历史消息
+        if (initialSessionId != null && initialMessages.isEmpty() && sessionObject.messages.isEmpty()) {
+            println("[Project] 检测到会话恢复，准备加载历史消息: sessionId=$initialSessionId")
+            // 启动协程加载历史消息
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                try {
+                    sessionObject.loadNewMessages(forceFullReload = true)
+                    println("[Project] 会话历史加载完成: sessionId=$initialSessionId, messages=${sessionObject.messages.size}")
+                } catch (e: Exception) {
+                    println("[Project] 会话历史加载失败: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+        }
+        
+        return sessionObject
     }
     
     /**
      * 移除Session对象
      */
     fun removeSession(tabId: String): SessionObject? {
-        return _sessions.remove(tabId)
+        val session = globalSessionManager.getSession(this.id, tabId)
+        globalSessionManager.removeSession("$id:$tabId") 
+        return session
     }
     
     /**
      * 获取所有Session对象
      */
     fun getAllSessions(): Collection<SessionObject> {
-        return _sessions.values
+        return globalSessionManager.getAllSessionsForProject(this.id).values
     }
     
     /**
-     * 清空所有Session对象
+     * 清空该项目的所有Session对象
      */
     fun clearAllSessions() {
-        _sessions.clear()
+        val projectSessions = globalSessionManager.getAllSessionsForProject(this.id)
+        projectSessions.keys.forEach { tabId ->
+            globalSessionManager.removeSession("$id:$tabId")
+        }
     }
 }
 

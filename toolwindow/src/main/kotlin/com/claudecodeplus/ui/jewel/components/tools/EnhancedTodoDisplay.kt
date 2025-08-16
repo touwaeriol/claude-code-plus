@@ -16,7 +16,6 @@ import com.claudecodeplus.ui.models.ToolCall
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import androidx.compose.material.LinearProgressIndicator
 import org.jetbrains.jewel.ui.component.Text
-import org.jetbrains.jewel.ui.component.DefaultButton
 
 /**
  * 增强的 TodoWrite 看板式展示组件
@@ -27,19 +26,16 @@ fun EnhancedTodoDisplay(
     modifier: Modifier = Modifier
 ) {
     val todos = parseTodos(toolCall)
-    var expanded by remember(toolCall.id) { mutableStateOf(true) }
     
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // 任务统计和进度条
-        TodoSummaryHeader(todos, expanded) { expanded = !expanded }
+        TodoSummaryHeader(todos)
         
-        // 单列任务列表（展开时显示）
-        if (expanded) {
-            TodoListView(todos)
-        }
+        // 单列任务列表（默认展开）
+        TodoListView(todos)
     }
 }
 
@@ -48,9 +44,7 @@ fun EnhancedTodoDisplay(
  */
 @Composable
 private fun TodoSummaryHeader(
-    todos: List<EnhancedTodoItem>,
-    expanded: Boolean,
-    onToggleExpand: () -> Unit
+    todos: List<EnhancedTodoItem>
 ) {
     val completedCount = todos.count { it.status == "completed" }
     val totalCount = todos.size
@@ -59,44 +53,29 @@ private fun TodoSummaryHeader(
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 标题和展开按钮
+        // 标题行
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "📋",
-                    style = JewelTheme.defaultTextStyle.copy(fontSize = 16.sp)
+            Text(
+                text = "📋",
+                style = JewelTheme.defaultTextStyle.copy(fontSize = 16.sp)
+            )
+            Text(
+                text = "任务管理",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 13.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
                 )
-                Text(
-                    text = "任务管理",
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 13.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
-                    )
+            )
+            Text(
+                text = "($completedCount/$totalCount 完成)",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 12.sp,
+                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
                 )
-                Text(
-                    text = "($completedCount/$totalCount 完成)",
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 12.sp,
-                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
-                    )
-                )
-            }
-            
-            DefaultButton(onClick = onToggleExpand) {
-                Text(
-                    text = if (expanded) "收起" else "展开",
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 12.sp
-                    )
-                )
-            }
+            )
         }
         
         // 进度条

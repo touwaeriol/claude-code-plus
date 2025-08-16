@@ -12,6 +12,7 @@ import java.time.Instant
 data class LocalProjectConfig(
     val projects: MutableList<LocalProject> = mutableListOf(),
     val lastOpenedProject: String? = null, // 最后打开的项目ID
+    val lastSelectedSession: String? = null, // 最后选中的会话ID
     val version: String = "1.0"
 )
 
@@ -209,6 +210,75 @@ class LocalConfigManager {
     }
     
     /**
+     * 更新会话ID（当Claude CLI返回新的sessionId时）
+     */
+    fun updateSessionId(projectId: String, oldSessionId: String, newSessionId: String) {
+        val config = loadConfig()
+        val project = config.projects.find { it.id == projectId } ?: return
+        val session = project.sessions.find { it.id == oldSessionId } ?: return
+        
+        val now = Instant.now().toString()
+        val updatedSession = session.copy(
+            id = newSessionId,
+            lastAccessedAt = now
+        )
+        
+        val updatedSessions = project.sessions.toMutableList()
+        updatedSessions.removeIf { it.id == oldSessionId }
+        updatedSessions.add(0, updatedSession) // 移到开头，使用新ID
+        val updatedProject = project.copy(sessions = updatedSessions)
+        
+        val updatedProjects = config.projects.toMutableList()
+        updatedProjects.removeIf { it.id == projectId }
+        updatedProjects.add(updatedProject)
+        
+        val updatedConfig = config.copy(projects = updatedProjects)
+        saveConfig(updatedConfig)
+        
+        println("[LocalConfigManager] 会话ID已更新: $oldSessionId -> $newSessionId")
+    }
+    
+    /**
+     * 为新会话设置sessionId（当第一次获得真实sessionId时）
+     * @param projectId 项目ID
+     * @param newSessionId 新的会话ID
+     */
+    fun updateNewSessionId(projectId: String, newSessionId: String) {
+        val config = loadConfig()
+        val project = config.projects.find { it.id == projectId } ?: return
+        
+        // 查找可能的临时会话记录，通常是最新创建的"新会话"
+        val sessionToUpdate = project.sessions.firstOrNull { session ->
+            // 找到名称为"新会话"且没有真实sessionId的会话，或者通过其他方式匹配
+            session.name == "新会话" && (session.id.startsWith("temp-") || session.id.length < 20)
+        } ?: project.sessions.firstOrNull() // 如果没找到，就更新第一个会话
+        
+        if (sessionToUpdate != null) {
+            val now = Instant.now().toString()
+            val updatedSession = sessionToUpdate.copy(
+                id = newSessionId,
+                lastAccessedAt = now
+            )
+            
+            val updatedSessions = project.sessions.toMutableList()
+            updatedSessions.removeIf { it.id == sessionToUpdate.id }
+            updatedSessions.add(0, updatedSession) // 移到开头，使用新ID
+            val updatedProject = project.copy(sessions = updatedSessions)
+            
+            val updatedProjects = config.projects.toMutableList()
+            updatedProjects.removeIf { it.id == projectId }
+            updatedProjects.add(updatedProject)
+            
+            val updatedConfig = config.copy(projects = updatedProjects)
+            saveConfig(updatedConfig)
+            
+            println("[LocalConfigManager] 新会话ID已设置: ${sessionToUpdate.id} -> $newSessionId")
+        } else {
+            println("[LocalConfigManager] 未找到需要更新的新会话记录")
+        }
+    }
+    
+    /**
      * 获取所有项目
      */
     fun getAllProjects(): List<LocalProject> {
@@ -298,5 +368,22 @@ class LocalConfigManager {
         val session = project.sessions.find { it.id == sessionId }
         
         return session?.model ?: project.defaultModel
+    }
+    
+    /**
+     * 保存最后选中的会话
+     */
+    fun saveLastSelectedSession(sessionId: String) {
+        val config = loadConfig()
+        val updatedConfig = config.copy(lastSelectedSession = sessionId)
+        saveConfig(updatedConfig)
+        println("[LocalConfigManager] 保存最后选中会话: $sessionId")
+    }
+    
+    /**
+     * 获取最后选中的会话ID
+     */
+    fun getLastSelectedSession(): String? {
+        return loadConfig().lastSelectedSession
     }
 }

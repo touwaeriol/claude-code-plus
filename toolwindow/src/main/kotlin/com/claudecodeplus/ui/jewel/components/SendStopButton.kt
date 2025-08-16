@@ -45,7 +45,7 @@ import androidx.compose.ui.window.PopupProperties
 
 /**
  * 发送/停止按钮组合组件
- * 包含发送按钮和图片选择按钮
+ * 包含上下文使用量指示器、图片选择按钮和发送按钮
  * 
  * @param isGenerating 是否正在生成
  * @param onSend 发送消息回调
@@ -53,6 +53,10 @@ import androidx.compose.ui.window.PopupProperties
  * @param onImageSelected 图片选择回调
  * @param hasInput 是否有输入内容
  * @param enabled 是否启用
+ * @param currentModel 当前选择的模型（用于上下文长度计算）
+ * @param messageHistory 消息历史（用于上下文统计）
+ * @param inputText 当前输入文本
+ * @param contexts 添加的上下文
  * @param modifier 修饰符
  */
 @Composable
@@ -63,6 +67,10 @@ fun SendStopButtonGroup(
     onImageSelected: (File) -> Unit = {},
     hasInput: Boolean = true,
     enabled: Boolean = true,
+    currentModel: com.claudecodeplus.ui.models.AiModel = com.claudecodeplus.ui.models.AiModel.OPUS,
+    messageHistory: List<com.claudecodeplus.ui.models.EnhancedMessage> = emptyList(),
+    inputText: String = "",
+    contexts: List<com.claudecodeplus.ui.models.ContextReference> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -70,6 +78,14 @@ fun SendStopButtonGroup(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // 上下文使用量指示器
+        ContextUsageIndicator(
+            currentModel = currentModel,
+            messageHistory = messageHistory,
+            inputText = inputText,
+            contexts = contexts
+        )
+        
         // 图片选择按钮
         ImagePickerButton(
             onImageSelected = onImageSelected,

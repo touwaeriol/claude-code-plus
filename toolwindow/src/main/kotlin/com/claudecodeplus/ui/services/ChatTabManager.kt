@@ -229,6 +229,15 @@ class ChatTabManager {
             // 如果标签有关联的会话，触发会话切换事件
             tab.sessionId?.let { sessionId ->
                 _events.value = TabEvent.SessionSwitchRequested(sessionId)
+                
+                // 保存最后选中的会话到本地配置
+                try {
+                    val localConfigManager = LocalConfigManager()
+                    localConfigManager.saveLastSelectedSession(sessionId)
+                    println("[ChatTabManager] 保存最后选中会话: $sessionId")
+                } catch (e: Exception) {
+                    println("[ChatTabManager] 保存最后选中会话失败: ${e.message}")
+                }
             }
         }
     }

@@ -60,12 +60,24 @@ fun UnifiedInputArea(
     onSkipPermissionsChange: (Boolean) -> Unit = {},
     fileIndexService: FileIndexService? = null,
     projectService: ProjectService? = null,
-    onContextClick: (String) -> Unit = {}
+    onContextClick: (String) -> Unit = {},
+    // 新增：会话状态参数，用于无状态UI
+    sessionObject: SessionObject? = null,
+    inputResetTrigger: Any? = null
 ) {
     val focusRequester = remember { FocusRequester() }
-    var showContextSelector by remember { mutableStateOf(false) }
-    var atSymbolPosition by remember { mutableStateOf<Int?>(null) }
-    var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
+    
+    // 使用会话状态或回退到局部状态（兼容性）
+    val showContextSelector = sessionObject?.showContextSelector ?: false
+    val atSymbolPosition = sessionObject?.atSymbolPosition
+    val textFieldValue = sessionObject?.inputTextFieldValue ?: TextFieldValue("")
+    
+    // 输入重置逻辑
+    LaunchedEffect(inputResetTrigger) {
+        if (inputResetTrigger != null && sessionObject != null) {
+            sessionObject.clearInput()
+        }
+    }
     
     // 启动时请求焦点
     LaunchedEffect(mode) {
@@ -78,13 +90,6 @@ fun UnifiedInputArea(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // 生成状态指示器
-        if (mode == InputAreaMode.INPUT && isGenerating) {
-            GeneratingIndicator(
-                onStop = { onStop?.invoke() },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
         
         Column(
             modifier = Modifier
@@ -112,8 +117,10 @@ fun UnifiedInputArea(
                 if (mode == InputAreaMode.INPUT) {
                     AddContextButton(
                         onClick = {
-                            showContextSelector = true
-                            atSymbolPosition = null
+                            sessionObject?.let { session ->
+                                session.showContextSelector = true
+                                session.atSymbolPosition = null
+                            }
                         },
                         enabled = enabled && !isGenerating,
                         modifier = Modifier.height(20.dp)
@@ -145,18 +152,20 @@ fun UnifiedInputArea(
                 // 输入模式
                 ChatInputField(
                     value = textFieldValue,
-                    onValueChange = { textFieldValue = it },
+                    onValueChange = { sessionObject?.updateInputText(it) },
                     onSend = {
                         if (textFieldValue.text.isNotBlank()) {
                             onSend(textFieldValue.text)
-                            textFieldValue = TextFieldValue("")
+                            sessionObject?.clearInput()
                         }
                     },
                     enabled = enabled && !isGenerating,
                     focusRequester = focusRequester,
                     onShowContextSelector = { position ->
-                        showContextSelector = true
-                        atSymbolPosition = position
+                        sessionObject?.let { session ->
+                            session.showContextSelector = true
+                            session.atSymbolPosition = position
+                        }
                     },
                     showPreview = false // 可以根据需要开启预览
                 )
@@ -174,12 +183,16 @@ fun UnifiedInputArea(
                     if (searchService != null) {
                         ChatInputContextSelectorPopup(
                             onDismiss = {
-                                showContextSelector = false
-                                atSymbolPosition = null
+                                sessionObject?.let { session ->
+                                    session.showContextSelector = false
+                                    session.atSymbolPosition = null
+                                }
                                 focusRequester.requestFocus()
                             },
                             onContextSelect = { context ->
-                                showContextSelector = false
+                                sessionObject?.let { session ->
+                                    session.showContextSelector = false
+                                }
                                 
                                 // 生成 Markdown 格式的引用
                                 val markdownLink = createMarkdownContextLink(
@@ -205,8 +218,10 @@ fun UnifiedInputArea(
                                     newText to TextRange(newPosition)
                                 }
                                 
-                                textFieldValue = TextFieldValue(newText, newSelection)
-                                atSymbolPosition = null
+                                sessionObject?.let { session ->
+                                    session.updateInputText(TextFieldValue(newText, newSelection))
+                                    session.atSymbolPosition = null
+                                }
                                 focusRequester.requestFocus()
                             },
                             searchService = searchService
@@ -331,12 +346,16 @@ fun UnifiedInputArea(
                         onSend = {
                             if (textFieldValue.text.isNotBlank()) {
                                 onSend(textFieldValue.text)
-                                textFieldValue = TextFieldValue("")
+                                sessionObject?.clearInput()
                             }
                         },
                         onStop = onStop ?: {},
                         hasInput = textFieldValue.text.isNotBlank(),
-                        enabled = enabled
+                        enabled = enabled,
+                        currentModel = selectedModel,
+                        messageHistory = sessionObject?.messages ?: emptyList(),
+                        inputText = textFieldValue.text,
+                        contexts = contexts
                     )
                 }
                 InputAreaMode.DISPLAY -> {

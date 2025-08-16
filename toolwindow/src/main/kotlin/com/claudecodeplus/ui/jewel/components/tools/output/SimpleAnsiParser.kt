@@ -131,6 +131,9 @@ object AnsiColors {
     val BRIGHT_CYAN = Color(85, 255, 255)
     val BRIGHT_WHITE = Color(255, 255, 255)
     
-    val DEFAULT_BACKGROUND = Color(30, 30, 30)
-    val DEFAULT_FOREGROUND = Color(200, 200, 200)
+    // 使用主题相对应的终端背景色
+    // 深色主题使用深色背景，浅色主题使用浅色背景
+    // 注意：这些将在Composable中动态获取主题色
+    val DEFAULT_BACKGROUND = Color.Transparent  // 占位符，实际使用时会被主题色替换
+    val DEFAULT_FOREGROUND = Color.Transparent  // 占位符，实际使用时会被主题色替换
 }

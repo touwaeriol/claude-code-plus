@@ -455,14 +455,85 @@ class ClaudeCliWrapper {
         val sessionId: String?,
         val processId: Long,
         val success: Boolean,
-        val errorMessage: String? = null
+        val errorMessage: String? = null,
+        val assistantMessage: String? = null // Claude 的回复内容
     )
     
     /**
-     * 执行查询，使用 Node.js SDK 包装器
-     * 通过 Node.js 脚本调用 @anthropic-ai/claude-code SDK
+     * 会话类型枚举
+     * 基于 Claudia 项目的二元会话策略
      */
+    enum class SessionType {
+        /** 新会话 - 不使用 --resume 参数 */
+        NEW,
+        /** 恢复会话 - 使用 --resume sessionId 参数 */
+        RESUME
+    }
+    
+    /**
+     * 启动新会话（基于 Claudia 的 executeClaudeCode）
+     * 不使用 --resume 参数，创建全新的会话
+     * 
+     * @param prompt 用户提示词
+     * @param options 查询选项（resume 参数会被忽略）
+     * @return 查询结果，包含新的 sessionId
+     */
+    suspend fun startNewSession(
+        prompt: String, 
+        options: QueryOptions,
+        onStreamingMessage: ((String) -> Unit)? = null
+    ): QueryResult {
+        // 确保不使用 resume 参数
+        val newOptions = options.copy(resume = null)
+        return executeQuery(prompt, newOptions, SessionType.NEW, onStreamingMessage)
+    }
+    
+    /**
+     * 恢复会话（基于 Claudia 的 resumeClaudeCode）
+     * 使用 --resume sessionId 参数延续之前的会话
+     * 
+     * @param sessionId 要恢复的会话 ID
+     * @param prompt 用户提示词
+     * @param options 查询选项
+     * @return 查询结果
+     */
+    suspend fun resumeSession(
+        sessionId: String, 
+        prompt: String, 
+        options: QueryOptions,
+        onStreamingMessage: ((String) -> Unit)? = null
+    ): QueryResult {
+        // 确保使用 resume 参数
+        val resumeOptions = options.copy(resume = sessionId)
+        return executeQuery(prompt, resumeOptions, SessionType.RESUME, onStreamingMessage)
+    }
+    
+    /**
+     * 执行查询（向后兼容）
+     * 根据 options.resume 参数自动判断是新会话还是恢复会话
+     * 
+     * @deprecated 建议使用 startNewSession 或 resumeSession 明确指定会话类型
+     */
+    @Deprecated("Use startNewSession or resumeSession for explicit session control", 
+                ReplaceWith("if (options.resume != null) resumeSession(options.resume, prompt, options) else startNewSession(prompt, options)"))
     suspend fun query(prompt: String, options: QueryOptions): QueryResult {
+        return if (options.resume != null) {
+            resumeSession(options.resume, prompt, options)
+        } else {
+            startNewSession(prompt, options)
+        }
+    }
+    
+    /**
+     * 内部执行查询方法
+     * 实际执行 Node.js SDK 调用的核心逻辑
+     */
+    private suspend fun executeQuery(
+        prompt: String, 
+        options: QueryOptions, 
+        sessionType: SessionType,
+        onStreamingMessage: ((String) -> Unit)? = null
+    ): QueryResult {
         val requestId = options.requestId ?: System.currentTimeMillis().toString()
         
         // 验证输入
@@ -475,7 +546,11 @@ class ClaudeCliWrapper {
             throw IllegalArgumentException("Fallback model cannot be the same as the main model")
         }
         
-        logger.info("🔵 [$requestId] 开始查询 (SDK): ${prompt.take(100)}...")
+        val sessionTypeStr = when(sessionType) {
+            SessionType.NEW -> "新会话"
+            SessionType.RESUME -> "恢复会话 (${options.resume})"
+        }
+        logger.info("🔵 [$requestId] 开始查询 (SDK - $sessionTypeStr): ${prompt.take(100)}...")
         
         return withContext(Dispatchers.IO) {
             
@@ -616,8 +691,9 @@ class ClaudeCliWrapper {
             // 启动输出监听协程
             val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
             
-            // 监听变量，用于跟踪 SDK 返回的会话ID
+            // 监听变量，用于跟踪 SDK 返回的会话ID和助手回复
             var detectedSessionId: String? = null
+            val assistantResponseBuilder = StringBuilder()
             
             // 启动 stdout 监听 - 处理 Node.js SDK 返回的 JSON 消息
             scope.launch {
@@ -642,10 +718,15 @@ class ClaudeCliWrapper {
                                                     logger.info("🔵 [$requestId] SDK 开始查询，会话ID: $sessionId")
                                                 }
                                                 "message" -> {
-                                                    // 转发 Claude 消息给回调函数
+                                                    // 转发 Claude 消息给回调函数并收集内容
                                                     val data = jsonMsg["data"]
                                                     if (data != null) {
-                                                        processOutputLine(data.toString())
+                                                        val content = data.toString()
+                                                        processOutputLine(content)
+                                                        // 收集助手回复内容
+                                                        assistantResponseBuilder.append(content)
+                                                        // 调用流式回调（实时更新UI）
+                                                        onStreamingMessage?.invoke(assistantResponseBuilder.toString())
                                                     }
                                                 }
                                                 "complete" -> {
@@ -711,7 +792,8 @@ class ClaudeCliWrapper {
                     sessionId = finalSessionId,
                     processId = process.pid(),
                     success = exitCode == 0,
-                    errorMessage = if (exitCode != 0) "Node.js SDK 退出码: $exitCode" else null
+                    errorMessage = if (exitCode != 0) "Node.js SDK 退出码: $exitCode" else null,
+                    assistantMessage = if (exitCode == 0 && assistantResponseBuilder.isNotEmpty()) assistantResponseBuilder.toString() else null
                 )
             } catch (e: Exception) {
                 logger.error("🔴 [$requestId] Node.js SDK 执行失败", e)
@@ -720,7 +802,8 @@ class ClaudeCliWrapper {
                     sessionId = finalSessionId,
                     processId = process.pid(),
                     success = false,
-                    errorMessage = e.message
+                    errorMessage = e.message,
+                    assistantMessage = null
                 )
             } finally {
                 currentProcess.set(null)

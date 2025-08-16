@@ -1006,6 +1006,247 @@ const displayableMessages = React.useMemo(() => {
 8. **错误处理**：解析失败的行应该记录但不中断整个流处理过程
 9. **度量计算**：token 使用统计可能出现在顶层 `usage` 字段或嵌套的 `message.usage` 字段
 
+## 历史会话与实时会话的消息格式差异分析
+
+### 问题背景
+
+在 Claude Code Plus 项目中发现了一个关键问题：**历史会话和实时会话使用不同的消息格式**，导致只能正确处理其中一种类型的消息。
+
+### 格式差异详细对比
+
+#### 1. 实时会话消息格式（Claude CLI 直接输出）
+
+实时会话直接来自 Claude CLI 的 `--output-format stream-json` 输出：
+
+```json
+{
+  "type": "assistant",
+  "message": {
+    "id": "msg_01abc123",
+    "type": "message", 
+    "role": "assistant",
+    "model": "claude-opus-4-1-20250805",
+    "content": [
+      {
+        "type": "text",
+        "text": "我来帮你查看项目结构。"
+      },
+      {
+        "type": "tool_use",
+        "id": "toolu_01GReBR1qZqBsaLLApUjZKr2",
+        "name": "LS",
+        "input": {
+          "path": "/Users/erio/codes/idea/claude-code-plus/desktop"
+        }
+      }
+    ],
+    "stop_reason": null,
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 52,
+      "cache_creation_input_tokens": 6628,
+      "cache_read_input_tokens": 423352,
+      "output_tokens": 45,
+      "service_tier": "standard"
+    }
+  }
+}
+```
+
+**特点**：
+- 结构简单，`message` 字段直接包含 Anthropic API 格式
+- `content` 数组包含 `text` 和 `tool_use` 类型的内容块
+- `usage` 信息位于 `message.usage`
+- 没有额外的会话元数据
+
+#### 2. 历史会话消息格式（JSONL 文件存储）
+
+历史会话来自 `~/.claude/projects/{project}/{sessionId}.jsonl` 文件：
+
+```json
+{
+  "parentUuid": "129d3a24-d688-4bab-95fb-13a60893b8b4",
+  "isSidechain": false,
+  "userType": "external",
+  "cwd": "/Users/erio/codes/idea/claude-code-plus/desktop",
+  "sessionId": "f4ce77bf-7148-415f-9f0b-bce9f5eeca46",
+  "version": "1.0.69",
+  "gitBranch": "main",
+  "message": {
+    "id": "msg_01LhHd7KtRa8vHWeWzFxDkvS",
+    "type": "message",
+    "role": "assistant", 
+    "model": "claude-opus-4-1-20250805",
+    "content": [
+      {
+        "type": "text",
+        "text": "我来帮你查看脚本中的问题。让我先检查脚本文件的内容。"
+      }
+    ],
+    "stop_reason": null,
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 4,
+      "cache_creation_input_tokens": 14036,
+      "cache_read_input_tokens": 30844,
+      "output_tokens": 1,
+      "service_tier": "standard"
+    }
+  },
+  "type": "assistant",
+  "uuid": "b466dda0-c75f-4f37-94cc-1f370a02cc29",
+  "timestamp": "2025-08-07T06:41:17.502Z"
+}
+```
+
+**特点**：
+- 包含完整的会话元数据（`uuid`, `sessionId`, `parentUuid`, `cwd` 等）
+- `message` 字段内容与实时格式相同
+- 额外包含版本、分支、时间戳等信息
+- 使用 UUID 进行消息链接
+
+### 3. 处理方式差异
+
+#### 实时消息处理（正常工作）
+```kotlin
+// SessionObject.kt:644
+private fun parseClaudeCliMessage(jsonObject: JsonObject, jsonLine: String): EnhancedMessage? {
+    val messageType = jsonObject["type"]?.jsonPrimitive?.content
+    
+    when (messageType) {
+        "assistant" -> {
+            val messageObj = jsonObject["message"]?.jsonObject
+            val contentArray = messageObj?.get("content")?.jsonArray
+            
+            // 直接处理 Claude CLI 输出格式
+            val textContent = contentArray?.mapNotNull { contentElement ->
+                val contentObj = contentElement.jsonObject
+                val type = contentObj["type"]?.jsonPrimitive?.content
+                if (type == "text") {
+                    contentObj["text"]?.jsonPrimitive?.content
+                } else null
+            }?.joinToString("") ?: ""
+            
+            // 提取工具调用...
+        }
+    }
+}
+```
+
+#### 历史消息处理（存在问题）
+```kotlin
+// SessionObject.kt:1167
+// 创建临时的SDKMessage对象来使用MessageConverter（适用于历史消息）
+val gson = com.google.gson.Gson()
+val jsonLine = gson.toJson(sessionMessage)
+
+val sdkMessage = com.claudecodeplus.sdk.SDKMessage(
+    messageId = sessionMessage.uuid ?: java.util.UUID.randomUUID().toString(),
+    timestamp = sessionMessage.timestamp ?: java.time.Instant.now().toString(),
+    content = jsonLine,  // 将整个历史消息序列化为content
+    type = when (sessionMessage.type) {
+        "assistant" -> com.claudecodeplus.sdk.MessageType.TEXT
+        "user" -> com.claudecodeplus.sdk.MessageType.TEXT
+        "error" -> com.claudecodeplus.sdk.MessageType.ERROR
+        else -> com.claudecodeplus.sdk.MessageType.TEXT
+    },
+    data = com.claudecodeplus.sdk.MessageData(text = jsonLine)
+)
+
+val enhancedMessage = MessageConverter.run { sdkMessage.toEnhancedMessage() }
+```
+
+### 4. 问题根源
+
+**问题**：历史消息处理使用了错误的数据格式转换方式。
+
+1. **格式不匹配**：将整个 JSONL 历史消息（包含元数据）序列化后传给 `MessageConverter`
+2. **双重包装**：`MessageConverter` 期望的是简化格式，而接收到的是完整的会话元数据
+3. **工具调用丢失**：`MessageConverter.extractToolCalls()` 无法正确解析被双重包装的工具调用数据
+
+### 5. 解决方案
+
+#### 方案A：统一使用实时消息解析器
+为历史消息创建适配器，将历史格式转换为实时格式后使用 `parseClaudeCliMessage()`：
+
+```kotlin
+private fun convertHistoryToRealtime(sessionMessage: ClaudeSessionMessage): JsonObject? {
+    return try {
+        // 提取内部的 message 对象，构造实时格式
+        val realTimeFormat = buildJsonObject {
+            put("type", sessionMessage.type)
+            sessionMessage.message?.let { message ->
+                putJsonObject("message") {
+                    put("id", message.id ?: "")
+                    put("type", "message")
+                    put("role", message.role ?: "assistant")
+                    put("model", message.model ?: "")
+                    
+                    // 复制 content 数组
+                    message.content?.let { content ->
+                        putJsonArray("content") {
+                            content.forEach { contentItem ->
+                                add(Json.parseToJsonElement(contentItem.toString()))
+                            }
+                        }
+                    }
+                    
+                    // 复制 usage 信息
+                    message.usage?.let { usage ->
+                        putJsonObject("usage") {
+                            put("input_tokens", usage.inputTokens ?: 0)
+                            put("output_tokens", usage.outputTokens ?: 0)
+                            put("cache_creation_input_tokens", usage.cacheCreationInputTokens ?: 0)
+                            put("cache_read_input_tokens", usage.cacheReadInputTokens ?: 0)
+                        }
+                    }
+                }
+            }
+        }
+        realTimeFormat
+    } catch (e: Exception) {
+        null
+    }
+}
+```
+
+#### 方案B：修复 MessageConverter
+改进 `MessageConverter.extractToolCalls()` 以正确处理历史消息格式。
+
+### 6. 推荐实现
+
+**推荐采用方案A**，因为：
+1. **一致性**：使用同一套解析逻辑，减少维护成本
+2. **可靠性**：实时解析器已经验证工作正常
+3. **扩展性**：未来消息格式变化只需要维护一个解析器
+
+### 7. 修复后的历史消息处理逻辑
+
+```kotlin
+// 替换 SessionObject.kt:1162-1184 的历史消息处理逻辑
+sessionMessages.forEach { sessionMessage ->
+    try {
+        println("[SessionObject] 📥 处理历史消息: ${sessionMessage.type} - ${sessionMessage.uuid?.take(8) ?: "unknown"}...")
+        
+        // 将历史格式转换为实时格式
+        val realtimeFormat = convertHistoryToRealtime(sessionMessage)
+        
+        if (realtimeFormat != null) {
+            // 使用实时消息解析器
+            val enhancedMessage = parseClaudeCliMessage(realtimeFormat, realtimeFormat.toString())
+            
+            if (enhancedMessage != null && (enhancedMessage.content.isNotEmpty() || enhancedMessage.toolCalls.isNotEmpty())) {
+                println("[SessionObject] ✅ 历史消息解析成功: content长度=${enhancedMessage.content.length}, toolCalls=${enhancedMessage.toolCalls.size}")
+                addMessage(enhancedMessage)
+            }
+        }
+    } catch (e: Exception) {
+        println("[SessionObject] 处理历史消息异常: ${e.message}")
+        e.printStackTrace()
+    }
+}
+```
+
 ## 参考资源
 
 - [Claude Code SDK Python 类型定义](https://github.com/anthropics/claude-code-sdk-python/blob/main/src/claude_code_sdk/types.py)
