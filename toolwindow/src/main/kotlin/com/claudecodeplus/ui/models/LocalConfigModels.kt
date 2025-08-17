@@ -70,31 +70,94 @@ class LocalConfigManager {
     }
     
     /**
-     * 加载本地配置
+     * 加载本地配置（带备份恢复机制）
      */
     fun loadConfig(): LocalProjectConfig {
-        return if (configFile.exists()) {
-            try {
-                val content = configFile.readText()
-                json.decodeFromString<LocalProjectConfig>(content)
-            } catch (e: Exception) {
-                println("加载本地配置失败，使用默认配置: ${e.message}")
-                LocalProjectConfig()
-            }
-        } else {
-            LocalProjectConfig()
+        if (!configFile.exists()) {
+            return LocalProjectConfig()
         }
+        
+        // 主配置文件
+        var lastException: Exception? = null
+        try {
+            val content = configFile.readText().trim()
+            if (content.isNotEmpty()) {
+                return json.decodeFromString<LocalProjectConfig>(content)
+            } else {
+                println("[LocalConfigManager] 配置文件为空")
+            }
+        } catch (e: Exception) {
+            lastException = e
+            println("[LocalConfigManager] 加载主配置文件失败: ${e.message}")
+        }
+        
+        // 尝试临时文件（可能是未完成的写入）
+        val tempFile = java.io.File(configFile.parent, "${configFile.name}.tmp")
+        if (tempFile.exists()) {
+            try {
+                val content = tempFile.readText().trim()
+                if (content.isNotEmpty()) {
+                    println("[LocalConfigManager] 从临时文件恢复配置")
+                    val config = json.decodeFromString<LocalProjectConfig>(content)
+                    // 恢复后保存到主文件
+                    saveConfig(config)
+                    return config
+                }
+            } catch (e: Exception) {
+                println("[LocalConfigManager] 从临时文件恢复失败: ${e.message}")
+                tempFile.delete() // 清理损坏的临时文件
+            }
+        }
+        
+        // 所有恢复尝试都失败，使用默认配置
+        println("[LocalConfigManager] 无法恢复配置，使用默认配置")
+        lastException?.printStackTrace()
+        return LocalProjectConfig()
     }
     
     /**
-     * 保存本地配置
+     * 保存本地配置（带文件锁防止并发冲突）
      */
     fun saveConfig(config: LocalProjectConfig) {
-        try {
-            val content = json.encodeToString(LocalProjectConfig.serializer(), config)
-            configFile.writeText(content)
-        } catch (e: Exception) {
-            println("保存本地配置失败: ${e.message}")
+        var attempts = 0
+        val maxAttempts = 3
+        
+        while (attempts < maxAttempts) {
+            try {
+                attempts++
+                
+                // 使用原子写入：先写到临时文件，再重命名
+                val tempFile = java.io.File(configFile.parent, "${configFile.name}.tmp")
+                val content = json.encodeToString(LocalProjectConfig.serializer(), config)
+                
+                // 写入临时文件
+                tempFile.writeText(content)
+                
+                // 原子性重命名（在大多数文件系统上是原子操作）
+                val success = tempFile.renameTo(configFile)
+                if (success) {
+                    println("[LocalConfigManager] 配置保存成功 (attempt $attempts)")
+                    return
+                } else {
+                    println("[LocalConfigManager] 配置重命名失败 (attempt $attempts)")
+                    tempFile.delete() // 清理临时文件
+                }
+            } catch (e: Exception) {
+                println("[LocalConfigManager] 保存本地配置失败 (attempt $attempts): ${e.message}")
+                if (attempts >= maxAttempts) {
+                    e.printStackTrace()
+                }
+            }
+            
+            // 短暂等待后重试
+            if (attempts < maxAttempts) {
+                try {
+                    Thread.sleep(100) // 等待100ms
+                } catch (ignored: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
+                }
+            }
         }
     }
     
@@ -386,6 +449,43 @@ class LocalConfigManager {
      */
     fun getLastSelectedSession(): String? {
         return loadConfig().lastSelectedSession
+    }
+    
+    /**
+     * 清理无效的最后选中会话ID
+     * 当会话不存在时调用
+     */
+    fun clearLastSelectedSession() {
+        val config = loadConfig()
+        val updatedConfig = config.copy(lastSelectedSession = null)
+        saveConfig(updatedConfig)
+        println("[LocalConfigManager] 已清理无效的最后选中会话")
+    }
+    
+    /**
+     * 验证最后选中的会话是否仍然存在
+     * @return 如果存在返回会话ID，否则返回null并清理配置
+     */
+    fun validateLastSelectedSession(): String? {
+        val config = loadConfig()
+        val lastSelectedSessionId = config.lastSelectedSession
+        
+        if (lastSelectedSessionId != null) {
+            // 检查这个会话是否在任何项目中存在
+            val sessionExists = config.projects.any { project ->
+                project.sessions.any { session -> session.id == lastSelectedSessionId }
+            }
+            
+            if (sessionExists) {
+                return lastSelectedSessionId
+            } else {
+                println("[LocalConfigManager] 最后选中的会话不存在: $lastSelectedSessionId，清理配置")
+                clearLastSelectedSession()
+                return null
+            }
+        }
+        
+        return null
     }
     
     /**

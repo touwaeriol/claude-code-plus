@@ -111,7 +111,7 @@ class ProjectManager(
                 // 优先选择配置文件中记录的最后选中会话
                 val projectSessions = _sessions.value[matchingProject.id] ?: emptyList()
                 val localConfigManager = LocalConfigManager()
-                val lastSelectedSessionId = localConfigManager.getLastSelectedSession()
+                val lastSelectedSessionId = localConfigManager.validateLastSelectedSession() // 使用验证方法
                 
                 val sessionToSelect = if (lastSelectedSessionId != null) {
                     // 查找记录的最后选中会话
@@ -120,11 +120,13 @@ class ProjectManager(
                         println("恢复最后选中的会话: ${lastSelectedSession.name} (${lastSelectedSessionId})")
                         lastSelectedSession
                     } else {
-                        println("最后选中的会话不存在，选择最新会话: $lastSelectedSessionId")
+                        println("最后选中的会话在当前项目中不存在，选择最新会话: $lastSelectedSessionId")
+                        // 清理这个无效的配置
+                        localConfigManager.clearLastSelectedSession()
                         projectSessions.firstOrNull()
                     }
                 } else {
-                    println("没有记录的最后选中会话，选择最新会话")
+                    println("没有记录有效的最后选中会话，选择最新会话")
                     projectSessions.firstOrNull()
                 }
                 
