@@ -106,21 +106,10 @@ private fun TodoSummaryHeader(
  */
 @Composable
 private fun TodoListView(todos: List<EnhancedTodoItem>) {
-    // 按优先级排序：高 -> 中 -> 低，同优先级按状态排序
-    val sortedTodos = todos.sortedWith(compareBy(
-        { when(it.priority) {
-            "high" -> 0
-            "medium" -> 1
-            "low" -> 2
-            else -> 3
-        }},
-        { when(it.status) {
-            "in_progress" -> 0
-            "pending" -> 1
-            "completed" -> 2
-            else -> 3
-        }}
-    ))
+    // 按任务ID的数字部分排序，保持创建顺序 (1 -> 2 -> 3 -> 4)
+    val sortedTodos = todos.sortedBy { 
+        it.id.toIntOrNull() ?: 0 
+    }
     
     Column(
         modifier = Modifier

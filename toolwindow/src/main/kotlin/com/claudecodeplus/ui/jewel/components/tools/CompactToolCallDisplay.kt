@@ -55,7 +55,7 @@ fun CompactToolCallDisplay(
     
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(1.dp)  // 减少工具调用之间的间距
+        verticalArrangement = Arrangement.spacedBy(0.dp)  // 移除工具调用之间的间距
     ) {
         toolCalls.forEach { toolCall ->
             CompactToolCallItem(toolCall)
@@ -76,14 +76,15 @@ private fun CompactToolCallItem(
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     
-    // 背景色动画
+    // 背景色动画（更平滑的过渡）
     val backgroundColor by animateColorAsState(
         targetValue = when {
-            expanded -> JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f)
-            isHovered -> JewelTheme.globalColors.panelBackground.copy(alpha = 0.3f)
-            else -> JewelTheme.globalColors.panelBackground.copy(alpha = 0.1f)
+            expanded -> JewelTheme.globalColors.panelBackground.copy(alpha = 0.4f)
+            isHovered -> JewelTheme.globalColors.panelBackground.copy(alpha = 0.2f)
+            else -> JewelTheme.globalColors.panelBackground.copy(alpha = 0.05f)
         },
-        animationSpec = tween(150)
+        animationSpec = tween(200, easing = EaseInOut),
+        label = "background_color"
     )
     
     Column(
@@ -98,7 +99,7 @@ private fun CompactToolCallItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { expanded = !expanded }
-                .padding(horizontal = 4.dp, vertical = 2.dp),  // 减少内边距
+                .padding(horizontal = 3.dp, vertical = 0.dp),  // 完全移除垂直内边距
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -111,64 +112,41 @@ private fun CompactToolCallItem(
                 // 工具图标
                 Text(
                     text = getToolIcon(toolCall),
-                    style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 12.sp,  // 减少图标大小
+                        lineHeight = 12.sp  // 减少行高
+                    )
                 )
                 
-                // 工具名称和参数（智能内联显示）
-                Column(
+                // 工具名称和参数（单行紧凑显示）
+                Row(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 工具调用标题行，格式：🔧 ToolName parameter_value
+                    // 工具调用标题行，格式：🔧 ToolName: parameter_value
                     val inlineDisplay = getInlineToolDisplay(toolCall)
                     Text(
                         text = inlineDisplay,
                         style = JewelTheme.defaultTextStyle.copy(
-                            fontSize = 13.sp,
+                            fontSize = 11.sp,  // 进一步减少字体大小
                             color = JewelTheme.globalColors.text.normal,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                            lineHeight = 11.sp  // 设置行高等于字体大小，减少行间距
                         ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    
-                    // 如果有多个参数，在第二行显示摘要
-                    if (toolCall.parameters.size > 1) {
-                        val paramSummary = getParameterSummary(toolCall)
-                        if (paramSummary.isNotEmpty()) {
-                            Text(
-                                text = paramSummary,
-                                style = JewelTheme.defaultTextStyle.copy(
-                                    fontSize = 11.sp,
-                                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
                 }
             }
             
-            // 右侧状态和时间
+            // 右侧状态指示器
             Row(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 执行时间（如果已完成）
-                if (toolCall.status != ToolCallStatus.PENDING && toolCall.endTime != null) {
-                    val duration = toolCall.endTime - toolCall.startTime
-                    Text(
-                        text = formatDuration(duration),
-                        style = JewelTheme.defaultTextStyle.copy(
-                            fontSize = 11.sp,
-                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)
-                        )
-                    )
-                }
-                
-                // 状态指示器
-                ToolStatusIndicator(
+                // 现代化状态指示器
+                ModernStatusIndicator(
                     status = when (toolCall.status) {
                         ToolCallStatus.PENDING -> ToolExecutionStatus.PENDING
                         ToolCallStatus.RUNNING -> ToolExecutionStatus.RUNNING
@@ -176,25 +154,53 @@ private fun CompactToolCallItem(
                         ToolCallStatus.FAILED -> ToolExecutionStatus.ERROR
                         ToolCallStatus.CANCELLED -> ToolExecutionStatus.ERROR
                     },
-                    size = 14.dp
+                    size = 10.dp  // 进一步减少状态指示器大小
                 )
                 
-                // 展开/折叠图标
-                Text(
-                    text = if (expanded) "▼" else "▶",
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 10.sp,
-                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)
-                    )
-                )
+                // 展开/折叠图标（现代化设计）
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)  // 减少箭头容器大小
+                        .padding(1.dp),  // 减少内边距
+                    contentAlignment = Alignment.Center
+                ) {
+                    AnimatedContent(
+                        targetState = expanded,
+                        transitionSpec = {
+                            scaleIn(animationSpec = tween(200)) + fadeIn() togetherWith
+                            scaleOut(animationSpec = tween(200)) + fadeOut()
+                        },
+                        label = "expand_icon"
+                    ) { isExpanded ->
+                        Text(
+                            text = if (isExpanded) "⌄" else "›",  // 使用更现代的箭头
+                            style = JewelTheme.defaultTextStyle.copy(
+                                fontSize = 10.sp,  // 减少箭头字体大小
+                                color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f),
+                                lineHeight = 10.sp  // 减少行高
+                            )
+                        )
+                    }
+                }
             }
         }
         
-        // 展开的详细内容
+        // 展开的详细内容（优化动画性能）
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(animationSpec = tween(200)) + fadeIn(),
-            exit = shrinkVertically(animationSpec = tween(200)) + fadeOut()
+            enter = expandVertically(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            ) + fadeIn(
+                animationSpec = tween(250, delayMillis = 50)
+            ),
+            exit = shrinkVertically(
+                animationSpec = tween(200)
+            ) + fadeOut(
+                animationSpec = tween(150)
+            )
         ) {
             ToolCallDetails(
                 toolCall = toolCall,
@@ -238,8 +244,8 @@ private fun ToolCallDetails(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 2.dp, vertical = 1.dp)  // 进一步减少内边距
-                        .padding(top = 18.dp) // 为关闭按钮留空间
+                        .padding(horizontal = 2.dp, vertical = 0.dp)  // 最小化内边距
+                        .padding(top = 12.dp) // 减少为关闭按钮留的空间
                 ) {
                     // 直接显示结果
                     toolCall.result?.let { result ->
@@ -318,7 +324,7 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
     val primaryParam = getPrimaryParamValue(toolCall)
     
     return when {
-        // 对于单参数工具，直接显示：ToolName parameter
+        // 对于单参数工具，使用冒号格式：ToolName: parameter
         isSingleParamTool(toolName) && primaryParam != null -> {
             when {
                 // 文件路径类工具，只显示文件名/目录名
@@ -326,7 +332,7 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
                 toolName.contains("Write", ignoreCase = true) ||
                 toolName.contains("LS", ignoreCase = true) -> {
                     val fileName = primaryParam.substringAfterLast('/').substringAfterLast('\\')
-                    "$toolName($fileName)"
+                    "$toolName: $fileName"
                 }
                 // URL类工具，显示域名
                 toolName.contains("Web", ignoreCase = true) -> {
@@ -334,43 +340,43 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
                         .removePrefix("https://")
                         .removePrefix("http://")
                         .substringBefore("/")
-                    "$toolName($domain)"
+                    "$toolName: $domain"
                 }
                 // Bash命令，截取命令的前面部分
                 toolName.contains("Bash", ignoreCase = true) -> {
-                    val command = if (primaryParam.length > 30) {
-                        primaryParam.take(27) + "..."
-                    } else {
-                        primaryParam
-                    }
-                    "$toolName($command)"
-                }
-                // Glob工具显示匹配模式
-                toolName.contains("Glob", ignoreCase = true) -> {
-                    "$toolName($primaryParam)"
-                }
-                // Grep/Search工具显示搜索内容
-                toolName.contains("Grep", ignoreCase = true) ||
-                toolName.contains("Search", ignoreCase = true) -> {
-                    val searchTerm = if (primaryParam.length > 25) {
+                    val command = if (primaryParam.length > 25) {
                         primaryParam.take(22) + "..."
                     } else {
                         primaryParam
                     }
-                    "$toolName($searchTerm)"
+                    "$toolName: $command"
                 }
-                else -> "$toolName($primaryParam)"
+                // Glob工具显示匹配模式
+                toolName.contains("Glob", ignoreCase = true) -> {
+                    "$toolName: $primaryParam"
+                }
+                // Grep/Search工具显示搜索内容
+                toolName.contains("Grep", ignoreCase = true) ||
+                toolName.contains("Search", ignoreCase = true) -> {
+                    val searchTerm = if (primaryParam.length > 20) {
+                        primaryParam.take(17) + "..."
+                    } else {
+                        primaryParam
+                    }
+                    "$toolName: $searchTerm"
+                }
+                else -> "$toolName: $primaryParam"
             }
         }
         // 对于多参数工具，显示工具名和主要参数
         else -> {
             if (primaryParam != null) {
-                val displayParam = if (primaryParam.length > 30) {
-                    primaryParam.take(27) + "..."
+                val displayParam = if (primaryParam.length > 25) {
+                    primaryParam.take(22) + "..."
                 } else {
                     primaryParam
                 }
-                "$toolName($displayParam)"
+                "$toolName: $displayParam"
             } else {
                 toolName
             }

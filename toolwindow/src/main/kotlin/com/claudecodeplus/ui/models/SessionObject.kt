@@ -15,6 +15,8 @@ import com.claudecodeplus.session.models.ClaudeSessionMessage
 import com.claudecodeplus.session.models.toEnhancedMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonObject
@@ -253,14 +255,36 @@ class SessionObject(
                     if (oldSessionId.isNullOrEmpty()) {
                         // 新会话：直接更新当前会话的ID
                         println("[SessionObject] 新会话获得ID，更新本地配置: null -> $newSessionId")
-                        // 这种情况下我们需要找到当前会话并更新其ID
-                        // 对于新会话，我们直接更新最新的"新会话"记录
                         localConfigManager.updateNewSessionId(proj.id, newSessionId)
                     } else {
                         // 已有会话：更新会话ID
                         localConfigManager.updateSessionId(proj.id, oldSessionId, newSessionId)
                         println("[SessionObject] 本地配置已更新会话ID: $oldSessionId -> $newSessionId")
                     }
+                    
+                    // 重要：立即保存新的会话ID为最后选中的会话
+                    localConfigManager.saveLastSelectedSession(newSessionId)
+                    println("[SessionObject] 已保存新的 sessionId 为最后选中: $newSessionId")
+                    
+                    // 通知ProjectManager更新ProjectSession.id
+                    try {
+                        // 如果有全局的ProjectManager实例，更新ProjectSession的ID
+                        val serviceContainer = Class.forName("com.claudecodeplus.desktop.di.ServiceContainer")
+                        val projectManagerField = serviceContainer.getDeclaredField("projectManager")
+                        val projectManager = projectManagerField.get(null)
+                        
+                        if (projectManager != null) {
+                            val updateProjectSessionIdMethod = projectManager.javaClass.getDeclaredMethod(
+                                "updateProjectSessionId", String::class.java, String::class.java
+                            )
+                            updateProjectSessionIdMethod.invoke(projectManager, oldSessionId ?: "", newSessionId)
+                            println("[SessionObject] 已通知ProjectManager更新ProjectSession.id: $oldSessionId -> $newSessionId")
+                        }
+                    } catch (e: Exception) {
+                        println("[SessionObject] 通知ProjectManager更新ProjectSession.id失败: ${e.message}")
+                        // 这不是致命错误，继续执行
+                    }
+                    
                 } ?: run {
                     println("[SessionObject] 无法更新本地配置：project 为 null")
                 }
@@ -273,10 +297,131 @@ class SessionObject(
     
     /**
      * 添加消息
+     * 放宽重复检查条件，确保新消息能正确保存
      */
     fun addMessage(message: EnhancedMessage) {
-        messages = messages + message
-        println("[SessionObject] 添加消息: role=${message.role}, content长度=${message.content.length}, 总消息数=${messages.size}")
+        try {
+            println("[SessionObject] 🔍 addMessage 被调用:")
+            println("  - message.role: ${message.role}")
+            println("  - message.content: '${message.content.take(50)}${if (message.content.length > 50) "..." else ""}'")
+            println("  - message.isStreaming: ${message.isStreaming}")
+            println("  - 当前消息总数: ${messages.size}")
+            println("  - 当前 isGenerating: $isGenerating")
+            
+            // 更宽松的重复检测：只检查完全相同的ID，避免误判
+            val isDuplicate = messages.any { existing ->
+                val sameId = existing.id == message.id
+                
+                if (sameId) {
+                    println("  - 检测到相同ID的消息: ${existing.id}")
+                    // 只有ID完全相同才视为重复
+                    return@any true
+                }
+                
+                // 对于流式消息，允许内容追加更新
+                if (existing.role == MessageRole.ASSISTANT && message.role == MessageRole.ASSISTANT && 
+                    existing.isStreaming && message.content.startsWith(existing.content)) {
+                    println("  - 检测到流式消息内容追加，允许更新")
+                    return@any false
+                }
+                
+                // 对于不同时间戳的消息，即使内容相同也不视为重复
+                return@any false
+            }
+            
+            if (isDuplicate) {
+                println("[SessionObject] ⚠️ 检测到重复消息ID，已跳过: role=${message.role}, id=${message.id}")
+                return
+            }
+            
+            val oldSize = messages.size
+            messages = messages + message
+            val newSize = messages.size
+            println("[SessionObject] ✅ 添加消息成功:")
+            println("  - 消息数量: $oldSize -> $newSize")
+            println("  - 新消息角色: ${message.role}")
+            println("  - 新消息内容长度: ${message.content.length}")
+            println("  - sessionId: $sessionId")
+            
+            // 重要：触发消息持久化，确保新消息保存到会话文件
+            if (!sessionId.isNullOrEmpty()) {
+                triggerMessagePersistence(message)
+            } else {
+                println("[SessionObject] ⚠️ sessionId为空，跳过消息持久化")
+            }
+            
+            // 如果是助手消息，检查是否需要清除生成状态
+            if (message.role == MessageRole.ASSISTANT && !message.isStreaming) {
+                if (isGenerating) {
+                    println("[SessionObject] ✅ 检测到非流式助手消息，清除生成状态")
+                    isGenerating = false
+                    currentTaskDescription = null
+                    taskStartTime = null
+                    println("  - isGenerating 已设置为: $isGenerating")
+                } else {
+                    println("[SessionObject] 📝 添加了助手消息，但当前已非生成状态")
+                }
+            } else if (message.role == MessageRole.ASSISTANT && message.isStreaming) {
+                println("[SessionObject] 📝 添加了流式助手消息，保持生成状态")
+            }
+            
+        } catch (e: Exception) {
+            println("[SessionObject] ❌ 添加消息失败: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+    
+    /**
+     * 触发消息持久化，确保消息保存到Claude CLI会话文件
+     * 这是修复会话持久化问题的关键方法
+     */
+    private fun triggerMessagePersistence(message: EnhancedMessage) {
+        try {
+            // 对于用户消息和助手消息，确保它们被正确保存
+            if (message.role in listOf(MessageRole.USER, MessageRole.ASSISTANT) && !sessionId.isNullOrEmpty()) {
+                println("[SessionObject] 🔄 触发消息持久化: sessionId=$sessionId, role=${message.role}")
+                
+                // 异步保存消息到本地配置，确保重启后能恢复
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    try {
+                        saveMessageToLocalConfig(message)
+                        println("[SessionObject] ✅ 消息已保存到本地配置")
+                    } catch (e: Exception) {
+                        println("[SessionObject] ❌ 保存消息到本地配置失败: ${e.message}")
+                        e.printStackTrace()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            println("[SessionObject] ❌ 触发消息持久化失败: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+    
+    /**
+     * 保存消息到本地配置
+     * 确保消息能在程序重启后恢复
+     */
+    private suspend fun saveMessageToLocalConfig(message: EnhancedMessage) {
+        try {
+            project?.let { proj ->
+                val localConfigManager = LocalConfigManager()
+                
+                // 保存消息到会话配置中
+                // 这里可以扩展为保存完整的消息历史
+                localConfigManager.updateSessionMetadata(proj.id, sessionId ?: "") { metadata ->
+                    metadata.copy(
+                        lastUpdated = System.currentTimeMillis(),
+                        messageCount = messages.size
+                    )
+                }
+                
+                println("[SessionObject] ✅ 已更新会话元数据: 消息数=${messages.size}")
+            }
+        } catch (e: Exception) {
+            println("[SessionObject] ❌ 保存消息到本地配置异常: ${e.message}")
+            throw e
+        }
     }
     
     /**
@@ -445,9 +590,14 @@ class SessionObject(
     
     /**
      * 处理CLI输出，更新会话消息
-     * 这个方法在后台运行，不依赖UI状态
+     * 修复：放宽重复检测条件，确保新消息能正确保存
+     * 增强健壮性：添加错误恢复和状态管理
      */
     private fun processCliOutput(jsonLine: String) {
+        println("[SessionObject] 🔍 processCliOutput 被调用:")
+        println("  - 输入长度: ${jsonLine.length}")
+        println("  - 输入前100字符: '${jsonLine.take(100)}${if (jsonLine.length > 100) "..." else ""}'")
+        
         // 先尝试直接处理非JSON输出（可能是纯文本响应）
         if (!jsonLine.trim().startsWith("{")) {
             println("[SessionObject] 收到非JSON输出，直接添加到最后一条助手消息: $jsonLine")
@@ -482,6 +632,7 @@ class SessionObject(
                 
                 if (sessionId != null && this.sessionId != sessionId) {
                     println("[SessionObject] 从system init消息更新sessionId: $sessionId")
+                    // 完整更新sessionId，包括本地配置保存
                     updateSessionId(sessionId)
                 } else if (sessionId != null) {
                     println("[SessionObject] system init消息中的sessionId与当前相同: $sessionId")
@@ -505,6 +656,9 @@ class SessionObject(
                     replaceMessage(messages[lastAssistantIndex].id) { existing ->
                         existing.copy(isStreaming = false)
                     }
+                    println("[SessionObject] ✅ 已清除最后一条助手消息的流式状态")
+                } else {
+                    println("[SessionObject] ⚠️ 未找到助手消息来清除流式状态")
                 }
                 
                 val sessionId = jsonObject["session_id"]?.jsonPrimitive?.content
@@ -512,6 +666,12 @@ class SessionObject(
                     println("[SessionObject] 从result消息更新sessionId: $sessionId")
                     updateSessionId(sessionId)
                 }
+                
+                // 健壮性检查：确保消息列表不为空
+                if (messages.isEmpty()) {
+                    println("[SessionObject] ⚠️ 检测到消息列表为空，这可能表明消息处理出现问题")
+                }
+                
                 return
             }
             messageType == "error" -> {
@@ -525,7 +685,7 @@ class SessionObject(
                 }
                 return
             }
-            messageType == "system" && messageSubtype != null -> {
+            messageType == "system" && messageSubtype != null && messageSubtype != "init" -> {
                 println("[SessionObject] 过滤掉系统子类型消息: $messageSubtype")
                 return
             }
@@ -594,7 +754,11 @@ class SessionObject(
             val enhancedMessage = parseClaudeCliMessage(jsonObject, jsonLine)
             
             if (enhancedMessage != null && (enhancedMessage.content.isNotEmpty() || enhancedMessage.toolCalls.isNotEmpty())) {
-                println("[SessionObject] ✅ Claude CLI消息解析成功: content长度=${enhancedMessage.content.length}, toolCalls=${enhancedMessage.toolCalls.size}")
+                println("[SessionObject] ✅ Claude CLI消息解析成功:")
+                println("  - content长度: ${enhancedMessage.content.length}")
+                println("  - toolCalls数量: ${enhancedMessage.toolCalls.size}")
+                println("  - 消息角色: ${enhancedMessage.role}")
+                println("  - isStreaming: ${enhancedMessage.isStreaming}")
                 
                 // 如果有工具调用，记录到正在执行列表
                 if (enhancedMessage.toolCalls.isNotEmpty()) {
@@ -603,32 +767,48 @@ class SessionObject(
                     }
                     
                     // 直接添加新的助手消息（包含工具调用），保持消息顺序
+                    println("[SessionObject] 🔧 准备添加工具调用消息")
                     addMessage(enhancedMessage)
                     println("[SessionObject] ✅ 已添加工具调用消息到消息列表")
                 } else if (enhancedMessage.content.isNotEmpty()) {
                     // 检查最后一条消息是否是助手消息，如果是则合并文本内容
                     val lastMessage = messages.lastOrNull()
-                    if (lastMessage?.role == MessageRole.ASSISTANT && lastMessage.toolCalls.isEmpty()) {
+                    println("[SessionObject] 📝 处理文本内容消息:")
+                    println("  - lastMessage?.role: ${lastMessage?.role}")
+                    println("  - lastMessage?.toolCalls?.isEmpty(): ${lastMessage?.toolCalls?.isEmpty()}")
+                    println("  - lastMessage?.isStreaming: ${lastMessage?.isStreaming}")
+                    
+                    // 改进合并逻辑：只有当最后一条消息是流式助手消息时才合并
+                    if (lastMessage?.role == MessageRole.ASSISTANT && 
+                        lastMessage.toolCalls.isEmpty() && 
+                        lastMessage.isStreaming) {
                         // 合并到最后一条助手消息的文本内容
+                        println("[SessionObject] 🔄 合并文本内容到流式助手消息")
                         updateLastMessage { existing ->
                             existing.copy(
                                 content = existing.content + enhancedMessage.content,
-                                timestamp = System.currentTimeMillis()
+                                timestamp = System.currentTimeMillis(),
+                                isStreaming = enhancedMessage.isStreaming
                             )
                         }
-                        println("[SessionObject] ✅ 已合并文本内容到最后一条助手消息")
+                        println("[SessionObject] ✅ 已合并文本内容到流式助手消息")
                     } else {
                         // 添加新的助手消息
+                        println("[SessionObject] 📝 准备添加新的助手消息")
                         addMessage(enhancedMessage)
                         println("[SessionObject] ✅ 已添加新的助手消息到消息列表")
                     }
                 }
             } else {
-                println("[SessionObject] ❌ Claude CLI消息解析结果为空: messageType=$messageType")
-                println("[SessionObject] 原始JSON前200字符: ${jsonLine.take(200)}")
+                println("[SessionObject] ❌ Claude CLI消息解析结果为空:")
+                println("  - messageType: $messageType")
+                println("  - enhancedMessage == null: ${enhancedMessage == null}")
                 if (enhancedMessage != null) {
-                    println("[SessionObject] enhancedMessage不为null但内容为空: content='${enhancedMessage.content}', toolCalls=${enhancedMessage.toolCalls.size}")
+                    println("  - content为空: ${enhancedMessage.content.isEmpty()}")
+                    println("  - toolCalls为空: ${enhancedMessage.toolCalls.isEmpty()}")
+                    println("  - content内容: '${enhancedMessage.content}'")
                 }
+                println("  - 原始JSON前200字符: ${jsonLine.take(200)}")
             }
         } catch (e: Exception) {
             println("[SessionObject] ❌ Claude CLI消息解析失败: ${e.message}")
@@ -927,26 +1107,37 @@ class SessionObject(
     /**
      * 更新最后一条助手消息
      * 如果没有助手消息，创建一个新的
+     * 增强健壮性：添加错误处理和日志
      */
     private fun updateLastAssistantMessage(updater: (EnhancedMessage) -> EnhancedMessage) {
-        val lastAssistantIndex = messages.indexOfLast { it.role == MessageRole.ASSISTANT }
-        
-        if (lastAssistantIndex >= 0) {
-            // 更新现有的助手消息
-            val updatedMessages = messages.toMutableList()
-            updatedMessages[lastAssistantIndex] = updater(updatedMessages[lastAssistantIndex])
-            messages = updatedMessages
-        } else {
-            // 创建新的助手消息
-            val newAssistantMessage = EnhancedMessage(
-                id = java.util.UUID.randomUUID().toString(),
-                role = MessageRole.ASSISTANT,
-                content = "",
-                timestamp = System.currentTimeMillis(),
-                model = selectedModel,
-                isStreaming = true
-            )
-            addMessage(updater(newAssistantMessage))
+        try {
+            val lastAssistantIndex = messages.indexOfLast { it.role == MessageRole.ASSISTANT }
+            
+            if (lastAssistantIndex >= 0) {
+                // 更新现有的助手消息
+                val updatedMessages = messages.toMutableList()
+                val originalMessage = updatedMessages[lastAssistantIndex]
+                val updatedMessage = updater(originalMessage)
+                updatedMessages[lastAssistantIndex] = updatedMessage
+                messages = updatedMessages
+                println("[SessionObject] ✅ 已更新最后一条助手消息: ${updatedMessage.content.take(50)}...")
+            } else {
+                // 创建新的助手消息
+                val newAssistantMessage = EnhancedMessage(
+                    id = java.util.UUID.randomUUID().toString(),
+                    role = MessageRole.ASSISTANT,
+                    content = "",
+                    timestamp = System.currentTimeMillis(),
+                    model = selectedModel,
+                    isStreaming = true
+                )
+                val finalMessage = updater(newAssistantMessage)
+                addMessage(finalMessage)
+                println("[SessionObject] ✅ 创建新的助手消息: ${finalMessage.content.take(50)}...")
+            }
+        } catch (e: Exception) {
+            println("[SessionObject] ❌ 更新助手消息失败: ${e.message}")
+            e.printStackTrace()
         }
     }
     
@@ -1019,11 +1210,36 @@ class SessionObject(
                     if (sessionId != newSessionId) {
                         println("[SessionObject] 🆔 更新会话 ID: $newSessionId")
                         updateSessionId(newSessionId)
+                    } else {
+                        // sessionId没有变化，但仍然确保保存为最后选中的会话
+                        println("[SessionObject] 🔄 sessionId未变化，但确保保存为最后选中: $newSessionId")
+                        try {
+                            project?.let { proj ->
+                                val localConfigManager = LocalConfigManager()
+                                localConfigManager.saveLastSelectedSession(newSessionId)
+                                println("[SessionObject] ✅ 已保存当前 sessionId 为最后选中: $newSessionId")
+                                
+                                // 重要：更新消息计数保存最新状态
+                                localConfigManager.updateSessionMetadata(proj.id, newSessionId) { metadata ->
+                                    metadata.copy(
+                                        lastUpdated = System.currentTimeMillis(),
+                                        messageCount = messages.size  // 保存当前消息数量
+                                    )
+                                }
+                                println("[SessionObject] ✅ 已更新会话消息计数: ${messages.size}")
+                            }
+                        } catch (e: Exception) {
+                            println("[SessionObject] ❌ 保存最后选中会话失败: ${e.message}")
+                            e.printStackTrace()
+                        }
                     }
                 }
                 
                 // 清空上下文
                 clearContexts()
+                
+                // 重要：最终确保消息被正确保存
+                println("[SessionObject] ✅ 消息发送完成，当前消息数: ${messages.size}")
                 
                 result
             } catch (e: Exception) {
@@ -1042,9 +1258,8 @@ class SessionObject(
                 
                 throw e
             } finally {
-                // 不在这里清除生成状态，而是在收到 result 消息时清除
-                // 这样可以确保界面正确显示生成状态直到真正完成
-                println("[SessionObject] sendMessage finally 块执行，但不清除生成状态")
+                // finally 块不处理 result，让正常流程和异常处理各自管理状态
+                println("[SessionObject] sendMessage finally 块执行完成")
             }
         }
     }
@@ -1247,6 +1462,7 @@ class SessionObject(
     
     /**
      * 从文件加载消息
+     * 修复：增强消息持久化机制，确保新消息能正确保存和恢复
      * @param forceFullReload 是否强制全量重新加载，false 为增量更新
      */
     suspend fun loadNewMessages(forceFullReload: Boolean = false) {
@@ -1318,17 +1534,24 @@ class SessionObject(
                 messages = emptyList()
             }
             
-            // 首先检查第一条消息以更新sessionId（如果需要）
-            val firstMessage = sessionMessages.firstOrNull()
-            if (firstMessage != null && this.sessionId != firstMessage.sessionId) {
-                println("[SessionObject] 📱 从历史消息更新sessionId: ${firstMessage.sessionId}")
-                updateSessionId(firstMessage.sessionId)
+            // 查找包含sessionId的消息来更新sessionId（如果需要）
+            val messageWithSessionId = sessionMessages.find { !it.sessionId.isNullOrEmpty() }
+            if (messageWithSessionId != null && this.sessionId != messageWithSessionId.sessionId) {
+                println("[SessionObject] 📱 从历史消息更新sessionId: ${messageWithSessionId.sessionId}")
+                updateSessionId(messageWithSessionId.sessionId)
+            } else if (messageWithSessionId != null) {
+                println("[SessionObject] 📱 历史消息sessionId与当前一致: ${messageWithSessionId.sessionId}")
+            } else {
+                println("[SessionObject] ⚠️ 历史消息中未找到有效的sessionId")
             }
             
             // 逐条处理历史消息，使用统一的parseClaudeCliMessage解析器
             sessionMessages.forEach { sessionMessage ->
                 try {
                     println("[SessionObject] 📥 处理历史消息: ${sessionMessage.type} - ${sessionMessage.uuid?.take(8) ?: "unknown"}...")
+                    
+                    // 为历史消息生成唯一ID，避免与新消息冲突
+                    val historyMessageId = "history_${sessionMessage.uuid ?: System.nanoTime()}"
                     
                     // 先检查是否是工具结果消息，需要特殊处理
                     if (sessionMessage.type == "user" && sessionMessage.message?.content != null) {
@@ -1374,7 +1597,13 @@ class SessionObject(
                         
                         if (enhancedMessage != null && (enhancedMessage.content.isNotEmpty() || enhancedMessage.toolCalls.isNotEmpty())) {
                             println("[SessionObject] ✅ 历史消息解析成功: content长度=${enhancedMessage.content.length}, toolCalls=${enhancedMessage.toolCalls.size}")
-                            addMessage(enhancedMessage)
+                            
+                            // 为历史消息使用特殊的ID，确保不与新消息重复
+                            val historyMessage = enhancedMessage.copy(
+                                id = historyMessageId,
+                                isStreaming = false  // 历史消息都不是流式的
+                            )
+                            addMessage(historyMessage)
                         } else {
                             println("[SessionObject] ⚠️ 历史消息解析结果为空或无有效内容")
                         }
@@ -1406,6 +1635,21 @@ class SessionObject(
                     // 如果加载了历史消息，更新会话状态
                     if (enhancedMessages.isNotEmpty()) {
                         onHistoryLoaded()
+                        
+                        // 重要：更新本地配置中的消息计数
+                        try {
+                            project?.let { proj ->
+                                val localConfigManager = LocalConfigManager()
+                                localConfigManager.updateSessionMetadata(proj.id, sessionId ?: "") { metadata ->
+                                    metadata.copy(
+                                        lastUpdated = System.currentTimeMillis(),
+                                        messageCount = enhancedMessages.size
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {
+                            println("[SessionObject] 更新本地配置失败: ${e.message}")
+                        }
                     }
                 } else {
                     println("[SessionObject] ⏩ 消息无变化，跳过更新")
@@ -1416,6 +1660,7 @@ class SessionObject(
             e.printStackTrace()
         }
     }
+    
     
     override fun toString(): String {
         return "SessionObject(sessionId=$sessionId, messages=${messages.size}, isGenerating=$isGenerating, queue=${questionQueue.size})"

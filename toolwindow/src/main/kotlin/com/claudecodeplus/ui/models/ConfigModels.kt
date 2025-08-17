@@ -165,7 +165,8 @@ data class McpConfig(
 class Project(
     val id: String, // Claude 项目目录名（经过路径编码后的名称）
     val path: String, // 项目的实际文件系统路径
-    val name: String = path.substringAfterLast("/")
+    val name: String = path.substringAfterLast("/"),
+    val lastAccessedAt: String? = null // 最后访问时间
 ) {
     // 使用全局会话管理器，而不是项目独立的会话存储
     companion object {

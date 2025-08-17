@@ -63,6 +63,10 @@ class ProjectManager(
 
     private val _currentSession = mutableStateOf<ProjectSession?>(null)
     val currentSession = _currentSession
+    
+    // 当前会话的 SessionObject 实例
+    private val _currentSessionObject = mutableStateOf<com.claudecodeplus.ui.models.SessionObject?>(null)
+    val currentSessionObject = _currentSessionObject
 
     private val _sessionLoadEvent = MutableSharedFlow<SessionLoadEvent>()
     val sessionLoadEvent: SharedFlow<SessionLoadEvent> = _sessionLoadEvent
@@ -473,27 +477,56 @@ class ProjectManager(
     }
 
     fun setCurrentSession(session: ProjectSession, loadHistory: Boolean = true) {
+        // 使用稳定的 ProjectSession.id 判断是否为同一会话（而不是动态的 sessionId）
+        val isSameSession = _currentSession.value?.id == session.id
+        
         _currentSession.value = session
         
-        // 保存最后选中的会话到配置文件
+        // 获取或创建对应的 SessionObject
+        val currentProj = _currentProject.value
+        if (currentProj != null) {
+            val sessionObject = currentProj.getOrCreateSession(
+                tabId = session.id, // 使用稳定的 session.id 作为 tabId
+                initialSessionId = session.id,
+                initialMessages = emptyList() // 历史消息将通过加载流程获取
+            )
+            
+            if (isSameSession) {
+                println("[ProjectManager] 切换到同一个会话，复用现有 SessionObject: tabId=${session.id}, sessionId=${sessionObject.sessionId}")
+            } else {
+                println("[ProjectManager] 切换到新会话或创建新 SessionObject: tabId=${session.id}, sessionId=${sessionObject.sessionId}")
+            }
+            
+            _currentSessionObject.value = sessionObject
+        } else {
+            _currentSessionObject.value = null
+            println("[ProjectManager] 无当前项目，清空 SessionObject")
+        }
+        
+        // 保存最后选中的会话到配置文件 - 现在使用 SessionObject 的 sessionId
         try {
             val localConfigManager = LocalConfigManager()
-            localConfigManager.saveLastSelectedSession(session.id)
+            val sessionIdToSave = _currentSessionObject.value?.sessionId ?: session.id
+            localConfigManager.saveLastSelectedSession(sessionIdToSave)
+            println("[ProjectManager] 保存最后选中会话: $sessionIdToSave")
         } catch (e: Exception) {
             println("[ProjectManager] 保存最后选中会话失败: ${e.message}")
         }
         
-        // 触发会话历史加载事件
-        if (loadHistory) {
+        // 触发会话历史加载事件（如果是同一个会话且已经加载过历史，可以跳过）
+        if (loadHistory && !isSameSession) {
             println("=== ProjectManager.setCurrentSession 发出会话加载事件 ===")
             println("  - session.id: ${session.id}")
             println("  - session.name: ${session.name}")
             println("  - loadHistory: $loadHistory")
+            println("  - isSameSession: $isSameSession (跳过重复加载)")
             scope.launch {
                 println("  - 发出 SessionLoadEvent")
                 _sessionLoadEvent.emit(SessionLoadEvent(session))
                 println("  - SessionLoadEvent 已发出")
             }
+        } else if (loadHistory && isSameSession) {
+            println("[ProjectManager] 切换到同一个会话，跳过历史加载")
         }
     }
     
@@ -782,6 +815,54 @@ class ProjectManager(
         
         // 5. 从 .claude.json 中移除项目（如果需要持久化）
         updateClaudeConfig(project, remove = true)
+    }
+    
+    /**
+     * 更新ProjectSession的ID（当SessionObject的sessionId发生变化时调用）
+     */
+    fun updateProjectSessionId(oldSessionId: String, newSessionId: String) {
+        println("[ProjectManager] updateProjectSessionId: $oldSessionId -> $newSessionId")
+        
+        try {
+            // 查找并更新所有项目中匹配的会话
+            val allSessions = _sessions.value
+            var updated = false
+            
+            allSessions.forEach { (projectId, sessionList) ->
+                sessionList.forEachIndexed { index, session ->
+                    if (session.id == oldSessionId) {
+                        println("[ProjectManager] 找到匹配的ProjectSession，更新ID: ${session.name}")
+                        val updatedSession = session.copy(id = newSessionId)
+                        
+                        // 更新sessions状态
+                        val updatedSessionList = sessionList.toMutableList()
+                        updatedSessionList[index] = updatedSession
+                        
+                        val updatedAllSessions = allSessions.toMutableMap()
+                        updatedAllSessions[projectId] = updatedSessionList
+                        _sessions.value = updatedAllSessions
+                        
+                        // 如果这是当前会话，也要更新currentSession
+                        if (_currentSession.value?.id == oldSessionId) {
+                            _currentSession.value = updatedSession
+                            println("[ProjectManager] 已更新当前会话ID: $oldSessionId -> $newSessionId")
+                        }
+                        
+                        updated = true
+                        return@forEachIndexed
+                    }
+                }
+            }
+            
+            if (updated) {
+                println("[ProjectManager] ProjectSession.id 更新成功")
+            } else {
+                println("[ProjectManager] 未找到匹配的ProjectSession: $oldSessionId")
+            }
+        } catch (e: Exception) {
+            println("[ProjectManager] 更新ProjectSession.id失败: ${e.message}")
+            e.printStackTrace()
+        }
     }
     
     /**
@@ -1216,6 +1297,25 @@ class ProjectManager(
             }
         } else {
             println("[ProjectManager] ❌ 未找到对应的项目: $projectPath")
+        }
+    }
+    
+    /**
+     * 保存当前会话的 sessionId 为最后选中的会话
+     * 当 SessionObject 的 sessionId 发生变化时调用
+     */
+    fun saveCurrentSessionAsLastSelected() {
+        val currentSessionObj = _currentSessionObject.value
+        if (currentSessionObj?.sessionId != null) {
+            try {
+                val localConfigManager = LocalConfigManager()
+                localConfigManager.saveLastSelectedSession(currentSessionObj.sessionId!!)
+                println("[ProjectManager] 自动保存当前会话为最后选中: ${currentSessionObj.sessionId}")
+            } catch (e: Exception) {
+                println("[ProjectManager] 自动保存最后选中会话失败: ${e.message}")
+            }
+        } else {
+            println("[ProjectManager] 无当前会话或会话ID为空，跳过保存")
         }
     }
     

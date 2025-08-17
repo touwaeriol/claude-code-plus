@@ -111,9 +111,20 @@ fun UnifiedChatInput(
         label = "shadow elevation"
     )
     
-    // 启动时请求焦点
+    // 启动时请求焦点 - 增强版
     LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(100) // 等待组件完全渲染
         focusRequester.requestFocus()
+        println("[UnifiedChatInput] 请求焦点")
+    }
+    
+    // 监听enabled状态变化时重新请求焦点
+    LaunchedEffect(enabled) {
+        if (enabled) {
+            kotlinx.coroutines.delay(50)
+            focusRequester.requestFocus()
+            println("[UnifiedChatInput] enabled状态变化，重新请求焦点: $enabled")
+        }
     }
     
     // 统一容器
@@ -166,15 +177,7 @@ fun UnifiedChatInput(
                 .fillMaxWidth()
                 .heightIn(min = 60.dp, max = 320.dp)  // 限制高度范围，约15行（每行约20dp）
         ) {
-            // 输入框外部的左上角generating状态指示器
-            if (isGenerating) {
-                GeneratingIndicator(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(start = 12.dp, top = 8.dp)
-                        .zIndex(1f) // 确保在最上层显示
-                )
-            }
+            // 移除输入框内的生成状态显示，现在统一在工具调用区域显示
             
             ChatInputField(
                 value = textFieldValue,
@@ -510,43 +513,3 @@ private class UnifiedChatContextSearchService(
     }
 }
 
-/**
- * Generating状态指示器组件 - 左上角显示
- */
-@Composable
-private fun GeneratingIndicator(
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .background(
-                JewelTheme.globalColors.panelBackground.copy(alpha = 0.9f),
-                RoundedCornerShape(12.dp)
-            )
-            .border(
-                1.dp,
-                JewelTheme.globalColors.borders.normal.copy(alpha = 0.3f),
-                RoundedCornerShape(12.dp)
-            )
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // 跳动的点动画
-        JumpingDots(
-            dotSize = 4.dp,
-            dotSpacing = 2.dp,
-            jumpHeight = 2.dp,
-            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
-        )
-        
-        // "Generating..."文本
-        Text(
-            text = "Generating...",
-            style = JewelTheme.defaultTextStyle.copy(
-                fontSize = 11.sp,
-                color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
-            )
-        )
-    }
-}

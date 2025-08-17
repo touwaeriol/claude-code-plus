@@ -33,6 +33,8 @@ data class LocalSession(
     val name: String, // 会话名称
     val createdAt: String, // 创建时间
     val lastAccessedAt: String? = null, // 最后访问时间
+    val lastUpdated: Long = 0L, // 最后更新时间戳
+    val messageCount: Int = 0, // 消息数量
     val description: String? = null, // 会话描述（可选）
     val model: String? = null // 会话使用的模型（可选）
 )
@@ -247,11 +249,10 @@ class LocalConfigManager {
         val config = loadConfig()
         val project = config.projects.find { it.id == projectId } ?: return
         
-        // 查找可能的临时会话记录，通常是最新创建的"新会话"
-        val sessionToUpdate = project.sessions.firstOrNull { session ->
-            // 找到名称为"新会话"且没有真实sessionId的会话，或者通过其他方式匹配
-            session.name == "新会话" && (session.id.startsWith("temp-") || session.id.length < 20)
-        } ?: project.sessions.firstOrNull() // 如果没找到，就更新第一个会话
+        // 查找最新的会话记录进行更新（通常是最近修改的）
+        val sessionToUpdate = project.sessions.maxByOrNull { 
+            Instant.parse(it.lastAccessedAt ?: it.createdAt).toEpochMilli() 
+        }
         
         if (sessionToUpdate != null) {
             val now = Instant.now().toString()
@@ -385,5 +386,39 @@ class LocalConfigManager {
      */
     fun getLastSelectedSession(): String? {
         return loadConfig().lastSelectedSession
+    }
+    
+    /**
+     * 更新会话元数据（用于消息持久化）
+     */
+    fun updateSessionMetadata(projectId: String, sessionId: String, updater: (LocalSession) -> LocalSession) {
+        try {
+            val config = loadConfig()
+            val project = config.projects.find { it.id == projectId }
+            if (project == null) {
+                println("[LocalConfigManager] 未找到项目: $projectId")
+                return
+            }
+            
+            val sessionIndex = project.sessions.indexOfFirst { it.id == sessionId }
+            if (sessionIndex == -1) {
+                println("[LocalConfigManager] 未找到会话: $sessionId")
+                return
+            }
+            
+            val originalSession = project.sessions[sessionIndex]
+            val updatedSession = updater(originalSession)
+            
+            // 更新会话
+            project.sessions[sessionIndex] = updatedSession
+            
+            // 保存配置
+            saveConfig(config)
+            
+            println("[LocalConfigManager] 会话元数据已更新: sessionId=$sessionId, messageCount=${updatedSession.messageCount}")
+        } catch (e: Exception) {
+            println("[LocalConfigManager] 更新会话元数据失败: ${e.message}")
+            e.printStackTrace()
+        }
     }
 }

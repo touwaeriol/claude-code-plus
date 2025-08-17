@@ -50,84 +50,17 @@ fun AssistantMessageDisplay(
             }
         }
         
-        // 按时间顺序显示消息元素
-        if (message.orderedElements.isNotEmpty()) {
-            // 收集所有工具调用以便批量显示
-            val toolCalls = mutableListOf<ToolCall>()
-            val contentItems = mutableListOf<MessageTimelineItem.ContentItem>()
-            
-            message.orderedElements.forEach { element ->
-                when (element) {
-                    is MessageTimelineItem.ToolCallItem -> {
-                        toolCalls.add(element.toolCall)
-                    }
-                    is MessageTimelineItem.ContentItem -> {
-                        // 如果之前有工具调用，先显示它们
-                        if (toolCalls.isNotEmpty()) {
-                            SmartToolCallDisplay(
-                                toolCalls = toolCalls.toList(),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            toolCalls.clear()
-                        }
-                        contentItems.add(element)
-                    }
-                    is MessageTimelineItem.StatusItem -> {
-                        // 如果之前有工具调用，先显示它们
-                        if (toolCalls.isNotEmpty()) {
-                            SmartToolCallDisplay(
-                                toolCalls = toolCalls.toList(),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            toolCalls.clear()
-                        }
-                        // 显示之前的内容
-                        contentItems.forEach { item ->
-                            if (item.content.isNotBlank()) {
-                                MarkdownRenderer(
-                                    markdown = item.content,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                        contentItems.clear()
-                        
-                        if (element.isStreaming) {
-                            StreamingIndicator(status = element.status)
-                        }
-                    }
-                }
-            }
-            
-            // 显示剩余的工具调用
-            if (toolCalls.isNotEmpty()) {
-                SmartToolCallDisplay(
-                    toolCalls = toolCalls,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            
-            // 显示剩余的内容
-            contentItems.forEach { item ->
-                if (item.content.isNotBlank()) {
-                    MarkdownRenderer(
-                        markdown = item.content,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        } else {
-            // 向后兼容：如果没有 orderedElements，使用旧的显示方式
-            // 使用智能工具调用显示
-            if (message.toolCalls.isNotEmpty()) {
-                SmartToolCallDisplay(
-                    toolCalls = message.toolCalls,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            
-            // 然后显示消息内容
-            if (message.content.isNotBlank()) {
+        // 显示工具调用（如果有）
+        if (message.toolCalls.isNotEmpty()) {
+            SmartToolCallDisplay(
+                toolCalls = message.toolCalls,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        
+        // 显示主要文本内容
+        if (message.content.isNotBlank()) {
+            SelectionContainer {
                 MarkdownRenderer(
                     markdown = message.content,
                     modifier = Modifier.fillMaxWidth()
@@ -135,43 +68,46 @@ fun AssistantMessageDisplay(
             }
         }
         
-        // 流式状态指示器
-        if (message.isStreaming) {
-            StreamingIndicator()
+        // 如果有按时间顺序的元素，也显示它们（用于流式内容）
+        if (message.orderedElements.isNotEmpty()) {
+            message.orderedElements.forEach { element ->
+                when (element) {
+                    is MessageTimelineItem.ToolCallItem -> {
+                        // 工具调用已在上面显示，这里跳过避免重复
+                    }
+                    is MessageTimelineItem.ContentItem -> {
+                        if (element.content.isNotBlank() && element.content != message.content) {
+                            SelectionContainer {
+                                MarkdownRenderer(
+                                    markdown = element.content,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                    is MessageTimelineItem.StatusItem -> {
+                        if (element.isStreaming) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = element.status,
+                                    style = JewelTheme.defaultTextStyle.copy(
+                                        fontSize = 12.sp,
+                                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+                                    )
+                                )
+                                JumpingDots()
+                            }
+                        }
+                    }
+                }
+            }
         }
+        
+        // 流式状态指示器已移至工具调用状态区域，此处不再显示
     }
 }
 
-/**
- * 流式响应指示器
- */
-@Composable
-private fun StreamingIndicator(
-    status: String = "",
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // 使用跳动的点代替文字
-        JumpingDots(
-            dotSize = 5.dp,
-            dotSpacing = 3.dp,
-            jumpHeight = 3.dp,
-            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
-        )
-        
-        // 如果有自定义状态文字，显示它
-        if (status.isNotBlank()) {
-            Text(
-                text = status,
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 13.sp,
-                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)
-                )
-            )
-        }
-    }
-}
+// StreamingIndicator 函数已移除，生成状态现在统一在工具调用状态区域显示

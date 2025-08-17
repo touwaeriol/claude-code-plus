@@ -53,7 +53,25 @@ fun ContextUsageIndicator(
     // 计算总token使用量
     val totalTokens = remember(messageHistory, inputText, contexts) {
         val calculated = calculateTotalTokens(messageHistory, inputText, contexts)
-        println("[ContextUsageIndicator] Token统计: 历史消息=${messageHistory.size}, 输入文本长度=${inputText.length}, 上下文=${contexts.size}, 总tokens=$calculated")
+        println("[ContextUsageIndicator] Token统计详情: 历史消息=${messageHistory.size}, 输入文本长度=${inputText.length}, 上下文=${contexts.size}, 总tokens=$calculated")
+        
+        // 简化的Token统计调试 - 只显示实际占用上下文的token
+        var debugTotal = 0
+        messageHistory.forEachIndexed { index, message ->
+            if (message.tokenUsage != null) {
+                val usage = message.tokenUsage!!
+                val messageTotal = usage.inputTokens + usage.outputTokens
+                debugTotal += messageTotal
+                println("  - [$index] ${message.role}: input=${usage.inputTokens}, output=${usage.outputTokens}, 小计=$messageTotal")
+            } else {
+                val estimated = estimateTokensFromText(message.content)
+                debugTotal += estimated
+                println("  - [$index] ${message.role}: 估算=$estimated")
+            }
+        }
+        println("  - 消息token总计: $debugTotal")
+        println("  - 输入文本估算: ${estimateTokensFromText(inputText)}")
+        println("  - 上下文估算: ${contexts.size * 1000}")  // 简化估算
         calculated
     }
     
@@ -165,9 +183,11 @@ private fun calculateTotalTokens(
         if (message.tokenUsage != null) {
             // 使用Claude CLI提供的精确token数据
             val usage = message.tokenUsage!!
+            
+            // 正确的上下文token计算：只计算实际内容token，不包括缓存机制token
+            // inputTokens 和 outputTokens 代表实际占用的上下文空间
+            // cacheCreationTokens 和 cacheReadTokens 只是计费机制，不额外占用上下文
             totalTokens += usage.inputTokens + usage.outputTokens
-            // 注意：缓存token (cache_creation_input_tokens, cache_read_input_tokens) 
-            // 不计入总上下文，因为它们是优化手段，不占用新的上下文空间
         } else {
             // 回退到估算（用于用户消息或无token数据的消息）
             totalTokens += estimateTokensFromText(message.content)

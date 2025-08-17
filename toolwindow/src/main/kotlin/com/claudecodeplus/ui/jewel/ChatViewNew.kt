@@ -35,6 +35,8 @@ import com.claudecodeplus.sdk.ClaudeEvent
 import com.claudecodeplus.sdk.SessionHistoryLoader
 import com.claudecodeplus.ui.services.MessageConverter.toEnhancedMessage
 import kotlinx.coroutines.Dispatchers
+import androidx.compose.ui.unit.sp
+import com.claudecodeplus.ui.models.ToolCallStatus
 
 /**
  * 注意：已移除简化的消息解析器
@@ -139,9 +141,15 @@ fun ChatViewNew(
     
     
     // 从 sessionObject 获取所有状态
-    val messages by derivedStateOf { sessionObject.messages }
+    val messages by derivedStateOf { 
+        println("[ChatViewNew] messages derivedStateOf 被重新计算: ${sessionObject.messages.size} 条消息")
+        sessionObject.messages 
+    }
     val contexts by derivedStateOf { sessionObject.contexts }
-    val isGenerating by derivedStateOf { sessionObject.isGenerating }
+    val isGenerating by derivedStateOf { 
+        println("[ChatViewNew] isGenerating derivedStateOf 被重新计算: ${sessionObject.isGenerating}")
+        sessionObject.isGenerating 
+    }
     val selectedModel by derivedStateOf { sessionObject.selectedModel }
     val selectedPermissionMode by derivedStateOf { sessionObject.selectedPermissionMode }
     val skipPermissions by derivedStateOf { sessionObject.skipPermissions }
@@ -196,6 +204,32 @@ fun ChatViewNew(
             .fillMaxSize()
             .background(JewelTheme.globalColors.panelBackground)
     ) {
+        // 获取最近消息的工具调用（用于显示在顶部状态区域）
+        val recentToolCalls = remember(messages) {
+            // 显示最新助手消息的所有工具调用（无论状态如何）
+            messages.lastOrNull { it.role == MessageRole.ASSISTANT }
+                ?.toolCalls
+                ?: emptyList()
+        }
+        
+        // 工具调用状态区域（固定在顶部）
+        if (recentToolCalls.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.95f))
+                    .padding(horizontal = 4.dp, vertical = 1.dp)  // 进一步减少区域边距
+            ) {
+                com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay(
+                    toolCalls = recentToolCalls,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            
+            // 分隔线
+            Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
+        }
+        
         // 聊天内容区域
         Box(
             modifier = Modifier
@@ -296,13 +330,34 @@ fun ChatViewNew(
         
         Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
         
-        // 输入区域
+        // 输入区域（包含生成状态显示）
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight()
                 .padding(16.dp)
         ) {
+            // 生成状态显示在输入框外部左上角
+            if (isGenerating) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    Text(
+                        text = "Generating",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 12.sp,
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    com.claudecodeplus.ui.jewel.components.tools.JumpingDots()
+                }
+            }
+            
             UnifiedChatInput(
                 contexts = contexts,
                 onContextAdd = { context -> sessionObject.addContext(context) },
@@ -333,7 +388,14 @@ fun ChatViewNew(
                     sendMessage(markdownText)
                 },
                 enabled = true,
-                isGenerating = isGenerating  // 正确传递生成状态
+                isGenerating = isGenerating,  // 正确传递生成状态
+                modifier = Modifier.let { 
+                    if (isGenerating) {
+                        it.padding(top = 32.dp) // 为生成状态留出空间
+                    } else {
+                        it
+                    }
+                }
             )
         }
     }
