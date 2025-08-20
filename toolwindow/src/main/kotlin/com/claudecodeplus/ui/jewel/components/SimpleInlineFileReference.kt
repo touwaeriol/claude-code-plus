@@ -20,7 +20,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.*
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
@@ -151,7 +154,7 @@ fun SimpleInlineFileReferenceHandler(
 }
 
 /**
- * 简化文件弹窗 - 悬浮在 @ 符号上方
+ * 简化文件弹窗 - 悬浮在 @ 符号上方，不覆盖输入内容
  */
 @Composable
 fun SimpleFilePopup(
@@ -165,7 +168,9 @@ fun SimpleFilePopup(
 ) {
     Popup(
         onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true)
+        properties = PopupProperties(focusable = true),
+        alignment = Alignment.TopStart,
+        offset = androidx.compose.ui.unit.IntOffset(0, -330) // 向上偏移，避免覆盖输入框
     ) {
         Box(
             modifier = modifier
@@ -203,7 +208,7 @@ fun SimpleFilePopup(
 }
 
 /**
- * 简化文件项组件
+ * 简化文件项组件 - Cursor 风格
  */
 @Composable
 fun SimpleFileItem(
@@ -213,6 +218,8 @@ fun SimpleFileItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showPathHover by remember { mutableStateOf(false) }
+    
     Box(
         modifier = modifier
             .clickable { onClick() }
@@ -235,11 +242,13 @@ fun SimpleFileItem(
                 style = JewelTheme.defaultTextStyle.copy(fontSize = 16.sp)
             )
             
-            // 文件信息
-            Column(
+            // 文件信息 - Cursor 风格
+            Row(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                // 主文件名（突出显示）
                 Text(
                     text = file.name,
                     style = JewelTheme.defaultTextStyle.copy(
@@ -251,14 +260,26 @@ fun SimpleFileItem(
                     )
                 )
                 
+                // 路径信息（缩小显示）
                 if (file.relativePath.isNotEmpty()) {
-                    Text(
-                        text = file.relativePath,
-                        style = JewelTheme.defaultTextStyle.copy(
-                            fontSize = 12.sp,
-                            color = JewelTheme.globalColors.text.disabled
-                        )
-                    )
+                    val displayPath = formatPathForDisplay(file.relativePath, file.name)
+                    if (displayPath.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .hoverable(MutableInteractionSource())
+                        ) {
+                            Text(
+                                text = displayPath,
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 11.sp,
+                                    color = JewelTheme.globalColors.text.disabled
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -330,4 +351,36 @@ private fun insertFileReference(
         text = newText,
         selection = androidx.compose.ui.text.TextRange(newPosition)
     ))
+}
+
+/**
+ * 格式化路径显示 - Cursor 风格
+ * 将文件路径转换为适合显示的格式
+ */
+private fun formatPathForDisplay(relativePath: String, fileName: String): String {
+    if (relativePath.isEmpty()) return ""
+    
+    // 移除文件名本身，只保留目录路径
+    val directoryPath = relativePath.removeSuffix("/$fileName").removeSuffix(fileName)
+    if (directoryPath.isEmpty()) return ""
+    
+    // 将路径分割成层级
+    val pathParts = directoryPath.split("/").filter { it.isNotEmpty() }
+    if (pathParts.isEmpty()) return ""
+    
+    // 根据路径长度决定显示方式
+    return when {
+        pathParts.size <= 2 -> {
+            // 短路径：直接显示完整路径
+            pathParts.joinToString(" > ")
+        }
+        pathParts.size <= 4 -> {
+            // 中等路径：显示最后几层
+            pathParts.takeLast(3).joinToString(" > ")
+        }
+        else -> {
+            // 长路径：显示前面和后面，中间用...
+            "${pathParts.first()} > ... > ${pathParts.takeLast(2).joinToString(" > ")}"
+        }
+    }
 }

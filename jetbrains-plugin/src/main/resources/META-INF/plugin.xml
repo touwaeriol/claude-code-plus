@@ -3,6 +3,7 @@
     <name>Claude Code Plus</name>
     <vendor>Claude Code Plus Team</vendor>
     
+    
     <description><![CDATA[
     Claude Code Plus - 基于 Claude SDK 的智能编程助手
     
@@ -26,6 +27,7 @@
         <toolWindow id="ClaudeCodePlus" 
                     displayName="Claude Code Plus"
                     anchor="right" 
+                    icon="/icons/claude-code-simple.svg"
                     factoryClass="com.claudecodeplus.plugin.ClaudeCodePlusToolWindowFactory"/>
                     
         <!-- Claude Code Plus 配置 -->
