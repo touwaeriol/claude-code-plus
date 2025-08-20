@@ -109,9 +109,8 @@ fun ChatInputField(
                     // 不再使用旧的复杂上下文选择器
                 },
                 enabled = enabled,
-                textStyle = TextStyle(
+                textStyle = JewelTheme.defaultTextStyle.copy(
                     color = JewelTheme.globalColors.text.normal,
-                    fontSize = JewelTheme.defaultTextStyle.fontSize,
                     lineHeight = JewelTheme.defaultTextStyle.fontSize * 1.5
                 ),
                 cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),

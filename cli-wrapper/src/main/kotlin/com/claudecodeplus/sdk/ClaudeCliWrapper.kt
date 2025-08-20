@@ -8,6 +8,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.coroutineContext
 import kotlinx.serialization.json.*
@@ -475,28 +476,84 @@ class ClaudeCliWrapper {
             scope.launch {
                 try {
                     logger.info("🔵 [$requestId] 开始监听 Claude CLI stdout...")
-                    process.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-                        var line: String?
-                        while (reader.readLine().also { line = it } != null) {
-                            line?.let { currentLine ->
-                                if (currentLine.isNotBlank()) {
-                                    try {
-                                        // 尝试解析 Claude CLI 返回的输出
-                                        logger.info("🔵 [$requestId] Claude CLI 输出: $currentLine")
-                                        processOutputLine(currentLine)
-                                        // 收集助手回复内容
-                                        assistantResponseBuilder.append(currentLine).append("\n")
-                                        // 调用流式回调（实时更新UI）
-                                        onStreamingMessage?.invoke(assistantResponseBuilder.toString())
-                                    } catch (e: Exception) {
-                                        logger.info("🔵 [$requestId] Claude CLI 输出: $currentLine")
-                                        processOutputLine(currentLine)
+                    val inputStream = process.inputStream
+                    val buffer = ByteArray(8192)
+                    val lineBuffer = StringBuilder()
+                    
+                    while (process.isAlive || inputStream.available() > 0) {
+                        // 检查是否有数据可读
+                        if (inputStream.available() > 0) {
+                            val bytesRead = inputStream.read(buffer, 0, minOf(buffer.size, inputStream.available()))
+                            if (bytesRead > 0) {
+                                val chunk = String(buffer, 0, bytesRead, Charsets.UTF_8)
+                                lineBuffer.append(chunk)
+                                
+                                // 处理完整的行
+                                var newlineIndex = lineBuffer.indexOf('\n')
+                                while (newlineIndex >= 0) {
+                                    val line = lineBuffer.substring(0, newlineIndex).trim()
+                                    lineBuffer.delete(0, newlineIndex + 1)
+                                    
+                                    if (line.isNotBlank()) {
+                                        try {
+                                            logger.info("🔵 [$requestId] Claude CLI 输出: $line")
+                                            processOutputLine(line)
+                                            
+                                            // 解析 JSON 并提取助手消息
+                                            if (line.startsWith("{") && line.endsWith("}")) {
+                                                val json = Json.parseToJsonElement(line)
+                                                if (json is JsonObject) {
+                                                    val type = json["type"]?.jsonPrimitive?.content
+                                                    when (type) {
+                                                        "assistant" -> {
+                                                            val message = json["message"]?.jsonObject
+                                                            val content = message?.get("content")?.jsonArray
+                                                            if (content != null) {
+                                                                for (item in content) {
+                                                                    val itemObj = item.jsonObject
+                                                                    if (itemObj["type"]?.jsonPrimitive?.content == "text") {
+                                                                        val text = itemObj["text"]?.jsonPrimitive?.content
+                                                                        if (text != null) {
+                                                                            assistantResponseBuilder.append(text)
+                                                                            // 调用流式回调（实时更新UI）
+                                                                            onStreamingMessage?.invoke(text)
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        "system" -> {
+                                                            val sessionId = json["session_id"]?.jsonPrimitive?.content
+                                                            if (sessionId != null) {
+                                                                detectedSessionId = sessionId
+                                                                logger.info("🔵 [$requestId] 检测到会话ID: $sessionId")
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            logger.warn("🔴 [$requestId] 解析输出行失败: ${e.message}")
+                                            // 即使解析失败，也记录原始输出
+                                            logger.info("🔵 [$requestId] Claude CLI 原始输出: $line")
+                                        }
                                     }
+                                    newlineIndex = lineBuffer.indexOf('\n')
                                 }
                             }
+                        } else {
+                            // 没有数据时稍微等待，避免忙等待
+                            delay(10)
                         }
                     }
-                    logger.info("🔵 [$requestId] Claude CLI stdout 流结束")
+                    
+                    // 处理最后可能剩余的内容
+                    if (lineBuffer.isNotBlank()) {
+                        val finalLine = lineBuffer.toString().trim()
+                        logger.info("🔵 [$requestId] Claude CLI 最终输出: $finalLine")
+                        processOutputLine(finalLine)
+                    }
+                    
                 } catch (e: Exception) {
                     if (e.message?.contains("Stream closed") != true) {
                         logger.error("🔴 [$requestId] Error reading Claude CLI stdout: ${e.message}", e)

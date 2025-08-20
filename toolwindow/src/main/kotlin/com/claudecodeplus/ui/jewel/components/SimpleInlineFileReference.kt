@@ -365,6 +365,7 @@ private fun insertFileReference(
 /**
  * 创建高亮文本
  */
+@Composable
 private fun createHighlightedText(text: String, searchQuery: String): androidx.compose.ui.text.AnnotatedString {
     return buildAnnotatedString {
         val lowerText = text.lowercase()
