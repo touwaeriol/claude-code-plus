@@ -8,7 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.*
-import com.claudecodeplus.ui.jewel.components.tools.SmartToolCallDisplay
+import com.claudecodeplus.ui.jewel.components.SmartToolCallDisplay
 import com.claudecodeplus.ui.jewel.components.tools.JumpingDots
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text

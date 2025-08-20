@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Material Design 风格 - 大尺寸版本 -->
+  
+  <!-- 外层阴影 -->
+  <circle cx="20" cy="21" r="18" fill="#000000" opacity="0.15"/>
+  
+  <!-- 圆形背景 -->
+  <circle cx="20" cy="20" r="18" fill="#1976D2"/>
+  
+  <!-- 内圈高光 -->
+  <circle cx="20" cy="20" r="16" fill="none" stroke="#FFFFFF" stroke-width="0.5" opacity="0.3"/>
+  
+  <!-- 主要元素 - 结合的 C 和代码符号 -->
+  <g transform="translate(20, 20)">
+    <!-- 左括号与 C 结合 -->
+    <path d="M-6 -9 Q-10 -9 -10 0 Q-10 9 -6 9" 
+          stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" fill="none"/>
+    
+    <!-- 右括号 -->
+    <path d="M6 -9 Q10 -9 10 0 Q10 9 6 9" 
+          stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.4"/>
+    
+    <!-- 中心点（AI 核心） -->
+    <circle cx="0" cy="0" r="3" fill="#FFD700"/>
+    
+    <!-- 脉冲效果 -->
+    <circle cx="0" cy="0" r="3" fill="none" stroke="#FFD700" stroke-width="1">
+      <animate attributeName="r" values="3;7;3" dur="3s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.8;0;0.8" dur="3s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+  
+  <!-- 角标（Plus 标识） -->
+  <g transform="translate(30, 10)">
+    <circle cx="0" cy="0" r="6" fill="#FF6B00"/>
+    <path d="M-2.5 0 H2.5 M0 -2.5 V2.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>

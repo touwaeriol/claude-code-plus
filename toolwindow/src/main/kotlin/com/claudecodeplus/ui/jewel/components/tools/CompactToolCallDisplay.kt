@@ -1635,3 +1635,57 @@ private fun extractRowsAffected(content: String): String {
         "✅ 数据库操作完成"
     }
 }
+
+/**
+ * 格式化工具调用的简要信息
+ */
+private fun formatToolBriefInfo(toolCall: ToolCall): String {
+    val primaryValue = getPrimaryParamValue(toolCall)
+    
+    return when {
+        // 单参数工具，直接显示参数值
+        isSingleParamTool(toolCall.name) && primaryValue != null -> {
+            when {
+                toolCall.name.contains("Read", ignoreCase = true) ||
+                toolCall.name.contains("Write", ignoreCase = true) ||
+                toolCall.name.contains("LS", ignoreCase = true) -> {
+                    // 对于文件路径，只显示文件名
+                    primaryValue.substringAfterLast('/').substringAfterLast('\\')
+                }
+                else -> primaryValue.take(40)
+            }
+        }
+        
+        // Edit/MultiEdit 显示修改数量
+        toolCall.name.contains("Edit", ignoreCase = true) -> {
+            val editsCount = toolCall.parameters["edits"]?.let {
+                if (it is List<*>) it.size else 1
+            } ?: 1
+            val fileName = primaryValue?.substringAfterLast('/')?.substringAfterLast('\\') ?: ""
+            "$fileName ($editsCount changes)"
+        }
+        
+        // Search/Grep 显示搜索模式
+        toolCall.name.contains("Search", ignoreCase = true) ||
+        toolCall.name.contains("Grep", ignoreCase = true) -> {
+            val pattern = toolCall.parameters["pattern"] ?: toolCall.parameters["query"] ?: ""
+            val glob = toolCall.parameters["glob"]?.toString()?.let { " in $it" } ?: ""
+            "\"$pattern\"$glob"
+        }
+        
+        // TodoWrite 显示任务信息
+        toolCall.name.contains("TodoWrite", ignoreCase = true) -> {
+            val todos = toolCall.parameters["todos"] as? List<*>
+            if (todos != null) {
+                "更新 ${todos.size} 个任务"
+            } else {
+                "任务管理"
+            }
+        }
+        
+        // 其他工具显示第一个参数
+        else -> {
+            toolCall.parameters.values.firstOrNull()?.toString()?.take(40) ?: ""
+        }
+    }
+}

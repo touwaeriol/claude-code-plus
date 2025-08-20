@@ -6,19 +6,17 @@
 
 package com.claudecodeplus.ui.jewel.components.context
 
+import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import com.claudecodeplus.ui.models.*
+import org.jetbrains.jewel.foundation.theme.JewelTheme
+import org.jetbrains.jewel.ui.component.Text
 
 /**
  * 简化的上下文选择器弹出组件
  * 专为聊天输入区域设计，提供文件和网页上下文选择
- * 
- * @param onDismiss 关闭回调
- * @param onContextSelect 上下文选择回调
- * @param searchService 搜索服务
- * @param modifier 修饰符
  */
 @Composable
 fun ChatInputContextSelectorPopup(
@@ -27,35 +25,24 @@ fun ChatInputContextSelectorPopup(
     searchService: ContextSearchService,
     modifier: Modifier = Modifier
 ) {
-    var state by remember { mutableStateOf<ContextSelectionState>(ContextSelectionState.SelectingType) }
-    
-    ContextSelectorPopup(
-        visible = true,
-        anchorPosition = IntOffset.Zero,
-        state = state,
-        searchService = searchService,
-        onStateChange = { newState -> state = newState },
-        onResult = { result ->
-            when (result) {
-                is ContextSelectionResult.FileSelected -> {
-                    val contextRef = ContextReference.FileReference(
-                        path = result.item.relativePath
-                    )
-                    onContextSelect(contextRef)
-                    onDismiss() // 选择后关闭弹出框
-                }
-                is ContextSelectionResult.WebSelected -> {
-                    val contextRef = ContextReference.WebReference(
-                        url = result.item.url
-                    )
-                    onContextSelect(contextRef)
-                    onDismiss() // 选择后关闭弹出框
-                }
-                is ContextSelectionResult.Cancelled -> {
-                    onDismiss()
-                }
-            }
-        },
+    // 简化版本：直接显示提示信息
+    Column(
         modifier = modifier
-    )
-} 
+            .fillMaxWidth()
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = "上下文选择器（简化版）",
+            style = JewelTheme.defaultTextStyle.copy(
+                color = JewelTheme.globalColors.text.normal
+            )
+        )
+        Text(
+            text = "功能开发中...",
+            style = JewelTheme.defaultTextStyle.copy(
+                color = JewelTheme.globalColors.text.disabled
+            )
+        )
+    }
+}

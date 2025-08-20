@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "spec-workflow": {
+      "command": "npx",
+      "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "/Users/erio/codes/idea/claude-code-plus","--dashboard" ,"--port" ,"4444"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ]
+    },
+    "auth-redis-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-redis",
+        "redis://:opencare@localhost:6379/1"
+      ]
+    },
+    "postgres-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://postgres:123456@localhost:5432/postgres"
+      ]
+    }
+  }
+}

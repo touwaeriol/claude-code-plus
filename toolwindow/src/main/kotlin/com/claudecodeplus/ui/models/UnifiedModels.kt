@@ -26,7 +26,13 @@ enum class AiModel(
     OPUS("Claude 4 Opus", "opus", "深度推理，复杂任务", 200_000),
     
     // Sonnet 模型 - 平衡型模型，速度和能力兼备
-    SONNET("Claude 4 Sonnet", "sonnet", "平衡性能，日常编码", 200_000)
+    SONNET("Claude 4 Sonnet", "sonnet", "平衡性能，日常编码", 200_000),
+    
+    // Plan 模式 - 仅规划不执行
+    OPUS_PLAN("Claude 4 Opus (Plan)", "opus", "规划模式，仅分析不执行", 200_000),
+    
+    // 最新版 Opus 4
+    OPUS_4("Claude 4 Opus Latest", "opus", "最新版 Opus 模型", 200_000)
 }
 
 /**
