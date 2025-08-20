@@ -24,6 +24,9 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
@@ -248,9 +251,15 @@ fun SimpleFileItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // 主文件名（突出显示）
+                // 主文件名（突出显示 + 搜索高亮）
+                val highlightedFileName = if (searchQuery.isNotEmpty()) {
+                    createHighlightedText(file.name, searchQuery)
+                } else {
+                    buildAnnotatedString { append(file.name) }
+                }
+                
                 Text(
-                    text = file.name,
+                    text = highlightedFileName,
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 14.sp,
                         color = if (isSelected) 
@@ -354,7 +363,45 @@ private fun insertFileReference(
 }
 
 /**
- * 格式化路径显示 - Cursor 风格
+ * 创建高亮文本
+ */
+private fun createHighlightedText(text: String, searchQuery: String): androidx.compose.ui.text.AnnotatedString {
+    return buildAnnotatedString {
+        val lowerText = text.lowercase()
+        val lowerQuery = searchQuery.lowercase()
+        
+        var currentIndex = 0
+        var searchIndex = lowerText.indexOf(lowerQuery, currentIndex)
+        
+        while (searchIndex != -1) {
+            // 添加前面的普通文本
+            if (searchIndex > currentIndex) {
+                append(text.substring(currentIndex, searchIndex))
+            }
+            
+            // 添加高亮的匹配文本
+            withStyle(
+                style = SpanStyle(
+                    background = JewelTheme.globalColors.borders.focused.copy(alpha = 0.3f),
+                    color = JewelTheme.globalColors.text.normal
+                )
+            ) {
+                append(text.substring(searchIndex, searchIndex + searchQuery.length))
+            }
+            
+            currentIndex = searchIndex + searchQuery.length
+            searchIndex = lowerText.indexOf(lowerQuery, currentIndex)
+        }
+        
+        // 添加剩余的普通文本
+        if (currentIndex < text.length) {
+            append(text.substring(currentIndex))
+        }
+    }
+}
+
+/**
+ * 格式化路径显示 - 优化版，优先显示路径结尾
  * 将文件路径转换为适合显示的格式
  */
 private fun formatPathForDisplay(relativePath: String, fileName: String): String {
@@ -368,7 +415,7 @@ private fun formatPathForDisplay(relativePath: String, fileName: String): String
     val pathParts = directoryPath.split("/").filter { it.isNotEmpty() }
     if (pathParts.isEmpty()) return ""
     
-    // 根据路径长度决定显示方式
+    // 根据路径长度决定显示方式 - 优化版，优先显示路径结尾
     return when {
         pathParts.size <= 2 -> {
             // 短路径：直接显示完整路径
@@ -379,8 +426,8 @@ private fun formatPathForDisplay(relativePath: String, fileName: String): String
             pathParts.takeLast(3).joinToString(" > ")
         }
         else -> {
-            // 长路径：显示前面和后面，中间用...
-            "${pathParts.first()} > ... > ${pathParts.takeLast(2).joinToString(" > ")}"
+            // 长路径：优先显示结尾部分，隐藏开头
+            "... > ${pathParts.takeLast(3).joinToString(" > ")}"
         }
     }
 }

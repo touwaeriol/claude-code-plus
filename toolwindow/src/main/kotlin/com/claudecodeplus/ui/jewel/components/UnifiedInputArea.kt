@@ -167,7 +167,9 @@ fun UnifiedInputArea(
                             session.atSymbolPosition = position
                         }
                     },
-                    showPreview = false // 可以根据需要开启预览
+                    showPreview = false, // 可以根据需要开启预览
+                    fileIndexService = fileIndexService, // 传递文件索引服务
+                    maxHeight = 300 // 增大输入框最大高度
                 )
                 
                 // 上下文选择器
