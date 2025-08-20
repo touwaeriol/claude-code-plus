@@ -6,7 +6,10 @@
       "Bash(arch)",
       "Rad",
       "Bash(mv:*)",
-      "Bash(./gradlew:*)"
+      "Bash(./gradlew:*)",
+      "Bash(find:*)",
+      "WebSearch",
+      "Bash(git add:*)"
     ],
     "deny": []
   },

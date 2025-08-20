@@ -14,7 +14,7 @@
     "auth-redis-mcp": {
       "command": "npx",
       "args": [
-        "-y",
+         "-y",
         "@modelcontextprotocol/server-redis",
         "redis://:opencare@localhost:6379/1"
       ]
@@ -22,7 +22,7 @@
     "postgres-mcp": {
       "command": "npx",
       "args": [
-        "-y",
+        "-y", @
         "@modelcontextprotocol/server-postgres",
         "postgresql://postgres:123456@localhost:5432/postgres"
       ]

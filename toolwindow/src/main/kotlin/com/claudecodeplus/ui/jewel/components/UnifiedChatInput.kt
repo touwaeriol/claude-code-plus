@@ -25,6 +25,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.*
@@ -90,6 +91,15 @@ fun UnifiedChatInput(
     val showContextSelector = sessionObject?.showContextSelector ?: false
     val showSimpleFileSelector = sessionObject?.showSimpleFileSelector ?: false
     val atSymbolPosition = sessionObject?.atSymbolPosition
+    
+    // 将 TextFieldValue 转换为 AnnotatedTextFieldValue
+    val annotatedValue = remember(textFieldValue) {
+        AnnotatedTextFieldValue(
+            text = textFieldValue.text,
+            selection = textFieldValue.selection,
+            annotations = emptyList() // 暂时为空，后续可以从会话状态中获取
+        )
+    }
     
     // 监听重置触发器，清空输入框
     LaunchedEffect(resetTrigger) {
@@ -177,21 +187,30 @@ fun UnifiedChatInput(
                 .fillMaxWidth()
                 .heightIn(min = 50.dp, max = 300.dp)  // 减少最小高度，更紧凑
         ) {
-            ChatInputField(
-                value = textFieldValue,
-                onValueChange = { sessionObject?.updateInputText(it) },
+            // 使用新的注解输入框
+            AnnotatedChatInputField(
+                value = annotatedValue,
+                onValueChange = { newAnnotatedValue ->
+                    // 将 AnnotatedTextFieldValue 转换回 TextFieldValue 更新会话状态
+                    val newTextFieldValue = TextFieldValue(
+                        text = newAnnotatedValue.text,
+                        selection = newAnnotatedValue.selection
+                    )
+                    sessionObject?.updateInputText(newTextFieldValue)
+                    // 可以在这里保存注解到会话状态
+                },
                 onSend = {
                     // 发送功能：只有在未生成状态下才能发送
-                    if (textFieldValue.text.isNotBlank() && !isGenerating) {
-                        onSend(textFieldValue.text)
+                    if (annotatedValue.text.isNotBlank() && !isGenerating) {
+                        onSend(annotatedValue.text)
                         sessionObject?.clearInput()
                     }
                 },
                 onInterruptAndSend = if (onInterruptAndSend != null) {
                     {
                         // 打断发送功能：只有在生成状态下才能打断
-                        if (textFieldValue.text.isNotBlank() && isGenerating) {
-                            onInterruptAndSend(textFieldValue.text)
+                        if (annotatedValue.text.isNotBlank() && isGenerating) {
+                            onInterruptAndSend(annotatedValue.text)
                             sessionObject?.clearInput()
                         }
                     }
@@ -209,7 +228,11 @@ fun UnifiedChatInput(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),  // 与顶部工具栏一致
                 maxHeight = 280,
-                fileIndexService = fileIndexService  // 传递文件索引服务
+                fileIndexService = fileIndexService,  // 传递文件索引服务
+                onFileReferenceClick = { annotation ->
+                    // 处理文件引用点击，可以打开文件或显示更多信息
+                    println("文件引用被点击: ${annotation.file.relativePath}")
+                }
             )
         }
         
@@ -224,11 +247,11 @@ fun UnifiedChatInput(
             skipPermissions = skipPermissions,
             onSkipPermissionsChange = onSkipPermissionsChange,
             isGenerating = isGenerating,
-            hasInput = textFieldValue.text.isNotBlank(),
+            hasInput = annotatedValue.text.isNotBlank(),
             onSend = {
                 // 发送按钮逻辑：只有在非生成状态下才能发送
-                if (textFieldValue.text.isNotBlank() && !isGenerating) {
-                    onSend(textFieldValue.text)
+                if (annotatedValue.text.isNotBlank() && !isGenerating) {
+                    onSend(annotatedValue.text)
                     sessionObject?.clearInput()
                 }
             },
@@ -236,8 +259,8 @@ fun UnifiedChatInput(
             onInterruptAndSend = if (onInterruptAndSend != null) {
                 {
                     // 打断发送逻辑：只有在生成状态下才能打断
-                    if (textFieldValue.text.isNotBlank() && isGenerating) {
-                        onInterruptAndSend(textFieldValue.text)
+                    if (annotatedValue.text.isNotBlank() && isGenerating) {
+                        onInterruptAndSend(annotatedValue.text)
                         sessionObject?.clearInput()
                     }
                 }
@@ -248,7 +271,7 @@ fun UnifiedChatInput(
                 .padding(horizontal = 16.dp, vertical = 10.dp),  // 与顶部工具栏一致
             // 传递上下文统计所需的参数
             messageHistory = sessionObject?.messages ?: emptyList(),
-            inputText = textFieldValue.text,
+            inputText = annotatedValue.text,
             contexts = contexts
         )
     }
@@ -280,14 +303,14 @@ fun UnifiedChatInput(
                         uri = context.uri
                     )
                     
-                    val currentText = textFieldValue.text
+                    val currentText = annotatedValue.text
                     val pos = atSymbolPosition!!
                     val newText = currentText.replaceRange(pos, pos + 1, markdownLink)
                     val newPosition = pos + markdownLink.length
                     
                     sessionObject?.updateInputText(TextFieldValue(
                         newText,
-                        androidx.compose.ui.text.TextRange(newPosition)
+                        TextRange(newPosition)
                     ))
                 } else {
                     // 按钮触发：添加到上下文列表
