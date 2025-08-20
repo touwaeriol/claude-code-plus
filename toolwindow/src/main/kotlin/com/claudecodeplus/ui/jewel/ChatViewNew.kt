@@ -143,6 +143,13 @@ fun ChatViewNew(
     // 从 sessionObject 获取所有状态
     val messages by derivedStateOf { 
         println("[ChatViewNew] messages derivedStateOf 被重新计算: ${sessionObject.messages.size} 条消息")
+        println("[ChatViewNew] SessionObject实例ID: ${System.identityHashCode(sessionObject)}")
+        if (sessionObject.messages.isNotEmpty()) {
+            println("[ChatViewNew] 消息详情:")
+            sessionObject.messages.forEachIndexed { index, msg ->
+                println("  [$index] ${msg.role}: '${msg.content.take(50)}...', isStreaming=${msg.isStreaming}")
+            }
+        }
         sessionObject.messages 
     }
     val contexts by derivedStateOf { sessionObject.contexts }

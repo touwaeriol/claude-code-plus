@@ -27,8 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
-import org.jetbrains.jewel.ui.component.Icon
-import org.jetbrains.jewel.ui.icons.AllIconsKeys
+// import org.jetbrains.jewel.ui.component.Icon
+// import org.jetbrains.jewel.ui.icons.AllIconsKeys
 
 /**
  * Add Context 按钮组件
@@ -103,14 +103,16 @@ fun AddContextButton(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Icon(
-                key = AllIconsKeys.General.Add,
-                contentDescription = null,
-                modifier = Modifier.size(12.dp),
-                tint = if (enabled) 
-                    JewelTheme.globalColors.text.normal 
-                else 
-                    JewelTheme.globalColors.text.disabled
+            // 使用文本图标替代 Jewel Icon（避免类加载器冲突）
+            Text(
+                text = "+",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 12.sp,
+                    color = if (enabled) 
+                        JewelTheme.globalColors.text.normal 
+                    else 
+                        JewelTheme.globalColors.text.disabled
+                )
             )
             Text(
                 text = "Add Context",

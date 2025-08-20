@@ -62,9 +62,18 @@ class SessionObject(
     var isFirstMessage by mutableStateOf(true)
     
     /**
-     * 消息列表
+     * 消息列表 - 使用 mutableStateListOf 确保UI能正确检测到变化
      */
-    var messages by mutableStateOf(initialMessages)
+    var messages by mutableStateOf(initialMessages.toList())
+        // 暂时允许外部访问，保持兼容性
+        
+    /**
+     * 内部方法：更新消息列表，确保UI能检测到变化
+     */
+    private fun updateMessagesList(newMessages: List<EnhancedMessage>) {
+        println("[SessionObject] 🔄 更新消息列表: ${messages.size} -> ${newMessages.size}")
+        messages = newMessages.toList()  // 确保创建新的列表实例
+    }
     
     /**
      * 上下文引用列表
@@ -179,6 +188,11 @@ class SessionObject(
      * 上下文选择器是否显示
      */
     var showContextSelector by mutableStateOf(false)
+    
+    /**
+     * 简化文件选择器是否显示（Add Context 按钮触发）
+     */
+    var showSimpleFileSelector by mutableStateOf(false)
     
     /**
      * @ 符号位置（用于内联引用）
@@ -335,7 +349,7 @@ class SessionObject(
             }
             
             val oldSize = messages.size
-            messages = messages + message
+            updateMessagesList(messages + message)
             val newSize = messages.size
             println("[SessionObject] ✅ 添加消息成功:")
             println("  - 消息数量: $oldSize -> $newSize")
@@ -429,7 +443,7 @@ class SessionObject(
      */
     fun updateLastMessage(updater: (EnhancedMessage) -> EnhancedMessage) {
         if (messages.isNotEmpty()) {
-            messages = messages.dropLast(1) + updater(messages.last())
+            updateMessagesList(messages.dropLast(1) + updater(messages.last()))
         }
     }
     
@@ -437,9 +451,9 @@ class SessionObject(
      * 替换指定 ID 的消息
      */
     fun replaceMessage(messageId: String, updater: (EnhancedMessage) -> EnhancedMessage) {
-        messages = messages.map { msg ->
+        updateMessagesList(messages.map { msg ->
             if (msg.id == messageId) updater(msg) else msg
-        }
+        })
     }
     
     /**
@@ -1094,9 +1108,10 @@ class SessionObject(
             )
             
             // 更新消息列表
-            messages = messages.toMutableList().apply {
+            val updatedMessages = messages.toMutableList().apply {
                 this[messageIndex] = updatedMessage
             }
+            updateMessagesList(updatedMessages)
             
             println("[SessionObject] ✅ 已更新工具调用结果: toolId=$toolUseId, isError=$isError")
         } else {
@@ -1119,7 +1134,7 @@ class SessionObject(
                 val originalMessage = updatedMessages[lastAssistantIndex]
                 val updatedMessage = updater(originalMessage)
                 updatedMessages[lastAssistantIndex] = updatedMessage
-                messages = updatedMessages
+                updateMessagesList(updatedMessages)
                 println("[SessionObject] ✅ 已更新最后一条助手消息: ${updatedMessage.content.take(50)}...")
             } else {
                 // 创建新的助手消息
@@ -1185,7 +1200,8 @@ class SessionObject(
                     sessionId = sessionId,
                     cwd = projectCwd,
                     model = selectedModel?.cliName,
-                    permissionMode = selectedPermissionMode.cliName
+                    permissionMode = selectedPermissionMode.cliName,
+                    skipPermissions = skipPermissions
                 )
                 
                 println("[SessionObject] 发送消息: isFirstMessage=$isFirstMessage, sessionId=$sessionId")
@@ -1269,7 +1285,7 @@ class SessionObject(
      */
     fun processHistoryMessage(message: com.claudecodeplus.ui.models.EnhancedMessage) {
         // 添加到消息列表，但不触发新消息通知
-        messages = messages + message
+        updateMessagesList(messages + message)
     }
     
     /**
@@ -1277,7 +1293,7 @@ class SessionObject(
      */
     fun processNewMessage(message: com.claudecodeplus.ui.models.EnhancedMessage) {
         // 添加到消息列表
-        messages = messages + message
+        updateMessagesList(messages + message)
         
         // EnhancedMessage 不包含 sessionId 属性，会话 ID 由其他途径获取
         // 此处保留原有逻辑结构，但移除对 sessionId 属性的引用
@@ -1350,7 +1366,7 @@ class SessionObject(
         GlobalCliWrapper.unregisterSessionCallback(sessionId)
         
         sessionId = null
-        messages = emptyList()
+        updateMessagesList(emptyList())
         contexts = emptyList()
         isGenerating = false
         currentStreamJob = null
@@ -1447,7 +1463,7 @@ class SessionObject(
      */
     fun restoreSessionState(state: SessionState) {
         sessionId = state.sessionId
-        messages = state.messages
+        updateMessagesList(state.messages)
         contexts = state.contexts
         isFirstMessage = state.isFirstMessage
         inputTextFieldValue = state.inputTextFieldValue
@@ -1531,7 +1547,7 @@ class SessionObject(
             
             // 清空现有消息，重新处理
             if (forceFullReload) {
-                messages = emptyList()
+                updateMessagesList(emptyList())
             }
             
             // 查找包含sessionId的消息来更新sessionId（如果需要）
@@ -1628,7 +1644,7 @@ class SessionObject(
                 
                 if (forceFullReload || enhancedMessages.size != messages.size) {
                     // 只有在强制重载或消息数量变化时才更新
-                    messages = enhancedMessages
+                    updateMessagesList(enhancedMessages)
                     val action = if (forceFullReload) "强制全量重载" else "增量更新"
                     println("[SessionObject] ✅ $action 消息列表，共 ${enhancedMessages.size} 条消息")
                     

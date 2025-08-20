@@ -34,7 +34,7 @@ object DefaultSessionConfig {
     /**
      * 默认权限模式
      */
-    var defaultPermissionMode by mutableStateOf(PermissionMode.BYPASS_PERMISSIONS)
+    var defaultPermissionMode by mutableStateOf(PermissionMode.BYPASS)
         private set
     
     /**
@@ -58,9 +58,9 @@ object DefaultSessionConfig {
             defaultModel = AiModel.values().find { it.name == modelName } ?: AiModel.OPUS
             
             // 加载默认权限模式
-            val permissionModeName = prefs.get(KEY_DEFAULT_PERMISSION_MODE, PermissionMode.BYPASS_PERMISSIONS.name)
+            val permissionModeName = prefs.get(KEY_DEFAULT_PERMISSION_MODE, PermissionMode.BYPASS.name)
             defaultPermissionMode = PermissionMode.values().find { it.name == permissionModeName } 
-                ?: PermissionMode.BYPASS_PERMISSIONS
+                ?: PermissionMode.BYPASS
             
             // 加载是否跳过权限
             defaultSkipPermissions = prefs.getBoolean(KEY_DEFAULT_SKIP_PERMISSIONS, true)
@@ -121,7 +121,7 @@ object DefaultSessionConfig {
      */
     fun resetToDefaults() {
         defaultModel = AiModel.OPUS
-        defaultPermissionMode = PermissionMode.BYPASS_PERMISSIONS
+        defaultPermissionMode = PermissionMode.BYPASS
         defaultSkipPermissions = true
         saveToSettings()
     }

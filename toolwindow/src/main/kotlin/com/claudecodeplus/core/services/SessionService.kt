@@ -26,7 +26,7 @@ interface SessionService {
     suspend fun createSession(
         projectPath: String,
         model: AiModel = AiModel.OPUS,
-        permissionMode: PermissionMode = PermissionMode.BYPASS_PERMISSIONS
+        permissionMode: PermissionMode = PermissionMode.BYPASS
     ): Result<String>
     
     /**

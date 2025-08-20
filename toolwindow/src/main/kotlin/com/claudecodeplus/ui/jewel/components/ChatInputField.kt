@@ -28,6 +28,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.VerticalScrollbar
+import com.claudecodeplus.ui.services.FileIndexService
 
 /**
  * 聊天输入框组件
@@ -52,7 +53,8 @@ fun ChatInputField(
     onShowContextSelector: (Int?) -> Unit,
     showPreview: Boolean = false,
     modifier: Modifier = Modifier,
-    maxHeight: Int = 200  // 增加最大高度
+    maxHeight: Int = 200,  // 增加最大高度
+    fileIndexService: FileIndexService? = null  // 新增参数
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
@@ -64,10 +66,11 @@ fun ChatInputField(
     val estimatedHeight = lineHeight * lineCount + padding
     val needsScroll = estimatedHeight > maxHeight.dp
     
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
+    Box(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
         // 输入框容器 - 使用 Box 包装以支持滚动条
         Box(
             modifier = Modifier
@@ -86,13 +89,13 @@ fun ChatInputField(
                         }
                     )
             ) {
-            // 占位符
+            // 占位符 - 简洁版本
             if (value.text.isEmpty()) {
                 Text(
-                    "输入消息，使用 [@名称](uri) 格式添加引用，或按 ⌘K...",
+                    "Message Claude...",
                     color = JewelTheme.globalColors.text.disabled,
                     style = JewelTheme.defaultTextStyle,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    modifier = Modifier.padding(vertical = 12.dp)  // 增加垂直内边距
                 )
             }
             
@@ -102,10 +105,8 @@ fun ChatInputField(
                 onValueChange = { newValue ->
                     onValueChange(newValue)
                     
-                    // 检测 @ 符号输入
-                    if (detectAtSymbol(newValue.text, newValue.selection.start)) {
-                        onShowContextSelector(newValue.selection.start - 1)
-                    }
+                    // @ 符号检测已移至 SimpleInlineFileReferenceHandler 中处理
+                    // 不再使用旧的复杂上下文选择器
                 },
                 enabled = enabled,
                 textStyle = TextStyle(
@@ -119,7 +120,7 @@ fun ChatInputField(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp)
+                    .padding(vertical = 12.dp)  // 增加垂直内边距，与占位符一致
                     .focusRequester(focusRequester)
                     .onFocusChanged { focusState ->
                         isFocused = focusState.isFocused
@@ -183,13 +184,24 @@ fun ChatInputField(
             }
         }
         
-        // 预览区域（可选）
-        if (showPreview && value.text.isNotBlank()) {
-            MessagePreview(
-                markdown = value.text,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp)
+            // 预览区域（可选）
+            if (showPreview && value.text.isNotBlank()) {
+                MessagePreview(
+                    markdown = value.text,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                )
+            }
+        }
+        
+        // 简化内联文件引用处理器 - 悬浮在输入框上方
+        if (fileIndexService != null) {
+            SimpleInlineFileReferenceHandler(
+                textFieldValue = value,
+                onTextChange = onValueChange,
+                fileIndexService = fileIndexService,
+                enabled = enabled
             )
         }
     }

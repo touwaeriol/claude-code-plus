@@ -89,7 +89,7 @@ fun JewelChatApp(
     var currentSessionId by remember { mutableStateOf<String?>(null) }
     var messageJob by remember { mutableStateOf<Job?>(null) }
     var selectedModel by remember { mutableStateOf(AiModel.OPUS) }
-    var selectedPermissionMode by remember { mutableStateOf(PermissionMode.BYPASS_PERMISSIONS) }
+    var selectedPermissionMode by remember { mutableStateOf(PermissionMode.BYPASS) }
     // skipPermissions 默认为 true，不再可修改
     val skipPermissions = true
     

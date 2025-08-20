@@ -21,7 +21,7 @@ data class ChatUiState(
     
     // 模型和权限设置
     val selectedModel: AiModel = AiModel.OPUS,
-    val selectedPermissionMode: PermissionMode = PermissionMode.BYPASS_PERMISSIONS,
+    val selectedPermissionMode: PermissionMode = PermissionMode.BYPASS,
     val skipPermissions: Boolean = true,
     
     // 会话相关状态

@@ -140,7 +140,7 @@ class ClaudeCliWrapperTest {
             model = "claude-opus-4-20250514",
             maxTurns = 5,
             customSystemPrompt = "You are a helpful assistant",
-            permissionMode = ClaudeCliWrapper.PermissionMode.BYPASS_PERMISSIONS.cliValue,
+            permissionMode = ClaudeCliWrapper.PermissionMode.BYPASS.cliValue,
             cwd = "/tmp"
         )
         
@@ -149,7 +149,7 @@ class ClaudeCliWrapperTest {
         assertEquals("claude-opus-4-20250514", options.model)
         assertEquals(5, options.maxTurns)
         assertEquals("You are a helpful assistant", options.customSystemPrompt)
-        assertEquals(ClaudeCliWrapper.PermissionMode.BYPASS_PERMISSIONS.cliValue, options.permissionMode)
+        assertEquals(ClaudeCliWrapper.PermissionMode.BYPASS.cliValue, options.permissionMode)
         assertEquals("/tmp", options.cwd)
     }
     

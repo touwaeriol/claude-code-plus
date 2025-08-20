@@ -9,5 +9,11 @@
       "Bash(./gradlew:*)"
     ],
     "deny": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "spec-workflow",
+    "context7",
+    "auth-redis-mcp",
+    "postgres-mcp"
+  ]
 }

@@ -7,6 +7,7 @@
 package com.claudecodeplus.ui.jewel.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,7 +24,6 @@ import com.claudecodeplus.ui.models.AiModel
 import com.claudecodeplus.ui.models.PermissionMode
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
-import org.jetbrains.jewel.ui.component.Checkbox
 
 /**
  * 模型选择器组件
@@ -36,7 +36,7 @@ fun ChatInputModelSelector(
     modifier: Modifier = Modifier
 ) {
     var showDropdown by remember { mutableStateOf(false) }
-    val models = listOf(AiModel.OPUS, AiModel.SONNET)
+    val models = listOf(AiModel.OPUS, AiModel.SONNET, AiModel.OPUS_PLAN, AiModel.OPUS_4)
     
     Box(modifier = modifier) {
         // 主按钮
@@ -139,7 +139,7 @@ fun ChatInputModelSelector(
  */
 @Composable
 fun ChatInputPermissionSelector(
-    currentPermissionMode: PermissionMode = PermissionMode.BYPASS_PERMISSIONS,
+    currentPermissionMode: PermissionMode = PermissionMode.BYPASS,
     onPermissionModeChange: (PermissionMode) -> Unit,
     enabled: Boolean = true,
     modifier: Modifier = Modifier
@@ -147,8 +147,8 @@ fun ChatInputPermissionSelector(
     var showDropdown by remember { mutableStateOf(false) }
     val permissionModes = listOf(
         PermissionMode.DEFAULT,
-        PermissionMode.ACCEPT_EDITS,
-        PermissionMode.BYPASS_PERMISSIONS,
+        PermissionMode.ACCEPT,
+        PermissionMode.BYPASS,
         PermissionMode.PLAN
     )
     
@@ -249,34 +249,57 @@ fun ChatInputPermissionSelector(
 }
 
 /**
- * 跳过权限复选框组件
+ * 跳过权限复选框组件 - 强制使用文本格式的 []bypass 样式
+ * 需求：必须显示为 []bypass 格式，而不是标准复选框
  */
 @Composable
 fun SkipPermissionsCheckbox(
-    checked: Boolean = true,
+    checked: Boolean = false,
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    // 强制使用文本格式，确保显示为 []bypass
     Row(
-        modifier = modifier,
+        modifier = modifier
+            .clickable(enabled = enabled) {
+                println("[SkipPermissionsCheckbox] 点击 - checked: $checked -> ${!checked}")
+                onCheckedChange(!checked)
+            }
+            .background(
+                if (checked && enabled) 
+                    JewelTheme.globalColors.borders.focused.copy(alpha = 0.15f)
+                else 
+                    Color.Transparent,
+                RoundedCornerShape(4.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Checkbox(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            enabled = enabled
-        )
+        // 强制文本格式的复选框 - 绝不使用 Jewel Checkbox
         Text(
-            text = "跳过权限",
+            text = if (checked) "[✓]" else "[ ]",
             style = JewelTheme.defaultTextStyle.copy(
-                fontSize = 9.sp,
-                color = if (enabled) JewelTheme.globalColors.text.normal else JewelTheme.globalColors.text.disabled
-            ),
-            modifier = Modifier.clickable(enabled = enabled) {
-                onCheckedChange(!checked)
-            }
+                fontSize = 11.sp,
+                color = when {
+                    !enabled -> JewelTheme.globalColors.text.disabled
+                    checked -> JewelTheme.globalColors.borders.focused
+                    else -> JewelTheme.globalColors.text.normal
+                }
+            )
+        )
+        
+        Text(
+            text = "bypass",
+            style = JewelTheme.defaultTextStyle.copy(
+                fontSize = 11.sp,
+                color = when {
+                    !enabled -> JewelTheme.globalColors.text.disabled
+                    checked -> JewelTheme.globalColors.borders.focused
+                    else -> JewelTheme.globalColors.text.normal
+                }
+            )
         )
     }
 }

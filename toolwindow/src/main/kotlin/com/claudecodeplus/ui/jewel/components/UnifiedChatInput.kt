@@ -23,10 +23,12 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.*
+import com.claudecodeplus.ui.services.IndexedFileInfo
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
 import com.claudecodeplus.ui.jewel.components.context.*
@@ -70,7 +72,7 @@ fun UnifiedChatInput(
     enabled: Boolean = true,
     selectedModel: AiModel = AiModel.OPUS,
     onModelChange: (AiModel) -> Unit = {},
-    selectedPermissionMode: PermissionMode = PermissionMode.BYPASS_PERMISSIONS,
+    selectedPermissionMode: PermissionMode = PermissionMode.BYPASS,
     onPermissionModeChange: (PermissionMode) -> Unit = {},
     skipPermissions: Boolean = true,
     onSkipPermissionsChange: (Boolean) -> Unit = {},
@@ -86,6 +88,7 @@ fun UnifiedChatInput(
     // 使用会话状态或回退到局部状态（兼容性）
     val textFieldValue = sessionObject?.inputTextFieldValue ?: TextFieldValue("")
     val showContextSelector = sessionObject?.showContextSelector ?: false
+    val showSimpleFileSelector = sessionObject?.showSimpleFileSelector ?: false
     val atSymbolPosition = sessionObject?.atSymbolPosition
     
     // 监听重置触发器，清空输入框
@@ -127,25 +130,20 @@ fun UnifiedChatInput(
         }
     }
     
-    // 统一容器
+    // 统一容器 - Cursor 风格简洁设计
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(
-                elevation = shadowElevation.dp,
-                shape = RoundedCornerShape(8.dp),
-                clip = false
-            )
             .background(
                 JewelTheme.globalColors.panelBackground,
-                RoundedCornerShape(8.dp)
+                RoundedCornerShape(12.dp)  // 增大圆角，更现代
             )
             .border(
-                width = 1.dp,
+                width = if (isFocused) 1.5.dp else 1.dp,  // 聚焦时稍微加粗边框
                 color = borderColor,
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(12.dp)
             )
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(12.dp))
             .onFocusChanged { focusState ->
                 isFocused = focusState.hasFocus
             }
@@ -155,48 +153,50 @@ fun UnifiedChatInput(
             TopToolbar(
                 contexts = contexts,
                 onContextAdd = {
+                    println("[UnifiedChatInput] Add Context 按钮被点击 - 显示简化文件列表")
                     sessionObject?.let { session ->
-                        session.showContextSelector = true
-                        session.atSymbolPosition = null
-                    }
+                        // 直接显示简化的文件选择器，而不是完整的上下文选择器
+                        session.showSimpleFileSelector = true
+                        println("[UnifiedChatInput] showSimpleFileSelector 已设置为: true")
+                    } ?: println("[UnifiedChatInput] sessionObject 为 null！")
                 },
                 onContextRemove = onContextRemove,
                 enabled = enabled && !isGenerating,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp)  // 增加水平内边距，减少垂直内边距
             )
             
-            // 分隔线（使用间距而非实线）
-            Spacer(modifier = Modifier.height(4.dp))
+            // 分隔线（更细致的间距）
+            Spacer(modifier = Modifier.height(2.dp))
         }
         
         // 中间输入区：纯净的文本输入
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 60.dp, max = 320.dp)  // 限制高度范围，约15行（每行约20dp）
+                .heightIn(min = 50.dp, max = 300.dp)  // 减少最小高度，更紧凑
         ) {
-            // 移除输入框内的生成状态显示，现在统一在工具调用区域显示
-            
             ChatInputField(
                 value = textFieldValue,
                 onValueChange = { sessionObject?.updateInputText(it) },
                 onSend = {
-                    if (textFieldValue.text.isNotBlank()) {
+                    // 发送功能：只有在未生成状态下才能发送
+                    if (textFieldValue.text.isNotBlank() && !isGenerating) {
                         onSend(textFieldValue.text)
                         sessionObject?.clearInput()
                     }
                 },
                 onInterruptAndSend = if (onInterruptAndSend != null) {
                     {
-                        if (textFieldValue.text.isNotBlank()) {
+                        // 打断发送功能：只有在生成状态下才能打断
+                        if (textFieldValue.text.isNotBlank() && isGenerating) {
                             onInterruptAndSend(textFieldValue.text)
                             sessionObject?.clearInput()
                         }
                     }
                 } else null,
-                enabled = enabled,  // 移除 !isGenerating 限制
+                enabled = enabled,  // 输入框始终可用，允许响应期间继续编辑
                 focusRequester = focusRequester,
                 onShowContextSelector = { position ->
                     sessionObject?.let { session ->
@@ -207,13 +207,14 @@ fun UnifiedChatInput(
                 showPreview = false,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                maxHeight = 300  // 传递最大高度参数
+                    .padding(horizontal = 16.dp),  // 与顶部工具栏一致
+                maxHeight = 280,
+                fileIndexService = fileIndexService  // 传递文件索引服务
             )
         }
         
         // 底部选项栏：模型、权限、操作按钮
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))  // 减少间距
         
         BottomToolbar(
             selectedModel = selectedModel,
@@ -225,7 +226,8 @@ fun UnifiedChatInput(
             isGenerating = isGenerating,
             hasInput = textFieldValue.text.isNotBlank(),
             onSend = {
-                if (textFieldValue.text.isNotBlank()) {
+                // 发送按钮逻辑：只有在非生成状态下才能发送
+                if (textFieldValue.text.isNotBlank() && !isGenerating) {
                     onSend(textFieldValue.text)
                     sessionObject?.clearInput()
                 }
@@ -233,7 +235,8 @@ fun UnifiedChatInput(
             onStop = onStop ?: {},
             onInterruptAndSend = if (onInterruptAndSend != null) {
                 {
-                    if (textFieldValue.text.isNotBlank()) {
+                    // 打断发送逻辑：只有在生成状态下才能打断
+                    if (textFieldValue.text.isNotBlank() && isGenerating) {
                         onInterruptAndSend(textFieldValue.text)
                         sessionObject?.clearInput()
                     }
@@ -242,7 +245,7 @@ fun UnifiedChatInput(
             enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),  // 与顶部工具栏一致
             // 传递上下文统计所需的参数
             messageHistory = sessionObject?.messages ?: emptyList(),
             inputText = textFieldValue.text,
@@ -296,6 +299,91 @@ fun UnifiedChatInput(
             },
             searchService = searchService
         )
+    }
+    
+    // 简化文件选择器弹窗（Add Context 按钮触发）
+    println("[UnifiedChatInput] showSimpleFileSelector=$showSimpleFileSelector, fileIndexService=$fileIndexService")
+    if (showSimpleFileSelector && fileIndexService != null) {
+        var searchResults by remember { mutableStateOf<List<IndexedFileInfo>>(emptyList()) }
+        var selectedIndex by remember { mutableStateOf(0) }
+        
+        // 加载最近文件
+        LaunchedEffect(showSimpleFileSelector) {
+            if (showSimpleFileSelector) {
+                try {
+                    println("[UnifiedChatInput] 开始加载最近文件...")
+                    val files = fileIndexService.getRecentFiles(10)
+                    println("[UnifiedChatInput] 加载到 ${files.size} 个文件")
+                    files.forEachIndexed { index, file ->
+                        println("[UnifiedChatInput] 文件 $index: ${file.name} - ${file.relativePath}")
+                    }
+                    searchResults = files
+                    selectedIndex = 0
+                    println("[UnifiedChatInput] searchResults.size = ${searchResults.size}")
+                } catch (e: Exception) {
+                    println("[UnifiedChatInput] 加载最近文件失败: ${e.message}")
+                    e.printStackTrace()
+                    searchResults = emptyList()
+                }
+            }
+        }
+        
+        println("[UnifiedChatInput] searchResults.isNotEmpty() = ${searchResults.isNotEmpty()}")
+        if (searchResults.isNotEmpty()) {
+            println("[UnifiedChatInput] 渲染 SimpleFilePopup，searchResults.size=${searchResults.size}")
+            SimpleFilePopup(
+                results = searchResults,
+                selectedIndex = selectedIndex,
+                searchQuery = "",
+                onItemSelected = { selectedFile ->
+                    // 将文件添加到上下文列表
+                    val contextReference = ContextReference.FileReference(
+                        path = selectedFile.relativePath,
+                        fullPath = selectedFile.absolutePath
+                    )
+                    onContextAdd(contextReference)
+                    
+                    // 关闭弹窗
+                    sessionObject?.showSimpleFileSelector = false
+                    focusRequester.requestFocus()
+                },
+                onDismiss = {
+                    sessionObject?.showSimpleFileSelector = false
+                    focusRequester.requestFocus()
+                },
+                onKeyEvent = { keyEvent ->
+                    if (keyEvent.type == KeyEventType.KeyDown) {
+                        when (keyEvent.key) {
+                            Key.DirectionUp -> {
+                                selectedIndex = (selectedIndex - 1).coerceAtLeast(0)
+                                true
+                            }
+                            Key.DirectionDown -> {
+                                selectedIndex = (selectedIndex + 1).coerceAtMost(searchResults.size - 1)
+                                true
+                            }
+                            Key.Enter -> {
+                                if (selectedIndex in searchResults.indices) {
+                                    val selectedFile = searchResults[selectedIndex]
+                                    val contextReference = ContextReference.FileReference(
+                                        path = selectedFile.relativePath,
+                                        fullPath = selectedFile.absolutePath
+                                    )
+                                    onContextAdd(contextReference)
+                                    sessionObject?.showSimpleFileSelector = false
+                                }
+                                true
+                            }
+                            Key.Escape -> {
+                                sessionObject?.showSimpleFileSelector = false
+                                true
+                            }
+                            else -> false
+                        }
+                    } else false
+                }
+            )
+        }
     }
 }
 

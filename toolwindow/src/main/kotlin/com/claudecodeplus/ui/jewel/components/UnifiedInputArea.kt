@@ -54,7 +54,7 @@ fun UnifiedInputArea(
     enabled: Boolean = true,
     selectedModel: AiModel = AiModel.OPUS,
     onModelChange: (AiModel) -> Unit = {},
-    selectedPermissionMode: PermissionMode = PermissionMode.BYPASS_PERMISSIONS,
+    selectedPermissionMode: PermissionMode = PermissionMode.BYPASS,
     onPermissionModeChange: (PermissionMode) -> Unit = {},
     skipPermissions: Boolean = true,
     onSkipPermissionsChange: (Boolean) -> Unit = {},

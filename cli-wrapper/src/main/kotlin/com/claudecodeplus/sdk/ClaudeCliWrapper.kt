@@ -15,305 +15,167 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 /**
- * Claude Code SDK 包装器 - 基于 Node.js SDK
+ * Claude CLI 包装器 - 直接调用 claude 命令
  * 
- * 这是与 Claude Code SDK 交互的核心类，通过 Node.js 桥接层使用官方 @anthropic-ai/claude-code SDK。
- * 相比直接调用 CLI，SDK 提供了更好的类型安全和错误处理。
+ * 这是与 Claude CLI 交互的核心类，直接调用 `claude` 命令而不是通过 Node.js SDK。
  * 
  * 主要功能：
- * - 通过 Node.js 脚本调用 Claude Code SDK
+ * - 直接调用系统安装的 claude 命令
  * - 管理会话（新建、继续、恢复）
  * - 支持中断响应（通过 terminate() 方法）
  * - 实时监听进程输出并发送事件
  * 
  * 工作原理：
- * 1. 启动 Node.js 脚本 claude-sdk-wrapper.js
- * 2. 通过 JSON 传递参数给 Node.js 脚本
- * 3. Node.js 脚本使用 @anthropic-ai/claude-code SDK 执行查询
- * 4. 监听 Node.js 进程的 stdout，解析返回的 JSON 消息
- * 5. UI 组件监听事件来更新消息显示
+ * 1. 在指定工作目录中执行 claude 命令
+ * 2. 通过命令行参数传递配置选项
+ * 3. 监听 claude 进程的 stdout，解析返回的消息
+ * 4. UI 组件监听事件来更新消息显示
  */
 class ClaudeCliWrapper {
     companion object {
         private val logger = LoggerFactory.getLogger(ClaudeCliWrapper::class.java)
         
         /**
-         * 获取 Node.js 脚本的完整路径
-         * 使用多层路径解析策略，支持各种部署场景
+         * 获取 claude 命令的路径
+         * 使用多层路径解析策略，查找系统中安装的 claude 命令
          * 
-         * @return Node.js 脚本的绝对路径
+         * @return claude 命令的路径
          */
-        private fun getNodeScriptPath(): String {
-            // 优先检查是否为打包模式
-            if (isPackagedMode()) {
-                return getScriptPathForPackagedMode()
+        private fun getClaudeCommandPath(): String {
+            // 首先尝试从 PATH 中查找
+            val pathCommand = findClaudeInPath()
+            if (pathCommand != null) {
+                logger.info("在 PATH 中找到 claude 命令: $pathCommand")
+                return pathCommand
             }
             
-            return getScriptPathForDevelopmentMode()
+            // 在常见位置查找
+            val commonPaths = listOf(
+                "/usr/local/bin/claude",
+                "/opt/homebrew/bin/claude", 
+                "/usr/bin/claude"
+            )
+            
+            for (path in commonPaths) {
+                val file = java.io.File(path)
+                if (file.exists() && file.canExecute()) {
+                    logger.info("在常见位置找到 claude 命令: $path")
+                    return path
+                }
+            }
+            
+            throw IllegalStateException(
+                "未找到 claude 命令。请确保已安装 Claude CLI 并在 PATH 中。\n" +
+                "安装方法：curl -fsSL https://claude.ai/install.sh | sh"
+            )
         }
         
         /**
-         * 检查是否为打包模式
+         * 在 PATH 中查找 claude 命令
          */
-        private fun isPackagedMode(): Boolean {
+        private fun findClaudeInPath(): String? {
+            val pathEnv = System.getenv("PATH") ?: return null
+            val pathSeparator = if (System.getProperty("os.name").lowercase().contains("windows")) ";" else ":"
+            
+            for (pathDir in pathEnv.split(pathSeparator)) {
+                if (pathDir.isBlank()) continue
+                
+                val commandName = if (System.getProperty("os.name").lowercase().contains("windows")) "claude.cmd" else "claude"
+                val claudeFile = java.io.File(pathDir, commandName)
+                
+                if (claudeFile.exists() && claudeFile.canExecute()) {
+                    return claudeFile.absolutePath
+                }
+            }
+            
+            return null
+        }
+        
+        /**
+         * 检查 claude 命令是否可用
+         */
+        private fun isClaudeAvailable(): Boolean {
             return try {
-                val codeSource = ClaudeCliWrapper::class.java.protectionDomain?.codeSource
-                val location = codeSource?.location?.toString()
-                // 如果是从 JAR 文件运行且无法找到开发环境的特征文件，则认为是打包模式
-                location?.endsWith(".jar") == true && !findDevelopmentModeScript().exists()
+                getClaudeCommandPath()
+                true
             } catch (e: Exception) {
                 false
             }
         }
         
         /**
-         * 打包模式下获取脚本路径
-         */
-        private fun getScriptPathForPackagedMode(): String {
-            logger.info("检测到打包模式，使用打包部署策略")
-            
-            try {
-                val (scriptFile, workingDir) = PackagedDeploymentStrategy.ensureNodejsRuntime()
-                logger.info("打包模式脚本路径: ${scriptFile.absolutePath}")
-                logger.info("打包模式工作目录: ${workingDir.absolutePath}")
-                return scriptFile.absolutePath
-            } catch (e: Exception) {
-                logger.error("打包模式脚本初始化失败", e)
-                throw IllegalStateException("打包模式下无法初始化 Node.js 运行时环境: ${e.message}", e)
-            }
-        }
-        
-        /**
-         * 开发模式下获取脚本路径
-         */
-        private fun getScriptPathForDevelopmentMode(): String {
-            logger.debug("使用开发模式脚本查找策略")
-            
-            // 策略 1: 基于类加载器位置推断项目根目录
-            val projectRoot = findProjectRoot()
-            if (projectRoot != null) {
-                val scriptInProject = java.io.File(projectRoot, "cli-wrapper/claude-sdk-wrapper.js")
-                if (scriptInProject.exists()) {
-                    logger.debug("通过项目根目录找到脚本: ${scriptInProject.absolutePath}")
-                    return scriptInProject.absolutePath
-                }
-            }
-            
-            // 策略 2: 基于当前工作目录向上查找
-            val scriptByTraversal = findScriptByDirectoryTraversal()
-            if (scriptByTraversal != null) {
-                logger.debug("通过目录遍历找到脚本: ${scriptByTraversal.absolutePath}")
-                return scriptByTraversal.absolutePath
-            }
-            
-            // 策略 3: 在常见位置查找
-            val commonLocations = listOf(
-                // 当前目录及其子目录
-                java.io.File(System.getProperty("user.dir"), "cli-wrapper/claude-sdk-wrapper.js"),
-                java.io.File(System.getProperty("user.dir"), "claude-sdk-wrapper.js"),
-                // JAR 同级目录
-                getScriptFromJarLocation()
-            ).filterNotNull()
-            
-            val existingScript = commonLocations.firstOrNull { it.exists() }
-            if (existingScript != null) {
-                logger.debug("在常见位置找到脚本: ${existingScript.absolutePath}")
-                return existingScript.absolutePath
-            }
-            
-            // 所有策略失败，抛出详细错误
-            val attemptedPaths = (listOfNotNull(projectRoot?.let { java.io.File(it, "cli-wrapper/claude-sdk-wrapper.js") }) +
-                                 listOfNotNull(scriptByTraversal) +
-                                 commonLocations).map { it.absolutePath }
-                                 
-            throw IllegalStateException(
-                "Node.js 脚本未找到。\n" +
-                "当前工作目录: ${System.getProperty("user.dir")}\n" +
-                "项目根目录: $projectRoot\n" +
-                "尝试位置: $attemptedPaths\n" +
-                "请确保 claude-sdk-wrapper.js 存在于 cli-wrapper 目录中并运行 'npm install'"
-            )
-        }
-        
-        /**
-         * 查找项目根目录
-         * 通过类加载器位置或特征文件推断
-         */
-        private fun findProjectRoot(): java.io.File? {
-            // 方法 1: 从类加载器位置推断
-            try {
-                val codeSource = ClaudeCliWrapper::class.java.protectionDomain?.codeSource
-                val location = codeSource?.location?.toURI()?.path
-                if (location != null) {
-                    val file = java.io.File(location)
-                    var dir = if (file.isFile) file.parentFile else file
-                    
-                    // 向上查找包含 cli-wrapper 的目录
-                    repeat(5) { // 最多向上查找5层
-                        if (dir != null && java.io.File(dir, "cli-wrapper").exists()) {
-                            return dir
-                        }
-                        dir = dir?.parentFile
-                    }
-                }
-            } catch (e: Exception) {
-                logger.debug("从类加载器位置推断项目根目录失败: ${e.message}")
-            }
-            
-            // 方法 2: 从当前目录向上查找特征文件
-            var currentDir: java.io.File? = java.io.File(System.getProperty("user.dir"))
-            repeat(10) { // 最多向上查找10层
-                if (currentDir == null) return@repeat
-                // 查找项目特征: cli-wrapper 目录 + build.gradle.kts/settings.gradle.kts
-                if (java.io.File(currentDir, "cli-wrapper").exists() && 
-                    (java.io.File(currentDir, "build.gradle.kts").exists() || 
-                     java.io.File(currentDir, "settings.gradle.kts").exists())) {
-                    return currentDir
-                }
-                currentDir = currentDir.parentFile
-            }
-            
-            return null
-        }
-        
-        /**
-         * 通过目录遍历查找脚本
-         */
-        private fun findScriptByDirectoryTraversal(): java.io.File? {
-            var currentDir: java.io.File? = java.io.File(System.getProperty("user.dir"))
-            
-            // 向上查找，直到找到 cli-wrapper/claude-sdk-wrapper.js
-            repeat(10) {
-                if (currentDir == null) return@repeat
-                val scriptFile = java.io.File(currentDir, "cli-wrapper/claude-sdk-wrapper.js")
-                if (scriptFile.exists()) {
-                    return scriptFile
-                }
-                currentDir = currentDir.parentFile
-            }
-            
-            return null
-        }
-        
-        /**
-         * 从资源文件中获取脚本路径
-         * 不再使用临时文件，因为会导致 node_modules 路径问题
-         */
-        private fun getScriptFromResources(): java.io.File? {
-            // 不使用临时文件，因为会导致 node_modules 路径问题
-            logger.debug("跳过从资源加载脚本，因为会导致 node_modules 路径问题")
-            return null
-        }
-        
-        /**
-         * 查找开发模式下的脚本文件
-         */
-        private fun findDevelopmentModeScript(): java.io.File {
-            val possiblePaths = listOf(
-                java.io.File(System.getProperty("user.dir"), "cli-wrapper/claude-sdk-wrapper.js"),
-                java.io.File(System.getProperty("user.dir"), "claude-sdk-wrapper.js")
-            )
-            
-            return possiblePaths.firstOrNull { it.exists() } 
-                ?: java.io.File("nonexistent") // 返回不存在的文件作为标识
-        }
-        
-        /**
-         * 从 jar 位置获取脚本路径
-         */
-        private fun getScriptFromJarLocation(): java.io.File? {
-            return try {
-                val codeSource = ClaudeCliWrapper::class.java.protectionDomain?.codeSource
-                val jarLocation = codeSource?.location?.toURI()?.path
-                if (jarLocation != null) {
-                    val jarDir = java.io.File(jarLocation).parentFile
-                    val scriptFile = java.io.File(jarDir, "nodejs/claude-sdk-wrapper.js")
-                    if (scriptFile.exists()) scriptFile else null
-                } else null
-            } catch (e: Exception) {
-                logger.debug("从 jar 位置加载脚本失败: ${e.message}")
-                null
-            }
-        }
-        
-        /**
-         * 构建 Node.js 命令和工作目录
-         * 确保脚本在正确的目录中运行，以便访问 node_modules
+         * 构建 claude 命令和工作目录
+         * 在用户指定的 cwd 目录中执行 claude 命令
          * 
-         * @param scriptPath Node.js 脚本路径
-         * @param jsonInput JSON 输入参数
+         * @param claudePath claude 命令路径
+         * @param prompt 用户提示
+         * @param options 查询选项
          * @return Pair(完整的命令列表, 工作目录)
          */
-        private fun buildNodeCommand(scriptPath: String, jsonInput: String): Pair<List<String>, java.io.File> {
-            val scriptFile = java.io.File(scriptPath)
-            
-            // 工作目录必须是 cli-wrapper 目录，这样才能访问 node_modules 和 package.json
-            val workingDir = if (isPackagedMode()) {
-                // 打包模式：使用打包部署策略提供的工作目录
-                PackagedDeploymentStrategy.getResourceDirectory().resolve("cli-wrapper")
-            } else if (scriptFile.parentFile?.name == "cli-wrapper") {
-                scriptFile.parentFile
-            } else {
-                // 如果脚本不在 cli-wrapper 目录，尝试查找附近的 cli-wrapper 目录
-                findCliWrapperDirectory(scriptFile) 
-                    ?: throw IllegalStateException("无法找到 cli-wrapper 目录，脚本位置: $scriptPath")
+        private fun buildClaudeCommand(claudePath: String, prompt: String, options: QueryOptions): Pair<List<String>, java.io.File> {
+            // 工作目录使用用户指定的 cwd
+            val workingDir = java.io.File(options.cwd)
+            if (!workingDir.exists()) {
+                throw IllegalStateException("指定的工作目录不存在: ${options.cwd}")
+            }
+            if (!workingDir.isDirectory) {
+                throw IllegalStateException("指定的路径不是目录: ${options.cwd}")
             }
             
-            // 检查必要的文件
-            val packageJson = java.io.File(workingDir, "package.json")
-            val nodeModules = java.io.File(workingDir, "node_modules")
+            logger.debug("Claude 工作目录: ${workingDir.absolutePath}")
             
-            if (!packageJson.exists()) {
-                throw IllegalStateException("package.json 未找到: ${packageJson.absolutePath}")
+            val command = mutableListOf<String>()
+            command.add(claudePath)
+            
+            // 添加固定参数
+            command.add("--verbose")
+            command.add("--print")
+            command.add("--output-format")
+            command.add("stream-json")
+            command.add("--input-format")
+            command.add("text")
+            
+            // 添加模型参数
+            options.model?.let { model ->
+                command.add("--model")
+                command.add(model)
             }
             
-            if (!nodeModules.exists()) {
-                throw IllegalStateException(
-                    "node_modules 未找到: ${nodeModules.absolutePath}\n" +
-                    "请在 ${workingDir.absolutePath} 目录下运行 'npm install'"
-                )
+            // 添加权限模式参数
+            command.add("--permission-mode")
+            command.add(options.permissionMode)
+            
+            // 添加跳过权限参数（基于复选框状态）
+            if (options.skipPermissions) {
+                command.add("--dangerously-skip-permissions")
             }
             
-            // 使用相对路径，让 Node.js 在正确目录中运行
-            val relativeScriptPath = scriptFile.relativeTo(workingDir).path
-            val command = listOf("node", relativeScriptPath, jsonInput)
+            // 添加会话相关参数
+            options.resume?.let { sessionId ->
+                if (sessionId.isNotBlank()) {
+                    command.add("--resume")
+                    command.add(sessionId)
+                }
+            }
+            
+            // 添加自定义系统提示
+            options.customSystemPrompt?.let { systemPrompt ->
+                command.add("--append-system-prompt")
+                command.add(systemPrompt)
+            }
+            
+            // 添加 MCP 配置
+            options.mcpServers?.let { servers ->
+                if (servers.isNotEmpty()) {
+                    command.add("--mcp-config")
+                    // 这里需要将 MCP 配置写入临时文件或使用其他方式传递
+                }
+            }
+            
+            // 添加用户提示作为最后一个参数
+            command.add(prompt)
             
             return Pair(command, workingDir)
-        }
-        
-        /**
-         * 查找 cli-wrapper 目录
-         */
-        private fun findCliWrapperDirectory(scriptFile: java.io.File): java.io.File? {
-            var dir = scriptFile.parentFile
-            
-            // 向上查找 cli-wrapper 目录
-            repeat(5) {
-                if (dir?.name == "cli-wrapper" && java.io.File(dir, "package.json").exists()) {
-                    return dir
-                }
-                val cliWrapperSubdir = java.io.File(dir, "cli-wrapper")
-                if (cliWrapperSubdir.exists() && java.io.File(cliWrapperSubdir, "package.json").exists()) {
-                    return cliWrapperSubdir
-                }
-                dir = dir?.parentFile
-            }
-            
-            return null
-        }
-        
-        /**
-         * 检查 Node.js 是否可用
-         * 
-         * @return 如果 Node.js 可用返回 true，否则返回 false
-         */
-        private fun isNodeAvailable(): Boolean {
-            return try {
-                val process = ProcessBuilder(listOf("node", "--version")).start()
-                process.waitFor() == 0
-            } catch (e: Exception) {
-                false
-            }
         }
     }
     
@@ -338,10 +200,10 @@ class ClaudeCliWrapper {
         DEFAULT("default"),
         
         /** 跳过权限检查 */
-        BYPASS_PERMISSIONS("bypassPermissions"),
+        BYPASS("bypass"),
         
         /** 自动接受编辑操作 */
-        ACCEPT_EDITS("acceptEdits"),
+        ACCEPT("accept"),
         
         /** 计划模式 */
         PLAN("plan")
@@ -526,7 +388,7 @@ class ClaudeCliWrapper {
     
     /**
      * 内部执行查询方法
-     * 实际执行 Node.js SDK 调用的核心逻辑
+     * 实际执行 Claude CLI 调用的核心逻辑
      */
     private suspend fun executeQuery(
         prompt: String, 
@@ -550,123 +412,37 @@ class ClaudeCliWrapper {
             SessionType.NEW -> "新会话"
             SessionType.RESUME -> "恢复会话 (${options.resume})"
         }
-        logger.info("🔵 [$requestId] 开始查询 (SDK - $sessionTypeStr): ${prompt.take(100)}...")
+        logger.info("🔵 [$requestId] 开始查询 (CLI - $sessionTypeStr): ${prompt.take(100)}...")
         
         return withContext(Dispatchers.IO) {
             
             // 检查协程状态
             coroutineContext.ensureActive()
             
-            // 检查 Node.js 是否可用
-            if (!isNodeAvailable()) {
-                throw IllegalStateException("Node.js 不可用。请确保已安装 Node.js 18+ 并在 PATH 中。")
+            // 检查 claude 命令是否可用
+            if (!isClaudeAvailable()) {
+                throw IllegalStateException(
+                    "Claude CLI 不可用。请确保已安装 Claude CLI。\n" +
+                    "安装方法：curl -fsSL https://claude.ai/install.sh | sh\n" +
+                    "或者访问 https://docs.anthropic.com/en/docs/claude-code 获取安装指南"
+                )
             }
             
-            // 获取 Node.js 脚本路径
-            val scriptPath = getNodeScriptPath()
-            val scriptFile = java.io.File(scriptPath)
-            if (!scriptFile.exists()) {
-                throw IllegalStateException("Node.js 脚本不存在: $scriptPath")
-            }
+            // 获取 claude 命令路径
+            val claudePath = getClaudeCommandPath()
             
-            // 构建 JSON 输入参数
-            val jsonInput = buildJsonObject {
-                put("prompt", prompt)
-                put("options", buildJsonObject {
-                    // 模型配置
-                    options.model?.let { put("model", it) }
-                    options.fallbackModel?.let { put("fallbackModel", it) }
-                    
-                    // 会话管理
-                    options.resume?.let { if (it.isNotBlank()) put("resume", it) }
-                    options.sessionId?.let { if (it.isNotBlank()) put("sessionId", it) }
-                    
-                    // 对话控制
-                    options.maxTurns?.let { put("maxTurns", it) }
-                    options.customSystemPrompt?.let { put("customSystemPrompt", it) }
-                    
-                    // 工作目录
-                    put("cwd", options.cwd)
-                    
-                    // 权限配置
-                    if (options.skipPermissions || options.permissionMode == "bypassPermissions") {
-                        put("skipPermissions", true)
-                    }
-                    put("permissionMode", options.permissionMode)
-                    
-                    // 工具权限
-                    options.allowedTools?.let { tools ->
-                        if (tools.isNotEmpty()) {
-                            put("allowedTools", buildJsonArray {
-                                tools.forEach { add(it) }
-                            })
-                        }
-                    }
-                    options.disallowedTools?.let { tools ->
-                        if (tools.isNotEmpty()) {
-                            put("disallowedTools", buildJsonArray {
-                                tools.forEach { add(it) }
-                            })
-                        }
-                    }
-                    
-                    // MCP 配置
-                    options.mcpServers?.let { servers ->
-                        put("mcpServers", buildJsonObject {
-                            servers.forEach { (name, config) ->
-                                put(name, Json.encodeToJsonElement(config))
-                            }
-                        })
-                    }
-                    
-                    // 高级选项
-                    options.debug?.let { if (it) put("debug", true) }
-                    options.verbose?.let { if (it) put("verbose", true) }
-                    options.showStats?.let { if (it) put("showStats", true) }
-                    options.continueRecent?.let { if (it) put("continueRecent", true) }
-                    options.settingsFile?.let { put("settingsFile", it) }
-                    options.autoConnectIde?.let { if (it) put("autoConnectIde", true) }
-                    
-                    options.additionalDirectories?.let { dirs ->
-                        if (dirs.isNotEmpty()) {
-                            put("additionalDirectories", buildJsonArray {
-                                dirs.forEach { add(it) }
-                            })
-                        }
-                    }
-                })
-            }.toString()
+            // 构建 claude 命令
+            val (claudeCommand, claudeWorkingDir) = buildClaudeCommand(claudePath, prompt, options)
+            logger.info("🔵 [$requestId] Claude 命令: ${claudeCommand.joinToString(" ")}")
+            logger.info("🔵 [$requestId] Claude 工作目录: ${claudeWorkingDir.absolutePath}")
             
-            logger.info("🔵 [$requestId] JSON 输入: ${jsonInput.take(500)}...")
+            val processBuilder = ProcessBuilder(claudeCommand)
+            processBuilder.directory(claudeWorkingDir)
             
-            // 构建 Node.js 命令
-            val (nodeCommand, nodeWorkingDir) = buildNodeCommand(scriptPath, jsonInput)
-            logger.info("🔵 [$requestId] Node.js 命令: ${nodeCommand.take(2).joinToString(" ")} [JSON_INPUT]")
-            logger.info("🔵 [$requestId] Node.js 工作目录: ${nodeWorkingDir.absolutePath}")
+            // Claude 命令在用户指定的 cwd 中执行，继承用户的环境变量
+            logger.info("🔵 [$requestId] Claude 将在工作目录中执行: ${options.cwd}")
             
-            val processBuilder = ProcessBuilder(nodeCommand)
-            processBuilder.directory(nodeWorkingDir)
-            
-            // Node.js 进程不需要设置用户指定的 cwd，因为 cwd 会通过 JSON 参数传递给 SDK
-            logger.info("🔵 [$requestId] 用户指定的 cwd 将通过 JSON 参数传递给 SDK: ${options.cwd}")
-            
-            // 设置环境变量
-            val env = processBuilder.environment()
-            env["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kotlin"
-            env["LANG"] = "en_US.UTF-8"
-            env["LC_ALL"] = "en_US.UTF-8"
-            env["PYTHONIOENCODING"] = "utf-8"
-            
-            // 确保 PATH 环境变量被继承（ProcessBuilder 默认会继承，但明确设置更安全）
-            val currentPath = System.getenv("PATH")
-            if (currentPath != null) {
-                env["PATH"] = currentPath
-            }
-            
-            // Windows 特定的编码设置
-            if (System.getProperty("os.name").lowercase().contains("windows")) {
-                env["CHCP"] = "65001"  // UTF-8 代码页
-            }
+            // 不设置额外的环境变量，让用户自己管理环境
             
             logger.info("🔵 [$requestId] 启动 Claude CLI 进程...")
             
@@ -686,79 +462,44 @@ class ClaudeCliWrapper {
             
             val process = processBuilder.start()
             currentProcess.set(process)
-            logger.info("🔵 [$requestId] 进程已启动，PID: ${process.pid()}")
+            logger.info("🔵 [$requestId] Claude CLI 进程已启动，PID: ${process.pid()}")
             
             // 启动输出监听协程
             val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
             
-            // 监听变量，用于跟踪 SDK 返回的会话ID和助手回复
+            // 监听变量，用于跟踪 Claude CLI 返回的会话ID和助手回复
             var detectedSessionId: String? = null
             val assistantResponseBuilder = StringBuilder()
             
-            // 启动 stdout 监听 - 处理 Node.js SDK 返回的 JSON 消息
+            // 启动 stdout 监听 - 处理 Claude CLI 返回的消息
             scope.launch {
                 try {
-                    logger.info("🔵 [$requestId] 开始监听 Node.js SDK stdout...")
+                    logger.info("🔵 [$requestId] 开始监听 Claude CLI stdout...")
                     process.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
                         var line: String?
                         while (reader.readLine().also { line = it } != null) {
                             line?.let { currentLine ->
                                 if (currentLine.isNotBlank()) {
                                     try {
-                                        // 解析 Node.js 脚本返回的 JSON 消息
-                                        val jsonMsg = Json.parseToJsonElement(currentLine.trim())
-                                        if (jsonMsg is JsonObject) {
-                                            val msgType = jsonMsg["type"]?.jsonPrimitive?.content
-                                            logger.info("🔵 [$requestId] SDK 消息类型: $msgType")
-                                            
-                                            when (msgType) {
-                                                "start" -> {
-                                                    val sessionId = jsonMsg["sessionId"]?.jsonPrimitive?.contentOrNull
-                                                    sessionId?.let { detectedSessionId = it }
-                                                    logger.info("🔵 [$requestId] SDK 开始查询，会话ID: $sessionId")
-                                                }
-                                                "message" -> {
-                                                    // 转发 Claude 消息给回调函数并收集内容
-                                                    val data = jsonMsg["data"]
-                                                    if (data != null) {
-                                                        val content = data.toString()
-                                                        processOutputLine(content)
-                                                        // 收集助手回复内容
-                                                        assistantResponseBuilder.append(content)
-                                                        // 调用流式回调（实时更新UI）
-                                                        onStreamingMessage?.invoke(assistantResponseBuilder.toString())
-                                                    }
-                                                }
-                                                "complete" -> {
-                                                    val sessionId = jsonMsg["sessionId"]?.jsonPrimitive?.contentOrNull
-                                                    val messageCount = jsonMsg["messageCount"]?.jsonPrimitive?.intOrNull
-                                                    val duration = jsonMsg["duration"]?.jsonPrimitive?.longOrNull
-                                                    sessionId?.let { detectedSessionId = it }
-                                                    logger.info("🔵 [$requestId] SDK 查询完成，会话ID: $sessionId, 消息数: $messageCount, 耗时: ${duration}ms")
-                                                }
-                                                "error" -> {
-                                                    val error = jsonMsg["error"]?.jsonPrimitive?.contentOrNull
-                                                    logger.warn("🔴 [$requestId] SDK 错误: $error")
-                                                }
-                                                "terminated" -> {
-                                                    val reason = jsonMsg["reason"]?.jsonPrimitive?.contentOrNull
-                                                    logger.info("🔴 [$requestId] SDK 进程被终止: $reason")
-                                                }
-                                            }
-                                        }
+                                        // 尝试解析 Claude CLI 返回的输出
+                                        logger.info("🔵 [$requestId] Claude CLI 输出: $currentLine")
+                                        processOutputLine(currentLine)
+                                        // 收集助手回复内容
+                                        assistantResponseBuilder.append(currentLine).append("\n")
+                                        // 调用流式回调（实时更新UI）
+                                        onStreamingMessage?.invoke(assistantResponseBuilder.toString())
                                     } catch (e: Exception) {
-                                        // 如果不是 JSON，就直接输出日志
-                                        logger.info("🔵 [$requestId] SDK 输出: $currentLine")
+                                        logger.info("🔵 [$requestId] Claude CLI 输出: $currentLine")
                                         processOutputLine(currentLine)
                                     }
                                 }
                             }
                         }
                     }
-                    logger.info("🔵 [$requestId] SDK stdout 流结束")
+                    logger.info("🔵 [$requestId] Claude CLI stdout 流结束")
                 } catch (e: Exception) {
                     if (e.message?.contains("Stream closed") != true) {
-                        logger.error("🔴 [$requestId] Error reading SDK stdout: ${e.message}", e)
+                        logger.error("🔴 [$requestId] Error reading Claude CLI stdout: ${e.message}", e)
                     }
                 }
             }
@@ -769,13 +510,13 @@ class ClaudeCliWrapper {
                     process.errorStream.bufferedReader().use { reader ->
                         reader.lineSequence().forEach { line ->
                             if (line.isNotBlank()) {
-                                logger.warn("🔴 [$requestId] SDK stderr: $line")
+                                logger.warn("🔴 [$requestId] Claude CLI stderr: $line")
                             }
                         }
                     }
                 } catch (e: Exception) {
                     if (e.message?.contains("Stream closed") != true) {
-                        logger.error("🔴 [$requestId] Error reading SDK stderr: ${e.message}", e)
+                        logger.error("🔴 [$requestId] Error reading Claude CLI stderr: ${e.message}", e)
                     }
                 }
             }
@@ -783,20 +524,20 @@ class ClaudeCliWrapper {
             try {
                 // 等待进程完成
                 val exitCode = process.waitFor()
-                logger.info("🔵 [$requestId] Node.js SDK 进程退出，退出码: $exitCode")
+                logger.info("🔵 [$requestId] Claude CLI 进程退出，退出码: $exitCode")
                 
-                // 优先使用从 SDK 返回中检测到的 sessionId，其次使用用户指定的
+                // 优先使用从 CLI 返回中检测到的 sessionId，其次使用用户指定的
                 val finalSessionId = detectedSessionId ?: options.sessionId ?: options.resume
                 
                 QueryResult(
                     sessionId = finalSessionId,
                     processId = process.pid(),
                     success = exitCode == 0,
-                    errorMessage = if (exitCode != 0) "Node.js SDK 退出码: $exitCode" else null,
+                    errorMessage = if (exitCode != 0) "Claude CLI 退出码: $exitCode" else null,
                     assistantMessage = if (exitCode == 0 && assistantResponseBuilder.isNotEmpty()) assistantResponseBuilder.toString() else null
                 )
             } catch (e: Exception) {
-                logger.error("🔴 [$requestId] Node.js SDK 执行失败", e)
+                logger.error("🔴 [$requestId] Claude CLI 执行失败", e)
                 val finalSessionId = detectedSessionId ?: options.sessionId ?: options.resume
                 QueryResult(
                     sessionId = finalSessionId,
@@ -873,37 +614,25 @@ class ClaudeCliWrapper {
     }
     
     /**
-     * 检查 Claude Code SDK 是否可用
-     * 验证 Node.js 和 SDK 脚本是否正常工作
+     * 检查 Claude CLI 是否可用
+     * 验证 claude 命令是否正常工作
      */
     suspend fun isClaudeCodeSdkAvailable(): Boolean = withContext(Dispatchers.IO) {
         try {
-            // 检查 Node.js
-            if (!isNodeAvailable()) {
-                logger.warn("Node.js 不可用")
+            // 检查 claude 命令
+            if (!isClaudeAvailable()) {
+                logger.warn("Claude CLI 不可用")
                 return@withContext false
             }
             
-            // 检查脚本文件
-            val scriptPath = getNodeScriptPath()
-            val scriptFile = java.io.File(scriptPath)
-            if (!scriptFile.exists()) {
-                logger.warn("Node.js SDK 脚本不存在: $scriptPath")
-                return@withContext false
-            }
+            // 获取 claude 命令路径
+            val claudePath = getClaudeCommandPath()
+            logger.info("找到 claude 命令: $claudePath")
             
-            // 测试运行简单查询
-            val testInput = buildJsonObject {
-                put("prompt", "test")
-                put("options", buildJsonObject {
-                    put("cwd", System.getProperty("user.dir"))
-                    put("maxTurns", 1)
-                })
-            }.toString()
-            
-            val (testCommand, testWorkingDir) = buildNodeCommand(scriptPath, testInput)
+            // 测试运行简单的 claude 命令（--help 或 --version）
+            val testCommand = listOf(claudePath, "--version")
             val processBuilder = ProcessBuilder(testCommand)
-            processBuilder.directory(testWorkingDir)
+            processBuilder.directory(java.io.File(System.getProperty("user.dir")))
             val process = processBuilder.start()
             
             // 等待短时间或直到进程结束
@@ -911,18 +640,18 @@ class ClaudeCliWrapper {
             
             if (!finished) {
                 process.destroyForcibly()
-                logger.warn("SDK 测试超时")
+                logger.warn("Claude CLI 测试超时")
                 return@withContext false
             }
             
             val exitCode = process.exitValue()
-            logger.info("SDK 测试结果: 退出码 $exitCode")
+            logger.info("Claude CLI 测试结果: 退出码 $exitCode")
             
-            // 只要能正常启动就认为可用（可能会因为缺少 API key 等原因失败）
-            true
+            // 只要能正常启动就认为可用（退出码0表示成功）
+            exitCode == 0
             
         } catch (e: Exception) {
-            logger.warn("Claude Code SDK 不可用: ${e.message}")
+            logger.warn("Claude CLI 不可用: ${e.message}")
             false
         }
     }

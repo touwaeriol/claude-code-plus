@@ -39,7 +39,7 @@ fun JewelConversationView(
     isGenerating: Boolean = false,
     selectedModel: AiModel = AiModel.OPUS,
     onModelChange: (AiModel) -> Unit = {},
-    selectedPermissionMode: PermissionMode = PermissionMode.BYPASS_PERMISSIONS,
+    selectedPermissionMode: PermissionMode = PermissionMode.BYPASS,
     onPermissionModeChange: (PermissionMode) -> Unit = {},
     // skipPermissions 默认为 true，不再可修改
     onClearChat: () -> Unit = {},
