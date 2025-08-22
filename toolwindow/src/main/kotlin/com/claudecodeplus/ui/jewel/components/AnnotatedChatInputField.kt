@@ -62,6 +62,7 @@ fun AnnotatedChatInputField(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+    var textLayoutResult by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
     
     // 计算是否需要滚动
     val lineHeight = 20.dp
@@ -128,6 +129,10 @@ fun AnnotatedChatInputField(
                                 onValueChange = onValueChange
                             )
                         },
+                        onTextLayout = { layoutResult ->
+                            // 保存TextLayoutResult用于精确字符定位
+                            textLayoutResult = layoutResult
+                        },
                         enabled = enabled,
                         textStyle = JewelTheme.defaultTextStyle.copy(
                             color = JewelTheme.globalColors.text.normal,
@@ -193,13 +198,14 @@ fun AnnotatedChatInputField(
             }
         }
         
-        // 简化内联文件引用处理器
+        // 简化内联文件引用处理器 - 传递TextLayoutResult
         if (fileIndexService != null) {
             AnnotatedInlineFileReferenceHandler(
                 value = value,
                 onValueChange = onValueChange,
                 fileIndexService = fileIndexService,
-                enabled = enabled
+                enabled = enabled,
+                textLayoutResult = textLayoutResult
             )
         }
     }

@@ -7,7 +7,9 @@
 
 package com.claudecodeplus.ui.jewel.components
 
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.TextRange
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.ui.services.IndexedFileInfo
@@ -21,13 +23,15 @@ import com.claudecodeplus.ui.services.IndexedFileInfo
  * @param onValueChange 值变化回调
  * @param fileIndexService 文件索引服务
  * @param enabled 是否启用
+ * @param textLayoutResult 文本布局结果，用于精确字符定位
  */
 @Composable
 fun AnnotatedInlineFileReferenceHandler(
     value: AnnotatedTextFieldValue,
     onValueChange: (AnnotatedTextFieldValue) -> Unit,
     fileIndexService: FileIndexService,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    textLayoutResult: androidx.compose.ui.text.TextLayoutResult? = null
 ) {
     // 检测@符号查询
     val atQuery = remember(value.text, value.selection) {
@@ -51,10 +55,22 @@ fun AnnotatedInlineFileReferenceHandler(
         }
         
         if (searchResults.isNotEmpty()) {
+            val scrollState = rememberLazyListState()
+            
+            // 使用改进的SimpleFilePopup，传递计算好的offset
             SimpleFilePopup(
                 results = searchResults,
                 selectedIndex = selectedIndex,
                 searchQuery = atQuery.query,
+                scrollState = scrollState,
+                popupOffset = remember(textLayoutResult, atQuery.position) {
+                    // 使用工具类计算 @ 符号的精确位置
+                    TextPositionUtils.safeCalculateCharacterPosition(
+                        textLayoutResult = textLayoutResult,
+                        characterPosition = atQuery.position,
+                        textLength = value.text.length
+                    )
+                },
                 onItemSelected = { file ->
                     insertFileAnnotation(
                         value = value,
