@@ -26,6 +26,9 @@ dependencies {
         // 排除 Compose Material，使用 Jewel
         exclude(group = "org.jetbrains.compose.material")
     }
+    implementation(project(":jetbrains-ide-mcp")) {
+        exclude(group = "org.jetbrains.kotlinx")
+    }
     
     // IntelliJ Platform dependencies
     intellijPlatform {

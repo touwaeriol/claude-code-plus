@@ -1,0 +1,535 @@
+package com.claudecodeplus.mcp.server
+
+import com.claudecodeplus.mcp.models.*
+import com.claudecodeplus.mcp.services.RealIdeAnalysisService
+import com.intellij.openapi.project.Project
+import io.ktor.server.application.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import io.ktor.server.request.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.plugins.contentnegotiation.*
+import kotlinx.coroutines.*
+import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.system.measureTimeMillis
+
+/**
+ * 标准化的 IntelliJ IDE MCP 服务器
+ * 使用真实的 IntelliJ Platform API 和标准化的参数格式
+ */
+class StandardizedIdeaMcpServer(
+    private val project: Project,
+    private val port: Int = 8001
+) {
+    private val logger = LoggerFactory.getLogger(StandardizedIdeaMcpServer::class.java)
+    private val isRunning = AtomicBoolean(false)
+    private var server: ApplicationEngine? = null
+    private var serverJob: Job? = null
+    
+    // 核心服务 - 使用真实的 IDE API
+    private val ideAnalysisService = RealIdeAnalysisService(project)
+    
+    /**
+     * 启动 MCP 服务器
+     */
+    suspend fun start() = withContext(Dispatchers.IO) {
+        if (isRunning.get()) {
+            logger.warn("MCP 服务器已在运行，端口: $port")
+            return@withContext
+        }
+        
+        try {
+            logger.info("正在启动标准化 IntelliJ IDE MCP 服务器，端口: $port")
+            
+            server = embeddedServer(Netty, port = port, host = "localhost") {
+                install(ContentNegotiation) {
+                    json(Json {
+                        prettyPrint = true
+                        isLenient = true
+                        ignoreUnknownKeys = true
+                        encodeDefaults = true
+                    })
+                }
+                
+                routing {
+                    // MCP 服务器元数据
+                    get("/") {
+                        call.respond(createServerInfo())
+                    }
+                    
+                    // 健康检查
+                    get("/health") {
+                        call.respond(createHealthInfo())
+                    }
+                    
+                    // 工具列表和定义
+                    get("/tools") {
+                        call.respond(createToolDefinitions())
+                    }
+                    
+                    // MCP 工具端点
+                    mcpToolRoutes()
+                }
+            }
+            
+            serverJob = GlobalScope.launch {
+                server?.start(wait = false)
+                isRunning.set(true)
+                logger.info("标准化 IntelliJ IDE MCP 服务器已启动: http://localhost:$port")
+            }
+            
+            delay(1000) // 等待服务器启动完成
+            
+        } catch (e: Exception) {
+            logger.error("启动 MCP 服务器失败", e)
+            throw e
+        }
+    }
+    
+    /**
+     * 停止 MCP 服务器
+     */
+    suspend fun stop() {
+        if (!isRunning.get()) {
+            logger.warn("MCP 服务器未在运行")
+            return
+        }
+        
+        try {
+            logger.info("正在停止标准化 IntelliJ IDE MCP 服务器...")
+            
+            serverJob?.cancelAndJoin()
+            server?.stop(1000, 2000)
+            
+            isRunning.set(false)
+            logger.info("标准化 IntelliJ IDE MCP 服务器已停止")
+            
+        } catch (e: Exception) {
+            logger.error("停止 MCP 服务器时出现错误", e)
+        }
+    }
+    
+    /**
+     * 检查服务器是否正在运行
+     */
+    fun isRunning(): Boolean = isRunning.get()
+    
+    /**
+     * 创建服务器信息
+     */
+    private fun createServerInfo() = mapOf(
+        "server" to "jetbrains-ide-mcp",
+        "version" to "1.0.0",
+        "description" to "IntelliJ Platform MCP Server for Advanced Code Analysis",
+        "capabilities" to mapOf(
+            "tools" to true,
+            "resources" to false,
+            "prompts" to false,
+            "logging" to true
+        ),
+        "project" to mapOf(
+            "name" to project.name,
+            "path" to (project.basePath ?: "unknown"),
+            "language" to "Multi-language"
+        ),
+        "status" to "running",
+        "api_version" to "2024.1",
+        "supported_languages" to listOf("Java", "Kotlin", "JavaScript", "TypeScript", "Python", "Go", "Rust"),
+        "timestamp" to System.currentTimeMillis()
+    )
+    
+    /**
+     * 创建健康检查信息
+     */
+    private fun createHealthInfo() = mapOf(
+        "status" to "healthy",
+        "timestamp" to System.currentTimeMillis(),
+        "project" to project.name,
+        "uptime" to "${System.currentTimeMillis()}ms",
+        "memory" to mapOf(
+            "used" to "${Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()}",
+            "total" to "${Runtime.getRuntime().totalMemory()}",
+            "max" to "${Runtime.getRuntime().maxMemory()}"
+        ),
+        "ide_info" to mapOf(
+            "version" to "2024.3",
+            "build" to "SNAPSHOT",
+            "jvm" to System.getProperty("java.version")
+        )
+    )
+    
+    /**
+     * 创建工具定义
+     */
+    private fun createToolDefinitions() = mapOf(
+        "tools" to listOf(
+            McpToolDefinition(
+                name = "check_file_errors",
+                description = "检查文件的语法错误、类型错误和代码检查问题，基于 IntelliJ Platform 的强大分析引擎",
+                parameters = McpToolParameters(
+                    properties = mapOf(
+                        "filePath" to ParameterProperty(
+                            type = "string",
+                            description = "要检查的文件的绝对路径"
+                        ),
+                        "checkLevel" to ParameterProperty(
+                            type = "string", 
+                            description = "检查级别：error(仅错误)、warning(错误+警告)、all(所有问题)",
+                            default = "all",
+                            enum = listOf("error", "warning", "all")
+                        ),
+                        "includeInspections" to ParameterProperty(
+                            type = "boolean",
+                            description = "是否包含 IntelliJ 代码检查结果",
+                            default = "true"
+                        ),
+                        "maxErrors" to ParameterProperty(
+                            type = "integer",
+                            description = "返回的最大错误数量",
+                            default = "100",
+                            minimum = 1,
+                            maximum = 1000
+                        )
+                    ),
+                    required = listOf("filePath")
+                ),
+                examples = listOf(
+                    McpToolExample(
+                        description = "检查 Kotlin 文件的所有问题",
+                        request = mapOf(
+                            "filePath" to "/project/src/main/kotlin/MyClass.kt",
+                            "checkLevel" to "all",
+                            "includeInspections" to true
+                        ),
+                        expectedResponse = "返回详细的错误、警告和检查结果"
+                    )
+                )
+            ),
+            
+            McpToolDefinition(
+                name = "analyze_code_quality",
+                description = "深入分析代码质量，包括复杂度、重复代码、可维护性等指标，提供改进建议",
+                parameters = McpToolParameters(
+                    properties = mapOf(
+                        "filePath" to ParameterProperty(
+                            type = "string",
+                            description = "要分析的文件的绝对路径"
+                        ),
+                        "metrics" to ParameterProperty(
+                            type = "array",
+                            description = "要分析的指标类型",
+                            default = "[\"complexity\", \"duplicates\", \"maintainability\"]"
+                        ),
+                        "includeDetails" to ParameterProperty(
+                            type = "boolean",
+                            description = "是否包含详细的分析结果",
+                            default = "true"
+                        )
+                    ),
+                    required = listOf("filePath")
+                )
+            ),
+            
+            McpToolDefinition(
+                name = "validate_syntax", 
+                description = "快速验证文件语法正确性，检测语法错误和解析问题",
+                parameters = McpToolParameters(
+                    properties = mapOf(
+                        "filePath" to ParameterProperty(
+                            type = "string",
+                            description = "要验证的文件的绝对路径"
+                        ),
+                        "strict" to ParameterProperty(
+                            type = "boolean",
+                            description = "严格模式，检查更多语法规则",
+                            default = "false"
+                        )
+                    ),
+                    required = listOf("filePath")
+                )
+            ),
+            
+            McpToolDefinition(
+                name = "get_inspection_results",
+                description = "获取特定代码检查工具的结果，可指定检查类型和严重级别",
+                parameters = McpToolParameters(
+                    properties = mapOf(
+                        "filePath" to ParameterProperty(
+                            type = "string",
+                            description = "要检查的文件的绝对路径"
+                        ),
+                        "inspectionNames" to ParameterProperty(
+                            type = "array",
+                            description = "指定的检查工具名称列表，空列表表示所有检查",
+                            default = "[]"
+                        ),
+                        "severity" to ParameterProperty(
+                            type = "string",
+                            description = "问题严重级别过滤",
+                            default = "all",
+                            enum = listOf("error", "warning", "info", "all")
+                        )
+                    ),
+                    required = listOf("filePath")
+                )
+            )
+        ),
+        "count" to 4,
+        "categories" to mapOf(
+            "static_analysis" to listOf("check_file_errors", "get_inspection_results"),
+            "code_quality" to listOf("analyze_code_quality"),
+            "syntax_validation" to listOf("validate_syntax")
+        )
+    )
+    
+    /**
+     * 定义 MCP 工具路由
+     */
+    private fun Route.mcpToolRoutes() {
+        route("/tools") {
+            // 文件错误检查工具
+            post("/check_file_errors") {
+                handleMcpTool("check_file_errors") {
+                    val request = call.receive<CheckFileErrorsRequest>()
+                    executeCheckFileErrors(request)
+                }
+            }
+            
+            // 代码质量分析工具
+            post("/analyze_code_quality") {
+                handleMcpTool("analyze_code_quality") {
+                    val request = call.receive<AnalyzeCodeQualityRequest>()
+                    executeAnalyzeCodeQuality(request)
+                }
+            }
+            
+            // 语法验证工具
+            post("/validate_syntax") {
+                handleMcpTool("validate_syntax") {
+                    val request = call.receive<ValidateSyntaxRequest>()
+                    executeValidateSyntax(request)
+                }
+            }
+            
+            // 获取检查结果工具
+            post("/get_inspection_results") {
+                handleMcpTool("get_inspection_results") {
+                    val request = call.receive<GetInspectionResultsRequest>()
+                    executeGetInspectionResults(request)
+                }
+            }
+        }
+    }
+    
+    /**
+     * 通用 MCP 工具处理器
+     */
+    private suspend inline fun <T> Route.handleMcpTool(
+        toolName: String,
+        crossinline execution: suspend () -> T
+    ) {
+        try {
+            val executionTime = measureTimeMillis {
+                val result = execution()
+                val response = McpToolResponse(
+                    tool = toolName,
+                    success = true,
+                    result = result,
+                    metadata = McpMetadata(
+                        timestamp = System.currentTimeMillis(),
+                        executionTime = 0, // 将在外部测量
+                        version = "1.0.0"
+                    )
+                )
+                call.respond(response.copy(
+                    metadata = response.metadata.copy(executionTime = executionTime)
+                ))
+            }
+            
+            logger.info("工具 '$toolName' 执行完成，耗时: ${executionTime}ms")
+            
+        } catch (e: Exception) {
+            logger.error("工具 '$toolName' 执行失败", e)
+            
+            val errorResponse = McpToolResponse<Any>(
+                tool = toolName,
+                success = false,
+                error = McpError(
+                    code = e.javaClass.simpleName,
+                    message = e.message ?: "Unknown error",
+                    details = mapOf(
+                        "stack_trace" to (e.stackTraceToString().take(500) + "...")
+                    )
+                ),
+                metadata = McpMetadata()
+            )
+            
+            call.respond(errorResponse)
+        }
+    }
+    
+    /**
+     * 执行文件错误检查
+     */
+    private suspend fun executeCheckFileErrors(request: CheckFileErrorsRequest): FileErrorCheckResult {
+        logger.info("执行文件错误检查: ${request.filePath}")
+        
+        // 调用真实的 IDE API
+        val analysisResult = ideAnalysisService.checkFileErrors(
+            filePath = request.filePath,
+            checkLevel = when (request.checkLevel) {
+                "error" -> com.claudecodeplus.mcp.services.AnalysisLevel.ERROR
+                "warning" -> com.claudecodeplus.mcp.services.AnalysisLevel.WARNING
+                else -> com.claudecodeplus.mcp.services.AnalysisLevel.ALL
+            }
+        )
+        
+        // 转换为标准化格式
+        val issues = (analysisResult.errors + analysisResult.warnings).map { issue ->
+            CodeIssue(
+                severity = issue.severity.name,
+                message = issue.message,
+                category = issue.category,
+                line = issue.line,
+                column = issue.column,
+                source = "IDE"
+            )
+        }
+        
+        return FileErrorCheckResult(
+            filePath = request.filePath,
+            fileExists = analysisResult.success,
+            summary = ErrorSummary(
+                totalIssues = issues.size,
+                errorCount = analysisResult.errors.size,
+                warningCount = analysisResult.warnings.size,
+                infoCount = 0,
+                categories = issues.groupingBy { it.category }.eachCount()
+            ),
+            issues = issues.take(request.maxErrors)
+        )
+    }
+    
+    /**
+     * 执行代码质量分析
+     */
+    private suspend fun executeAnalyzeCodeQuality(request: AnalyzeCodeQualityRequest): CodeQualityResult {
+        logger.info("执行代码质量分析: ${request.filePath}")
+        
+        // 调用真实的 IDE API
+        val qualityResult = ideAnalysisService.analyzeCodeQuality(request.filePath, request.metrics)
+        
+        // 转换为标准化格式
+        val complexityMetrics = if (request.metrics.contains("complexity")) {
+            ComplexityMetrics(
+                cyclomaticComplexity = qualityResult.metrics["cyclomatic_complexity"] as? Int ?: 0,
+                complexityScore = qualityResult.metrics["complexity_score"] as? Double ?: 0.0,
+                methodCount = qualityResult.metrics["method_count"] as? Int ?: 0,
+                classCount = qualityResult.metrics["class_count"] as? Int ?: 0,
+                averageMethodLength = qualityResult.metrics["avg_method_lines"] as? Double ?: 0.0,
+                maxMethodComplexity = 0
+            )
+        } else null
+        
+        val overallScore = complexityMetrics?.let { 
+            10.0 - (it.complexityScore.coerceAtMost(10.0))
+        } ?: 7.0
+        
+        return CodeQualityResult(
+            filePath = request.filePath,
+            summary = QualitySummary(
+                overallScore = overallScore,
+                grade = when {
+                    overallScore >= 9.0 -> "A+"
+                    overallScore >= 8.0 -> "A"
+                    overallScore >= 7.0 -> "B+"
+                    overallScore >= 6.0 -> "B"
+                    overallScore >= 5.0 -> "C+"
+                    overallScore >= 4.0 -> "C"
+                    else -> "D"
+                },
+                status = when {
+                    overallScore >= 8.0 -> "excellent"
+                    overallScore >= 6.0 -> "good"
+                    overallScore >= 4.0 -> "fair"
+                    else -> "poor"
+                },
+                riskLevel = when {
+                    overallScore >= 7.0 -> "low"
+                    overallScore >= 5.0 -> "medium"
+                    overallScore >= 3.0 -> "high"
+                    else -> "critical"
+                }
+            ),
+            metrics = QualityMetrics(
+                fileMetrics = FileMetrics(
+                    totalLines = qualityResult.metrics["lines_of_code"] as? Int ?: 0,
+                    codeLines = qualityResult.metrics["lines_of_code"] as? Int ?: 0,
+                    commentLines = 0,
+                    blankLines = 0,
+                    fileSize = qualityResult.metrics["file_size_bytes"] as? Long ?: 0,
+                    characterCount = qualityResult.metrics["characters"] as? Int ?: 0
+                ),
+                complexityMetrics = complexityMetrics
+            )
+        )
+    }
+    
+    /**
+     * 执行语法验证
+     */
+    private suspend fun executeValidateSyntax(request: ValidateSyntaxRequest): SyntaxValidationResult {
+        logger.info("执行语法验证: ${request.filePath}")
+        
+        // 调用真实的 IDE API
+        val syntaxResult = ideAnalysisService.validateSyntax(request.filePath)
+        
+        return SyntaxValidationResult(
+            filePath = request.filePath,
+            isValid = syntaxResult.isValid,
+            summary = SyntaxSummary(
+                totalErrors = syntaxResult.syntaxErrors.size,
+                errorTypes = syntaxResult.syntaxErrors.map { it.errorCode }.distinct(),
+                severity = when {
+                    syntaxResult.syntaxErrors.isEmpty() -> "none"
+                    syntaxResult.syntaxErrors.size < 3 -> "minor"
+                    syntaxResult.syntaxErrors.size < 10 -> "major"
+                    else -> "critical"
+                },
+                parseSuccess = syntaxResult.isValid
+            ),
+            errors = syntaxResult.syntaxErrors.map { error ->
+                SyntaxError(
+                    message = error.message,
+                    line = error.line,
+                    column = error.column,
+                    errorCode = error.errorCode,
+                    errorType = "SYNTAX"
+                )
+            }
+        )
+    }
+    
+    /**
+     * 执行获取检查结果
+     */
+    private suspend fun executeGetInspectionResults(request: GetInspectionResultsRequest): List<InspectionResult> {
+        logger.info("获取检查结果: ${request.filePath}")
+        
+        // 这里应该调用更详细的检查结果获取逻辑
+        // 当前简化实现
+        return listOf(
+            InspectionResult(
+                inspectionName = "UnusedDeclaration",
+                displayName = "未使用的声明",
+                enabled = true,
+                severity = "WARNING",
+                problemCount = 0
+            )
+        )
+    }
+}

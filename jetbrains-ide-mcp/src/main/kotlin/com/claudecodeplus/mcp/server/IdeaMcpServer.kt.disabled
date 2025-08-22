@@ -1,0 +1,204 @@
+package com.claudecodeplus.mcp.server
+
+import com.claudecodeplus.mcp.tools.FileAnalysisTool
+import com.claudecodeplus.mcp.tools.CodeQualityTool
+import com.claudecodeplus.mcp.tools.SyntaxValidationTool
+import com.claudecodeplus.mcp.services.IdeAnalysisService
+import com.intellij.openapi.project.Project
+import io.ktor.server.application.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.plugins.contentnegotiation.*
+import kotlinx.coroutines.*
+import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * IntelliJ IDE MCP 服务器
+ * 基于 MCP Java SDK 实现，提供基于 IDE 平台的代码分析功能
+ */
+class IdeaMcpServer(
+    private val project: Project,
+    private val port: Int = 8001
+) {
+    private val logger = LoggerFactory.getLogger(IdeaMcpServer::class.java)
+    private val isRunning = AtomicBoolean(false)
+    private var server: ApplicationEngine? = null
+    private var serverJob: Job? = null
+    
+    // 核心服务
+    private val ideAnalysisService = IdeAnalysisService(project)
+    
+    // MCP 工具实例
+    private val fileAnalysisTool = FileAnalysisTool(ideAnalysisService)
+    private val codeQualityTool = CodeQualityTool(ideAnalysisService) 
+    private val syntaxValidationTool = SyntaxValidationTool(ideAnalysisService)
+    
+    /**
+     * 启动 MCP 服务器
+     */
+    suspend fun start() = withContext(Dispatchers.IO) {
+        if (isRunning.get()) {
+            logger.warn("MCP 服务器已在运行，端口: $port")
+            return@withContext
+        }
+        
+        try {
+            logger.info("正在启动 IntelliJ IDE MCP 服务器，端口: $port")
+            
+            server = embeddedServer(Netty, port = port, host = "localhost") {
+                install(ContentNegotiation) {
+                    json(Json {
+                        prettyPrint = true
+                        isLenient = true
+                        ignoreUnknownKeys = true
+                    })
+                }
+                
+                routing {
+                    // MCP 服务器信息端点
+                    get("/") {
+                        call.respond(mapOf(
+                            "server" to "jetbrains-ide-mcp",
+                            "version" to "1.0.0",
+                            "description" to "IntelliJ Platform MCP Server for Code Analysis",
+                            "capabilities" to mapOf(
+                                "tools" to true,
+                                "resources" to false,
+                                "prompts" to false,
+                                "logging" to true
+                            ),
+                            "project" to project.name,
+                            "status" to "running"
+                        ))
+                    }
+                    
+                    // 健康检查端点
+                    get("/health") {
+                        call.respond(mapOf(
+                            "status" to "healthy",
+                            "timestamp" to System.currentTimeMillis(),
+                            "project" to project.name
+                        ))
+                    }
+                    
+                    // MCP 工具端点
+                    mcpToolsRoutes()
+                }
+            }
+            
+            serverJob = GlobalScope.launch {
+                server?.start(wait = false)
+                isRunning.set(true)
+                logger.info("IntelliJ IDE MCP 服务器已启动: http://localhost:$port")
+            }
+            
+            // 等待服务器启动完成
+            delay(1000)
+            
+        } catch (e: Exception) {
+            logger.error("启动 MCP 服务器失败", e)
+            throw e
+        }
+    }
+    
+    /**
+     * 停止 MCP 服务器
+     */
+    suspend fun stop() {
+        if (!isRunning.get()) {
+            logger.warn("MCP 服务器未在运行")
+            return
+        }
+        
+        try {
+            logger.info("正在停止 IntelliJ IDE MCP 服务器...")
+            
+            serverJob?.cancelAndJoin()
+            server?.stop(1000, 2000)
+            
+            isRunning.set(false)
+            logger.info("IntelliJ IDE MCP 服务器已停止")
+            
+        } catch (e: Exception) {
+            logger.error("停止 MCP 服务器时出现错误", e)
+        }
+    }
+    
+    /**
+     * 检查服务器是否正在运行
+     */
+    fun isRunning(): Boolean = isRunning.get()
+    
+    /**
+     * 定义 MCP 工具路由
+     */
+    private fun Route.mcpToolsRoutes() {
+        route("/tools") {
+            // 获取所有可用工具
+            get("/") {
+                call.respond(mapOf(
+                    "tools" to listOf(
+                        mapOf(
+                            "name" to "check_file_errors",
+                            "description" to "检查文件的语法错误、类型错误和编译错误",
+                            "parameters" to mapOf(
+                                "filePath" to "string (required) - 要检查的文件路径",
+                                "checkLevel" to "string (optional) - 检查级别: error, warning, all"
+                            )
+                        ),
+                        mapOf(
+                            "name" to "analyze_code_quality",
+                            "description" to "分析代码质量，包括复杂度、重复代码等",
+                            "parameters" to mapOf(
+                                "filePath" to "string (required) - 要分析的文件路径",
+                                "metrics" to "array (optional) - 要分析的指标列表"
+                            )
+                        ),
+                        mapOf(
+                            "name" to "validate_syntax",
+                            "description" to "快速验证文件语法正确性",
+                            "parameters" to mapOf(
+                                "filePath" to "string (required) - 要验证的文件路径"
+                            )
+                        )
+                    )
+                ))
+            }
+            
+            // 文件错误检查工具
+            post("/check_file_errors") {
+                // TODO: 实现具体的工具调用逻辑
+                call.respond(mapOf(
+                    "tool" to "check_file_errors",
+                    "status" to "not_implemented",
+                    "message" to "工具实现中..."
+                ))
+            }
+            
+            // 代码质量分析工具
+            post("/analyze_code_quality") {
+                // TODO: 实现具体的工具调用逻辑
+                call.respond(mapOf(
+                    "tool" to "analyze_code_quality", 
+                    "status" to "not_implemented",
+                    "message" to "工具实现中..."
+                ))
+            }
+            
+            // 语法验证工具
+            post("/validate_syntax") {
+                // TODO: 实现具体的工具调用逻辑
+                call.respond(mapOf(
+                    "tool" to "validate_syntax",
+                    "status" to "not_implemented", 
+                    "message" to "工具实现中..."
+                ))
+            }
+        }
+    }
+}

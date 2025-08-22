@@ -1,0 +1,77 @@
+package com.claudecodeplus.mcp.tools
+
+import com.claudecodeplus.mcp.services.IdeAnalysisService
+import com.claudecodeplus.mcp.services.AnalysisLevel
+import kotlinx.coroutines.runBlocking
+import org.slf4j.LoggerFactory
+
+/**
+ * 文件分析工具
+ * 实现文件错误检查功能
+ */
+class FileAnalysisTool(private val ideAnalysisService: IdeAnalysisService) {
+    private val logger = LoggerFactory.getLogger(FileAnalysisTool::class.java)
+    
+    /**
+     * 检查文件错误
+     * MCP 工具: check_file_errors
+     */
+    fun checkFileErrors(
+        filePath: String,
+        checkLevel: String = "all"
+    ): Map<String, Any> {
+        logger.info("执行文件错误检查工具: filePath=$filePath, checkLevel=$checkLevel")
+        
+        return try {
+            val level = when (checkLevel.lowercase()) {
+                "error" -> AnalysisLevel.ERROR
+                "warning" -> AnalysisLevel.WARNING
+                "all" -> AnalysisLevel.ALL
+                else -> AnalysisLevel.ALL
+            }
+            
+            val result = runBlocking {
+                ideAnalysisService.checkFileErrors(filePath, level)
+            }
+            
+            mapOf(
+                "tool" to "check_file_errors",
+                "success" to result.success,
+                "result" to mapOf(
+                    "filePath" to result.filePath,
+                    "message" to result.message,
+                    "errorCount" to result.errors.size,
+                    "warningCount" to result.warnings.size,
+                    "errors" to result.errors.map { error ->
+                        mapOf(
+                            "severity" to error.severity.name,
+                            "message" to error.message,
+                            "line" to error.line,
+                            "column" to error.column,
+                            "category" to error.category
+                        )
+                    },
+                    "warnings" to result.warnings.map { warning ->
+                        mapOf(
+                            "severity" to warning.severity.name,
+                            "message" to warning.message,
+                            "line" to warning.line,
+                            "column" to warning.column,
+                            "category" to warning.category
+                        )
+                    }
+                )
+            )
+        } catch (e: Exception) {
+            logger.error("执行文件错误检查工具时出现异常", e)
+            mapOf(
+                "tool" to "check_file_errors",
+                "success" to false,
+                "error" to mapOf(
+                    "message" to "工具执行失败: ${e.message}",
+                    "type" to e.javaClass.simpleName
+                )
+            )
+        }
+    }
+}

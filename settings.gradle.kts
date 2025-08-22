@@ -23,5 +23,6 @@ include(
     "cli-wrapper",
     "toolwindow", 
     "jetbrains-plugin",
+    "jetbrains-ide-mcp",
     "desktop"
 )

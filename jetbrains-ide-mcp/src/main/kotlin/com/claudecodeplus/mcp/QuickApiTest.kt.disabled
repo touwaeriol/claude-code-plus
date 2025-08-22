@@ -1,0 +1,150 @@
+package com.claudecodeplus.mcp
+
+import kotlinx.coroutines.*
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.system.measureTimeMillis
+
+/**
+ * 快速 API 测试工具
+ * 在 HTTP 服务器运行时测试各个端点
+ */
+object QuickApiTest {
+    
+    @JvmStatic
+    fun main(args: Array<String>) {
+        println("🔧 HTTP MCP API 快速测试工具")
+        println("=" * 50)
+        
+        runBlocking {
+            val baseUrl = "http://localhost:8998"
+            
+            // 先检查服务器是否运行
+            println("🔍 检查服务器状态...")
+            if (!isServerRunning(baseUrl)) {
+                println("❌ 服务器未运行！")
+                println("💡 请先运行: ./gradlew jetbrains-ide-mcp:run")
+                return@runBlocking
+            }
+            
+            println("✅ 服务器正在运行")
+            println()
+            
+            // 测试各个端点
+            testApiEndpoint("$baseUrl/", "服务器信息")
+            testApiEndpoint("$baseUrl/health", "健康检查")  
+            testApiEndpoint("$baseUrl/tools/", "工具列表")
+            testApiEndpoint("$baseUrl/stats", "统计信息")
+            
+            // 测试 POST 端点
+            testPostEndpoint("$baseUrl/tools/check_file_errors", "文件错误检查工具")
+        }
+        
+        println("\n" + "=" * 50)
+        println("✅ API 测试完成！")
+    }
+    
+    private suspend fun isServerRunning(baseUrl: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("$baseUrl/health")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 2000
+            connection.readTimeout = 2000
+            connection.responseCode == 200
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    private suspend fun testApiEndpoint(url: String, description: String) = withContext(Dispatchers.IO) {
+        println("📡 测试: $description")
+        println("   URL: $url")
+        
+        val responseTime = measureTimeMillis {
+            try {
+                val connection = URL(url).openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.setRequestProperty("Accept", "application/json")
+                
+                val responseCode = connection.responseCode
+                val responseBody = if (responseCode == 200) {
+                    BufferedReader(InputStreamReader(connection.inputStream)).use { reader ->
+                        reader.readText()
+                    }
+                } else {
+                    "HTTP $responseCode"
+                }
+                
+                println("   状态: ${if (responseCode == 200) "✅ 成功" else "❌ 失败 ($responseCode)"}")
+                
+                // 显示响应的关键信息（截取前200字符）
+                if (responseCode == 200) {
+                    val preview = if (responseBody.length > 200) {
+                        "${responseBody.take(200)}..."
+                    } else {
+                        responseBody
+                    }
+                    println("   响应: ${preview.replace("\n", " ")}")
+                }
+                
+            } catch (e: Exception) {
+                println("   状态: ❌ 异常 - ${e.message}")
+            }
+        }
+        
+        println("   耗时: ${responseTime}ms")
+        println()
+    }
+    
+    private suspend fun testPostEndpoint(url: String, description: String) = withContext(Dispatchers.IO) {
+        println("📤 测试: $description (POST)")
+        println("   URL: $url")
+        
+        val responseTime = measureTimeMillis {
+            try {
+                val connection = URL(url).openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("Accept", "application/json")
+                connection.doOutput = true
+                
+                // 发送简单的测试数据
+                val testData = """{"filePath": "/test/sample.kt", "checkLevel": "all"}"""
+                connection.outputStream.use { os ->
+                    os.write(testData.toByteArray())
+                }
+                
+                val responseCode = connection.responseCode
+                val responseBody = if (responseCode == 200) {
+                    BufferedReader(InputStreamReader(connection.inputStream)).use { reader ->
+                        reader.readText()
+                    }
+                } else {
+                    "HTTP $responseCode"
+                }
+                
+                println("   状态: ${if (responseCode == 200) "✅ 成功" else "❌ 失败 ($responseCode)"}")
+                
+                if (responseCode == 200) {
+                    val preview = if (responseBody.length > 200) {
+                        "${responseBody.take(200)}..."
+                    } else {
+                        responseBody
+                    }
+                    println("   响应: ${preview.replace("\n", " ")}")
+                }
+                
+            } catch (e: Exception) {
+                println("   状态: ❌ 异常 - ${e.message}")
+            }
+        }
+        
+        println("   耗时: ${responseTime}ms")
+        println()
+    }
+    
+    private operator fun String.times(n: Int) = this.repeat(n)
+}

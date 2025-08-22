@@ -1,0 +1,328 @@
+package com.claudecodeplus.mcp.server
+
+import com.claudecodeplus.mcp.models.*
+import com.claudecodeplus.mcp.services.AnalysisService
+import com.claudecodeplus.mcp.services.AnalysisServiceFactory
+import com.intellij.openapi.project.Project
+import io.ktor.server.application.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import io.ktor.server.request.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.plugins.contentnegotiation.*
+import kotlinx.coroutines.*
+import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.system.measureTimeMillis
+
+/**
+ * 可配置的 IntelliJ IDE MCP 服务器
+ * 支持选择不同的分析实现方式
+ */
+class ConfigurableMcpServer(
+    private val project: Project,
+    private val port: Int = 8001,
+    private val implementationType: AnalysisServiceFactory.ImplementationType = AnalysisServiceFactory.ImplementationType.INTELLIJ_API
+) {
+    private val logger = LoggerFactory.getLogger(ConfigurableMcpServer::class.java)
+    private val isRunning = AtomicBoolean(false)
+    private var server: ApplicationEngine? = null
+    private var serverJob: Job? = null
+    
+    // 可配置的分析服务
+    private val analysisService: AnalysisService = AnalysisServiceFactory.createAnalysisService(project, implementationType)
+    
+    /**
+     * 启动 MCP 服务器
+     */
+    suspend fun start() = withContext(Dispatchers.IO) {
+        if (isRunning.get()) {
+            logger.warn("MCP 服务器已在运行，端口: $port")
+            return@withContext
+        }
+        
+        try {
+            logger.info("正在启动可配置 IntelliJ IDE MCP 服务器，端口: $port")
+            logger.info("使用实现类型: ${implementationType}")
+            
+            server = embeddedServer(Netty, port = port, host = "localhost") {
+                install(ContentNegotiation) {
+                    json(Json {
+                        prettyPrint = true
+                        isLenient = true
+                        ignoreUnknownKeys = true
+                        encodeDefaults = true
+                    })
+                }
+                
+                routing {
+                    // 服务器信息
+                    get("/") {
+                        call.respond(createServerInfo())
+                    }
+                    
+                    // 健康检查
+                    get("/health") {
+                        call.respond(createHealthInfo())
+                    }
+                    
+                    // 工具定义
+                    get("/tools") {
+                        call.respond(createToolDefinitions())
+                    }
+                    
+                    // 服务能力信息
+                    get("/capabilities") {
+                        call.respond(createCapabilitiesInfo())
+                    }
+                    
+                    // MCP 工具路由
+                    route("/tools") {
+                        // 文件错误检查
+                        post("/check_file_errors") {
+                            handleToolCall("check_file_errors") {
+                                val request = call.receive<CheckFileErrorsRequest>()
+                                analysisService.checkFileErrors(request.filePath, request.checkLevel).get()
+                            }
+                        }
+                        
+                        // 代码质量分析
+                        post("/analyze_code_quality") {
+                            handleToolCall("analyze_code_quality") {
+                                val request = call.receive<AnalyzeCodeQualityRequest>()
+                                analysisService.analyzeCodeQuality(request.filePath, request.metrics).get()
+                            }
+                        }
+                        
+                        // 语法验证
+                        post("/validate_syntax") {
+                            handleToolCall("validate_syntax") {
+                                val request = call.receive<ValidateSyntaxRequest>()
+                                analysisService.validateSyntax(request.filePath).get()
+                            }
+                        }
+                    }
+                }
+            }
+            
+            serverJob = GlobalScope.launch {
+                server?.start(wait = false)
+                isRunning.set(true)
+                logger.info("可配置 IntelliJ IDE MCP 服务器已启动: http://localhost:$port")
+                logger.info("服务器能力: ${analysisService.getCapabilities()}")
+            }
+            
+            delay(1000) // 等待服务器启动完成
+            
+        } catch (e: Exception) {
+            logger.error("启动 MCP 服务器失败", e)
+            throw e
+        }
+    }
+    
+    /**
+     * 停止服务器
+     */
+    suspend fun stop() {
+        if (!isRunning.get()) {
+            return
+        }
+        
+        try {
+            logger.info("正在停止可配置 IntelliJ IDE MCP 服务器...")
+            
+            serverJob?.cancelAndJoin()
+            server?.stop(1000, 2000)
+            
+            isRunning.set(false)
+            logger.info("可配置 IntelliJ IDE MCP 服务器已停止")
+            
+        } catch (e: Exception) {
+            logger.error("停止 MCP 服务器时出现错误", e)
+        }
+    }
+    
+    /**
+     * 检查服务器是否正在运行
+     */
+    fun isRunning(): Boolean = isRunning.get()
+    
+    /**
+     * 获取当前使用的分析服务类型
+     */
+    fun getImplementationType(): AnalysisServiceFactory.ImplementationType = implementationType
+    
+    /**
+     * 获取分析服务能力
+     */
+    fun getServiceCapabilities() = analysisService.getCapabilities()
+    
+    /**
+     * 通用工具调用处理
+     */
+    private suspend inline fun <T> handleToolCall(
+        toolName: String,
+        crossinline execution: suspend () -> T
+    ) {
+        try {
+            val executionTime = measureTimeMillis {
+                val result = execution()
+                val response = McpToolResponse(
+                    tool = toolName,
+                    success = true,
+                    result = result,
+                    metadata = McpMetadata(executionTime = 0) // 将在外部设置
+                )
+                call.respond(response.copy(
+                    metadata = response.metadata.copy(executionTime = executionTime)
+                ))
+            }
+            
+            logger.info("工具 '$toolName' 执行完成，耗时: ${executionTime}ms")
+            
+        } catch (e: Exception) {
+            logger.error("工具 '$toolName' 执行失败", e)
+            
+            val errorResponse = McpToolResponse<Any>(
+                tool = toolName,
+                success = false,
+                error = McpError(
+                    code = e.javaClass.simpleName,
+                    message = e.message ?: "Unknown error",
+                    details = mapOf(
+                        "implementation_type" to implementationType.name,
+                        "timestamp" to System.currentTimeMillis().toString()
+                    )
+                ),
+                metadata = McpMetadata()
+            )
+            
+            call.respond(errorResponse)
+        }
+    }
+    
+    /**
+     * 创建服务器信息
+     */
+    private fun createServerInfo() = mapOf(
+        "server" to "configurable-jetbrains-ide-mcp",
+        "version" to "1.0.0",
+        "description" to "Configurable IntelliJ Platform MCP Server for Advanced Code Analysis",
+        "implementation_type" to implementationType.name,
+        "capabilities" to analysisService.getCapabilities(),
+        "project" to mapOf(
+            "name" to project.name,
+            "path" to (project.basePath ?: "unknown")
+        ),
+        "status" to "running",
+        "timestamp" to System.currentTimeMillis()
+    )
+    
+    /**
+     * 创建健康检查信息
+     */
+    private fun createHealthInfo() = mapOf(
+        "status" to "healthy",
+        "timestamp" to System.currentTimeMillis(),
+        "project" to project.name,
+        "implementation_type" to implementationType.name,
+        "analysis_service_ready" to true,
+        "capabilities" to analysisService.getCapabilities(),
+        "memory" to mapOf(
+            "used" to "${Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()}",
+            "total" to "${Runtime.getRuntime().totalMemory()}",
+            "max" to "${Runtime.getRuntime().maxMemory()}"
+        )
+    )
+    
+    /**
+     * 创建工具定义
+     */
+    private fun createToolDefinitions(): Map<String, Any> {
+        val capabilities = analysisService.getCapabilities()
+        
+        return mapOf(
+            "tools" to listOf(
+                createToolDefinition(
+                    "check_file_errors",
+                    "检查文件的语法错误和代码问题",
+                    if (capabilities.supportsPsiAnalysis) "基于 IntelliJ PSI 的精确分析" else "基于文本的基础分析"
+                ),
+                createToolDefinition(
+                    "analyze_code_quality",
+                    "分析代码质量指标",
+                    if (capabilities.supportsLanguageSpecificAnalysis) "语言特定的深度分析" else "通用质量指标分析"
+                ),
+                createToolDefinition(
+                    "validate_syntax",
+                    "验证文件语法正确性",
+                    if (capabilities.supportsPsiAnalysis) "基于 PSI 解析器的语法验证" else "基础语法检查"
+                )
+            ),
+            "count" to 3,
+            "implementation_type" to implementationType.name,
+            "capabilities" to capabilities,
+            "supported_languages" to capabilities.supportedLanguages
+        )
+    }
+    
+    /**
+     * 创建能力信息
+     */
+    private fun createCapabilitiesInfo() = mapOf(
+        "implementation_type" to implementationType.name,
+        "service_capabilities" to analysisService.getCapabilities(),
+        "comparison" to mapOf(
+            "simple_implementation" to mapOf(
+                "pros" to listOf("无需 IDE 环境", "启动快速", "资源占用少"),
+                "cons" to listOf("分析精度有限", "语言支持基础", "无法使用 IntelliJ 检查工具")
+            ),
+            "intellij_api_implementation" to mapOf(
+                "pros" to listOf("原生语言检测", "精确 PSI 分析", "完整检查工具集成", "语言特定分析"),
+                "cons" to listOf("需要 IDE 环境", "资源占用较多", "启动较慢")
+            )
+        ),
+        "recommendations" to mapOf(
+            "development" to "使用 SIMPLE 实现进行快速测试和开发",
+            "production" to "使用 INTELLIJ_API 实现获得最佳分析质量",
+            "ci_cd" to "根据环境可用性选择合适的实现"
+        )
+    )
+    
+    private fun createToolDefinition(name: String, description: String, implementation: String) = mapOf(
+        "name" to name,
+        "description" to description,
+        "implementation" to implementation,
+        "endpoint" to "POST /tools/$name"
+    )
+}
+
+/**
+ * 服务器配置构建器
+ */
+class McpServerBuilder(private val project: Project) {
+    private var port: Int = 8001
+    private var implementationType: AnalysisServiceFactory.ImplementationType = 
+        AnalysisServiceFactory.ImplementationType.INTELLIJ_API
+    
+    fun port(port: Int) = apply { this.port = port }
+    
+    fun useSimpleImplementation() = apply { 
+        this.implementationType = AnalysisServiceFactory.ImplementationType.SIMPLE 
+    }
+    
+    fun useIntelliJApiImplementation() = apply { 
+        this.implementationType = AnalysisServiceFactory.ImplementationType.INTELLIJ_API 
+    }
+    
+    fun implementationType(type: AnalysisServiceFactory.ImplementationType) = apply {
+        this.implementationType = type
+    }
+    
+    fun build(): ConfigurableMcpServer {
+        return ConfigurableMcpServer(project, port, implementationType)
+    }
+}

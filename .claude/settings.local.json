@@ -9,7 +9,10 @@
       "Bash(./gradlew:*)",
       "Bash(find:*)",
       "WebSearch",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "WebFetch(domain:modelcontextprotocol.io)",
+      "WebFetch(domain:github.com)",
+      "Bash(mkdir:*)"
     ],
     "deny": []
   },

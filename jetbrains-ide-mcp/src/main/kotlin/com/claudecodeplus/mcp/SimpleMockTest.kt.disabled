@@ -1,0 +1,311 @@
+package com.claudecodeplus.mcp
+
+import com.claudecodeplus.mcp.services.*
+import kotlinx.coroutines.runBlocking
+import kotlin.system.measureTimeMillis
+
+/**
+ * 简单的 MCP 功能验证测试
+ * 不依赖外部测试框架，可以直接运行
+ */
+object SimpleMockTest {
+    
+    @JvmStatic
+    fun main(args: Array<String>) {
+        println("🚀 开始 MCP 服务器功能验证...")
+        println("=" * 50)
+        
+        runBlocking {
+            // 创建 Mock 分析服务
+            val mockAnalysisService = createMockAnalysisService()
+            
+            println("\n📋 测试 1: 文件错误检查")
+            testFileErrorCheck(mockAnalysisService)
+            
+            println("\n📊 测试 2: 代码质量分析") 
+            testCodeQualityAnalysis(mockAnalysisService)
+            
+            println("\n🔍 测试 3: 语法验证")
+            testSyntaxValidation(mockAnalysisService)
+            
+            println("\n⚡ 测试 4: 性能测试")
+            testPerformance(mockAnalysisService)
+        }
+        
+        println("\n" + "=" * 50)
+        println("✅ MCP 功能验证完成！")
+    }
+    
+    private fun createMockAnalysisService(): MockAnalysisService {
+        return MockAnalysisService()
+    }
+    
+    private suspend fun testFileErrorCheck(service: MockAnalysisService) {
+        val testCases = listOf(
+            "/test/error_file.kt" to "应发现错误",
+            "/test/warning_file.kt" to "应发现警告",
+            "/test/clean_file.kt" to "应无问题",
+            "/test/notfound_file.kt" to "文件不存在"
+        )
+        
+        testCases.forEach { (filePath, description) ->
+            val executionTime = measureTimeMillis {
+                val result = service.checkFileErrors(filePath)
+                println("  📁 $filePath")
+                println("     $description")
+                println("     结果: ${if (result.success) "成功" else "失败"}")
+                println("     错误: ${result.errors.size}, 警告: ${result.warnings.size}")
+            }
+            println("     执行时间: ${executionTime}ms\n")
+        }
+    }
+    
+    private suspend fun testCodeQualityAnalysis(service: MockAnalysisService) {
+        val testCases = listOf(
+            "/test/complex_file.kt" to listOf("complexity", "maintainability"),
+            "/test/simple_file.kt" to listOf("complexity", "duplicates"),
+            "/test/normal_file.kt" to listOf("all")
+        )
+        
+        testCases.forEach { (filePath, metrics) ->
+            val executionTime = measureTimeMillis {
+                val result = service.analyzeCodeQuality(filePath, metrics)
+                println("  📊 $filePath")
+                println("     分析指标: ${metrics.joinToString(", ")}")
+                println("     结果: ${if (result.success) "成功" else "失败"}")
+                
+                if (result.success) {
+                    println("     复杂度: ${result.metrics["complexity_score"]}")
+                    println("     代码行数: ${result.metrics["lines_of_code"]}")
+                    println("     可维护性: ${result.metrics["maintainability_index"]}")
+                }
+            }
+            println("     执行时间: ${executionTime}ms\n")
+        }
+    }
+    
+    private suspend fun testSyntaxValidation(service: MockAnalysisService) {
+        val testCases = listOf(
+            "/test/valid_file.kt" to "语法正确",
+            "/test/syntax_error_file.kt" to "语法错误",
+            "/test/parse_error_file.kt" to "解析错误"
+        )
+        
+        testCases.forEach { (filePath, description) ->
+            val executionTime = measureTimeMillis {
+                val result = service.validateSyntax(filePath)
+                println("  🔍 $filePath")
+                println("     $description")
+                println("     结果: ${if (result.isValid) "语法正确" else "语法错误"}")
+                println("     错误数: ${result.syntaxErrors.size}")
+                
+                if (result.syntaxErrors.isNotEmpty()) {
+                    println("     错误详情: ${result.syntaxErrors.first().message}")
+                }
+            }
+            println("     执行时间: ${executionTime}ms\n")
+        }
+    }
+    
+    private suspend fun testPerformance(service: MockAnalysisService) {
+        val iterations = 5
+        println("  执行 $iterations 次性能测试...")
+        
+        val totalTime = measureTimeMillis {
+            repeat(iterations) { i ->
+                val filePath = "/test/perf_test_$i.kt"
+                
+                service.checkFileErrors(filePath)
+                service.analyzeCodeQuality(filePath)
+                service.validateSyntax(filePath)
+            }
+        }
+        
+        val avgTime = totalTime / iterations
+        val totalCalls = iterations * 3
+        
+        println("  📈 性能结果:")
+        println("     总执行时间: ${totalTime}ms")
+        println("     平均每次迭代: ${avgTime}ms")
+        println("     平均每个工具调用: ${totalTime / totalCalls}ms")
+        println("     估算吞吐量: ${totalCalls * 1000 / totalTime} 调用/秒")
+    }
+    
+    private operator fun String.times(n: Int) = this.repeat(n)
+}
+
+/**
+ * 简化版的 Mock 分析服务
+ */
+class MockAnalysisService {
+    
+    suspend fun checkFileErrors(
+        filePath: String,
+        checkLevel: AnalysisLevel = AnalysisLevel.ALL
+    ): FileAnalysisResult {
+        // 模拟处理时间
+        kotlinx.coroutines.delay(50)
+        
+        return when {
+            filePath.contains("error") -> {
+                FileAnalysisResult(
+                    filePath = filePath,
+                    success = true,
+                    message = "发现 2 个错误，1 个警告",
+                    errors = listOf(
+                        AnalysisIssue(
+                            severity = IssueSeverity.ERROR,
+                            message = "语法错误：缺少分号",
+                            line = 15,
+                            column = 23,
+                            category = "Syntax"
+                        ),
+                        AnalysisIssue(
+                            severity = IssueSeverity.ERROR,
+                            message = "类型错误：String 不能赋值给 Int",
+                            line = 22,
+                            column = 10,
+                            category = "Type"
+                        )
+                    ),
+                    warnings = listOf(
+                        AnalysisIssue(
+                            severity = IssueSeverity.WARNING,
+                            message = "未使用的变量 'temp'",
+                            line = 8,
+                            column = 5,
+                            category = "Unused"
+                        )
+                    )
+                )
+            }
+            filePath.contains("warning") -> {
+                FileAnalysisResult(
+                    filePath = filePath,
+                    success = true,
+                    message = "发现 1 个警告",
+                    errors = emptyList(),
+                    warnings = listOf(
+                        AnalysisIssue(
+                            severity = IssueSeverity.WARNING,
+                            message = "函数过于复杂，考虑重构",
+                            line = 45,
+                            column = 1,
+                            category = "Complexity"
+                        )
+                    )
+                )
+            }
+            filePath.contains("notfound") -> {
+                FileAnalysisResult(
+                    filePath = filePath,
+                    success = false,
+                    message = "无法找到文件: $filePath",
+                    errors = listOf(
+                        AnalysisIssue(
+                            severity = IssueSeverity.ERROR,
+                            message = "文件不存在",
+                            line = 0,
+                            column = 0,
+                            category = "System"
+                        )
+                    ),
+                    warnings = emptyList()
+                )
+            }
+            else -> {
+                FileAnalysisResult(
+                    filePath = filePath,
+                    success = true,
+                    message = "文件检查通过，未发现问题",
+                    errors = emptyList(),
+                    warnings = emptyList()
+                )
+            }
+        }
+    }
+    
+    suspend fun analyzeCodeQuality(
+        filePath: String,
+        metrics: List<String> = listOf("complexity", "duplicates", "maintainability")
+    ): CodeQualityResult {
+        kotlinx.coroutines.delay(100)
+        
+        val mockMetrics = mutableMapOf<String, Any>()
+        
+        when {
+            filePath.contains("complex") -> {
+                mockMetrics["complexity_score"] = 8.5
+                mockMetrics["cyclomatic_complexity"] = 15
+                mockMetrics["maintainability_index"] = 45
+                mockMetrics["lines_of_code"] = 350
+            }
+            filePath.contains("simple") -> {
+                mockMetrics["complexity_score"] = 2.1
+                mockMetrics["cyclomatic_complexity"] = 3
+                mockMetrics["maintainability_index"] = 85
+                mockMetrics["lines_of_code"] = 50
+            }
+            else -> {
+                mockMetrics["complexity_score"] = 4.2
+                mockMetrics["cyclomatic_complexity"] = 7
+                mockMetrics["maintainability_index"] = 70
+                mockMetrics["lines_of_code"] = 120
+            }
+        }
+        
+        mockMetrics["analysis_timestamp"] = System.currentTimeMillis()
+        
+        return CodeQualityResult(
+            filePath = filePath,
+            success = true,
+            message = "代码质量分析完成",
+            metrics = mockMetrics
+        )
+    }
+    
+    suspend fun validateSyntax(filePath: String): SyntaxValidationResult {
+        kotlinx.coroutines.delay(30)
+        
+        return when {
+            filePath.contains("syntax_error") -> {
+                SyntaxValidationResult(
+                    filePath = filePath,
+                    isValid = false,
+                    message = "语法验证失败",
+                    syntaxErrors = listOf(
+                        SyntaxError(
+                            message = "意外的标记 '}'",
+                            line = 12,
+                            column = 5,
+                            errorCode = "UNEXPECTED_TOKEN"
+                        )
+                    )
+                )
+            }
+            filePath.contains("parse_error") -> {
+                SyntaxValidationResult(
+                    filePath = filePath,
+                    isValid = false,
+                    message = "文件解析失败",
+                    syntaxErrors = listOf(
+                        SyntaxError(
+                            message = "无法解析文件内容",
+                            line = 1,
+                            column = 1,
+                            errorCode = "PARSE_ERROR"
+                        )
+                    )
+                )
+            }
+            else -> {
+                SyntaxValidationResult(
+                    filePath = filePath,
+                    isValid = true,
+                    message = "语法验证通过",
+                    syntaxErrors = emptyList()
+                )
+            }
+        }
+    }
+}

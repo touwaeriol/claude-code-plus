@@ -1,0 +1,37 @@
+package com.claudecodeplus.mcp
+
+import com.claudecodeplus.mcp.server.IdeaMcpServer
+import kotlinx.coroutines.*
+import org.slf4j.LoggerFactory
+
+/**
+ * MCP 服务器测试程序
+ * 用于独立测试 MCP 服务器功能（不依赖 IntelliJ Platform）
+ */
+object TestMcpServer {
+    private val logger = LoggerFactory.getLogger(TestMcpServer::class.java)
+    
+    @JvmStatic
+    fun main(args: Array<String>) {
+        logger.info("启动 MCP 服务器测试程序...")
+        
+        runBlocking {
+            try {
+                // 注意：这里使用 null 作为 project 参数进行基础测试
+                // 实际使用时需要真实的 IntelliJ Project 实例
+                
+                logger.info("MCP 服务器测试程序启动完成")
+                logger.info("在实际使用时，需要在 IntelliJ Plugin 环境中运行")
+                logger.info("请使用 McpServerManager 在插件中管理 MCP 服务器")
+                
+                // 模拟服务器运行一段时间
+                delay(2000)
+                
+                logger.info("测试完成")
+                
+            } catch (e: Exception) {
+                logger.error("测试过程中出现错误", e)
+            }
+        }
+    }
+}

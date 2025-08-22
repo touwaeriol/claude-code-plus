@@ -1,0 +1,215 @@
+package com.claudecodeplus.mcp
+
+import com.claudecodeplus.mcp.server.ConfigurableMcpServer
+import com.claudecodeplus.mcp.server.McpServerBuilder
+import com.claudecodeplus.mcp.services.AnalysisServiceFactory
+import com.claudecodeplus.mcp.models.*
+import com.intellij.openapi.project.ProjectManager
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+
+/**
+ * IntelliJ API vs 简化实现对比演示
+ */
+object ComparisonDemo {
+    
+    @JvmStatic
+    fun main(args: Array<String>) {
+        println("🔧 IntelliJ API vs 简化实现对比演示")
+        println("=" * 60)
+        
+        // 显示实现方式对比
+        showImplementationComparison()
+        
+        // 显示使用方式
+        showUsageExamples()
+        
+        // 显示配置选项
+        showConfigurationOptions()
+        
+        println("\n" + "=" * 60)
+        println("✅ 对比演示完成！")
+        println("💡 选择合适的实现方式以获得最佳体验")
+    }
+    
+    private fun showImplementationComparison() {
+        println("\n📊 实现方式对比")
+        println("-" * 40)
+        
+        val json = Json { prettyPrint = true }
+        
+        // 简化实现能力
+        val simpleCapabilities = mapOf(
+            "implementation_type" to "SIMPLE",
+            "capabilities" to mapOf(
+                "supportsNativeLanguageDetection" to false,
+                "supportsIntelliJInspections" to false,
+                "supportsPsiAnalysis" to false,
+                "supportsLanguageSpecificAnalysis" to false,
+                "requiresIdeEnvironment" to false,
+                "supportedLanguages" to listOf("Kotlin", "Java", "Python", "JavaScript", "TypeScript", "Go", "Rust")
+            ),
+            "pros" to listOf(
+                "无需 IntelliJ 环境",
+                "启动速度快",
+                "资源占用少",
+                "易于部署和测试"
+            ),
+            "cons" to listOf(
+                "语言检测基于文件扩展名",
+                "分析精度有限",
+                "无法使用 IntelliJ 检查工具",
+                "缺少语言特定优化"
+            )
+        )
+        
+        println("🔹 简化实现 (SIMPLE):")
+        println(json.encodeToString(simpleCapabilities))
+        
+        // IntelliJ API 实现能力
+        val intellijCapabilities = mapOf(
+            "implementation_type" to "INTELLIJ_API",
+            "capabilities" to mapOf(
+                "supportsNativeLanguageDetection" to true,
+                "supportsIntelliJInspections" to true,
+                "supportsPsiAnalysis" to true,
+                "supportsLanguageSpecificAnalysis" to true,
+                "requiresIdeEnvironment" to true,
+                "supportedLanguages" to listOf("All languages supported by IntelliJ Platform")
+            ),
+            "pros" to listOf(
+                "原生语言自动检测",
+                "精确的 PSI 代码分析",
+                "完整的检查工具集成",
+                "语言特定的深度分析",
+                "支持所有 IntelliJ 支持的语言"
+            ),
+            "cons" to listOf(
+                "需要 IntelliJ 插件环境",
+                "启动和运行开销较大",
+                "依赖复杂的 IDE API",
+                "部署复杂度较高"
+            )
+        )
+        
+        println("\n🔸 IntelliJ API 实现 (INTELLIJ_API):")
+        println(json.encodeToString(intellijCapabilities))
+    }
+    
+    private fun showUsageExamples() {
+        println("\n🚀 使用方式示例")
+        println("-" * 40)
+        
+        println("\n1. 使用简化实现（适用于开发和测试）:")
+        println("```kotlin")
+        println("val server = McpServerBuilder(project)")
+        println("    .port(8001)")
+        println("    .useSimpleImplementation()")
+        println("    .build()")
+        println("server.start()")
+        println("```")
+        
+        println("\n2. 使用 IntelliJ API 实现（适用于生产环境）:")
+        println("```kotlin")
+        println("val server = McpServerBuilder(project)")
+        println("    .port(8001)")
+        println("    .useIntelliJApiImplementation()")
+        println("    .build()")
+        println("server.start()")
+        println("```")
+        
+        println("\n3. 通过枚举配置:")
+        println("```kotlin")
+        println("val server = McpServerBuilder(project)")
+        println("    .implementationType(AnalysisServiceFactory.ImplementationType.INTELLIJ_API)")
+        println("    .build()")
+        println("```")
+        
+        println("\n4. 检查服务器能力:")
+        println("```bash")
+        println("curl http://localhost:8001/capabilities")
+        println("```")
+    }
+    
+    private fun showConfigurationOptions() {
+        println("\n⚙️ 配置选项说明")
+        println("-" * 40)
+        
+        val configOptions = mapOf(
+            "port" to mapOf(
+                "默认值" to 8001,
+                "说明" to "MCP 服务器监听端口",
+                "示例" to "port(8080)"
+            ),
+            "implementation_type" to mapOf(
+                "可选值" to listOf("SIMPLE", "INTELLIJ_API"),
+                "默认值" to "INTELLIJ_API", 
+                "说明" to "选择分析服务实现方式"
+            ),
+            "environment_detection" to mapOf(
+                "自动检测" to true,
+                "说明" to "系统会自动检测是否在 IntelliJ 环境中运行",
+                "建议" to "开发环境使用 SIMPLE，生产环境使用 INTELLIJ_API"
+            )
+        )
+        
+        val json = Json { prettyPrint = true }
+        println(json.encodeToString(configOptions))
+    }
+    
+    /**
+     * 实际启动演示（仅作示例，需要在 IntelliJ 环境中运行）
+     */
+    @Suppress("unused")
+    private fun demonstrateActualUsage() {
+        // 注意：这需要在真实的 IntelliJ 插件环境中运行
+        println("\n🔥 实际启动演示（需要 IntelliJ 环境）")
+        
+        try {
+            // 获取当前项目（在插件环境中）
+            val projects = ProjectManager.getInstance().openProjects
+            if (projects.isNotEmpty()) {
+                val project = projects.first()
+                
+                runBlocking {
+                    // 启动简化版本服务器
+                    val simpleServer = McpServerBuilder(project)
+                        .port(8001)
+                        .useSimpleImplementation()
+                        .build()
+                    
+                    println("启动简化版服务器...")
+                    simpleServer.start()
+                    println("简化版服务器已启动: http://localhost:8001")
+                    println("服务器能力: ${simpleServer.getServiceCapabilities()}")
+                    
+                    // 启动完整 API 版本服务器
+                    val apiServer = McpServerBuilder(project)
+                        .port(8002)
+                        .useIntelliJApiImplementation()
+                        .build()
+                    
+                    println("\n启动 IntelliJ API 服务器...")
+                    apiServer.start()
+                    println("IntelliJ API 服务器已启动: http://localhost:8002")
+                    println("服务器能力: ${apiServer.getServiceCapabilities()}")
+                    
+                    println("\n两个服务器都已启动，可以进行对比测试！")
+                    println("- 简化版: http://localhost:8001")
+                    println("- 完整版: http://localhost:8002")
+                    
+                    // 注意：在实际使用中，你需要适当的方式来保持服务器运行
+                    // 这里仅作演示
+                }
+            } else {
+                println("❌ 未找到打开的项目，需要在 IntelliJ 环境中运行")
+            }
+        } catch (e: Exception) {
+            println("❌ 启动失败: ${e.message}")
+            println("💡 这是正常的，因为当前不在 IntelliJ 插件环境中")
+        }
+    }
+    
+    private operator fun String.times(n: Int) = this.repeat(n)
+}

@@ -1,0 +1,219 @@
+package com.claudecodeplus.mcp
+
+import io.ktor.server.application.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.*
+import kotlinx.serialization.json.Json
+import kotlin.system.measureTimeMillis
+
+/**
+ * 简单的 HTTP MCP 服务器测试
+ * 验证基础的 HTTP 服务器功能
+ */
+object SimpleHttpMockTest {
+    
+    @JvmStatic
+    fun main(args: Array<String>) {
+        println("🌐 开始 HTTP MCP 服务器测试...")
+        println("=" * 50)
+        
+        runBlocking {
+            val server = startMockMcpServer()
+            
+            try {
+                println("✅ 服务器启动成功")
+                println("📍 服务器地址: http://localhost:8998")
+                
+                // 运行服务器一段时间进行测试
+                println("\n⏰ 服务器运行中，持续 10 秒...")
+                
+                // 模拟一些简单的功能测试
+                testServerFunctionality()
+                
+                delay(10000)
+                
+            } finally {
+                println("\n⏹ 正在停止服务器...")
+                server.stop(1000, 2000)
+                println("✅ 服务器已停止")
+            }
+        }
+        
+        println("\n" + "=" * 50)
+        println("✅ HTTP MCP 服务器测试完成！")
+    }
+    
+    private suspend fun startMockMcpServer(): ApplicationEngine {
+        return embeddedServer(Netty, port = 8998, host = "localhost") {
+            install(ContentNegotiation) {
+                json(Json {
+                    prettyPrint = true
+                    isLenient = true
+                    ignoreUnknownKeys = true
+                })
+            }
+            
+            routing {
+                // 服务器信息端点
+                get("/") {
+                    val serverInfo = mapOf(
+                        "server" to "jetbrains-ide-mcp",
+                        "version" to "1.0.0-test",
+                        "description" to "IntelliJ Platform MCP Server - Test Mode",
+                        "capabilities" to mapOf(
+                            "tools" to true,
+                            "resources" to false,
+                            "prompts" to false,
+                            "logging" to true
+                        ),
+                        "status" to "running",
+                        "timestamp" to System.currentTimeMillis()
+                    )
+                    
+                    println("📞 API 调用: GET / - 返回服务器信息")
+                    call.respond(serverInfo)
+                }
+                
+                // 健康检查端点
+                get("/health") {
+                    val healthInfo = mapOf(
+                        "status" to "healthy",
+                        "timestamp" to System.currentTimeMillis(),
+                        "uptime" to "测试模式",
+                        "memory" to mapOf(
+                            "used" to "${Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()}",
+                            "total" to "${Runtime.getRuntime().totalMemory()}"
+                        )
+                    )
+                    
+                    println("📞 API 调用: GET /health - 健康检查")
+                    call.respond(healthInfo)
+                }
+                
+                // 工具列表端点
+                get("/tools/") {
+                    val toolsList = mapOf(
+                        "tools" to listOf(
+                            mapOf(
+                                "name" to "check_file_errors",
+                                "description" to "检查文件的语法错误、类型错误和编译错误",
+                                "parameters" to mapOf(
+                                    "filePath" to "string (required) - 要检查的文件路径",
+                                    "checkLevel" to "string (optional) - 检查级别: error, warning, all"
+                                ),
+                                "example" to mapOf(
+                                    "filePath" to "/path/to/MyClass.kt",
+                                    "checkLevel" to "all"
+                                )
+                            ),
+                            mapOf(
+                                "name" to "analyze_code_quality",
+                                "description" to "分析代码质量，包括复杂度、重复代码等",
+                                "parameters" to mapOf(
+                                    "filePath" to "string (required) - 要分析的文件路径",
+                                    "metrics" to "array (optional) - 要分析的指标列表"
+                                ),
+                                "example" to mapOf(
+                                    "filePath" to "/path/to/MyClass.kt",
+                                    "metrics" to listOf("complexity", "maintainability")
+                                )
+                            ),
+                            mapOf(
+                                "name" to "validate_syntax",
+                                "description" to "快速验证文件语法正确性",
+                                "parameters" to mapOf(
+                                    "filePath" to "string (required) - 要验证的文件路径"
+                                ),
+                                "example" to mapOf(
+                                    "filePath" to "/path/to/MyClass.kt"
+                                )
+                            )
+                        ),
+                        "count" to 3
+                    )
+                    
+                    println("📞 API 调用: GET /tools/ - 返回工具列表")
+                    call.respond(toolsList)
+                }
+                
+                // 工具执行示例端点（简化版）
+                post("/tools/check_file_errors") {
+                    println("📞 API 调用: POST /tools/check_file_errors - 执行文件错误检查")
+                    
+                    val response = mapOf(
+                        "tool" to "check_file_errors",
+                        "success" to true,
+                        "result" to mapOf(
+                            "message" to "Mock 测试：文件错误检查完成",
+                            "errorCount" to 0,
+                            "warningCount" to 1,
+                            "executionTime" to "50ms"
+                        ),
+                        "timestamp" to System.currentTimeMillis()
+                    )
+                    
+                    call.respond(response)
+                }
+                
+                // 统计信息端点
+                get("/stats") {
+                    val stats = mapOf(
+                        "server_stats" to mapOf(
+                            "requests_handled" to "测试模式",
+                            "uptime" to "${System.currentTimeMillis()}",
+                            "tools_available" to 3,
+                            "active_connections" to 1
+                        ),
+                        "system_info" to mapOf(
+                            "java_version" to System.getProperty("java.version"),
+                            "kotlin_version" to "2.1.10",
+                            "mcp_sdk_version" to "0.11.2"
+                        )
+                    )
+                    
+                    println("📞 API 调用: GET /stats - 返回服务器统计")
+                    call.respond(stats)
+                }
+            }
+        }.start(wait = false)
+    }
+    
+    private suspend fun testServerFunctionality() {
+        println("\n🧪 执行功能测试...")
+        
+        // 测试 1: 服务器响应时间
+        val responseTime = measureTimeMillis {
+            delay(10) // 模拟处理时间
+        }
+        println("  ⏱ 模拟响应时间: ${responseTime}ms")
+        
+        // 测试 2: 内存使用情况
+        val runtime = Runtime.getRuntime()
+        val usedMemory = (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024
+        println("  💾 当前内存使用: ${usedMemory}MB")
+        
+        // 测试 3: 并发处理能力（模拟）
+        val concurrentRequests = 5
+        val concurrentTime = measureTimeMillis {
+            repeat(concurrentRequests) {
+                delay(20) // 模拟处理请求
+            }
+        }
+        println("  🚀 模拟处理 $concurrentRequests 个请求耗时: ${concurrentTime}ms")
+        
+        println("\n💡 测试建议:")
+        println("  • 可以使用浏览器访问 http://localhost:8998")
+        println("  • 可以使用 curl 测试 API 端点:")
+        println("    curl http://localhost:8998/")
+        println("    curl http://localhost:8998/health")
+        println("    curl http://localhost:8998/tools/")
+        println("    curl http://localhost:8998/stats")
+    }
+    
+    private operator fun String.times(n: Int) = this.repeat(n)
+}
