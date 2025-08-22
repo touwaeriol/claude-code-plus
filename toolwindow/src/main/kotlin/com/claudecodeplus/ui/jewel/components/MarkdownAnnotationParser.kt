@@ -31,13 +31,13 @@ private val CONTEXT_LINK_REGEX = Regex("""\[@([^\]]+)\]\(([^)]+)\)""")
  * 
  * @param markdown 包含 [@显示名称](uri) 格式的 Markdown 文本
  * @param linkColor 链接颜色，默认使用 Jewel 主题的 info 颜色
- * @param linkBackgroundAlpha 链接背景透明度
+ * @param useModernStyle 是否使用现代化样式（淡蓝色背景，无下划线）
  * @return 带有注解和样式的 AnnotatedString
  */
 fun parseMarkdownToAnnotatedString(
     markdown: String,
     linkColor: Color? = null,
-    linkBackgroundAlpha: Float = 0.1f
+    useModernStyle: Boolean = true
 ): AnnotatedString {
     return buildAnnotatedString {
         var lastIndex = 0
@@ -53,7 +53,7 @@ fun parseMarkdownToAnnotatedString(
             
             // 解析 URI 以确定类型
             val contextUri = parseContextUri(uriString)
-            val (icon, color) = getContextStyle(contextUri, linkColor)
+            val (icon, originalColor) = getContextStyle(contextUri, linkColor)
             
             // 添加带注解和样式的引用
             pushStringAnnotation(
@@ -61,15 +61,30 @@ fun parseMarkdownToAnnotatedString(
                 annotation = uriString
             )
             
-            withStyle(
-                SpanStyle(
-                    color = color,
-                    background = color.copy(alpha = linkBackgroundAlpha),
-                    fontWeight = FontWeight.Medium,
-                    textDecoration = TextDecoration.Underline
-                )
-            ) {
-                append("$icon $displayName")
+            if (useModernStyle) {
+                // 现代化样式：淡蓝色背景，深蓝色文字，无下划线，类似 VS Code 的文件引用
+                withStyle(
+                    SpanStyle(
+                        color = Color(0xFF0969DA), // GitHub 蓝色文字
+                        background = Color(0xFFDDF4FF), // 淡蓝色背景，类似第二张图片
+                        fontWeight = FontWeight.Medium
+                        // 移除 textDecoration = TextDecoration.Underline
+                    )
+                ) {
+                    append("$icon$displayName") // 移除图标和文字之间的空格，更紧凑
+                }
+            } else {
+                // 传统样式：保持原有的样式
+                withStyle(
+                    SpanStyle(
+                        color = originalColor,
+                        background = originalColor.copy(alpha = 0.1f),
+                        fontWeight = FontWeight.Medium,
+                        textDecoration = TextDecoration.Underline
+                    )
+                ) {
+                    append("$icon $displayName")
+                }
             }
             
             pop() // 弹出注解

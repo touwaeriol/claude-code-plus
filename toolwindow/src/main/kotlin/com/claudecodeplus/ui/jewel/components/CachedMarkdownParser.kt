@@ -29,9 +29,9 @@ class CachedMarkdownParser(
     suspend fun parse(
         markdown: String,
         linkColor: Color? = null,
-        linkBackgroundAlpha: Float = 0.1f
+        useModernStyle: Boolean = true
     ): AnnotatedString {
-        val key = CacheKey(markdown, linkColor, linkBackgroundAlpha)
+        val key = CacheKey(markdown, linkColor, useModernStyle)
         
         // 尝试从缓存获取
         cache.get(key)?.let { return it }
@@ -44,7 +44,7 @@ class CachedMarkdownParser(
             val result = parseMarkdownToAnnotatedString(
                 markdown = markdown,
                 linkColor = linkColor,
-                linkBackgroundAlpha = linkBackgroundAlpha
+                useModernStyle = useModernStyle
             )
             
             cache.put(key, result)
@@ -76,7 +76,7 @@ class CachedMarkdownParser(
     private data class CacheKey(
         val markdown: String,
         val linkColor: Color?,
-        val linkBackgroundAlpha: Float
+        val useModernStyle: Boolean
     )
     
     /**
@@ -138,15 +138,15 @@ private val globalParser = CachedMarkdownParser()
 fun rememberParsedMarkdown(
     markdown: String,
     linkColor: Color? = null,
-    linkBackgroundAlpha: Float = 0.1f
+    useModernStyle: Boolean = true
 ): AnnotatedString {
     return produceState(
         initialValue = AnnotatedString(markdown),
         key1 = markdown,
         key2 = linkColor,
-        key3 = linkBackgroundAlpha
+        key3 = useModernStyle
     ) {
-        value = globalParser.parse(markdown, linkColor, linkBackgroundAlpha)
+        value = globalParser.parse(markdown, linkColor, useModernStyle)
     }.value
 }
 
@@ -160,9 +160,9 @@ object SyncCachedMarkdownParser {
     fun parse(
         markdown: String,
         linkColor: Color? = null,
-        linkBackgroundAlpha: Float = 0.1f
+        useModernStyle: Boolean = true
     ): AnnotatedString {
-        val cacheKey = "$markdown|${linkColor?.value}|$linkBackgroundAlpha"
+        val cacheKey = "$markdown|${linkColor?.value}|$useModernStyle"
         
         return cache.computeIfAbsent(cacheKey) {
             // 当缓存过大时，清理一半的条目
@@ -174,7 +174,7 @@ object SyncCachedMarkdownParser {
             parseMarkdownToAnnotatedString(
                 markdown = markdown,
                 linkColor = linkColor,
-                linkBackgroundAlpha = linkBackgroundAlpha
+                useModernStyle = useModernStyle
             )
         }
     }

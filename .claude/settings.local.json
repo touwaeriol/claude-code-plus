@@ -9,9 +9,15 @@
       "Bash(./gradlew:*)",
       "Bash(find:*)",
       "WebSearch",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(grep:*)",
+      "Bash(git worktree:*)",
+      "mcp__gradle-class-finder-mcp__find_class"
     ],
-    "deny": []
+    "deny": [],
+    "additionalDirectories": [
+      "/Users/erio/codes/"
+    ]
   },
   "enabledMcpjsonServers": [
     "spec-workflow",

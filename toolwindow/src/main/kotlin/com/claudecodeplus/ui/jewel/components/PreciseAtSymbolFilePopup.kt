@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.claudecodeplus.ui.services.IndexedFileInfo
+import com.claudecodeplus.ui.jewel.components.business.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 
 /**
@@ -80,7 +81,12 @@ fun PreciseAtSymbolFilePopup(
                 dismissOnClickOutside = true
             ),
             popupPositionProvider = remember(atSymbolOffset) {
-                AtSymbolPopupPositionProvider(atSymbolOffset)
+                AtSymbolPositionProvider(
+                    FilePopupConfig(
+                        type = FilePopupType.AT_SYMBOL,
+                        anchorOffset = atSymbolOffset
+                    )
+                )
             }
         ) {
             // 使用基础的背景容器替代Panel

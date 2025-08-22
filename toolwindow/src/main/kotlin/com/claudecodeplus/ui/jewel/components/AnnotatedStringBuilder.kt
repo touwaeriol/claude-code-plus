@@ -31,37 +31,37 @@ object FileReferenceAnnotationTags {
 object FileReferenceTheme {
     
     /**
-     * 正常状态样式
+     * 正常状态样式 - 现代化设计，类似 VS Code 的文件引用
      */
     @Composable
     fun normalStyle(): SpanStyle {
         return SpanStyle(
-            background = JewelTheme.globalColors.borders.focused.copy(alpha = 0.1f),
-            color = JewelTheme.globalColors.text.info,
+            background = Color(0xFFDDF4FF), // 淡蓝色背景，类似第二张图片
+            color = Color(0xFF0969DA), // GitHub 蓝色文字
             fontWeight = FontWeight.Medium
         )
     }
     
     /**
-     * 悬停状态样式
+     * 悬停状态样式 - 稍微深一点的蓝色
      */
     @Composable 
     fun hoverStyle(): SpanStyle {
         return SpanStyle(
-            background = JewelTheme.globalColors.borders.focused.copy(alpha = 0.2f),
-            color = JewelTheme.globalColors.text.info,
+            background = Color(0xFFB8E4FF), // 稍微深一点的蓝色背景
+            color = Color(0xFF0969DA), // 保持相同的文字颜色
             fontWeight = FontWeight.Medium
         )
     }
     
     /**
-     * 选中状态样式
+     * 选中状态样式 - 更深的蓝色表示选中
      */
     @Composable
     fun selectedStyle(): SpanStyle {
         return SpanStyle(
-            background = JewelTheme.globalColors.borders.focused.copy(alpha = 0.3f),
-            color = JewelTheme.globalColors.text.info,
+            background = Color(0xFF91D5FF), // 更深的蓝色背景表示选中
+            color = Color(0xFF0969DA), // 保持相同的文字颜色
             fontWeight = FontWeight.Bold
         )
     }

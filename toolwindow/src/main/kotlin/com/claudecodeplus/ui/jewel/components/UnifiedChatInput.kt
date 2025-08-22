@@ -13,9 +13,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -24,6 +26,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
@@ -85,12 +89,21 @@ fun UnifiedChatInput(
     val focusRequester = remember { FocusRequester() }
     var isFocused by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    
+    // Add Context 按钮坐标追踪
+    var addContextButtonCoordinates by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
     
     // 使用会话状态或回退到局部状态（兼容性）
     val textFieldValue = sessionObject?.inputTextFieldValue ?: TextFieldValue("")
     val showContextSelector = sessionObject?.showContextSelector ?: false
     val showSimpleFileSelector = sessionObject?.showSimpleFileSelector ?: false
     val atSymbolPosition = sessionObject?.atSymbolPosition
+    
+    // 调试：监控状态变化
+    LaunchedEffect(showContextSelector, showSimpleFileSelector, atSymbolPosition) {
+        println("[UnifiedChatInput] 状态变化 - showContextSelector=$showContextSelector, showSimpleFileSelector=$showSimpleFileSelector, atSymbolPosition=$atSymbolPosition")
+    }
     
     // 将 TextFieldValue 转换为 AnnotatedTextFieldValue
     val annotatedValue = remember(textFieldValue) {
@@ -174,7 +187,10 @@ fun UnifiedChatInput(
                 enabled = enabled && !isGenerating,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)  // 增加水平内边距，减少垂直内边距
+                    .padding(horizontal = 16.dp, vertical = 10.dp),  // 增加水平内边距，减少垂直内边距
+                onAddContextButtonPositioned = { coordinates ->
+                    addContextButtonCoordinates = coordinates
+                }
             )
             
             // 分隔线（更细致的间距）
@@ -218,7 +234,9 @@ fun UnifiedChatInput(
                 enabled = enabled,  // 输入框始终可用，允许响应期间继续编辑
                 focusRequester = focusRequester,
                 onShowContextSelector = { position ->
+                    println("[UnifiedChatInput] @ 符号被触发，位置: $position")
                     sessionObject?.let { session ->
+                        println("[UnifiedChatInput] 设置上下文选择器状态: showContextSelector=true, atSymbolPosition=$position")
                         session.showContextSelector = true
                         session.atSymbolPosition = position
                     }
@@ -276,8 +294,8 @@ fun UnifiedChatInput(
         )
     }
     
-    // 上下文选择器弹窗
-    if (showContextSelector) {
+    // 上下文选择器弹窗 - 确保互斥显示
+    if (showContextSelector && !showSimpleFileSelector) {
         val searchService = remember(fileIndexService, projectService) {
             // 即使服务为 null 也创建一个基本的搜索服务
             UnifiedChatContextSearchService(fileIndexService, projectService)
@@ -292,12 +310,14 @@ fun UnifiedChatInput(
                 focusRequester.requestFocus()
             },
             onContextSelect = { context ->
-                sessionObject?.let { session ->
-                    session.showContextSelector = false
-                }
+                println("[UnifiedChatInput] 文件被选中: ${context.toDisplayString()}, atSymbolPosition=$atSymbolPosition")
+                
+                // 弹窗已在 onDismiss 回调中关闭，这里不需要额外处理
+                println("[UnifiedChatInput] 上下文选择完成")
                 
                 if (atSymbolPosition != null) {
                     // @ 触发：生成内联引用
+                    println("[UnifiedChatInput] @ 触发模式：生成内联引用")
                     val markdownLink = createMarkdownContextLink(
                         displayName = context.toDisplayString(),
                         uri = context.uri
@@ -308,25 +328,30 @@ fun UnifiedChatInput(
                     val newText = currentText.replaceRange(pos, pos + 1, markdownLink)
                     val newPosition = pos + markdownLink.length
                     
+                    println("[UnifiedChatInput] 更新输入文本: '$newText', 光标位置: $newPosition")
                     sessionObject?.updateInputText(TextFieldValue(
                         newText,
                         TextRange(newPosition)
                     ))
                 } else {
                     // 按钮触发：添加到上下文列表
+                    println("[UnifiedChatInput] 按钮触发模式：添加到上下文列表")
                     onContextAdd(context)
                 }
                 
-                sessionObject?.atSymbolPosition = null
-                focusRequester.requestFocus()
+                println("[UnifiedChatInput] 请求输入框焦点")
+                scope.launch {
+                    kotlinx.coroutines.delay(50) // 小延迟确保弹窗完全关闭后再请求焦点
+                    focusRequester.requestFocus()
+                }
             },
             searchService = searchService
         )
     }
     
-    // 简化文件选择器弹窗（Add Context 按钮触发）
+    // 简化文件选择器弹窗（Add Context 按钮触发） - 确保互斥显示
     println("[UnifiedChatInput] showSimpleFileSelector=$showSimpleFileSelector, fileIndexService=$fileIndexService")
-    if (showSimpleFileSelector && fileIndexService != null) {
+    if (showSimpleFileSelector && !showContextSelector && fileIndexService != null) {
         var searchResults by remember { mutableStateOf<List<IndexedFileInfo>>(emptyList()) }
         var selectedIndex by remember { mutableStateOf(0) }
         
@@ -354,10 +379,27 @@ fun UnifiedChatInput(
         println("[UnifiedChatInput] searchResults.isNotEmpty() = ${searchResults.isNotEmpty()}")
         if (searchResults.isNotEmpty()) {
             println("[UnifiedChatInput] 渲染 SimpleFilePopup，searchResults.size=${searchResults.size}")
-            SimpleFilePopup(
+            val scrollState = rememberLazyListState()
+            
+            // 计算按钮的绝对位置传给弹窗
+            val buttonCenterPosition = remember(addContextButtonCoordinates) {
+                addContextButtonCoordinates?.let { coords ->
+                    val position = coords.positionInRoot()
+                    val size = coords.size
+                    // 返回按钮中心位置
+                    Offset(
+                        x = position.x + size.width / 2,
+                        y = position.y
+                    )
+                } ?: Offset.Zero
+            }
+            
+            ButtonFilePopup(
                 results = searchResults,
                 selectedIndex = selectedIndex,
                 searchQuery = "",
+                scrollState = scrollState,
+                popupOffset = buttonCenterPosition, // 传递按钮中心位置作为锚点
                 onItemSelected = { selectedFile ->
                     // 将文件添加到上下文列表
                     val contextReference = ContextReference.FileReference(
@@ -420,7 +462,8 @@ private fun TopToolbar(
     onContextAdd: () -> Unit,
     onContextRemove: (ContextReference) -> Unit,
     enabled: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onAddContextButtonPositioned: (androidx.compose.ui.layout.LayoutCoordinates?) -> Unit = {}
 ) {
     FlowRow(
         modifier = modifier,
@@ -431,7 +474,11 @@ private fun TopToolbar(
         AddContextButton(
             onClick = onContextAdd,
             enabled = enabled,
-            modifier = Modifier.height(20.dp)
+            modifier = Modifier
+                .height(20.dp)
+                .onGloballyPositioned { coordinates ->
+                    onAddContextButtonPositioned(coordinates)
+                }
         )
         
         // 上下文标签

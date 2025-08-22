@@ -28,7 +28,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.VerticalScrollbar
-import com.claudecodeplus.ui.services.FileIndexService
 
 /**
  * 聊天输入框组件
@@ -53,8 +52,7 @@ fun ChatInputField(
     onShowContextSelector: (Int?) -> Unit,
     showPreview: Boolean = false,
     modifier: Modifier = Modifier,
-    maxHeight: Int = 200,  // 增加最大高度
-    fileIndexService: FileIndexService? = null  // 新增参数
+    maxHeight: Int = 200  // 增加最大高度
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
@@ -192,16 +190,6 @@ fun ChatInputField(
                         .padding(horizontal = 8.dp)
                 )
             }
-        }
-        
-        // 简化内联文件引用处理器 - 悬浮在输入框上方
-        if (fileIndexService != null) {
-            SimpleInlineFileReferenceHandler(
-                textFieldValue = value,
-                onTextChange = onValueChange,
-                fileIndexService = fileIndexService,
-                enabled = enabled
-            )
         }
     }
 }

@@ -131,6 +131,8 @@ fun ChatInputContextSelectorPopup(
                                 path = selectedItem.relativePath,
                                 fullPath = selectedItem.absolutePath
                             )
+                            // 立即关闭弹窗，然后调用选择回调
+                            onDismiss()
                             onContextSelect(fileRef)
                         }
                     }
@@ -140,6 +142,8 @@ fun ChatInputContextSelectorPopup(
                                 url = webUrl.text,
                                 title = null
                             )
+                            // 立即关闭弹窗，然后调用选择回调
+                            onDismiss()
                             onContextSelect(webRef)
                         }
                     }
@@ -286,6 +290,8 @@ fun ChatInputContextSelectorPopup(
                                     path = item.relativePath,
                                     fullPath = item.absolutePath
                                 )
+                                // 立即关闭弹窗，然后调用选择回调
+                                onDismiss()
                                 onContextSelect(fileRef)
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -301,6 +307,8 @@ fun ChatInputContextSelectorPopup(
                                         url = webUrl.text,
                                         title = null
                                     )
+                                    // 立即关闭弹窗，然后调用选择回调
+                                    onDismiss()
                                     onContextSelect(webRef)
                                 }
                             },

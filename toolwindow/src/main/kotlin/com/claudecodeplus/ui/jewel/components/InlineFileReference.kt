@@ -86,7 +86,7 @@ fun InlineFileReferenceHandler(
         }
         
         val cursorPos = textFieldValue.selection.start
-        val atResult = findAtSymbolWithQuery(textFieldValue.text, cursorPos)
+        val atResult = com.claudecodeplus.ui.jewel.components.isInAtQuery(textFieldValue.text, cursorPos)
         
         if (atResult != null) {
             val (atPos, query) = atResult
@@ -373,48 +373,4 @@ private fun InlineFileResultItem(
     }
 }
 
-/**
- * 查找 @ 符号及其后的查询文本
- * 
- * @param text 文本内容
- * @param cursorPos 光标位置
- * @return Pair(atPosition, queryText) 或 null
- */
-private fun findAtSymbolWithQuery(text: String, cursorPos: Int): Pair<Int, String>? {
-    if (cursorPos <= 0 || text.isEmpty()) return null
-    
-    // 从光标位置向前搜索 @ 符号
-    for (i in (cursorPos - 1) downTo 0) {
-        val char = text[i]
-        
-        when {
-            char == '@' -> {
-                // 检查 @ 前是否是空白或文本开头
-                val isValidAtStart = i == 0 || text[i - 1].isWhitespace()
-                if (!isValidAtStart) continue
-                
-                // 提取查询文本
-                val queryStart = i + 1
-                val queryEnd = cursorPos
-                val queryText = if (queryEnd > queryStart) {
-                    text.substring(queryStart, queryEnd)
-                } else {
-                    ""
-                }
-                
-                // 验证查询文本是否有效（不包含空白字符）
-                if (queryText.any { it.isWhitespace() }) {
-                    return null
-                }
-                
-                return Pair(i, queryText)
-            }
-            char.isWhitespace() -> {
-                // 遇到空白字符，停止搜索
-                return null
-            }
-        }
-    }
-    
-    return null
-}
+// 移除重复的函数定义，使用 SimpleInlineFileReference.kt 中的版本

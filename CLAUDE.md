@@ -80,22 +80,57 @@
   - `ToolGroupDisplay.kt` - 工具分组展示
   - `AssistantMessageDisplay.kt` - 助手消息展示（集成新的工具展示组件）
 
-- **会话管理组件**
+- **UI 组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/components/`）
   - `MultiTabChatView.kt` - 多标签聊天视图
+  - `ChatOrganizer.kt` - 对话组织器
+  - `ProjectSelector.kt` - 项目选择器
+  - `ProjectTabBar.kt` - 项目标签栏
+  - `ProjectListPanel.kt` - 项目列表面板
+  - `SessionListPanel.kt` - 会话列表面板
+  - `GlobalSearchDialog.kt` - 全局搜索对话框
+  - `ContextTemplateDialog.kt` - 上下文模板对话框
+  - `BatchQuestionDialog.kt` - 批量问题对话框
+  - `ContextPreviewPanel.kt` - 上下文预览面板
+  - `InterruptedSessionBanner.kt` - 中断会话横幅
+  - `chat/ModernChatView.kt` - 现代聊天视图
+
+- **服务层组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/services/`）
   - `ChatTabManager.kt` - 标签管理服务（支持Claude会话链接状态跟踪）
   - `ProjectManager.kt` - 项目管理服务
-  - `ChatOrganizer.kt` - 对话组织器
-  - `SessionObject.kt` - 会话状态容器（包含所有会话运行时数据）
   - `SessionManager.kt` - 会话生命周期管理（支持多会话并发）
   - `DefaultSessionConfig.kt` - 全局默认会话配置管理
   - `SessionPersistenceService.kt` - 会话配置持久化服务
-  - `SessionMetadata.kt` - 会话元数据模型（用于配置序列化）
+  - `ChatSessionStateManager.kt` - 聊天会话状态管理
+  - `UnifiedSessionService.kt` - 统一会话服务
+  - `SessionHistoryService.kt` - 会话历史服务
+  - `SessionLoader.kt` - 会话加载器
+  - `ChatExportService.kt` - 聊天导出服务
+  - `ChatSearchEngine.kt` - 聊天搜索引擎
+  - `ChatSummaryService.kt` - 聊天摘要服务
+  - `ContextManagementService.kt` - 上下文管理服务
+  - `ContextProvider.kt` - 上下文提供器
+  - `ContextRecommendationEngine.kt` - 上下文推荐引擎
+  - `ContextTemplateManager.kt` - 上下文模板管理器
+  - `PromptTemplateManager.kt` - 提示模板管理器
+  - `QuestionQueueManager.kt` - 问题队列管理器
+  - `FileIndexService.kt` - 文件索引服务
+  - `FileSearchService.kt` - 文件搜索服务
+  - `MessageConverter.kt` - 消息转换器
+  - `MessageProcessor.kt` - 消息处理器
+  - `ClaudeCliWrapperAdapter.kt` - Claude CLI包装器适配器
 
-- **上下文管理组件**
-  - `ContextSelectorPopup.kt` - 上下文选择器弹窗
-  - `FileContextSelector.kt` - 文件选择器
-  - `WebContextSelector.kt` - Web URL 选择器
-  - `InlineReferenceManager` - 内联引用管理器
+- **数据模型**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/models/`）
+  - `SessionObject.kt` - 会话状态容器（包含所有会话运行时数据）
+  - `SessionObjectV2.kt` - 会话对象V2版本
+  - `SessionMetadata.kt` - 会话元数据模型（用于配置序列化）
+  - `ChatModels.kt` - 聊天相关数据模型
+  - `ContextModels.kt` - 上下文相关数据模型
+  - `ConfigModels.kt` - 配置相关数据模型
+  - `LocalConfigModels.kt` - 本地配置数据模型
+  - `EnhancedMessage.kt` - 增强消息模型
+  - `EnhancedModels.kt` - 增强数据模型
+  - `UnifiedModels.kt` - 统一数据模型
+  - `GlobalCliWrapper.kt` - 全局CLI包装器模型
 
 ## 最新调查和发现记录
 
@@ -104,32 +139,53 @@
 完成了工具显示系统的全面升级，显著提升了用户体验：
 
 #### 核心改进
-- **覆盖率提升**：从支持6种工具类型扩展到80+种工具的专业显示
-- **MCP 集成**：为所有 MCP (Model Context Protocol) 工具实现统一展示格式
-- **专业格式化**：每种工具类型都有量身定制的显示方式
-- **智能分页**：大量结果自动分页，避免界面过载
+
+* **覆盖率提升**：从支持6种工具类型扩展到80+种工具的专业显示
+* **MCP 集成**：为所有 MCP (Model Context Protocol) 工具实现统一展示格式
+* **专业格式化**：每种工具类型都有量身定制的显示方式
+* **智能分页**：大量结果自动分页，避免界面过载
 
 #### 新增专业显示组件
-- `FileMatchResultDisplay()` - Glob 文件匹配结果（列表+统计）
-- `SearchResultDisplay()` - Grep/Search 搜索结果（文件:行号:内容格式）
-- `WebContentDisplay()` - WebFetch 网页内容摘要
-- `SubTaskDisplay()` - Task 子任务处理展示
-- `NotebookOperationDisplay()` - NotebookEdit Jupyter 操作
-- `MCPToolDisplay()` - MCP 工具统一格式
+
+* `FileMatchResultDisplay()` - Glob 文件匹配结果（列表+统计）
+* `SearchResultDisplay()` - Grep/Search 搜索结果（文件:行号:内容格式）
+* `WebContentDisplay()` - WebFetch 网页内容摘要
+* `SubTaskDisplay()` - Task 子任务处理展示
+* `NotebookOperationDisplay()` - NotebookEdit Jupyter 操作
+* `MCPToolDisplay()` - MCP 工具统一格式
 
 ### 2025年8月6日 - Claude CLI 会话连续性机制调查
 
 详细的调查过程、发现和解决方案请参考：**`docs/事件驱动架构设计.md`**
 
 #### 关键结论摘要
+
 基于对 Claudia 项目的深入分析和实际测试，确认了 Claude CLI 的真实行为：
-- `--resume` 参数在 `--print` 模式下每次都创建新会话文件
-- Claude 通过 `leafUuid` 机制保持会话连续性
-- 当前文件监听系统因此失效
+
+* `--resume` 参数在 `--print` 模式下每次都创建新会话文件
+* Claude 通过 `leafUuid` 机制保持会话连续性
+* 当前文件监听系统因此失效
 
 #### 解决方案
+
 采用事件驱动架构替代文件监听，详细设计参考 `docs/事件驱动架构设计.md`
 
-### `.claude/rules`
+## 组件库
 
-This directory was ignored as it is not part of the project's source code.
+编写 compose ui 代码时，先检查 @.claude/rules/jewel-component-index.md 是否满足我们的需求
+如果需要详细阅读某个组件的具体使用方式，到 @.claude/rules/jewel-components.md 中阅读详细说明
+只要jewel组件库中有，必须使用 jewel组件来实现功能，实验性质的组件也使用
+
+### 组件使用优先级
+
+1. **优先使用标准Jewel组件** - Button, Text, TextField等
+2. **避免自定义实现** - 如果Jewel有对应组件，不要用Box+clickable
+3. **实验性组件必须使用** - LazyTree, EditableComboBox等即使需要@ExperimentalJewelApi也必须使用
+4. **主题系统统一** - 使用JewelTheme.globalColors而非硬编码颜色
+
+### 常用组件速查
+
+* 按钮: Button, IconButton, IconActionButton  
+* 输入: TextField, TextArea, ComboBox
+* 布局: ScrollableContainer, Divider, SplitLayout
+* 弹窗: Popup, PopupContainer, Tooltip

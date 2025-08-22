@@ -150,27 +150,32 @@ fun AnnotatedChatInputField(
                                 isFocused = focusState.isFocused
                             }
                             .onPreviewKeyEvent { keyEvent ->
-                                // 首先处理注解相关的键盘事件
-                                val annotationHandled = AnnotationKeyboardHandler.handleKeyEvent(
-                                    keyEvent = keyEvent,
-                                    value = value,
-                                    onValueChange = onValueChange,
-                                    onAnnotationClick = onFileReferenceClick
-                                )
-                                
-                                if (annotationHandled) {
-                                    true
-                                } else {
-                                    // 处理普通的键盘事件
-                                    handleNormalKeyEvent(
+                                // 只拦截特定的功能键，让普通输入（包括输入法）正常工作
+                                when {
+                                    // 优先处理注解相关的键盘事件
+                                    AnnotationKeyboardHandler.handleKeyEvent(
                                         keyEvent = keyEvent,
                                         value = value,
-                                        onSend = onSend,
-                                        onInterruptAndSend = onInterruptAndSend,
                                         onValueChange = onValueChange,
-                                        onShowContextSelector = onShowContextSelector,
-                                        enabled = enabled
-                                    )
+                                        onAnnotationClick = onFileReferenceClick
+                                    ) -> true
+                                    
+                                    // 只拦截特定的功能键组合
+                                    keyEvent.key == Key.Enter || 
+                                    (keyEvent.key == Key.K && (keyEvent.isMetaPressed || keyEvent.isCtrlPressed)) -> {
+                                        handleNormalKeyEvent(
+                                            keyEvent = keyEvent,
+                                            value = value,
+                                            onSend = onSend,
+                                            onInterruptAndSend = onInterruptAndSend,
+                                            onValueChange = onValueChange,
+                                            onShowContextSelector = onShowContextSelector,
+                                            enabled = enabled
+                                        )
+                                    }
+                                    
+                                    // 对于其他键（包括输入法相关的），让它们正常传递
+                                    else -> false
                                 }
                             }
                     )
@@ -198,11 +203,22 @@ fun AnnotatedChatInputField(
             }
         }
         
-        // 简化内联文件引用处理器 - 传递TextLayoutResult
+        // 使用新的业务组件系统处理内联文件引用
         if (fileIndexService != null) {
-            AnnotatedInlineFileReferenceHandler(
-                value = value,
-                onValueChange = onValueChange,
+            SimpleInlineFileReferenceHandler(
+                textFieldValue = androidx.compose.ui.text.input.TextFieldValue(
+                    text = value.text,
+                    selection = value.selection
+                ),
+                onTextChange = { newTextFieldValue ->
+                    // 转换回 AnnotatedTextFieldValue
+                    val newAnnotatedValue = AnnotatedTextFieldValue(
+                        text = newTextFieldValue.text,
+                        selection = newTextFieldValue.selection,
+                        annotations = value.annotations // 保持现有注解
+                    )
+                    onValueChange(newAnnotatedValue)
+                },
                 fileIndexService = fileIndexService,
                 enabled = enabled,
                 textLayoutResult = textLayoutResult
