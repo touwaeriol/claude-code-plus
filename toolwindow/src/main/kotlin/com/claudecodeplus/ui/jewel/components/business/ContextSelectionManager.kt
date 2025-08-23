@@ -49,11 +49,16 @@ class ContextSelectionManager(
     
     /**
      * 检查光标位置是否在@ 查询中
+     * 
+     * 触发条件：
+     * 1. 光标必须在@符号后的查询文本中（在@xxxx的中间）
+     * 2. @符号前必须是空格/回车/文本开头
+     * 3. 光标到@之间不能有空格/回车
      */
     fun isInAtQuery(text: String, cursorPosition: Int): Pair<Int, String>? {
         if (cursorPosition <= 0 || cursorPosition > text.length) return null
         
-        // 向前查找最近的@符号
+        // 向前查找最近的@符号，确保光标到@之间没有空白字符
         var atPosition = -1
         for (i in cursorPosition - 1 downTo 0) {
             when (text[i]) {
@@ -61,13 +66,26 @@ class ContextSelectionManager(
                     atPosition = i
                     break
                 }
-                ' ', '\n', '\t' -> break // 遇到空白字符停止搜索
+                // 遇到空白字符则说明不在@查询中
+                ' ', '\n', '\t' -> return null
             }
         }
         
         if (atPosition == -1) return null
         
-        // 向前查找空白字符或开始位置
+        // 检查@符号前的字符是否合法（空格/回车/文本开头）
+        val beforeAtChar = if (atPosition > 0) text[atPosition - 1] else null
+        if (beforeAtChar != null && beforeAtChar !in " \n\t") {
+            // @符号前不是空白字符或文本开头，不触发
+            return null
+        }
+        
+        // 确保光标在@符号后面（包括紧跟@符号的情况）
+        if (cursorPosition < atPosition + 1) {
+            return null
+        }
+        
+        // 查找查询文本的结束位置
         val queryStart = atPosition + 1
         val queryEnd = run {
             for (i in cursorPosition until text.length) {
@@ -76,12 +94,11 @@ class ContextSelectionManager(
             text.length
         }
         
-        val query = text.substring(queryStart, queryEnd)
-        return if (queryEnd >= cursorPosition) {
-            Pair(atPosition, query)
-        } else {
-            null
-        }
+        // 提取查询文本（从@后到光标位置）
+        val query = text.substring(queryStart, cursorPosition)
+        
+        // 光标在@符号后即可触发（查询可以为空，显示最近文件）
+        return Pair(atPosition, query)
     }
     
     /**
