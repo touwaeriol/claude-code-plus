@@ -14,6 +14,7 @@ import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.SessionHistoryService
 import com.claudecodeplus.ui.services.MessageProcessor
 import com.claudecodeplus.ui.services.SessionLoader
+import com.claudecodeplus.ui.services.MessageConverter.toEnhancedMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -465,27 +466,125 @@ private fun sendMessage(
             val toolCalls = mutableListOf<ToolCall>()
             val orderedElements = mutableListOf<MessageTimelineItem>()
             
-            // 使用新的统一API执行查询
-            val result = unifiedSessionService.query(messageWithContext, options)
-            
-            if (result.success) {
-                // 命令执行成功，更新会话ID
-                if (result.sessionId != null && result.sessionId != currentSessionId) {
-                    onSessionIdUpdate(result.sessionId)
+            // 使用事件驱动的方式执行查询和监听输出
+            try {
+                // 创建事件服务实例
+                val processHandler = com.claudecodeplus.sdk.ClaudeProcessEventHandler()
+                val cliWrapper = com.claudecodeplus.sdk.ClaudeCliWrapper()
+                val historyLoader = com.claudecodeplus.sdk.SessionHistoryLoader()
+                val eventService = com.claudecodeplus.sdk.ClaudeEventService(processHandler, cliWrapper, historyLoader)
+                
+                // 决定是新会话还是恢复会话
+                val eventFlow = if (currentSessionId != null) {
+                    // 恢复现有会话
+                    eventService.resumeExistingSession(
+                        sessionId = currentSessionId,
+                        projectPath = workingDirectory,
+                        prompt = messageWithContext,
+                        options = options
+                    )
+                } else {
+                    // 启动新会话
+                    eventService.startNewSession(
+                        projectPath = workingDirectory,
+                        prompt = messageWithContext,
+                        options = options
+                    )
                 }
                 
-                // 文件监听现在由项目监听器自动处理，无需手动订阅
-            } else {
-                // 命令执行失败
+                // 在IO线程中监听事件流，在主线程更新UI
+                launch(Dispatchers.IO) {
+                    try {
+                        eventFlow.collect { event ->
+                            when (event) {
+                                is com.claudecodeplus.sdk.ClaudeEvent.MessageReceived -> {
+                                    // 在主线程更新消息
+                                    launch(Dispatchers.Main) {
+                                        val enhancedMessage = event.message.toEnhancedMessage()
+                                        println("[JewelChatApp] 收到增强消息: role=${enhancedMessage.role}, toolCalls=${enhancedMessage.toolCalls.size}")
+                                        
+                                        // 根据消息类型处理
+                                        when (enhancedMessage.role) {
+                                            MessageRole.ASSISTANT -> {
+                                                // 检查是否有工具调用信息
+                                                if (enhancedMessage.toolCalls.isNotEmpty()) {
+                                                    println("[JewelChatApp] 🔧 检测到工具调用，直接添加消息")
+                                                    // 如果有工具调用，直接添加这个消息，不要合并
+                                                    onMessageUpdate(messagesWithAssistant + enhancedMessage)
+                                                } else {
+                                                    // 没有工具调用的普通助手消息，进行内容合并
+                                                    val currentMessages = messagesWithAssistant.dropLast(1) // 移除空的助手消息
+                                                    val updatedAssistantMessage = assistantMessage.copy(
+                                                        content = enhancedMessage.content,
+                                                        status = if (enhancedMessage.isStreaming) MessageStatus.STREAMING else MessageStatus.COMPLETE,
+                                                        isStreaming = enhancedMessage.isStreaming,
+                                                        // 保持原有的工具调用信息（如果有的话）
+                                                        toolCalls = assistantMessage.toolCalls + enhancedMessage.toolCalls,
+                                                        tokenUsage = enhancedMessage.tokenUsage ?: assistantMessage.tokenUsage
+                                                    )
+                                                    onMessageUpdate(currentMessages + updatedAssistantMessage)
+                                                }
+                                            }
+                                            else -> {
+                                                // 其他类型消息直接添加
+                                                onMessageUpdate(messagesWithAssistant + enhancedMessage)
+                                            }
+                                        }
+                                    }
+                                }
+                                is com.claudecodeplus.sdk.ClaudeEvent.ProcessError -> {
+                                    launch(Dispatchers.Main) {
+                                        val errorMessage = EnhancedMessage(
+                                            id = IdGenerator.generateMessageId(),
+                                            role = MessageRole.ASSISTANT,
+                                            content = "❌ 错误: ${event.error}",
+                                            timestamp = System.currentTimeMillis(),
+                                            status = MessageStatus.FAILED,
+                                            isError = true
+                                        )
+                                        onMessageUpdate(messagesWithAssistant + errorMessage)
+                                    }
+                                }
+                                is com.claudecodeplus.sdk.ClaudeEvent.SessionComplete -> {
+                                    launch(Dispatchers.Main) {
+                                        // 会话完成，停止生成状态
+                                        onGeneratingChange(false)
+                                    }
+                                }
+                                else -> {
+                                    // 其他事件类型的处理
+                                    println("[JewelChatApp] 收到事件: $event")
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        launch(Dispatchers.Main) {
+                            val errorMessage = EnhancedMessage(
+                                id = IdGenerator.generateMessageId(),
+                                role = MessageRole.ASSISTANT,
+                                content = "❌ 处理响应时出错: ${e.message}",
+                                timestamp = System.currentTimeMillis(),
+                                status = MessageStatus.FAILED,
+                                isError = true
+                            )
+                            onMessageUpdate(messagesWithAssistant + errorMessage)
+                            onGeneratingChange(false)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
                 val errorMessage = EnhancedMessage(
                     id = IdGenerator.generateMessageId(),
                     role = MessageRole.ASSISTANT,
-                    content = "❌ 错误: ${result.errorMessage ?: "未知错误"}",
+                    content = "❌ 启动查询时出错: ${e.message}",
                     timestamp = System.currentTimeMillis(),
                     status = MessageStatus.FAILED,
                     isError = true
                 )
                 onMessageUpdate(messagesWithAssistant + errorMessage)
+                onGeneratingChange(false)
             }
         } catch (e: Exception) {
             // 异常处理

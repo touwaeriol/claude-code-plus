@@ -5,7 +5,7 @@ plugins {
     kotlin("jvm") version "2.1.10" apply false
     kotlin("plugin.serialization") version "2.1.10" apply false
     id("org.jetbrains.intellij.platform") version "2.6.0" apply false
-    id("org.jetbrains.compose") version "1.8.0-alpha04" apply false
+    id("org.jetbrains.compose") version "1.7.0" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.1.10" apply false
 }
 
@@ -17,7 +17,7 @@ extra["kotlinVersion"] = "2.1.10"
 extra["coroutinesVersion"] = "1.7.3"
 extra["serializationVersion"] = "1.6.2"
 extra["jewelVersion"] = "0.29.0-251.27828"
-extra["composeVersion"] = "1.8.0-alpha04"
+extra["composeVersion"] = "1.7.0"
 extra["commonsIoVersion"] = "2.15.1"
 extra["caffeineVersion"] = "3.1.8"
 extra["rxKotlinVersion"] = "3.0.1"
@@ -28,12 +28,19 @@ subprojects {
     apply(plugin = "kotlin")
     
     repositories {
-        mavenCentral()
-        google()
+        // JetBrains 专有仓库优先
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
-        maven("https://packages.jetbrains.team/maven/p/kpm/public")
+        maven("https://packages.jetbrains.team/maven/p/kmp/public") 
         maven("https://www.jetbrains.com/intellij-repository/releases")
         maven("https://cache-redirector.jetbrains.com/intellij-dependencies")
+        
+        // 官方仓库
+        mavenCentral()
+        google()
+        
+        // 阿里云镜像作为备选
+        maven("https://maven.aliyun.com/repository/central")
+        maven("https://maven.aliyun.com/repository/google")
     }
     
     // 通用依赖配置（jetbrains-plugin 模块会特殊处理）

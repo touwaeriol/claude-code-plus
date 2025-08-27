@@ -9,7 +9,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
 
 /**
  * Claude 会话事件服务
@@ -53,11 +57,11 @@ class ClaudeEventService(
             command = command,
             workingDirectory = projectPath,
             sessionId = null, // 新会话没有 sessionId
-            onOutput = { jsonLine ->
-                println("[ClaudeEventService] 新会话收到输出: $jsonLine")
+            onOutput = { outputLine ->
+                println("[ClaudeEventService] 新会话收到输出: $outputLine")
                 scope.launch {
                     try {
-                        val message = parseJsonLine(jsonLine)
+                        val message = parseOutputLine(outputLine)
                         if (message != null) {
                             println("[ClaudeEventService] 新会话解析消息成功: ${message.type}")
                             eventChannel.send(ClaudeEvent.MessageReceived(message))
@@ -66,7 +70,7 @@ class ClaudeEventService(
                         }
                     } catch (e: Exception) {
                         println("[ClaudeEventService] 新会话解析异常: ${e.message}")
-                        eventChannel.send(ClaudeEvent.ParseError(jsonLine, e))
+                        eventChannel.send(ClaudeEvent.ParseError(outputLine, e))
                     }
                 }
             },
@@ -131,15 +135,15 @@ class ClaudeEventService(
             command = command,
             workingDirectory = projectPath,
             sessionId = sessionId,
-            onOutput = { jsonLine ->
+            onOutput = { outputLine ->
                 scope.launch {
                     try {
-                        val message = parseJsonLine(jsonLine)
+                        val message = parseOutputLine(outputLine)
                         if (message != null) {
                             eventChannel.send(ClaudeEvent.MessageReceived(message))
                         }
                     } catch (e: Exception) {
-                        eventChannel.send(ClaudeEvent.ParseError(jsonLine, e))
+                        eventChannel.send(ClaudeEvent.ParseError(outputLine, e))
                     }
                 }
             },
@@ -194,84 +198,87 @@ class ClaudeEventService(
         options: ClaudeCliWrapper.QueryOptions,
         projectPath: String
     ): List<String> {
-        val args = mutableListOf<String>()
+        val osName = System.getProperty("os.name").lowercase()
         
-        // 查找 claude 命令路径
-        val claudeCommand = options.customCommand ?: findClaudeCommand()
-        args.add(claudeCommand)
+        // 构建 claude 命令及其参数
+        val claudeArgs = mutableListOf<String>()
+        
+        // 使用用户自定义命令或默认的 "claude"
+        val claudeCommand = options.customCommand ?: "claude"
+        claudeArgs.add(claudeCommand)
         
         // 会话控制参数（如果有）
         if (options.resume != null && options.resume.isNotBlank()) {
-            args.add("--resume")
-            args.add(options.resume)
+            claudeArgs.add("--resume")
+            claudeArgs.add(options.resume)
         }
         
         // 核心参数必须放在 prompt 之前
         if (options.model != null) {
-            args.add("--model")
-            args.add(options.model)
+            claudeArgs.add("--model")
+            claudeArgs.add(options.model)
         }
         
         // 使用 --print 模式和 stream-json 输出
-        args.add("--print")
-        args.add("--output-format")
-        args.add("stream-json")
-        args.add("--verbose")
+        claudeArgs.add("--print")
+        claudeArgs.add("--output-format")
+        claudeArgs.add("stream-json")
+        claudeArgs.add("--verbose")
         
         // 权限设置
         if (options.skipPermissions) {
-            args.add("--dangerously-skip-permissions")
+            claudeArgs.add("--dangerously-skip-permissions")
         } else {
-            args.add("--permission-mode")
-            args.add(options.permissionMode)
+            claudeArgs.add("--permission-mode")
+            claudeArgs.add(options.permissionMode)
         }
         
         // prompt 参数放在最后
-        args.add(prompt)
+        claudeArgs.add(prompt)
         
-        return args
-    }
-    
-    /**
-     * 查找 Claude CLI 命令路径
-     */
-    private fun findClaudeCommand(): String {
-        val osName = System.getProperty("os.name").lowercase()
+        // 根据操作系统选择合适的 shell 来执行命令
         return when {
             osName.contains("win") -> {
-                // Windows: 查找 claude.cmd
-                val paths = listOf(
-                    "claude.cmd",
-                    "C:\\Users\\${System.getProperty("user.name")}\\AppData\\Roaming\\npm\\claude.cmd",
-                    "C:\\Program Files\\nodejs\\claude.cmd"
-                )
-                paths.firstOrNull { commandExists(it) } ?: "claude.cmd"
+                // Windows: 使用 cmd
+                listOf("cmd", "/c", claudeArgs.joinToString(" ") { 
+                    if (it.contains(" ")) "\"$it\"" else it 
+                })
+            }
+            osName.contains("mac") -> {
+                // macOS: 使用 zsh (默认shell)
+                listOf("/bin/zsh", "-c", claudeArgs.joinToString(" ") { 
+                    if (it.contains(" ")) "'$it'" else it 
+                })
             }
             else -> {
-                // Unix 系统: 查找 claude
-                val paths = listOf(
-                    "claude",
-                    "/usr/local/bin/claude",
-                    "${System.getProperty("user.home")}/.local/bin/claude"
-                )
-                paths.firstOrNull { commandExists(it) } ?: "claude"
+                // Linux: 使用 bash
+                listOf("/bin/bash", "-c", claudeArgs.joinToString(" ") { 
+                    if (it.contains(" ")) "'$it'" else it 
+                })
             }
         }
     }
     
-    /**
-     * 检查命令是否存在
-     */
-    private fun commandExists(command: String): Boolean {
-        return try {
-            val processBuilder = ProcessBuilder(command, "--version")
-            val process = processBuilder.start()
-            process.waitFor() == 0
-        } catch (e: Exception) {
-            false
-        }
-    }
     
+    /**
+     * 解析CLI输出行（支持JSON和非JSON内容）
+     */
+    private fun parseOutputLine(line: String): SDKMessage? {
+        if (line.isBlank()) return null
+        
+        // 首先尝试作为JSON解析
+        if (line.trim().startsWith("{") && line.trim().endsWith("}")) {
+            return parseJsonLine(line)
+        }
+        
+        // 对于非JSON内容，创建简单的文本消息
+        return SDKMessage(
+            type = MessageType.TEXT,
+            data = MessageData(text = line),
+            content = line
+        )
+    }
+
     /**
      * 解析 JSONL 行为 SDKMessage
      */
@@ -299,37 +306,14 @@ class ClaudeEventService(
             
             println("[ClaudeEventService] 解析字段: type=$type, sessionId=$sessionId")
             
-            // 提取消息内容 - 根据不同类型处理
-            val messageContent = when (type) {
-                "assistant" -> {
-                    // 助手消息可能在 message.content 中
-                    jsonElement["message"]?.let { msgElement ->
-                        if (msgElement is JsonObject) {
-                            msgElement["content"]?.toString() ?: msgElement.toString()
-                        } else {
-                            msgElement.toString()
-                        }
-                    } ?: line
-                }
-                "result" -> {
-                    // 结果消息可能在 result 字段中
-                    jsonElement["result"]?.jsonPrimitive?.content ?: line
-                }
-                else -> {
-                    jsonElement["message"]?.toString() ?: line
-                }
-            }
+            // 提取消息内容 - 保留原始JSON让MessageConverter处理
+            val messageContent = line
+            
+            // 智能检测消息类型：区分纯文本消息和包含工具调用的消息
+            val actualType = detectActualMessageType(type, jsonElement)
             
             return SDKMessage(
-                type = when (type.lowercase()) {
-                    "user", "assistant", "text" -> MessageType.TEXT
-                    "error" -> MessageType.ERROR
-                    "tool_use" -> MessageType.TOOL_USE
-                    "tool_result" -> MessageType.TOOL_RESULT
-                    "start" -> MessageType.START
-                    "end" -> MessageType.END
-                    else -> MessageType.TEXT
-                },
+                type = actualType,
                 data = MessageData(
                     text = messageContent,
                     sessionId = sessionId
@@ -350,6 +334,54 @@ class ClaudeEventService(
                 data = MessageData(text = line),
                 content = line
             )
+        }
+    }
+    
+    /**
+     * 智能检测实际消息类型
+     * 根据消息内容区分纯文本消息和包含工具调用/结果的消息
+     */
+    private fun detectActualMessageType(type: String, jsonElement: JsonObject): MessageType {
+        return when (type.lowercase()) {
+            "assistant" -> {
+                // 检查助手消息是否包含工具调用
+                val messageContent = jsonElement["message"]?.jsonObject?.get("content")?.jsonArray
+                val hasToolUse = messageContent?.any { element ->
+                    element.jsonObject["type"]?.jsonPrimitive?.content == "tool_use" 
+                } ?: false
+                
+                if (hasToolUse) {
+                    println("[ClaudeEventService] 检测到工具调用助手消息")
+                    MessageType.TOOL_USE
+                } else {
+                    println("[ClaudeEventService] 检测到纯文本助手消息")
+                    MessageType.TEXT
+                }
+            }
+            "user" -> {
+                // 检查用户消息是否包含工具结果
+                val messageContent = jsonElement["message"]?.jsonObject?.get("content")?.jsonArray
+                val hasToolResult = messageContent?.any { element ->
+                    element.jsonObject["type"]?.jsonPrimitive?.content == "tool_result" 
+                } ?: false
+                
+                if (hasToolResult) {
+                    println("[ClaudeEventService] 检测到工具结果用户消息")
+                    MessageType.TOOL_RESULT
+                } else {
+                    println("[ClaudeEventService] 检测到纯文本用户消息")
+                    MessageType.TEXT
+                }
+            }
+            "error" -> MessageType.ERROR
+            "tool_use" -> MessageType.TOOL_USE
+            "tool_result" -> MessageType.TOOL_RESULT
+            "start" -> MessageType.START
+            "end" -> MessageType.END
+            else -> {
+                println("[ClaudeEventService] 未知消息类型: $type，默认为TEXT")
+                MessageType.TEXT
+            }
         }
     }
 }

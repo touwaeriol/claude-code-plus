@@ -30,8 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
-import org.jetbrains.jewel.ui.component.Icon
-import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 import java.io.File
@@ -125,10 +123,10 @@ fun SendStopButton(
     val isPressed by interactionSource.collectIsPressedAsState()
     var showContextMenu by remember { mutableStateOf(false) }
     
-    // 确定当前图标
-    val currentIcon = when {
-        isGenerating && !hasInput -> AllIconsKeys.Actions.Suspend  // 停止图标（方形）
-        else -> AllIconsKeys.General.ArrowUp  // 发送图标（向上箭头）
+    // 确定当前图标文本（临时替换避免ClassLoader冲突）
+    val currentIconText = when {
+        isGenerating && !hasInput -> "⏹"  // 停止图标
+        else -> "▲"  // 发送图标（向上箭头）
     }
     
     // 颜色动画
@@ -194,14 +192,13 @@ fun SendStopButton(
                 .hoverable(interactionSource, enabled),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                key = currentIcon,
-                contentDescription = when {
-                    isGenerating && !hasInput -> "Stop"
-                    else -> "Send"
-                },
-                modifier = Modifier.size(14.dp),
-                tint = Color.White
+            // 临时使用Text替代Icon避免ClassLoader冲突
+            Text(
+                text = currentIconText,
+                style = JewelTheme.defaultTextStyle.copy(
+                    color = Color.White,
+                    fontSize = 12.sp
+                )
             )
         }
         
@@ -320,14 +317,16 @@ fun ImagePickerButton(
             .hoverable(interactionSource, enabled),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            key = AllIconsKeys.FileTypes.Image,
-            contentDescription = "Select image",
-            modifier = Modifier.size(12.dp),
-            tint = if (enabled) 
-                JewelTheme.globalColors.text.normal 
-            else 
-                JewelTheme.globalColors.text.disabled
+        // 临时使用Text替代Icon避免ClassLoader冲突
+        Text(
+            text = "📷",
+            style = JewelTheme.defaultTextStyle.copy(
+                color = if (enabled) 
+                    JewelTheme.globalColors.text.normal 
+                else 
+                    JewelTheme.globalColors.text.disabled,
+                fontSize = 12.sp
+            )
         )
     }
 }

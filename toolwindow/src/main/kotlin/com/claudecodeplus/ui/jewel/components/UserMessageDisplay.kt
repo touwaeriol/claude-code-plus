@@ -1,55 +1,43 @@
 package com.claudecodeplus.ui.jewel.components
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.EnhancedMessage
-import org.jetbrains.jewel.foundation.theme.JewelTheme
-import org.jetbrains.jewel.ui.component.Text
 
 /**
  * 用户消息显示组件
- * 专门用于显示用户发送的消息
+ * 直接使用 UnifiedInputArea 的 DISPLAY 模式，确保与输入框完全一致
  */
 @Composable
 fun UserMessageDisplay(
     message: EnhancedMessage,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        // 用户标识
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = "👤",
-                style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
-            )
-            Text(
-                text = "你",
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 12.sp,
-                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
-                )
-            )
+    // 直接使用 UnifiedInputArea 的 DISPLAY 模式来显示用户消息
+    // 这样可以确保显示效果与输入框完全一致，包括主题适配
+    UnifiedInputArea(
+        modifier = modifier,
+        mode = InputAreaMode.DISPLAY,
+        message = message,
+        contexts = message.contexts,
+        onContextClick = { uri ->
+            // 消息列表中的引用点击处理（只读，可以显示文件信息等）
+            println("点击了上下文引用: $uri")
         }
-        
-        // 消息内容
-        if (message.content.isNotBlank()) {
-            SelectionContainer {
-                MarkdownRenderer(
-                    markdown = message.content,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
+    )
+}
+
+/**
+ * 检查文本是否包含内联引用
+ */
+private fun containsInlineReferences(text: String): Boolean {
+    // 检查 Markdown 格式的内联引用 [@filename](file://path)
+    val markdownPattern = Regex("""(\[@([^\]]+)\]\(file://([^)]+)\))""")
+    if (markdownPattern.find(text) != null) {
+        return true
     }
+    
+    // 检查旧格式的内联引用 @scheme://path
+    val legacyRefs = InlineReferenceDetector.extractReferences(text)
+    return legacyRefs.isNotEmpty()
 }

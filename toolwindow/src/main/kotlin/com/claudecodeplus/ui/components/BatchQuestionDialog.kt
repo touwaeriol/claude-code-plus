@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
@@ -339,7 +340,10 @@ private fun QuestionEditView(
                     value = newQuestion,
                     onValueChange = onNewQuestionChange,
                     singleLine = true,
-                    textStyle = JewelTheme.defaultTextStyle,
+                    textStyle = JewelTheme.defaultTextStyle.copy(
+                        color = JewelTheme.globalColors.text.normal
+                    ),
+                    cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (newQuestion.isEmpty()) {
@@ -466,7 +470,10 @@ private fun QuestionItem(
                             .clip(RoundedCornerShape(4.dp))
                             .background(Color(0xFFF5F5F5))
                             .padding(8.dp),
-                        textStyle = JewelTheme.defaultTextStyle,
+                        textStyle = JewelTheme.defaultTextStyle.copy(
+                            color = JewelTheme.globalColors.text.normal
+                        ),
+                        cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),
                         singleLine = false
                     )
                 } else {

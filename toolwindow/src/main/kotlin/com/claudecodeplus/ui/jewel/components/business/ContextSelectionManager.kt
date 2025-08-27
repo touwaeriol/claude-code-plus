@@ -176,11 +176,7 @@ class ContextSelectionManager(
         currentText: TextFieldValue,
         atPosition: Int
     ) {
-        val displayName = file.name
-        val markdownLink = createMarkdownContextLink(
-            displayName = displayName,
-            uri = "file://${file.absolutePath}"
-        )
+        val simpleReference = "@${file.relativePath}"
         
         // 计算替换范围：找到@ 查询的结束位置
         val queryStart = atPosition + 1
@@ -192,8 +188,13 @@ class ContextSelectionManager(
             }
         }
         
-        val newText = currentText.text.replaceRange(atPosition, queryEnd, markdownLink)
-        val newPosition = atPosition + markdownLink.length
+        // 检查替换后的位置是否需要添加空格
+        val needsSpace = queryEnd >= currentText.text.length || 
+                        (queryEnd < currentText.text.length && currentText.text[queryEnd] !in " \n\t")
+        
+        val finalReplacement = if (needsSpace) "$simpleReference " else simpleReference
+        val newText = currentText.text.replaceRange(atPosition, queryEnd, finalReplacement)
+        val newPosition = atPosition + finalReplacement.length
         
         onTextUpdate(TextFieldValue(
             text = newText,

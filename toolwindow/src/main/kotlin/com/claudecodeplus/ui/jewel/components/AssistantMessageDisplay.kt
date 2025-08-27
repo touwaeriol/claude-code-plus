@@ -8,7 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.*
-import com.claudecodeplus.ui.jewel.components.SmartToolCallDisplay
+import com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay
 import com.claudecodeplus.ui.jewel.components.tools.JumpingDots
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
@@ -22,7 +22,8 @@ import java.util.*
 @Composable
 fun AssistantMessageDisplay(
     message: EnhancedMessage,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -52,8 +53,9 @@ fun AssistantMessageDisplay(
         
         // 显示工具调用（如果有）
         if (message.toolCalls.isNotEmpty()) {
-            SmartToolCallDisplay(
+            CompactToolCallDisplay(
                 toolCalls = message.toolCalls,
+                onExpandedChange = onExpandedChange,
                 modifier = Modifier.fillMaxWidth()
             )
         }

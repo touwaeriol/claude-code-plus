@@ -38,27 +38,34 @@ import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.component.styling.TooltipStyle
 import org.jetbrains.jewel.ui.theme.tooltipStyle
 import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.delay
 
 /**
  * 紧凑的工具调用显示组件
  * 默认单行显示，点击展开详情
+ * 已简化：移除复杂的固定显示逻辑，直接控制展开高度
  */
 @Composable
 fun CompactToolCallDisplay(
     toolCalls: List<ToolCall>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
     println("[CompactToolCallDisplay] 工具调用数量：${toolCalls.size}")
     toolCalls.forEach { tool ->
         println("  - ${tool.name} (${tool.id}): ${tool.status}, result=${tool.result?.let { it::class.simpleName } ?: "null"}")
     }
     
+    // 简化的普通显示模式 - 移除复杂的固定显示逻辑
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(0.dp)  // 移除工具调用之间的间距
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         toolCalls.forEach { toolCall ->
-            CompactToolCallItem(toolCall)
+            CompactToolCallItem(
+                toolCall = toolCall,
+                onExpandedChange = onExpandedChange
+            )
         }
     }
 }
@@ -68,13 +75,21 @@ fun CompactToolCallDisplay(
  */
 @Composable
 private fun CompactToolCallItem(
-    toolCall: ToolCall
+    toolCall: ToolCall,
+    onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
     println("[CompactToolCallItem] 渲染工具：${toolCall.name}, ID：${toolCall.id}")
     
     var expanded by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
+    
+    // 展开状态变化时通知上级组件
+    LaunchedEffect(expanded) {
+        delay(100)  // 简单防抖
+        onExpandedChange?.invoke(toolCall.id, expanded)
+        println("[CompactToolCallItem] 通知展开状态变化: ${toolCall.name} -> $expanded")
+    }
     
     // 背景色动画（更平滑的过渡）
     val backgroundColor by animateColorAsState(
@@ -98,8 +113,16 @@ private fun CompactToolCallItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { expanded = !expanded }
-                .padding(horizontal = 3.dp, vertical = 0.dp),  // 完全移除垂直内边距
+                .heightIn(min = 32.dp)  // 确保最小点击高度
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,  // 使用hover效果替代ripple
+                    onClick = { 
+                        expanded = !expanded
+                        println("[CompactToolCallItem] Tool ${toolCall.name} clicked, expanded: $expanded")
+                    }
+                )
+                .padding(horizontal = 6.dp, vertical = 4.dp),  // 增加内边距提升点击体验
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -145,23 +168,23 @@ private fun CompactToolCallItem(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 现代化状态指示器
-                ModernStatusIndicator(
-                    status = when (toolCall.status) {
-                        ToolCallStatus.PENDING -> ToolExecutionStatus.PENDING
-                        ToolCallStatus.RUNNING -> ToolExecutionStatus.RUNNING
-                        ToolCallStatus.SUCCESS -> ToolExecutionStatus.SUCCESS
-                        ToolCallStatus.FAILED -> ToolExecutionStatus.ERROR
-                        ToolCallStatus.CANCELLED -> ToolExecutionStatus.ERROR
+                // 简化状态指示器（避免StackOverflow）
+                Text(
+                    text = when (toolCall.status) {
+                        ToolCallStatus.PENDING -> "⏳"
+                        ToolCallStatus.RUNNING -> "🔄"
+                        ToolCallStatus.SUCCESS -> "✅"
+                        ToolCallStatus.FAILED -> "❌"
+                        ToolCallStatus.CANCELLED -> "⚠️"
                     },
-                    size = 10.dp  // 进一步减少状态指示器大小
+                    style = JewelTheme.defaultTextStyle.copy(fontSize = 9.sp)
                 )
                 
-                // 展开/折叠图标（现代化设计）
+                // 简化的展开/折叠图标
                 Box(
                     modifier = Modifier
-                        .size(12.dp)  // 减少箭头容器大小
-                        .padding(1.dp),  // 减少内边距
+                        .size(12.dp)
+                        .padding(1.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     AnimatedContent(
@@ -173,11 +196,11 @@ private fun CompactToolCallItem(
                         label = "expand_icon"
                     ) { isExpanded ->
                         Text(
-                            text = if (isExpanded) "⌄" else "›",  // 使用更现代的箭头
+                            text = if (isExpanded) "⌄" else "›",
                             style = JewelTheme.defaultTextStyle.copy(
-                                fontSize = 10.sp,  // 减少箭头字体大小
+                                fontSize = 10.sp,
                                 color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f),
-                                lineHeight = 10.sp  // 减少行高
+                                lineHeight = 10.sp
                             )
                         )
                     }
@@ -185,21 +208,24 @@ private fun CompactToolCallItem(
             }
         }
         
-        // 展开的详细内容（优化动画性能）
+        // 展开的详细内容 - 🎯 优化动画性能，使用 animateContentSize
         AnimatedVisibility(
             visible = expanded,
             enter = expandVertically(
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessLow
+                    stiffness = Spring.StiffnessMedium
                 )
             ) + fadeIn(
-                animationSpec = tween(250, delayMillis = 50)
+                animationSpec = tween(300, delayMillis = 50)
             ),
             exit = shrinkVertically(
-                animationSpec = tween(200)
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
             ) + fadeOut(
-                animationSpec = tween(150)
+                animationSpec = tween(200)
             )
         ) {
             ToolCallDetails(
@@ -230,26 +256,98 @@ private fun ToolCallDetails(
         return
     }
     
+    // 🎯 设置最大高度为300dp（约等于视窗40%）
+    val maxExpandHeight = 300.dp
+    
+    println("[ToolCallDetails] 最大展开高度: $maxExpandHeight")
+    
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.05f))  // 更淡的背景
     ) {
-        // 详细内容区域含关闭按钮
+        // 详细内容区域含关闭按钮 - 🔑 添加高度限制和内部滚动
         Box(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = maxExpandHeight)  // 限制最大高度为视窗40%
         ) {
-            // 主内容
+            // 主内容 - 使用垂直滚动实现内部滚动
             SelectionContainer {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
                         .padding(horizontal = 2.dp, vertical = 0.dp)  // 最小化内边距
                         .padding(top = 12.dp) // 减少为关闭按钮留的空间
-                ) {
-                    // 直接显示结果
-                    toolCall.result?.let { result ->
-                        formatToolResult(toolCall)
+                    ) {
+                    // 根据工具调用状态显示对应内容
+                    when {
+                        // 运行中的工具调用显示进度状态
+                        toolCall.status == ToolCallStatus.RUNNING -> {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                com.claudecodeplus.ui.jewel.components.tools.JumpingDots()
+                                Text(
+                                    text = "工具执行中...",
+                                    style = JewelTheme.defaultTextStyle.copy(
+                                        fontSize = 12.sp,
+                                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+                                    )
+                                )
+                            }
+                        }
+                        
+                        // 等待中的工具调用
+                        toolCall.status == ToolCallStatus.PENDING -> {
+                            Text(
+                                text = "⏳ 等待执行...",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 12.sp,
+                                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+                                )
+                            )
+                        }
+                        
+                        // 取消的工具调用
+                        toolCall.status == ToolCallStatus.CANCELLED -> {
+                            Text(
+                                text = "⚠️ 工具执行已取消",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 12.sp,
+                                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+                                )
+                            )
+                        }
+                        
+                        // 有结果的工具调用显示格式化结果
+                        toolCall.result != null -> {
+                            formatToolResult(toolCall)
+                        }
+                        
+                        // 失败状态但没有结果对象的情况
+                        toolCall.status == ToolCallStatus.FAILED -> {
+                            Text(
+                                text = "❌ 工具执行失败",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFFF6B6B)
+                                )
+                            )
+                        }
+                        
+                        // 其他情况显示状态
+                        else -> {
+                            Text(
+                                text = "状态: ${toolCall.status}",
+                                style = JewelTheme.defaultTextStyle.copy(
+                                    fontSize = 12.sp,
+                                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -277,21 +375,27 @@ private fun ToolCallDetails(
 
 /**
  * 判断是否需要显示工具的详细结果
- * 修复：确保所有有结果的工具都可以展开显示
+ * 修复：确保所有状态的工具都可以展开显示
  */
 private fun shouldShowToolDetails(toolCall: ToolCall): Boolean {
-    // 如果工具调用没有结果，不需要显示详细信息
-    if (toolCall.result == null) return false
-    
-    // 有结果的工具都应该可以显示详细结果
     return when {
-        // 失败的工具 - 用户必须看到错误信息
+        // 运行中的工具调用应该显示进度状态
+        toolCall.status == ToolCallStatus.RUNNING -> true
+        
+        // 失败的工具调用必须显示错误信息
+        toolCall.status == ToolCallStatus.FAILED -> true
         toolCall.result is ToolResult.Failure -> true
         
-        // 成功的工具 - 用户可以选择查看详细结果
+        // 成功的工具调用显示结果
         toolCall.result is ToolResult.Success -> true
         
-        // 其他类型的结果也显示
+        // 取消的工具调用显示状态
+        toolCall.status == ToolCallStatus.CANCELLED -> true
+        
+        // 等待中的工具调用显示等待状态
+        toolCall.status == ToolCallStatus.PENDING -> true
+        
+        // 默认显示，确保用户能看到所有工具调用的状态
         else -> true
     }
 }

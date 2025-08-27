@@ -84,17 +84,17 @@ object AnnotationKeyboardHandler {
         currentAnnotation: FileReferenceAnnotation?
     ): Boolean {
         return when {
-            // 光标在注解内部，删除整个注解
+            // 光标在注解内部任何位置，删除整个注解
             currentAnnotation != null -> {
                 deleteAnnotation(value, onValueChange, currentAnnotation)
                 true
             }
             
-            // 光标在注解边界，检查是否要删除注解
+            // 光标在注解边界后，检查前一个字符是否是注解的结束
             cursorPos > 0 -> {
                 val prevAnnotation = value.getAnnotationAt(cursorPos - 1)
-                if (prevAnnotation != null && cursorPos == prevAnnotation.endIndex) {
-                    // 在注解结束位置，删除整个注解
+                if (prevAnnotation != null) {
+                    // 前一个字符在注解内，删除整个注解
                     deleteAnnotation(value, onValueChange, prevAnnotation)
                     true
                 } else {
@@ -116,17 +116,17 @@ object AnnotationKeyboardHandler {
         currentAnnotation: FileReferenceAnnotation?
     ): Boolean {
         return when {
-            // 光标在注解内部，删除整个注解
+            // 光标在注解内部任何位置，删除整个注解
             currentAnnotation != null -> {
                 deleteAnnotation(value, onValueChange, currentAnnotation)
                 true
             }
             
-            // 光标在注解边界，检查是否要删除注解
+            // 光标在注解边界前，检查下一个字符是否是注解的开始
             cursorPos < value.text.length -> {
                 val nextAnnotation = value.getAnnotationAt(cursorPos)
-                if (nextAnnotation != null && cursorPos == nextAnnotation.startIndex) {
-                    // 在注解开始位置，删除整个注解
+                if (nextAnnotation != null) {
+                    // 下一个字符在注解内，删除整个注解
                     deleteAnnotation(value, onValueChange, nextAnnotation)
                     true
                 } else {
@@ -328,17 +328,3 @@ object AnnotationKeyboardHandler {
     }
 }
 
-/**
- * 扩展属性：检查键盘事件是否包含修饰键
- */
-val KeyEvent.isShiftPressed: Boolean
-    get() = isShiftPressed
-
-val KeyEvent.isCtrlPressed: Boolean
-    get() = isCtrlPressed
-
-val KeyEvent.isAltPressed: Boolean
-    get() = isAltPressed
-
-val KeyEvent.isMetaPressed: Boolean
-    get() = isMetaPressed

@@ -12,9 +12,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
@@ -23,8 +25,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -40,7 +44,12 @@ import com.claudecodeplus.ui.jewel.components.context.*
 import com.claudecodeplus.ui.jewel.components.tools.JumpingDots
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.TextArea
 import kotlinx.coroutines.launch
+
+// 导入内联引用系统
+import com.claudecodeplus.ui.jewel.components.parseInlineReferences
+import com.claudecodeplus.ui.jewel.components.FileReferenceAnnotation
 
 /**
  * 统一的聊天输入组件
@@ -84,7 +93,12 @@ fun UnifiedChatInput(
     fileIndexService: FileIndexService? = null,
     projectService: ProjectService? = null,
     resetTrigger: Any? = null,  // 添加重置触发器
-    sessionObject: SessionObject? = null  // 新增会话对象参数
+    sessionObject: SessionObject? = null,  // 新增会话对象参数
+    // UI元素显示控制参数
+    showModelSelector: Boolean = true,
+    showPermissionControls: Boolean = true,
+    showContextControls: Boolean = true,
+    showSendButton: Boolean = true
 ) {
     val focusRequester = remember { FocusRequester() }
     var isFocused by remember { mutableStateOf(false) }
@@ -100,19 +114,12 @@ fun UnifiedChatInput(
     val showSimpleFileSelector = sessionObject?.showSimpleFileSelector ?: false
     val atSymbolPosition = sessionObject?.atSymbolPosition
     
-    // 调试：监控状态变化
+    // 监控状态变化
     LaunchedEffect(showContextSelector, showSimpleFileSelector, atSymbolPosition) {
-        println("[UnifiedChatInput] 状态变化 - showContextSelector=$showContextSelector, showSimpleFileSelector=$showSimpleFileSelector, atSymbolPosition=$atSymbolPosition")
+        // 状态变化已记录
     }
     
-    // 将 TextFieldValue 转换为 AnnotatedTextFieldValue
-    val annotatedValue = remember(textFieldValue) {
-        AnnotatedTextFieldValue(
-            text = textFieldValue.text,
-            selection = textFieldValue.selection,
-            annotations = emptyList() // 暂时为空，后续可以从会话状态中获取
-        )
-    }
+    // 完全简化：直接使用 TextFieldValue，不需要任何注解包装
     
     // 监听重置触发器，清空输入框
     LaunchedEffect(resetTrigger) {
@@ -141,7 +148,7 @@ fun UnifiedChatInput(
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(100) // 等待组件完全渲染
         focusRequester.requestFocus()
-        println("[UnifiedChatInput] 请求焦点")
+        // 请求焦点
     }
     
     // 监听enabled状态变化时重新请求焦点
@@ -149,7 +156,7 @@ fun UnifiedChatInput(
         if (enabled) {
             kotlinx.coroutines.delay(50)
             focusRequester.requestFocus()
-            println("[UnifiedChatInput] enabled状态变化，重新请求焦点: $enabled")
+            // enabled状态变化，重新请求焦点
         }
     }
     
@@ -171,17 +178,17 @@ fun UnifiedChatInput(
                 isFocused = focusState.hasFocus
             }
     ) {
-        // 顶部工具栏：上下文管理
-        if (contexts.isNotEmpty() || enabled) {
+        // 顶部工具栏：上下文管理（条件显示）
+        if (showContextControls && (contexts.isNotEmpty() || enabled)) {
             TopToolbar(
                 contexts = contexts,
                 onContextAdd = {
-                    println("[UnifiedChatInput] Add Context 按钮被点击 - 显示简化文件列表")
+                    // Add Context 按钮被点击 - 显示简化文件列表
                     sessionObject?.let { session ->
                         // 直接显示简化的文件选择器，而不是完整的上下文选择器
                         session.showSimpleFileSelector = true
-                        println("[UnifiedChatInput] showSimpleFileSelector 已设置为: true")
-                    } ?: println("[UnifiedChatInput] sessionObject 为 null！")
+                        // showSimpleFileSelector 已设置为 true
+                    } ?: Unit // sessionObject 为 null
                 },
                 onContextRemove = onContextRemove,
                 enabled = enabled && !isGenerating,
@@ -202,55 +209,77 @@ fun UnifiedChatInput(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 50.dp, max = 300.dp)  // 减少最小高度，更紧凑
+                .clickable { focusRequester.requestFocus() }  // 🔑 关键修复：点击整个区域都能聚焦
         ) {
-            // 使用新的注解输入框
-            AnnotatedChatInputField(
-                value = annotatedValue,
-                onValueChange = { newAnnotatedValue ->
-                    // 将 AnnotatedTextFieldValue 转换回 TextFieldValue 更新会话状态
-                    val newTextFieldValue = TextFieldValue(
-                        text = newAnnotatedValue.text,
-                        selection = newAnnotatedValue.selection
-                    )
+            // 使用简单的 BasicTextField 避免复杂的 TextArea API
+            BasicTextField(
+                value = textFieldValue,
+                onValueChange = { newTextFieldValue ->
                     sessionObject?.updateInputText(newTextFieldValue)
-                    // 可以在这里保存注解到会话状态
-                },
-                onSend = {
-                    // 发送功能：只有在未生成状态下才能发送
-                    if (annotatedValue.text.isNotBlank() && !isGenerating) {
-                        onSend(annotatedValue.text)
-                        sessionObject?.clearInput()
-                    }
-                },
-                onInterruptAndSend = if (onInterruptAndSend != null) {
-                    {
-                        // 打断发送功能：只有在生成状态下才能打断
-                        if (annotatedValue.text.isNotBlank() && isGenerating) {
-                            onInterruptAndSend(annotatedValue.text)
-                            sessionObject?.clearInput()
+                    
+                    // 检测@符号触发文件选择
+                    val cursorPos = newTextFieldValue.selection.start
+                    if (cursorPos > 0 && newTextFieldValue.text.getOrNull(cursorPos - 1) == '@') {
+                        // 检查@符号前是否为空格或行首
+                        val beforeAt = if (cursorPos > 1) newTextFieldValue.text[cursorPos - 2] else null
+                        if (beforeAt == null || beforeAt in " \n\t") {
+                            sessionObject?.let { session ->
+                                session.atSymbolPosition = cursorPos - 1
+                                session.showSimpleFileSelector = true
+                            }
                         }
                     }
-                } else null,
-                enabled = enabled,  // 输入框始终可用，允许响应期间继续编辑
-                focusRequester = focusRequester,
-                onShowContextSelector = { position ->
-                    println("[UnifiedChatInput] @ 符号被触发，位置: $position")
-                    sessionObject?.let { session ->
-                        println("[UnifiedChatInput] 设置上下文选择器状态: showContextSelector=true, atSymbolPosition=$position")
-                        session.showContextSelector = true
-                        session.atSymbolPosition = position
+                },
+                enabled = enabled,
+                textStyle = JewelTheme.defaultTextStyle.copy(
+                    color = JewelTheme.globalColors.text.normal
+                ),
+                cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),
+                decorationBox = { innerTextField ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .clickable { focusRequester.requestFocus() }  // 🔑 内部区域也可点击聚焦
+                    ) {
+                        if (textFieldValue.text.isEmpty()) {
+                            Text(
+                                "Message Claude...",
+                                color = JewelTheme.globalColors.text.disabled,
+                                style = JewelTheme.defaultTextStyle
+                            )
+                        }
+                        innerTextField()
                     }
                 },
-                showPreview = false,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),  // 与顶部工具栏一致
-                maxHeight = 280,
-                fileIndexService = fileIndexService,  // 传递文件索引服务
-                onFileReferenceClick = { annotation ->
-                    // 处理文件引用点击，可以打开文件或显示更多信息
-                    println("文件引用被点击: ${annotation.file.relativePath}")
-                }
+                    .focusRequester(focusRequester)
+                    .onKeyEvent { keyEvent ->
+                        when {
+                            // Enter 发送消息
+                            keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp && !keyEvent.isShiftPressed -> {
+                                if (textFieldValue.text.isNotBlank() && !isGenerating) {
+                                    onSend(textFieldValue.text)
+                                    sessionObject?.clearInput()
+                                }
+                                true
+                            }
+                            // Shift+Enter 换行
+                            keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp && keyEvent.isShiftPressed -> {
+                                false // 让默认处理插入换行
+                            }
+                            // Alt+Enter 打断并发送
+                            keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp && keyEvent.isAltPressed -> {
+                                if (textFieldValue.text.isNotBlank() && isGenerating) {
+                                    onInterruptAndSend?.invoke(textFieldValue.text)
+                                    sessionObject?.clearInput()
+                                }
+                                true
+                            }
+                            else -> false
+                        }
+                    }
             )
         }
         
@@ -265,11 +294,11 @@ fun UnifiedChatInput(
             skipPermissions = skipPermissions,
             onSkipPermissionsChange = onSkipPermissionsChange,
             isGenerating = isGenerating,
-            hasInput = annotatedValue.text.isNotBlank(),
+            hasInput = textFieldValue.text.isNotBlank(),
             onSend = {
                 // 发送按钮逻辑：只有在非生成状态下才能发送
-                if (annotatedValue.text.isNotBlank() && !isGenerating) {
-                    onSend(annotatedValue.text)
+                if (textFieldValue.text.isNotBlank() && !isGenerating) {
+                    onSend(textFieldValue.text)
                     sessionObject?.clearInput()
                 }
             },
@@ -277,8 +306,8 @@ fun UnifiedChatInput(
             onInterruptAndSend = if (onInterruptAndSend != null) {
                 {
                     // 打断发送逻辑：只有在生成状态下才能打断
-                    if (annotatedValue.text.isNotBlank() && isGenerating) {
-                        onInterruptAndSend(annotatedValue.text)
+                    if (textFieldValue.text.isNotBlank() && isGenerating) {
+                        onInterruptAndSend?.invoke(textFieldValue.text)
                         sessionObject?.clearInput()
                     }
                 }
@@ -289,8 +318,12 @@ fun UnifiedChatInput(
                 .padding(horizontal = 16.dp, vertical = 10.dp),  // 与顶部工具栏一致
             // 传递上下文统计所需的参数
             messageHistory = sessionObject?.messages ?: emptyList(),
-            inputText = annotatedValue.text,
-            contexts = contexts
+            inputText = textFieldValue.text,
+            contexts = contexts,
+            // 传递显示控制参数
+            showModelSelector = showModelSelector,
+            showPermissionControls = showPermissionControls,
+            showSendButton = showSendButton
         )
     }
     
@@ -310,36 +343,41 @@ fun UnifiedChatInput(
                 focusRequester.requestFocus()
             },
             onContextSelect = { context ->
-                println("[UnifiedChatInput] 文件被选中: ${context.toDisplayString()}, atSymbolPosition=$atSymbolPosition")
+                // 文件被选中
                 
                 // 弹窗已在 onDismiss 回调中关闭，这里不需要额外处理
-                println("[UnifiedChatInput] 上下文选择完成")
+                // 上下文选择完成
                 
                 if (atSymbolPosition != null) {
-                    // @ 触发：生成内联引用
-                    println("[UnifiedChatInput] @ 触发模式：生成内联引用")
-                    val markdownLink = createMarkdownContextLink(
-                        displayName = context.toDisplayString(),
-                        uri = context.uri
-                    )
+                    // @ 触发：生成Markdown格式的内联引用
+                    // @ 触发模式：生成Markdown内联引用
+                    val inlineReference = when (context) {
+                        is ContextReference.FileReference -> {
+                            // 生成 [@文件名](file://绝对路径) 格式
+                            val fileName = context.path.takeIf { it.isNotBlank() } ?: context.fullPath.substringAfterLast('/')
+                            "[@$fileName](file://${context.fullPath}) "
+                        }
+                        is ContextReference.WebReference -> "@${context.url} "
+                        else -> "@${context.toDisplayString()} "
+                    }
                     
-                    val currentText = annotatedValue.text
+                    val currentText = textFieldValue.text
                     val pos = atSymbolPosition!!
-                    val newText = currentText.replaceRange(pos, pos + 1, markdownLink)
-                    val newPosition = pos + markdownLink.length
+                    val newText = currentText.replaceRange(pos, pos + 1, inlineReference)
+                    val newPosition = pos + inlineReference.length
                     
-                    println("[UnifiedChatInput] 更新输入文本: '$newText', 光标位置: $newPosition")
+                    // 更新输入文本
                     sessionObject?.updateInputText(TextFieldValue(
                         newText,
                         TextRange(newPosition)
                     ))
                 } else {
                     // 按钮触发：添加到上下文列表
-                    println("[UnifiedChatInput] 按钮触发模式：添加到上下文列表")
+                    // 按钮触发模式：添加到上下文列表
                     onContextAdd(context)
                 }
                 
-                println("[UnifiedChatInput] 请求输入框焦点")
+                // 请求输入框焦点
                 scope.launch {
                     kotlinx.coroutines.delay(50) // 小延迟确保弹窗完全关闭后再请求焦点
                     focusRequester.requestFocus()
@@ -401,12 +439,46 @@ fun UnifiedChatInput(
                 scrollState = scrollState,
                 popupOffset = buttonCenterPosition, // 传递按钮中心位置作为锚点
                 onItemSelected = { selectedFile ->
-                    // 将文件添加到上下文列表
-                    val contextReference = ContextReference.FileReference(
-                        path = selectedFile.relativePath,
-                        fullPath = selectedFile.absolutePath
-                    )
-                    onContextAdd(contextReference)
+                    // 根据触发方式决定处理逻辑
+                    val currentAtPosition = sessionObject?.atSymbolPosition
+                    if (currentAtPosition != null) {
+                        // @符号触发：插入@相对路径到文本中
+                        val currentText = sessionObject?.inputTextFieldValue ?: androidx.compose.ui.text.input.TextFieldValue("")
+                        val simpleReference = "@${selectedFile.relativePath}"
+                        
+                        // 计算替换范围（从@符号开始到当前光标位置）
+                        val replaceEndPos = currentText.selection.start
+                        
+                        // 检查是否需要添加空格
+                        val needsSpace = replaceEndPos >= currentText.text.length || 
+                                        (replaceEndPos < currentText.text.length && currentText.text[replaceEndPos] !in " \n\t")
+                        
+                        val finalReference = if (needsSpace) "$simpleReference " else simpleReference
+                        
+                        val newText = currentText.text.replaceRange(
+                            currentAtPosition,
+                            replaceEndPos,
+                            finalReference
+                        )
+                        val newPosition = currentAtPosition + finalReference.length
+                        
+                        sessionObject?.updateInputText(
+                            androidx.compose.ui.text.input.TextFieldValue(
+                                text = newText,
+                                selection = androidx.compose.ui.text.TextRange(newPosition)
+                            )
+                        )
+                        
+                        // 清除@符号位置
+                        sessionObject?.atSymbolPosition = null
+                    } else {
+                        // Add Context按钮：将文件添加到上下文列表（胶囊标签）
+                        val contextReference = ContextReference.FileReference(
+                            path = selectedFile.relativePath,
+                            fullPath = selectedFile.absolutePath
+                        )
+                        onContextAdd(contextReference)
+                    }
                     
                     // 关闭弹窗
                     sessionObject?.showSimpleFileSelector = false
@@ -430,11 +502,48 @@ fun UnifiedChatInput(
                             Key.Enter -> {
                                 if (selectedIndex in searchResults.indices) {
                                     val selectedFile = searchResults[selectedIndex]
-                                    val contextReference = ContextReference.FileReference(
-                                        path = selectedFile.relativePath,
-                                        fullPath = selectedFile.absolutePath
-                                    )
-                                    onContextAdd(contextReference)
+                                    
+                                    // 根据触发方式决定处理逻辑
+                                    val currentAtPosition = sessionObject?.atSymbolPosition
+                                    if (currentAtPosition != null) {
+                                        // @符号触发：插入@相对路径到文本中
+                                        val currentText = sessionObject?.inputTextFieldValue ?: androidx.compose.ui.text.input.TextFieldValue("")
+                                        val simpleReference = "@${selectedFile.relativePath}"
+                                        
+                                        // 计算替换范围（从@符号开始到当前光标位置）
+                                        val replaceEndPos = currentText.selection.start
+                                        
+                                        // 检查是否需要添加空格
+                                        val needsSpace = replaceEndPos >= currentText.text.length || 
+                                                        (replaceEndPos < currentText.text.length && currentText.text[replaceEndPos] !in " \n\t")
+                                        
+                                        val finalReference = if (needsSpace) "$simpleReference " else simpleReference
+                                        
+                                        val newText = currentText.text.replaceRange(
+                                            currentAtPosition,
+                                            replaceEndPos,
+                                            finalReference
+                                        )
+                                        val newPosition = currentAtPosition + finalReference.length
+                                        
+                                        sessionObject?.updateInputText(
+                                            androidx.compose.ui.text.input.TextFieldValue(
+                                                text = newText,
+                                                selection = androidx.compose.ui.text.TextRange(newPosition)
+                                            )
+                                        )
+                                        
+                                        // 清除@符号位置
+                                        sessionObject?.atSymbolPosition = null
+                                    } else {
+                                        // Add Context按钮：将文件添加到上下文列表（胶囊标签）
+                                        val contextReference = ContextReference.FileReference(
+                                            path = selectedFile.relativePath,
+                                            fullPath = selectedFile.absolutePath
+                                        )
+                                        onContextAdd(contextReference)
+                                    }
+                                    
                                     sessionObject?.showSimpleFileSelector = false
                                 }
                                 true
@@ -513,50 +622,65 @@ private fun BottomToolbar(
     // 新增参数，用于上下文统计
     messageHistory: List<EnhancedMessage> = emptyList(),
     inputText: String = "",
-    contexts: List<ContextReference> = emptyList()
+    contexts: List<ContextReference> = emptyList(),
+    // UI元素显示控制参数
+    showModelSelector: Boolean = true,
+    showPermissionControls: Boolean = true,
+    showSendButton: Boolean = true
 ) {
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 左侧：模型、权限选择器和跳过权限复选框
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ModernModelSelector(
-                currentModel = selectedModel,
-                onModelChange = onModelChange,
-                enabled = enabled && !isGenerating
-            )
-            
-            ModernPermissionSelector(
-                currentMode = selectedPermissionMode,
-                onModeChange = onPermissionModeChange,
-                enabled = enabled && !isGenerating
-            )
-            
-            // 跳过权限复选框
-            SkipPermissionsCheckbox(
-                checked = skipPermissions,
-                onCheckedChange = onSkipPermissionsChange,
-                enabled = enabled && !isGenerating
-            )
+        // 左侧：模型、权限选择器和跳过权限复选框（条件显示）
+        if (showModelSelector || showPermissionControls) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (showModelSelector) {
+                    ModernModelSelector(
+                        currentModel = selectedModel,
+                        onModelChange = onModelChange,
+                        enabled = enabled && !isGenerating
+                    )
+                }
+                
+                if (showPermissionControls) {
+                    ModernPermissionSelector(
+                        currentMode = selectedPermissionMode,
+                        onModeChange = onPermissionModeChange,
+                        enabled = enabled && !isGenerating
+                    )
+                    
+                    // 跳过权限复选框
+                    SkipPermissionsCheckbox(
+                        checked = skipPermissions,
+                        onCheckedChange = onSkipPermissionsChange,
+                        enabled = enabled && !isGenerating
+                    )
+                }
+            }
+        } else {
+            // 如果不显示左侧控件，用空的Box占位
+            Box {}
         }
         
-        // 右侧：操作按钮和上下文统计
-        SendStopButtonGroup(
-            isGenerating = isGenerating,
-            onSend = onSend,
-            onStop = onStop,
-            hasInput = hasInput,
-            enabled = enabled,
-            currentModel = selectedModel,
-            messageHistory = messageHistory,
-            inputText = inputText,
-            contexts = contexts
-        )
+        // 右侧：操作按钮和上下文统计（条件显示）
+        if (showSendButton) {
+            SendStopButtonGroup(
+                isGenerating = isGenerating,
+                onSend = onSend,
+                onStop = onStop,
+                hasInput = hasInput,
+                enabled = enabled,
+                currentModel = selectedModel,
+                messageHistory = messageHistory,
+                inputText = inputText,
+                contexts = contexts
+            )
+        }
     }
 }
 
@@ -572,15 +696,7 @@ private fun ContextReference.toDisplayString(): String {
     }
 }
 
-private val ContextReference.uri: String
-    get() = when (this) {
-        is ContextReference.FileReference -> "file://${this.fullPath}"
-        is ContextReference.WebReference -> url
-        is ContextReference.FolderReference -> "file://${this.path}"
-        is ContextReference.SymbolReference -> "claude-context://symbol/${this.name}"
-        is ContextReference.ImageReference -> "file://$path"
-        else -> "claude-context://unknown"
-    }
+// URI 属性已在 ContextReference 模型中定义，移除重复扩展
 
 // 内部的 ContextSearchService 实现
 private class UnifiedChatContextSearchService(

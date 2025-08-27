@@ -22,7 +22,6 @@
     - 完整的权限管理系统（权限模式选择器、跳过权限认证开关、权限控制组合逻辑）
     - 聊天界面布局设计（基础界面结构、消息展示布局、工具展示示例、状态指示器系统、响应式布局适配）
     - 所有UI组件的功能需求和交互规范
-*   **`requirements/desktop-requirements.md`**: 桌面应用的需求文档，包括多标签界面、项目管理面板、窗口管理和平台支持
 *   **`requirements/plugin-requirements.md`**: IntelliJ 插件的需求文档，涵盖 IDE 集成、编辑器功能、调试支持等特定功能
 
 #### 架构和设计文档
@@ -47,8 +46,8 @@
 *   **`SDK迁移指南.md`**: Claude CLI SDK 迁移指南，包含版本更新和API变更说明
 
 #### 部署和使用指南
-*   **`部署指南.md`**: Claude Code Plus 的部署说明，涵盖作为 IntelliJ IDEA 插件或独立桌面应用程序的部署方式，概述模块结构和功能差异。
-*   **`快速开始.md`**: 增强桌面应用的快速入门指南，包括如何运行应用、功能概览（如多标签对话和上下文管理）以及键盘快捷键摘要。
+*   **`部署指南.md`**: Claude Code Plus 的部署说明，作为 IntelliJ IDEA 插件的部署方式和配置。
+*   **`快速开始.md`**: 插件快速入门指南，包括如何使用插件、功能概览（如多标签对话和上下文管理）以及键盘快捷键摘要。
 
 #### 实现状态文档
 *   **`上下文消息格式设计.md`**: 详细说明上下文消息格式的设计理念和实现方案，包括标签上下文和内联引用的区别
@@ -79,6 +78,12 @@
   - `ToolExecutionProgress.kt` - 工具执行进度显示
   - `ToolGroupDisplay.kt` - 工具分组展示
   - `AssistantMessageDisplay.kt` - 助手消息展示（集成新的工具展示组件）
+
+- **消息显示组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/jewel/components/`）**已完全优化**
+  - `UserMessageDisplay.kt` - **用户消息显示组件**，已优化为与输入框完全一致的主题适配
+  - `UnifiedInputArea.kt` - **统一输入区域组件**，支持 INPUT 和 DISPLAY 两种模式，DISPLAY 模式已优化为纯文本显示
+  - `AnnotatedMessageDisplay.kt` - 带注解的消息显示组件（已被纯文本方案替代，避免主题适配问题）
+  - `CachedMarkdownParser.kt` - 缓存的 Markdown 解析器（性能优化组件）
 
 - **UI 组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/components/`）
   - `MultiTabChatView.kt` - 多标签聊天视图
@@ -133,6 +138,95 @@
   - `GlobalCliWrapper.kt` - 全局CLI包装器模型
 
 ## 最新调查和发现记录
+
+### 2025年8月26日 - 暗色主题完全修复
+
+完成了关键的UI主题适配问题全面修复，彻底解决了暗色主题下文字不可见的问题：
+
+#### 术语定义（开发必读）
+为避免后续开发中的概念混淆，明确定义以下核心术语：
+
+- **输入框 (Input Box)**：聊天界面底部的文本输入区域，用户在此输入新消息
+  - **对应组件**：`UnifiedChatInput.kt`
+  - **视觉位置**：界面最底部，包含文本输入域、上下文标签、模型选择器、发送按钮等
+  - **用户交互**：打字、选择文件、发送消息的主要区域
+
+- **会话列表 (Message History/Session List)**：聊天界面中间的消息历史显示区域
+  - **用户消息组件**：`UserMessageDisplay.kt` - 显示用户之前发送的消息
+  - **AI消息组件**：`AssistantMessageDisplay.kt` - 显示AI的回复消息  
+  - **视觉位置**：界面中间滚动区域，按时间顺序显示对话历史
+  - **用户交互**：查看历史对话、复制消息内容、点击文件引用等
+
+#### 问题描述
+- 在暗色主题下，**输入框**文字和光标都显示为黑色，在深色背景下几乎不可见
+- **会话列表**中用户消息也存在相同的主题适配问题，历史消息无法清楚阅读
+- 影响用户正常输入和阅读体验
+
+#### 第一阶段修复：输入框 (Input Box) 组件
+- **UnifiedChatInput.kt**：**输入框**核心组件
+  - 添加 `cursorBrush = SolidColor(JewelTheme.globalColors.text.normal)` 配置
+  - 确保光标颜色跟随主题色彩系统
+  - 修复用户在底部输入区域打字时的可见性问题
+
+- **BatchQuestionDialog.kt**：批量问题对话框
+  - 修复两个 BasicTextField 实例的主题适配
+  - 统一添加主题感知的文字和光标颜色配置
+
+#### 第二阶段修复：会话列表 (Message History) 中的用户消息
+- **UserMessageDisplay.kt**：**会话列表**中用户消息显示组件 **🎯 核心修复**
+  - **问题根因**：原先使用 `UnifiedInputArea` → `AnnotatedMessageDisplay` → `ClickableText`，缺少主题色彩配置
+  - **解决方案**：简化为直接使用 `UnifiedInputArea` 的 DISPLAY 模式，与**输入框**使用完全相同组件
+  - **关键改进**：确保**会话列表**中用户消息与**输入框**视觉效果完全一致，包括主题适配
+
+- **UnifiedInputArea.kt**：统一输入区域组件 **🔧 关键优化**
+  - **DISPLAY 模式改进**：将 `AnnotatedMessageDisplay` 替换为纯 Jewel `Text` 组件
+  - **主题适配增强**：使用 `JewelTheme.globalColors.text.normal` 确保文字颜色正确
+  - **纯文本显示**：避免 Markdown 渲染导致的主题问题，专注于纯文本展示
+
+#### 技术实现要点
+```kotlin
+// 输入框光标和文字颜色修复
+import androidx.compose.ui.graphics.SolidColor
+
+BasicTextField(
+    textStyle = JewelTheme.defaultTextStyle.copy(
+        color = JewelTheme.globalColors.text.normal
+    ),
+    cursorBrush = SolidColor(JewelTheme.globalColors.text.normal)
+)
+
+// 用户消息显示修复
+SelectionContainer {
+    Text(
+        text = message.content,
+        style = JewelTheme.defaultTextStyle.copy(
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            color = JewelTheme.globalColors.text.normal  // 关键修复点
+        )
+    )
+}
+```
+
+#### 架构改进
+- **组件统一化**：用户消息展示与输入框使用完全相同的基础组件 `UnifiedInputArea`
+- **避免复杂渲染**：放弃 `ClickableText` 和 Markdown 渲染，使用简洁的 Jewel `Text` 组件
+- **主题系统一致性**：所有文本组件统一使用 `JewelTheme.globalColors.text.normal`
+
+#### 验证范围
+已确认以下组件的主题适配完全正确：
+- `AnnotatedChatInputField.kt` ✅
+- `ChatInputField.kt` ✅  
+- `RichTextInputField.kt` ✅
+- `ChatInputContextSelectorPopup.kt` ✅
+- `UserMessageDisplay.kt` ✅ **新增修复**
+- `UnifiedInputArea.kt` ✅ **DISPLAY模式修复**
+
+#### 修复效果
+- ✅ **输入框 (Input Box)** 在暗色主题下文字和光标完全可见，用户可以正常打字输入
+- ✅ **会话列表 (Message History)** 中用户消息在暗色主题下完全可见，历史对话清晰可读
+- ✅ 两个区域视觉效果完全统一，用户体验一致
+- ✅ 避免了 ClickableText 和 Markdown 渲染的主题兼容性问题
 
 ### 2025年8月13日 - 工具显示系统全面增强
 

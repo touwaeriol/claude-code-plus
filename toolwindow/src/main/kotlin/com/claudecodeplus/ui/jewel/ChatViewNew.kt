@@ -1,5 +1,7 @@
 package com.claudecodeplus.ui.jewel
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -211,30 +213,149 @@ fun ChatViewNew(
             .fillMaxSize()
             .background(JewelTheme.globalColors.panelBackground)
     ) {
-        // 获取最近消息的工具调用（用于显示在顶部状态区域）
-        val recentToolCalls = remember(messages) {
-            // 显示最新助手消息的所有工具调用（无论状态如何）
-            messages.lastOrNull { it.role == MessageRole.ASSISTANT }
-                ?.toolCalls
-                ?: emptyList()
+        // 滚动状态
+        val scrollState = rememberScrollState()
+        
+        // 展开状态跟踪
+        val expandedToolCalls = remember { mutableStateMapOf<String, Boolean>() }
+        
+        // 获取当前页面中所有助手消息（含工具调用）
+        val assistantMessagesWithTools = remember(messages) {
+            messages.mapIndexed { index, message -> 
+                index to message 
+            }.filter { (_, message) -> 
+                message.role == MessageRole.ASSISTANT && message.toolCalls.isNotEmpty() 
+            }
         }
         
-        // 工具调用状态区域（固定在顶部）
-        if (recentToolCalls.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.95f))
-                    .padding(horizontal = 4.dp, vertical = 1.dp)  // 进一步减少区域边距
-            ) {
-                com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay(
-                    toolCalls = recentToolCalls,
-                    modifier = Modifier.fillMaxWidth()
-                )
+        // 🎯 精确的工具调用可见性检测系统
+        // 数据类：工具调用可见性状态
+        data class ToolCallVisibility(
+            val toolCallId: String,
+            val messageIndex: Int,
+            val isExpanded: Boolean,
+            val estimatedTopPosition: Float,
+            val estimatedBottomPosition: Float,
+            val isFullyVisible: Boolean,
+            val isPartiallyVisible: Boolean,
+            val isObscured: Boolean // 展开且被部分/完全遮挡
+        )
+        
+        // 工具调用可见性状态映射
+        val toolCallVisibilityMap by remember {
+            derivedStateOf {
+                val scrollValue = scrollState.value
+                val viewportHeight = 600f // 估算的可见区域高度
+                val messageHeight = 120f   // 估算的消息平均高度
+                val toolCallExpandedHeight = 300f // 估算的展开工具调用高度
+                
+                val visibilityMap = mutableMapOf<String, ToolCallVisibility>()
+                
+                assistantMessagesWithTools.forEach { (messageIndex, message) ->
+                    message.toolCalls.forEach { toolCall ->
+                        val isExpanded = expandedToolCalls[toolCall.id] == true
+                        
+                        // 估算工具调用在滚动容器中的位置
+                        val messageTopPosition = messageIndex * messageHeight
+                        val toolCallTopPosition = messageTopPosition + 60f // 消息内容后的工具调用位置
+                        val toolCallBottomPosition = toolCallTopPosition + (if (isExpanded) toolCallExpandedHeight else 40f)
+                        
+                        // 计算相对于视窗的位置
+                        val relativeTopPosition = toolCallTopPosition - scrollValue
+                        val relativeBottomPosition = toolCallBottomPosition - scrollValue
+                        
+                        // 可见性判断
+                        val isFullyVisible = relativeTopPosition >= 0 && relativeBottomPosition <= viewportHeight
+                        val isPartiallyVisible = relativeBottomPosition > 0 && relativeTopPosition < viewportHeight
+                        val isObscured = isExpanded && isPartiallyVisible && !isFullyVisible && relativeTopPosition < 0
+                        
+                        visibilityMap[toolCall.id] = ToolCallVisibility(
+                            toolCallId = toolCall.id,
+                            messageIndex = messageIndex,
+                            isExpanded = isExpanded,
+                            estimatedTopPosition = relativeTopPosition,
+                            estimatedBottomPosition = relativeBottomPosition,
+                            isFullyVisible = isFullyVisible,
+                            isPartiallyVisible = isPartiallyVisible,
+                            isObscured = isObscured
+                        )
+                    }
+                }
+                
+                visibilityMap
             }
-            
-            // 分隔线
-            Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
+        }
+        
+        // 智能显示顶部固定区域的条件
+        val shouldShowTopArea by remember {
+            derivedStateOf {
+                // 精确条件：存在展开且被遮挡的工具调用
+                val obscuredExpandedTools = toolCallVisibilityMap.values.filter { it.isObscured }
+                val shouldShow = obscuredExpandedTools.isNotEmpty()
+                
+                if (shouldShow != (obscuredExpandedTools.isEmpty())) {
+                    println("[ChatViewNew] 精确遮挡检测: 找到${obscuredExpandedTools.size}个被遮挡的展开工具")
+                    obscuredExpandedTools.forEach { visibility ->
+                        println("  - 工具 ${visibility.toolCallId}: 顶部位置=${visibility.estimatedTopPosition}, 底部位置=${visibility.estimatedBottomPosition}")
+                    }
+                }
+                
+                shouldShow
+            }
+        }
+        
+        // 工具调用状态区域（使用Banner和AnimatedVisibility优化）
+        AnimatedVisibility(
+            visible = shouldShowTopArea,
+            enter = slideInVertically(
+                animationSpec = tween(300)
+            ) + fadeIn(
+                animationSpec = tween(200)
+            ),
+            exit = slideOutVertically(
+                animationSpec = tween(200)
+            ) + fadeOut(
+                animationSpec = tween(150)
+            )
+        ) {
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.95f))
+                        .padding(4.dp)
+                ) {
+                    // 🎯 获取被遮挡的展开工具调用（用于固定区快捷操作）
+                    val obscuredExpandedToolsToShow = remember {
+                        derivedStateOf {
+                            // 只显示被遮挡的展开工具调用
+                            val obscuredVisibilities = toolCallVisibilityMap.values.filter { it.isObscured }
+                            
+                            assistantMessagesWithTools.flatMap { (_, message) ->
+                                message.toolCalls.filter { toolCall ->
+                                    obscuredVisibilities.any { visibility -> 
+                                        visibility.toolCallId == toolCall.id 
+                                    }
+                                }
+                            }
+                        }
+                    }.value
+                    
+                    if (obscuredExpandedToolsToShow.isNotEmpty()) {
+                        com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay(
+                            toolCalls = obscuredExpandedToolsToShow,
+                            onExpandedChange = { toolId, expanded ->
+                                expandedToolCalls[toolId] = expanded
+                                println("[ChatViewNew] 工具状态更新: $toolId -> $expanded")
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                
+                // 分隔线
+                Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
+            }
         }
         
         // 聊天内容区域
@@ -249,8 +370,6 @@ fun ChatViewNew(
                     .fillMaxSize()
                     .background(JewelTheme.globalColors.panelBackground)
             ) {
-                val scrollState = rememberScrollState()
-                
                 // 恢复滚动位置
                 LaunchedEffect(sessionObject) {
                     val savedPosition = sessionObject.scrollPosition
@@ -324,6 +443,10 @@ fun ChatViewNew(
                                     MessageRole.ASSISTANT, MessageRole.SYSTEM, MessageRole.ERROR -> {
                                         AssistantMessageDisplay(
                                             message = message,
+                                            onExpandedChange = { toolId, expanded ->
+                                                expandedToolCalls[toolId] = expanded
+                                                println("[ChatViewNew] 消息流中工具展开状态更新: $toolId -> $expanded")
+                                            },
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                     }

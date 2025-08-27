@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -149,86 +150,33 @@ fun UnifiedInputArea(
         // 第二行：文本内容
         when (mode) {
             InputAreaMode.INPUT -> {
-                // 输入模式
-                ChatInputField(
-                    value = textFieldValue,
-                    onValueChange = { sessionObject?.updateInputText(it) },
-                    onSend = {
-                        if (textFieldValue.text.isNotBlank()) {
-                            onSend(textFieldValue.text)
-                            sessionObject?.clearInput()
-                        }
-                    },
-                    enabled = enabled && !isGenerating,
-                    focusRequester = focusRequester,
-                    onShowContextSelector = { position ->
-                        sessionObject?.let { session ->
-                            session.showContextSelector = true
-                            session.atSymbolPosition = position
-                        }
-                    },
-                    showPreview = false, // 可以根据需要开启预览
-                    maxHeight = 300 // 增大输入框最大高度
+                // 输入模式 - 使用与底部相同的 UnifiedChatInput 组件，但隐藏控制元素
+                UnifiedChatInput(
+                    contexts = contexts,
+                    onContextAdd = onContextAdd,
+                    onContextRemove = onContextRemove,
+                    onSend = onSend,
+                    isGenerating = isGenerating,
+                    enabled = enabled,
+                    selectedModel = selectedModel,
+                    onModelChange = onModelChange,
+                    selectedPermissionMode = selectedPermissionMode,
+                    onPermissionModeChange = onPermissionModeChange,
+                    skipPermissions = skipPermissions,
+                    onSkipPermissionsChange = onSkipPermissionsChange,
+                    fileIndexService = fileIndexService,
+                    projectService = projectService,
+                    resetTrigger = inputResetTrigger,
+                    sessionObject = sessionObject,
+                    // 隐藏用户要求隐藏的UI元素
+                    showModelSelector = false,
+                    showPermissionControls = false,
+                    showContextControls = false,
+                    showSendButton = false,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 
-                // 上下文选择器
-                if (showContextSelector) {
-                    val searchService = remember(fileIndexService, projectService) {
-                        if (fileIndexService != null && projectService != null) {
-                            ContextSearchServiceImpl(fileIndexService, projectService)
-                        } else {
-                            null
-                        }
-                    }
-                    
-                    if (searchService != null) {
-                        ChatInputContextSelectorPopup(
-                            onDismiss = {
-                                sessionObject?.let { session ->
-                                    session.showContextSelector = false
-                                    session.atSymbolPosition = null
-                                }
-                                focusRequester.requestFocus()
-                            },
-                            onContextSelect = { context ->
-                                sessionObject?.let { session ->
-                                    session.showContextSelector = false
-                                }
-                                
-                                // 生成 Markdown 格式的引用
-                                val markdownLink = createMarkdownContextLink(
-                                    displayName = context.toDisplayString(),
-                                    uri = context.uri
-                                )
-                                
-                                val currentText = textFieldValue.text
-                                val selection = textFieldValue.selection
-                                
-                                val (newText, newSelection) = if (atSymbolPosition != null) {
-                                    // @ 触发：替换 @
-                                    val pos = atSymbolPosition!!
-                                    val newText = currentText.replaceRange(pos, pos + 1, markdownLink)
-                                    val newPosition = pos + markdownLink.length
-                                    newText to TextRange(newPosition)
-                                } else {
-                                    // 按钮触发：在光标位置插入
-                                    val newText = currentText.substring(0, selection.start) + 
-                                                 markdownLink + " " +
-                                                 currentText.substring(selection.end)
-                                    val newPosition = selection.start + markdownLink.length + 1
-                                    newText to TextRange(newPosition)
-                                }
-                                
-                                sessionObject?.let { session ->
-                                    session.updateInputText(TextFieldValue(newText, newSelection))
-                                    session.atSymbolPosition = null
-                                }
-                                focusRequester.requestFocus()
-                            },
-                            searchService = searchService
-                        )
-                    }
-                }
+                // UnifiedChatInput 已经内置了上下文选择器功能
             }
             
             InputAreaMode.DISPLAY -> {
@@ -256,14 +204,19 @@ fun UnifiedInputArea(
                             // Caveat 消息，不显示
                             // 这些是本地命令的元数据消息，用户不需要看到
                         } else {
-                            // 显示普通用户消息内容
+                            // 显示普通用户消息内容（纯文本）
                             if (msg.content.isNotBlank()) {
-                                AnnotatedMessageDisplay(
-                                    message = msg.content,
-                                    timestamp = null, // 时间戳在底部显示
-                                    onContextClick = onContextClick,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                SelectionContainer {
+                                    Text(
+                                        text = msg.content,
+                                        style = JewelTheme.defaultTextStyle.copy(
+                                            fontSize = 13.sp,
+                                            lineHeight = 18.sp,
+                                            color = JewelTheme.globalColors.text.normal
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
                         }
                         
@@ -426,18 +379,7 @@ private fun ContextReference.toDisplayString(): String {
     }
 }
 
-/**
- * 将 ContextReference 转换为 URI
- */
-private val ContextReference.uri: String
-    get() = when (this) {
-        is ContextReference.FileReference -> "file://${this.fullPath}"
-        is ContextReference.WebReference -> url
-        is ContextReference.FolderReference -> "file://${this.path}"
-        is ContextReference.SymbolReference -> "claude-context://symbol/${this.name}"
-        is ContextReference.ImageReference -> "file://$path"
-        else -> "claude-context://unknown"
-    }
+// URI 属性已在 ContextReference 模型中定义，移除重复扩展
 
 /**
  * 上下文搜索服务实现

@@ -38,6 +38,7 @@ import com.claudecodeplus.ui.jewel.components.business.*
 import com.claudecodeplus.ui.jewel.components.createMarkdownContextLink
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.SimpleListItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -204,7 +205,7 @@ fun ButtonFilePopup(
 }
 
 /**
- * Jewel 风格的文件项组件 - 支持二级悬浮
+ * Jewel 风格的文件项组件 - 使用标准SimpleListItem实现
  */
 @Composable
 fun JewelFileItem(
@@ -215,32 +216,20 @@ fun JewelFileItem(
     modifier: Modifier = Modifier,
     anchorBounds: androidx.compose.ui.geometry.Rect? = null
 ) {
-    // 悬停状态管理
+    // 悬停状态管理（用于二级弹窗）
     var isHovered by remember { mutableStateOf(false) }
     
     // 使用Box支持嵌套的二级悬浮
     Box(modifier = modifier.fillMaxWidth()) {
-        // 主文件项
+        // 使用简化的Row布局代替复杂的SimpleListItem
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(4.dp))
                 .background(
                     color = when {
-                        isSelected -> JewelTheme.globalColors.borders.focused.copy(alpha = 0.25f)
-                        isHovered -> JewelTheme.globalColors.borders.normal.copy(alpha = 0.08f)
+                        isSelected -> JewelTheme.globalColors.borders.focused.copy(alpha = 0.15f)
                         else -> androidx.compose.ui.graphics.Color.Transparent
-                    }
-                )
-                .then(
-                    if (isSelected) {
-                        Modifier.border(
-                            1.dp,
-                            JewelTheme.globalColors.borders.focused.copy(alpha = 0.6f),
-                            RoundedCornerShape(4.dp)
-                        )
-                    } else {
-                        Modifier
                     }
                 )
                 .clickable { onClick() }
@@ -261,31 +250,8 @@ fun JewelFileItem(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 // 主文件名（搜索高亮）
-                val highlightedFileName = if (searchQuery.isNotEmpty()) {
-                    buildAnnotatedString {
-                        val fileName = file.name
-                        val queryIndex = fileName.indexOf(searchQuery, ignoreCase = true)
-                        if (queryIndex >= 0) {
-                            append(fileName.substring(0, queryIndex))
-                            withStyle(
-                                SpanStyle(
-                                    background = JewelTheme.globalColors.borders.focused.copy(alpha = 0.3f),
-                                    color = JewelTheme.globalColors.borders.focused
-                                )
-                            ) {
-                                append(fileName.substring(queryIndex, queryIndex + searchQuery.length))
-                            }
-                            append(fileName.substring(queryIndex + searchQuery.length))
-                        } else {
-                            append(fileName)
-                        }
-                    }
-                } else {
-                    buildAnnotatedString { append(file.name) }
-                }
-                
                 Text(
-                    text = highlightedFileName,
+                    text = buildHighlightedText(file.name, searchQuery),
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 13.sp,
                         color = if (isSelected) 
@@ -303,7 +269,7 @@ fun JewelFileItem(
                     val displayPath = file.relativePath.removeSuffix("/${file.name}").removeSuffix(file.name)
                     if (displayPath.isNotEmpty()) {
                         Text(
-                            text = "• ${displayPath.split("/").takeLast(2).joinToString("/")}",
+                            text = displayPath.split("/").takeLast(2).joinToString("/"),
                             style = JewelTheme.defaultTextStyle.copy(
                                 fontSize = 10.sp,
                                 color = JewelTheme.globalColors.text.disabled
@@ -317,7 +283,7 @@ fun JewelFileItem(
             }
         }
         
-        // 二级层级悬浮弹窗
+        // 二级层级悬浮弹窗 - 保持原有功能
         if (isHovered && isSelected && anchorBounds != null) {
             FileHierarchyPopup(
                 targetFile = file,
@@ -329,7 +295,7 @@ fun JewelFileItem(
 }
 
 /**
- * 获取文件图标
+ * 获取文件图标 - 使用简单的表情符号代替复杂的图标路径
  */
 private fun getFileIcon(fileName: String): String {
     return when (fileName.substringAfterLast('.', "")) {
@@ -348,6 +314,29 @@ private fun getFileIcon(fileName: String): String {
         "txt" -> "📄"
         "sh", "bat", "cmd" -> "⚡"
         else -> "📄"
+    }
+}
+
+/**
+ * 构建带高亮的文本 - 简化版本
+ */
+@Composable
+private fun buildHighlightedText(fileName: String, searchQuery: String): androidx.compose.ui.text.AnnotatedString {
+    if (searchQuery.isEmpty()) {
+        return androidx.compose.ui.text.AnnotatedString(fileName)
+    }
+    
+    return buildAnnotatedString {
+        val index = fileName.indexOf(searchQuery, ignoreCase = true)
+        if (index >= 0) {
+            append(fileName.substring(0, index))
+            withStyle(SpanStyle(color = JewelTheme.globalColors.borders.focused)) {
+                append(fileName.substring(index, index + searchQuery.length))
+            }
+            append(fileName.substring(index + searchQuery.length))
+        } else {
+            append(fileName)
+        }
     }
 }
 

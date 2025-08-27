@@ -149,35 +149,48 @@ fun AnnotatedChatInputField(
                             .onFocusChanged { focusState ->
                                 isFocused = focusState.isFocused
                             }
-                            .onPreviewKeyEvent { keyEvent ->
-                                // 只拦截特定的功能键，让普通输入（包括输入法）正常工作
+                            // **临时注释键盘事件处理测试中文输入法**
+                            /*
+                            .onKeyEvent { keyEvent ->
+                                // 完全避免拦截输入法：只处理已经完成的键盘事件
+                                if (keyEvent.type != KeyEventType.KeyUp) return@onKeyEvent false
+                                
                                 when {
-                                    // 优先处理注解相关的键盘事件
-                                    AnnotationKeyboardHandler.handleKeyEvent(
-                                        keyEvent = keyEvent,
-                                        value = value,
-                                        onValueChange = onValueChange,
-                                        onAnnotationClick = onFileReferenceClick
-                                    ) -> true
-                                    
-                                    // 只拦截特定的功能键组合
-                                    keyEvent.key == Key.Enter || 
-                                    (keyEvent.key == Key.K && (keyEvent.isMetaPressed || keyEvent.isCtrlPressed)) -> {
-                                        handleNormalKeyEvent(
-                                            keyEvent = keyEvent,
-                                            value = value,
-                                            onSend = onSend,
-                                            onInterruptAndSend = onInterruptAndSend,
-                                            onValueChange = onValueChange,
-                                            onShowContextSelector = onShowContextSelector,
-                                            enabled = enabled
-                                        )
+                                    // Enter 发送消息
+                                    keyEvent.key == Key.Enter && !keyEvent.isShiftPressed -> {
+                                        if (value.text.isNotBlank()) {
+                                            onSend()
+                                        }
+                                        true
                                     }
                                     
-                                    // 对于其他键（包括输入法相关的），让它们正常传递
+                                    // Shift+Enter 换行
+                                    keyEvent.key == Key.Enter && keyEvent.isShiftPressed -> {
+                                        insertNewline(value, onValueChange)
+                                        true
+                                    }
+                                    
+                                    // Alt+Enter 打断并发送
+                                    keyEvent.key == Key.Enter && keyEvent.isAltPressed -> {
+                                        if (value.text.isNotBlank() && onInterruptAndSend != null) {
+                                            onInterruptAndSend()
+                                        }
+                                        true
+                                    }
+                                    
+                                    // ⌘K 或 Ctrl+K 快捷键
+                                    keyEvent.key == Key.K && (keyEvent.isMetaPressed || keyEvent.isCtrlPressed) -> {
+                                        if (enabled) {
+                                            onShowContextSelector(null)
+                                        }
+                                        true
+                                    }
+                                    
+                                    // 其他所有键都不拦截
                                     else -> false
                                 }
                             }
+                            */
                     )
                 }
                 
@@ -227,6 +240,7 @@ fun AnnotatedChatInputField(
     }
 }
 
+
 /**
  * 处理文本变化
  */
@@ -235,22 +249,13 @@ private fun handleTextChange(
     newTextFieldValue: TextFieldValue,
     onValueChange: (AnnotatedTextFieldValue) -> Unit
 ) {
-    // 使用注解更新逻辑处理文本变化
-    val updateResult = AnnotationUpdater.updateAnnotationsOnTextChange(
-        oldValue = oldValue,
-        newTextFieldValue = newTextFieldValue
+    // 简化处理：直接转换为AnnotatedTextFieldValue，不使用复杂的注解更新逻辑
+    val newAnnotatedValue = AnnotatedTextFieldValue(
+        text = newTextFieldValue.text,
+        selection = newTextFieldValue.selection,
+        annotations = emptyList() // 简化：不维护复杂的注解状态
     )
-    
-    when (updateResult) {
-        is AnnotationUpdateResult.Success -> {
-            onValueChange(updateResult.updatedValue)
-        }
-        is AnnotationUpdateResult.AnnotationDestroyed -> {
-            // 注解被破坏时，仍然应用更新，但可以添加日志或通知
-            println("注解被破坏: ${updateResult.destroyedAnnotations.map { it.displayText }}")
-            onValueChange(updateResult.updatedValue)
-        }
-    }
+    onValueChange(newAnnotatedValue)
 }
 
 /**

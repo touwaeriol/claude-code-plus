@@ -32,10 +32,60 @@ enum class InlineReferenceType {
 }
 
 /**
+ * 解析 Markdown 格式的文件引用 [@文件名](file://path)
+ * 这是新的主要解析函数，支持Markdown格式
+ */
+fun parseMarkdownReferences(text: String): Pair<String, List<InlineReference>> {
+    val pattern = Regex("""(\[@([^\]]+)\]\(file://([^)]+)\))""")
+    val references = mutableListOf<InlineReference>()
+    var processedText = text
+    var offset = 0
+    
+    // 从后往前处理，避免索引偏移问题
+    pattern.findAll(text).toList().reversed().forEach { match ->
+        val fullMatch = match.groupValues[1]  // [@文件名](file://path)
+        val fileName = match.groupValues[2]   // 文件名
+        val filePath = match.groupValues[3]   // 文件路径
+        val displayText = "@$fileName"        // @文件名
+        
+        val reference = InlineReference(
+            displayText = displayText,
+            fullPath = fullMatch, // 保存完整的 Markdown 格式
+            type = InlineReferenceType.FILE,
+            startIndex = match.range.first - offset,
+            endIndex = match.range.first - offset + displayText.length
+        )
+        
+        references.add(0, reference)
+        
+        // 替换为显示文本
+        processedText = processedText.replaceRange(
+            match.range.first - offset,
+            match.range.last + 1 - offset,
+            displayText
+        )
+        
+        // 更新偏移量
+        offset += fullMatch.length - displayText.length
+    }
+    
+    return processedText to references
+}
+
+/**
  * 解析文本中的内联引用，仅用于UI显示
- * 使用新的可扩展检测系统
+ * 使用新的可扩展检测系统 - 保持向后兼容
  */
 fun parseInlineReferences(text: String): Pair<String, List<InlineReference>> {
+    // 首先尝试解析 Markdown 格式
+    val (markdownDisplayText, markdownRefs) = parseMarkdownReferences(text)
+    
+    // 如果找到了 Markdown 引用，直接返回
+    if (markdownRefs.isNotEmpty()) {
+        return markdownDisplayText to markdownRefs
+    }
+    
+    // 否则使用原有的 @scheme:// 格式解析
     val extractedRefs = InlineReferenceDetector.extractReferences(text)
     val references = mutableListOf<InlineReference>()
     var processedText = text
@@ -77,6 +127,7 @@ fun parseInlineReferences(text: String): Pair<String, List<InlineReference>> {
 
 /**
  * 创建带有内联引用的富文本
+ * 使用现代化的背景样式设计
  */
 fun createAnnotatedStringWithReferences(
     text: String,
@@ -89,12 +140,12 @@ fun createAnnotatedStringWithReferences(
         
         // 为每个引用添加样式和点击注解
         references.forEach { reference ->
-            // 添加超链接样式
+            // 添加现代化的超链接样式（背景 + 颜色）
             addStyle(
                 style = SpanStyle(
-                    color = Color(0xFF007ACC), // 蓝色链接颜色
-                    fontWeight = FontWeight.Medium,
-                    textDecoration = TextDecoration.Underline
+                    background = Color(0xFFDDF4FF), // 淡蓝色背景
+                    color = Color(0xFF0969DA),      // GitHub蓝色文字
+                    fontWeight = FontWeight.Medium
                 ),
                 start = reference.startIndex,
                 end = reference.endIndex
@@ -109,6 +160,17 @@ fun createAnnotatedStringWithReferences(
             )
         }
     }
+}
+
+/**
+ * 为消息展示创建带样式的 AnnotatedString
+ * 专门用于消息列表中的文件引用渲染
+ */
+fun createMessageAnnotatedString(
+    text: String,
+    onReferenceClick: (InlineReference) -> Unit = {}
+): AnnotatedString {
+    return createAnnotatedStringWithReferences(text, onReferenceClick)
 }
 
 /**

@@ -117,11 +117,16 @@ fun JewelInlineFileReferenceHandler(
                                     // 替换 @ 查询为文件引用
                                     val currentText = textFieldValue.text
                                     val fileName = file.name
-                                    val replacement = "@$fileName"
+                                    val baseReplacement = "@$fileName"
                                     
                                     val replaceStart = atPosition
                                     val replaceEnd = atPosition + 1 + searchQuery.length
                                     
+                                    // 检查替换后的位置是否需要添加空格
+                                    val needsSpace = replaceEnd >= currentText.length || 
+                                                    (replaceEnd < currentText.length && currentText[replaceEnd] !in " \n\t")
+                                    
+                                    val replacement = if (needsSpace) "$baseReplacement " else baseReplacement
                                     val newText = currentText.replaceRange(replaceStart, replaceEnd, replacement)
                                     val newPosition = replaceStart + replacement.length
                                     
@@ -144,88 +149,7 @@ fun JewelInlineFileReferenceHandler(
 }
 
 /**
- * Jewel 风格的文件项组件
- */
-@Composable
-private fun JewelFileItem(
-    file: IndexedFileInfo,
-    searchQuery: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(4.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // 文件图标
-        Text(
-            text = if (file.isDirectory) "📁" else getFileIcon(file.name),
-            style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
-        )
-        
-        // 文件信息
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            // 文件名（带搜索高亮）
-            val highlightedFileName = if (searchQuery.isNotEmpty()) {
-                buildAnnotatedString {
-                    val fileName = file.name
-                    val queryIndex = fileName.indexOf(searchQuery, ignoreCase = true)
-                    if (queryIndex >= 0) {
-                        append(fileName.substring(0, queryIndex))
-                        withStyle(
-                            SpanStyle(
-                                background = JewelTheme.globalColors.borders.focused.copy(alpha = 0.3f),
-                                fontWeight = FontWeight.Bold
-                            )
-                        ) {
-                            append(fileName.substring(queryIndex, queryIndex + searchQuery.length))
-                        }
-                        append(fileName.substring(queryIndex + searchQuery.length))
-                    } else {
-                        append(fileName)
-                    }
-                }
-            } else {
-                buildAnnotatedString { append(file.name) }
-            }
-            
-            Text(
-                text = highlightedFileName,
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 13.sp,
-                    color = JewelTheme.globalColors.text.normal
-                )
-            )
-            
-            // 路径信息
-            if (file.relativePath.isNotEmpty()) {
-                val displayPath = file.relativePath.removeSuffix("/${file.name}").removeSuffix(file.name)
-                if (displayPath.isNotEmpty()) {
-                    Text(
-                        text = displayPath,
-                        style = JewelTheme.defaultTextStyle.copy(
-                            fontSize = 11.sp,
-                            color = JewelTheme.globalColors.text.disabled
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * 获取文件图标
+ * 获取文件图标 - 使用简单的表情符号代替复杂的图标路径
  */
 private fun getFileIcon(fileName: String): String {
     return when (fileName.substringAfterLast('.', "")) {
@@ -244,5 +168,91 @@ private fun getFileIcon(fileName: String): String {
         "txt" -> "📄"
         "sh", "bat", "cmd" -> "⚡"
         else -> "📄"
+    }
+}
+
+/**
+ * 构建带高亮的文本 - 简化版本
+ */
+@Composable
+private fun buildHighlightedText(fileName: String, searchQuery: String): androidx.compose.ui.text.AnnotatedString {
+    if (searchQuery.isEmpty()) {
+        return androidx.compose.ui.text.AnnotatedString(fileName)
+    }
+    
+    return buildAnnotatedString {
+        val index = fileName.indexOf(searchQuery, ignoreCase = true)
+        if (index >= 0) {
+            append(fileName.substring(0, index))
+            withStyle(SpanStyle(
+                background = JewelTheme.globalColors.borders.focused.copy(alpha = 0.3f),
+                fontWeight = FontWeight.Bold
+            )) {
+                append(fileName.substring(index, index + searchQuery.length))
+            }
+            append(fileName.substring(index + searchQuery.length))
+        } else {
+            append(fileName)
+        }
+    }
+}
+
+/**
+ * Jewel 风格的文件项组件 - 使用标准SimpleListItem的简化版本
+ */
+@Composable
+private fun JewelFileItem(
+    file: IndexedFileInfo,
+    searchQuery: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // 使用简化的Row布局代替复杂的SimpleListItem
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(4.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // 文件图标（使用表情符号）
+        Text(
+            text = if (file.isDirectory) "📁" else getFileIcon(file.name),
+            style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
+        )
+        
+        // 文件信息
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            // 文件名（带搜索高亮）
+            Text(
+                text = buildHighlightedText(file.name, searchQuery),
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 13.sp
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            
+            // 路径信息
+            if (file.relativePath.isNotEmpty()) {
+                val displayPath = file.relativePath.removeSuffix("/${file.name}").removeSuffix(file.name)
+                if (displayPath.isNotEmpty()) {
+                    Text(
+                        text = displayPath,
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 11.sp,
+                            color = JewelTheme.globalColors.text.disabled
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
     }
 }

@@ -12,11 +12,19 @@
       "Bash(git add:*)",
       "Bash(grep:*)",
       "Bash(git worktree:*)",
-      "mcp__gradle-class-finder-mcp__find_class"
+      "mcp__gradle-class-finder-mcp__find_class",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(kotlinc:*)",
+      "Bash(java:*)",
+      "Bash(claude:*)",
+      "Bash(echo:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "additionalDirectories": [
-      "/Users/erio/codes/"
+      "/Users/erio/codes/",
+      "/private/tmp"
     ]
   },
   "enabledMcpjsonServers": [

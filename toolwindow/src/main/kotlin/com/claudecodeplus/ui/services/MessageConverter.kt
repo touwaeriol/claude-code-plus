@@ -28,24 +28,47 @@ object MessageConverter {
      * 处理来自事件流的消息和历史加载的消息
      */
     fun SDKMessage.toEnhancedMessage(): EnhancedMessage {
+        println("[MessageConverter] 开始转换消息: type=${this.type}, messageId=${this.messageId}")
+        
         // 优先使用 content 字段，然后是 data.text
         val rawContent = content ?: data.text ?: ""
+        // 分析原始内容
         
         // 解析原始 JSON 内容
         val contentJson = try {
             if (rawContent.startsWith("{")) {
-                json.parseToJsonElement(rawContent).jsonObject
+                val parsed = json.parseToJsonElement(rawContent).jsonObject
+                // 成功解析JSON
+                parsed
             } else {
+                // 原始内容不是JSON格式
                 null
             }
         } catch (e: Exception) {
+            // JSON解析失败
             null
         }
         
+        // 检查是否是用户中断消息
+        val isInterruptMessage = rawContent.contains("用户已中断请求") || 
+                                rawContent.contains("Request interrupted by user")
+        
         // 提取消息角色和内容
         val role = contentJson?.get("message")?.jsonObject?.get("role")?.jsonPrimitive?.content 
-            ?: if (type == MessageType.TEXT) "assistant" else "system"
-        val messageContent = extractMessageContent(contentJson, rawContent)
+            ?: when (type) {
+                MessageType.TEXT -> "assistant"
+                MessageType.TOOL_USE -> "assistant"  // 工具调用来自助手
+                MessageType.TOOL_RESULT -> "user"    // 工具结果来自用户
+                else -> "system"
+            }
+        // 解析出的角色: $role
+        
+        val messageContent = if (isInterruptMessage) {
+            "⏹️ 请求已被用户中断"
+        } else {
+            extractMessageContent(contentJson, rawContent)
+        }
+        // 最终消息内容长度: ${messageContent.length}
         
         // 提取时间戳 - 转换为 Long 毫秒时间戳
         val timestampMillis = try {
@@ -58,7 +81,7 @@ object MessageConverter {
             System.currentTimeMillis()
         }
         
-        return EnhancedMessage(
+        val enhancedMessage = EnhancedMessage(
             id = this.messageId ?: java.util.UUID.randomUUID().toString(),
             role = if (role == "user") MessageRole.USER else MessageRole.ASSISTANT,
             content = messageContent,
@@ -67,6 +90,9 @@ object MessageConverter {
             tokenUsage = extractTokenUsage(contentJson), // 提取真实token信息
             isStreaming = false // 事件流中的消息都是完整的
         )
+        
+        // 转换完成: ${enhancedMessage.role}
+        return enhancedMessage
     }
     
     /**
@@ -95,6 +121,11 @@ object MessageConverter {
                 // 简单的文本内容
                 contentJson?.get("content")?.jsonPrimitive != null -> {
                     contentJson.get("content")!!.jsonPrimitive.content
+                }
+                
+                // Claude CLI 结果消息格式 (type: "result")
+                contentJson?.get("type")?.jsonPrimitive?.content == "result" -> {
+                    contentJson.get("result")?.jsonPrimitive?.content ?: ""
                 }
                 
                 // 如果无法从 JSON 中提取，使用原始内容
@@ -163,18 +194,84 @@ object MessageConverter {
     
     /**
      * 提取工具调用信息
-     * 处理工具调用和工具结果的关联
+     * 现在正确处理分离的工具调用事件：
+     * 1. tool_use 事件 -> 创建 RUNNING 状态的工具调用
+     * 2. tool_result 事件 -> 忽略（后续由 SessionObject 关联）
+     * 3. 普通消息事件 -> 无工具调用
      */
     private fun extractToolCalls(contentJson: JsonObject?): List<com.claudecodeplus.ui.models.ToolCall> {
         return try {
             val toolCalls = mutableListOf<com.claudecodeplus.ui.models.ToolCall>()
-            val toolResults = mutableMapOf<String, com.claudecodeplus.ui.models.ToolResult>()
+            
+            // 开始解析工具调用
             
             // 从 message.content 数组中提取工具调用和结果
             val messageObj = contentJson?.get("message")?.jsonObject
             val contentArray = messageObj?.get("content")?.jsonArray
             
-            // 首先提取所有工具结果
+            println("[MessageConverter] messageObj存在: ${messageObj != null}, contentArray存在: ${contentArray != null}, 数组大小: ${contentArray?.size ?: 0}")
+            
+            // 打印contentArray的详细结构
+            contentArray?.forEachIndexed { index, element ->
+                val obj = element.jsonObject
+                val type = obj["type"]?.jsonPrimitive?.content
+                println("  [$index] type: $type, keys: ${obj.keys}")
+            }
+            
+            // 只提取 tool_use 类型，创建 RUNNING 状态的工具调用
+            contentArray?.forEach { contentElement ->
+                val contentObj = contentElement.jsonObject
+                val type = contentObj["type"]?.jsonPrimitive?.content
+                
+                if (type == "tool_use") {
+                    val toolId = contentObj["id"]?.jsonPrimitive?.content ?: ""
+                    val toolName = contentObj["name"]?.jsonPrimitive?.content ?: ""
+                    val inputJson = contentObj["input"]?.jsonObject
+                    
+                    println("[MessageConverter] 🔧 发现工具调用: $toolName (ID: $toolId)")
+                    
+                    // 将输入参数转换为 Map
+                    val parameters = inputJson?.mapValues { (_, value) ->
+                        value.jsonPrimitive?.content ?: value.toString()
+                    } ?: emptyMap()
+                    
+                    // 创建 RUNNING 状态的工具调用（结果将在后续事件中更新）
+                    val toolCall = com.claudecodeplus.ui.models.ToolCall(
+                        id = toolId,
+                        name = toolName,
+                        parameters = parameters,
+                        status = com.claudecodeplus.ui.models.ToolCallStatus.RUNNING,
+                        result = null,
+                        startTime = System.currentTimeMillis(),
+                        endTime = null
+                    )
+                    
+                    toolCalls.add(toolCall)
+                }
+            }
+            
+            // 工具调用解析完成，共 ${toolCalls.size} 个
+            // 工具调用详情已记录
+            
+            toolCalls
+        } catch (e: Exception) {
+            // 提取工具调用失败
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+    
+    /**
+     * 提取工具结果信息
+     * 从 tool_result 事件中提取结果，用于在 SessionObject 中关联到对应的工具调用
+     */
+    fun extractToolResults(contentJson: JsonObject?): Map<String, com.claudecodeplus.ui.models.ToolResult> {
+        return try {
+            val toolResults = mutableMapOf<String, com.claudecodeplus.ui.models.ToolResult>()
+            
+            val messageObj = contentJson?.get("message")?.jsonObject
+            val contentArray = messageObj?.get("content")?.jsonArray
+            
             contentArray?.forEach { contentElement ->
                 val contentObj = contentElement.jsonObject
                 val type = contentObj["type"]?.jsonPrimitive?.content
@@ -191,50 +288,15 @@ object MessageConverter {
                     }
                     
                     toolResults[toolUseId] = result
+                    println("[MessageConverter] 🔧 发现工具结果: toolId=$toolUseId, isError=$isError")
                 }
             }
             
-            // 然后提取工具调用并关联结果
-            contentArray?.forEach { contentElement ->
-                val contentObj = contentElement.jsonObject
-                val type = contentObj["type"]?.jsonPrimitive?.content
-                
-                if (type == "tool_use") {
-                    val toolId = contentObj["id"]?.jsonPrimitive?.content ?: ""
-                    val toolName = contentObj["name"]?.jsonPrimitive?.content ?: ""
-                    val inputJson = contentObj["input"]?.jsonObject
-                    
-                    // 将输入参数转换为 Map
-                    val parameters = inputJson?.mapValues { (_, value) ->
-                        value.jsonPrimitive?.content ?: value.toString()
-                    } ?: emptyMap()
-                    
-                    // 查找对应的工具结果
-                    val result = toolResults[toolId]
-                    val status = when {
-                        result is com.claudecodeplus.ui.models.ToolResult.Success -> com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS
-                        result is com.claudecodeplus.ui.models.ToolResult.Failure -> com.claudecodeplus.ui.models.ToolCallStatus.FAILED
-                        else -> com.claudecodeplus.ui.models.ToolCallStatus.RUNNING
-                    }
-                    
-                    val toolCall = com.claudecodeplus.ui.models.ToolCall(
-                        id = toolId,
-                        name = toolName,
-                        parameters = parameters,
-                        status = status,
-                        result = result,
-                        startTime = System.currentTimeMillis(),
-                        endTime = if (result != null) System.currentTimeMillis() else null
-                    )
-                    
-                    toolCalls.add(toolCall)
-                }
-            }
-            
-            toolCalls
+            println("[MessageConverter] ✅ 工具结果解析完成，共 ${toolResults.size} 个结果")
+            toolResults
         } catch (e: Exception) {
-            println("[MessageConverter] 提取工具调用失败: ${e.message}")
-            emptyList()
+            println("[MessageConverter] ❌ 工具结果解析失败: ${e.message}")
+            emptyMap()
         }
     }
     

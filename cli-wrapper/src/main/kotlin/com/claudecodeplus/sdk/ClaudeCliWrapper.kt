@@ -37,83 +37,26 @@ class ClaudeCliWrapper {
         private val logger = LoggerFactory.getLogger(ClaudeCliWrapper::class.java)
         
         /**
-         * 获取 claude 命令的路径
-         * 使用多层路径解析策略，查找系统中安装的 claude 命令
-         * 
-         * @return claude 命令的路径
+         * 检测操作系统类型并返回对应的shell命令
          */
-        private fun getClaudeCommandPath(): String {
-            // 首先尝试从 PATH 中查找
-            val pathCommand = findClaudeInPath()
-            if (pathCommand != null) {
-                logger.info("在 PATH 中找到 claude 命令: $pathCommand")
-                return pathCommand
-            }
-            
-            // 在常见位置查找
-            val commonPaths = listOf(
-                "/usr/local/bin/claude",
-                "/opt/homebrew/bin/claude", 
-                "/usr/bin/claude"
-            )
-            
-            for (path in commonPaths) {
-                val file = java.io.File(path)
-                if (file.exists() && file.canExecute()) {
-                    logger.info("在常见位置找到 claude 命令: $path")
-                    return path
-                }
-            }
-            
-            throw IllegalStateException(
-                "未找到 claude 命令。请确保已安装 Claude CLI 并在 PATH 中。\n" +
-                "安装方法：curl -fsSL https://claude.ai/install.sh | sh"
-            )
-        }
-        
-        /**
-         * 在 PATH 中查找 claude 命令
-         */
-        private fun findClaudeInPath(): String? {
-            val pathEnv = System.getenv("PATH") ?: return null
-            val pathSeparator = if (System.getProperty("os.name").lowercase().contains("windows")) ";" else ":"
-            
-            for (pathDir in pathEnv.split(pathSeparator)) {
-                if (pathDir.isBlank()) continue
-                
-                val commandName = if (System.getProperty("os.name").lowercase().contains("windows")) "claude.cmd" else "claude"
-                val claudeFile = java.io.File(pathDir, commandName)
-                
-                if (claudeFile.exists() && claudeFile.canExecute()) {
-                    return claudeFile.absolutePath
-                }
-            }
-            
-            return null
-        }
-        
-        /**
-         * 检查 claude 命令是否可用
-         */
-        private fun isClaudeAvailable(): Boolean {
-            return try {
-                getClaudeCommandPath()
-                true
-            } catch (e: Exception) {
-                false
+        private fun getShellCommand(): List<String> {
+            val osName = System.getProperty("os.name").lowercase()
+            return when {
+                osName.contains("windows") -> listOf("cmd", "/c")
+                osName.contains("mac") || osName.contains("darwin") -> listOf("/bin/zsh", "-ic")
+                else -> listOf("/bin/bash", "-ic") // Linux and others
             }
         }
         
         /**
          * 构建 claude 命令和工作目录
-         * 在用户指定的 cwd 目录中执行 claude 命令
+         * 使用交互式shell执行claude命令，确保继承完整的shell环境变量
          * 
-         * @param claudePath claude 命令路径
          * @param prompt 用户提示
          * @param options 查询选项
          * @return Pair(完整的命令列表, 工作目录)
          */
-        private fun buildClaudeCommand(claudePath: String, prompt: String, options: QueryOptions): Pair<List<String>, java.io.File> {
+        private fun buildClaudeCommand(prompt: String, options: QueryOptions): Pair<List<String>, java.io.File> {
             // 工作目录使用用户指定的 cwd
             val workingDir = java.io.File(options.cwd)
             if (!workingDir.exists()) {
@@ -125,58 +68,78 @@ class ClaudeCliWrapper {
             
             logger.debug("Claude 工作目录: ${workingDir.absolutePath}")
             
-            val command = mutableListOf<String>()
-            command.add(claudePath)
+            // 构建claude原始命令参数
+            val claudeArgs = mutableListOf<String>()
+            claudeArgs.add("claude")
             
             // 添加固定参数
-            command.add("--verbose")
-            command.add("--print")
-            command.add("--output-format")
-            command.add("stream-json")
-            command.add("--input-format")
-            command.add("text")
+            claudeArgs.add("--verbose")
+            claudeArgs.add("--print")
+            claudeArgs.add("--output-format")
+            claudeArgs.add("stream-json")
+            claudeArgs.add("--input-format")
+            claudeArgs.add("text")
             
             // 添加模型参数
             options.model?.let { model ->
-                command.add("--model")
-                command.add(model)
+                claudeArgs.add("--model")
+                claudeArgs.add(model)
             }
             
             // 添加权限模式参数
-            command.add("--permission-mode")
-            command.add(options.permissionMode)
+            claudeArgs.add("--permission-mode")
+            claudeArgs.add(options.permissionMode)
             
             // 添加跳过权限参数（基于复选框状态）
             if (options.skipPermissions) {
-                command.add("--dangerously-skip-permissions")
+                claudeArgs.add("--dangerously-skip-permissions")
             }
             
             // 添加会话相关参数
             options.resume?.let { sessionId ->
                 if (sessionId.isNotBlank()) {
-                    command.add("--resume")
-                    command.add(sessionId)
+                    claudeArgs.add("--resume")
+                    claudeArgs.add(sessionId)
                 }
             }
             
             // 添加自定义系统提示
             options.customSystemPrompt?.let { systemPrompt ->
-                command.add("--append-system-prompt")
-                command.add(systemPrompt)
+                claudeArgs.add("--append-system-prompt")
+                claudeArgs.add(systemPrompt)
             }
             
             // 添加 MCP 配置
             options.mcpServers?.let { servers ->
                 if (servers.isNotEmpty()) {
-                    command.add("--mcp-config")
+                    claudeArgs.add("--mcp-config")
                     // 这里需要将 MCP 配置写入临时文件或使用其他方式传递
                 }
             }
             
             // 添加用户提示作为最后一个参数
-            command.add(prompt)
+            claudeArgs.add(prompt)
             
-            return Pair(command, workingDir)
+            // 获取shell命令前缀
+            val shellCommand = getShellCommand()
+            
+            // 构建完整的shell包装命令
+            val fullCommand = mutableListOf<String>()
+            fullCommand.addAll(shellCommand)
+            
+            // 将claude命令作为shell参数传递
+            val claudeCommandString = claudeArgs.joinToString(" ") { arg ->
+                // 对包含空格或特殊字符的参数进行转义
+                if (arg.contains(" ") || arg.contains("\"") || arg.contains("'")) {
+                    "\"${arg.replace("\"", "\\\"")}\""
+                } else {
+                    arg
+                }
+            }
+            
+            fullCommand.add(claudeCommandString)
+            
+            return Pair(fullCommand, workingDir)
         }
     }
     
@@ -420,20 +383,8 @@ class ClaudeCliWrapper {
             // 检查协程状态
             coroutineContext.ensureActive()
             
-            // 检查 claude 命令是否可用
-            if (!isClaudeAvailable()) {
-                throw IllegalStateException(
-                    "Claude CLI 不可用。请确保已安装 Claude CLI。\n" +
-                    "安装方法：curl -fsSL https://claude.ai/install.sh | sh\n" +
-                    "或者访问 https://docs.anthropic.com/en/docs/claude-code 获取安装指南"
-                )
-            }
-            
-            // 获取 claude 命令路径
-            val claudePath = getClaudeCommandPath()
-            
-            // 构建 claude 命令
-            val (claudeCommand, claudeWorkingDir) = buildClaudeCommand(claudePath, prompt, options)
+            // 构建 claude 命令（通过交互式shell执行）
+            val (claudeCommand, claudeWorkingDir) = buildClaudeCommand(prompt, options)
             logger.info("🔵 [$requestId] Claude 命令: ${claudeCommand.joinToString(" ")}")
             logger.info("🔵 [$requestId] Claude 工作目录: ${claudeWorkingDir.absolutePath}")
             
@@ -672,22 +623,20 @@ class ClaudeCliWrapper {
     
     /**
      * 检查 Claude CLI 是否可用
-     * 验证 claude 命令是否正常工作
+     * 通过交互式shell测试claude命令
      */
     suspend fun isClaudeCodeSdkAvailable(): Boolean = withContext(Dispatchers.IO) {
         try {
-            // 检查 claude 命令
-            if (!isClaudeAvailable()) {
-                logger.warn("Claude CLI 不可用")
-                return@withContext false
-            }
+            // 获取shell命令前缀
+            val shellCommand = getShellCommand()
             
-            // 获取 claude 命令路径
-            val claudePath = getClaudeCommandPath()
-            logger.info("找到 claude 命令: $claudePath")
+            // 构建测试命令：shell -ic "claude --version"
+            val testCommand = mutableListOf<String>()
+            testCommand.addAll(shellCommand)
+            testCommand.add("claude --version")
             
-            // 测试运行简单的 claude 命令（--help 或 --version）
-            val testCommand = listOf(claudePath, "--version")
+            logger.info("测试命令: ${testCommand.joinToString(" ")}")
+            
             val processBuilder = ProcessBuilder(testCommand)
             processBuilder.directory(java.io.File(System.getProperty("user.dir")))
             val process = processBuilder.start()
