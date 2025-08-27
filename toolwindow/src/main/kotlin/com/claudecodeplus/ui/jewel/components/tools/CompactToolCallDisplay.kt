@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalFoundationApi::class)
+@file:OptIn(ExperimentalFoundationApi::class, org.jetbrains.jewel.foundation.ExperimentalJewelApi::class)
 
 package com.claudecodeplus.ui.jewel.components.tools
 
@@ -272,14 +272,18 @@ private fun ToolCallDetails(
                 .fillMaxWidth()
                 .heightIn(max = maxExpandHeight)  // 限制最大高度为视窗40%
         ) {
-            // 主内容 - 使用垂直滚动实现内部滚动
+            // 主内容 - 使用垂直滚动显示滚动条
             SelectionContainer {
-                Box(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 2.dp, vertical = 0.dp)  // 最小化内边距
-                        .padding(top = 12.dp) // 减少为关闭按钮留的空间
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 2.dp, vertical = 0.dp)  // 最小化内边距
+                            .padding(top = 12.dp) // 减少为关闭按钮留的空间
                     ) {
                     // 根据工具调用状态显示对应内容
                     when {
@@ -349,8 +353,9 @@ private fun ToolCallDetails(
                             )
                         }
                     }
-                }
-            }
+                    } // 结束 Box
+                } // 结束 Column
+            } // 结束 SelectionContainer
             
             // 关闭按钮 - 浮动在右上角，更小更轻量
             Box(

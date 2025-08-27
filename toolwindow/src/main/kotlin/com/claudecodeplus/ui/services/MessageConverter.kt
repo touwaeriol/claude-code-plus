@@ -218,7 +218,7 @@ object MessageConverter {
                 println("  [$index] type: $type, keys: ${obj.keys}")
             }
             
-            // 只提取 tool_use 类型，创建 RUNNING 状态的工具调用
+            // 🔧 现在每个消息只包含一个工具调用（已在ClaudeEventService拆分）
             contentArray?.forEach { contentElement ->
                 val contentObj = contentElement.jsonObject
                 val type = contentObj["type"]?.jsonPrimitive?.content
@@ -228,7 +228,7 @@ object MessageConverter {
                     val toolName = contentObj["name"]?.jsonPrimitive?.content ?: ""
                     val inputJson = contentObj["input"]?.jsonObject
                     
-                    println("[MessageConverter] 🔧 发现工具调用: $toolName (ID: $toolId)")
+                    println("[MessageConverter] 🔧 发现单个工具调用: $toolName (ID: $toolId)")
                     
                     // 将输入参数转换为 Map
                     val parameters = inputJson?.mapValues { (_, value) ->
@@ -247,6 +247,8 @@ object MessageConverter {
                     )
                     
                     toolCalls.add(toolCall)
+                    // 🎯 现在每个消息最多只有一个工具调用，所以可以直接break
+                    // 但保留forEach以确保兼容性
                 }
             }
             

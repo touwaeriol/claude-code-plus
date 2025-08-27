@@ -1,12 +1,6 @@
 package com.claudecodeplus.sdk
 
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.consumeAsFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+// 移除了Channel和Flow相关导入，简化为直接回调模式
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonElement
@@ -14,11 +8,13 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.encodeToString
 
 /**
  * Claude 会话事件服务
  * 管理会话生命周期，处理消息流，维护会话状态
  * 完全符合 Claudia 项目的会话管理策略
+ * 简化版：使用直接回调模式，移除Channel和Flow的复杂性
  */
 class ClaudeEventService(
     private val processHandler: ClaudeProcessEventHandler,
@@ -34,12 +30,16 @@ class ClaudeEventService(
     /**
      * 启动新会话（对应 Claudia 的 executeClaudeCode）
      * 使用与 Claudia 完全相同的参数模式
+     * 简化版：使用直接回调模式，立即处理消息
      */
-    fun startNewSession(
+    suspend fun startNewSession(
         projectPath: String, 
         prompt: String,
-        options: ClaudeCliWrapper.QueryOptions
-    ): Flow<ClaudeEvent> = flow {
+        options: ClaudeCliWrapper.QueryOptions,
+        onMessage: (SDKMessage) -> Unit,
+        onError: (String) -> Unit = {},
+        onComplete: (Boolean) -> Unit = {}
+    ) {
         // 构建命令，确保不使用 --resume 参数（新会话）
         val command = buildClaudeCommandList(
             prompt = prompt, 
@@ -49,72 +49,61 @@ class ClaudeEventService(
         
         println("[ClaudeEventService] 启动新会话命令: ${command.joinToString(" ")}")
         
-        // 使用 Channel 来处理异步事件
-        val eventChannel = Channel<ClaudeEvent>()
-        val scope = CoroutineScope(Dispatchers.IO)
-        
+        // 直接使用回调，避免Channel和Flow的复杂性
         val process = processHandler.executeWithEvents(
             command = command,
             workingDirectory = projectPath,
             sessionId = null, // 新会话没有 sessionId
             onOutput = { outputLine ->
                 println("[ClaudeEventService] 新会话收到输出: $outputLine")
-                scope.launch {
-                    try {
-                        val message = parseOutputLine(outputLine)
-                        if (message != null) {
-                            println("[ClaudeEventService] 新会话解析消息成功: ${message.type}")
-                            eventChannel.send(ClaudeEvent.MessageReceived(message))
-                        } else {
-                            println("[ClaudeEventService] 新会话解析消息失败，跳过")
-                        }
-                    } catch (e: Exception) {
-                        println("[ClaudeEventService] 新会话解析异常: ${e.message}")
-                        eventChannel.send(ClaudeEvent.ParseError(outputLine, e))
+                try {
+                    val message = parseOutputLine(outputLine)
+                    if (message != null) {
+                        println("[ClaudeEventService] 新会话解析消息成功: ${message.type}")
+                        println("[ClaudeEventService] 🎯 立即回调处理消息")
+                        onMessage(message) // 直接同步调用，保证顺序和即时性
+                    } else {
+                        println("[ClaudeEventService] 新会话解析消息失败，跳过")
                     }
+                } catch (e: Exception) {
+                    println("[ClaudeEventService] 新会话解析异常: ${e.message}")
+                    onError("解析异常: ${e.message}")
                 }
             },
             onError = { errorLine ->
                 println("[ClaudeEventService] 新会话收到错误: $errorLine")
-                scope.launch {
-                    eventChannel.send(ClaudeEvent.ProcessError(errorLine))
-                }
+                onError(errorLine)
             },
             onComplete = { success ->
                 println("[ClaudeEventService] 新会话进程完成: success=$success")
-                scope.launch {
-                    eventChannel.send(ClaudeEvent.ProcessComplete(success))
-                    eventChannel.send(ClaudeEvent.SessionComplete(success))
-                    // 进程完成后关闭 channel
-                    eventChannel.close()
-                }
+                onComplete(success)
             }
         )
-        
-        // 使用协程收集事件并发送
-        eventChannel.consumeAsFlow().collect { event ->
-            emit(event)
-        }
     }
     
     /**
      * 恢复已有会话（对应 Claudia 的 resumeClaudeCode）
      * 关键：先预加载历史，再继续会话
+     * 简化版：使用直接回调模式
      */
-    fun resumeExistingSession(
+    suspend fun resumeExistingSession(
         sessionId: String,
         projectPath: String,
         prompt: String,
-        options: ClaudeCliWrapper.QueryOptions
-    ): Flow<ClaudeEvent> = flow {
+        options: ClaudeCliWrapper.QueryOptions,
+        onMessage: (SDKMessage) -> Unit,
+        onError: (String) -> Unit = {},
+        onComplete: (Boolean) -> Unit = {}
+    ) {
         // 1. 先预加载历史记录（关键步骤，符合 Claudia 模式）
         try {
             val historyMessages = historyLoader.loadSessionHistory(sessionId, projectPath)
             historyMessages.forEach { message ->
-                emit(ClaudeEvent.HistoryMessageLoaded(message))
+                println("[ClaudeEventService] 🎯 立即回调历史消息")
+                onMessage(message)
             }
         } catch (e: Exception) {
-            emit(ClaudeEvent.HistoryLoadError(e.message ?: "Failed to load history"))
+            onError("历史加载失败: ${e.message}")
         }
         
         // 2. 然后使用 --resume 继续会话
@@ -127,44 +116,30 @@ class ClaudeEventService(
         
         println("[ClaudeEventService] 恢复会话命令: ${command.joinToString(" ")}")
         
-        // 使用 Channel 来处理异步事件
-        val eventChannel = Channel<ClaudeEvent>()
-        val scope = CoroutineScope(Dispatchers.IO)
-        
+        // 直接使用回调，避免Channel和Flow的复杂性
         val process = processHandler.executeWithEvents(
             command = command,
             workingDirectory = projectPath,
             sessionId = sessionId,
             onOutput = { outputLine ->
-                scope.launch {
-                    try {
-                        val message = parseOutputLine(outputLine)
-                        if (message != null) {
-                            eventChannel.send(ClaudeEvent.MessageReceived(message))
-                        }
-                    } catch (e: Exception) {
-                        eventChannel.send(ClaudeEvent.ParseError(outputLine, e))
+                try {
+                    // 🔧 拆分包含多个工具调用的JSON，实现逐个显示
+                    val messages = parseAndSplitToolCalls(outputLine)
+                    messages.forEach { message ->
+                        println("[ClaudeEventService] 🎯 立即回调处理消息")
+                        onMessage(message)
                     }
+                } catch (e: Exception) {
+                    onError("解析异常: ${e.message}")
                 }
             },
             onError = { errorLine ->
-                scope.launch {
-                    eventChannel.send(ClaudeEvent.ProcessError(errorLine))
-                }
+                onError(errorLine)
             },
             onComplete = { success ->
-                scope.launch {
-                    eventChannel.send(ClaudeEvent.ProcessComplete(success))
-                    eventChannel.send(ClaudeEvent.SessionComplete(success))
-                    eventChannel.close()
-                }
+                onComplete(success)
             }
         )
-        
-        // 使用协程收集事件并发送
-        eventChannel.consumeAsFlow().collect { event ->
-            emit(event)
-        }
     }
     
     /**
@@ -172,20 +147,24 @@ class ClaudeEventService(
      * 完全模仿 Claudia 的逻辑：
      * - if (effectiveSession && !isFirstPrompt) -> resumeClaudeCode
      * - else -> executeClaudeCode
+     * 简化版：使用直接回调模式
      */
-    fun handleMessage(
+    suspend fun handleMessage(
         sessionId: String?,
         isFirstMessage: Boolean,
         projectPath: String,
         prompt: String,
-        options: ClaudeCliWrapper.QueryOptions
-    ): Flow<ClaudeEvent> {
-        return if (sessionId != null && !isFirstMessage) {
+        options: ClaudeCliWrapper.QueryOptions,
+        onMessage: (SDKMessage) -> Unit,
+        onError: (String) -> Unit = {},
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        if (sessionId != null && !isFirstMessage) {
             // 有会话ID且非首次消息 -> 恢复会话
-            resumeExistingSession(sessionId, projectPath, prompt, options)
+            resumeExistingSession(sessionId, projectPath, prompt, options, onMessage, onError, onComplete)
         } else {
             // 无会话ID或首次消息 -> 新会话  
-            startNewSession(projectPath, prompt, options)
+            startNewSession(projectPath, prompt, options, onMessage, onError, onComplete)
         }
     }
     
@@ -382,6 +361,99 @@ class ClaudeEventService(
                 println("[ClaudeEventService] 未知消息类型: $type，默认为TEXT")
                 MessageType.TEXT
             }
+        }
+    }
+    
+    /**
+     * 拆分包含多个工具调用的JSON消息，实现逐个显示效果
+     */
+    private fun parseAndSplitToolCalls(line: String): List<SDKMessage> {
+        if (line.isBlank()) return emptyList()
+        
+        // 对于非JSON内容，直接返回单个文本消息
+        if (!line.trim().startsWith("{") || !line.trim().endsWith("}")) {
+            val textMessage = SDKMessage(
+                type = MessageType.TEXT,
+                data = MessageData(text = line),
+                content = line
+            )
+            return listOf(textMessage)
+        }
+        
+        try {
+            val jsonElement = json.parseToJsonElement(line)
+            if (jsonElement !is JsonObject) {
+                return listOf(parseOutputLine(line) ?: return emptyList())
+            }
+            
+            val type = jsonElement["type"]?.jsonPrimitive?.content ?: ""
+            
+            // 只拆分assistant消息中的多个工具调用
+            if (type == "assistant") {
+                val messageContent = jsonElement["message"]?.jsonObject?.get("content")?.jsonArray
+                
+                // 统计tool_use数量
+                val toolUseCount = messageContent?.count { element ->
+                    element.jsonObject["type"]?.jsonPrimitive?.content == "tool_use"
+                } ?: 0
+                
+                println("[ClaudeEventService] 检测到assistant消息，包含${toolUseCount}个工具调用")
+                
+                // 如果包含多个工具调用，拆分成单独消息
+                if (toolUseCount > 1) {
+                    val splitMessages = mutableListOf<SDKMessage>()
+                    
+                    messageContent?.forEachIndexed { index, contentElement ->
+                        val contentType = contentElement.jsonObject["type"]?.jsonPrimitive?.content
+                        
+                        if (contentType == "tool_use") {
+                            // 为每个工具调用创建单独的assistant消息
+                            val originalMessage = jsonElement["message"]?.jsonObject
+                            val originalUuid = jsonElement["uuid"]?.jsonPrimitive?.content
+                            val sessionId = jsonElement["session_id"]?.jsonPrimitive?.content
+                            
+                            // 构建新的JSON消息，只包含当前工具调用
+                            val newMessageJson = buildString {
+                                append("{")
+                                append("\"type\":\"assistant\",")
+                                append("\"message\":{")
+                                append("\"content\":[")
+                                append(contentElement.toString())
+                                append("]")
+                                // 保持其他message字段
+                                originalMessage?.forEach { (key, value) ->
+                                    if (key != "content") {
+                                        append(",\"$key\":$value")
+                                    }
+                                }
+                                append("},")
+                                if (sessionId != null) {
+                                    append("\"session_id\":\"$sessionId\",")
+                                }
+                                if (originalUuid != null) {
+                                    append("\"uuid\":\"${originalUuid}_tool_${index}\"")
+                                }
+                                append("}")
+                            }
+                            
+                            val splitJson = newMessageJson
+                            println("[ClaudeEventService] 拆分工具调用消息 ${index + 1}/${toolUseCount}")
+                            
+                            parseOutputLine(splitJson)?.let { splitMessages.add(it) }
+                        }
+                    }
+                    
+                    return splitMessages
+                }
+            }
+            
+            // 其他情况（单个工具调用、tool_result、system等）直接解析
+            return listOf(parseOutputLine(line) ?: return emptyList())
+            
+        } catch (e: Exception) {
+            println("[ClaudeEventService] 拆分工具调用失败: ${e.message}")
+            // 降级处理：按原逻辑解析
+            return listOf(parseOutputLine(line) ?: return emptyList())
         }
     }
 }
