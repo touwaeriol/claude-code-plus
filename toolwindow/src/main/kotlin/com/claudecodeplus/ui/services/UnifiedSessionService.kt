@@ -2,7 +2,9 @@ package com.claudecodeplus.ui.services
 
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.ui.models.EnhancedMessage
+import com.claudecodeplus.ui.utils.SessionIdRegistry
 import kotlinx.coroutines.CoroutineScope
+import mu.KotlinLogging
 import java.util.UUID
 
 /**
@@ -13,6 +15,7 @@ import java.util.UUID
 class UnifiedSessionService(
     private val scope: CoroutineScope
 ) {
+    private val logger = KotlinLogging.logger {}
     private val cliWrapper = ClaudeCliWrapper()
     // 移除已删除的消息转换器
     
@@ -28,10 +31,12 @@ class UnifiedSessionService(
      * 执行查询
      * 
      * 如果没有指定 sessionId 且不是恢复会话，会自动生成一个新的 UUID
+     * 同时会自动记录 sessionId 到注册表以便后续恢复
      */
     suspend fun query(
         prompt: String, 
-        options: ClaudeCliWrapper.QueryOptions
+        options: ClaudeCliWrapper.QueryOptions,
+        tabId: String? = null  // 添加标签页ID参数，用于记录会话映射
     ): ClaudeCliWrapper.QueryResult {
         // 使用传入的 cwd
         val workingDir = options.cwd
@@ -64,12 +69,27 @@ class UnifiedSessionService(
         
         val result = cliWrapper.query(prompt, finalOptions)
         
-        // 如果命令成功且创建了新会话，将会话ID添加到内存缓存
+        // 如果命令成功，处理会话ID记录
         if (result.success) {
             val sessionId = result.sessionId ?: finalOptions.sessionId
-            if (sessionId != null && finalOptions.sessionId != null && finalOptions.resume == null) {
-                // 这是一个新创建的会话（使用了--session-id而不是--resume）
-                createdSessions.add(sessionId)
+            
+            if (sessionId != null) {
+                // 将会话ID添加到内存缓存
+                if (finalOptions.sessionId != null && finalOptions.resume == null) {
+                    // 这是一个新创建的会话（使用了--session-id而不是--resume）
+                    createdSessions.add(sessionId)
+                    logger.info("[UnifiedSessionService] 记录新创建的会话: $sessionId")
+                }
+                
+                // 自动记录 sessionId 到注册表（如果提供了项目路径和标签页ID）
+                if (tabId != null && workingDir != null) {
+                    try {
+                        SessionIdRegistry.recordSessionId(workingDir, tabId, sessionId)
+                        logger.info("[UnifiedSessionService] 自动记录会话映射: $workingDir:$tabId -> $sessionId")
+                    } catch (e: Exception) {
+                        logger.warn("[UnifiedSessionService] 记录会话映射失败", e)
+                    }
+                }
             }
         }
         

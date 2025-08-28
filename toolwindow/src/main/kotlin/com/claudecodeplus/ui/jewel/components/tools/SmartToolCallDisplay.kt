@@ -32,9 +32,11 @@ fun SmartToolCallDisplay(
     ) {
         // 按照需求FR-2.14，去掉分组标题，直接显示每个工具调用
         toolCalls.forEach { toolCall ->
+            println("[SmartToolCallDisplay] 处理工具调用：${toolCall.name}")
             when {
                 // TodoWrite 工具特殊展示
                 toolCall.name.contains("TodoWrite", ignoreCase = true) -> {
+                    println("[SmartToolCallDisplay] ✅ 识别为TodoWrite工具，使用EnhancedTodoDisplay")
                     EnhancedTodoDisplay(
                         toolCall = toolCall,
                         modifier = Modifier.fillMaxWidth()
@@ -42,6 +44,7 @@ fun SmartToolCallDisplay(
                 }
                 // 其他所有工具都使用统一的紧凑展示
                 else -> {
+                    println("[SmartToolCallDisplay] 使用CompactToolCallDisplay显示：${toolCall.name}")
                     CompactToolCallDisplay(
                         toolCalls = listOf(toolCall),
                         modifier = Modifier.fillMaxWidth()

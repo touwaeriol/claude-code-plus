@@ -12,10 +12,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.scale
 import com.claudecodeplus.ui.models.ToolCall
 import org.jetbrains.jewel.foundation.theme.JewelTheme
-import androidx.compose.material.LinearProgressIndicator
+import com.claudecodeplus.ui.jewel.components.tools.LinearProgressBar
 import org.jetbrains.jewel.ui.component.Text
+import kotlinx.serialization.json.*
 
 /**
  * 增强的 TodoWrite 看板式展示组件
@@ -84,11 +87,9 @@ private fun TodoSummaryHeader(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            LinearProgressIndicator(
+            LinearProgressBar(
                 progress = progress,
-                modifier = Modifier.weight(1f).height(6.dp),
-                color = JewelTheme.globalColors.text.info,
-                backgroundColor = JewelTheme.globalColors.borders.normal
+                modifier = Modifier.weight(1f).height(6.dp)
             )
             Text(
                 text = "${(progress * 100).toInt()}%",
@@ -147,9 +148,10 @@ private fun TodoListItem(todo: EnhancedTodoItem) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(3.dp))
             .background(
-                when (todo.priority) {
-                    "high" -> Color(0xFFFF6B6B).copy(alpha = 0.1f)
-                    "medium" -> Color(0xFFFFD93D).copy(alpha = 0.1f)
+                when (todo.status.lowercase()) {
+                    "completed" -> Color(0xFF4CAF50).copy(alpha = 0.1f)  // 绿色背景 - 已完成
+                    "in_progress" -> Color(0xFF2196F3).copy(alpha = 0.15f)  // 蓝色背景 - 进行中 
+                    "pending" -> Color(0xFFFFC107).copy(alpha = 0.1f)  // 黄色背景 - 待办
                     else -> JewelTheme.globalColors.panelBackground.copy(alpha = 0.5f)
                 }
             )
@@ -157,15 +159,26 @@ private fun TodoListItem(todo: EnhancedTodoItem) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 优先级指示器
+        // 状态指示器（带动画效果）
+        val animatedScale by animateFloatAsState(
+            targetValue = if (todo.status.lowercase() == "in_progress") 1.2f else 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1000),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "statusIndicatorScale"
+        )
+        
         Box(
             modifier = Modifier
-                .size(6.dp)
+                .size(8.dp)
+                .scale(if (todo.status.lowercase() == "in_progress") animatedScale else 1.0f)
                 .clip(androidx.compose.foundation.shape.CircleShape)
                 .background(
-                    when (todo.priority) {
-                        "high" -> Color(0xFFFF6B6B)
-                        "medium" -> Color(0xFFFFD93D)
+                    when (todo.status.lowercase()) {
+                        "completed" -> Color(0xFF4CAF50)  // 绿色 - 已完成
+                        "in_progress" -> Color(0xFF2196F3)  // 蓝色 - 进行中
+                        "pending" -> Color(0xFFFFC107)  // 黄色 - 待办
                         else -> JewelTheme.globalColors.borders.normal
                     }
                 )
@@ -173,10 +186,11 @@ private fun TodoListItem(todo: EnhancedTodoItem) {
         
         // 状态图标
         Text(
-            text = when (todo.status) {
+            text = when (todo.status.lowercase()) {
                 "completed" -> "✅"
-                "in_progress" -> "▶️"
-                else -> "⏸️"
+                "in_progress" -> "🔄"
+                "pending" -> "⏳"
+                else -> "❓"
             },
             style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
         )
@@ -200,35 +214,36 @@ private fun TodoListItem(todo: EnhancedTodoItem) {
             modifier = Modifier.weight(1f)
         )
         
-        // 优先级标签（仅在中高优先级时显示）
-        if (todo.priority != "low") {
-            Text(
-                text = when (todo.priority) {
-                    "high" -> "高"
-                    "medium" -> "中"
-                    else -> ""
+        // 状态标签
+        Text(
+            text = when (todo.status.lowercase()) {
+                "completed" -> "已完成"
+                "in_progress" -> "进行中"
+                "pending" -> "待办"
+                else -> "未知"
+            },
+            style = JewelTheme.defaultTextStyle.copy(
+                fontSize = 10.sp,
+                color = when (todo.status.lowercase()) {
+                    "completed" -> Color(0xFF4CAF50)
+                    "in_progress" -> Color(0xFF2196F3)
+                    "pending" -> Color(0xFFFFC107)
+                    else -> JewelTheme.globalColors.text.normal
                 },
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 10.sp,
-                    color = when (todo.priority) {
-                        "high" -> Color(0xFFFF6B6B)
-                        "medium" -> Color(0xFFFFD93D)
-                        else -> JewelTheme.globalColors.text.normal
-                    },
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
-                ),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(
-                        when (todo.priority) {
-                            "high" -> Color(0xFFFF6B6B).copy(alpha = 0.1f)
-                            "medium" -> Color(0xFFFFD93D).copy(alpha = 0.1f)
-                            else -> Color.Transparent
-                        }
-                    )
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
-            )
-        }
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+            ),
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    when (todo.status.lowercase()) {
+                        "completed" -> Color(0xFF4CAF50).copy(alpha = 0.1f)
+                        "in_progress" -> Color(0xFF2196F3).copy(alpha = 0.1f)
+                        "pending" -> Color(0xFFFFC107).copy(alpha = 0.1f)
+                        else -> Color.Transparent
+                    }
+                )
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        )
     }
 }
 
@@ -240,29 +255,102 @@ private data class EnhancedTodoItem(
     val id: String,
     val content: String,
     val status: String,
-    val priority: String
+    val activeForm: String,
+    val priority: String = "normal"
 )
 
 /**
  * 解析任务列表
  */
 private fun parseTodos(toolCall: ToolCall): List<EnhancedTodoItem> {
-    val todosParam = toolCall.parameters["todos"] ?: return emptyList()
+    println("[EnhancedTodoDisplay] 开始解析TodoWrite工具调用")
+    println("[EnhancedTodoDisplay] 工具名称：${toolCall.name}")
+    println("[EnhancedTodoDisplay] 所有参数：${toolCall.parameters}")
+    println("[EnhancedTodoDisplay] 参数类型：${toolCall.parameters::class}")
     
-    if (todosParam is List<*>) {
-        return todosParam.mapNotNull { item ->
-            if (item is Map<*, *>) {
-                EnhancedTodoItem(
-                    id = item["id"]?.toString() ?: "",
-                    content = item["content"]?.toString() ?: "",
-                    status = item["status"]?.toString() ?: "pending",
-                    priority = item["priority"]?.toString() ?: "medium"
-                )
-            } else {
-                null
-            }
-        }
+    // 检查是否有todos参数
+    val todosParam = toolCall.parameters["todos"]
+    if (todosParam == null) {
+        println("[EnhancedTodoDisplay] ❌ 未找到todos参数")
+        // 打印所有可用的参数键
+        println("[EnhancedTodoDisplay] 可用参数键：${toolCall.parameters.keys}")
+        return emptyList()
     }
     
-    return emptyList()
+    println("[EnhancedTodoDisplay] todos参数找到，类型：${todosParam::class}")
+    println("[EnhancedTodoDisplay] todos内容：$todosParam")
+    
+    return when (todosParam) {
+        is List<*> -> {
+            println("[EnhancedTodoDisplay] 解析List类型，共${todosParam.size}个项目")
+            todosParam.mapIndexed { index, item ->
+                println("[EnhancedTodoDisplay] 处理第${index}个项目，类型：${item?.javaClass}")
+                when (item) {
+                    is Map<*, *> -> {
+                        val content = item["content"]?.toString() ?: ""
+                        val status = item["status"]?.toString() ?: "pending"
+                        val activeForm = item["activeForm"]?.toString() ?: content
+                        
+                        println("[EnhancedTodoDisplay] ✅ Map项目 $index: content='$content', status='$status', activeForm='$activeForm'")
+                        
+                        EnhancedTodoItem(
+                            id = (index + 1).toString(),
+                            content = content,
+                            status = status,
+                            activeForm = activeForm,
+                            priority = "normal"
+                        )
+                    }
+                    else -> {
+                        // 如果是字符串形式，尝试解析为简单任务
+                        val content = item.toString()
+                        println("[EnhancedTodoDisplay] ⚠️ 简单项目 $index: '$content'")
+                        
+                        EnhancedTodoItem(
+                            id = (index + 1).toString(),
+                            content = content,
+                            status = "pending",
+                            activeForm = content,
+                            priority = "normal"
+                        )
+                    }
+                }
+            }
+        }
+        is String -> {
+            println("[EnhancedTodoDisplay] 解析JSON字符串类型")
+            try {
+                // 使用 kotlinx.serialization.json 解析JSON字符串
+                val json = Json { ignoreUnknownKeys = true }
+                val todoList = json.decodeFromString<List<JsonObject>>(todosParam)
+                
+                println("[EnhancedTodoDisplay] ✅ JSON解析成功，共${todoList.size}个项目")
+                
+                todoList.mapIndexed { index, jsonObj ->
+                    println("[EnhancedTodoDisplay] 处理第${index}个JSON项目")
+                    
+                    val content = jsonObj["content"]?.jsonPrimitive?.content ?: ""
+                    val status = jsonObj["status"]?.jsonPrimitive?.content ?: "pending"
+                    val activeForm = jsonObj["activeForm"]?.jsonPrimitive?.content ?: content
+                    
+                    println("[EnhancedTodoDisplay] ✅ JSON项目 $index: content='$content', status='$status', activeForm='$activeForm'")
+                    
+                    EnhancedTodoItem(
+                        id = (index + 1).toString(),
+                        content = content,
+                        status = status,
+                        activeForm = activeForm,
+                        priority = "normal"
+                    )
+                }
+            } catch (e: Exception) {
+                println("[EnhancedTodoDisplay] ❌ JSON解析失败: ${e.message}")
+                emptyList()
+            }
+        }
+        else -> {
+            println("[EnhancedTodoDisplay] ❌ 未知的todos参数类型：${todosParam::class}")
+            emptyList()
+        }
+    }
 }

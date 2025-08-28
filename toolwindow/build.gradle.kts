@@ -45,8 +45,11 @@ dependencies {
     // Kotlinx Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
     
-    // Gson for JSON parsing
+    // Gson for JSON parsing (暂时保留，逐步迁移)
     implementation("com.google.code.gson:gson:2.10.1")
+    
+    // Kotlin reflection
+    implementation("org.jetbrains.kotlin:kotlin-reflect:${rootProject.extra["kotlinVersion"]}")
     
     // Mordant for ANSI text parsing and rendering
     implementation("com.github.ajalt.mordant:mordant:2.2.0")

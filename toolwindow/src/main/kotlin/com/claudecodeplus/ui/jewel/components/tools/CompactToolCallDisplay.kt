@@ -38,6 +38,8 @@ import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.component.styling.TooltipStyle
 import org.jetbrains.jewel.ui.theme.tooltipStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import kotlinx.coroutines.delay
 
 /**
@@ -80,7 +82,10 @@ private fun CompactToolCallItem(
 ) {
     println("[CompactToolCallItem] 渲染工具：${toolCall.name}, ID：${toolCall.id}")
     
-    var expanded by remember { mutableStateOf(false) }
+    // TodoWrite 工具默认展开显示任务列表
+    var expanded by remember { 
+        mutableStateOf(toolCall.name.contains("TodoWrite", ignoreCase = true)) 
+    }
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     
@@ -229,8 +234,7 @@ private fun CompactToolCallItem(
             )
         ) {
             ToolCallDetails(
-                toolCall = toolCall,
-                onClose = { expanded = false }
+                toolCall = toolCall
             )
         }
     }
@@ -241,8 +245,7 @@ private fun CompactToolCallItem(
  */
 @Composable
 private fun ToolCallDetails(
-    toolCall: ToolCall,
-    onClose: () -> Unit = {}
+    toolCall: ToolCall
 ) {
     println("[ToolCallDetails] 工具：${toolCall.name}, 结果：${toolCall.result?.let { it::class.simpleName } ?: "null"}")
     
@@ -266,25 +269,20 @@ private fun ToolCallDetails(
             .fillMaxWidth()
             .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.05f))  // 更淡的背景
     ) {
-        // 详细内容区域含关闭按钮 - 🔑 添加高度限制和内部滚动
+        // 详细内容区域 - 🔑 添加高度限制和内部滚动
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = maxExpandHeight)  // 限制最大高度为视窗40%
         ) {
-            // 主内容 - 使用垂直滚动显示滚动条
+            // 使用带滚动条的垂直滚动
             SelectionContainer {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 6.dp, vertical = 8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 2.dp, vertical = 0.dp)  // 最小化内边距
-                            .padding(top = 12.dp) // 减少为关闭按钮留的空间
-                    ) {
                     // 根据工具调用状态显示对应内容
                     when {
                         // 运行中的工具调用显示进度状态
@@ -353,25 +351,59 @@ private fun ToolCallDetails(
                             )
                         }
                     }
-                    } // 结束 Box
                 } // 结束 Column
             } // 结束 SelectionContainer
             
-            // 关闭按钮 - 浮动在右上角，更小更轻量
+            // 复制按钮 - 浮动在右上角
+            val clipboardManager = LocalClipboardManager.current
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(2.dp)
+                    .padding(6.dp)
             ) {
                 Text(
-                    text = "✕",
+                    text = "📋",
                     style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 10.sp,  // 更小的字体
-                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)  // 更淡的颜色
+                        fontSize = 12.sp,
+                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
                     ),
                     modifier = Modifier
-                        .clickable { onClose() }
-                        .padding(2.dp)  // 更小的点击区域
+                        .clickable {
+                            // 复制工具调用结果到剪贴板 - 只复制纯文本结果
+                            val content = buildString {
+                                toolCall.result?.let { result ->
+                                    when (result) {
+                                        is ToolResult.Success -> {
+                                            // 去除行号和格式信息，只保留纯文本内容
+                                            val cleanOutput = result.output
+                                                .lines()
+                                                .map { line ->
+                                                    // 去除行号前缀（格式如：123→ 或 123： 等）
+                                                    line.replace(Regex("^\\s*\\d+[→:→]"), "").trimStart()
+                                                }
+                                                .joinToString("\n")
+                                            append(cleanOutput)
+                                        }
+                                        is ToolResult.Failure -> {
+                                            append(result.error)
+                                        }
+                                        else -> {
+                                            // 处理其他类型的结果
+                                            val resultStr = result.toString()
+                                            val cleanResult = resultStr
+                                                .lines()
+                                                .map { line ->
+                                                    line.replace(Regex("^\\s*\\d+[→:→]"), "").trimStart()
+                                                }
+                                                .joinToString("\n")
+                                            append(cleanResult)
+                                        }
+                                    }
+                                } ?: append("无结果")
+                            }
+                            clipboardManager.setText(AnnotatedString(content))
+                        }
+                        .padding(4.dp)
                 )
             }
         }
@@ -1798,3 +1830,4 @@ private fun formatToolBriefInfo(toolCall: ToolCall): String {
         }
     }
 }
+

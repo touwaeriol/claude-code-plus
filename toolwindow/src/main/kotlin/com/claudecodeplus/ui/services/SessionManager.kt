@@ -2,7 +2,12 @@ package com.claudecodeplus.ui.services
 
 import com.claudecodeplus.ui.models.SessionObject
 import com.claudecodeplus.ui.models.EnhancedMessage
+import com.claudecodeplus.ui.utils.ClaudeSessionFileLocator
+import com.claudecodeplus.ui.utils.ClaudeSessionHistoryLoader
+import com.claudecodeplus.ui.utils.SessionIdRegistry
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -270,7 +275,201 @@ class SessionManager {
         val totalMessages: Int
     )
     
-    // ========== 文件追踪相关方法 ==========
+    // ========== Claude 会话文件恢复相关方法 ==========
     
-    // 文件监听功能已移除，改为事件驱动架构
+    /**
+     * 从 Claude 会话文件恢复会话状态
+     * 
+     * 该方法会：
+     * 1. 从 SessionIdRegistry 获取已记录的会话 ID
+     * 2. 如果没有记录，则获取项目最新的会话文件
+     * 3. 从会话文件加载历史消息
+     * 4. 创建或更新会话对象
+     * 
+     * @param projectPath 项目完整路径
+     * @param tabId 标签页 ID
+     * @param project 项目对象
+     * @param coroutineScope 协程作用域（用于异步操作）
+     * @return 如果成功恢复返回 true，否则返回 false
+     */
+    fun restoreSessionFromClaudeFile(
+        projectPath: String, 
+        tabId: String, 
+        project: com.claudecodeplus.ui.models.Project,
+        coroutineScope: CoroutineScope
+    ): Boolean {
+        if (projectPath.isBlank() || tabId.isBlank()) {
+            logger.warn("[SessionManager] 恢复会话参数为空")
+            return false
+        }
+        
+        logger.info("[SessionManager] 开始恢复会话: projectPath=$projectPath, tabId=$tabId")
+        
+        // 异步执行会话恢复，避免阻塞 UI
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                // 1. 获取会话 ID
+                val sessionId = SessionIdRegistry.getSessionId(projectPath, tabId)
+                    ?: SessionIdRegistry.getLatestSessionForProject(projectPath)
+                    ?: ClaudeSessionFileLocator.getLatestSessionId(projectPath)
+                
+                if (sessionId == null) {
+                    logger.info("[SessionManager] 项目没有可恢复的会话: $projectPath")
+                    return@launch
+                }
+                
+                // 2. 获取会话文件
+                val sessionFile = ClaudeSessionFileLocator.getSessionFile(projectPath, sessionId)
+                if (sessionFile == null) {
+                    logger.warn("[SessionManager] 会话文件不存在: projectPath=$projectPath, sessionId=$sessionId")
+                    return@launch
+                }
+                
+                // 3. 加载历史消息和获取当前会话ID
+                val historyLoader = ClaudeSessionHistoryLoader()
+                val loadResult = historyLoader.loadSessionHistory(sessionFile)
+                val messages = loadResult.messages
+                val currentSessionId = loadResult.currentSessionId
+                
+                if (messages.isEmpty()) {
+                    logger.warn("[SessionManager] 会话文件没有有效消息: $sessionFile")
+                    return@launch
+                }
+                
+                // 记录会话ID更新情况
+                if (currentSessionId != null && currentSessionId != sessionId) {
+                    logger.info("[SessionManager] 会话ID已更新: $sessionId -> $currentSessionId")
+                }
+                
+                // 4. 在主线程创建/更新会话对象
+                coroutineScope.launch(Dispatchers.Main) {
+                    val sessionKey = "$projectPath:$tabId"
+                    
+                    // 检查是否已经存在会话
+                    val existingSession = sessions[sessionKey]
+                    if (existingSession != null) {
+                        // 更新现有会话
+                        existingSession.messages = messages.toMutableList()
+                        // 使用最新的会话ID（如果有更新的话）
+                        existingSession.sessionId = currentSessionId ?: sessionId
+                        existingSession.onHistoryLoaded()
+                        logger.info("[SessionManager] 更新现有会话: $sessionKey, messages=${messages.size}, sessionId=${existingSession.sessionId}")
+                    } else {
+                        // 创建新会话，使用最新的会话ID
+                        val effectiveSessionId = currentSessionId ?: sessionId
+                        val newSession = SessionObject(
+                            effectiveSessionId,
+                            messages,
+                            null, // 使用默认模型
+                            null, // 使用默认权限模式
+                            null, // 使用默认跳过权限设置
+                            project
+                        )
+                        newSession.isFirstMessage = false // 标记为已有消息的会话
+                        newSession.onHistoryLoaded()
+                        
+                        sessions[sessionKey] = newSession
+                        logger.info("[SessionManager] 创建恢复会话: $sessionKey, messages=${messages.size}")
+                        
+                        _events.value = SessionEvent.SessionCreated(sessionKey, newSession)
+                    }
+                    
+                    // 记录会话 ID 映射（如果还没有记录的话）
+                    SessionIdRegistry.recordSessionId(projectPath, tabId, sessionId)
+                    
+                    // 发送历史恢复事件
+                    _events.value = SessionEvent.SessionHistoryRestored(sessionKey, messages.size)
+                }
+                
+            } catch (e: Exception) {
+                logger.error("[SessionManager] 恢复会话失败: projectPath=$projectPath, tabId=$tabId", e)
+            }
+        }
+        
+        return true
+    }
+    
+    /**
+     * 记录新的会话 ID
+     * 
+     * 当开始新的 Claude 对话时调用此方法记录会话 ID，
+     * 以便后续能够从会话文件恢复状态。
+     * 
+     * @param projectPath 项目完整路径
+     * @param tabId 标签页 ID
+     * @param sessionId Claude 会话 ID
+     */
+    fun recordSessionId(projectPath: String, tabId: String, sessionId: String) {
+        if (projectPath.isBlank() || tabId.isBlank() || sessionId.isBlank()) {
+            logger.warn("[SessionManager] 记录会话ID参数为空")
+            return
+        }
+        
+        try {
+            SessionIdRegistry.recordSessionId(projectPath, tabId, sessionId)
+            
+            // 更新内存中的会话对象
+            val sessionKey = "$projectPath:$tabId"
+            sessions[sessionKey]?.let { session ->
+                session.sessionId = sessionId
+            }
+            
+            logger.info("[SessionManager] 记录会话ID: $sessionKey -> $sessionId")
+        } catch (e: Exception) {
+            logger.error("[SessionManager] 记录会话ID失败", e)
+        }
+    }
+    
+    /**
+     * 获取项目的会话恢复统计信息
+     * 
+     * @param projectPath 项目完整路径
+     * @return 会话恢复统计信息
+     */
+    fun getSessionRestoreStats(projectPath: String): SessionRestoreStats {
+        return try {
+            val registeredSessions = SessionIdRegistry.getProjectSessions(projectPath)
+            val availableFiles = ClaudeSessionFileLocator.getProjectSessionFiles(projectPath)
+            val fileStats = ClaudeSessionFileLocator.getSessionStats(projectPath)
+            
+            SessionRestoreStats(
+                registeredSessionCount = registeredSessions.size,
+                availableFileCount = availableFiles.size,
+                totalFileSizeMB = fileStats.totalSizeMB,
+                newestSessionTime = fileStats.newestSessionTime,
+                oldestSessionTime = fileStats.oldestSessionTime
+            )
+        } catch (e: Exception) {
+            logger.error("[SessionManager] 获取恢复统计信息失败: $projectPath", e)
+            SessionRestoreStats(0, 0, 0.0, null, null)
+        }
+    }
+    
+    /**
+     * 清理项目的会话映射记录
+     * 
+     * @param projectPath 项目完整路径
+     * @return 清理的记录数量
+     */
+    fun clearProjectSessionMappings(projectPath: String): Int {
+        return try {
+            val clearedCount = SessionIdRegistry.clearProject(projectPath)
+            logger.info("[SessionManager] 清理项目会话映射: $projectPath, 清理了 $clearedCount 个记录")
+            clearedCount
+        } catch (e: Exception) {
+            logger.error("[SessionManager] 清理项目会话映射失败: $projectPath", e)
+            0
+        }
+    }
+    
+    /**
+     * 会话恢复统计信息
+     */
+    data class SessionRestoreStats(
+        val registeredSessionCount: Int,    // 已注册的会话数量
+        val availableFileCount: Int,        // 可用的会话文件数量
+        val totalFileSizeMB: Double,        // 总文件大小（MB）
+        val newestSessionTime: Long?,       // 最新会话时间
+        val oldestSessionTime: Long?        // 最旧会话时间
+    )
 }

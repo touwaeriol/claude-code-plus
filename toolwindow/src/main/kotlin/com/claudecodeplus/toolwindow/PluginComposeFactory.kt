@@ -31,7 +31,9 @@ object PluginComposeFactory {
         project: Any? = null,  // 改为 Any 类型，避免依赖 IntelliJ API
         fileIndexService: FileIndexService? = null,
         projectService: ProjectService? = null,
-        themeStateHolder: MutableState<Boolean>? = null  // 新增：外部传入的主题状态
+        themeStateHolder: MutableState<Boolean>? = null,  // 新增：外部传入的主题状态
+        backgroundService: Any? = null,  // 新增：后台服务
+        sessionStateSync: Any? = null   // 新增：状态同步器
     ): JComponent {
         return JPanel(BorderLayout()).apply {
             val composePanel = ComposePanel()
@@ -62,7 +64,9 @@ object PluginComposeFactory {
                         workingDirectory = workingDirectory,
                         fileIndexService = fileIndexService,
                         projectService = projectService,
-                        sessionManager = sessionManager
+                        sessionManager = sessionManager,
+                        backgroundService = backgroundService,
+                        sessionStateSync = sessionStateSync
                     )
                 }
             }

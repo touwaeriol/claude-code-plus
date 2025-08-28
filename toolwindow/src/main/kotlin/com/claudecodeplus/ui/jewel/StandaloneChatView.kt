@@ -26,6 +26,8 @@ fun StandaloneChatView(
     sessionManager: ClaudeSessionManager = ClaudeSessionManager(),
     initialMessages: List<EnhancedMessage>? = null,
     sessionId: String? = null,
+    backgroundService: Any? = null,  // 新增：后台服务
+    sessionStateSync: Any? = null,   // 新增：状态同步器
     modifier: Modifier = Modifier
 ) {
     // 为简单用例创建默认的 tabId 和临时 Project
@@ -51,6 +53,8 @@ fun StandaloneChatView(
         currentTabId = null,
         currentProject = tempProject,
         projectManager = null,
+        backgroundService = backgroundService,
+        sessionStateSync = sessionStateSync,
         modifier = modifier
     )
 }

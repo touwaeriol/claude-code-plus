@@ -230,9 +230,14 @@ object MessageConverter {
                     
                     println("[MessageConverter] 🔧 发现单个工具调用: $toolName (ID: $toolId)")
                     
-                    // 将输入参数转换为 Map
+                    // 将输入参数转换为 Map，安全处理各种JSON类型
                     val parameters = inputJson?.mapValues { (_, value) ->
-                        value.jsonPrimitive?.content ?: value.toString()
+                        when {
+                            value is kotlinx.serialization.json.JsonPrimitive -> value.content
+                            value is kotlinx.serialization.json.JsonArray -> value.toString()
+                            value is kotlinx.serialization.json.JsonObject -> value.toString()
+                            else -> value.toString()
+                        }
                     } ?: emptyMap()
                     
                     // 创建 RUNNING 状态的工具调用（结果将在后续事件中更新）

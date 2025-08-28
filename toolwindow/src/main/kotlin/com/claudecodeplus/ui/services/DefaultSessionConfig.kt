@@ -6,6 +6,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import java.util.prefs.Preferences
+import com.google.gson.JsonParser
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.Paths
 
 /**
  * 默认会话配置管理器
@@ -53,9 +57,22 @@ object DefaultSessionConfig {
      */
     fun loadFromSettings() {
         try {
-            // 加载默认模型
-            val modelName = prefs.get(KEY_DEFAULT_MODEL, AiModel.OPUS.name)
-            defaultModel = AiModel.values().find { it.name == modelName } ?: AiModel.OPUS
+            // 首先尝试从 Claude 全局配置文件读取
+            var modelFromClaude: AiModel? = null
+            try {
+                modelFromClaude = loadModelFromClaudeSettings()
+            } catch (e: Exception) {
+                println("[DefaultSessionConfig] 无法读取 Claude 全局配置: ${e.message}")
+            }
+            
+            // 加载默认模型 - 优先使用 Claude 配置，否则使用插件本地配置
+            val modelName = if (modelFromClaude != null) {
+                println("[DefaultSessionConfig] 使用 Claude 全局配置的模型: ${modelFromClaude.displayName}")
+                modelFromClaude.name
+            } else {
+                prefs.get(KEY_DEFAULT_MODEL, AiModel.OPUS.name)
+            }
+            defaultModel = AiModel.values().find { it.name == modelName } ?: modelFromClaude ?: AiModel.OPUS
             
             // 加载默认权限模式
             val permissionModeName = prefs.get(KEY_DEFAULT_PERMISSION_MODE, PermissionMode.BYPASS.name)
@@ -72,6 +89,52 @@ object DefaultSessionConfig {
         } catch (e: Exception) {
             println("[DefaultSessionConfig] 加载配置失败: ${e.message}")
             e.printStackTrace()
+        }
+    }
+    
+    /**
+     * 从 Claude 全局配置文件读取模型设置
+     * 
+     * @return 解析出的 AI 模型，如果无法读取则返回 null
+     */
+    private fun loadModelFromClaudeSettings(): AiModel? {
+        val settingsFile = Paths.get(System.getProperty("user.home"), ".claude", "settings.json")
+        
+        if (!Files.exists(settingsFile)) {
+            println("[DefaultSessionConfig] Claude 设置文件不存在: $settingsFile")
+            return null
+        }
+        
+        try {
+            val content = Files.readString(settingsFile)
+            val json = JsonParser.parseString(content).asJsonObject
+            
+            val modelStr = json.get("model")?.asString
+            if (modelStr.isNullOrBlank()) {
+                println("[DefaultSessionConfig] Claude 设置文件中没有模型配置")
+                return null
+            }
+            
+            // 映射 Claude CLI 模型名称到插件模型枚举
+            val aiModel = when (modelStr.lowercase()) {
+                "opus" -> AiModel.OPUS
+                "sonnet" -> AiModel.SONNET
+                "opusplan" -> AiModel.OPUS_PLAN
+                "claude-opus-4-20250514" -> AiModel.OPUS_4
+                else -> {
+                    println("[DefaultSessionConfig] 未知的 Claude 模型: $modelStr, 使用默认模型")
+                    null
+                }
+            }
+            
+            if (aiModel != null) {
+                println("[DefaultSessionConfig] 从 Claude 设置文件读取到模型: $modelStr -> ${aiModel.displayName}")
+            }
+            
+            return aiModel
+        } catch (e: Exception) {
+            println("[DefaultSessionConfig] 读取 Claude 设置文件失败: ${e.message}")
+            return null
         }
     }
     

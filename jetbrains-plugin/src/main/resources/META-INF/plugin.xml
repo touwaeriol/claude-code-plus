@@ -41,8 +41,9 @@
         <applicationService 
             serviceImplementation="com.claudecodeplus.settings.McpSettingsService"/>
             
-        <!-- 项目级别服务 -->
-        <projectService 
-            serviceImplementation="com.claudecodeplus.settings.ProjectMcpSettingsService"/>
+        <!-- Claude Code Plus 后台服务 -->
+        <applicationService 
+            serviceImplementation="com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService"/>
+            
     </extensions>
 </idea-plugin>

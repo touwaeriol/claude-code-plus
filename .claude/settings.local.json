@@ -19,7 +19,8 @@
       "Bash(java:*)",
       "Bash(claude:*)",
       "Bash(echo:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Read(/Users/erio/.claude/**)"
     ],
     "deny": [],
     "additionalDirectories": [

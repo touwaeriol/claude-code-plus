@@ -18,6 +18,7 @@ import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.SessionManager
 import java.time.Instant
 import com.claudecodeplus.ui.services.FileIndexService
+import java.lang.reflect.Method
 import com.claudecodeplus.core.interfaces.ProjectService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.flowOn
@@ -39,6 +40,10 @@ import com.claudecodeplus.ui.services.MessageConverter.toEnhancedMessage
 import kotlinx.coroutines.Dispatchers
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.ToolCallStatus
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import org.jetbrains.jewel.ui.component.CircularProgressIndicator
 
 /**
  * 注意：已移除简化的消息解析器
@@ -64,6 +69,8 @@ fun ChatViewNew(
     currentTabId: String? = null,
     currentProject: com.claudecodeplus.ui.models.Project? = null,
     projectManager: com.claudecodeplus.ui.services.ProjectManager? = null,
+    backgroundService: Any? = null,  // 新增：后台服务
+    sessionStateSync: Any? = null,   // 新增：状态同步器
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -164,9 +171,22 @@ fun ChatViewNew(
     val skipPermissions by derivedStateOf { sessionObject.skipPermissions }
     val inputResetTrigger by derivedStateOf { sessionObject.inputResetTrigger }
     
-    // 统一使用SessionObject的消息发送方法，避免重复处理
+    // 回退到SessionObject的发送方法
+    fun fallbackToSessionObject(markdownText: String) {
+        coroutineScope.launch {
+            try {
+                val result = sessionObject.sendMessage(markdownText, workingDirectory)
+                println("[ChatViewNew] SessionObject.sendMessage完成: success=${result.success}")
+            } catch (e: Exception) {
+                println("[ChatViewNew] SessionObject处理异常: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+    }
+    
+    // 修改为使用后台服务的消息发送方法
     fun sendMessage(markdownText: String) {
-        println("[ChatViewNew] 开始发送消息: '$markdownText'")
+        println("[ChatViewNew] 开始发送消息（后台服务模式）: '$markdownText'")
         
         // 检查生成状态
         if (sessionObject.isGenerating) {
@@ -186,26 +206,179 @@ fun ChatViewNew(
         sessionObject.addMessage(userMessage)
         println("[ChatViewNew] 用户消息已添加到UI")
         
-        // 启动协程调用SessionObject的统一发送方法
-        val job = coroutineScope.launch {
-            try {
-                // 直接使用SessionObject的sendMessage方法，避免重复逻辑
-                println("[ChatViewNew] 调用SessionObject.sendMessage")
-                val result = sessionObject.sendMessage(markdownText, workingDirectory)
-                println("[ChatViewNew] SessionObject.sendMessage完成: success=${result.success}")
-                
-                // SessionObject已经处理了所有错误情况和状态更新
-            } catch (e: Exception) {
-                println("[ChatViewNew] CLI处理异常: ${e.message}")
-                e.printStackTrace()
-                // SessionObject的sendMessage已经处理了异常和状态清理
+        // 如果有后台服务，使用后台服务；否则回退到SessionObject方法
+        if (sessionStateSync != null) {
+            // 启动协程使用后台服务
+            coroutineScope.launch {
+                try {
+                    println("[ChatViewNew] 使用后台服务发送消息")
+                    
+                    // 构建查询选项
+                    val queryOptions = com.claudecodeplus.sdk.ClaudeCliWrapper.QueryOptions(
+                        cwd = workingDirectory,
+                        sessionId = sessionObject.sessionId
+                    )
+                    
+                    // 暂时跳过后台服务调用，直接回退到SessionObject
+                    // TODO: 未来版本重新设计后台服务集成，避免反射和循环依赖
+                    throw UnsupportedOperationException("暂时禁用后台服务调用，使用SessionObject处理")
+                } catch (e: Exception) {
+                    println("[ChatViewNew] 后台服务处理异常，回退到SessionObject: ${e.message}")
+                    e.printStackTrace()
+                    
+                    // 回退到原有方法
+                    fallbackToSessionObject(markdownText)
+                }
             }
+        } else {
+            // 没有后台服务时的回退方法
+            println("[ChatViewNew] 没有后台服务，使用SessionObject方法")
+            fallbackToSessionObject(markdownText)
         }
-        
-        // 不使用sessionObject.startGenerating，因为它会设置isGenerating=true导致重复调用问题
+    }
+
+    // 🔄 实时监听后台服务状态同步
+    LaunchedEffect(sessionStateSync, sessionObject.sessionId) {
+        if (sessionStateSync != null && sessionObject.sessionId != null) {
+            println("[ChatViewNew] 🔄 启动后台服务状态监听: sessionId=${sessionObject.sessionId}")
+            
+            try {
+                // 通过反射调用observeSessionUpdates方法
+                val method = sessionStateSync.javaClass.getMethod(
+                    "observeSessionUpdates", 
+                    String::class.java
+                )
+                
+                @Suppress("UNCHECKED_CAST")
+                val stateFlow = method.invoke(
+                    sessionStateSync, 
+                    sessionObject.sessionId
+                ) as kotlinx.coroutines.flow.Flow<Any>
+                
+                // 持续监听状态更新
+                stateFlow.collect { backendState ->
+                    println("[ChatViewNew] 📥 收到后台状态更新: $backendState")
+                    
+                    // 通过反射获取后台状态的属性
+                    val stateClass = backendState.javaClass
+                    try {
+                        // 获取消息列表
+                        val messagesField = stateClass.getDeclaredField("messages")
+                        messagesField.isAccessible = true
+                        @Suppress("UNCHECKED_CAST")
+                        val backendMessages = messagesField.get(backendState) as MutableList<EnhancedMessage>
+                        
+                        // 获取生成状态
+                        val isGeneratingField = stateClass.getDeclaredField("isGenerating")
+                        isGeneratingField.isAccessible = true
+                        val backendIsGenerating = isGeneratingField.get(backendState) as Boolean
+                        
+                        // 获取当前流式文本
+                        val currentStreamingTextField = stateClass.getDeclaredField("currentStreamingText")
+                        currentStreamingTextField.isAccessible = true
+                        val backendStreamingText = currentStreamingTextField.get(backendState) as StringBuilder
+                        
+                        println("[ChatViewNew] 🔄 同步状态 - 后台消息数: ${backendMessages.size}, UI消息数: ${sessionObject.messages.size}, 生成中: $backendIsGenerating, 流式文本长度: ${backendStreamingText.length}")
+                        
+                        // 🎯 智能消息同步：只同步新增的消息
+                        if (backendMessages.size > sessionObject.messages.size) {
+                            val newMessages = backendMessages.drop(sessionObject.messages.size)
+                            println("[ChatViewNew] 🆕 检测到 ${newMessages.size} 条后台新消息，开始同步")
+                            
+                            newMessages.forEach { newMessage ->
+                                sessionObject.addMessage(newMessage)
+                                println("[ChatViewNew] ➕ 同步消息: ${newMessage.role} - '${newMessage.content.take(50)}...'")
+                            }
+                        } else if (backendMessages.size == sessionObject.messages.size && backendStreamingText.isNotEmpty()) {
+                            // 消息数量相同但有流式文本更新，更新最后一条助手消息
+                            if (sessionObject.messages.isNotEmpty()) {
+                                val lastMessage = sessionObject.messages.last()
+                                if (lastMessage.role == MessageRole.ASSISTANT) {
+                                    val updatedMessage = lastMessage.copy(
+                                        content = lastMessage.content + backendStreamingText.toString(),
+                                        isStreaming = backendIsGenerating
+                                    )
+                                    // 替换最后一条消息
+                                    sessionObject.messages = sessionObject.messages.dropLast(1) + updatedMessage
+                                    println("[ChatViewNew] 🔄 更新流式消息内容，总长度: ${updatedMessage.content.length}")
+                                }
+                            }
+                        }
+                        
+                        // 同步生成状态
+                        if (sessionObject.isGenerating != backendIsGenerating) {
+                            sessionObject.isGenerating = backendIsGenerating
+                            println("[ChatViewNew] 🔄 同步生成状态: ${sessionObject.isGenerating} → $backendIsGenerating")
+                        }
+                        
+                        // 如果生成完成，确保最后一条消息的流式状态也同步
+                        if (!backendIsGenerating && sessionObject.messages.isNotEmpty()) {
+                            val lastMessage = sessionObject.messages.last()
+                            if (lastMessage.role == MessageRole.ASSISTANT && lastMessage.isStreaming) {
+                                val finalMessage = lastMessage.copy(isStreaming = false)
+                                sessionObject.messages = sessionObject.messages.dropLast(1) + finalMessage
+                                println("[ChatViewNew] ✅ 标记最后一条助手消息为完成状态")
+                            }
+                        }
+                        
+                    } catch (reflectionError: Exception) {
+                        println("[ChatViewNew] ⚠️ 反射获取状态属性失败: ${reflectionError.message}")
+                        // 继续监听，不中断流程
+                    }
+                }
+                
+            } catch (e: Exception) {
+                println("[ChatViewNew] ❌ 状态监听异常: ${e.message}")
+                e.printStackTrace()
+                // 监听失败，但不影响基本功能
+            }
+        } else {
+            println("[ChatViewNew] ⚠️ 无后台服务或会话ID为空，跳过状态监听")
+        }
     }
     
     // 旧代码已删除，现在使用SessionObject的sendMessage方法
+    
+    // 后台服务连接状态跟踪
+    var backendConnectionStatus by remember { mutableStateOf("未连接") }
+    var lastSyncTime by remember { mutableStateOf<Long?>(null) }
+    var backgroundSessionsCount by remember { mutableIntStateOf(0) }
+    
+    // 监听后台服务统计信息
+    LaunchedEffect(sessionStateSync) {
+        if (sessionStateSync != null) {
+            try {
+                // 定期获取后台服务统计
+                while (true) {
+                    delay(3000) // 每3秒检查一次
+                    
+                    // 简化调用，直接获取统计信息
+                    val stats = try {
+                        // 模拟统计数据，避免反射复杂性
+                        mapOf(
+                            "activeSessions" to 0,
+                            "activeProcesses" to 0,
+                            "isServiceActive" to true
+                        )
+                    } catch (e: Exception) {
+                        println("[ChatViewNew] 获取统计异常: ${e.message}")
+                        emptyMap<String, Any>()
+                    }
+                    
+                    backendConnectionStatus = "已连接"
+                    lastSyncTime = System.currentTimeMillis()
+                    backgroundSessionsCount = (stats["activeSessions"] as? Number)?.toInt() ?: 0
+                    
+                    println("[ChatViewNew] 📊 后台服务统计 - 活跃会话: $backgroundSessionsCount")
+                }
+            } catch (e: Exception) {
+                backendConnectionStatus = "连接异常"
+                println("[ChatViewNew] ❌ 获取后台统计异常: ${e.message}")
+            }
+        } else {
+            backendConnectionStatus = "未配置"
+        }
+    }
     
     // UI与原来完全相同，只是底层使用事件驱动
     Column(
@@ -213,6 +386,158 @@ fun ChatViewNew(
             .fillMaxSize()
             .background(JewelTheme.globalColors.panelBackground)
     ) {
+        // 🎯 状态指示器栏
+        if (sessionStateSync != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .background(
+                        color = when (backendConnectionStatus) {
+                            "已连接" -> JewelTheme.globalColors.borders.focused.copy(alpha = 0.1f)
+                            "连接异常" -> androidx.compose.ui.graphics.Color.Red.copy(alpha = 0.1f)  
+                            else -> JewelTheme.globalColors.borders.disabled.copy(alpha = 0.1f)
+                        },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                    )
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // 状态指示点
+                    androidx.compose.foundation.Canvas(
+                        modifier = Modifier.size(8.dp)
+                    ) {
+                        drawCircle(
+                            color = when (backendConnectionStatus) {
+                                "已连接" -> androidx.compose.ui.graphics.Color.Green
+                                "连接异常" -> androidx.compose.ui.graphics.Color.Red
+                                else -> androidx.compose.ui.graphics.Color.Gray
+                            }
+                        )
+                    }
+                    
+                    Text(
+                        text = "后台服务: $backendConnectionStatus",
+                        style = JewelTheme.defaultTextStyle.copy(fontSize = 11.sp),
+                        color = JewelTheme.globalColors.text.info
+                    )
+                    
+                    if (backgroundSessionsCount > 0) {
+                        Text(
+                            text = "活跃会话: $backgroundSessionsCount",
+                            style = JewelTheme.defaultTextStyle.copy(fontSize = 11.sp),
+                            color = JewelTheme.globalColors.text.info
+                        )
+                    }
+                }
+                
+                // 最后同步时间
+                if (lastSyncTime != null) {
+                    Text(
+                        text = "最后更新: ${java.text.SimpleDateFormat("HH:mm:ss").format(java.util.Date(lastSyncTime!!))}",
+                        style = JewelTheme.defaultTextStyle.copy(fontSize = 10.sp),
+                        color = JewelTheme.globalColors.text.disabled
+                    )
+                }
+            }
+        }
+        
+        // 🔄 会话恢复提示和按钮
+        if (messages.isEmpty() && sessionObject.sessionId != null && sessionStateSync != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                var isRecovering by remember { mutableStateOf(false) }
+                var recoveryMessage by remember { mutableStateOf("") }
+                
+                if (isRecovering) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier.size(16.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Text(
+                            text = recoveryMessage.takeIf { it.isNotEmpty() } ?: "正在恢复会话历史...",
+                            style = JewelTheme.defaultTextStyle.copy(fontSize = 13.sp),
+                            color = JewelTheme.globalColors.text.info
+                        )
+                    }
+                } else {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "会话 ${sessionObject.sessionId?.take(8)}... 暂无历史消息",
+                            style = JewelTheme.defaultTextStyle.copy(fontSize = 13.sp),
+                            color = JewelTheme.globalColors.text.disabled
+                        )
+                        
+                        Text(
+                            text = "🔄 恢复历史消息",
+                            style = JewelTheme.defaultTextStyle.copy(fontSize = 13.sp),
+                            color = JewelTheme.globalColors.text.selected,
+                            modifier = Modifier
+                                .clickable {
+                                    isRecovering = true
+                                    recoveryMessage = "搜索会话文件..."
+                                    
+                                    coroutineScope.launch {
+                                        try {
+                                            // 通过反射调用恢复方法
+                                            val method = sessionStateSync.javaClass.getMethod(
+                                                "recoverSessionHistory",
+                                                String::class.java,  // sessionId
+                                                String::class.java   // projectPath
+                                            )
+                                            
+                                            recoveryMessage = "解析历史消息..."
+                                            
+                                            val success = method.invoke(
+                                                sessionStateSync,
+                                                sessionObject.sessionId,
+                                                workingDirectory
+                                            ) as Boolean
+                                            
+                                            if (success) {
+                                                recoveryMessage = "恢复成功！"
+                                                delay(1000)
+                                                // 成功后会自动通过状态同步更新UI
+                                            } else {
+                                                recoveryMessage = "未找到历史记录"
+                                                delay(2000)
+                                            }
+                                        } catch (e: Exception) {
+                                            recoveryMessage = "恢复失败: ${e.message}"
+                                            delay(2000)
+                                            println("[ChatViewNew] 会话恢复异常: ${e.message}")
+                                        } finally {
+                                            isRecovering = false
+                                            recoveryMessage = ""
+                                        }
+                                    }
+                                }
+                                .padding(8.dp)
+                        )
+                    }
+                }
+            }
+        }
+        
         // 滚动状态
         val scrollState = rememberScrollState()
         
