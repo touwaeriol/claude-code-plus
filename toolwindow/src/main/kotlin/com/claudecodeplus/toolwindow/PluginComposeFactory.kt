@@ -33,7 +33,8 @@ object PluginComposeFactory {
         projectService: ProjectService? = null,
         themeStateHolder: MutableState<Boolean>? = null,  // 新增：外部传入的主题状态
         backgroundService: Any? = null,  // 新增：后台服务
-        sessionStateSync: Any? = null   // 新增：状态同步器
+        sessionStateSync: Any? = null,   // 新增：状态同步器
+        onNewSessionRequest: (() -> Unit)? = null  // 新增：新会话请求回调
     ): JComponent {
         return JPanel(BorderLayout()).apply {
             val composePanel = ComposePanel()
@@ -66,7 +67,8 @@ object PluginComposeFactory {
                         projectService = projectService,
                         sessionManager = sessionManager,
                         backgroundService = backgroundService,
-                        sessionStateSync = sessionStateSync
+                        sessionStateSync = sessionStateSync,
+                        onNewSessionRequest = onNewSessionRequest
                     )
                 }
             }

@@ -52,6 +52,29 @@ data class SessionLoadEvent(val session: ProjectSession)
 class ProjectManager(
     private val autoLoad: Boolean = true // 是否自动加载项目，false时需要手动选择
 ) {
+    companion object {
+        // 全局单例实例，用于保证 Project 实例的唯一性
+        @JvmStatic
+        val globalInstance = ProjectManager()
+        
+        // 临时项目缓存，避免重复创建
+        private val temporaryProjects = mutableMapOf<String, Project>()
+        
+        /**
+         * 获取或创建临时项目（用于没有真实项目时）
+         * 保证同一路径返回同一实例
+         */
+        @JvmStatic
+        fun getTemporaryProject(workingDirectory: String): Project {
+            return temporaryProjects.getOrPut(workingDirectory) {
+                Project(
+                    id = "temp:$workingDirectory",
+                    path = workingDirectory,
+                    name = "临时项目"
+                )
+            }
+        }
+    }
     private val _projects = MutableStateFlow<List<Project>>(emptyList())
     val projects = _projects.asStateFlow()
 

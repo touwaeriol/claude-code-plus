@@ -220,10 +220,14 @@ class ClaudeCodePlusBackgroundService : Disposable {
                             // 解析助手消息
                             val message = parseAssistantMessage(jsonElement, sessionId)
                             if (message != null) {
-                                // 直接添加到内存消息列表
-                                stateFlow.value.messages.add(message)
-                                // 触发状态更新
-                                stateFlow.value = stateFlow.value.copy(lastActivity = System.currentTimeMillis())
+                                // 创建新的消息列表副本并更新状态
+                                val currentState = stateFlow.value
+                                val updatedMessages = currentState.messages.toMutableList()
+                                updatedMessages.add(message)
+                                stateFlow.value = currentState.copy(
+                                    messages = updatedMessages,
+                                    lastActivity = System.currentTimeMillis()
+                                )
                                 logger.debug("✅ 已添加助手消息到会话 $sessionId, 总消息数: ${stateFlow.value.messages.size}")
                             }
                         }
@@ -231,8 +235,14 @@ class ClaudeCodePlusBackgroundService : Disposable {
                             // 解析用户消息
                             val message = parseUserMessage(jsonElement, sessionId)
                             if (message != null) {
-                                stateFlow.value.messages.add(message)
-                                stateFlow.value = stateFlow.value.copy(lastActivity = System.currentTimeMillis())
+                                // 创建新的消息列表副本并更新状态
+                                val currentState = stateFlow.value
+                                val updatedMessages = currentState.messages.toMutableList()
+                                updatedMessages.add(message)
+                                stateFlow.value = currentState.copy(
+                                    messages = updatedMessages,
+                                    lastActivity = System.currentTimeMillis()
+                                )
                                 logger.debug("✅ 已添加用户消息到会话 $sessionId, 总消息数: ${stateFlow.value.messages.size}")
                             }
                         }
@@ -326,33 +336,41 @@ class ClaudeCodePlusBackgroundService : Disposable {
         
         val currentState = stateFlow.value
         
-        // 累积流式文本到缓冲区
-        currentState.currentStreamingText.append(streamingText)
+        // 累积流式文本到缓冲区（需要创建新的StringBuilder）
+        val updatedStreamingText = StringBuilder(currentState.currentStreamingText)
+        updatedStreamingText.append(streamingText)
+        
+        // 创建新的消息列表副本
+        val updatedMessages = currentState.messages.toMutableList()
         
         // 找到或创建当前流式消息
-        val lastMessage = currentState.messages.lastOrNull()
+        val lastMessage = updatedMessages.lastOrNull()
         if (lastMessage != null && lastMessage.role == com.claudecodeplus.ui.models.MessageRole.ASSISTANT && lastMessage.isStreaming) {
             // 更新现有的流式消息
             val updatedMessage = lastMessage.copy(
-                content = currentState.currentStreamingText.toString(),
+                content = updatedStreamingText.toString(),
                 timestamp = System.currentTimeMillis()
             )
             // 替换最后一条消息
-            currentState.messages[currentState.messages.size - 1] = updatedMessage
+            updatedMessages[updatedMessages.size - 1] = updatedMessage
         } else {
             // 创建新的流式消息
             val streamingMessage = EnhancedMessage(
                 id = java.util.UUID.randomUUID().toString(),
                 role = com.claudecodeplus.ui.models.MessageRole.ASSISTANT,
-                content = currentState.currentStreamingText.toString(),
+                content = updatedStreamingText.toString(),
                 timestamp = System.currentTimeMillis(),
                 isStreaming = true
             )
-            currentState.messages.add(streamingMessage)
+            updatedMessages.add(streamingMessage)
         }
         
-        // 触发状态更新
-        stateFlow.value = currentState.copy(lastActivity = System.currentTimeMillis())
+        // 创建新的状态对象并更新
+        stateFlow.value = currentState.copy(
+            messages = updatedMessages,
+            currentStreamingText = updatedStreamingText,
+            lastActivity = System.currentTimeMillis()
+        )
     }
     
     /**
@@ -360,7 +378,8 @@ class ClaudeCodePlusBackgroundService : Disposable {
      */
     private suspend fun finishStreamingMessage(sessionId: String, stateFlow: MutableStateFlow<SessionState>) {
         val currentState = stateFlow.value
-        val lastMessage = currentState.messages.lastOrNull()
+        val updatedMessages = currentState.messages.toMutableList()
+        val lastMessage = updatedMessages.lastOrNull()
         
         if (lastMessage != null && lastMessage.isStreaming) {
             // 将流式消息标记为完成
@@ -369,15 +388,20 @@ class ClaudeCodePlusBackgroundService : Disposable {
                 content = currentState.currentStreamingText.toString(),
                 timestamp = System.currentTimeMillis()
             )
-            currentState.messages[currentState.messages.size - 1] = finishedMessage
-            
-            // 清空流式文本缓冲区
-            currentState.currentStreamingText.clear()
+            updatedMessages[updatedMessages.size - 1] = finishedMessage
             
             logger.info("✅ 完成流式消息: 会话 $sessionId, 内容长度: ${finishedMessage.content.length}")
+            
+            // 创建新的状态，清空流式文本缓冲区
+            stateFlow.value = currentState.copy(
+                messages = updatedMessages,
+                currentStreamingText = StringBuilder(),
+                lastActivity = System.currentTimeMillis()
+            )
+        } else {
+            // 即使没有流式消息，也更新活动时间
+            stateFlow.value = currentState.copy(lastActivity = System.currentTimeMillis())
         }
-        
-        stateFlow.value = currentState.copy(lastActivity = System.currentTimeMillis())
     }
     
     /**

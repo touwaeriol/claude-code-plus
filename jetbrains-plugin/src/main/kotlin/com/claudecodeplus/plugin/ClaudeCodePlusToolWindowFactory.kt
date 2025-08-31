@@ -10,17 +10,17 @@ import com.claudecodeplus.toolwindow.PluginComposeFactory
 import com.claudecodeplus.plugin.adapters.IdeaProjectServiceAdapter
 import com.claudecodeplus.plugin.adapters.SimpleFileIndexService
 import com.claudecodeplus.plugin.theme.IdeaThemeAdapter
-import com.claudecodeplus.ui.services.SessionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import com.intellij.openapi.diagnostic.Logger
 import androidx.compose.runtime.mutableStateOf
 import com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService
 import com.claudecodeplus.plugin.services.SessionStateSyncImpl
 import com.intellij.openapi.components.service
+import com.claudecodeplus.plugin.listeners.ClaudeToolWindowListener
+import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.openapi.wm.ex.ToolWindowManagerEx
 
 /**
  * IntelliJ IDEA 工具窗口工厂
@@ -30,6 +30,34 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
     
     companion object {
         private val logger = Logger.getInstance(ClaudeCodePlusToolWindowFactory::class.java)
+        
+        // 存储当前会话对象的引用，用于New Chat功能
+        @Volatile
+        private var currentSessionObject: Any? = null
+        
+        /**
+         * 设置当前会话对象
+         */
+        fun setCurrentSessionObject(sessionObject: Any?) {
+            currentSessionObject = sessionObject
+            logger.info("设置当前会话对象: $sessionObject")
+        }
+        
+        /**
+         * 清空当前会话
+         */
+        fun clearCurrentSession() {
+            try {
+                currentSessionObject?.let { session ->
+                    // 通过反射调用clearSession方法
+                    val clearMethod = session.javaClass.getMethod("clearSession")
+                    clearMethod.invoke(session)
+                    logger.info("✅ 会话已清空")
+                }
+            } catch (e: Exception) {
+                logger.error("清空会话失败", e)
+            }
+        }
     }
     
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -42,7 +70,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val workingDirectory = project.basePath ?: System.getProperty("user.dir")
             val unifiedSessionService = UnifiedSessionService(scope)
-            val sessionManager = ClaudeSessionManager()
+            val cliSessionManager = ClaudeSessionManager()
             
             // 获取后台服务实例
             val backgroundService = service<ClaudeCodePlusBackgroundService>()
@@ -53,9 +81,6 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             val projectService = IdeaProjectServiceAdapter(project)
             val fileIndexService = SimpleFileIndexService(project)
             
-            // 创建会话管理器实例（用于从 Claude 文件恢复会话）
-            val sessionManagerForRestore = SessionManager()
-            
             // 创建主题状态holder
             val currentTheme = IdeaThemeAdapter.isDarkTheme()
             val themeStateHolder = mutableStateOf(currentTheme)
@@ -64,7 +89,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             // 使用 toolwindow 提供的 Compose 面板，传入主题状态和后台服务
             val composePanel = PluginComposeFactory.createComposePanel(
                 unifiedSessionService = unifiedSessionService,
-                sessionManager = sessionManager,
+                sessionManager = cliSessionManager,
                 workingDirectory = workingDirectory,
                 project = project,
                 fileIndexService = fileIndexService,
@@ -85,51 +110,20 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             val content = contentFactory.createContent(composePanel, "", false)
             toolWindow.contentManager.addContent(content)
             
-            // 延迟恢复会话状态，给 UI 初始化留出时间
-            scope.launch {
-                delay(1000) // 延迟1秒等待 UI 完全初始化
-                
-                try {
-                    logger.info("开始尝试从 Claude 会话文件恢复状态")
-                    
-                    // 尝试恢复主标签页的会话
-                    val projectPath = project.basePath
-                    if (projectPath != null) {
-                        // 创建项目模型（简化版本）
-                        val projectModel = com.claudecodeplus.ui.models.Project(
-                            id = com.claudecodeplus.ui.utils.ClaudePathConverter.pathToClaudeProjectName(projectPath),
-                            path = projectPath,
-                            name = project.name,
-                            lastAccessedAt = null
-                        )
-                        
-                        // 尝试恢复默认标签页 "main" 的会话
-                        val restored = sessionManagerForRestore.restoreSessionFromClaudeFile(
-                            projectPath = projectPath,
-                            tabId = "main",  // 默认标签页 ID
-                            project = projectModel,
-                            coroutineScope = scope
-                        )
-                        
-                        if (restored) {
-                            logger.info("成功启动会话恢复流程")
-                        } else {
-                            logger.info("项目没有可恢复的会话，将创建新会话")
-                        }
-                        
-                        // 记录统计信息
-                        val stats = sessionManagerForRestore.getSessionRestoreStats(projectPath)
-                        logger.info("会话恢复统计: 已注册=${stats.registeredSessionCount}, 可用文件=${stats.availableFileCount}, 总大小=${stats.totalFileSizeMB}MB")
-                        
-                    } else {
-                        logger.warn("项目路径为空，无法恢复会话")
-                    }
-                } catch (e: Exception) {
-                    logger.error("恢复会话状态失败", e)
-                }
+            // 注册工具窗口监听器
+            val toolWindowListener = ClaudeToolWindowListener(project)
+            val toolWindowManager = ToolWindowManager.getInstance(project)
+            if (toolWindowManager is ToolWindowManagerEx) {
+                // 使用新的API注册监听器，连接到项目的生命周期
+                val connection = project.messageBus.connect(project)
+                connection.subscribe(
+                    com.intellij.openapi.wm.ex.ToolWindowManagerListener.TOPIC,
+                    toolWindowListener
+                )
+                logger.info("✅ 已注册工具窗口监听器，连接绑定到项目生命周期")
             }
             
-            logger.info("Claude Code Plus tool window created successfully")
+            logger.info("Claude Code Plus tool window created successfully - 默认创建新会话")
             
         } catch (e: Exception) {
             logger.error("Failed to create Claude Code Plus tool window", e)
@@ -153,6 +147,30 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
     
     override fun init(toolWindow: ToolWindow) {
         toolWindow.stripeTitle = "Claude AI"
+        
+        // 添加标题栏按钮
+        setupTitleActions(toolWindow)
+    }
+    
+    private fun setupTitleActions(toolWindow: ToolWindow) {
+        // 创建新会话按钮Action
+        val newChatAction = object : com.intellij.openapi.actionSystem.AnAction(
+            "New Chat",
+            "Start a new conversation",
+            com.intellij.icons.AllIcons.General.Add
+        ) {
+            override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+                logger.info("New Chat button clicked")
+                
+                // 直接清空当前会话
+                clearCurrentSession()
+            }
+        }
+        
+        // 设置标题栏动作
+        if (toolWindow is com.intellij.openapi.wm.ex.ToolWindowEx) {
+            toolWindow.setTitleActions(listOf(newChatAction))
+        }
     }
     
     override fun shouldBeAvailable(project: Project): Boolean = true

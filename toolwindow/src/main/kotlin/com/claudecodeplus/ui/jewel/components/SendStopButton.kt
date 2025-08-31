@@ -55,6 +55,7 @@ import androidx.compose.ui.window.PopupProperties
  * @param messageHistory 消息历史（用于上下文统计）
  * @param inputText 当前输入文本
  * @param contexts 添加的上下文
+ * @param sessionTokenUsage 会话级别的Token使用量（从CLI result消息获取）
  * @param modifier 修饰符
  */
 @Composable
@@ -69,6 +70,7 @@ fun SendStopButtonGroup(
     messageHistory: List<com.claudecodeplus.ui.models.EnhancedMessage> = emptyList(),
     inputText: String = "",
     contexts: List<com.claudecodeplus.ui.models.ContextReference> = emptyList(),
+    sessionTokenUsage: com.claudecodeplus.ui.models.EnhancedMessage.TokenUsage? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -81,7 +83,8 @@ fun SendStopButtonGroup(
             currentModel = currentModel,
             messageHistory = messageHistory,
             inputText = inputText,
-            contexts = contexts
+            contexts = contexts,
+            sessionTokenUsage = sessionTokenUsage
         )
         
         // 图片选择按钮

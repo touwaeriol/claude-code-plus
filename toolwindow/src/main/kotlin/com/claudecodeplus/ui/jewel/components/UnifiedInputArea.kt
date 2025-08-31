@@ -309,7 +309,8 @@ fun UnifiedInputArea(
                         currentModel = selectedModel,
                         messageHistory = sessionObject?.messages ?: emptyList(),
                         inputText = textFieldValue.text,
-                        contexts = contexts
+                        contexts = contexts,
+                        sessionTokenUsage = sessionObject?.totalSessionTokenUsage
                     )
                 }
                 InputAreaMode.DISPLAY -> {

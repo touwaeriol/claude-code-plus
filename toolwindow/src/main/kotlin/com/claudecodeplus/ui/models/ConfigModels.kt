@@ -207,18 +207,37 @@ class Project(
             project = this
         )
         
-        // 如果有sessionId，说明是恢复会话，需要加载历史消息
-        if (initialSessionId != null && initialMessages.isEmpty() && sessionObject.messages.isEmpty()) {
-            println("[Project] 检测到会话恢复，准备加载历史消息: sessionId=$initialSessionId")
-            // 启动协程加载历史消息
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                try {
-                    sessionObject.loadNewMessages(forceFullReload = true)
-                    println("[Project] 会话历史加载完成: sessionId=$initialSessionId, messages=${sessionObject.messages.size}")
-                } catch (e: Exception) {
-                    println("[Project] 会话历史加载失败: ${e.message}")
-                    e.printStackTrace()
+        // 调试日志：打印会话创建/获取的关键信息
+        println("[Project] 🔍 getOrCreateSession 被调用")
+        println("[Project] - tabId: $tabId")
+        println("[Project] - initialSessionId: $initialSessionId") 
+        println("[Project] - initialMessages.size: ${initialMessages.size}")
+        println("[Project] - sessionObject.messages.size: ${sessionObject.messages.size}")
+        println("[Project] - sessionObject hashCode: ${sessionObject.hashCode()}")
+        
+        // 检查是否需要加载历史消息：
+        // 修复：第一次打开插件时不自动加载历史会话
+        // 只有明确提供了 sessionId 时才加载历史消息
+        if (initialMessages.isEmpty() && sessionObject.messages.isEmpty()) {
+            if (!initialSessionId.isNullOrEmpty()) {
+                // 有明确的 sessionId，说明是恢复已存在的会话
+                println("[Project] 恢复已存在会话: sessionId=$initialSessionId, tabId=$tabId")
+                
+                // 启动协程加载历史消息
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                    try {
+                        sessionObject.loadNewMessages(forceFullReload = true)
+                        println("[Project] 会话历史加载完成: sessionId=${sessionObject.sessionId}, messages=${sessionObject.messages.size}")
+                    } catch (e: Exception) {
+                        println("[Project] 会话历史加载失败: ${e.message}")
+                        e.printStackTrace()
+                    }
                 }
+            } else {
+                // 没有 sessionId，这是新会话，不自动加载历史
+                println("[Project] 🆕 新会话创建，不自动加载历史消息")
+                println("[Project] - tabId: $tabId")
+                println("[Project] - 用户可以通过界面按钮选择恢复历史会话")
             }
         }
         

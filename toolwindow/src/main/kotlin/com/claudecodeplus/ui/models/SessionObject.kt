@@ -51,6 +51,11 @@ class SessionObject(
     // ========== 核心会话数据 ==========
     
     /**
+     * 会话级别的累计Token使用量（从CLI的result消息中获取）
+     */
+    var totalSessionTokenUsage by mutableStateOf<EnhancedMessage.TokenUsage?>(null)
+    
+    /**
      * 会话 ID（Claude CLI 返回的会话标识）
      */
     var sessionId by mutableStateOf(initialSessionId)
@@ -97,6 +102,21 @@ class SessionObject(
      * 是否正在生成响应
      */
     var isGenerating by mutableStateOf(false)
+    
+    /**
+     * 后台服务引用（可选）
+     */
+    private var backgroundService: Any? = null
+    
+    /**
+     * 设置后台服务引用
+     */
+    fun setBackgroundService(service: Any?) {
+        backgroundService = service
+        if (service != null) {
+            println("[SessionObject] 已连接后台服务")
+        }
+    }
     
     /**
      * 当前的生成任务
@@ -1426,7 +1446,33 @@ class SessionObject(
                 }
             }
             isResult -> {
-                println("[SessionObject] 处理结果消息，更新生成状态")
+                println("[SessionObject] 处理结果消息，更新生成状态和Token使用量")
+                
+                // 提取result消息中的总token使用量
+                try {
+                    val resultJson = kotlinx.serialization.json.Json.parseToJsonElement(rawJson).jsonObject
+                    val usageObj = resultJson["usage"]?.jsonObject
+                    
+                    if (usageObj != null) {
+                        val inputTokens = usageObj["input_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                        val outputTokens = usageObj["output_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                        val cacheCreationTokens = usageObj["cache_creation_input_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                        val cacheReadTokens = usageObj["cache_read_input_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                        
+                        // 更新会话级别的总token使用量
+                        totalSessionTokenUsage = EnhancedMessage.TokenUsage(
+                            inputTokens = inputTokens,
+                            outputTokens = outputTokens,
+                            cacheCreationTokens = cacheCreationTokens,
+                            cacheReadTokens = cacheReadTokens
+                        )
+                        
+                        println("[SessionObject] 📊 更新会话Token统计: input=$inputTokens, output=$outputTokens, total=${inputTokens + outputTokens}")
+                    }
+                } catch (e: Exception) {
+                    println("[SessionObject] 解析result消息的token使用量失败: ${e.message}")
+                }
+                
                 // result消息用于结束生成状态
                 isGenerating = false
                 updateLastMessage { msg ->
@@ -1906,7 +1952,6 @@ class SessionObject(
             println("[SessionObject] ⚠️ 找不到对应的工具调用消息: toolId=$toolId")
         }
     }
-    
     
     override fun toString(): String {
         return "SessionObject(sessionId=$sessionId, messages=${messages.size}, isGenerating=$isGenerating, queue=${questionQueue.size})"

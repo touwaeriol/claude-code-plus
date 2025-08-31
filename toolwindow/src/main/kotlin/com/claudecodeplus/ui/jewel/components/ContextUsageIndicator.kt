@@ -48,14 +48,22 @@ fun ContextUsageIndicator(
     messageHistory: List<EnhancedMessage> = emptyList(),
     inputText: String = "",
     contexts: List<ContextReference> = emptyList(),
+    sessionTokenUsage: EnhancedMessage.TokenUsage? = null, // 会话级别的总token使用量
     modifier: Modifier = Modifier
 ) {
     // 计算总token使用量
-    val totalTokens = remember(messageHistory, inputText, contexts) {
-        val calculated = calculateTotalTokens(messageHistory, inputText, contexts)
-        println("[ContextUsageIndicator] Token统计详情: 历史消息=${messageHistory.size}, 输入文本长度=${inputText.length}, 上下文=${contexts.size}, 总tokens=$calculated")
-        
-        // 简化的Token统计调试 - 只显示实际占用上下文的token
+    val totalTokens = remember(messageHistory, inputText, contexts, sessionTokenUsage) {
+        // 如果有会话级别的总token使用量，优先使用它（最准确）
+        if (sessionTokenUsage != null) {
+            val sessionTotal = sessionTokenUsage.inputTokens + sessionTokenUsage.outputTokens
+            println("[ContextUsageIndicator] 使用会话级别Token统计: input=${sessionTokenUsage.inputTokens}, output=${sessionTokenUsage.outputTokens}, total=$sessionTotal")
+            sessionTotal
+        } else {
+            // 否则累加各个消息的token使用量
+            val calculated = calculateTotalTokens(messageHistory, inputText, contexts)
+            println("[ContextUsageIndicator] 逐消息累加Token统计: 历史消息=${messageHistory.size}, 输入文本长度=${inputText.length}, 上下文=${contexts.size}, 总tokens=$calculated")
+            
+            // 简化的Token统计调试 - 只显示实际占用上下文的token
         var debugTotal = 0
         messageHistory.forEachIndexed { index, message ->
             if (message.tokenUsage != null) {
@@ -69,10 +77,11 @@ fun ContextUsageIndicator(
                 println("  - [$index] ${message.role}: 估算=$estimated")
             }
         }
-        println("  - 消息token总计: $debugTotal")
-        println("  - 输入文本估算: ${estimateTokensFromText(inputText)}")
-        println("  - 上下文估算: ${contexts.size * 1000}")  // 简化估算
-        calculated
+            println("  - 消息token总计: $debugTotal")
+            println("  - 输入文本估算: ${estimateTokensFromText(inputText)}")
+            println("  - 上下文估算: ${contexts.size * 1000}")  // 简化估算
+            calculated
+        }
     }
     
     val maxTokens = currentModel.contextLength

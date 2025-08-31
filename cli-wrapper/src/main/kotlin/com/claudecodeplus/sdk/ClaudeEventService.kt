@@ -95,18 +95,11 @@ class ClaudeEventService(
         onError: (String) -> Unit = {},
         onComplete: (Boolean) -> Unit = {}
     ) {
-        // 1. 先预加载历史记录（关键步骤，符合 Claudia 模式）
-        try {
-            val historyMessages = historyLoader.loadSessionHistory(sessionId, projectPath)
-            historyMessages.forEach { message ->
-                println("[ClaudeEventService] 🎯 立即回调历史消息")
-                onMessage(message)
-            }
-        } catch (e: Exception) {
-            onError("历史加载失败: ${e.message}")
-        }
+        // 1. 禁用历史加载 - 用户明确要求不监听文件
+        // 历史记录应该由用户主动触发加载，而不是自动加载
+        println("[ClaudeEventService] 跳过历史加载，直接恢复会话")
         
-        // 2. 然后使用 --resume 继续会话
+        // 2. 直接使用 --resume 继续会话
         val resumeOptions = options.copy(resume = sessionId)
         val command = buildClaudeCommandList(
             prompt = prompt,

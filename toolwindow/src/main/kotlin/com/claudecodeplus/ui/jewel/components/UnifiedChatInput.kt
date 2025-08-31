@@ -320,6 +320,7 @@ fun UnifiedChatInput(
             messageHistory = sessionObject?.messages ?: emptyList(),
             inputText = textFieldValue.text,
             contexts = contexts,
+            sessionObject = sessionObject,
             // 传递显示控制参数
             showModelSelector = showModelSelector,
             showPermissionControls = showPermissionControls,
@@ -623,6 +624,7 @@ private fun BottomToolbar(
     messageHistory: List<EnhancedMessage> = emptyList(),
     inputText: String = "",
     contexts: List<ContextReference> = emptyList(),
+    sessionObject: SessionObject? = null,  // 会话对象
     // UI元素显示控制参数
     showModelSelector: Boolean = true,
     showPermissionControls: Boolean = true,
@@ -678,7 +680,8 @@ private fun BottomToolbar(
                 currentModel = selectedModel,
                 messageHistory = messageHistory,
                 inputText = inputText,
-                contexts = contexts
+                contexts = contexts,
+                sessionTokenUsage = sessionObject?.totalSessionTokenUsage
             )
         }
     }

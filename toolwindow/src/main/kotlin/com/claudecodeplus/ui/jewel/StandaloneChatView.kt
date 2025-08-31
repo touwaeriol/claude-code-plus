@@ -9,7 +9,6 @@ import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
 import com.claudecodeplus.ui.services.SessionManager
-import java.util.UUID
 
 /**
  * 独立会话的 ChatView 包装器
@@ -28,16 +27,16 @@ fun StandaloneChatView(
     sessionId: String? = null,
     backgroundService: Any? = null,  // 新增：后台服务
     sessionStateSync: Any? = null,   // 新增：状态同步器
+    onNewSessionRequest: (() -> Unit)? = null,  // 新增：新会话请求回调
     modifier: Modifier = Modifier
 ) {
     // 为简单用例创建默认的 tabId 和临时 Project
-    val defaultTabId = remember { "default-${UUID.randomUUID()}" }
-    val tempProject = remember {
-        com.claudecodeplus.ui.models.Project(
-            id = "temp-${UUID.randomUUID()}",
-            name = "临时项目",
-            path = workingDirectory
-        )
+    val defaultTabId = remember { "main" }
+    
+    // 使用全局 ProjectManager 获取稳定的临时项目实例
+    // 基于 workingDirectory 生成确定性的项目ID，确保同一目录总是返回相同的项目实例
+    val tempProject = remember(workingDirectory) {
+        com.claudecodeplus.ui.services.ProjectManager.getTemporaryProject(workingDirectory)
     }
     
     ChatViewNew(
@@ -55,6 +54,7 @@ fun StandaloneChatView(
         projectManager = null,
         backgroundService = backgroundService,
         sessionStateSync = sessionStateSync,
+        onNewSessionRequest = onNewSessionRequest,
         modifier = modifier
     )
 }

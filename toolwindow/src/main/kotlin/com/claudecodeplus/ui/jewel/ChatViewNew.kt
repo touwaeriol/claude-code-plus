@@ -4,7 +4,10 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import org.jetbrains.jewel.ui.component.Divider
+import org.jetbrains.jewel.ui.Orientation
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -71,9 +74,25 @@ fun ChatViewNew(
     projectManager: com.claudecodeplus.ui.services.ProjectManager? = null,
     backgroundService: Any? = null,  // 新增：后台服务
     sessionStateSync: Any? = null,   // 新增：状态同步器
+    onNewSessionRequest: (() -> Unit)? = null,  // 新增：新会话请求回调
     modifier: Modifier = Modifier
 ) {
+    // 使用稳定的 CoroutineScope，避免 composition 生命周期问题
     val coroutineScope = rememberCoroutineScope()
+    
+    // 创建一个稳定的回调函数引用，避免在 composition 外使用 coroutineScope
+    val stableCoroutineScope = remember { 
+        kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.Dispatchers.Main + kotlinx.coroutines.SupervisorJob()
+        ) 
+    }
+    
+    // 清理 CoroutineScope
+    DisposableEffect(Unit) {
+        onDispose {
+            stableCoroutineScope.cancel("ChatViewNew disposed")
+        }
+    }
     
     // 移除已删除的消息转换器
     
@@ -86,13 +105,14 @@ fun ChatViewNew(
     println("workingDirectory: $workingDirectory")
     
     // 获取或创建该标签的会话对象（保持现有架构，但使用增强的SessionObject）
-    val sessionObject = remember(tabId) {
-        // 只依赖 tabId，确保同一标签总是返回同一实例
-        val project = currentProject ?: com.claudecodeplus.ui.models.Project(
-            id = "temp",
-            name = "临时项目", 
-            path = workingDirectory
-        )
+    // 使用全局 ProjectManager 确保 Project 实例的唯一性
+    val project = currentProject ?: com.claudecodeplus.ui.services.ProjectManager.getTemporaryProject(workingDirectory)
+    
+    // 使用 remember 和 project+tabId 组合键来缓存 SessionObject
+    val sessionObjectKey = "${project.id}:$tabId"
+    val sessionObject = remember(sessionObjectKey) {
+        println("[ChatViewNew] 创建/获取 SessionObject，key=$sessionObjectKey")
+        println("[ChatViewNew] Project hashCode: ${project.hashCode()}")
         
         project.getOrCreateSession(
             tabId = tabId, 
@@ -115,9 +135,51 @@ fun ChatViewNew(
         }
     }
     
+    // 注册会话对象到工具窗口工厂（用于New Chat功能）
+    LaunchedEffect(sessionObject) {
+        try {
+            // 通过反射调用工具窗口工厂的静态方法
+            val factoryClass = Class.forName("com.claudecodeplus.plugin.ClaudeCodePlusToolWindowFactory")
+            val companionField = factoryClass.getDeclaredField("Companion")
+            companionField.isAccessible = true
+            val companion = companionField.get(null)
+            
+            val setMethod = companion.javaClass.getMethod("setCurrentSessionObject", Any::class.java)
+            setMethod.invoke(companion, sessionObject)
+            
+            println("[ChatViewNew] 已注册会话对象到工具窗口工厂")
+        } catch (e: Exception) {
+            // 如果不在插件环境中，忽略错误
+            println("[ChatViewNew] 非插件环境，跳过会话注册: ${e.message}")
+        }
+    }
+    
     // 监听标签切换，确保正确恢复会话状态
     LaunchedEffect(tabId, currentProject) {
         println("[ChatViewNew] 标签/项目变化检测: tabId=$tabId, project=${currentProject?.name}")
+        
+        // 🎯 关键修复：每次标签显示时检查并恢复 sessionId
+        if (sessionObject.sessionId == null && sessionObject.messages.isEmpty()) {
+            println("[ChatViewNew] 检测到 SessionObject 缺少 sessionId，尝试从历史中恢复...")
+            try {
+                val foundSessionId = com.claudecodeplus.ui.utils.SessionIdRegistry.getSessionId(workingDirectory, tabId)
+                if (foundSessionId != null) {
+                    println("[ChatViewNew] 🎯 从历史会话找到 sessionId: $foundSessionId")
+                    sessionObject.updateSessionId(foundSessionId)
+                    
+                    // 注释掉自动加载历史消息，避免启动延迟
+                    // 用户可以通过界面按钮主动选择恢复历史会话
+                    // println("[ChatViewNew] 开始加载历史消息...")
+                    // sessionObject.loadNewMessages(forceFullReload = true)
+                    println("[ChatViewNew] 跳过自动加载历史消息，提升启动速度")
+                } else {
+                    println("[ChatViewNew] ⚠️ 未找到历史 sessionId，会话为新会话")
+                }
+            } catch (e: Exception) {
+                println("[ChatViewNew] 查找历史 sessionId 失败: ${e.message}")
+                e.printStackTrace()
+            }
+        }
         
         if (currentProject != null) {
             // 确保会话状态正确恢复
@@ -150,16 +212,20 @@ fun ChatViewNew(
     
     
     // 从 sessionObject 获取所有状态
+    // 分页加载状态
+    var loadedMessageCount by remember { mutableIntStateOf(50) } // 默认显示最后50条消息
+    
     val messages by derivedStateOf { 
-        println("[ChatViewNew] messages derivedStateOf 被重新计算: ${sessionObject.messages.size} 条消息")
+        val totalMessages = sessionObject.messages.size
+        println("[ChatViewNew] messages derivedStateOf 被重新计算: $totalMessages 条总消息, 显示最后 ${minOf(loadedMessageCount, totalMessages)} 条")
         println("[ChatViewNew] SessionObject实例ID: ${System.identityHashCode(sessionObject)}")
-        if (sessionObject.messages.isNotEmpty()) {
-            println("[ChatViewNew] 消息详情:")
-            sessionObject.messages.forEachIndexed { index, msg ->
-                println("  [$index] ${msg.role}: '${msg.content.take(50)}...', isStreaming=${msg.isStreaming}")
-            }
+        
+        // 性能优化：只取最后N条消息进行渲染
+        if (totalMessages > loadedMessageCount) {
+            sessionObject.messages.takeLast(loadedMessageCount)
+        } else {
+            sessionObject.messages
         }
-        sessionObject.messages 
     }
     val contexts by derivedStateOf { sessionObject.contexts }
     val isGenerating by derivedStateOf { 
@@ -173,7 +239,7 @@ fun ChatViewNew(
     
     // 回退到SessionObject的发送方法
     fun fallbackToSessionObject(markdownText: String) {
-        coroutineScope.launch {
+        stableCoroutineScope.launch {
             try {
                 val result = sessionObject.sendMessage(markdownText, workingDirectory)
                 println("[ChatViewNew] SessionObject.sendMessage完成: success=${result.success}")
@@ -209,7 +275,7 @@ fun ChatViewNew(
         // 如果有后台服务，使用后台服务；否则回退到SessionObject方法
         if (sessionStateSync != null) {
             // 启动协程使用后台服务
-            coroutineScope.launch {
+            stableCoroutineScope.launch {
                 try {
                     println("[ChatViewNew] 使用后台服务发送消息")
                     
@@ -237,6 +303,17 @@ fun ChatViewNew(
         }
     }
 
+    // 🔄 工具窗口状态监听 - 简化方式：通过后台服务自动恢复
+    // 注意：工具窗口监听器已在 ClaudeCodePlusToolWindowFactory 中注册
+    // 这里只需要响应状态变化即可
+    LaunchedEffect(sessionStateSync) {
+        if (sessionStateSync != null) {
+            println("[ChatViewNew] 🔄 后台服务已连接，状态将自动同步")
+            // 状态同步已通过下面的 observeSessionUpdates 实现
+            // 无需额外的工具窗口监听器
+        }
+    }
+    
     // 🔄 实时监听后台服务状态同步
     LaunchedEffect(sessionStateSync, sessionObject.sessionId) {
         if (sessionStateSync != null && sessionObject.sessionId != null) {
@@ -293,9 +370,10 @@ fun ChatViewNew(
                             // 消息数量相同但有流式文本更新，更新最后一条助手消息
                             if (sessionObject.messages.isNotEmpty()) {
                                 val lastMessage = sessionObject.messages.last()
-                                if (lastMessage.role == MessageRole.ASSISTANT) {
+                                if (lastMessage.role == MessageRole.ASSISTANT && lastMessage.isStreaming) {
+                                    // 后台的 streamingText 已经是完整内容，直接替换
                                     val updatedMessage = lastMessage.copy(
-                                        content = lastMessage.content + backendStreamingText.toString(),
+                                        content = backendStreamingText.toString(),
                                         isStreaming = backendIsGenerating
                                     )
                                     // 替换最后一条消息
@@ -339,46 +417,8 @@ fun ChatViewNew(
     
     // 旧代码已删除，现在使用SessionObject的sendMessage方法
     
-    // 后台服务连接状态跟踪
-    var backendConnectionStatus by remember { mutableStateOf("未连接") }
-    var lastSyncTime by remember { mutableStateOf<Long?>(null) }
-    var backgroundSessionsCount by remember { mutableIntStateOf(0) }
-    
-    // 监听后台服务统计信息
-    LaunchedEffect(sessionStateSync) {
-        if (sessionStateSync != null) {
-            try {
-                // 定期获取后台服务统计
-                while (true) {
-                    delay(3000) // 每3秒检查一次
-                    
-                    // 简化调用，直接获取统计信息
-                    val stats = try {
-                        // 模拟统计数据，避免反射复杂性
-                        mapOf(
-                            "activeSessions" to 0,
-                            "activeProcesses" to 0,
-                            "isServiceActive" to true
-                        )
-                    } catch (e: Exception) {
-                        println("[ChatViewNew] 获取统计异常: ${e.message}")
-                        emptyMap<String, Any>()
-                    }
-                    
-                    backendConnectionStatus = "已连接"
-                    lastSyncTime = System.currentTimeMillis()
-                    backgroundSessionsCount = (stats["activeSessions"] as? Number)?.toInt() ?: 0
-                    
-                    println("[ChatViewNew] 📊 后台服务统计 - 活跃会话: $backgroundSessionsCount")
-                }
-            } catch (e: Exception) {
-                backendConnectionStatus = "连接异常"
-                println("[ChatViewNew] ❌ 获取后台统计异常: ${e.message}")
-            }
-        } else {
-            backendConnectionStatus = "未配置"
-        }
-    }
+    // 移除了所有后台服务状态跟踪相关代码
+    // 不再需要这些变量和检查，提升性能
     
     // UI与原来完全相同，只是底层使用事件驱动
     Column(
@@ -386,66 +426,8 @@ fun ChatViewNew(
             .fillMaxSize()
             .background(JewelTheme.globalColors.panelBackground)
     ) {
-        // 🎯 状态指示器栏
-        if (sessionStateSync != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .background(
-                        color = when (backendConnectionStatus) {
-                            "已连接" -> JewelTheme.globalColors.borders.focused.copy(alpha = 0.1f)
-                            "连接异常" -> androidx.compose.ui.graphics.Color.Red.copy(alpha = 0.1f)  
-                            else -> JewelTheme.globalColors.borders.disabled.copy(alpha = 0.1f)
-                        },
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
-                    )
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // 状态指示点
-                    androidx.compose.foundation.Canvas(
-                        modifier = Modifier.size(8.dp)
-                    ) {
-                        drawCircle(
-                            color = when (backendConnectionStatus) {
-                                "已连接" -> androidx.compose.ui.graphics.Color.Green
-                                "连接异常" -> androidx.compose.ui.graphics.Color.Red
-                                else -> androidx.compose.ui.graphics.Color.Gray
-                            }
-                        )
-                    }
-                    
-                    Text(
-                        text = "后台服务: $backendConnectionStatus",
-                        style = JewelTheme.defaultTextStyle.copy(fontSize = 11.sp),
-                        color = JewelTheme.globalColors.text.info
-                    )
-                    
-                    if (backgroundSessionsCount > 0) {
-                        Text(
-                            text = "活跃会话: $backgroundSessionsCount",
-                            style = JewelTheme.defaultTextStyle.copy(fontSize = 11.sp),
-                            color = JewelTheme.globalColors.text.info
-                        )
-                    }
-                }
-                
-                // 最后同步时间
-                if (lastSyncTime != null) {
-                    Text(
-                        text = "最后更新: ${java.text.SimpleDateFormat("HH:mm:ss").format(java.util.Date(lastSyncTime!!))}",
-                        style = JewelTheme.defaultTextStyle.copy(fontSize = 10.sp),
-                        color = JewelTheme.globalColors.text.disabled
-                    )
-                }
-            }
-        }
+        // 移除状态指示器栏，因为不再需要显示后台服务状态
+        // 这些信息对用户没有实际价值，还会占用界面空间
         
         // 🔄 会话恢复提示和按钮
         if (messages.isEmpty() && sessionObject.sessionId != null && sessionStateSync != null) {
@@ -496,7 +478,7 @@ fun ChatViewNew(
                                     isRecovering = true
                                     recoveryMessage = "搜索会话文件..."
                                     
-                                    coroutineScope.launch {
+                                    stableCoroutineScope.launch {
                                         try {
                                             // 通过反射调用恢复方法
                                             val method = sessionStateSync.javaClass.getMethod(
@@ -515,11 +497,11 @@ fun ChatViewNew(
                                             
                                             if (success) {
                                                 recoveryMessage = "恢复成功！"
-                                                delay(1000)
+                                                // delay(1000) // 移除不必要的延迟
                                                 // 成功后会自动通过状态同步更新UI
                                             } else {
                                                 recoveryMessage = "未找到历史记录"
-                                                delay(2000)
+                                                // delay(2000) // 移除不必要的延迟
                                             }
                                         } catch (e: Exception) {
                                             recoveryMessage = "恢复失败: ${e.message}"
@@ -713,7 +695,7 @@ fun ChatViewNew(
                 // 监听消息变化，新消息时滚动到底部
                 LaunchedEffect(messages.size) {
                     if (messages.isNotEmpty()) {
-                        kotlinx.coroutines.delay(100) // 等待UI更新
+                        // kotlinx.coroutines.delay(100) // 移除等待，让UI立即响应
                         scrollState.scrollTo(scrollState.maxValue)
                         println("[ChatViewNew] 新消息滚动到底部")
                     }
@@ -749,6 +731,39 @@ fun ChatViewNew(
                                 )
                             }
                         } else {
+                            // 如果有更多历史消息，显示加载更多按钮
+                            if (sessionObject.messages.size > loadedMessageCount) {
+                                val remainingCount = sessionObject.messages.size - loadedMessageCount
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp)
+                                        .clickable {
+                                            // 每次加载更多50条消息
+                                            loadedMessageCount += 50
+                                            println("[ChatViewNew] 加载更多消息，当前显示: $loadedMessageCount / ${sessionObject.messages.size}")
+                                        }
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "⬆ 加载更多消息 ($remainingCount 条历史消息)",
+                                        style = JewelTheme.defaultTextStyle.copy(
+                                            color = JewelTheme.globalColors.text.info,
+                                            fontSize = 12.sp
+                                        )
+                                    )
+                                }
+                                
+                                // 分隔线
+                                Divider(
+                                    orientation = Orientation.Horizontal,
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    color = JewelTheme.globalColors.borders.normal
+                                )
+                            }
+                            
                             messages.forEach { message ->
                                 when (message.role) {
                                     MessageRole.USER -> {
