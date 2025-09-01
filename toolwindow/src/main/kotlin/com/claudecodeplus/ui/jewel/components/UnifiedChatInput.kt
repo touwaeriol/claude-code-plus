@@ -217,15 +217,37 @@ fun UnifiedChatInput(
                 onValueChange = { newTextFieldValue ->
                     sessionObject?.updateInputText(newTextFieldValue)
                     
-                    // 检测@符号触发文件选择
+                    // 检测@符号触发上下文选择器
                     val cursorPos = newTextFieldValue.selection.start
-                    if (cursorPos > 0 && newTextFieldValue.text.getOrNull(cursorPos - 1) == '@') {
-                        // 检查@符号前是否为空格或行首
-                        val beforeAt = if (cursorPos > 1) newTextFieldValue.text[cursorPos - 2] else null
-                        if (beforeAt == null || beforeAt in " \n\t") {
-                            sessionObject?.let { session ->
-                                session.atSymbolPosition = cursorPos - 1
-                                session.showSimpleFileSelector = true
+                    val text = newTextFieldValue.text
+                    
+                    // 查找光标前最近的@符号
+                    var atPos: Int? = null
+                    for (i in (cursorPos - 1) downTo 0) {
+                        when (text[i]) {
+                            '@' -> {
+                                // 检查@符号前是否为空格或行首
+                                val beforeAt = if (i > 0) text[i - 1] else null
+                                if (beforeAt == null || beforeAt in " \n\t") {
+                                    atPos = i
+                                    break
+                                }
+                            }
+                            ' ', '\n', '\t' -> break // 遇到空白字符停止搜索
+                        }
+                    }
+                    
+                    sessionObject?.let { session ->
+                        if (atPos != null) {
+                            // 找到了有效的@符号
+                            session.atSymbolPosition = atPos
+                            session.showContextSelector = true
+                            session.showSimpleFileSelector = false
+                        } else {
+                            // 没有找到有效的@符号，关闭上下文选择器
+                            if (session.showContextSelector) {
+                                session.showContextSelector = false
+                                session.atSymbolPosition = null
                             }
                         }
                     }
@@ -335,6 +357,18 @@ fun UnifiedChatInput(
             UnifiedChatContextSearchService(fileIndexService, projectService)
         }
         
+        // 提取@符号后的搜索查询
+        val initialSearchQuery = remember(atSymbolPosition, textFieldValue.text) {
+            if (atSymbolPosition != null) {
+                val atPos = atSymbolPosition!!
+                val afterAt = textFieldValue.text.substring(atPos + 1)
+                // 提取到下一个空格或行尾的文本作为搜索查询
+                afterAt.takeWhile { it != ' ' && it != '\n' && it != '\t' }
+            } else {
+                ""
+            }
+        }
+        
         ChatInputContextSelectorPopup(
             onDismiss = {
                 sessionObject?.let { session ->
@@ -384,7 +418,8 @@ fun UnifiedChatInput(
                     focusRequester.requestFocus()
                 }
             },
-            searchService = searchService
+            searchService = searchService,
+            initialSearchQuery = initialSearchQuery
         )
     }
     
@@ -603,7 +638,7 @@ private fun TopToolbar(
 }
 
 /**
- * 底部工具栏组件
+ * 底部工具栏组件 - 响应式布局版本
  */
 @Composable
 private fun BottomToolbar(
@@ -630,59 +665,163 @@ private fun BottomToolbar(
     showPermissionControls: Boolean = true,
     showSendButton: Boolean = true
 ) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    // 响应式布局：使用 BoxWithConstraints 获取实际可用宽度
+    BoxWithConstraints(
+        modifier = modifier.fillMaxWidth()
     ) {
-        // 左侧：模型、权限选择器和跳过权限复选框（条件显示）
-        if (showModelSelector || showPermissionControls) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+        val availableWidth = maxWidth
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 左侧：响应式控件组
+            ResponsiveControlsGroup(
+                availableWidth = availableWidth,
+                selectedModel = selectedModel,
+                onModelChange = onModelChange,
+                selectedPermissionMode = selectedPermissionMode,
+                onPermissionModeChange = onPermissionModeChange,
+                skipPermissions = skipPermissions,
+                onSkipPermissionsChange = onSkipPermissionsChange,
+                enabled = enabled && !isGenerating,
+                showModelSelector = showModelSelector,
+                showPermissionControls = showPermissionControls,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            
+            // 右侧：发送按钮（固定位置）
+            if (showSendButton) {
+                SendStopButtonGroup(
+                    isGenerating = isGenerating,
+                    onSend = onSend,
+                    onStop = onStop,
+                    hasInput = hasInput,
+                    enabled = enabled,
+                    currentModel = selectedModel,
+                    messageHistory = messageHistory,
+                    inputText = inputText,
+                    contexts = contexts,
+                    sessionTokenUsage = sessionObject?.totalSessionTokenUsage
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 响应式控件组 - 根据可用宽度自动调整显示方式
+ */
+@Composable
+private fun ResponsiveControlsGroup(
+    availableWidth: androidx.compose.ui.unit.Dp,
+    selectedModel: AiModel,
+    onModelChange: (AiModel) -> Unit,
+    selectedPermissionMode: PermissionMode,
+    onPermissionModeChange: (PermissionMode) -> Unit,
+    skipPermissions: Boolean,
+    onSkipPermissionsChange: (Boolean) -> Unit,
+    enabled: Boolean,
+    showModelSelector: Boolean,
+    showPermissionControls: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+    ) {
+        when {
+            // 超紧凑模式：仅显示核心功能
+            availableWidth < 350.dp -> {
                 if (showModelSelector) {
-                    ModernModelSelector(
+                    ChatInputModelSelector(
                         currentModel = selectedModel,
                         onModelChange = onModelChange,
-                        enabled = enabled && !isGenerating
+                        enabled = enabled,
+                        compact = true, // 使用紧凑模式
+                        modifier = Modifier.widthIn(max = 90.dp)
+                    )
+                }
+            }
+            
+            // 紧凑模式：显示模型+简化权限
+            availableWidth < 450.dp -> {
+                if (showModelSelector) {
+                    ChatInputModelSelector(
+                        currentModel = selectedModel,
+                        onModelChange = onModelChange,
+                        enabled = enabled,
+                        compact = true,
+                        modifier = Modifier.widthIn(max = 90.dp)
                     )
                 }
                 
                 if (showPermissionControls) {
-                    ModernPermissionSelector(
-                        currentMode = selectedPermissionMode,
-                        onModeChange = onPermissionModeChange,
-                        enabled = enabled && !isGenerating
-                    )
-                    
-                    // 跳过权限复选框
-                    SkipPermissionsCheckbox(
-                        checked = skipPermissions,
-                        onCheckedChange = onSkipPermissionsChange,
-                        enabled = enabled && !isGenerating
+                    ChatInputPermissionSelector(
+                        currentPermissionMode = selectedPermissionMode,
+                        onPermissionModeChange = onPermissionModeChange,
+                        enabled = enabled,
+                        iconOnly = true, // 使用图标模式
+                        modifier = Modifier.size(32.dp)
                     )
                 }
             }
-        } else {
-            // 如果不显示左侧控件，用空的Box占位
-            Box {}
-        }
-        
-        // 右侧：操作按钮和上下文统计（条件显示）
-        if (showSendButton) {
-            SendStopButtonGroup(
-                isGenerating = isGenerating,
-                onSend = onSend,
-                onStop = onStop,
-                hasInput = hasInput,
-                enabled = enabled,
-                currentModel = selectedModel,
-                messageHistory = messageHistory,
-                inputText = inputText,
-                contexts = contexts,
-                sessionTokenUsage = sessionObject?.totalSessionTokenUsage
-            )
+            
+            // 标准模式：显示模型+权限
+            availableWidth < 550.dp -> {
+                if (showModelSelector) {
+                    ChatInputModelSelector(
+                        currentModel = selectedModel,
+                        onModelChange = onModelChange,
+                        enabled = enabled,
+                        compact = true,
+                        modifier = Modifier.widthIn(max = 90.dp)
+                    )
+                }
+                
+                if (showPermissionControls) {
+                    ChatInputPermissionSelector(
+                        currentPermissionMode = selectedPermissionMode,
+                        onPermissionModeChange = onPermissionModeChange,
+                        enabled = enabled,
+                        compact = true,
+                        modifier = Modifier.widthIn(max = 100.dp)
+                    )
+                }
+            }
+            
+            // 完整模式：显示所有控件
+            else -> {
+                if (showModelSelector) {
+                    ChatInputModelSelector(
+                        currentModel = selectedModel,
+                        onModelChange = onModelChange,
+                        enabled = enabled,
+                        compact = false, // 使用标准模式
+                        modifier = Modifier.widthIn(max = 120.dp)
+                    )
+                }
+                
+                if (showPermissionControls) {
+                    ChatInputPermissionSelector(
+                        currentPermissionMode = selectedPermissionMode,
+                        onPermissionModeChange = onPermissionModeChange,
+                        enabled = enabled,
+                        compact = false,
+                        modifier = Modifier.widthIn(max = 130.dp)
+                    )
+                    
+                    // 跳过权限复选框（只在完整模式下显示）
+                    SkipPermissionsCheckbox(
+                        checked = skipPermissions,
+                        onCheckedChange = onSkipPermissionsChange,
+                        enabled = enabled,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+            }
         }
     }
 }

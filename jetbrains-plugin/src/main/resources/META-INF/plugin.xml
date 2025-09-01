@@ -1,19 +1,56 @@
 <idea-plugin>
     <id>com.claudecodeplus</id>
     <name>Claude Code Plus</name>
-    <vendor>Claude Code Plus Team</vendor>
+    <vendor email="liuxiongfenglove@gmail.com" url="https://github.com/touwaeriol/claude-code-plus">Claude Code Plus Team</vendor>
     
+    <version>1.0.0</version>
     
     <description><![CDATA[
-    Claude Code Plus - 基于 Claude SDK 的智能编程助手
+    <h2>Claude Code Plus - Advanced AI Programming Assistant</h2>
     
-    主要功能：
-    - 与 Claude AI 进行智能对话
-    - 支持文件引用和代码补全
-    - MCP (Model Context Protocol) 服务配置
-    - 导出对话历史
-    - Markdown 格式的对话显示
+    <p>Claude Code Plus is an enhanced IntelliJ IDEA plugin that integrates Claude AI directly into your development environment, providing intelligent code assistance and natural language interaction.</p>
+    
+    <h3>Key Features:</h3>
+    <ul>
+        <li><b>AI-Powered Conversations:</b> Chat with Claude AI directly in your IDE</li>
+        <li><b>Smart Context Management:</b> Reference files and code snippets with @ mentions</li>
+        <li><b>MCP Protocol Support:</b> Configure and use Model Context Protocol services</li>
+        <li><b>Multi-Session Support:</b> Manage multiple chat sessions simultaneously</li>
+        <li><b>Export Capabilities:</b> Save conversation history in multiple formats</li>
+        <li><b>Rich Markdown Display:</b> Beautiful rendering of code and formatted text</li>
+        <li><b>Tool Integration:</b> View and interact with Claude's tool usage</li>
+        <li><b>Dark Theme Support:</b> Fully compatible with IntelliJ's dark themes</li>
+    </ul>
+    
+    <h3>Requirements:</h3>
+    <ul>
+        <li>IntelliJ IDEA 2024.3 - 2025.2.x (Build 243-252)</li>
+        <li>Claude CLI installed and configured</li>
+    </ul>
+    
+    <h3>Support & Feedback:</h3>
+    <ul>
+        <li><b>Report Issues:</b> <a href="https://github.com/touwaeriol/claude-code-plus/issues">GitHub Issues</a></li>
+        <li><b>Documentation:</b> <a href="https://github.com/touwaeriol/claude-code-plus">GitHub Repository</a></li>
+        <li><b>Feature Requests:</b> <a href="https://github.com/touwaeriol/claude-code-plus/issues/new">Submit a request</a></li>
+    </ul>
+    
+    <p>We welcome your feedback and contributions! Please report any bugs or suggestions on our GitHub Issues page.</p>
     ]]></description>
+    
+    <change-notes><![CDATA[
+    <h3>Version 1.0.0 - Initial Release</h3>
+    <ul>
+        <li>Initial public release</li>
+        <li>Full Claude AI integration</li>
+        <li>Context management with @ mentions</li>
+        <li>MCP service configuration</li>
+        <li>Multi-tab session support</li>
+        <li>Dark theme compatibility</li>
+        <li>Performance optimizations for instant response</li>
+        <li>Session state persistence across tool window switches</li>
+    </ul>
+    ]]></change-notes>
     
     <depends>com.intellij.modules.platform</depends>
     <depends>org.intellij.plugins.markdown</depends>

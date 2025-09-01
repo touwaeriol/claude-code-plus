@@ -20,19 +20,21 @@ enum class AiModel(
     val displayName: String, 
     val cliName: String, 
     val description: String,
-    val contextLength: Int // 上下文长度（tokens）
+    val contextLength: Int, // 上下文长度（tokens）
+    val shortName: String, // 简短名称，用于紧凑显示
+    val icon: String // 图标，用于最紧凑显示
 ) {
     // Opus 模型 - 最强大的模型，用于复杂任务
-    OPUS("Opus", "opus", "Deep reasoning, complex tasks", 200_000),
+    OPUS("Opus", "opus", "Deep reasoning, complex tasks", 200_000, "Opus", "🔹"),
     
     // Sonnet 模型 - 平衡型模型，速度和能力兼备
-    SONNET("Sonnet", "sonnet", "Balanced performance, daily coding", 200_000),
+    SONNET("Sonnet", "sonnet", "Balanced performance, daily coding", 200_000, "Sonnet", "🔷"),
     
     // Plan 模式 - 仅规划不执行
-    OPUS_PLAN("Opus Plan", "opusplan", "Planning mode, analysis only", 200_000),
+    OPUS_PLAN("Opus Plan", "opusplan", "Planning mode, analysis only", 200_000, "Plan", "📝"),
     
     // 最新版 Opus 4 - 特定版本
-    OPUS_4("Opus 4", "claude-opus-4-20250514", "Latest Opus 4 model", 200_000)
+    OPUS_4("Opus 4", "claude-opus-4-20250514", "Latest Opus 4 model", 200_000, "O4", "✨")
 }
 
 /**
@@ -50,18 +52,24 @@ enum class AiModel(
  * - 开发环境可使用 BYPASS_PERMISSIONS 提高效率
  * - PLAN 模式用于预览 AI 的操作计划
  */
-enum class PermissionMode(val displayName: String, val cliName: String, val description: String) {
+enum class PermissionMode(
+    val displayName: String, 
+    val cliName: String, 
+    val description: String,
+    val shortName: String, // 简短名称，用于紧凑显示
+    val icon: String // 图标，用于最紧凑显示
+) {
     // 默认模式 - 每次操作都需要用户确认
-    DEFAULT("Default", "default", "Default permission mode"),
+    DEFAULT("Default", "default", "Default permission mode", "Default", "🔒"),
     
     // 接受编辑模式 - 自动接受文件编辑，但其他操作仍需确认  
-    ACCEPT("Accept Edits", "acceptEdits", "Auto-accept edit operations"),
+    ACCEPT("Accept Edits", "acceptEdits", "Auto-accept edit operations", "Accept", "✅"),
     
     // 绕过权限模式 - 所有操作都不需要确认（注意安全）
-    BYPASS("Bypass Permissions", "bypassPermissions", "Bypass permission checks"),
+    BYPASS("Bypass Permissions", "bypassPermissions", "Bypass permission checks", "Bypass", "🚀"),
     
     // 计划模式 - AI 只生成操作计划，不实际执行
-    PLAN("Plan", "plan", "Planning only, no execution")
+    PLAN("Plan", "plan", "Planning only, no execution", "Plan", "📋")
 }
 
 /**

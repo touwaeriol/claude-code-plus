@@ -51,10 +51,13 @@ fun ChatInputContextSelectorPopup(
     onDismiss: () -> Unit,
     onContextSelect: (ContextReference) -> Unit,
     searchService: ContextSearchService,
+    initialSearchQuery: String = "",  // 新增：初始搜索查询
     modifier: Modifier = Modifier
 ) {
-    var selectionState by remember { mutableStateOf<ContextSelectionState>(ContextSelectionState.SelectingType) }
-    var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
+    var selectionState by remember { mutableStateOf<ContextSelectionState>(
+        if (initialSearchQuery.isNotEmpty()) ContextSelectionState.SelectingFile() else ContextSelectionState.SelectingType
+    ) }
+    var searchQuery by remember { mutableStateOf(TextFieldValue(initialSearchQuery)) }
     var searchResults by remember { mutableStateOf<List<FileSearchResult>>(emptyList()) }
     var webUrl by remember { mutableStateOf(TextFieldValue("")) }
     var selectedIndex by remember { mutableStateOf(0) }
@@ -64,13 +67,20 @@ fun ChatInputContextSelectorPopup(
     val focusRequester = remember { FocusRequester() }
     val config = remember { ContextSelectorConfig() }
     
-    // 获取初始文件列表
+    // 获取初始文件列表或进行初始搜索
     LaunchedEffect(Unit) {
         isLoading = true
         try {
-            val rootFiles = searchService.getRootFiles(config.maxResults)
-            searchResults = rootFiles.map { 
-                FileSearchResult(it, 0, FileSearchResult.MatchType.PATH_MATCH) 
+            if (initialSearchQuery.isNotEmpty()) {
+                // 如果有初始搜索查询，直接进行搜索
+                val results = searchService.searchFiles(initialSearchQuery, config.maxResults)
+                searchResults = results
+            } else {
+                // 否则获取根文件列表
+                val rootFiles = searchService.getRootFiles(config.maxResults)
+                searchResults = rootFiles.map { 
+                    FileSearchResult(it, 0, FileSearchResult.MatchType.PATH_MATCH) 
+                }
             }
         } catch (e: Exception) {
             searchResults = emptyList()
