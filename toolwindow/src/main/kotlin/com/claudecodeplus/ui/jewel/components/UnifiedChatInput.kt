@@ -376,9 +376,34 @@ fun UnifiedChatInput(
         var searchResults by remember { mutableStateOf<List<IndexedFileInfo>>(emptyList()) }
         var selectedIndex by remember { mutableStateOf(0) }
         var isIndexing by remember { mutableStateOf(false) }
+        var currentSearchQuery by remember { mutableStateOf("") }
         
-        // 加载最近文件
-        LaunchedEffect(showSimpleFileSelector) {
+        // 提取@符号后的搜索关键词
+        val searchQuery = remember(textFieldValue.text, atSymbolPosition) {
+            if (atSymbolPosition != null) {
+                val text = textFieldValue.text
+                val cursorPos = textFieldValue.selection.start
+                if (cursorPos > atSymbolPosition) {
+                    // 提取@符号后到光标位置的文本作为搜索关键词
+                    val rawQuery = text.substring(atSymbolPosition + 1, cursorPos).trim()
+                    // 清理中文标点符号，替换为英文对应符号
+                    val query = rawQuery
+                        .replace("。", ".")  // 中文句号转英文句号
+                        .replace("，", ",")  // 中文逗号转英文逗号
+                        .replace("：", ":")  // 中文冒号转英文冒号
+                        .replace("；", ";")  // 中文分号转英文分号
+                    println("[UnifiedChatInput] 提取搜索关键词: '$query' (原始: '$rawQuery')")
+                    query
+                } else {
+                    ""
+                }
+            } else {
+                ""
+            }
+        }
+        
+        // 根据是否有搜索关键词来决定加载策略
+        LaunchedEffect(showSimpleFileSelector, searchQuery) {
             if (showSimpleFileSelector) {
                 try {
                     // 检查索引状态
@@ -388,17 +413,26 @@ fun UnifiedChatInput(
                         println("[UnifiedChatInput] 项目正在建立索引，使用基础文件搜索...")
                     }
                     
-                    println("[UnifiedChatInput] 开始加载最近文件...")
-                    val files = fileIndexService.getRecentFiles(10)
+                    val files = if (searchQuery.isBlank()) {
+                        // 没有搜索关键词时显示最近文件
+                        println("[UnifiedChatInput] 显示最近文件...")
+                        fileIndexService.getRecentFiles(10)
+                    } else {
+                        // 有搜索关键词时进行文件搜索
+                        println("[UnifiedChatInput] 搜索文件，关键词: '$searchQuery'")
+                        fileIndexService.searchFiles(searchQuery, 10, emptyList())
+                    }
+                    
                     println("[UnifiedChatInput] 加载到 ${files.size} 个文件")
                     files.forEachIndexed { index, file ->
                         println("[UnifiedChatInput] 文件 $index: ${file.name} - ${file.relativePath}")
                     }
                     searchResults = files
                     selectedIndex = 0
+                    currentSearchQuery = searchQuery
                     println("[UnifiedChatInput] searchResults.size = ${searchResults.size}")
                 } catch (e: Exception) {
-                    println("[UnifiedChatInput] 加载最近文件失败: ${e.message}")
+                    println("[UnifiedChatInput] 文件搜索失败: ${e.message}")
                     e.printStackTrace()
                     searchResults = emptyList()
                 }
@@ -426,7 +460,7 @@ fun UnifiedChatInput(
             ButtonFilePopup(
                 results = searchResults,
                 selectedIndex = selectedIndex,
-                searchQuery = "",
+                searchQuery = currentSearchQuery,
                 scrollState = scrollState,
                 popupOffset = buttonCenterPosition, // 传递按钮中心位置作为锚点
                 isIndexing = isIndexing, // 传递索引状态

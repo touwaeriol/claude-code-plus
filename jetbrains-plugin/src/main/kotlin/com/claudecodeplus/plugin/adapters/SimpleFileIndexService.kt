@@ -48,45 +48,64 @@ class SimpleFileIndexService(
             val queryLower = query.lowercase()
             val projectBasePath = project.basePath ?: return@withContext emptyList()
             
-            // 直接遍历文件系统而不依赖索引
             val projectDir = File(projectBasePath)
-            projectDir.walkTopDown()
-                .filter { !it.isDirectory }
-                .filter { file ->
-                    file.name.lowercase().contains(queryLower) &&
-                    (fileTypes.isEmpty() || fileTypes.contains(file.extension?.lowercase() ?: ""))
-                }
-                .take(maxResults)
-                .forEach { file ->
-                    val relativePath = file.relativeTo(projectDir).path
-                    results.add(
-                        IndexedFileInfo(
-                            name = file.name,
-                            relativePath = relativePath,
-                            absolutePath = file.absolutePath,
-                            fileType = file.extension ?: "",
-                            size = file.length(),
-                            lastModified = file.lastModified(),
-                            isDirectory = false,
-                            language = detectLanguage(file.extension ?: ""),
-                            encoding = "UTF-8"
-                        )
-                    )
-                }
             
-            // 按相关性排序
-            results.sortedBy { file ->
-                when {
-                    file.name.equals(query, ignoreCase = true) -> 0
-                    file.name.startsWith(query, ignoreCase = true) -> 1
-                    file.name.contains(query, ignoreCase = true) -> 2
-                    else -> 3
-                }
+            // 首先查找根目录下的直接匹配文件（优先级最高）
+            projectDir.listFiles()?.filter { file ->
+                !file.isDirectory && 
+                file.name.lowercase().contains(queryLower) &&
+                (fileTypes.isEmpty() || fileTypes.contains(file.extension?.lowercase() ?: ""))
+            }?.forEach { file ->
+                results.add(createFileInfoFromFile(file, projectDir))
             }
+            
+            // 然后递归搜索子目录（如果还需要更多结果）
+            if (results.size < maxResults) {
+                projectDir.walkTopDown()
+                    .filter { !it.isDirectory && it.parent != projectBasePath } // 排除根目录文件（已处理）
+                    .filter { file ->
+                        file.name.lowercase().contains(queryLower) &&
+                        (fileTypes.isEmpty() || fileTypes.contains(file.extension?.lowercase() ?: ""))
+                    }
+                    .take(maxResults - results.size)
+                    .forEach { file ->
+                        results.add(createFileInfoFromFile(file, projectDir))
+                    }
+            }
+            
+            // 按相关性和路径深度排序
+            results.sortedWith(compareBy(
+                // 精确匹配优先
+                { !it.name.equals(query, ignoreCase = true) },
+                // 根目录文件优先（路径深度最小）
+                { it.relativePath.count { it == '/' || it == File.separatorChar } },
+                // 前缀匹配次之
+                { !it.name.startsWith(query, ignoreCase = true) },
+                // 文件名字母排序
+                { it.name.lowercase() }
+            )).take(maxResults)
         } catch (e: Exception) {
             logger.warn("Fallback search failed: ${e.message}")
             emptyList()
         }
+    }
+    
+    /**
+     * 从 File 对象创建 IndexedFileInfo
+     */
+    private fun createFileInfoFromFile(file: File, projectDir: File): IndexedFileInfo {
+        val relativePath = file.relativeTo(projectDir).path
+        return IndexedFileInfo(
+            name = file.name,
+            relativePath = relativePath,
+            absolutePath = file.absolutePath,
+            fileType = file.extension ?: "",
+            size = file.length(),
+            lastModified = file.lastModified(),
+            isDirectory = false,
+            language = detectLanguage(file.extension ?: ""),
+            encoding = "UTF-8"
+        )
     }
     
     override suspend fun initialize(rootPath: String) {
