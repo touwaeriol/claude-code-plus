@@ -51,6 +51,7 @@ import kotlinx.coroutines.delay
 fun CompactToolCallDisplay(
     toolCalls: List<ToolCall>,
     modifier: Modifier = Modifier,
+    ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,  // IDE 集成接口
     onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
     println("[CompactToolCallDisplay] 工具调用数量：${toolCalls.size}")
@@ -66,6 +67,7 @@ fun CompactToolCallDisplay(
         toolCalls.forEach { toolCall ->
             CompactToolCallItem(
                 toolCall = toolCall,
+                ideIntegration = ideIntegration,
                 onExpandedChange = onExpandedChange
             )
         }
@@ -78,6 +80,7 @@ fun CompactToolCallDisplay(
 @Composable
 private fun CompactToolCallItem(
     toolCall: ToolCall,
+    ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,
     onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
     println("[CompactToolCallItem] 渲染工具：${toolCall.name}, ID：${toolCall.id}")
@@ -123,8 +126,16 @@ private fun CompactToolCallItem(
                     interactionSource = interactionSource,
                     indication = null,  // 使用hover效果替代ripple
                     onClick = { 
-                        expanded = !expanded
-                        println("[CompactToolCallItem] Tool ${toolCall.name} clicked, expanded: $expanded")
+                        // 尝试使用 IDE 集成处理工具点击
+                        val handled = ideIntegration?.handleToolClick(toolCall) == true
+                        
+                        if (!handled) {
+                            // 回退到默认展开行为
+                            expanded = !expanded
+                            println("[CompactToolCallItem] Tool ${toolCall.name} clicked, expanded: $expanded")
+                        } else {
+                            println("[CompactToolCallItem] Tool ${toolCall.name} handled by IDE integration")
+                        }
                     }
                 )
                 .padding(horizontal = 6.dp, vertical = 4.dp),  // 增加内边距提升点击体验
@@ -1830,4 +1841,5 @@ private fun formatToolBriefInfo(toolCall: ToolCall): String {
         }
     }
 }
+
 

@@ -15,6 +15,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
+import com.claudecodeplus.ui.theme.Dimensions
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.*
@@ -160,24 +161,40 @@ fun UnifiedChatInput(
         }
     }
     
-    // 统一容器 - Cursor 风格简洁设计
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                JewelTheme.globalColors.panelBackground,
-                RoundedCornerShape(12.dp)  // 增大圆角，更现代
-            )
-            .border(
-                width = if (isFocused) 1.5.dp else 1.dp,  // 聚焦时稍微加粗边框
-                color = borderColor,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .clip(RoundedCornerShape(12.dp))
-            .onFocusChanged { focusState ->
-                isFocused = focusState.hasFocus
-            }
+    // 使用 BoxWithConstraints 检测窗口宽度并应用最小宽度保护
+    BoxWithConstraints(
+        modifier = modifier.fillMaxWidth()
     ) {
+        val currentWidth = maxWidth
+        
+        // 初始化默认宽度（首次渲染时捕获）
+        LaunchedEffect(currentWidth) {
+            if (currentWidth > 0.dp) {
+                Dimensions.MinWidth.initializeDefaultWidth(currentWidth)
+            }
+        }
+        
+        // 计算内容宽度：使用当前宽度和最小宽度的较大值
+        val contentWidth = maxOf(currentWidth, Dimensions.MinWidth.INPUT_AREA)
+        
+        // 统一容器 - Cursor 风格简洁设计
+        Column(
+            modifier = Modifier
+                .width(contentWidth)  // 使用计算出的内容宽度
+                .background(
+                    JewelTheme.globalColors.panelBackground,
+                    RoundedCornerShape(12.dp)  // 增大圆角，更现代
+                )
+                .border(
+                    width = if (isFocused) 1.5.dp else 1.dp,  // 聚焦时稍微加粗边框
+                    color = borderColor,
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .clip(RoundedCornerShape(12.dp))
+                .onFocusChanged { focusState ->
+                    isFocused = focusState.hasFocus
+                }
+        ) {
         // 顶部工具栏：上下文管理（条件显示）
         if (showContextControls && (contexts.isNotEmpty() || enabled)) {
             TopToolbar(
@@ -239,14 +256,14 @@ fun UnifiedChatInput(
                     
                     sessionObject?.let { session ->
                         if (atPos != null) {
-                            // 找到了有效的@符号
+                            // 找到了有效的@符号，显示简化文件选择器（与Add Context按钮相同）
                             session.atSymbolPosition = atPos
-                            session.showContextSelector = true
-                            session.showSimpleFileSelector = false
+                            session.showSimpleFileSelector = true  // 显示简化文件选择器
+                            session.showContextSelector = false  // 确保完整上下文选择器关闭
                         } else {
-                            // 没有找到有效的@符号，关闭上下文选择器
-                            if (session.showContextSelector) {
-                                session.showContextSelector = false
+                            // 没有找到有效的@符号，关闭选择器
+                            if (session.showSimpleFileSelector && session.atSymbolPosition != null) {
+                                session.showSimpleFileSelector = false
                                 session.atSymbolPosition = null
                             }
                         }
@@ -348,91 +365,29 @@ fun UnifiedChatInput(
             showPermissionControls = showPermissionControls,
             showSendButton = showSendButton
         )
-    }
+        }  // 关闭 Column
+    }  // 关闭 BoxWithConstraints
     
-    // 上下文选择器弹窗 - 确保互斥显示
-    if (showContextSelector && !showSimpleFileSelector) {
-        val searchService = remember(fileIndexService, projectService) {
-            // 即使服务为 null 也创建一个基本的搜索服务
-            UnifiedChatContextSearchService(fileIndexService, projectService)
-        }
-        
-        // 提取@符号后的搜索查询
-        val initialSearchQuery = remember(atSymbolPosition, textFieldValue.text) {
-            if (atSymbolPosition != null) {
-                val atPos = atSymbolPosition!!
-                val afterAt = textFieldValue.text.substring(atPos + 1)
-                // 提取到下一个空格或行尾的文本作为搜索查询
-                afterAt.takeWhile { it != ' ' && it != '\n' && it != '\t' }
-            } else {
-                ""
-            }
-        }
-        
-        ChatInputContextSelectorPopup(
-            onDismiss = {
-                sessionObject?.let { session ->
-                    session.showContextSelector = false
-                    session.atSymbolPosition = null
-                }
-                focusRequester.requestFocus()
-            },
-            onContextSelect = { context ->
-                // 文件被选中
-                
-                // 弹窗已在 onDismiss 回调中关闭，这里不需要额外处理
-                // 上下文选择完成
-                
-                if (atSymbolPosition != null) {
-                    // @ 触发：生成Markdown格式的内联引用
-                    // @ 触发模式：生成Markdown内联引用
-                    val inlineReference = when (context) {
-                        is ContextReference.FileReference -> {
-                            // 生成 [@文件名](file://绝对路径) 格式
-                            val fileName = context.path.takeIf { it.isNotBlank() } ?: context.fullPath.substringAfterLast('/')
-                            "[@$fileName](file://${context.fullPath}) "
-                        }
-                        is ContextReference.WebReference -> "@${context.url} "
-                        else -> "@${context.toDisplayString()} "
-                    }
-                    
-                    val currentText = textFieldValue.text
-                    val pos = atSymbolPosition!!
-                    val newText = currentText.replaceRange(pos, pos + 1, inlineReference)
-                    val newPosition = pos + inlineReference.length
-                    
-                    // 更新输入文本
-                    sessionObject?.updateInputText(TextFieldValue(
-                        newText,
-                        TextRange(newPosition)
-                    ))
-                } else {
-                    // 按钮触发：添加到上下文列表
-                    // 按钮触发模式：添加到上下文列表
-                    onContextAdd(context)
-                }
-                
-                // 请求输入框焦点
-                scope.launch {
-                    kotlinx.coroutines.delay(50) // 小延迟确保弹窗完全关闭后再请求焦点
-                    focusRequester.requestFocus()
-                }
-            },
-            searchService = searchService,
-            initialSearchQuery = initialSearchQuery
-        )
-    }
+    // 注释掉错误的完整上下文选择器弹窗 - @符号现在使用简化文件选择器
     
-    // 简化文件选择器弹窗（Add Context 按钮触发） - 确保互斥显示
-    println("[UnifiedChatInput] showSimpleFileSelector=$showSimpleFileSelector, fileIndexService=$fileIndexService")
-    if (showSimpleFileSelector && !showContextSelector && fileIndexService != null) {
+    // 简化文件选择器弹窗（Add Context 按钮或@符号触发） - 统一使用简化文件选择器
+    println("[UnifiedChatInput] showSimpleFileSelector=$showSimpleFileSelector, atSymbolPosition=$atSymbolPosition, fileIndexService=$fileIndexService")
+    if (showSimpleFileSelector && fileIndexService != null) {
         var searchResults by remember { mutableStateOf<List<IndexedFileInfo>>(emptyList()) }
         var selectedIndex by remember { mutableStateOf(0) }
+        var isIndexing by remember { mutableStateOf(false) }
         
         // 加载最近文件
         LaunchedEffect(showSimpleFileSelector) {
             if (showSimpleFileSelector) {
                 try {
+                    // 检查索引状态
+                    isIndexing = !fileIndexService.isIndexReady()
+                    
+                    if (isIndexing) {
+                        println("[UnifiedChatInput] 项目正在建立索引，使用基础文件搜索...")
+                    }
+                    
                     println("[UnifiedChatInput] 开始加载最近文件...")
                     val files = fileIndexService.getRecentFiles(10)
                     println("[UnifiedChatInput] 加载到 ${files.size} 个文件")
@@ -474,6 +429,7 @@ fun UnifiedChatInput(
                 searchQuery = "",
                 scrollState = scrollState,
                 popupOffset = buttonCenterPosition, // 传递按钮中心位置作为锚点
+                isIndexing = isIndexing, // 传递索引状态
                 onItemSelected = { selectedFile ->
                     // 根据触发方式决定处理逻辑
                     val currentAtPosition = sessionObject?.atSymbolPosition
@@ -671,14 +627,17 @@ private fun BottomToolbar(
     ) {
         val availableWidth = maxWidth
         
+        // 计算工具栏宽度：使用当前宽度和最小宽度的较大值
+        val toolbarWidth = maxOf(availableWidth, Dimensions.MinWidth.BOTTOM_TOOLBAR)
+        
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.width(toolbarWidth),  // 应用最小宽度保护
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 左侧：响应式控件组
             ResponsiveControlsGroup(
-                availableWidth = availableWidth,
+                availableWidth = toolbarWidth,  // 使用计算后的工具栏宽度
                 selectedModel = selectedModel,
                 onModelChange = onModelChange,
                 selectedPermissionMode = selectedPermissionMode,
@@ -711,7 +670,7 @@ private fun BottomToolbar(
 }
 
 /**
- * 响应式控件组 - 根据可用宽度自动调整显示方式
+ * 左侧控件组 - 恢复简洁美观设计，所有宽度下都显示三个控件
  */
 @Composable
 private fun ResponsiveControlsGroup(
@@ -728,100 +687,35 @@ private fun ResponsiveControlsGroup(
     modifier: Modifier = Modifier
 ) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
     ) {
-        when {
-            // 超紧凑模式：仅显示核心功能
-            availableWidth < 350.dp -> {
-                if (showModelSelector) {
-                    ChatInputModelSelector(
-                        currentModel = selectedModel,
-                        onModelChange = onModelChange,
-                        enabled = enabled,
-                        compact = true, // 使用紧凑模式
-                        modifier = Modifier.widthIn(max = 90.dp)
-                    )
-                }
-            }
+        if (showModelSelector) {
+            ChatInputModelSelector(
+                currentModel = selectedModel,
+                onModelChange = onModelChange,
+                enabled = enabled,
+                compact = false, // 使用标准模式确保正确显示模型名称
+                modifier = Modifier.widthIn(max = 140.dp) // 与权限选择器宽度统一
+            )
+        }
+        
+        if (showPermissionControls) {
+            ChatInputPermissionSelector(
+                currentPermissionMode = selectedPermissionMode,
+                onPermissionModeChange = onPermissionModeChange,
+                enabled = enabled,
+                compact = false, // 使用标准模式显示完整权限名称
+                modifier = Modifier.widthIn(max = 140.dp) // 与模型选择器宽度统一
+            )
             
-            // 紧凑模式：显示模型+简化权限
-            availableWidth < 450.dp -> {
-                if (showModelSelector) {
-                    ChatInputModelSelector(
-                        currentModel = selectedModel,
-                        onModelChange = onModelChange,
-                        enabled = enabled,
-                        compact = true,
-                        modifier = Modifier.widthIn(max = 90.dp)
-                    )
-                }
-                
-                if (showPermissionControls) {
-                    ChatInputPermissionSelector(
-                        currentPermissionMode = selectedPermissionMode,
-                        onPermissionModeChange = onPermissionModeChange,
-                        enabled = enabled,
-                        iconOnly = true, // 使用图标模式
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            }
-            
-            // 标准模式：显示模型+权限
-            availableWidth < 550.dp -> {
-                if (showModelSelector) {
-                    ChatInputModelSelector(
-                        currentModel = selectedModel,
-                        onModelChange = onModelChange,
-                        enabled = enabled,
-                        compact = true,
-                        modifier = Modifier.widthIn(max = 90.dp)
-                    )
-                }
-                
-                if (showPermissionControls) {
-                    ChatInputPermissionSelector(
-                        currentPermissionMode = selectedPermissionMode,
-                        onPermissionModeChange = onPermissionModeChange,
-                        enabled = enabled,
-                        compact = true,
-                        modifier = Modifier.widthIn(max = 100.dp)
-                    )
-                }
-            }
-            
-            // 完整模式：显示所有控件
-            else -> {
-                if (showModelSelector) {
-                    ChatInputModelSelector(
-                        currentModel = selectedModel,
-                        onModelChange = onModelChange,
-                        enabled = enabled,
-                        compact = false, // 使用标准模式
-                        modifier = Modifier.widthIn(max = 120.dp)
-                    )
-                }
-                
-                if (showPermissionControls) {
-                    ChatInputPermissionSelector(
-                        currentPermissionMode = selectedPermissionMode,
-                        onPermissionModeChange = onPermissionModeChange,
-                        enabled = enabled,
-                        compact = false,
-                        modifier = Modifier.widthIn(max = 130.dp)
-                    )
-                    
-                    // 跳过权限复选框（只在完整模式下显示）
-                    SkipPermissionsCheckbox(
-                        checked = skipPermissions,
-                        onCheckedChange = onSkipPermissionsChange,
-                        enabled = enabled,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-                }
-            }
+            // 跳过权限复选框 - 标准样式
+            SkipPermissionsCheckbox(
+                checked = skipPermissions,
+                onCheckedChange = onSkipPermissionsChange,
+                enabled = enabled
+            )
         }
     }
 }

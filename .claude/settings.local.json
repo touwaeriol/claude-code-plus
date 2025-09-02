@@ -20,12 +20,26 @@
       "Bash(claude:*)",
       "Bash(echo:*)",
       "Bash(pkill:*)",
-      "Read(/Users/erio/.claude/**)"
+      "Read(/Users/erio/.claude/**)",
+      "Read(/Users/erio/.gradle/caches/transforms-4/9a2bdd5cf8f3fe5d60313468c4903915/transformed/ideaIC-2025.1.4.1-aarch64/**)",
+      "Read(/Users/erio/codes/idea/intellij-community/**)",
+      "Read(/Users/erio/codes/idea/intellij-community/platform/jewel/ui/src/main/kotlin/org/jetbrains/jewel/ui/component/**)",
+      "Read(/Users/erio/codes/idea/intellij-community/platform/jewel/**)",
+      "Read(/Users/erio/codes/idea/intellij-community/platform/jewel/ide-laf-bridge/src/main/kotlin/org/jetbrains/jewel/bridge/theme/**)",
+      "Read(/Users/erio/codes/idea/intellij-community/platform/jewel/**)",
+      "Read(/Users/erio/codes/idea/intellij-community/**)",
+      "Read(/Users/erio/codes/idea/intellij-community/**)",
+      "Read(/Users/erio/codes/idea/intellij-community/platform/jewel/ui/generated/org/jetbrains/jewel/ui/icons/**)",
+      "Read(/Users/erio/codes/idea/intellij-community/platform/jewel/ui/generated/org/jetbrains/jewel/ui/icons/**)",
+      "WebFetch(domain:platform.jetbrains.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:plugins.jetbrains.com)"
     ],
     "deny": [],
     "additionalDirectories": [
       "/Users/erio/codes/",
-      "/private/tmp"
+      "/private/tmp",
+      "/Users/erio/codes/idea/intellij-community"
     ]
   },
   "enabledMcpjsonServers": [

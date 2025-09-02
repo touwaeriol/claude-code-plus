@@ -8,6 +8,7 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.roots.ProjectRootManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -26,6 +27,68 @@ class SimpleFileIndexService(
         private val logger = Logger.getInstance(SimpleFileIndexService::class.java)
     }
     
+    /**
+     * 检查项目索引是否就绪
+     */
+    private fun isProjectIndexing(): Boolean {
+        return DumbService.getInstance(project).isDumb
+    }
+    
+    /**
+     * 当索引正在进行时使用的简单文件搜索
+     * 不依赖IntelliJ的索引系统，直接遍历文件系统
+     */
+    private suspend fun searchFilesWithoutIndex(
+        query: String,
+        maxResults: Int,
+        fileTypes: List<String>
+    ): List<IndexedFileInfo> = withContext(Dispatchers.IO) {
+        try {
+            val results = mutableListOf<IndexedFileInfo>()
+            val queryLower = query.lowercase()
+            val projectBasePath = project.basePath ?: return@withContext emptyList()
+            
+            // 直接遍历文件系统而不依赖索引
+            val projectDir = File(projectBasePath)
+            projectDir.walkTopDown()
+                .filter { !it.isDirectory }
+                .filter { file ->
+                    file.name.lowercase().contains(queryLower) &&
+                    (fileTypes.isEmpty() || fileTypes.contains(file.extension?.lowercase() ?: ""))
+                }
+                .take(maxResults)
+                .forEach { file ->
+                    val relativePath = file.relativeTo(projectDir).path
+                    results.add(
+                        IndexedFileInfo(
+                            name = file.name,
+                            relativePath = relativePath,
+                            absolutePath = file.absolutePath,
+                            fileType = file.extension ?: "",
+                            size = file.length(),
+                            lastModified = file.lastModified(),
+                            isDirectory = false,
+                            language = detectLanguage(file.extension ?: ""),
+                            encoding = "UTF-8"
+                        )
+                    )
+                }
+            
+            // 按相关性排序
+            results.sortedBy { file ->
+                when {
+                    file.name.equals(query, ignoreCase = true) -> 0
+                    file.name.startsWith(query, ignoreCase = true) -> 1
+                    file.name.contains(query, ignoreCase = true) -> 2
+                    else -> 3
+                }
+            }
+        } catch (e: Exception) {
+            logger.warn("Fallback search failed: ${e.message}")
+            emptyList()
+        }
+    }
+    
     override suspend fun initialize(rootPath: String) {
         // IntelliJ 自动管理索引，不需要手动初始化
     }
@@ -40,6 +103,12 @@ class SimpleFileIndexService(
         fileTypes: List<String>
     ): List<IndexedFileInfo> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
+        
+        // 如果索引正在进行，提供有限的搜索功能
+        if (isProjectIndexing()) {
+            logger.info("Project is indexing, providing limited file search")
+            return@withContext searchFilesWithoutIndex(query, maxResults, fileTypes)
+        }
         
         try {
             ReadAction.compute<List<IndexedFileInfo>, Exception> {
@@ -169,7 +238,7 @@ class SimpleFileIndexService(
         return emptyList()
     }
     
-    override fun isIndexReady(): Boolean = true
+    override fun isIndexReady(): Boolean = !isProjectIndexing()
     
     override suspend fun getIndexStats(): IndexStats {
         return IndexStats(

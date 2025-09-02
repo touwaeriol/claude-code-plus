@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.claudecodeplus"
-version = "1.0.0"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
@@ -25,7 +25,24 @@ dependencies {
         exclude(group = "org.jetbrains.kotlinx")
         // 排除 Compose Material，使用 Jewel
         exclude(group = "org.jetbrains.compose.material")
+        // 排除 toolwindow 模块的 Jewel 依赖，避免类加载器冲突
+        exclude(group = "org.jetbrains.jewel")
+        // 排除 Compose 依赖，使用插件环境的版本
+        exclude(group = "org.jetbrains.compose.ui")
+        exclude(group = "org.jetbrains.compose.foundation")
+        exclude(group = "org.jetbrains.compose.runtime")
+        exclude(group = "org.jetbrains.compose.animation")
     }
+    
+    // Jewel IDE Bridge - 用于 IntelliJ 插件环境
+    val jewelVersion = rootProject.extra["jewelVersion"] as String
+    implementation("org.jetbrains.jewel:jewel-foundation:$jewelVersion")
+    implementation("org.jetbrains.jewel:jewel-ui:$jewelVersion")
+    // 添加 standalone theme 支持，运行时需要
+    implementation("org.jetbrains.jewel:jewel-int-ui-standalone:$jewelVersion")
+    // 暂时移除 IDE Bridge，因为它导致了 ToolWindowFactory 的类加载器冲突
+    // 图标问题已通过 IconUtils.kt 的 fallback 机制解决
+    // implementation("org.jetbrains.jewel:jewel-ide-laf-bridge:0.28.0-251.25410.129")
     
     // IntelliJ Platform dependencies
     intellijPlatform {
@@ -46,6 +63,10 @@ dependencies {
     
     // 使用 IntelliJ Platform 的 Kotlin 标准库
     compileOnly(kotlin("stdlib"))
+    
+    // 🔧 编译时需要协程 API，但运行时会被排除，使用 IntelliJ Platform 内置版本
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:${rootProject.extra["coroutinesVersion"]}")
     
     // 测试依赖
     testImplementation(kotlin("test"))

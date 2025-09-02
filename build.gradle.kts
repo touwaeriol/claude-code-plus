@@ -43,7 +43,22 @@ subprojects {
         maven("https://maven.aliyun.com/repository/google")
     }
     
-    // 通用依赖配置（jetbrains-plugin 模块会特殊处理）
+    // 🔧 对于插件模块，只排除运行时的 kotlinx-coroutines，保留编译时
+    if (project.name == "jetbrains-plugin") {
+        configurations {
+            // 只排除运行时配置，保留编译时配置
+            named("runtimeClasspath") {
+                exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
+                exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
+                exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-swing")
+                exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-debug")
+                exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-test")
+                exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-jdk8")
+            }
+        }
+    }
+    
+    // 通用依赖配置（排除会冲突的模块，让它们自己管理依赖）
     if (project.name != "jetbrains-plugin" && project.name != "cli-wrapper" && project.name != "toolwindow") {
         dependencies {
             val implementation by configurations
@@ -53,13 +68,12 @@ subprojects {
             // Kotlin 标准库
             implementation("org.jetbrains.kotlin:kotlin-stdlib:${rootProject.extra["kotlinVersion"]}")
             
-            // 协程库
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
+            // 🚫 移除协程库的通用配置，避免意外引入冲突
+            // 每个模块根据自己的需求配置协程依赖
             
             // 测试依赖
             testImplementation("org.junit.jupiter:junit-jupiter-api:${rootProject.extra["junitVersion"]}")
             testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${rootProject.extra["junitVersion"]}")
-            testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${rootProject.extra["coroutinesVersion"]}")
         }
     }
     

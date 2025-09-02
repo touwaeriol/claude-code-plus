@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -22,12 +23,14 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.claudecodeplus.ui.jewel.components.JewelFileItem
 import com.claudecodeplus.ui.services.IndexedFileInfo
 import org.jetbrains.jewel.foundation.theme.JewelTheme
+import org.jetbrains.jewel.ui.component.Text
 
 /**
  * 弹窗类型枚举
@@ -64,6 +67,7 @@ fun UnifiedFilePopup(
     searchQuery: String,
     scrollState: LazyListState,
     config: FilePopupConfig,
+    isIndexing: Boolean = false,
     onItemSelected: (IndexedFileInfo) -> Unit,
     onDismiss: () -> Unit,
     onKeyEvent: (KeyEvent) -> Boolean,
@@ -136,6 +140,11 @@ fun UnifiedFilePopup(
                     .padding(4.dp),
                 verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
+                // 索引状态提示
+                if (isIndexing) {
+                    IndexingStatusBanner()
+                }
+                
                 LazyColumn(
                     state = scrollState,
                     modifier = Modifier
@@ -260,6 +269,43 @@ class FilePopupEventHandler {
                 true
             }
             else -> false
+        }
+    }
+}
+
+/**
+ * 索引状态横幅提示
+ * 在文件索引期间显示提示信息
+ */
+@Composable
+fun IndexingStatusBanner() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                JewelTheme.globalColors.borders.focused.copy(alpha = 0.1f),
+                RoundedCornerShape(4.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // 索引进度图标
+            Text(
+                text = "⏳",
+                style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
+            )
+            
+            // 提示文字
+            Text(
+                text = "正在建立索引，文件搜索功能受限",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 11.sp,
+                    color = JewelTheme.globalColors.text.info
+                )
+            )
         }
     }
 }

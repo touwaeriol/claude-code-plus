@@ -1488,6 +1488,14 @@ class SessionObject(
                     addMessage(enhancedMessage)
                 } else {
                     // 纯文本消息，更新最后一条助手消息
+                    // 检测认证错误
+                    if (enhancedMessage.content.contains("API Error: 401 API key not found") || 
+                        enhancedMessage.content.contains("Please run /login")) {
+                        println("[SessionObject] 检测到认证错误，设置错误消息")
+                        errorMessage = enhancedMessage.content
+                        isGenerating = false
+                    }
+                    
                     updateLastMessage { msg ->
                         println("[SessionObject] 更新最后一条消息: ${msg.id}")
                         msg.copy(

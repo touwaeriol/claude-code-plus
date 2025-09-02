@@ -23,6 +23,7 @@ import java.util.*
 fun AssistantMessageDisplay(
     message: EnhancedMessage,
     modifier: Modifier = Modifier,
+    ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,
     onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
     Column(
@@ -55,6 +56,7 @@ fun AssistantMessageDisplay(
         if (message.toolCalls.isNotEmpty()) {
             SmartToolCallDisplay(
                 toolCalls = message.toolCalls,
+                ideIntegration = ideIntegration,
                 modifier = Modifier.fillMaxWidth()
             )
         }

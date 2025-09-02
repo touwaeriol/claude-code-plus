@@ -24,15 +24,15 @@ dependencies {
     compileOnly(compose.foundation)
     compileOnly(compose.animation)
     compileOnly(compose.ui)
-    compileOnly(compose.material) // 需要 Material 组件用于 DropdownMenu
+    compileOnly(compose.material) // 恢复 Material 依赖，使用 compileOnly 配置
     
-    // Jewel UI - 使用 api 传递依赖
+    // Jewel UI - 使用 compileOnly 避免与插件环境冲突
     val jewelVersion = rootProject.extra["jewelVersion"] as String
     
-    // 从 Maven Central 引入 Jewel
-    api("org.jetbrains.jewel:jewel-foundation:$jewelVersion")
-    api("org.jetbrains.jewel:jewel-ui:$jewelVersion")
-    api("org.jetbrains.jewel:jewel-int-ui-standalone:$jewelVersion")
+    // 从 Maven Central 引入 Jewel - 使用 compileOnly 配置
+    compileOnly("org.jetbrains.jewel:jewel-foundation:$jewelVersion")
+    compileOnly("org.jetbrains.jewel:jewel-ui:$jewelVersion")
+    compileOnly("org.jetbrains.jewel:jewel-int-ui-standalone:$jewelVersion")
 
     // 协程 - 使用 compileOnly 避免与 IntelliJ 平台冲突
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")

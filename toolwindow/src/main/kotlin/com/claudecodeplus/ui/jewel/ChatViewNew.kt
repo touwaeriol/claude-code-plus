@@ -3,14 +3,23 @@ package com.claudecodeplus.ui.jewel
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import org.jetbrains.jewel.ui.component.Divider
+import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.IconButton
 import org.jetbrains.jewel.ui.Orientation
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.claudecodeplus.ui.theme.Dimensions
 import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
@@ -75,6 +84,7 @@ fun ChatViewNew(
     backgroundService: Any? = null,  // 新增：后台服务
     sessionStateSync: Any? = null,   // 新增：状态同步器
     onNewSessionRequest: (() -> Unit)? = null,  // 新增：新会话请求回调
+    ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,  // 新增：IDE 集成接口
     modifier: Modifier = Modifier
 ) {
     // 使用稳定的 CoroutineScope，避免 composition 生命周期问题
@@ -236,6 +246,7 @@ fun ChatViewNew(
     val selectedPermissionMode by derivedStateOf { sessionObject.selectedPermissionMode }
     val skipPermissions by derivedStateOf { sessionObject.skipPermissions }
     val inputResetTrigger by derivedStateOf { sessionObject.inputResetTrigger }
+    val errorMessage by derivedStateOf { sessionObject.errorMessage }
     
     // 回退到SessionObject的发送方法
     fun fallbackToSessionObject(markdownText: String) {
@@ -272,35 +283,10 @@ fun ChatViewNew(
         sessionObject.addMessage(userMessage)
         println("[ChatViewNew] 用户消息已添加到UI")
         
-        // 如果有后台服务，使用后台服务；否则回退到SessionObject方法
-        if (sessionStateSync != null) {
-            // 启动协程使用后台服务
-            stableCoroutineScope.launch {
-                try {
-                    println("[ChatViewNew] 使用后台服务发送消息")
-                    
-                    // 构建查询选项
-                    val queryOptions = com.claudecodeplus.sdk.ClaudeCliWrapper.QueryOptions(
-                        cwd = workingDirectory,
-                        sessionId = sessionObject.sessionId
-                    )
-                    
-                    // 暂时跳过后台服务调用，直接回退到SessionObject
-                    // TODO: 未来版本重新设计后台服务集成，避免反射和循环依赖
-                    throw UnsupportedOperationException("暂时禁用后台服务调用，使用SessionObject处理")
-                } catch (e: Exception) {
-                    println("[ChatViewNew] 后台服务处理异常，回退到SessionObject: ${e.message}")
-                    e.printStackTrace()
-                    
-                    // 回退到原有方法
-                    fallbackToSessionObject(markdownText)
-                }
-            }
-        } else {
-            // 没有后台服务时的回退方法
-            println("[ChatViewNew] 没有后台服务，使用SessionObject方法")
-            fallbackToSessionObject(markdownText)
-        }
+        // 🔧 简化协程调用，避免类加载器冲突
+        // 直接使用 SessionObject 处理，避免在 UI 层启动协程
+        println("[ChatViewNew] 使用 SessionObject 方法处理消息发送")
+        fallbackToSessionObject(markdownText)
     }
 
     // 🔄 工具窗口状态监听 - 简化方式：通过后台服务自动恢复
@@ -424,6 +410,7 @@ fun ChatViewNew(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .widthIn(min = Dimensions.MinWidth.MAIN_WINDOW)  // 始终应用最小宽度保护
             .background(JewelTheme.globalColors.panelBackground)
     ) {
         // 移除状态指示器栏，因为不再需要显示后台服务状态
@@ -651,6 +638,7 @@ fun ChatViewNew(
                     if (obscuredExpandedToolsToShow.isNotEmpty()) {
                         com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay(
                             toolCalls = obscuredExpandedToolsToShow,
+                            ideIntegration = ideIntegration,
                             onExpandedChange = { toolId, expanded ->
                                 expandedToolCalls[toolId] = expanded
                                 println("[ChatViewNew] 工具状态更新: $toolId -> $expanded")
@@ -716,6 +704,91 @@ fun ChatViewNew(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        // 错误横幅 - 在所有内容之前显示
+                        errorMessage?.let { error ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        color = Color.Red.copy(alpha = 0.1f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = Color.Red.copy(alpha = 0.3f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(12.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    // 错误图标
+                                    Text(
+                                        text = "⚠️",
+                                        style = JewelTheme.defaultTextStyle.copy(fontSize = 16.sp)
+                                    )
+                                    
+                                    // 错误信息
+                                    Column(
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        if (error.contains("API key not found") || error.contains("401")) {
+                                            Text(
+                                                text = "Claude 认证错误",
+                                                style = JewelTheme.defaultTextStyle.copy(
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = Color.Red
+                                                )
+                                            )
+                                            Text(
+                                                text = "请在终端中运行 'claude login' 命令完成认证",
+                                                style = JewelTheme.defaultTextStyle.copy(
+                                                    fontSize = 12.sp,
+                                                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
+                                                )
+                                            )
+                                        } else {
+                                            Text(
+                                                text = "Claude CLI 错误",
+                                                style = JewelTheme.defaultTextStyle.copy(
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = Color.Red
+                                                )
+                                            )
+                                            Text(
+                                                text = error,
+                                                style = JewelTheme.defaultTextStyle.copy(
+                                                    fontSize = 12.sp,
+                                                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
+                                                )
+                                            )
+                                        }
+                                    }
+                                    
+                                    // 关闭按钮
+                                    IconButton(
+                                        onClick = {
+                                            sessionObject.clearError()
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Text(
+                                            text = "×",
+                                            style = JewelTheme.defaultTextStyle.copy(
+                                                fontSize = 16.sp,
+                                                color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
                         if (messages.isEmpty()) {
                             Box(
                                 modifier = Modifier
@@ -783,6 +856,7 @@ fun ChatViewNew(
                                     MessageRole.ASSISTANT, MessageRole.SYSTEM, MessageRole.ERROR -> {
                                         AssistantMessageDisplay(
                                             message = message,
+                                            ideIntegration = ideIntegration,
                                             onExpandedChange = { toolId, expanded ->
                                                 expandedToolCalls[toolId] = expanded
                                                 println("[ChatViewNew] 消息流中工具展开状态更新: $toolId -> $expanded")

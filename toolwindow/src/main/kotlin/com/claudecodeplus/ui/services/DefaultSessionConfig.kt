@@ -117,6 +117,7 @@ object DefaultSessionConfig {
             
             // 映射 Claude CLI 模型名称到插件模型枚举
             val aiModel = when (modelStr.lowercase()) {
+                "default" -> AiModel.DEFAULT
                 "opus" -> AiModel.OPUS
                 "sonnet" -> AiModel.SONNET
                 "opusplan" -> AiModel.OPUS_PLAN

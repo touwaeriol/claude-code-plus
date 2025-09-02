@@ -19,7 +19,8 @@ import org.jetbrains.jewel.ui.component.Text
 @Composable
 fun SmartToolCallDisplay(
     toolCalls: List<ToolCall>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null
 ) {
     // 如果没有工具调用，不显示任何内容
     if (toolCalls.isEmpty()) return
@@ -47,6 +48,7 @@ fun SmartToolCallDisplay(
                     println("[SmartToolCallDisplay] 使用CompactToolCallDisplay显示：${toolCall.name}")
                     CompactToolCallDisplay(
                         toolCalls = listOf(toolCall),
+                        ideIntegration = ideIntegration,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

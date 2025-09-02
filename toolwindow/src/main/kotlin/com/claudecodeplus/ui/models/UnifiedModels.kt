@@ -24,6 +24,9 @@ enum class AiModel(
     val shortName: String, // 简短名称，用于紧凑显示
     val icon: String // 图标，用于最紧凑显示
 ) {
+    // 默认模型 - 使用系统默认配置
+    DEFAULT("Default", "default", "Use system default model", 200_000, "Default", "🔘"),
+    
     // Opus 模型 - 最强大的模型，用于复杂任务
     OPUS("Opus", "opus", "Deep reasoning, complex tasks", 200_000, "Opus", "🔹"),
     
@@ -66,7 +69,7 @@ enum class PermissionMode(
     ACCEPT("Accept Edits", "acceptEdits", "Auto-accept edit operations", "Accept", "✅"),
     
     // 绕过权限模式 - 所有操作都不需要确认（注意安全）
-    BYPASS("Bypass Permissions", "bypassPermissions", "Bypass permission checks", "Bypass", "🚀"),
+    BYPASS("Bypass", "bypassPermissions", "Bypass permission checks", "Bypass", "🚀"),
     
     // 计划模式 - AI 只生成操作计划，不实际执行
     PLAN("Plan", "plan", "Planning only, no execution", "Plan", "📋")
