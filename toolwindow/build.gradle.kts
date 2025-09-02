@@ -75,4 +75,11 @@ compose.desktop {
     }
 }
 
+// Compose Multiplatform 资源配置
+compose.resources {
+    publicResClass = true
+    packageOfResClass = "com.claudecodeplus.ui.resources"
+    generateResClass = auto
+}
+
 // IDE configuration for source/javadoc download is handled by IDE settings

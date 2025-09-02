@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.IndexedFileInfo
 import com.claudecodeplus.ui.services.FileIndexService
+import com.claudecodeplus.ui.services.stringResource
 import com.claudecodeplus.core.interfaces.ProjectService
 import com.claudecodeplus.ui.jewel.components.context.*
 import com.claudecodeplus.ui.jewel.components.tools.JumpingDots
@@ -283,7 +284,7 @@ fun UnifiedChatInput(
                     ) {
                         if (textFieldValue.text.isEmpty()) {
                             Text(
-                                "Message Claude...",
+                                stringResource("chat_input_placeholder"),
                                 color = JewelTheme.globalColors.text.disabled,
                                 style = JewelTheme.defaultTextStyle
                             )
