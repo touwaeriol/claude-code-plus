@@ -50,6 +50,7 @@ fun MultiTabChatView(
     projectService: ProjectService,
     sessionManager: ClaudeSessionManager,
     projectManager: com.claudecodeplus.ui.services.ProjectManager? = null,
+    ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,  // 新增：IDE 集成
     onTabHover: ((String?) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -111,6 +112,7 @@ fun MultiTabChatView(
                                     name = tab.projectName ?: tab.projectId?.substringAfterLast("/") ?: "Unknown Project"
                                 ),
                                 projectManager = projectManager,
+                                ideIntegration = ideIntegration,  // 传递 IDE 集成
                                 modifier = Modifier.fillMaxSize()
                             )
                         

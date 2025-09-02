@@ -25,6 +25,7 @@ fun StandaloneChatView(
     sessionManager: ClaudeSessionManager = ClaudeSessionManager(),
     initialMessages: List<EnhancedMessage>? = null,
     sessionId: String? = null,
+    ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,  // 新增：IDE 集成
     backgroundService: Any? = null,  // 新增：后台服务
     sessionStateSync: Any? = null,   // 新增：状态同步器
     onNewSessionRequest: (() -> Unit)? = null,  // 新增：新会话请求回调
@@ -52,6 +53,7 @@ fun StandaloneChatView(
         currentTabId = null,
         currentProject = tempProject,
         projectManager = null,
+        ideIntegration = ideIntegration,  // 传递 IDE 集成
         backgroundService = backgroundService,
         sessionStateSync = sessionStateSync,
         onNewSessionRequest = onNewSessionRequest,

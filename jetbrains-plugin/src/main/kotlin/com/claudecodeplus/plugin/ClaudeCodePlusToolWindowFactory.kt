@@ -1,5 +1,6 @@
 package com.claudecodeplus.plugin
 
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
@@ -9,6 +10,7 @@ import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.toolwindow.PluginComposeFactory
 import com.claudecodeplus.plugin.adapters.IdeaProjectServiceAdapter
 import com.claudecodeplus.plugin.adapters.SimpleFileIndexService
+import com.claudecodeplus.plugin.adapters.IdeaIdeIntegration
 import com.claudecodeplus.plugin.theme.IdeaThemeAdapter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,8 +27,9 @@ import com.intellij.openapi.wm.ex.ToolWindowManagerEx
 /**
  * IntelliJ IDEA 工具窗口工厂
  * 创建简化的聊天界面
+ * 实现DumbAware接口，确保在索引期间也可用
  */
-class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
+class ClaudeCodePlusToolWindowFactory : ToolWindowFactory, DumbAware {
     
     companion object {
         private val logger = Logger.getInstance(ClaudeCodePlusToolWindowFactory::class.java)
@@ -60,6 +63,13 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
         }
     }
     
+    /**
+     * 确保工具窗口始终可用，即使在索引期间
+     */
+    override fun shouldBeAvailable(project: Project): Boolean {
+        return true // 聊天功能不依赖索引，始终可用
+    }
+    
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         logger.info("Creating Claude Code Plus tool window for project: ${project.basePath}")
         
@@ -81,6 +91,9 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             val projectService = IdeaProjectServiceAdapter(project)
             val fileIndexService = SimpleFileIndexService(project)
             
+            // 创建 IDE 集成实例
+            val ideIntegration = IdeaIdeIntegration(project)
+            
             // 创建主题状态holder
             val currentTheme = IdeaThemeAdapter.isDarkTheme()
             val themeStateHolder = mutableStateOf(currentTheme)
@@ -94,6 +107,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
                 project = project,
                 fileIndexService = fileIndexService,
                 projectService = projectService,
+                ideIntegration = ideIntegration,        // 传入 IDE 集成实例
                 themeStateHolder = themeStateHolder,  // 传入主题状态
                 backgroundService = backgroundService,  // 传入后台服务
                 sessionStateSync = sessionStateSync     // 传入状态同步器
@@ -172,6 +186,4 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory {
             toolWindow.setTitleActions(listOf(newChatAction))
         }
     }
-    
-    override fun shouldBeAvailable(project: Project): Boolean = true
 }

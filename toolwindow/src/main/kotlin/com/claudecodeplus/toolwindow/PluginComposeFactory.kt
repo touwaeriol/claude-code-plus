@@ -31,6 +31,7 @@ object PluginComposeFactory {
         project: Any? = null,  // 改为 Any 类型，避免依赖 IntelliJ API
         fileIndexService: FileIndexService? = null,
         projectService: ProjectService? = null,
+        ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,  // 新增：IDE 集成
         themeStateHolder: MutableState<Boolean>? = null,  // 新增：外部传入的主题状态
         backgroundService: Any? = null,  // 新增：后台服务
         sessionStateSync: Any? = null,   // 新增：状态同步器
@@ -66,6 +67,7 @@ object PluginComposeFactory {
                         fileIndexService = fileIndexService,
                         projectService = projectService,
                         sessionManager = sessionManager,
+                        ideIntegration = ideIntegration,
                         backgroundService = backgroundService,
                         sessionStateSync = sessionStateSync,
                         onNewSessionRequest = onNewSessionRequest
