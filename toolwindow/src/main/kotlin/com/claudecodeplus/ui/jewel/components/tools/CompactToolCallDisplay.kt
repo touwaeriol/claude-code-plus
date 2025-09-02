@@ -41,6 +41,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import kotlinx.coroutines.delay
+import com.claudecodeplus.ui.services.stringResource
+import com.claudecodeplus.ui.services.formatStringResource
+import com.claudecodeplus.ui.services.StringResources
 
 /**
  * 紧凑的工具调用显示组件
@@ -354,7 +357,7 @@ private fun ToolCallDetails(
                         // 其他情况显示状态
                         else -> {
                             Text(
-                                text = "状态: ${toolCall.status}",
+                                text = formatStringResource(StringResources.TOOL_STATUS, toolCall.status),
                                 style = JewelTheme.defaultTextStyle.copy(
                                     fontSize = 12.sp,
                                     color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
@@ -548,7 +551,7 @@ private fun getParameterSummary(toolCall: ToolCall): String {
             val editsCount = toolCall.parameters["edits"]?.let {
                 if (it is List<*>) it.size else 1
             } ?: 1
-            "$editsCount 处修改"
+            formatStringResource(StringResources.EDIT_CHANGES, editsCount)
         }
         // Search/Grep工具显示搜索范围
         toolCall.name.contains("Search", ignoreCase = true) ||
@@ -558,7 +561,7 @@ private fun getParameterSummary(toolCall: ToolCall): String {
             when {
                 glob != null -> "in $glob"
                 type != null -> ".$type files"
-                else -> "${toolCall.parameters.size - 1} 个参数"
+                else -> formatStringResource(StringResources.PARAMETERS_COUNT, toolCall.parameters.size - 1)
             }
         }
         // Glob工具显示匹配模式
@@ -690,7 +693,7 @@ private fun FileMatchResultDisplay(toolCall: ToolCall) {
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = "📂 找到 ${lines.size} 个匹配文件：",
+                        text = formatStringResource(StringResources.FILES_FOUND, lines.size),
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
@@ -727,7 +730,7 @@ private fun FileMatchResultDisplay(toolCall: ToolCall) {
                         
                         if (lines.size > 20) {
                             Text(
-                                text = "... 还有 ${lines.size - 20} 个文件",
+                                text = formatStringResource(StringResources.FILES_MORE, lines.size - 20),
                                 style = JewelTheme.defaultTextStyle.copy(
                                     fontSize = 10.sp,
                                     color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
@@ -778,7 +781,7 @@ private fun SearchResultDisplay(toolCall: ToolCall) {
                     // 搜索统计
                     val pattern = toolCall.parameters["pattern"]?.toString() ?: ""
                     Text(
-                        text = "🔍 搜索 \"$pattern\" 找到 ${lines.size} 处匹配：",
+                        text = formatStringResource(StringResources.SEARCH_RESULTS, pattern, lines.size),
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
@@ -855,7 +858,7 @@ private fun SearchResultDisplay(toolCall: ToolCall) {
                         
                         if (lines.size > 15) {
                             Text(
-                                text = "... 还有 ${lines.size - 15} 处匹配",
+                                text = formatStringResource(StringResources.SEARCH_MORE, lines.size - 15),
                                 style = JewelTheme.defaultTextStyle.copy(
                                     fontSize = 10.sp,
                                     color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
@@ -927,7 +930,7 @@ private fun WebContentDisplay(toolCall: ToolCall) {
                 
                 // 内容统计
                 Text(
-                    text = "内容长度：${content.length} 字符",
+                    text = formatStringResource(StringResources.CONTENT_LENGTH, content.length),
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 10.sp,
                         color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)
@@ -986,7 +989,7 @@ private fun SubTaskDisplay(toolCall: ToolCall) {
         }
         is ToolResult.Failure -> {
             Text(
-                text = "❌ 任务执行失败：${result.error}",
+                text = formatStringResource(StringResources.TASK_EXECUTION_FAILED, result.error),
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 12.sp,
                     color = Color(0xFFFF6B6B)
@@ -1069,7 +1072,7 @@ private fun NotebookOperationDisplay(toolCall: ToolCall) {
         }
         is ToolResult.Failure -> {
             Text(
-                text = "❌ Notebook 操作失败：${result.error}",
+                text = formatStringResource(StringResources.NOTEBOOK_OPERATION_FAILED, result.error),
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 12.sp,
                     color = Color(0xFFFF6B6B)
@@ -1149,7 +1152,7 @@ private fun MCPToolDisplay(toolCall: ToolCall) {
         }
         is ToolResult.Failure -> {
             Text(
-                text = "❌ MCP 工具执行失败：${result.error}",
+                text = formatStringResource(StringResources.MCP_TOOL_FAILED, result.error),
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 12.sp,
                     color = Color(0xFFFF6B6B)

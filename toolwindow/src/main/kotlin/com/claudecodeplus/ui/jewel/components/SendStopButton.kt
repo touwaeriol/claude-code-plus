@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.claudecodeplus.ui.services.stringResource
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import javax.swing.JFileChooser
@@ -231,7 +232,7 @@ fun SendStopButton(
                             }
                             .padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
-                        Text("发送", style = JewelTheme.defaultTextStyle)
+                        Text(stringResource("send"), style = JewelTheme.defaultTextStyle)
                     }
                     if (onInterruptAndSend != null) {
                         Box(
@@ -243,7 +244,7 @@ fun SendStopButton(
                                 }
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
-                            Text("打断并发送", style = JewelTheme.defaultTextStyle)
+                            Text(stringResource("interrupt_and_send"), style = JewelTheme.defaultTextStyle)
                         }
                     }
                 }
@@ -340,12 +341,12 @@ fun ImagePickerButton(
 private fun showImagePicker(onImageSelected: (File) -> Unit) {
     try {
         val fileChooser = JFileChooser()
-        fileChooser.dialogTitle = "选择图片"
+        fileChooser.dialogTitle = stringResource("select_image")
         fileChooser.fileSelectionMode = JFileChooser.FILES_ONLY
         
         // 设置文件过滤器，只显示图片文件
         val imageFilter = FileNameExtensionFilter(
-            "图片文件 (*.jpg, *.jpeg, *.png, *.gif, *.bmp, *.webp)",
+            stringResource("image_files"),
             "jpg", "jpeg", "png", "gif", "bmp", "webp"
         )
         fileChooser.fileFilter = imageFilter

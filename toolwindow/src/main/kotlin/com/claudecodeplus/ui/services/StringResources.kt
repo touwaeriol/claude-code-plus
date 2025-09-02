@@ -8,6 +8,38 @@ import com.claudecodeplus.ui.services.LocalizationService.SupportedLanguage
  */
 object StringResources {
     
+    // 常用错误消息键的静态常量
+    const val OPERATION_FAILED = "operation_failed"
+    const val SESSION_CREATION_FAILED = "session_creation_failed"
+    const val SEND_MESSAGE_FAILED = "send_message_failed"
+    const val LOAD_HISTORY_FAILED = "load_history_failed"
+    const val SESSION_CONNECTION_ERROR = "session_connection_error"
+    
+    // 工具调用状态
+    const val TOOL_STATUS = "tool_status"
+    const val FILES_FOUND = "files_found"
+    const val FILES_MORE = "files_more"
+    const val SEARCH_RESULTS = "search_results"
+    const val SEARCH_MORE = "search_more"
+    const val CONTENT_LENGTH = "content_length"
+    const val TASK_EXECUTION_FAILED = "task_execution_failed"
+    const val NOTEBOOK_OPERATION_FAILED = "notebook_operation_failed"
+    const val MCP_TOOL_FAILED = "mcp_tool_failed"
+    const val EDIT_CHANGES = "edit_changes"
+    const val PARAMETERS_COUNT = "parameters_count"
+    const val UPDATE_TASKS = "update_tasks"
+    
+    // 文件操作
+    const val DIRECTORIES = "directories"
+    const val FILES = "files"
+    const val FILE_TYPE_JSON = "file_type_json"
+    const val FILE_TYPE_XML = "file_type_xml"
+    const val FILE_TYPE_CODE = "file_type_code"
+    const val FILE_TYPE_CONFIG = "file_type_config"
+    const val FILE_CONTENT = "file_content"
+    const val MORE_LINES = "more_lines"
+    const val MORE_ITEMS = "more_items"
+    
     /**
      * 字符串资源映射
      */
@@ -44,6 +76,9 @@ object StringResources {
             "file_selector_search" to "Search Files",
             "file_selector_no_files" to "No files found",
             "interrupting" to "Interrupting...",
+            "interrupt_and_send" to "Interrupt & Send",
+            "select_image" to "Select Image",
+            "image_files" to "Image Files (*.jpg, *.jpeg, *.png, *.gif, *.bmp, *.webp)",
             
             // 工具调用
             "tool_read" to "Read",
@@ -62,6 +97,36 @@ object StringResources {
             
             // 消息显示
             "assistant_message" to "Assistant",
+            
+            // 错误消息
+            "operation_failed" to "Operation failed: %1\$s",
+            "session_creation_failed" to "Session creation failed: %1\$s",
+            "send_message_failed" to "Send message failed: %1\$s",
+            "load_history_failed" to "Load history failed: %1\$s",
+            "session_connection_error" to "Session connection error: %1\$s",
+            
+            // 工具调用状态
+            "tool_status" to "Status: %1\$s",
+            "files_found" to "📂 Found %1\$s matching files:",
+            "files_more" to "... %1\$s more files",
+            "search_results" to "🔍 Search \"%1\$s\" found %2\$s matches:",
+            "search_more" to "... %1\$s more matches",
+            "content_length" to "Content length: %1\$s characters",
+            "task_execution_failed" to "❌ Task execution failed: %1\$s",
+            "notebook_operation_failed" to "❌ Notebook operation failed: %1\$s",
+            "mcp_tool_failed" to "❌ MCP tool execution failed: %1\$s",
+            "edit_changes" to "%1\$s changes",
+            "parameters_count" to "%1\$s parameters",
+            "update_tasks" to "Update %1\$s tasks",
+            "directories" to "directories",
+            "files" to "files",
+            "file_type_json" to "JSON",
+            "file_type_xml" to "XML/HTML",
+            "file_type_code" to "Code",
+            "file_type_config" to "Configuration",
+            "file_content" to "📄 %1\$s file content (%2\$s lines, %3\$s characters)",
+            "more_lines" to "... %1\$s more lines",
+            "more_items" to "... %1\$s more items",
             "user_message" to "You",
             "system_message" to "System",
             "thinking" to "Thinking...",
@@ -99,6 +164,9 @@ object StringResources {
             "file_selector_search" to "搜索文件",
             "file_selector_no_files" to "未找到文件",
             "interrupting" to "中断中...",
+            "interrupt_and_send" to "中断并发送",
+            "select_image" to "选择图片",
+            "image_files" to "图片文件 (*.jpg, *.jpeg, *.png, *.gif, *.bmp, *.webp)",
             
             // 工具调用
             "tool_read" to "读取",
@@ -117,6 +185,36 @@ object StringResources {
             
             // 消息显示
             "assistant_message" to "助手",
+            
+            // 错误消息
+            "operation_failed" to "操作失败: %1\$s",
+            "session_creation_failed" to "创建会话失败: %1\$s",
+            "send_message_failed" to "发送消息失败: %1\$s",
+            "load_history_failed" to "加载历史消息失败: %1\$s",
+            "session_connection_error" to "会话连接异常: %1\$s",
+            
+            // 工具调用状态
+            "tool_status" to "状态: %1\$s",
+            "files_found" to "📂 找到 %1\$s 个匹配文件：",
+            "files_more" to "... 还有 %1\$s 个文件",
+            "search_results" to "🔍 搜索 \"%1\$s\" 找到 %2\$s 处匹配：",
+            "search_more" to "... 还有 %1\$s 处匹配",
+            "content_length" to "内容长度：%1\$s 字符",
+            "task_execution_failed" to "❌ 任务执行失败：%1\$s",
+            "notebook_operation_failed" to "❌ Notebook 操作失败：%1\$s",
+            "mcp_tool_failed" to "❌ MCP 工具执行失败：%1\$s",
+            "edit_changes" to "%1\$s 处修改",
+            "parameters_count" to "%1\$s 个参数",
+            "update_tasks" to "更新 %1\$s 个任务",
+            "directories" to "个目录",
+            "files" to "个文件",
+            "file_type_json" to "JSON",
+            "file_type_xml" to "XML/HTML",
+            "file_type_code" to "代码",
+            "file_type_config" to "配置",
+            "file_content" to "📄 %1\$s 文件内容 (%2\$s 行，%3\$s 字符)",
+            "more_lines" to "... 还有 %1\$s 行",
+            "more_items" to "... 还有 %1\$s 项",
             "user_message" to "你",
             "system_message" to "系统",
             "thinking" to "思考中...",
@@ -154,6 +252,9 @@ object StringResources {
             "file_selector_search" to "搜尋檔案",
             "file_selector_no_files" to "未找到檔案",
             "interrupting" to "中斷中...",
+            "interrupt_and_send" to "中斷並傳送",
+            "select_image" to "選擇圖片",
+            "image_files" to "圖片檔案 (*.jpg, *.jpeg, *.png, *.gif, *.bmp, *.webp)",
             
             // 工具調用
             "tool_read" to "讀取",
@@ -172,6 +273,36 @@ object StringResources {
             
             // 消息顯示
             "assistant_message" to "助手",
+            
+            // 錯誤訊息
+            "operation_failed" to "操作失敗: %1\$s",
+            "session_creation_failed" to "建立會話失敗: %1\$s",
+            "send_message_failed" to "傳送訊息失敗: %1\$s",
+            "load_history_failed" to "載入歷史訊息失敗: %1\$s",
+            "session_connection_error" to "會話連線異常: %1\$s",
+            
+            // 工具調用狀態
+            "tool_status" to "狀態: %1\$s",
+            "files_found" to "📂 找到 %1\$s 個匹配檔案：",
+            "files_more" to "... 還有 %1\$s 個檔案",
+            "search_results" to "🔍 搜尋 \"%1\$s\" 找到 %2\$s 處匹配：",
+            "search_more" to "... 還有 %1\$s 處匹配",
+            "content_length" to "內容長度：%1\$s 字元",
+            "task_execution_failed" to "❌ 任務執行失敗：%1\$s",
+            "notebook_operation_failed" to "❌ Notebook 操作失敗：%1\$s",
+            "mcp_tool_failed" to "❌ MCP 工具執行失敗：%1\$s",
+            "edit_changes" to "%1\$s 處修改",
+            "parameters_count" to "%1\$s 個參數",
+            "update_tasks" to "更新 %1\$s 個任務",
+            "directories" to "個目錄",
+            "files" to "個檔案",
+            "file_type_json" to "JSON",
+            "file_type_xml" to "XML/HTML",
+            "file_type_code" to "程式碼",
+            "file_type_config" to "配置",
+            "file_content" to "📄 %1\$s 檔案內容 (%2\$s 行，%3\$s 字元)",
+            "more_lines" to "... 還有 %1\$s 行",
+            "more_items" to "... 還有 %1\$s 項",
             "user_message" to "你",
             "system_message" to "系統",
             "thinking" to "思考中...",
@@ -209,6 +340,9 @@ object StringResources {
             "file_selector_search" to "ファイル検索",
             "file_selector_no_files" to "ファイルが見つかりません",
             "interrupting" to "中断中...",
+            "interrupt_and_send" to "中断して送信",
+            "select_image" to "画像を選択",
+            "image_files" to "画像ファイル (*.jpg, *.jpeg, *.png, *.gif, *.bmp, *.webp)",
             
             // ツール呼び出し
             "tool_read" to "読み取り",
@@ -227,6 +361,36 @@ object StringResources {
             
             // メッセージ表示
             "assistant_message" to "アシスタント",
+            
+            // エラーメッセージ
+            "operation_failed" to "操作が失敗しました: %1\$s",
+            "session_creation_failed" to "セッション作成に失敗しました: %1\$s",
+            "send_message_failed" to "メッセージ送信に失敗しました: %1\$s",
+            "load_history_failed" to "履歴の読み込みに失敗しました: %1\$s",
+            "session_connection_error" to "セッション接続エラー: %1\$s",
+            
+            // ツール状態
+            "tool_status" to "ステータス: %1\$s",
+            "files_found" to "📂 %1\$s 個のマッチングファイルが見つかりました：",
+            "files_more" to "... あと %1\$s 個のファイル",
+            "search_results" to "🔍 \"%1\$s\" の検索で %2\$s 個のマッチが見つかりました：",
+            "search_more" to "... あと %1\$s 個のマッチ",
+            "content_length" to "コンテンツ長: %1\$s 文字",
+            "task_execution_failed" to "❌ タスク実行に失敗しました: %1\$s",
+            "notebook_operation_failed" to "❌ Notebook 操作に失敗しました: %1\$s",
+            "mcp_tool_failed" to "❌ MCP ツール実行に失敗しました: %1\$s",
+            "edit_changes" to "%1\$s 箇所の変更",
+            "parameters_count" to "%1\$s 個のパラメータ",
+            "update_tasks" to "%1\$s 個のタスクを更新",
+            "directories" to "個のディレクトリ",
+            "files" to "個のファイル",
+            "file_type_json" to "JSON",
+            "file_type_xml" to "XML/HTML",
+            "file_type_code" to "コード",
+            "file_type_config" to "設定",
+            "file_content" to "📄 %1\$s ファイル内容 (%2\$s 行、%3\$s 文字)",
+            "more_lines" to "... あと %1\$s 行",
+            "more_items" to "... あと %1\$s 項目",
             "user_message" to "あなた",
             "system_message" to "システム",
             "thinking" to "考え中...",
@@ -264,6 +428,9 @@ object StringResources {
             "file_selector_search" to "파일 검색",
             "file_selector_no_files" to "파일을 찾을 수 없습니다",
             "interrupting" to "중단 중...",
+            "interrupt_and_send" to "중단 후 전송",
+            "select_image" to "이미지 선택",
+            "image_files" to "이미지 파일 (*.jpg, *.jpeg, *.png, *.gif, *.bmp, *.webp)",
             
             // 도구 호출
             "tool_read" to "읽기",
@@ -282,6 +449,36 @@ object StringResources {
             
             // 메시지 표시
             "assistant_message" to "어시스턴트",
+            
+            // 오류 메시지
+            "operation_failed" to "작업 실패: %1\$s",
+            "session_creation_failed" to "세션 생성 실패: %1\$s",
+            "send_message_failed" to "메시지 전송 실패: %1\$s",
+            "load_history_failed" to "히스토리 로드 실패: %1\$s",
+            "session_connection_error" to "세션 연결 오류: %1\$s",
+            
+            // 도구 상태
+            "tool_status" to "상태: %1\$s",
+            "files_found" to "📂 %1\$s개의 매칭 파일을 찾았습니다:",
+            "files_more" to "... %1\$s개 더 많은 파일",
+            "search_results" to "🔍 \"%1\$s\" 검색에서 %2\$s개 매치 발견:",
+            "search_more" to "... %1\$s개 더 많은 매치",
+            "content_length" to "콘텐츠 길이: %1\$s 문자",
+            "task_execution_failed" to "❌ 작업 실행 실패: %1\$s",
+            "notebook_operation_failed" to "❌ Notebook 작업 실패: %1\$s",
+            "mcp_tool_failed" to "❌ MCP 도구 실행 실패: %1\$s",
+            "edit_changes" to "%1\$s개 변경사항",
+            "parameters_count" to "%1\$s개 매개변수",
+            "update_tasks" to "%1\$s개 작업 업데이트",
+            "directories" to "개 디렉토리",
+            "files" to "개 파일",
+            "file_type_json" to "JSON",
+            "file_type_xml" to "XML/HTML",
+            "file_type_code" to "코드",
+            "file_type_config" to "구성",
+            "file_content" to "📄 %1\$s 파일 콘텐츠 (%2\$s 줄, %3\$s 문자)",
+            "more_lines" to "... %1\$s줄 더",
+            "more_items" to "... %1\$s개 더",
             "user_message" to "사용자",
             "system_message" to "시스템",
             "thinking" to "생각하는 중...",

@@ -13,6 +13,8 @@ import com.claudecodeplus.core.services.ProjectService
 import com.claudecodeplus.core.services.SessionService
 import com.claudecodeplus.core.services.ToolResultProcessor
 import com.claudecodeplus.ui.models.EnhancedMessage
+import com.claudecodeplus.ui.services.formatStringResource
+import com.claudecodeplus.ui.services.StringResources
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -71,7 +73,7 @@ class ChatViewModel {
                 }
             } catch (e: Exception) {
                 logE("处理UI事件失败: ${event::class.simpleName}", e)
-                showError("操作失败: ${e.message}")
+                showError(formatStringResource(StringResources.OPERATION_FAILED, e.message ?: ""))
             }
         }
     }
@@ -153,7 +155,7 @@ class ChatViewModel {
                     // 发送消息到新会话
                     sendMessageToSession(newSessionId, text)
                 } else {
-                    throw Exception("创建会话失败: ${newSessionResult}")
+                    throw Exception(formatStringResource(StringResources.SESSION_CREATION_FAILED, newSessionResult))
                 }
             } else {
                 // 发送到现有会话
@@ -171,7 +173,7 @@ class ChatViewModel {
             updateState { 
                 it.copy(
                     isGenerating = false,
-                    errorMessage = "发送消息失败: ${e.message}"
+                    errorMessage = formatStringResource(StringResources.SEND_MESSAGE_FAILED, e.message ?: "")
                 )
             }
         }
@@ -189,7 +191,7 @@ class ChatViewModel {
         )
         
         if (result.isFailure) {
-            throw Exception("发送消息失败: ${result}")
+            throw Exception(formatStringResource(StringResources.SEND_MESSAGE_FAILED, result))
         }
     }
     
@@ -258,14 +260,14 @@ class ChatViewModel {
                 // 滚动到底部
                 _effects.emit(ChatUiEffect.ScrollToBottom)
             } else {
-                throw Exception("加载历史消息失败: ${result}")
+                throw Exception(formatStringResource(StringResources.LOAD_HISTORY_FAILED, result))
             }
         } catch (e: Exception) {
             logE("加载历史消息失败", e)
             updateState { 
                 it.copy(
                     isLoadingHistory = false,
-                    errorMessage = "加载历史消息失败: ${e.message}"
+                    errorMessage = formatStringResource(StringResources.LOAD_HISTORY_FAILED, e.message ?: "")
                 )
             }
         }
@@ -282,7 +284,7 @@ class ChatViewModel {
                 sessionService.observeSessionEvents(sessionId)
                     .catch { e ->
                         logE("会话事件监听异常", e)
-                        showError("会话连接异常: ${e.message}")
+                        showError(formatStringResource(StringResources.SESSION_CONNECTION_ERROR, e.message ?: ""))
                     }
                     .collect { event ->
                         handleSessionEvent(event)
