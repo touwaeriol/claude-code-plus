@@ -31,7 +31,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
@@ -60,7 +63,7 @@ fun ChatInputContextSelectorPopup(
     var searchQuery by remember { mutableStateOf(TextFieldValue(initialSearchQuery)) }
     var searchResults by remember { mutableStateOf<List<FileSearchResult>>(emptyList()) }
     var webUrl by remember { mutableStateOf(TextFieldValue("")) }
-    var selectedIndex by remember { mutableStateOf(0) }
+    var selectedIndex by remember { mutableStateOf(-1) }
     var isLoading by remember { mutableStateOf(false) }
     
     val scope = rememberCoroutineScope()
@@ -75,15 +78,19 @@ fun ChatInputContextSelectorPopup(
                 // 如果有初始搜索查询，直接进行搜索
                 val results = searchService.searchFiles(initialSearchQuery, config.maxResults)
                 searchResults = results
+                selectedIndex = if (results.isNotEmpty()) 0 else -1
             } else {
                 // 否则获取根文件列表
                 val rootFiles = searchService.getRootFiles(config.maxResults)
-                searchResults = rootFiles.map { 
+                val results = rootFiles.map { 
                     FileSearchResult(it, 0, FileSearchResult.MatchType.PATH_MATCH) 
                 }
+                searchResults = results
+                selectedIndex = if (results.isNotEmpty()) 0 else -1
             }
         } catch (e: Exception) {
             searchResults = emptyList()
+            selectedIndex = -1
         } finally {
             isLoading = false
         }
@@ -92,23 +99,27 @@ fun ChatInputContextSelectorPopup(
     // 搜索去抖动
     LaunchedEffect(searchQuery.text) {
         if (selectionState is ContextSelectionState.SelectingFile) {
-            selectedIndex = 0
             if (searchQuery.text.isNotEmpty()) {
                 isLoading = true
                 delay(config.searchDelayMs)
                 try {
-                    searchResults = searchService.searchFiles(searchQuery.text, config.maxResults)
+                    val results = searchService.searchFiles(searchQuery.text, config.maxResults)
+                    searchResults = results
+                    selectedIndex = if (results.isNotEmpty()) 0 else -1
                 } catch (e: Exception) {
                     searchResults = emptyList()
+                    selectedIndex = -1
                 } finally {
                     isLoading = false
                 }
             } else {
                 // 空查询时显示根目录文件
                 val rootFiles = searchService.getRootFiles(config.maxResults)
-                searchResults = rootFiles.map { 
+                val results = rootFiles.map { 
                     FileSearchResult(it, 0, FileSearchResult.MatchType.PATH_MATCH) 
                 }
+                searchResults = results
+                selectedIndex = if (results.isNotEmpty()) 0 else -1
             }
         }
     }
@@ -122,20 +133,20 @@ fun ChatInputContextSelectorPopup(
             }
             keyEvent.key == Key.DirectionUp && keyEvent.type == KeyEventType.KeyDown -> {
                 if (searchResults.isNotEmpty()) {
-                    selectedIndex = (selectedIndex - 1).coerceAtLeast(0)
+                    selectedIndex = if (selectedIndex <= 0) searchResults.size - 1 else selectedIndex - 1
                 }
                 true
             }
             keyEvent.key == Key.DirectionDown && keyEvent.type == KeyEventType.KeyDown -> {
                 if (searchResults.isNotEmpty()) {
-                    selectedIndex = (selectedIndex + 1).coerceAtMost(searchResults.size - 1)
+                    selectedIndex = if (selectedIndex >= searchResults.size - 1) 0 else selectedIndex + 1
                 }
                 true
             }
             keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyDown -> {
                 when (selectionState) {
                     is ContextSelectionState.SelectingFile -> {
-                        if (searchResults.isNotEmpty() && selectedIndex < searchResults.size) {
+                        if (searchResults.isNotEmpty() && selectedIndex >= 0 && selectedIndex < searchResults.size) {
                             val selectedItem = searchResults[selectedIndex].item
                             val fileRef = ContextReference.FileReference(
                                 path = selectedItem.relativePath,
@@ -294,6 +305,7 @@ fun ChatInputContextSelectorPopup(
                         FileSearchResults(
                             results = searchResults,
                             selectedIndex = selectedIndex,
+                            searchQuery = searchQuery.text,
                             isLoading = isLoading,
                             onItemClick = { item ->
                                 val fileRef = ContextReference.FileReference(
@@ -425,6 +437,7 @@ private fun SearchInputField(
 private fun FileSearchResults(
     results: List<FileSearchResult>,
     selectedIndex: Int,
+    searchQuery: String,
     isLoading: Boolean,
     onItemClick: (FileContextItem) -> Unit,
     modifier: Modifier = Modifier
@@ -471,6 +484,7 @@ private fun FileSearchResults(
                         FileResultItem(
                             item = result.item,
                             matchType = result.matchType,
+                            searchQuery = searchQuery,
                             isSelected = index == selectedIndex,
                             onClick = { onItemClick(result.item) },
                             modifier = Modifier.fillMaxWidth()
@@ -489,6 +503,7 @@ private fun FileSearchResults(
 private fun FileResultItem(
     item: FileContextItem,
     matchType: FileSearchResult.MatchType,
+    searchQuery: String,
     isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -521,25 +536,41 @@ private fun FileResultItem(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(
-                    text = item.name,
-                    style = JewelTheme.defaultTextStyle.copy(
-                        fontSize = 13.sp,
-                        color = if (isSelected) 
-                            JewelTheme.globalColors.borders.focused
-                        else 
-                            JewelTheme.globalColors.text.normal
-                    )
-                )
-                
-                if (item.relativePath.isNotEmpty()) {
+                // 文件名（带关键词高亮）
+                if (searchQuery.isNotEmpty()) {
                     Text(
-                        text = item.getPathDisplay(),
+                        text = buildHighlightedText(item.name, searchQuery, isSelected),
+                        style = JewelTheme.defaultTextStyle.copy(fontSize = 13.sp)
+                    )
+                } else {
+                    Text(
+                        text = item.name,
                         style = JewelTheme.defaultTextStyle.copy(
-                            fontSize = 11.sp,
-                            color = JewelTheme.globalColors.text.disabled
+                            fontSize = 13.sp,
+                            color = if (isSelected) 
+                                JewelTheme.globalColors.borders.focused
+                            else 
+                                JewelTheme.globalColors.text.normal
                         )
                     )
+                }
+                
+                if (item.relativePath.isNotEmpty()) {
+                    // 路径（带关键词高亮）
+                    if (searchQuery.isNotEmpty()) {
+                        Text(
+                            text = buildHighlightedText(item.getPathDisplay(), searchQuery, false),
+                            style = JewelTheme.defaultTextStyle.copy(fontSize = 11.sp)
+                        )
+                    } else {
+                        Text(
+                            text = item.getPathDisplay(),
+                            style = JewelTheme.defaultTextStyle.copy(
+                                fontSize = 11.sp,
+                                color = JewelTheme.globalColors.text.disabled
+                            )
+                        )
+                    }
                 }
             }
             
@@ -559,6 +590,71 @@ private fun FileResultItem(
                         )
                 )
             }
+        }
+    }
+}
+
+/**
+ * 构建带关键词高亮的文本
+ * 使用业界标准的关键词高亮方案：黄色背景 + 深色文字 或 蓝色背景 + 白色文字
+ */
+@Composable
+private fun buildHighlightedText(
+    text: String, 
+    searchQuery: String, 
+    isSelected: Boolean
+) = buildAnnotatedString {
+    if (searchQuery.isEmpty()) {
+        append(text)
+        return@buildAnnotatedString
+    }
+    
+    val query = searchQuery.lowercase()
+    val lowerText = text.lowercase()
+    var lastIndex = 0
+    
+    // 查找所有匹配的位置
+    var currentIndex = lowerText.indexOf(query, lastIndex)
+    while (currentIndex != -1) {
+        // 添加匹配前的文本
+        if (currentIndex > lastIndex) {
+            withStyle(
+                SpanStyle(
+                    color = if (isSelected) 
+                        JewelTheme.globalColors.borders.focused 
+                    else 
+                        JewelTheme.globalColors.text.normal
+                )
+            ) {
+                append(text.substring(lastIndex, currentIndex))
+            }
+        }
+        
+        // 添加高亮的匹配文本 - 使用业界标准的高亮颜色方案
+        withStyle(
+            SpanStyle(
+                background = Color(0xFFFFEB3B), // 明亮黄色背景，适合所有主题
+                color = Color(0xFF1B1B1B) // 深色文字，确保在黄色背景下可读
+            )
+        ) {
+            append(text.substring(currentIndex, currentIndex + searchQuery.length))
+        }
+        
+        lastIndex = currentIndex + searchQuery.length
+        currentIndex = lowerText.indexOf(query, lastIndex)
+    }
+    
+    // 添加剩余的文本
+    if (lastIndex < text.length) {
+        withStyle(
+            SpanStyle(
+                color = if (isSelected) 
+                    JewelTheme.globalColors.borders.focused 
+                else 
+                    JewelTheme.globalColors.text.normal
+            )
+        ) {
+            append(text.substring(lastIndex))
         }
     }
 }
