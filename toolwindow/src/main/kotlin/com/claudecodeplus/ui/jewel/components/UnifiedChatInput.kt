@@ -48,10 +48,21 @@ import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.TextArea
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.DisposableEffect
 
 // 导入内联引用系统
 import com.claudecodeplus.ui.jewel.components.parseInlineReferences
 import com.claudecodeplus.ui.jewel.components.FileReferenceAnnotation
+
+// 导入官方动作类
+import com.claudecodeplus.plugin.actions.DeleteToLineStartAction
+import com.claudecodeplus.plugin.actions.InsertNewLineAction
+import com.claudecodeplus.plugin.actions.InsertNewLineAltAction
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.CustomShortcutSet
+import javax.swing.KeyStroke
+import java.awt.event.InputEvent
+import java.awt.event.KeyEvent
 
 /**
  * 统一的聊天输入组件
@@ -129,6 +140,10 @@ fun UnifiedChatInput(
             sessionObject?.clearInput()
         }
     }
+    
+    // 官方快捷键动作集成
+    // 注意：由于Compose组件与Swing组件系统差异，我们继续使用onKeyEvent方式处理
+    // AnAction系统更适合全局IDE快捷键，而聊天输入框的快捷键应该是局部的
     
     // 动画状态
     val borderColor by animateColorAsState(
@@ -297,22 +312,57 @@ fun UnifiedChatInput(
                     .focusRequester(focusRequester)
                     .onKeyEvent { keyEvent ->
                         when {
-                            // Enter 发送消息
-                            keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp && !keyEvent.isShiftPressed -> {
-                                if (textFieldValue.text.isNotBlank() && !isGenerating) {
-                                    onSend(textFieldValue.text)
+                            // Alt+Enter 打断并发送 (优先级最高)
+                            keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp && keyEvent.isAltPressed -> {
+                                if (textFieldValue.text.isNotBlank() && isGenerating) {
+                                    onInterruptAndSend?.invoke(textFieldValue.text)
                                     sessionObject?.clearInput()
                                 }
                                 true
                             }
-                            // Shift+Enter 换行
-                            keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp && keyEvent.isShiftPressed -> {
-                                false // 让默认处理插入换行
+                            // Shift+Enter 或 Ctrl+J 换行 (中等优先级)
+                            (keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp && keyEvent.isShiftPressed) ||
+                            (keyEvent.key == Key.J && keyEvent.type == KeyEventType.KeyUp && keyEvent.isCtrlPressed) -> {
+                                val currentPos = textFieldValue.selection.start
+                                val newText = textFieldValue.text.substring(0, currentPos) + "\n" + 
+                                              textFieldValue.text.substring(currentPos)
+                                val newPosition = currentPos + 1
+                                sessionObject?.updateInputText(
+                                    TextFieldValue(
+                                        text = newText,
+                                        selection = TextRange(newPosition)
+                                    )
+                                )
+                                true // 阻止默认处理
                             }
-                            // Alt+Enter 打断并发送
-                            keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp && keyEvent.isAltPressed -> {
-                                if (textFieldValue.text.isNotBlank() && isGenerating) {
-                                    onInterruptAndSend?.invoke(textFieldValue.text)
+                            // Ctrl+U 清空光标位置到行首 (中等优先级)
+                            keyEvent.key == Key.U && keyEvent.type == KeyEventType.KeyUp && keyEvent.isCtrlPressed -> {
+                                val currentText = textFieldValue.text
+                                val cursorPos = textFieldValue.selection.start
+                                
+                                // 找到当前行的开始位置
+                                val lineStart = if (cursorPos == 0) 0 else {
+                                    val lineBreakPos = currentText.lastIndexOf('\n', cursorPos - 1)
+                                    if (lineBreakPos == -1) 0 else lineBreakPos + 1
+                                }
+                                
+                                // 删除从行首到光标位置的文本
+                                val newText = currentText.substring(0, lineStart) + 
+                                              currentText.substring(cursorPos)
+                                
+                                // 更新光标位置到行首
+                                sessionObject?.updateInputText(
+                                    TextFieldValue(
+                                        text = newText,
+                                        selection = TextRange(lineStart)
+                                    )
+                                )
+                                true // 阻止默认处理
+                            }
+                            // Enter 发送消息 (最低优先级)
+                            keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp && !keyEvent.isShiftPressed && !keyEvent.isAltPressed -> {
+                                if (textFieldValue.text.isNotBlank() && !isGenerating) {
+                                    onSend(textFieldValue.text)
                                     sessionObject?.clearInput()
                                 }
                                 true

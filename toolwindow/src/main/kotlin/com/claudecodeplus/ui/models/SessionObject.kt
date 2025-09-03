@@ -23,6 +23,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.jsonArray
+import java.io.File
 
 /**
  * 完整的会话对象，包含会话的所有状态
@@ -281,52 +282,28 @@ class SessionObject(
             updateCliCallback(newSessionId)
         }
         
-        // 如果设置了新的会话ID，需要更新本地配置
+        // 如果设置了新的会话ID，需要更新项目级配置
         if (!newSessionId.isNullOrEmpty() && oldSessionId != newSessionId) {
             try {
-                project?.let { proj ->
-                    val localConfigManager = LocalConfigManager()
-                    
-                    if (oldSessionId.isNullOrEmpty()) {
-                        // 新会话：直接更新当前会话的ID
-                        println("[SessionObject] 新会话获得ID，更新本地配置: null -> $newSessionId")
-                        localConfigManager.updateNewSessionId(proj.id, newSessionId)
-                    } else {
-                        // 已有会话：更新会话ID
-                        localConfigManager.updateSessionId(proj.id, oldSessionId, newSessionId)
-                        println("[SessionObject] 本地配置已更新会话ID: $oldSessionId -> $newSessionId")
-                    }
-                    
-                    // 重要：立即保存新的会话ID为最后选中的会话
-                    localConfigManager.saveLastSelectedSession(newSessionId)
-                    println("[SessionObject] 已保存新的 sessionId 为最后选中: $newSessionId")
-                    
-                    // 通知ProjectManager更新ProjectSession.id
-                    try {
-                        // 如果有全局的ProjectManager实例，更新ProjectSession的ID
-                        val serviceContainer = Class.forName("com.claudecodeplus.desktop.di.ServiceContainer")
-                        val projectManagerField = serviceContainer.getDeclaredField("projectManager")
-                        val projectManager = projectManagerField.get(null)
-                        
-                        if (projectManager != null) {
-                            val updateProjectSessionIdMethod = projectManager.javaClass.getDeclaredMethod(
-                                "updateProjectSessionId", String::class.java, String::class.java
-                            )
-                            updateProjectSessionIdMethod.invoke(projectManager, oldSessionId ?: "", newSessionId)
-                            println("[SessionObject] 已通知ProjectManager更新ProjectSession.id: $oldSessionId -> $newSessionId")
-                        }
-                    } catch (e: Exception) {
-                        println("[SessionObject] 通知ProjectManager更新ProjectSession.id失败: ${e.message}")
-                        // 这不是致命错误，继续执行
-                    }
-                    
-                } ?: run {
-                    println("[SessionObject] 无法更新本地配置：project 为 null")
-                }
+                // 通过回调机制通知上层更新项目级服务
+                notifySessionIdUpdate(oldSessionId, newSessionId)
+                println("[SessionObject] ✅ 已通知上层更新会话ID: $oldSessionId -> $newSessionId")
             } catch (e: Exception) {
-                println("[SessionObject] 更新本地配置失败: ${e.message}")
+                println("[SessionObject] 更新配置失败: ${e.message}")
                 e.printStackTrace()
             }
+        }
+    }
+    
+    // 会话 ID 更新回调
+    var sessionIdUpdateCallback: ((oldSessionId: String?, newSessionId: String) -> Unit)? = null
+    
+    /**
+     * 通知上层更新会话 ID
+     */
+    private fun notifySessionIdUpdate(oldSessionId: String?, newSessionId: String) {
+        sessionIdUpdateCallback?.invoke(oldSessionId, newSessionId) ?: run {
+            println("[SessionObject] ⚠️ 没有设置会话ID更新回调，跳过项目级服务更新")
         }
     }
     

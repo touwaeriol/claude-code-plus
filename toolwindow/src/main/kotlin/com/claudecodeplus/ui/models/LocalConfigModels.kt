@@ -489,6 +489,38 @@ class LocalConfigManager {
     }
     
     /**
+     * 验证最后选中的会话是否属于指定的工作目录
+     * @param workingDirectory 当前工作目录
+     * @return 如果属于当前工作目录返回会话ID，否则返回null并清理配置
+     */
+    fun validateLastSelectedSessionForProject(workingDirectory: String): String? {
+        val config = loadConfig()
+        val lastSelectedSessionId = config.lastSelectedSession
+        
+        if (lastSelectedSessionId != null) {
+            // 生成当前工作目录对应的项目ID
+            val expectedProjectId = com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(workingDirectory)
+            
+            // 检查会话是否属于当前工作目录的项目
+            val currentProject = config.projects.find { it.id == expectedProjectId }
+            val sessionBelongsToCurrentProject = currentProject?.sessions?.any { 
+                session -> session.id == lastSelectedSessionId 
+            } ?: false
+            
+            if (sessionBelongsToCurrentProject) {
+                println("[LocalConfigManager] 最后选中的会话属于当前项目: $lastSelectedSessionId")
+                return lastSelectedSessionId
+            } else {
+                println("[LocalConfigManager] 最后选中的会话不属于当前项目 (workingDir: $workingDirectory, projectId: $expectedProjectId, sessionId: $lastSelectedSessionId)，清理配置")
+                clearLastSelectedSession()
+                return null
+            }
+        }
+        
+        return null
+    }
+    
+    /**
      * 更新会话元数据（用于消息持久化）
      */
     fun updateSessionMetadata(projectId: String, sessionId: String, updater: (LocalSession) -> LocalSession) {

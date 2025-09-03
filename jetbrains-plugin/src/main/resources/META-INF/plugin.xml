@@ -93,5 +93,9 @@
         <applicationService 
             serviceImplementation="com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService"/>
             
+        <!-- 项目级别服务 -->
+        <projectService 
+            serviceImplementation="com.claudecodeplus.plugin.services.ProjectSessionStateService"/>
+            
     </extensions>
 </idea-plugin>

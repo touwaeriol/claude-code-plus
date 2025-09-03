@@ -321,6 +321,53 @@ object SessionIdRegistry {
     }
     
     /**
+     * 清理不属于指定工作目录的所有会话映射
+     * @param workingDirectory 当前工作目录
+     * @return 清理的会话数量
+     */
+    fun clearOtherProjectSessions(workingDirectory: String): Int {
+        val expectedProjectPath = workingDirectory
+        val keysToRemove = mutableListOf<String>()
+        
+        return try {
+            // 收集不属于当前项目的键
+            for (key in prefs.keys()) {
+                if (!key.startsWith(LATEST_SESSION_PREFIX) && !key.startsWith(SESSION_METADATA_PREFIX)) {
+                    val colonIndex = key.lastIndexOf(':')
+                    if (colonIndex > 0) {
+                        val projectPath = key.substring(0, colonIndex)
+                        // 如果不是当前工作目录，标记为删除
+                        if (projectPath != expectedProjectPath) {
+                            keysToRemove.add(key)
+                            
+                            // 同时标记对应的最新会话和元数据
+                            val sessionId = prefs.get(key, null)
+                            if (sessionId != null) {
+                                keysToRemove.add(LATEST_SESSION_PREFIX + projectPath)
+                                keysToRemove.add(SESSION_METADATA_PREFIX + sessionId)
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 删除键
+            for (key in keysToRemove) {
+                prefs.remove(key)
+            }
+            
+            prefs.flush()
+            
+            val removedCount = keysToRemove.size
+            logger.info("[SessionIdRegistry] 清理其他项目会话: 保留 $expectedProjectPath, 删除 $removedCount 个记录")
+            removedCount
+        } catch (e: Exception) {
+            logger.error("[SessionIdRegistry] 清理其他项目会话失败", e)
+            0
+        }
+    }
+    
+    /**
      * 获取注册表统计信息
      */
     fun getRegistryStats(): RegistryStats {

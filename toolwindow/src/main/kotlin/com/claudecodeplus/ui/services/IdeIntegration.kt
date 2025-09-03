@@ -1,6 +1,7 @@
 package com.claudecodeplus.ui.services
 
 import com.claudecodeplus.ui.models.ToolCall
+import java.util.*
 
 /**
  * IDE 集成接口
@@ -48,6 +49,12 @@ interface IdeIntegration {
      * 检查是否支持 IDE 集成
      */
     fun isSupported(): Boolean
+    
+    /**
+     * 获取IDE的语言设置
+     * @return IDE的Locale设置，如果失败返回英语
+     */
+    fun getIdeLocale(): Locale = Locale.ENGLISH
 }
 
 /**
@@ -68,4 +75,5 @@ class NoOpIdeIntegration : IdeIntegration {
     override fun showDiff(filePath: String, oldContent: String, newContent: String): Boolean = false
     override fun showNotification(message: String, type: NotificationType) {}
     override fun isSupported(): Boolean = false
+    override fun getIdeLocale(): Locale = Locale.ENGLISH
 }

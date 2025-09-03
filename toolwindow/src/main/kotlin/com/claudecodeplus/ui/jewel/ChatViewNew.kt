@@ -116,7 +116,7 @@ fun ChatViewNew(
     
     // 获取或创建该标签的会话对象（保持现有架构，但使用增强的SessionObject）
     // 使用全局 ProjectManager 确保 Project 实例的唯一性
-    val project = currentProject ?: com.claudecodeplus.ui.services.ProjectManager.getTemporaryProject(workingDirectory)
+    val project = currentProject ?: com.claudecodeplus.ui.services.ProjectManager.getOrCreateProject(workingDirectory)
     
     // 使用 remember 和 project+tabId 组合键来缓存 SessionObject
     val sessionObjectKey = "${project.id}:$tabId"

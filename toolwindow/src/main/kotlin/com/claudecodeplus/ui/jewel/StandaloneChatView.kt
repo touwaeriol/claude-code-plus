@@ -34,10 +34,10 @@ fun StandaloneChatView(
     // 为简单用例创建默认的 tabId 和临时 Project
     val defaultTabId = remember { "main" }
     
-    // 使用全局 ProjectManager 获取稳定的临时项目实例
+    // 使用全局 ProjectManager 获取稳定的项目实例
     // 基于 workingDirectory 生成确定性的项目ID，确保同一目录总是返回相同的项目实例
     val tempProject = remember(workingDirectory) {
-        com.claudecodeplus.ui.services.ProjectManager.getTemporaryProject(workingDirectory)
+        com.claudecodeplus.ui.services.ProjectManager.getOrCreateProject(workingDirectory)
     }
     
     ChatViewNew(

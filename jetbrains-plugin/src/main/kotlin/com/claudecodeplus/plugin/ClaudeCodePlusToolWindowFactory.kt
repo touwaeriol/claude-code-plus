@@ -5,6 +5,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
+import com.intellij.openapi.roots.ProjectRootManager
 import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.toolwindow.PluginComposeFactory
@@ -78,7 +79,61 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory, DumbAware {
         try {
             // 创建服务实例
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val workingDirectory = project.basePath ?: System.getProperty("user.dir")
+            
+            // 确定工作目录：必须使用 IntelliJ 项目的真实路径
+            val workingDirectory = when {
+                // 优先使用项目根目录路径
+                project.basePath != null -> {
+                    logger.info("使用项目根目录: ${project.basePath}")
+                    project.basePath!!
+                }
+                // 如果是单文件项目，使用第一个内容根的父目录
+                else -> {
+                    val projectRootManager = ProjectRootManager.getInstance(project)
+                    val contentRoots = projectRootManager.contentRoots
+                    if (contentRoots.isNotEmpty()) {
+                        val contentRoot = contentRoots.first()
+                        val fileDir = if (contentRoot.isDirectory) {
+                            contentRoot.path
+                        } else {
+                            contentRoot.parent?.path ?: contentRoot.path
+                        }
+                        logger.info("使用内容根目录: $fileDir")
+                        fileDir
+                    } else {
+                        throw IllegalStateException("无法确定项目工作目录：IntelliJ 项目必须有明确的根路径或内容根")
+                    }
+                }
+            }
+            
+            logger.info("最终工作目录: $workingDirectory")
+            
+            // ✅ 使用项目级服务清理会话状态（确保每次启动都是新会话）
+            try {
+                val sessionStateService = project.service<com.claudecodeplus.plugin.services.ProjectSessionStateService>()
+                sessionStateService.clearCurrentSession()
+                logger.info("✅ 已清理项目级会话状态，准备创建新会话")
+                
+                // 打印服务统计信息
+                val stats = sessionStateService.getStats()
+                logger.info("📊 项目会话服务状态: $stats")
+                
+                // ✅ 清理 SessionIdRegistry 中其他项目的会话映射，防止跨项目会话污染
+                try {
+                    val removedCount = com.claudecodeplus.ui.utils.SessionIdRegistry.clearOtherProjectSessions(workingDirectory)
+                    logger.info("🧹 SessionIdRegistry 清理完成，删除其他项目的 $removedCount 个会话映射")
+                    
+                    // 打印当前注册表状态
+                    val registryStats = com.claudecodeplus.ui.utils.SessionIdRegistry.getRegistryStats()
+                    logger.info("📊 SessionIdRegistry 统计: ${registryStats.totalSessions} 个会话，${registryStats.totalProjects} 个项目")
+                    logger.info("📋 当前项目列表: ${registryStats.projects}")
+                } catch (e: Exception) {
+                    logger.warn("⚠️ 清理 SessionIdRegistry 时出错，继续启动", e)
+                }
+            } catch (e: Exception) {
+                logger.warn("⚠️ 清理项目级会话状态时出错，继续启动", e)
+            }
+            
             val unifiedSessionService = UnifiedSessionService(scope)
             val cliSessionManager = ClaudeSessionManager()
             
@@ -93,6 +148,9 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory, DumbAware {
             
             // 创建 IDE 集成实例
             val ideIntegration = IdeaIdeIntegration(project)
+            
+            // ✅ 设置IDE集成到国际化服务，确保语言设置正确
+            com.claudecodeplus.ui.services.LocalizationService.setIdeIntegration(ideIntegration)
             
             // 创建主题状态holder
             val currentTheme = IdeaThemeAdapter.isDarkTheme()

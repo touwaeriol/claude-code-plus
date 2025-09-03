@@ -85,6 +85,13 @@ class SessionManager {
                 logger.info { "[SessionManager] 创建新会话 $sessionKey" }
             }
             
+            // ✅ 设置会话 ID 更新回调
+            newSession.sessionIdUpdateCallback = { oldSessionId, newSessionId ->
+                logger.info { "[SessionManager] 通知上层更新会话 ID: $oldSessionId -> $newSessionId" }
+                // 通过事件系统通知上层
+                _events.value = SessionEvent.SessionIdUpdated(sessionKey, oldSessionId, newSessionId)
+            }
+            
             _events.value = SessionEvent.SessionCreated(sessionKey, newSession)
             newSession
         }
@@ -261,6 +268,7 @@ class SessionManager {
         data class SessionRemoved(val tabId: String) : SessionEvent()
         data class SessionActivated(val tabId: String) : SessionEvent()
         data class SessionHistoryRestored(val tabId: String, val messageCount: Int) : SessionEvent()
+        data class SessionIdUpdated(val tabId: String, val oldSessionId: String?, val newSessionId: String) : SessionEvent()
         object AllSessionsCleared : SessionEvent()
     }
     

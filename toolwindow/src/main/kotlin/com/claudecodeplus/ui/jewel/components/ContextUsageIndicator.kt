@@ -59,8 +59,8 @@ fun ContextUsageIndicator(
             println("[ContextUsageIndicator] 使用会话级别Token统计: input=${sessionTokenUsage.inputTokens}, output=${sessionTokenUsage.outputTokens}, total=$sessionTotal")
             sessionTotal
         } else {
-            // 否则累加各个消息的token使用量
-            val calculated = calculateTotalTokens(messageHistory, inputText, contexts)
+            // 否则累加各个消息的token使用量，并传递sessionTokenUsage以便动态获取系统Token
+            val calculated = calculateTotalTokens(messageHistory, inputText, contexts, sessionTokenUsage)
             println("[ContextUsageIndicator] 逐消息累加Token统计: 历史消息=${messageHistory.size}, 输入文本长度=${inputText.length}, 上下文=${contexts.size}, 总tokens=$calculated")
             
             // 简化的Token统计调试 - 只显示实际占用上下文的token
@@ -107,7 +107,7 @@ fun ContextUsageIndicator(
     val formattedTokens = formatTokenCount(totalTokens)
     val formattedMaxTokens = formatTokenCount(maxTokens)
     
-    // 悬浮提示内容 - 显示精确的token统计信息
+    // 悬浮提示内容 - 显示精确的token统计信息和详细分解
     val tooltipText = buildString {
         append("上下文使用: ")
         append(String.format("%,d", totalTokens))
@@ -117,21 +117,75 @@ fun ContextUsageIndicator(
         append(percentage)
         append("%)")
         
-        // 显示token来源分析
-        val (preciseTokens, estimatedTokens) = analyzeTokenSources(messageHistory, inputText, contexts)
-        if (preciseTokens > 0 || estimatedTokens > 0) {
-            append("\n\n详细信息:")
-            if (preciseTokens > 0) {
-                append(String.format("\n• 精确统计: %,d tokens", preciseTokens))
+        // 🎯 增强详细信息：显示Token组成分解
+        append("\n\n📊 Token组成分解:")
+        
+        // 系统基础Token
+        val systemTokens = if (sessionTokenUsage != null && sessionTokenUsage.cacheReadTokens > 0) {
+            sessionTokenUsage.cacheReadTokens
+        } else {
+            val initMessage = messageHistory.firstOrNull { message ->
+                message.role == com.claudecodeplus.ui.models.MessageRole.ASSISTANT && 
+                message.tokenUsage != null && 
+                message.tokenUsage!!.cacheReadTokens > 0
             }
-            if (estimatedTokens > 0) {
-                append(String.format("\n• 估算部分: %,d tokens", estimatedTokens))
+            initMessage?.tokenUsage?.cacheReadTokens ?: 25926
+        }
+        append(String.format("\n• 系统基础: %,d tokens", systemTokens))
+        append("\n  (系统提示词 + 工具定义)")
+        
+        // 对话历史Token
+        val (preciseTokens, estimatedTokens) = analyzeTokenSources(messageHistory, inputText, contexts)
+        val historyTokens = preciseTokens - kotlin.math.min(systemTokens, preciseTokens)
+        if (historyTokens > 0) {
+            append(String.format("\n• 对话历史: %,d tokens", historyTokens))
+        }
+        
+        // 当前输入Token
+        val inputTokens = estimateTokensFromText(inputText)
+        if (inputTokens > 0) {
+            append(String.format("\n• 当前输入: %,d tokens", inputTokens))
+        }
+        
+        // 上下文文件Token
+        val contextTokens = contexts.sumOf { context ->
+            when (context) {
+                is ContextReference.FileReference -> 1000
+                is ContextReference.WebReference -> 2000
+                else -> 500
+            }.toLong()
+        }.toInt()
+        if (contextTokens > 0) {
+            append(String.format("\n• 上下文文件: %,d tokens (%d个文件)", contextTokens, contexts.size))
+        }
+        
+        // 估算Token提示
+        if (estimatedTokens > systemTokens) {
+            val userEstimatedTokens = estimatedTokens - systemTokens
+            append(String.format("\n\n📝 估算精度: %,d tokens 为精确统计", preciseTokens))
+            if (userEstimatedTokens > 0) {
+                append(String.format("\n  %,d tokens 为估算值", userEstimatedTokens))
             }
         }
         
+        // 🎯 缓存优化说明（如果有缓存Token数据）
+        if (sessionTokenUsage != null && sessionTokenUsage.cacheCreationTokens > 0) {
+            append("\n\n⚡ 缓存优化:")
+            append(String.format("\n• 缓存创建: %,d tokens", sessionTokenUsage.cacheCreationTokens))
+            if (sessionTokenUsage.cacheReadTokens > 0) {
+                append(String.format("\n• 缓存复用: %,d tokens", sessionTokenUsage.cacheReadTokens))
+                val savings = sessionTokenUsage.cacheCreationTokens - sessionTokenUsage.cacheReadTokens
+                if (savings > 0) {
+                    append(String.format("\n• 节省计费: %,d tokens", savings))
+                }
+            }
+            append("\n  (缓存仅影响计费，不额外占用上下文)")
+        }
+        
         when {
-            percentage >= 95 -> append("\n\n⚠️ 超过限制")
-            percentage >= 80 -> append("\n\n⚠️ 接近限制")
+            percentage >= 95 -> append("\n\n⚠️ 上下文即将用完！")
+            percentage >= 80 -> append("\n\n⚠️ 上下文接近限制")
+            percentage >= 50 -> append("\n\n💡 可考虑开启新对话")
         }
     }
     
@@ -178,14 +232,20 @@ fun ContextUsageIndicator(
  * 计算总token使用量
  * 
  * 优先使用Claude CLI提供的精确token数据，必要时进行估算
- * 这样既保证精确性又避免重复计算
+ * 重要：包含系统提示词、工具定义等基础上下文开销
  */
 private fun calculateTotalTokens(
     messageHistory: List<EnhancedMessage>,
     inputText: String,
-    contexts: List<ContextReference>
+    contexts: List<ContextReference>,
+    sessionTokenUsage: EnhancedMessage.TokenUsage? = null
 ): Int {
     var totalTokens = 0
+    
+    // 0. Claude Code系统级基础Token开销（这部分通常被缓存，但仍占用上下文）
+    // 优先从实际会话数据获取，否则使用基于真实数据的默认值
+    val systemBaseTokens = getSystemBaseTokens(messageHistory, sessionTokenUsage)
+    totalTokens += systemBaseTokens
     
     // 1. 历史消息的精确token统计
     messageHistory.forEach { message ->
@@ -319,6 +379,44 @@ private fun analyzeTokenSources(
     }
     
     return Pair(preciseTokens, estimatedTokens)
+}
+
+/**
+ * 获取Claude Code系统级基础Token开销
+ * 包括：系统提示词、工具定义、环境信息等
+ * 
+ * 优先从SessionObject获取动态数据，否则使用基于真实会话数据的默认值
+ */
+private fun getSystemBaseTokens(
+    messageHistory: List<EnhancedMessage>,
+    sessionTokenUsage: EnhancedMessage.TokenUsage?
+): Int {
+    // 🎯 策略1：从会话级别Token统计中获取系统基础Token
+    if (sessionTokenUsage != null && sessionTokenUsage.cacheReadTokens > 0) {
+        // cache_read_input_tokens 表示系统缓存实际占用的上下文空间
+        println("  - 动态系统Token（来源：会话级统计）: ${sessionTokenUsage.cacheReadTokens}")
+        return sessionTokenUsage.cacheReadTokens
+    }
+    
+    // 🎯 策略2：从历史消息中查找第一条Claude init消息的Token数据
+    val initMessage = messageHistory.firstOrNull { message ->
+        message.role == com.claudecodeplus.ui.models.MessageRole.ASSISTANT && 
+        message.tokenUsage != null && 
+        message.tokenUsage!!.cacheReadTokens > 0
+    }
+    
+    if (initMessage?.tokenUsage != null) {
+        val systemTokens = initMessage.tokenUsage!!.cacheReadTokens
+        println("  - 动态系统Token（来源：init消息）: $systemTokens")
+        return systemTokens
+    }
+    
+    // 🎯 策略3：使用基于真实会话数据的默认值作为回退
+    // 数据来源：分析 ~/.claude/projects 中的实际会话历史文件
+    // session: 843ebfc6-9548-406f-856f-c5d74cb4e41b
+    // cache_read_input_tokens: 25,926 (后续读取系统缓存的准确值)
+    println("  - 默认系统Token（来源：历史数据分析）: 25926")
+    return 25926 // 基于真实会话数据的精确值
 }
 
 /**

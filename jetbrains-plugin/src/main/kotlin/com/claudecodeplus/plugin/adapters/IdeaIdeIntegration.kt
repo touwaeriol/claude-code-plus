@@ -7,6 +7,10 @@ import com.claudecodeplus.ui.services.IdeIntegration
 import com.claudecodeplus.ui.services.NotificationType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.ide.ui.UISettings
+import com.intellij.l10n.LocalizationUtil
+import java.util.*
 
 /**
  * IntelliJ IDEA 的 IDE 集成实现
@@ -93,4 +97,20 @@ class IdeaIdeIntegration(
     }
     
     override fun isSupported(): Boolean = true
+    
+    /**
+     * 获取IntelliJ IDEA的界面语言设置
+     * @return IDE的Locale设置
+     */
+    override fun getIdeLocale(): Locale {
+        return try {
+            // 使用IntelliJ IDEA的LocalizationUtil获取界面语言设置
+            val ideLocale = LocalizationUtil.getLocale()
+            logger.info("🌐 获取IDE界面语言设置: $ideLocale (language=${ideLocale.language}, country=${ideLocale.country})")
+            ideLocale
+        } catch (e: Exception) {
+            logger.warn("获取IDE界面语言设置失败，使用英语作为默认", e)
+            Locale.ENGLISH
+        }
+    }
 }

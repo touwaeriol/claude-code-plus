@@ -61,16 +61,19 @@ class ProjectManager(
         private val temporaryProjects = mutableMapOf<String, Project>()
         
         /**
-         * 获取或创建临时项目（用于没有真实项目时）
+         * 获取或创建项目（基于真实工作目录）
          * 保证同一路径返回同一实例
+         * 不再使用 "temp:" 前缀，所有项目都应该有明确的目录
          */
         @JvmStatic
-        fun getTemporaryProject(workingDirectory: String): Project {
+        fun getOrCreateProject(workingDirectory: String): Project {
             return temporaryProjects.getOrPut(workingDirectory) {
+                // 从路径提取项目名称
+                val projectName = workingDirectory.substringAfterLast(java.io.File.separator).ifBlank { "项目" }
                 Project(
-                    id = "temp:$workingDirectory",
+                    id = com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(workingDirectory),
                     path = workingDirectory,
-                    name = "临时项目"
+                    name = projectName
                 )
             }
         }
@@ -134,7 +137,7 @@ class ProjectManager(
                 // 优先选择配置文件中记录的最后选中会话
                 val projectSessions = _sessions.value[matchingProject.id] ?: emptyList()
                 val localConfigManager = LocalConfigManager()
-                val lastSelectedSessionId = localConfigManager.validateLastSelectedSession() // 使用验证方法
+                val lastSelectedSessionId = localConfigManager.validateLastSelectedSessionForProject(workingDirectory) // 验证会话是否属于当前项目
                 
                 val sessionToSelect = if (lastSelectedSessionId != null) {
                     // 查找记录的最后选中会话

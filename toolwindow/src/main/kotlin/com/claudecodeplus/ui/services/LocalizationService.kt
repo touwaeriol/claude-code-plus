@@ -9,6 +9,18 @@ import java.util.*
 object LocalizationService {
     
     /**
+     * IDE集成实例，用于获取语言设置
+     */
+    private var ideIntegration: IdeIntegration? = null
+    
+    /**
+     * 设置IDE集成实例
+     */
+    fun setIdeIntegration(integration: IdeIntegration) {
+        this.ideIntegration = integration
+    }
+    
+    /**
      * 支持的语言列表
      */
     enum class SupportedLanguage(
@@ -31,19 +43,15 @@ object LocalizationService {
     
     /**
      * 从IDE获取当前语言设置
-     * 注意：在toolwindow模块中，暂时使用系统默认语言
-     * 后续可以通过插件模块传递真正的IDE语言设置
-     * @return 当前系统的Locale设置
+     * @return IDE的Locale设置
      */
     fun getIDELocale(): Locale {
         return try {
-            // 暂时使用系统默认语言，后续可以从插件模块获取IDE语言设置
-            val systemLocale = Locale.getDefault()
-            println("[LocalizationService] 使用系统默认语言: $systemLocale")
-            systemLocale
+            val ideLocale = ideIntegration?.getIdeLocale() ?: Locale.getDefault()
+            println("[LocalizationService] 获取IDE语言设置: $ideLocale")
+            ideLocale
         } catch (e: Exception) {
-            // 如果获取失败，返回默认英语
-            println("[LocalizationService] 获取系统语言设置失败: ${e.message}")
+            println("[LocalizationService] 获取IDE语言设置失败，使用英语作为默认: ${e.message}")
             Locale.ENGLISH
         }
     }

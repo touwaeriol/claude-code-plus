@@ -61,6 +61,7 @@ class ChatTabManager {
      * 创建新标签
      * 
      * 创建一个新的聊天标签。如果提供了项目信息，会在标签标题中显示项目简称。
+     * 根据用户需求，每次创建新会话时都要清理之前的会话状态。
      * 
      * 标题格式：
      * - 有项目: [项目简称] 标题
@@ -68,7 +69,7 @@ class ChatTabManager {
      * 
      * @param title 标签标题，默认为 "新对话 N"
      * @param groupId 所属分组 ID，默认为 "default"
-     * @param sessionId Claude 会话 ID，新建会话时为 null
+     * @param sessionId Claude 会话 ID，创建新会话时应设为 null
      * @param project 关联的项目信息
      * @return 新创建标签的 ID
      */
@@ -83,6 +84,12 @@ class ChatTabManager {
         println("  - 输入 project: ${project?.name} (${project?.id})")
         println("  - 输入 sessionId: $sessionId")
         println("  - 当前标签数量: ${_tabs.size}")
+        
+        // ✅ 重要：每次创建新会话时清理项目级会话状态
+        // 确保不会加载之前的会话，避免跨项目会话混乱
+        project?.let { proj ->
+            clearProjectSessionState(proj.path)
+        }
         
         val projectShortName = project?.name?.let { name ->
             // 生成项目简称：取前4个字符或使用首字母缩写
@@ -101,15 +108,16 @@ class ChatTabManager {
         
         println("  - 最终标签标题: '$tabTitle'")
         
-        // 使用提供的 sessionId，如果没有提供则生成新的（主要用于兼容性）
-        val finalSessionId = sessionId ?: UUID.randomUUID().toString()
+        // ✅ 重要：新会话时 sessionId 必须为 null
+        // 这确保 Claude CLI 会创建新会话而不是恢复旧会话
+        val finalSessionId: String? = null
         
-        println("  - 使用的 sessionId: $finalSessionId (是否由外部提供: ${sessionId != null})")
+        println("  - 使用的 sessionId: $finalSessionId (新会话，强制为 null)")
         
         val newTab = ChatTab(
             title = tabTitle,
             groupId = groupId,
-            sessionId = finalSessionId,
+            sessionId = finalSessionId,  // 始终为 null，让 Claude CLI 创建新会话
             projectId = project?.id,
             projectName = project?.name,
             projectPath = project?.path
@@ -586,6 +594,31 @@ class ChatTabManager {
         data class MessageUpdated(val message: EnhancedMessage) : SessionLoadEvent()
         data class LoadComplete(val messages: List<EnhancedMessage>) : SessionLoadEvent()
         data class Error(val error: String) : SessionLoadEvent()
+    }
+    
+    // 项目会话清理回调
+    var projectSessionClearCallback: ((projectPath: String) -> Unit)? = null
+    
+    /**
+     * 清理项目级会话状态
+     * 在创建新会话时调用，确保不会加载之前的会话
+     */
+    private fun clearProjectSessionState(projectPath: String?) {
+        if (projectPath == null) {
+            println("[ChatTabManager] 跳过会话清理：项目路径为 null")
+            return
+        }
+        
+        try {
+            // 通过回调机制通知上层清理项目会话状态
+            projectSessionClearCallback?.invoke(projectPath) ?: run {
+                println("[ChatTabManager] ⚠️ 没有设置项目会话清理回调，跳过会话清理")
+            }
+            println("[ChatTabManager] ✅ 已通知上层清理项目会话状态: $projectPath")
+        } catch (e: Exception) {
+            println("[ChatTabManager] ❌ 清理项目会话状态失败: ${e.message}")
+            e.printStackTrace()
+        }
     }
     
     sealed class TabEvent {
