@@ -54,15 +54,7 @@ import androidx.compose.runtime.DisposableEffect
 import com.claudecodeplus.ui.jewel.components.parseInlineReferences
 import com.claudecodeplus.ui.jewel.components.FileReferenceAnnotation
 
-// 导入官方动作类
-import com.claudecodeplus.plugin.actions.DeleteToLineStartAction
-import com.claudecodeplus.plugin.actions.InsertNewLineAction
-import com.claudecodeplus.plugin.actions.InsertNewLineAltAction
-import com.intellij.openapi.actionSystem.ActionManager
-import com.intellij.openapi.actionSystem.CustomShortcutSet
-import javax.swing.KeyStroke
-import java.awt.event.InputEvent
-import java.awt.event.KeyEvent
+// Removed plugin-specific imports since toolwindow module should not depend on plugin module
 
 /**
  * 统一的聊天输入组件

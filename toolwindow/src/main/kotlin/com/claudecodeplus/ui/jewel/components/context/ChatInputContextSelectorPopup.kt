@@ -630,11 +630,11 @@ private fun buildHighlightedText(
             }
         }
         
-        // 添加高亮的匹配文本 - 使用业界标准的高亮颜色方案
+        // 添加高亮的匹配文本 - 使用业界标准的高亮颜色方案，结合 Jewel 主题
         withStyle(
             SpanStyle(
                 background = Color(0xFFFFEB3B), // 明亮黄色背景，适合所有主题
-                color = Color(0xFF1B1B1B) // 深色文字，确保在黄色背景下可读
+                color = JewelTheme.globalColors.text.normal // 使用主题文字颜色，自动适应暗色/亮色主题
             )
         ) {
             append(text.substring(currentIndex, currentIndex + searchQuery.length))
