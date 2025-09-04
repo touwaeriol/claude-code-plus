@@ -545,15 +545,64 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
 private fun getParameterSummary(toolCall: ToolCall): String {
     if (toolCall.parameters.size <= 1) return ""
     
+    // 优先使用强类型工具对象获取参数摘要
+    toolCall.tool?.let { tool ->
+        return when (tool) {
+            is com.claudecodeplus.sdk.EditTool -> {
+                formatStringResource(StringResources.EDIT_CHANGES, 1) // EditTool 单个编辑
+            }
+            is com.claudecodeplus.sdk.MultiEditTool -> {
+                val editsCount = tool.edits?.size ?: 1
+                formatStringResource(StringResources.EDIT_CHANGES, editsCount)
+            }
+            is com.claudecodeplus.sdk.GrepTool -> {
+                when {
+                    tool.glob != null -> "in ${tool.glob}"
+                    tool.type != null -> ".${tool.type} files"
+                    else -> formatStringResource(StringResources.PARAMETERS_COUNT, toolCall.parameters.size - 1)
+                }
+            }
+            is com.claudecodeplus.sdk.GlobTool -> {
+                "pattern: ${tool.pattern}"
+            }
+            is com.claudecodeplus.sdk.TaskTool -> {
+                "agent: ${tool.subagentType ?: "general"}"
+            }
+            is com.claudecodeplus.sdk.WebFetchTool -> {
+                val prompt = tool.prompt ?: "web fetch"
+                if (prompt.length > 20) {
+                    "query: ${prompt.take(17)}..."
+                } else {
+                    "query: $prompt"
+                }
+            }
+            is com.claudecodeplus.sdk.NotebookEditTool -> {
+                tool.editMode?.let { "$it cell" } ?: "notebook edit"
+            }
+            is com.claudecodeplus.sdk.TodoWriteTool -> {
+                val todosCount = tool.todos?.size ?: 0
+                "更新 $todosCount 个任务"
+            }
+            // 其他工具类型可以按需添加
+            else -> "${toolCall.parameters.size} 个参数"
+        }
+    }
+    
+    // 回退到原有的基于名称匹配的逻辑（兼容性）
     return when {
-        // Edit工具显示编辑数量
+        // MCP工具显示服务器名称
+        toolCall.name.startsWith("mcp__", ignoreCase = true) -> {
+            val serverName = toolCall.name.substringAfter("mcp__").substringBefore("__")
+            "via $serverName"
+        }
+        // Edit工具显示编辑数量（回退逻辑）
         toolCall.name.contains("Edit", ignoreCase = true) -> {
             val editsCount = toolCall.parameters["edits"]?.let {
                 if (it is List<*>) it.size else 1
             } ?: 1
             formatStringResource(StringResources.EDIT_CHANGES, editsCount)
         }
-        // Search/Grep工具显示搜索范围
+        // Search/Grep工具显示搜索范围（回退逻辑）
         toolCall.name.contains("Search", ignoreCase = true) ||
         toolCall.name.contains("Grep", ignoreCase = true) -> {
             val glob = toolCall.parameters["glob"]?.toString()
@@ -564,39 +613,10 @@ private fun getParameterSummary(toolCall: ToolCall): String {
                 else -> formatStringResource(StringResources.PARAMETERS_COUNT, toolCall.parameters.size - 1)
             }
         }
-        // Glob工具显示匹配模式
+        // Glob工具显示匹配模式（回退逻辑）
         toolCall.name.contains("Glob", ignoreCase = true) -> {
             val pattern = toolCall.parameters["pattern"]?.toString()
             if (pattern != null) "pattern: $pattern" else "${toolCall.parameters.size} 个参数"
-        }
-        // Task工具显示任务类型
-        toolCall.name.contains("Task", ignoreCase = true) -> {
-            val subagentType = toolCall.parameters["subagent_type"]?.toString()
-            if (subagentType != null) "agent: $subagentType" else "${toolCall.parameters.size} 个参数"
-        }
-        // WebFetch工具显示提示信息
-        toolCall.name.contains("WebFetch", ignoreCase = true) -> {
-            val prompt = toolCall.parameters["prompt"]?.toString()
-            if (prompt != null && prompt.length > 20) {
-                "query: ${prompt.take(17)}..."
-            } else {
-                prompt?.let { "query: $it" } ?: "${toolCall.parameters.size} 个参数"
-            }
-        }
-        // NotebookEdit工具显示操作类型
-        toolCall.name.contains("NotebookEdit", ignoreCase = true) -> {
-            val editMode = toolCall.parameters["edit_mode"]?.toString()
-            val cellType = toolCall.parameters["cell_type"]?.toString()
-            when {
-                editMode != null && cellType != null -> "$editMode $cellType cell"
-                editMode != null -> "$editMode cell"
-                else -> "${toolCall.parameters.size} 个参数"
-            }
-        }
-        // MCP工具显示服务器名称
-        toolCall.name.startsWith("mcp__", ignoreCase = true) -> {
-            val serverName = toolCall.name.substringAfter("mcp__").substringBefore("__")
-            "via $serverName"
         }
         // 其他工具显示参数数量
         else -> "${toolCall.parameters.size} 个参数"
@@ -778,8 +798,9 @@ private fun SearchResultDisplay(toolCall: ToolCall) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    // 搜索统计
-                    val pattern = toolCall.parameters["pattern"]?.toString() ?: ""
+                    // 搜索统计 - 使用类型安全方法
+                    val pattern = (toolCall.tool as? com.claudecodeplus.sdk.GrepTool)?.pattern
+                        ?: toolCall.parameters["pattern"]?.toString() ?: ""
                     Text(
                         text = formatStringResource(StringResources.SEARCH_RESULTS, pattern, lines.size),
                         style = JewelTheme.defaultTextStyle.copy(
@@ -891,7 +912,8 @@ private fun WebContentDisplay(toolCall: ToolCall) {
     
     when (result) {
         is ToolResult.Success -> {
-            val url = toolCall.parameters["url"]?.toString() ?: ""
+            val url = (toolCall.tool as? com.claudecodeplus.sdk.WebFetchTool)?.url
+                ?: toolCall.parameters["url"]?.toString() ?: ""
             val content = result.output
             
             Column(
@@ -961,7 +983,8 @@ private fun SubTaskDisplay(toolCall: ToolCall) {
     when (result) {
         is ToolResult.Success -> {
             val output = result.output
-            val description = toolCall.parameters["description"]?.toString() ?: "执行任务"
+            val description = (toolCall.tool as? com.claudecodeplus.sdk.TaskTool)?.description
+                ?: toolCall.parameters["description"]?.toString() ?: "执行任务"
             
             Column(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -1009,9 +1032,13 @@ private fun NotebookOperationDisplay(toolCall: ToolCall) {
     
     when (result) {
         is ToolResult.Success -> {
-            val notebookPath = toolCall.parameters["notebook_path"]?.toString() ?: ""
-            val cellNumber = toolCall.parameters["cell_number"]?.toString()
-            val editMode = toolCall.parameters["edit_mode"]?.toString() ?: "replace"
+            val notebookTool = toolCall.tool as? com.claudecodeplus.sdk.NotebookEditTool
+            val notebookPath = notebookTool?.notebookPath
+                ?: toolCall.parameters["notebook_path"]?.toString() ?: ""
+            val cellNumber = notebookTool?.cellId
+                ?: toolCall.parameters["cell_number"]?.toString()
+            val editMode = notebookTool?.editMode
+                ?: toolCall.parameters["edit_mode"]?.toString() ?: "replace"
             
             Column(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -1811,7 +1838,38 @@ private fun formatToolBriefInfo(toolCall: ToolCall): String {
             }
         }
         
-        // Edit/MultiEdit 显示修改数量
+        // 使用强类型工具对象进行描述
+        toolCall.tool != null -> {
+            when (val tool = toolCall.tool) {
+                is com.claudecodeplus.sdk.EditTool -> {
+                    val fileName = tool.filePath?.substringAfterLast('/')?.substringAfterLast('\\') ?: "file"
+                    "$fileName (1 change)"
+                }
+                is com.claudecodeplus.sdk.MultiEditTool -> {
+                    val editsCount = tool.edits?.size ?: 1
+                    val fileName = tool.filePath?.substringAfterLast('/')?.substringAfterLast('\\') ?: "file"
+                    "$fileName ($editsCount changes)"
+                }
+                is com.claudecodeplus.sdk.GrepTool -> {
+                    val pattern = tool.pattern ?: "pattern"
+                    val glob = tool.glob?.let { " in $it" } ?: ""
+                    "\"$pattern\"$glob"
+                }
+                is com.claudecodeplus.sdk.TodoWriteTool -> {
+                    val todosCount = tool.todos?.size ?: 0
+                    "更新 $todosCount 个任务"
+                }
+                is com.claudecodeplus.sdk.GlobTool -> {
+                    "pattern: ${tool.pattern}"
+                }
+                is com.claudecodeplus.sdk.WebFetchTool -> {
+                    "fetch: ${tool.url}"
+                }
+                else -> primaryValue?.take(40) ?: ""
+            }
+        }
+        
+        // Edit/MultiEdit 显示修改数量（回退逻辑）
         toolCall.name.contains("Edit", ignoreCase = true) -> {
             val editsCount = toolCall.parameters["edits"]?.let {
                 if (it is List<*>) it.size else 1
@@ -1820,7 +1878,7 @@ private fun formatToolBriefInfo(toolCall: ToolCall): String {
             "$fileName ($editsCount changes)"
         }
         
-        // Search/Grep 显示搜索模式
+        // Search/Grep 显示搜索模式（回退逻辑）
         toolCall.name.contains("Search", ignoreCase = true) ||
         toolCall.name.contains("Grep", ignoreCase = true) -> {
             val pattern = toolCall.parameters["pattern"] ?: toolCall.parameters["query"] ?: ""
@@ -1828,7 +1886,7 @@ private fun formatToolBriefInfo(toolCall: ToolCall): String {
             "\"$pattern\"$glob"
         }
         
-        // TodoWrite 显示任务信息
+        // TodoWrite 显示任务信息（回退逻辑）
         toolCall.name.contains("TodoWrite", ignoreCase = true) -> {
             val todos = toolCall.parameters["todos"] as? List<*>
             if (todos != null) {

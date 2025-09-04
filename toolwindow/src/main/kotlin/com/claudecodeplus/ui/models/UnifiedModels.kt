@@ -861,6 +861,143 @@ EnhancedMessage(
     ) {
         val totalTokens: Int get() = inputTokens + outputTokens
     }
+    
+    // === 类型安全的工具访问方法 ===
+    
+    /**
+     * 获取指定类型的工具调用
+     */
+    inline fun <reified T : com.claudecodeplus.sdk.Tool> getToolCallsOfType(): List<ToolCall> {
+        return toolCalls.filter { it.tool is T }
+    }
+    
+    /**
+     * 获取第一个指定类型的工具调用
+     */
+    inline fun <reified T : com.claudecodeplus.sdk.Tool> getFirstToolCallOfType(): ToolCall? {
+        return toolCalls.firstOrNull { it.tool is T }
+    }
+    
+    /**
+     * 检查是否包含指定类型的工具调用
+     */
+    inline fun <reified T : com.claudecodeplus.sdk.Tool> hasToolCallOfType(): Boolean {
+        return toolCalls.any { it.tool is T }
+    }
+    
+    /**
+     * 获取所有读取文件的工具调用
+     */
+    fun getFileReadToolCalls(): List<ToolCall> {
+        return getToolCallsOfType<com.claudecodeplus.sdk.ReadTool>()
+    }
+    
+    /**
+     * 获取所有文件编辑的工具调用
+     */
+    fun getFileEditToolCalls(): List<ToolCall> {
+        return toolCalls.filter { 
+            it.tool is com.claudecodeplus.sdk.EditTool || 
+            it.tool is com.claudecodeplus.sdk.WriteTool ||
+            it.tool is com.claudecodeplus.sdk.MultiEditTool
+        }
+    }
+    
+    /**
+     * 获取所有Bash命令执行的工具调用
+     */
+    fun getBashToolCalls(): List<ToolCall> {
+        return getToolCallsOfType<com.claudecodeplus.sdk.BashTool>()
+    }
+    
+    /**
+     * 获取所有Web相关的工具调用
+     */
+    fun getWebToolCalls(): List<ToolCall> {
+        return toolCalls.filter {
+            it.tool is com.claudecodeplus.sdk.WebFetchTool ||
+            it.tool is com.claudecodeplus.sdk.WebSearchTool
+        }
+    }
+    
+    /**
+     * 获取所有任务管理的工具调用
+     */
+    fun getTaskManagementToolCalls(): List<ToolCall> {
+        return toolCalls.filter {
+            it.tool is com.claudecodeplus.sdk.TaskTool ||
+            it.tool is com.claudecodeplus.sdk.TodoWriteTool
+        }
+    }
+    
+    /**
+     * 获取所有MCP工具调用
+     */
+    fun getMcpToolCalls(): List<ToolCall> {
+        return getToolCallsOfType<com.claudecodeplus.sdk.McpTool>()
+    }
+    
+    /**
+     * 检查是否为纯文本消息（无工具调用）
+     */
+    fun isPlainTextMessage(): Boolean {
+        return toolCalls.isEmpty()
+    }
+    
+    /**
+     * 检查是否包含工具调用
+     */
+    fun hasToolCalls(): Boolean {
+        return toolCalls.isNotEmpty()
+    }
+    
+    /**
+     * 获取运行中的工具调用
+     */
+    fun getRunningToolCalls(): List<ToolCall> {
+        return toolCalls.filter { it.status == ToolCallStatus.RUNNING }
+    }
+    
+    /**
+     * 获取已完成的工具调用
+     */
+    fun getCompletedToolCalls(): List<ToolCall> {
+        return toolCalls.filter { it.status == ToolCallStatus.SUCCESS }
+    }
+    
+    /**
+     * 获取失败的工具调用
+     */
+    fun getFailedToolCalls(): List<ToolCall> {
+        return toolCalls.filter { it.status == ToolCallStatus.FAILED }
+    }
+    
+    /**
+     * 类型安全地获取工具参数
+     */
+    fun ToolCall.getTypedParameter(key: String): Any? {
+        return when (tool) {
+            is com.claudecodeplus.sdk.ReadTool -> when (key) {
+                "file_path" -> tool.filePath
+                "offset" -> tool.offset
+                "limit" -> tool.limit
+                else -> parameters[key]
+            }
+            is com.claudecodeplus.sdk.EditTool -> when (key) {
+                "file_path" -> tool.filePath
+                "old_string" -> tool.oldString
+                "new_string" -> tool.newString
+                "replace_all" -> tool.replaceAll
+                else -> parameters[key]
+            }
+            is com.claudecodeplus.sdk.BashTool -> when (key) {
+                "command" -> tool.command
+                "timeout" -> tool.timeout
+                else -> parameters[key]
+            }
+            else -> parameters[key]
+        }
+    }
 }
 
 /**

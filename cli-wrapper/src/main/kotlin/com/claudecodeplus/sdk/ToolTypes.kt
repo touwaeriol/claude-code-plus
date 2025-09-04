@@ -1,7 +1,11 @@
 package com.claudecodeplus.sdk
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.contentOrNull
 
 /**
@@ -160,7 +164,7 @@ data class TaskTool(
 }
 
 data class TodoWriteTool(
-    val todos: List<Any>? = null
+    val todos: List<TodoItem>? = null
 ) : Tool(
     name = "TodoWrite",
     icon = "📋",
@@ -168,6 +172,15 @@ data class TodoWriteTool(
 ) {
     override fun getCategory() = ToolCategory.TASK_MANAGEMENT
 }
+
+/**
+ * 待办事项数据结构
+ */
+data class TodoItem(
+    val content: String,
+    val status: String,
+    val activeForm: String
+)
 
 // === Web 工具 ===
 
@@ -232,6 +245,48 @@ data class ExitPlanModeTool(
     description = "退出计划模式"
 ) {
     override fun getCategory() = ToolCategory.SPECIAL
+}
+
+data class BashOutputTool(
+    val bashId: String? = null,
+    val filter: String? = null
+) : Tool(
+    name = "BashOutput",
+    icon = "💻",
+    description = "获取后台Bash输出"
+) {
+    override fun getCategory() = ToolCategory.TERMINAL
+}
+
+data class KillBashTool(
+    val shellId: String? = null
+) : Tool(
+    name = "KillBash",
+    icon = "💻",
+    description = "终止后台Bash进程"
+) {
+    override fun getCategory() = ToolCategory.TERMINAL
+}
+
+data class ListMcpResourcesTool(
+    val server: String? = null
+) : Tool(
+    name = "ListMcpResourcesTool",
+    icon = "🔌",
+    description = "列出MCP资源"
+) {
+    override fun getCategory() = ToolCategory.OTHER
+}
+
+data class ReadMcpResourcesTool(
+    val server: String? = null,
+    val uri: String? = null
+) : Tool(
+    name = "ReadMcpResourceTool",
+    icon = "🔌",
+    description = "读取MCP资源"
+) {
+    override fun getCategory() = ToolCategory.OTHER
 }
 
 // === 其他工具（包括 MCP 和未知工具） ===
@@ -304,9 +359,16 @@ object ToolParser {
                 // 特殊工具
                 name.equals("ExitPlanMode", ignoreCase = true) -> parseExitPlanModeTool(input)
                 
-                // MCP 工具
+                // 其他常用工具
+                name.equals("BashOutput", ignoreCase = true) -> parseBashOutputTool(input)
+                name.equals("KillBash", ignoreCase = true) -> parseKillBashTool(input)
+                name.equals("ListMcpResourcesTool", ignoreCase = true) -> parseListMcpResourcesTool(input)
+                name.equals("ReadMcpResourceTool", ignoreCase = true) -> parseReadMcpResourcesTool(input)
+                
+                // MCP 工具（包括更多常见模式）
                 name.startsWith("mcp_", ignoreCase = true) || 
-                name.startsWith("mcp__", ignoreCase = true) -> parseMcpTool(name, input)
+                name.startsWith("mcp__", ignoreCase = true) ||
+                name.contains("__", ignoreCase = true) -> parseMcpTool(name, input)
                 
                 // 未知工具
                 else -> {
@@ -347,15 +409,40 @@ object ToolParser {
     }
     
     private fun parseMultiEditTool(input: JsonObject): MultiEditTool {
-        // TODO: 实现 MultiEdit 的解析逻辑
+        val filePath = input["file_path"]?.jsonPrimitive?.contentOrNull
+        val editsArray = input["edits"]?.jsonArray
+        
+        val edits = editsArray?.mapNotNull { editElement ->
+            try {
+                val editObj = editElement.jsonObject
+                val oldString = editObj["old_string"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val newString = editObj["new_string"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val replaceAll = editObj["replace_all"]?.jsonPrimitive?.contentOrNull?.toBoolean() ?: false
+                
+                MultiEditTool.Edit(
+                    oldString = oldString,
+                    newString = newString,
+                    replaceAll = replaceAll
+                )
+            } catch (e: Exception) {
+                logger.warn("Failed to parse edit item: ${e.message}")
+                null
+            }
+        }
+        
         return MultiEditTool(
-            filePath = input["file_path"]?.jsonPrimitive?.contentOrNull
+            filePath = filePath,
+            edits = edits
         )
     }
     
     private fun parseLSTool(input: JsonObject): LSTool {
+        val ignoreArray = input["ignore"]?.jsonArray
+        val ignoreList = ignoreArray?.mapNotNull { it.jsonPrimitive?.contentOrNull }
+        
         return LSTool(
-            path = input["path"]?.jsonPrimitive?.contentOrNull
+            path = input["path"]?.jsonPrimitive?.contentOrNull,
+            ignore = ignoreList
         )
     }
     
@@ -393,8 +480,27 @@ object ToolParser {
     }
     
     private fun parseTodoWriteTool(input: JsonObject): TodoWriteTool {
-        // TODO: 实现 TodoWrite 的解析逻辑
-        return TodoWriteTool()
+        val todosArray = input["todos"]?.jsonArray
+        
+        val todos = todosArray?.mapNotNull { todoElement ->
+            try {
+                val todoObj = todoElement.jsonObject
+                val content = todoObj["content"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val status = todoObj["status"]?.jsonPrimitive?.contentOrNull ?: "pending"
+                val activeForm = todoObj["activeForm"]?.jsonPrimitive?.contentOrNull ?: content
+                
+                TodoItem(
+                    content = content,
+                    status = status,
+                    activeForm = activeForm
+                )
+            } catch (e: Exception) {
+                logger.warn("Failed to parse todo item: ${e.message}")
+                null
+            }
+        }
+        
+        return TodoWriteTool(todos = todos)
     }
     
     private fun parseWebFetchTool(input: JsonObject): WebFetchTool {
@@ -405,8 +511,16 @@ object ToolParser {
     }
     
     private fun parseWebSearchTool(input: JsonObject): WebSearchTool {
+        val allowedDomainsArray = input["allowed_domains"]?.jsonArray
+        val blockedDomainsArray = input["blocked_domains"]?.jsonArray
+        
+        val allowedDomains = allowedDomainsArray?.mapNotNull { it.jsonPrimitive?.contentOrNull }
+        val blockedDomains = blockedDomainsArray?.mapNotNull { it.jsonPrimitive?.contentOrNull }
+        
         return WebSearchTool(
-            query = input["query"]?.jsonPrimitive?.contentOrNull
+            query = input["query"]?.jsonPrimitive?.contentOrNull,
+            allowedDomains = allowedDomains,
+            blockedDomains = blockedDomains
         )
     }
     
@@ -429,6 +543,32 @@ object ToolParser {
     private fun parseExitPlanModeTool(input: JsonObject): ExitPlanModeTool {
         return ExitPlanModeTool(
             plan = input["plan"]?.jsonPrimitive?.contentOrNull
+        )
+    }
+    
+    private fun parseBashOutputTool(input: JsonObject): BashOutputTool {
+        return BashOutputTool(
+            bashId = input["bash_id"]?.jsonPrimitive?.contentOrNull,
+            filter = input["filter"]?.jsonPrimitive?.contentOrNull
+        )
+    }
+    
+    private fun parseKillBashTool(input: JsonObject): KillBashTool {
+        return KillBashTool(
+            shellId = input["shell_id"]?.jsonPrimitive?.contentOrNull
+        )
+    }
+    
+    private fun parseListMcpResourcesTool(input: JsonObject): ListMcpResourcesTool {
+        return ListMcpResourcesTool(
+            server = input["server"]?.jsonPrimitive?.contentOrNull
+        )
+    }
+    
+    private fun parseReadMcpResourcesTool(input: JsonObject): ReadMcpResourcesTool {
+        return ReadMcpResourcesTool(
+            server = input["server"]?.jsonPrimitive?.contentOrNull,
+            uri = input["uri"]?.jsonPrimitive?.contentOrNull
         )
     }
     

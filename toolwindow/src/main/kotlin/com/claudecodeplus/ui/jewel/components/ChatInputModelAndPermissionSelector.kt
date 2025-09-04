@@ -512,3 +512,86 @@ fun SkipPermissionsCheckbox(
         modifier = modifier
     )
 }
+
+/**
+ * 自动清理上下文复选框
+ */
+@Composable
+fun AutoCleanupContextsCheckbox(
+    checked: Boolean = false,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
+    compact: Boolean = false,
+    iconOnly: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val animatedColor by animateColorAsState(
+        targetValue = if (checked) {
+            // 激活状态：使用主题强调色
+            if (enabled) 
+                JewelTheme.globalColors.borders.focused
+            else 
+                JewelTheme.globalColors.borders.disabled
+        } else {
+            // 非激活状态：使用更柔和的背景色
+            if (enabled)
+                JewelTheme.globalColors.borders.normal.copy(alpha = 0.3f)
+            else
+                JewelTheme.globalColors.borders.disabled.copy(alpha = 0.2f)
+        },
+        animationSpec = tween(200)
+    )
+
+    val textColor = if (enabled) {
+        JewelTheme.globalColors.text.normal
+    } else {
+        JewelTheme.globalColors.text.disabled
+    }
+
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(enabled = enabled) { onCheckedChange(!checked) }
+            .background(animatedColor.copy(alpha = 0.1f))
+            .padding(horizontal = if (compact) 4.dp else 6.dp, vertical = if (compact) 2.dp else 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // 复选框指示器
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .background(
+                    if (checked) animatedColor else Color.Transparent,
+                    RoundedCornerShape(2.dp)
+                )
+                .border(
+                    1.dp,
+                    animatedColor,
+                    RoundedCornerShape(2.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (checked) {
+                Text(
+                    text = "✓",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 8.sp,
+                        color = JewelTheme.globalColors.panelBackground
+                    )
+                )
+            }
+        }
+
+        // 文本标签
+        if (!iconOnly) {
+            Text(
+                text = if (compact) "清理" else "自动清理上下文",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = if (compact) 10.sp else 11.sp,
+                    color = textColor
+                )
+            )
+        }
+    }
+}

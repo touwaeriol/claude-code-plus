@@ -95,6 +95,8 @@ fun UnifiedChatInput(
     onPermissionModeChange: (PermissionMode) -> Unit = {},
     skipPermissions: Boolean = true,
     onSkipPermissionsChange: (Boolean) -> Unit = {},
+    autoCleanupContexts: Boolean = false,
+    onAutoCleanupContextsChange: (Boolean) -> Unit = {},
     fileIndexService: FileIndexService? = null,
     projectService: ProjectService? = null,
     resetTrigger: Any? = null,  // 添加重置触发器
@@ -375,6 +377,8 @@ fun UnifiedChatInput(
             onPermissionModeChange = onPermissionModeChange,
             skipPermissions = skipPermissions,
             onSkipPermissionsChange = onSkipPermissionsChange,
+            autoCleanupContexts = autoCleanupContexts,
+            onAutoCleanupContextsChange = onAutoCleanupContextsChange,
             isGenerating = isGenerating,
             hasInput = textFieldValue.text.isNotBlank(),
             onSend = {
@@ -681,6 +685,8 @@ private fun BottomToolbar(
     onPermissionModeChange: (PermissionMode) -> Unit,
     skipPermissions: Boolean,
     onSkipPermissionsChange: (Boolean) -> Unit,
+    autoCleanupContexts: Boolean,
+    onAutoCleanupContextsChange: (Boolean) -> Unit,
     isGenerating: Boolean,
     hasInput: Boolean,
     onSend: () -> Unit,
@@ -721,6 +727,8 @@ private fun BottomToolbar(
                 onPermissionModeChange = onPermissionModeChange,
                 skipPermissions = skipPermissions,
                 onSkipPermissionsChange = onSkipPermissionsChange,
+                autoCleanupContexts = autoCleanupContexts,
+                onAutoCleanupContextsChange = onAutoCleanupContextsChange,
                 enabled = enabled && !isGenerating,
                 showModelSelector = showModelSelector,
                 showPermissionControls = showPermissionControls,
@@ -758,6 +766,8 @@ private fun ResponsiveControlsGroup(
     onPermissionModeChange: (PermissionMode) -> Unit,
     skipPermissions: Boolean,
     onSkipPermissionsChange: (Boolean) -> Unit,
+    autoCleanupContexts: Boolean,
+    onAutoCleanupContextsChange: (Boolean) -> Unit,
     enabled: Boolean,
     showModelSelector: Boolean,
     showPermissionControls: Boolean,
@@ -793,6 +803,14 @@ private fun ResponsiveControlsGroup(
                 onCheckedChange = onSkipPermissionsChange,
                 enabled = enabled
             )
+            
+            // 自动清理上下文复选框 - 暂时隐藏，默认不自动清理
+            // TODO: 后续需要时再显示此功能
+            // AutoCleanupContextsCheckbox(
+            //     checked = autoCleanupContexts,
+            //     onCheckedChange = onAutoCleanupContextsChange,
+            //     enabled = enabled
+            // )
         }
     }
 }

@@ -59,6 +59,8 @@ fun UnifiedInputArea(
     onPermissionModeChange: (PermissionMode) -> Unit = {},
     skipPermissions: Boolean = true,
     onSkipPermissionsChange: (Boolean) -> Unit = {},
+    autoCleanupContexts: Boolean = false,
+    onAutoCleanupContextsChange: (Boolean) -> Unit = {},
     fileIndexService: FileIndexService? = null,
     projectService: ProjectService? = null,
     onContextClick: (String) -> Unit = {},
@@ -164,6 +166,8 @@ fun UnifiedInputArea(
                     onPermissionModeChange = onPermissionModeChange,
                     skipPermissions = skipPermissions,
                     onSkipPermissionsChange = onSkipPermissionsChange,
+                    autoCleanupContexts = autoCleanupContexts,
+                    onAutoCleanupContextsChange = onAutoCleanupContextsChange,
                     fileIndexService = fileIndexService,
                     projectService = projectService,
                     resetTrigger = inputResetTrigger,
@@ -271,6 +275,13 @@ fun UnifiedInputArea(
                         SkipPermissionsCheckbox(
                             checked = skipPermissions,
                             onCheckedChange = onSkipPermissionsChange,
+                            enabled = enabled && !isGenerating
+                        )
+                        
+                        // 自动清理上下文复选框
+                        AutoCleanupContextsCheckbox(
+                            checked = autoCleanupContexts,
+                            onCheckedChange = onAutoCleanupContextsChange,
                             enabled = enabled && !isGenerating
                         )
                     }

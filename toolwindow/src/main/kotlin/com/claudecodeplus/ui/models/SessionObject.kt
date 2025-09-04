@@ -10,6 +10,7 @@ import androidx.compose.ui.text.TextRange
 import com.claudecodeplus.session.models.SessionInfo
 import com.claudecodeplus.ui.services.DefaultSessionConfig
 import com.claudecodeplus.ui.services.MessageConverter
+import com.claudecodeplus.ui.services.ContextProcessor
 import kotlinx.coroutines.Job
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.session.models.ClaudeSessionMessage
@@ -86,6 +87,12 @@ class SessionObject(
      * 上下文引用列表
      */
     var contexts by mutableStateOf<List<ContextReference>>(emptyList())
+    
+    /**
+     * 发送消息后是否自动清理上下文标签
+     * 默认为 false，保留上下文便于作为持续的会话上下文
+     */
+    var autoCleanupContexts by mutableStateOf(false)
     
     /**
      * 会话元信息
@@ -1302,13 +1309,17 @@ class SessionObject(
                     }
                 }
                 
+                // 构建包含上下文文件内容的完整消息
+                val fullPrompt = ContextProcessor.buildPromptWithContextFiles(contexts, projectCwd, markdownText)
+                println("[SessionObject] 构建完整提示词，原始长度: ${markdownText.length}, 完整长度: ${fullPrompt.length}")
+                
                 // 决定是新会话还是恢复会话，使用回调模式
                 if (isFirstMessage) {
                     println("[SessionObject] 🆕 启动新会话 (startNewSession)")
                     markSessionStarted()
                     eventService.startNewSession(
                         projectPath = projectCwd,
-                        prompt = markdownText,
+                        prompt = fullPrompt,
                         options = options,
                         onMessage = onMessage,
                         onError = onError,
@@ -1319,7 +1330,7 @@ class SessionObject(
                     eventService.resumeExistingSession(
                         sessionId = sessionId!!,
                         projectPath = projectCwd,
-                        prompt = markdownText,
+                        prompt = fullPrompt,
                         options = options,
                         onMessage = onMessage,
                         onError = onError,
@@ -1329,7 +1340,7 @@ class SessionObject(
                     println("[SessionObject] ⚠️ 没有 sessionId，降级为新会话")
                     eventService.startNewSession(
                         projectPath = projectCwd,
-                        prompt = markdownText,
+                        prompt = fullPrompt,
                         options = options,
                         onMessage = onMessage,
                         onError = onError,
@@ -1937,6 +1948,8 @@ class SessionObject(
             println("[SessionObject] ⚠️ 找不到对应的工具调用消息: toolId=$toolId")
         }
     }
+    
+    // buildPromptWithContextFiles 方法已移到 ContextProcessor.kt 工具类中
     
     override fun toString(): String {
         return "SessionObject(sessionId=$sessionId, messages=${messages.size}, isGenerating=$isGenerating, queue=${questionQueue.size})"

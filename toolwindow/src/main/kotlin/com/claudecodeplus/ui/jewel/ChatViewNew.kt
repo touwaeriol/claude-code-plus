@@ -30,6 +30,7 @@ import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.SessionManager
 import java.time.Instant
 import com.claudecodeplus.ui.services.FileIndexService
+import com.claudecodeplus.ui.services.ContextProcessor
 import java.lang.reflect.Method
 import com.claudecodeplus.core.interfaces.ProjectService
 import kotlinx.coroutines.*
@@ -272,16 +273,31 @@ fun ChatViewNew(
         }
         
         // 添加用户消息到UI
+        // 如果有 contexts，将其以 front matter 格式嵌入到内容中
+        val contentWithContexts = if (sessionObject.contexts.isNotEmpty()) {
+            buildContentWithFrontMatter(markdownText, sessionObject.contexts)
+        } else {
+            markdownText
+        }
+        
         val userMessage = EnhancedMessage(
             id = java.util.UUID.randomUUID().toString(),
             role = MessageRole.USER,
-            content = markdownText,
+            content = contentWithContexts,
             timestamp = System.currentTimeMillis(),
             model = sessionObject.selectedModel,
             contexts = sessionObject.contexts
         )
         sessionObject.addMessage(userMessage)
         println("[ChatViewNew] 用户消息已添加到UI")
+        
+        // 根据配置决定是否自动清理上下文标签
+        if (sessionObject.autoCleanupContexts) {
+            sessionObject.contexts = emptyList()
+            println("[ChatViewNew] 上下文标签已根据配置自动清理")
+        } else {
+            println("[ChatViewNew] 上下文标签已保留，可作为持续的会话上下文")
+        }
         
         // 🔧 简化协程调用，避免类加载器冲突
         // 直接使用 SessionObject 处理，避免在 UI 层启动协程
@@ -919,6 +935,10 @@ fun ChatViewNew(
                 onSkipPermissionsChange = { skip -> 
                     sessionObject.skipPermissions = skip
                 },
+                autoCleanupContexts = sessionObject.autoCleanupContexts,
+                onAutoCleanupContextsChange = { autoCleanup -> 
+                    sessionObject.autoCleanupContexts = autoCleanup
+                },
                 fileIndexService = fileIndexService,
                 projectService = projectService,
                 resetTrigger = inputResetTrigger,
@@ -943,5 +963,22 @@ fun ChatViewNew(
             )
         }
     }
+}
+
+/**
+ * 构建包含 markdown front matter 的消息内容
+ * 格式:
+ * ---
+ * contexts:
+ *   - file:/path/to/file.txt
+ *   - web:https://example.com
+ * ---
+ * 实际消息内容...
+ */
+private fun buildContentWithFrontMatter(
+    originalContent: String, 
+    contexts: List<ContextReference>
+): String {
+    return ContextProcessor.generateFrontMatter(contexts) + originalContent
 }
 
