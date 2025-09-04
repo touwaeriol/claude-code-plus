@@ -111,7 +111,8 @@ fun UnifiedInputArea(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
         // 第一行：上下文标签
-        if (contexts.isNotEmpty() || mode == InputAreaMode.INPUT) {
+        val displayContexts = contexts.ifEmpty { message?.contexts ?: emptyList() }
+        if (displayContexts.isNotEmpty() || mode == InputAreaMode.INPUT) {
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -130,7 +131,7 @@ fun UnifiedInputArea(
                     )
                 }
                 
-                contexts.forEach { context ->
+                displayContexts.forEach { context ->
                     when (mode) {
                         InputAreaMode.INPUT -> {
                             ContextTag(
