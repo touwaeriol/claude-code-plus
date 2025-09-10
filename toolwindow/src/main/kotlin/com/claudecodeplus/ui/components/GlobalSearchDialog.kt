@@ -33,8 +33,7 @@ import com.claudecodeplus.ui.services.ChatTabManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import java.time.format.DateTimeFormatter
 import java.time.ZoneId
 
@@ -177,7 +176,7 @@ fun GlobalSearchDialog(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.Search,
+                                    AllIconsKeys.Actions.Find,
                                     contentDescription = null,
                                     modifier = Modifier.size(48.dp),
                                     tint = Color.Gray
@@ -247,7 +246,7 @@ private fun SearchBar(
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
+                Icon(AllIconsKeys.Actions.Find, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = if (query.isEmpty()) "搜索对话内容、标题或标签..." else query,
@@ -259,13 +258,13 @@ private fun SearchBar(
                         onClick = { onQueryChange("") },
                         modifier = Modifier.size(20.dp)
                     ) {
-                        Icon(Icons.Default.Clear, contentDescription = "清除")
+                        Icon(AllIconsKeys.Actions.Cancel, contentDescription = "清除")
                     }
                 }
             }
             
             OutlinedButton(onClick = onToggleAdvanced) {
-                Icon(Icons.Default.Settings, contentDescription = null)
+                Icon(AllIconsKeys.General.Settings, contentDescription = null)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("高级")
             }
@@ -314,10 +313,10 @@ private fun SuggestionItem(
     ) {
         // 类型图标
         val icon = when (suggestion.type) {
-            SearchSuggestion.Type.TITLE -> Icons.Default.List
-            SearchSuggestion.Type.TAG -> Icons.Default.Star
-            SearchSuggestion.Type.KEYWORD -> Icons.Default.Info
-            SearchSuggestion.Type.RECENT -> Icons.Default.Refresh
+            SearchSuggestion.Type.TITLE -> AllIconsKeys.Actions.ListFiles
+            SearchSuggestion.Type.TAG -> AllIconsKeys.Nodes.Bookmark
+            SearchSuggestion.Type.KEYWORD -> AllIconsKeys.General.Information
+            SearchSuggestion.Type.RECENT -> AllIconsKeys.Actions.ForceRefresh
         }
         
         Icon(
@@ -511,11 +510,11 @@ private fun MatchedMessageItem(
     ) {
         // 匹配类型图标
         val (icon, color) = when (match.matchType) {
-            MessageMatch.MatchType.TITLE -> Icons.Default.List to Color(0xFF4CAF50)
-            MessageMatch.MatchType.CONTENT -> Icons.Default.Info to Color(0xFF2196F3)
-            MessageMatch.MatchType.TAG -> Icons.Default.Star to Color(0xFFFF9800)
-            MessageMatch.MatchType.CONTEXT -> Icons.Default.List to Color(0xFF9C27B0)
-            MessageMatch.MatchType.METADATA -> Icons.Default.Info to Color(0xFF607D8B)
+            MessageMatch.MatchType.TITLE -> AllIconsKeys.Actions.ListFiles to Color(0xFF4CAF50)
+            MessageMatch.MatchType.CONTENT -> AllIconsKeys.General.Information to Color(0xFF2196F3)
+            MessageMatch.MatchType.TAG -> AllIconsKeys.Nodes.Bookmark to Color(0xFFFF9800)
+            MessageMatch.MatchType.CONTEXT -> AllIconsKeys.Actions.ListFiles to Color(0xFF9C27B0)
+            MessageMatch.MatchType.METADATA -> AllIconsKeys.General.Information to Color(0xFF607D8B)
         }
         
         Icon(

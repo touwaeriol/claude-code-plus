@@ -5,9 +5,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,7 +37,7 @@ fun ModernStatusIndicator(
             ToolExecutionStatus.SUCCESS -> {
                 // 绿色对勾
                 Icon(
-                    imageVector = Icons.Default.Check,
+                    key = AllIconsKeys.Actions.Checked,
                     contentDescription = "成功",
                     tint = Color(0xFF4CAF50), // Material Green 500
                     modifier = Modifier.size(size)
@@ -49,7 +47,7 @@ fun ModernStatusIndicator(
             ToolExecutionStatus.ERROR -> {
                 // 红色叉号
                 Icon(
-                    imageVector = Icons.Default.Close,
+                    key = AllIconsKeys.Actions.Close,
                     contentDescription = "失败",
                     tint = Color(0xFFF44336), // Material Red 500
                     modifier = Modifier.size(size)

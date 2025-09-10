@@ -10,8 +10,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,7 +20,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
-import androidx.compose.material.Surface
+// Surface replaced with Jewel Box components
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.component.TabData.Default as TabDefault
@@ -40,17 +39,19 @@ fun BatchQuestionDialog(
     sessionId: String?,
     onDismiss: () -> Unit
 ) {
-    var questions by remember { mutableStateOf(listOf<String>()) }
-    var newQuestion by remember { mutableStateOf("") }
-    var useCurrentContext by remember { mutableStateOf(true) }
-    var showResults by remember { mutableStateOf(false) }
+    // 使用更简单的状态管理避免内联编译问题
+    val questions = mutableStateOf(listOf<String>())
+    val newQuestion = mutableStateOf("")
+    val useCurrentContext = mutableStateOf(true)
+    val showResults = mutableStateOf(false)
     
     val queue by queueManager.queue.collectAsState()
     val isProcessing by queueManager.isProcessing.collectAsState()
     val currentQuestion by queueManager.currentQuestion.collectAsState()
     val progress by queueManager.progress.collectAsState()
     
-    val scope = rememberCoroutineScope()
+    // 避免rememberCoroutineScope的内联编译问题，使用简单的CoroutineScope
+    val scope = kotlinx.coroutines.GlobalScope
     
     DialogWindow(
         onCloseRequest = onDismiss,
@@ -67,15 +68,15 @@ fun BatchQuestionDialog(
                 horizontalArrangement = Arrangement.Start
             ) {
                 OutlinedButton(
-                    onClick = { showResults = false },
-                    enabled = showResults
+                    onClick = { showResults.value = false },
+                    enabled = showResults.value
                 ) {
                     Text("问题编辑")
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 OutlinedButton(
-                    onClick = { showResults = true },
-                    enabled = !showResults
+                    onClick = { showResults.value = true },
+                    enabled = !showResults.value
                 ) {
                     Text("处理结果")
                 }
@@ -84,34 +85,34 @@ fun BatchQuestionDialog(
             Divider(orientation = Orientation.Horizontal)
             
             Box(modifier = Modifier.weight(1f)) {
-                if (!showResults) {
+                if (!showResults.value) {
                     // 问题编辑视图
                     QuestionEditView(
-                        questions = questions,
-                        newQuestion = newQuestion,
-                        useCurrentContext = useCurrentContext,
+                        questions = questions.value,
+                        newQuestion = newQuestion.value,
+                        useCurrentContext = useCurrentContext.value,
                         currentContextSize = currentContext.size,
-                        onNewQuestionChange = { newQuestion = it },
+                        onNewQuestionChange = { newQuestion.value = it },
                         onAddQuestion = {
-                            if (newQuestion.isNotBlank()) {
-                                questions = questions + newQuestion
-                                newQuestion = ""
+                            if (newQuestion.value.isNotBlank()) {
+                                questions.value = questions.value + newQuestion.value
+                                newQuestion.value = ""
                             }
                         },
                         onUpdateQuestion = { index, value ->
-                            questions = questions.toMutableList().apply {
+                            questions.value = questions.value.toMutableList().apply {
                                 this[index] = value
                             }
                         },
                         onRemoveQuestion = { index ->
-                            questions = questions.filterIndexed { i, _ -> i != index }
+                            questions.value = questions.value.filterIndexed { i, _ -> i != index }
                         },
                         onReorderQuestions = { from, to ->
-                            questions = questions.toMutableList().apply {
+                            questions.value = questions.value.toMutableList().apply {
                                 add(to, removeAt(from))
                             }
                         },
-                        onUseContextChange = { useCurrentContext = it },
+                        onUseContextChange = { useCurrentContext.value = it },
                         onImportFromFile = {
                             // TODO: 实现从文件导入
                         }
@@ -186,7 +187,7 @@ fun BatchQuestionDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Chip(onClick = {}) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(12.dp))
+                            Icon(AllIconsKeys.Actions.Checked, contentDescription = null, modifier = Modifier.size(12.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("${stats.completed}", style = JewelTheme.defaultTextStyle)
                         }
@@ -194,7 +195,7 @@ fun BatchQuestionDialog(
                         if (stats.failed > 0) {
                             Chip(onClick = {}) {
                                 Icon(
-                                    Icons.Default.Warning,
+                                    AllIconsKeys.General.Warning,
                                     contentDescription = null,
                                     modifier = Modifier.size(12.dp),
                                     tint = Color.Red
@@ -214,7 +215,7 @@ fun BatchQuestionDialog(
                 ) {
                     if (isProcessing) {
                         OutlinedButton(onClick = { queueManager.pauseProcessing() }) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null)
+                            Icon(AllIconsKeys.Actions.Execute, contentDescription = null)
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("暂停")
                         }
@@ -232,11 +233,11 @@ fun BatchQuestionDialog(
                     
                     DefaultButton(
                         onClick = {
-                            if (!isProcessing && questions.isNotEmpty()) {
+                            if (!isProcessing && questions.value.isNotEmpty()) {
                                 // 添加问题到队列
-                                val context = if (useCurrentContext) currentContext else emptyList()
+                                val context = if (useCurrentContext.value) currentContext else emptyList()
                                 queueManager.addQuestions(
-                                    questions.map { it to context }
+                                    questions.value.map { it to context }
                                 )
                                 
                                 // 开始处理
@@ -245,14 +246,14 @@ fun BatchQuestionDialog(
                                 }
                                 
                                 // 切换到结果视图
-                                showResults = true
+                                showResults.value = true
                             }
                         },
-                        enabled = !isProcessing && (questions.isNotEmpty() || queue.any { 
+                        enabled = !isProcessing && (questions.value.isNotEmpty() || queue.any { 
                             it.status == QueuedQuestion.QuestionStatus.PENDING 
                         })
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Icon(AllIconsKeys.Actions.Execute, contentDescription = null)
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(if (isProcessing) "处理中..." else "开始处理")
                     }
@@ -306,7 +307,7 @@ private fun QuestionEditView(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(onClick = onImportFromFile) {
-                    Icon(Icons.Default.Add, contentDescription = null)
+                    Icon(AllIconsKeys.General.Add, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("导入")
                 }
@@ -316,7 +317,7 @@ private fun QuestionEditView(
                         // TODO: 显示模板
                     }
                 ) {
-                    Icon(Icons.Default.Star, contentDescription = null)
+                    Icon(AllIconsKeys.Nodes.Bookmark, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("模板")
                 }
@@ -359,7 +360,7 @@ private fun QuestionEditView(
                 onClick = onAddQuestion,
                 enabled = newQuestion.isNotBlank()
             ) {
-                Icon(Icons.Default.Add, contentDescription = null)
+                Icon(AllIconsKeys.General.Add, contentDescription = null)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("添加")
             }
@@ -378,7 +379,7 @@ private fun QuestionEditView(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
-                        Icons.Default.Info,
+                        AllIconsKeys.General.Information,
                         contentDescription = null,
                         modifier = Modifier.size(48.dp),
                         tint = Color.Gray.copy(alpha = 0.5f)
@@ -429,14 +430,17 @@ private fun QuestionItem(
     onMoveUp: (() -> Unit)?,
     onMoveDown: (() -> Unit)?
 ) {
-    var isEditing by remember { mutableStateOf(false) }
-    var editText by remember(question) { mutableStateOf(question) }
+    val isEditing = mutableStateOf(false)
+    val editText = mutableStateOf(question)
     
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp)),
-        color = Color.White
+            .background(
+                color = JewelTheme.globalColors.panelBackground,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .clip(RoundedCornerShape(8.dp))
     ) {
         Row(
             modifier = Modifier
@@ -461,10 +465,10 @@ private fun QuestionItem(
             
             // 问题内容
             Box(modifier = Modifier.weight(1f)) {
-                if (isEditing) {
+                if (isEditing.value) {
                     BasicTextField(
-                        value = editText,
-                        onValueChange = { editText = it },
+                        value = editText.value,
+                        onValueChange = { editText.value = it },
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(4.dp))
@@ -482,7 +486,7 @@ private fun QuestionItem(
                         style = JewelTheme.defaultTextStyle,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { isEditing = true }
+                            .clickable { isEditing.value = true }
                     )
                 }
             }
@@ -491,16 +495,16 @@ private fun QuestionItem(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                if (isEditing) {
+                if (isEditing.value) {
                     IconButton(
                         onClick = {
-                            onUpdate(editText)
-                            isEditing = false
+                            onUpdate(editText.value)
+                            isEditing.value = false
                         },
                         modifier = Modifier.size(20.dp)
                     ) {
                         Icon(
-                            Icons.Default.Check,
+                            AllIconsKeys.Actions.Checked,
                             contentDescription = "保存",
                             modifier = Modifier.size(16.dp)
                         )
@@ -508,13 +512,13 @@ private fun QuestionItem(
                     
                     IconButton(
                         onClick = {
-                            editText = question
-                            isEditing = false
+                            editText.value = question
+                            isEditing.value = false
                         },
                         modifier = Modifier.size(20.dp)
                     ) {
                         Icon(
-                            Icons.Default.Close,
+                            AllIconsKeys.Actions.Close,
                             contentDescription = "取消",
                             modifier = Modifier.size(16.dp)
                         )
@@ -526,7 +530,7 @@ private fun QuestionItem(
                             modifier = Modifier.size(20.dp)
                         ) {
                             Icon(
-                                Icons.Default.KeyboardArrowUp,
+                                AllIconsKeys.Actions.FindAndShowPrevMatches,
                                 contentDescription = "上移",
                                 modifier = Modifier.size(16.dp)
                             )
@@ -539,7 +543,7 @@ private fun QuestionItem(
                             modifier = Modifier.size(20.dp)
                         ) {
                             Icon(
-                                Icons.Default.ArrowDropDown,
+                                AllIconsKeys.Actions.FindAndShowNextMatches,
                                 contentDescription = "下移",
                                 modifier = Modifier.size(16.dp)
                             )
@@ -547,11 +551,11 @@ private fun QuestionItem(
                     }
                     
                     IconButton(
-                        onClick = { isEditing = true },
+                        onClick = { isEditing.value = true },
                         modifier = Modifier.size(20.dp)
                     ) {
                         Icon(
-                            Icons.Default.Edit,
+                            AllIconsKeys.Actions.Edit,
                             contentDescription = "编辑",
                             modifier = Modifier.size(16.dp)
                         )
@@ -562,7 +566,7 @@ private fun QuestionItem(
                         modifier = Modifier.size(20.dp)
                     ) {
                         Icon(
-                            Icons.Default.Delete,
+                            AllIconsKeys.Actions.GC,
                             contentDescription = "删除",
                             modifier = Modifier.size(16.dp),
                             tint = Color.Red
@@ -596,13 +600,13 @@ private fun QueueResultsView(
                 horizontalArrangement = Arrangement.End
             ) {
                 OutlinedButton(onClick = onRetryFailed) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Icon(AllIconsKeys.Actions.ForceRefresh, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("重试失败")
                 }
                 
                 OutlinedButton(onClick = onExportResults) {
-                    Icon(Icons.Default.Share, contentDescription = null)
+                    Icon(AllIconsKeys.Actions.Upload, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("导出结果")
                 }
@@ -634,18 +638,21 @@ private fun QueueResultItem(
     question: QueuedQuestion,
     isCurrent: Boolean
 ) {
-    var isExpanded by remember { mutableStateOf(false) }
+    val isExpanded = mutableStateOf(false)
     
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                color = if (isCurrent) {
+                    Color.LightGray
+                } else {
+                    JewelTheme.globalColors.panelBackground
+                },
+                shape = RoundedCornerShape(4.dp)
+            )
             .animateContentSize()
-            .clip(RoundedCornerShape(8.dp)),
-        color = if (isCurrent) {
-            Color.LightGray
-        } else {
-            Color.White
-        }
+            .clip(RoundedCornerShape(8.dp))
     ) {
         Column(
             modifier = Modifier.padding(12.dp)
@@ -654,7 +661,7 @@ private fun QueueResultItem(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded },
+                    .clickable { isExpanded.value = !isExpanded.value },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -665,11 +672,11 @@ private fun QueueResultItem(
                 ) {
                     // 状态图标
                     val iconAndColor = when (question.status) {
-                        QueuedQuestion.QuestionStatus.PENDING -> Icons.Default.Info to Color.Gray
-                        QueuedQuestion.QuestionStatus.PROCESSING -> Icons.Default.Refresh to Color(0xFF2196F3)
-                        QueuedQuestion.QuestionStatus.COMPLETED -> Icons.Default.CheckCircle to Color(0xFF4CAF50)
-                        QueuedQuestion.QuestionStatus.FAILED -> Icons.Default.Warning to Color.Red
-                        QueuedQuestion.QuestionStatus.CANCELLED -> Icons.Default.Clear to Color(0xFFFF9800)
+                        QueuedQuestion.QuestionStatus.PENDING -> AllIconsKeys.General.Information to Color.Gray
+                        QueuedQuestion.QuestionStatus.PROCESSING -> AllIconsKeys.Actions.ForceRefresh to Color(0xFF2196F3)
+                        QueuedQuestion.QuestionStatus.COMPLETED -> AllIconsKeys.Actions.Checked to Color(0xFF4CAF50)
+                        QueuedQuestion.QuestionStatus.FAILED -> AllIconsKeys.General.Warning to Color.Red
+                        QueuedQuestion.QuestionStatus.CANCELLED -> AllIconsKeys.Actions.Cancel to Color(0xFFFF9800)
                     }
                     val icon = iconAndColor.first
                     val color = iconAndColor.second
@@ -692,13 +699,13 @@ private fun QueueResultItem(
                 }
                 
                 Icon(
-                    if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    if (isExpanded.value) AllIconsKeys.Actions.FindAndShowPrevMatches else AllIconsKeys.Actions.FindAndShowNextMatches,
                     contentDescription = null
                 )
             }
             
             // 展开内容
-            AnimatedVisibility(visible = isExpanded) {
+            AnimatedVisibility(visible = isExpanded.value) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -710,12 +717,14 @@ private fun QueueResultItem(
                         style = JewelTheme.defaultTextStyle
                     )
                     
-                    Surface(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        shape = RoundedCornerShape(4.dp),
-                        color = Color(0xFFF5F5F5)
+                            .background(
+                                color = Color(0xFFF5F5F5),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(vertical = 4.dp)
                     ) {
                         Text(
                             text = question.content,
@@ -733,12 +742,14 @@ private fun QueueResultItem(
                                 modifier = Modifier.padding(top = 8.dp)
                             )
                             
-                            Surface(
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                shape = RoundedCornerShape(4.dp),
-                                color = Color(0xFFF5F5F5)
+                                    .background(
+                                        color = Color(0xFFF5F5F5),
+                                        shape = RoundedCornerShape(4.dp)
+                                    )
+                                    .padding(vertical = 4.dp)
                             ) {
                                 Text(
                                     text = question.result ?: "无结果",

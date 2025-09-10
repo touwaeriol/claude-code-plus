@@ -157,18 +157,18 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory, DumbAware {
             val themeStateHolder = mutableStateOf(currentTheme)
             logger.info("当前 IDE 主题: ${IdeaThemeAdapter.getCurrentThemeName()}, 是否为暗色: $currentTheme")
             
-            // 使用 toolwindow 提供的 Compose 面板，传入主题状态和后台服务
+            // 创建真正的Compose UI面板
             val composePanel = PluginComposeFactory.createComposePanel(
                 unifiedSessionService = unifiedSessionService,
                 sessionManager = cliSessionManager,
+                projectService = projectService,
+                fileIndexService = fileIndexService,
+                ideIntegration = ideIntegration,
                 workingDirectory = workingDirectory,
                 project = project,
-                fileIndexService = fileIndexService,
-                projectService = projectService,
-                ideIntegration = ideIntegration,        // 传入 IDE 集成实例
-                themeStateHolder = themeStateHolder,  // 传入主题状态
-                backgroundService = backgroundService,  // 传入后台服务
-                sessionStateSync = sessionStateSync     // 传入状态同步器
+                themeStateHolder = themeStateHolder,
+                backgroundService = backgroundService,
+                sessionStateSync = sessionStateSync
             )
             
             // 注册主题变化监听器，更新主题状态
@@ -224,6 +224,50 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory, DumbAware {
         setupTitleActions(toolWindow)
     }
     
+    private fun createSimplifiedPanel(
+        unifiedSessionService: UnifiedSessionService,
+        sessionManager: ClaudeSessionManager,
+        workingDirectory: String,
+        project: Project
+    ): javax.swing.JPanel {
+        val panel = javax.swing.JPanel(java.awt.BorderLayout())
+        
+        // 设置面板背景色，确保可见
+        panel.background = java.awt.Color.LIGHT_GRAY
+        panel.border = javax.swing.BorderFactory.createTitledBorder("Claude Code Plus")
+        
+        // 创建主要内容
+        val mainLabel = javax.swing.JLabel(
+            "<html><div style='text-align:center; padding:20px;'>" +
+            "<h1 style='color:black;'>🤖 Claude Code Plus</h1>" +
+            "<h3 style='color:red;'>UI组件暂时不可用</h3>" +
+            "<p style='color:blue;'>正在解决Compose内联编译问题</p>" +
+            "<p style='color:green;'>✅ 后台服务正常运行</p>" +
+            "<p style='color:gray;'>工作目录: ${workingDirectory}</p>" +
+            "</div></html>",
+            javax.swing.SwingConstants.CENTER
+        )
+        mainLabel.preferredSize = java.awt.Dimension(300, 200)
+        
+        // 创建测试按钮
+        val testButton = javax.swing.JButton("测试按钮 - 点击验证UI")
+        testButton.addActionListener {
+            javax.swing.JOptionPane.showMessageDialog(
+                panel, 
+                "UI面板正常工作！\n工作目录: $workingDirectory", 
+                "Claude Code Plus", 
+                javax.swing.JOptionPane.INFORMATION_MESSAGE
+            )
+        }
+        
+        // 布局组件
+        panel.add(mainLabel, java.awt.BorderLayout.CENTER)
+        panel.add(testButton, java.awt.BorderLayout.SOUTH)
+        
+        logger.info("✅ 简化面板创建完成，工作目录: $workingDirectory")
+        return panel
+    }
+
     private fun setupTitleActions(toolWindow: ToolWindow) {
         // 创建新会话按钮Action
         val newChatAction = object : com.intellij.openapi.actionSystem.AnAction(

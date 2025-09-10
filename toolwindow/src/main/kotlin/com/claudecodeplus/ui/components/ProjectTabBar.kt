@@ -17,9 +17,7 @@ import com.claudecodeplus.ui.models.Project
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.hoverable
@@ -88,7 +86,7 @@ fun ProjectTabBar(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Add,
+                        key = AllIconsKeys.General.Add,
                         contentDescription = "新建项目",
                         modifier = Modifier.size(16.dp),
                         tint = JewelTheme.globalColors.text.normal
@@ -179,7 +177,7 @@ private fun ProjectTab(
             // 关闭按钮
             if (onClose != null && (isActive || isHovered)) {
                 Icon(
-                    imageVector = Icons.Default.Close,
+                    key = AllIconsKeys.Actions.Close,
                     contentDescription = "关闭项目",
                     modifier = Modifier
                         .size(14.dp)

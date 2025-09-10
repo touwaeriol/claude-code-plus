@@ -7,9 +7,13 @@ import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.jewel.StandaloneChatView
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
-import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
-import org.jetbrains.jewel.intui.standalone.theme.darkThemeDefinition
-import org.jetbrains.jewel.intui.standalone.theme.lightThemeDefinition
+import org.jetbrains.jewel.foundation.theme.JewelTheme
+import org.jetbrains.jewel.bridge.theme.SwingBridgeTheme
+import org.jetbrains.jewel.foundation.ExperimentalJewelApi
+import org.jetbrains.jewel.ui.component.styling.LazyTreeStyle
+import org.jetbrains.jewel.foundation.GlobalColors
+import org.jetbrains.jewel.foundation.GlobalMetrics
+import androidx.compose.runtime.CompositionLocalProvider
 import javax.swing.UIManager
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -24,6 +28,7 @@ object PluginComposeFactory {
     /**
      * 创建带会话管理的聊天 Compose 面板
      */
+    @OptIn(ExperimentalJewelApi::class)
     fun createComposePanel(
         unifiedSessionService: UnifiedSessionService,
         sessionManager: ClaudeSessionManager,
@@ -42,25 +47,8 @@ object PluginComposeFactory {
             
             // 设置 Compose 内容
             composePanel.setContent {
-                // 使用外部传入的主题状态，如果没有则使用本地检测
-                val isDark = if (themeStateHolder != null) {
-                    themeStateHolder.value
-                } else {
-                    // 备用方案：使用 UIManager 检测主题
-                    remember { 
-                        try {
-                            val laf = UIManager.getLookAndFeel()
-                            laf.name.contains("Darcula", ignoreCase = true) || 
-                            laf.name.contains("Dark", ignoreCase = true) ||
-                            laf.javaClass.name.contains("Darcula", ignoreCase = true)
-                        } catch (e: Exception) {
-                            false
-                        }
-                    }
-                }
-                
-                // 根据主题状态选择主题
-                IntUiTheme(isDark = isDark) {
+                // 手动提供 GlobalColors 上下文，解决主题错误
+                SwingBridgeTheme {
                     StandaloneChatView(
                         unifiedSessionService = unifiedSessionService,
                         workingDirectory = workingDirectory,

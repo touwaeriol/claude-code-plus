@@ -13,6 +13,7 @@ import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.jewel.components.*
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.SessionManager
+import com.claudecodeplus.ui.components.AssistantMessageDisplay
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
 import kotlinx.coroutines.*

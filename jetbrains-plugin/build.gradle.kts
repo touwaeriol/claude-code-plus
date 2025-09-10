@@ -23,31 +23,23 @@ dependencies {
     }
     implementation(project(":toolwindow")) {
         exclude(group = "org.jetbrains.kotlinx")
-        // 排除 Compose Material，使用 Jewel
-        exclude(group = "org.jetbrains.compose.material")
-        // 排除 toolwindow 模块的 Jewel 依赖，避免类加载器冲突
-        exclude(group = "org.jetbrains.jewel")
-        // 排除 Compose 依赖，使用插件环境的版本
-        exclude(group = "org.jetbrains.compose.ui")
-        exclude(group = "org.jetbrains.compose.foundation")
-        exclude(group = "org.jetbrains.compose.runtime")
-        exclude(group = "org.jetbrains.compose.animation")
+        // 🎯 现在toolwindow使用内建依赖，不需要复杂的排除规则
     }
     
-    // Jewel IDE Bridge - 用于 IntelliJ 插件环境
-    val jewelVersion = rootProject.extra["jewelVersion"] as String
-    implementation("org.jetbrains.jewel:jewel-foundation:$jewelVersion")
-    implementation("org.jetbrains.jewel:jewel-ui:$jewelVersion")
-    // 添加 standalone theme 支持，运行时需要
-    implementation("org.jetbrains.jewel:jewel-int-ui-standalone:$jewelVersion")
-    // 暂时移除 IDE Bridge，因为它导致了 ToolWindowFactory 的类加载器冲突
-    // 图标问题已通过 IconUtils.kt 的 fallback 机制解决
-    // implementation("org.jetbrains.jewel:jewel-ide-laf-bridge:0.28.0-251.25410.129")
+    // 🎯 使用IDE平台内置的Jewel模块 - 替换外部依赖
+    // 移除所有外部Jewel依赖，使用IDE内置版本
     
     // IntelliJ Platform dependencies
     intellijPlatform {
         // 使用较新的版本以确保对 252.* 的兼容性
         intellijIdeaCommunity("2025.1.4.1")
+        
+        // 🎯 Jewel和Compose内置模块 - 官方推荐方式！
+        bundledModule("intellij.platform.jewel.foundation")
+        bundledModule("intellij.platform.jewel.ui")
+        bundledModule("intellij.platform.jewel.ideLafBridge")
+        bundledModule("intellij.libraries.compose.foundation.desktop")  // 唯一可用的Compose库
+        bundledModule("intellij.libraries.skiko")  // Compose的原生渲染库
         
         // 添加 Markdown 插件依赖
         bundledPlugin("org.intellij.plugins.markdown")
@@ -59,7 +51,8 @@ dependencies {
         bundledPlugin("com.intellij.java")
     }
     
-    // Compose 运行时由 IntelliJ 平台提供，不需要显式添加
+    // 🔧 移除外部Compose依赖，避免与IDE内置版本的类加载器冲突
+    // jetbrains-plugin模块只使用IDE内置的Compose版本
     
     // 使用 IntelliJ Platform 的 Kotlin 标准库
     compileOnly(kotlin("stdlib"))

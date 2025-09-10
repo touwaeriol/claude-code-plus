@@ -32,10 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.Tooltip
 import androidx.compose.foundation.hoverable
@@ -194,10 +191,10 @@ fun ProjectListPanel(
                                 val projectSessions = sessions[project.id] ?: emptyList()
                                 if (projectSessions.isNotEmpty()) {
                                     Icon(
-                                        imageVector = if (expandedProjects.contains(project.id)) 
-                                            Icons.Default.KeyboardArrowDown 
+                                        key = if (expandedProjects.contains(project.id)) 
+                                            AllIconsKeys.Actions.FindAndShowNextMatches 
                                         else 
-                                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                            AllIconsKeys.General.ArrowRight,
                                         contentDescription = if (expandedProjects.contains(project.id)) "折叠" else "展开",
                                         modifier = Modifier.size(16.dp)
                                     )
@@ -298,7 +295,7 @@ fun ProjectListPanel(
                                         // 标签指示器
                                         if (hasOpenTab) {
                                             Icon(
-                                                imageVector = Icons.Default.Star, // 使用 Star 图标作为标签指示器
+                                                key = AllIconsKeys.Nodes.Bookmark, // 使用 Bookmark 图标作为标签指示器
                                                 contentDescription = "已打开标签",
                                                 modifier = Modifier.size(14.dp),
                                                 tint = if (isActiveTab) Color(0xFF2675BF) else Color(0xFF4CAF50)

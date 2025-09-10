@@ -5,8 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +30,7 @@ import androidx.compose.ui.window.PopupProperties
 /**
  * 上下文预览面板
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ContextPreviewPanel(
     contextItems: List<ContextItem>,
@@ -210,7 +210,7 @@ private fun ContextPanelHeader(
                     modifier = Modifier.size(20.dp)
                 ) {
                     Icon(
-                        Icons.Default.Info,
+                        AllIconsKeys.General.Information,
                         contentDescription = "推荐",
                         modifier = Modifier.size(16.dp)
                     )
@@ -221,7 +221,7 @@ private fun ContextPanelHeader(
                     modifier = Modifier.size(20.dp)
                 ) {
                     Icon(
-                        Icons.Default.Star,
+                        AllIconsKeys.Nodes.Bookmark,
                         contentDescription = "模板",
                         modifier = Modifier.size(16.dp)
                     )
@@ -232,7 +232,7 @@ private fun ContextPanelHeader(
                     modifier = Modifier.size(20.dp)
                 ) {
                     Icon(
-                        Icons.Default.Add,
+                        AllIconsKeys.General.Add,
                         contentDescription = "添加",
                         modifier = Modifier.size(16.dp)
                     )
@@ -280,7 +280,7 @@ private fun RecommendationSection(
                 modifier = Modifier.size(16.dp)
             ) {
                 Icon(
-                    Icons.Default.Close,
+                    AllIconsKeys.Actions.Close,
                     contentDescription = "关闭",
                     modifier = Modifier.size(12.dp)
                 )
@@ -388,6 +388,7 @@ private fun ContextItemList(
 /**
  * 上下文项卡片
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ContextItemBox(
     item: ContextItem,
@@ -426,9 +427,9 @@ private fun ContextItemBox(
                 ) {
                     // 图标
                     val icon = when (item) {
-                        is ContextItem.File -> Icons.Default.List
-                        is ContextItem.Folder -> if (isExpanded) Icons.Default.List else Icons.Default.List
-                        is ContextItem.CodeBlock -> Icons.Default.Info
+                        is ContextItem.File -> AllIconsKeys.Actions.ListFiles
+                        is ContextItem.Folder -> if (isExpanded) AllIconsKeys.Actions.ListFiles else AllIconsKeys.Actions.ListFiles
+                        is ContextItem.CodeBlock -> AllIconsKeys.General.Information
                     }
                     
                     Icon(
@@ -496,7 +497,7 @@ private fun ContextItemBox(
                             modifier = Modifier.size(20.dp)
                         ) {
                             Icon(
-                                if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                if (isExpanded) AllIconsKeys.Actions.FindAndShowPrevMatches else AllIconsKeys.Actions.FindAndShowNextMatches,
                                 contentDescription = if (isExpanded) "收起" else "展开",
                                 modifier = Modifier.size(16.dp)
                             )
@@ -508,7 +509,7 @@ private fun ContextItemBox(
                         modifier = Modifier.size(20.dp)
                     ) {
                         Icon(
-                            Icons.Default.Close,
+                            AllIconsKeys.Actions.Close,
                             contentDescription = "移除",
                             modifier = Modifier.size(12.dp)
                         )
@@ -540,7 +541,7 @@ private fun ContextItemBox(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.List,
+                                    AllIconsKeys.Actions.ListFiles,
                                     contentDescription = null,
                                     modifier = Modifier.size(12.dp),
                                     tint = Color.Gray
@@ -607,7 +608,7 @@ private fun EmptyContextView(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
-                Icons.Default.List,
+                AllIconsKeys.Actions.ListFiles,
                 contentDescription = null,
                 modifier = Modifier.size(48.dp),
                 tint = Color.Gray.copy(alpha = 0.5f)
@@ -620,7 +621,7 @@ private fun EmptyContextView(
             )
             
             OutlinedButton(onClick = onAddClick) {
-                Icon(Icons.Default.Add, contentDescription = null)
+                Icon(AllIconsKeys.General.Add, contentDescription = null)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("添加文件或文件夹")
             }
@@ -645,13 +646,13 @@ private fun ContextActionBar(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             OutlinedButton(onClick = onValidate) {
-                Icon(Icons.Default.CheckCircle, contentDescription = null)
+                Icon(AllIconsKeys.Actions.Checked, contentDescription = null)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("验证")
             }
             
             OutlinedButton(onClick = onClearAll) {
-                Icon(Icons.Default.Clear, contentDescription = null)
+                Icon(AllIconsKeys.Actions.Cancel, contentDescription = null)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("清空")
             }
@@ -689,7 +690,7 @@ private fun AddContextMenu(
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.List, contentDescription = null)
+                    Icon(AllIconsKeys.Actions.ListFiles, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("添加文件")
                 }
@@ -701,7 +702,7 @@ private fun AddContextMenu(
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.List, contentDescription = null)
+                    Icon(AllIconsKeys.Actions.ListFiles, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("添加文件夹")
                 }
@@ -715,7 +716,7 @@ private fun AddContextMenu(
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Star, contentDescription = null)
+                    Icon(AllIconsKeys.Nodes.Bookmark, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("从模板添加")
                 }

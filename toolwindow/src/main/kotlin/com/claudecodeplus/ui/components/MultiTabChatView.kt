@@ -29,10 +29,7 @@ import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.interfaces.ProjectService
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Home
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.draw.clip
@@ -201,7 +198,7 @@ fun EmptyTabsView(
             )
             
             DefaultButton(onClick = onCreateTab) {
-                Icon(Icons.Default.Add, contentDescription = null)
+                Icon(AllIconsKeys.General.Add, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("创建新对话")
             }
@@ -223,7 +220,7 @@ fun NoProjectView() {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Icon(
-                Icons.Default.Home,
+                AllIconsKeys.Nodes.HomeFolder,
                 contentDescription = null,
                 modifier = Modifier.size(48.dp),
                 tint = JewelTheme.globalColors.text.disabled

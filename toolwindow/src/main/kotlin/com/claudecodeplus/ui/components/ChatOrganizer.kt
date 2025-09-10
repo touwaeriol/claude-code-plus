@@ -19,8 +19,7 @@ import org.jetbrains.jewel.ui.Orientation
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.ChatTabManager
 import kotlinx.coroutines.launch
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -136,7 +135,7 @@ private fun GroupSidebar(
         // 全部对话
         GroupItem(
             name = "全部对话",
-            icon = Icons.Default.List,
+            icon = AllIconsKeys.Actions.ListFiles,
             isSelected = selectedGroupId == null,
             onClick = { onGroupSelect(null) }
         )
@@ -164,7 +163,7 @@ private fun GroupSidebar(
             onClick = onGroupCreate,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(Icons.Default.Add, contentDescription = null)
+            Icon(AllIconsKeys.General.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(4.dp))
             Text("新建分组")
         }
@@ -179,7 +178,7 @@ private fun GroupSidebar(
 private fun GroupItem(
     name: String,
     color: Color? = null,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    icon: org.jetbrains.jewel.ui.icon.IconKey? = null,
     isSelected: Boolean,
     onClick: () -> Unit,
     onEdit: (() -> Unit)? = null
@@ -204,7 +203,7 @@ private fun GroupItem(
         // 颜色指示器或图标
         when {
             icon != null -> Icon(
-                icon,
+                key = icon,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp)
             )
@@ -230,7 +229,7 @@ private fun GroupItem(
                 modifier = Modifier.size(20.dp)
             ) {
                 Icon(
-                    Icons.Default.Edit,
+                    AllIconsKeys.Actions.Edit,
                     contentDescription = "编辑",
                     modifier = Modifier.size(14.dp)
                 )
@@ -264,7 +263,7 @@ private fun OrganizerToolbar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.Default.Search,
+                AllIconsKeys.Actions.Find,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp).padding(end = 4.dp)
             )
@@ -279,13 +278,13 @@ private fun OrganizerToolbar(
         // 操作按钮
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             OutlinedButton(onClick = onManageTags) {
-                Icon(Icons.Default.Star, contentDescription = null)
+                Icon(AllIconsKeys.Nodes.Bookmark, contentDescription = null)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("管理标签")
             }
             
             IconButton(onClick = onClose) {
-                Icon(Icons.Default.Close, contentDescription = "关闭")
+                Icon(AllIconsKeys.Actions.Close, contentDescription = "关闭")
             }
         }
     }

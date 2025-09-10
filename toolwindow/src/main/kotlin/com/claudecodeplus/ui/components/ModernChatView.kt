@@ -8,7 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.claudecodeplus.core.ApplicationInitializer
-import com.claudecodeplus.ui.jewel.components.AssistantMessageDisplay
+import com.claudecodeplus.ui.components.AssistantMessageDisplay
 import com.claudecodeplus.ui.jewel.components.UnifiedChatInput
 import com.claudecodeplus.ui.jewel.components.UserMessageDisplay
 import com.claudecodeplus.ui.models.MessageRole

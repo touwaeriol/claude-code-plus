@@ -1,7 +1,9 @@
 plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
-    `java-library`  // 添加 java-library 插件以支持 api 配置
+    `java-library`
+    id("org.jetbrains.intellij.platform")
+    // 🎯 关键：需要Compose插件来处理内建Compose库的编译
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
     idea
@@ -10,33 +12,35 @@ plugins {
 group = "com.claudecodeplus"
 version = "1.0-SNAPSHOT"
 
+repositories {
+    mavenCentral()
+    
+    // IntelliJ Platform Gradle Plugin Repositories Extension
+    intellijPlatform {
+        defaultRepositories()
+    }
+}
+
 dependencies {
     // 依赖 cli-wrapper 模块
     implementation(project(":cli-wrapper")) {
-        // 在插件环境下排除协程库
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-swing")
     }
     
-    // Compose Desktop - 使用 compileOnly 避免与 IntelliJ 平台冲突
-    compileOnly(compose.desktop.currentOs)
-    compileOnly(compose.runtime)
-    compileOnly(compose.foundation)
-    compileOnly(compose.animation)
-    compileOnly(compose.ui)
-    compileOnly(compose.material) // 恢复 Material 依赖，使用 compileOnly 配置
-    
-    // Jewel UI - 使用 compileOnly 避免与插件环境冲突
-    val jewelVersion = rootProject.extra["jewelVersion"] as String
-    
-    // 从 Maven Central 引入 Jewel - 使用 compileOnly 配置
-    compileOnly("org.jetbrains.jewel:jewel-foundation:$jewelVersion")
-    compileOnly("org.jetbrains.jewel:jewel-ui:$jewelVersion")
-    compileOnly("org.jetbrains.jewel:jewel-int-ui-standalone:$jewelVersion")
-
-    // 协程 - 使用 compileOnly 避免与 IntelliJ 平台冲突
-    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
-    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-swing:${rootProject.extra["coroutinesVersion"]}")
+    // 🎯 完全使用IDE内建依赖 - 正确的配置方式
+    intellijPlatform {
+        intellijIdeaCommunity("2025.1.4.1")
+        
+        // Jewel UI库 - IDE内建版本
+        bundledModule("intellij.platform.jewel.foundation")
+        bundledModule("intellij.platform.jewel.ui") 
+        bundledModule("intellij.platform.jewel.ideLafBridge")
+        
+        // Compose库 - IDE内建版本（使用确定存在的模块）
+        bundledModule("intellij.libraries.compose.foundation.desktop")
+        bundledModule("intellij.libraries.skiko")
+    }
     
     // Markdown 解析
     implementation("org.commonmark:commonmark:0.25.0")
@@ -64,22 +68,9 @@ dependencies {
     // 测试依赖
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:1.13.8")
-    testImplementation(compose.desktop.currentOs)
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:${rootProject.extra["coroutinesVersion"]}")
+    // 🚫 移除外部Compose和协程依赖 - 使用IDE平台内置版本
 }
 
-compose.desktop {
-    application {
-        mainClass = "MainKt"
-    }
-}
-
-// Compose Multiplatform 资源配置
-compose.resources {
-    publicResClass = true
-    packageOfResClass = "com.claudecodeplus.ui.resources"
-    generateResClass = auto
-}
+// 🚫 移除Compose Multiplatform相关配置 - 使用IDE平台内置版本
 
 // IDE configuration for source/javadoc download is handled by IDE settings

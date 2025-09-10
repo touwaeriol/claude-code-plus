@@ -14,10 +14,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.jetbrains.jewel.foundation.theme.JewelTheme
-import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
-import org.jetbrains.jewel.intui.standalone.theme.darkThemeDefinition
-import org.jetbrains.jewel.intui.standalone.theme.lightThemeDefinition
-import org.jetbrains.jewel.ui.ComponentStyling
 import javax.swing.JPanel
 import java.awt.BorderLayout
 
@@ -75,22 +71,8 @@ class JewelChatPanel(
         composePanel.setContent {
             val actualTheme = JewelThemeStyle.getActualTheme(themeStyle, isSystemDark)
             
-            val theme = when (actualTheme) {
-                JewelThemeStyle.DARK, JewelThemeStyle.HIGH_CONTRAST_DARK -> {
-                    JewelTheme.darkThemeDefinition()
-                }
-                JewelThemeStyle.LIGHT, JewelThemeStyle.HIGH_CONTRAST_LIGHT -> {
-                    JewelTheme.lightThemeDefinition()
-                }
-                else -> JewelTheme.lightThemeDefinition() // 默认亮色
-            }
-            
-            IntUiTheme(
-                theme = theme,
-                styling = ComponentStyling.provide()
-            ) {
-                ChatPanelContent()
-            }
+            // IDE platform automatically provides theme
+            ChatPanelContent()
         }
     }
     

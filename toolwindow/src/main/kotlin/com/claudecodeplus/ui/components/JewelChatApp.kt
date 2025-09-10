@@ -73,7 +73,7 @@ fun JewelChatApp(
     workingDirectory: String,
     fileIndexService: com.claudecodeplus.ui.services.FileIndexService? = null,
     projectService: com.claudecodeplus.core.interfaces.ProjectService? = null,
-    themeProvider: JewelThemeProvider = DefaultJewelThemeProvider(),
+    themeProvider: JewelThemeProvider = IdeJewelThemeProvider(),
     modifier: Modifier = Modifier,
     showToolbar: Boolean = true,
     onThemeChange: ((JewelThemeStyle) -> Unit)? = null,

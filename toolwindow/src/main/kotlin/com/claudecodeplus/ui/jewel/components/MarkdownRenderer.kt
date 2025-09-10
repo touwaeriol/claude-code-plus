@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
-import androidx.compose.material.LocalContentColor
 import org.commonmark.parser.Parser
 import org.commonmark.node.*
 import org.commonmark.ext.gfm.tables.*
@@ -138,7 +137,7 @@ fun MarkdownRenderer(
                             Text(
                                 text = block.content,
                                 style = JewelTheme.defaultTextStyle.copy(
-                                    color = LocalContentColor.current.copy(alpha = 0.7f)
+                                    color = JewelTheme.globalColors.text.disabled
                                 ),
                                 modifier = Modifier.padding(start = 12.dp)
                             )

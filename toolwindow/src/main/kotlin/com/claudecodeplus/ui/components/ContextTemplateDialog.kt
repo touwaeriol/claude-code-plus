@@ -8,8 +8,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,7 +90,7 @@ fun ContextTemplateDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        Icons.Default.Search,
+                        AllIconsKeys.Actions.Find,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = Color.Gray
@@ -107,12 +106,12 @@ fun ContextTemplateDialog(
                 OutlinedButton(onClick = { /* TODO: 实现分类选择 */ }) {
                     Text(selectedCategory)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                    Icon(AllIconsKeys.Actions.FindAndShowNextMatches, contentDescription = null)
                 }
                 
                 // 创建模板按钮
                 DefaultButton(onClick = { showCreateDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = null)
+                    Icon(AllIconsKeys.General.Add, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("创建")
                 }
@@ -160,7 +159,7 @@ fun ContextTemplateDialog(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
-                                Icons.Default.Clear,
+                                AllIconsKeys.Actions.Cancel,
                                 contentDescription = null,
                                 modifier = Modifier.size(48.dp),
                                 tint = Color.Gray
@@ -288,7 +287,7 @@ private fun RecommendedTemplateCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        Icons.Default.Info,
+                        AllIconsKeys.General.Information,
                         contentDescription = null,
                         modifier = Modifier.size(12.dp)
                     )
@@ -356,7 +355,7 @@ private fun TemplateCard(
                         modifier = Modifier.size(20.dp)
                     ) {
                         Icon(
-                            Icons.Default.MoreVert,
+                            AllIconsKeys.Actions.More,
                             contentDescription = "更多",
                             modifier = Modifier.size(16.dp)
                         )
@@ -422,7 +421,7 @@ private fun TemplateCard(
                                 .background(Color(0xFFFF9800).copy(alpha = 0.2f))
                         ) {
                             Icon(
-                                Icons.Default.Star,
+                                AllIconsKeys.Nodes.Bookmark,
                                 contentDescription = null,
                                 modifier = Modifier
                                     .size(12.dp)

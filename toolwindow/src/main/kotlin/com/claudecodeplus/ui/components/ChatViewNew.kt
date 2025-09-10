@@ -28,6 +28,7 @@ import com.claudecodeplus.ui.jewel.components.*
 import com.claudecodeplus.ui.jewel.components.QueueIndicator
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.SessionManager
+import com.claudecodeplus.ui.components.AssistantMessageDisplay
 import java.time.Instant
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.ui.services.ContextProcessor

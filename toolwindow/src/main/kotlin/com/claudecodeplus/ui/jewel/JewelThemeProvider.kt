@@ -1,12 +1,10 @@
 package com.claudecodeplus.ui.jewel
 
 import org.jetbrains.jewel.foundation.theme.JewelTheme
-import org.jetbrains.jewel.intui.standalone.theme.darkThemeDefinition
-import org.jetbrains.jewel.intui.standalone.theme.lightThemeDefinition
 
 /**
  * Jewel 主题提供者接口
- * 用于统一管理主题配置，便于插件集成
+ * 在IDE平台环境中，主题由IDE自动管理，这个接口用于兼容独立应用模式
  */
 interface JewelThemeProvider {
     /**
@@ -36,9 +34,10 @@ interface JewelThemeProvider {
 }
 
 /**
- * 默认的主题提供者实现
+ * IDE插件环境的主题提供者实现
+ * 在IDE环境中，主题由平台自动管理，此类主要用于兼容性
  */
-class DefaultJewelThemeProvider(
+class IdeJewelThemeProvider(
     private var themeStyle: JewelThemeStyle = JewelThemeStyle.LIGHT,
     private var isSystemDark: Boolean = false,
     private var themeConfig: JewelThemeConfig = JewelThemeConfig.DEFAULT
@@ -61,109 +60,42 @@ class DefaultJewelThemeProvider(
     }
     
     /**
-     * 更新主题样式
+     * 更新主题状态（内部使用）
      */
-    fun updateThemeStyle(newThemeStyle: JewelThemeStyle) {
-        if (themeStyle != newThemeStyle) {
-            themeStyle = newThemeStyle
-            notifyListeners()
+    internal fun updateThemeStyle(newStyle: JewelThemeStyle, systemDark: Boolean) {
+        if (themeStyle != newStyle || isSystemDark != systemDark) {
+            themeStyle = newStyle
+            isSystemDark = systemDark
+            listeners.forEach { it(newStyle) }
         }
-    }
-    
-    /**
-     * 更新系统暗色主题状态
-     */
-    fun updateSystemDark(isDark: Boolean) {
-        if (isSystemDark != isDark) {
-            isSystemDark = isDark
-            if (themeStyle == JewelThemeStyle.SYSTEM) {
-                notifyListeners()
-            }
-        }
-    }
-    
-    /**
-     * 更新主题配置
-     */
-    fun updateThemeConfig(newConfig: JewelThemeConfig) {
-        if (themeConfig != newConfig) {
-            themeConfig = newConfig
-            notifyListeners()
-        }
-    }
-    
-    private fun notifyListeners() {
-        listeners.forEach { it(themeStyle) }
     }
 }
 
-/**
- * 插件主题提供者 - 用于与 IntelliJ 插件系统集成
- */
-class PluginJewelThemeProvider(
-    private val getPluginTheme: () -> JewelThemeStyle = { JewelThemeStyle.SYSTEM },
-    private val isPluginDarkTheme: () -> Boolean = { false }
-) : JewelThemeProvider {
-    
-    private val listeners = mutableListOf<(JewelThemeStyle) -> Unit>()
-    
-    override fun getCurrentThemeStyle(): JewelThemeStyle = getPluginTheme()
-    
-    override fun isSystemDark(): Boolean = isPluginDarkTheme()
-    
-    override fun getThemeConfig(): JewelThemeConfig = JewelThemeConfig.DEFAULT
-    
-    override fun addThemeChangeListener(listener: (JewelThemeStyle) -> Unit) {
-        listeners.add(listener)
-    }
-    
-    override fun removeThemeChangeListener(listener: (JewelThemeStyle) -> Unit) {
-        listeners.remove(listener)
-    }
-    
-    /**
-     * 通知主题变化（由插件系统调用）
-     */
-    fun notifyThemeChanged() {
-        listeners.forEach { it(getCurrentThemeStyle()) }
-    }
-}
 
 /**
- * 主题工具类
+ * IDE平台主题工具类
+ * 在IDE环境中，主题由平台自动管理
  */
-object JewelThemeUtils {
+object IdePlatformTheme {
+    
     /**
-     * 根据主题提供者获取实际的 Jewel 主题定义
+     * 创建默认的主题提供者
+     * 在IDE环境中返回简化的实现
      */
-    fun getThemeDefinition(provider: JewelThemeProvider) = run {
-        val actualTheme = JewelThemeStyle.getActualTheme(
-            provider.getCurrentThemeStyle(),
-            provider.isSystemDark()
-        )
-        
-        when (actualTheme) {
-            JewelThemeStyle.DARK, JewelThemeStyle.HIGH_CONTRAST_DARK -> {
-                JewelTheme.darkThemeDefinition()
-            }
-            JewelThemeStyle.LIGHT, JewelThemeStyle.HIGH_CONTRAST_LIGHT -> {
-                JewelTheme.lightThemeDefinition()
-            }
-            else -> JewelTheme.lightThemeDefinition() // 默认亮色
-        }
+    fun createProvider(): JewelThemeProvider {
+        return IdeJewelThemeProvider()
     }
     
     /**
      * 检测系统主题
+     * 在IDE环境中，这个信息由IDE平台提供
      */
     fun detectSystemTheme(): Boolean {
-        // 这里可以添加系统主题检测逻辑
-        // 对于 macOS 可以检查系统外观设置
-        // 对于其他系统可以有相应的检测方法
         return try {
-            System.getProperty("apple.awt.application.appearance")?.contains("Dark") == true
+            // 在IDE环境中，主题由平台管理，这里提供默认值
+            false
         } catch (e: Exception) {
-            false // 默认为亮色主题
+            false
         }
     }
-} 
+}

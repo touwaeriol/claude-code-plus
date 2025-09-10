@@ -668,7 +668,7 @@ private fun TopToolbar(
             PillContextTag(
                 context = context,
                 onRemove = { onContextRemove(context) },
-                enabled = enabled
+                enabled = true  // 始终允许移除上下文，即使在生成期间
             )
         }
     }
@@ -729,7 +729,7 @@ private fun BottomToolbar(
                 onSkipPermissionsChange = onSkipPermissionsChange,
                 autoCleanupContexts = autoCleanupContexts,
                 onAutoCleanupContextsChange = onAutoCleanupContextsChange,
-                enabled = enabled && !isGenerating,
+                enabled = enabled,  // 保持控件在生成期间可用，允许用户修改设置
                 showModelSelector = showModelSelector,
                 showPermissionControls = showPermissionControls,
                 modifier = Modifier.weight(1f, fill = false)

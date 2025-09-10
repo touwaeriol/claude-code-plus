@@ -5,8 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,10 +70,10 @@ fun InterruptedSessionBanner(
                     ) {
                         // 图标
                         val icon = when (session.reason) {
-                            InterruptedSession.InterruptReason.USER_CANCELLED -> Icons.Default.Info
-                            InterruptedSession.InterruptReason.ERROR -> Icons.Default.Warning
-                            InterruptedSession.InterruptReason.TIMEOUT -> Icons.Default.Refresh
-                            InterruptedSession.InterruptReason.SYSTEM_SHUTDOWN -> Icons.Default.Close
+                            InterruptedSession.InterruptReason.USER_CANCELLED -> AllIconsKeys.General.Information
+                            InterruptedSession.InterruptReason.ERROR -> AllIconsKeys.General.Warning
+                            InterruptedSession.InterruptReason.TIMEOUT -> AllIconsKeys.Actions.ForceRefresh
+                            InterruptedSession.InterruptReason.SYSTEM_SHUTDOWN -> AllIconsKeys.Actions.Close
                         }
                         
                         Icon(
@@ -110,7 +109,7 @@ fun InterruptedSessionBanner(
                         OutlinedButton(onClick = { isExpanded = !isExpanded }) {
                             Text(if (isExpanded) "收起" else "详情")
                             Icon(
-                                if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                if (isExpanded) AllIconsKeys.Actions.FindAndShowPrevMatches else AllIconsKeys.Actions.FindAndShowNextMatches,
                                 contentDescription = null
                             )
                         }
@@ -120,7 +119,7 @@ fun InterruptedSessionBanner(
                         }
                         
                         DefaultButton(onClick = onResume) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null)
+                            Icon(AllIconsKeys.Actions.Execute, contentDescription = null)
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("继续对话")
                         }
@@ -242,7 +241,7 @@ fun InterruptedSessionsPanel(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        Icons.Default.Refresh,
+                        AllIconsKeys.Actions.ForceRefresh,
                         contentDescription = null,
                         modifier = Modifier.size(20.dp)
                     )
@@ -367,7 +366,7 @@ private fun InterruptedSessionCard(
                     modifier = Modifier.size(20.dp)
                 ) {
                     Icon(
-                        Icons.Default.Delete,
+                        AllIconsKeys.Actions.GC,
                         contentDescription = "删除",
                         modifier = Modifier.size(16.dp)
                     )
