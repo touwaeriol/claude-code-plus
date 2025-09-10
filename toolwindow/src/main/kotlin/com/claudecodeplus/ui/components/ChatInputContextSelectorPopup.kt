@@ -595,38 +595,8 @@ private fun FileResultItem(
 }
 
 /**
- * 获取主题感知的关键词高亮颜色
- * 根据当前主题动态计算高亮背景色和文字色，确保在不同主题下都有良好的对比度
- */
-@Composable
-private fun getThemeAwareHighlightColors(): Pair<Color, Color> {
-    // 获取主题的主要颜色
-    val focusedColor = JewelTheme.globalColors.borders.focused
-    val backgroundColor = JewelTheme.globalColors.panelBackground
-    val textColor = JewelTheme.globalColors.text.normal
-    
-    // 通过比较背景色的亮度来判断是否为暗色主题
-    val bgLuminance = backgroundColor.red * 0.299f + backgroundColor.green * 0.587f + backgroundColor.blue * 0.114f
-    val isDarkTheme = bgLuminance < 0.5f
-    
-    return if (isDarkTheme) {
-        // 暗色主题：使用主题强调色的半透明版本作为背景，保持文本对比度
-        Pair(
-            focusedColor.copy(alpha = 0.3f), // 半透明的强调色背景
-            Color.White.copy(alpha = 0.95f)  // 高对比度白色文字
-        )
-    } else {
-        // 亮色主题：使用温和的黄色调背景，深色文字
-        Pair(
-            Color(0xFFFFF59D).copy(alpha = 0.8f), // 温和黄色背景
-            Color(0xFF1A1A1A).copy(alpha = 0.87f)  // 深色文字确保可读性
-        )
-    }
-}
-
-/**
  * 构建带关键词高亮的文本
- * 使用主题感知的关键词高亮方案，在不同主题下自动调整颜色
+ * 使用业界标准的关键词高亮方案：黄色背景 + 深色文字 或 蓝色背景 + 白色文字
  */
 @Composable
 private fun buildHighlightedText(
@@ -642,9 +612,6 @@ private fun buildHighlightedText(
     val query = searchQuery.lowercase()
     val lowerText = text.lowercase()
     var lastIndex = 0
-    
-    // 获取主题感知的高亮颜色
-    val (highlightBackground, highlightText) = getThemeAwareHighlightColors()
     
     // 查找所有匹配的位置
     var currentIndex = lowerText.indexOf(query, lastIndex)
@@ -663,11 +630,11 @@ private fun buildHighlightedText(
             }
         }
         
-        // 添加高亮的匹配文本 - 使用主题感知的高亮颜色
+        // 添加高亮的匹配文本 - 使用业界标准的高亮颜色方案，结合 Jewel 主题
         withStyle(
             SpanStyle(
-                background = highlightBackground,
-                color = highlightText
+                background = Color(0xFFFFEB3B), // 明亮黄色背景，适合所有主题
+                color = JewelTheme.globalColors.text.normal // 使用主题文字颜色，自动适应暗色/亮色主题
             )
         ) {
             append(text.substring(currentIndex, currentIndex + searchQuery.length))

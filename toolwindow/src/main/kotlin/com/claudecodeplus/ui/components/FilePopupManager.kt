@@ -31,6 +31,9 @@ import com.claudecodeplus.ui.jewel.components.JewelFileItem
 import com.claudecodeplus.ui.services.IndexedFileInfo
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.clickable
 
 /**
  * 弹窗类型枚举
@@ -72,7 +75,10 @@ fun UnifiedFilePopup(
     onDismiss: () -> Unit,
     onKeyEvent: (KeyEvent) -> Boolean,
     modifier: Modifier = Modifier,
-    onPopupBoundsChanged: ((Rect) -> Unit)? = null
+    onPopupBoundsChanged: ((Rect) -> Unit)? = null,
+    // 新增参数：搜索相关
+    onSearchQueryChange: ((String) -> Unit)? = null,
+    searchInputValue: String = searchQuery
 ) {
     // 追踪弹窗边界
     var popupBounds by remember { mutableStateOf<Rect?>(null) }
@@ -140,6 +146,18 @@ fun UnifiedFilePopup(
                     .padding(4.dp),
                 verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
+                // 为 ADD_CONTEXT 类型添加搜索输入框
+                if (config.type == FilePopupType.ADD_CONTEXT && onSearchQueryChange != null) {
+                    SearchInputField(
+                        value = searchInputValue,
+                        onValueChange = onSearchQueryChange,
+                        placeholder = "搜索文件...",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    )
+                }
+                
                 // 索引状态提示
                 if (isIndexing) {
                     IndexingStatusBanner()
@@ -306,6 +324,62 @@ fun IndexingStatusBanner() {
                     color = JewelTheme.globalColors.text.info
                 )
             )
+        }
+    }
+}
+
+/**
+ * 文件搜索输入框组件
+ * 专为 Add Context 弹窗设计的搜索输入框
+ * 使用基础的 BasicTextField 实现，确保兼容性
+ */
+@Composable
+fun SearchInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(32.dp)
+            .background(
+                JewelTheme.globalColors.panelBackground,
+                RoundedCornerShape(4.dp)
+            )
+            .border(
+                1.dp,
+                JewelTheme.globalColors.borders.normal,
+                RoundedCornerShape(4.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        androidx.compose.foundation.text.BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle = JewelTheme.defaultTextStyle.copy(
+                fontSize = 13.sp,
+                color = JewelTheme.globalColors.text.normal
+            ),
+            cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),
+            singleLine = true,
+            modifier = Modifier.fillMaxSize()
+        ) { innerTextField ->
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (value.isEmpty()) {
+                    Text(
+                        text = placeholder,
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 13.sp,
+                            color = JewelTheme.globalColors.text.disabled
+                        )
+                    )
+                }
+                innerTextField()
+            }
         }
     }
 }

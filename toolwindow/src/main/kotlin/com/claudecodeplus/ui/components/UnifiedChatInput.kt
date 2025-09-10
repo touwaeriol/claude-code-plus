@@ -424,9 +424,10 @@ fun UnifiedChatInput(
         var selectedIndex by remember { mutableStateOf(0) }
         var isIndexing by remember { mutableStateOf(false) }
         var currentSearchQuery by remember { mutableStateOf("") }
+        var addContextSearchInput by remember { mutableStateOf("") }
         
-        // 提取@符号后的搜索关键词
-        val searchQuery = remember(textFieldValue.text, atSymbolPosition) {
+        // 提取@符号后的搜索关键词或使用Add Context搜索输入
+        val searchQuery = remember(textFieldValue.text, atSymbolPosition, addContextSearchInput) {
             if (atSymbolPosition != null) {
                 val text = textFieldValue.text
                 val cursorPos = textFieldValue.selection.start
@@ -439,13 +440,15 @@ fun UnifiedChatInput(
                         .replace("，", ",")  // 中文逗号转英文逗号
                         .replace("：", ":")  // 中文冒号转英文冒号
                         .replace("；", ";")  // 中文分号转英文分号
-                    println("[UnifiedChatInput] 提取搜索关键词: '$query' (原始: '$rawQuery')")
+                    println("[UnifiedChatInput] 提取@符号搜索关键词: '$query' (原始: '$rawQuery')")
                     query
                 } else {
                     ""
                 }
             } else {
-                ""
+                // Add Context 按钮触发时，使用独立的搜索输入框值
+                println("[UnifiedChatInput] 使用Add Context搜索输入: '$addContextSearchInput'")
+                addContextSearchInput
             }
         }
         
@@ -511,6 +514,10 @@ fun UnifiedChatInput(
                 scrollState = scrollState,
                 popupOffset = buttonCenterPosition, // 传递按钮中心位置作为锚点
                 isIndexing = isIndexing, // 传递索引状态
+                onSearchQueryChange = { newQuery ->
+                    addContextSearchInput = newQuery
+                },
+                searchInputValue = addContextSearchInput,
                 onItemSelected = { selectedFile ->
                     // 根据触发方式决定处理逻辑
                     val currentAtPosition = sessionObject?.atSymbolPosition

@@ -65,27 +65,27 @@
   - 添加 `--print` 参数以使用非交互模式
 
 #### 已实现的核心组件
-- **工具展示组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/jewel/components/tools/`）**已大幅增强**
-  - `LoadingIndicators.kt` - 各种加载动画组件（跳动点、脉冲点、旋转进度等）
+
+**工具展示组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/jewel/components/`）**已大幅增强**
+  - `LoadingIndicators.kt`（tools目录下）- 各种加载动画组件（跳动点、脉冲点、旋转进度等）
   - `CompactToolCallDisplay.kt` - **核心工具调用展示组件**，支持智能参数显示和80+工具专业格式化：
     - 基础工具：Edit/Read/Write/LS/Bash/TodoWrite 专业显示
     - 搜索工具：Glob文件匹配、Grep/Search内容搜索专业展示
     - 网络工具：WebFetch网页内容摘要显示
     - 高级工具：Task子任务处理、NotebookEdit Jupyter操作显示
     - MCP工具：统一的MCP工具展示格式（server.function）
-  - `EnhancedTodoDisplay.kt` - TodoWrite 单列任务列表展示
-  - `DiffResultDisplay.kt` - 文件编辑的 Diff 结果展示
-  - `ToolExecutionProgress.kt` - 工具执行进度显示
-  - `ToolGroupDisplay.kt` - 工具分组展示
+  - `SmartToolCallDisplay.kt` - 智能工具调用展示组件
   - `AssistantMessageDisplay.kt` - 助手消息展示（集成新的工具展示组件）
 
-- **消息显示组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/jewel/components/`）**已完全优化**
+**消息显示组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/jewel/components/`）**已完全优化**
   - `UserMessageDisplay.kt` - **用户消息显示组件**，已优化为与输入框完全一致的主题适配
   - `UnifiedInputArea.kt` - **统一输入区域组件**，支持 INPUT 和 DISPLAY 两种模式，DISPLAY 模式已优化为纯文本显示
   - `AnnotatedMessageDisplay.kt` - 带注解的消息显示组件（已被纯文本方案替代，避免主题适配问题）
   - `CachedMarkdownParser.kt` - 缓存的 Markdown 解析器（性能优化组件）
+  - `MarkdownRenderer.kt` - Markdown 渲染组件
+  - `ChatInputField.kt` - 聊天输入字段组件
 
-- **UI 组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/components/`）
+**UI 组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/components/`）
   - `MultiTabChatView.kt` - 多标签聊天视图
   - `ChatOrganizer.kt` - 对话组织器
   - `ProjectSelector.kt` - 项目选择器
@@ -94,10 +94,16 @@
   - `SessionListPanel.kt` - 会话列表面板
   - `GlobalSearchDialog.kt` - 全局搜索对话框
   - `ContextTemplateDialog.kt` - 上下文模板对话框
-  - `BatchQuestionDialog.kt` - 批量问题对话框
+  - `BatchQuestionDialog.kt` - 批量问题对话框（已修复主题适配）
   - `ContextPreviewPanel.kt` - 上下文预览面板
   - `InterruptedSessionBanner.kt` - 中断会话横幅
-  - `chat/ModernChatView.kt` - 现代聊天视图
+  - `ModernChatView.kt` - 现代聊天视图
+  - `ChatViewNew.kt` - 新版聊天视图
+  - `ChatViewOptimized.kt` - 优化版聊天视图
+  - `StandaloneChatView.kt` - 独立聊天视图
+  - `UnifiedChatInput.kt` - 统一聊天输入组件（已修复控件状态管理）
+  - `SimpleInlineFileReference.kt` - @ 符号文件引用组件（已修复主题感知高亮）
+  - `ChatInputContextSelectorPopup.kt` - 上下文选择弹窗（已确认为未使用的遗留代码）
 
 - **服务层组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/services/`）
   - `ChatTabManager.kt` - 标签管理服务（支持Claude会话链接状态跟踪）
@@ -138,6 +144,43 @@
   - `GlobalCliWrapper.kt` - 全局CLI包装器模型
 
 ## 最新调查和发现记录
+
+### 2025年9月10日 - UI 控件和主题高亮修复
+
+完成了关键UI交互问题的修复，提升了用户在AI处理期间的操作体验：
+
+#### 修复内容
+1. **AI处理期间控件状态修复**（`UnifiedChatInput.kt`）
+   - **问题**：AI处理期间，输入框中的所有按钮都被禁用，用户无法修改配置
+   - **解决方案**：移除控件的 `&& !isGenerating` 条件，确保所有控件在AI处理期间保持可用
+   - **影响文件**：`UnifiedChatInput.kt:732`, `UnifiedChatInput.kt:671`
+
+2. **@ 符号文件引用主题感知高亮修复**（`SimpleInlineFileReference.kt`）
+   - **问题**：@符号搜索文件时，关键词高亮颜色固定，在不同主题下可见性差
+   - **解决方案**：实现主题感知的高亮颜色系统
+   ```kotlin
+   @Composable
+   private fun getThemeAwareHighlightColor(): androidx.compose.ui.graphics.Color {
+       val isDarkTheme = JewelTheme.isDark
+       return if (isDarkTheme) {
+           androidx.compose.ui.graphics.Color(0xFFFFA500) // 暗主题：亮橙色
+       } else {
+           androidx.compose.ui.graphics.Color(0xFF0066CC) // 亮主题：深蓝色
+       }
+   }
+   ```
+   - **影响文件**：`SimpleInlineFileReference.kt:327-336`, `SimpleInlineFileReference.kt:351`
+
+3. **无用代码清理**
+   - **清理目标**：`ChatInputContextSelectorPopup.kt` 中错误添加的主题高亮代码
+   - **原因**：错误地在未使用的遗留文件中添加了高亮功能
+   - **结果**：确认该文件为遗留代码，已恢复为原始状态
+
+#### 工具集成增强
+完成了工具结果在IDE中的展示功能验证：
+- **Read 工具**：`ReadToolHandler.kt` 使用 `OpenFileDescriptor` 在IDE中打开文件并定位到指定行
+- **Edit 工具**：`EditToolHandler.kt` 使用 `DiffManager` 显示文件变更的完整差异对比
+- **工具点击管理**：`ToolClickManager.kt` 统一管理所有工具的点击处理逻辑
 
 ### 2025年8月26日 - 暗色主题完全修复
 
@@ -218,9 +261,9 @@ SelectionContainer {
 - `AnnotatedChatInputField.kt` ✅
 - `ChatInputField.kt` ✅  
 - `RichTextInputField.kt` ✅
-- `ChatInputContextSelectorPopup.kt` ✅
 - `UserMessageDisplay.kt` ✅ **新增修复**
 - `UnifiedInputArea.kt` ✅ **DISPLAY模式修复**
+- `SimpleInlineFileReference.kt` ✅ **主题感知高亮修复**
 
 #### 修复效果
 - ✅ **输入框 (Input Box)** 在暗色主题下文字和光标完全可见，用户可以正常打字输入

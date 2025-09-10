@@ -184,7 +184,10 @@ fun ButtonFilePopup(
     onDismiss: () -> Unit,
     onKeyEvent: (KeyEvent) -> Boolean,
     modifier: Modifier = Modifier,
-    onPopupBoundsChanged: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null
+    onPopupBoundsChanged: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
+    // 新增搜索相关参数
+    onSearchQueryChange: ((String) -> Unit)? = null,
+    searchInputValue: String = searchQuery
 ) {
     val config = FilePopupConfig(
         type = FilePopupType.ADD_CONTEXT,
@@ -202,7 +205,9 @@ fun ButtonFilePopup(
         onDismiss = onDismiss,
         onKeyEvent = onKeyEvent,
         modifier = modifier,
-        onPopupBoundsChanged = onPopupBoundsChanged
+        onPopupBoundsChanged = onPopupBoundsChanged,
+        onSearchQueryChange = onSearchQueryChange,
+        searchInputValue = searchInputValue
     )
 }
 
@@ -256,10 +261,7 @@ fun JewelFileItem(
                     text = buildHighlightedText(file.name, searchQuery),
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 13.sp,
-                        color = if (isSelected) 
-                            JewelTheme.globalColors.borders.focused
-                        else 
-                            JewelTheme.globalColors.text.normal
+                        color = JewelTheme.globalColors.text.normal // 统一使用正常文本颜色，确保可见性
                     ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -320,7 +322,23 @@ private fun getFileIcon(fileName: String): String {
 }
 
 /**
- * 构建带高亮的文本 - 简化版本
+ * 获取主题感知的高亮颜色
+ * 根据当前主题选择合适的高亮颜色，确保在不同主题下关键词都清晰可见
+ */
+@Composable
+private fun getThemeAwareHighlightColor(): androidx.compose.ui.graphics.Color {
+    val isDarkTheme = JewelTheme.isDark
+    return if (isDarkTheme) {
+        // 暗色主题：使用亮橙色，在深色背景上清晰可见
+        androidx.compose.ui.graphics.Color(0xFFFFA500)
+    } else {
+        // 亮色主题：使用深蓝色，在浅色背景上明显突出
+        androidx.compose.ui.graphics.Color(0xFF0066CC)
+    }
+}
+
+/**
+ * 构建带高亮的文本 - 主题感知版本
  */
 @Composable
 private fun buildHighlightedText(fileName: String, searchQuery: String): androidx.compose.ui.text.AnnotatedString {
@@ -332,7 +350,7 @@ private fun buildHighlightedText(fileName: String, searchQuery: String): android
         val index = fileName.indexOf(searchQuery, ignoreCase = true)
         if (index >= 0) {
             append(fileName.substring(0, index))
-            withStyle(SpanStyle(color = JewelTheme.globalColors.borders.focused)) {
+            withStyle(SpanStyle(color = getThemeAwareHighlightColor())) {
                 append(fileName.substring(index, index + searchQuery.length))
             }
             append(fileName.substring(index + searchQuery.length))
