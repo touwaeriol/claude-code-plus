@@ -108,7 +108,9 @@ fun UnifiedChatInput(
     showModelSelector: Boolean = true,
     showPermissionControls: Boolean = true,
     showContextControls: Boolean = true,
-    showSendButton: Boolean = true
+    showSendButton: Boolean = true,
+    // 图片选择回调
+    onImageSelected: (java.io.File) -> Unit = {}
 ) {
     val focusRequester = remember { FocusRequester() }
     var isFocused by remember { mutableStateOf(false) }
@@ -549,6 +551,7 @@ private fun BottomToolbar(
                     isGenerating = isGenerating,
                     onSend = onSend,
                     onStop = onStop,
+                    onImageSelected = onImageSelected,
                     hasInput = hasInput,
                     enabled = enabled,
                     currentModel = selectedModel,

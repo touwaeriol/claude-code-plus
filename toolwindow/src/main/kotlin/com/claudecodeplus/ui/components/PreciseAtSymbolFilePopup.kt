@@ -28,6 +28,9 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.claudecodeplus.ui.services.IndexedFileInfo
 import com.claudecodeplus.ui.jewel.components.business.*
+import com.claudecodeplus.ui.jewel.components.JewelFileItem
+import com.claudecodeplus.ui.jewel.components.FileItemSelectionType
+import com.claudecodeplus.ui.jewel.components.getItemSelectionType
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 
 /**
@@ -144,9 +147,15 @@ fun PreciseAtSymbolFilePopup(
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
                         itemsIndexed(results) { index, file ->
+                            // @ 符号模式始终不使用键盘模式，保持简单的选择逻辑
+                            val selectionType = if (index == selectedIndex) {
+                                FileItemSelectionType.PRIMARY
+                            } else {
+                                FileItemSelectionType.NONE
+                            }
                             JewelFileItem(
                                 file = file,
-                                isSelected = index == selectedIndex,
+                                selectionType = selectionType,
                                 searchQuery = searchQuery,
                                 onClick = { onItemSelected(file) },
                                 modifier = Modifier.fillMaxWidth(),

@@ -28,12 +28,36 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.claudecodeplus.ui.jewel.components.JewelFileItem
+import com.claudecodeplus.ui.jewel.components.FileItemSelectionType
+import com.claudecodeplus.ui.jewel.components.getItemSelectionType
 import com.claudecodeplus.ui.services.IndexedFileInfo
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.runtime.LaunchedEffect
+import java.awt.Cursor
+import java.awt.Point
+import java.awt.Toolkit
+import java.awt.image.BufferedImage
+
+/**
+ * 创建透明的空光标，用于键盘模式时隐藏鼠标指针
+ */
+private fun createEmptyCursor(): Cursor {
+    return Toolkit.getDefaultToolkit().createCustomCursor(
+        BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB),
+        Point(0, 0),
+        "Empty Cursor"
+    )
+}
 
 /**
  * 弹窗类型枚举
@@ -67,6 +91,7 @@ data class FilePopupConfig(
 fun UnifiedFilePopup(
     results: List<IndexedFileInfo>,
     selectedIndex: Int,
+    hoveredIndex: Int = -1,
     searchQuery: String,
     scrollState: LazyListState,
     config: FilePopupConfig,
@@ -74,11 +99,14 @@ fun UnifiedFilePopup(
     onItemSelected: (IndexedFileInfo) -> Unit,
     onDismiss: () -> Unit,
     onKeyEvent: (KeyEvent) -> Boolean,
+    onItemHover: ((Int) -> Unit)? = null,
     modifier: Modifier = Modifier,
     onPopupBoundsChanged: ((Rect) -> Unit)? = null,
     // 新增参数：搜索相关
     onSearchQueryChange: ((String) -> Unit)? = null,
-    searchInputValue: String = searchQuery
+    searchInputValue: String = searchQuery,
+    // 键盘模式状态
+    isKeyboardMode: Boolean = false
 ) {
     // 追踪弹窗边界
     var popupBounds by remember { mutableStateOf<Rect?>(null) }
@@ -94,9 +122,13 @@ fun UnifiedFilePopup(
     Popup(
         onDismissRequest = onDismiss,
         properties = PopupProperties(
-            focusable = false, // 不抢夺焦点，让输入框保持焦点
-            dismissOnBackPress = false, // 通过ESC键手动控制
-            dismissOnClickOutside = true
+            // 根据弹窗类型决定是否可聚焦
+            // @ 符号：false，保持主输入框焦点
+            // Add Context：true，允许搜索框输入
+            focusable = config.type == FilePopupType.ADD_CONTEXT,
+            dismissOnBackPress = true,  // 允许返回键关闭
+            dismissOnClickOutside = true, // 点击外部关闭
+            clippingEnabled = false  // 允许弹窗超出边界
         ),
         popupPositionProvider = positionProvider
     ) {
@@ -113,6 +145,11 @@ fun UnifiedFilePopup(
                     JewelTheme.globalColors.borders.normal,
                     RoundedCornerShape(8.dp)
                 )
+                .pointerHoverIcon(
+                    // 键盘模式时隐藏鼠标指针，鼠标模式时显示正常指针
+                    if (isKeyboardMode) PointerIcon(createEmptyCursor())
+                    else PointerIcon.Default
+                )
                 .onGloballyPositioned { coordinates ->
                     // 追踪弹窗边界
                     val position = coordinates.positionInRoot()
@@ -127,10 +164,23 @@ fun UnifiedFilePopup(
                     onPopupBoundsChanged?.invoke(bounds)
                 }
                 .onPreviewKeyEvent { keyEvent ->
-                    // 只拦截导航相关的键盘事件
+                    // 只拦截导航相关的键盘事件，且不会抢夺搜索输入框的焦点
                     if (keyEvent.type == KeyEventType.KeyDown) {
                         when (keyEvent.key) {
-                            Key.DirectionUp, Key.DirectionDown, Key.Enter, Key.Escape, Key.Tab -> {
+                            Key.DirectionUp, Key.DirectionDown -> {
+                                // 上下键始终用于导航，即使搜索框有焦点
+                                onKeyEvent(keyEvent)
+                            }
+                            Key.Enter -> {
+                                // Enter键仅在有结果时处理
+                                if (results.isNotEmpty()) {
+                                    onKeyEvent(keyEvent)
+                                } else {
+                                    false
+                                }
+                            }
+                            Key.Escape -> {
+                                // Escape键始终用于关闭弹窗
                                 onKeyEvent(keyEvent)
                             }
                             else -> false
@@ -147,15 +197,20 @@ fun UnifiedFilePopup(
                 verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 // 为 ADD_CONTEXT 类型添加搜索输入框
+                println("[UnifiedFilePopup] 检查是否显示搜索输入框: type=${config.type}, onSearchQueryChange=${onSearchQueryChange != null}")
                 if (config.type == FilePopupType.ADD_CONTEXT && onSearchQueryChange != null) {
+                    println("[UnifiedFilePopup] ✅ 显示搜索输入框")
                     SearchInputField(
                         value = searchInputValue,
                         onValueChange = onSearchQueryChange,
                         placeholder = "搜索文件...",
+                        autoFocus = true, // 添加自动聚焦
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
                     )
+                } else {
+                    println("[UnifiedFilePopup] ❌ 不显示搜索输入框 - type=${config.type}, onSearchQueryChange=${onSearchQueryChange != null}")
                 }
                 
                 // 索引状态提示
@@ -171,11 +226,27 @@ fun UnifiedFilePopup(
                     verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
                     itemsIndexed(results) { index, file ->
+                        val selectionType = getItemSelectionType(
+                            index = index,
+                            keyboardIndex = selectedIndex,
+                            mouseIndex = hoveredIndex,
+                            isKeyboardMode = isKeyboardMode
+                        )
                         JewelFileItem(
                             file = file,
-                            isSelected = index == selectedIndex,
+                            selectionType = selectionType,
                             searchQuery = searchQuery,
                             onClick = { onItemSelected(file) },
+                            onHover = { isHovering ->
+                                if (isHovering) {
+                                    onItemHover?.invoke(index)
+                                } else {
+                                    // 只有在当前项是悬停状态时才清除，避免误清除其他项的悬停
+                                    if (index == hoveredIndex) {
+                                        onItemHover?.invoke(-1)
+                                    }
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             anchorBounds = popupBounds
                         )
@@ -330,16 +401,36 @@ fun IndexingStatusBanner() {
 
 /**
  * 文件搜索输入框组件
- * 专为 Add Context 弹窗设计的搜索输入框
- * 使用基础的 BasicTextField 实现，确保兼容性
+ * 专为 Add Context 弹窗设计的搜索输入框，支持自动聚焦
+ * 使用改进的 BasicTextField 实现，添加了输入法支持
  */
 @Composable
 fun SearchInputField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
+    autoFocus: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    // 使用 FocusRequester 来管理焦点
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    
+    // 当 autoFocus 为 true 时，自动请求焦点
+    LaunchedEffect(autoFocus) {
+        if (autoFocus) {
+            println("[SearchInputField] 🎯 尝试自动聚焦，autoFocus=$autoFocus")
+            // 延迟一帧确保组件已完全初始化
+            kotlinx.coroutines.delay(16)
+            try {
+                focusRequester.requestFocus()
+                println("[SearchInputField] ✅ 自动聚焦成功")
+            } catch (e: IllegalStateException) {
+                println("[SearchInputField] ❌ 自动聚焦失败: ${e.message}")
+                // 忽略焦点请求失败的异常，这是正常的竞争条件
+            }
+        }
+    }
+    
     Box(
         modifier = modifier
             .height(32.dp)
@@ -356,19 +447,48 @@ fun SearchInputField(
     ) {
         androidx.compose.foundation.text.BasicTextField(
             value = value,
-            onValueChange = onValueChange,
+            onValueChange = { newValue ->
+                println("[SearchInputField] 📝 输入变化: '$value' -> '$newValue', 长度: ${value.length} -> ${newValue.length}")
+                onValueChange(newValue)
+            },
             textStyle = JewelTheme.defaultTextStyle.copy(
                 fontSize = 13.sp,
                 color = JewelTheme.globalColors.text.normal
             ),
             cursorBrush = SolidColor(JewelTheme.globalColors.text.normal),
             singleLine = true,
-            modifier = Modifier.fillMaxSize()
+            enabled = true,
+            readOnly = false,
+            // 添加 KeyboardOptions 来确保支持所有输入类型
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                imeAction = androidx.compose.ui.text.input.ImeAction.Search
+            ),
+            // 添加 KeyboardActions 
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onSearch = {
+                    // 搜索动作 - 可以添加搜索逻辑
+                }
+            ),
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(focusRequester) // 添加焦点请求器
+                .onPreviewKeyEvent { keyEvent ->
+                    println("[SearchInputField] ⌨️  键盘事件: ${keyEvent.key}, type=${keyEvent.type}, isCtrlPressed=${keyEvent.isCtrlPressed}, isMetaPressed=${keyEvent.isMetaPressed}")
+                    false // 不拦截，让BasicTextField正常处理
+                }
+                .onFocusChanged { focusState ->
+                    println("[SearchInputField] 🎯 焦点状态变化: isFocused=${focusState.isFocused}, hasFocus=${focusState.hasFocus}")
+                }
+                // 完全移除 onPreviewKeyEvent，让 BasicTextField 正常处理所有输入
+                // 导航键已经在外层的 UnifiedFilePopup 中统一处理
         ) { innerTextField ->
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
+                // 先显示 placeholder，如果有内容则被覆盖
                 if (value.isEmpty()) {
                     Text(
                         text = placeholder,
@@ -378,7 +498,15 @@ fun SearchInputField(
                         )
                     )
                 }
-                innerTextField()
+                
+                // 然后显示实际输入的文字，确保在最上层
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 2.dp)  // 增加小的内边距
+                ) {
+                    innerTextField()
+                }
             }
         }
     }

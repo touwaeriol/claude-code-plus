@@ -18,6 +18,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.*
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.SpanStyle
@@ -41,6 +44,60 @@ import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.SimpleListItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+/**
+ * 文件项选择类型枚举
+ * 用于区分不同的选择状态和相应的视觉样式
+ */
+enum class FileItemSelectionType {
+    NONE,               // 无选中
+    PRIMARY,            // 主要选中（键盘或唯一选中）
+    SECONDARY           // 次要选中（键盘模式下的鼠标位置）
+}
+
+/**
+ * 根据选择类型获取对应的背景颜色
+ */
+@Composable
+fun getSelectionBackground(type: FileItemSelectionType): androidx.compose.ui.graphics.Color {
+    return when (type) {
+        FileItemSelectionType.NONE -> androidx.compose.ui.graphics.Color.Transparent
+        FileItemSelectionType.PRIMARY -> JewelTheme.globalColors.borders.focused.copy(alpha = 0.2f)     // 主要选中：正常高亮
+        FileItemSelectionType.SECONDARY -> JewelTheme.globalColors.borders.focused.copy(alpha = 0.12f)  // 次要选中：淡化但可见
+    }
+}
+
+/**
+ * 计算文件项的选择类型
+ * 根据当前索引、键盘选中索引、鼠标悬停索引和键盘模式状态来判断
+ */
+fun getItemSelectionType(
+    index: Int,
+    keyboardIndex: Int,
+    mouseIndex: Int,
+    isKeyboardMode: Boolean
+): FileItemSelectionType {
+    return when {
+        // 键盘模式下（用户按了上下键）
+        isKeyboardMode -> {
+            when {
+                index == keyboardIndex -> FileItemSelectionType.PRIMARY    // 键盘选中：正常高亮
+                index == mouseIndex -> FileItemSelectionType.SECONDARY     // 鼠标位置：淡化显示
+                else -> FileItemSelectionType.NONE
+            }
+        }
+        // 鼠标模式下（默认状态或鼠标移动后）
+        else -> {
+            when {
+                // 有鼠标悬停
+                index == mouseIndex -> FileItemSelectionType.PRIMARY
+                // 只有键盘选择（初始状态，没有鼠标悬停）
+                index == keyboardIndex && mouseIndex == -1 -> FileItemSelectionType.PRIMARY
+                else -> FileItemSelectionType.NONE
+            }
+        }
+    }
+}
 
 /**
  * 简化的内联文件引用处理器 - 使用业务组件封装
@@ -150,6 +207,7 @@ fun SimpleFilePopup(
     modifier: Modifier = Modifier,
     onPopupBoundsChanged: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null
 ) {
+    println("[SimpleFilePopup] @ 符号弹窗被调用")
     val config = FilePopupConfig(
         type = FilePopupType.AT_SYMBOL,
         anchorOffset = popupOffset
@@ -165,7 +223,9 @@ fun SimpleFilePopup(
         onDismiss = onDismiss,
         onKeyEvent = onKeyEvent,
         modifier = modifier,
-        onPopupBoundsChanged = onPopupBoundsChanged
+        onPopupBoundsChanged = onPopupBoundsChanged,
+        onSearchQueryChange = null, // 明确指定不要搜索输入框
+        searchInputValue = "" // 明确指定空值
     )
 }
 
@@ -176,6 +236,7 @@ fun SimpleFilePopup(
 fun ButtonFilePopup(
     results: List<IndexedFileInfo>,
     selectedIndex: Int,
+    hoveredIndex: Int = -1,
     searchQuery: String,
     scrollState: LazyListState,
     popupOffset: Offset,
@@ -183,12 +244,16 @@ fun ButtonFilePopup(
     onItemSelected: (IndexedFileInfo) -> Unit,
     onDismiss: () -> Unit,
     onKeyEvent: (KeyEvent) -> Boolean,
+    onItemHover: ((Int) -> Unit)? = null,
     modifier: Modifier = Modifier,
     onPopupBoundsChanged: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
     // 新增搜索相关参数
     onSearchQueryChange: ((String) -> Unit)? = null,
-    searchInputValue: String = searchQuery
+    searchInputValue: String = searchQuery,
+    // 键盘模式状态
+    isKeyboardMode: Boolean = false
 ) {
+    println("[ButtonFilePopup] Add Context 按钮弹窗被调用")
     val config = FilePopupConfig(
         type = FilePopupType.ADD_CONTEXT,
         anchorOffset = popupOffset
@@ -197,6 +262,7 @@ fun ButtonFilePopup(
     UnifiedFilePopup(
         results = results,
         selectedIndex = selectedIndex,
+        hoveredIndex = hoveredIndex,
         searchQuery = searchQuery,
         scrollState = scrollState,
         config = config,
@@ -204,10 +270,12 @@ fun ButtonFilePopup(
         onItemSelected = onItemSelected,
         onDismiss = onDismiss,
         onKeyEvent = onKeyEvent,
+        onItemHover = onItemHover,
         modifier = modifier,
         onPopupBoundsChanged = onPopupBoundsChanged,
         onSearchQueryChange = onSearchQueryChange,
-        searchInputValue = searchInputValue
+        searchInputValue = searchInputValue,
+        isKeyboardMode = isKeyboardMode
     )
 }
 
@@ -217,14 +285,21 @@ fun ButtonFilePopup(
 @Composable
 fun JewelFileItem(
     file: IndexedFileInfo,
-    isSelected: Boolean,
+    selectionType: FileItemSelectionType,
     searchQuery: String,
     onClick: () -> Unit,
+    onHover: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
     anchorBounds: androidx.compose.ui.geometry.Rect? = null
 ) {
-    // 悬停状态管理（用于二级弹窗）
-    var isHovered by remember { mutableStateOf(false) }
+    // 交互源和悬停状态管理
+    val interactionSource = remember { MutableInteractionSource() }
+    val isLocallyHovered by interactionSource.collectIsHoveredAsState()
+    
+    // 监听悬停状态变化
+    LaunchedEffect(isLocallyHovered) {
+        onHover?.invoke(isLocallyHovered)
+    }
     
     // 使用Box支持嵌套的二级悬浮
     Box(modifier = modifier.fillMaxWidth()) {
@@ -234,11 +309,9 @@ fun JewelFileItem(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(4.dp))
                 .background(
-                    color = when {
-                        isSelected -> JewelTheme.globalColors.borders.focused.copy(alpha = 0.15f)
-                        else -> androidx.compose.ui.graphics.Color.Transparent
-                    }
+                    color = getSelectionBackground(selectionType)
                 )
+                .hoverable(interactionSource)
                 .clickable { onClick() }
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -288,10 +361,11 @@ fun JewelFileItem(
         }
         
         // 二级层级悬浮弹窗 - 保持原有功能
-        if (isHovered && isSelected && anchorBounds != null) {
+        val isSelected = selectionType != FileItemSelectionType.NONE
+        if (isLocallyHovered && isSelected && anchorBounds != null) {
             FileHierarchyPopup(
                 targetFile = file,
-                onDismiss = { isHovered = false },
+                onDismiss = { /* 悬停状态由InteractionSource管理，无需手动设置 */ },
                 anchorBounds = anchorBounds
             )
         }

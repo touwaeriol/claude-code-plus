@@ -145,6 +145,78 @@
 
 ## 最新调查和发现记录
 
+### 2025年9月12日 - 上下文使用指示器圆环进度条实现
+
+完成了上下文使用指示器的视觉增强，添加了直观的圆环进度条显示：
+
+#### 实现内容
+1. **Jewel组件库调研**（`ContextUsageIndicator.kt`）
+   - **发现**：Jewel的CircularProgressIndicator仅支持无限期加载动画，不支持确定进度显示
+   - **组件更新**：更新了jewel-components.md和jewel-component-index.md中的进度条文档，澄清了实际API
+   - **文档完善**：从43个组件更新为45个组件的完整索引
+
+2. **自定义圆环进度条实现**（`ContextUsageIndicator.kt:452-509`）
+   ```kotlin
+   @Composable
+   private fun CustomCircularProgress(
+       percentage: Int,
+       modifier: Modifier = Modifier
+   ) {
+       // 智能颜色系统：根据使用率自动变色
+       val progressColor = when {
+           percentage >= 95 -> Color(0xFFFF4444) // 危险红色
+           percentage >= 80 -> Color(0xFFFF8800) // 警告橙色  
+           percentage >= 50 -> Color(0xFFFFA500) // 注意黄色
+           else -> JewelTheme.globalColors.text.normal.copy(alpha = 0.6f) // 正常灰色
+       }
+   }
+   ```
+
+3. **视觉效果优化**
+   - **圆环尺寸**：14x14 dp 精致尺寸，与现有UI完美融合
+   - **主题适配**：使用JewelTheme色彩系统，支持暗色/亮色主题自动切换
+   - **渐进式警告**：4级颜色系统，从正常灰色到危险红色的平滑过渡
+   - **最终效果**：`[圆环进度] [27k/200k]` 的直观显示格式
+
+#### 技术要点
+- **Canvas绘制**：使用Compose Canvas API绘制精确的圆环进度
+- **主题一致性**：完全遵循Jewel UI设计系统的色彩规范
+- **性能优化**：最小化重绘，仅在百分比变化时更新圆环颜色
+- **圆角处理**：使用StrokeCap.Round实现圆润的线条端点
+
+#### 验证结果
+- ✅ **IDE成功启动**：插件正常加载，无编译错误
+- ✅ **圆环显示正常**：在上下文使用指示器中正确显示百分比圆环
+- ✅ **颜色系统工作**：根据使用率自动变色（基础25,926 tokens显示为正常灰色）
+- ✅ **主题兼容**：支持IntelliJ的暗色和亮色主题
+
+#### 基于Claudia项目的Token统计优化
+根据对Claudia项目（~/codes/webstorm/claudia/）的深入分析，实现了更准确的token统计：
+
+**Claudia的Token统计逻辑**：
+```kotlin
+// 与Claudia项目完全一致的token统计
+val messageTokens = messageHistory.fold(0) { total, msg ->
+    if (msg.tokenUsage != null) {
+        total + msg.tokenUsage!!.inputTokens + msg.tokenUsage!!.outputTokens
+    } else {
+        total  // 不进行估算，仅使用精确数据
+    }
+}
+```
+
+**关键改进**：
+- **精确统计**：仅累加Claude CLI提供的实际token使用数据
+- **去除估算**：不再估算输入文本、上下文文件等token数量
+- **简化逻辑**：直接使用input_tokens + output_tokens的累加
+- **准确显示**：新会话显示0 tokens，而非预估的25,926 tokens
+
+#### 用户体验改进
+- **直观性提升**：用户现在可以一眼看出上下文剩余容量
+- **预警功能**：颜色变化提供清晰的使用率警告
+- **统计准确**：与Claudia项目保持一致的精确token计算
+- **信息透明**：tooltip显示统计方式和消息数量详情
+
 ### 2025年9月10日 - UI 控件和主题高亮修复
 
 完成了关键UI交互问题的修复，提升了用户在AI处理期间的操作体验：
@@ -326,3 +398,4 @@ SelectionContainer {
 * 输入: TextField, TextArea, ComboBox
 * 布局: ScrollableContainer, Divider, SplitLayout
 * 弹窗: Popup, PopupContainer, Tooltip
+* 进度: HorizontalProgressBar(确定进度), CircularProgressIndicator(旋转动画)
