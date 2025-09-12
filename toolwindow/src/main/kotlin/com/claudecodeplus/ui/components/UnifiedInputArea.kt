@@ -209,33 +209,18 @@ fun UnifiedInputArea(
                             // Caveat 消息，不显示
                             // 这些是本地命令的元数据消息，用户不需要看到
                         } else {
-                            // 显示普通用户消息内容（纯文本）
-                            if (msg.content.isNotBlank()) {
+                            // 显示普通用户消息内容（纯文本），过滤掉已转换的上下文文本
+                            val filteredContent = filterContextMetadata(msg.content)
+                            if (filteredContent.isNotBlank()) {
                                 SelectionContainer {
                                     Text(
-                                        text = msg.content,
+                                        text = filteredContent,
                                         style = JewelTheme.defaultTextStyle.copy(
                                             fontSize = 13.sp,
                                             lineHeight = 18.sp,
                                             color = JewelTheme.globalColors.text.normal
                                         ),
                                         modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-                            }
-                        }
-                        
-                        // 显示上下文引用（如果有）
-                        if (msg.contexts.isNotEmpty() && compactStatus == null) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                msg.contexts.forEach { context ->
-                                    ReadOnlyContextTag(
-                                        context = context,
-                                        modifier = Modifier
                                     )
                                 }
                             }
@@ -351,31 +336,20 @@ fun UnifiedInputArea(
 }
 
 /**
- * 只读上下文标签
+ * 只读上下文标签 - 复用 PillContextTag 样式
  */
 @Composable
 private fun ReadOnlyContextTag(
     context: ContextReference,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    // 直接使用 PillContextTag 但禁用交互（onRemove 为空操作）
+    PillContextTag(
+        context = context,
+        onRemove = { /* 只读模式，不支持移除 */ },
+        enabled = false, // 禁用交互效果
         modifier = modifier
-            .background(
-                JewelTheme.globalColors.panelBackground,
-                RoundedCornerShape(6.dp)
-            )
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(
-            text = context.toDisplayString(),
-            style = JewelTheme.defaultTextStyle.copy(
-                fontSize = 11.sp,
-                color = JewelTheme.globalColors.text.normal
-            )
-        )
-    }
+    )
 }
 
 /**
@@ -483,4 +457,27 @@ private class ContextSearchServiceImpl(
             null
         }
     }
+}
+
+/**
+ * 过滤掉已转换的上下文元数据文本
+ * 隐藏形如以下格式的文本：
+ * ---
+ * contexts:
+ *   - file:@build/classes/kotlin/main/com/...
+ *   - file:@toolwindow/bin/test/test-session.jsonl
+ * ---
+ */
+private fun filterContextMetadata(content: String): String {
+    // 匹配上下文元数据的正则表达式
+    val contextMetadataRegex = Regex(
+        """---\s*\ncontexts:\s*\n(?:.*?\n)*?---\s*\n?""",
+        setOf(RegexOption.MULTILINE, RegexOption.DOT_MATCHES_ALL)
+    )
+    
+    // 移除上下文元数据块
+    val filtered = content.replace(contextMetadataRegex, "")
+    
+    // 清理多余的空行
+    return filtered.replace(Regex("\n{3,}"), "\n\n").trim()
 }
