@@ -21,8 +21,8 @@ object ProjectPathUtils {
      * 5. 保留开头的 - (Unix 路径)
      * 
      * 例如：
-     * - /home/erio/codes/claude-code-plus → -home-erio-codes-claude-code-plus
-     * - /Users/erio/.claude-code-router → -Users-erio--claude-code-router
+     * - /home/username/codes/claude-code-plus → -home-username-codes-claude-code-plus
+     * - /Users/username/.claude-code-router → -Users-username--claude-code-router
      * - C:\Users\user\project → C--Users-user-project
      * 
      * @param projectPath 项目的绝对路径

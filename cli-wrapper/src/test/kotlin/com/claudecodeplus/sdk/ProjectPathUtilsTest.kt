@@ -31,20 +31,20 @@ class ProjectPathUtilsTest {
         
         // 实际项目路径测试
         assertEquals(
-            "-home-erio-codes-claude-code-plus",
-            ProjectPathUtils.projectPathToDirectoryName("/home/erio/codes/claude-code-plus")
+            "-home-testuser-codes-claude-code-plus",
+            ProjectPathUtils.projectPathToDirectoryName("/home/testuser/codes/claude-code-plus")
         )
         
         // 测试包含点号的路径
         assertEquals(
-            "-Users-erio--claude-code-router",
-            ProjectPathUtils.projectPathToDirectoryName("/Users/erio/.claude-code-router")
+            "-Users-testuser--claude-code-router",
+            ProjectPathUtils.projectPathToDirectoryName("/Users/testuser/.claude-code-router")
         )
         
         // 测试包含下划线的路径
         assertEquals(
-            "-Users-erio-codes-webstorm-analysis-claude-code",
-            ProjectPathUtils.projectPathToDirectoryName("/Users/erio/codes/webstorm/analysis_claude_code")
+            "-Users-testuser-codes-webstorm-analysis-claude-code",
+            ProjectPathUtils.projectPathToDirectoryName("/Users/testuser/codes/webstorm/analysis_claude_code")
         )
         
         // 混合路径

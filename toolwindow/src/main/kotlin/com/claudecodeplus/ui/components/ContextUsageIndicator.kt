@@ -51,37 +51,9 @@ fun ContextUsageIndicator(
     sessionTokenUsage: EnhancedMessage.TokenUsage? = null, // 会话级别的总token使用量
     modifier: Modifier = Modifier
 ) {
-    // 计算总token使用量
+    // 🎯 基于会话日志分析的精确Token统计
     val totalTokens = remember(messageHistory, inputText, contexts, sessionTokenUsage) {
-        // 如果有会话级别的总token使用量，优先使用它（最准确）
-        if (sessionTokenUsage != null) {
-            val sessionTotal = sessionTokenUsage.inputTokens + sessionTokenUsage.outputTokens
-            println("[ContextUsageIndicator] 使用会话级别Token统计: input=${sessionTokenUsage.inputTokens}, output=${sessionTokenUsage.outputTokens}, total=$sessionTotal")
-            sessionTotal
-        } else {
-            // 否则累加各个消息的token使用量，并传递sessionTokenUsage以便动态获取系统Token
-            val calculated = calculateTotalTokens(messageHistory, inputText, contexts, sessionTokenUsage)
-            println("[ContextUsageIndicator] 逐消息累加Token统计: 历史消息=${messageHistory.size}, 输入文本长度=${inputText.length}, 上下文=${contexts.size}, 总tokens=$calculated")
-            
-            // 简化的Token统计调试 - 只显示实际占用上下文的token
-        var debugTotal = 0
-        messageHistory.forEachIndexed { index, message ->
-            if (message.tokenUsage != null) {
-                val usage = message.tokenUsage!!
-                val messageTotal = usage.inputTokens + usage.outputTokens
-                debugTotal += messageTotal
-                println("  - [$index] ${message.role}: input=${usage.inputTokens}, output=${usage.outputTokens}, 小计=$messageTotal")
-            } else {
-                val estimated = estimateTokensFromText(message.content)
-                debugTotal += estimated
-                println("  - [$index] ${message.role}: 估算=$estimated")
-            }
-        }
-            println("  - 消息token总计: $debugTotal")
-            println("  - 输入文本估算: ${estimateTokensFromText(inputText)}")
-            println("  - 上下文估算: ${contexts.size * 1000}")  // 简化估算
-            calculated
-        }
+        calculateAccurateTokens(messageHistory, inputText, contexts, sessionTokenUsage)
     }
     
     val maxTokens = currentModel.contextLength
@@ -229,77 +201,75 @@ fun ContextUsageIndicator(
 }
 
 /**
- * 计算总token使用量
- * 
- * 优先使用Claude CLI提供的精确token数据，必要时进行估算
- * 重要：包含系统提示词、工具定义等基础上下文开销
+ * 🎯 基于实际会话日志分析的精确Token统计
+ *
+ * 核心原则：
+ * 1. 只累加真实占用上下文的token（input_tokens + output_tokens）
+ * 2. 忽略缓存相关token（它们是计费优化，不占用额外上下文）
+ * 3. 避免重复计算系统token和历史消息token
  */
-private fun calculateTotalTokens(
+private fun calculateAccurateTokens(
     messageHistory: List<EnhancedMessage>,
     inputText: String,
     contexts: List<ContextReference>,
     sessionTokenUsage: EnhancedMessage.TokenUsage? = null
 ): Int {
+    println("\n🔍 [精确Token统计] 开始计算...")
+
+    // 🎯 策略：直接累加所有消息的实际占用token
+    // 这已经包含了系统token、历史消息token等所有上下文消耗
     var totalTokens = 0
-    
-    // 0. Claude Code系统级基础Token开销（这部分通常被缓存，但仍占用上下文）
-    // 优先从实际会话数据获取，否则使用基于真实数据的默认值
-    val systemBaseTokens = getSystemBaseTokens(messageHistory, sessionTokenUsage)
-    totalTokens += systemBaseTokens
-    
+
     // 1. 历史消息的精确token统计
-    messageHistory.forEach { message ->
+    messageHistory.forEachIndexed { index, message ->
         if (message.tokenUsage != null) {
-            // 使用Claude CLI提供的精确token数据
             val usage = message.tokenUsage!!
-            
-            // 正确的上下文token计算：只计算实际内容token，不包括缓存机制token
-            // inputTokens 和 outputTokens 代表实际占用的上下文空间
-            // cacheCreationTokens 和 cacheReadTokens 只是计费机制，不额外占用上下文
-            totalTokens += usage.inputTokens + usage.outputTokens
-        } else {
-            // 回退到估算（用于用户消息或无token数据的消息）
-            totalTokens += estimateTokensFromText(message.content)
-            
-            // 工具调用结果的估算
-            message.toolCalls.forEach { toolCall ->
-                totalTokens += estimateTokensFromText(toolCall.parameters.toString())
-                toolCall.result?.let { result ->
-                    when (result) {
-                        is com.claudecodeplus.ui.models.ToolResult.Success -> {
-                            totalTokens += estimateTokensFromText(result.output)
-                        }
-                        is com.claudecodeplus.ui.models.ToolResult.Failure -> {
-                            totalTokens += estimateTokensFromText(result.error)
-                        }
-                        else -> {
-                            totalTokens += estimateTokensFromText(result.toString())
-                        }
-                    }
-                }
+
+            // 🔑 关键：只计算实际占用上下文窗口的token
+            // input_tokens + output_tokens = 真实的上下文使用量
+            val messageTokens = usage.inputTokens + usage.outputTokens
+            totalTokens += messageTokens
+
+            println("  [$index] ${message.role}: input=${usage.inputTokens}, output=${usage.outputTokens}, 占用=${messageTokens}")
+
+            // 显示缓存信息（仅供调试，不计入总数）
+            if (usage.cacheReadTokens > 0) {
+                println("    └─ 缓存读取: ${usage.cacheReadTokens} tokens (已优化，不额外占用上下文)")
             }
+            if (usage.cacheCreationTokens > 0) {
+                println("    └─ 缓存创建: ${usage.cacheCreationTokens} tokens (已优化，不额外占用上下文)")
+            }
+        } else {
+            // 估算用户消息或无token数据的消息
+            val estimated = estimateTokensFromText(message.content)
+            totalTokens += estimated
+            println("  [$index] ${message.role}: 估算=${estimated}")
         }
     }
-    
-    // 2. 当前用户输入（估算）
-    totalTokens += estimateTokensFromText(inputText)
-    
+
+    // 2. 当前输入文本（估算）
+    val inputTokens = estimateTokensFromText(inputText)
+    if (inputTokens > 0) {
+        totalTokens += inputTokens
+        println("  [输入] 当前输入: ${inputTokens}")
+    }
+
     // 3. 上下文文件（估算）
     contexts.forEach { context ->
-        when (context) {
-            is ContextReference.FileReference -> {
-                // 文件大小的简单估算，实际应该读取文件内容
-                totalTokens += 1000 // 平均每个文件1000 tokens
-            }
-            is ContextReference.WebReference -> {
-                totalTokens += 2000 // 网页内容估算
-            }
-            else -> {
-                totalTokens += 500 // 其他上下文类型
-            }
+        val contextTokens = when (context) {
+            is ContextReference.FileReference -> 1000 // 平均每个文件
+            is ContextReference.WebReference -> 2000  // 网页内容
+            else -> 500 // 其他类型
         }
+        totalTokens += contextTokens
+        println("  [上下文] ${context::class.simpleName}: ${contextTokens}")
     }
-    
+
+    println("🎯 [总计] 精确统计结果: ${totalTokens} tokens")
+    println("  - 历史消息: ${messageHistory.size} 条")
+    println("  - 输入文本: ${inputText.length} 字符")
+    println("  - 上下文: ${contexts.size} 个\n")
+
     return totalTokens
 }
 

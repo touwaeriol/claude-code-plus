@@ -49,6 +49,7 @@ import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.TextArea
 import kotlinx.coroutines.launch
+import java.io.File
 import androidx.compose.runtime.DisposableEffect
 
 // 导入内联引用系统
@@ -90,6 +91,7 @@ fun UnifiedChatInput(
     onSend: (String) -> Unit = {},
     onInterruptAndSend: ((String) -> Unit)? = null,
     onStop: (() -> Unit)? = null,
+    onImageSelected: (File) -> Unit = {},
     isGenerating: Boolean = false,
     enabled: Boolean = true,
     selectedModel: AiModel = AiModel.OPUS,
@@ -108,9 +110,7 @@ fun UnifiedChatInput(
     showModelSelector: Boolean = true,
     showPermissionControls: Boolean = true,
     showContextControls: Boolean = true,
-    showSendButton: Boolean = true,
-    // 图片选择回调
-    onImageSelected: (java.io.File) -> Unit = {}
+    showSendButton: Boolean = true
 ) {
     val focusRequester = remember { FocusRequester() }
     var isFocused by remember { mutableStateOf(false) }
@@ -381,6 +381,7 @@ fun UnifiedChatInput(
                     }
                 }
             } else null,
+            onImageSelected = onImageSelected,
             enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
@@ -502,6 +503,7 @@ private fun BottomToolbar(
     onSend: () -> Unit,
     onStop: () -> Unit,
     onInterruptAndSend: (() -> Unit)? = null,
+    onImageSelected: (File) -> Unit = {},
     enabled: Boolean,
     modifier: Modifier = Modifier,
     // 新增参数，用于上下文统计

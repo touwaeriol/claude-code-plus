@@ -10,7 +10,7 @@
 2. 设置 Java 环境（推荐使用 GraalVM）：
    ```bash
    export JAVA_HOME=/path/to/your/jdk
-   # 例如：export JAVA_HOME=/Users/erio/Library/Java/JavaVirtualMachines/graalvm-ce-17.0.9/Contents/Home
+   # 例如：export JAVA_HOME=$HOME/Library/Java/JavaVirtualMachines/graalvm-ce-17.0.9/Contents/Home
    ```
 3. 运行插件：
    ```bash

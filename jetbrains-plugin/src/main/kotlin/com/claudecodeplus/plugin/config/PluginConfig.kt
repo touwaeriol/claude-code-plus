@@ -6,27 +6,35 @@ import java.io.File
  * 插件配置
  */
 object PluginConfig {
-    
+
     /**
-     * 获取 Claude SDK wrapper 脚本路径
+     * 检查 claude 命令是否可用
+     * @return Pair<是否可用, 详细信息>
      */
-    fun getClaudeSdkWrapperPath(): String {
-        // 开发模式下，从项目根目录查找
-        val projectRoot = findProjectRoot()
-        if (projectRoot != null) {
-            val scriptFile = File(projectRoot, "cli-wrapper/claude-sdk-wrapper.js")
-            if (scriptFile.exists()) {
-                return scriptFile.absolutePath
+    fun checkClaudeCommand(): Pair<Boolean, String> {
+        return try {
+            val osName = System.getProperty("os.name").lowercase()
+            val command = if (osName.contains("windows")) {
+                listOf("cmd", "/c", "claude", "--version")
+            } else {
+                listOf("/bin/bash", "-c", "claude --version")
             }
+
+            val process = ProcessBuilder(command)
+                .redirectErrorStream(true)
+                .start()
+
+            val output = process.inputStream.bufferedReader().readText()
+            val exitCode = process.waitFor()
+
+            if (exitCode == 0) {
+                Pair(true, "Claude CLI 可用: ${output.trim()}")
+            } else {
+                Pair(false, "Claude CLI 执行失败 (退出码: $exitCode): ${output.trim()}")
+            }
+        } catch (e: Exception) {
+            Pair(false, "无法执行 claude 命令: ${e.message}")
         }
-        
-        // 尝试从系统属性获取
-        System.getProperty("claude.sdk.wrapper.path")?.let {
-            return it
-        }
-        
-        // 默认路径
-        return "/Users/erio/codes/idea/claude-code-plus/cli-wrapper/claude-sdk-wrapper.js"
     }
     
     /**
@@ -59,17 +67,23 @@ object PluginConfig {
     }
     
     /**
-     * 设置环境变量，确保 Node.js 脚本能找到
+     * 设置环境并检查 claude 命令可用性
      */
     fun setupEnvironment() {
-        val scriptPath = getClaudeSdkWrapperPath()
-        val scriptDir = File(scriptPath).parentFile.absolutePath
-        
+        // 检查 claude 命令是否可用
+        val (isAvailable, message) = checkClaudeCommand()
+
         // 设置系统属性，供 ClaudeCliWrapper 使用
-        System.setProperty("claude.project.root", File(scriptDir).parent)
-        System.setProperty("claude.sdk.wrapper.path", scriptPath)
-        
-        println("[PluginConfig] Claude SDK Wrapper 路径: $scriptPath")
-        println("[PluginConfig] 项目根目录: ${File(scriptDir).parent}")
+        System.setProperty("claude.command.available", isAvailable.toString())
+        System.setProperty("claude.command.check.result", message)
+
+        println("[PluginConfig] Claude 命令检查: $message")
+
+        // 开发模式下，尝试设置项目根目录
+        val projectRoot = findProjectRoot()
+        if (projectRoot != null) {
+            System.setProperty("claude.project.root", projectRoot)
+            println("[PluginConfig] 项目根目录: $projectRoot")
+        }
     }
 }

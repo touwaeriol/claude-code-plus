@@ -80,18 +80,19 @@ fun testCompleteFlow() {
     
     // 测试1：单个文件引用
     println("📝 测试1: 单个文件引用")
-    val singleRef = "请查看 [@架构设计.md](file:///Users/erio/codes/docs/架构设计.md) 了解详情"
+    val docsDir = "${System.getProperty("user.home")}/codes/docs"
+    val singleRef = "请查看 [@架构设计.md](file://$docsDir/架构设计.md) 了解详情"
     val (displayText1, refs1) = parseMarkdownReferences(singleRef)
-    
+
     // 测试2：多个文件引用
     println("📝 测试2: 多个文件引用")
-    val multiRef = "参考 [@架构设计.md](file:///Users/erio/codes/docs/架构设计.md) 和 [@功能特性.md](file:///Users/erio/codes/docs/功能特性.md) 文档"
+    val multiRef = "参考 [@架构设计.md](file://$docsDir/架构设计.md) 和 [@功能特性.md](file://$docsDir/功能特性.md) 文档"
     val (displayText2, refs2) = parseMarkdownReferences(multiRef)
-    
+
     // 测试3：模拟用户输入流程
     println("📝 测试3: 模拟用户输入流程")
     val userInput = "我需要了解"
-    val selectedFile = simulateFileSelection("部署指南.md", "/Users/erio/codes/docs/部署指南.md")
+    val selectedFile = simulateFileSelection("部署指南.md", "$docsDir/部署指南.md")
     val combinedText = "$userInput $selectedFile 的内容"
     
     println("用户输入: $userInput")

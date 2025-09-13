@@ -14,7 +14,7 @@ import java.util.prefs.Preferences
  * - Value: "sessionId"
  * 
  * 示例：
- * - "/Users/erio/codes/idea/claude-code-plus:main" -> "00adc9a3-e233-46d9-8dd4-bf6acda7bf20"
+ * - "/Users/username/codes/idea/claude-code-plus:main" -> "00adc9a3-e233-46d9-8dd4-bf6acda7bf20"
  */
 object SessionIdRegistry {
     private val logger = KotlinLogging.logger {}

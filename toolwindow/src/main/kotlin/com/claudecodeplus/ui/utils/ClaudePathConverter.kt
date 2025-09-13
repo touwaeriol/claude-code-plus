@@ -17,17 +17,17 @@ import java.nio.file.Paths
  * 5. 特殊字符处理：连续的 `-` 保持不变
  * 
  * 示例：
- * - `/Users/erio/codes/idea/claude-code-plus` → `-Users-erio-codes-idea-claude-code-plus`
- * - `C:\Users\erio\codes\idea\claude-code-plus` → `-C-Users-erio-codes-idea-claude-code-plus`
- * - `/Users/erio/.claude-code-router` → `-Users-erio--claude-code-router`
+ * - `/Users/username/codes/idea/claude-code-plus` → `-Users-username-codes-idea-claude-code-plus`
+ * - `C:\Users\username\codes\idea\claude-code-plus` → `-C-Users-username-codes-idea-claude-code-plus`
+ * - `/Users/username/.claude-code-router` → `-Users-username--claude-code-router`
  */
 object ClaudePathConverter {
     
     /**
      * 将完整项目路径转换为 Claude 项目目录名
      * 
-     * @param fullPath 完整项目路径 如: `/Users/erio/codes/idea/claude-code-plus`
-     * @return Claude 项目目录名 如: `-Users-erio-codes-idea-claude-code-plus`
+     * @param fullPath 完整项目路径 如: `/Users/username/codes/idea/claude-code-plus`
+     * @return Claude 项目目录名 如: `-Users-username-codes-idea-claude-code-plus`
      */
     fun pathToClaudeProjectName(fullPath: String): String {
         // 处理空路径

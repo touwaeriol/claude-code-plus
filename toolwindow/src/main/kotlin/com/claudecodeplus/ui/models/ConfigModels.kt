@@ -150,9 +150,9 @@ data class McpConfig(
  * 项目数据模型
  * 
  * 重要说明：
- * - id: Claude 项目目录名（如 "-Users-erio-codes-webstorm-analysis-claude-code"），
+ * - id: Claude 项目目录名（如 "-Users-username-codes-webstorm-analysis-claude-code"），
  *       对应 ~/.claude/projects/ 下的实际目录名，是项目的唯一标识符
- * - path: 项目的实际文件系统路径（如 "/Users/erio/codes/webstorm/analysis_claude_code"），
+ * - path: 项目的实际文件系统路径（如 "/Users/username/codes/webstorm/analysis_claude_code"），
  *       用于显示和文件操作
  * - name: 项目显示名称，通常是路径的最后一段目录名
  * 

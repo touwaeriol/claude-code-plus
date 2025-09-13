@@ -26,7 +26,7 @@ class PluginStartup : StartupActivity {
             
             logger.info("插件启动初始化完成")
             logger.info("文件编码: ${System.getProperty("file.encoding")}")
-            logger.info("Claude SDK 路径: ${PluginConfig.getClaudeSdkWrapperPath()}")
+            logger.info("Claude 命令状态: ${System.getProperty("claude.command.check.result", "未检查")}")
             
         } catch (e: Exception) {
             logger.error("插件启动初始化失败", e)
