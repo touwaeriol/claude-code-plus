@@ -9,6 +9,7 @@ package com.claudecodeplus.ui.jewel.components.business
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -123,9 +124,9 @@ fun UnifiedFilePopup(
         onDismissRequest = onDismiss,
         properties = PopupProperties(
             // 根据弹窗类型决定是否可聚焦
-            // @ 符号：false，保持主输入框焦点
-            // Add Context：true，允许搜索框输入
-            focusable = config.type == FilePopupType.ADD_CONTEXT,
+            // 📌 修改：@ 符号弹窗也需要能接收键盘事件
+            // 之前设为false导致键盘导航失效
+            focusable = true, // 统一设为true，让所有弹窗都能接收键盘事件
             dismissOnBackPress = true,  // 允许返回键关闭
             dismissOnClickOutside = true, // 点击外部关闭
             clippingEnabled = false  // 允许弹窗超出边界
@@ -145,6 +146,7 @@ fun UnifiedFilePopup(
                     JewelTheme.globalColors.borders.normal,
                     RoundedCornerShape(8.dp)
                 )
+                .focusable(true) // 📌 关键：让Box可聚焦，能接收键盘事件
                 .pointerHoverIcon(
                     // 键盘模式时隐藏鼠标指针，鼠标模式时显示正常指针
                     if (isKeyboardMode) PointerIcon(createEmptyCursor())
@@ -164,28 +166,44 @@ fun UnifiedFilePopup(
                     onPopupBoundsChanged?.invoke(bounds)
                 }
                 .onPreviewKeyEvent { keyEvent ->
+                    println("🎹 [UnifiedFilePopup] onPreviewKeyEvent接收: key=${keyEvent.key}, type=${keyEvent.type}")
+
                     // 只拦截导航相关的键盘事件，且不会抢夺搜索输入框的焦点
                     if (keyEvent.type == KeyEventType.KeyDown) {
                         when (keyEvent.key) {
                             Key.DirectionUp, Key.DirectionDown -> {
                                 // 上下键始终用于导航，即使搜索框有焦点
-                                onKeyEvent(keyEvent)
+                                println("🎹 [UnifiedFilePopup] ✅ 拦截导航键: ${keyEvent.key}")
+                                val handled = onKeyEvent(keyEvent)
+                                println("🎹 [UnifiedFilePopup] 导航键处理结果: $handled")
+                                handled
                             }
                             Key.Enter -> {
                                 // Enter键仅在有结果时处理
                                 if (results.isNotEmpty()) {
-                                    onKeyEvent(keyEvent)
+                                    println("🎹 [UnifiedFilePopup] ✅ 拦截Enter键 (有结果)")
+                                    val handled = onKeyEvent(keyEvent)
+                                    println("🎹 [UnifiedFilePopup] Enter键处理结果: $handled")
+                                    handled
                                 } else {
+                                    println("🎹 [UnifiedFilePopup] ❌ 忽略Enter键 (无结果)")
                                     false
                                 }
                             }
                             Key.Escape -> {
                                 // Escape键始终用于关闭弹窗
-                                onKeyEvent(keyEvent)
+                                println("🎹 [UnifiedFilePopup] ✅ 拦截Escape键")
+                                val handled = onKeyEvent(keyEvent)
+                                println("🎹 [UnifiedFilePopup] Escape键处理结果: $handled")
+                                handled
                             }
-                            else -> false
+                            else -> {
+                                println("🎹 [UnifiedFilePopup] ❌ 忽略非导航键: ${keyEvent.key}")
+                                false
+                            }
                         }
                     } else {
+                        println("🎹 [UnifiedFilePopup] ❌ 忽略非KeyDown事件: ${keyEvent.type}")
                         false
                     }
                 }
@@ -330,34 +348,55 @@ class FilePopupEventHandler {
         onItemSelect: () -> Unit,
         onDismiss: () -> Unit
     ): Boolean {
-        if (keyEvent.type != KeyEventType.KeyDown) return false
-        
+        println("🎹 [FilePopupManager] 键盘事件接收: key=${keyEvent.key}, type=${keyEvent.type}, selectedIndex=$selectedIndex, resultsSize=$resultsSize")
+
+        if (keyEvent.type != KeyEventType.KeyDown) {
+            println("🎹 [FilePopupManager] ❌ 忽略非KeyDown事件: ${keyEvent.type}")
+            return false
+        }
+
         return when (keyEvent.key) {
             Key.DirectionUp -> {
+                println("🎹 [FilePopupManager] ⬆️ 上箭头按下")
                 if (resultsSize > 0) {
                     val newIndex = (selectedIndex - 1).coerceAtLeast(0)
+                    println("🎹 [FilePopupManager] ✅ 更新选中索引: $selectedIndex → $newIndex")
                     onIndexChange(newIndex)
+                } else {
+                    println("🎹 [FilePopupManager] ❌ 无结果，忽略上箭头")
                 }
                 true
             }
             Key.DirectionDown -> {
+                println("🎹 [FilePopupManager] ⬇️ 下箭头按下")
                 if (resultsSize > 0) {
                     val newIndex = (selectedIndex + 1).coerceAtMost(resultsSize - 1)
+                    println("🎹 [FilePopupManager] ✅ 更新选中索引: $selectedIndex → $newIndex")
                     onIndexChange(newIndex)
+                } else {
+                    println("🎹 [FilePopupManager] ❌ 无结果，忽略下箭头")
                 }
                 true
             }
             Key.Enter -> {
+                println("🎹 [FilePopupManager] ⏎ Enter按下")
                 if (selectedIndex in 0 until resultsSize) {
+                    println("🎹 [FilePopupManager] ✅ 选择项目: index=$selectedIndex")
                     onItemSelect()
+                } else {
+                    println("🎹 [FilePopupManager] ❌ 无效选中索引: $selectedIndex (范围: 0-${resultsSize-1})")
                 }
                 true
             }
             Key.Escape -> {
+                println("🎹 [FilePopupManager] ⎋ Escape按下 - 关闭弹窗")
                 onDismiss()
                 true
             }
-            else -> false
+            else -> {
+                println("🎹 [FilePopupManager] ❓ 未处理的键: ${keyEvent.key}")
+                false
+            }
         }
     }
 }

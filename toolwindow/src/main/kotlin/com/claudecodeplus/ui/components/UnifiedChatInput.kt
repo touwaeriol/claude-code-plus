@@ -551,8 +551,8 @@ private fun BottomToolbar(
             if (showSendButton) {
                 SendStopButtonGroup(
                     isGenerating = isGenerating,
-                    onSend = onSend,
-                    onStop = onStop,
+                    onSend = {},
+                    onStop = { onStop?.invoke() },
                     onImageSelected = onImageSelected,
                     hasInput = hasInput,
                     enabled = enabled,

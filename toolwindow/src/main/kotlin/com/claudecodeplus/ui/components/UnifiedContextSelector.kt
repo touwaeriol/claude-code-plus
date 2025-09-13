@@ -174,27 +174,40 @@ fun AddContextPopup(
                 keyboardSelectedIndex
             }
             
-            eventHandler.handleKeyEvent(
+            println("🎹 [AddContextPopup] Add Context弹窗接收键盘事件: startIndex=$startIndex, resultsSize=${searchResults.size}")
+
+            val handled = eventHandler.handleKeyEvent(
                 keyEvent = keyEvent,
                 selectedIndex = startIndex,
                 resultsSize = searchResults.size,
                 onIndexChange = { newIndex ->
+                    println("🎹 [AddContextPopup] ✅ Add Context弹窗更新选中索引: $keyboardSelectedIndex → $newIndex")
                     keyboardSelectedIndex = newIndex
                     // 键盘操作时进入键盘模式
                     isKeyboardMode = true
                 },
                 onItemSelect = {
+                    println("🎹 [AddContextPopup] ✅ Add Context弹窗选择文件: effectiveIndex=$effectiveSelectedIndex")
                     if (effectiveSelectedIndex in searchResults.indices) {
                         val selectedFile = searchResults[effectiveSelectedIndex]
+                        println("🎹 [AddContextPopup] 选择的文件: ${selectedFile.relativePath}")
                         val contextReference = ContextReference.FileReference(
                             path = selectedFile.relativePath,
                             fullPath = selectedFile.absolutePath
                         )
                         onContextAdd(contextReference)
+                    } else {
+                        println("🎹 [AddContextPopup] ❌ 无效选择: effectiveIndex=$effectiveSelectedIndex, resultsSize=${searchResults.size}")
                     }
                 },
-                onDismiss = onDismiss
+                onDismiss = {
+                    println("🎹 [AddContextPopup] ❌ Add Context弹窗关闭")
+                    onDismiss()
+                }
             )
+
+            println("🎹 [AddContextPopup] Add Context键盘事件处理结果: $handled")
+            handled
         },
         onItemHover = { hoveredIdx ->
             mouseHoveredIndex = hoveredIdx

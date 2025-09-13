@@ -62,8 +62,9 @@ enum class FileItemSelectionType {
 fun getSelectionBackground(type: FileItemSelectionType): androidx.compose.ui.graphics.Color {
     return when (type) {
         FileItemSelectionType.NONE -> androidx.compose.ui.graphics.Color.Transparent
-        FileItemSelectionType.PRIMARY -> JewelTheme.globalColors.borders.focused.copy(alpha = 0.2f)     // 主要选中：正常高亮
-        FileItemSelectionType.SECONDARY -> JewelTheme.globalColors.borders.focused.copy(alpha = 0.12f)  // 次要选中：淡化但可见
+        // 📌 增强视觉反馈：提高主要选中的透明度，使其更明显
+        FileItemSelectionType.PRIMARY -> JewelTheme.globalColors.borders.focused.copy(alpha = 0.35f)     // 主要选中：更明显的高亮
+        FileItemSelectionType.SECONDARY -> JewelTheme.globalColors.borders.focused.copy(alpha = 0.18f)  // 次要选中：稍微增强但保持淡化
     }
 }
 
@@ -166,26 +167,39 @@ fun SimpleInlineFileReferenceHandler(
                 selectedIndex = 0
             },
             onKeyEvent = { keyEvent ->
-                eventHandler.handleKeyEvent(
+                println("🎹 [SimpleInlineFileReference] @ 符号弹窗接收键盘事件: key=${keyEvent.key}, selectedIndex=$selectedIndex, resultsSize=${selectionState.searchResults.size}")
+
+                val handled = eventHandler.handleKeyEvent(
                     keyEvent = keyEvent,
                     selectedIndex = selectedIndex,
                     resultsSize = selectionState.searchResults.size,
-                    onIndexChange = { selectedIndex = it },
+                    onIndexChange = { newIndex ->
+                        println("🎹 [SimpleInlineFileReference] ✅ @ 符号弹窗更新选中索引: $selectedIndex → $newIndex")
+                        selectedIndex = newIndex
+                    },
                     onItemSelect = {
+                        println("🎹 [SimpleInlineFileReference] ✅ @ 符号弹窗选择文件: index=$selectedIndex")
                         if (selectedIndex in selectionState.searchResults.indices && selectionState.atPosition != null) {
                             val selectedFile = selectionState.searchResults[selectedIndex]
+                            println("🎹 [SimpleInlineFileReference] 选择的文件: ${selectedFile.relativePath}")
                             contextManager.handleAtSymbolFileSelection(
                                 file = selectedFile,
                                 currentText = textFieldValue,
                                 atPosition = selectionState.atPosition
                             )
                             selectedIndex = 0
+                        } else {
+                            println("🎹 [SimpleInlineFileReference] ❌ 无效选择: index=$selectedIndex, resultsSize=${selectionState.searchResults.size}, atPosition=${selectionState.atPosition}")
                         }
                     },
-                    onDismiss = { 
+                    onDismiss = {
+                        println("🎹 [SimpleInlineFileReference] ❌ @ 符号弹窗关闭")
                         selectedIndex = 0
                     }
                 )
+
+                println("🎹 [SimpleInlineFileReference] @ 符号键盘事件处理结果: $handled")
+                handled
             }
         )
     }
@@ -310,6 +324,18 @@ fun JewelFileItem(
                 .clip(RoundedCornerShape(4.dp))
                 .background(
                     color = getSelectionBackground(selectionType)
+                )
+                // 📌 增强视觉反馈：为主要选中项添加明显的边框
+                .then(
+                    if (selectionType == FileItemSelectionType.PRIMARY) {
+                        Modifier.border(
+                            width = 2.dp,
+                            color = JewelTheme.globalColors.borders.focused,
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                    } else {
+                        Modifier
+                    }
                 )
                 .hoverable(interactionSource)
                 .clickable { onClick() }
