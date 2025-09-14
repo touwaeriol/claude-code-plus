@@ -2,7 +2,7 @@
   "mcpServers": {
     "spec-workflow": {
       "command": "npx",
-      "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "/Users/erio/codes/idea/claude-code-plus","--dashboard" ,"--port" ,"4444"]
+      "args": ["-y", "@pimzino/spec-workflow-mcp@latest", "/c/Users/16790/IdeaProjects/claude-code-plus","--dashboard" ,"--port" ,"4444"]
     },
     "context7": {
       "command": "npx",

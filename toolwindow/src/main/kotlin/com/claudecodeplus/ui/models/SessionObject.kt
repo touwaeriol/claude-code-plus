@@ -910,16 +910,26 @@ class SessionObject(
                                                 }
                                             }
                                             is Map<*, *> -> {
-                                                // 如果是Map，转换为JsonObject
-                                                val gson = com.google.gson.Gson()
-                                                val jsonString = gson.toJson(contentItem)
-                                                json.parseToJsonElement(jsonString)
+                                                // 如果是Map，手动构建JsonObject
+                                                kotlinx.serialization.json.buildJsonObject {
+                                                    contentItem.forEach { (key, value) ->
+                                                        val keyStr = key.toString()
+                                                        when (value) {
+                                                            is String -> put(keyStr, kotlinx.serialization.json.JsonPrimitive(value))
+                                                            is Number -> put(keyStr, kotlinx.serialization.json.JsonPrimitive(value))
+                                                            is Boolean -> put(keyStr, kotlinx.serialization.json.JsonPrimitive(value))
+                                                            null -> put(keyStr, kotlinx.serialization.json.JsonNull)
+                                                            else -> put(keyStr, kotlinx.serialization.json.JsonPrimitive(value.toString()))
+                                                        }
+                                                    }
+                                                }
                                             }
                                             else -> {
-                                                // 其他类型，尝试序列化
-                                                val gson = com.google.gson.Gson()
-                                                val jsonString = gson.toJson(contentItem)
-                                                json.parseToJsonElement(jsonString)
+                                                // 其他类型，作为文本处理
+                                                kotlinx.serialization.json.buildJsonObject {
+                                                    put("type", kotlinx.serialization.json.JsonPrimitive("text"))
+                                                    put("text", kotlinx.serialization.json.JsonPrimitive(contentItem.toString()))
+                                                }
                                             }
                                         }
                                         add(contentJson)

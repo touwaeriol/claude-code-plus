@@ -49,8 +49,7 @@ dependencies {
     // Kotlinx Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
     
-    // Gson for JSON parsing (暂时保留，逐步迁移)
-    implementation("com.google.code.gson:gson:2.10.1")
+    // Gson已完全迁移到Kotlinx Serialization
     
     // Kotlin reflection
     implementation("org.jetbrains.kotlin:kotlin-reflect:${rootProject.extra["kotlinVersion"]}")

@@ -37,9 +37,6 @@
     ],
     "deny": [],
     "additionalDirectories": [
-      "/Users/erio/codes/",
-      "/private/tmp",
-      "/Users/erio/codes/idea/intellij-community"
     ]
   },
   "enabledMcpjsonServers": [

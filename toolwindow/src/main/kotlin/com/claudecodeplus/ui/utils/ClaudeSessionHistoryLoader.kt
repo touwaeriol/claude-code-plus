@@ -2,9 +2,10 @@ package com.claudecodeplus.ui.utils
 
 import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.models.MessageRole
-import com.google.gson.JsonParser
-import com.google.gson.JsonSyntaxException
+import com.claudecodeplus.ui.services.ModernClaudeMessageParser
+import com.claudecodeplus.ui.services.ClaudeMessageAdapter
 import mu.KotlinLogging
+import kotlinx.serialization.json.*
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -24,6 +25,14 @@ import java.time.format.DateTimeFormatter
  */
 class ClaudeSessionHistoryLoader {
     private val logger = KotlinLogging.logger {}
+    private val modernParser = ModernClaudeMessageParser()
+    private val adapter = ClaudeMessageAdapter()
+
+    // 用于快速元数据解析的JSON配置
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
     
     /**
      * 从会话文件加载历史消息
@@ -72,99 +81,29 @@ class ClaudeSessionHistoryLoader {
     
     /**
      * 解析 JSONL 中的单行 JSON
-     * 
+     *
      * @param line JSON 字符串
      * @param lineNumber 行号（用于错误日志）
      * @return 解析结果，包含消息和可能的会话ID更新
      */
     private fun parseJsonLine(line: String, lineNumber: Int): ParseResult? {
         return try {
-            val json = JsonParser.parseString(line).asJsonObject
-            
-            // 获取消息类型
-            val type = json.get("type")?.asString
-            
-            // 处理 system init 消息（包含sessionId更新）
-            if (type == "system" && json.get("message")?.asJsonObject?.get("role")?.asString == "init") {
-                val sessionId = json.get("sessionId")?.asString
-                logger.debug("[ClaudeSessionHistoryLoader] 检测到 system init 消息，sessionId: $sessionId")
-                // 返回sessionId更新信息，但不包含消息
-                return ParseResult(null, sessionId)
+            // 使用现代解析器解析JSONL行
+            val parseResult = modernParser.parseJsonLine(line, lineNumber) ?: return null
+
+            // 使用适配器转换为EnhancedMessage
+            val enhancedMessage = adapter.toEnhancedMessage(parseResult.message)
+
+            // 检查是否为系统初始化消息或其他非UI显示消息
+            val sessionIdUpdate = adapter.extractSessionIdUpdate(parseResult.message)
+            if (sessionIdUpdate != null && enhancedMessage == null) {
+                logger.debug("[ClaudeSessionHistoryLoader] 检测到 system init 消息，sessionId: $sessionIdUpdate")
+                return ParseResult(null, sessionIdUpdate)
             }
-            
-            if (type != "user" && type != "assistant") {
-                // 跳过非消息类型的记录（如系统消息、元数据等）
-                return null
-            }
-            
-            // 获取消息对象
-            val messageObj = json.get("message")?.asJsonObject
-            if (messageObj == null) {
-                logger.debug("[ClaudeSessionHistoryLoader] 行 $lineNumber 缺少 message 字段")
-                return null
-            }
-            
-            val role = messageObj.get("role")?.asString ?: type
-            
-            // 处理 content 字段，它可能是字符串或数组
-            val content = when {
-                messageObj.get("content")?.isJsonArray == true -> {
-                    // 如果是数组，提取所有文本内容
-                    val contentArray = messageObj.getAsJsonArray("content")
-                    contentArray.joinToString("\n") { element ->
-                        if (element.isJsonObject) {
-                            val contentObj = element.asJsonObject
-                            when (contentObj.get("type")?.asString) {
-                                "text" -> contentObj.get("text")?.asString ?: ""
-                                "tool_use" -> {
-                                    // 简化显示工具调用
-                                    val name = contentObj.get("name")?.asString ?: "unknown"
-                                    "[Tool: $name]"
-                                }
-                                else -> contentObj.toString()
-                            }
-                        } else {
-                            element.asString
-                        }
-                    }
-                }
-                messageObj.get("content")?.isJsonPrimitive == true -> {
-                    messageObj.get("content")?.asString ?: ""
-                }
-                else -> ""
-            }
-            
-            // 跳过空内容的消息
-            if (content.isBlank()) {
-                return null
-            }
-            
-            // 获取时间戳
-            val timestamp = json.get("timestamp")?.asString
-            val parsedTimestamp = parseTimestamp(timestamp)
-            
-            // 获取 UUID 和其他元数据
-            val uuid = json.get("uuid")?.asString ?: ""
-            val sessionId = json.get("sessionId")?.asString ?: ""
-            val parentUuid = json.get("parentUuid")?.asString
-            
-            // 创建 EnhancedMessage 对象
-            val message = createEnhancedMessage(
-                role = role,
-                content = content,
-                timestamp = parsedTimestamp,
-                uuid = uuid,
-                sessionId = sessionId,
-                parentUuid = parentUuid,
-                originalJson = json
-            )
-            
-            // 返回解析结果，包含消息和当前sessionId
-            ParseResult(message, sessionId.ifBlank { null })
-            
-        } catch (e: JsonSyntaxException) {
-            logger.warn("[ClaudeSessionHistoryLoader] 行 $lineNumber JSON 解析失败: ${e.message}")
-            null
+
+            // 返回解析结果
+            ParseResult(enhancedMessage, parseResult.sessionId)
+
         } catch (e: Exception) {
             logger.error("[ClaudeSessionHistoryLoader] 行 $lineNumber 处理失败", e)
             null
@@ -190,76 +129,6 @@ class ClaudeSessionHistoryLoader {
         }
     }
     
-    /**
-     * 创建 EnhancedMessage 对象
-     * 
-     * @param role 消息角色 ("user" 或 "assistant")
-     * @param content 消息内容
-     * @param timestamp 时间戳
-     * @param uuid 消息 UUID
-     * @param sessionId 会话 ID
-     * @param parentUuid 父消息 UUID
-     * @param originalJson 原始 JSON 对象（用于调试）
-     * @return EnhancedMessage 对象
-     */
-    private fun createEnhancedMessage(
-        role: String,
-        content: String,
-        timestamp: Long,
-        uuid: String,
-        sessionId: String,
-        parentUuid: String?,
-        originalJson: com.google.gson.JsonObject
-    ): EnhancedMessage {
-        
-        return when (role.lowercase()) {
-            "user" -> {
-                EnhancedMessage(
-                    id = uuid.ifBlank { generateUuid() },
-                    role = MessageRole.USER,
-                    content = content,
-                    timestamp = timestamp
-                )
-            }
-            "assistant" -> {
-                EnhancedMessage(
-                    id = uuid.ifBlank { generateUuid() },
-                    role = MessageRole.ASSISTANT,
-                    content = content,
-                    timestamp = timestamp,
-                    toolCalls = parseToolCalls(originalJson)
-                )
-            }
-            else -> {
-                // 默认创建用户消息
-                EnhancedMessage(
-                    id = uuid.ifBlank { generateUuid() },
-                    role = MessageRole.USER,
-                    content = content,
-                    timestamp = timestamp
-                )
-            }
-        }
-    }
-    
-    /**
-     * 解析工具调用信息（如果消息中包含）
-     * 
-     * @param json 原始 JSON 对象
-     * @return 工具调用列表
-     */
-    private fun parseToolCalls(json: com.google.gson.JsonObject): List<com.claudecodeplus.ui.models.ToolCall> {
-        // TODO: 根据实际的 Claude CLI 输出格式解析工具调用信息
-        // 这里先返回空列表，后续根据需要完善
-        return emptyList()
-    }
-    
-    /**
-     * 生成简单的 UUID（如果原始数据中没有）
-     */
-    private fun generateUuid(): String {
-        return java.util.UUID.randomUUID().toString()
-    }
     
     /**
      * 获取会话文件的基本信息
@@ -283,27 +152,27 @@ class ClaudeSessionHistoryLoader {
                 reader.lineSequence().take(100).forEach { line -> // 只读取前100行用于获取基本信息
                     if (line.trim().isNotEmpty()) {
                         try {
-                            val json = JsonParser.parseString(line).asJsonObject
-                            
+                            val jsonObject = json.parseToJsonElement(line).jsonObject
+
                             // 获取 sessionId
                             if (sessionId == null) {
-                                sessionId = json.get("sessionId")?.asString
+                                sessionId = jsonObject["sessionId"]?.jsonPrimitive?.content
                             }
-                            
+
                             // 获取项目路径
                             if (projectPath == null) {
-                                projectPath = json.get("cwd")?.asString
+                                projectPath = jsonObject["cwd"]?.jsonPrimitive?.content
                             }
-                            
+
                             // 计算消息数量
-                            val type = json.get("type")?.asString
+                            val type = jsonObject["type"]?.jsonPrimitive?.content
                             if (type == "user" || type == "assistant") {
                                 messageCount++
-                                
+
                                 // 获取时间戳
-                                val timestampStr = json.get("timestamp")?.asString
+                                val timestampStr = jsonObject["timestamp"]?.jsonPrimitive?.content
                                 val timestamp = parseTimestamp(timestampStr)
-                                
+
                                 if (firstTimestamp == null) {
                                     firstTimestamp = timestamp
                                 }

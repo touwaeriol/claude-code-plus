@@ -2,12 +2,13 @@ package com.claudecodeplus.session
 
 import com.claudecodeplus.session.models.*
 import com.claudecodeplus.ui.models.EnhancedMessage
-import com.google.gson.Gson
-import com.google.gson.JsonSyntaxException
+import com.claudecodeplus.ui.services.UniversalMessageParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.*
+import kotlinx.serialization.encodeToString
 import java.io.File
 import java.util.UUID
 
@@ -15,8 +16,13 @@ import java.util.UUID
  * Claude 会话管理器
  */
 class ClaudeSessionManager {
-    
-    private val gson = Gson()
+
+    private val universalParser = UniversalMessageParser()
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        prettyPrint = false
+    }
     private val sessionCache = mutableMapOf<String, List<ClaudeSessionMessage>>()
     
     /**
@@ -53,8 +59,9 @@ class ClaudeSessionManager {
                     // 检查是否有压缩摘要标记
                     val isCompactSummary = lines.any { line ->
                         try {
-                            val json = gson.fromJson(line, Map::class.java)
-                            json["type"] == "summary" && json["isCompactSummary"] == true
+                            val jsonElement = json.parseToJsonElement(line).jsonObject
+                            jsonElement["type"]?.jsonPrimitive?.content == "summary" &&
+                            jsonElement["isCompactSummary"]?.jsonPrimitive?.boolean == true
                         } catch (e: Exception) {
                             false
                         }
@@ -126,7 +133,7 @@ class ClaudeSessionManager {
         val sessionFile = File(getSessionFilePath(projectPath, sessionId))
         sessionFile.parentFile.mkdirs()
         
-        val jsonLine = gson.toJson(message)
+        val jsonLine = json.encodeToString(message)
         sessionFile.appendText("$jsonLine\n")
         
         // 更新缓存
@@ -194,8 +201,8 @@ class ClaudeSessionManager {
     
     private fun parseMessage(line: String): ClaudeSessionMessage? {
         return try {
-            gson.fromJson(line, ClaudeSessionMessage::class.java)
-        } catch (e: JsonSyntaxException) {
+            json.decodeFromString<ClaudeSessionMessage>(line)
+        } catch (e: Exception) {
             null
         }
     }

@@ -201,12 +201,11 @@ fun ContextUsageIndicator(
 }
 
 /**
- * 🎯 基于实际会话日志分析的精确Token统计
+ * 🎯 基于opcode项目的正确Token统计
  *
- * 核心原则：
- * 1. 只累加真实占用上下文的token（input_tokens + output_tokens）
- * 2. 忽略缓存相关token（它们是计费优化，不占用额外上下文）
- * 3. 避免重复计算系统token和历史消息token
+ * 直接复制opcode项目的实现方式：
+ * 1. 累加所有消息的token使用量（input + output + cache tokens）
+ * 2. 加上当前输入和新上下文的估算token
  */
 private fun calculateAccurateTokens(
     messageHistory: List<EnhancedMessage>,
@@ -214,63 +213,64 @@ private fun calculateAccurateTokens(
     contexts: List<ContextReference>,
     sessionTokenUsage: EnhancedMessage.TokenUsage? = null
 ): Int {
-    println("\n🔍 [精确Token统计] 开始计算...")
+    println("\n🔧 [opcode方式Token统计] 开始计算...")
 
-    // 🎯 策略：直接累加所有消息的实际占用token
-    // 这已经包含了系统token、历史消息token等所有上下文消耗
-    var totalTokens = 0
-
-    // 1. 历史消息的精确token统计
-    messageHistory.forEachIndexed { index, message ->
-        if (message.tokenUsage != null) {
-            val usage = message.tokenUsage!!
-
-            // 🔑 关键：只计算实际占用上下文窗口的token
-            // input_tokens + output_tokens = 真实的上下文使用量
-            val messageTokens = usage.inputTokens + usage.outputTokens
-            totalTokens += messageTokens
-
-            println("  [$index] ${message.role}: input=${usage.inputTokens}, output=${usage.outputTokens}, 占用=${messageTokens}")
-
-            // 显示缓存信息（仅供调试，不计入总数）
-            if (usage.cacheReadTokens > 0) {
-                println("    └─ 缓存读取: ${usage.cacheReadTokens} tokens (已优化，不额外占用上下文)")
-            }
-            if (usage.cacheCreationTokens > 0) {
-                println("    └─ 缓存创建: ${usage.cacheCreationTokens} tokens (已优化，不额外占用上下文)")
-            }
+    // 1. 累加所有消息的token使用量（直接按opcode方式）
+    val totalTokensFromMessages = messageHistory.sumOf { message ->
+        val usage = message.tokenUsage
+        if (usage != null) {
+            // 按opcode方式：input + output + cache creation + cache read
+            val messageTotal = usage.inputTokens + usage.outputTokens +
+                             usage.cacheCreationTokens + usage.cacheReadTokens
+            println("  📊 消息token: ${usage.inputTokens}in + ${usage.outputTokens}out + ${usage.cacheCreationTokens}cache_c + ${usage.cacheReadTokens}cache_r = $messageTotal")
+            messageTotal
         } else {
-            // 估算用户消息或无token数据的消息
-            val estimated = estimateTokensFromText(message.content)
-            totalTokens += estimated
-            println("  [$index] ${message.role}: 估算=${estimated}")
+            0
         }
     }
 
-    // 2. 当前输入文本（估算）
+    println("  📈 历史消息总token: $totalTokensFromMessages")
+
+    // 2. 加上当前输入的估算token
     val inputTokens = estimateTokensFromText(inputText)
     if (inputTokens > 0) {
-        totalTokens += inputTokens
-        println("  [输入] 当前输入: ${inputTokens}")
+        println("  ➕ 当前输入token: $inputTokens")
     }
 
-    // 3. 上下文文件（估算）
-    contexts.forEach { context ->
-        val contextTokens = when (context) {
-            is ContextReference.FileReference -> 1000 // 平均每个文件
-            is ContextReference.WebReference -> 2000  // 网页内容
-            else -> 500 // 其他类型
+    // 3. 加上新上下文文件的估算token
+    val contextTokens = contexts.sumOf { context ->
+        estimateSmartContextTokens(context)
+    }
+    if (contextTokens > 0) {
+        println("  ➕ 上下文文件token: $contextTokens")
+    }
+
+    val totalSize = totalTokensFromMessages + inputTokens + contextTokens
+    println("  🎯 总计上下文大小: $totalSize tokens\n")
+
+    return totalSize
+}
+
+
+/**
+ * 智能估算上下文文件的token数量
+ */
+private fun estimateSmartContextTokens(context: ContextReference): Int {
+    return when (context) {
+        is ContextReference.FileReference -> {
+            // 基于文件类型的智能估算
+            when {
+                context.path.endsWith(".md") -> 2000  // Markdown文档
+                context.path.endsWith(".kt") -> 1500  // Kotlin源码
+                context.path.endsWith(".java") -> 1500 // Java源码
+                context.path.endsWith(".js") || context.path.endsWith(".ts") -> 1200 // JavaScript/TypeScript
+                context.path.endsWith(".json") -> 800  // JSON配置
+                else -> 1000 // 其他文件类型
+            }
         }
-        totalTokens += contextTokens
-        println("  [上下文] ${context::class.simpleName}: ${contextTokens}")
+        is ContextReference.WebReference -> 2500 // 网页内容通常较多
+        else -> 500 // 其他类型保守估算
     }
-
-    println("🎯 [总计] 精确统计结果: ${totalTokens} tokens")
-    println("  - 历史消息: ${messageHistory.size} 条")
-    println("  - 输入文本: ${inputText.length} 字符")
-    println("  - 上下文: ${contexts.size} 个\n")
-
-    return totalTokens
 }
 
 /**

@@ -380,16 +380,26 @@ class MessageProcessorImpl : MessageProcessor {
                 }
             }
             is Map<*, *> -> {
-                // 如果是Map，转换为JsonObject
-                val gson = com.google.gson.Gson()
-                val jsonString = gson.toJson(contentItem)
-                json.parseToJsonElement(jsonString)
+                // 如果是Map，手动构建JsonObject
+                buildJsonObject {
+                    contentItem.forEach { (key, value) ->
+                        val keyStr = key.toString()
+                        when (value) {
+                            is String -> put(keyStr, JsonPrimitive(value))
+                            is Number -> put(keyStr, JsonPrimitive(value))
+                            is Boolean -> put(keyStr, JsonPrimitive(value))
+                            null -> put(keyStr, JsonNull)
+                            else -> put(keyStr, JsonPrimitive(value.toString()))
+                        }
+                    }
+                }
             }
             else -> {
-                // 其他类型，尝试序列化
-                val gson = com.google.gson.Gson()
-                val jsonString = gson.toJson(contentItem)
-                json.parseToJsonElement(jsonString)
+                // 其他类型，作为文本处理
+                buildJsonObject {
+                    put("type", JsonPrimitive("text"))
+                    put("text", JsonPrimitive(contentItem.toString()))
+                }
             }
         }
     }

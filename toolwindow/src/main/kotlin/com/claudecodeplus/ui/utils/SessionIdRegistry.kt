@@ -1,6 +1,10 @@
 package com.claudecodeplus.ui.utils
 
 import mu.KotlinLogging
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import java.util.prefs.Preferences
 
 /**
@@ -18,12 +22,18 @@ import java.util.prefs.Preferences
  */
 object SessionIdRegistry {
     private val logger = KotlinLogging.logger {}
-    
+
+    // JSON配置用于序列化
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
     // 使用 Preferences 进行持久化存储
     private const val PREF_NODE = "claude_code_plus/session_registry"
     private const val LATEST_SESSION_PREFIX = "latest_session:"
     private const val SESSION_METADATA_PREFIX = "session_meta:"
-    
+
     private val prefs: Preferences = Preferences.userRoot().node(PREF_NODE)
     
     /**
@@ -403,6 +413,7 @@ object SessionIdRegistry {
     /**
      * 会话元数据
      */
+    @Serializable
     data class SessionMetadata(
         val projectPath: String,
         val tabId: String,
@@ -411,20 +422,13 @@ object SessionIdRegistry {
         val lastAccessTime: Long
     ) {
         fun toJsonString(): String {
-            return """{"projectPath":"$projectPath","tabId":"$tabId","sessionId":"$sessionId","createTime":$createTime,"lastAccessTime":$lastAccessTime}"""
+            return json.encodeToString(this)
         }
-        
+
         companion object {
-            fun fromJsonString(json: String): SessionMetadata? {
+            fun fromJsonString(jsonStr: String): SessionMetadata? {
                 return try {
-                    val obj = com.google.gson.JsonParser.parseString(json).asJsonObject
-                    SessionMetadata(
-                        projectPath = obj.get("projectPath").asString,
-                        tabId = obj.get("tabId").asString,
-                        sessionId = obj.get("sessionId").asString,
-                        createTime = obj.get("createTime").asLong,
-                        lastAccessTime = obj.get("lastAccessTime").asLong
-                    )
+                    json.decodeFromString<SessionMetadata>(jsonStr)
                 } catch (e: Exception) {
                     null
                 }

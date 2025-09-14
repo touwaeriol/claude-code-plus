@@ -3,11 +3,14 @@ package com.claudecodeplus.session.models
 import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.models.MessageRole
 import com.claudecodeplus.ui.models.AiModel
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.*
 import java.time.Instant
 
 /**
  * 会话信息
  */
+@Serializable
 data class SessionInfo(
     val sessionId: String,
     val filePath: String,
@@ -22,6 +25,7 @@ data class SessionInfo(
 /**
  * Claude CLI 会话消息（简化版）
  */
+@Serializable
 data class ClaudeSessionMessage(
     val uuid: String,
     val parentUuid: String? = null,
@@ -36,12 +40,13 @@ data class ClaudeSessionMessage(
 /**
  * 消息内容
  */
+@Serializable
 data class MessageContent(
     val role: String,
-    val content: Any? = null,
+    val content: kotlinx.serialization.json.JsonElement? = null,
     val id: String? = null,
     val model: String? = null,
-    val usage: Map<String, Any>? = null
+    val usage: Map<String, kotlinx.serialization.json.JsonElement>? = null
 )
 
 /**
@@ -70,8 +75,23 @@ fun ClaudeSessionMessage.toEnhancedMessage(): EnhancedMessage? {
     
     // 处理内容和工具调用
     val contentList = when (val c = message.content) {
-        is String -> listOf(mapOf("type" to "text", "text" to c))
-        is List<*> -> c.filterIsInstance<Map<*, *>>()
+        is kotlinx.serialization.json.JsonPrimitive -> {
+            if (c.isString) {
+                listOf(mapOf("type" to "text", "text" to c.content))
+            } else emptyList()
+        }
+        is kotlinx.serialization.json.JsonArray -> {
+            c.mapNotNull { element ->
+                if (element is kotlinx.serialization.json.JsonObject) {
+                    element.toMap().mapValues { (_, value) ->
+                        when (value) {
+                            is kotlinx.serialization.json.JsonPrimitive -> value.content
+                            else -> value.toString()
+                        }
+                    }
+                } else null
+            }
+        }
         else -> emptyList()
     }
     
@@ -99,10 +119,10 @@ fun ClaudeSessionMessage.toEnhancedMessage(): EnhancedMessage? {
     // 解析 token 使用信息
     val tokenUsage = message.usage?.let { usage ->
         EnhancedMessage.TokenUsage(
-            inputTokens = (usage["input_tokens"] as? Number)?.toInt() ?: 0,
-            outputTokens = (usage["output_tokens"] as? Number)?.toInt() ?: 0,
-            cacheCreationTokens = (usage["cache_creation_input_tokens"] as? Number)?.toInt() ?: 0,
-            cacheReadTokens = (usage["cache_read_input_tokens"] as? Number)?.toInt() ?: 0
+            inputTokens = usage["input_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
+            outputTokens = usage["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
+            cacheCreationTokens = usage["cache_creation_input_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
+            cacheReadTokens = usage["cache_read_input_tokens"]?.jsonPrimitive?.intOrNull ?: 0
         )
     }
     

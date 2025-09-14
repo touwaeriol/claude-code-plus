@@ -6,19 +6,31 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import java.util.prefs.Preferences
-import com.google.gson.JsonParser
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.decodeFromString
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
 
 /**
+ * Claude全局设置数据类
+ */
+@Serializable
+data class ClaudeSettings(
+    val model: String? = null
+)
+
+/**
  * 默认会话配置管理器
- * 
+ *
  * 管理全局的默认会话设置，包括：
  * - 默认 AI 模型
  * - 默认权限模式
  * - 其他会话级别的默认设置
- * 
+ *
  * 配置会持久化到用户设置中，并在应用启动时加载
  */
 object DefaultSessionConfig {
@@ -26,7 +38,13 @@ object DefaultSessionConfig {
     private const val KEY_DEFAULT_MODEL = "default_model"
     private const val KEY_DEFAULT_PERMISSION_MODE = "default_permission_mode"
     private const val KEY_DEFAULT_SKIP_PERMISSIONS = "default_skip_permissions"
-    
+
+    // JSON配置用于解析Claude设置文件
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
     private val prefs: Preferences = Preferences.userRoot().node(PREF_NODE)
     
     /**
@@ -107,9 +125,9 @@ object DefaultSessionConfig {
         
         try {
             val content = Files.readString(settingsFile)
-            val json = JsonParser.parseString(content).asJsonObject
-            
-            val modelStr = json.get("model")?.asString
+            val settings = json.decodeFromString<ClaudeSettings>(content)
+
+            val modelStr = settings.model
             if (modelStr.isNullOrBlank()) {
                 println("[DefaultSessionConfig] Claude 设置文件中没有模型配置")
                 return null
