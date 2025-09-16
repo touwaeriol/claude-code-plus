@@ -1,0 +1,271 @@
+package com.claudecodeplus.sdk.protocol
+
+import com.claudecodeplus.sdk.exceptions.MessageParsingException
+import com.claudecodeplus.sdk.types.*
+import kotlinx.serialization.json.*
+
+/**
+ * Parser for converting raw JSON messages to typed objects.
+ */
+class MessageParser {
+    
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+    
+    /**
+     * Parse a JSON element into a typed Message object.
+     */
+    fun parseMessage(data: JsonElement): Message {
+        try {
+            val jsonObject = data.jsonObject
+            val type = jsonObject["type"]?.jsonPrimitive?.content
+                ?: throw MessageParsingException("Missing 'type' field in message")
+            
+            return when (type) {
+                "user" -> parseUserMessage(jsonObject)
+                "assistant" -> parseAssistantMessage(jsonObject)
+                "system" -> parseSystemMessage(jsonObject)
+                "result" -> parseResultMessage(jsonObject)
+                else -> throw MessageParsingException("Unknown message type: $type")
+            }
+        } catch (e: Exception) {
+            throw MessageParsingException("Failed to parse message: ${e.message}", data = null, cause = e)
+        }
+    }
+    
+    /**
+     * Parse user message.
+     */
+    private fun parseUserMessage(jsonObject: JsonObject): UserMessage {
+        val content = jsonObject["content"] ?: throw MessageParsingException("Missing 'content' in user message")
+        val parentToolUseId = jsonObject["parent_tool_use_id"]?.jsonPrimitive?.contentOrNull
+        val sessionId = jsonObject["session_id"]?.jsonPrimitive?.content ?: "default"
+        
+        return UserMessage(
+            content = content,
+            parentToolUseId = parentToolUseId,
+            sessionId = sessionId
+        )
+    }
+    
+    /**
+     * Parse assistant message.
+     */
+    private fun parseAssistantMessage(jsonObject: JsonObject): AssistantMessage {
+        // Check if content and model are directly in the object (old format)
+        val directContent = jsonObject["content"]?.jsonArray
+        val directModel = jsonObject["model"]?.jsonPrimitive?.content
+        
+        // Or check if they're nested in a "message" object (new format)
+        val messageObject = jsonObject["message"]?.jsonObject
+        val nestedContent = messageObject?.get("content")?.jsonArray
+        val nestedModel = messageObject?.get("model")?.jsonPrimitive?.content
+        
+        val contentArray = directContent ?: nestedContent 
+            ?: throw MessageParsingException("Missing 'content' array in assistant message")
+        val model = directModel ?: nestedModel 
+            ?: throw MessageParsingException("Missing 'model' in assistant message")
+        
+        val content = contentArray.map { parseContentBlock(it) }
+        
+        // Try to get token usage from either location
+        val tokenUsage = jsonObject["token_usage"]?.let { parseTokenUsage(it) }
+            ?: messageObject?.get("usage")?.let { parseTokenUsage(it) }
+        
+        return AssistantMessage(
+            content = content,
+            model = model,
+            tokenUsage = tokenUsage
+        )
+    }
+    
+    /**
+     * Parse system message.
+     */
+    private fun parseSystemMessage(jsonObject: JsonObject): SystemMessage {
+        val subtype = jsonObject["subtype"]?.jsonPrimitive?.content 
+            ?: throw MessageParsingException("Missing 'subtype' in system message")
+        val data = jsonObject["data"] 
+            ?: throw MessageParsingException("Missing 'data' in system message")
+        
+        return SystemMessage(
+            subtype = subtype,
+            data = data
+        )
+    }
+    
+    /**
+     * Parse result message.
+     */
+    private fun parseResultMessage(jsonObject: JsonObject): ResultMessage {
+        val subtype = jsonObject["subtype"]?.jsonPrimitive?.content 
+            ?: throw MessageParsingException("Missing 'subtype' in result message")
+        val durationMs = jsonObject["duration_ms"]?.jsonPrimitive?.long 
+            ?: throw MessageParsingException("Missing 'duration_ms' in result message")
+        val durationApiMs = jsonObject["duration_api_ms"]?.jsonPrimitive?.long 
+            ?: throw MessageParsingException("Missing 'duration_api_ms' in result message")
+        val isError = jsonObject["is_error"]?.jsonPrimitive?.boolean 
+            ?: throw MessageParsingException("Missing 'is_error' in result message")
+        val numTurns = jsonObject["num_turns"]?.jsonPrimitive?.int 
+            ?: throw MessageParsingException("Missing 'num_turns' in result message")
+        val sessionId = jsonObject["session_id"]?.jsonPrimitive?.content 
+            ?: throw MessageParsingException("Missing 'session_id' in result message")
+        
+        val totalCostUsd = jsonObject["total_cost_usd"]?.jsonPrimitive?.doubleOrNull
+        val usage = jsonObject["usage"]
+        val result = jsonObject["result"]?.jsonPrimitive?.contentOrNull
+        
+        return ResultMessage(
+            subtype = subtype,
+            durationMs = durationMs,
+            durationApiMs = durationApiMs,
+            isError = isError,
+            numTurns = numTurns,
+            sessionId = sessionId,
+            totalCostUsd = totalCostUsd,
+            usage = usage,
+            result = result
+        )
+    }
+    
+    /**
+     * Parse content block from JSON.
+     */
+    private fun parseContentBlock(data: JsonElement): ContentBlock {
+        val jsonObject = data.jsonObject
+        val type = jsonObject["type"]?.jsonPrimitive?.content 
+            ?: throw MessageParsingException("Missing 'type' field in content block")
+        
+        return when (type) {
+            "text" -> {
+                val text = jsonObject["text"]?.jsonPrimitive?.content 
+                    ?: throw MessageParsingException("Missing 'text' in text block")
+                TextBlock(text)
+            }
+            "thinking" -> {
+                val thinking = jsonObject["thinking"]?.jsonPrimitive?.content 
+                    ?: throw MessageParsingException("Missing 'thinking' in thinking block")
+                val signature = jsonObject["signature"]?.jsonPrimitive?.content 
+                    ?: throw MessageParsingException("Missing 'signature' in thinking block")
+                ThinkingBlock(thinking, signature)
+            }
+            "tool_use" -> {
+                val id = jsonObject["id"]?.jsonPrimitive?.content 
+                    ?: throw MessageParsingException("Missing 'id' in tool_use block")
+                val name = jsonObject["name"]?.jsonPrimitive?.content 
+                    ?: throw MessageParsingException("Missing 'name' in tool_use block")
+                val input = jsonObject["input"] 
+                    ?: throw MessageParsingException("Missing 'input' in tool_use block")
+                ToolUseBlock(id, name, input)
+            }
+            "tool_result" -> {
+                val toolUseId = jsonObject["tool_use_id"]?.jsonPrimitive?.content 
+                    ?: throw MessageParsingException("Missing 'tool_use_id' in tool_result block")
+                val content = jsonObject["content"]
+                val isError = jsonObject["is_error"]?.jsonPrimitive?.booleanOrNull
+                ToolResultBlock(toolUseId, content, isError)
+            }
+            else -> throw MessageParsingException("Unknown content block type: $type")
+        }
+    }
+    
+    /**
+     * Parse token usage information.
+     */
+    private fun parseTokenUsage(data: JsonElement): TokenUsage {
+        val jsonObject = data.jsonObject
+        val inputTokens = jsonObject["input_tokens"]?.jsonPrimitive?.int 
+            ?: throw MessageParsingException("Missing 'input_tokens' in token usage")
+        val outputTokens = jsonObject["output_tokens"]?.jsonPrimitive?.int 
+            ?: throw MessageParsingException("Missing 'output_tokens' in token usage")
+        val cacheCreationInputTokens = jsonObject["cache_creation_input_tokens"]?.jsonPrimitive?.intOrNull
+        val cacheReadInputTokens = jsonObject["cache_read_input_tokens"]?.jsonPrimitive?.intOrNull
+        
+        return TokenUsage(
+            inputTokens = inputTokens,
+            outputTokens = outputTokens,
+            cacheCreationInputTokens = cacheCreationInputTokens,
+            cacheReadInputTokens = cacheReadInputTokens
+        )
+    }
+    
+    /**
+     * Check if a JSON element represents a control message.
+     */
+    fun isControlMessage(data: JsonElement): Boolean {
+        val jsonObject = data.jsonObject
+        val type = jsonObject["type"]?.jsonPrimitive?.content
+        return type == "control_request" || type == "control_response"
+    }
+    
+    /**
+     * Parse control request message.
+     */
+    fun parseControlRequest(data: JsonElement): Pair<String, ControlRequest> {
+        val jsonObject = data.jsonObject
+        val requestId = jsonObject["request_id"]?.jsonPrimitive?.content 
+            ?: throw MessageParsingException("Missing 'request_id' in control request")
+        val request = jsonObject["request"]?.jsonObject 
+            ?: throw MessageParsingException("Missing 'request' in control request")
+        
+        val subtype = request["subtype"]?.jsonPrimitive?.content 
+            ?: throw MessageParsingException("Missing 'subtype' in control request")
+        
+        val controlRequest = when (subtype) {
+            "interrupt" -> InterruptRequest()
+            "can_use_tool" -> {
+                val toolName = request["tool_name"]?.jsonPrimitive?.content 
+                    ?: throw MessageParsingException("Missing 'tool_name' in permission request")
+                val input = request["input"] 
+                    ?: throw MessageParsingException("Missing 'input' in permission request")
+                val suggestions = request["permission_suggestions"]?.jsonArray?.toList()
+                val blockedPath = request["blocked_path"]?.jsonPrimitive?.contentOrNull
+                PermissionRequest(toolName = toolName, input = input, permissionSuggestions = suggestions, blockedPath = blockedPath)
+            }
+            "hook_callback" -> {
+                val callbackId = request["callback_id"]?.jsonPrimitive?.content 
+                    ?: throw MessageParsingException("Missing 'callback_id' in hook callback request")
+                val input = request["input"] 
+                    ?: throw MessageParsingException("Missing 'input' in hook callback request")
+                val toolUseId = request["tool_use_id"]?.jsonPrimitive?.contentOrNull
+                HookCallbackRequest(callbackId = callbackId, input = input, toolUseId = toolUseId)
+            }
+            "mcp_message" -> {
+                val serverName = request["server_name"]?.jsonPrimitive?.content 
+                    ?: throw MessageParsingException("Missing 'server_name' in MCP message request")
+                val message = request["message"] 
+                    ?: throw MessageParsingException("Missing 'message' in MCP message request")
+                McpMessageRequest(serverName = serverName, message = message)
+            }
+            else -> throw MessageParsingException("Unknown control request subtype: $subtype")
+        }
+        
+        return requestId to controlRequest
+    }
+    
+    /**
+     * Parse control response message.
+     */
+    fun parseControlResponse(data: JsonElement): ControlResponse {
+        val jsonObject = data.jsonObject
+        val response = jsonObject["response"]?.jsonObject 
+            ?: throw MessageParsingException("Missing 'response' in control response")
+        
+        val subtype = response["subtype"]?.jsonPrimitive?.content 
+            ?: throw MessageParsingException("Missing 'subtype' in control response")
+        val requestId = response["request_id"]?.jsonPrimitive?.content 
+            ?: throw MessageParsingException("Missing 'request_id' in control response")
+        
+        val responseData = response["response"]
+        val error = response["error"]?.jsonPrimitive?.contentOrNull
+        
+        return ControlResponse(
+            subtype = subtype,
+            requestId = requestId,
+            response = responseData,
+            error = error
+        )
+    }
+}

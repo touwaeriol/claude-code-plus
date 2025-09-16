@@ -1,0 +1,483 @@
+package com.claudecodeplus.sdk
+
+import com.claudecodeplus.sdk.types.*
+import kotlinx.coroutines.*
+import kotlinx.serialization.json.JsonPrimitive
+import org.junit.jupiter.api.Test
+import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.test.*
+
+/**
+ * 真实的 MCP + Hooks 集成测试
+ * 让 AI 真正调用我们的自定义 MCP 工具，并验证 hooks 正常工作
+ */
+class RealMcpHooksIntegrationTest {
+
+    companion object {
+        // 测试用的临时文件
+        private const val TEST_FILE_PATH = "/tmp/claude_mcp_test.txt"
+        private const val TEST_CONTENT = "Hello from Claude MCP Test!"
+        
+        // Hook 调用计数器
+        private val preToolHookCalls = AtomicInteger(0)
+        private val postToolHookCalls = AtomicInteger(0)
+        private val mcpToolWasCalled = AtomicBoolean(false)
+        private val securityCheckTriggered = AtomicBoolean(false)
+    }
+
+    /**
+     * 安全检查 Hook - 在工具调用前执行
+     */
+    private val securityHook: HookCallback = securityHook@{ input, toolUseId, context ->
+        val toolName = input["tool_name"] as? String ?: ""
+        val toolInput = input["tool_input"] as? Map<*, *> ?: emptyMap<String, Any>()
+        
+        preToolHookCalls.incrementAndGet()
+        
+        println("🔒 [PRE_TOOL_USE] 安全检查: $toolName")
+        println("   工具输入: $toolInput")
+        println("   工具ID: $toolUseId")
+        
+        if (toolName.startsWith("mcp__")) {
+            val parts = toolName.split("__")
+            val serverName = if (parts.size >= 2) parts[1] else "unknown"
+            val toolFunction = if (parts.size >= 3) parts[2] else "unknown"
+            
+            println("   🔧 MCP 工具详情: 服务器=$serverName, 功能=$toolFunction")
+            securityCheckTriggered.set(true)
+            
+            // 安全策略：阻止危险的文件操作
+            when (toolFunction) {
+                "write_file" -> {
+                    val path = toolInput["path"] as? String ?: ""
+                    if (!path.startsWith("/tmp/")) {
+                        println("   🚫 阻止危险的写文件操作: $path")
+                        return@securityHook HookJSONOutput(
+                            decision = "block",
+                            systemMessage = "安全策略: 只能向 /tmp/ 目录写入文件",
+                            hookSpecificOutput = JsonPrimitive("unsafe_write_blocked")
+                        )
+                    }
+                }
+                "calculate" -> {
+                    val expression = toolInput["expression"] as? String ?: ""
+                    if (expression.contains("import") || expression.contains("exec")) {
+                        println("   🚫 阻止危险的计算表达式: $expression")
+                        return@securityHook HookJSONOutput(
+                            decision = "block",
+                            systemMessage = "安全策略: 表达式不能包含危险操作",
+                            hookSpecificOutput = JsonPrimitive("dangerous_expression_blocked")
+                        )
+                    }
+                }
+            }
+            
+            println("   ✅ MCP 工具安全检查通过")
+        }
+        
+        HookJSONOutput(systemMessage = "✅ 安全检查通过")
+    }
+
+    /**
+     * 审计 Hook - 在工具调用后执行
+     */
+    private val auditHook: HookCallback = { input, toolUseId, context ->
+        val toolName = input["tool_name"] as? String ?: ""
+        
+        postToolHookCalls.incrementAndGet()
+        
+        println("📋 [POST_TOOL_USE] 审计记录: $toolName")
+        println("   工具ID: $toolUseId")
+        println("   时间戳: ${System.currentTimeMillis()}")
+        
+        if (toolName.startsWith("mcp__")) {
+            val parts = toolName.split("__")
+            val serverName = if (parts.size >= 2) parts[1] else "unknown"
+            val toolFunction = if (parts.size >= 3) parts[2] else "unknown"
+            
+            println("   📊 MCP 工具审计: 服务器=$serverName, 功能=$toolFunction")
+            mcpToolWasCalled.set(true)
+        }
+        
+        HookJSONOutput(
+            systemMessage = "📋 审计记录完成",
+            hookSpecificOutput = JsonPrimitive("audit_logged")
+        )
+    }
+
+    /**
+     * 获取 MCP 服务器脚本的绝对路径
+     */
+    private fun getMcpServerScript(): String {
+        val currentDir = System.getProperty("user.dir")
+        return "$currentDir/claude-code-sdk/src/test/resources/simple_mcp_server.py"
+    }
+
+    @Test
+    fun `test real AI using MCP tools with security hooks`() = runBlocking {
+        println("=== 🚀 开始真实 MCP + Hooks 集成测试 ===")
+        
+        // 重置计数器
+        preToolHookCalls.set(0)
+        postToolHookCalls.set(0)
+        mcpToolWasCalled.set(false)
+        securityCheckTriggered.set(false)
+        
+        // 清理测试文件
+        val testFile = File(TEST_FILE_PATH)
+        testFile.delete()
+        
+        val mcpServerScript = getMcpServerScript()
+        println("MCP 服务器脚本路径: $mcpServerScript")
+        assertTrue(File(mcpServerScript).exists(), "MCP 服务器脚本应该存在")
+        
+        // 配置 MCP 服务器和 Hooks
+        val options = ClaudeCodeOptions(
+            model = "claude-3-5-sonnet-20241022",
+            
+            // MCP 服务器配置
+            mcpServers = mapOf(
+                "test-server" to McpStdioServerConfig(
+                    command = "python3",
+                    args = listOf(mcpServerScript),
+                    env = mapOf("PYTHONUNBUFFERED" to "1")
+                )
+            ),
+            
+            // 允许的工具（包括 MCP 工具）
+            allowedTools = listOf(
+                "Read", "Write", "Bash",
+                "mcp__test-server__read_file",
+                "mcp__test-server__write_file",
+                "mcp__test-server__calculate",
+                "mcp__test-server__get_time"
+            ),
+            
+            // Hooks 配置
+            hooks = mapOf(
+                HookEvent.PRE_TOOL_USE to listOf(
+                    HookMatcher(
+                        matcher = "mcp__.*", // 匹配所有 MCP 工具
+                        hooks = listOf(securityHook)
+                    )
+                ),
+                HookEvent.POST_TOOL_USE to listOf(
+                    HookMatcher(
+                        matcher = "mcp__.*",
+                        hooks = listOf(auditHook)
+                    )
+                )
+            ),
+            
+            // 系统提示
+            appendSystemPrompt = """
+                你现在可以使用以下 MCP 自定义工具：
+                1. test-server.read_file - 读取文件内容
+                2. test-server.write_file - 写入文件内容  
+                3. test-server.calculate - 执行数学计算
+                4. test-server.get_time - 获取当前时间
+                
+                这些工具都会经过安全检查和审计记录。
+                请严格按照用户的指令使用这些工具。
+            """.trimIndent()
+        )
+        
+        val client = ClaudeCodeSdkClient(options)
+        
+        try {
+            println("📡 正在连接到 Claude CLI...")
+            client.connect()
+            
+            println("🔗 连接状态: ${client.isConnected()}")
+            assertTrue(client.isConnected(), "应该成功连接到 Claude")
+            
+            val serverInfo = client.getServerInfo()
+            println("📋 服务器信息: $serverInfo")
+            assertNotNull(serverInfo, "应该获取到服务器信息")
+            
+            // 测试1: 要求 AI 使用 MCP 工具写入文件
+            println("\n--- 测试1: 写入文件 ---")
+            val writeMessage = "请使用 test-server 的 write_file 工具，向 $TEST_FILE_PATH 写入内容：$TEST_CONTENT"
+            println("🗣️ 发送消息: $writeMessage")
+            
+            client.query(writeMessage)
+            
+            var writeTaskCompleted = false
+            var aiResponse = ""
+            
+            withTimeout(45000) { // 45秒超时
+                client.receiveResponse().collect { message ->
+                    println("📨 收到消息类型: ${message::class.simpleName}")
+                    
+                    when (message) {
+                        is AssistantMessage -> {
+                            message.content.forEach { block ->
+                                when (block) {
+                                    is TextBlock -> {
+                                        aiResponse += block.text
+                                        println("🤖 Claude: ${block.text}")
+                                    }
+                                    is ToolUseBlock -> {
+                                        println("🔧 Claude 调用工具: ${block.name}")
+                                        println("   工具输入: ${block.input}")
+                                        
+                                        // 验证 AI 确实调用了我们的 MCP 工具
+                                        if (block.name.startsWith("mcp__test-server__")) {
+                                            println("   ✅ 确认调用了 MCP 工具!")
+                                        }
+                                    }
+                                    is ThinkingBlock -> {
+                                        println("🤔 Claude 思考: ${block.thinking}")
+                                    }
+                                    is ToolResultBlock -> {
+                                        println("🔧 工具结果: ${block.content}")
+                                    }
+                                }
+                            }
+                        }
+                        is ResultMessage -> {
+                            println("📊 收到结果消息: ${message.subtype}")
+                            if (message.subtype == "success") {
+                                writeTaskCompleted = true
+                            }
+                        }
+                        else -> {
+                            println("📬 其他消息: ${message::class.simpleName}")
+                        }
+                    }
+                }
+            }
+            
+            assertTrue(writeTaskCompleted, "写入任务应该完成")
+            
+            // 验证文件确实被创建
+            println("\n--- 验证文件创建 ---")
+            assertTrue(testFile.exists(), "测试文件应该被创建")
+            val fileContent = testFile.readText()
+            println("📄 文件内容: $fileContent")
+            assertTrue(fileContent.contains(TEST_CONTENT), "文件内容应该包含预期文本")
+            
+            // 测试2: 要求 AI 读取刚才写入的文件
+            println("\n--- 测试2: 读取文件 ---")
+            val readMessage = "请使用 test-server 的 read_file 工具，读取 $TEST_FILE_PATH 的内容"
+            println("🗣️ 发送消息: $readMessage")
+            
+            client.query(readMessage)
+            
+            var readTaskCompleted = false
+            var readResponse = ""
+            
+            withTimeout(30000) {
+                client.receiveResponse().collect { message ->
+                    when (message) {
+                        is AssistantMessage -> {
+                            message.content.forEach { block ->
+                                when (block) {
+                                    is TextBlock -> {
+                                        readResponse += block.text
+                                        println("🤖 Claude: ${block.text}")
+                                    }
+                                    is ToolUseBlock -> {
+                                        println("🔧 Claude 调用工具: ${block.name}")
+                                    }
+                                    is ThinkingBlock -> {
+                                        println("🤔 Claude 思考: ${block.thinking}")
+                                    }
+                                    is ToolResultBlock -> {
+                                        println("🔧 工具结果: ${block.content}")
+                                    }
+                                }
+                            }
+                        }
+                        is ResultMessage -> {
+                            if (message.subtype == "success") {
+                                readTaskCompleted = true
+                            }
+                        }
+                        else -> {}
+                    }
+                }
+            }
+            
+            assertTrue(readTaskCompleted, "读取任务应该完成")
+            assertTrue(readResponse.contains(TEST_CONTENT), 
+                "AI 的回复应该包含文件内容，实际回复：$readResponse")
+            
+            // 测试3: 要求 AI 执行数学计算
+            println("\n--- 测试3: 数学计算 ---")
+            val calcMessage = "请使用 test-server 的 calculate 工具，计算 15 * 8 的结果"
+            println("🗣️ 发送消息: $calcMessage")
+            
+            client.query(calcMessage)
+            
+            var calcTaskCompleted = false
+            var calcResponse = ""
+            
+            withTimeout(30000) {
+                client.receiveResponse().collect { message ->
+                    when (message) {
+                        is AssistantMessage -> {
+                            message.content.forEach { block ->
+                                when (block) {
+                                    is TextBlock -> {
+                                        calcResponse += block.text
+                                        println("🤖 Claude: ${block.text}")
+                                    }
+                                    is ToolUseBlock -> {
+                                        println("🔧 Claude 调用工具: ${block.name}")
+                                    }
+                                    is ThinkingBlock -> {
+                                        println("🤔 Claude 思考: ${block.thinking}")
+                                    }
+                                    is ToolResultBlock -> {
+                                        println("🔧 工具结果: ${block.content}")
+                                    }
+                                }
+                            }
+                        }
+                        is ResultMessage -> {
+                            if (message.subtype == "success") {
+                                calcTaskCompleted = true
+                            }
+                        }
+                        else -> {}
+                    }
+                }
+            }
+            
+            assertTrue(calcTaskCompleted, "计算任务应该完成")
+            assertTrue(calcResponse.contains("120"), 
+                "AI 的回复应该包含计算结果 120，实际回复：$calcResponse")
+            
+            // 验证 Hooks 被正确触发
+            println("\n--- 验证 Hooks 执行情况 ---")
+            println("🔒 PRE_TOOL_USE Hook 调用次数: ${preToolHookCalls.get()}")
+            println("📋 POST_TOOL_USE Hook 调用次数: ${postToolHookCalls.get()}")
+            println("🔧 MCP 工具被调用: ${mcpToolWasCalled.get()}")
+            println("🛡️ 安全检查被触发: ${securityCheckTriggered.get()}")
+            
+            // 断言验证
+            assertTrue(preToolHookCalls.get() > 0, "PRE_TOOL_USE Hook 应该被调用")
+            assertTrue(postToolHookCalls.get() > 0, "POST_TOOL_USE Hook 应该被调用")
+            assertTrue(mcpToolWasCalled.get(), "MCP 工具应该被调用")
+            assertTrue(securityCheckTriggered.get(), "安全检查应该被触发")
+            
+            println("\n✅ 真实 MCP + Hooks 集成测试成功！")
+            
+        } catch (e: Exception) {
+            println("❌ 测试失败: ${e.message}")
+            e.printStackTrace()
+            throw e
+        } finally {
+            try {
+                client.disconnect()
+                println("🔌 已断开连接")
+                
+                // 清理测试文件
+                testFile.delete()
+                println("🗑️ 已清理测试文件")
+            } catch (e: Exception) {
+                println("⚠️ 清理时出错: ${e.message}")
+            }
+        }
+    }
+    
+    @Test
+    fun `test security hook blocks dangerous operations`() = runBlocking {
+        println("=== 🛡️ 测试安全 Hook 阻止危险操作 ===")
+        
+        // 重置状态
+        preToolHookCalls.set(0)
+        securityCheckTriggered.set(false)
+        
+        val mcpServerScript = getMcpServerScript()
+        
+        val options = ClaudeCodeOptions(
+            model = "claude-3-5-sonnet-20241022",
+            mcpServers = mapOf(
+                "test-server" to McpStdioServerConfig(
+                    command = "python3",
+                    args = listOf(mcpServerScript),
+                    env = mapOf("PYTHONUNBUFFERED" to "1")
+                )
+            ),
+            allowedTools = listOf(
+                "mcp__test-server__write_file"
+            ),
+            hooks = mapOf(
+                HookEvent.PRE_TOOL_USE to listOf(
+                    HookMatcher(
+                        matcher = "mcp__.*",
+                        hooks = listOf(securityHook)
+                    )
+                )
+            ),
+            appendSystemPrompt = """
+                请使用 test-server 的 write_file 工具。
+                如果遇到安全限制，请告诉我被阻止的原因。
+            """.trimIndent()
+        )
+        
+        val client = ClaudeCodeSdkClient(options)
+        
+        try {
+            client.connect()
+            assertTrue(client.isConnected())
+            
+            // 尝试写入危险路径（应该被阻止）
+            val dangerousMessage = "请使用 write_file 工具向 /etc/passwd 写入内容 'test'"
+            println("🗣️ 发送危险操作: $dangerousMessage")
+            
+            client.query(dangerousMessage)
+            
+            var gotSecurityBlock = false
+            var aiResponse = ""
+            
+            withTimeout(30000) {
+                client.receiveResponse().collect { message ->
+                    when (message) {
+                        is AssistantMessage -> {
+                            message.content.forEach { block ->
+                                when (block) {
+                                    is TextBlock -> {
+                                        aiResponse += block.text
+                                        println("🤖 Claude: ${block.text}")
+                                        
+                                        // 检查是否包含安全限制的提示
+                                        if (block.text.contains("安全") || 
+                                            block.text.contains("阻止") ||
+                                            block.text.contains("/tmp/")) {
+                                            gotSecurityBlock = true
+                                        }
+                                    }
+                                    is ThinkingBlock -> {
+                                        println("🤔 Claude 思考: ${block.thinking}")
+                                    }
+                                    is ToolResultBlock -> {
+                                        println("🔧 工具结果: ${block.content}")
+                                    }
+                                    is ToolUseBlock -> {
+                                        println("🔧 Claude 调用工具: ${block.name}")
+                                    }
+                                }
+                            }
+                        }
+                        is ResultMessage -> {
+                            // 结果消息
+                        }
+                        else -> {}
+                    }
+                }
+            }
+            
+            assertTrue(securityCheckTriggered.get(), "安全检查应该被触发")
+            assertTrue(preToolHookCalls.get() > 0, "PRE_TOOL_USE Hook 应该被调用")
+            println("✅ 安全 Hook 成功阻止了危险操作")
+            
+        } finally {
+            client.disconnect()
+        }
+    }
+}
