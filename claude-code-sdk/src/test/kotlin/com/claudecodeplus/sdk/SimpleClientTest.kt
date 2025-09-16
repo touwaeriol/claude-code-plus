@@ -4,309 +4,277 @@ import com.claudecodeplus.sdk.exceptions.ClientNotConnectedException
 import com.claudecodeplus.sdk.types.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import kotlin.test.*
 
+/**
+ * 真实的 SDK 客户端测试（不使用 mock）
+ */
 class SimpleClientTest {
-    
+
     @Test
     fun `test client initial state`() {
-        val mockTransport = MockTransport()
-        val options = ClaudeCodeOptions(model = "claude-3-5-sonnet")
-        val client = ClaudeCodeSdkClient(options, transport = mockTransport)
-        
+        val options = ClaudeCodeOptions(model = "claude-3-5-sonnet-20241022")
+        val client = ClaudeCodeSdkClient(options)
+
         assertFalse(client.isConnected())
         assertNull(client.getServerInfo())
     }
-    
+
     @Test
     fun `test query without connection throws exception`() = runTest {
-        val mockTransport = MockTransport()
-        val client = ClaudeCodeSdkClient(ClaudeCodeOptions(), transport = mockTransport)
-        
+        val client = ClaudeCodeSdkClient(ClaudeCodeOptions())
+
         assertFailsWith<ClientNotConnectedException> {
             client.query("Hello")
         }
     }
-    
-    @Test
-    fun `test connect and basic functionality`() = runTest {
-        val mockTransport = MockTransport()
-        val client = ClaudeCodeSdkClient(ClaudeCodeOptions(model = "claude-3-5-sonnet"), transport = mockTransport)
-        
-        // Prepare mock response for initialization
-        val connectJob = launch {
-            client.connect()
-        }
-        
-        // Give enough time for message processing to start
-        delay(50)
-        
-        // Send mock initialization response
-        mockTransport.sendMessage("""
-        {
-            "type": "control_response",
-            "response": {
-                "subtype": "success",
-                "request_id": "req_1",
-                "response": {
-                    "commands": ["read", "write", "bash"]
-                }
-            }
-        }
-        """.trimIndent())
-        
-        // Wait for connection to complete
-        connectJob.join()
-        
-        assertTrue(client.isConnected())
-        assertNotNull(client.getServerInfo())
-        
-        client.disconnect()
-        assertFalse(client.isConnected())
-    }
-    
-    @Test
-    fun `test send query message`() = runTest {
-        val mockTransport = MockTransport()
-        val client = ClaudeCodeSdkClient(ClaudeCodeOptions(), transport = mockTransport)
-        
-        // Connect first
-        val connectJob = launch { client.connect() }
-        delay(50)
-        mockTransport.sendMessage("""
-        {
-            "type": "control_response",
-            "response": {
-                "subtype": "success",
-                "request_id": "req_1",
-                "response": {}
-            }
-        }
-        """.trimIndent())
-        connectJob.join()
-        
-        // Clear previous data
-        mockTransport.clearWrittenData()
-        
-        // Send query
-        val testMessage = "What is 2 + 2?"
-        client.query(testMessage)
-        
-        // Verify message was sent
-        val writtenData = mockTransport.getWrittenData()
-        assertEquals(1, writtenData.size)
-        
-        val json = Json { ignoreUnknownKeys = true }
-        val sentMessage = json.parseToJsonElement(writtenData.first()).jsonObject
-        
-        assertEquals("user", sentMessage["type"]?.jsonPrimitive?.content)
-        assertEquals("default", sentMessage["session_id"]?.jsonPrimitive?.content)
-        
-        val messageObj = sentMessage["message"]?.jsonObject
-        assertEquals("user", messageObj?.get("role")?.jsonPrimitive?.content)
-        assertEquals(testMessage, messageObj?.get("content")?.jsonPrimitive?.content)
-        
-        client.disconnect()
-    }
-    
-    @Test
-    fun `test query with custom session id`() = runTest {
-        val mockTransport = MockTransport()
-        val client = ClaudeCodeSdkClient(ClaudeCodeOptions(), transport = mockTransport)
-        
-        // Connect
-        val connectJob = launch { client.connect() }
-        delay(50)
-        mockTransport.sendMessage("""
-        {
-            "type": "control_response",
-            "response": {
-                "subtype": "success",
-                "request_id": "req_1",
-                "response": {}
-            }
-        }
-        """.trimIndent())
-        connectJob.join()
-        
-        mockTransport.clearWrittenData()
-        
-        val customSessionId = "test-session-123"
-        client.query("Hello", customSessionId)
-        
-        val writtenData = mockTransport.getWrittenData()
-        val json = Json { ignoreUnknownKeys = true }
-        val sentMessage = json.parseToJsonElement(writtenData.first()).jsonObject
-        
-        assertEquals(customSessionId, sentMessage["session_id"]?.jsonPrimitive?.content)
-        
-        client.disconnect()
-    }
-    
-    @Test
-    fun `test receive response`() = runTest {
-        val mockTransport = MockTransport()
-        val client = ClaudeCodeSdkClient(ClaudeCodeOptions(), transport = mockTransport)
-        
-        // Connect
-        val connectJob = launch { client.connect() }
-        delay(50)
-        mockTransport.sendMessage("""
-        {
-            "type": "control_response",
-            "response": {
-                "subtype": "success",
-                "request_id": "req_1",
-                "response": {}
-            }
-        }
-        """.trimIndent())
-        connectJob.join()
-        
-        // Start collecting messages first
-        val messages = mutableListOf<Message>()
-        val collectJob = launch {
-            client.receiveResponse().collect { message ->
-                println("收到消息: ${message::class.simpleName}")
-                messages.add(message)
-            }
-        }
-        
-        // Give collection time to start
-        delay(50)
-        
-        // Now send mock assistant message
-        mockTransport.sendMessage("""
-        {
-            "type": "assistant",
-            "message": {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Hello! I'm Claude."
-                    }
-                ],
-                "model": "claude-3-5-sonnet"
-            }
-        }
-        """.trimIndent())
-        
-        // Send result message
-        mockTransport.sendMessage("""
-        {
-            "type": "result",
-            "subtype": "success",
-            "duration_ms": 1000,
-            "duration_api_ms": 800,
-            "is_error": false,
-            "num_turns": 1,
-            "session_id": "default"
-        }
-        """.trimIndent())
-        
-        // Wait for collection to complete
-        collectJob.join()
-        
-        assertEquals(2, messages.size)
-        
-        val assistantMessage = messages[0] as AssistantMessage
-        assertEquals("claude-3-5-sonnet", assistantMessage.model)
-        val textBlock = assistantMessage.content.first() as TextBlock
-        assertEquals("Hello! I'm Claude.", textBlock.text)
-        
-        val resultMessage = messages[1] as ResultMessage
-        assertEquals("success", resultMessage.subtype)
-        assertEquals(1000L, resultMessage.durationMs)
-        assertFalse(resultMessage.isError)
-        
-        client.disconnect()
-    }
-    
-    @Test
-    fun `test interrupt functionality`() = runTest {
-        val mockTransport = MockTransport()
-        val client = ClaudeCodeSdkClient(ClaudeCodeOptions(), transport = mockTransport)
-        
-        // Connect first
-        val connectJob = launch { client.connect() }
-        delay(50)
-        mockTransport.sendMessage("""
-        {
-            "type": "control_response",
-            "response": {
-                "subtype": "success",
-                "request_id": "req_1",
-                "response": {}
-            }
-        }
-        """.trimIndent())
-        connectJob.join()
-        
-        mockTransport.clearWrittenData()
-        
-        // Test interrupt functionality - but handle it synchronously to avoid timeouts
-        try {
-            // Start interrupt in a separate coroutine
-            val interruptJob = launch {
-                client.interrupt()
-            }
-            
-            // Give interrupt time to send request
-            delay(100)
-            
-            // Verify interrupt request was sent
-            val writtenData = mockTransport.getWrittenData()
-            assertEquals(1, writtenData.size)
-            
-            val json = Json { 
-                ignoreUnknownKeys = true
-                encodeDefaults = true
-            }
-            val sentMessage = json.parseToJsonElement(writtenData.first()).jsonObject
-            
-            assertEquals("control_request", sentMessage["type"]?.jsonPrimitive?.content)
-            val requestObj = sentMessage["request"]?.jsonObject
-            // InterruptRequest should have subtype field
-            assertEquals("interrupt", requestObj?.get("subtype")?.jsonPrimitive?.content)
-            
-            // Send mock interrupt response
-            val requestId = sentMessage["request_id"]?.jsonPrimitive?.content
-            mockTransport.sendMessage("""
-            {
-                "type": "control_response",
-                "response": {
-                    "subtype": "success",
-                    "request_id": "$requestId",
-                    "response": {}
-                }
-            }
-            """.trimIndent())
-            
-            // Give response time to be processed
-            delay(100)
-            
-            // Wait for interrupt to complete
-            interruptJob.join()
-            
-        } catch (e: Exception) {
-            println("Interrupt test error: ${e.message}")
-            throw e
-        }
-        
-        client.disconnect()
-    }
-    
+
     @Test
     fun `test interrupt without connection throws exception`() = runTest {
-        val mockTransport = MockTransport()
-        val client = ClaudeCodeSdkClient(ClaudeCodeOptions(), transport = mockTransport)
-        
+        val client = ClaudeCodeSdkClient(ClaudeCodeOptions())
+
         assertFailsWith<ClientNotConnectedException> {
             client.interrupt()
         }
+    }
+
+    @Test
+    fun `test real connection and simple query`() = runBlocking {
+        val options = ClaudeCodeOptions(
+            model = "claude-3-5-sonnet-20241022",
+            allowedTools = listOf("Read", "Write"),
+            appendSystemPrompt = "Keep your responses very brief."
+        )
+
+        val client = ClaudeCodeSdkClient(options)
+
+        try {
+            // 连接到真实的 Claude CLI
+            println("🔌 正在连接到 Claude CLI...")
+            client.connect()
+
+            assertTrue(client.isConnected(), "应该成功连接到 Claude")
+
+            val serverInfo = client.getServerInfo()
+            assertNotNull(serverInfo, "应该获取到服务器信息")
+            println("📋 服务器信息: $serverInfo")
+
+            // 发送一个简单的数学问题
+            val question = "What is 2 + 2? Answer only with the number."
+            println("🗣️ 发送问题: $question")
+
+            client.query(question)
+
+            var aiResponse = ""
+            var responseReceived = false
+
+            withTimeout(30000) { // 30秒超时
+                client.receiveResponse().collect { message ->
+                    println("📨 收到消息类型: ${message::class.simpleName}")
+
+                    when (message) {
+                        is AssistantMessage -> {
+                            message.content.forEach { block ->
+                                if (block is TextBlock) {
+                                    aiResponse += block.text
+                                    println("🤖 Claude: ${block.text}")
+                                }
+                            }
+                        }
+                        is ResultMessage -> {
+                            println("📊 结果消息: ${message.subtype}")
+                            responseReceived = true
+                        }
+                        else -> {
+                            println("📬 其他消息: ${message::class.simpleName}")
+                        }
+                    }
+                }
+            }
+
+            assertTrue(responseReceived, "应该收到响应")
+            assertTrue(aiResponse.contains("4"), "回复应该包含数字 4")
+
+        } catch (e: Exception) {
+            println("❌ 测试失败: ${e.message}")
+            throw e
+        } finally {
+            client.disconnect()
+            assertFalse(client.isConnected(), "断开连接后应该显示未连接")
+            println("🔌 已断开连接")
+        }
+    }
+
+    @Test
+    fun `test use extension function`() = runBlocking {
+        val options = ClaudeCodeOptions(
+            model = "claude-3-5-sonnet-20241022",
+            appendSystemPrompt = "Keep your responses very brief."
+        )
+
+        val client = ClaudeCodeSdkClient(options)
+
+        val result = client.use {
+            assertTrue(isConnected(), "在 use 块中应该自动连接")
+
+            query("What is the capital of France? Answer with just the city name.")
+
+            var response = ""
+            receiveResponse().collect { message ->
+                if (message is AssistantMessage) {
+                    message.content.forEach { block ->
+                        if (block is TextBlock) {
+                            response += block.text
+                        }
+                    }
+                }
+            }
+
+            assertTrue(response.contains("Paris"), "回复应该包含 Paris")
+            response
+        }
+
+        assertFalse(client.isConnected(), "use 块结束后应该自动断开连接")
+        println("✅ use 扩展函数测试通过，回复: $result")
+    }
+
+    @Test
+    fun `test simpleQuery convenience function`() = runBlocking {
+        val options = ClaudeCodeOptions(
+            model = "claude-3-5-sonnet-20241022",
+            appendSystemPrompt = "Keep your responses very brief."
+        )
+
+        val client = ClaudeCodeSdkClient(options)
+
+        val messages = client.simpleQuery("Is 3 a prime number? Answer with just yes or no.")
+
+        assertTrue(messages.isNotEmpty(), "应该收到消息")
+
+        var foundAnswer = false
+        messages.forEach { message ->
+            if (message is AssistantMessage) {
+                message.content.forEach { block ->
+                    if (block is TextBlock) {
+                        val text = block.text.lowercase()
+                        if (text.contains("yes")) {
+                            foundAnswer = true
+                        }
+                    }
+                }
+            }
+        }
+
+        assertTrue(foundAnswer, "应该收到包含 'yes' 的回答")
+        println("✅ simpleQuery 测试通过")
+    }
+
+    @Test
+    fun `test claudeQuery top-level function`() = runBlocking {
+        val messages = claudeQuery(
+            prompt = "What is 5 * 5? Answer with just the number.",
+            options = ClaudeCodeOptions(
+                model = "claude-3-5-sonnet-20241022",
+                appendSystemPrompt = "Keep your responses very brief."
+            )
+        )
+
+        assertTrue(messages.isNotEmpty(), "应该收到消息")
+
+        var foundAnswer = false
+        messages.forEach { message ->
+            if (message is AssistantMessage) {
+                message.content.forEach { block ->
+                    if (block is TextBlock && block.text.contains("25")) {
+                        foundAnswer = true
+                    }
+                }
+            }
+        }
+
+        assertTrue(foundAnswer, "应该收到包含 25 的回答")
+        println("✅ claudeQuery 顶级函数测试通过")
+    }
+
+    @Test
+    fun `test claudeCodeSdkClient helper function`() = runBlocking {
+        val client = claudeCodeSdkClient(
+            ClaudeCodeOptions(
+                model = "claude-3-5-sonnet-20241022",
+                allowedTools = listOf("Read"),
+                appendSystemPrompt = "Be concise."
+            )
+        )
+
+        assertNotNull(client, "应该成功创建客户端")
+        // 注意：options 是私有的，不能直接访问
+        // 可以通过实际使用来验证配置是否正确
+
+        // 测试实际使用
+        client.use {
+            query("What is 1 + 1? Just the number.")
+
+            var response = ""
+            receiveResponse().collect { message ->
+                if (message is AssistantMessage) {
+                    message.content.forEach { block ->
+                        if (block is TextBlock) {
+                            response += block.text
+                        }
+                    }
+                }
+            }
+
+            assertTrue(response.contains("2"), "回复应该包含 2")
+        }
+
+        println("✅ claudeCodeSdkClient builder 测试通过")
+    }
+
+    @Test
+    fun `test multiple queries in same session`() = runBlocking {
+        val options = ClaudeCodeOptions(
+            model = "claude-3-5-sonnet-20241022",
+            appendSystemPrompt = "Keep responses very brief."
+        )
+
+        val client = ClaudeCodeSdkClient(options)
+
+        client.use {
+            // 第一个问题
+            query("Remember the number 42. What number did I just tell you?")
+
+            var firstResponse = ""
+            receiveResponse().collect { message ->
+                if (message is AssistantMessage) {
+                    message.content.forEach { block ->
+                        if (block is TextBlock) {
+                            firstResponse += block.text
+                        }
+                    }
+                }
+            }
+
+            assertTrue(firstResponse.contains("42"), "第一个回复应该包含 42")
+
+            // 第二个问题（测试上下文记忆）
+            query("What was the number I asked you to remember? Just the number.")
+
+            var secondResponse = ""
+            receiveResponse().collect { message ->
+                if (message is AssistantMessage) {
+                    message.content.forEach { block ->
+                        if (block is TextBlock) {
+                            secondResponse += block.text
+                        }
+                    }
+                }
+            }
+
+            assertTrue(secondResponse.contains("42"), "第二个回复应该记住 42")
+        }
+
+        println("✅ 多次查询测试通过")
     }
 }

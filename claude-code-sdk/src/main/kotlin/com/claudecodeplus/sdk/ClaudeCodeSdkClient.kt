@@ -294,9 +294,17 @@ class ClaudeCodeSdkClient(
 
 /**
  * Builder function for creating ClaudeCodeSdkClient with options.
+ * Usage:
+ * ```kotlin
+ * val client = claudeCodeSdkClient(
+ *     ClaudeCodeOptions(
+ *         model = "claude-3-5-sonnet-20241022",
+ *         allowedTools = listOf("Read", "Write")
+ *     )
+ * )
+ * ```
  */
-fun claudeCodeSdkClient(block: ClaudeCodeOptions.() -> Unit = {}): ClaudeCodeSdkClient {
-    val options = ClaudeCodeOptions().apply(block)
+fun claudeCodeSdkClient(options: ClaudeCodeOptions = ClaudeCodeOptions()): ClaudeCodeSdkClient {
     return ClaudeCodeSdkClient(options)
 }
 
