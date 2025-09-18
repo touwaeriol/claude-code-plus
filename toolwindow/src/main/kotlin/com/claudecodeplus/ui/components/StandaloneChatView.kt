@@ -7,7 +7,7 @@ import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.services.FileIndexService
-import com.claudecodeplus.core.interfaces.ProjectService
+import com.claudecodeplus.core.services.ProjectService
 import com.claudecodeplus.ui.services.SessionManager
 
 /**
@@ -49,7 +49,7 @@ fun StandaloneChatView(
         tabId = defaultTabId,
         initialMessages = initialMessages,
         sessionId = sessionId,
-        tabManager = null,
+        // tabManager = null, // 已移除ChatTabManager参数
         currentTabId = null,
         currentProject = tempProject,
         projectManager = null,

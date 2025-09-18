@@ -197,7 +197,7 @@ class ClaudeMessageAdapter {
                         id = id,
                         name = name,
                         parameters = parameters,
-                        tool = null // 强类型工具对象可以后续处理
+                        toolType = ToolType.OTHER // 使用默认工具类型
                     ))
                 }
             }

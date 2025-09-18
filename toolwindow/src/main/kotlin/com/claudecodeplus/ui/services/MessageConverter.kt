@@ -1,7 +1,12 @@
 package com.claudecodeplus.ui.services
 
-import com.claudecodeplus.sdk.SDKMessage
-import com.claudecodeplus.sdk.MessageType
+import com.claudecodeplus.sdk.types.SDKMessage
+import com.claudecodeplus.sdk.types.MessageType
+import com.claudecodeplus.sdk.types.type
+import com.claudecodeplus.sdk.types.messageId
+import com.claudecodeplus.sdk.types.content
+import com.claudecodeplus.sdk.types.data
+import com.claudecodeplus.sdk.types.timestamp
 import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.models.MessageRole
 import kotlinx.serialization.json.Json
@@ -31,12 +36,12 @@ object MessageConverter {
         println("[MessageConverter] 开始转换消息: type=${this.type}, messageId=${this.messageId}")
         
         // 优先使用 content 字段，然后是 data.text
-        val rawContent = content ?: data.text ?: ""
+        val rawContent = content ?: data?.text ?: ""
         // 分析原始内容
         
         // 解析原始 JSON 内容
         val contentJson = try {
-            if (rawContent.startsWith("{")) {
+            if (rawContent.isNotEmpty() && rawContent.startsWith("{")) {
                 val parsed = json.parseToJsonElement(rawContent).jsonObject
                 // 成功解析JSON
                 parsed
@@ -72,8 +77,9 @@ object MessageConverter {
         
         // 提取时间戳 - 转换为 Long 毫秒时间戳
         val timestampMillis = try {
-            if (this.timestamp.isNotEmpty()) {
-                Instant.parse(this.timestamp).toEpochMilli()
+            // 使用扩展属性的时间戳，如果为0则使用当前时间
+            if (this.timestamp > 0) {
+                this.timestamp
             } else {
                 System.currentTimeMillis()
             }

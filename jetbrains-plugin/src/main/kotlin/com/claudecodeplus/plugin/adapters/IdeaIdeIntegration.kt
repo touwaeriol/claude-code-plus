@@ -24,10 +24,18 @@ class IdeaIdeIntegration(
     }
     
     override fun handleToolClick(toolCall: ToolCall): Boolean {
+        logger.info("🔧 [IdeaIdeIntegration] 处理工具点击: ${toolCall.name}")
+        logger.info("- 工具ID: ${toolCall.id}")
+        logger.info("- 工具状态: ${toolCall.status}")
+        logger.info("- 有结果: ${toolCall.result != null}")
+        logger.info("- 参数: ${toolCall.parameters}")
+
         return try {
-            ToolClickManager.handleToolClick(toolCall, project, ToolClickConfig())
+            val result = ToolClickManager.handleToolClick(toolCall, project, ToolClickConfig())
+            logger.info("✅ [IdeaIdeIntegration] ToolClickManager处理结果: $result")
+            result
         } catch (e: Exception) {
-            logger.error("处理工具点击失败", e)
+            logger.error("❌ [IdeaIdeIntegration] 处理工具点击失败", e)
             false
         }
     }

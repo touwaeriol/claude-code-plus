@@ -647,7 +647,7 @@ enum class ToolType {
 data class ToolCall(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
-    val tool: com.claudecodeplus.sdk.Tool? = null,  // 新的工具类型对象
+    // val tool: com.claudecodeplus.sdk.Tool? = null,  // 新的工具类型对象 - 暂时禁用
     @Deprecated("Use tool property instead")
     val toolType: ToolType = ToolType.OTHER,  // 保留旧的枚举以保持兼容性
     val displayName: String = name,
@@ -862,79 +862,75 @@ EnhancedMessage(
         val totalTokens: Int get() = inputTokens + outputTokens
     }
     
-    // === 类型安全的工具访问方法 ===
-    
+    // === 基于工具名称的访问方法 ===
+
     /**
-     * 获取指定类型的工具调用
+     * 获取指定名称的工具调用
      */
-    inline fun <reified T : com.claudecodeplus.sdk.Tool> getToolCallsOfType(): List<ToolCall> {
-        return toolCalls.filter { it.tool is T }
+    fun getToolCallsByName(toolName: String): List<ToolCall> {
+        return toolCalls.filter { it.name == toolName }
     }
-    
+
     /**
-     * 获取第一个指定类型的工具调用
+     * 获取第一个指定名称的工具调用
      */
-    inline fun <reified T : com.claudecodeplus.sdk.Tool> getFirstToolCallOfType(): ToolCall? {
-        return toolCalls.firstOrNull { it.tool is T }
+    fun getFirstToolCallByName(toolName: String): ToolCall? {
+        return toolCalls.firstOrNull { it.name == toolName }
     }
-    
+
     /**
-     * 检查是否包含指定类型的工具调用
+     * 检查是否包含指定名称的工具调用
      */
-    inline fun <reified T : com.claudecodeplus.sdk.Tool> hasToolCallOfType(): Boolean {
-        return toolCalls.any { it.tool is T }
+    fun hasToolCallByName(toolName: String): Boolean {
+        return toolCalls.any { it.name == toolName }
     }
     
     /**
      * 获取所有读取文件的工具调用
      */
     fun getFileReadToolCalls(): List<ToolCall> {
-        return getToolCallsOfType<com.claudecodeplus.sdk.ReadTool>()
+        return getToolCallsByName("Read")
     }
-    
+
     /**
      * 获取所有文件编辑的工具调用
      */
     fun getFileEditToolCalls(): List<ToolCall> {
-        return toolCalls.filter { 
-            it.tool is com.claudecodeplus.sdk.EditTool || 
-            it.tool is com.claudecodeplus.sdk.WriteTool ||
-            it.tool is com.claudecodeplus.sdk.MultiEditTool
+        return toolCalls.filter {
+            it.name in listOf("Edit", "Write", "MultiEdit")
         }
     }
-    
+
     /**
      * 获取所有Bash命令执行的工具调用
      */
     fun getBashToolCalls(): List<ToolCall> {
-        return getToolCallsOfType<com.claudecodeplus.sdk.BashTool>()
+        return getToolCallsByName("Bash")
     }
-    
+
     /**
      * 获取所有Web相关的工具调用
      */
     fun getWebToolCalls(): List<ToolCall> {
         return toolCalls.filter {
-            it.tool is com.claudecodeplus.sdk.WebFetchTool ||
-            it.tool is com.claudecodeplus.sdk.WebSearchTool
+            it.name in listOf("WebFetch", "WebSearch")
         }
     }
-    
+
     /**
      * 获取所有任务管理的工具调用
      */
     fun getTaskManagementToolCalls(): List<ToolCall> {
         return toolCalls.filter {
-            it.tool is com.claudecodeplus.sdk.TaskTool ||
-            it.tool is com.claudecodeplus.sdk.TodoWriteTool
+            it.name in listOf("Task", "TodoWrite")
         }
     }
-    
+
     /**
      * 获取所有MCP工具调用
      */
     fun getMcpToolCalls(): List<ToolCall> {
-        return getToolCallsOfType<com.claudecodeplus.sdk.McpTool>()
+        return toolCalls.filter { it.name.contains("mcp__") }
     }
     
     /**
@@ -973,30 +969,10 @@ EnhancedMessage(
     }
     
     /**
-     * 类型安全地获取工具参数
+     * 安全地获取工具参数
      */
-    fun ToolCall.getTypedParameter(key: String): Any? {
-        return when (tool) {
-            is com.claudecodeplus.sdk.ReadTool -> when (key) {
-                "file_path" -> tool.filePath
-                "offset" -> tool.offset
-                "limit" -> tool.limit
-                else -> parameters[key]
-            }
-            is com.claudecodeplus.sdk.EditTool -> when (key) {
-                "file_path" -> tool.filePath
-                "old_string" -> tool.oldString
-                "new_string" -> tool.newString
-                "replace_all" -> tool.replaceAll
-                else -> parameters[key]
-            }
-            is com.claudecodeplus.sdk.BashTool -> when (key) {
-                "command" -> tool.command
-                "timeout" -> tool.timeout
-                else -> parameters[key]
-            }
-            else -> parameters[key]
-        }
+    fun ToolCall.getParameter(key: String): Any? {
+        return parameters[key]
     }
 }
 

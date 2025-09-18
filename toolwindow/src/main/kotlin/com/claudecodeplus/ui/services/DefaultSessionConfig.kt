@@ -50,7 +50,7 @@ object DefaultSessionConfig {
     /**
      * 默认 AI 模型
      */
-    var defaultModel by mutableStateOf(AiModel.OPUS)
+    var defaultModel by mutableStateOf(AiModel.DEFAULT)
         private set
     
     /**
@@ -88,9 +88,9 @@ object DefaultSessionConfig {
                 println("[DefaultSessionConfig] 使用 Claude 全局配置的模型: ${modelFromClaude.displayName}")
                 modelFromClaude.name
             } else {
-                prefs.get(KEY_DEFAULT_MODEL, AiModel.OPUS.name)
+                prefs.get(KEY_DEFAULT_MODEL, AiModel.DEFAULT.name)
             }
-            defaultModel = AiModel.values().find { it.name == modelName } ?: modelFromClaude ?: AiModel.OPUS
+            defaultModel = AiModel.values().find { it.name == modelName } ?: modelFromClaude ?: AiModel.DEFAULT
             
             // 加载默认权限模式
             val permissionModeName = prefs.get(KEY_DEFAULT_PERMISSION_MODE, PermissionMode.BYPASS.name)
@@ -202,7 +202,7 @@ object DefaultSessionConfig {
      * 重置为出厂默认值
      */
     fun resetToDefaults() {
-        defaultModel = AiModel.OPUS
+        defaultModel = AiModel.DEFAULT
         defaultPermissionMode = PermissionMode.BYPASS
         defaultSkipPermissions = true
         saveToSettings()

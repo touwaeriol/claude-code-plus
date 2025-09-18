@@ -28,9 +28,6 @@ import androidx.compose.ui.unit.Dp
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolCallStatus
 import com.claudecodeplus.ui.models.ToolResult
-import com.claudecodeplus.sdk.ToolType
-import com.claudecodeplus.sdk.Tool
-import com.claudecodeplus.sdk.ToolParser
 import com.claudecodeplus.ui.jewel.components.tools.*
 import com.claudecodeplus.ui.jewel.components.tools.output.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -57,10 +54,6 @@ fun CompactToolCallDisplay(
     ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,  // IDE 集成接口
     onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
-    println("[CompactToolCallDisplay] 工具调用数量：${toolCalls.size}")
-    toolCalls.forEach { tool ->
-        println("  - ${tool.name} (${tool.id}): ${tool.status}, result=${tool.result?.let { it::class.simpleName } ?: "null"}")
-    }
     
     // 简化的普通显示模式 - 移除复杂的固定显示逻辑
     Column(
@@ -86,7 +79,6 @@ private fun CompactToolCallItem(
     ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,
     onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
-    println("[CompactToolCallItem] 渲染工具：${toolCall.name}, ID：${toolCall.id}")
     
     // TodoWrite 工具默认展开显示任务列表
     var expanded by remember { 
@@ -99,7 +91,6 @@ private fun CompactToolCallItem(
     LaunchedEffect(expanded) {
         delay(100)  // 简单防抖
         onExpandedChange?.invoke(toolCall.id, expanded)
-        println("[CompactToolCallItem] 通知展开状态变化: ${toolCall.name} -> $expanded")
     }
     
     // 背景色动画（更平滑的过渡）
@@ -128,16 +119,21 @@ private fun CompactToolCallItem(
                 .clickable(
                     interactionSource = interactionSource,
                     indication = null,  // 使用hover效果替代ripple
-                    onClick = { 
+                    onClick = {
                         // 尝试使用 IDE 集成处理工具点击
-                        val handled = ideIntegration?.handleToolClick(toolCall) == true
-                        
+                        val handled = if (ideIntegration != null) {
+                            try {
+                                ideIntegration.handleToolClick(toolCall)
+                            } catch (e: Exception) {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+
                         if (!handled) {
                             // 回退到默认展开行为
                             expanded = !expanded
-                            println("[CompactToolCallItem] Tool ${toolCall.name} clicked, expanded: $expanded")
-                        } else {
-                            println("[CompactToolCallItem] Tool ${toolCall.name} handled by IDE integration")
                         }
                     }
                 )
@@ -261,12 +257,8 @@ private fun CompactToolCallItem(
 private fun ToolCallDetails(
     toolCall: ToolCall
 ) {
-    println("[ToolCallDetails] 工具：${toolCall.name}, 结果：${toolCall.result?.let { it::class.simpleName } ?: "null"}")
-    
     // 判断是否需要显示详细结果
     val shouldShowDetails = shouldShowToolDetails(toolCall)
-    
-    println("[ToolCallDetails] shouldShowDetails for ${toolCall.name} = $shouldShowDetails")
     
     if (!shouldShowDetails) {
         // 对于不需要显示详细结果的工具，不渲染任何内容
@@ -275,8 +267,6 @@ private fun ToolCallDetails(
     
     // 🎯 设置最大高度为300dp（约等于视窗40%）
     val maxExpandHeight = 300.dp
-    
-    println("[ToolCallDetails] 最大展开高度: $maxExpandHeight")
     
     Column(
         modifier = Modifier
@@ -455,11 +445,18 @@ private fun shouldShowToolDetails(toolCall: ToolCall): Boolean {
  * 获取工具图标
  */
 private fun getToolIcon(toolCall: ToolCall): String {
-    // 优先使用新的 Tool 对象
-    return toolCall.tool?.icon ?: run {
-        // 回退到旧的 ToolType 系统
-        val toolType = ToolType.fromName(toolCall.name)
-        ToolType.getIcon(toolType)
+    return when {
+        toolCall.name.contains("Read", ignoreCase = true) -> "📖"
+        toolCall.name.contains("Write", ignoreCase = true) -> "✏️"
+        toolCall.name.contains("Edit", ignoreCase = true) -> "✏️"
+        toolCall.name.contains("Bash", ignoreCase = true) -> "💻"
+        toolCall.name.contains("Web", ignoreCase = true) -> "🌐"
+        toolCall.name.contains("Glob", ignoreCase = true) -> "🔍"
+        toolCall.name.contains("Grep", ignoreCase = true) -> "🔍"
+        toolCall.name.contains("Task", ignoreCase = true) -> "🤖"
+        toolCall.name.contains("Todo", ignoreCase = true) -> "📝"
+        toolCall.name.startsWith("mcp__", ignoreCase = true) -> "🔧"
+        else -> "🔧"
     }
 }
 
@@ -545,48 +542,6 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
 private fun getParameterSummary(toolCall: ToolCall): String {
     if (toolCall.parameters.size <= 1) return ""
     
-    // 优先使用强类型工具对象获取参数摘要
-    toolCall.tool?.let { tool ->
-        return when (tool) {
-            is com.claudecodeplus.sdk.EditTool -> {
-                formatStringResource(StringResources.EDIT_CHANGES, 1) // EditTool 单个编辑
-            }
-            is com.claudecodeplus.sdk.MultiEditTool -> {
-                val editsCount = tool.edits?.size ?: 1
-                formatStringResource(StringResources.EDIT_CHANGES, editsCount)
-            }
-            is com.claudecodeplus.sdk.GrepTool -> {
-                when {
-                    tool.glob != null -> "in ${tool.glob}"
-                    tool.type != null -> ".${tool.type} files"
-                    else -> formatStringResource(StringResources.PARAMETERS_COUNT, toolCall.parameters.size - 1)
-                }
-            }
-            is com.claudecodeplus.sdk.GlobTool -> {
-                "pattern: ${tool.pattern}"
-            }
-            is com.claudecodeplus.sdk.TaskTool -> {
-                "agent: ${tool.subagentType ?: "general"}"
-            }
-            is com.claudecodeplus.sdk.WebFetchTool -> {
-                val prompt = tool.prompt ?: "web fetch"
-                if (prompt.length > 20) {
-                    "query: ${prompt.take(17)}..."
-                } else {
-                    "query: $prompt"
-                }
-            }
-            is com.claudecodeplus.sdk.NotebookEditTool -> {
-                tool.editMode?.let { "$it cell" } ?: "notebook edit"
-            }
-            is com.claudecodeplus.sdk.TodoWriteTool -> {
-                val todosCount = tool.todos?.size ?: 0
-                "更新 $todosCount 个任务"
-            }
-            // 其他工具类型可以按需添加
-            else -> "${toolCall.parameters.size} 个参数"
-        }
-    }
     
     // 回退到原有的基于名称匹配的逻辑（兼容性）
     return when {
@@ -798,9 +753,8 @@ private fun SearchResultDisplay(toolCall: ToolCall) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    // 搜索统计 - 使用类型安全方法
-                    val pattern = (toolCall.tool as? com.claudecodeplus.sdk.GrepTool)?.pattern
-                        ?: toolCall.parameters["pattern"]?.toString() ?: ""
+                    // 搜索统计
+                    val pattern = toolCall.parameters["pattern"]?.toString() ?: ""
                     Text(
                         text = formatStringResource(StringResources.SEARCH_RESULTS, pattern, lines.size),
                         style = JewelTheme.defaultTextStyle.copy(
@@ -912,8 +866,7 @@ private fun WebContentDisplay(toolCall: ToolCall) {
     
     when (result) {
         is ToolResult.Success -> {
-            val url = (toolCall.tool as? com.claudecodeplus.sdk.WebFetchTool)?.url
-                ?: toolCall.parameters["url"]?.toString() ?: ""
+            val url = toolCall.parameters["url"]?.toString() ?: ""
             val content = result.output
             
             Column(
@@ -983,8 +936,7 @@ private fun SubTaskDisplay(toolCall: ToolCall) {
     when (result) {
         is ToolResult.Success -> {
             val output = result.output
-            val description = (toolCall.tool as? com.claudecodeplus.sdk.TaskTool)?.description
-                ?: toolCall.parameters["description"]?.toString() ?: "执行任务"
+            val description = toolCall.parameters["description"]?.toString() ?: "执行任务"
             
             Column(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -1032,13 +984,9 @@ private fun NotebookOperationDisplay(toolCall: ToolCall) {
     
     when (result) {
         is ToolResult.Success -> {
-            val notebookTool = toolCall.tool as? com.claudecodeplus.sdk.NotebookEditTool
-            val notebookPath = notebookTool?.notebookPath
-                ?: toolCall.parameters["notebook_path"]?.toString() ?: ""
-            val cellNumber = notebookTool?.cellId
-                ?: toolCall.parameters["cell_number"]?.toString()
-            val editMode = notebookTool?.editMode
-                ?: toolCall.parameters["edit_mode"]?.toString() ?: "replace"
+            val notebookPath = toolCall.parameters["notebook_path"]?.toString() ?: ""
+            val cellNumber = toolCall.parameters["cell_number"]?.toString()
+            val editMode = toolCall.parameters["edit_mode"]?.toString() ?: "replace"
             
             Column(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -1217,25 +1165,20 @@ private fun formatBytes(bytes: Long): String {
  */
 @Composable
 private fun formatToolResult(toolCall: ToolCall) {
-    println("[formatToolResult] 格式化工具结果：${toolCall.name}, 有结果：${toolCall.result != null}")
-    
     when {
         // Edit/MultiEdit 使用 Diff 展示
         toolCall.name.contains("Edit", ignoreCase = true) -> {
-            println("[formatToolResult] 使用 DiffResultDisplay")
             DiffResultDisplay(toolCall)
         }
-        
+
         // Read/Write 使用内容预览
         toolCall.name.contains("Read", ignoreCase = true) ||
         toolCall.name.contains("Write", ignoreCase = true) -> {
-            println("[formatToolResult] 使用 FileContentPreview")
             FileContentPreview(toolCall)
         }
-        
+
         // LS 使用文件列表展示
         toolCall.name.contains("LS", ignoreCase = true) -> {
-            println("[formatToolResult] 使用 FileListDisplay")
             FileListDisplay(toolCall)
         }
         
@@ -1360,8 +1303,6 @@ private fun FileContentPreview(toolCall: ToolCall) {
  */
 @Composable
 private fun FileListDisplay(toolCall: ToolCall) {
-    println("[FileListDisplay] 显示LS结果")
-    
     // 使用通用组件，不限制高度
     ToolResultContent(
         toolCall = toolCall,
@@ -1469,11 +1410,12 @@ private fun DefaultResultDisplay(toolCall: ToolCall) {
  * 判断工具是否应该限制高度
  */
 private fun shouldLimitToolHeight(toolCall: ToolCall): Boolean {
-    // 优先使用新的 Tool 对象
-    return toolCall.tool?.shouldLimitHeight() ?: run {
-        // 回退到旧的 ToolType 系统
-        val toolType = ToolType.fromName(toolCall.name)
-        ToolType.shouldLimitHeight(toolType)
+    return when {
+        toolCall.name.contains("Grep", ignoreCase = true) -> true
+        toolCall.name.contains("Glob", ignoreCase = true) -> true
+        toolCall.name.contains("Read", ignoreCase = true) -> true
+        toolCall.name.contains("LS", ignoreCase = true) -> true
+        else -> false
     }
 }
 
@@ -1838,36 +1780,6 @@ private fun formatToolBriefInfo(toolCall: ToolCall): String {
             }
         }
         
-        // 使用强类型工具对象进行描述
-        toolCall.tool != null -> {
-            when (val tool = toolCall.tool) {
-                is com.claudecodeplus.sdk.EditTool -> {
-                    val fileName = tool.filePath?.substringAfterLast('/')?.substringAfterLast('\\') ?: "file"
-                    "$fileName (1 change)"
-                }
-                is com.claudecodeplus.sdk.MultiEditTool -> {
-                    val editsCount = tool.edits?.size ?: 1
-                    val fileName = tool.filePath?.substringAfterLast('/')?.substringAfterLast('\\') ?: "file"
-                    "$fileName ($editsCount changes)"
-                }
-                is com.claudecodeplus.sdk.GrepTool -> {
-                    val pattern = tool.pattern ?: "pattern"
-                    val glob = tool.glob?.let { " in $it" } ?: ""
-                    "\"$pattern\"$glob"
-                }
-                is com.claudecodeplus.sdk.TodoWriteTool -> {
-                    val todosCount = tool.todos?.size ?: 0
-                    "更新 $todosCount 个任务"
-                }
-                is com.claudecodeplus.sdk.GlobTool -> {
-                    "pattern: ${tool.pattern}"
-                }
-                is com.claudecodeplus.sdk.WebFetchTool -> {
-                    "fetch: ${tool.url}"
-                }
-                else -> primaryValue?.take(40) ?: ""
-            }
-        }
         
         // Edit/MultiEdit 显示修改数量（回退逻辑）
         toolCall.name.contains("Edit", ignoreCase = true) -> {

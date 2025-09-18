@@ -39,10 +39,23 @@ class MessageParser {
      * Parse user message.
      */
     private fun parseUserMessage(jsonObject: JsonObject): UserMessage {
-        val content = jsonObject["content"] ?: throw MessageParsingException("Missing 'content' in user message")
+        // 检查是否有嵌套的message结构（Claude CLI stream-json格式）
+        val messageObject = jsonObject["message"]?.jsonObject
+        val content = if (messageObject != null) {
+            // 新格式：{"type": "user", "message": {"role": "user", "content": [...]}}
+            messageObject["content"] ?: JsonPrimitive("")
+        } else {
+            // 旧格式：{"type": "user", "content": "..."}
+            jsonObject["content"] ?: run {
+                // 容错处理：某些系统消息可能被错误标记为user类型
+                println("[MessageParser] ⚠️ User message missing content field, using empty content for compatibility")
+                JsonPrimitive("")
+            }
+        }
+
         val parentToolUseId = jsonObject["parent_tool_use_id"]?.jsonPrimitive?.contentOrNull
         val sessionId = jsonObject["session_id"]?.jsonPrimitive?.content ?: "default"
-        
+
         return UserMessage(
             content = content,
             parentToolUseId = parentToolUseId,

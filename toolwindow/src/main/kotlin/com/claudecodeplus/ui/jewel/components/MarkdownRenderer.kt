@@ -44,10 +44,10 @@ fun MarkdownRenderer(
     onCodeAction: (code: String, language: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
-    val parser = remember { 
+    val parser = remember {
         Parser.builder()
             .extensions(listOf(TablesExtension.create()))
-            .build() 
+            .build()
     }
     val document = remember(markdown) { parser.parse(markdown) }
     val blocks = remember(document) { parseCommonMarkDocument(document) }

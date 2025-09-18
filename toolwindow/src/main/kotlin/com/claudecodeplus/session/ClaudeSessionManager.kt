@@ -194,7 +194,7 @@ class ClaudeSessionManager {
     
     private fun getSessionsDirectory(projectPath: String): File {
         // Claude 使用项目路径作为目录名，需要正确编码
-        val encodedPath = com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(projectPath)
+        val encodedPath = java.io.File(projectPath).name
         val homeDir = System.getProperty("user.home")
         return File(homeDir, ".claude/projects/$encodedPath")
     }

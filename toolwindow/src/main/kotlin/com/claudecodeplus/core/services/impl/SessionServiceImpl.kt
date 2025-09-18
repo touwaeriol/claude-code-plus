@@ -15,31 +15,36 @@ import com.claudecodeplus.core.types.Result
 import com.claudecodeplus.core.types.suspendResultOf
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.models.*
+import com.claudecodeplus.ui.services.SdkMessageConverter
+import com.claudecodeplus.sdk.ClaudeCodeSdkClient
+import com.claudecodeplus.sdk.types.ClaudeCodeOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
+import java.util.UUID
 
 /**
  * 会话服务实现
- * 负责会话的生命周期管理、消息处理和CLI交互
+ * 简化架构：直接使用 ClaudeCodeSdkClient，无需复杂的会话管理
  */
 class SessionServiceImpl(
     private val messageProcessor: MessageProcessor,
     private val toolResultProcessor: ToolResultProcessor = ToolResultProcessor()
 ) : SessionService {
-    
+
     private val sessionManager = ClaudeSessionManager()
     private val sessionEvents = ConcurrentHashMap<String, MutableSharedFlow<SessionEvent>>()
-    
-    // 全局CLI Wrapper实例
-    private val cliWrapper: com.claudecodeplus.sdk.ClaudeCliWrapper
-        get() = GlobalCliWrapper.instance
-    
+
+    // 为每个会话保存一个 SDK 客户端
+    private val sessionClients = ConcurrentHashMap<String, ClaudeCodeSdkClient>()
+
     init {
-        // 设置全局CLI输出处理
-        setupGlobalCliOutputHandling()
+        logI("SessionServiceImpl 初始化，直接使用 ClaudeCodeSdkClient")
     }
     
     override suspend fun createSession(
@@ -48,27 +53,40 @@ class SessionServiceImpl(
         permissionMode: PermissionMode
     ): Result<String> = suspendResultOf {
         logI("创建新会话: projectPath=$projectPath, model=${model.displayName}")
-        
-        val options = com.claudecodeplus.sdk.ClaudeCliWrapper.QueryOptions(
-            sessionId = null, // 新会话不需要sessionId
-            cwd = projectPath,
-            model = model.cliName,
-            permissionMode = permissionMode.cliName
-        )
-        
-        // 使用空消息启动新会话来获取sessionId
-        val result = cliWrapper.startNewSession("initialize", options)
-        
-        if (result.success && !result.sessionId.isNullOrEmpty()) {
-            val sessionId = result.sessionId!!
-            logI("新会话创建成功: sessionId=$sessionId")
-            
+
+        // 生成新的会话ID
+        val sessionId = UUID.randomUUID().toString()
+
+        try {
+            // 创建 ClaudeCodeOptions
+            val options = ClaudeCodeOptions(
+                model = model.cliName,
+                cwd = java.nio.file.Paths.get(projectPath),
+                permissionMode = when (permissionMode) {
+                    PermissionMode.DEFAULT -> com.claudecodeplus.sdk.types.PermissionMode.DEFAULT
+                    PermissionMode.ACCEPT -> com.claudecodeplus.sdk.types.PermissionMode.ACCEPT_EDITS
+                    PermissionMode.BYPASS -> com.claudecodeplus.sdk.types.PermissionMode.BYPASS_PERMISSIONS
+                    PermissionMode.PLAN -> com.claudecodeplus.sdk.types.PermissionMode.PLAN
+                }
+            )
+
+            // 创建 SDK 客户端
+            val client = ClaudeCodeSdkClient(options)
+
+            // 连接客户端
+            client.connect()
+
+            // 保存客户端
+            sessionClients[sessionId] = client
+
             // 注册事件流
             registerSessionEvents(sessionId)
-            
+
+            logI("新会话创建成功: sessionId=$sessionId")
             sessionId
-        } else {
-            throw AppError.SessionError("创建会话失败: ${result.toString()}")
+        } catch (e: Exception) {
+            logE("创建会话失败", e)
+            throw AppError.SessionError("创建会话失败: ${e.message}")
         }
     }
     
@@ -79,28 +97,40 @@ class SessionServiceImpl(
         workingDirectory: String
     ): Result<Unit> = suspendResultOf {
         logI("发送消息到会话: sessionId=$sessionId, message=${message.take(50)}...")
-        
-        val options = com.claudecodeplus.sdk.ClaudeCliWrapper.QueryOptions(
-            sessionId = sessionId,
-            cwd = workingDirectory
-            // model 和 permissionMode 使用默认值
-        )
-        
-        // 发射生成开始事件
-        emitSessionEvent(sessionId, SessionEvent.GenerationStarted)
-        
-        val result = cliWrapper.resumeSession(sessionId, message, options)
-        
-        if (!result.success) {
-            // 发射错误事件
-            val errorMessage = result.toString()
-            emitSessionEvent(sessionId, SessionEvent.ErrorOccurred(errorMessage))
-            throw AppError.SessionError("发送消息失败: $errorMessage", sessionId = sessionId)
+
+        val client = sessionClients[sessionId]
+            ?: throw AppError.SessionError("会话不存在: $sessionId", sessionId = sessionId)
+
+        try {
+            // 发射生成开始事件
+            emitSessionEvent(sessionId, SessionEvent.GenerationStarted)
+
+            // 发送消息
+            client.query(message, sessionId)
+
+            // 监听响应
+            client.receiveResponse()
+                .map { sdkMessage ->
+                    SdkMessageConverter.fromSdkMessage(sdkMessage)
+                }
+                .onEach { enhancedMessage ->
+                    // 发射消息接收事件
+                    emitSessionEvent(sessionId, SessionEvent.MessageReceived(enhancedMessage))
+                }
+                .catch { error ->
+                    logE("消息接收失败", error)
+                    emitSessionEvent(sessionId, SessionEvent.ErrorOccurred(error.message ?: "未知错误"))
+                }
+                .collect { }
+
+            logI("消息发送成功: sessionId=$sessionId")
+        } catch (e: Exception) {
+            logE("发送消息失败", e)
+            emitSessionEvent(sessionId, SessionEvent.ErrorOccurred(e.message ?: "发送失败"))
+            throw AppError.SessionError("发送消息失败: ${e.message}", sessionId = sessionId)
         }
-        
-        logI("消息发送成功: sessionId=$sessionId")
     }
-    
+
     override suspend fun resumeSession(
         sessionId: String,
         message: String,
@@ -108,15 +138,15 @@ class SessionServiceImpl(
         workingDirectory: String
     ): Result<Unit> = suspendResultOf {
         logI("恢复会话并发送消息: sessionId=$sessionId")
-        
-        // 先检查会话是否存在
-        if (!sessionExists(sessionId, workingDirectory)) {
+
+        // 检查会话客户端是否存在
+        if (!sessionClients.containsKey(sessionId)) {
             throw AppError.SessionError("会话不存在: $sessionId", sessionId = sessionId)
         }
-        
+
         // 注册事件流（如果尚未注册）
         registerSessionEvents(sessionId)
-        
+
         // 调用sendMessage处理实际发送
         sendMessage(sessionId, message, contexts, workingDirectory)
     }
@@ -190,14 +220,22 @@ class SessionServiceImpl(
     
     override suspend fun interruptSession(sessionId: String): Result<Unit> = suspendResultOf {
         logI("中断会话: sessionId=$sessionId")
-        
-        // 发射生成停止事件
-        emitSessionEvent(sessionId, SessionEvent.GenerationStopped)
-        
-        // TODO: 实现实际的中断逻辑
-        // 这里可能需要终止相关的CLI进程
-        
-        logI("会话已中断: sessionId=$sessionId")
+
+        val client = sessionClients[sessionId]
+            ?: throw AppError.SessionError("会话不存在: $sessionId", sessionId = sessionId)
+
+        try {
+            // 中断 SDK 客户端
+            client.interrupt()
+
+            // 发射生成停止事件
+            emitSessionEvent(sessionId, SessionEvent.GenerationStopped)
+
+            logI("会话已中断: sessionId=$sessionId")
+        } catch (e: Exception) {
+            logE("中断会话失败", e)
+            throw AppError.SessionError("中断会话失败: ${e.message}", sessionId = sessionId)
+        }
     }
     
     override fun observeSessionEvents(sessionId: String): Flow<SessionEvent> {
@@ -222,17 +260,34 @@ class SessionServiceImpl(
     
     override suspend fun deleteSession(sessionId: String, projectPath: String): Result<Unit> = suspendResultOf {
         logI("删除会话: sessionId=$sessionId")
-        
-        // 清理事件流
-        sessionEvents.remove(sessionId)
-        
-        // TODO: 删除会话文件
-        
-        logI("会话已删除: sessionId=$sessionId")
+
+        try {
+            // 断开并移除 SDK 客户端
+            sessionClients[sessionId]?.let { client ->
+                client.disconnect()
+                sessionClients.remove(sessionId)
+            }
+
+            // 清理事件流
+            sessionEvents.remove(sessionId)
+
+            // TODO: 删除会话文件（如果需要的话）
+
+            logI("会话已删除: sessionId=$sessionId")
+        } catch (e: Exception) {
+            logE("删除会话失败", e)
+            throw AppError.SessionError("删除会话失败: ${e.message}", sessionId = sessionId)
+        }
     }
     
     override suspend fun sessionExists(sessionId: String, projectPath: String): Boolean {
         return try {
+            // 检查内存中是否有会话客户端
+            if (sessionClients.containsKey(sessionId)) {
+                return true
+            }
+
+            // 检查文件系统中是否有会话文件
             withContext(Dispatchers.IO) {
                 val sessionFilePath = sessionManager.getSessionFilePath(projectPath, sessionId)
                 val sessionFile = java.io.File(sessionFilePath)
@@ -242,88 +297,6 @@ class SessionServiceImpl(
             logE("检查会话存在性失败", e)
             false
         }
-    }
-    
-    /**
-     * 设置全局CLI输出处理
-     */
-    private fun setupGlobalCliOutputHandling() {
-        GlobalCliWrapper.instance.setOutputLineCallback { jsonLine ->
-            handleGlobalCliOutput(jsonLine)
-        }
-    }
-    
-    /**
-     * 处理全局CLI输出
-     */
-    private fun handleGlobalCliOutput(jsonLine: String) {
-        try {
-            logD("收到CLI输出: ${jsonLine.take(100)}...")
-            
-            // 提取会话ID
-            val sessionId = messageProcessor.extractSessionId(jsonLine)
-            
-            // 检查是否为系统消息
-            if (messageProcessor.isSystemMessage(jsonLine)) {
-                handleSystemMessage(jsonLine, sessionId)
-                return
-            }
-            
-            // 检查是否为工具结果消息
-            if (messageProcessor.isToolResultMessage(jsonLine)) {
-                handleToolResultMessage(jsonLine, sessionId)
-                return
-            }
-            
-            // 解析普通消息
-            when (val parseResult = messageProcessor.parseRealtimeMessage(jsonLine)) {
-                is ParseResult.Success -> {
-                    sessionId?.let { id ->
-                        emitSessionEvent(id, SessionEvent.MessageReceived(parseResult.data))
-                    }
-                }
-                is ParseResult.Ignored -> {
-                    logD("实时消息被忽略: ${parseResult.reason}")
-                }
-                is ParseResult.Error -> {
-                    logW("实时消息解析失败: ${parseResult.message}")
-                    sessionId?.let { id ->
-                        emitSessionEvent(id, SessionEvent.ErrorOccurred(parseResult.message))
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            logE("处理CLI输出异常", e)
-        }
-    }
-    
-    /**
-     * 处理系统消息（如初始化、结果摘要）
-     */
-    private fun handleSystemMessage(jsonLine: String, sessionId: String?) {
-        try {
-            if (sessionId != null && jsonLine.contains("\"subtype\":\"init\"")) {
-                // 系统初始化消息，可能包含sessionId更新
-                val extractedSessionId = messageProcessor.extractSessionId(jsonLine)
-                if (extractedSessionId != null && extractedSessionId != sessionId) {
-                    emitSessionEvent(sessionId, SessionEvent.SessionIdUpdated(sessionId, extractedSessionId))
-                }
-            } else if (sessionId != null && jsonLine.contains("\"type\":\"result\"")) {
-                // 结果摘要消息，表示生成完成
-                emitSessionEvent(sessionId, SessionEvent.GenerationStopped)
-            }
-        } catch (e: Exception) {
-            logE("处理系统消息异常", e)
-        }
-    }
-    
-    /**
-     * 处理工具结果消息
-     */
-    private fun handleToolResultMessage(jsonLine: String, sessionId: String?) {
-        // 工具结果消息需要在UI层处理，这里只记录
-        logD("收到工具结果消息，sessionId=$sessionId")
-        // TODO: 可以发送特殊的工具结果事件
     }
     
     /**
@@ -338,23 +311,23 @@ class SessionServiceImpl(
                 val toolUseId = contentItem["tool_use_id"] as? String
                 val resultContent = contentItem["content"] as? String ?: ""
                 val isError = (contentItem["is_error"] as? Boolean) ?: false
-                
+
                 if (toolUseId != null) {
                     logD("处理历史工具结果: toolId=$toolUseId, isError=$isError")
-                    
+
                     // 更新对应的工具调用结果
                     val updatedMessages = toolResultProcessor.processToolResult(
                         buildToolResultJson(toolUseId, resultContent, isError),
                         enhancedMessages
                     )
-                    
+
                     enhancedMessages.clear()
                     enhancedMessages.addAll(updatedMessages)
                 }
             }
         }
     }
-    
+
     /**
      * 构建工具结果的JSON字符串
      */
@@ -408,15 +381,5 @@ class SessionServiceImpl(
         } catch (e: Exception) {
             logE("发射会话事件失败", e)
         }
-    }
-}
-
-/**
- * 全局CLI Wrapper管理器（简化版）
- * 在后续步骤中会被依赖注入替代
- */
-object GlobalCliWrapper {
-    val instance: com.claudecodeplus.sdk.ClaudeCliWrapper by lazy {
-        com.claudecodeplus.sdk.ClaudeCliWrapper()
     }
 }

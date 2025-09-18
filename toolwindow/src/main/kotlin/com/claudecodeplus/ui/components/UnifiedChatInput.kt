@@ -42,7 +42,7 @@ import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.IndexedFileInfo
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.ui.services.stringResource
-import com.claudecodeplus.core.interfaces.ProjectService
+import com.claudecodeplus.core.services.ProjectService
 import com.claudecodeplus.ui.jewel.components.context.*
 import com.claudecodeplus.ui.jewel.components.tools.JumpingDots
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -712,7 +712,8 @@ private class UnifiedChatContextSearchService(
             val content = fileIndexService?.getFileContent(relativePath)
             if (content != null) {
                 val fileName = relativePath.substringAfterLast('/')
-                val absolutePath = projectService?.getProjectPath()?.let { "$it/$relativePath" } ?: relativePath
+                // TODO: Add getProjectPath method to ProjectService or pass working directory
+                val absolutePath = relativePath
                 
                 FileContextItem(
                     name = fileName,

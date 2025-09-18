@@ -104,15 +104,10 @@ class ClaudeCodeSdkClient(
             logger.info("📥 启动消息处理...")
             controlProtocol!!.startMessageProcessing(clientScope!!)
             logger.info("✅ 消息处理已启动")
-            
-            // Initialize control protocol - 关键修复！
-            logger.info("🔄 初始化控制协议（Hooks和SDK MCP服务器）...")
-            serverInfo = try {
-                controlProtocol!!.initialize()
-            } catch (e: Exception) {
-                logger.warning("⚠️ 控制协议初始化失败，使用基础连接: ${e.message}")
-                mapOf("status" to "connected_basic", "error" to (e.message ?: "Unknown error"))
-            }
+
+            // 跳过控制协议初始化 - Claude CLI不需要这个步骤
+            logger.info("✅ 跳过控制协议初始化（Claude CLI直接使用stream-json模式）")
+            serverInfo = mapOf("status" to "connected", "mode" to "stream-json")
             logger.info("🎉 Claude SDK客户端连接成功!")
             
             // Send initial prompt if provided
@@ -238,7 +233,17 @@ class ClaudeCodeSdkClient(
     /**
      * Check if the client is connected.
      */
-    fun isConnected(): Boolean = actualTransport?.isConnected() == true
+    fun isConnected(): Boolean {
+        val transportConnected = actualTransport?.isConnected() == true
+        val hasBasicConnection = serverInfo != null
+
+        logger.severe("🔍 [isConnected] transport=${transportConnected}, hasBasicConnection=${hasBasicConnection}, serverInfo=$serverInfo")
+
+        // 如果transport连接且有基本连接信息（包括fallback模式），则认为已连接
+        val result = transportConnected && hasBasicConnection
+        logger.severe("🔍 [isConnected] 最终结果: $result")
+        return result
+    }
     
     /**
      * Disconnect from Claude and cleanup resources.

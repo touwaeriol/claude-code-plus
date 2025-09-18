@@ -2,7 +2,9 @@ package com.claudecodeplus.sdk.transport
 
 import com.claudecodeplus.sdk.exceptions.*
 import com.claudecodeplus.sdk.types.ClaudeCodeOptions
+import com.claudecodeplus.sdk.types.PermissionMode
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -29,6 +31,7 @@ class SubprocessTransport(
     private var process: Process? = null
     private var writer: BufferedWriter? = null
     private var reader: BufferedReader? = null
+    private var errorReader: BufferedReader? = null
     private var isConnectedFlag = false
     
     private val json = Json {
@@ -64,12 +67,27 @@ class SubprocessTransport(
             logger.info("⚡ 启动Claude CLI进程...")
             process = processBuilder.start()
             logger.info("✅ Claude CLI进程启动成功, PID: ${process?.pid()}")
-            
+
+            // 检查进程是否立即退出
+            delay(100) // 短暂等待
+            if (!process!!.isAlive) {
+                val exitCode = process!!.exitValue()
+                val stderrContent = try {
+                    BufferedReader(InputStreamReader(process!!.errorStream)).readText()
+                } catch (e: Exception) {
+                    "无法读取stderr: ${e.message}"
+                }
+                logger.severe("❌ Claude CLI进程立即退出，退出代码: $exitCode")
+                logger.severe("❌ stderr内容: $stderrContent")
+                throw CLIConnectionException("Claude CLI process exited immediately with code $exitCode. stderr: $stderrContent")
+            }
+
             // Setup I/O streams
             writer = BufferedWriter(OutputStreamWriter(process!!.outputStream))
             reader = BufferedReader(InputStreamReader(process!!.inputStream))
-            logger.info("📡 I/O流设置完成")
-            
+            errorReader = BufferedReader(InputStreamReader(process!!.errorStream))
+            logger.info("📡 I/O流设置完成（包含stderr）")
+
             isConnectedFlag = true
             logger.info("🎉 SubprocessTransport连接成功!")
         } catch (e: java.io.IOException) {
@@ -111,6 +129,7 @@ class SubprocessTransport(
             var currentLine: String? = null
             while (isConnected() && reader?.readLine().also { currentLine = it } != null) {
                 currentLine?.let { line ->
+                    logger.info("📥 从 CLI 读取到原始行: $line")
                     jsonBuffer.append(line)
                     
                     // Parse JSON character by character to detect complete objects
@@ -153,10 +172,17 @@ class SubprocessTransport(
                     if (!p.isAlive) {
                         val exitCode = p.exitValue()
                         if (exitCode != 0) {
+                            // 读取stderr内容
+                            val stderrContent = try {
+                                errorReader?.readText() ?: "No stderr content available"
+                            } catch (e: Exception) {
+                                "Failed to read stderr: ${e.message}"
+                            }
+                            logger.severe("❌ Claude CLI进程失败，退出代码: $exitCode, stderr: $stderrContent")
                             throw ProcessException(
                                 "Command failed with exit code $exitCode",
                                 exitCode = exitCode,
-                                stderr = "Check stderr output for details"
+                                stderr = stderrContent
                             )
                         }
                     }
@@ -181,6 +207,7 @@ class SubprocessTransport(
         try {
             writer?.close()
             reader?.close()
+            errorReader?.close()
             
             process?.let { p ->
                 // Give the process a chance to terminate gracefully
@@ -206,17 +233,20 @@ class SubprocessTransport(
         // Base command - try to find claude executable
         command.add(findClaudeExecutable())
         
-        // Output format
+        // Output format with print flag
         command.addAll(listOf("--output-format", "stream-json"))
-        
-        // Verbose output
+
+        // Verbose output (required for stream-json)
         command.add("--verbose")
-        
+
+        // Print flag (required for stream-json output format)
+        command.add("--print")
+
         // Input format for streaming mode
         if (streamingMode) {
             command.addAll(listOf("--input-format", "stream-json"))
         } else {
-            command.addAll(listOf("--print", "--"))
+            command.add("--")
         }
         
         // Note: Permission handling is done through the stream-json protocol
@@ -249,7 +279,13 @@ class SubprocessTransport(
         
         // Permission mode
         options.permissionMode?.let { mode ->
-            command.addAll(listOf("--permission-mode", mode.name.lowercase().replace("_", "")))
+            val permissionModeValue = when (mode) {
+                PermissionMode.DEFAULT -> "default"
+                PermissionMode.ACCEPT_EDITS -> "acceptEdits"
+                PermissionMode.PLAN -> "plan"
+                PermissionMode.BYPASS_PERMISSIONS -> "bypassPermissions"
+            }
+            command.addAll(listOf("--permission-mode", permissionModeValue))
         }
         
         // Continue conversation
@@ -289,6 +325,7 @@ class SubprocessTransport(
             value?.let { command.add(it) }
         }
         
+        logger.info("🔧 完整构建的Claude CLI命令: ${command.joinToString(" ")}")
         return command
     }
     

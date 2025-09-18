@@ -3,10 +3,9 @@ package com.claudecodeplus.ui.jewel
 import androidx.compose.runtime.*
 import androidx.compose.ui.awt.ComposePanel
 import com.claudecodeplus.ui.services.UnifiedSessionService
-import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.FileIndexService
-import com.claudecodeplus.core.interfaces.ProjectService
+import com.claudecodeplus.core.services.ProjectService
 import com.claudecodeplus.ui.services.MessageProcessor
 import com.claudecodeplus.ui.utils.MessageBuilderUtils
 import kotlinx.coroutines.CoroutineScope
@@ -211,10 +210,10 @@ class JewelChatPanel(
                 // DEBUG: Selected model: ${selectedModel.displayName} (CLI: ${selectedModel.cliName})
                 
                 // 调用 CLI  
-                val options = ClaudeCliWrapper.QueryOptions(
-                    model = selectedModel.cliName, // 使用选定的模型
-                    cwd = workingDirectory,
-                    resume = currentSessionId
+                val options: Map<String, Any> = mapOf(
+                    "model" to selectedModel.cliName, // 使用选定的模型
+                    "cwd" to workingDirectory,
+                    "resume" to (currentSessionId ?: "")
                 )
                 
                 val responseBuilder = StringBuilder()
@@ -223,10 +222,10 @@ class JewelChatPanel(
                 // 使用新的统一API执行查询
                 val result = unifiedSessionService.query(messageWithContext, options)
                 
-                if (result.success) {
+                if (result["success"] == true) {
                     // 命令执行成功，更新会话ID
-                    if (result.sessionId != null && result.sessionId != currentSessionId) {
-                        onSessionIdUpdate(result.sessionId)
+                    if (result["sessionId"] != null && result["sessionId"] != currentSessionId) {
+                        onSessionIdUpdate(result["sessionId"] as? String)
                     }
                     
                     // 文件监听现在由项目监听器自动处理，无需手动订阅
@@ -234,7 +233,7 @@ class JewelChatPanel(
                     // 命令执行失败
                     val errorMessage = EnhancedMessage(
                         role = MessageRole.ASSISTANT,
-                        content = "❌ 错误: ${result.errorMessage ?: "未知错误"}",
+                        content = "❌ 错误: ${result["message"] ?: "未知错误"}",
                         timestamp = System.currentTimeMillis(),
                         status = MessageStatus.FAILED,
                         isError = true

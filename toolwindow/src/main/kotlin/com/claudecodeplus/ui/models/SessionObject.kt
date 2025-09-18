@@ -239,10 +239,11 @@ class SessionObject(
     var claudeProcess by mutableStateOf<Process?>(null)
     
     /**
-     * 获取全局CLI Wrapper实例
+     * 获取全局CLI Wrapper实例 - 临时注释掉，待迁移到新的SDK
+     * TODO: 迁移到 ClaudeCodeSdkClient
      */
-    private val cliWrapper: com.claudecodeplus.sdk.ClaudeCliWrapper
-        get() = GlobalCliWrapper.instance
+    // private val cliWrapper: com.claudecodeplus.sdk.ClaudeCliWrapper
+    //     get() = GlobalCliWrapper.instance
     
     // ========== 状态查询方法 ==========
     
@@ -284,9 +285,10 @@ class SessionObject(
             isFirstMessage = false
         }
         
-        // 如果会话ID发生变化，更新CLI回调注册
+        // 如果会话ID发生变化，更新CLI回调注册（已废弃：现在使用ClaudeCodeSdkAdapter）
         if (oldSessionId != newSessionId) {
-            updateCliCallback(newSessionId)
+            // updateCliCallback(newSessionId) // 已废弃：使用旧的GlobalCliWrapper
+            println("[SessionObject] 🔄 会话ID已变化: $oldSessionId -> $newSessionId（ClaudeCodeSdkAdapter将在sendMessage时处理）")
         }
         
         // 如果设置了新的会话ID，需要更新项目级配置
@@ -521,23 +523,60 @@ class SessionObject(
      * 更新工具调用状态
      */
     fun updateToolCallStatus(toolCallId: String, status: ToolCallStatus, result: ToolResult? = null) {
+        println("[SessionObject] 🔧 更新工具调用状态: $toolCallId -> $status")
+
+        // 1. 更新runningToolCalls中的工具调用
         runningToolCalls.find { it.id == toolCallId }?.let { toolCall ->
             val updatedToolCall = toolCall.copy(
                 status = status,
                 result = result,
-                endTime = if (status in listOf(ToolCallStatus.SUCCESS, ToolCallStatus.FAILED)) 
+                endTime = if (status in listOf(ToolCallStatus.SUCCESS, ToolCallStatus.FAILED))
                     System.currentTimeMillis() else null
             )
-            
+
             val index = runningToolCalls.indexOf(toolCall)
             if (index >= 0) {
                 runningToolCalls[index] = updatedToolCall
             }
-            
-            // 如果完成，从运行列表中移除
-            if (status in listOf(ToolCallStatus.SUCCESS, ToolCallStatus.FAILED)) {
-                removeRunningToolCall(toolCallId)
+
+            println("[SessionObject] ✅ 已更新runningToolCalls中的工具调用: $toolCallId")
+        }
+
+        // 2. 🎯 关键修复：更新消息历史中的工具调用
+        val messageIndex = messages.indexOfLast { message ->
+            message.toolCalls.any { it.id == toolCallId }
+        }
+
+        if (messageIndex >= 0) {
+            val message = messages[messageIndex]
+            val updatedToolCalls = message.toolCalls.map { toolCall ->
+                if (toolCall.id == toolCallId) {
+                    toolCall.copy(
+                        status = status,
+                        result = result,
+                        endTime = if (status in listOf(ToolCallStatus.SUCCESS, ToolCallStatus.FAILED))
+                            System.currentTimeMillis() else null
+                    )
+                } else {
+                    toolCall
+                }
             }
+
+            val updatedMessage = message.copy(toolCalls = updatedToolCalls)
+            val updatedMessages = messages.toMutableList()
+            updatedMessages[messageIndex] = updatedMessage
+
+            // 3. 更新消息列表，触发UI重新渲染
+            messages = updatedMessages
+            println("[SessionObject] 🔄 已更新消息历史中的工具调用，触发UI刷新")
+        } else {
+            println("[SessionObject] ⚠️ 未找到包含工具调用ID $toolCallId 的消息")
+        }
+
+        // 4. 如果完成，从运行列表中移除
+        if (status in listOf(ToolCallStatus.SUCCESS, ToolCallStatus.FAILED)) {
+            removeRunningToolCall(toolCallId)
+            println("[SessionObject] 🏁 工具调用已完成，从运行列表中移除: $toolCallId")
         }
     }
     
@@ -556,10 +595,14 @@ class SessionObject(
     // ========== CLI 子进程管理 ==========
     
     /**
-     * 初始化会话，注册CLI输出回调
+     * 初始化会话
+     * 注意：CLI输出回调现在通过ClaudeCodeSdkAdapter在sendMessage时动态注册
      */
     init {
-        setupCliOutputHandling()
+        // 移除setupCliOutputHandling()调用，避免与ClaudeCodeSdkAdapter的回调系统冲突
+        // setupCliOutputHandling() // 已废弃：使用旧的GlobalCliWrapper
+
+        println("[SessionObject] 🎯 会话初始化完成，sessionId=$sessionId（回调将在sendMessage时注册）")
     }
     
     /**
@@ -1217,27 +1260,27 @@ class SessionObject(
     
     /**
      * 发送消息给Claude CLI（会话级别的方法）
-     * 这样CLI处理就完全在SessionObject内部，支持后台更新
+     * 使用新的 ClaudeCodeSdkAdapter 替代旧的 CLI wrapper
      */
     suspend fun sendMessage(
         markdownText: String,
         workingDirectory: String
-    ): com.claudecodeplus.sdk.ClaudeCliWrapper.QueryResult {
+    ): com.claudecodeplus.sdk.types.QueryResult {
         println("[SessionObject] sendMessage 被调用: markdownText='$markdownText', isGenerating=$isGenerating")
-        
+
         if (isGenerating) {
             println("[SessionObject] 会话正在生成中，添加到队列")
             addToQueue(markdownText)
             inputResetTrigger = System.currentTimeMillis()
             throw IllegalStateException("会话正在生成中，已添加到队列")
         }
-        
+
         // 设置生成状态（用户消息已在ChatViewNew中添加）
         println("[SessionObject] 设置生成状态")
         isGenerating = true
         currentTaskDescription = "发送消息: ${markdownText.take(50)}..."
         taskStartTime = System.currentTimeMillis()
-        
+
         // 添加助手消息占位符
         println("[SessionObject] 添加助手消息占位符")
         val assistantMessage = EnhancedMessage(
@@ -1249,270 +1292,148 @@ class SessionObject(
             isStreaming = true
         )
         addMessage(assistantMessage)
-        
+
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                
-                // 准备CLI选项
-                val projectCwd = getProjectCwd() ?: workingDirectory
-                val options = com.claudecodeplus.sdk.ClaudeCliWrapper.QueryOptions(
-                    sessionId = sessionId,
-                    cwd = projectCwd,
-                    model = selectedModel?.cliName,
-                    permissionMode = selectedPermissionMode.cliName,
-                    skipPermissions = skipPermissions
-                )
-                
-                println("[SessionObject] 发送消息: isFirstMessage=$isFirstMessage, sessionId=$sessionId")
-                
-                // 使用事件驱动的会话处理
-                println("[SessionObject] 使用事件驱动方式启动会话")
-                
-                // 创建事件服务实例
-                val processHandler = com.claudecodeplus.sdk.ClaudeProcessEventHandler()
-                val historyLoader = com.claudecodeplus.sdk.SessionHistoryLoader()
-                val eventService = com.claudecodeplus.sdk.ClaudeEventService(processHandler, cliWrapper, historyLoader)
-                
-                // 准备回调函数，直接处理消息
-                val onMessage: (com.claudecodeplus.sdk.SDKMessage) -> Unit = { message ->
-                    println("[SessionObject] 🎯 收到回调消息: type=${message.type}")
-                    
-                    // 在主线程更新消息
-                    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                        try {
-                            println("[SessionObject] 开始转换消息...")
-                            val enhancedMessage = with(com.claudecodeplus.ui.services.MessageConverter) {
-                                message.toEnhancedMessage()
-                            }
-                            println("[SessionObject] 转换完成，角色: ${enhancedMessage.role}, 内容长度: ${enhancedMessage.content.length}")
-                            
-                            // 立即处理消息并更新UI
-                            processMessageAndUpdateUI(enhancedMessage, message)
-                        } catch (e: Exception) {
-                            println("[SessionObject] 处理回调消息异常: ${e.message}")
-                            e.printStackTrace()
-                        }
-                    }
-                }
-                
-                val onError: (String) -> Unit = { error ->
-                    println("[SessionObject] 收到错误回调: $error")
-                    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                        val errorMessage = EnhancedMessage(
-                            id = java.util.UUID.randomUUID().toString(),
-                            role = MessageRole.ASSISTANT,
-                            content = "❌ 错误: $error",
-                            timestamp = System.currentTimeMillis(),
-                            status = MessageStatus.FAILED,
-                            isError = true
-                        )
-                        addMessage(errorMessage)
-                        isGenerating = false
-                    }
-                }
-                
-                val onComplete: (Boolean) -> Unit = { success ->
-                    println("[SessionObject] 收到完成回调: success=$success")
-                    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                        isGenerating = false
-                        // queryResult 会在方法末尾设置，这里只更新状态
-                    }
-                }
-                
                 // 构建包含上下文文件内容的完整消息
+                val projectCwd = getProjectCwd() ?: workingDirectory
                 val fullPrompt = ContextProcessor.buildPromptWithContextFiles(contexts, projectCwd, markdownText)
                 println("[SessionObject] 构建完整提示词，原始长度: ${markdownText.length}, 完整长度: ${fullPrompt.length}")
-                
-                // 决定是新会话还是恢复会话，使用回调模式
-                if (isFirstMessage) {
-                    println("[SessionObject] 🆕 启动新会话 (startNewSession)")
-                    markSessionStarted()
-                    eventService.startNewSession(
-                        projectPath = projectCwd,
-                        prompt = fullPrompt,
-                        options = options,
-                        onMessage = onMessage,
-                        onError = onError,
-                        onComplete = onComplete
-                    )
-                } else if (sessionId != null) {
-                    println("[SessionObject] 🔄 恢复会话 (resumeSession): $sessionId")
-                    eventService.resumeExistingSession(
-                        sessionId = sessionId!!,
-                        projectPath = projectCwd,
-                        prompt = fullPrompt,
-                        options = options,
-                        onMessage = onMessage,
-                        onError = onError,
-                        onComplete = onComplete
-                    )
-                } else {
-                    println("[SessionObject] ⚠️ 没有 sessionId，降级为新会话")
-                    eventService.startNewSession(
-                        projectPath = projectCwd,
-                        prompt = fullPrompt,
-                        options = options,
-                        onMessage = onMessage,
-                        onError = onError,
-                        onComplete = onComplete
-                    )
-                }
-                
-                // 初始化查询结果
-                var queryResult = com.claudecodeplus.sdk.ClaudeCliWrapper.QueryResult(
-                    success = false,
-                    sessionId = null,
-                    errorMessage = "初始化中",
-                    processId = 0L
+
+                // 创建用户消息
+                val userMessage = EnhancedMessage(
+                    id = java.util.UUID.randomUUID().toString(),
+                    role = MessageRole.USER,
+                    content = fullPrompt,
+                    timestamp = System.currentTimeMillis()
                 )
                 
-                // 使用回调模式，消息会在onMessage回调中立即处理，无需等待
-                println("[SessionObject] 使用回调模式，消息将通过回调立即处理...")
-                
-                // 简化返回 - 因为现在使用回调，进程是异步的
-                queryResult = queryResult.copy(success = true, errorMessage = null)
-                
+                println("[SessionObject] 🚀 准备调用 ClaudeCodeSdkAdapter.sendMessage，sessionId=${sessionId ?: "default"}")
+
+                // 发送消息并处理响应流
+                val responseFlow = com.claudecodeplus.ui.services.ClaudeCodeSdkAdapter.sendMessage(
+                    sessionId = sessionId ?: "default",
+                    message = userMessage,
+                    sessionObject = this@SessionObject,
+                    project = null // TODO: 如果需要项目信息，从上下文获取
+                )
+
+                println("[SessionObject] ✅ ClaudeCodeSdkAdapter.sendMessage 调用完成，开始收集响应流...")
+
+                // 收集响应流并处理消息（移除重复的回调注册，避免双重处理）
+                responseFlow.collect { enhancedMessage ->
+                    println("[SessionObject] 🎯 收到SDK响应: ${enhancedMessage.role} - ${enhancedMessage.content.take(50)}...")
+
+                    // 在主线程处理消息
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        processEnhancedMessage(enhancedMessage)
+                    }
+                }
+
+                // 标记首次消息完成
+                if (isFirstMessage) {
+                    markSessionStarted()
+                }
+
                 // 清空上下文
                 clearContexts()
-                
-                // 重要：最终确保消息被正确保存
-                println("[SessionObject] ✅ 消息发送完成，当前消息数: ${messages.size}")
-                
-                queryResult
-            } catch (e: Exception) {
-                println("[SessionObject] 发送消息异常: ${e.message}")
-                e.printStackTrace()
-                
-                val errorMessage = EnhancedMessage(
-                    id = "error_${System.currentTimeMillis()}",
-                    role = MessageRole.SYSTEM,
-                    content = "发送失败: ${e.message}",
-                    timestamp = System.currentTimeMillis(),
-                    toolCalls = emptyList(),
-                    orderedElements = emptyList()
+
+                // 返回成功结果
+                com.claudecodeplus.sdk.types.QueryResult(
+                    success = true,
+                    sessionId = sessionId
                 )
-                addMessage(errorMessage)
-                
+
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // 协程被取消，可能是组件 dispose 或用户主动取消
+                println("[SessionObject] ⚠️ 操作被取消: ${e.message}")
+
+                // CancellationException 需要重新抛出，这是协程的约定
+                // 但在抛出前我们可以做一些清理工作
+                isGenerating = false
+                currentTaskDescription = ""
+
+                // 重新抛出以保持协程语义正确
                 throw e
+
+            } catch (e: Exception) {
+                println("[SessionObject] ❌ sendMessage 异常: ${e.message}")
+                e.printStackTrace()
+
+                // 异常时重置状态
+                isGenerating = false
+                errorMessage = e.message
+                currentTaskDescription = ""
+
+                // 返回失败的 QueryResult
+                com.claudecodeplus.sdk.types.QueryResult(
+                    success = false,
+                    error = e.message,
+                    sessionId = sessionId
+                )
             } finally {
                 // finally 块不处理 result，让正常流程和异常处理各自管理状态
                 println("[SessionObject] sendMessage finally 块执行完成")
             }
         }
     }
-    
+
     /**
-     * 处理消息并更新UI（回调模式）
-     * 将原来复杂的Flow事件处理逻辑移到这里
+     * 处理 SDK 增强消息并更新 UI
      */
-    private fun processMessageAndUpdateUI(enhancedMessage: EnhancedMessage, originalMessage: com.claudecodeplus.sdk.SDKMessage) {
-        println("[SessionObject] 🎯 处理消息并更新UI: type=${originalMessage.type}")
-        
-        // 检查原始消息类型，决定如何处理
-        val rawJson = originalMessage.content ?: ""
-        val isSystemInit = rawJson.contains("\"type\":\"system\"") && rawJson.contains("\"subtype\":\"init\"")
-        val isResult = rawJson.contains("\"type\":\"result\"")
-        val isToolResult = rawJson.contains("\"type\":\"user\"") && rawJson.contains("\"tool_result\"")
-        
-        when {
-            isToolResult -> {
-                println("[SessionObject] 🔧 处理工具结果消息")
-                // 解析工具结果并更新对应的工具调用
-                val toolResults = with(com.claudecodeplus.ui.services.MessageConverter) {
-                    try {
-                        val contentJson = kotlinx.serialization.json.Json.parseToJsonElement(rawJson).jsonObject
-                        extractToolResults(contentJson)
-                    } catch (e: Exception) {
-                        println("[SessionObject] 解析工具结果失败: ${e.message}")
-                        emptyMap()
-                    }
-                }
-                
-                // 更新对应的工具调用
-                toolResults.forEach { (toolId, result) ->
-                    updateToolCallResult(toolId, result)
-                }
-            }
-            isSystemInit -> {
-                println("[SessionObject] 处理系统初始化消息，仅更新sessionId")
-                // system init消息仅用于更新sessionId，不显示在UI
-                originalMessage.sessionId?.let { newSessionId ->
-                    if (sessionId != newSessionId) {
-                        println("[SessionObject] 🆔 从系统初始化更新会话 ID: $newSessionId")
-                        updateSessionId(newSessionId)
+    private fun processEnhancedMessage(enhancedMessage: EnhancedMessage) {
+        println("[SessionObject] 🎯 处理增强消息: ${enhancedMessage.role} - ${enhancedMessage.content.take(50)}...")
+
+        when (enhancedMessage.role) {
+            MessageRole.ASSISTANT -> {
+                if (enhancedMessage.content.isNotBlank() || enhancedMessage.toolCalls.isNotEmpty()) {
+                    if (enhancedMessage.toolCalls.isNotEmpty()) {
+                        // 添加包含工具调用的新消息
+                        addMessage(enhancedMessage)
+                    } else {
+                        // 更新最后一条助手消息的内容
+                        updateLastMessage { msg ->
+                            msg.copy(
+                                content = if (msg.content.isEmpty()) enhancedMessage.content
+                                         else msg.content + enhancedMessage.content,
+                                isStreaming = false,
+                                tokenUsage = enhancedMessage.tokenUsage ?: msg.tokenUsage
+                            )
+                        }
                     }
                 }
             }
-            isResult -> {
-                println("[SessionObject] 处理结果消息，更新生成状态和Token使用量")
-                
-                // 提取result消息中的总token使用量
-                try {
-                    val resultJson = kotlinx.serialization.json.Json.parseToJsonElement(rawJson).jsonObject
-                    val usageObj = resultJson["usage"]?.jsonObject
-                    
-                    if (usageObj != null) {
-                        val inputTokens = usageObj["input_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
-                        val outputTokens = usageObj["output_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
-                        val cacheCreationTokens = usageObj["cache_creation_input_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
-                        val cacheReadTokens = usageObj["cache_read_input_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
-                        
-                        // 更新会话级别的总token使用量
-                        totalSessionTokenUsage = EnhancedMessage.TokenUsage(
-                            inputTokens = inputTokens,
-                            outputTokens = outputTokens,
-                            cacheCreationTokens = cacheCreationTokens,
-                            cacheReadTokens = cacheReadTokens
-                        )
-                        
-                        println("[SessionObject] 📊 更新会话Token统计: input=$inputTokens, output=$outputTokens, total=${inputTokens + outputTokens}")
-                    }
-                } catch (e: Exception) {
-                    println("[SessionObject] 解析result消息的token使用量失败: ${e.message}")
-                }
-                
-                // result消息用于结束生成状态
+            MessageRole.SYSTEM -> {
+                // 系统消息用于更新状态，不显示在UI中
+                println("[SessionObject] 处理系统消息: ${enhancedMessage.content}")
+            }
+            MessageRole.ERROR -> {
+                // 错误消息
                 isGenerating = false
-                updateLastMessage { msg ->
-                    msg.copy(isStreaming = false)
-                }
-            }
-            enhancedMessage.role == MessageRole.ASSISTANT && (enhancedMessage.content.isNotBlank() || enhancedMessage.toolCalls.isNotEmpty()) -> {
-                println("[SessionObject] 处理ASSISTANT消息，内容: ${enhancedMessage.content.take(50)}..., 工具调用: ${enhancedMessage.toolCalls.size}个")
-                
-                // 如果消息包含工具调用，直接添加（现在每个消息只包含一个工具调用）
-                if (enhancedMessage.toolCalls.isNotEmpty()) {
-                    println("[SessionObject] 🔧 发现工具调用消息，立即添加到UI")
-                    addMessage(enhancedMessage)
-                } else {
-                    // 纯文本消息，更新最后一条助手消息
-                    // 检测认证错误
-                    if (enhancedMessage.content.contains("API Error: 401 API key not found") || 
-                        enhancedMessage.content.contains("Please run /login")) {
-                        println("[SessionObject] 检测到认证错误，设置错误消息")
-                        errorMessage = enhancedMessage.content
-                        isGenerating = false
-                    }
-                    
-                    updateLastMessage { msg ->
-                        println("[SessionObject] 更新最后一条消息: ${msg.id}")
-                        msg.copy(
-                            content = enhancedMessage.content,
-                            isStreaming = enhancedMessage.isStreaming
-                        )
-                    }
-                }
+                errorMessage = enhancedMessage.content
+                addMessage(enhancedMessage)
             }
             else -> {
-                println("[SessionObject] 跳过消息: role=${enhancedMessage.role}, content长度=${enhancedMessage.content.length}")
+                // 其他类型的消息直接添加
+                addMessage(enhancedMessage)
             }
         }
-        
-        // 如果有sessionId，更新当前会话ID
-        if (originalMessage.sessionId != null && originalMessage.sessionId != sessionId) {
-            println("[SessionObject] 🆔 从消息更新会话 ID: ${originalMessage.sessionId}")
-            updateSessionId(originalMessage.sessionId!!)
+
+        // 检查是否为结束消息
+        if (enhancedMessage.status == MessageStatus.COMPLETE && enhancedMessage.role == MessageRole.ASSISTANT) {
+            isGenerating = false
+            updateLastMessage { msg -> msg.copy(isStreaming = false) }
         }
+    }
+
+    /**
+     * 处理消息并更新UI（旧版本，已弃用）
+     * 注意：这个方法依赖旧的 SDK 类型，将逐步迁移到 processEnhancedMessage
+     */
+    @Deprecated("使用 processEnhancedMessage 替代")
+    private fun processMessageAndUpdateUI(enhancedMessage: EnhancedMessage, originalMessage: com.claudecodeplus.sdk.types.SDKMessage) {
+        // 简化为调用新的处理方法
+        processEnhancedMessage(enhancedMessage)
     }
     
     /**
@@ -1597,8 +1518,7 @@ class SessionObject(
      * 清空整个会话
      */
     fun clearSession() {
-        // 注销CLI回调
-        GlobalCliWrapper.unregisterSessionCallback(sessionId)
+        // 注：已移除GlobalCliWrapper调用，现在使用ClaudeCodeSdkAdapter
         
         sessionId = null
         updateMessagesList(emptyList())

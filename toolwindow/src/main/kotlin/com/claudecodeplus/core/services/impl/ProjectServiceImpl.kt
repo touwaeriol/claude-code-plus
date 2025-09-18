@@ -69,7 +69,7 @@ class ProjectServiceImpl(
         } else {
         
         // 创建新项目
-        val projectId = com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(path)
+        val projectId = java.io.File(path).name
         val localProject = LocalProject(
             id = projectId,
             name = name,

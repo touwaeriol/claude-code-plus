@@ -1,7 +1,10 @@
 package com.claudecodeplus.ui.services
 
-import com.claudecodeplus.sdk.MessageType
-import com.claudecodeplus.sdk.SDKMessage
+import com.claudecodeplus.sdk.types.MessageType
+import com.claudecodeplus.sdk.types.SDKMessage
+import com.claudecodeplus.sdk.types.type
+import com.claudecodeplus.sdk.types.data
+import com.claudecodeplus.sdk.ToolParser
 import com.claudecodeplus.ui.models.*
 import java.util.UUID
 
@@ -55,7 +58,7 @@ class MessageProcessor {
         val elements = orderedElements ?: currentMessage.orderedElements.toMutableList()
         return when (sdkMessage.type) {
             MessageType.TEXT -> {
-                sdkMessage.data.text?.let { text ->
+                sdkMessage.data?.text?.let { text ->
                     responseBuilder.append(text)
                     
                     // 更新或添加内容元素
@@ -87,11 +90,11 @@ class MessageProcessor {
             
             MessageType.TOOL_USE -> {
                 // 只有在 Claude 提供了 toolCallId 时才创建 ToolCall
-                val toolCallId = sdkMessage.data.toolCallId
+                val toolCallId = sdkMessage.data?.toolCallId
                 if (toolCallId != null) {
                     // 解析工具类型
-                    val toolName = sdkMessage.data.toolName ?: "unknown"
-                    val toolInput = sdkMessage.data.toolInput
+                    val toolName = sdkMessage.data?.toolName ?: "unknown"
+                    val toolInput = sdkMessage.data?.toolInput
                     val tool = if (toolInput is Map<*, *>) {
                         try {
                             // 转换为 JsonObject 以使用 ToolParser
@@ -102,7 +105,7 @@ class MessageProcessor {
                                     }
                                 }
                             }
-                            com.claudecodeplus.sdk.ToolParser.parse(toolName, jsonObject)
+                            ToolParser.parseToolParameters(toolName, jsonObject)
                         } catch (e: Exception) {
                             null
                         }
@@ -113,7 +116,7 @@ class MessageProcessor {
                     val toolCall = ToolCall(
                         id = toolCallId,
                         name = toolName,
-                        tool = tool,
+                        toolType = ToolType.OTHER, // 使用默认工具类型
                         displayName = toolName,
                         parameters = toolInput as? Map<String, Any> ?: emptyMap(),
                         status = ToolCallStatus.RUNNING,
@@ -138,15 +141,15 @@ class MessageProcessor {
                     )
                 } else {
                     // 如果没有 toolCallId，记录警告但不创建 ToolCall
-                    println("WARNING: Tool use without id: ${sdkMessage.data.toolName}")
+                    println("WARNING: Tool use without id: ${sdkMessage.data?.toolName}")
                     ProcessResult.NoChange
                 }
             }
             
             MessageType.TOOL_RESULT -> {
                 // 通过 toolCallId 查找对应的工具调用
-                val toolCallId = sdkMessage.data.toolCallId
-                println("[MessageProcessor] TOOL_RESULT: toolCallId=$toolCallId, hasError=${sdkMessage.data.error != null}, resultLength=${sdkMessage.data.toolResult?.toString()?.length ?: 0}")
+                val toolCallId = sdkMessage.data?.toolCallId
+                println("[MessageProcessor] TOOL_RESULT: toolCallId=$toolCallId, hasError=${sdkMessage.data?.error != null}, resultLength=${sdkMessage.data?.toolResult?.toString()?.length ?: 0}")
                 println("[MessageProcessor] 当前工具调用列表(${toolCalls.size}个)：${toolCalls.map { "${it.name}(${it.id})" }}")
                 
                 if (toolCallId != null) {
@@ -157,16 +160,17 @@ class MessageProcessor {
                     if (toolCallIndex >= 0) {
                         val toolCall = toolCalls[toolCallIndex]
                         println("[MessageProcessor] 找到工具调用: ${toolCall.name} (${toolCall.id})")
-                        
+
+                        val messageData = sdkMessage.data
                         val updatedToolCall = toolCall.copy(
-                            status = if (sdkMessage.data.error != null) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
-                            result = if (sdkMessage.data.error != null) {
+                            status = if (messageData?.error != null) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
+                            result = if (messageData?.error != null) {
                                 ToolResult.Failure(
-                                    error = sdkMessage.data.error ?: "Unknown error"
+                                    error = messageData.error ?: "Unknown error"
                                 )
                             } else {
                                 ToolResult.Success(
-                                    output = sdkMessage.data.toolResult?.toString() ?: ""
+                                    output = messageData?.toolResult?.toString() ?: ""
                                 )
                             },
                             endTime = System.currentTimeMillis()
@@ -203,7 +207,7 @@ class MessageProcessor {
             }
             
             MessageType.ERROR -> {
-                val errorMsg = sdkMessage.data.error ?: "Unknown error"
+                val errorMsg = sdkMessage.data?.error ?: "Unknown error"
                 ProcessResult.Error(
                     currentMessage.copy(
                         content = "❌ 错误: $errorMsg",
@@ -228,9 +232,14 @@ class MessageProcessor {
             
             MessageType.START -> {
                 // START消息通常包含sessionId，这里返回SessionStart
-                sdkMessage.data.sessionId?.let {
+                sdkMessage.data?.sessionId?.let {
                     ProcessResult.SessionStart(it)
                 } ?: ProcessResult.NoChange
+            }
+
+            // 添加缺失的分支
+            MessageType.USER, MessageType.ASSISTANT, MessageType.SYSTEM -> {
+                ProcessResult.NoChange
             }
         }
     }

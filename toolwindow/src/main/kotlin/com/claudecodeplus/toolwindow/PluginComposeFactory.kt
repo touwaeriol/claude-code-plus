@@ -6,7 +6,7 @@ import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.jewel.StandaloneChatView
 import com.claudecodeplus.ui.services.FileIndexService
-import com.claudecodeplus.core.interfaces.ProjectService
+import com.claudecodeplus.core.services.ProjectService
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.bridge.theme.SwingBridgeTheme
 import org.jetbrains.jewel.foundation.ExperimentalJewelApi

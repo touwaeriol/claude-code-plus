@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.jewel.components.context.*
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.FileIndexService
-import com.claudecodeplus.core.interfaces.ProjectService
+import com.claudecodeplus.core.services.ProjectService
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import java.text.SimpleDateFormat
@@ -440,7 +440,8 @@ private class ContextSearchServiceImpl(
             val content = fileIndexService?.getFileContent(relativePath)
             if (content != null) {
                 val fileName = relativePath.substringAfterLast('/')
-                val absolutePath = projectService?.getProjectPath()?.let { "$it/$relativePath" } ?: relativePath
+                // TODO: Add getProjectPath method to ProjectService or pass working directory
+                val absolutePath = relativePath
                 
                 FileContextItem(
                     name = fileName,

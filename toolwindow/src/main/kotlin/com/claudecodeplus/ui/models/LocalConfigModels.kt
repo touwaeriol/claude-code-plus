@@ -166,7 +166,7 @@ class LocalConfigManager {
      */
     fun addProject(path: String, name: String? = null, defaultModel: String? = null): LocalProject {
         val config = loadConfig()
-        val projectId = com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(path)
+        val projectId = com.claudecodeplus.sdk.utils.ProjectPathUtils.projectPathToDirectoryName(path)
         val projectName = name ?: path.substringAfterLast("/")
         val now = Instant.now().toString()
         
@@ -499,7 +499,7 @@ class LocalConfigManager {
         
         if (lastSelectedSessionId != null) {
             // 生成当前工作目录对应的项目ID
-            val expectedProjectId = com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(workingDirectory)
+            val expectedProjectId = com.claudecodeplus.sdk.utils.ProjectPathUtils.projectPathToDirectoryName(workingDirectory)
             
             // 检查会话是否属于当前工作目录的项目
             val currentProject = config.projects.find { it.id == expectedProjectId }

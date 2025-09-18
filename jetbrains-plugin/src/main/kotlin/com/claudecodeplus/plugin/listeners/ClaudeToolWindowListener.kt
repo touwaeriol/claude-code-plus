@@ -6,6 +6,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.wm.ToolWindow
 import com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService
+import com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService.SessionState
 import com.intellij.openapi.components.service
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.firstOrNull
@@ -129,11 +130,11 @@ class ClaudeToolWindowListener(private val project: Project) : ToolWindowManager
                 val projectPath = project.basePath ?: return@withContext
                 
                 // 获取项目所有会话状态
-                val projectStates = backgroundService.observeProjectSessionUpdates(projectPath)
+                val projectStates: Map<String, SessionState> = backgroundService.observeProjectUpdates(projectPath)
                     .firstOrNull() ?: emptyMap()
-                
+
                 logger.info("💾 保存 ${projectStates.size} 个会话状态")
-                
+
                 // 记录活跃会话ID
                 activeSessionIds.clear()
                 activeSessionIds.addAll(projectStates.keys)
@@ -188,9 +189,9 @@ class ClaudeToolWindowListener(private val project: Project) : ToolWindowManager
         
         listenerScope.launch {
             try {
-                val projectStates = backgroundService.observeProjectSessionUpdates(projectPath)
+                val projectStates: Map<String, SessionState> = backgroundService.observeProjectUpdates(projectPath)
                     .firstOrNull() ?: emptyMap()
-                
+
                 activeSessionIds.clear()
                 activeSessionIds.addAll(projectStates.keys)
                 

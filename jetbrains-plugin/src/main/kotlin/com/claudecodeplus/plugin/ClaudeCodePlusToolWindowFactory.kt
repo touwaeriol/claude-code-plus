@@ -10,6 +10,7 @@ import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.toolwindow.PluginComposeFactory
 import com.claudecodeplus.plugin.adapters.IdeaProjectServiceAdapter
+import com.claudecodeplus.plugin.adapters.ProjectServiceAdapter
 import com.claudecodeplus.plugin.adapters.SimpleFileIndexService
 import com.claudecodeplus.plugin.adapters.IdeaIdeIntegration
 import com.claudecodeplus.plugin.theme.IdeaThemeAdapter
@@ -143,7 +144,8 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory, DumbAware {
             logger.info("🔗 已连接到后台服务，统计信息: ${backgroundService.getServiceStats()}")
             
             // 创建 IntelliJ 平台服务适配器
-            val projectService = IdeaProjectServiceAdapter(project)
+            val ideaProjectService = IdeaProjectServiceAdapter(project)
+            val projectService = ProjectServiceAdapter()
             val fileIndexService = SimpleFileIndexService(project)
             
             // 创建 IDE 集成实例

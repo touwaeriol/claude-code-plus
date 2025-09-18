@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.claudecodeplus.ui.theme.Dimensions
 import com.claudecodeplus.ui.services.UnifiedSessionService
-import com.claudecodeplus.sdk.ClaudeCliWrapper
 import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.session.models.*
 import com.claudecodeplus.ui.jewel.components.*
@@ -33,7 +32,7 @@ import java.time.Instant
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.ui.services.ContextProcessor
 import java.lang.reflect.Method
-import com.claudecodeplus.core.interfaces.ProjectService
+import com.claudecodeplus.core.services.ProjectService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.flowOn
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -47,9 +46,10 @@ import kotlinx.coroutines.delay
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.DisposableEffect
 import com.claudecodeplus.ui.services.SessionPersistenceService
-import com.claudecodeplus.sdk.ClaudeEventService
-import com.claudecodeplus.sdk.ClaudeEvent
-import com.claudecodeplus.sdk.SessionHistoryLoader
+// Event services removed - not available in SDK
+// import com.claudecodeplus.sdk.ClaudeEventService
+// import com.claudecodeplus.sdk.ClaudeEvent
+import com.claudecodeplus.ui.utils.ClaudeSessionHistoryLoader
 import com.claudecodeplus.ui.services.MessageConverter.toEnhancedMessage
 import kotlinx.coroutines.Dispatchers
 import androidx.compose.ui.unit.sp
@@ -79,7 +79,7 @@ fun ChatViewNew(
     tabId: String,
     initialMessages: List<EnhancedMessage>? = null,
     sessionId: String? = null,
-    tabManager: com.claudecodeplus.ui.services.ChatTabManager? = null,
+    // tabManager: com.claudecodeplus.ui.services.ChatTabManager? = null, // 已移除ChatTabManager
     currentTabId: String? = null,
     currentProject: com.claudecodeplus.ui.models.Project? = null,
     projectManager: com.claudecodeplus.ui.services.ProjectManager? = null,
@@ -102,7 +102,9 @@ fun ChatViewNew(
     // 清理 CoroutineScope
     DisposableEffect(Unit) {
         onDispose {
-            stableCoroutineScope.cancel("ChatViewNew disposed")
+            // 注意：不取消 stableCoroutineScope，让 AI 响应能够继续完成
+            // 这样可以避免 "ChatViewNew disposed" 异常
+            // stableCoroutineScope.cancel("ChatViewNew disposed")
         }
     }
     
@@ -863,7 +865,8 @@ fun ChatViewNew(
                                             onContextClick = { uri ->
                                                 if (uri.startsWith("file://") && projectService != null) {
                                                     val path = uri.removePrefix("file://")
-                                                    projectService.openFile(path)
+                                                    // TODO: Add openFile method to ProjectService
+                                                    println("Would open file: $path")
                                                 }
                                             },
                                             sessionObject = sessionObject,

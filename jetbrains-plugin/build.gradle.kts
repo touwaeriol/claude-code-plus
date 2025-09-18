@@ -18,13 +18,13 @@ repositories {
 
 dependencies {
     // 依赖其他模块 - 按照官方方式排除整个 kotlinx 组
-    implementation(project(":cli-wrapper")) {
-        exclude(group = "org.jetbrains.kotlinx")
-    }
     implementation(project(":toolwindow")) {
         exclude(group = "org.jetbrains.kotlinx")
         // 🎯 现在toolwindow使用内建依赖，不需要复杂的排除规则
     }
+
+    // 添加 claude-code-sdk 依赖
+    implementation(project(":claude-code-sdk"))
     
     // 🎯 使用IDE平台内置的Jewel模块 - 替换外部依赖
     // 移除所有外部Jewel依赖，使用IDE内置版本

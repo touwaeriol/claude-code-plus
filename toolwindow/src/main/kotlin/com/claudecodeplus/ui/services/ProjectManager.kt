@@ -17,6 +17,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
+import com.claudecodeplus.sdk.utils.ProjectPathUtils
 
 /**
  * 会话加载事件
@@ -71,7 +72,7 @@ class ProjectManager(
                 // 从路径提取项目名称
                 val projectName = workingDirectory.substringAfterLast(java.io.File.separator).ifBlank { "项目" }
                 Project(
-                    id = com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(workingDirectory),
+                    id = ProjectPathUtils.projectPathToDirectoryName(workingDirectory),
                     path = workingDirectory,
                     name = projectName
                 )
@@ -781,7 +782,7 @@ class ProjectManager(
             println("加载当前工作目录项目: $currentDir")
             
             // 生成对应的项目ID
-            val currentDirProjectId = com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(currentDir)
+            val currentDirProjectId = ProjectPathUtils.projectPathToDirectoryName(currentDir)
             println("对应的项目ID: $currentDirProjectId")
             
             // 清除缓存以强制重新加载（使用项目ID作为键）
@@ -945,7 +946,7 @@ class ProjectManager(
         println("创建新项目: $name at $path")
         
         // 生成 Claude 目录名（项目ID）
-        val projectId = com.claudecodeplus.sdk.ProjectPathUtils.projectPathToDirectoryName(path)
+        val projectId = ProjectPathUtils.projectPathToDirectoryName(path)
         println("生成的项目ID（目录名）: $projectId")
         
         // 创建项目对象

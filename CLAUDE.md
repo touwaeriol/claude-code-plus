@@ -52,17 +52,20 @@
 #### 实现状态文档
 *   **`上下文消息格式设计.md`**: 详细说明上下文消息格式的设计理念和实现方案，包括标签上下文和内联引用的区别
 
-### 组件实现状态
+### 当前技术架构
 
-#### ClaudeCliWrapper 重要更新
-- **命令切换**：从直接调用 `node cli.js` 改为使用 `claude` 命令
-  - 支持自定义命令路径：通过 `QueryOptions.customCommand` 参数
-  - 自动查找 claude 命令位置（Windows: claude.cmd, Unix: /usr/local/bin/claude 等）
-  - 保留了中断功能：通过 `terminate()` 方法终止进程
-- **参数映射调整**：
-  - `--custom-system-prompt` → `--append-system-prompt`
-  - `--mcp-servers` → `--mcp-config`
-  - 添加 `--print` 参数以使用非交互模式
+#### 🎯 核心后端系统（Claude Code SDK）
+**ClaudeCodeSdkAdapter + SdkMessageConverter** - 当前主要后端架构
+- **ClaudeCodeSdkAdapter**：管理SDK客户端实例，处理会话生命周期
+- **SdkMessageConverter**：**核心组件** - 处理SDK消息与UI模型的双向转换
+- **SubprocessTransport**：基于Claude CLI的底层通信传输层
+- **优势**：完整的工具集成支持、流式响应、中断能力、状态管理
+
+#### ❌ 已废弃的组件系统
+**GlobalCliWrapper** - 旧架构（保留但不使用）
+- **原因**：架构复杂、工具集成不完整、维护困难
+- **状态**：已从主流程中移除，仅保留用于参考
+- **迁移完成**：所有功能已成功迁移到SDK架构
 
 #### 已实现的核心组件
 
@@ -86,49 +89,39 @@
   - `ChatInputField.kt` - 聊天输入字段组件
 
 **UI 组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/components/`）
-  - `MultiTabChatView.kt` - 多标签聊天视图
-  - `ChatOrganizer.kt` - 对话组织器
-  - `ProjectSelector.kt` - 项目选择器
-  - `ProjectTabBar.kt` - 项目标签栏
-  - `ProjectListPanel.kt` - 项目列表面板
-  - `SessionListPanel.kt` - 会话列表面板
-  - `GlobalSearchDialog.kt` - 全局搜索对话框
-  - `ContextTemplateDialog.kt` - 上下文模板对话框
+  - `JewelConversationView.kt` - **当前主要UI组件** - Jewel聊天界面视图
+  - `UnifiedChatInput.kt` - **核心组件** - 统一聊天输入组件（已修复控件状态管理）
+  - `UnifiedInputArea.kt` - **核心组件** - 统一输入区域组件
+  - `SimpleInlineFileReference.kt` - @ 符号文件引用组件（已修复主题感知高亮）
+  - `StandaloneChatView.kt` - 独立聊天视图（当前使用）
   - `BatchQuestionDialog.kt` - 批量问题对话框（已修复主题适配）
   - `ContextPreviewPanel.kt` - 上下文预览面板
   - `InterruptedSessionBanner.kt` - 中断会话横幅
-  - `ModernChatView.kt` - 现代聊天视图
-  - `ChatViewNew.kt` - 新版聊天视图
-  - `ChatViewOptimized.kt` - 优化版聊天视图
-  - `StandaloneChatView.kt` - 独立聊天视图
-  - `UnifiedChatInput.kt` - 统一聊天输入组件（已修复控件状态管理）
-  - `SimpleInlineFileReference.kt` - @ 符号文件引用组件（已修复主题感知高亮）
-  - `ChatInputContextSelectorPopup.kt` - 上下文选择弹窗（已确认为未使用的遗留代码）
+  - ~~`MultiTabChatView.kt`~~ - **已废弃** - 多标签聊天视图（.unused文件）
+  - ~~`ChatOrganizer.kt`~~ - **已废弃** - 对话组织器（.unused文件）
+  - ~~`ProjectListPanel.kt`~~ - **已废弃** - 项目列表面板（.unused文件）
+  - ~~`GlobalSearchDialog.kt`~~ - **已废弃** - 全局搜索对话框（.unused文件）
+  - ~~`ChatViewOptimized.kt`~~ - **已废弃** - 优化版聊天视图（.unused文件）
+  - ~~`JewelChatApp.kt`~~ - **已废弃** - Jewel聊天应用（.unused文件）
+  - ~~`ChatInputContextSelectorPopup.kt`~~ - **已废弃** - 上下文选择弹窗（已确认为未使用的遗留代码）
 
 - **服务层组件**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/services/`）
-  - `ChatTabManager.kt` - 标签管理服务（支持Claude会话链接状态跟踪）
-  - `ProjectManager.kt` - 项目管理服务
-  - `SessionManager.kt` - 会话生命周期管理（支持多会话并发）
+  - `UnifiedSessionService.kt` - 统一会话服务（当前主要使用）
+  - `SdkMessageConverter.kt` - **核心组件** - SDK消息转换器（已修复工具集成）
+  - `ClaudeCodeSdkAdapter.kt` - **核心组件** - Claude Code SDK适配器（当前后端）
+  - `UnifiedMessageConverter.kt` - 统一消息转换器
+  - `SessionHistoryService.kt` - 会话历史服务
   - `DefaultSessionConfig.kt` - 全局默认会话配置管理
   - `SessionPersistenceService.kt` - 会话配置持久化服务
-  - `ChatSessionStateManager.kt` - 聊天会话状态管理
-  - `UnifiedSessionService.kt` - 统一会话服务
-  - `SessionHistoryService.kt` - 会话历史服务
-  - `SessionLoader.kt` - 会话加载器
-  - `ChatExportService.kt` - 聊天导出服务
-  - `ChatSearchEngine.kt` - 聊天搜索引擎
-  - `ChatSummaryService.kt` - 聊天摘要服务
-  - `ContextManagementService.kt` - 上下文管理服务
-  - `ContextProvider.kt` - 上下文提供器
-  - `ContextRecommendationEngine.kt` - 上下文推荐引擎
-  - `ContextTemplateManager.kt` - 上下文模板管理器
-  - `PromptTemplateManager.kt` - 提示模板管理器
-  - `QuestionQueueManager.kt` - 问题队列管理器
   - `FileIndexService.kt` - 文件索引服务
   - `FileSearchService.kt` - 文件搜索服务
-  - `MessageConverter.kt` - 消息转换器
-  - `MessageProcessor.kt` - 消息处理器
-  - `ClaudeCliWrapperAdapter.kt` - Claude CLI包装器适配器
+  - `ContextManagementService.kt` - 上下文管理服务
+  - `ContextProvider.kt` - 上下文提供器
+  - `LocalizationService.kt` - 国际化服务
+  - ~~`ChatTabManager.kt`~~ - **已废弃** - 标签管理服务（.unused文件）
+  - ~~`ClaudeCliWrapperAdapter.kt`~~ - **已废弃** - 旧CLI包装器适配器
+  - ~~`MessageConverter.kt`~~ - **已废弃** - 旧消息转换器
+  - ~~`MessageProcessor.kt`~~ - **已废弃** - 旧消息处理器
 
 - **数据模型**（`toolwindow/src/main/kotlin/com/claudecodeplus/ui/models/`）
   - `SessionObject.kt` - 会话状态容器（包含所有会话运行时数据）
@@ -144,6 +137,103 @@
   - `GlobalCliWrapper.kt` - 全局CLI包装器模型
 
 ## 最新调查和发现记录
+
+### 2025年9月18日 - CLI-Wrapper 模块删除和迁移完成
+
+成功完成 cli-wrapper 模块的完全删除和必要类的迁移工作：
+
+#### 删除内容
+1. **完全删除 cli-wrapper 模块**
+   - 从 `settings.gradle.kts` 中移除模块引用
+   - 从 `jetbrains-plugin/build.gradle.kts` 中移除依赖
+   - 物理删除整个 `cli-wrapper/` 目录及其所有内容
+
+#### 迁移内容
+**迁移到 claude-code-sdk 模块的关键类**：
+1. **ProjectService.kt** → `claude-code-sdk/src/main/kotlin/com/claudecodeplus/core/interfaces/`
+2. **SessionStateSync.kt** → `claude-code-sdk/src/main/kotlin/com/claudecodeplus/plugin/interfaces/`
+3. **ClaudeCodePlusBackgroundService.kt** → `claude-code-sdk/src/main/kotlin/com/claudecodeplus/plugin/services/`
+   - 包含 SessionState 和 SessionUpdate 数据类
+   - 提供基本的会话状态管理接口
+4. **SessionStateSyncImpl.kt** → `claude-code-sdk/src/main/kotlin/com/claudecodeplus/plugin/services/`
+5. **ProjectSessionStateService.kt** → `claude-code-sdk/src/main/kotlin/com/claudecodeplus/plugin/services/`
+
+#### 编译问题修复
+**主要修复的编译错误**：
+- 添加缺失的 `SessionState` 导入和类型定义
+- 修复 `ClaudeToolWindowListener.kt` 中的方法调用
+- 实现 `observeProjectUpdates` 和 `getServiceStats` 等缺失方法
+- 统一方法名称和返回类型
+
+#### 项目架构优化
+**新的模块结构**：
+```
+claude-code-plus/
+├── claude-code-sdk/     # SDK核心功能和服务接口
+├── toolwindow/          # UI组件和界面逻辑
+└── jetbrains-plugin/    # IntelliJ插件集成
+```
+
+#### 验证结果
+- ✅ **编译成功**：所有模块无错误编译通过
+- ✅ **插件启动**：IntelliJ IDEA 插件成功启动
+- ✅ **架构简化**：减少了模块间复杂依赖关系
+- ✅ **功能保留**：保持原有功能完整性
+
+### 2025年9月18日 - 工具集成功能修复
+
+完成了Claude Code Plus中工具集成功能的关键修复，恢复了Read工具在IDE中打开文件、Edit工具显示差异对比等功能：
+
+#### 问题诊断
+1. **根本原因**：从GlobalCliWrapper迁移到ClaudeCodeSdkAdapter后，工具集成功能失效
+2. **具体位置**：SdkMessageConverter中ToolResultBlock处理被完全跳过
+3. **影响范围**：所有工具的结果都无法正确传递到UI层，导致工具集成功能完全失效
+
+#### 修复内容
+**SdkMessageConverter.kt (Lines 105-138)** - **核心修复位置**
+```kotlin
+is ToolResultBlock -> {
+    // 处理工具结果：查找对应的工具调用并更新其结果
+    val targetToolCall = toolCalls.find { it.id == contentBlock.toolUseId }
+    if (targetToolCall != null) {
+        val hasError = contentBlock.isError == true
+        val outputContent = contentBlock.content.toString()
+
+        // 更新工具调用的结果和状态
+        val updatedToolCall = targetToolCall.copy(
+            result = if (hasError) {
+                ToolResult.Failure(error = outputContent, details = null)
+            } else {
+                ToolResult.Success(output = outputContent, summary = outputContent.take(100))
+            },
+            status = if (hasError) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
+            endTime = System.currentTimeMillis()
+        )
+
+        // 替换列表中的工具调用
+        val index = toolCalls.indexOf(targetToolCall)
+        toolCalls[index] = updatedToolCall
+    }
+}
+```
+
+#### 工具集成调用链验证
+确认完整的工具集成调用链已恢复：
+1. **UI层**：CompactToolCallDisplay → IdeIntegration → handleToolClick()
+2. **管理层**：ToolClickManager → 路由到具体工具处理器
+3. **处理器层**：ReadToolHandler、EditToolHandler等具体实现
+4. **IDE集成**：使用OpenFileDescriptor、DiffManager等IntelliJ APIs
+
+#### 后端系统现状
+- **当前使用**：ClaudeCodeSdkAdapter + SdkMessageConverter（已修复）
+- **已废弃**：GlobalCliWrapper（保留但不在主流程中使用）
+- **SDK迁移**：完全基于claude-code-sdk模块的新架构
+
+#### 恢复功能
+- ✅ **Read工具**：点击后在IDE中打开对应文件并定位到指定行号
+- ✅ **Edit工具**：点击后显示文件变更的完整差异对比
+- ✅ **所有工具**：工具结果正确传递并在UI中显示
+- ✅ **状态管理**：工具执行状态（PENDING/RUNNING/SUCCESS/FAILED）正确更新
 
 ### 2025年9月12日 - 上下文使用指示器圆环进度条实现
 

@@ -602,7 +602,7 @@ class SessionObjectV2(
     suspend fun sendMessage(
         markdownText: String,
         workingDirectory: String
-    ): com.claudecodeplus.sdk.ClaudeCliWrapper.QueryResult {
+    ): com.claudecodeplus.sdk.types.QueryResult {
         println("[SessionObjectV2] 发送消息 (兼容模式): ${markdownText.take(50)}...")
         
         if (isGenerating) {
@@ -616,12 +616,10 @@ class SessionObjectV2(
         val success = sendMessage(markdownText)
         
         // 构造兼容的返回结果
-        return com.claudecodeplus.sdk.ClaudeCliWrapper.QueryResult(
-            sessionId = sessionId,
-            processId = 0L,
+        return com.claudecodeplus.sdk.types.QueryResult(
             success = success,
-            errorMessage = if (!success) errorMessage else null,
-            assistantMessage = null
+            error = if (!success) errorMessage else null,
+            sessionId = sessionId
         )
     }
     

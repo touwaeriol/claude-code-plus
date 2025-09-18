@@ -22,11 +22,8 @@ repositories {
 }
 
 dependencies {
-    // 依赖 cli-wrapper 模块
-    implementation(project(":cli-wrapper")) {
-        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
-        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-swing")
-    }
+    // 依赖 claude-code-sdk 模块
+    implementation(project(":claude-code-sdk"))
     
     // 🎯 完全使用IDE内建依赖 - 正确的配置方式
     intellijPlatform {
