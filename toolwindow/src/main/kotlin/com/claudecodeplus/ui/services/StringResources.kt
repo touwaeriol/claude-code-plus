@@ -28,6 +28,12 @@ object StringResources {
     const val EDIT_CHANGES = "edit_changes"
     const val PARAMETERS_COUNT = "parameters_count"
     const val UPDATE_TASKS = "update_tasks"
+    const val TASK_MANAGEMENT = "task_management"
+    const val TASK_COMPLETED_COUNT = "task_completed_count"
+    const val TASK_STATUS_PENDING = "task_status_pending"
+    const val TASK_STATUS_IN_PROGRESS = "task_status_in_progress"
+    const val TASK_STATUS_COMPLETED = "task_status_completed"
+    const val NO_TASKS = "no_tasks"
     
     // 文件操作
     const val DIRECTORIES = "directories"
@@ -118,6 +124,12 @@ object StringResources {
             "edit_changes" to "%1\$s changes",
             "parameters_count" to "%1\$s parameters",
             "update_tasks" to "Update %1\$s tasks",
+            "task_management" to "Task Management",
+            "task_completed_count" to "(%1\$d/%2\$d completed)",
+            "task_status_pending" to "Pending",
+            "task_status_in_progress" to "In Progress",
+            "task_status_completed" to "Completed",
+            "no_tasks" to "No tasks",
             "directories" to "directories",
             "files" to "files",
             "file_type_json" to "JSON",
@@ -206,6 +218,12 @@ object StringResources {
             "edit_changes" to "%1\$s 处修改",
             "parameters_count" to "%1\$s 个参数",
             "update_tasks" to "更新 %1\$s 个任务",
+            "task_management" to "任务管理",
+            "task_completed_count" to "(%1\$d/%2\$d 完成)",
+            "task_status_pending" to "待办",
+            "task_status_in_progress" to "进行中",
+            "task_status_completed" to "已完成",
+            "no_tasks" to "暂无任务",
             "directories" to "个目录",
             "files" to "个文件",
             "file_type_json" to "JSON",
@@ -294,6 +312,12 @@ object StringResources {
             "edit_changes" to "%1\$s 處修改",
             "parameters_count" to "%1\$s 個參數",
             "update_tasks" to "更新 %1\$s 個任務",
+            "task_management" to "任務管理",
+            "task_completed_count" to "(%1\$d/%2\$d 完成)",
+            "task_status_pending" to "待辦",
+            "task_status_in_progress" to "進行中",
+            "task_status_completed" to "已完成",
+            "no_tasks" to "暫無任務",
             "directories" to "個目錄",
             "files" to "個檔案",
             "file_type_json" to "JSON",
@@ -382,6 +406,12 @@ object StringResources {
             "edit_changes" to "%1\$s 箇所の変更",
             "parameters_count" to "%1\$s 個のパラメータ",
             "update_tasks" to "%1\$s 個のタスクを更新",
+            "task_management" to "タスク管理",
+            "task_completed_count" to "(%1\$d/%2\$d 完了)",
+            "task_status_pending" to "待機中",
+            "task_status_in_progress" to "実行中",
+            "task_status_completed" to "完了",
+            "no_tasks" to "タスクなし",
             "directories" to "個のディレクトリ",
             "files" to "個のファイル",
             "file_type_json" to "JSON",
@@ -470,6 +500,12 @@ object StringResources {
             "edit_changes" to "%1\$s개 변경사항",
             "parameters_count" to "%1\$s개 매개변수",
             "update_tasks" to "%1\$s개 작업 업데이트",
+            "task_management" to "작업 관리",
+            "task_completed_count" to "(%1\$d/%2\$d 완료)",
+            "task_status_pending" to "대기 중",
+            "task_status_in_progress" to "진행 중",
+            "task_status_completed" to "완료",
+            "no_tasks" to "작업 없음",
             "directories" to "개 디렉토리",
             "files" to "개 파일",
             "file_type_json" to "JSON",

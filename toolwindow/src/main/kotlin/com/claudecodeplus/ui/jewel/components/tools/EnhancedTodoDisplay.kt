@@ -15,30 +15,50 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.*
 import androidx.compose.ui.draw.scale
 import com.claudecodeplus.ui.models.ToolCall
+import com.claudecodeplus.sdk.types.TodoWriteToolUse
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import com.claudecodeplus.ui.jewel.components.tools.LinearProgressBar
 import org.jetbrains.jewel.ui.component.Text
 import kotlinx.serialization.json.*
+import com.claudecodeplus.ui.services.stringResource
+import com.claudecodeplus.ui.services.formatStringResource
+import com.claudecodeplus.ui.services.StringResources
 
 /**
  * 增强的 TodoWrite 看板式展示组件
  */
 @Composable
 fun EnhancedTodoDisplay(
-    toolCall: ToolCall,
+    toolCall: ToolCall? = null,
+    todos: List<TodoWriteToolUse.TodoItem>? = null,
     modifier: Modifier = Modifier
 ) {
-    val todos = parseTodos(toolCall)
+    val todoItems = when {
+        todos != null -> {
+            // 直接使用传入的强类型数据
+            todos.mapIndexed { index, todo ->
+                EnhancedTodoItem(
+                    id = (index + 1).toString(),
+                    content = todo.content,
+                    status = todo.status,
+                    activeForm = todo.activeForm,
+                    priority = "normal"
+                )
+            }
+        }
+        toolCall != null -> parseTodos(toolCall)  // 兼容旧的解析方式
+        else -> emptyList()
+    }
     
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // 任务统计和进度条
-        TodoSummaryHeader(todos)
-        
+        TodoSummaryHeader(todoItems)
+
         // 单列任务列表（默认展开）
-        TodoListView(todos)
+        TodoListView(todoItems)
     }
 }
 
@@ -56,27 +76,17 @@ private fun TodoSummaryHeader(
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 标题行
+        // 任务统计行（去掉重复的标题）
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "📋",
-                style = JewelTheme.defaultTextStyle.copy(fontSize = 16.sp)
-            )
-            Text(
-                text = "任务管理",
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 13.sp,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
-                )
-            )
-            Text(
-                text = "($completedCount/$totalCount 完成)",
+                text = formatStringResource(StringResources.TASK_COMPLETED_COUNT, completedCount, totalCount),
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 12.sp,
-                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f),
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
                 )
             )
         }
@@ -122,7 +132,7 @@ private fun TodoListView(todos: List<EnhancedTodoItem>) {
     ) {
         if (sortedTodos.isEmpty()) {
             Text(
-                text = "暂无任务",
+                text = stringResource(StringResources.NO_TASKS),
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 12.sp,
                     color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f),
@@ -217,10 +227,10 @@ private fun TodoListItem(todo: EnhancedTodoItem) {
         // 状态标签
         Text(
             text = when (todo.status.lowercase()) {
-                "completed" -> "已完成"
-                "in_progress" -> "进行中"
-                "pending" -> "待办"
-                else -> "未知"
+                "completed" -> stringResource(StringResources.TASK_STATUS_COMPLETED)
+                "in_progress" -> stringResource(StringResources.TASK_STATUS_IN_PROGRESS)
+                "pending" -> stringResource(StringResources.TASK_STATUS_PENDING)
+                else -> "Unknown"
             },
             style = JewelTheme.defaultTextStyle.copy(
                 fontSize = 10.sp,
@@ -265,20 +275,13 @@ private data class EnhancedTodoItem(
 private fun parseTodos(toolCall: ToolCall): List<EnhancedTodoItem> {
     println("[EnhancedTodoDisplay] 开始解析TodoWrite工具调用")
     println("[EnhancedTodoDisplay] 工具名称：${toolCall.name}")
-    println("[EnhancedTodoDisplay] 所有参数：${toolCall.parameters}")
-    println("[EnhancedTodoDisplay] 参数类型：${toolCall.parameters::class}")
-    
+
     // 检查是否有todos参数
     val todosParam = toolCall.parameters["todos"]
     if (todosParam == null) {
         println("[EnhancedTodoDisplay] ❌ 未找到todos参数")
-        // 打印所有可用的参数键
-        println("[EnhancedTodoDisplay] 可用参数键：${toolCall.parameters.keys}")
         return emptyList()
     }
-    
-    println("[EnhancedTodoDisplay] todos参数找到，类型：${todosParam::class}")
-    println("[EnhancedTodoDisplay] todos内容：$todosParam")
     
     return when (todosParam) {
         is List<*> -> {

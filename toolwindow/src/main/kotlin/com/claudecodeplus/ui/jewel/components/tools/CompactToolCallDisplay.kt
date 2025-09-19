@@ -31,6 +31,7 @@ import com.claudecodeplus.ui.models.ToolResult
 import com.claudecodeplus.ui.jewel.components.tools.*
 import com.claudecodeplus.ui.jewel.components.tools.output.*
 import com.claudecodeplus.ui.jewel.components.tools.EnhancedTodoDisplay
+import com.claudecodeplus.sdk.types.TodoWriteToolUse
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.component.styling.TooltipStyle
@@ -444,8 +445,31 @@ private fun shouldShowToolDetails(toolCall: ToolCall): Boolean {
 
 /**
  * 获取工具图标
+ * 🎯 核心改进：使用instanceof检查具体工具类型
  */
 private fun getToolIcon(toolCall: ToolCall): String {
+    // 🎯 优先使用具体工具类型
+    val specificTool = toolCall.specificTool
+    if (specificTool != null) {
+        return when (specificTool) {
+            is com.claudecodeplus.sdk.types.ReadToolUse -> "📖"
+            is com.claudecodeplus.sdk.types.WriteToolUse -> "✏️"
+            is com.claudecodeplus.sdk.types.EditToolUse -> "✏️"
+            is com.claudecodeplus.sdk.types.MultiEditToolUse -> "📝"
+            is com.claudecodeplus.sdk.types.BashToolUse -> "💻"
+            is com.claudecodeplus.sdk.types.WebFetchToolUse -> "🌐"
+            is com.claudecodeplus.sdk.types.WebSearchToolUse -> "🔍"
+            is com.claudecodeplus.sdk.types.GlobToolUse -> "📁"
+            is com.claudecodeplus.sdk.types.GrepToolUse -> "🔍"
+            is com.claudecodeplus.sdk.types.TaskToolUse -> "🤖"
+            is com.claudecodeplus.sdk.types.TodoWriteToolUse -> "📝"
+            is com.claudecodeplus.sdk.types.NotebookEditToolUse -> "📓"
+            is com.claudecodeplus.sdk.types.McpToolUse -> "🔌"
+            else -> "🔧"
+        }
+    }
+
+    // 🔄 回退逻辑：使用字符串匹配
     return when {
         toolCall.name.contains("Read", ignoreCase = true) -> "📖"
         toolCall.name.contains("Write", ignoreCase = true) -> "✏️"
@@ -471,11 +495,96 @@ private data class ToolDisplayInfo(
 
 /**
  * 获取工具的内联显示格式，例如：LS ./desktop
+ * 🎯 核心改进：使用instanceof检查具体工具类型，避免字符串匹配
  */
 private fun getInlineToolDisplay(toolCall: ToolCall): String {
     val toolName = toolCall.name
+
+    // 🎯 关键改进：优先使用具体工具类型的强类型属性
+    val specificTool = toolCall.specificTool
+    if (specificTool != null) {
+        println("[CompactToolCallDisplay] 🎯 使用instanceof检查: ${specificTool::class.simpleName}")
+        return when (specificTool) {
+            is com.claudecodeplus.sdk.types.ReadToolUse -> {
+                val fileName = specificTool.filePath.substringAfterLast('/').substringAfterLast('\\')
+                println("[CompactToolCallDisplay] 📖 ReadToolUse强类型: filePath=${specificTool.filePath}, fileName=$fileName")
+                "Read: $fileName"
+            }
+            is com.claudecodeplus.sdk.types.WriteToolUse -> {
+                val fileName = specificTool.filePath.substringAfterLast('/').substringAfterLast('\\')
+                "Write: $fileName"
+            }
+            is com.claudecodeplus.sdk.types.EditToolUse -> {
+                val fileName = specificTool.filePath.substringAfterLast('/').substringAfterLast('\\')
+                "Edit: $fileName"
+            }
+            is com.claudecodeplus.sdk.types.MultiEditToolUse -> {
+                val fileName = specificTool.filePath.substringAfterLast('/').substringAfterLast('\\')
+                "MultiEdit: $fileName (${specificTool.edits.size} changes)"
+            }
+            is com.claudecodeplus.sdk.types.BashToolUse -> {
+                val command = if (specificTool.command.length > 25) {
+                    specificTool.command.take(22) + "..."
+                } else {
+                    specificTool.command
+                }
+                "Bash: $command"
+            }
+            is com.claudecodeplus.sdk.types.GlobToolUse -> {
+                "Glob: ${specificTool.pattern}"
+            }
+            is com.claudecodeplus.sdk.types.GrepToolUse -> {
+                val searchTerm = if (specificTool.pattern.length > 20) {
+                    specificTool.pattern.take(17) + "..."
+                } else {
+                    specificTool.pattern
+                }
+                "Grep: $searchTerm"
+            }
+            is com.claudecodeplus.sdk.types.WebFetchToolUse -> {
+                val domain = specificTool.url
+                    .removePrefix("https://")
+                    .removePrefix("http://")
+                    .substringBefore("/")
+                "WebFetch: $domain"
+            }
+            is com.claudecodeplus.sdk.types.WebSearchToolUse -> {
+                val query = if (specificTool.query.length > 20) {
+                    specificTool.query.take(17) + "..."
+                } else {
+                    specificTool.query
+                }
+                "WebSearch: $query"
+            }
+            is com.claudecodeplus.sdk.types.TodoWriteToolUse -> {
+                "TodoWrite: ${specificTool.todos.size} tasks"
+            }
+            is com.claudecodeplus.sdk.types.TaskToolUse -> {
+                val description = specificTool.description
+                val shortDesc = if (description.length > 20) {
+                    description.take(17) + "..."
+                } else {
+                    description
+                }
+                "Task: $shortDesc"
+            }
+            is com.claudecodeplus.sdk.types.NotebookEditToolUse -> {
+                val fileName = specificTool.notebookPath.substringAfterLast('/').substringAfterLast('\\')
+                "NotebookEdit: $fileName"
+            }
+            is com.claudecodeplus.sdk.types.McpToolUse -> {
+                "${specificTool.serverName}.${specificTool.functionName}"
+            }
+            else -> {
+                println("[CompactToolCallDisplay] ⚠️ 未处理的具体工具类型: ${specificTool::class.simpleName}")
+                toolName
+            }
+        }
+    }
+
+    // 🔄 回退逻辑：如果没有具体工具类型，使用原有的字符串匹配方式
     val primaryParam = getPrimaryParamValue(toolCall)
-    
+
     return when {
         // 对于单参数工具，使用冒号格式：ToolName: parameter
         isSingleParamTool(toolName) && primaryParam != null -> {
@@ -1166,6 +1275,36 @@ private fun formatBytes(bytes: Long): String {
  */
 @Composable
 private fun formatToolResult(toolCall: ToolCall) {
+    // 🎯 TodoWrite特殊处理：永远显示input.todos，与result无关
+    if (toolCall.name.contains("TodoWrite", ignoreCase = true)) {
+        // 优先使用specificTool
+        if (toolCall.specificTool is TodoWriteToolUse) {
+            val todoTool = toolCall.specificTool as TodoWriteToolUse
+            println("[CompactToolCallDisplay] 🎯 使用specificTool路由到EnhancedTodoDisplay: 任务数量=${todoTool.todos.size}")
+            EnhancedTodoDisplay(todos = todoTool.todos)
+            return
+        }
+
+        // 回退：从parameters中提取todos
+        val todosParam = toolCall.parameters["todos"]
+        if (todosParam != null) {
+            println("[CompactToolCallDisplay] 🎯 使用parameters回退到EnhancedTodoDisplay")
+            EnhancedTodoDisplay(toolCall = toolCall)  // 传递整个toolCall，让组件自己解析
+            return
+        }
+
+        // 最后回退：显示简单状态
+        println("[CompactToolCallDisplay] ⚠️ TodoWrite工具无法找到todos数据")
+        Text(
+            text = "✅ 任务列表已更新",
+            style = JewelTheme.defaultTextStyle.copy(
+                fontSize = 12.sp,
+                color = Color(0xFF4CAF50)
+            )
+        )
+        return
+    }
+
     when {
         // Edit/MultiEdit 使用 Diff 展示
         toolCall.name.contains("Edit", ignoreCase = true) -> {
@@ -1187,15 +1326,7 @@ private fun formatToolResult(toolCall: ToolCall) {
         toolCall.name.contains("Bash", ignoreCase = true) -> {
             CommandResultDisplay(toolCall)
         }
-        
-        // TodoWrite 使用看板展示 - 专注参数而非结果
-        toolCall.name.contains("TodoWrite", ignoreCase = true) -> {
-            // TodoWrite工具的价值在于参数中的任务列表，而不是result中的确认消息
-            // 因此我们忽略result，专注于从参数中解析和展示任务
-            println("[CompactToolCallDisplay] 🎯 路由到EnhancedTodoDisplay: ${toolCall.name}, 参数键: ${toolCall.parameters.keys}")
-            EnhancedTodoDisplay(toolCall)
-        }
-        
+
         // Glob 文件匹配结果展示
         toolCall.name.contains("Glob", ignoreCase = true) -> {
             FileMatchResultDisplay(toolCall)

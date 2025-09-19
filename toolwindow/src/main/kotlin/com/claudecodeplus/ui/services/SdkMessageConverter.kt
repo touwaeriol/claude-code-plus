@@ -140,16 +140,19 @@ object SdkMessageConverter {
         val toolCalls = mutableListOf<ToolCall>()
         val orderedElements = mutableListOf<MessageTimelineItem>()
 
+        // 智能上下文感知：跟踪TodoWrite工具
+        var lastToolWasTodoWrite = false
+
         message.content.forEach { contentBlock ->
             when (contentBlock) {
                 is TextBlock -> {
-                    // 过滤掉TodoWrite工具的标准结果文本
                     val text = contentBlock.text
-                    val isTodoWriteResult = text.contains("Todos have been modified successfully") ||
-                                           text.contains("todo list has been updated") ||
-                                           text.contains("任务列表已更新")
 
-                    if (!isTodoWriteResult) {
+                    // 🎯 智能过滤：如果上一个是TodoWrite工具，直接跳过后续的结果文本
+                    if (lastToolWasTodoWrite && text.contains("Todos have been modified successfully", ignoreCase = true)) {
+                        println("[SdkMessageConverter] 🎯 智能过滤：跳过TodoWrite结果文本: \"${text.take(50)}...\"")
+                        lastToolWasTodoWrite = false // 重置标志
+                    } else {
                         textContent.append(text)
                         orderedElements.add(
                             MessageTimelineItem.ContentItem(
@@ -157,8 +160,6 @@ object SdkMessageConverter {
                                 timestamp = System.currentTimeMillis()
                             )
                         )
-                    } else {
-                        println("[SdkMessageConverter] 🔇 过滤TodoWrite结果文本: ${text.take(50)}...")
                     }
                 }
                 is ThinkingBlock -> {
@@ -170,7 +171,26 @@ object SdkMessageConverter {
                         )
                     )
                 }
+                is SpecificToolUse -> {
+                    // 🎯 核心改进：现在直接处理具体的工具类型
+                    val toolCall = convertSpecificToolUse(contentBlock)
+                    toolCalls.add(toolCall)
+                    orderedElements.add(
+                        MessageTimelineItem.ToolCallItem(
+                            toolCall = toolCall,
+                            timestamp = System.currentTimeMillis()
+                        )
+                    )
+
+                    // 🎯 设置标志：如果是TodoWrite工具
+                    if (contentBlock is TodoWriteToolUse) {
+                        lastToolWasTodoWrite = true
+                        println("[SdkMessageConverter] 🎯 检测到TodoWriteToolUse，设置标志过滤后续结果文本")
+                    }
+                }
                 is ToolUseBlock -> {
+                    // 🔄 向后兼容：处理可能仍然存在的旧ToolUseBlock类型
+                    println("[SdkMessageConverter] ⚠️ 遇到旧的ToolUseBlock类型，建议检查MessageParser配置")
                     val toolCall = convertToolUseBlock(contentBlock)
                     toolCalls.add(toolCall)
                     orderedElements.add(
@@ -181,33 +201,26 @@ object SdkMessageConverter {
                     )
                 }
                 is ToolResultBlock -> {
-                    // 🎯 关键修复：确保TodoWrite工具调用在当前消息中保持可见
+                    // 处理工具结果：查找对应的工具调用并更新其结果
                     val targetToolCall = toolCalls.find { it.id == contentBlock.toolUseId }
-                    val isTodoWriteTool = targetToolCall?.name?.contains("TodoWrite", ignoreCase = true) == true
+                    if (targetToolCall != null) {
+                        val hasError = contentBlock.isError == true
+                        val outputContent = contentBlock.content.toString()
 
-                    if (isTodoWriteTool) {
-                        // TodoWrite工具：在当前消息中更新状态，确保工具调用保持可见
-                        if (targetToolCall != null) {
-                            val hasError = contentBlock.isError == true
-                            val outputContent = contentBlock.content.toString()
+                        // 更新工具调用的结果和状态（使用copy()保留originalSpecificTool）
+                        val updatedToolCall = targetToolCall.copy(
+                            result = if (hasError) {
+                                ToolResult.Failure(error = outputContent, details = null)
+                            } else {
+                                ToolResult.Success(output = outputContent, summary = outputContent.take(100))
+                            },
+                            status = if (hasError) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
+                            endTime = System.currentTimeMillis()
+                        )
 
-                            val updatedToolCall = targetToolCall.copy(
-                                result = if (hasError) {
-                                    ToolResult.Failure(error = outputContent, details = null)
-                                } else {
-                                    ToolResult.Success(
-                                        output = outputContent,
-                                        summary = "任务列表已更新"
-                                    )
-                                },
-                                status = if (hasError) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
-                                endTime = System.currentTimeMillis()
-                            )
-
-                            val index = toolCalls.indexOf(targetToolCall)
-                            toolCalls[index] = updatedToolCall
-                            println("[SdkMessageConverter] 📝 TodoWrite工具保持在当前消息可见: ${targetToolCall.id} -> ${updatedToolCall.status}")
-                        }
+                        // 替换列表中的工具调用
+                        val index = toolCalls.indexOf(targetToolCall)
+                        toolCalls[index] = updatedToolCall
                     }
 
                     // 🎯 跨消息工具调用关联：使用SessionObject的全局方法
@@ -234,15 +247,11 @@ object SdkMessageConverter {
                         } catch (e: Exception) {
                             println("[SdkMessageConverter] ⚠️ 调用SessionObject.updateToolCallStatus失败: ${e.message}")
                             // 回退到原有逻辑
-                            if (!isTodoWriteTool) {
-                                handleToolResultFallback(contentBlock, toolCalls)
-                            }
-                        }
-                    } else {
-                        // 没有SessionObject时，使用原有逻辑（但TodoWrite除外）
-                        if (!isTodoWriteTool) {
                             handleToolResultFallback(contentBlock, toolCalls)
                         }
+                    } else {
+                        // 没有SessionObject时，使用原有逻辑
+                        handleToolResultFallback(contentBlock, toolCalls)
                     }
                 }
             }
@@ -350,22 +359,68 @@ object SdkMessageConverter {
     }
 
     /**
-     * 转换工具使用块为 ToolCall
+     * 转换具体工具使用类型为 ToolCall
+     * 🎯 核心改进：利用具体工具类型的强类型属性，无需手动解析JSON参数
+     */
+    private fun convertSpecificToolUse(specificTool: SpecificToolUse): ToolCall {
+        // 🎯 关键改进：直接使用具体工具类型的强类型参数
+        val parameters = specificTool.getTypedParameters()
+        val toolName = specificTool.toolType.toolName
+
+        // 🔍 TodoWrite 工具专用调试日志
+        if (specificTool is TodoWriteToolUse) {
+            println("[SdkMessageConverter] 🔍 TodoWrite工具（强类型）:")
+            println("[SdkMessageConverter] - 工具类型: ${specificTool::class.simpleName}")
+            println("[SdkMessageConverter] - 任务数量: ${specificTool.todos.size}")
+            println("[SdkMessageConverter] - 强类型参数: $parameters")
+            specificTool.todos.forEachIndexed { index, todo ->
+                println("[SdkMessageConverter] - Todo[$index]: ${todo.content} (${todo.status})")
+            }
+        }
+
+        // 🎯 演示instanceof检查的强大功能
+        when (specificTool) {
+            is BashToolUse -> {
+                println("[SdkMessageConverter] 🔧 Bash工具: ${specificTool.command}")
+                specificTool.description?.let { println("  描述: $it") }
+            }
+            is EditToolUse -> {
+                println("[SdkMessageConverter] ✏️ 编辑工具: ${specificTool.filePath}")
+                println("  替换: ${specificTool.oldString} → ${specificTool.newString}")
+            }
+            is ReadToolUse -> {
+                println("[SdkMessageConverter] 📖 读取工具: ${specificTool.filePath}")
+                specificTool.offset?.let { println("  偏移: $it") }
+                specificTool.limit?.let { println("  限制: $it") }
+            }
+            is McpToolUse -> {
+                println("[SdkMessageConverter] 🔌 MCP工具: ${specificTool.serverName}.${specificTool.functionName}")
+                println("  参数: ${specificTool.parameters}")
+            }
+            is TodoWriteToolUse -> {
+                // 已在上面专门处理
+            }
+            else -> {
+                println("[SdkMessageConverter] 🔧 其他工具: ${specificTool::class.simpleName}")
+            }
+        }
+
+        return ToolCall(
+            id = specificTool.id,
+            name = toolName,
+            specificTool = specificTool,  // 🎯 核心改进：保存具体工具实例到ToolCall
+            parameters = parameters,
+            status = ToolCallStatus.RUNNING,
+            result = null, // 结果会在后续的 ToolResultBlock 中设置
+            startTime = System.currentTimeMillis()
+        )
+    }
+
+    /**
+     * 转换工具使用块为 ToolCall (向后兼容)
      */
     private fun convertToolUseBlock(toolUse: ToolUseBlock): ToolCall {
         val parameters = parseToolParameters(toolUse.input)
-
-        // 🔍 TodoWrite 工具专用调试日志
-        if (toolUse.name == "TodoWrite") {
-            println("[SdkMessageConverter] 🔍 TodoWrite工具参数解析:")
-            println("[SdkMessageConverter] - 工具名称: ${toolUse.name}")
-            println("[SdkMessageConverter] - 原始输入: ${toolUse.input}")
-            println("[SdkMessageConverter] - 解析后参数: $parameters")
-            println("[SdkMessageConverter] - 参数键: ${parameters.keys}")
-            parameters.forEach { (key, value) ->
-                println("[SdkMessageConverter] - $key: ${value::class.simpleName} = $value")
-            }
-        }
 
         return ToolCall(
             id = toolUse.id,
