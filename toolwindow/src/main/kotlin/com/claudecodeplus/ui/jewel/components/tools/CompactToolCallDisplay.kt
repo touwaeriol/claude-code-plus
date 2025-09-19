@@ -31,6 +31,7 @@ import com.claudecodeplus.ui.models.ToolResult
 import com.claudecodeplus.ui.jewel.components.tools.*
 import com.claudecodeplus.ui.jewel.components.tools.output.*
 import com.claudecodeplus.ui.jewel.components.tools.EnhancedTodoDisplay
+import com.claudecodeplus.ui.jewel.components.tools.TypedToolCallDisplay
 import com.claudecodeplus.sdk.types.TodoWriteToolUse
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
@@ -332,7 +333,17 @@ private fun ToolCallDetails(
                         
                         // 有结果的工具调用显示格式化结果
                         toolCall.result != null -> {
-                            formatToolResult(toolCall)
+                            // 🎯 优先使用新的类型安全展示系统
+                            if (toolCall.specificTool != null) {
+                                TypedToolCallDisplay(
+                                    toolCall = toolCall,
+                                    showDetails = true,
+                                    ideIntegration = null  // 这里可以传递ideIntegration
+                                )
+                            } else {
+                                // 回退到原有展示逻辑
+                                formatToolResult(toolCall)
+                            }
                         }
                         
                         // 失败状态但没有结果对象的情况

@@ -165,13 +165,18 @@ class MessageParser {
                 ThinkingBlock(thinking, signature)
             }
             "tool_use" -> {
-                val id = jsonObject["id"]?.jsonPrimitive?.content 
+                val id = jsonObject["id"]?.jsonPrimitive?.content
                     ?: throw MessageParsingException("Missing 'id' in tool_use block")
-                val name = jsonObject["name"]?.jsonPrimitive?.content 
+                val name = jsonObject["name"]?.jsonPrimitive?.content
                     ?: throw MessageParsingException("Missing 'name' in tool_use block")
-                val input = jsonObject["input"] 
+                val input = jsonObject["input"]
                     ?: throw MessageParsingException("Missing 'input' in tool_use block")
-                ToolUseBlock(id, name, input)
+
+                // 创建基础的ToolUseBlock
+                val basicToolUse = ToolUseBlock(id, name, input)
+
+                // 使用ToolTypeParser将其转换为具体的工具类型
+                ToolTypeParser.parseToolUseBlock(basicToolUse)
             }
             "tool_result" -> {
                 val toolUseId = jsonObject["tool_use_id"]?.jsonPrimitive?.content 

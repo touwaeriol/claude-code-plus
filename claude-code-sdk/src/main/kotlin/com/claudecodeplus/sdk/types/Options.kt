@@ -44,46 +44,62 @@ sealed interface McpServerConfig {
 
 /**
  * Claude Code SDK options.
+ * Based on Python SDK ClaudeCodeOptions with additional Kotlin-specific enhancements.
  */
 data class ClaudeCodeOptions(
     // Tool configuration
     val allowedTools: List<String> = emptyList(),
     val disallowedTools: List<String> = emptyList(),
-    
+
     // System prompts
     val systemPrompt: String? = null,
     val appendSystemPrompt: String? = null,
-    
+
     // MCP servers (can be McpServerConfig or McpServer instances)
     val mcpServers: Map<String, Any> = emptyMap(),
-    
+
     // Permission settings
     val permissionMode: PermissionMode? = null,
     val permissionPromptToolName: String? = null,
     val canUseTool: CanUseTool? = null,
-    
+
     // Session control
     val continueConversation: Boolean = false,
     val resume: String? = null,
     val maxTurns: Int? = null,
-    
+    val maxThinkingTokens: Int = 8000,
+
     // Model configuration
     val model: String? = null,
-    
+
     // Environment
     val cwd: Path? = null,
     val settings: String? = null,
     val addDirs: List<Path> = emptyList(),
     val env: Map<String, String> = emptyMap(),
-    
+
     // Hook configurations
     val hooks: Map<HookEvent, List<HookMatcher>>? = null,
-    
+
     // Extra CLI arguments
     val extraArgs: Map<String, String?> = emptyMap(),
-    
+
     // Debug settings
-    val debugStderr: Any? = null // File-like object for debug output
+    val debugStderr: Any? = null, // File-like object for debug output
+
+    // Advanced options from Python SDK
+    val timeout: Long? = null, // Timeout in milliseconds
+    val verbose: Boolean = false,
+    val print: Boolean = false, // Enable print mode
+    val compact: Boolean = false, // Enable compact mode
+    val maxTokens: Int? = null, // Max tokens limit
+    val temperature: Double? = null, // Model temperature
+    val topP: Double? = null, // Top-p sampling
+    val stopSequences: List<String> = emptyList(),
+
+    // Streaming configuration
+    val stream: Boolean = false,
+    val streamingCallback: ((String) -> Unit)? = null
 )
 
 /**

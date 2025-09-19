@@ -33,11 +33,11 @@
       "Read(/Users/erio/codes/idea/intellij-community/platform/jewel/ui/generated/org/jetbrains/jewel/ui/icons/**)",
       "WebFetch(domain:platform.jetbrains.com)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:plugins.jetbrains.com)"
+      "WebFetch(domain:plugins.jetbrains.com)",
+      "Read(//Users/erio/codes/python/claude-code-sdk-python/src/claude_code_sdk/**)"
     ],
     "deny": [],
-    "additionalDirectories": [
-    ]
+    "additionalDirectories": []
   },
   "enabledMcpjsonServers": [
     "spec-workflow",

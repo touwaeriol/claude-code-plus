@@ -316,7 +316,7 @@ class MessageParserTest {
                 "content": [
                     {"type": "text", "text": "This is text"},
                     {"type": "thinking", "thinking": "Thinking process", "signature": "sig123"},
-                    {"type": "tool_use", "id": "tool1", "name": "Read", "input": {"file": "test.txt"}},
+                    {"type": "tool_use", "id": "tool1", "name": "Read", "input": {"file_path": "test.txt"}},
                     {"type": "tool_result", "tool_use_id": "tool1", "content": "File contents", "is_error": false}
                 ],
                 "model": "claude-3-5-sonnet-20241022"
@@ -332,7 +332,7 @@ class MessageParserTest {
 
         assertTrue(content[0] is TextBlock)
         assertTrue(content[1] is ThinkingBlock)
-        assertTrue(content[2] is ToolUseBlock)
+        assertTrue(content[2] is ReadToolUse)  // 现在应该是具体的工具类型
         assertTrue(content[3] is ToolResultBlock)
 
         println("✅ 所有内容块类型都能正确解析")

@@ -45,6 +45,12 @@
 #### 技术文档
 *   **`SDK迁移指南.md`**: Claude CLI SDK 迁移指南，包含版本更新和API变更说明
 
+#### 官方文档链接
+*   **Claude Code SDK 官方文档**: https://docs.claude.com/en/docs/claude-code/sdk/sdk-python
+    - 官方SDK文档，包含Python SDK的完整API参考
+    - 涵盖安装、配置、使用示例和最佳实践
+    - 最新功能和更新的权威来源
+
 #### 部署和使用指南
 *   **`部署指南.md`**: Claude Code Plus 的部署说明，作为 IntelliJ IDEA 插件的部署方式和配置。
 *   **`快速开始.md`**: 插件快速入门指南，包括如何使用插件、功能概览（如多标签对话和上下文管理）以及键盘快捷键摘要。

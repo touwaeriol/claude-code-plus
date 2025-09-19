@@ -647,8 +647,8 @@ enum class ToolType {
 data class ToolCall(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
-    // val tool: com.claudecodeplus.sdk.Tool? = null,  // 新的工具类型对象 - 暂时禁用
-    @Deprecated("Use tool property instead")
+    val specificTool: com.claudecodeplus.sdk.types.SpecificToolUse? = null,  // 🎯 新增：存储具体工具类型实例
+    @Deprecated("Use specificTool property instead")
     val toolType: ToolType = ToolType.OTHER,  // 保留旧的枚举以保持兼容性
     val displayName: String = name,
     val parameters: Map<String, Any> = emptyMap(),

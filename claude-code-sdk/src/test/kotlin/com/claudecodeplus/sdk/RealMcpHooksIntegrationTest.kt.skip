@@ -228,8 +228,14 @@ class RealMcpHooksIntegrationTest {
                                             println("   ✅ 确认调用了 MCP 工具!")
                                         }
                                     }
+                                    else -> {
+                                        println("📝 其他内容块: ${block::class.simpleName}")
+                                    }
                                     is ThinkingBlock -> {
                                         println("🤔 Claude 思考: ${block.thinking}")
+                                    }
+                                    else -> {
+                                        println("📝 其他内容块: ${block::class.simpleName}")
                                     }
                                     is ToolResultBlock -> {
                                         println("🔧 工具结果: ${block.content}")
@@ -285,6 +291,9 @@ class RealMcpHooksIntegrationTest {
                                     is ThinkingBlock -> {
                                         println("🤔 Claude 思考: ${block.thinking}")
                                     }
+                                    else -> {
+                                        println("📝 其他内容块: ${block::class.simpleName}")
+                                    }
                                     is ToolResultBlock -> {
                                         println("🔧 工具结果: ${block.content}")
                                     }
@@ -330,6 +339,9 @@ class RealMcpHooksIntegrationTest {
                                     }
                                     is ThinkingBlock -> {
                                         println("🤔 Claude 思考: ${block.thinking}")
+                                    }
+                                    else -> {
+                                        println("📝 其他内容块: ${block::class.simpleName}")
                                     }
                                     is ToolResultBlock -> {
                                         println("🔧 工具结果: ${block.content}")
@@ -454,6 +466,9 @@ class RealMcpHooksIntegrationTest {
                                     }
                                     is ThinkingBlock -> {
                                         println("🤔 Claude 思考: ${block.thinking}")
+                                    }
+                                    else -> {
+                                        println("📝 其他内容块: ${block::class.simpleName}")
                                     }
                                     is ToolResultBlock -> {
                                         println("🔧 工具结果: ${block.content}")
