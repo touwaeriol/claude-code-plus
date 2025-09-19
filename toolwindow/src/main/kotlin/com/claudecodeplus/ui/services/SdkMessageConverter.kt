@@ -27,7 +27,7 @@ object SdkMessageConverter {
         logger.info("🔄 [SdkMessageConverter] 转换SDK消息: ${sdkMessage::class.simpleName}")
         return when (sdkMessage) {
             is UserMessage -> convertUserMessage(sdkMessage)
-            is AssistantMessage -> convertAssistantMessage(sdkMessage)
+            is AssistantMessage -> convertAssistantMessage(sdkMessage, null) // 使用统一的方法，传递null作为sessionObject
             is SystemMessage -> convertSystemMessage(sdkMessage)
             is ResultMessage -> convertResultMessage(sdkMessage)
         }
@@ -130,109 +130,6 @@ object SdkMessageConverter {
         )
     }
 
-    /**
-     * 将助手消息转换为 EnhancedMessage
-     */
-    private fun convertAssistantMessage(message: AssistantMessage): EnhancedMessage {
-        // 解析内容块
-        val textContent = StringBuilder()
-        val toolCalls = mutableListOf<ToolCall>()
-        val orderedElements = mutableListOf<MessageTimelineItem>()
-
-        message.content.forEach { contentBlock ->
-            when (contentBlock) {
-                is TextBlock -> {
-                    textContent.append(contentBlock.text)
-                    orderedElements.add(
-                        MessageTimelineItem.ContentItem(
-                            content = contentBlock.text,
-                            timestamp = System.currentTimeMillis()
-                        )
-                    )
-                }
-                is ThinkingBlock -> {
-                    // 思考过程作为特殊的文本项添加
-                    orderedElements.add(
-                        MessageTimelineItem.ContentItem(
-                            content = "思考: ${contentBlock.thinking}",
-                            timestamp = System.currentTimeMillis()
-                        )
-                    )
-                }
-                is ToolUseBlock -> {
-                    val toolCall = convertToolUseBlock(contentBlock)
-                    toolCalls.add(toolCall)
-                    orderedElements.add(
-                        MessageTimelineItem.ToolCallItem(
-                            toolCall = toolCall,
-                            timestamp = System.currentTimeMillis()
-                        )
-                    )
-                }
-                is ToolResultBlock -> {
-                    // 处理工具结果：查找对应的工具调用并更新其结果
-                    val targetToolCall = toolCalls.find { it.id == contentBlock.toolUseId }
-                    if (targetToolCall != null) {
-                        // 判断是否有错误（安全地处理可空的Boolean）
-                        val hasError = contentBlock.isError == true
-                        val outputContent = contentBlock.content.toString()
-
-                        // 更新工具调用的结果和状态
-                        val updatedToolCall = targetToolCall.copy(
-                            result = if (hasError) {
-                                ToolResult.Failure(
-                                    error = outputContent,
-                                    details = null
-                                )
-                            } else {
-                                ToolResult.Success(
-                                    output = outputContent,
-                                    summary = if (outputContent.length > 100) "${outputContent.take(100)}..." else outputContent
-                                )
-                            },
-                            status = if (hasError) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
-                            endTime = System.currentTimeMillis()
-                        )
-
-                        // 替换列表中的工具调用
-                        val index = toolCalls.indexOf(targetToolCall)
-                        toolCalls[index] = updatedToolCall
-
-                        println("[SdkMessageConverter] 🔧 更新工具调用结果: ${targetToolCall.name} (${targetToolCall.id}) -> ${updatedToolCall.status}")
-                    } else {
-                        println("[SdkMessageConverter] ⚠️ 未找到工具调用ID: ${contentBlock.toolUseId}")
-                    }
-                }
-            }
-        }
-
-        // 转换 Token 使用信息
-        val tokenUsage = message.tokenUsage?.let { usage ->
-            println("🔍 [SdkMessageConverter] Token使用详情:")
-            println("  - inputTokens: ${usage.inputTokens}")
-            println("  - outputTokens: ${usage.outputTokens}")
-            println("  - cacheCreationInputTokens: ${usage.cacheCreationInputTokens}")
-            println("  - cacheReadInputTokens: ${usage.cacheReadInputTokens}")
-
-            EnhancedMessage.TokenUsage(
-                inputTokens = usage.inputTokens,
-                outputTokens = usage.outputTokens,
-                cacheCreationTokens = usage.cacheCreationInputTokens ?: 0,
-                cacheReadTokens = usage.cacheReadInputTokens ?: 0
-            )
-        }
-
-        return EnhancedMessage(
-            id = UUID.randomUUID().toString(),
-            role = MessageRole.ASSISTANT,
-            content = textContent.toString(),
-            timestamp = System.currentTimeMillis(),
-            toolCalls = toolCalls,
-            orderedElements = orderedElements,
-            tokenUsage = tokenUsage,
-            status = MessageStatus.COMPLETE
-        )
-    }
 
     /**
      * 将助手消息转换为 EnhancedMessage，支持跨消息工具调用关联
@@ -246,13 +143,23 @@ object SdkMessageConverter {
         message.content.forEach { contentBlock ->
             when (contentBlock) {
                 is TextBlock -> {
-                    textContent.append(contentBlock.text)
-                    orderedElements.add(
-                        MessageTimelineItem.ContentItem(
-                            content = contentBlock.text,
-                            timestamp = System.currentTimeMillis()
+                    // 过滤掉TodoWrite工具的标准结果文本
+                    val text = contentBlock.text
+                    val isTodoWriteResult = text.contains("Todos have been modified successfully") ||
+                                           text.contains("todo list has been updated") ||
+                                           text.contains("任务列表已更新")
+
+                    if (!isTodoWriteResult) {
+                        textContent.append(text)
+                        orderedElements.add(
+                            MessageTimelineItem.ContentItem(
+                                content = text,
+                                timestamp = System.currentTimeMillis()
+                            )
                         )
-                    )
+                    } else {
+                        println("[SdkMessageConverter] 🔇 过滤TodoWrite结果文本: ${text.take(50)}...")
+                    }
                 }
                 is ThinkingBlock -> {
                     // 思考过程作为特殊的文本项添加
@@ -274,6 +181,35 @@ object SdkMessageConverter {
                     )
                 }
                 is ToolResultBlock -> {
+                    // 🎯 关键修复：确保TodoWrite工具调用在当前消息中保持可见
+                    val targetToolCall = toolCalls.find { it.id == contentBlock.toolUseId }
+                    val isTodoWriteTool = targetToolCall?.name?.contains("TodoWrite", ignoreCase = true) == true
+
+                    if (isTodoWriteTool) {
+                        // TodoWrite工具：在当前消息中更新状态，确保工具调用保持可见
+                        if (targetToolCall != null) {
+                            val hasError = contentBlock.isError == true
+                            val outputContent = contentBlock.content.toString()
+
+                            val updatedToolCall = targetToolCall.copy(
+                                result = if (hasError) {
+                                    ToolResult.Failure(error = outputContent, details = null)
+                                } else {
+                                    ToolResult.Success(
+                                        output = outputContent,
+                                        summary = "任务列表已更新"
+                                    )
+                                },
+                                status = if (hasError) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
+                                endTime = System.currentTimeMillis()
+                            )
+
+                            val index = toolCalls.indexOf(targetToolCall)
+                            toolCalls[index] = updatedToolCall
+                            println("[SdkMessageConverter] 📝 TodoWrite工具保持在当前消息可见: ${targetToolCall.id} -> ${updatedToolCall.status}")
+                        }
+                    }
+
                     // 🎯 跨消息工具调用关联：使用SessionObject的全局方法
                     if (sessionObject != null) {
                         try {
@@ -298,11 +234,15 @@ object SdkMessageConverter {
                         } catch (e: Exception) {
                             println("[SdkMessageConverter] ⚠️ 调用SessionObject.updateToolCallStatus失败: ${e.message}")
                             // 回退到原有逻辑
-                            handleToolResultFallback(contentBlock, toolCalls)
+                            if (!isTodoWriteTool) {
+                                handleToolResultFallback(contentBlock, toolCalls)
+                            }
                         }
                     } else {
-                        // 没有SessionObject时，使用原有逻辑
-                        handleToolResultFallback(contentBlock, toolCalls)
+                        // 没有SessionObject时，使用原有逻辑（但TodoWrite除外）
+                        if (!isTodoWriteTool) {
+                            handleToolResultFallback(contentBlock, toolCalls)
+                        }
                     }
                 }
             }
@@ -413,10 +353,24 @@ object SdkMessageConverter {
      * 转换工具使用块为 ToolCall
      */
     private fun convertToolUseBlock(toolUse: ToolUseBlock): ToolCall {
+        val parameters = parseToolParameters(toolUse.input)
+
+        // 🔍 TodoWrite 工具专用调试日志
+        if (toolUse.name == "TodoWrite") {
+            println("[SdkMessageConverter] 🔍 TodoWrite工具参数解析:")
+            println("[SdkMessageConverter] - 工具名称: ${toolUse.name}")
+            println("[SdkMessageConverter] - 原始输入: ${toolUse.input}")
+            println("[SdkMessageConverter] - 解析后参数: $parameters")
+            println("[SdkMessageConverter] - 参数键: ${parameters.keys}")
+            parameters.forEach { (key, value) ->
+                println("[SdkMessageConverter] - $key: ${value::class.simpleName} = $value")
+            }
+        }
+
         return ToolCall(
             id = toolUse.id,
             name = toolUse.name,
-            parameters = parseToolParameters(toolUse.input),
+            parameters = parameters,
             status = ToolCallStatus.RUNNING,
             result = null, // 结果会在后续的 ToolResultBlock 中设置
             startTime = System.currentTimeMillis()
@@ -424,23 +378,55 @@ object SdkMessageConverter {
     }
 
     /**
-     * 解析工具参数
+     * 解析工具参数 - 支持嵌套的JSON结构
      */
     private fun parseToolParameters(input: JsonElement): Map<String, Any> {
         return try {
             when (input) {
                 is JsonObject -> {
                     input.jsonObject.mapValues { (_, value) ->
-                        when (value) {
-                            is JsonPrimitive -> value.content
-                            else -> value.toString()
-                        }
+                        parseJsonElement(value)
                     }
                 }
-                else -> mapOf("input" to input.toString())
+                else -> mapOf("input" to parseJsonElement(input))
             }
         } catch (e: Exception) {
             mapOf("input" to input.toString())
+        }
+    }
+
+    /**
+     * 递归解析JsonElement，保持嵌套结构
+     */
+    private fun parseJsonElement(element: JsonElement): Any {
+        return when (element) {
+            is JsonPrimitive -> {
+                when {
+                    element.isString -> element.content
+                    element.booleanOrNull != null -> element.boolean
+                    element.intOrNull != null -> element.int
+                    element.longOrNull != null -> element.long
+                    element.doubleOrNull != null -> element.double
+                    else -> element.content
+                }
+            }
+            is JsonArray -> {
+                // 递归解析数组中的每个元素
+                val result = element.map { parseJsonElement(it) }
+                println("[SdkMessageConverter] 解析JsonArray: 包含 ${result.size} 个元素")
+                result
+            }
+            is JsonObject -> {
+                // 递归解析对象中的每个字段
+                val result = element.mapValues { (key, value) ->
+                    val parsedValue = parseJsonElement(value)
+                    println("[SdkMessageConverter] 解析JsonObject字段: $key -> ${parsedValue::class.simpleName}")
+                    parsedValue
+                }
+                println("[SdkMessageConverter] 解析JsonObject完成: ${result.keys}")
+                result
+            }
+            else -> element.toString()
         }
     }
 

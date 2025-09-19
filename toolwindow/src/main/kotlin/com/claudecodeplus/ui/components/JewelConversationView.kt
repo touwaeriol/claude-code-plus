@@ -261,7 +261,7 @@ private fun MessageBubble(
                             }
                             is MessageTimelineItem.ContentItem -> {
                                 if (element.content.isNotBlank()) {
-                                    MarkdownRenderer(
+                                    SimpleMarkdownRenderer(
                                         markdown = element.content,
                                         modifier = Modifier.fillMaxWidth()
                                     )
@@ -293,7 +293,7 @@ private fun MessageBubble(
                     
                     // 然后显示消息内容
                     if (message.content.isNotBlank()) {
-                        MarkdownRenderer(
+                        SimpleMarkdownRenderer(
                             markdown = message.content,
                             modifier = Modifier.fillMaxWidth()
                         )

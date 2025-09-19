@@ -573,10 +573,20 @@ class SessionObject(
             println("[SessionObject] ⚠️ 未找到包含工具调用ID $toolCallId 的消息")
         }
 
-        // 4. 如果完成，从运行列表中移除
+        // 4. 如果完成，从运行列表中移除（TodoWrite除外，需要保持可见以显示任务看板）
         if (status in listOf(ToolCallStatus.SUCCESS, ToolCallStatus.FAILED)) {
-            removeRunningToolCall(toolCallId)
-            println("[SessionObject] 🏁 工具调用已完成，从运行列表中移除: $toolCallId")
+            // 查找工具调用的名称
+            val toolCall = messages.flatMap { msg ->
+                msg.toolCalls.filter { it.id == toolCallId }
+            }.firstOrNull()
+
+            // TodoWrite工具不从运行列表中移除，保持在UI中可见
+            if (toolCall?.name != "TodoWrite") {
+                removeRunningToolCall(toolCallId)
+                println("[SessionObject] 🏁 工具调用已完成，从运行列表中移除: $toolCallId")
+            } else {
+                println("[SessionObject] 📝 TodoWrite工具调用完成，但保持可见以显示任务看板: $toolCallId")
+            }
         }
     }
     

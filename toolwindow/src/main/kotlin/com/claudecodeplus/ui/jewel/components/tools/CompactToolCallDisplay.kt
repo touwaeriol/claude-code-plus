@@ -30,6 +30,7 @@ import com.claudecodeplus.ui.models.ToolCallStatus
 import com.claudecodeplus.ui.models.ToolResult
 import com.claudecodeplus.ui.jewel.components.tools.*
 import com.claudecodeplus.ui.jewel.components.tools.output.*
+import com.claudecodeplus.ui.jewel.components.tools.EnhancedTodoDisplay
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.component.styling.TooltipStyle
@@ -1187,8 +1188,11 @@ private fun formatToolResult(toolCall: ToolCall) {
             CommandResultDisplay(toolCall)
         }
         
-        // TodoWrite 使用看板展示
+        // TodoWrite 使用看板展示 - 专注参数而非结果
         toolCall.name.contains("TodoWrite", ignoreCase = true) -> {
+            // TodoWrite工具的价值在于参数中的任务列表，而不是result中的确认消息
+            // 因此我们忽略result，专注于从参数中解析和展示任务
+            println("[CompactToolCallDisplay] 🎯 路由到EnhancedTodoDisplay: ${toolCall.name}, 参数键: ${toolCall.parameters.keys}")
             EnhancedTodoDisplay(toolCall)
         }
         

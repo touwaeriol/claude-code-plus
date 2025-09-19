@@ -287,18 +287,23 @@ private fun parseTodos(toolCall: ToolCall): List<EnhancedTodoItem> {
                 println("[EnhancedTodoDisplay] 处理第${index}个项目，类型：${item?.javaClass}")
                 when (item) {
                     is Map<*, *> -> {
+                        // 从Map中提取字段，兼容不同的数据格式
+                        val id = item["id"]?.toString() ?: (index + 1).toString()
                         val content = item["content"]?.toString() ?: ""
                         val status = item["status"]?.toString() ?: "pending"
+                        // activeForm是可选字段，如果不存在则使用content作为默认值
                         val activeForm = item["activeForm"]?.toString() ?: content
-                        
-                        println("[EnhancedTodoDisplay] ✅ Map项目 $index: content='$content', status='$status', activeForm='$activeForm'")
-                        
+                        // priority字段也是可选的
+                        val priority = item["priority"]?.toString() ?: "normal"
+
+                        println("[EnhancedTodoDisplay] ✅ Map项目 $index: id='$id', content='$content', status='$status', activeForm='$activeForm', priority='$priority'")
+
                         EnhancedTodoItem(
-                            id = (index + 1).toString(),
+                            id = id,
                             content = content,
                             status = status,
                             activeForm = activeForm,
-                            priority = "normal"
+                            priority = priority
                         )
                     }
                     else -> {

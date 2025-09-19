@@ -9,7 +9,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay
-import com.claudecodeplus.ui.jewel.components.MarkdownRenderer
+import com.claudecodeplus.ui.jewel.components.SimpleMarkdownRenderer
 import com.claudecodeplus.ui.jewel.components.tools.JumpingDots
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
@@ -55,22 +55,26 @@ fun AssistantMessageDisplay(
         
         // 显示工具调用（如果有）
         if (message.toolCalls.isNotEmpty()) {
+            println("[AssistantMessageDisplay] 🎯 显示工具调用: ${message.toolCalls.size} 个工具")
+            message.toolCalls.forEach { toolCall ->
+                println("[AssistantMessageDisplay] - 工具: ${toolCall.name} (ID: ${toolCall.id}, 状态: ${toolCall.status})")
+            }
             CompactToolCallDisplay(
                 toolCalls = message.toolCalls,
                 modifier = Modifier.fillMaxWidth(),
                 ideIntegration = ideIntegration,
                 onExpandedChange = onExpandedChange
             )
+        } else {
+            println("[AssistantMessageDisplay] ❌ 没有工具调用要显示")
         }
         
         // 显示主要文本内容
         if (message.content.isNotBlank()) {
-            SelectionContainer {
-                MarkdownRenderer(
-                    markdown = message.content,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            SimpleMarkdownRenderer(
+                markdown = message.content,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
         
         // 如果有按时间顺序的元素，也显示它们（用于流式内容）
@@ -82,12 +86,10 @@ fun AssistantMessageDisplay(
                     }
                     is MessageTimelineItem.ContentItem -> {
                         if (element.content.isNotBlank() && element.content != message.content) {
-                            SelectionContainer {
-                                MarkdownRenderer(
-                                    markdown = element.content,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
+                            SimpleMarkdownRenderer(
+                                markdown = element.content,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
                     is MessageTimelineItem.StatusItem -> {

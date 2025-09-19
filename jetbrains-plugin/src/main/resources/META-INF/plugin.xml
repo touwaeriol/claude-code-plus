@@ -3,7 +3,7 @@
     <name>Claude Code Plus</name>
     <vendor email="liuxiongfenglove@gmail.com" url="https://github.com/touwaeriol/claude-code-plus">Claude Code Plus Team</vendor>
     
-    <version>1.0.2</version>
+    <version>1.0.3</version>
     
     <description><![CDATA[
     <h2>Claude Code Plus - Advanced AI Programming Assistant</h2>
@@ -39,6 +39,16 @@
     ]]></description>
     
     <change-notes><![CDATA[
+    <h3>Version 1.0.3 - Architecture Modernization and Code Cleanup</h3>
+    <ul>
+        <li><strong>Architecture Refactoring:</strong> Completely removed cli-wrapper module and simplified project structure</li>
+        <li><strong>SDK Migration:</strong> Migrated essential services to claude-code-sdk module for better organization</li>
+        <li><strong>Performance Improvements:</strong> Eliminated 19,000+ lines of legacy code, reducing plugin size by ~88%</li>
+        <li><strong>Enhanced Token Statistics:</strong> Improved context usage indicators with visual progress rings</li>
+        <li><strong>Code Quality:</strong> Removed deprecated components and consolidated duplicate functionality</li>
+        <li><strong>Stability:</strong> Maintained full functionality while significantly simplifying codebase</li>
+    </ul>
+
     <h3>Version 1.0.2 - Performance and Stability Updates</h3>
     <ul>
         <li><strong>Performance Optimizations:</strong> Improved response times and reduced memory usage</li>
