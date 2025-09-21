@@ -1,4 +1,4 @@
-package com.claudecodeplus.ui.jewel
+package com.claudecodeplus.ui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -40,7 +40,7 @@ fun StandaloneChatView(
         com.claudecodeplus.ui.services.ProjectManager.getOrCreateProject(workingDirectory)
     }
     
-    ChatViewNew(
+    com.claudecodeplus.ui.components.ChatViewNew(
         unifiedSessionService = unifiedSessionService,
         workingDirectory = workingDirectory,
         fileIndexService = fileIndexService,

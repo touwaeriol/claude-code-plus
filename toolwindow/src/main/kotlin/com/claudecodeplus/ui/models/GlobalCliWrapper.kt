@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.models
+﻿package com.claudecodeplus.ui.models
 
+import com.claudecodeplus.core.logging.*
 import com.claudecodeplus.ui.services.ClaudeCodeSdkAdapter
 import kotlinx.coroutines.flow.Flow
 
@@ -24,7 +25,7 @@ object GlobalCliWrapper {
             val jsonString = buildJsonLikeString(enhancedMessage)
             callback(jsonString)
         }
-        println("[GlobalCliWrapper] 注册会话回调: sessionId=$key (通过 SDK 适配器)")
+    //         logD("[GlobalCliWrapper] 注册会话回调: sessionId=$key (通过 SDK 适配器)")
     }
 
     /**
@@ -34,7 +35,7 @@ object GlobalCliWrapper {
     fun unregisterSessionCallback(sessionId: String?) {
         val key = sessionId ?: "default"
         ClaudeCodeSdkAdapter.unregisterSessionCallback(key)
-        println("[GlobalCliWrapper] 注销会话回调: sessionId=$key (通过 SDK 适配器)")
+    //         logD("[GlobalCliWrapper] 注销会话回调: sessionId=$key (通过 SDK 适配器)")
     }
 
     /**
@@ -53,7 +54,7 @@ object GlobalCliWrapper {
      * 清理所有会话回调（兼容接口）
      */
     fun clearAllCallbacks() {
-        println("[GlobalCliWrapper] 清理所有会话回调 (通过 SDK 适配器)")
+    //         logD("[GlobalCliWrapper] 清理所有会话回调 (通过 SDK 适配器)")
         // SDK 适配器会在关闭会话时自动清理，这里提供兼容接口
     }
 
@@ -113,7 +114,7 @@ object GlobalCliWrapper {
     @Deprecated("使用 ClaudeCodeSdkAdapter 替代", ReplaceWith("ClaudeCodeSdkAdapter"))
     val instance: Any get() = object {
         fun setOutputLineCallback(callback: (String) -> Unit) {
-            println("[GlobalCliWrapper] setOutputLineCallback 已废弃，请使用 registerSessionCallback")
+    //             logD("[GlobalCliWrapper] setOutputLineCallback 已废弃，请使用 registerSessionCallback")
         }
     }
 }

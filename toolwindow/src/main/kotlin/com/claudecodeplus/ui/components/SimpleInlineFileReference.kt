@@ -1,4 +1,4 @@
-/*
+﻿/*
  * SimpleInlineFileReferenceClean.kt
  * 
  * 重构后的简化文件引用组件 - 移除重复代码，使用统一业务组件
@@ -7,6 +7,7 @@
 
 package com.claudecodeplus.ui.jewel.components
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -167,21 +168,21 @@ fun SimpleInlineFileReferenceHandler(
                 selectedIndex = 0
             },
             onKeyEvent = { keyEvent ->
-                println("🎹 [SimpleInlineFileReference] @ 符号弹窗接收键盘事件: key=${keyEvent.key}, selectedIndex=$selectedIndex, resultsSize=${selectionState.searchResults.size}")
+                logD("🎹 [SimpleInlineFileReference] @ 符号弹窗接收键盘事件: key=${keyEvent.key}, selectedIndex=$selectedIndex, resultsSize=${selectionState.searchResults.size}")
 
                 val handled = eventHandler.handleKeyEvent(
                     keyEvent = keyEvent,
                     selectedIndex = selectedIndex,
                     resultsSize = selectionState.searchResults.size,
                     onIndexChange = { newIndex ->
-                        println("🎹 [SimpleInlineFileReference] ✅ @ 符号弹窗更新选中索引: $selectedIndex → $newIndex")
+                        logD("🎹 [SimpleInlineFileReference] ✅ @ 符号弹窗更新选中索引: $selectedIndex → $newIndex")
                         selectedIndex = newIndex
                     },
                     onItemSelect = {
-                        println("🎹 [SimpleInlineFileReference] ✅ @ 符号弹窗选择文件: index=$selectedIndex")
+                        logD("🎹 [SimpleInlineFileReference] ✅ @ 符号弹窗选择文件: index=$selectedIndex")
                         if (selectedIndex in selectionState.searchResults.indices && selectionState.atPosition != null) {
                             val selectedFile = selectionState.searchResults[selectedIndex]
-                            println("🎹 [SimpleInlineFileReference] 选择的文件: ${selectedFile.relativePath}")
+                            logD("🎹 [SimpleInlineFileReference] 选择的文件: ${selectedFile.relativePath}")
                             contextManager.handleAtSymbolFileSelection(
                                 file = selectedFile,
                                 currentText = textFieldValue,
@@ -189,16 +190,16 @@ fun SimpleInlineFileReferenceHandler(
                             )
                             selectedIndex = 0
                         } else {
-                            println("🎹 [SimpleInlineFileReference] ❌ 无效选择: index=$selectedIndex, resultsSize=${selectionState.searchResults.size}, atPosition=${selectionState.atPosition}")
+                            logD("🎹 [SimpleInlineFileReference] ❌ 无效选择: index=$selectedIndex, resultsSize=${selectionState.searchResults.size}, atPosition=${selectionState.atPosition}")
                         }
                     },
                     onDismiss = {
-                        println("🎹 [SimpleInlineFileReference] ❌ @ 符号弹窗关闭")
+                        logD("🎹 [SimpleInlineFileReference] ❌ @ 符号弹窗关闭")
                         selectedIndex = 0
                     }
                 )
 
-                println("🎹 [SimpleInlineFileReference] @ 符号键盘事件处理结果: $handled")
+                logD("🎹 [SimpleInlineFileReference] @ 符号键盘事件处理结果: $handled")
                 handled
             }
         )
@@ -221,7 +222,7 @@ fun SimpleFilePopup(
     modifier: Modifier = Modifier,
     onPopupBoundsChanged: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null
 ) {
-    println("[SimpleFilePopup] @ 符号弹窗被调用")
+    logD("[SimpleFilePopup] @ 符号弹窗被调用")
     val config = FilePopupConfig(
         type = FilePopupType.AT_SYMBOL,
         anchorOffset = popupOffset
@@ -267,7 +268,7 @@ fun ButtonFilePopup(
     // 键盘模式状态
     isKeyboardMode: Boolean = false
 ) {
-    println("[ButtonFilePopup] Add Context 按钮弹窗被调用")
+    logD("[ButtonFilePopup] Add Context 按钮弹窗被调用")
     val config = FilePopupConfig(
         type = FilePopupType.ADD_CONTEXT,
         anchorOffset = popupOffset

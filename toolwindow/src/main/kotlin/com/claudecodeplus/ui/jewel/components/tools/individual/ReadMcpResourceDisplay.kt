@@ -28,15 +28,17 @@ fun ReadMcpResourceDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具头部信息
-        val subtitle = "${readMcpResourceTool.server}/${readMcpResourceTool.uri.substringAfterLast('/')}"
+        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        if (!showDetails) {
+            val subtitle = "${readMcpResourceTool.server}/${readMcpResourceTool.uri.substringAfterLast('/')}"
 
-        ToolHeaderDisplay(
-            icon = "📋",
-            toolName = "ReadMcpResource",
-            subtitle = subtitle,
-            status = toolCall.status
-        )
+            ToolHeaderDisplay(
+                icon = "📋",
+                toolName = "ReadMcpResource",
+                subtitle = subtitle,
+                status = toolCall.status
+            )
+        }
 
         // 显示资源内容
         if (showDetails && toolCall.result != null) {

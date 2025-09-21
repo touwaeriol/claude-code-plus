@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ContextUsageIndicator.kt
  * 
  * 上下文使用量指示器组件
@@ -7,6 +7,7 @@
 
 package com.claudecodeplus.ui.jewel.components
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -184,7 +185,7 @@ private fun calculateAccurateTokens(
     contexts: List<ContextReference>,
     sessionTokenUsage: EnhancedMessage.TokenUsage? = null
 ): Int {
-    println("\n🔧 [ContextUsage] 基于Claude Code原理的Token统计...")
+    logD("\n🔧 [ContextUsage] 基于Claude Code原理的Token统计...")
 
     // 🎯 实现Claude Code的VE函数：逆序遍历找最新usage
     val latestUsage = findLatestTokenUsage(messageHistory)
@@ -193,17 +194,17 @@ private fun calculateAccurateTokens(
         // 🎯 实现Claude Code的zY5函数：累加所有token类型
         val totalTokens = calculateTotalTokens(latestUsage)
 
-        println("    - 基于最新API调用的token统计:")
-        println("      • input_tokens: ${latestUsage.inputTokens}（当前完整上下文）")
-        println("      • output_tokens: ${latestUsage.outputTokens}（AI回复）")
-        println("      • cache_creation_tokens: ${latestUsage.cacheCreationTokens}")
-        println("      • cache_read_tokens: ${latestUsage.cacheReadTokens}")
-        println("      • 总计: $totalTokens tokens（用于92%判断的数字）")
-        println("      ✅ 与Claude Code的VE→HY5→zY5函数链完全一致")
+    logD("    - 基于最新API调用的token统计:")
+    logD("      • input_tokens: ${latestUsage.inputTokens}（当前完整上下文）")
+    logD("      • output_tokens: ${latestUsage.outputTokens}（AI回复）")
+    logD("      • cache_creation_tokens: ${latestUsage.cacheCreationTokens}")
+    logD("      • cache_read_tokens: ${latestUsage.cacheReadTokens}")
+    logD("      • 总计: $totalTokens tokens（用于92%判断的数字）")
+    logD("      ✅ 与Claude Code的VE→HY5→zY5函数链完全一致")
 
         return totalTokens
     } else {
-        println("    - 新会话，暂无API调用数据，显示0 tokens")
+    logD("    - 新会话，暂无API调用数据，显示0 tokens")
         return 0
     }
 }

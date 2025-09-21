@@ -24,11 +24,11 @@ class MessageProcessorImpl : MessageProcessor {
     
     override fun parseRealtimeMessage(jsonLine: String): ParseResult<EnhancedMessage> {
         return parseResultOf {
-            logD("开始解析实时消息: ${jsonLine.take(100)}...")
+    //             logD("开始解析实时消息: ${jsonLine.take(100)}...")
             
             // 先检查是否为JSON格式
             if (!jsonLine.trim().startsWith("{")) {
-                logD("非JSON格式消息，忽略")
+    //                 logD("非JSON格式消息，忽略")
                 return ParseResult.Ignored("非JSON内容")
             }
             
@@ -36,16 +36,16 @@ class MessageProcessorImpl : MessageProcessor {
             val messageType = jsonObject["type"]?.jsonPrimitive?.content
             val messageSubtype = jsonObject["subtype"]?.jsonPrimitive?.content
             
-            logD("消息类型: type=$messageType, subtype=$messageSubtype")
+    //             logD("消息类型: type=$messageType, subtype=$messageSubtype")
             
             // 过滤系统消息
             when {
                 messageType == "system" && messageSubtype == "init" -> {
-                    logD("系统初始化消息，忽略")
+    //                     logD("系统初始化消息，忽略")
                     return ParseResult.Ignored("系统初始化消息")
                 }
                 messageType == "result" -> {
-                    logD("结果摘要消息，忽略")
+    //                     logD("结果摘要消息，忽略")
                     return ParseResult.Ignored("结果摘要消息")
                 }
                 messageType == "error" -> {
@@ -54,14 +54,14 @@ class MessageProcessorImpl : MessageProcessor {
                     return ParseResult.Error("CLI错误: $errorMessage")
                 }
                 messageType == "system" && messageSubtype != null && messageSubtype != "init" -> {
-                    logD("系统子消息，忽略: $messageSubtype")
+    //                     logD("系统子消息，忽略: $messageSubtype")
                     return ParseResult.Ignored("系统消息: $messageSubtype")
                 }
             }
             
             // 检查是否为工具结果消息
             if (isToolResultMessage(jsonLine)) {
-                logD("工具结果消息，需要特殊处理")
+    //                 logD("工具结果消息，需要特殊处理")
                 return ParseResult.Ignored("工具结果消息，需要在上层处理")
             }
             
@@ -70,7 +70,7 @@ class MessageProcessorImpl : MessageProcessor {
                 "assistant" -> parseAssistantMessage(jsonObject)
                 "user" -> parseUserMessage(jsonObject)
                 else -> {
-                    logD("未知消息类型或无需处理: $messageType")
+    //                     logD("未知消息类型或无需处理: $messageType")
                     return ParseResult.Ignored("未知消息类型: $messageType")
                 }
             }
@@ -79,7 +79,7 @@ class MessageProcessorImpl : MessageProcessor {
     
     override fun parseHistoryMessage(sessionMessage: ClaudeSessionMessage): ParseResult<EnhancedMessage> {
         return parseResultOf {
-            logD("解析历史消息: type=${sessionMessage.type}")
+    //             logD("解析历史消息: type=${sessionMessage.type}")
             
             // 将历史消息转换为实时格式，然后复用实时解析逻辑
             val realtimeFormat = convertHistoryToRealtime(sessionMessage)
@@ -176,7 +176,7 @@ class MessageProcessorImpl : MessageProcessor {
         val contentArray = messageObj?.get("content")?.jsonArray
         val role = messageObj?.get("role")?.jsonPrimitive?.content ?: "assistant"
         
-        logD("解析助手消息，内容数组大小: ${contentArray?.size ?: 0}")
+    //         logD("解析助手消息，内容数组大小: ${contentArray?.size ?: 0}")
         
         // 提取文本内容
         val textContent = contentArray?.mapNotNull { contentElement ->
@@ -193,7 +193,7 @@ class MessageProcessorImpl : MessageProcessor {
         // 提取token使用信息
         val tokenUsage = extractTokenUsage(messageObj)
         
-        logD("助手消息解析完成: 文本长度=${textContent.length}, 工具调用=${toolCalls.size}")
+    //         logD("助手消息解析完成: 文本长度=${textContent.length}, 工具调用=${toolCalls.size}")
         
         return EnhancedMessage(
             id = UUID.randomUUID().toString(),
@@ -221,7 +221,7 @@ class MessageProcessorImpl : MessageProcessor {
             } else null
         }?.joinToString("") ?: ""
         
-        logD("用户消息解析完成: 文本长度=${textContent.length}")
+    //         logD("用户消息解析完成: 文本长度=${textContent.length}")
         
         return EnhancedMessage(
             id = UUID.randomUUID().toString(),

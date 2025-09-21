@@ -1,4 +1,4 @@
-/*
+﻿/*
  * InlineFileReference.kt
  * 
  * Cursor 风格的内联文件引用组件
@@ -7,6 +7,7 @@
 
 package com.claudecodeplus.ui.jewel.components
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -111,7 +112,7 @@ fun InlineFileReferenceHandler(
                     searchResults = results
                 } catch (e: Exception) {
                     searchResults = emptyList()
-                    println("[InlineFileReference] 搜索失败: ${e.message}")
+    logD("[InlineFileReference] 搜索失败: ${e.message}")
                 } finally {
                     isSearching = false
                 }

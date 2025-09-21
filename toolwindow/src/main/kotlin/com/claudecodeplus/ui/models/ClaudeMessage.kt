@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ClaudeMessage.kt
  *
  * 基于Kotlinx Serialization的Claude CLI消息类型定义
@@ -8,6 +8,7 @@
 
 package com.claudecodeplus.ui.models
 
+import com.claudecodeplus.core.logging.*
 import kotlinx.serialization.*
 import kotlinx.serialization.json.*
 
@@ -170,7 +171,7 @@ object SmartClaudeMessageSerializer : JsonTransformingSerializer<ClaudeMessage>(
 
             // 未知类型：降级处理
             else -> {
-                println("⚠️  [SmartClaudeMessageSerializer] 未知消息类型: type='$type', subtype='$subtype', message.role='$messageRole'")
+    //                 logD("⚠️  [SmartClaudeMessageSerializer] 未知消息类型: type='$type', subtype='$subtype', message.role='$messageRole'")
                 "unknown"
             }
         }

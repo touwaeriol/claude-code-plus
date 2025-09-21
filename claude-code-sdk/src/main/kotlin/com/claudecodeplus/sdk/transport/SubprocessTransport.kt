@@ -65,7 +65,25 @@ class SubprocessTransport(
             }
             
             logger.info("⚡ 启动Claude CLI进程...")
-            process = processBuilder.start()
+
+            // Windows下需要通过cmd来执行，否则ProcessBuilder无法识别.cmd文件
+            val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+            process = if (isWindows) {
+                logger.info("🪟 Windows系统，通过cmd /c执行命令")
+                val cmdCommand = mutableListOf("cmd", "/c")
+                cmdCommand.addAll(command)
+                ProcessBuilder(cmdCommand).apply {
+                    // 复制原有配置
+                    options.cwd?.let { directory(it.toFile()) }
+                    if (options.env.isNotEmpty()) {
+                        environment().putAll(options.env)
+                    }
+                    environment()["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kt-client"
+                }.start()
+            } else {
+                processBuilder.start()
+            }
+
             logger.info("✅ Claude CLI进程启动成功, PID: ${process?.pid()}")
 
             // 检查进程是否立即退出
@@ -333,47 +351,37 @@ class SubprocessTransport(
      * Find the Claude executable in the system.
      */
     private fun findClaudeExecutable(): String {
-        val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-        val executable = if (isWindows) "claude.cmd" else "claude"
-        
+        // 直接使用 "claude" 命令，让操作系统自动处理平台差异
+        // Windows会自动查找claude.cmd，Mac/Linux会执行claude脚本
+        val executable = "claude"
+
         // First try to find claude via which/where command
         try {
+            val isWindows = System.getProperty("os.name").lowercase().contains("windows")
             val whichCommand = if (isWindows) "where" else "which"
-            val process = ProcessBuilder(whichCommand, "claude").start()
+            val process = ProcessBuilder(whichCommand, executable).start()
             val result = process.inputStream.bufferedReader().readText().trim()
             if (process.waitFor() == 0 && result.isNotEmpty()) {
+                // 在Windows下，where命令可能返回多个结果（.cmd, .ps1等）
+                // 优先选择.cmd文件
+                if (isWindows) {
+                    val lines = result.lines()
+                    val cmdFile = lines.find { it.endsWith(".cmd") }
+                    if (cmdFile != null) {
+                        return cmdFile
+                    }
+                }
                 return result.lines().first() // Return first match
             }
         } catch (e: Exception) {
-            // Continue to manual search if which/where fails
+            logger.info("使用which/where查找失败，尝试直接使用'claude'命令")
         }
-        
-        // Check common installation locations
-        val homeDir = System.getProperty("user.home")
-        val paths = listOf(
-            "$homeDir/.npm-global/bin/$executable",
-            "/usr/local/bin/$executable", 
-            "/opt/homebrew/bin/$executable",
-            "$homeDir/.local/bin/$executable",
-            "$homeDir/node_modules/.bin/$executable",
-            "$homeDir/.yarn/bin/$executable"
-        )
-        
-        for (path in paths) {
-            if (Path.of(path).exists()) {
-                return path
-            }
-        }
-        
-        // Check if Node.js is installed
-        val nodeInstalled = isNodeInstalled()
-        
-        if (!nodeInstalled) {
-            throw CLINotFoundException.withInstallInstructions(nodeInstalled = false)
-        }
-        
-        // If we get here, Claude is not found but Node.js is installed
-        throw CLINotFoundException.withInstallInstructions(nodeInstalled = true)
+
+        // 如果which/where失败，直接返回"claude"
+        // 让ProcessBuilder尝试在PATH中查找
+        // 这模拟了用户在命令行中直接输入claude的行为
+        logger.info("直接使用'claude'命令，依赖系统PATH环境变量")
+        return executable
     }
     
     /**

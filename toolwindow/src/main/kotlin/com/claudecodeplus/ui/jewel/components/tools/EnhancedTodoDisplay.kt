@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.jewel.components.tools
+﻿package com.claudecodeplus.ui.jewel.components.tools
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -273,21 +274,21 @@ private data class EnhancedTodoItem(
  * 解析任务列表
  */
 private fun parseTodos(toolCall: ToolCall): List<EnhancedTodoItem> {
-    println("[EnhancedTodoDisplay] 开始解析TodoWrite工具调用")
-    println("[EnhancedTodoDisplay] 工具名称：${toolCall.name}")
+    //     logD("[EnhancedTodoDisplay] 开始解析TodoWrite工具调用")
+    //     logD("[EnhancedTodoDisplay] 工具名称：${toolCall.name}")
 
     // 检查是否有todos参数
     val todosParam = toolCall.parameters["todos"]
     if (todosParam == null) {
-        println("[EnhancedTodoDisplay] ❌ 未找到todos参数")
+    //         logD("[EnhancedTodoDisplay] ❌ 未找到todos参数")
         return emptyList()
     }
     
     return when (todosParam) {
         is List<*> -> {
-            println("[EnhancedTodoDisplay] 解析List类型，共${todosParam.size}个项目")
+    //             logD("[EnhancedTodoDisplay] 解析List类型，共${todosParam.size}个项目")
             todosParam.mapIndexed { index, item ->
-                println("[EnhancedTodoDisplay] 处理第${index}个项目，类型：${item?.javaClass}")
+    //                 logD("[EnhancedTodoDisplay] 处理第${index}个项目，类型：${item?.javaClass}")
                 when (item) {
                     is Map<*, *> -> {
                         // 从Map中提取字段，兼容不同的数据格式
@@ -299,7 +300,7 @@ private fun parseTodos(toolCall: ToolCall): List<EnhancedTodoItem> {
                         // priority字段也是可选的
                         val priority = item["priority"]?.toString() ?: "normal"
 
-                        println("[EnhancedTodoDisplay] ✅ Map项目 $index: id='$id', content='$content', status='$status', activeForm='$activeForm', priority='$priority'")
+    //                         logD("[EnhancedTodoDisplay] ✅ Map项目 $index: id='$id', content='$content', status='$status', activeForm='$activeForm', priority='$priority'")
 
                         EnhancedTodoItem(
                             id = id,
@@ -312,7 +313,7 @@ private fun parseTodos(toolCall: ToolCall): List<EnhancedTodoItem> {
                     else -> {
                         // 如果是字符串形式，尝试解析为简单任务
                         val content = item.toString()
-                        println("[EnhancedTodoDisplay] ⚠️ 简单项目 $index: '$content'")
+    //                         logD("[EnhancedTodoDisplay] ⚠️ 简单项目 $index: '$content'")
                         
                         EnhancedTodoItem(
                             id = (index + 1).toString(),
@@ -326,22 +327,22 @@ private fun parseTodos(toolCall: ToolCall): List<EnhancedTodoItem> {
             }
         }
         is String -> {
-            println("[EnhancedTodoDisplay] 解析JSON字符串类型")
+    //             logD("[EnhancedTodoDisplay] 解析JSON字符串类型")
             try {
                 // 使用 kotlinx.serialization.json 解析JSON字符串
                 val json = Json { ignoreUnknownKeys = true }
                 val todoList = json.decodeFromString<List<JsonObject>>(todosParam)
                 
-                println("[EnhancedTodoDisplay] ✅ JSON解析成功，共${todoList.size}个项目")
+    //                 logD("[EnhancedTodoDisplay] ✅ JSON解析成功，共${todoList.size}个项目")
                 
                 todoList.mapIndexed { index, jsonObj ->
-                    println("[EnhancedTodoDisplay] 处理第${index}个JSON项目")
+    //                     logD("[EnhancedTodoDisplay] 处理第${index}个JSON项目")
                     
                     val content = jsonObj["content"]?.jsonPrimitive?.content ?: ""
                     val status = jsonObj["status"]?.jsonPrimitive?.content ?: "pending"
                     val activeForm = jsonObj["activeForm"]?.jsonPrimitive?.content ?: content
                     
-                    println("[EnhancedTodoDisplay] ✅ JSON项目 $index: content='$content', status='$status', activeForm='$activeForm'")
+    //                     logD("[EnhancedTodoDisplay] ✅ JSON项目 $index: content='$content', status='$status', activeForm='$activeForm'")
                     
                     EnhancedTodoItem(
                         id = (index + 1).toString(),
@@ -352,12 +353,12 @@ private fun parseTodos(toolCall: ToolCall): List<EnhancedTodoItem> {
                     )
                 }
             } catch (e: Exception) {
-                println("[EnhancedTodoDisplay] ❌ JSON解析失败: ${e.message}")
+    //                 logD("[EnhancedTodoDisplay] ❌ JSON解析失败: ${e.message}")
                 emptyList()
             }
         }
         else -> {
-            println("[EnhancedTodoDisplay] ❌ 未知的todos参数类型：${todosParam::class}")
+    //             logD("[EnhancedTodoDisplay] ❌ 未知的todos参数类型：${todosParam::class}")
             emptyList()
         }
     }

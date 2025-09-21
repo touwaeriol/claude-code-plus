@@ -30,13 +30,15 @@ fun KillShellDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具头部信息
-        ToolHeaderDisplay(
-            icon = "⚡",
-            toolName = "KillShell",
-            subtitle = "shell_id: ${killShellTool.shellId}",
-            status = toolCall.status
-        )
+        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        if (!showDetails) {
+            ToolHeaderDisplay(
+                icon = "⚡",
+                toolName = "KillShell",
+                subtitle = "shell_id: ${killShellTool.shellId}",
+                status = toolCall.status
+            )
+        }
 
         // 显示结果
         if (showDetails && toolCall.result != null) {

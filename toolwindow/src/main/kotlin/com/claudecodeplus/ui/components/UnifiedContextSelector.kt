@@ -1,4 +1,4 @@
-/*
+﻿/*
  * UnifiedContextSelector.kt
  * 
  * 统一的上下文选择组件
@@ -8,6 +8,7 @@
 
 package com.claudecodeplus.ui.jewel.components
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -57,7 +58,7 @@ fun UnifiedContextSelector(
     // 通用参数
     enabled: Boolean = true
 ) {
-    println("[UnifiedContextSelector] 模式: $mode, atPosition: $atPosition")
+    logD("[UnifiedContextSelector] 模式: $mode, atPosition: $atPosition")
     
     when (mode) {
         ContextTriggerMode.AT_SYMBOL -> {
@@ -101,7 +102,7 @@ fun AddContextPopup(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    println("[AddContextPopup] 显示 Add Context 弹窗")
+    logD("[AddContextPopup] 显示 Add Context 弹窗")
     
     if (fileIndexService == null) return
     
@@ -140,10 +141,10 @@ fun AddContextPopup(
             keyboardSelectedIndex = 0 // 重置键盘选择索引
             mouseHoveredIndex = -1 // 清除鼠标悬停状态
             
-            println("[AddContextPopup] 搜索结果: ${results.size} 个文件，关键词: '$searchInput'")
+    logD("[AddContextPopup] 搜索结果: ${results.size} 个文件，关键词: '$searchInput'")
             
         } catch (e: Exception) {
-            println("[AddContextPopup] 搜索失败: ${e.message}")
+    logD("[AddContextPopup] 搜索失败: ${e.message}")
             searchResults = emptyList()
         }
     }
@@ -174,39 +175,39 @@ fun AddContextPopup(
                 keyboardSelectedIndex
             }
             
-            println("🎹 [AddContextPopup] Add Context弹窗接收键盘事件: startIndex=$startIndex, resultsSize=${searchResults.size}")
+            logD("🎹 [AddContextPopup] Add Context弹窗接收键盘事件: startIndex=$startIndex, resultsSize=${searchResults.size}")
 
             val handled = eventHandler.handleKeyEvent(
                 keyEvent = keyEvent,
                 selectedIndex = startIndex,
                 resultsSize = searchResults.size,
                 onIndexChange = { newIndex ->
-                    println("🎹 [AddContextPopup] ✅ Add Context弹窗更新选中索引: $keyboardSelectedIndex → $newIndex")
+                    logD("🎹 [AddContextPopup] ✅ Add Context弹窗更新选中索引: $keyboardSelectedIndex → $newIndex")
                     keyboardSelectedIndex = newIndex
                     // 键盘操作时进入键盘模式
                     isKeyboardMode = true
                 },
                 onItemSelect = {
-                    println("🎹 [AddContextPopup] ✅ Add Context弹窗选择文件: effectiveIndex=$effectiveSelectedIndex")
+                    logD("🎹 [AddContextPopup] ✅ Add Context弹窗选择文件: effectiveIndex=$effectiveSelectedIndex")
                     if (effectiveSelectedIndex in searchResults.indices) {
                         val selectedFile = searchResults[effectiveSelectedIndex]
-                        println("🎹 [AddContextPopup] 选择的文件: ${selectedFile.relativePath}")
+                        logD("🎹 [AddContextPopup] 选择的文件: ${selectedFile.relativePath}")
                         val contextReference = ContextReference.FileReference(
                             path = selectedFile.relativePath,
                             fullPath = selectedFile.absolutePath
                         )
                         onContextAdd(contextReference)
                     } else {
-                        println("🎹 [AddContextPopup] ❌ 无效选择: effectiveIndex=$effectiveSelectedIndex, resultsSize=${searchResults.size}")
+                        logD("🎹 [AddContextPopup] ❌ 无效选择: effectiveIndex=$effectiveSelectedIndex, resultsSize=${searchResults.size}")
                     }
                 },
                 onDismiss = {
-                    println("🎹 [AddContextPopup] ❌ Add Context弹窗关闭")
+                    logD("🎹 [AddContextPopup] ❌ Add Context弹窗关闭")
                     onDismiss()
                 }
             )
 
-            println("🎹 [AddContextPopup] Add Context键盘事件处理结果: $handled")
+            logD("🎹 [AddContextPopup] Add Context键盘事件处理结果: $handled")
             handled
         },
         onItemHover = { hoveredIdx ->

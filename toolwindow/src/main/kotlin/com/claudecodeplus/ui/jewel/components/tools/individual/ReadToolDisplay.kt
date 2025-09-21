@@ -29,27 +29,29 @@ fun ReadToolDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具头部信息
-        val fileName = readTool.filePath.substringAfterLast('/')
-        val rangeInfo = buildString {
-            if (readTool.offset != null || readTool.limit != null) {
-                append(" (")
-                if (readTool.offset != null) append("offset: ${readTool.offset}")
-                if (readTool.limit != null) {
-                    if (readTool.offset != null) append(", ")
-                    append("limit: ${readTool.limit}")
+        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        if (!showDetails) {
+            val fileName = readTool.filePath.substringAfterLast('/')
+            val rangeInfo = buildString {
+                if (readTool.offset != null || readTool.limit != null) {
+                    append(" (")
+                    if (readTool.offset != null) append("offset: ${readTool.offset}")
+                    if (readTool.limit != null) {
+                        if (readTool.offset != null) append(", ")
+                        append("limit: ${readTool.limit}")
+                    }
+                    append(")")
                 }
-                append(")")
             }
-        }
 
-        ToolHeaderDisplay(
-            icon = "📖",
-            toolName = "Read",
-            subtitle = "$fileName$rangeInfo",
-            status = toolCall.status,
-            onHeaderClick = onFileClick
-        )
+            ToolHeaderDisplay(
+                icon = "📖",
+                toolName = "Read",
+                subtitle = "$fileName$rangeInfo",
+                status = toolCall.status,
+                onHeaderClick = onFileClick
+            )
+        }
 
         // 显示文件内容
         if (showDetails && toolCall.result != null) {

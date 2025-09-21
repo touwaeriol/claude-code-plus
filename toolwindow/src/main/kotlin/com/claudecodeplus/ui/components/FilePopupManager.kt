@@ -1,4 +1,4 @@
-/*
+﻿/*
  * FilePopupManager.kt
  * 
  * 统一的文件弹窗管理业务组件
@@ -7,6 +7,7 @@
 
 package com.claudecodeplus.ui.jewel.components.business
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -166,44 +167,44 @@ fun UnifiedFilePopup(
                     onPopupBoundsChanged?.invoke(bounds)
                 }
                 .onPreviewKeyEvent { keyEvent ->
-                    println("🎹 [UnifiedFilePopup] onPreviewKeyEvent接收: key=${keyEvent.key}, type=${keyEvent.type}")
+                    logD("🎹 [UnifiedFilePopup] onPreviewKeyEvent接收: key=${keyEvent.key}, type=${keyEvent.type}")
 
                     // 只拦截导航相关的键盘事件，且不会抢夺搜索输入框的焦点
                     if (keyEvent.type == KeyEventType.KeyDown) {
                         when (keyEvent.key) {
                             Key.DirectionUp, Key.DirectionDown -> {
                                 // 上下键始终用于导航，即使搜索框有焦点
-                                println("🎹 [UnifiedFilePopup] ✅ 拦截导航键: ${keyEvent.key}")
+                                logD("🎹 [UnifiedFilePopup] ✅ 拦截导航键: ${keyEvent.key}")
                                 val handled = onKeyEvent(keyEvent)
-                                println("🎹 [UnifiedFilePopup] 导航键处理结果: $handled")
+                                logD("🎹 [UnifiedFilePopup] 导航键处理结果: $handled")
                                 handled
                             }
                             Key.Enter -> {
                                 // Enter键仅在有结果时处理
                                 if (results.isNotEmpty()) {
-                                    println("🎹 [UnifiedFilePopup] ✅ 拦截Enter键 (有结果)")
+                                    logD("🎹 [UnifiedFilePopup] ✅ 拦截Enter键 (有结果)")
                                     val handled = onKeyEvent(keyEvent)
-                                    println("🎹 [UnifiedFilePopup] Enter键处理结果: $handled")
+                                    logD("🎹 [UnifiedFilePopup] Enter键处理结果: $handled")
                                     handled
                                 } else {
-                                    println("🎹 [UnifiedFilePopup] ❌ 忽略Enter键 (无结果)")
+                                    logD("🎹 [UnifiedFilePopup] ❌ 忽略Enter键 (无结果)")
                                     false
                                 }
                             }
                             Key.Escape -> {
                                 // Escape键始终用于关闭弹窗
-                                println("🎹 [UnifiedFilePopup] ✅ 拦截Escape键")
+                                logD("🎹 [UnifiedFilePopup] ✅ 拦截Escape键")
                                 val handled = onKeyEvent(keyEvent)
-                                println("🎹 [UnifiedFilePopup] Escape键处理结果: $handled")
+                                logD("🎹 [UnifiedFilePopup] Escape键处理结果: $handled")
                                 handled
                             }
                             else -> {
-                                println("🎹 [UnifiedFilePopup] ❌ 忽略非导航键: ${keyEvent.key}")
+                                logD("🎹 [UnifiedFilePopup] ❌ 忽略非导航键: ${keyEvent.key}")
                                 false
                             }
                         }
                     } else {
-                        println("🎹 [UnifiedFilePopup] ❌ 忽略非KeyDown事件: ${keyEvent.type}")
+                        logD("🎹 [UnifiedFilePopup] ❌ 忽略非KeyDown事件: ${keyEvent.type}")
                         false
                     }
                 }
@@ -215,9 +216,9 @@ fun UnifiedFilePopup(
                 verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 // 为 ADD_CONTEXT 类型添加搜索输入框
-                println("[UnifiedFilePopup] 检查是否显示搜索输入框: type=${config.type}, onSearchQueryChange=${onSearchQueryChange != null}")
+    logD("[UnifiedFilePopup] 检查是否显示搜索输入框: type=${config.type}, onSearchQueryChange=${onSearchQueryChange != null}")
                 if (config.type == FilePopupType.ADD_CONTEXT && onSearchQueryChange != null) {
-                    println("[UnifiedFilePopup] ✅ 显示搜索输入框")
+    logD("[UnifiedFilePopup] ✅ 显示搜索输入框")
                     SearchInputField(
                         value = searchInputValue,
                         onValueChange = onSearchQueryChange,
@@ -228,7 +229,7 @@ fun UnifiedFilePopup(
                             .padding(vertical = 4.dp)
                     )
                 } else {
-                    println("[UnifiedFilePopup] ❌ 不显示搜索输入框 - type=${config.type}, onSearchQueryChange=${onSearchQueryChange != null}")
+    logD("[UnifiedFilePopup] ❌ 不显示搜索输入框 - type=${config.type}, onSearchQueryChange=${onSearchQueryChange != null}")
                 }
                 
                 // 索引状态提示
@@ -348,53 +349,53 @@ class FilePopupEventHandler {
         onItemSelect: () -> Unit,
         onDismiss: () -> Unit
     ): Boolean {
-        println("🎹 [FilePopupManager] 键盘事件接收: key=${keyEvent.key}, type=${keyEvent.type}, selectedIndex=$selectedIndex, resultsSize=$resultsSize")
+        logD("🎹 [FilePopupManager] 键盘事件接收: key=${keyEvent.key}, type=${keyEvent.type}, selectedIndex=$selectedIndex, resultsSize=$resultsSize")
 
         if (keyEvent.type != KeyEventType.KeyDown) {
-            println("🎹 [FilePopupManager] ❌ 忽略非KeyDown事件: ${keyEvent.type}")
+            logD("🎹 [FilePopupManager] ❌ 忽略非KeyDown事件: ${keyEvent.type}")
             return false
         }
 
         return when (keyEvent.key) {
             Key.DirectionUp -> {
-                println("🎹 [FilePopupManager] ⬆️ 上箭头按下")
+                logD("🎹 [FilePopupManager] ⬆️ 上箭头按下")
                 if (resultsSize > 0) {
                     val newIndex = (selectedIndex - 1).coerceAtLeast(0)
-                    println("🎹 [FilePopupManager] ✅ 更新选中索引: $selectedIndex → $newIndex")
+                    logD("🎹 [FilePopupManager] ✅ 更新选中索引: $selectedIndex → $newIndex")
                     onIndexChange(newIndex)
                 } else {
-                    println("🎹 [FilePopupManager] ❌ 无结果，忽略上箭头")
+                    logD("🎹 [FilePopupManager] ❌ 无结果，忽略上箭头")
                 }
                 true
             }
             Key.DirectionDown -> {
-                println("🎹 [FilePopupManager] ⬇️ 下箭头按下")
+                logD("🎹 [FilePopupManager] ⬇️ 下箭头按下")
                 if (resultsSize > 0) {
                     val newIndex = (selectedIndex + 1).coerceAtMost(resultsSize - 1)
-                    println("🎹 [FilePopupManager] ✅ 更新选中索引: $selectedIndex → $newIndex")
+                    logD("🎹 [FilePopupManager] ✅ 更新选中索引: $selectedIndex → $newIndex")
                     onIndexChange(newIndex)
                 } else {
-                    println("🎹 [FilePopupManager] ❌ 无结果，忽略下箭头")
+                    logD("🎹 [FilePopupManager] ❌ 无结果，忽略下箭头")
                 }
                 true
             }
             Key.Enter -> {
-                println("🎹 [FilePopupManager] ⏎ Enter按下")
+                logD("🎹 [FilePopupManager] ⏎ Enter按下")
                 if (selectedIndex in 0 until resultsSize) {
-                    println("🎹 [FilePopupManager] ✅ 选择项目: index=$selectedIndex")
+                    logD("🎹 [FilePopupManager] ✅ 选择项目: index=$selectedIndex")
                     onItemSelect()
                 } else {
-                    println("🎹 [FilePopupManager] ❌ 无效选中索引: $selectedIndex (范围: 0-${resultsSize-1})")
+                    logD("🎹 [FilePopupManager] ❌ 无效选中索引: $selectedIndex (范围: 0-${resultsSize-1})")
                 }
                 true
             }
             Key.Escape -> {
-                println("🎹 [FilePopupManager] ⎋ Escape按下 - 关闭弹窗")
+                logD("🎹 [FilePopupManager] ⎋ Escape按下 - 关闭弹窗")
                 onDismiss()
                 true
             }
             else -> {
-                println("🎹 [FilePopupManager] ❓ 未处理的键: ${keyEvent.key}")
+                logD("🎹 [FilePopupManager] ❓ 未处理的键: ${keyEvent.key}")
                 false
             }
         }
@@ -457,14 +458,14 @@ fun SearchInputField(
     // 当 autoFocus 为 true 时，自动请求焦点
     LaunchedEffect(autoFocus) {
         if (autoFocus) {
-            println("[SearchInputField] 🎯 尝试自动聚焦，autoFocus=$autoFocus")
+            logD("[SearchInputField] 🎯 尝试自动聚焦，autoFocus=$autoFocus")
             // 延迟一帧确保组件已完全初始化
             kotlinx.coroutines.delay(16)
             try {
                 focusRequester.requestFocus()
-                println("[SearchInputField] ✅ 自动聚焦成功")
+    logD("[SearchInputField] ✅ 自动聚焦成功")
             } catch (e: IllegalStateException) {
-                println("[SearchInputField] ❌ 自动聚焦失败: ${e.message}")
+    logD("[SearchInputField] ❌ 自动聚焦失败: ${e.message}")
                 // 忽略焦点请求失败的异常，这是正常的竞争条件
             }
         }
@@ -487,7 +488,7 @@ fun SearchInputField(
         androidx.compose.foundation.text.BasicTextField(
             value = value,
             onValueChange = { newValue ->
-                println("[SearchInputField] 📝 输入变化: '$value' -> '$newValue', 长度: ${value.length} -> ${newValue.length}")
+                logD("[SearchInputField] 📝 输入变化: '$value' -> '$newValue', 长度: ${value.length} -> ${newValue.length}")
                 onValueChange(newValue)
             },
             textStyle = JewelTheme.defaultTextStyle.copy(
@@ -512,11 +513,11 @@ fun SearchInputField(
                 .fillMaxSize()
                 .focusRequester(focusRequester) // 添加焦点请求器
                 .onPreviewKeyEvent { keyEvent ->
-                    println("[SearchInputField] ⌨️  键盘事件: ${keyEvent.key}, type=${keyEvent.type}, isCtrlPressed=${keyEvent.isCtrlPressed}, isMetaPressed=${keyEvent.isMetaPressed}")
+    logD("[SearchInputField] ⌨️  键盘事件: ${keyEvent.key}, type=${keyEvent.type}, isCtrlPressed=${keyEvent.isCtrlPressed}, isMetaPressed=${keyEvent.isMetaPressed}")
                     false // 不拦截，让BasicTextField正常处理
                 }
                 .onFocusChanged { focusState ->
-                    println("[SearchInputField] 🎯 焦点状态变化: isFocused=${focusState.isFocused}, hasFocus=${focusState.hasFocus}")
+                    logD("[SearchInputField] 🎯 焦点状态变化: isFocused=${focusState.isFocused}, hasFocus=${focusState.hasFocus}")
                 }
                 // 完全移除 onPreviewKeyEvent，让 BasicTextField 正常处理所有输入
                 // 导航键已经在外层的 UnifiedFilePopup 中统一处理

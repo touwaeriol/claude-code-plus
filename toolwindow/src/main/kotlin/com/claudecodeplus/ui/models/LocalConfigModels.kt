@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.models
+﻿package com.claudecodeplus.ui.models
 
+import com.claudecodeplus.core.logging.*
 import kotlinx.serialization.Serializable
 import java.time.Instant
 
@@ -84,11 +85,11 @@ class LocalConfigManager {
             if (content.isNotEmpty()) {
                 return json.decodeFromString<LocalProjectConfig>(content)
             } else {
-                println("[LocalConfigManager] 配置文件为空")
+    //                 logD("[LocalConfigManager] 配置文件为空")
             }
         } catch (e: Exception) {
             lastException = e
-            println("[LocalConfigManager] 加载主配置文件失败: ${e.message}")
+    //             logD("[LocalConfigManager] 加载主配置文件失败: ${e.message}")
         }
         
         // 尝试临时文件（可能是未完成的写入）
@@ -97,20 +98,20 @@ class LocalConfigManager {
             try {
                 val content = tempFile.readText().trim()
                 if (content.isNotEmpty()) {
-                    println("[LocalConfigManager] 从临时文件恢复配置")
+    //                     logD("[LocalConfigManager] 从临时文件恢复配置")
                     val config = json.decodeFromString<LocalProjectConfig>(content)
                     // 恢复后保存到主文件
                     saveConfig(config)
                     return config
                 }
             } catch (e: Exception) {
-                println("[LocalConfigManager] 从临时文件恢复失败: ${e.message}")
+    //                 logD("[LocalConfigManager] 从临时文件恢复失败: ${e.message}")
                 tempFile.delete() // 清理损坏的临时文件
             }
         }
         
         // 所有恢复尝试都失败，使用默认配置
-        println("[LocalConfigManager] 无法恢复配置，使用默认配置")
+    //         logD("[LocalConfigManager] 无法恢复配置，使用默认配置")
         lastException?.printStackTrace()
         return LocalProjectConfig()
     }
@@ -136,16 +137,16 @@ class LocalConfigManager {
                 // 原子性重命名（在大多数文件系统上是原子操作）
                 val success = tempFile.renameTo(configFile)
                 if (success) {
-                    println("[LocalConfigManager] 配置保存成功 (attempt $attempts)")
+    //                     logD("[LocalConfigManager] 配置保存成功 (attempt $attempts)")
                     return
                 } else {
-                    println("[LocalConfigManager] 配置重命名失败 (attempt $attempts)")
+    //                     logD("[LocalConfigManager] 配置重命名失败 (attempt $attempts)")
                     tempFile.delete() // 清理临时文件
                 }
             } catch (e: Exception) {
-                println("[LocalConfigManager] 保存本地配置失败 (attempt $attempts): ${e.message}")
+    //                 logD("[LocalConfigManager] 保存本地配置失败 (attempt $attempts): ${e.message}")
                 if (attempts >= maxAttempts) {
-                    e.printStackTrace()
+                    logE("Exception caught", e)
                 }
             }
             
@@ -300,7 +301,7 @@ class LocalConfigManager {
         val updatedConfig = config.copy(projects = updatedProjects)
         saveConfig(updatedConfig)
         
-        println("[LocalConfigManager] 会话ID已更新: $oldSessionId -> $newSessionId")
+    //         logD("[LocalConfigManager] 会话ID已更新: $oldSessionId -> $newSessionId")
     }
     
     /**
@@ -336,9 +337,9 @@ class LocalConfigManager {
             val updatedConfig = config.copy(projects = updatedProjects)
             saveConfig(updatedConfig)
             
-            println("[LocalConfigManager] 新会话ID已设置: ${sessionToUpdate.id} -> $newSessionId")
+    //             logD("[LocalConfigManager] 新会话ID已设置: ${sessionToUpdate.id} -> $newSessionId")
         } else {
-            println("[LocalConfigManager] 未找到需要更新的新会话记录")
+    //             logD("[LocalConfigManager] 未找到需要更新的新会话记录")
         }
     }
     
@@ -441,7 +442,7 @@ class LocalConfigManager {
         val config = loadConfig()
         val updatedConfig = config.copy(lastSelectedSession = sessionId)
         saveConfig(updatedConfig)
-        println("[LocalConfigManager] 保存最后选中会话: $sessionId")
+    //         logD("[LocalConfigManager] 保存最后选中会话: $sessionId")
     }
     
     /**
@@ -459,7 +460,7 @@ class LocalConfigManager {
         val config = loadConfig()
         val updatedConfig = config.copy(lastSelectedSession = null)
         saveConfig(updatedConfig)
-        println("[LocalConfigManager] 已清理无效的最后选中会话")
+    //         logD("[LocalConfigManager] 已清理无效的最后选中会话")
     }
     
     /**
@@ -479,7 +480,7 @@ class LocalConfigManager {
             if (sessionExists) {
                 return lastSelectedSessionId
             } else {
-                println("[LocalConfigManager] 最后选中的会话不存在: $lastSelectedSessionId，清理配置")
+    //                 logD("[LocalConfigManager] 最后选中的会话不存在: $lastSelectedSessionId，清理配置")
                 clearLastSelectedSession()
                 return null
             }
@@ -508,10 +509,10 @@ class LocalConfigManager {
             } ?: false
             
             if (sessionBelongsToCurrentProject) {
-                println("[LocalConfigManager] 最后选中的会话属于当前项目: $lastSelectedSessionId")
+    //                 logD("[LocalConfigManager] 最后选中的会话属于当前项目: $lastSelectedSessionId")
                 return lastSelectedSessionId
             } else {
-                println("[LocalConfigManager] 最后选中的会话不属于当前项目 (workingDir: $workingDirectory, projectId: $expectedProjectId, sessionId: $lastSelectedSessionId)，清理配置")
+    //                 logD("[LocalConfigManager] 最后选中的会话不属于当前项目 (workingDir: $workingDirectory, projectId: $expectedProjectId, sessionId: $lastSelectedSessionId)，清理配置")
                 clearLastSelectedSession()
                 return null
             }
@@ -528,13 +529,13 @@ class LocalConfigManager {
             val config = loadConfig()
             val project = config.projects.find { it.id == projectId }
             if (project == null) {
-                println("[LocalConfigManager] 未找到项目: $projectId")
+    //                 logD("[LocalConfigManager] 未找到项目: $projectId")
                 return
             }
             
             val sessionIndex = project.sessions.indexOfFirst { it.id == sessionId }
             if (sessionIndex == -1) {
-                println("[LocalConfigManager] 未找到会话: $sessionId")
+    //                 logD("[LocalConfigManager] 未找到会话: $sessionId")
                 return
             }
             
@@ -547,10 +548,10 @@ class LocalConfigManager {
             // 保存配置
             saveConfig(config)
             
-            println("[LocalConfigManager] 会话元数据已更新: sessionId=$sessionId, messageCount=${updatedSession.messageCount}")
+    //             logD("[LocalConfigManager] 会话元数据已更新: sessionId=$sessionId, messageCount=${updatedSession.messageCount}")
         } catch (e: Exception) {
-            println("[LocalConfigManager] 更新会话元数据失败: ${e.message}")
-            e.printStackTrace()
+    //             logD("[LocalConfigManager] 更新会话元数据失败: ${e.message}")
+            logE("Exception caught", e)
         }
     }
 }

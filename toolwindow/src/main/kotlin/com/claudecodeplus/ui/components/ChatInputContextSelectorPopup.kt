@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ChatInputContextSelectorPopup.kt
  * 
  * 现代化上下文选择器弹出组件
@@ -7,6 +7,7 @@
 
 package com.claudecodeplus.ui.jewel.components.context
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -191,7 +192,7 @@ fun ChatInputContextSelectorPopup(
         try {
             focusRequester.requestFocus()
         } catch (e: Exception) {
-            println("[ChatInputContextSelectorPopup] 焦点请求失败: ${e.message}")
+    logD("[ChatInputContextSelectorPopup] 焦点请求失败: ${e.message}")
         }
     }
     
@@ -247,7 +248,7 @@ fun ChatInputContextSelectorPopup(
                                 try {
                                     focusRequester.requestFocus()
                                 } catch (e: Exception) {
-                                    println("[ChatInputContextSelectorPopup] Files标签焦点请求失败: ${e.message}")
+    logD("[ChatInputContextSelectorPopup] Files标签焦点请求失败: ${e.message}")
                                 }
                             }
                         )
@@ -259,7 +260,7 @@ fun ChatInputContextSelectorPopup(
                                 try {
                                     focusRequester.requestFocus()
                                 } catch (e: Exception) {
-                                    println("[ChatInputContextSelectorPopup] Web标签焦点请求失败: ${e.message}")
+    logD("[ChatInputContextSelectorPopup] Web标签焦点请求失败: ${e.message}")
                                 }
                             }
                         )

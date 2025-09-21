@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.jewel.components
+﻿package com.claudecodeplus.ui.jewel.components
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.claudecodeplus.ui.models.EnhancedMessage
@@ -22,7 +23,7 @@ fun UserMessageDisplay(
         contexts = message.contexts,
         onContextClick = { uri ->
             // 消息列表中的引用点击处理（只读，可以显示文件信息等）
-            println("点击了上下文引用: $uri")
+    logD("点击了上下文引用: $uri")
         }
     )
 }

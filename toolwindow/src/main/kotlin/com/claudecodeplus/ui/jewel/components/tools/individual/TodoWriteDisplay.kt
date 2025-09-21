@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.jewel.components.tools.individual
+﻿package com.claudecodeplus.ui.jewel.components.tools.individual
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -26,17 +27,19 @@ fun TodoWriteDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具头部信息
-        ToolHeaderDisplay(
-            icon = "📝",
-            toolName = "TodoWrite",
-            subtitle = "${todoWriteTool.todos.size}个任务",
-            status = toolCall.status
-        )
+        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        if (!showDetails) {
+            ToolHeaderDisplay(
+                icon = "📝",
+                toolName = "TodoWrite",
+                subtitle = "${todoWriteTool.todos.size}个任务",
+                status = toolCall.status
+            )
+        }
 
         // 🎯 核心改进：直接显示input中的todos，完全忽略result
         if (showDetails) {
-            println("[TodoWriteDisplay] 🎯 显示input.todos，任务数量：${todoWriteTool.todos.size}")
+            logD("[TodoWriteDisplay] 🎯 显示input.todos，任务数量：${todoWriteTool.todos.size}")
 
             // 使用现有的EnhancedTodoDisplay，传入强类型的todos
             EnhancedTodoDisplay(

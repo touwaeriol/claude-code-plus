@@ -29,17 +29,19 @@ fun EditToolDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具头部信息
-        val fileName = editTool.filePath.substringAfterLast('/')
-        val editType = if (editTool.replaceAll) "替换全部" else "单次替换"
+        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        if (!showDetails) {
+            val fileName = editTool.filePath.substringAfterLast('/')
+            val editType = if (editTool.replaceAll) "替换全部" else "单次替换"
 
-        ToolHeaderDisplay(
-            icon = "✏️",
-            toolName = "Edit",
-            subtitle = "$fileName ($editType)",
-            status = toolCall.status,
-            onHeaderClick = onFileClick
-        )
+            ToolHeaderDisplay(
+                icon = "✏️",
+                toolName = "Edit",
+                subtitle = "$fileName ($editType)",
+                status = toolCall.status,
+                onHeaderClick = onFileClick
+            )
+        }
 
         // 显示编辑差异
         if (showDetails) {

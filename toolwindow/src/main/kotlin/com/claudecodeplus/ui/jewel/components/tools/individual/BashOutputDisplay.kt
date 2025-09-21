@@ -28,20 +28,22 @@ fun BashOutputDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具头部信息
-        val subtitle = buildString {
-            append("bash_id: ${bashOutputTool.bashId}")
-            if (bashOutputTool.filter != null) {
-                append(" | filter: ${bashOutputTool.filter}")
+        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        if (!showDetails) {
+            val subtitle = buildString {
+                append("bash_id: ${bashOutputTool.bashId}")
+                if (bashOutputTool.filter != null) {
+                    append(" | filter: ${bashOutputTool.filter}")
+                }
             }
-        }
 
-        ToolHeaderDisplay(
-            icon = "📤",
-            toolName = "BashOutput",
-            subtitle = subtitle,
-            status = toolCall.status
-        )
+            ToolHeaderDisplay(
+                icon = "📤",
+                toolName = "BashOutput",
+                subtitle = subtitle,
+                status = toolCall.status
+            )
+        }
 
         // 显示Bash输出结果
         if (showDetails && toolCall.result != null) {

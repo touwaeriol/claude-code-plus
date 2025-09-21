@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.services
+﻿package com.claudecodeplus.ui.services
 
+import com.claudecodeplus.core.logging.*
 import com.claudecodeplus.ui.models.SessionObject
 import com.claudecodeplus.ui.models.SessionMetadata
 import com.claudecodeplus.ui.models.SessionMetadata.Companion.toJson
@@ -48,13 +49,13 @@ class SessionPersistenceService {
                 
                 metadataFile.writeText(metadata.toJson())
                 
-                println("[SessionPersistence] 保存会话元数据成功: $sessionId")
-                println("  - 模型: ${metadata.modelName}")
-                println("  - 权限模式: ${metadata.permissionMode}")
-                println("  - 跳过权限: ${metadata.skipPermissions}")
+    //                 logD("[SessionPersistence] 保存会话元数据成功: $sessionId")
+    //                 logD("  - 模型: ${metadata.modelName}")
+    //                 logD("  - 权限模式: ${metadata.permissionMode}")
+    //                 logD("  - 跳过权限: ${metadata.skipPermissions}")
             } catch (e: Exception) {
-                println("[SessionPersistence] 保存会话元数据失败: ${e.message}")
-                e.printStackTrace()
+    //                 logD("[SessionPersistence] 保存会话元数据失败: ${e.message}")
+                logE("Exception caught", e)
             }
         }
         
@@ -72,7 +73,7 @@ class SessionPersistenceService {
             try {
                 val metadataFile = File(projectPath, "$SESSIONS_DIR/$sessionId$METADATA_SUFFIX")
                 if (!metadataFile.exists()) {
-                    println("[SessionPersistence] 元数据文件不存在: $sessionId")
+    //                     logD("[SessionPersistence] 元数据文件不存在: $sessionId")
                     return@withContext null
                 }
                 
@@ -80,16 +81,16 @@ class SessionPersistenceService {
                 val metadata = SessionMetadata.fromJson(jsonContent)
                 
                 if (metadata != null) {
-                    println("[SessionPersistence] 加载会话元数据成功: $sessionId")
-                    println("  - 模型: ${metadata.modelName}")
-                    println("  - 权限模式: ${metadata.permissionMode}")
-                    println("  - 跳过权限: ${metadata.skipPermissions}")
+    //                     logD("[SessionPersistence] 加载会话元数据成功: $sessionId")
+    //                     logD("  - 模型: ${metadata.modelName}")
+    //                     logD("  - 权限模式: ${metadata.permissionMode}")
+    //                     logD("  - 跳过权限: ${metadata.skipPermissions}")
                 }
                 
                 metadata
             } catch (e: Exception) {
-                println("[SessionPersistence] 加载会话元数据失败: ${e.message}")
-                e.printStackTrace()
+    //                 logD("[SessionPersistence] 加载会话元数据失败: ${e.message}")
+                logE("Exception caught", e)
                 null
             }
         }
@@ -111,15 +112,15 @@ class SessionPersistenceService {
                 val metadata = loadSessionMetadata(sessionId, projectPath)
                 if (metadata != null) {
                     metadata.applyToSessionObject(sessionObject)
-                    println("[SessionPersistence] 恢复会话配置成功: $sessionId")
+    //                     logD("[SessionPersistence] 恢复会话配置成功: $sessionId")
                     true
                 } else {
-                    println("[SessionPersistence] 没有找到会话元数据，使用默认配置: $sessionId")
+    //                     logD("[SessionPersistence] 没有找到会话元数据，使用默认配置: $sessionId")
                     false
                 }
             } catch (e: Exception) {
-                println("[SessionPersistence] 恢复会话配置失败: ${e.message}")
-                e.printStackTrace()
+    //                 logD("[SessionPersistence] 恢复会话配置失败: ${e.message}")
+                logE("Exception caught", e)
                 false
             }
         }
@@ -138,11 +139,11 @@ class SessionPersistenceService {
                 val metadataFile = File(projectPath, "$SESSIONS_DIR/$sessionId$METADATA_SUFFIX")
                 if (metadataFile.exists()) {
                     metadataFile.delete()
-                    println("[SessionPersistence] 删除会话元数据成功: $sessionId")
+    //                     logD("[SessionPersistence] 删除会话元数据成功: $sessionId")
                 }
             } catch (e: Exception) {
-                println("[SessionPersistence] 删除会话元数据失败: ${e.message}")
-                e.printStackTrace()
+    //                 logD("[SessionPersistence] 删除会话元数据失败: ${e.message}")
+                logE("Exception caught", e)
             }
         }
         
@@ -165,8 +166,8 @@ class SessionPersistenceService {
                     file.name.removeSuffix(METADATA_SUFFIX)
                 } ?: emptyList()
             } catch (e: Exception) {
-                println("[SessionPersistence] 列出会话失败: ${e.message}")
-                e.printStackTrace()
+    //                 logD("[SessionPersistence] 列出会话失败: ${e.message}")
+                logE("Exception caught", e)
                 emptyList()
             }
         }

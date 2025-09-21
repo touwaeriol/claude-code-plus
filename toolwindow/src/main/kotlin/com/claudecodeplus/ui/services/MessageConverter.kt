@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.services
+﻿package com.claudecodeplus.ui.services
 
+import com.claudecodeplus.core.logging.*
 import com.claudecodeplus.sdk.types.SDKMessage
 import com.claudecodeplus.sdk.types.MessageType
 import com.claudecodeplus.sdk.types.type
@@ -33,7 +34,7 @@ object MessageConverter {
      * 处理来自事件流的消息和历史加载的消息
      */
     fun SDKMessage.toEnhancedMessage(): EnhancedMessage {
-        println("[MessageConverter] 开始转换消息: type=${this.type}, messageId=${this.messageId}")
+    //         logD("[MessageConverter] 开始转换消息: type=${this.type}, messageId=${this.messageId}")
         
         // 优先使用 content 字段，然后是 data.text
         val rawContent = content ?: data?.text ?: ""
@@ -141,20 +142,20 @@ object MessageConverter {
                 
                 else -> {
                     // 调试：输出无法解析的内容格式
-                    println("[MessageConverter] 无法提取内容，rawContent前200字符: ${rawContent.take(200)}")
+    //                     logD("[MessageConverter] 无法提取内容，rawContent前200字符: ${rawContent.take(200)}")
                     if (contentJson != null) {
-                        println("[MessageConverter] contentJson结构:")
-                        println("  - 顶层keys: ${contentJson.keys}")
+    //                         logD("[MessageConverter] contentJson结构:")
+    //                         logD("  - 顶层keys: ${contentJson.keys}")
                         contentJson.forEach { (key, value) ->
-                            println("  - $key: ${value.toString().take(100)}")
+    //                             logD("  - $key: ${value.toString().take(100)}")
                         }
                     }
                     ""
                 }
             }
         } catch (e: Exception) {
-            println("[MessageConverter] 提取消息内容失败: ${e.message}")
-            println("[MessageConverter] rawContent: ${rawContent.take(200)}")
+    //             logD("[MessageConverter] 提取消息内容失败: ${e.message}")
+    //             logD("[MessageConverter] rawContent: ${rawContent.take(200)}")
             ""
         }
     }
@@ -176,7 +177,7 @@ object MessageConverter {
                 }
             }.joinToString("")
         } catch (e: Exception) {
-            println("[MessageConverter] 从content数组提取文本失败: ${e.message}")
+    //             logD("[MessageConverter] 从content数组提取文本失败: ${e.message}")
             ""
         }
     }
@@ -215,13 +216,13 @@ object MessageConverter {
             val messageObj = contentJson?.get("message")?.jsonObject
             val contentArray = messageObj?.get("content")?.jsonArray
             
-            println("[MessageConverter] messageObj存在: ${messageObj != null}, contentArray存在: ${contentArray != null}, 数组大小: ${contentArray?.size ?: 0}")
+    //             logD("[MessageConverter] messageObj存在: ${messageObj != null}, contentArray存在: ${contentArray != null}, 数组大小: ${contentArray?.size ?: 0}")
             
             // 打印contentArray的详细结构
             contentArray?.forEachIndexed { index, element ->
                 val obj = element.jsonObject
                 val type = obj["type"]?.jsonPrimitive?.content
-                println("  [$index] type: $type, keys: ${obj.keys}")
+    //                 logD("  [$index] type: $type, keys: ${obj.keys}")
             }
             
             // 🔧 现在每个消息只包含一个工具调用（已在ClaudeEventService拆分）
@@ -234,7 +235,7 @@ object MessageConverter {
                     val toolName = contentObj["name"]?.jsonPrimitive?.content ?: ""
                     val inputJson = contentObj["input"]?.jsonObject
                     
-                    println("[MessageConverter] 🔧 发现单个工具调用: $toolName (ID: $toolId)")
+                    logD("[MessageConverter] 🔧 发现单个工具调用: $toolName (ID: $toolId)")
                     
                     // 将输入参数转换为 Map，安全处理各种JSON类型
                     val parameters = inputJson?.mapValues { (_, value) ->
@@ -269,7 +270,7 @@ object MessageConverter {
             toolCalls
         } catch (e: Exception) {
             // 提取工具调用失败
-            e.printStackTrace()
+            logE("Exception caught", e)
             emptyList()
         }
     }
@@ -301,14 +302,14 @@ object MessageConverter {
                     }
                     
                     toolResults[toolUseId] = result
-                    println("[MessageConverter] 🔧 发现工具结果: toolId=$toolUseId, isError=$isError")
+                    logD("[MessageConverter] 🔧 发现工具结果: toolId=$toolUseId, isError=$isError")
                 }
             }
             
-            println("[MessageConverter] ✅ 工具结果解析完成，共 ${toolResults.size} 个结果")
+    //             logD("[MessageConverter] ✅ 工具结果解析完成，共 ${toolResults.size} 个结果")
             toolResults
         } catch (e: Exception) {
-            println("[MessageConverter] ❌ 工具结果解析失败: ${e.message}")
+    //             logD("[MessageConverter] ❌ 工具结果解析失败: ${e.message}")
             emptyMap()
         }
     }
@@ -343,7 +344,7 @@ object MessageConverter {
                 null
             }
         } catch (e: Exception) {
-            println("[MessageConverter] 提取Token使用信息失败: ${e.message}")
+    //             logD("[MessageConverter] 提取Token使用信息失败: ${e.message}")
             null
         }
     }

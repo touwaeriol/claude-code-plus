@@ -153,8 +153,10 @@ class MessageParser {
         
         return when (type) {
             "text" -> {
-                val text = jsonObject["text"]?.jsonPrimitive?.content 
+                val text = jsonObject["text"]?.jsonPrimitive?.content
                     ?: throw MessageParsingException("Missing 'text' in text block")
+                println("[MessageParser] 📝 解析TextBlock，文本长度: ${text.length}")
+                println("[MessageParser] 📝 TextBlock内容: ${text.take(200)}")
                 TextBlock(text)
             }
             "thinking" -> {

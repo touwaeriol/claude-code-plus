@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.models
+﻿package com.claudecodeplus.ui.models
 
+import com.claudecodeplus.core.logging.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.coroutines.CoroutineScope
@@ -208,12 +209,12 @@ class Project(
         )
         
         // 调试日志：打印会话创建/获取的关键信息
-        println("[Project] 🔍 getOrCreateSession 被调用")
-        println("[Project] - tabId: $tabId")
-        println("[Project] - initialSessionId: $initialSessionId") 
-        println("[Project] - initialMessages.size: ${initialMessages.size}")
-        println("[Project] - sessionObject.messages.size: ${sessionObject.messages.size}")
-        println("[Project] - sessionObject hashCode: ${sessionObject.hashCode()}")
+        logD("[Project] 🔍 getOrCreateSession 被调用")
+    //         logD("[Project] - tabId: $tabId")
+    //         logD("[Project] - initialSessionId: $initialSessionId") 
+    //         logD("[Project] - initialMessages.size: ${initialMessages.size}")
+    //         logD("[Project] - sessionObject.messages.size: ${sessionObject.messages.size}")
+    //         logD("[Project] - sessionObject hashCode: ${sessionObject.hashCode()}")
         
         // 检查是否需要加载历史消息：
         // 修复：第一次打开插件时不自动加载历史会话
@@ -221,23 +222,23 @@ class Project(
         if (initialMessages.isEmpty() && sessionObject.messages.isEmpty()) {
             if (!initialSessionId.isNullOrEmpty()) {
                 // 有明确的 sessionId，说明是恢复已存在的会话
-                println("[Project] 恢复已存在会话: sessionId=$initialSessionId, tabId=$tabId")
+    //                 logD("[Project] 恢复已存在会话: sessionId=$initialSessionId, tabId=$tabId")
                 
                 // 启动协程加载历史消息
                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
                     try {
                         sessionObject.loadNewMessages(forceFullReload = true)
-                        println("[Project] 会话历史加载完成: sessionId=${sessionObject.sessionId}, messages=${sessionObject.messages.size}")
+    //                         logD("[Project] 会话历史加载完成: sessionId=${sessionObject.sessionId}, messages=${sessionObject.messages.size}")
                     } catch (e: Exception) {
-                        println("[Project] 会话历史加载失败: ${e.message}")
-                        e.printStackTrace()
+    //                         logD("[Project] 会话历史加载失败: ${e.message}")
+                        logE("Exception caught", e)
                     }
                 }
             } else {
                 // 没有 sessionId，这是新会话，不自动加载历史
-                println("[Project] 🆕 新会话创建，不自动加载历史消息")
-                println("[Project] - tabId: $tabId")
-                println("[Project] - 用户可以通过界面按钮选择恢复历史会话")
+                logD("[Project] 🆕 新会话创建，不自动加载历史消息")
+    //                 logD("[Project] - tabId: $tabId")
+    //                 logD("[Project] - 用户可以通过界面按钮选择恢复历史会话")
             }
         }
         
@@ -279,3 +280,4 @@ data class ProjectSession(
     val lastModified: Long = System.currentTimeMillis(), // 最后修改时间（毫秒时间戳）
     val cwd: String // 会话的工作目录，从会话文件中解析得到，现在为必需字段
 )
+

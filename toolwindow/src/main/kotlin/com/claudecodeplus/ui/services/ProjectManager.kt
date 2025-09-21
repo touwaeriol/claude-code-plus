@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.services
+﻿package com.claudecodeplus.ui.services
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.runtime.mutableStateOf
 import com.claudecodeplus.ui.models.ClaudeConfig
 import com.claudecodeplus.ui.models.LocalConfigManager
@@ -116,7 +117,7 @@ class ProjectManager(
             // 等待项目加载完成
             kotlinx.coroutines.delay(200)
             
-            println("尝试根据工作目录选择项目: $workingDirectory")
+    //             logD("尝试根据工作目录选择项目: $workingDirectory")
             
             // 查找匹配的项目
             val matchingProject = _projects.value.find { project ->
@@ -124,11 +125,11 @@ class ProjectManager(
             }
             
             if (matchingProject != null) {
-                println("找到匹配的项目: ${matchingProject.name} (${matchingProject.path})")
+    //                 logD("找到匹配的项目: ${matchingProject.name} (${matchingProject.path})")
                 _currentProject.value = matchingProject
                 
                 // 文件监听功能已移除
-                println("[ProjectManager] 已启动匹配项目监听: ${matchingProject.name} -> ${matchingProject.path}")
+    //                 logD("[ProjectManager] 已启动匹配项目监听: ${matchingProject.name} -> ${matchingProject.path}")
                 
                 // 加载该项目的会话
                 if (!_sessions.value.containsKey(matchingProject.id)) {
@@ -144,16 +145,16 @@ class ProjectManager(
                     // 查找记录的最后选中会话
                     val lastSelectedSession = projectSessions.find { it.id == lastSelectedSessionId }
                     if (lastSelectedSession != null) {
-                        println("恢复最后选中的会话: ${lastSelectedSession.name} (${lastSelectedSessionId})")
+    //                         logD("恢复最后选中的会话: ${lastSelectedSession.name} (${lastSelectedSessionId})")
                         lastSelectedSession
                     } else {
-                        println("最后选中的会话在当前项目中不存在，选择最新会话: $lastSelectedSessionId")
+    //                         logD("最后选中的会话在当前项目中不存在，选择最新会话: $lastSelectedSessionId")
                         // 清理这个无效的配置
                         localConfigManager.clearLastSelectedSession()
                         projectSessions.firstOrNull()
                     }
                 } else {
-                    println("没有记录有效的最后选中会话，选择最新会话")
+    //                     logD("没有记录有效的最后选中会话，选择最新会话")
                     projectSessions.firstOrNull()
                 }
                 
@@ -161,7 +162,7 @@ class ProjectManager(
                     setCurrentSession(sessionToSelect, loadHistory = true)
                 }
             } else {
-                println("未找到匹配工作目录的项目，使用默认选择逻辑")
+    //                 logD("未找到匹配工作目录的项目，使用默认选择逻辑")
                 findAndSelectLatestSession()
             }
         }
@@ -180,7 +181,7 @@ class ProjectManager(
      * 4. 切换到对应的项目和会话
      */
     private suspend fun findAndSelectLatestSession() {
-        println("开始查找所有项目中最新修改的会话...")
+    //         logD("开始查找所有项目中最新修改的会话...")
         
         var latestSession: ProjectSession? = null
         var latestProject: Project? = null
@@ -207,23 +208,23 @@ class ProjectManager(
         
         // 如果找到了最新会话，只在没有当前项目时才切换项目
         if (latestSession != null && latestProject != null) {
-            println("找到最新会话: ${latestSession.name} in ${latestProject.name}")
-            println("最后修改时间: ${java.time.Instant.ofEpochMilli(latestSession.lastModified)}")
+    //             logD("找到最新会话: ${latestSession.name} in ${latestProject.name}")
+    //             logD("最后修改时间: ${java.time.Instant.ofEpochMilli(latestSession.lastModified)}")
             
             // 只有在没有当前项目时才切换项目，避免强制覆盖已选择的项目
             if (_currentProject.value == null) {
-                println("当前无项目，切换到最新会话所在项目: ${latestProject.name}")
+    //                 logD("当前无项目，切换到最新会话所在项目: ${latestProject.name}")
                 _currentProject.value = latestProject
                 
                 // 文件监听功能已移除
-                println("[ProjectManager] 已启动最新项目监听: ${latestProject.name} -> ${latestProject.path}")
+    //                 logD("[ProjectManager] 已启动最新项目监听: ${latestProject.name} -> ${latestProject.path}")
                 
                 setCurrentSession(latestSession, loadHistory = true)
             } else {
-                println("已有当前项目 ${_currentProject.value?.name}，不切换到 ${latestProject.name}")
+    //                 logD("已有当前项目 ${_currentProject.value?.name}，不切换到 ${latestProject.name}")
             }
         } else {
-            println("未找到任何会话")
+    //             logD("未找到任何会话")
         }
     }
     
@@ -234,11 +235,11 @@ class ProjectManager(
     private fun loadProjectsFromLocalConfig() {
         scope.launch {
             try {
-                println("从本地配置文件加载项目列表...")
+    //                 logD("从本地配置文件加载项目列表...")
                 val localConfigManager = com.claudecodeplus.ui.models.LocalConfigManager()
                 val localProjects = localConfigManager.getAllProjects()
                 
-                println("从本地配置加载到 ${localProjects.size} 个项目")
+    //                 logD("从本地配置加载到 ${localProjects.size} 个项目")
                 
                 val loadedProjects = localProjects.map { localProject ->
                     Project(
@@ -251,15 +252,15 @@ class ProjectManager(
                 _projects.value = loadedProjects
                 
                 if (loadedProjects.isNotEmpty()) {
-                    println("项目列表加载完成:")
+    //                     logD("项目列表加载完成:")
                     loadedProjects.forEach { project ->
-                        println("  - ${project.name} (${project.path})")
+    //                         logD("  - ${project.name} (${project.path})")
                     }
                     
                     if (autoLoad) {
                         // 自动加载模式：尝试选择当前工作目录对应的项目
                         val currentDir = System.getProperty("user.dir")
-                        println("当前工作目录: $currentDir")
+    //                         logD("当前工作目录: $currentDir")
                         
                         val currentDirProject = loadedProjects.find { project ->
                             val normalizedProjectPath = project.path.replace('\\', '/')
@@ -268,14 +269,14 @@ class ProjectManager(
                         }
                         
                         if (currentDirProject != null) {
-                            println("找到匹配当前工作目录的项目: ${currentDirProject.name}")
-                            println("[DEBUG] 设置当前项目前: _currentProject.value = ${_currentProject.value?.name}")
+    //                             logD("找到匹配当前工作目录的项目: ${currentDirProject.name}")
+    //                             logD("[DEBUG] 设置当前项目前: _currentProject.value = ${_currentProject.value?.name}")
                             _currentProject.value = currentDirProject
-                            println("[DEBUG] 设置当前项目后: _currentProject.value = ${_currentProject.value?.name}")
-                            println("[DEBUG] 触发UI重组...")
+    //                             logD("[DEBUG] 设置当前项目后: _currentProject.value = ${_currentProject.value?.name}")
+    //                             logD("[DEBUG] 触发UI重组...")
                             loadSessionsFromLocalConfig(currentDirProject.id)
                         } else {
-                            println("未找到匹配当前工作目录的项目，创建新项目")
+    //                             logD("未找到匹配当前工作目录的项目，创建新项目")
                             // 自动创建当前工作目录的项目
                             val projectName = currentDir.substringAfterLast(java.io.File.separator)
                             val newProject = localConfigManager.addProject(currentDir, projectName)
@@ -294,13 +295,13 @@ class ProjectManager(
                             newSessionsMap[project.id] = emptyList()
                             _sessions.value = newSessionsMap
                             
-                            println("已创建并选择新项目: ${project.name}")
+    //                             logD("已创建并选择新项目: ${project.name}")
                         }
                     } else {
-                        println("手动模式，等待用户选择项目")
+    //                         logD("手动模式，等待用户选择项目")
                     }
                 } else {
-                    println("本地配置中没有项目")
+    //                     logD("本地配置中没有项目")
                     if (autoLoad) {
                         // 即使没有项目，也自动创建当前工作目录的项目
                         val currentDir = System.getProperty("user.dir")
@@ -321,12 +322,12 @@ class ProjectManager(
                         newSessionsMap[project.id] = emptyList()
                         _sessions.value = newSessionsMap
                         
-                        println("已创建并选择新项目: ${project.name}")
+    //                         logD("已创建并选择新项目: ${project.name}")
                     }
                 }
             } catch (e: Exception) {
-                println("从本地配置加载项目失败: ${e.message}")
-                e.printStackTrace()
+    //                 logD("从本地配置加载项目失败: ${e.message}")
+                logE("Exception caught", e)
                 _projects.value = emptyList()
             }
         }
@@ -334,68 +335,68 @@ class ProjectManager(
 
     fun loadSessionsForProject(projectId: String, forceReload: Boolean = false) {
         if (!forceReload && _sessions.value.containsKey(projectId)) {
-            println("项目会话已缓存，跳过加载: $projectId")
+    //             logD("项目会话已缓存，跳过加载: $projectId")
             return
         }
 
         scope.launch {
             try {
-                println("开始加载项目会话: $projectId")
+    //                 logD("开始加载项目会话: $projectId")
                 
                 // 简化后的逻辑：projectId 就是 Claude 目录名，直接使用
                 val basePath = File(System.getProperty("user.home"), ".claude/projects")
                 val sessionsDir = File(basePath, projectId)
                 
-                println("会话目录: ${sessionsDir.absolutePath}")
-                println("目录是否存在: ${sessionsDir.exists()}")
+    //                 logD("会话目录: ${sessionsDir.absolutePath}")
+    //                 logD("目录是否存在: ${sessionsDir.exists()}")
 
                 if (sessionsDir.exists() && sessionsDir.isDirectory) {
                     val sessionFiles = sessionsDir.listFiles { _, name -> name.endsWith(".jsonl") } ?: emptyArray()
-                    println("找到 ${sessionFiles.size} 个会话文件")
+    //                     logD("找到 ${sessionFiles.size} 个会话文件")
                     
                     val loadedSessions = sessionFiles.mapNotNull { file ->
                         try {
-                            println("正在处理会话文件: ${file.name}")
+    //                             logD("正在处理会话文件: ${file.name}")
                             val lines = file.readLines()
                             if (lines.isEmpty()) {
-                                println("会话文件为空: ${file.name}")
+    //                                 logD("会话文件为空: ${file.name}")
                                 return@mapNotNull null
                             }
 
                             // 使用文件名作为会话ID（这是Claude CLI的约定）
                             val sessionId = file.nameWithoutExtension
-                            println("  使用文件名作为sessionId: $sessionId")
+    //                             logD("  使用文件名作为sessionId: $sessionId")
                             
                             // 尝试从第一行获取时间戳
                             val timestamp = try {
                                 val firstLineJson = json.parseToJsonElement(lines.first()).jsonObject
                                 firstLineJson["timestamp"]?.jsonPrimitive?.content ?: ""
                             } catch (e: Exception) {
-                                println("  无法解析第一行获取时间戳: ${e.message}")
+    //                                 logD("  无法解析第一行获取时间戳: ${e.message}")
                                 ""
                             }
                             
                             // 生成会话名称
                             val sessionName = generateSessionName(lines, sessionId, timestamp)
 
-                            println("成功加载会话: $sessionId - $sessionName")
+    //                             logD("成功加载会话: $sessionId - $sessionName")
                             
                             // 检查生成的会话名称是否是纯数字
                             if (sessionName.matches(Regex("\\d+"))) {
-                                println("警告：generateSessionName 返回了纯数字名称！")
-                                println("  - sessionName: '$sessionName'")
-                                println("  - lines.size: ${lines.size}")
-                                println("  - 文件: ${file.name}")
+    //                                 logD("警告：generateSessionName 返回了纯数字名称！")
+    //                                 logD("  - sessionName: '$sessionName'")
+    //                                 logD("  - lines.size: ${lines.size}")
+    //                                 logD("  - 文件: ${file.name}")
                                 // 尝试查看前几行内容
-                                println("  - 前3行内容：")
+    //                                 logD("  - 前3行内容：")
                                 lines.take(3).forEachIndexed { index, line ->
-                                    println("    ${index + 1}: ${line.take(100)}...")
+    //                                     logD("    ${index + 1}: ${line.take(100)}...")
                                 }
                             }
                             
                             // 检查并修正会话名称
                             val validatedSessionName = if (sessionName.matches(Regex("\\d+")) && sessionName.toIntOrNull()?.let { it in 50..10000 } == true) {
-                                println("  - 检测到纯数字会话名称: '$sessionName'，使用默认名称")
+    //                                 logD("  - 检测到纯数字会话名称: '$sessionName'，使用默认名称")
                                 val dateTime = if (timestamp.isNotBlank()) {
                                     try {
                                         val date = timestamp.substringBefore("T")
@@ -413,22 +414,22 @@ class ProjectManager(
                             }
                             
                             val finalSessionName = validatedSessionName.take(50)
-                            println("DEBUG: 原始会话名称: '$sessionName', 验证后: '$validatedSessionName', 截断后: '$finalSessionName'")
+    //                             logD("DEBUG: 原始会话名称: '$sessionName', 验证后: '$validatedSessionName', 截断后: '$finalSessionName'")
                             // 额外的调试信息
-                            println("DEBUG: 即将创建 ProjectSession:")
-                            println("  - sessionId: $sessionId")
-                            println("  - projectId: $projectId")
-                            println("  - name (finalSessionName): '$finalSessionName'")
-                            println("  - timestamp: $timestamp")
-                            println("  - lines.size: ${lines.size}")
+    //                             logD("DEBUG: 即将创建 ProjectSession:")
+    //                             logD("  - sessionId: $sessionId")
+    //                             logD("  - projectId: $projectId")
+    //                             logD("  - name (finalSessionName): '$finalSessionName'")
+    //                             logD("  - timestamp: $timestamp")
+    //                             logD("  - lines.size: ${lines.size}")
                             
                             // 提取会话的工作目录
                             val sessionCwd = extractCwdFromSessionFile(lines)
-                            println("DEBUG: 从会话文件中提取的 cwd: '$sessionCwd'")
+    //                             logD("DEBUG: 从会话文件中提取的 cwd: '$sessionCwd'")
                             
                             // 如果无法提取到有效的 cwd，跳过这个会话文件
                             if (sessionCwd.isNullOrBlank()) {
-                                println("警告: 会话文件 ${file.name} 无法提取有效的工作目录，已跳过")
+    //                                 logD("警告: 会话文件 ${file.name} 无法提取有效的工作目录，已跳过")
                                 return@mapNotNull null
                             }
                             
@@ -440,27 +441,27 @@ class ProjectManager(
                                 lastModified = file.lastModified(), // 使用文件的最后修改时间
                                 cwd = sessionCwd
                             )
-                            println("DEBUG: 创建后的 ProjectSession - ID: ${session.id}, Name: '${session.name}', LastModified: ${file.lastModified()}")
+    //                             logD("DEBUG: 创建后的 ProjectSession - ID: ${session.id}, Name: '${session.name}', LastModified: ${file.lastModified()}")
                             
                             // 额外检查：如果名称是纯数字，检查是否等于行数
                             if (session.name.matches(Regex("\\d+"))) {
                                 val nameAsNumber = session.name.toIntOrNull()
                                 if (nameAsNumber == lines.size) {
-                                    println("严重错误：会话名称是文件行数！")
-                                    println("  - session.name: '${session.name}'")
-                                    println("  - lines.size: ${lines.size}")
-                                    println("  - 它们相等！")
+    //                                     logD("严重错误：会话名称是文件行数！")
+    //                                     logD("  - session.name: '${session.name}'")
+    //                                     logD("  - lines.size: ${lines.size}")
+    //                                     logD("  - 它们相等！")
                                 }
                             }
                             session
                         } catch (e: Exception) {
-                            println("处理会话文件失败: ${file.name}, 错误: ${e.message}")
-                            e.printStackTrace()
+    //                             logD("处理会话文件失败: ${file.name}, 错误: ${e.message}")
+                            logE("Exception caught", e)
                             null
                         }
                     }.sortedByDescending { it.lastModified } // 按最后修改时间降序排序
 
-                    println("成功加载 ${loadedSessions.size} 个会话")
+    //                     logD("成功加载 ${loadedSessions.size} 个会话")
                     val newSessionsMap = _sessions.value.toMutableMap()
                     newSessionsMap[projectId] = loadedSessions
                     _sessions.value = newSessionsMap
@@ -468,17 +469,17 @@ class ProjectManager(
                     // 如果是当前项目，自动选择最新修改的会话
                     if (_currentProject.value?.id == projectId && loadedSessions.isNotEmpty()) {
                         val latestSession = loadedSessions.first() // 已按最后修改时间排序，第一个是最新的
-                        println("自动选择最新会话: ${latestSession.name} (最后修改: ${java.time.Instant.ofEpochMilli(latestSession.lastModified)})")
+    //                         logD("自动选择最新会话: ${latestSession.name} (最后修改: ${java.time.Instant.ofEpochMilli(latestSession.lastModified)})")
                         setCurrentSession(latestSession, loadHistory = true)
                     } else {
-                        println("跳过自动选择会话，因为不是当前项目: 当前=${_currentProject.value?.id}, 加载的=$projectId")
+    //                         logD("跳过自动选择会话，因为不是当前项目: 当前=${_currentProject.value?.id}, 加载的=$projectId")
                     }
                 } else {
-                    println("会话目录不存在或不是目录")
+    //                     logD("会话目录不存在或不是目录")
                 }
             } catch (e: Exception) {
-                println("加载会话失败: ${e.message}")
-                e.printStackTrace()
+    //                 logD("加载会话失败: ${e.message}")
+                logE("Exception caught", e)
             }
         }
     }
@@ -489,7 +490,7 @@ class ProjectManager(
         loadSessionsForProject(project.id)
         
         // 不再需要启动文件监听和设置回调
-        println("[ProjectManager] 已选择项目: ${project.name} -> ${project.path}")
+    //         logD("[ProjectManager] 已选择项目: ${project.name} -> ${project.path}")
     }
     
     /**
@@ -497,7 +498,7 @@ class ProjectManager(
      */
     fun reloadAllSessions() {
         scope.launch {
-            println("强制重新加载所有会话...")
+    //             logD("强制重新加载所有会话...")
             _sessions.value = emptyMap()
             _projects.value.forEach { project ->
                 loadSessionsForProject(project.id, forceReload = true)
@@ -521,15 +522,15 @@ class ProjectManager(
             )
             
             if (isSameSession) {
-                println("[ProjectManager] 切换到同一个会话，复用现有 SessionObject: tabId=${session.id}, sessionId=${sessionObject.sessionId}")
+    //                 logD("[ProjectManager] 切换到同一个会话，复用现有 SessionObject: tabId=${session.id}, sessionId=${sessionObject.sessionId}")
             } else {
-                println("[ProjectManager] 切换到新会话或创建新 SessionObject: tabId=${session.id}, sessionId=${sessionObject.sessionId}")
+    //                 logD("[ProjectManager] 切换到新会话或创建新 SessionObject: tabId=${session.id}, sessionId=${sessionObject.sessionId}")
             }
             
             _currentSessionObject.value = sessionObject
         } else {
             _currentSessionObject.value = null
-            println("[ProjectManager] 无当前项目，清空 SessionObject")
+    //             logD("[ProjectManager] 无当前项目，清空 SessionObject")
         }
         
         // 保存最后选中的会话到配置文件 - 现在使用 SessionObject 的 sessionId
@@ -537,33 +538,33 @@ class ProjectManager(
             val localConfigManager = LocalConfigManager()
             val sessionIdToSave = _currentSessionObject.value?.sessionId ?: session.id
             localConfigManager.saveLastSelectedSession(sessionIdToSave)
-            println("[ProjectManager] 保存最后选中会话: $sessionIdToSave")
+    //             logD("[ProjectManager] 保存最后选中会话: $sessionIdToSave")
         } catch (e: Exception) {
-            println("[ProjectManager] 保存最后选中会话失败: ${e.message}")
+    //             logD("[ProjectManager] 保存最后选中会话失败: ${e.message}")
         }
         
         // 触发会话历史加载事件（如果是同一个会话且已经加载过历史，可以跳过）
         if (loadHistory && !isSameSession) {
-            println("=== ProjectManager.setCurrentSession 发出会话加载事件 ===")
-            println("  - session.id: ${session.id}")
-            println("  - session.name: ${session.name}")
-            println("  - loadHistory: $loadHistory")
-            println("  - isSameSession: $isSameSession (跳过重复加载)")
+    //             logD("=== ProjectManager.setCurrentSession 发出会话加载事件 ===")
+    //             logD("  - session.id: ${session.id}")
+    //             logD("  - session.name: ${session.name}")
+    //             logD("  - loadHistory: $loadHistory")
+    //             logD("  - isSameSession: $isSameSession (跳过重复加载)")
             scope.launch {
-                println("  - 发出 SessionLoadEvent")
+    //                 logD("  - 发出 SessionLoadEvent")
                 _sessionLoadEvent.emit(SessionLoadEvent(session))
-                println("  - SessionLoadEvent 已发出")
+    //                 logD("  - SessionLoadEvent 已发出")
             }
         } else if (loadHistory && isSameSession) {
-            println("[ProjectManager] 切换到同一个会话，跳过历史加载")
+    //             logD("[ProjectManager] 切换到同一个会话，跳过历史加载")
         }
     }
     
     private fun generateSessionName(lines: List<String>, sessionId: String, timestamp: String): String {
-        println("\n=== generateSessionName 调试 ===")
-        println("  - 输入 lines.size: ${lines.size}")
-        println("  - 输入 sessionId: $sessionId")
-        println("  - 输入 timestamp: $timestamp")
+    //         logD("\n=== generateSessionName 调试 ===")
+    //         logD("  - 输入 lines.size: ${lines.size}")
+    //         logD("  - 输入 sessionId: $sessionId")
+    //         logD("  - 输入 timestamp: $timestamp")
         
         try {
             // 查找第一条用户消息
@@ -571,34 +572,34 @@ class ProjectManager(
             for ((index, line) in lines.withIndex()) {
                 if (line.contains("\"type\":\"user\"") && !line.contains("\"isMeta\":true")) {
                     userMessageCount++
-                    println("  - 找到用户消息 #$userMessageCount at line $index")
+    //                     logD("  - 找到用户消息 #$userMessageCount at line $index")
                     
                     val messageJson = json.parseToJsonElement(line).jsonObject["message"]?.jsonObject
                     
                     // 尝试获取 content（可能是字符串或数组）
                     val contentElement = messageJson?.get("content")
-                    println("  - contentElement 类型: ${contentElement?.javaClass?.simpleName}")
-                    println("  - contentElement 内容: $contentElement")
+    //                     logD("  - contentElement 类型: ${contentElement?.javaClass?.simpleName}")
+    //                     logD("  - contentElement 内容: $contentElement")
                     
                     val content = when {
                         contentElement is kotlinx.serialization.json.JsonPrimitive -> {
-                            println("  - 处理 JsonPrimitive 类型")
+    //                             logD("  - 处理 JsonPrimitive 类型")
                             contentElement.content
                         }
                         contentElement is kotlinx.serialization.json.JsonArray -> {
-                            println("  - 处理 JsonArray 类型，数组大小: ${contentElement.size}")
+    //                             logD("  - 处理 JsonArray 类型，数组大小: ${contentElement.size}")
                             // 处理内容数组（如 [{"type":"text","text":"..."}]）
                             val firstElement = contentElement.firstOrNull()
-                            println("  - 第一个元素: $firstElement")
+    //                             logD("  - 第一个元素: $firstElement")
                             firstElement?.jsonObject?.get("text")?.jsonPrimitive?.content
                         }
                         else -> {
-                            println("  - 未知的 content 类型")
+    //                             logD("  - 未知的 content 类型")
                             null
                         }
                     }
                     
-                    println("  - 提取的 content: '${content?.take(50)}...'")
+    //                     logD("  - 提取的 content: '${content?.take(50)}...'")
                     
                     if (!content.isNullOrBlank()) {
                         // 跳过 Caveat 消息和命令消息
@@ -606,7 +607,7 @@ class ProjectManager(
                             content.contains("<command-name>") || 
                             content.contains("<local-command-stdout>") ||
                             content.startsWith("[Request interrupted")) {
-                            println("  - 跳过特殊消息类型")
+    //                             logD("  - 跳过特殊消息类型")
                             continue
                         }
                         
@@ -616,7 +617,7 @@ class ProjectManager(
                             .replace(Regex("\\s+"), " ")
                             .trim()
                         
-                        println("  - 清理后的 content: '$cleanContent'")
+    //                         logD("  - 清理后的 content: '$cleanContent'")
                         
                         // 如果内容有意义（长度>=3），使用它（允许纯数字，因为有些会话可能就是讨论数字）
                         if (cleanContent.length >= 3) {
@@ -625,14 +626,14 @@ class ProjectManager(
                                 val numberValue = cleanContent.toIntOrNull()
                                 // 如果是可能的行数范围（50-10000），跳过
                                 if (numberValue != null && numberValue in 50..10000) {
-                                    println("  - 跳过可能是行数的纯数字: $cleanContent (值在 50-10000 范围内)")
+    //                                     logD("  - 跳过可能是行数的纯数字: $cleanContent (值在 50-10000 范围内)")
                                     continue
                                 }
                                 // 如果是小数字（<50），可能是真实的对话内容，但加上前缀
                                 if (numberValue != null && numberValue < 50) {
                                     val result = "关于 $cleanContent 的讨论"
-                                    println("  - ✅ 返回带前缀的数字会话名称: '$result'")
-                                    println("=================================\n")
+    //                                     logD("  - ✅ 返回带前缀的数字会话名称: '$result'")
+    //                                     logD("=================================\n")
                                     return result
                                 }
                             }
@@ -641,8 +642,8 @@ class ProjectManager(
                                 cleanContent.length <= 50 -> cleanContent
                                 else -> cleanContent.take(47) + "..."
                             }
-                            println("  - ✅ 返回会话名称: '$result'")
-                            println("=================================\n")
+    //                             logD("  - ✅ 返回会话名称: '$result'")
+    //                             logD("=================================\n")
                             return result
                         }
                     }
@@ -650,26 +651,26 @@ class ProjectManager(
             }
             
             // 尝试从摘要获取
-            println("  - 没有找到合适的用户消息，尝试从摘要获取")
+    //             logD("  - 没有找到合适的用户消息，尝试从摘要获取")
             val summaryLine = lines.firstOrNull { it.contains("\"type\":\"summary\"") }
             if (summaryLine != null) {
-                println("  - 找到摘要行")
+    //                 logD("  - 找到摘要行")
                 try {
                     val summaryJson = json.parseToJsonElement(summaryLine).jsonObject
                     val summary = summaryJson["summary"]?.jsonPrimitive?.content
                     if (!summary.isNullOrBlank()) {
                         val result = if (summary.length <= 50) summary else summary.take(47) + "..."
-                        println("  - ✅ 从摘要返回: '$result'")
-                        println("=================================\n")
+    //                         logD("  - ✅ 从摘要返回: '$result'")
+    //                         logD("=================================\n")
                         return result
                     }
                 } catch (e: Exception) {
-                    println("  - 解析摘要失败: ${e.message}")
+    //                     logD("  - 解析摘要失败: ${e.message}")
                 }
             }
             
             // 使用时间戳
-            println("  - 没有找到合适内容，使用时间戳生成默认名称")
+    //             logD("  - 没有找到合适内容，使用时间戳生成默认名称")
             val result = if (timestamp.isNotBlank()) {
                 try {
                     val date = timestamp.substringBefore("T")
@@ -681,14 +682,14 @@ class ProjectManager(
             } else {
                 "会话 ${sessionId.take(8)}"
             }
-            println("  - ✅ 返回默认名称: '$result'")
-            println("=================================\n")
+    //             logD("  - ✅ 返回默认名称: '$result'")
+    //             logD("=================================\n")
             return result
         } catch (e: Exception) {
             val result = "会话 ${sessionId.take(8)}"
-            println("  - ❌ 异常: ${e.message}")
-            println("  - ✅ 返回异常处理名称: '$result'")
-            println("=================================\n")
+    //             logD("  - ❌ 异常: ${e.message}")
+    //             logD("  - ✅ 返回异常处理名称: '$result'")
+    //             logD("=================================\n")
             return result
         }
     }
@@ -698,20 +699,20 @@ class ProjectManager(
      */
     fun refreshAllSessionNames() {
         scope.launch {
-            println("\n=== 开始刷新所有会话名称 ===")
+    //             logD("\n=== 开始刷新所有会话名称 ===")
             var fixedCount = 0
             
             // 遍历所有项目的会话
             _sessions.value.forEach { (projectId, sessions) ->
                 val project = _projects.value.find { it.id == projectId }
-                println("刷新项目 ${project?.name ?: projectId} 的会话...")
+    //                 logD("刷新项目 ${project?.name ?: projectId} 的会话...")
                 
                 val updatedSessions = sessions.map { session ->
                     // 检查是否是纯数字名称
                     if (session.name.matches(Regex("\\d+"))) {
                         val numberValue = session.name.toIntOrNull()
                         if (numberValue != null && numberValue in 50..10000) {
-                            println("  - 发现纯数字会话名称: '${session.name}' (ID: ${session.id})")
+    //                             logD("  - 发现纯数字会话名称: '${session.name}' (ID: ${session.id})")
                             
                             // 生成存储路径（projectId 现在就是目录名）
                             val basePath = File(System.getProperty("user.home"), ".claude/projects")
@@ -742,16 +743,16 @@ class ProjectManager(
                                         newName
                                     }
                                     
-                                    println("    - 新名称: '$finalName'")
+    //                                     logD("    - 新名称: '$finalName'")
                                     fixedCount++
                                     
                                     // 返回更新后的会话（保持原有的 lastModified）
                                     return@map session.copy(name = finalName)
                                 } catch (e: Exception) {
-                                    println("    - 刷新失败: ${e.message}")
+    //                                     logD("    - 刷新失败: ${e.message}")
                                 }
                             } else {
-                                println("    - 会话文件不存在: ${sessionFile?.absolutePath ?: "无ID"}")
+    //                                 logD("    - 会话文件不存在: ${sessionFile?.absolutePath ?: "无ID"}")
                             }
                         }
                     }
@@ -765,8 +766,8 @@ class ProjectManager(
                 }
             }
             
-            println("=== 会话名称刷新完成，共修复 $fixedCount 个会话 ===")
-            println("注意：标签标题需要在 TabManager 中单独更新\n")
+    //             logD("=== 会话名称刷新完成，共修复 $fixedCount 个会话 ===")
+    //             logD("注意：标签标题需要在 TabManager 中单独更新\n")
         }
     }
     
@@ -774,16 +775,16 @@ class ProjectManager(
      * 手动加载当前工作目录的项目和会话
      */
     fun loadCurrentWorkingDirectoryProject() {
-        println("[DEBUG] loadCurrentWorkingDirectoryProject 方法被调用")
+    //         logD("[DEBUG] loadCurrentWorkingDirectoryProject 方法被调用")
         scope.launch {
-            println("[DEBUG] 在协程中执行 loadCurrentWorkingDirectoryProject")
+    //             logD("[DEBUG] 在协程中执行 loadCurrentWorkingDirectoryProject")
             // 获取当前工作目录
             val currentDir = System.getProperty("user.dir")
-            println("加载当前工作目录项目: $currentDir")
+    //             logD("加载当前工作目录项目: $currentDir")
             
             // 生成对应的项目ID
             val currentDirProjectId = ProjectPathUtils.projectPathToDirectoryName(currentDir)
-            println("对应的项目ID: $currentDirProjectId")
+    //             logD("对应的项目ID: $currentDirProjectId")
             
             // 清除缓存以强制重新加载（使用项目ID作为键）
             _sessions.value = _sessions.value.filterKeys { it != currentDirProjectId }.toMap()
@@ -796,10 +797,10 @@ class ProjectManager(
             }
             
             if (existingProject != null) {
-                println("项目已存在: ${existingProject.name}")
+    //                 logD("项目已存在: ${existingProject.name}")
                 setCurrentProject(existingProject)
             } else {
-                println("项目不存在，添加到项目列表")
+    //                 logD("项目不存在，添加到项目列表")
                 // 从路径中提取项目名称
                 val projectName = extractProjectName(currentDir)
                 val newProject = Project(
@@ -817,14 +818,14 @@ class ProjectManager(
      * 删除项目及其所有会话
      */
     suspend fun deleteProject(project: Project) {
-        println("删除项目: ${project.name}")
+    //         logD("删除项目: ${project.name}")
         
         // 1. 删除项目的会话目录（project.id 现在就是目录名）
         val basePath = File(System.getProperty("user.home"), ".claude/projects")
         val projectDir = File(basePath, project.id)
         
         if (projectDir.exists() && projectDir.isDirectory) {
-            println("删除会话目录: ${projectDir.absolutePath}")
+    //             logD("删除会话目录: ${projectDir.absolutePath}")
             projectDir.deleteRecursively()
         }
         
@@ -850,7 +851,7 @@ class ProjectManager(
      * 更新ProjectSession的ID（当SessionObject的sessionId发生变化时调用）
      */
     fun updateProjectSessionId(oldSessionId: String, newSessionId: String) {
-        println("[ProjectManager] updateProjectSessionId: $oldSessionId -> $newSessionId")
+    //         logD("[ProjectManager] updateProjectSessionId: $oldSessionId -> $newSessionId")
         
         try {
             // 查找并更新所有项目中匹配的会话
@@ -860,7 +861,7 @@ class ProjectManager(
             allSessions.forEach { (projectId, sessionList) ->
                 sessionList.forEachIndexed { index, session ->
                     if (session.id == oldSessionId) {
-                        println("[ProjectManager] 找到匹配的ProjectSession，更新ID: ${session.name}")
+    //                         logD("[ProjectManager] 找到匹配的ProjectSession，更新ID: ${session.name}")
                         val updatedSession = session.copy(id = newSessionId)
                         
                         // 更新sessions状态
@@ -874,7 +875,7 @@ class ProjectManager(
                         // 如果这是当前会话，也要更新currentSession
                         if (_currentSession.value?.id == oldSessionId) {
                             _currentSession.value = updatedSession
-                            println("[ProjectManager] 已更新当前会话ID: $oldSessionId -> $newSessionId")
+    //                             logD("[ProjectManager] 已更新当前会话ID: $oldSessionId -> $newSessionId")
                         }
                         
                         updated = true
@@ -884,13 +885,13 @@ class ProjectManager(
             }
             
             if (updated) {
-                println("[ProjectManager] ProjectSession.id 更新成功")
+    //                 logD("[ProjectManager] ProjectSession.id 更新成功")
             } else {
-                println("[ProjectManager] 未找到匹配的ProjectSession: $oldSessionId")
+    //                 logD("[ProjectManager] 未找到匹配的ProjectSession: $oldSessionId")
             }
         } catch (e: Exception) {
-            println("[ProjectManager] 更新ProjectSession.id失败: ${e.message}")
-            e.printStackTrace()
+    //             logD("[ProjectManager] 更新ProjectSession.id失败: ${e.message}")
+            logE("Exception caught", e)
         }
     }
     
@@ -898,7 +899,7 @@ class ProjectManager(
      * 删除单个会话
      */
     suspend fun deleteSession(session: ProjectSession, project: Project) {
-        println("删除会话: ${session.name}")
+    //         logD("删除会话: ${session.name}")
         
         // 1. 删除会话文件（使用 project.id 作为目录名）
         val basePath = File(System.getProperty("user.home"), ".claude/projects")
@@ -908,7 +909,7 @@ class ProjectManager(
         }
         
         if (sessionFileToDelete != null && sessionFileToDelete.exists()) {
-            println("删除会话文件: ${sessionFileToDelete.absolutePath}")
+    //             logD("删除会话文件: ${sessionFileToDelete.absolutePath}")
             sessionFileToDelete.delete()
         }
         
@@ -932,7 +933,7 @@ class ProjectManager(
     private suspend fun updateClaudeConfig(project: Project, remove: Boolean = false) {
         // 这里可以实现更新 .claude.json 的逻辑
         // 目前暂时不实现，因为可能影响其他 Claude 实例
-        println("更新配置文件: ${project.path}, 移除: $remove")
+    //         logD("更新配置文件: ${project.path}, 移除: $remove")
     }
     
     
@@ -943,11 +944,11 @@ class ProjectManager(
      * @return 创建的项目对象
      */
     suspend fun createProject(name: String, path: String): Project {
-        println("创建新项目: $name at $path")
+    //         logD("创建新项目: $name at $path")
         
         // 生成 Claude 目录名（项目ID）
         val projectId = ProjectPathUtils.projectPathToDirectoryName(path)
-        println("生成的项目ID（目录名）: $projectId")
+    //         logD("生成的项目ID（目录名）: $projectId")
         
         // 创建项目对象
         val newProject = Project(
@@ -964,7 +965,7 @@ class ProjectManager(
         }
         
         if (existingProject != null) {
-            println("项目已存在，切换到该项目: ${existingProject.name}")
+    //             logD("项目已存在，切换到该项目: ${existingProject.name}")
             setCurrentProject(existingProject)
             return existingProject
         }
@@ -997,11 +998,11 @@ class ProjectManager(
         scope.launch {
             val project = _projects.value.find { it.id == projectId }
             if (project == null) {
-                println("项目不存在: $projectId")
+    //                 logD("项目不存在: $projectId")
                 return@launch
             }
             
-            println("手动选择项目: ${project.name} (loadSessions: $loadSessions)")
+    //             logD("手动选择项目: ${project.name} (loadSessions: $loadSessions)")
             _currentProject.value = project
             
             if (loadSessions) {
@@ -1023,7 +1024,7 @@ class ProjectManager(
                 _sessions.value = newSessionsMap
                 
                 _currentSession.value = null
-                println("项目已选择，未加载历史会话，仅提供新建会话选项")
+    //                 logD("项目已选择，未加载历史会话，仅提供新建会话选项")
             }
         }
     }
@@ -1033,11 +1034,11 @@ class ProjectManager(
      */
     private suspend fun loadSessionsFromLocalConfig(projectId: String) {
         try {
-            println("从本地配置加载项目会话: $projectId")
+    //             logD("从本地配置加载项目会话: $projectId")
             val localConfigManager = com.claudecodeplus.ui.models.LocalConfigManager()
             val localSessions = localConfigManager.getProjectSessions(projectId)
             
-            println("从本地配置加载到 ${localSessions.size} 个会话")
+    //             logD("从本地配置加载到 ${localSessions.size} 个会话")
             
             val loadedSessions = localSessions.map { localSession ->
                 ProjectSession(
@@ -1061,16 +1062,16 @@ class ProjectManager(
             _sessions.value = newSessionsMap
             
             if (loadedSessions.isNotEmpty()) {
-                println("成功加载 ${loadedSessions.size} 个会话:")
+    //                 logD("成功加载 ${loadedSessions.size} 个会话:")
                 loadedSessions.forEach { session ->
-                    println("  - ${session.name} (${session.id})")
+    //                     logD("  - ${session.name} (${session.id})")
                 }
             } else {
-                println("该项目没有历史会话")
+    //                 logD("该项目没有历史会话")
             }
         } catch (e: Exception) {
-            println("从本地配置加载会话失败: ${e.message}")
-            e.printStackTrace()
+    //             logD("从本地配置加载会话失败: ${e.message}")
+            logE("Exception caught", e)
         }
     }
     
@@ -1089,7 +1090,7 @@ class ProjectManager(
             
             // 创建新项目并添加到本地配置
             val projectName = projectPath.substringAfterLast("/")
-            println("创建新项目: $projectName (路径: $projectPath)")
+    //             logD("创建新项目: $projectName (路径: $projectPath)")
             
             try {
                 val localConfigManager = com.claudecodeplus.ui.models.LocalConfigManager()
@@ -1115,10 +1116,10 @@ class ProjectManager(
                 _sessions.value = newSessionsMap
                 
                 _currentSession.value = null
-                println("成功创建并选择新项目: $projectName (ID: ${localProject.id})")
+    //                 logD("成功创建并选择新项目: $projectName (ID: ${localProject.id})")
             } catch (e: Exception) {
-                println("创建项目失败: ${e.message}")
-                e.printStackTrace()
+    //                 logD("创建项目失败: ${e.message}")
+                logE("Exception caught", e)
             }
         }
     }
@@ -1129,7 +1130,7 @@ class ProjectManager(
      * @return 创建的会话对象
      */
     suspend fun createPlaceholderSession(projectId: String): ProjectSession {
-        println("创建新的占位会话: projectId=$projectId")
+    //         logD("创建新的占位会话: projectId=$projectId")
         
         // 从项目ID获取项目路径作为cwd
         val project = _projects.value.find { it.id == projectId }
@@ -1152,10 +1153,10 @@ class ProjectManager(
             // 将新会话记录到本地配置中
             val localConfigManager = com.claudecodeplus.ui.models.LocalConfigManager()
             localConfigManager.addSession(projectId, sessionId, "新会话")
-            println("会话已记录到本地配置")
+    //             logD("会话已记录到本地配置")
         } catch (e: Exception) {
-            println("记录会话到本地配置失败: ${e.message}")
-            e.printStackTrace()
+    //             logD("记录会话到本地配置失败: ${e.message}")
+            logE("Exception caught", e)
         }
         
         // 添加到会话列表
@@ -1168,7 +1169,7 @@ class ProjectManager(
         
         // 不创建任何文件，所有文件操作由Claude CLI负责
         
-        println("创建占位会话成功: $sessionId")
+    //         logD("创建占位会话成功: $sessionId")
         return newSession
     }
     
@@ -1179,7 +1180,7 @@ class ProjectManager(
      * @param firstMessage 第一条消息内容
      */
     suspend fun updateSessionName(sessionId: String?, projectId: String, firstMessage: String) {
-        println("更新会话名称: sessionId=$sessionId, firstMessage=${firstMessage.take(50)}...")
+    //         logD("更新会话名称: sessionId=$sessionId, firstMessage=${firstMessage.take(50)}...")
         
         val projectSessions = _sessions.value[projectId]?.toMutableList() ?: return
         val sessionIndex = projectSessions.indexOfFirst { it.id == sessionId }
@@ -1195,7 +1196,7 @@ class ProjectManager(
             newSessionsMap[projectId] = projectSessions
             _sessions.value = newSessionsMap
             
-            println("会话名称已更新: '$newName'")
+    //             logD("会话名称已更新: '$newName'")
         }
     }
     
@@ -1219,7 +1220,7 @@ class ProjectManager(
      * 更新会话ID（当占位会话获得真实的Claude会话ID时）
      */
     suspend fun updateSessionId(oldSessionId: String?, newSessionId: String, projectId: String) {
-        println("更新会话ID: oldSessionId=$oldSessionId, newSessionId=$newSessionId")
+    //         logD("更新会话ID: oldSessionId=$oldSessionId, newSessionId=$newSessionId")
         
         val projectSessions = _sessions.value[projectId]?.toMutableList() ?: return
         val sessionIndex = projectSessions.indexOfFirst { it.id == oldSessionId }
@@ -1235,7 +1236,7 @@ class ProjectManager(
             
             // 不进行任何文件操作，所有文件由Claude CLI管理
             
-            println("会话ID已更新")
+    //             logD("会话ID已更新")
         }
     }
     
@@ -1279,53 +1280,53 @@ class ProjectManager(
      * 处理会话消息更新
      */
     private fun onSessionFileChanged(sessionId: String, projectPath: String) {
-        println("[ProjectManager] 🔔 收到文件变更回调 - sessionId: $sessionId, projectPath: $projectPath")
+        logD("[ProjectManager] 🔔 收到文件变更回调 - sessionId: $sessionId, projectPath: $projectPath")
         
         // 根据projectPath找到对应的Project
         val project = _projects.value.find { it.path == projectPath }
         if (project != null) {
-            println("[ProjectManager] ✅ 找到对应的项目: ${project.name}")
+    //             logD("[ProjectManager] ✅ 找到对应的项目: ${project.name}")
             
             // 从Project的所有Session中查找匹配sessionId的SessionObject
             project.getAllSessions().find { sessionObject -> 
                 sessionObject.sessionId == sessionId 
             }?.let { sessionObject ->
-                println("[ProjectManager] ✅ 找到匹配的SessionObject，通知更新: $sessionId")
+    //                 logD("[ProjectManager] ✅ 找到匹配的SessionObject，通知更新: $sessionId")
                 scope.launch {
-                    println("[ProjectManager] 开始调用 loadNewMessages (增量更新) for sessionId: $sessionId")
+    //                     logD("[ProjectManager] 开始调用 loadNewMessages (增量更新) for sessionId: $sessionId")
                     try {
                         sessionObject.loadNewMessages(forceFullReload = false) // 增量更新
-                        println("[ProjectManager] ✅ loadNewMessages 完成 for sessionId: $sessionId")
+    //                         logD("[ProjectManager] ✅ loadNewMessages 完成 for sessionId: $sessionId")
                     } catch (e: Exception) {
-                        println("[ProjectManager] ❌ loadNewMessages 失败 for sessionId: $sessionId, error: ${e.message}")
-                        e.printStackTrace()
+    //                         logD("[ProjectManager] ❌ loadNewMessages 失败 for sessionId: $sessionId, error: ${e.message}")
+                        logE("Exception caught", e)
                     }
                 }
             } ?: run {
-                println("[ProjectManager] ⚠️ 项目中未找到SessionObject with sessionId: $sessionId")
+    //                 logD("[ProjectManager] ⚠️ 项目中未找到SessionObject with sessionId: $sessionId")
                 
                 // 如果是当前项目的会话，尝试重新加载会话列表
                 val currentProject = _currentProject.value
-                println("[ProjectManager] 当前项目: ${currentProject?.name} (path: ${currentProject?.path})")
-                println("[ProjectManager] 文件变更的项目路径: $projectPath")
+    //                 logD("[ProjectManager] 当前项目: ${currentProject?.name} (path: ${currentProject?.path})")
+    //                 logD("[ProjectManager] 文件变更的项目路径: $projectPath")
                 
                 if (currentProject != null && projectPath == currentProject.path) {
-                    println("[ProjectManager] ✅ 这是当前项目的会话，重新加载会话列表")
+    //                     logD("[ProjectManager] ✅ 这是当前项目的会话，重新加载会话列表")
                     scope.launch {
                         try {
                             loadSessionsForProject(currentProject.id, forceReload = true)
-                            println("[ProjectManager] ✅ 会话列表重新加载完成")
+    //                             logD("[ProjectManager] ✅ 会话列表重新加载完成")
                         } catch (e: Exception) {
-                            println("[ProjectManager] ❌ 重新加载会话列表失败: ${e.message}")
-                            e.printStackTrace()
+    //                             logD("[ProjectManager] ❌ 重新加载会话列表失败: ${e.message}")
+                            logE("Exception caught", e)
                         }
                     }
                 } else {
-                    println("[ProjectManager] ❌ 文件变更不属于当前项目，忽略")
+    //                     logD("[ProjectManager] ❌ 文件变更不属于当前项目，忽略")
                 }
             }
         } else {
-            println("[ProjectManager] ❌ 未找到对应的项目: $projectPath")
+    //             logD("[ProjectManager] ❌ 未找到对应的项目: $projectPath")
         }
     }
     
@@ -1339,12 +1340,12 @@ class ProjectManager(
             try {
                 val localConfigManager = LocalConfigManager()
                 localConfigManager.saveLastSelectedSession(currentSessionObj.sessionId!!)
-                println("[ProjectManager] 自动保存当前会话为最后选中: ${currentSessionObj.sessionId}")
+    //                 logD("[ProjectManager] 自动保存当前会话为最后选中: ${currentSessionObj.sessionId}")
             } catch (e: Exception) {
-                println("[ProjectManager] 自动保存最后选中会话失败: ${e.message}")
+    //                 logD("[ProjectManager] 自动保存最后选中会话失败: ${e.message}")
             }
         } else {
-            println("[ProjectManager] 无当前会话或会话ID为空，跳过保存")
+    //             logD("[ProjectManager] 无当前会话或会话ID为空，跳过保存")
         }
     }
     

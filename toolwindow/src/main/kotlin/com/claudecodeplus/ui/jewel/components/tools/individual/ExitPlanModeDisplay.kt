@@ -36,13 +36,15 @@ fun ExitPlanModeDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具头部信息
-        ToolHeaderDisplay(
-            icon = "📋",
-            toolName = "ExitPlanMode",
-            subtitle = "计划展示和用户确认",
-            status = toolCall.status
-        )
+        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        if (!showDetails) {
+            ToolHeaderDisplay(
+                icon = "📋",
+                toolName = "ExitPlanMode",
+                subtitle = "计划展示和用户确认",
+                status = toolCall.status
+            )
+        }
 
         // 显示计划内容
         if (showDetails) {

@@ -166,7 +166,7 @@ class SessionServiceImpl(
                 pageSize = if (forceReload) Int.MAX_VALUE else 100
             )
             
-            logD("读取到 ${sessionMessages.size} 条历史消息")
+    //             logD("读取到 ${sessionMessages.size} 条历史消息")
             
             // 逐条解析历史消息
             val enhancedMessages = mutableListOf<EnhancedMessage>()
@@ -195,10 +195,10 @@ class SessionServiceImpl(
                     when (val parseResult = messageProcessor.parseHistoryMessage(sessionMessage)) {
                         is ParseResult.Success -> {
                             enhancedMessages.add(parseResult.data)
-                            logD("历史消息解析成功: ${parseResult.data.role}")
+    //                             logD("历史消息解析成功: ${parseResult.data.role}")
                         }
                         is ParseResult.Ignored -> {
-                            logD("历史消息被忽略: ${parseResult.reason}")
+    //                             logD("历史消息被忽略: ${parseResult.reason}")
                         }
                         is ParseResult.Error -> {
                             logW("历史消息解析失败: ${parseResult.message}")
@@ -255,7 +255,7 @@ class SessionServiceImpl(
     
     override suspend fun updateSessionMetadata(sessionId: String, metadata: SessionMetadata): Result<Unit> = suspendResultOf {
         // TODO: 实现元数据更新到配置文件
-        logD("更新会话元数据: sessionId=$sessionId")
+    //         logD("更新会话元数据: sessionId=$sessionId")
     }
     
     override suspend fun deleteSession(sessionId: String, projectPath: String): Result<Unit> = suspendResultOf {
@@ -313,7 +313,7 @@ class SessionServiceImpl(
                 val isError = (contentItem["is_error"] as? Boolean) ?: false
 
                 if (toolUseId != null) {
-                    logD("处理历史工具结果: toolId=$toolUseId, isError=$isError")
+    //                     logD("处理历史工具结果: toolId=$toolUseId, isError=$isError")
 
                     // 更新对应的工具调用结果
                     val updatedMessages = toolResultProcessor.processToolResult(
@@ -355,7 +355,7 @@ class SessionServiceImpl(
     private fun registerSessionEvents(sessionId: String) {
         if (!sessionEvents.containsKey(sessionId)) {
             sessionEvents[sessionId] = MutableSharedFlow()
-            logD("已注册会话事件流: sessionId=$sessionId")
+    //             logD("已注册会话事件流: sessionId=$sessionId")
         }
     }
     
@@ -365,7 +365,7 @@ class SessionServiceImpl(
     private fun getOrCreateEventFlow(sessionId: String): MutableSharedFlow<SessionEvent> {
         return sessionEvents.getOrPut(sessionId) {
             MutableSharedFlow<SessionEvent>().also {
-                logD("创建新的会话事件流: sessionId=$sessionId")
+    //                 logD("创建新的会话事件流: sessionId=$sessionId")
             }
         }
     }
@@ -377,7 +377,7 @@ class SessionServiceImpl(
         try {
             val eventFlow = getOrCreateEventFlow(sessionId)
             eventFlow.tryEmit(event)
-            logD("发射会话事件: sessionId=$sessionId, event=${event::class.simpleName}")
+    //             logD("发射会话事件: sessionId=$sessionId, event=${event::class.simpleName}")
         } catch (e: Exception) {
             logE("发射会话事件失败", e)
         }

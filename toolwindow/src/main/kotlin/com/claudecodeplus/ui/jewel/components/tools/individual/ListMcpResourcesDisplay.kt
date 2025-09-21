@@ -28,19 +28,21 @@ fun ListMcpResourcesDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具头部信息
-        val subtitle = if (listMcpResourcesTool.server != null) {
-            "server: ${listMcpResourcesTool.server}"
-        } else {
-            "列出所有MCP服务器资源"
-        }
+        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        if (!showDetails) {
+            val subtitle = if (listMcpResourcesTool.server != null) {
+                "server: ${listMcpResourcesTool.server}"
+            } else {
+                "列出所有MCP服务器资源"
+            }
 
-        ToolHeaderDisplay(
-            icon = "🔌",
-            toolName = "ListMcpResources",
-            subtitle = subtitle,
-            status = toolCall.status
-        )
+            ToolHeaderDisplay(
+                icon = "🔌",
+                toolName = "ListMcpResources",
+                subtitle = subtitle,
+                status = toolCall.status
+            )
+        }
 
         // 显示资源列表
         if (showDetails && toolCall.result != null) {

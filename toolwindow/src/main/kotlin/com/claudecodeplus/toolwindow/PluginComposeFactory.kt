@@ -4,7 +4,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.awt.ComposePanel
 import com.claudecodeplus.ui.services.UnifiedSessionService
 import com.claudecodeplus.session.ClaudeSessionManager
-import com.claudecodeplus.ui.jewel.StandaloneChatView
+import com.claudecodeplus.ui.components.StandaloneChatView
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.core.services.ProjectService
 import org.jetbrains.jewel.foundation.theme.JewelTheme

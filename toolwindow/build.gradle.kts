@@ -39,13 +39,16 @@ dependencies {
         bundledModule("intellij.libraries.skiko")
     }
     
-    // Markdown 解析 - 完整的CommonMark生态
+    // Markdown 解析 - 完整的CommonMark生态（保留用于其他功能）
     implementation("org.commonmark:commonmark:0.25.0")
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.25.0")
     implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.25.0")
     implementation("org.commonmark:commonmark-ext-autolink:0.25.0")
     implementation("org.commonmark:commonmark-ext-task-list-items:0.25.0")
     implementation("org.commonmark:commonmark-ext-heading-anchor:0.25.0")
+
+    // 注释掉不兼容的库 - 与 IntelliJ 平台的 Compose 集成冲突
+    // implementation("com.mohamedrejeb.richeditor:richeditor-compose:1.0.0-rc11")
     
     // Kotlinx Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")

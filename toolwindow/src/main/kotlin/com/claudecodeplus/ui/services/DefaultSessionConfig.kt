@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.services
+﻿package com.claudecodeplus.ui.services
 
+import com.claudecodeplus.core.logging.*
 import com.claudecodeplus.ui.models.AiModel
 import com.claudecodeplus.ui.models.PermissionMode
 import androidx.compose.runtime.mutableStateOf
@@ -80,12 +81,12 @@ object DefaultSessionConfig {
             try {
                 modelFromClaude = loadModelFromClaudeSettings()
             } catch (e: Exception) {
-                println("[DefaultSessionConfig] 无法读取 Claude 全局配置: ${e.message}")
+    //                 logD("[DefaultSessionConfig] 无法读取 Claude 全局配置: ${e.message}")
             }
             
             // 加载默认模型 - 优先使用 Claude 配置，否则使用插件本地配置
             val modelName = if (modelFromClaude != null) {
-                println("[DefaultSessionConfig] 使用 Claude 全局配置的模型: ${modelFromClaude.displayName}")
+    //                 logD("[DefaultSessionConfig] 使用 Claude 全局配置的模型: ${modelFromClaude.displayName}")
                 modelFromClaude.name
             } else {
                 prefs.get(KEY_DEFAULT_MODEL, AiModel.DEFAULT.name)
@@ -100,13 +101,13 @@ object DefaultSessionConfig {
             // 加载是否跳过权限
             defaultSkipPermissions = prefs.getBoolean(KEY_DEFAULT_SKIP_PERMISSIONS, true)
             
-            println("[DefaultSessionConfig] 加载默认配置:")
-            println("  - 默认模型: $defaultModel")
-            println("  - 默认权限模式: $defaultPermissionMode")
-            println("  - 跳过权限确认: $defaultSkipPermissions")
+    //             logD("[DefaultSessionConfig] 加载默认配置:")
+    //             logD("  - 默认模型: $defaultModel")
+    //             logD("  - 默认权限模式: $defaultPermissionMode")
+    //             logD("  - 跳过权限确认: $defaultSkipPermissions")
         } catch (e: Exception) {
-            println("[DefaultSessionConfig] 加载配置失败: ${e.message}")
-            e.printStackTrace()
+    //             logD("[DefaultSessionConfig] 加载配置失败: ${e.message}")
+            logE("Exception caught", e)
         }
     }
     
@@ -119,7 +120,7 @@ object DefaultSessionConfig {
         val settingsFile = Paths.get(System.getProperty("user.home"), ".claude", "settings.json")
         
         if (!Files.exists(settingsFile)) {
-            println("[DefaultSessionConfig] Claude 设置文件不存在: $settingsFile")
+    //             logD("[DefaultSessionConfig] Claude 设置文件不存在: $settingsFile")
             return null
         }
         
@@ -129,7 +130,7 @@ object DefaultSessionConfig {
 
             val modelStr = settings.model
             if (modelStr.isNullOrBlank()) {
-                println("[DefaultSessionConfig] Claude 设置文件中没有模型配置")
+    //                 logD("[DefaultSessionConfig] Claude 设置文件中没有模型配置")
                 return null
             }
             
@@ -141,18 +142,18 @@ object DefaultSessionConfig {
                 "opusplan" -> AiModel.OPUS_PLAN
                 "claude-opus-4-20250514" -> AiModel.OPUS_4
                 else -> {
-                    println("[DefaultSessionConfig] 未知的 Claude 模型: $modelStr, 使用默认模型")
+    //                     logD("[DefaultSessionConfig] 未知的 Claude 模型: $modelStr, 使用默认模型")
                     null
                 }
             }
             
             if (aiModel != null) {
-                println("[DefaultSessionConfig] 从 Claude 设置文件读取到模型: $modelStr -> ${aiModel.displayName}")
+    //                 logD("[DefaultSessionConfig] 从 Claude 设置文件读取到模型: $modelStr -> ${aiModel.displayName}")
             }
             
             return aiModel
         } catch (e: Exception) {
-            println("[DefaultSessionConfig] 读取 Claude 设置文件失败: ${e.message}")
+    //             logD("[DefaultSessionConfig] 读取 Claude 设置文件失败: ${e.message}")
             return null
         }
     }
@@ -167,10 +168,10 @@ object DefaultSessionConfig {
             prefs.putBoolean(KEY_DEFAULT_SKIP_PERMISSIONS, defaultSkipPermissions)
             prefs.flush()
             
-            println("[DefaultSessionConfig] 保存默认配置成功")
+    //             logD("[DefaultSessionConfig] 保存默认配置成功")
         } catch (e: Exception) {
-            println("[DefaultSessionConfig] 保存配置失败: ${e.message}")
-            e.printStackTrace()
+    //             logD("[DefaultSessionConfig] 保存配置失败: ${e.message}")
+            logE("Exception caught", e)
         }
     }
     

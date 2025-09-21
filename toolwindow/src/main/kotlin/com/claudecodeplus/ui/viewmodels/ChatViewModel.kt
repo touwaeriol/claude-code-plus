@@ -294,14 +294,14 @@ class ChatViewModel {
             }
         }
         
-        logD("已启动会话事件监听: sessionId=$sessionId")
+    //         logD("已启动会话事件监听: sessionId=$sessionId")
     }
     
     /**
      * 处理会话事件
      */
     private suspend fun handleSessionEvent(event: SessionEvent) {
-        logD("收到会话事件: ${event::class.simpleName}")
+    //         logD("收到会话事件: ${event::class.simpleName}")
         
         when (event) {
             is SessionEvent.MessageReceived -> {
@@ -391,7 +391,7 @@ class ChatViewModel {
                 state
             }
         }
-        logD("添加上下文: ${context}")
+    //         logD("添加上下文: ${context}")
     }
     
     /**
@@ -401,7 +401,7 @@ class ChatViewModel {
         updateState { state ->
             state.copy(contexts = state.contexts - context)
         }
-        logD("移除上下文: ${context}")
+    //         logD("移除上下文: ${context}")
     }
     
     /**
@@ -411,7 +411,7 @@ class ChatViewModel {
         updateState { 
             it.copy(selectedModel = model)
         }
-        logD("切换模型: ${model.displayName}")
+    //         logD("切换模型: ${model.displayName}")
     }
     
     /**
@@ -421,7 +421,7 @@ class ChatViewModel {
         updateState { 
             it.copy(selectedPermissionMode = mode)
         }
-        logD("切换权限模式: ${mode.name}")
+    //         logD("切换权限模式: ${mode.name}")
     }
     
     /**
@@ -431,7 +431,7 @@ class ChatViewModel {
         updateState { 
             it.copy(skipPermissions = skip)
         }
-        logD("跳过权限设置: $skip")
+    //         logD("跳过权限设置: $skip")
     }
     
     /**

@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.models
+﻿package com.claudecodeplus.ui.models
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
@@ -185,7 +186,7 @@ class SessionObjectV2(
             messageLoadingState = MessageLoadingState.HISTORY_LOADED
         }
         
-        println("[SessionObjectV2] 创建: sessionId=$initialSessionId, messages=${initialMessages.size}")
+    //         logD("[SessionObjectV2] 创建: sessionId=$initialSessionId, messages=${initialMessages.size}")
     }
     
     // ========== 公共方法 ==========
@@ -195,13 +196,13 @@ class SessionObjectV2(
      */
     suspend fun sendMessage(message: String): Boolean {
         if (isGenerating) {
-            println("[SessionObjectV2] 会话正在生成中，添加到队列")
+    //             logD("[SessionObjectV2] 会话正在生成中，添加到队列")
             addToQueue(message)
             return false
         }
         
         return try {
-            println("[SessionObjectV2] 发送消息: ${message.take(50)}...")
+    //             logD("[SessionObjectV2] 发送消息: ${message.take(50)}...")
             
             // 创建用户消息
             val userMessage = EnhancedMessage(
@@ -220,7 +221,7 @@ class SessionObjectV2(
             true
             
         } catch (e: Exception) {
-            println("[SessionObjectV2] 发送消息异常: ${e.message}")
+    //             logD("[SessionObjectV2] 发送消息异常: ${e.message}")
             setError("发送异常: ${e.message}")
             false
         }
@@ -230,7 +231,7 @@ class SessionObjectV2(
      * 中断生成
      */
     suspend fun interruptGeneration() {
-        println("[SessionObjectV2] 中断生成")
+    //         logD("[SessionObjectV2] 中断生成")
         isGenerating = false
         currentStreamJob?.cancel()
         currentStreamJob = null
@@ -250,7 +251,7 @@ class SessionObjectV2(
         }
         
         try {
-            println("[SessionObjectV2] 加载历史消息: sessionId=$sessionId, forceReload=$forceReload")
+    //             logD("[SessionObjectV2] 加载历史消息: sessionId=$sessionId, forceReload=$forceReload")
             isLoadingSession = true
             messageLoadingState = MessageLoadingState.LOADING_HISTORY
             
@@ -260,7 +261,7 @@ class SessionObjectV2(
             messageLoadingState = MessageLoadingState.HISTORY_LOADED
             isLoadingSession = false
         } catch (e: Exception) {
-            println("[SessionObjectV2] 加载历史消息异常: ${e.message}")
+    //             logD("[SessionObjectV2] 加载历史消息异常: ${e.message}")
             setError("加载异常: ${e.message}")
             messageLoadingState = MessageLoadingState.ERROR
             isLoadingSession = false
@@ -290,7 +291,7 @@ class SessionObjectV2(
         taskStartTime = null
         isFirstMessage = true
         messageLoadingState = MessageLoadingState.IDLE
-        println("[SessionObjectV2] 会话已清空")
+    //         logD("[SessionObjectV2] 会话已清空")
     }
     
     // ========== 状态管理方法 ==========
@@ -302,7 +303,7 @@ class SessionObjectV2(
         val oldSessionId = sessionId
         sessionId = newSessionId
         
-        println("[SessionObjectV2] 会话ID已更新: $oldSessionId -> $newSessionId")
+    //         logD("[SessionObjectV2] 会话ID已更新: $oldSessionId -> $newSessionId")
         
         // 标记不再是首次消息
         if (!newSessionId.isNullOrEmpty()) {
@@ -321,7 +322,7 @@ class SessionObjectV2(
         val isDuplicate = messages.any { it.id == message.id }
         if (!isDuplicate) {
             messages = messages + message
-            println("[SessionObjectV2] 添加消息: ${message.role}, content=${message.content.take(50)}...")
+    //             logD("[SessionObjectV2] 添加消息: ${message.role}, content=${message.content.take(50)}...")
         }
     }
     
@@ -370,7 +371,7 @@ class SessionObjectV2(
      */
     private fun setError(error: String) {
         errorMessage = error
-        println("[SessionObjectV2] 会话错误: $error")
+    //         logD("[SessionObjectV2] 会话错误: $error")
     }
     
     /**
@@ -591,7 +592,7 @@ class SessionObjectV2(
         messageLoadingState = state.messageLoadingState
         scrollPosition = state.scrollPosition
         
-        println("[SessionObjectV2] 会话状态已恢复: sessionId=$sessionId, messages=${messages.size}")
+    //         logD("[SessionObjectV2] 会话状态已恢复: sessionId=$sessionId, messages=${messages.size}")
     }
     
     // ========== 兼容性方法 ==========
@@ -603,10 +604,10 @@ class SessionObjectV2(
         markdownText: String,
         workingDirectory: String
     ): com.claudecodeplus.sdk.types.QueryResult {
-        println("[SessionObjectV2] 发送消息 (兼容模式): ${markdownText.take(50)}...")
+    //         logD("[SessionObjectV2] 发送消息 (兼容模式): ${markdownText.take(50)}...")
         
         if (isGenerating) {
-            println("[SessionObjectV2] 会话正在生成中，添加到队列")
+    //             logD("[SessionObjectV2] 会话正在生成中，添加到队列")
             addToQueue(markdownText)
             inputResetTrigger = System.currentTimeMillis()
             throw IllegalStateException("会话正在生成中，已添加到队列")

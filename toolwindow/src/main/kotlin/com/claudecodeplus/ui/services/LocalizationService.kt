@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.services
+﻿package com.claudecodeplus.ui.services
 
+import com.claudecodeplus.core.logging.*
 import java.util.*
 
 /**
@@ -48,10 +49,10 @@ object LocalizationService {
     fun getIDELocale(): Locale {
         return try {
             val ideLocale = ideIntegration?.getIdeLocale() ?: Locale.getDefault()
-            println("[LocalizationService] 获取IDE语言设置: $ideLocale")
+    //             logD("[LocalizationService] 获取IDE语言设置: $ideLocale")
             ideLocale
         } catch (e: Exception) {
-            println("[LocalizationService] 获取IDE语言设置失败，使用英语作为默认: ${e.message}")
+    //             logD("[LocalizationService] 获取IDE语言设置失败，使用英语作为默认: ${e.message}")
             Locale.ENGLISH
         }
     }
@@ -80,7 +81,7 @@ object LocalizationService {
         val ideLocale = getIDELocale()
         val supportedLanguage = mapToSupportedLanguage(ideLocale)
         
-        println("[LocalizationService] IDE Locale: $ideLocale -> 应用语言: ${supportedLanguage.nativeName}")
+    //         logD("[LocalizationService] IDE Locale: $ideLocale -> 应用语言: ${supportedLanguage.nativeName}")
         
         return supportedLanguage
     }
@@ -127,7 +128,7 @@ object LocalizationService {
             String.format(template, *args)
         } catch (e: Exception) {
             // 如果格式化失败，返回原始模板
-            println("[LocalizationService] 字符串格式化失败: $template, 错误: ${e.message}")
+    //             logD("[LocalizationService] 字符串格式化失败: $template, 错误: ${e.message}")
             template
         }
     }

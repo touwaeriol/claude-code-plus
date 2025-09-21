@@ -27,7 +27,7 @@ class ToolResultProcessor {
      */
     fun processToolResult(jsonLine: String, messages: List<EnhancedMessage>): List<EnhancedMessage> {
         try {
-            logD("处理工具结果消息")
+    //             logD("处理工具结果消息")
             
             if (!jsonLine.trim().startsWith("{")) return messages
             
@@ -66,7 +66,7 @@ class ToolResultProcessor {
                 val isError = contentObj["is_error"]?.jsonPrimitive?.content?.toBoolean() ?: false
                 
                 if (toolUseId != null) {
-                    logD("处理工具结果: toolId=$toolUseId, isError=$isError")
+    //                     logD("处理工具结果: toolId=$toolUseId, isError=$isError")
                     updatedMessages = updateToolCallResult(
                         messages = updatedMessages,
                         toolUseId = toolUseId,
@@ -122,10 +122,10 @@ class ToolResultProcessor {
             val updatedMessages = messages.toMutableList()
             updatedMessages[messageIndex] = updatedMessage
             
-            logD("工具调用结果已更新: toolId=$toolUseId, isError=$isError")
+    //             logD("工具调用结果已更新: toolId=$toolUseId, isError=$isError")
             return updatedMessages
         } else {
-            logD("未找到工具调用ID为 $toolUseId 的消息")
+    //             logD("未找到工具调用ID为 $toolUseId 的消息")
             return messages
         }
     }

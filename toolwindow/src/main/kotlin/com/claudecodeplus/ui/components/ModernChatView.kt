@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.components.chat
+﻿package com.claudecodeplus.ui.components.chat
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -220,7 +221,7 @@ private fun ErrorDialog(
     // 这里可以实现一个简单的错误提示
     // 暂时使用控制台输出
     LaunchedEffect(error) {
-        println("错误: $error")
+    logD("错误: $error")
         // 自动关闭错误
         kotlinx.coroutines.delay(3000)
         onDismiss()
@@ -239,10 +240,10 @@ private suspend fun handleEffect(effect: ChatUiEffect) {
             // 输入框焦点的逻辑在UnifiedChatInput中处理
         }
         is ChatUiEffect.ShowSnackbar -> {
-            println("提示: ${effect.message}")
+    logD("提示: ${effect.message}")
         }
         is ChatUiEffect.NavigateToSession -> {
-            println("导航到会话: ${effect.sessionId}")
+    logD("导航到会话: ${effect.sessionId}")
         }
     }
 }

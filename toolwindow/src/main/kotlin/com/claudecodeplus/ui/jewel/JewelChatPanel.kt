@@ -98,7 +98,7 @@ class JewelChatPanel(
             )
         }
         
-        JewelConversationView(
+        com.claudecodeplus.ui.components.JewelConversationView(
             messages = messages.value,
             onSend = { textWithMarkdown ->
                 if (textWithMarkdown.isNotBlank() && !isGenerating.value) {

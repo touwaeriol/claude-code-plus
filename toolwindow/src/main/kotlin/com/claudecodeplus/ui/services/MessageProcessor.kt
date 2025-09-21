@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.services
+﻿package com.claudecodeplus.ui.services
 
+import com.claudecodeplus.core.logging.*
 import com.claudecodeplus.sdk.types.MessageType
 import com.claudecodeplus.sdk.types.SDKMessage
 import com.claudecodeplus.sdk.types.type
@@ -141,7 +142,7 @@ class MessageProcessor {
                     )
                 } else {
                     // 如果没有 toolCallId，记录警告但不创建 ToolCall
-                    println("WARNING: Tool use without id: ${sdkMessage.data?.toolName}")
+    //                     logD("WARNING: Tool use without id: ${sdkMessage.data?.toolName}")
                     ProcessResult.NoChange
                 }
             }
@@ -149,17 +150,17 @@ class MessageProcessor {
             MessageType.TOOL_RESULT -> {
                 // 通过 toolCallId 查找对应的工具调用
                 val toolCallId = sdkMessage.data?.toolCallId
-                println("[MessageProcessor] TOOL_RESULT: toolCallId=$toolCallId, hasError=${sdkMessage.data?.error != null}, resultLength=${sdkMessage.data?.toolResult?.toString()?.length ?: 0}")
-                println("[MessageProcessor] 当前工具调用列表(${toolCalls.size}个)：${toolCalls.map { "${it.name}(${it.id})" }}")
+    //                 logD("[MessageProcessor] TOOL_RESULT: toolCallId=$toolCallId, hasError=${sdkMessage.data?.error != null}, resultLength=${sdkMessage.data?.toolResult?.toString()?.length ?: 0}")
+    //                 logD("[MessageProcessor] 当前工具调用列表(${toolCalls.size}个)：${toolCalls.map { "${it.name}(${it.id})" }}")
                 
                 if (toolCallId != null) {
                     // 查找匹配的工具调用
                     val toolCallIndex = toolCalls.indexOfFirst { it.id == toolCallId }
-                    println("[MessageProcessor] 查找工具调用: index=$toolCallIndex, toolCalls.size=${toolCalls.size}")
+    //                     logD("[MessageProcessor] 查找工具调用: index=$toolCallIndex, toolCalls.size=${toolCalls.size}")
                     
                     if (toolCallIndex >= 0) {
                         val toolCall = toolCalls[toolCallIndex]
-                        println("[MessageProcessor] 找到工具调用: ${toolCall.name} (${toolCall.id})")
+    //                         logD("[MessageProcessor] 找到工具调用: ${toolCall.name} (${toolCall.id})")
 
                         val messageData = sdkMessage.data
                         val updatedToolCall = toolCall.copy(
@@ -175,7 +176,7 @@ class MessageProcessor {
                             },
                             endTime = System.currentTimeMillis()
                         )
-                        println("[MessageProcessor] 更新工具调用结果: status=${updatedToolCall.status}, hasResult=${updatedToolCall.result != null}")
+    //                         logD("[MessageProcessor] 更新工具调用结果: status=${updatedToolCall.status}, hasResult=${updatedToolCall.result != null}")
                         toolCalls[toolCallIndex] = updatedToolCall
                         
                         // 更新有序元素中对应的工具调用
@@ -201,7 +202,7 @@ class MessageProcessor {
                     }
                 } else {
                     // 如果没有 toolCallId，这是一个错误情况
-                    println("ERROR: Tool result without toolCallId")
+    //                     logD("ERROR: Tool result without toolCallId")
                     ProcessResult.NoChange
                 }
             }

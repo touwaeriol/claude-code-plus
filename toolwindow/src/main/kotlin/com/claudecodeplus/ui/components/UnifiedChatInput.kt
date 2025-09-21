@@ -1,4 +1,4 @@
-/*
+﻿/*
  * UnifiedChatInput.kt
  * 
  * 统一的聊天输入组件 - 现代化设计
@@ -7,6 +7,7 @@
 
 package com.claudecodeplus.ui.jewel.components
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -238,7 +239,7 @@ fun UnifiedChatInput(
             BasicTextField(
                 value = textFieldValue,
                 onValueChange = { newTextFieldValue ->
-                    println("[UnifiedChatInput] 📝 主输入框变化: '${textFieldValue.text}' -> '${newTextFieldValue.text}', 长度: ${textFieldValue.text.length} -> ${newTextFieldValue.text.length}")
+                    logD("[UnifiedChatInput] 📝 主输入框变化: '${textFieldValue.text}' -> '${newTextFieldValue.text}', 长度: ${textFieldValue.text.length} -> ${newTextFieldValue.text.length}")
                     // 直接更新文本，避免复杂的处理逻辑干扰输入
                     sessionObject?.updateInputText(newTextFieldValue)
                 },
@@ -283,11 +284,11 @@ fun UnifiedChatInput(
                     .fillMaxWidth()
                     .focusRequester(focusRequester)
                     .onFocusChanged { focusState ->
-                        println("[UnifiedChatInput] 🎯 主输入框焦点变化: isFocused=${focusState.isFocused}, hasFocus=${focusState.hasFocus}")
+                        logD("[UnifiedChatInput] 🎯 主输入框焦点变化: isFocused=${focusState.isFocused}, hasFocus=${focusState.hasFocus}")
                         isFocused = focusState.isFocused
                     }
                     .onKeyEvent { keyEvent ->
-                        println("[UnifiedChatInput] ⌨️ 主输入框键盘事件: ${keyEvent.key}, type=${keyEvent.type}, isAltPressed=${keyEvent.isAltPressed}, isShiftPressed=${keyEvent.isShiftPressed}")
+    logD("[UnifiedChatInput] ⌨️ 主输入框键盘事件: ${keyEvent.key}, type=${keyEvent.type}, isAltPressed=${keyEvent.isAltPressed}, isShiftPressed=${keyEvent.isShiftPressed}")
                         when {
                             // Alt+Enter 打断并发送 (优先级最高)
                             keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp && keyEvent.isAltPressed -> {
@@ -731,4 +732,5 @@ private class UnifiedChatContextSearchService(
         }
     }
 }
+
 

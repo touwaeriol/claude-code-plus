@@ -6,6 +6,9 @@ out/
 ### Kotlin ###
 .kotlin
 
+### Java ###
+*.class
+
 ### Eclipse ###
 .apt_generated
 .classpath

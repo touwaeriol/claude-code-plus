@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.services
+﻿package com.claudecodeplus.ui.services
 
+import com.claudecodeplus.core.logging.*
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.sdk.types.*
 import kotlinx.serialization.json.*
@@ -93,9 +94,9 @@ object SdkMessageConverter {
                                             val status = if (hasError) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS
 
                                             sessionObject.updateToolCallStatus(toolUseId, status, toolResult)
-                                            println("[SdkMessageConverter] 🔧 处理User消息中的工具结果: $toolUseId -> $status")
+                                            logD("[SdkMessageConverter] 🔧 处理User消息中的工具结果: $toolUseId -> $status")
                                         } catch (e: Exception) {
-                                            println("[SdkMessageConverter] ⚠️ 处理User消息工具结果失败: ${e.message}")
+    //                                             logD("[SdkMessageConverter] ⚠️ 处理User消息工具结果失败: ${e.message}")
                                         }
                                     }
 
@@ -140,27 +141,22 @@ object SdkMessageConverter {
         val toolCalls = mutableListOf<ToolCall>()
         val orderedElements = mutableListOf<MessageTimelineItem>()
 
-        // 智能上下文感知：跟踪TodoWrite工具
-        var lastToolWasTodoWrite = false
-
         message.content.forEach { contentBlock ->
             when (contentBlock) {
                 is TextBlock -> {
                     val text = contentBlock.text
+                    logD("[SdkMessageConverter] 📝 处理TextBlock，内容长度: ${text.length}")
+                    logD("[SdkMessageConverter] 📝 TextBlock内容预览: ${text.take(200)}")
 
-                    // 🎯 智能过滤：如果上一个是TodoWrite工具，直接跳过后续的结果文本
-                    if (lastToolWasTodoWrite && text.contains("Todos have been modified successfully", ignoreCase = true)) {
-                        println("[SdkMessageConverter] 🎯 智能过滤：跳过TodoWrite结果文本: \"${text.take(50)}...\"")
-                        lastToolWasTodoWrite = false // 重置标志
-                    } else {
-                        textContent.append(text)
-                        orderedElements.add(
-                            MessageTimelineItem.ContentItem(
-                                content = text,
-                                timestamp = System.currentTimeMillis()
-                            )
+                    // 直接添加文本内容，不需要任何过滤
+                    textContent.append(text)
+                    orderedElements.add(
+                        MessageTimelineItem.ContentItem(
+                            content = text,
+                            timestamp = System.currentTimeMillis()
                         )
-                    }
+                    )
+    //                     logD("[SdkMessageConverter] ✅ 添加文本到content: ${textContent.length} 字符")
                 }
                 is ThinkingBlock -> {
                     // 思考过程作为特殊的文本项添加
@@ -172,7 +168,7 @@ object SdkMessageConverter {
                     )
                 }
                 is SpecificToolUse -> {
-                    // 🎯 核心改进：现在直接处理具体的工具类型
+                    // 处理具体的工具类型
                     val toolCall = convertSpecificToolUse(contentBlock)
                     toolCalls.add(toolCall)
                     orderedElements.add(
@@ -181,16 +177,11 @@ object SdkMessageConverter {
                             timestamp = System.currentTimeMillis()
                         )
                     )
-
-                    // 🎯 设置标志：如果是TodoWrite工具
-                    if (contentBlock is TodoWriteToolUse) {
-                        lastToolWasTodoWrite = true
-                        println("[SdkMessageConverter] 🎯 检测到TodoWriteToolUse，设置标志过滤后续结果文本")
-                    }
+                    logD("[SdkMessageConverter] 🔧 记录工具调用: ${toolCall.name}")
                 }
                 is ToolUseBlock -> {
-                    // 🔄 向后兼容：处理可能仍然存在的旧ToolUseBlock类型
-                    println("[SdkMessageConverter] ⚠️ 遇到旧的ToolUseBlock类型，建议检查MessageParser配置")
+                    // 向后兼容：处理可能仍然存在的旧ToolUseBlock类型
+    //                     logD("[SdkMessageConverter] ⚠️ 遇到旧的ToolUseBlock类型，建议检查MessageParser配置")
                     val toolCall = convertToolUseBlock(contentBlock)
                     toolCalls.add(toolCall)
                     orderedElements.add(
@@ -199,6 +190,7 @@ object SdkMessageConverter {
                             timestamp = System.currentTimeMillis()
                         )
                     )
+                    logD("[SdkMessageConverter] 🔧 记录工具调用: ${toolCall.name}")
                 }
                 is ToolResultBlock -> {
                     // 处理工具结果：查找对应的工具调用并更新其结果
@@ -243,9 +235,9 @@ object SdkMessageConverter {
                             }
                             val status = if (hasError) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS
                             sessionObject.updateToolCallStatus(contentBlock.toolUseId, status, toolResult)
-                            println("[SdkMessageConverter] 🔧 已调用SessionObject.updateToolCallStatus: ${contentBlock.toolUseId} -> $status")
+                            logD("[SdkMessageConverter] 🔧 已调用SessionObject.updateToolCallStatus: ${contentBlock.toolUseId} -> $status")
                         } catch (e: Exception) {
-                            println("[SdkMessageConverter] ⚠️ 调用SessionObject.updateToolCallStatus失败: ${e.message}")
+    //                             logD("[SdkMessageConverter] ⚠️ 调用SessionObject.updateToolCallStatus失败: ${e.message}")
                             // 回退到原有逻辑
                             handleToolResultFallback(contentBlock, toolCalls)
                         }
@@ -253,17 +245,19 @@ object SdkMessageConverter {
                         // 没有SessionObject时，使用原有逻辑
                         handleToolResultFallback(contentBlock, toolCalls)
                     }
+
+                    logD("[SdkMessageConverter] 🔧 记录工具结果")
                 }
             }
         }
 
         // 转换 Token 使用信息
         val tokenUsage = message.tokenUsage?.let { usage ->
-            println("🔍 [SdkMessageConverter] Token使用详情:")
-            println("  - inputTokens: ${usage.inputTokens}")
-            println("  - outputTokens: ${usage.outputTokens}")
-            println("  - cacheCreationInputTokens: ${usage.cacheCreationInputTokens}")
-            println("  - cacheReadInputTokens: ${usage.cacheReadInputTokens}")
+            logD("🔍 [SdkMessageConverter] Token使用详情:")
+    //             logD("  - inputTokens: ${usage.inputTokens}")
+    //             logD("  - outputTokens: ${usage.outputTokens}")
+    //             logD("  - cacheCreationInputTokens: ${usage.cacheCreationInputTokens}")
+    //             logD("  - cacheReadInputTokens: ${usage.cacheReadInputTokens}")
 
             EnhancedMessage.TokenUsage(
                 inputTokens = usage.inputTokens,
@@ -273,10 +267,20 @@ object SdkMessageConverter {
             )
         }
 
+        // 直接使用原始内容，不做任何过滤
+        val finalContent = textContent.toString()
+
+        logD("[SdkMessageConverter] 📊 最终消息内容长度: ${finalContent.length}")
+        if (finalContent.isNotEmpty()) {
+            logD("[SdkMessageConverter] 📊 最终消息内容预览: ${finalContent.take(200)}")
+        } else {
+    //             logD("[SdkMessageConverter] ⚠️ 最终消息内容为空！")
+        }
+
         return EnhancedMessage(
             id = UUID.randomUUID().toString(),
             role = MessageRole.ASSISTANT,
-            content = textContent.toString(),
+            content = finalContent,
             timestamp = System.currentTimeMillis(),
             toolCalls = toolCalls,
             orderedElements = orderedElements,
@@ -310,9 +314,9 @@ object SdkMessageConverter {
             val index = toolCalls.indexOf(targetToolCall)
             toolCalls[index] = updatedToolCall
 
-            println("[SdkMessageConverter] 🔧 回退逻辑更新工具调用: ${targetToolCall.name} (${targetToolCall.id}) -> ${updatedToolCall.status}")
+            logD("[SdkMessageConverter] 🔧 回退逻辑更新工具调用: ${targetToolCall.name} (${targetToolCall.id}) -> ${updatedToolCall.status}")
         } else {
-            println("[SdkMessageConverter] ⚠️ 未找到工具调用ID: ${contentBlock.toolUseId}")
+    //             logD("[SdkMessageConverter] ⚠️ 未找到工具调用ID: ${contentBlock.toolUseId}")
         }
     }
 
@@ -369,39 +373,39 @@ object SdkMessageConverter {
 
         // 🔍 TodoWrite 工具专用调试日志
         if (specificTool is TodoWriteToolUse) {
-            println("[SdkMessageConverter] 🔍 TodoWrite工具（强类型）:")
-            println("[SdkMessageConverter] - 工具类型: ${specificTool::class.simpleName}")
-            println("[SdkMessageConverter] - 任务数量: ${specificTool.todos.size}")
-            println("[SdkMessageConverter] - 强类型参数: $parameters")
+            logD("[SdkMessageConverter] 🔍 TodoWrite工具（强类型）:")
+    //             logD("[SdkMessageConverter] - 工具类型: ${specificTool::class.simpleName}")
+    //             logD("[SdkMessageConverter] - 任务数量: ${specificTool.todos.size}")
+    //             logD("[SdkMessageConverter] - 强类型参数: $parameters")
             specificTool.todos.forEachIndexed { index, todo ->
-                println("[SdkMessageConverter] - Todo[$index]: ${todo.content} (${todo.status})")
+    //                 logD("[SdkMessageConverter] - Todo[$index]: ${todo.content} (${todo.status})")
             }
         }
 
         // 🎯 演示instanceof检查的强大功能
         when (specificTool) {
             is BashToolUse -> {
-                println("[SdkMessageConverter] 🔧 Bash工具: ${specificTool.command}")
-                specificTool.description?.let { println("  描述: $it") }
+                logD("[SdkMessageConverter] 🔧 Bash工具: ${specificTool.command}")
+                specificTool.description?.let { logD("  描述: $it") }
             }
             is EditToolUse -> {
-                println("[SdkMessageConverter] ✏️ 编辑工具: ${specificTool.filePath}")
-                println("  替换: ${specificTool.oldString} → ${specificTool.newString}")
+    //                 logD("[SdkMessageConverter] ✏️ 编辑工具: ${specificTool.filePath}")
+    //                 logD("  替换: ${specificTool.oldString} → ${specificTool.newString}")
             }
             is ReadToolUse -> {
-                println("[SdkMessageConverter] 📖 读取工具: ${specificTool.filePath}")
-                specificTool.offset?.let { println("  偏移: $it") }
-                specificTool.limit?.let { println("  限制: $it") }
+                logD("[SdkMessageConverter] 📖 读取工具: ${specificTool.filePath}")
+                specificTool.offset?.let { logD("  偏移: $it") }
+                specificTool.limit?.let { logD("  限制: $it") }
             }
             is McpToolUse -> {
-                println("[SdkMessageConverter] 🔌 MCP工具: ${specificTool.serverName}.${specificTool.functionName}")
-                println("  参数: ${specificTool.parameters}")
+                logD("[SdkMessageConverter] 🔌 MCP工具: ${specificTool.serverName}.${specificTool.functionName}")
+    //                 logD("  参数: ${specificTool.parameters}")
             }
             is TodoWriteToolUse -> {
                 // 已在上面专门处理
             }
             else -> {
-                println("[SdkMessageConverter] 🔧 其他工具: ${specificTool::class.simpleName}")
+                logD("[SdkMessageConverter] 🔧 其他工具: ${specificTool::class.simpleName}")
             }
         }
 
@@ -468,17 +472,17 @@ object SdkMessageConverter {
             is JsonArray -> {
                 // 递归解析数组中的每个元素
                 val result = element.map { parseJsonElement(it) }
-                println("[SdkMessageConverter] 解析JsonArray: 包含 ${result.size} 个元素")
+    //                 logD("[SdkMessageConverter] 解析JsonArray: 包含 ${result.size} 个元素")
                 result
             }
             is JsonObject -> {
                 // 递归解析对象中的每个字段
                 val result = element.mapValues { (key, value) ->
                     val parsedValue = parseJsonElement(value)
-                    println("[SdkMessageConverter] 解析JsonObject字段: $key -> ${parsedValue::class.simpleName}")
+    //                     logD("[SdkMessageConverter] 解析JsonObject字段: $key -> ${parsedValue::class.simpleName}")
                     parsedValue
                 }
-                println("[SdkMessageConverter] 解析JsonObject完成: ${result.keys}")
+    //                 logD("[SdkMessageConverter] 解析JsonObject完成: ${result.keys}")
                 result
             }
             else -> element.toString()
@@ -504,6 +508,7 @@ object SdkMessageConverter {
             sessionId = sessionId
         )
     }
+
 
     /**
      * 从 ClaudeCodeOptions 构建配置

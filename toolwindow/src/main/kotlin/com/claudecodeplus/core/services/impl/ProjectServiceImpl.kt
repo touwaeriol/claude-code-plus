@@ -132,12 +132,12 @@ class ProjectServiceImpl(
     }
     
     override suspend fun loadProjectSessions(projectId: String, forceReload: Boolean): Result<List<ProjectSession>> = suspendResultOf {
-        logD("加载项目会话: projectId=$projectId, forceReload=$forceReload")
+    //         logD("加载项目会话: projectId=$projectId, forceReload=$forceReload")
         
         // 检查缓存
         val cachedFlow = _projectSessions[projectId]
         if (!forceReload && cachedFlow != null && cachedFlow.value.isNotEmpty()) {
-            logD("使用缓存的会话列表")
+    //             logD("使用缓存的会话列表")
             cachedFlow.value
         } else {
         
@@ -155,7 +155,7 @@ class ProjectServiceImpl(
         val sessionFlow = _projectSessions.getOrPut(projectId) { MutableStateFlow(emptyList()) }
         sessionFlow.value = sessions
         
-        logD("项目会话加载完成: ${sessions.size}个会话")
+    //         logD("项目会话加载完成: ${sessions.size}个会话")
         sessions
         }
     }
@@ -201,7 +201,7 @@ class ProjectServiceImpl(
     }
     
     override suspend fun updateSession(projectId: String, session: ProjectSession): Result<Unit> = suspendResultOf {
-        logD("更新会话: projectId=$projectId, sessionId=${session.id}")
+    //         logD("更新会话: projectId=$projectId, sessionId=${session.id}")
         
         val localSession = session.toLocalSession()
         projectRepository.saveSession(projectId, localSession).let { result ->
@@ -219,7 +219,7 @@ class ProjectServiceImpl(
             sessionFlow.value = updatedSessions
         }
         
-        logD("会话更新成功: ${session.id}")
+    //         logD("会话更新成功: ${session.id}")
     }
     
     override suspend fun deleteSession(projectId: String, sessionId: String): Result<Unit> = suspendResultOf {
@@ -242,22 +242,22 @@ class ProjectServiceImpl(
     }
     
     override suspend fun setLastSelectedProject(projectId: String): Result<Unit> = suspendResultOf {
-        logD("设置最后选中的项目: $projectId")
+    //         logD("设置最后选中的项目: $projectId")
         projectRepository.setLastSelectedProject(projectId)
     }
     
     override suspend fun getLastSelectedProject(): Result<String?> = suspendResultOf {
-        logD("获取最后选中的项目")
+    //         logD("获取最后选中的项目")
         projectRepository.getLastSelectedProject().getOrNull()
     }
     
     override suspend fun setLastSelectedSession(sessionId: String): Result<Unit> = suspendResultOf {
-        logD("设置最后选中的会话: $sessionId")
+    //         logD("设置最后选中的会话: $sessionId")
         projectRepository.setLastSelectedSession(sessionId)
     }
     
     override suspend fun getLastSelectedSession(): Result<String?> = suspendResultOf {
-        logD("获取最后选中的会话")
+    //         logD("获取最后选中的会话")
         projectRepository.getLastSelectedSession().getOrNull()
     }
     
@@ -284,7 +284,7 @@ class ProjectServiceImpl(
             val projects = localProjects.map { it.toProject() }
                 .sortedByDescending { it.lastAccessedAt }
             _projects.value = projects
-            logD("项目缓存已刷新: ${projects.size}个项目")
+    //             logD("项目缓存已刷新: ${projects.size}个项目")
         } else {
             logE("刷新项目缓存失败")
         }

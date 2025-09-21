@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.components
+﻿package com.claudecodeplus.ui.components
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
@@ -9,7 +10,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay
-import com.claudecodeplus.ui.jewel.components.SimpleMarkdownRenderer
+import com.claudecodeplus.ui.jewel.components.markdown.MarkdownRenderer
 import com.claudecodeplus.ui.jewel.components.tools.JumpingDots
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
@@ -25,11 +26,12 @@ fun AssistantMessageDisplay(
     message: EnhancedMessage,
     modifier: Modifier = Modifier,
     ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,
+    expandedTools: Map<String, Boolean> = emptyMap(),  // 外部传入的展开状态
     onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)  // 增加垂直间距，避免内容重叠
     ) {
         // 显示模型信息（如果有）
         message.model?.let { model ->
@@ -52,66 +54,46 @@ fun AssistantMessageDisplay(
                 }
             }
         }
-        
-        // 显示工具调用（如果有）
-        if (message.toolCalls.isNotEmpty()) {
-            println("[AssistantMessageDisplay] 🎯 显示工具调用: ${message.toolCalls.size} 个工具")
-            message.toolCalls.forEach { toolCall ->
-                println("[AssistantMessageDisplay] - 工具: ${toolCall.name} (ID: ${toolCall.id}, 状态: ${toolCall.status})")
-            }
+
+        // 按照 SDK 输出的时间顺序显示所有元素
+    logD("[AssistantMessageDisplay] 显示 orderedElements，共 ${message.orderedElements.size} 个元素")
+
+        // 收集所有工具调用以便统一显示
+        val allToolCalls = message.orderedElements
+            .filterIsInstance<MessageTimelineItem.ToolCallItem>()
+            .map { it.toolCall }
+
+        // 如果有工具调用，使用 CompactToolCallDisplay 统一显示
+        if (allToolCalls.isNotEmpty()) {
+            logD("[AssistantMessageDisplay] 🎯 显示工具调用: ${allToolCalls.size} 个工具")
             CompactToolCallDisplay(
-                toolCalls = message.toolCalls,
+                toolCalls = allToolCalls,
                 modifier = Modifier.fillMaxWidth(),
                 ideIntegration = ideIntegration,
+                expandedTools = expandedTools,
                 onExpandedChange = onExpandedChange
             )
-        } else {
-            println("[AssistantMessageDisplay] ❌ 没有工具调用要显示")
         }
-        
-        // 显示主要文本内容
-        if (message.content.isNotBlank()) {
-            SimpleMarkdownRenderer(
-                markdown = message.content,
+
+        // 显示文本内容
+        val textContent = message.orderedElements
+            .filterIsInstance<MessageTimelineItem.ContentItem>()
+            .joinToString("") { it.content }
+
+        if (textContent.isNotBlank()) {
+            logD("[AssistantMessageDisplay] 🎯 渲染文本内容: ${textContent.take(100)}...")
+            MarkdownRenderer(
+                markdown = textContent,
+                onLinkClick = { url ->
+    logD("[AssistantMessageDisplay] 链接点击: $url")
+                },
+                onCodeAction = { code, language ->
+    logD("[AssistantMessageDisplay] 代码操作: 语言=$language")
+                },
                 modifier = Modifier.fillMaxWidth()
             )
         }
-        
-        // 如果有按时间顺序的元素，也显示它们（用于流式内容）
-        if (message.orderedElements.isNotEmpty()) {
-            message.orderedElements.forEach { element ->
-                when (element) {
-                    is MessageTimelineItem.ToolCallItem -> {
-                        // 工具调用已在上面显示，这里跳过避免重复
-                    }
-                    is MessageTimelineItem.ContentItem -> {
-                        if (element.content.isNotBlank() && element.content != message.content) {
-                            SimpleMarkdownRenderer(
-                                markdown = element.content,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                    is MessageTimelineItem.StatusItem -> {
-                        if (element.isStreaming) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = element.status,
-                                    style = JewelTheme.defaultTextStyle.copy(
-                                        fontSize = 12.sp,
-                                        color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
-                                    )
-                                )
-                                JumpingDots()
-                            }
-                        }
-                    }
-                }
-            }
-        }
+
         
         // 流式状态指示器已移至工具调用状态区域，此处不再显示
     }

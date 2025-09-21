@@ -1,7 +1,8 @@
-@file:OptIn(ExperimentalFoundationApi::class, org.jetbrains.jewel.foundation.ExperimentalJewelApi::class)
+﻿@file:OptIn(ExperimentalFoundationApi::class, org.jetbrains.jewel.foundation.ExperimentalJewelApi::class)
 
 package com.claudecodeplus.ui.jewel.components.tools
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.animation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.core.*
@@ -55,9 +56,10 @@ fun CompactToolCallDisplay(
     toolCalls: List<ToolCall>,
     modifier: Modifier = Modifier,
     ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,  // IDE 集成接口
+    expandedTools: Map<String, Boolean> = emptyMap(),  // 外部传入的展开状态
     onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
-    
+
     // 简化的普通显示模式 - 移除复杂的固定显示逻辑
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -67,6 +69,7 @@ fun CompactToolCallDisplay(
             CompactToolCallItem(
                 toolCall = toolCall,
                 ideIntegration = ideIntegration,
+                isExpanded = expandedTools[toolCall.id] ?: false,
                 onExpandedChange = onExpandedChange
             )
         }
@@ -80,16 +83,24 @@ fun CompactToolCallDisplay(
 private fun CompactToolCallItem(
     toolCall: ToolCall,
     ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,
+    isExpanded: Boolean = false,  // 从外部接收展开状态
     onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
-    
-    // TodoWrite 工具默认展开显示任务列表
-    var expanded by remember { 
-        mutableStateOf(toolCall.name.contains("TodoWrite", ignoreCase = true)) 
+
+    // 使用外部传入的展开状态，如果是TodoWrite则默认展开
+    var expanded by remember(toolCall.id, isExpanded) {
+        mutableStateOf(isExpanded || toolCall.name.contains("TodoWrite", ignoreCase = true))
     }
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
-    
+
+    // 同步外部状态变化
+    LaunchedEffect(isExpanded) {
+        if (expanded != isExpanded) {
+            expanded = isExpanded
+        }
+    }
+
     // 展开状态变化时通知上级组件
     LaunchedEffect(expanded) {
         delay(100)  // 简单防抖
@@ -514,11 +525,11 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
     // 🎯 关键改进：优先使用具体工具类型的强类型属性
     val specificTool = toolCall.specificTool
     if (specificTool != null) {
-        println("[CompactToolCallDisplay] 🎯 使用instanceof检查: ${specificTool::class.simpleName}")
+        // logD("[CompactToolCallDisplay] 🎯 使用instanceof检查: ${specificTool::class.simpleName}")
         return when (specificTool) {
             is com.claudecodeplus.sdk.types.ReadToolUse -> {
                 val fileName = specificTool.filePath.substringAfterLast('/').substringAfterLast('\\')
-                println("[CompactToolCallDisplay] 📖 ReadToolUse强类型: filePath=${specificTool.filePath}, fileName=$fileName")
+                // logD("[CompactToolCallDisplay] 📖 ReadToolUse强类型: filePath=${specificTool.filePath}, fileName=$fileName")
                 "Read: $fileName"
             }
             is com.claudecodeplus.sdk.types.WriteToolUse -> {
@@ -568,7 +579,7 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
                 "WebSearch: $query"
             }
             is com.claudecodeplus.sdk.types.TodoWriteToolUse -> {
-                "TodoWrite: ${specificTool.todos.size} tasks"
+                "${specificTool.todos.size} tasks"
             }
             is com.claudecodeplus.sdk.types.TaskToolUse -> {
                 val description = specificTool.description
@@ -587,7 +598,7 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
                 "${specificTool.serverName}.${specificTool.functionName}"
             }
             else -> {
-                println("[CompactToolCallDisplay] ⚠️ 未处理的具体工具类型: ${specificTool::class.simpleName}")
+    //                 logD("[CompactToolCallDisplay] ⚠️ 未处理的具体工具类型: ${specificTool::class.simpleName}")
                 toolName
             }
         }
@@ -1291,7 +1302,7 @@ private fun formatToolResult(toolCall: ToolCall) {
         // 优先使用specificTool
         if (toolCall.specificTool is TodoWriteToolUse) {
             val todoTool = toolCall.specificTool as TodoWriteToolUse
-            println("[CompactToolCallDisplay] 🎯 使用specificTool路由到EnhancedTodoDisplay: 任务数量=${todoTool.todos.size}")
+            // logD("[CompactToolCallDisplay] 🎯 使用specificTool路由到EnhancedTodoDisplay: 任务数量=${todoTool.todos.size}")
             EnhancedTodoDisplay(todos = todoTool.todos)
             return
         }
@@ -1299,13 +1310,13 @@ private fun formatToolResult(toolCall: ToolCall) {
         // 回退：从parameters中提取todos
         val todosParam = toolCall.parameters["todos"]
         if (todosParam != null) {
-            println("[CompactToolCallDisplay] 🎯 使用parameters回退到EnhancedTodoDisplay")
+            // logD("[CompactToolCallDisplay] 🎯 使用parameters回退到EnhancedTodoDisplay")
             EnhancedTodoDisplay(toolCall = toolCall)  // 传递整个toolCall，让组件自己解析
             return
         }
 
         // 最后回退：显示简单状态
-        println("[CompactToolCallDisplay] ⚠️ TodoWrite工具无法找到todos数据")
+    //         logD("[CompactToolCallDisplay] ⚠️ TodoWrite工具无法找到todos数据")
         Text(
             text = "✅ 任务列表已更新",
             style = JewelTheme.defaultTextStyle.copy(
@@ -1960,5 +1971,6 @@ private fun formatToolBriefInfo(toolCall: ToolCall): String {
         }
     }
 }
+
 
 

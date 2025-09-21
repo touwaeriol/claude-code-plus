@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.services
+﻿package com.claudecodeplus.ui.services
 
+import com.claudecodeplus.core.logging.*
 import com.claudecodeplus.sdk.ClaudeCodeSdkClient
 import com.claudecodeplus.sdk.types.*
 import com.claudecodeplus.ui.models.*
@@ -73,38 +74,38 @@ object ClaudeCodeSdkAdapter {
         sessionObject: SessionObject,
         project: Project? = null
     ): Flow<EnhancedMessage> {
-        println("🚀🚀🚀 [ClaudeCodeSdkAdapter] sendMessage 函数被调用!! sessionId=$sessionId, content=${message.content.take(50)}")
+        logD("🚀🚀🚀 [ClaudeCodeSdkAdapter] sendMessage 函数被调用!! sessionId=$sessionId, content=${message.content.take(50)}")
         logger.info("🚀 [ClaudeCodeSdkAdapter] sendMessage 被调用: sessionId=$sessionId, content=${message.content.take(50)}")
 
         try {
-            println("🔧 [ClaudeCodeSdkAdapter] 尝试获取或创建客户端...")
+            logD("🔧 [ClaudeCodeSdkAdapter] 尝试获取或创建客户端...")
             val client = getOrCreateClient(sessionId, sessionObject, project)
 
             // 确保客户端已连接
             if (!client.isConnected()) {
-                println("🔌 [ClaudeCodeSdkAdapter] 连接会话 $sessionId 的 SDK 客户端")
+                logD("🔌 [ClaudeCodeSdkAdapter] 连接会话 $sessionId 的 SDK 客户端")
                 logger.info("🔌 连接会话 $sessionId 的 SDK 客户端")
                 client.connect()
             }
 
             // 转换并发送消息
-            println("📤 [ClaudeCodeSdkAdapter] 转换并发送消息...")
+            logD("📤 [ClaudeCodeSdkAdapter] 转换并发送消息...")
             val sdkUserMessage = SdkMessageConverter.toSdkUserMessage(message, sessionId)
             client.query(message.content, sessionId)
 
             // 返回响应流
-            println("📬 [ClaudeCodeSdkAdapter] 返回响应流...")
+            logD("📬 [ClaudeCodeSdkAdapter] 返回响应流...")
             return client.receiveResponse()
                 .onStart {
-                    println("🎬 [ClaudeCodeSdkAdapter] 响应流开始...")
+                    logD("🎬 [ClaudeCodeSdkAdapter] 响应流开始...")
                     logger.info("🎬 会话 $sessionId 响应流开始")
                 }
                 .map { sdkMessage ->
-                    println("📨 [ClaudeCodeSdkAdapter] 收到SDK原始消息: ${sdkMessage::class.simpleName}")
+                    logD("📨 [ClaudeCodeSdkAdapter] 收到SDK原始消息: ${sdkMessage::class.simpleName}")
                     logger.info("📨 会话 $sessionId 收到 SDK 消息: ${sdkMessage::class.simpleName}")
 
                     val enhancedMessage = SdkMessageConverter.fromSdkMessage(sdkMessage, sessionObject)
-                    println("✅ [ClaudeCodeSdkAdapter] 转换后的消息: role=${enhancedMessage.role}, content=${enhancedMessage.content.take(50)}")
+    //                     logD("✅ [ClaudeCodeSdkAdapter] 转换后的消息: role=${enhancedMessage.role}, content=${enhancedMessage.content.take(50)}")
                     logger.info("✅ 会话 $sessionId 转换后消息: role=${enhancedMessage.role}")
 
                     enhancedMessage
@@ -118,7 +119,7 @@ object ClaudeCodeSdkAdapter {
                     when (error) {
                         is CancellationException -> {
                             // 协程取消是正常的生命周期事件，不是错误
-                            println("⚠️ [ClaudeCodeSdkAdapter] 会话 $sessionId 操作被取消: ${error.message}")
+    //                             logD("⚠️ [ClaudeCodeSdkAdapter] 会话 $sessionId 操作被取消: ${error.message}")
                             logger.info("⚠️ 会话 $sessionId 操作被取消: ${error.message}")
                             // 重新抛出以保持协程语义
                             throw error
@@ -136,13 +137,13 @@ object ClaudeCodeSdkAdapter {
                 }
         } catch (e: CancellationException) {
             // 协程取消是正常的生命周期事件，直接抛出
-            println("⚠️ [ClaudeCodeSdkAdapter] sendMessage 操作被取消: ${e.message}")
+    //             logD("⚠️ [ClaudeCodeSdkAdapter] sendMessage 操作被取消: ${e.message}")
             logger.info("⚠️ sendMessage 操作被取消: ${e.message}")
             throw e
         } catch (e: Exception) {
-            println("❌❌❌ [ClaudeCodeSdkAdapter] sendMessage 异常: ${e.message}")
+    //             logD("❌❌❌ [ClaudeCodeSdkAdapter] sendMessage 异常: ${e.message}")
             logger.severe("❌ [ClaudeCodeSdkAdapter] sendMessage 异常: ${e.message}")
-            e.printStackTrace()
+            logE("Exception caught", e)
 
             // 返回错误流
             return flow {

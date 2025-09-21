@@ -28,24 +28,26 @@ fun GrepToolDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具头部信息
-        val subtitle = buildString {
-            append("search: ${grepTool.pattern}")
-            when {
-                grepTool.glob != null -> append(" in ${grepTool.glob}")
-                grepTool.type != null -> append(" in *.${grepTool.type}")
-                grepTool.path != null -> append(" in ${grepTool.path}")
+        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        if (!showDetails) {
+            val subtitle = buildString {
+                append("search: ${grepTool.pattern}")
+                when {
+                    grepTool.glob != null -> append(" in ${grepTool.glob}")
+                    grepTool.type != null -> append(" in *.${grepTool.type}")
+                    grepTool.path != null -> append(" in ${grepTool.path}")
+                }
+                if (grepTool.caseInsensitive) append(" [忽略大小写]")
+                if (grepTool.showLineNumbers) append(" [显示行号]")
             }
-            if (grepTool.caseInsensitive) append(" [忽略大小写]")
-            if (grepTool.showLineNumbers) append(" [显示行号]")
-        }
 
-        ToolHeaderDisplay(
-            icon = "🔍",
-            toolName = "Grep",
-            subtitle = subtitle,
-            status = toolCall.status
-        )
+            ToolHeaderDisplay(
+                icon = "🔍",
+                toolName = "Grep",
+                subtitle = subtitle,
+                status = toolCall.status
+            )
+        }
 
         // 显示搜索结果
         if (showDetails && toolCall.result != null) {

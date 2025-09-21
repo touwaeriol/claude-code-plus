@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.jewel
+﻿package com.claudecodeplus.ui.components
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -12,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.jewel.components.*
+import com.claudecodeplus.ui.jewel.components.markdown.MarkdownRenderer
 import com.claudecodeplus.ui.models.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.DefaultButton
@@ -251,52 +253,38 @@ private fun MessageBubble(
                     }
                 }
                 
-                // 按时间顺序显示消息元素
-                // DEBUG: Message has ${message.orderedElements.size} ordered elements
-                if (message.orderedElements.isNotEmpty()) {
-                    message.orderedElements.forEach { element ->
-                        when (element) {
-                            is MessageTimelineItem.ToolCallItem -> {
-                                SimpleToolCallDisplay(element.toolCall)
+                // 按 SDK 输出的时间顺序显示消息元素
+    logD("[JewelConversationView] 显示 AI消息 orderedElements: ${message.orderedElements.size} 个元素")
+
+                message.orderedElements.forEach { element ->
+                    when (element) {
+                        is MessageTimelineItem.ToolCallItem -> {
+                            SimpleToolCallDisplay(element.toolCall)
+                        }
+                        is MessageTimelineItem.ContentItem -> {
+                            if (element.content.isNotBlank()) {
+    logD("[JewelConversationView] 渲染文本内容: ${element.content.take(100)}")
+                                MarkdownRenderer(
+                                    markdown = element.content,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
-                            is MessageTimelineItem.ContentItem -> {
-                                if (element.content.isNotBlank()) {
-                                    SimpleMarkdownRenderer(
-                                        markdown = element.content,
-                                        modifier = Modifier.fillMaxWidth()
+                        }
+                        is MessageTimelineItem.StatusItem -> {
+                            if (element.isStreaming) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "▌"
+                                    )
+                                    Text(
+                                        text = element.status
                                     )
                                 }
                             }
-                            is MessageTimelineItem.StatusItem -> {
-                                if (element.isStreaming) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Text(
-                                            text = "▌"
-                                        )
-                                        Text(
-                                            text = element.status
-                                        )
-                                    }
-                                }
-                            }
                         }
-                    }
-                } else {
-                    // 向后兼容：如果没有orderedElements，回退到原来的显示方式
-                    // 先显示工具调用（按照添加顺序）
-                    message.toolCalls.forEach { toolCall ->
-                        SimpleToolCallDisplay(toolCall)
-                    }
-                    
-                    // 然后显示消息内容
-                    if (message.content.isNotBlank()) {
-                        SimpleMarkdownRenderer(
-                            markdown = message.content,
-                            modifier = Modifier.fillMaxWidth()
-                        )
                     }
                 }
                 
@@ -411,6 +399,7 @@ private fun ChatHeader(
         )
     }
 }
+
 
 
 

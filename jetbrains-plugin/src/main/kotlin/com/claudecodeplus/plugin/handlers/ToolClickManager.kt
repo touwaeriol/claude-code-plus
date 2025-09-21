@@ -42,9 +42,12 @@ object ToolClickManager {
             registerHandler("Edit", EditToolHandler())
             registerHandler("MultiEdit", EditToolHandler())
             logger.info("ToolClickManager: 已注册 Edit/MultiEdit 工具处理器")
-            
+
+            // 注册 Write 工具处理器
+            registerHandler("Write", WriteToolHandler())
+            logger.info("ToolClickManager: 已注册 Write 工具处理器")
+
             // 未来可以添加更多处理器
-            // registerHandler("Write", WriteToolHandler())
             // registerHandler("Bash", BashToolHandler())
             
             logger.info("ToolClickManager: 默认处理器初始化完成，共注册 ${handlers.size} 个处理器")

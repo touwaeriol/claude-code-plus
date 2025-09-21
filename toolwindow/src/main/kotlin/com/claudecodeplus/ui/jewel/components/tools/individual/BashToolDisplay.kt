@@ -28,29 +28,31 @@ fun BashToolDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 工具头部信息
-        val command = if (bashTool.command.length > 30) {
-            bashTool.command.take(27) + "..."
-        } else {
-            bashTool.command
-        }
-
-        val subtitle = buildString {
-            append(command)
-            if (bashTool.timeout != null) {
-                append(" (timeout: ${bashTool.timeout}ms)")
+        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        if (!showDetails) {
+            val command = if (bashTool.command.length > 30) {
+                bashTool.command.take(27) + "..."
+            } else {
+                bashTool.command
             }
-            if (bashTool.runInBackground) {
-                append(" [后台]")
-            }
-        }
 
-        ToolHeaderDisplay(
-            icon = "💻",
-            toolName = "Bash",
-            subtitle = subtitle,
-            status = toolCall.status
-        )
+            val subtitle = buildString {
+                append(command)
+                if (bashTool.timeout != null) {
+                    append(" (timeout: ${bashTool.timeout}ms)")
+                }
+                if (bashTool.runInBackground) {
+                    append(" [后台]")
+                }
+            }
+
+            ToolHeaderDisplay(
+                icon = "💻",
+                toolName = "Bash",
+                subtitle = subtitle,
+                status = toolCall.status
+            )
+        }
 
         // 显示命令执行结果
         if (showDetails && toolCall.result != null) {

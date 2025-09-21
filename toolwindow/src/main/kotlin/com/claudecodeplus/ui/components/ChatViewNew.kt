@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.jewel
+﻿package com.claudecodeplus.ui.components
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -27,7 +28,7 @@ import com.claudecodeplus.ui.jewel.components.*
 import com.claudecodeplus.ui.jewel.components.QueueIndicator
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.SessionManager
-import com.claudecodeplus.ui.components.AssistantMessageDisplay
+import com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay
 import java.time.Instant
 import com.claudecodeplus.ui.services.FileIndexService
 import com.claudecodeplus.ui.services.ContextProcessor
@@ -113,10 +114,10 @@ fun ChatViewNew(
     // 使用SessionObject内部的ClaudeCliWrapper实例，支持后台处理
     // val cliWrapper = remember { com.claudecodeplus.sdk.ClaudeCliWrapper() } // 旧方法，已移至SessionObject
     
-    println("=== ChatViewNew 使用事件驱动架构 ===")
-    println("tabId: $tabId")
-    println("sessionId: $sessionId") 
-    println("workingDirectory: $workingDirectory")
+    logD("=== ChatViewNew 使用事件驱动架构 ===")
+    logD("tabId: $tabId")
+    logD("sessionId: $sessionId") 
+    logD("workingDirectory: $workingDirectory")
     
     // 获取或创建该标签的会话对象（保持现有架构，但使用增强的SessionObject）
     // 使用全局 ProjectManager 确保 Project 实例的唯一性
@@ -125,8 +126,8 @@ fun ChatViewNew(
     // 使用 remember 和 project+tabId 组合键来缓存 SessionObject
     val sessionObjectKey = "${project.id}:$tabId"
     val sessionObject = remember(sessionObjectKey) {
-        println("[ChatViewNew] 创建/获取 SessionObject，key=$sessionObjectKey")
-        println("[ChatViewNew] Project hashCode: ${project.hashCode()}")
+    logD("[ChatViewNew] 创建/获取 SessionObject，key=$sessionObjectKey")
+    logD("[ChatViewNew] Project hashCode: ${project.hashCode()}")
         
         project.getOrCreateSession(
             tabId = tabId, 
@@ -142,10 +143,10 @@ fun ChatViewNew(
                 if (session.messages.isEmpty() || session.messages.size < initialMessages.size) {
                     // 如果当前会话消息少于初始消息，说明可能是状态丢失，需要恢复
                     session.messages = initialMessages
-                    println("[ChatViewNew] 恢复会话消息: ${initialMessages.size} 条")
+    logD("[ChatViewNew] 恢复会话消息: ${initialMessages.size} 条")
                 }
             }
-            println("[ChatViewNew] 会话对象已创建/获取: tabId=$tabId, sessionId=${session.sessionId}, messages=${session.messages.size}")
+    logD("[ChatViewNew] 会话对象已创建/获取: tabId=$tabId, sessionId=${session.sessionId}, messages=${session.messages.size}")
         }
     }
     
@@ -161,37 +162,37 @@ fun ChatViewNew(
             val setMethod = companion.javaClass.getMethod("setCurrentSessionObject", Any::class.java)
             setMethod.invoke(companion, sessionObject)
             
-            println("[ChatViewNew] 已注册会话对象到工具窗口工厂")
+    logD("[ChatViewNew] 已注册会话对象到工具窗口工厂")
         } catch (e: Exception) {
             // 如果不在插件环境中，忽略错误
-            println("[ChatViewNew] 非插件环境，跳过会话注册: ${e.message}")
+    logD("[ChatViewNew] 非插件环境，跳过会话注册: ${e.message}")
         }
     }
     
     // 监听标签切换，确保正确恢复会话状态
     LaunchedEffect(tabId, currentProject) {
-        println("[ChatViewNew] 标签/项目变化检测: tabId=$tabId, project=${currentProject?.name}")
+    logD("[ChatViewNew] 标签/项目变化检测: tabId=$tabId, project=${currentProject?.name}")
         
         // 🎯 关键修复：每次标签显示时检查并恢复 sessionId
         if (sessionObject.sessionId == null && sessionObject.messages.isEmpty()) {
-            println("[ChatViewNew] 检测到 SessionObject 缺少 sessionId，尝试从历史中恢复...")
+    logD("[ChatViewNew] 检测到 SessionObject 缺少 sessionId，尝试从历史中恢复...")
             try {
                 val foundSessionId = com.claudecodeplus.ui.utils.SessionIdRegistry.getSessionId(workingDirectory, tabId)
                 if (foundSessionId != null) {
-                    println("[ChatViewNew] 🎯 从历史会话找到 sessionId: $foundSessionId")
+                    logD("[ChatViewNew] 🎯 从历史会话找到 sessionId: $foundSessionId")
                     sessionObject.updateSessionId(foundSessionId)
                     
                     // 注释掉自动加载历史消息，避免启动延迟
                     // 用户可以通过界面按钮主动选择恢复历史会话
-                    // println("[ChatViewNew] 开始加载历史消息...")
+                    logD("[ChatViewNew] 开始加载历史消息...")
                     // sessionObject.loadNewMessages(forceFullReload = true)
-                    println("[ChatViewNew] 跳过自动加载历史消息，提升启动速度")
+    logD("[ChatViewNew] 跳过自动加载历史消息，提升启动速度")
                 } else {
-                    println("[ChatViewNew] ⚠️ 未找到历史 sessionId，会话为新会话")
+    logD("[ChatViewNew] ⚠️ 未找到历史 sessionId，会话为新会话")
                 }
             } catch (e: Exception) {
-                println("[ChatViewNew] 查找历史 sessionId 失败: ${e.message}")
-                e.printStackTrace()
+    logD("[ChatViewNew] 查找历史 sessionId 失败: ${e.message}")
+                logE("Exception caught", e)
             }
         }
         
@@ -199,22 +200,22 @@ fun ChatViewNew(
             // 确保会话状态正确恢复
             val currentSession = currentProject.getSession(tabId)
             if (currentSession != null) {
-                println("[ChatViewNew] 找到现有会话，验证状态完整性")
+    logD("[ChatViewNew] 找到现有会话，验证状态完整性")
                 
                 // 验证并恢复状态（如果需要）
                 if (sessionId != null && currentSession.sessionId != sessionId) {
                     currentSession.updateSessionId(sessionId)
-                    println("[ChatViewNew] 恢复 sessionId: $sessionId")
+    logD("[ChatViewNew] 恢复 sessionId: $sessionId")
                 }
                 
                 if (initialMessages != null && initialMessages.isNotEmpty() && 
                     currentSession.messages.size < initialMessages.size) {
                     currentSession.messages = initialMessages
-                    println("[ChatViewNew] 恢复消息历史: ${initialMessages.size} 条")
+    logD("[ChatViewNew] 恢复消息历史: ${initialMessages.size} 条")
                 }
             } else {
                 // 新项目中没有这个标签的会话，创建新会话
-                println("[ChatViewNew] 在新项目中创建会话")
+    logD("[ChatViewNew] 在新项目中创建会话")
                 currentProject.getOrCreateSession(
                     tabId = tabId,
                     initialSessionId = sessionId,
@@ -231,8 +232,8 @@ fun ChatViewNew(
     
     val messages by derivedStateOf { 
         val totalMessages = sessionObject.messages.size
-        println("[ChatViewNew] messages derivedStateOf 被重新计算: $totalMessages 条总消息, 显示最后 ${minOf(loadedMessageCount, totalMessages)} 条")
-        println("[ChatViewNew] SessionObject实例ID: ${System.identityHashCode(sessionObject)}")
+    logD("[ChatViewNew] messages derivedStateOf 被重新计算: $totalMessages 条总消息, 显示最后 ${minOf(loadedMessageCount, totalMessages)} 条")
+    logD("[ChatViewNew] SessionObject实例ID: ${System.identityHashCode(sessionObject)}")
         
         // 性能优化：只取最后N条消息进行渲染
         if (totalMessages > loadedMessageCount) {
@@ -243,7 +244,7 @@ fun ChatViewNew(
     }
     val contexts by derivedStateOf { sessionObject.contexts }
     val isGenerating by derivedStateOf { 
-        println("[ChatViewNew] isGenerating derivedStateOf 被重新计算: ${sessionObject.isGenerating}")
+    logD("[ChatViewNew] isGenerating derivedStateOf 被重新计算: ${sessionObject.isGenerating}")
         sessionObject.isGenerating 
     }
     val selectedModel by derivedStateOf { sessionObject.selectedModel }
@@ -257,21 +258,21 @@ fun ChatViewNew(
         stableCoroutineScope.launch {
             try {
                 val result = sessionObject.sendMessage(markdownText, workingDirectory)
-                println("[ChatViewNew] SessionObject.sendMessage完成: success=${result.success}")
+    logD("[ChatViewNew] SessionObject.sendMessage完成: success=${result.success}")
             } catch (e: Exception) {
-                println("[ChatViewNew] SessionObject处理异常: ${e.message}")
-                e.printStackTrace()
+    logD("[ChatViewNew] SessionObject处理异常: ${e.message}")
+                logE("Exception caught", e)
             }
         }
     }
     
     // 修改为使用后台服务的消息发送方法
     fun sendMessage(markdownText: String) {
-        println("[ChatViewNew] 开始发送消息（后台服务模式）: '$markdownText'")
+    logD("[ChatViewNew] 开始发送消息（后台服务模式）: '$markdownText'")
         
         // 检查生成状态
         if (sessionObject.isGenerating) {
-            println("[ChatViewNew] 会话正在生成中，不能发送新消息")
+    logD("[ChatViewNew] 会话正在生成中，不能发送新消息")
             return
         }
         
@@ -292,19 +293,19 @@ fun ChatViewNew(
             contexts = sessionObject.contexts
         )
         sessionObject.addMessage(userMessage)
-        println("[ChatViewNew] 用户消息已添加到UI")
+    logD("[ChatViewNew] 用户消息已添加到UI")
         
         // 根据配置决定是否自动清理上下文标签
         if (sessionObject.autoCleanupContexts) {
             sessionObject.contexts = emptyList()
-            println("[ChatViewNew] 上下文标签已根据配置自动清理")
+    logD("[ChatViewNew] 上下文标签已根据配置自动清理")
         } else {
-            println("[ChatViewNew] 上下文标签已保留，可作为持续的会话上下文")
+    logD("[ChatViewNew] 上下文标签已保留，可作为持续的会话上下文")
         }
         
         // 🔧 简化协程调用，避免类加载器冲突
         // 直接使用 SessionObject 处理，避免在 UI 层启动协程
-        println("[ChatViewNew] 使用 SessionObject 方法处理消息发送")
+    logD("[ChatViewNew] 使用 SessionObject 方法处理消息发送")
         fallbackToSessionObject(markdownText)
     }
 
@@ -313,7 +314,7 @@ fun ChatViewNew(
     // 这里只需要响应状态变化即可
     LaunchedEffect(sessionStateSync) {
         if (sessionStateSync != null) {
-            println("[ChatViewNew] 🔄 后台服务已连接，状态将自动同步")
+            logD("[ChatViewNew] 🔄 后台服务已连接，状态将自动同步")
             // 状态同步已通过下面的 observeSessionUpdates 实现
             // 无需额外的工具窗口监听器
         }
@@ -322,7 +323,7 @@ fun ChatViewNew(
     // 🔄 实时监听后台服务状态同步
     LaunchedEffect(sessionStateSync, sessionObject.sessionId) {
         if (sessionStateSync != null && sessionObject.sessionId != null) {
-            println("[ChatViewNew] 🔄 启动后台服务状态监听: sessionId=${sessionObject.sessionId}")
+            logD("[ChatViewNew] 🔄 启动后台服务状态监听: sessionId=${sessionObject.sessionId}")
             
             try {
                 // 通过反射调用observeSessionUpdates方法
@@ -339,7 +340,7 @@ fun ChatViewNew(
                 
                 // 持续监听状态更新
                 stateFlow.collect { backendState ->
-                    println("[ChatViewNew] 📥 收到后台状态更新: $backendState")
+                    logD("[ChatViewNew] 📥 收到后台状态更新: $backendState")
                     
                     // 通过反射获取后台状态的属性
                     val stateClass = backendState.javaClass
@@ -360,16 +361,16 @@ fun ChatViewNew(
                         currentStreamingTextField.isAccessible = true
                         val backendStreamingText = currentStreamingTextField.get(backendState) as StringBuilder
                         
-                        println("[ChatViewNew] 🔄 同步状态 - 后台消息数: ${backendMessages.size}, UI消息数: ${sessionObject.messages.size}, 生成中: $backendIsGenerating, 流式文本长度: ${backendStreamingText.length}")
+                        logD("[ChatViewNew] 🔄 同步状态 - 后台消息数: ${backendMessages.size}, UI消息数: ${sessionObject.messages.size}, 生成中: $backendIsGenerating, 流式文本长度: ${backendStreamingText.length}")
                         
                         // 🎯 智能消息同步：只同步新增的消息
                         if (backendMessages.size > sessionObject.messages.size) {
                             val newMessages = backendMessages.drop(sessionObject.messages.size)
-                            println("[ChatViewNew] 🆕 检测到 ${newMessages.size} 条后台新消息，开始同步")
+                            logD("[ChatViewNew] 🆕 检测到 ${newMessages.size} 条后台新消息，开始同步")
                             
                             newMessages.forEach { newMessage ->
                                 sessionObject.addMessage(newMessage)
-                                println("[ChatViewNew] ➕ 同步消息: ${newMessage.role} - '${newMessage.content.take(50)}...'")
+    logD("[ChatViewNew] ➕ 同步消息: ${newMessage.role} - '${newMessage.content.take(50)}...'")
                             }
                         } else if (backendMessages.size == sessionObject.messages.size && backendStreamingText.isNotEmpty()) {
                             // 消息数量相同但有流式文本更新，更新最后一条助手消息
@@ -383,7 +384,7 @@ fun ChatViewNew(
                                     )
                                     // 替换最后一条消息
                                     sessionObject.messages = sessionObject.messages.dropLast(1) + updatedMessage
-                                    println("[ChatViewNew] 🔄 更新流式消息内容，总长度: ${updatedMessage.content.length}")
+                                    logD("[ChatViewNew] 🔄 更新流式消息内容，总长度: ${updatedMessage.content.length}")
                                 }
                             }
                         }
@@ -391,7 +392,7 @@ fun ChatViewNew(
                         // 同步生成状态
                         if (sessionObject.isGenerating != backendIsGenerating) {
                             sessionObject.isGenerating = backendIsGenerating
-                            println("[ChatViewNew] 🔄 同步生成状态: ${sessionObject.isGenerating} → $backendIsGenerating")
+                            logD("[ChatViewNew] 🔄 同步生成状态: ${sessionObject.isGenerating} → $backendIsGenerating")
                         }
                         
                         // 如果生成完成，确保最后一条消息的流式状态也同步
@@ -400,23 +401,23 @@ fun ChatViewNew(
                             if (lastMessage.role == MessageRole.ASSISTANT && lastMessage.isStreaming) {
                                 val finalMessage = lastMessage.copy(isStreaming = false)
                                 sessionObject.messages = sessionObject.messages.dropLast(1) + finalMessage
-                                println("[ChatViewNew] ✅ 标记最后一条助手消息为完成状态")
+    logD("[ChatViewNew] ✅ 标记最后一条助手消息为完成状态")
                             }
                         }
                         
                     } catch (reflectionError: Exception) {
-                        println("[ChatViewNew] ⚠️ 反射获取状态属性失败: ${reflectionError.message}")
+    logD("[ChatViewNew] ⚠️ 反射获取状态属性失败: ${reflectionError.message}")
                         // 继续监听，不中断流程
                     }
                 }
                 
             } catch (e: Exception) {
-                println("[ChatViewNew] ❌ 状态监听异常: ${e.message}")
-                e.printStackTrace()
+    logD("[ChatViewNew] ❌ 状态监听异常: ${e.message}")
+                logE("Exception caught", e)
                 // 监听失败，但不影响基本功能
             }
         } else {
-            println("[ChatViewNew] ⚠️ 无后台服务或会话ID为空，跳过状态监听")
+    logD("[ChatViewNew] ⚠️ 无后台服务或会话ID为空，跳过状态监听")
         }
     }
     
@@ -512,7 +513,7 @@ fun ChatViewNew(
                                         } catch (e: Exception) {
                                             recoveryMessage = "恢复失败: ${e.message}"
                                             delay(2000)
-                                            println("[ChatViewNew] 会话恢复异常: ${e.message}")
+    logD("[ChatViewNew] 会话恢复异常: ${e.message}")
                                         } finally {
                                             isRecovering = false
                                             recoveryMessage = ""
@@ -607,9 +608,9 @@ fun ChatViewNew(
                 val shouldShow = obscuredExpandedTools.isNotEmpty()
                 
                 if (shouldShow != (obscuredExpandedTools.isEmpty())) {
-                    println("[ChatViewNew] 精确遮挡检测: 找到${obscuredExpandedTools.size}个被遮挡的展开工具")
+    logD("[ChatViewNew] 精确遮挡检测: 找到${obscuredExpandedTools.size}个被遮挡的展开工具")
                     obscuredExpandedTools.forEach { visibility ->
-                        println("  - 工具 ${visibility.toolCallId}: 顶部位置=${visibility.estimatedTopPosition}, 底部位置=${visibility.estimatedBottomPosition}")
+    logD("  - 工具 ${visibility.toolCallId}: 顶部位置=${visibility.estimatedTopPosition}, 底部位置=${visibility.estimatedBottomPosition}")
                     }
                 }
                 
@@ -658,9 +659,10 @@ fun ChatViewNew(
                         com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay(
                             toolCalls = obscuredExpandedToolsToShow,
                             ideIntegration = ideIntegration,
+                            expandedTools = expandedToolCalls,  // 传递展开状态
                             onExpandedChange = { toolId, expanded ->
                                 expandedToolCalls[toolId] = expanded
-                                println("[ChatViewNew] 工具状态更新: $toolId -> $expanded")
+    logD("[ChatViewNew] 工具状态更新: $toolId -> $expanded")
                             },
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -688,12 +690,12 @@ fun ChatViewNew(
                 LaunchedEffect(sessionObject) {
                     val savedPosition = sessionObject.scrollPosition
                     if (savedPosition > 0f) {
-                        println("[ChatViewNew] 恢复滚动位置: $savedPosition")
+    logD("[ChatViewNew] 恢复滚动位置: $savedPosition")
                         scrollState.scrollTo(savedPosition.toInt())
                     } else {
                         // 新会话或没有保存位置，滚动到底部
                         if (messages.isNotEmpty()) {
-                            println("[ChatViewNew] 滚动到底部")
+    logD("[ChatViewNew] 滚动到底部")
                             scrollState.scrollTo(scrollState.maxValue)
                         }
                     }
@@ -704,7 +706,7 @@ fun ChatViewNew(
                     if (messages.isNotEmpty()) {
                         // kotlinx.coroutines.delay(100) // 移除等待，让UI立即响应
                         scrollState.scrollTo(scrollState.maxValue)
-                        println("[ChatViewNew] 新消息滚动到底部")
+    logD("[ChatViewNew] 新消息滚动到底部")
                     }
                 }
                 
@@ -833,7 +835,7 @@ fun ChatViewNew(
                                         .clickable {
                                             // 每次加载更多50条消息
                                             loadedMessageCount += 50
-                                            println("[ChatViewNew] 加载更多消息，当前显示: $loadedMessageCount / ${sessionObject.messages.size}")
+    logD("[ChatViewNew] 加载更多消息，当前显示: $loadedMessageCount / ${sessionObject.messages.size}")
                                         }
                                         .padding(12.dp),
                                     horizontalArrangement = Arrangement.Center,
@@ -857,16 +859,23 @@ fun ChatViewNew(
                             }
                             
                             messages.forEach { message ->
+                                logD("[ChatViewNew] 🔍 处理消息: role=${message.role}, content长度=${message.content.length}")
+                                logD("[ChatViewNew] 📝 消息内容前100字符: ${message.content.take(100)}")
+                                if (message.content.contains("##") || message.content.contains("**")) {
+    logD("[ChatViewNew] ✅ 检测到Markdown标记")
+                                }
+                                logD("[ChatViewNew] 📊 orderedElements数量: ${message.orderedElements.size}")
+
                                 when (message.role) {
                                     MessageRole.USER -> {
+                                        logD("[ChatViewNew] 👤 渲染用户消息")
                                         UnifiedInputArea(
                                             mode = InputAreaMode.DISPLAY,
                                             message = message,
                                             onContextClick = { uri ->
-                                                if (uri.startsWith("file://") && projectService != null) {
+                                                if (uri.startsWith("file://") && ideIntegration != null) {
                                                     val path = uri.removePrefix("file://")
-                                                    // TODO: Add openFile method to ProjectService
-                                                    println("Would open file: $path")
+                                                    ideIntegration.openFile(path, null)
                                                 }
                                             },
                                             sessionObject = sessionObject,
@@ -874,14 +883,15 @@ fun ChatViewNew(
                                         )
                                     }
                                     MessageRole.ASSISTANT, MessageRole.SYSTEM, MessageRole.ERROR -> {
-                                        AssistantMessageDisplay(
+                                        // 使用 AssistantMessageDisplay 组件来渲染 AI 消息
+                                        com.claudecodeplus.ui.components.AssistantMessageDisplay(
                                             message = message,
+                                            modifier = Modifier.fillMaxWidth(),
                                             ideIntegration = ideIntegration,
+                                            expandedTools = expandedToolCalls,  // 传递展开状态
                                             onExpandedChange = { toolId, expanded ->
                                                 expandedToolCalls[toolId] = expanded
-                                                println("[ChatViewNew] 消息流中工具展开状态更新: $toolId -> $expanded")
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
+                                            }
                                         )
                                     }
                                 }
@@ -985,4 +995,5 @@ private fun buildContentWithFrontMatter(
 ): String {
     return ContextProcessor.generateFrontMatter(contexts) + originalContent
 }
+
 

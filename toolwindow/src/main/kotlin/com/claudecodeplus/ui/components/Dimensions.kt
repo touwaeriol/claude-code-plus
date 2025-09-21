@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.theme
+﻿package com.claudecodeplus.ui.theme
 
+import com.claudecodeplus.core.logging.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -52,7 +53,7 @@ object Dimensions {
         fun initializeDefaultWidth(width: Dp) {
             if (_defaultWidth == null) {
                 _defaultWidth = width
-                println("[Dimensions] 初始化插件默认宽度: $width")
+    logD("[Dimensions] 初始化插件默认宽度: $width")
             }
         }
     }

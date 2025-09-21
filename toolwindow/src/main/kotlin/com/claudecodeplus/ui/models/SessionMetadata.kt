@@ -1,5 +1,6 @@
-package com.claudecodeplus.ui.models
+﻿package com.claudecodeplus.ui.models
 
+import com.claudecodeplus.core.logging.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -35,7 +36,7 @@ data class SessionMetadata(
             return try {
                 json.decodeFromString<SessionMetadata>(jsonString)
             } catch (e: Exception) {
-                println("[SessionMetadata] 解析失败: ${e.message}")
+    //                 logD("[SessionMetadata] 解析失败: ${e.message}")
                 null
             }
         }

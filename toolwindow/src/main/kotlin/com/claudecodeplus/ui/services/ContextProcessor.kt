@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ContextProcessor.kt
  * 
  * 上下文处理工具类 - 负责上下文内容格式化和前缀生成
@@ -6,6 +6,7 @@
 
 package com.claudecodeplus.ui.services
 
+import com.claudecodeplus.core.logging.*
 import com.claudecodeplus.ui.models.ContextReference
 import java.io.File
 import kotlin.text.Charsets
@@ -94,11 +95,11 @@ object ContextProcessor {
             if (file.exists() && file.isFile()) {
                 file.readText(Charsets.UTF_8)
             } else {
-                println("[ContextProcessor] 文件不存在或不是文件: $filePath")
+    //                 logD("[ContextProcessor] 文件不存在或不是文件: $filePath")
                 null
             }
         } catch (e: Exception) {
-            println("[ContextProcessor] 读取文件失败: ${context.path}, 错误: ${e.message}")
+    //             logD("[ContextProcessor] 读取文件失败: ${context.path}, 错误: ${e.message}")
             null
         }
     }
