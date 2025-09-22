@@ -1,4 +1,5 @@
-当你修改此文档时，必须修改 [CLAUDE.md](CLAUDE.md) 保证两个文件内容一致
+当你修改此文档时，必须修改 [AGENTS.md](AGENTS.md) 保证两个文件内容一致
+
 
 # Claude Code Plus 项目文档索引
 
@@ -23,7 +24,7 @@
 
 ### 常用组件速查
 
-* 按钮: Button, IconButton, IconActionButton  
+* 按钮: Button, IconButton, IconActionButton
 * 输入: TextField, TextArea, ComboBox
 * 布局: ScrollableContainer, Divider, SplitLayout
 * 弹窗: Popup, PopupContainer, Tooltip
@@ -38,27 +39,27 @@ claude-code-sdk 是一个独立的 Kotlin 模块，提供与 Claude CLI 进行�
 #### 核心组件
 
 1. **ClaudeCodeSdkClient** (`claude-code-sdk/src/main/kotlin/com/claudecodeplus/sdk/ClaudeCodeSdkClient.kt`)
-   - 主要客户端类，管理与 Claude 的所有交互
-   - 支持连接管理、消息发送、响应接收
-   - 提供简单查询和流式交互两种模式
-   - 关键方法：`connect()`, `query()`, `receiveResponse()`, `interrupt()`, `disconnect()`
+    - 主要客户端类，管理与 Claude 的所有交互
+    - 支持连接管理、消息发送、响应接收
+    - 提供简单查询和流式交互两种模式
+    - 关键方法：`connect()`, `query()`, `receiveResponse()`, `interrupt()`, `disconnect()`
 
 2. **SubprocessTransport** (`claude-code-sdk/src/main/kotlin/com/claudecodeplus/sdk/transport/SubprocessTransport.kt`)
-   - 传输层实现，通过子进程与 Claude CLI 通信
-   - 处理进程启动、I/O 流管理、错误处理
-   - 支持 Windows/Unix 跨平台运行
-   - 自动处理 stream-json 模式的消息流
+    - 传输层实现，通过子进程与 Claude CLI 通信
+    - 处理进程启动、I/O 流管理、错误处理
+    - 支持 Windows/Unix 跨平台运行
+    - 自动处理 stream-json 模式的消息流
 
 3. **ControlProtocol** (`claude-code-sdk/src/main/kotlin/com/claudecodeplus/sdk/protocol/ControlProtocol.kt`)
-   - 控制协议处理器，管理双向通信协议
-   - 路由消息到正确的处理器
-   - 支持 Hook 回调、MCP 服务器、权限请求
-   - 管理请求/响应的异步处理
+    - 控制协议处理器，管理双向通信协议
+    - 路由消息到正确的处理器
+    - 支持 Hook 回调、MCP 服务器、权限请求
+    - 管理请求/响应的异步处理
 
 4. **MessageParser** (`claude-code-sdk/src/main/kotlin/com/claudecodeplus/sdk/protocol/MessageParser.kt`)
-   - 解析来自 Claude CLI 的 JSON 流消息
-   - 将 JSON 转换为强类型的消息对象
-   - 支持所有 Claude 消息类型：User、Assistant、System、Result
+    - 解析来自 Claude CLI 的 JSON 流消息
+    - 将 JSON 转换为强类型的消息对象
+    - 支持所有 Claude 消息类型：User、Assistant、System、Result
 
 ### 关键功能特性
 
@@ -77,22 +78,22 @@ client.receiveResponse().collect { message ->
 
 #### 2. MCP (Model Context Protocol) 服务器支持
 - **McpServer 接口** (`claude-code-sdk/src/main/kotlin/com/claudecodeplus/sdk/mcp/McpServer.kt`)
-  - 定义标准 MCP 服务器接口
-  - 支持工具列表查询 `listTools()`
-  - 支持工具调用执行 `callTool()`
+    - 定义标准 MCP 服务器接口
+    - 支持工具列表查询 `listTools()`
+    - 支持工具调用执行 `callTool()`
 - **McpServerBase** - 提供基础实现和工具注册
 - 支持三种服务器类型：stdio、sse、http
 
 #### 3. 消息类型系统
 - **Messages.kt** - 定义所有消息类型
-  - UserMessage - 用户输入
-  - AssistantMessage - Claude 响应
-  - SystemMessage - 系统元数据
-  - ResultMessage - 会话结果和统计
+    - UserMessage - 用户输入
+    - AssistantMessage - Claude 响应
+    - SystemMessage - 系统元数据
+    - ResultMessage - 会话结果和统计
 - **ContentBlocks.kt** - 内容块类型
-  - TextBlock - 文本内容
-  - ToolUseBlock - 工具调用
-  - ToolResultBlock - 工具执行结果
+    - TextBlock - 文本内容
+    - ToolUseBlock - 工具调用
+    - ToolResultBlock - 工具执行结果
 
 #### 4. 配置选项 (ClaudeCodeOptions)
 ```kotlin
@@ -167,41 +168,41 @@ val options = ClaudeCodeOptions(
 ### 开发注意事项
 
 1. **连接管理**
-   - 必须先 `connect()` 才能发送消息
-   - 使用 `isConnected()` 检查连接状态
-   - 记得调用 `disconnect()` 释放资源
+    - 必须先 `connect()` 才能发送消息
+    - 使用 `isConnected()` 检查连接状态
+    - 记得调用 `disconnect()` 释放资源
 
 2. **消息处理**
-   - receiveResponse() 返回 Flow，支持协程
-   - 每个响应以 ResultMessage 结束
-   - 支持流式和批量两种处理方式
+    - receiveResponse() 返回 Flow，支持协程
+    - 每个响应以 ResultMessage 结束
+    - 支持流式和批量两种处理方式
 
 3. **错误处理**
-   - 捕获 ClientNotConnectedException
-   - 检查 ResultMessage.isError
-   - Transport 层自动重试机制
+    - 捕获 ClientNotConnectedException
+    - 检查 ResultMessage.isError
+    - Transport 层自动重试机制
 
 4. **性能优化**
-   - 使用流式处理避免内存占用
-   - 支持消息批处理
-   - 异步非阻塞设计
+    - 使用流式处理避免内存占用
+    - 支持消息批处理
+    - 异步非阻塞设计
 
 ### 调试技巧
 
 1. **日志输出**
-   - SDK 使用 java.util.logging
-   - 关键操作都有详细日志
-   - 通过 debugStderr 参数输出调试信息
+    - SDK 使用 java.util.logging
+    - 关键操作都有详细日志
+    - 通过 debugStderr 参数输出调试信息
 
 2. **消息追踪**
-   - MessageParser 记录所有收到的消息
-   - ControlProtocol 记录消息路由
-   - Transport 层记录原始 I/O
+    - MessageParser 记录所有收到的消息
+    - ControlProtocol 记录消息路由
+    - Transport 层记录原始 I/O
 
 3. **常见问题**
-   - CLI 进程启动失败：检查 Claude CLI 是否安装
-   - 连接超时：检查网络和 API 密钥
-   - 消息解析错误：查看原始 JSON 输出
+    - CLI 进程启动失败：检查 Claude CLI 是否安装
+    - 连接超时：检查网络和 API 密钥
+    - 消息解析错误：查看原始 JSON 输出
 
 ## Toolwindow 模块 - UI 层
 
@@ -256,12 +257,12 @@ UI层 (Compose组件)
 - `CompactToolCallDisplay` - 紧凑模式显示
 - `ExpandedToolCallDisplay` - 展开模式显示
 - 专业化显示器：
-  - `ReadToolDisplay` - 文件读取
-  - `EditToolDisplay` - 文件编辑
-  - `WriteToolDisplay` - 文件写入
-  - `BashToolDisplay` - 命令执行
-  - `GrepToolDisplay` - 搜索操作
-  - `TodoWriteDisplay` - 任务列表
+    - `ReadToolDisplay` - 文件读取
+    - `EditToolDisplay` - 文件编辑
+    - `WriteToolDisplay` - 文件写入
+    - `BashToolDisplay` - 命令执行
+    - `GrepToolDisplay` - 搜索操作
+    - `TodoWriteDisplay` - 任务列表
 
 #### 4. 消息转换系统
 
@@ -352,9 +353,9 @@ jetbrains-plugin 是 IntelliJ IDEA 集成层，负责将 Claude Code Plus 功能
 **用户操作 Actions**：
 - `NewSessionAction` - 创建新会话
 - `ChatInputActions` - 输入快捷键
-  - Ctrl+U - 删除到行首
-  - Shift+Enter - 插入换行
-  - Ctrl+J - 备用换行
+    - Ctrl+U - 删除到行首
+    - Shift+Enter - 插入换行
+    - Ctrl+J - 备用换行
 
 #### 4. 工具点击处理
 

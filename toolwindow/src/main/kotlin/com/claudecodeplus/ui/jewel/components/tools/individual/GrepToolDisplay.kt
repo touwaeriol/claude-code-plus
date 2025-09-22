@@ -1,4 +1,4 @@
-package com.claudecodeplus.ui.jewel.components.tools.individual
+﻿package com.claudecodeplus.ui.jewel.components.tools.individual
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -12,10 +12,9 @@ import com.claudecodeplus.ui.jewel.components.tools.shared.SearchResultDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
 
 /**
- * Grep工具专用展示组件
+ * Grep宸ュ叿涓撶敤灞曠ず缁勪欢
  *
- * 🎯 职责：专门处理Grep工具的展示
- * 🔧 特点：显示文本搜索、匹配结果、搜索选项
+ * 馃幆 鑱岃矗锛氫笓闂ㄥ鐞咷rep宸ュ叿鐨勫睍绀? * 馃敡 鐗圭偣锛氭樉绀烘枃鏈悳绱€佸尮閰嶇粨鏋溿€佹悳绱㈤€夐」
  */
 @Composable
 fun GrepToolDisplay(
@@ -28,7 +27,7 @@ fun GrepToolDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        // 鍙湪闈炶鎯呮ā寮忎笅鏄剧ず宸ュ叿澶撮儴淇℃伅锛堥伩鍏嶅睍寮€鏃堕噸澶嶏級
         if (!showDetails) {
             val subtitle = buildString {
                 append("search: ${grepTool.pattern}")
@@ -37,23 +36,23 @@ fun GrepToolDisplay(
                     grepTool.type != null -> append(" in *.${grepTool.type}")
                     grepTool.path != null -> append(" in ${grepTool.path}")
                 }
-                if (grepTool.caseInsensitive) append(" [忽略大小写]")
-                if (grepTool.showLineNumbers) append(" [显示行号]")
+                if (grepTool.caseInsensitive) append(" [蹇界暐澶у皬鍐橾")
+                if (grepTool.showLineNumbers) append(" [鏄剧ず琛屽彿]")
             }
 
             ToolHeaderDisplay(
-                icon = "🔍",
+                icon = "馃攳",
                 toolName = "Grep",
                 subtitle = subtitle,
                 status = toolCall.status
             )
         }
 
-        // 显示搜索结果
+        // 鏄剧ず鎼滅储缁撴灉
         if (showDetails && toolCall.result != null) {
             when (val result = toolCall.result) {
                 is ToolResult.Success -> {
-                    // 解析搜索结果
+                    // 瑙ｆ瀽鎼滅储缁撴灉
                     val searchResults = result.output
                         .split('\n')
                         .filter { it.trim().isNotEmpty() }

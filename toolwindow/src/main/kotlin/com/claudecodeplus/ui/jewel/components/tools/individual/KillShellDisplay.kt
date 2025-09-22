@@ -1,4 +1,4 @@
-package com.claudecodeplus.ui.jewel.components.tools.individual
+﻿package com.claudecodeplus.ui.jewel.components.tools.individual
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -14,11 +14,9 @@ import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 
 /**
- * KillShell工具专用展示组件
+ * KillShell宸ュ叿涓撶敤灞曠ず缁勪欢
  *
- * 🎯 职责：专门处理KillShell工具的展示
- * 🔧 特点：显示Shell进程ID、终止状态
- */
+ * 馃幆 鑱岃矗锛氫笓闂ㄥ鐞咾illShell宸ュ叿鐨勫睍绀? * 馃敡 鐗圭偣锛氭樉绀篠hell杩涚▼ID銆佺粓姝㈢姸鎬? */
 @Composable
 fun KillShellDisplay(
     toolCall: ToolCall,
@@ -30,22 +28,22 @@ fun KillShellDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        // 鍙湪闈炶鎯呮ā寮忎笅鏄剧ず宸ュ叿澶撮儴淇℃伅锛堥伩鍏嶅睍寮€鏃堕噸澶嶏級
         if (!showDetails) {
             ToolHeaderDisplay(
-                icon = "⚡",
+                icon = "鈿?,
                 toolName = "KillShell",
                 subtitle = "shell_id: ${killShellTool.shellId}",
                 status = toolCall.status
             )
         }
 
-        // 显示结果
+        // 鏄剧ず缁撴灉
         if (showDetails && toolCall.result != null) {
             when (val result = toolCall.result) {
                 is ToolResult.Success -> {
                     Text(
-                        text = "✅ Shell进程已终止: ${killShellTool.shellId}",
+                        text = "鉁?Shell杩涚▼宸茬粓姝? ${killShellTool.shellId}",
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 11.sp,
                             color = androidx.compose.ui.graphics.Color(0xFF4CAF50)
@@ -54,7 +52,7 @@ fun KillShellDisplay(
                 }
                 is ToolResult.Failure -> {
                     Text(
-                        text = "❌ 终止失败: ${result.error}",
+                        text = "鉂?缁堟澶辫触: ${result.error}",
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 11.sp,
                             color = androidx.compose.ui.graphics.Color(0xFFFF6B6B)

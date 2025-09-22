@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalFoundationApi::class, org.jetbrains.jewel.foundation.ExperimentalJewelApi::class)
+﻿@file:OptIn(ExperimentalFoundationApi::class, org.jetbrains.jewel.foundation.ExperimentalJewelApi::class)
 
 package com.claudecodeplus.ui.jewel.components.tools.shared
 
@@ -27,16 +27,11 @@ import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 
 /**
- * 底层可复用组件集合
- *
- * 这些组件可以被多个工具展示组件复用，遵循DRY原则。
- * 每个组件都有明确的职责和接口。
- */
+ * 搴曞眰鍙鐢ㄧ粍浠堕泦鍚? *
+ * 杩欎簺缁勪欢鍙互琚涓伐鍏峰睍绀虹粍浠跺鐢紝閬靛惊DRY鍘熷垯銆? * 姣忎釜缁勪欢閮芥湁鏄庣‘鐨勮亴璐ｅ拰鎺ュ彛銆? */
 
 /**
- * 工具头部显示组件（可复用）
- * 用于显示工具的基本信息：图标、名称、副标题、状态
- */
+ * 宸ュ叿澶撮儴鏄剧ず缁勪欢锛堝彲澶嶇敤锛? * 鐢ㄤ簬鏄剧ず宸ュ叿鐨勫熀鏈俊鎭細鍥炬爣銆佸悕绉般€佸壇鏍囬銆佺姸鎬? */
 @Composable
 fun ToolHeaderDisplay(
     icon: String,
@@ -61,13 +56,13 @@ fun ToolHeaderDisplay(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 工具图标
+        // 宸ュ叿鍥炬爣
         Text(
             text = icon,
             style = JewelTheme.defaultTextStyle.copy(fontSize = 14.sp)
         )
 
-        // 工具名称和副标题
+        // 宸ュ叿鍚嶇О鍜屽壇鏍囬
         Column(
             modifier = Modifier.weight(1f)
         ) {
@@ -90,14 +85,14 @@ fun ToolHeaderDisplay(
             )
         }
 
-        // 状态指示器
-        Text(
+        // 鐘舵€佹寚绀哄櫒
+                Text(
             text = when (status) {
-                ToolCallStatus.PENDING -> "⏳"
-                ToolCallStatus.RUNNING -> "🔄"
-                ToolCallStatus.SUCCESS -> "✅"
-                ToolCallStatus.FAILED -> "❌"
-                ToolCallStatus.CANCELLED -> "⚠️"
+                ToolCallStatus.PENDING -> "待处理"
+                ToolCallStatus.RUNNING -> "执行中"
+                ToolCallStatus.SUCCESS -> "已完成"
+                ToolCallStatus.FAILED -> "已失败"
+                ToolCallStatus.CANCELLED -> "已取消"
             },
             style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
         )
@@ -105,9 +100,7 @@ fun ToolHeaderDisplay(
 }
 
 /**
- * 文件内容展示组件（可复用）
- * Read/Write/Edit等文件操作工具可以复用
- */
+ * 鏂囦欢鍐呭灞曠ず缁勪欢锛堝彲澶嶇敤锛? * Read/Write/Edit绛夋枃浠舵搷浣滃伐鍏峰彲浠ュ鐢? */
 @Composable
 fun FileContentDisplay(
     content: String,
@@ -119,10 +112,10 @@ fun FileContentDisplay(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 文件路径（如果提供）
+        // 鏂囦欢璺緞锛堝鏋滄彁渚涳級
         filePath?.let { path ->
             Text(
-                text = "📄 ${path.substringAfterLast('/')}",
+                text = "馃搫 ${path.substringAfterLast('/')}",
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
@@ -131,7 +124,7 @@ fun FileContentDisplay(
             )
         }
 
-        // 文件内容
+        // 鏂囦欢鍐呭
         SelectionContainer {
             Text(
                 text = content,
@@ -139,13 +132,13 @@ fun FileContentDisplay(
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                     color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f),
-                    lineHeight = 14.sp
+                    lineHeight = 16.sp  // 澧炲姞琛岄珮閬垮厤閲嶅彔锛?45%鐨勫瓧浣撳ぇ灏忥級
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(
                         if (maxLines != Int.MAX_VALUE) {
-                            Modifier.heightIn(max = (maxLines * 14).dp)
+                            Modifier.heightIn(max = (maxLines * 16).dp)
                         } else {
                             Modifier
                         }
@@ -159,9 +152,7 @@ fun FileContentDisplay(
 }
 
 /**
- * 搜索结果展示组件（可复用）
- * Glob/Grep等搜索工具可以复用
- */
+ * 鎼滅储缁撴灉灞曠ず缁勪欢锛堝彲澶嶇敤锛? * Glob/Grep绛夋悳绱㈠伐鍏峰彲浠ュ鐢? */
 @Composable
 fun SearchResultDisplay(
     results: List<String>,
@@ -173,15 +164,15 @@ fun SearchResultDisplay(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 搜索统计
+        // 鎼滅储缁熻
         val count = totalCount ?: results.size
         Text(
             text = buildString {
-                append("🔍 ")
+                append("馃攳 ")
                 if (searchTerm != null) {
-                    append("搜索 \"$searchTerm\"：")
+                    append("鎼滅储 \"$searchTerm\"锛?)
                 }
-                append("找到 $count 个结果")
+                append("鎵惧埌 $count 涓粨鏋?)
             },
             style = JewelTheme.defaultTextStyle.copy(
                 fontSize = 11.sp,
@@ -190,10 +181,10 @@ fun SearchResultDisplay(
             )
         )
 
-        // 结果列表
+        // 缁撴灉鍒楄〃
         if (results.isEmpty()) {
             Text(
-                text = "未找到匹配结果",
+                text = "鏈壘鍒板尮閰嶇粨鏋?,
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 10.sp,
                     color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
@@ -221,7 +212,7 @@ fun SearchResultDisplay(
 
                 if (results.size > 20) {
                     Text(
-                        text = "... 还有 ${results.size - 20} 个结果",
+                        text = "... 杩樻湁 ${results.size - 20} 涓粨鏋?,
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 9.sp,
                             color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
@@ -234,9 +225,7 @@ fun SearchResultDisplay(
 }
 
 /**
- * 网页内容展示组件（可复用）
- * WebFetch/WebSearch等网络工具可以复用
- */
+ * 缃戦〉鍐呭灞曠ず缁勪欢锛堝彲澶嶇敤锛? * WebFetch/WebSearch绛夌綉缁滃伐鍏峰彲浠ュ鐢? */
 @Composable
 fun WebContentDisplay(
     content: String,
@@ -248,19 +237,18 @@ fun WebContentDisplay(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // URL或标题
-        Row(
+        // URL鎴栨爣棰?        Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "🌐",
+                text = "馃寪",
                 style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
             )
             Text(
                 text = title ?: url?.let {
                     it.removePrefix("https://").removePrefix("http://").substringBefore("/")
-                } ?: "网页内容",
+                } ?: "缃戦〉鍐呭",
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
@@ -271,14 +259,14 @@ fun WebContentDisplay(
             )
         }
 
-        // 内容摘要
+        // 鍐呭鎽樿
         SelectionContainer {
             Text(
                 text = if (content.length > 300) content.take(297) + "..." else content,
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 10.sp,
                     color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f),
-                    lineHeight = 14.sp
+                    lineHeight = 15.sp  // 澧炲姞琛岄珮閬垮厤閲嶅彔锛?50%鐨勫瓧浣撳ぇ灏忥級
                 ),
                 modifier = Modifier
                     .heightIn(max = 80.dp)
@@ -286,9 +274,9 @@ fun WebContentDisplay(
             )
         }
 
-        // 内容统计
+        // 鍐呭缁熻
         Text(
-            text = "内容长度: ${content.length} 字符",
+            text = "鍐呭闀垮害: ${content.length} 瀛楃",
             style = JewelTheme.defaultTextStyle.copy(
                 fontSize = 9.sp,
                 color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)
@@ -298,9 +286,7 @@ fun WebContentDisplay(
 }
 
 /**
- * 差异展示组件（可复用）
- * Edit/MultiEdit等编辑工具可以复用
- */
+ * 宸紓灞曠ず缁勪欢锛堝彲澶嶇敤锛? * Edit/MultiEdit绛夌紪杈戝伐鍏峰彲浠ュ鐢? */
 @Composable
 fun DiffDisplay(
     oldContent: String?,
@@ -313,20 +299,20 @@ fun DiffDisplay(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 文件信息
+        // 鏂囦欢淇℃伅
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "✏️",
+                text = "鉁忥笍",
                 style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
             )
             Text(
                 text = buildString {
-                    append(filePath?.substringAfterLast('/') ?: "文件编辑")
+                    append(filePath?.substringAfterLast('/') ?: "鏂囦欢缂栬緫")
                     if (changeCount != null) {
-                        append(" ($changeCount 处修改)")
+                        append(" ($changeCount 澶勪慨鏀?")
                     }
                 },
                 style = JewelTheme.defaultTextStyle.copy(
@@ -337,7 +323,7 @@ fun DiffDisplay(
             )
         }
 
-        // 差异内容（简化显示）
+        // 宸紓鍐呭锛堢畝鍖栨樉绀猴級
         if (oldContent != null && newContent != null) {
             Column(
                 modifier = Modifier
@@ -346,8 +332,7 @@ fun DiffDisplay(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                // 删除的内容
-                if (oldContent.isNotEmpty()) {
+                // 鍒犻櫎鐨勫唴瀹?                if (oldContent.isNotEmpty()) {
                     Text(
                         text = "- ${oldContent.take(100)}${if (oldContent.length > 100) "..." else ""}",
                         style = JewelTheme.defaultTextStyle.copy(
@@ -358,8 +343,7 @@ fun DiffDisplay(
                     )
                 }
 
-                // 添加的内容
-                if (newContent.isNotEmpty()) {
+                // 娣诲姞鐨勫唴瀹?                if (newContent.isNotEmpty()) {
                     Text(
                         text = "+ ${newContent.take(100)}${if (newContent.length > 100) "..." else ""}",
                         style = JewelTheme.defaultTextStyle.copy(
@@ -375,9 +359,7 @@ fun DiffDisplay(
 }
 
 /**
- * 终端输出展示组件（可复用）
- * Bash等命令工具可以复用
- */
+ * 缁堢杈撳嚭灞曠ず缁勪欢锛堝彲澶嶇敤锛? * Bash绛夊懡浠ゅ伐鍏峰彲浠ュ鐢? */
 @Composable
 fun TerminalOutputDisplay(
     output: String,
@@ -389,21 +371,21 @@ fun TerminalOutputDisplay(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 命令信息
+        // 鍛戒护淇℃伅
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "💻",
+                text = "馃捇",
                 style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
             )
             Text(
                 text = buildString {
-                    append(command?.take(30) ?: "命令执行")
+                    append(command?.take(30) ?: "鍛戒护鎵ц")
                     if (command != null && command.length > 30) append("...")
                     if (exitCode != null) {
-                        append(" (退出码: $exitCode)")
+                        append(" (閫€鍑虹爜: $exitCode)")
                     }
                 },
                 style = JewelTheme.defaultTextStyle.copy(
@@ -414,7 +396,7 @@ fun TerminalOutputDisplay(
             )
         }
 
-        // 输出内容
+        // 杈撳嚭鍐呭
         SelectionContainer {
             Text(
                 text = output,
@@ -433,8 +415,7 @@ fun TerminalOutputDisplay(
 }
 
 /**
- * 通用工具结果展示组件（可复用）
- * 处理各种ToolResult类型
+ * 閫氱敤宸ュ叿缁撴灉灞曠ず缁勪欢锛堝彲澶嶇敤锛? * 澶勭悊鍚勭ToolResult绫诲瀷
  */
 @Composable
 fun ToolResultDisplay(
@@ -458,7 +439,7 @@ fun ToolResultDisplay(
         }
         is ToolResult.Failure -> {
             Text(
-                text = "❌ ${result.error}",
+                text = "鉂?${result.error}",
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 11.sp,
                     color = Color(0xFFFF6B6B)
@@ -478,3 +459,5 @@ fun ToolResultDisplay(
         }
     }
 }
+
+

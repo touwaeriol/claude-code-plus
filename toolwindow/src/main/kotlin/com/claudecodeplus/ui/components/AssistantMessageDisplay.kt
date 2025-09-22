@@ -1,39 +1,38 @@
 ﻿package com.claudecodeplus.ui.components
 
 import com.claudecodeplus.core.logging.*
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.claudecodeplus.ui.models.*
-import com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay
 import com.claudecodeplus.ui.jewel.components.markdown.MarkdownRenderer
+import com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay
 import com.claudecodeplus.ui.jewel.components.tools.JumpingDots
+import com.claudecodeplus.ui.models.EnhancedMessage
+import com.claudecodeplus.ui.models.MessageTimelineItem
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
-import java.text.SimpleDateFormat
-import java.util.*
 
-/**
- * AI 助手消息显示组件
- * 专门用于显示 AI 的回复，支持 Markdown 渲染和工具调用显示
- */
 @Composable
 fun AssistantMessageDisplay(
     message: EnhancedMessage,
     modifier: Modifier = Modifier,
     ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,
-    expandedTools: Map<String, Boolean> = emptyMap(),  // 外部传入的展开状态
+    expandedTools: Map<String, Boolean> = emptyMap(),
     onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)  // 增加垂直间距，避免内容重叠
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 显示模型信息（如果有）
         message.model?.let { model ->
             SelectionContainer {
                 Row(
@@ -41,7 +40,7 @@ fun AssistantMessageDisplay(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = "🤖",
+                        text = "AI",
                         style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
                     )
                     Text(
@@ -55,48 +54,76 @@ fun AssistantMessageDisplay(
             }
         }
 
-        // 按照 SDK 输出的时间顺序显示所有元素
-    logD("[AssistantMessageDisplay] 显示 orderedElements，共 ${message.orderedElements.size} 个元素")
-
-        // 收集所有工具调用以便统一显示
-        val allToolCalls = message.orderedElements
-            .filterIsInstance<MessageTimelineItem.ToolCallItem>()
-            .map { it.toolCall }
-
-        // 如果有工具调用，使用 CompactToolCallDisplay 统一显示
-        if (allToolCalls.isNotEmpty()) {
-            logD("[AssistantMessageDisplay] 🎯 显示工具调用: ${allToolCalls.size} 个工具")
-            CompactToolCallDisplay(
-                toolCalls = allToolCalls,
-                modifier = Modifier.fillMaxWidth(),
-                ideIntegration = ideIntegration,
-                expandedTools = expandedTools,
-                onExpandedChange = onExpandedChange
-            )
-        }
-
-        // 显示文本内容
-        val textContent = message.orderedElements
-            .filterIsInstance<MessageTimelineItem.ContentItem>()
-            .joinToString("") { it.content }
-
-        if (textContent.isNotBlank()) {
-            logD("[AssistantMessageDisplay] 🎯 渲染文本内容: ${textContent.take(100)}...")
+        val orderedElements = message.orderedElements
+        if (orderedElements.isNotEmpty()) {
+            logD("[AssistantMessageDisplay] 顺序渲染 ${orderedElements.size} 个 orderedElements")
+            orderedElements.forEachIndexed { index, element ->
+                val elementKey = "${message.id}-${element.timestamp}-$index-${element::class.simpleName}"
+                when (element) {
+                    is MessageTimelineItem.ContentItem -> {
+                        val content = element.content
+                        if (content.isNotBlank()) {
+                            key(elementKey) {
+                                logD("[AssistantMessageDisplay] 渲染文本片段(${index + 1}/${orderedElements.size}): ${content.take(80)}...")
+                                MarkdownRenderer(
+                                    markdown = content,
+                                    onLinkClick = { url -> logD("[AssistantMessageDisplay] 链接点击: $url") },
+                                    onCodeAction = { _, language -> logD("[AssistantMessageDisplay] 代码操作: 语言=$language") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                    is MessageTimelineItem.ToolCallItem -> {
+                        val toolCall = element.toolCall
+                        key(elementKey) {
+                            logD("[AssistantMessageDisplay] 渲染工具调用: ${toolCall.name} (${toolCall.id})")
+                            CompactToolCallDisplay(
+                                toolCalls = listOf(toolCall),
+                                modifier = Modifier.fillMaxWidth(),
+                                ideIntegration = ideIntegration,
+                                expandedTools = expandedTools,
+                                onExpandedChange = onExpandedChange
+                            )
+                        }
+                    }
+                    is MessageTimelineItem.StatusItem -> {
+                        key(elementKey) {
+                            StatusMessageRow(status = element)
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        } else if (message.content.isNotBlank()) {
+            logD("[AssistantMessageDisplay] 无 orderedElements，渲染整体文本: ${message.content.take(80)}...")
             MarkdownRenderer(
-                markdown = textContent,
-                onLinkClick = { url ->
-    logD("[AssistantMessageDisplay] 链接点击: $url")
-                },
-                onCodeAction = { code, language ->
-    logD("[AssistantMessageDisplay] 代码操作: 语言=$language")
-                },
+                markdown = message.content,
+                onLinkClick = { url -> logD("[AssistantMessageDisplay] 链接点击: $url") },
+                onCodeAction = { _, language -> logD("[AssistantMessageDisplay] 代码操作: 语言=$language") },
                 modifier = Modifier.fillMaxWidth()
             )
         }
-
-        
-        // 流式状态指示器已移至工具调用状态区域，此处不再显示
     }
 }
 
-// StreamingIndicator 函数已移除，生成状态现在统一在工具调用状态区域显示
+@Composable
+private fun StatusMessageRow(status: MessageTimelineItem.StatusItem) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (status.isStreaming) {
+            JumpingDots(
+                modifier = Modifier.padding(end = 2.dp)
+            )
+        }
+        Text(
+            text = status.status,
+            style = JewelTheme.defaultTextStyle.copy(
+                fontSize = 12.sp,
+                color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
+            )
+        )
+    }
+}

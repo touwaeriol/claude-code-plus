@@ -34,6 +34,7 @@ import com.claudecodeplus.ui.jewel.components.tools.output.*
 import com.claudecodeplus.ui.jewel.components.tools.EnhancedTodoDisplay
 import com.claudecodeplus.ui.jewel.components.tools.TypedToolCallDisplay
 import com.claudecodeplus.sdk.types.TodoWriteToolUse
+import com.claudecodeplus.sdk.types.TaskToolUse
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.component.styling.TooltipStyle
@@ -56,7 +57,7 @@ fun CompactToolCallDisplay(
     toolCalls: List<ToolCall>,
     modifier: Modifier = Modifier,
     ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,  // IDE 集成接口
-    expandedTools: Map<String, Boolean> = emptyMap(),  // 外部传入的展开状态
+    expandedTools: Map<String, Boolean?> = emptyMap(),  // 外部传入的展开状态
     onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
 
@@ -69,7 +70,7 @@ fun CompactToolCallDisplay(
             CompactToolCallItem(
                 toolCall = toolCall,
                 ideIntegration = ideIntegration,
-                isExpanded = expandedTools[toolCall.id] ?: false,
+                isExpanded = expandedTools[toolCall.id],
                 onExpandedChange = onExpandedChange
             )
         }
@@ -83,20 +84,35 @@ fun CompactToolCallDisplay(
 private fun CompactToolCallItem(
     toolCall: ToolCall,
     ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,
-    isExpanded: Boolean = false,  // 从外部接收展开状态
+    isExpanded: Boolean? = null,  // 从外部接收展开状态
     onExpandedChange: ((String, Boolean) -> Unit)? = null
 ) {
 
     // 使用外部传入的展开状态，如果是TodoWrite则默认展开
+    val defaultExpanded = when (toolCall.specificTool) {
+        is TodoWriteToolUse, is TaskToolUse -> true
+        else -> toolCall.name.contains("TodoWrite", ignoreCase = true) ||
+            toolCall.name.contains("Task", ignoreCase = true)
+    }
+    val canShowInlineDetails = remember(
+        toolCall.id,
+        toolCall.status,
+        toolCall.result,
+        toolCall.specificTool
+    ) {
+        shouldShowToolDetails(toolCall)
+    }
     var expanded by remember(toolCall.id, isExpanded) {
-        mutableStateOf(isExpanded || toolCall.name.contains("TodoWrite", ignoreCase = true))
+        mutableStateOf(isExpanded ?: defaultExpanded)
+    }
+        mutableStateOf(isExpanded ?: defaultExpanded)
     }
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
 
     // 同步外部状态变化
     LaunchedEffect(isExpanded) {
-        if (expanded != isExpanded) {
+        if (isExpanded != null && expanded != isExpanded) {
             expanded = isExpanded
         }
     }
@@ -105,6 +121,11 @@ private fun CompactToolCallItem(
     LaunchedEffect(expanded) {
         delay(100)  // 简单防抖
         onExpandedChange?.invoke(toolCall.id, expanded)
+    LaunchedEffect(canShowInlineDetails, ideIntegration) {
+        if (!canShowInlineDetails && ideIntegration != null && expanded) {
+            expanded = false
+        }
+    }
     }
     
     // 背景色动画（更平滑的过渡）
@@ -146,7 +167,9 @@ private fun CompactToolCallItem(
                         }
 
                         if (!handled) {
-                            // 回退到默认展开行为
+                            if (canShowInlineDetails || ideIntegration == null) {
+                                expanded = !expanded
+                            }
                             expanded = !expanded
                         }
                     }
@@ -176,7 +199,7 @@ private fun CompactToolCallItem(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 工具调用标题行，格式：🔧 ToolName: parameter_value
+                    // 工具调用标题行，格式：?? ToolName: parameter_value
                     val inlineDisplay = getInlineToolDisplay(toolCall)
                     Text(
                         text = inlineDisplay,
@@ -198,13 +221,13 @@ private fun CompactToolCallItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 简化状态指示器（避免StackOverflow）
-                Text(
+                                Text(
                     text = when (toolCall.status) {
-                        ToolCallStatus.PENDING -> "⏳"
-                        ToolCallStatus.RUNNING -> "🔄"
-                        ToolCallStatus.SUCCESS -> "✅"
-                        ToolCallStatus.FAILED -> "❌"
-                        ToolCallStatus.CANCELLED -> "⚠️"
+                        ToolCallStatus.PENDING -> "待"
+                        ToolCallStatus.RUNNING -> "执行"
+                        ToolCallStatus.SUCCESS -> "成功"
+                        ToolCallStatus.FAILED -> "失败"
+                        ToolCallStatus.CANCELLED -> "取消"
                     },
                     style = JewelTheme.defaultTextStyle.copy(fontSize = 9.sp)
                 )
@@ -224,8 +247,8 @@ private fun CompactToolCallItem(
                         },
                         label = "expand_icon"
                     ) { isExpanded ->
-                        Text(
-                            text = if (isExpanded) "⌄" else "›",
+                                                Text(
+                            text = if (isExpanded) "▼" else "▶",
                             style = JewelTheme.defaultTextStyle.copy(
                                 fontSize = 10.sp,
                                 color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f),
@@ -237,9 +260,9 @@ private fun CompactToolCallItem(
             }
         }
         
-        // 展开的详细内容 - 🎯 优化动画性能，使用 animateContentSize
+        // 展开的详细内容 - ?? 优化动画性能，使用 animateContentSize
         AnimatedVisibility(
-            visible = expanded,
+            visible = expanded && (canShowInlineDetails || ideIntegration == null),
             enter = expandVertically(
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioNoBouncy,
@@ -258,7 +281,8 @@ private fun CompactToolCallItem(
             )
         ) {
             ToolCallDetails(
-                toolCall = toolCall
+                toolCall = toolCall,
+                ideIntegration = ideIntegration
             )
         }
     }
@@ -269,17 +293,21 @@ private fun CompactToolCallItem(
  */
 @Composable
 private fun ToolCallDetails(
-    toolCall: ToolCall
+    toolCall: ToolCall,
+    ideIntegration: com.claudecodeplus.ui.services.IdeIntegration?
 ) {
     // 判断是否需要显示详细结果
     val shouldShowDetails = shouldShowToolDetails(toolCall)
     
     if (!shouldShowDetails) {
+        if (ideIntegration == null) {
+            GenericToolDisplay(toolCall, showDetails = true)
+        }
         // 对于不需要显示详细结果的工具，不渲染任何内容
         return
     }
     
-    // 🎯 设置最大高度为300dp（约等于视窗40%）
+    // ?? 设置最大高度为300dp（约等于视窗40%）
     val maxExpandHeight = 300.dp
     
     Column(
@@ -287,7 +315,7 @@ private fun ToolCallDetails(
             .fillMaxWidth()
             .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.05f))  // 更淡的背景
     ) {
-        // 详细内容区域 - 🔑 添加高度限制和内部滚动
+        // 详细内容区域 - ?? 添加高度限制和内部滚动
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -323,7 +351,7 @@ private fun ToolCallDetails(
                         // 等待中的工具调用
                         toolCall.status == ToolCallStatus.PENDING -> {
                             Text(
-                                text = "⏳ 等待执行...",
+                                text = "? 等待执行...",
                                 style = JewelTheme.defaultTextStyle.copy(
                                     fontSize = 12.sp,
                                     color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
@@ -334,7 +362,7 @@ private fun ToolCallDetails(
                         // 取消的工具调用
                         toolCall.status == ToolCallStatus.CANCELLED -> {
                             Text(
-                                text = "⚠️ 工具执行已取消",
+                                text = "?? 工具执行已取消",
                                 style = JewelTheme.defaultTextStyle.copy(
                                     fontSize = 12.sp,
                                     color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
@@ -344,12 +372,12 @@ private fun ToolCallDetails(
                         
                         // 有结果的工具调用显示格式化结果
                         toolCall.result != null -> {
-                            // 🎯 优先使用新的类型安全展示系统
+                            // ?? 优先使用新的类型安全展示系统
                             if (toolCall.specificTool != null) {
                                 TypedToolCallDisplay(
                                     toolCall = toolCall,
                                     showDetails = true,
-                                    ideIntegration = null  // 这里可以传递ideIntegration
+                                    ideIntegration = ideIntegration
                                 )
                             } else {
                                 // 回退到原有展示逻辑
@@ -360,7 +388,7 @@ private fun ToolCallDetails(
                         // 失败状态但没有结果对象的情况
                         toolCall.status == ToolCallStatus.FAILED -> {
                             Text(
-                                text = "❌ 工具执行失败",
+                                text = "? 工具执行失败",
                                 style = JewelTheme.defaultTextStyle.copy(
                                     fontSize = 12.sp,
                                     color = Color(0xFFFF6B6B)
@@ -390,7 +418,7 @@ private fun ToolCallDetails(
                     .padding(6.dp)
             ) {
                 Text(
-                    text = "📋",
+                    text = "Copy",
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 12.sp,
                         color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
@@ -442,70 +470,13 @@ private fun ToolCallDetails(
  * 判断是否需要显示工具的详细结果
  * 修复：确保所有状态的工具都可以展开显示
  */
-private fun shouldShowToolDetails(toolCall: ToolCall): Boolean {
-    return when {
-        // 运行中的工具调用应该显示进度状态
-        toolCall.status == ToolCallStatus.RUNNING -> true
-        
-        // 失败的工具调用必须显示错误信息
-        toolCall.status == ToolCallStatus.FAILED -> true
-        toolCall.result is ToolResult.Failure -> true
-        
-        // 成功的工具调用显示结果
-        toolCall.result is ToolResult.Success -> true
-        
-        // 取消的工具调用显示状态
-        toolCall.status == ToolCallStatus.CANCELLED -> true
-        
-        // 等待中的工具调用显示等待状态
-        toolCall.status == ToolCallStatus.PENDING -> true
-        
-        // 默认显示，确保用户能看到所有工具调用的状态
-        else -> true
-    }
-}
+
 
 /**
  * 获取工具图标
- * 🎯 核心改进：使用instanceof检查具体工具类型
+ * ?? 核心改进：使用instanceof检查具体工具类型
  */
-private fun getToolIcon(toolCall: ToolCall): String {
-    // 🎯 优先使用具体工具类型
-    val specificTool = toolCall.specificTool
-    if (specificTool != null) {
-        return when (specificTool) {
-            is com.claudecodeplus.sdk.types.ReadToolUse -> "📖"
-            is com.claudecodeplus.sdk.types.WriteToolUse -> "✏️"
-            is com.claudecodeplus.sdk.types.EditToolUse -> "✏️"
-            is com.claudecodeplus.sdk.types.MultiEditToolUse -> "📝"
-            is com.claudecodeplus.sdk.types.BashToolUse -> "💻"
-            is com.claudecodeplus.sdk.types.WebFetchToolUse -> "🌐"
-            is com.claudecodeplus.sdk.types.WebSearchToolUse -> "🔍"
-            is com.claudecodeplus.sdk.types.GlobToolUse -> "📁"
-            is com.claudecodeplus.sdk.types.GrepToolUse -> "🔍"
-            is com.claudecodeplus.sdk.types.TaskToolUse -> "🤖"
-            is com.claudecodeplus.sdk.types.TodoWriteToolUse -> "📝"
-            is com.claudecodeplus.sdk.types.NotebookEditToolUse -> "📓"
-            is com.claudecodeplus.sdk.types.McpToolUse -> "🔌"
-            else -> "🔧"
-        }
-    }
 
-    // 🔄 回退逻辑：使用字符串匹配
-    return when {
-        toolCall.name.contains("Read", ignoreCase = true) -> "📖"
-        toolCall.name.contains("Write", ignoreCase = true) -> "✏️"
-        toolCall.name.contains("Edit", ignoreCase = true) -> "✏️"
-        toolCall.name.contains("Bash", ignoreCase = true) -> "💻"
-        toolCall.name.contains("Web", ignoreCase = true) -> "🌐"
-        toolCall.name.contains("Glob", ignoreCase = true) -> "🔍"
-        toolCall.name.contains("Grep", ignoreCase = true) -> "🔍"
-        toolCall.name.contains("Task", ignoreCase = true) -> "🤖"
-        toolCall.name.contains("Todo", ignoreCase = true) -> "📝"
-        toolCall.name.startsWith("mcp__", ignoreCase = true) -> "🔧"
-        else -> "🔧"
-    }
-}
 
 /**
  * 工具显示信息
@@ -517,19 +488,19 @@ private data class ToolDisplayInfo(
 
 /**
  * 获取工具的内联显示格式，例如：LS ./desktop
- * 🎯 核心改进：使用instanceof检查具体工具类型，避免字符串匹配
+ * ?? 核心改进：使用instanceof检查具体工具类型，避免字符串匹配
  */
 private fun getInlineToolDisplay(toolCall: ToolCall): String {
     val toolName = toolCall.name
 
-    // 🎯 关键改进：优先使用具体工具类型的强类型属性
+    // ?? 关键改进：优先使用具体工具类型的强类型属性
     val specificTool = toolCall.specificTool
     if (specificTool != null) {
-        // logD("[CompactToolCallDisplay] 🎯 使用instanceof检查: ${specificTool::class.simpleName}")
+        // logD("[CompactToolCallDisplay] ?? 使用instanceof检查: ${specificTool::class.simpleName}")
         return when (specificTool) {
             is com.claudecodeplus.sdk.types.ReadToolUse -> {
                 val fileName = specificTool.filePath.substringAfterLast('/').substringAfterLast('\\')
-                // logD("[CompactToolCallDisplay] 📖 ReadToolUse强类型: filePath=${specificTool.filePath}, fileName=$fileName")
+                // logD("[CompactToolCallDisplay] ?? ReadToolUse强类型: filePath=${specificTool.filePath}, fileName=$fileName")
                 "Read: $fileName"
             }
             is com.claudecodeplus.sdk.types.WriteToolUse -> {
@@ -598,13 +569,13 @@ private fun getInlineToolDisplay(toolCall: ToolCall): String {
                 "${specificTool.serverName}.${specificTool.functionName}"
             }
             else -> {
-    //                 logD("[CompactToolCallDisplay] ⚠️ 未处理的具体工具类型: ${specificTool::class.simpleName}")
+    //                 logD("[CompactToolCallDisplay] ?? 未处理的具体工具类型: ${specificTool::class.simpleName}")
                 toolName
             }
         }
     }
 
-    // 🔄 回退逻辑：如果没有具体工具类型，使用原有的字符串匹配方式
+    // ?? 回退逻辑：如果没有具体工具类型，使用原有的字符串匹配方式
     val primaryParam = getPrimaryParamValue(toolCall)
 
     return when {
@@ -789,7 +760,7 @@ private fun FileMatchResultDisplay(toolCall: ToolCall) {
             
             if (lines.isEmpty()) {
                 Text(
-                    text = "📂 未找到匹配的文件",
+                    text = "?? 未找到匹配的文件",
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 12.sp,
                         color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
@@ -820,7 +791,7 @@ private fun FileMatchResultDisplay(toolCall: ToolCall) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "📄",
+                                    text = "Copy",
                                     style = JewelTheme.defaultTextStyle.copy(fontSize = 10.sp)
                                 )
                                 Text(
@@ -850,7 +821,7 @@ private fun FileMatchResultDisplay(toolCall: ToolCall) {
         }
         is ToolResult.Failure -> {
             Text(
-                text = "❌ ${result.error}",
+                text = "? ${result.error}",
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 12.sp,
                     color = Color(0xFFFF6B6B)
@@ -875,7 +846,7 @@ private fun SearchResultDisplay(toolCall: ToolCall) {
             
             if (lines.isEmpty()) {
                 Text(
-                    text = "🔍 未找到匹配的内容",
+                    text = "?? 未找到匹配的内容",
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 12.sp,
                         color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
@@ -978,7 +949,7 @@ private fun SearchResultDisplay(toolCall: ToolCall) {
         }
         is ToolResult.Failure -> {
             Text(
-                text = "❌ ${result.error}",
+                text = "? ${result.error}",
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 12.sp,
                     color = Color(0xFFFF6B6B)
@@ -1010,7 +981,7 @@ private fun WebContentDisplay(toolCall: ToolCall) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "🌐",
+                        text = "Copy",
                         style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
                     )
                     Text(
@@ -1047,7 +1018,7 @@ private fun WebContentDisplay(toolCall: ToolCall) {
         }
         is ToolResult.Failure -> {
             Text(
-                text = "❌ ${result.error}",
+                text = "? ${result.error}",
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 12.sp,
                     color = Color(0xFFFF6B6B)
@@ -1074,7 +1045,7 @@ private fun SubTaskDisplay(toolCall: ToolCall) {
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
-                    text = "🔧 $description",
+                    text = "?? $description",
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
@@ -1129,7 +1100,7 @@ private fun NotebookOperationDisplay(toolCall: ToolCall) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "📓",
+                        text = "Copy",
                         style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
                     )
                     Text(
@@ -1168,7 +1139,7 @@ private fun NotebookOperationDisplay(toolCall: ToolCall) {
                     )
                 } else {
                     Text(
-                        text = "✅ 操作完成",
+                        text = "? 操作完成",
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 11.sp,
                             color = Color(0xFF4CAF50)
@@ -1212,7 +1183,7 @@ private fun MCPToolDisplay(toolCall: ToolCall) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "🔗",
+                        text = "Copy",
                         style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
                     )
                     Text(
@@ -1297,12 +1268,12 @@ private fun formatBytes(bytes: Long): String {
  */
 @Composable
 private fun formatToolResult(toolCall: ToolCall) {
-    // 🎯 TodoWrite特殊处理：永远显示input.todos，与result无关
+    // ?? TodoWrite特殊处理：永远显示input.todos，与result无关
     if (toolCall.name.contains("TodoWrite", ignoreCase = true)) {
         // 优先使用specificTool
         if (toolCall.specificTool is TodoWriteToolUse) {
             val todoTool = toolCall.specificTool as TodoWriteToolUse
-            // logD("[CompactToolCallDisplay] 🎯 使用specificTool路由到EnhancedTodoDisplay: 任务数量=${todoTool.todos.size}")
+            // logD("[CompactToolCallDisplay] ?? 使用specificTool路由到EnhancedTodoDisplay: 任务数量=${todoTool.todos.size}")
             EnhancedTodoDisplay(todos = todoTool.todos)
             return
         }
@@ -1310,15 +1281,15 @@ private fun formatToolResult(toolCall: ToolCall) {
         // 回退：从parameters中提取todos
         val todosParam = toolCall.parameters["todos"]
         if (todosParam != null) {
-            // logD("[CompactToolCallDisplay] 🎯 使用parameters回退到EnhancedTodoDisplay")
+            // logD("[CompactToolCallDisplay] ?? 使用parameters回退到EnhancedTodoDisplay")
             EnhancedTodoDisplay(toolCall = toolCall)  // 传递整个toolCall，让组件自己解析
             return
         }
 
         // 最后回退：显示简单状态
-    //         logD("[CompactToolCallDisplay] ⚠️ TodoWrite工具无法找到todos数据")
+    //         logD("[CompactToolCallDisplay] ?? TodoWrite工具无法找到todos数据")
         Text(
-            text = "✅ 任务列表已更新",
+            text = "? 任务列表已更新",
             style = JewelTheme.defaultTextStyle.copy(
                 fontSize = 12.sp,
                 color = Color(0xFF4CAF50)
@@ -1434,7 +1405,7 @@ private fun ToolResultContent(
         }
     } else if (result is ToolResult.Failure) {
         Text(
-            text = "❌ ${result.error}",
+            text = "? ${result.error}",
             style = JewelTheme.defaultTextStyle.copy(
                 fontSize = 12.sp,
                 color = Color(0xFFFF6B6B)
@@ -1496,7 +1467,7 @@ private fun CommandResultDisplay(toolCall: ToolCall) {
         }
         is ToolResult.Failure -> {
             Text(
-                text = "❌ ${result.error}",
+                text = "? ${result.error}",
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 12.sp,
                     color = Color(0xFFFF6B6B)
@@ -1536,7 +1507,7 @@ private fun DefaultResultDisplay(toolCall: ToolCall) {
             } else {
                 // 如果内容被完全过滤掉，显示简单的成功状态
                 Text(
-                    text = "✅ 执行成功",
+                    text = "? 执行成功",
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 12.sp,
                         color = Color(0xFF4CAF50)
@@ -1546,7 +1517,7 @@ private fun DefaultResultDisplay(toolCall: ToolCall) {
         }
         is ToolResult.Failure -> {
             Text(
-                text = "❌ ${result.error}",
+                text = "? ${result.error}",
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 12.sp,
                     color = Color(0xFFFF6B6B)
@@ -1555,7 +1526,7 @@ private fun DefaultResultDisplay(toolCall: ToolCall) {
         }
         is ToolResult.FileSearchResult -> {
             Text(
-                text = "📁 找到 ${result.files.size} 个文件 (总计 ${result.totalCount})",
+                text = "?? 找到 ${result.files.size} 个文件 (总计 ${result.totalCount})",
                 style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
             )
         }
@@ -1635,14 +1606,14 @@ private fun cleanMcpToolResult(content: String, toolName: String): String {
                 content.contains("rows affected", ignoreCase = true) -> extractRowsAffected(content)
                 content.contains("SELECT", ignoreCase = true) -> {
                     val lines = content.lines().filter { it.trim().isNotEmpty() }
-                    "📊 查询结果 (${lines.size} 行数据)"
+                    "?? 查询结果 (${lines.size} 行数据)"
                 }
-                content.contains("error", ignoreCase = true) -> "❌ 数据库操作失败"
+                content.contains("error", ignoreCase = true) -> "? 数据库操作失败"
                 functionName.contains("list", ignoreCase = true) -> {
                     val count = content.lines().filter { it.trim().isNotEmpty() }.size
-                    "📋 列出 $count 项"
+                    "?? 列出 $count 项"
                 }
-                else -> "✅ 数据库操作成功"
+                else -> "? 数据库操作成功"
             }
         }
         
@@ -1650,15 +1621,15 @@ private fun cleanMcpToolResult(content: String, toolName: String): String {
         serverName.contains("redis", ignoreCase = true) -> {
             when {
                 content.contains("error", ignoreCase = true) || content.contains("fail", ignoreCase = true) -> 
-                    "❌ Redis 操作失败"
+                    "? Redis 操作失败"
                 functionName.contains("get", ignoreCase = true) && content.length > 50 ->
-                    "📤 获取数据 (${content.length} 字符)"
-                functionName.contains("set", ignoreCase = true) -> "📥 数据写入成功"
+                    "?? 获取数据 (${content.length} 字符)"
+                functionName.contains("set", ignoreCase = true) -> "?? 数据写入成功"
                 functionName.contains("search", ignoreCase = true) -> {
                     val matches = content.lines().filter { it.trim().isNotEmpty() }.size
-                    "🔍 搜索到 $matches 项结果"
+                    "?? 搜索到 $matches 项结果"
                 }
-                else -> "✅ Redis 操作成功"
+                else -> "? Redis 操作成功"
             }
         }
         
@@ -1667,25 +1638,25 @@ private fun cleanMcpToolResult(content: String, toolName: String): String {
             when {
                 functionName.contains("read", ignoreCase = true) -> {
                     if (content.contains("rows", ignoreCase = true)) {
-                        "📊 Excel 数据读取完成"
+                        "?? Excel 数据读取完成"
                     } else {
-                        "📊 Excel 文件读取完成"
+                        "?? Excel 文件读取完成"
                     }
                 }
-                functionName.contains("write", ignoreCase = true) -> "📝 Excel 数据写入完成"
-                functionName.contains("format", ignoreCase = true) -> "🎨 Excel 格式设置完成"
-                functionName.contains("create", ignoreCase = true) -> "📄 Excel 文件创建完成"
-                else -> "✅ Excel 操作完成"
+                functionName.contains("write", ignoreCase = true) -> "?? Excel 数据写入完成"
+                functionName.contains("format", ignoreCase = true) -> "?? Excel 格式设置完成"
+                functionName.contains("create", ignoreCase = true) -> "?? Excel 文件创建完成"
+                else -> "? Excel 操作完成"
             }
         }
         
         // XMind 操作结果
         serverName.contains("xmind", ignoreCase = true) -> {
             when {
-                functionName.contains("read", ignoreCase = true) -> "🧠 思维导图解析完成"
-                functionName.contains("search", ignoreCase = true) -> "🔍 思维导图搜索完成"
-                functionName.contains("extract", ignoreCase = true) -> "📤 节点提取完成"
-                else -> "✅ XMind 操作完成"
+                functionName.contains("read", ignoreCase = true) -> "?? 思维导图解析完成"
+                functionName.contains("search", ignoreCase = true) -> "?? 思维导图搜索完成"
+                functionName.contains("extract", ignoreCase = true) -> "?? 节点提取完成"
+                else -> "? XMind 操作完成"
             }
         }
         
@@ -1694,13 +1665,13 @@ private fun cleanMcpToolResult(content: String, toolName: String): String {
             when {
                 functionName.contains("find_class", ignoreCase = true) -> {
                     if (content.contains("找到", ignoreCase = true)) {
-                        "🔍 类查找完成"
+                        "?? 类查找完成"
                     } else {
-                        "❌ 未找到指定类"
+                        "? 未找到指定类"
                     }
                 }
-                functionName.contains("get_source", ignoreCase = true) -> "📄 源码获取完成"
-                else -> "✅ Gradle 操作完成"
+                functionName.contains("get_source", ignoreCase = true) -> "?? 源码获取完成"
+                else -> "? Gradle 操作完成"
             }
         }
         
@@ -1720,7 +1691,7 @@ private fun cleanMcpToolResult(content: String, toolName: String): String {
                     if (dataLines.isNotEmpty()) {
                         "${dataLines.take(2).joinToString("\n")}\n... (${lines.size} 行数据)"
                     } else {
-                        "✅ $functionName 执行完成 (${lines.size} 行输出)"
+                        "? $functionName 执行完成 (${lines.size} 行输出)"
                     }
                 }
                 content.length > 100 -> {
@@ -1752,7 +1723,7 @@ private fun cleanLsOutput(content: String): String {
     val files = lines.size - directories
     
     val summary = buildString {
-        append("📁 ")
+        append("?? ")
         if (directories > 0 && files > 0) {
             append("${directories} 个目录, ${files} 个文件")
         } else if (directories > 0) {
@@ -1794,7 +1765,7 @@ private fun cleanReadOutput(content: String): String {
     }
     
     return buildString {
-        append("📄 $fileType 文件内容 (${lines.size} 行, ${content.length} 字符)")
+        append("?? $fileType 文件内容 (${lines.size} 行, ${content.length} 字符)")
         append("\n")
         append(lines.take(8).joinToString("\n"))
         if (lines.size > 8) {
@@ -1808,10 +1779,10 @@ private fun cleanReadOutput(content: String): String {
  */
 private fun cleanWriteOutput(content: String): String {
     return when {
-        content.contains("successfully", ignoreCase = true) -> "✅ 文件写入成功"
-        content.contains("created", ignoreCase = true) -> "✅ 文件创建成功"
-        content.contains("error", ignoreCase = true) -> "❌ 文件操作失败"
-        else -> if (content.length > 100) "✅ 文件操作完成" else content
+        content.contains("successfully", ignoreCase = true) -> "? 文件写入成功"
+        content.contains("created", ignoreCase = true) -> "? 文件创建成功"
+        content.contains("error", ignoreCase = true) -> "? 文件操作失败"
+        else -> if (content.length > 100) "? 文件操作完成" else content
     }
 }
 
@@ -1820,10 +1791,10 @@ private fun cleanWriteOutput(content: String): String {
  */
 private fun cleanEditOutput(content: String): String {
     return when {
-        content.contains("successfully", ignoreCase = true) -> "✅ 文件编辑成功"
-        content.contains("modified", ignoreCase = true) -> "✅ 文件修改完成"
-        content.contains("error", ignoreCase = true) -> "❌ 编辑失败"
-        else -> if (content.length > 100) "✅ 文件编辑完成" else content
+        content.contains("successfully", ignoreCase = true) -> "? 文件编辑成功"
+        content.contains("modified", ignoreCase = true) -> "? 文件修改完成"
+        content.contains("error", ignoreCase = true) -> "? 编辑失败"
+        else -> if (content.length > 100) "? 文件编辑完成" else content
     }
 }
 
@@ -1841,7 +1812,7 @@ private fun cleanBashOutput(content: String): String {
                 it.contains(".") && (it.contains("/") || it.contains("\\"))
             }
             if (fileLines.size > 10) {
-                "📁 找到 ${fileLines.size} 个文件\n${fileLines.take(8).joinToString("\n")}\n... 还有 ${fileLines.size - 8} 个文件"
+                "?? 找到 ${fileLines.size} 个文件\n${fileLines.take(8).joinToString("\n")}\n... 还有 ${fileLines.size - 8} 个文件"
             } else {
                 fileLines.joinToString("\n")
             }
@@ -1868,7 +1839,7 @@ private fun cleanBashOutput(content: String): String {
             if (keyLines.isNotEmpty()) {
                 "${keyLines.joinToString("\n")}\n... (${lines.size - keyLines.size} 行省略)"
             } else {
-                "✅ 命令执行完成 (${lines.size} 行输出)"
+                "? 命令执行完成 (${lines.size} 行输出)"
             }
         }
         
@@ -1898,7 +1869,7 @@ private fun cleanInfoOutput(content: String): String {
     }
     
     return if (lines.isEmpty()) {
-        "✅ 信息查询完成"
+        "? 信息查询完成"
     } else {
         lines.take(5).joinToString("\n")
     }
@@ -1911,9 +1882,9 @@ private fun extractRowsAffected(content: String): String {
     val regex = "(\\d+)\\s+rows?\\s+affected".toRegex(RegexOption.IGNORE_CASE)
     val match = regex.find(content)
     return if (match != null) {
-        "✅ 操作成功，影响 ${match.groupValues[1]} 行"
+        "? 操作成功，影响 ${match.groupValues[1]} 行"
     } else {
-        "✅ 数据库操作完成"
+        "? 数据库操作完成"
     }
 }
 
@@ -1972,5 +1943,25 @@ private fun formatToolBriefInfo(toolCall: ToolCall): String {
     }
 }
 
+
+
+
+
+
+
+private fun shouldShowToolDetails(toolCall: ToolCall): Boolean {
+    val specificTool = toolCall.specificTool
+    return when (specificTool) {
+        is com.claudecodeplus.sdk.types.ReadToolUse,
+        is com.claudecodeplus.sdk.types.WriteToolUse,
+        is com.claudecodeplus.sdk.types.EditToolUse,
+        is com.claudecodeplus.sdk.types.MultiEditToolUse -> false
+        is com.claudecodeplus.sdk.types.TodoWriteToolUse,
+        is com.claudecodeplus.sdk.types.TaskToolUse -> true
+        else -> toolCall.status == ToolCallStatus.RUNNING ||
+            toolCall.status == ToolCallStatus.PENDING ||
+            toolCall.result != null
+    }
+}
 
 

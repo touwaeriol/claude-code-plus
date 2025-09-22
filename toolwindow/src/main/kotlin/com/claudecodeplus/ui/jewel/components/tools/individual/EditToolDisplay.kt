@@ -1,21 +1,24 @@
-package com.claudecodeplus.ui.jewel.components.tools.individual
+﻿package com.claudecodeplus.ui.jewel.components.tools.individual
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.claudecodeplus.sdk.types.EditToolUse
+import com.claudecodeplus.ui.jewel.components.tools.shared.DiffDisplay
+import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
+import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolResult
-import com.claudecodeplus.sdk.types.EditToolUse
-import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
-import com.claudecodeplus.ui.jewel.components.tools.shared.DiffDisplay
-import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
+import org.jetbrains.jewel.ui.component.DefaultButton
+import org.jetbrains.jewel.ui.component.Text
 
 /**
- * Edit工具专用展示组件
- *
- * 🎯 职责：专门处理Edit工具的展示
- * 🔧 特点：显示文件路径、编辑内容、差异对比
+ * Edit 工具专用展示组件
  */
 @Composable
 fun EditToolDisplay(
@@ -29,13 +32,12 @@ fun EditToolDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 只在非详情模式下显示工具头部信息（避免展开时重复）
         if (!showDetails) {
             val fileName = editTool.filePath.substringAfterLast('/')
             val editType = if (editTool.replaceAll) "替换全部" else "单次替换"
 
             ToolHeaderDisplay(
-                icon = "✏️",
+                icon = "EDIT",
                 toolName = "Edit",
                 subtitle = "$fileName ($editType)",
                 status = toolCall.status,
@@ -43,11 +45,21 @@ fun EditToolDisplay(
             )
         }
 
-        // 显示编辑差异
         if (showDetails) {
+            if (onFileClick != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DefaultButton(onClick = onFileClick) {
+                        Text("在 IDE 中查看差异")
+                    }
+                }
+            }
+
             when (val result = toolCall.result) {
                 is ToolResult.Success -> {
-                    // 显示编辑前后的差异
                     DiffDisplay(
                         oldContent = editTool.oldString,
                         newContent = editTool.newString,
@@ -59,7 +71,6 @@ fun EditToolDisplay(
                     ToolResultDisplay(result)
                 }
                 null -> {
-                    // 工具还在运行，显示即将进行的编辑
                     DiffDisplay(
                         oldContent = editTool.oldString,
                         newContent = editTool.newString,

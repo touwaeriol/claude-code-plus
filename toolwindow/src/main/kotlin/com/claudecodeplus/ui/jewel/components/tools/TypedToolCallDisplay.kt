@@ -43,10 +43,10 @@ fun TypedToolCallDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 🎯 核心：基于SpecificToolUse的类型安全路由到专门组件
+        // ?? 核心：基于SpecificToolUse的类型安全路由到专门组件
         when (val specificTool = toolCall.specificTool) {
             is TodoWriteToolUse -> {
-                // logD("[TypedToolCallDisplay] 🎯 路由到TodoWriteDisplay: ${specificTool.todos.size}个任务")
+                // logD("[TypedToolCallDisplay] ?? 路由到TodoWriteDisplay: ${specificTool.todos.size}个任务")
                 TodoWriteDisplay(
                     toolCall = toolCall,
                     todoWriteTool = specificTool,
@@ -54,7 +54,7 @@ fun TypedToolCallDisplay(
                 )
             }
             is ReadToolUse -> {
-                // logD("[TypedToolCallDisplay] 📖 路由到ReadToolDisplay: ${specificTool.filePath}")
+                // logD("[TypedToolCallDisplay] ?? 路由到ReadToolDisplay: ${specificTool.filePath}")
                 ReadToolDisplay(
                     toolCall = toolCall,
                     readTool = specificTool,
@@ -63,7 +63,7 @@ fun TypedToolCallDisplay(
                 )
             }
             is EditToolUse -> {
-    //                 logD("[TypedToolCallDisplay] ✏️ 路由到EditToolDisplay: ${specificTool.filePath}")
+    //                 logD("[TypedToolCallDisplay] ?? 路由到EditToolDisplay: ${specificTool.filePath}")
                 EditToolDisplay(
                     toolCall = toolCall,
                     editTool = specificTool,
@@ -72,7 +72,7 @@ fun TypedToolCallDisplay(
                 )
             }
             is BashToolUse -> {
-                // logD("[TypedToolCallDisplay] 💻 路由到BashToolDisplay: ${specificTool.command}")
+                // logD("[TypedToolCallDisplay] ?? 路由到BashToolDisplay: ${specificTool.command}")
                 BashToolDisplay(
                     toolCall = toolCall,
                     bashTool = specificTool,
@@ -80,7 +80,7 @@ fun TypedToolCallDisplay(
                 )
             }
             is BashOutputToolUse -> {
-                // logD("[TypedToolCallDisplay] 📤 路由到BashOutputDisplay: ${specificTool.bashId}")
+                // logD("[TypedToolCallDisplay] ?? 路由到BashOutputDisplay: ${specificTool.bashId}")
                 BashOutputDisplay(
                     toolCall = toolCall,
                     bashOutputTool = specificTool,
@@ -88,7 +88,7 @@ fun TypedToolCallDisplay(
                 )
             }
             is KillShellToolUse -> {
-    //                 logD("[TypedToolCallDisplay] ⚡ 路由到KillShellDisplay: ${specificTool.shellId}")
+    //                 logD("[TypedToolCallDisplay] ? 路由到KillShellDisplay: ${specificTool.shellId}")
                 KillShellDisplay(
                     toolCall = toolCall,
                     killShellTool = specificTool,
@@ -96,7 +96,7 @@ fun TypedToolCallDisplay(
                 )
             }
             is ExitPlanModeToolUse -> {
-                // logD("[TypedToolCallDisplay] 📋 路由到ExitPlanModeDisplay")
+                // logD("[TypedToolCallDisplay] ?? 路由到ExitPlanModeDisplay")
                 ExitPlanModeDisplay(
                     toolCall = toolCall,
                     exitPlanModeTool = specificTool,
@@ -104,7 +104,7 @@ fun TypedToolCallDisplay(
                 )
             }
             is ListMcpResourcesToolUse -> {
-                // logD("[TypedToolCallDisplay] 🔌 路由到ListMcpResourcesDisplay: ${specificTool.server}")
+                // logD("[TypedToolCallDisplay] ?? 路由到ListMcpResourcesDisplay: ${specificTool.server}")
                 ListMcpResourcesDisplay(
                     toolCall = toolCall,
                     listMcpResourcesTool = specificTool,
@@ -112,7 +112,7 @@ fun TypedToolCallDisplay(
                 )
             }
             is ReadMcpResourceToolUse -> {
-                // logD("[TypedToolCallDisplay] 📋 路由到ReadMcpResourceDisplay: ${specificTool.server}/${specificTool.uri}")
+                // logD("[TypedToolCallDisplay] ?? 路由到ReadMcpResourceDisplay: ${specificTool.server}/${specificTool.uri}")
                 ReadMcpResourceDisplay(
                     toolCall = toolCall,
                     readMcpResourceTool = specificTool,
@@ -120,7 +120,7 @@ fun TypedToolCallDisplay(
                 )
             }
             is GlobToolUse -> {
-                // logD("[TypedToolCallDisplay] 🔍 路由到GlobToolDisplay: ${specificTool.pattern}")
+                // logD("[TypedToolCallDisplay] ?? 路由到GlobToolDisplay: ${specificTool.pattern}")
                 GlobToolDisplay(
                     toolCall = toolCall,
                     globTool = specificTool,
@@ -128,49 +128,69 @@ fun TypedToolCallDisplay(
                 )
             }
             is GrepToolUse -> {
-                // logD("[TypedToolCallDisplay] 🔍 路由到GrepToolDisplay: ${specificTool.pattern}")
+                // logD("[TypedToolCallDisplay] ?? 路由到GrepToolDisplay: ${specificTool.pattern}")
                 GrepToolDisplay(
                     toolCall = toolCall,
                     grepTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            // TODO: 待实现的其他工具专门组件
+            // 其他未专门实现的工具使用通用展示
             is WriteToolUse -> {
-    //                 logD("[TypedToolCallDisplay] ✏️ 路由到WriteToolDisplay: ${specificTool.filePath}")
-                GenericToolDisplay(toolCall, showDetails) // 临时使用，待实现WriteToolDisplay
+                WriteToolDisplay(
+                    toolCall = toolCall,
+                    writeTool = specificTool,
+                    showDetails = showDetails,
+                    onFileClick = { ideIntegration?.handleToolClick(toolCall) }
+                )
             }
             is MultiEditToolUse -> {
-                // logD("[TypedToolCallDisplay] 📝 路由到MultiEditToolDisplay: ${specificTool.filePath}")
-                GenericToolDisplay(toolCall, showDetails) // 临时使用，待实现MultiEditToolDisplay
+                MultiEditToolDisplay(
+                    toolCall = toolCall,
+                    multiEditTool = specificTool,
+                    showDetails = showDetails,
+                    onFileClick = { ideIntegration?.handleToolClick(toolCall) }
+                )
             }
             is WebFetchToolUse -> {
-                // logD("[TypedToolCallDisplay] 🌐 路由到WebFetchToolDisplay: ${specificTool.url}")
-                GenericToolDisplay(toolCall, showDetails) // 临时使用，待实现WebFetchToolDisplay
+                WebFetchToolDisplay(
+                    toolCall = toolCall,
+                    webFetchTool = specificTool,
+                    showDetails = showDetails
+                )
             }
             is WebSearchToolUse -> {
-                // logD("[TypedToolCallDisplay] 🔍 路由到WebSearchToolDisplay: ${specificTool.query}")
-                GenericToolDisplay(toolCall, showDetails) // 临时使用，待实现WebSearchToolDisplay
+                WebSearchToolDisplay(
+                    toolCall = toolCall,
+                    webSearchTool = specificTool,
+                    showDetails = showDetails
+                )
             }
             is TaskToolUse -> {
-                // logD("[TypedToolCallDisplay] 🤖 路由到TaskToolDisplay: ${specificTool.description}")
-                GenericToolDisplay(toolCall, showDetails) // 临时使用，待实现TaskToolDisplay
+                TaskToolDisplay(
+                    toolCall = toolCall,
+                    taskTool = specificTool,
+                    showDetails = showDetails
+                )
             }
             is NotebookEditToolUse -> {
-                // logD("[TypedToolCallDisplay] 📓 路由到NotebookToolDisplay: ${specificTool.notebookPath}")
-                GenericToolDisplay(toolCall, showDetails) // 临时使用，待实现NotebookEditToolDisplay
+                NotebookEditToolDisplay(
+                    toolCall = toolCall,
+                    notebookEditTool = specificTool,
+                    showDetails = showDetails
+                )
             }
             is McpToolUse -> {
-                // logD("[TypedToolCallDisplay] 🔌 路由到McpToolDisplay: ${specificTool.serverName}.${specificTool.functionName}")
-                GenericToolDisplay(toolCall, showDetails) // 临时使用，待实现McpToolDisplay
+                McpToolDisplay(
+                    toolCall = toolCall,
+                    mcpTool = specificTool,
+                    showDetails = showDetails
+                )
             }
             is UnknownToolUse -> {
-    //                 logD("[TypedToolCallDisplay] ❓ 路由到GenericToolDisplay: ${specificTool.toolName}")
                 GenericToolDisplay(toolCall, showDetails)
             }
             null -> {
-                // 🔄 向后兼容：没有specificTool时回退到旧的展示逻辑
-    //                 logD("[TypedToolCallDisplay] ⚠️ 缺少specificTool，回退到字符串匹配模式: ${toolCall.name}")
                 FallbackToolDisplay(
                     toolCall = toolCall,
                     showDetails = showDetails,
@@ -194,7 +214,7 @@ private fun GenericToolDisplay(
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         ToolHeaderDisplay(
-            icon = "🔧",
+            icon = "GEN",
             toolName = toolCall.name,
             subtitle = "Generic Tool",
             status = toolCall.status
@@ -221,5 +241,12 @@ private fun FallbackToolDisplay(
     // 这里可以调用原有的展示逻辑，或者实现简化版本
     GenericToolDisplay(toolCall, showDetails)
 }
+
+
+
+
+
+
+
 
 

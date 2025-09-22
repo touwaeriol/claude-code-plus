@@ -1,9 +1,11 @@
 ﻿package com.claudecodeplus.ui.jewel.components.markdown
 
 import com.claudecodeplus.core.logging.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
@@ -51,7 +53,12 @@ private fun RenderNode(
 
     when (node) {
         is Document -> {
-            RenderChildren(node, onLinkClick, onCodeAction)
+            // Document 节点的子节点是顶级块元素，需要间距
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                RenderChildren(node, onLinkClick, onCodeAction)
+            }
         }
 
         is Heading -> {
@@ -102,7 +109,14 @@ private fun RenderNode(
                 if (child is ListItem) {
                     val currentChild = child
                     items.add {
-                        RenderChildren(currentChild, onLinkClick, onCodeAction)
+                        // 如果 ListItem 有多个子节点，需要用 Column 布局
+                        if (currentChild.firstChild != null && currentChild.firstChild.next != null) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                RenderChildren(currentChild, onLinkClick, onCodeAction)
+                            }
+                        } else {
+                            RenderChildren(currentChild, onLinkClick, onCodeAction)
+                        }
                     }
                 }
                 child = child.next
@@ -117,7 +131,14 @@ private fun RenderNode(
                 if (child is ListItem) {
                     val currentChild = child
                     items.add {
-                        RenderChildren(currentChild, onLinkClick, onCodeAction)
+                        // 如果 ListItem 有多个子节点，需要用 Column 布局
+                        if (currentChild.firstChild != null && currentChild.firstChild.next != null) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                RenderChildren(currentChild, onLinkClick, onCodeAction)
+                            }
+                        } else {
+                            RenderChildren(currentChild, onLinkClick, onCodeAction)
+                        }
                     }
                 }
                 child = child.next

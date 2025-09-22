@@ -1,4 +1,4 @@
-package com.claudecodeplus.ui.jewel.components.tools.individual
+﻿package com.claudecodeplus.ui.jewel.components.tools.individual
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -12,11 +12,9 @@ import com.claudecodeplus.ui.jewel.components.tools.shared.SearchResultDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
 
 /**
- * Glob工具专用展示组件
+ * Glob宸ュ叿涓撶敤灞曠ず缁勪欢
  *
- * 🎯 职责：专门处理Glob工具的展示
- * 🔧 特点：显示文件模式匹配、搜索结果
- */
+ * 馃幆 鑱岃矗锛氫笓闂ㄥ鐞咷lob宸ュ叿鐨勫睍绀? * 馃敡 鐗圭偣锛氭樉绀烘枃浠舵ā寮忓尮閰嶃€佹悳绱㈢粨鏋? */
 @Composable
 fun GlobToolDisplay(
     toolCall: ToolCall,
@@ -28,7 +26,7 @@ fun GlobToolDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 只在非详情模式下显示工具头部信息（避免展开时重复）
+        // 鍙湪闈炶鎯呮ā寮忎笅鏄剧ず宸ュ叿澶撮儴淇℃伅锛堥伩鍏嶅睍寮€鏃堕噸澶嶏級
         if (!showDetails) {
             val subtitle = buildString {
                 append("pattern: ${globTool.pattern}")
@@ -38,19 +36,18 @@ fun GlobToolDisplay(
             }
 
             ToolHeaderDisplay(
-                icon = "🔍",
+                icon = "馃攳",
                 toolName = "Glob",
                 subtitle = subtitle,
                 status = toolCall.status
             )
         }
 
-        // 显示搜索结果
+        // 鏄剧ず鎼滅储缁撴灉
         if (showDetails && toolCall.result != null) {
             when (val result = toolCall.result) {
                 is ToolResult.Success -> {
-                    // 解析输出为文件列表
-                    val fileList = result.output
+                    // 瑙ｆ瀽杈撳嚭涓烘枃浠跺垪琛?                    val fileList = result.output
                         .split('\n')
                         .filter { it.trim().isNotEmpty() }
 

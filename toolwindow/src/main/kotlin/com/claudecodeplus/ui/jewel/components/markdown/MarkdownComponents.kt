@@ -45,7 +45,7 @@ fun MarkdownHeading(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 8.dp)
     ) {
         Column {
             SelectionContainer {
@@ -77,7 +77,7 @@ fun MarkdownParagraph(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 6.dp)
     ) {
         SelectionContainer {
             content()
@@ -97,7 +97,8 @@ fun MarkdownList(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 6.dp),  // 增加列表前后间距
+        verticalArrangement = Arrangement.spacedBy(4.dp) // 增加列表项之间的垂直间距
     ) {
         items.forEachIndexed { index, item ->
             MarkdownListItem(
@@ -120,15 +121,15 @@ fun MarkdownListItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 16.dp)
+            .padding(start = 16.dp),
+        verticalAlignment = Alignment.Top // 确保顶部对齐
     ) {
         Text(
             text = marker,
             style = JewelTheme.defaultTextStyle.copy(
-                fontSize = 13.sp,
                 fontFamily = if (marker.contains(".")) FontFamily.Default else FontFamily.Monospace
-            ),
-            modifier = Modifier.width(20.dp)
+            )
+            // 移除固定宽度，让标记自然占用所需空间
         )
         Spacer(modifier = Modifier.width(8.dp))
         Box(modifier = Modifier.weight(1f)) {
@@ -490,8 +491,6 @@ fun MarkdownText(
     Text(
         text = text,
         style = JewelTheme.defaultTextStyle.copy(
-            fontSize = 13.sp,
-            lineHeight = 20.sp,
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
             fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal
         ),

@@ -1,4 +1,4 @@
-ï»¿package com.claudecodeplus.ui.jewel.components.tools.individual
+package com.claudecodeplus.ui.jewel.components.tools.individual
 
 import com.claudecodeplus.core.logging.*
 import androidx.compose.foundation.layout.*
@@ -11,10 +11,10 @@ import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
 import com.claudecodeplus.ui.jewel.components.tools.EnhancedTodoDisplay
 
 /**
- * TodoWriteå·¥å…·ä¸“ç”¨å±•ç¤ºç»„ä»¶
+ * TodoWrite¹¤¾ß×¨ÓÃÕ¹Ê¾×é¼ş
  *
- * ğŸ¯ èŒè´£ï¼šä¸“é—¨å¤„ç†TodoWriteå·¥å…·çš„å±•ç¤º
- * ğŸ”§ è§£å†³çš„æ ¸å¿ƒé—®é¢˜ï¼šç›´æ¥æ˜¾ç¤ºinput.todosè€Œä¸æ˜¯result.content
+ * ?? Ö°Ôğ£º×¨ÃÅ´¦ÀíTodoWrite¹¤¾ßµÄÕ¹Ê¾
+ * ?? ½â¾öµÄºËĞÄÎÊÌâ£ºÖ±½ÓÏÔÊ¾input.todos¶ø²»ÊÇresult.content
  */
 @Composable
 fun TodoWriteDisplay(
@@ -27,21 +27,21 @@ fun TodoWriteDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // åªåœ¨éè¯¦æƒ…æ¨¡å¼ä¸‹æ˜¾ç¤ºå·¥å…·å¤´éƒ¨ä¿¡æ¯ï¼ˆé¿å…å±•å¼€æ—¶é‡å¤ï¼‰
+        // Ö»ÔÚ·ÇÏêÇéÄ£Ê½ÏÂÏÔÊ¾¹¤¾ßÍ·²¿ĞÅÏ¢£¨±ÜÃâÕ¹¿ªÊ±ÖØ¸´£©
         if (!showDetails) {
             ToolHeaderDisplay(
-                icon = "ğŸ“",
+                icon = "TODO",
                 toolName = "TodoWrite",
-                subtitle = "${todoWriteTool.todos.size}ä¸ªä»»åŠ¡",
+                subtitle = "${todoWriteTool.todos.size}¸öÈÎÎñ",
                 status = toolCall.status
             )
         }
 
-        // ğŸ¯ æ ¸å¿ƒæ”¹è¿›ï¼šç›´æ¥æ˜¾ç¤ºinputä¸­çš„todosï¼Œå®Œå…¨å¿½ç•¥result
+        // ?? ºËĞÄ¸Ä½ø£ºÖ±½ÓÏÔÊ¾inputÖĞµÄtodos£¬ÍêÈ«ºöÂÔresult
         if (showDetails) {
-            logD("[TodoWriteDisplay] ğŸ¯ æ˜¾ç¤ºinput.todosï¼Œä»»åŠ¡æ•°é‡ï¼š${todoWriteTool.todos.size}")
+            logD("[TodoWriteDisplay] ?? ÏÔÊ¾input.todos£¬ÈÎÎñÊıÁ¿£º${todoWriteTool.todos.size}")
 
-            // ä½¿ç”¨ç°æœ‰çš„EnhancedTodoDisplayï¼Œä¼ å…¥å¼ºç±»å‹çš„todos
+            // Ê¹ÓÃÏÖÓĞµÄEnhancedTodoDisplay£¬´«ÈëÇ¿ÀàĞÍµÄtodos
             EnhancedTodoDisplay(
                 todos = todoWriteTool.todos,
                 modifier = Modifier.fillMaxWidth()
