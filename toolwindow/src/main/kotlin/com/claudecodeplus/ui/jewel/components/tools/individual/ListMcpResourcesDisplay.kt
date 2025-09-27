@@ -49,9 +49,7 @@ fun ListMcpResourcesDisplay(
             when (val result = toolCall.result) {
                 is ToolResult.Success -> {
                     // 解析资源列表（假设是换行分隔的资源URI）
-                    val resources = result.output
-                        .split('\n')
-                        .filter { it.trim().isNotEmpty() }
+                    val resources = result.output.split('\n').filter { it.trim().isNotEmpty() }
 
                     SearchResultDisplay(
                         results = resources,

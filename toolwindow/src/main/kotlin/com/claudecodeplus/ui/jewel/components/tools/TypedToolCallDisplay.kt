@@ -46,8 +46,7 @@ fun TypedToolCallDisplay(
         // ?? 核心：基于SpecificToolUse的类型安全路由到专门组件
         when (val specificTool = toolCall.specificTool) {
             is TodoWriteToolUse -> {
-                // logD("[TypedToolCallDisplay] ?? 路由到TodoWriteDisplay: ${specificTool.todos.size}个任务")
-                TodoWriteDisplay(
+                TodoWriteDisplayV2(
                     toolCall = toolCall,
                     todoWriteTool = specificTool,
                     showDetails = showDetails
@@ -241,7 +240,6 @@ private fun FallbackToolDisplay(
     // 这里可以调用原有的展示逻辑，或者实现简化版本
     GenericToolDisplay(toolCall, showDetails)
 }
-
 
 
 

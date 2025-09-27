@@ -115,9 +115,9 @@ private fun TodoListItem(todo: EnhancedTodoItem) {
     }
 
     val statusLabel = when (todo.status.lowercase()) {
-        "completed" -> "完成"
-        "in_progress" -> "进行中"
-        "pending" -> "待处理"
+        "completed" -> stringResource(StringResources.TASK_STATUS_COMPLETED)
+        "in_progress" -> stringResource(StringResources.TASK_STATUS_IN_PROGRESS)
+        "pending" -> stringResource(StringResources.TASK_STATUS_PENDING)
         else -> todo.status
     }
 

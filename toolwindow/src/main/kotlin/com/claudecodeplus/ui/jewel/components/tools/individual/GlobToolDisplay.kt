@@ -47,9 +47,8 @@ fun GlobToolDisplay(
         if (showDetails && toolCall.result != null) {
             when (val result = toolCall.result) {
                 is ToolResult.Success -> {
-                    // 瑙ｆ瀽杈撳嚭涓烘枃浠跺垪琛?                    val fileList = result.output
-                        .split('\n')
-                        .filter { it.trim().isNotEmpty() }
+                    // 解析输出为文件列表
+                    val fileList = result.output.split('\n').filter { it.trim().isNotEmpty() }
 
                     SearchResultDisplay(
                         results = fileList,

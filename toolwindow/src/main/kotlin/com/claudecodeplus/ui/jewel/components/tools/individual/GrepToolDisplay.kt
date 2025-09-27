@@ -52,10 +52,8 @@ fun GrepToolDisplay(
         if (showDetails && toolCall.result != null) {
             when (val result = toolCall.result) {
                 is ToolResult.Success -> {
-                    // 瑙ｆ瀽鎼滅储缁撴灉
-                    val searchResults = result.output
-                        .split('\n')
-                        .filter { it.trim().isNotEmpty() }
+                    // 解析搜索结果
+                    val searchResults = result.output.split('\n').filter { it.trim().isNotEmpty() }
 
                     SearchResultDisplay(
                         results = searchResults,

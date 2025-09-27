@@ -31,7 +31,7 @@ fun KillShellDisplay(
         // 鍙湪闈炶鎯呮ā寮忎笅鏄剧ず宸ュ叿澶撮儴淇℃伅锛堥伩鍏嶅睍寮€鏃堕噸澶嶏級
         if (!showDetails) {
             ToolHeaderDisplay(
-                icon = "鈿?,
+                icon = "⛔",
                 toolName = "KillShell",
                 subtitle = "shell_id: ${killShellTool.shellId}",
                 status = toolCall.status

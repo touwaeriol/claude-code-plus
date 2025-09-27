@@ -17,6 +17,15 @@ object StringResources {
     
     // 工具调用状态
     const val TOOL_STATUS = "tool_status"
+    // 工具状态（简短标签）
+    const val TOOL_STATUS_PENDING = "tool_status_pending_short"
+    const val TOOL_STATUS_RUNNING = "tool_status_running_short"
+    const val TOOL_STATUS_SUCCESS = "tool_status_success_short"
+    const val TOOL_STATUS_FAILED = "tool_status_failed_short"
+    const val TOOL_STATUS_CANCELLED = "tool_status_cancelled_short"
+    // 展开状态
+    const val UI_EXPANDED = "ui_expanded"
+    const val UI_COLLAPSED = "ui_collapsed"
     const val FILES_FOUND = "files_found"
     const val FILES_MORE = "files_more"
     const val SEARCH_RESULTS = "search_results"
@@ -97,6 +106,15 @@ object StringResources {
             "tool_completed" to "Completed",
             "tool_failed" to "Failed",
             "tool_results" to "Results:",
+            // 工具状态短标签
+            TOOL_STATUS_PENDING to "Pending",
+            TOOL_STATUS_RUNNING to "Running",
+            TOOL_STATUS_SUCCESS to "Success",
+            TOOL_STATUS_FAILED to "Failed",
+            TOOL_STATUS_CANCELLED to "Cancelled",
+            // 展开/折叠
+            UI_EXPANDED to "Expanded",
+            UI_COLLAPSED to "Collapsed",
             "tool_parameters" to "Parameters:",
             "tool_file_changes" to "File changes",
             "tool_search_results" to "Search results",
@@ -191,6 +209,15 @@ object StringResources {
             "tool_completed" to "已完成",
             "tool_failed" to "失败",
             "tool_results" to "结果：",
+            // 工具状态短标签
+            TOOL_STATUS_PENDING to "待处理",
+            TOOL_STATUS_RUNNING to "执行中",
+            TOOL_STATUS_SUCCESS to "已完成",
+            TOOL_STATUS_FAILED to "已失败",
+            TOOL_STATUS_CANCELLED to "已取消",
+            // 展开/折叠
+            UI_EXPANDED to "展开",
+            UI_COLLAPSED to "折叠",
             "tool_parameters" to "参数：",
             "tool_file_changes" to "文件变更",
             "tool_search_results" to "搜索结果",
@@ -285,6 +312,15 @@ object StringResources {
             "tool_completed" to "已完成",
             "tool_failed" to "失敗",
             "tool_results" to "結果：",
+            // 工具狀態短標籤
+            TOOL_STATUS_PENDING to "待處理",
+            TOOL_STATUS_RUNNING to "執行中",
+            TOOL_STATUS_SUCCESS to "已完成",
+            TOOL_STATUS_FAILED to "已失敗",
+            TOOL_STATUS_CANCELLED to "已取消",
+            // 展開/收合
+            UI_EXPANDED to "展開",
+            UI_COLLAPSED to "收合",
             "tool_parameters" to "參數：",
             "tool_file_changes" to "檔案變更",
             "tool_search_results" to "搜尋結果",
@@ -379,6 +415,15 @@ object StringResources {
             "tool_completed" to "完了",
             "tool_failed" to "失敗",
             "tool_results" to "結果：",
+            // ツール状態（短いラベル）
+            TOOL_STATUS_PENDING to "保留",
+            TOOL_STATUS_RUNNING to "実行中",
+            TOOL_STATUS_SUCCESS to "完了",
+            TOOL_STATUS_FAILED to "失敗",
+            TOOL_STATUS_CANCELLED to "取消",
+            // 展開/折りたたみ
+            UI_EXPANDED to "展開",
+            UI_COLLAPSED to "折りたたみ",
             "tool_parameters" to "パラメータ：",
             "tool_file_changes" to "ファイル変更",
             "tool_search_results" to "検索結果",
@@ -476,6 +521,15 @@ object StringResources {
             "tool_parameters" to "매개변수:",
             "tool_file_changes" to "파일 변경사항",
             "tool_search_results" to "검색 결과",
+            // 도구 상태(짧은 라벨)
+            TOOL_STATUS_PENDING to "대기",
+            TOOL_STATUS_RUNNING to "실행 중",
+            TOOL_STATUS_SUCCESS to "성공",
+            TOOL_STATUS_FAILED to "실패",
+            TOOL_STATUS_CANCELLED to "취소",
+            // 펼침/접기
+            UI_EXPANDED to "펼침",
+            UI_COLLAPSED to "접힘",
             
             // 메시지 표시
             "assistant_message" to "어시스턴트",
