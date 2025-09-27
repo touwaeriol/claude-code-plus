@@ -67,16 +67,7 @@ fun AnnotatedMessageDisplay(
             )
         }
         
-        // 时间戳（可选）
-        timestamp?.let {
-            Text(
-                text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(it)),
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 11.sp,
-                    color = JewelTheme.globalColors.text.disabled
-                )
-            )
-        }
+        // 移除时间戳渲染，避免在纯工具调用消息后出现多余的“时间条/空白区域”
     }
 }
 

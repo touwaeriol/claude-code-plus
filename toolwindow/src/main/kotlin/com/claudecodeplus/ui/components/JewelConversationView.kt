@@ -303,10 +303,7 @@ private fun MessageBubble(
                     }
                 }
                 
-                // 时间戳
-                Text(
-                    text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(message.timestamp))
-                )
+                // 移除时间戳行，避免在工具调用后出现“时间条/空白”
             }
         }
     }
@@ -399,7 +396,6 @@ private fun ChatHeader(
         )
     }
 }
-
 
 
 

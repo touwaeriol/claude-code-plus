@@ -89,6 +89,16 @@ fun UnifiedInputArea(
         }
     }
     
+    // 当用于 DISPLAY 模式且消息没有可显示文本与上下文时，跳过整体容器，避免出现空白“气泡/时间条”
+    if (mode == InputAreaMode.DISPLAY) {
+        val displayContexts = contexts.ifEmpty { message?.contexts ?: emptyList() }
+        val filteredText = filterContextMetadata(message?.content ?: "")
+        val hasDisplay = filteredText.isNotBlank() || displayContexts.isNotEmpty()
+        if (!hasDisplay) {
+            return
+        }
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
