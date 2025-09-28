@@ -34,7 +34,8 @@ import java.util.UUID
  */
 class SessionServiceImpl(
     private val messageProcessor: MessageProcessor,
-    private val toolResultProcessor: ToolResultProcessor = ToolResultProcessor()
+    private val toolResultProcessor: ToolResultProcessor = ToolResultProcessor(),
+    private val clientFactory: (ClaudeCodeOptions) -> ClaudeCodeSdkClient = { opts -> ClaudeCodeSdkClient(opts) }
 ) : SessionService {
 
     private val sessionManager = ClaudeSessionManager()
@@ -70,8 +71,8 @@ class SessionServiceImpl(
                 }
             )
 
-            // 创建 SDK 客户端
-            val client = ClaudeCodeSdkClient(options)
+            // 创建 SDK 客户端（允许通过工厂在测试中注入 FakeTransport/FakeClient）
+            val client = clientFactory(options)
 
             // 连接客户端
             client.connect()
