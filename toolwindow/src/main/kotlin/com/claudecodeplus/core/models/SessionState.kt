@@ -16,7 +16,7 @@ data class SessionState(
     val contexts: List<ContextReference> = emptyList(),
     val isGenerating: Boolean = false,
     val selectedModel: AiModel = AiModel.OPUS,
-    val selectedPermissionMode: PermissionMode = PermissionMode.BYPASS,
+    val selectedPermissionMode: PermissionMode = PermissionMode.DEFAULT,
     val skipPermissions: Boolean = true,
     val inputText: TextFieldValue = TextFieldValue(""),
     val scrollPosition: Float = 0f,

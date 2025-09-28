@@ -57,7 +57,7 @@ object DefaultSessionConfig {
     /**
      * 默认权限模式
      */
-    var defaultPermissionMode by mutableStateOf(PermissionMode.BYPASS)
+    var defaultPermissionMode by mutableStateOf(PermissionMode.DEFAULT)
         private set
     
     /**
@@ -94,9 +94,9 @@ object DefaultSessionConfig {
             defaultModel = AiModel.values().find { it.name == modelName } ?: modelFromClaude ?: AiModel.DEFAULT
             
             // 加载默认权限模式
-            val permissionModeName = prefs.get(KEY_DEFAULT_PERMISSION_MODE, PermissionMode.BYPASS.name)
+            val permissionModeName = prefs.get(KEY_DEFAULT_PERMISSION_MODE, PermissionMode.DEFAULT.name)
             defaultPermissionMode = PermissionMode.values().find { it.name == permissionModeName } 
-                ?: PermissionMode.BYPASS
+                ?: PermissionMode.DEFAULT
             
             // 加载是否跳过权限
             defaultSkipPermissions = prefs.getBoolean(KEY_DEFAULT_SKIP_PERMISSIONS, true)
@@ -204,7 +204,7 @@ object DefaultSessionConfig {
      */
     fun resetToDefaults() {
         defaultModel = AiModel.DEFAULT
-        defaultPermissionMode = PermissionMode.BYPASS
+        defaultPermissionMode = PermissionMode.DEFAULT
         defaultSkipPermissions = true
         saveToSettings()
     }

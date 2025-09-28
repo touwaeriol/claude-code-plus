@@ -97,7 +97,7 @@ fun UnifiedChatInput(
     enabled: Boolean = true,
     selectedModel: AiModel = AiModel.OPUS,
     onModelChange: (AiModel) -> Unit = {},
-    selectedPermissionMode: PermissionMode = PermissionMode.BYPASS,
+    selectedPermissionMode: PermissionMode = PermissionMode.DEFAULT,
     onPermissionModeChange: (PermissionMode) -> Unit = {},
     skipPermissions: Boolean = true,
     onSkipPermissionsChange: (Boolean) -> Unit = {},
@@ -732,5 +732,4 @@ private class UnifiedChatContextSearchService(
         }
     }
 }
-
 
