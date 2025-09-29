@@ -96,8 +96,19 @@ object ToolClickManager {
     ): Boolean {
         return try {
             val normalizedName = toolCall.name.lowercase()
-            val handler = handlers[normalizedName]
-            
+            var handler = handlers[normalizedName]
+
+            if (handler == null) {
+                val specificTool = toolCall.specificTool
+                if (specificTool != null) {
+                    val typeKey = specificTool.toolType.toolName.lowercase()
+                    handler = handlers[typeKey]
+                    if (handler != null) {
+                        logger.debug("ToolClickManager: 使用 specificTool 类型映射处理器 - ${specificTool.toolType.toolName}")
+                    }
+                }
+            }
+
             if (handler == null) {
                 logger.debug("ToolClickManager: 没有找到 ${toolCall.name} 的处理器")
                 return false

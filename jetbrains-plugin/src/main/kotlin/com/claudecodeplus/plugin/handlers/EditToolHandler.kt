@@ -1,5 +1,7 @@
 package com.claudecodeplus.plugin.handlers
 
+import com.claudecodeplus.sdk.types.EditToolUse
+import com.claudecodeplus.sdk.types.MultiEditToolUse
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolCallStatus
 import com.intellij.diff.DiffContentFactory
@@ -26,11 +28,11 @@ class EditToolHandler : ToolClickHandler {
         private val logger = Logger.getInstance(EditToolHandler::class.java)
         private val NOTIFICATION_GROUP_ID = "Claude Code Plus"
     }
-    
+
     override fun canHandle(toolCall: ToolCall): Boolean {
-        return (toolCall.name.equals("Edit", ignoreCase = true) || 
-                toolCall.name.equals("MultiEdit", ignoreCase = true)) && 
-               toolCall.status == ToolCallStatus.SUCCESS
+        val specificTool = toolCall.specificTool
+        val isEditTool = specificTool is EditToolUse || specificTool is MultiEditToolUse
+        return isEditTool && toolCall.status == ToolCallStatus.SUCCESS
     }
     
     override fun handleToolClick(
@@ -70,48 +72,47 @@ class EditToolHandler : ToolClickHandler {
      * 解析 Edit 工具调用参数
      */
     private fun parseEditToolCall(toolCall: ToolCall, project: Project?): EditFileInfo? {
-        return when {
-            // 标准 Edit 工具 - 改进为显示完整文件内容
-            toolCall.parameters.containsKey("file_path") -> {
-                val filePath = toolCall.parameters["file_path"] as? String ?: return null
-                val oldString = toolCall.parameters["old_string"] as? String ?: ""
-                val newString = toolCall.parameters["new_string"] as? String ?: ""
-                val replaceAll = toolCall.parameters["replace_all"] as? Boolean ?: false
-                
-                // 使用反向编辑恢复原始文件内容
-                val originalFileContent = getOriginalFileContent(project, filePath, oldString, newString, replaceAll)
-                
-                // 读取当前文件内容（已被Claude修改）
-                val modifiedFileContent = readFileContent(filePath) ?: ""
-                
-                EditFileInfo(
-                    filePath = filePath,
-                    oldContent = originalFileContent,  // 完整原始文件
-                    newContent = modifiedFileContent, // 完整修改后文件
-                    isMultiEdit = false
+        val specificTool = toolCall.specificTool
+        if (specificTool is EditToolUse) {
+            val originalFileContent = getOriginalFileContent(
+                project,
+                specificTool.filePath,
+                specificTool.oldString,
+                specificTool.newString,
+                specificTool.replaceAll
+            )
+
+            val modifiedFileContent = readFileContent(specificTool.filePath) ?: ""
+
+            return EditFileInfo(
+                filePath = specificTool.filePath,
+                oldContent = originalFileContent,
+                newContent = modifiedFileContent,
+                isMultiEdit = false
+            )
+        } else if (specificTool is MultiEditToolUse) {
+            val modifiedContent = readFileContent(specificTool.filePath) ?: ""
+            val operations = specificTool.edits.map {
+                EditOperationData(
+                    oldString = it.oldString,
+                    newString = it.newString,
+                    replaceAll = it.replaceAll
                 )
             }
-            
-            // MultiEdit 工具
-            toolCall.parameters.containsKey("edits") -> {
-                val filePath = toolCall.parameters["file_path"] as? String ?: return null
-                val edits = toolCall.parameters["edits"] as? List<*> ?: return null
-                
-                // 获取当前文件内容（已被Claude修改）
-                val modifiedContent = readFileContent(filePath) ?: ""
-                // 使用反向编辑恢复原始文件内容
-                val originalContent = getOriginalFileContentForMultiEdit(project, filePath, edits)
-                
-                EditFileInfo(
-                    filePath = filePath,
-                    oldContent = originalContent,
-                    newContent = modifiedContent,
-                    isMultiEdit = true
-                )
-            }
-            
-            else -> null
+            val originalContent = getOriginalFileContentForMultiEdit(
+                project,
+                specificTool.filePath,
+                operations
+            )
+
+            return EditFileInfo(
+                filePath = specificTool.filePath,
+                oldContent = originalContent,
+                newContent = modifiedContent,
+                isMultiEdit = true
+            )
         }
+        return null
     }
     
     /**
@@ -129,35 +130,6 @@ class EditToolHandler : ToolClickHandler {
             logger.warn("EditToolHandler: 读取文件内容失败: $filePath", e)
             null
         }
-    }
-    
-    /**
-     * 应用多个编辑操作
-     */
-    private fun applyMultipleEdits(content: String, edits: List<*>): String {
-        var result = content
-        
-        try {
-            edits.forEach { edit ->
-                if (edit is Map<*, *>) {
-                    val oldString = edit["old_string"] as? String
-                    val newString = edit["new_string"] as? String
-                    val replaceAll = edit["replace_all"] as? Boolean ?: false
-                    
-                    if (oldString != null && newString != null) {
-                        result = if (replaceAll) {
-                            result.replace(oldString, newString)
-                        } else {
-                            result.replaceFirst(oldString, newString)
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            logger.warn("EditToolHandler: 应用编辑操作失败", e)
-        }
-        
-        return result
     }
     
     /**
@@ -200,7 +172,7 @@ class EditToolHandler : ToolClickHandler {
     private fun getOriginalFileContentForMultiEdit(
         project: Project?,
         filePath: String,
-        edits: List<*>
+        edits: List<EditOperationData>
     ): String {
         // 读取当前文件内容（已被Claude修改）
         val currentContent = readFileContent(filePath) ?: ""
@@ -214,20 +186,12 @@ class EditToolHandler : ToolClickHandler {
             // 反向应用编辑操作，从最后一个编辑开始
             // 因为 MultiEdit 是按顺序应用的，所以要反向撤销
             edits.reversed().forEachIndexed { index, edit ->
-                if (edit is Map<*, *>) {
-                    val oldString = edit["old_string"] as? String
-                    val newString = edit["new_string"] as? String
-                    val replaceAll = edit["replace_all"] as? Boolean ?: false
-                    
-                    logger.debug("EditToolHandler: 反向编辑 #${edits.size - index}: oldString='$oldString', newString='$newString'")
-                    
-                    if (oldString != null && newString != null) {
-                        result = if (replaceAll) {
-                            result.replace(newString, oldString)
-                        } else {
-                            result.replaceFirst(newString, oldString)
-                        }
-                    }
+                logger.debug("EditToolHandler: 反向编辑 #${edits.size - index}: oldString='${edit.oldString}', newString='${edit.newString}'")
+
+                result = if (edit.replaceAll) {
+                    result.replace(edit.newString, edit.oldString)
+                } else {
+                    result.replaceFirst(edit.newString, edit.oldString)
                 }
             }
             
@@ -355,6 +319,12 @@ class EditToolHandler : ToolClickHandler {
 /**
  * Edit 文件信息数据类
  */
+private data class EditOperationData(
+    val oldString: String,
+    val newString: String,
+    val replaceAll: Boolean
+)
+
 private data class EditFileInfo(
     val filePath: String,
     val oldContent: String,

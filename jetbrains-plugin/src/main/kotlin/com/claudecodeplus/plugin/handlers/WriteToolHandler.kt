@@ -1,5 +1,6 @@
 package com.claudecodeplus.plugin.handlers
 
+import com.claudecodeplus.sdk.types.WriteToolUse
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolCallStatus
 import com.intellij.openapi.application.ApplicationManager
@@ -11,7 +12,6 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.notification.NotificationType
 import com.intellij.notification.Notifications
-import com.intellij.notification.Notification
 import com.intellij.notification.NotificationGroupManager
 import java.io.File
 import java.nio.file.Paths
@@ -28,8 +28,8 @@ class WriteToolHandler : ToolClickHandler {
     }
 
     override fun canHandle(toolCall: ToolCall): Boolean {
-        return toolCall.name.equals("Write", ignoreCase = true) &&
-               toolCall.status == ToolCallStatus.SUCCESS
+        return toolCall.specificTool is WriteToolUse &&
+            toolCall.status == ToolCallStatus.SUCCESS
     }
 
     override fun handleToolClick(
@@ -69,20 +69,9 @@ class WriteToolHandler : ToolClickHandler {
      * 解析 Write 工具调用参数
      */
     private fun parseWriteToolCall(toolCall: ToolCall): WriteFileInfo? {
-        return when {
-            toolCall.parameters.containsKey("file_path") -> {
-                val filePath = toolCall.parameters["file_path"] as? String ?: return null
-                WriteFileInfo(filePath = filePath)
-            }
+        val specificTool = toolCall.specificTool as? WriteToolUse ?: return null
 
-            // 支持其他可能的参数格式
-            toolCall.parameters.containsKey("path") -> {
-                val filePath = toolCall.parameters["path"] as? String ?: return null
-                WriteFileInfo(filePath = filePath)
-            }
-
-            else -> null
-        }
+        return WriteFileInfo(filePath = specificTool.filePath)
     }
 
     /**

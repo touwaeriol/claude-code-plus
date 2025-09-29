@@ -1,18 +1,19 @@
 package com.claudecodeplus.plugin.handlers
 
+import com.claudecodeplus.sdk.types.ReadToolUse
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolCallStatus
-import com.claudecodeplus.sdk.ToolParser
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
+import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.notification.NotificationType
 import com.intellij.notification.Notifications
-import com.intellij.notification.Notification
 import com.intellij.notification.NotificationGroupManager
 import java.io.File
 import java.nio.file.Paths
@@ -29,8 +30,8 @@ class ReadToolHandler : ToolClickHandler {
     }
     
     override fun canHandle(toolCall: ToolCall): Boolean {
-        return toolCall.name.equals("Read", ignoreCase = true) && 
-               toolCall.status == ToolCallStatus.SUCCESS
+        return toolCall.specificTool is ReadToolUse &&
+            toolCall.status == ToolCallStatus.SUCCESS
     }
     
     override fun handleToolClick(
@@ -70,27 +71,13 @@ class ReadToolHandler : ToolClickHandler {
      * 解析 Read 工具调用参数
      */
     private fun parseReadToolCall(toolCall: ToolCall): ReadFileInfo? {
-        return when {
-            toolCall.parameters.containsKey("file_path") -> {
-                val filePath = toolCall.parameters["file_path"] as? String ?: return null
-                val offset = toolCall.parameters["offset"] as? Int
-                val limit = toolCall.parameters["limit"] as? Int
-                
-                ReadFileInfo(
-                    filePath = filePath,
-                    startLine = offset,
-                    lineCount = limit
-                )
-            }
-            
-            // 支持其他可能的参数格式
-            toolCall.parameters.containsKey("path") -> {
-                val filePath = toolCall.parameters["path"] as? String ?: return null
-                ReadFileInfo(filePath = filePath)
-            }
-            
-            else -> null
-        }
+        val specificTool = toolCall.specificTool as? ReadToolUse ?: return null
+
+        return ReadFileInfo(
+            filePath = specificTool.filePath,
+            startLine = specificTool.offset,
+            lineCount = specificTool.limit
+        )
     }
     
     /**
@@ -113,21 +100,21 @@ class ReadToolHandler : ToolClickHandler {
                 }
                 
                 val fileEditorManager = FileEditorManager.getInstance(project)
-                
-                // 如果有行号信息，使用 OpenFileDescriptor 精确定位
-                val editor = if (fileInfo.startLine != null && fileInfo.startLine > 0) {
-                    val lineNumber = fileInfo.startLine - 1  // IDEA 使用 0 基索引
-                    val descriptor = OpenFileDescriptor(project, virtualFile, lineNumber, 0)
-                    fileEditorManager.openEditor(descriptor, true)
+
+                val descriptor = if (fileInfo.startLine != null && fileInfo.startLine > 0) {
+                    val lineNumber = fileInfo.startLine - 1 // IDEA 使用 0 基索引
+                    OpenFileDescriptor(project, virtualFile, lineNumber, 0)
                 } else {
-                    fileEditorManager.openFile(virtualFile, true).firstOrNull()
+                    OpenFileDescriptor(project, virtualFile)
                 }
-                
+
+                val editor = fileEditorManager.openTextEditor(descriptor, true)
+
                 // 选择文本范围（如果指定了行数限制）
                 if (editor != null && fileInfo.startLine != null && fileInfo.lineCount != null) {
                     selectTextRange(editor, fileInfo.startLine, fileInfo.lineCount)
                 }
-                
+
                 if (config.showNotifications) {
                     val message = if (fileInfo.startLine != null) {
                         "已打开文件并定位到第 ${fileInfo.startLine} 行"
@@ -179,45 +166,35 @@ class ReadToolHandler : ToolClickHandler {
     /**
      * 选择文本范围
      */
-    private fun selectTextRange(editor: Any, startLine: Int, lineCount: Int) {
+    private fun selectTextRange(editor: Editor, startLine: Int, lineCount: Int) {
         try {
-            // 使用反射访问 editor 的方法，因为返回类型可能不是 TextEditor
-            val editorClass = editor.javaClass
-            val getEditorMethod = editorClass.getMethod("getEditor")
-            val textEditor = getEditorMethod.invoke(editor)
-            
-            val textEditorClass = textEditor.javaClass
-            val getDocumentMethod = textEditorClass.getMethod("getDocument")
-            val getSelectionModelMethod = textEditorClass.getMethod("getSelectionModel")
-            
-            val document = getDocumentMethod.invoke(textEditor)
-            val selectionModel = getSelectionModelMethod.invoke(textEditor)
-            
-            // 计算起始和结束偏移量
-            val documentClass = document.javaClass
-            val getLineStartOffsetMethod = documentClass.getMethod("getLineStartOffset", Int::class.java)
-            val getLineEndOffsetMethod = documentClass.getMethod("getLineEndOffset", Int::class.java)
-            val getLineCountMethod = documentClass.getMethod("getLineCount")
-            
-            val totalLines = getLineCountMethod.invoke(document) as Int
-            val startLineIndex = (startLine - 1).coerceAtLeast(0)
-            val endLineIndex = (startLineIndex + lineCount - 1).coerceAtMost(totalLines - 1)
-            
-            val startOffset = getLineStartOffsetMethod.invoke(document, startLineIndex) as Int
-            val endOffset = getLineEndOffsetMethod.invoke(document, endLineIndex) as Int
-            
-            // 设置选择
-            val selectionModelClass = selectionModel.javaClass
-            val setSelectionMethod = selectionModelClass.getMethod("setSelection", Int::class.java, Int::class.java)
-            setSelectionMethod.invoke(selectionModel, startOffset, endOffset)
-            
-            logger.info("ReadToolHandler: 已选择第 $startLine-${startLine + lineCount - 1} 行")
-            
+            val document = editor.document
+            if (document.lineCount == 0) {
+                return
+            }
+
+            val startLineIndex = (startLine - 1).coerceIn(0, document.lineCount - 1)
+            val endLineIndex = (startLineIndex + lineCount - 1)
+                .coerceIn(startLineIndex, document.lineCount - 1)
+
+            val startOffset = document.getLineStartOffset(startLineIndex)
+            val endOffset = document.getLineEndOffset(endLineIndex)
+
+            val selectionModel = editor.selectionModel
+            selectionModel.setSelection(startOffset, endOffset)
+
+            val caretModel = editor.caretModel
+            caretModel.moveToOffset(startOffset)
+            editor.scrollingModel.scrollTo(caretModel.logicalPosition, ScrollType.CENTER)
+
+            val startLineDisplay = startLine.coerceAtLeast(1)
+            val endLineDisplay = endLineIndex + 1
+            logger.info("ReadToolHandler: 已选择第 $startLineDisplay-$endLineDisplay 行")
         } catch (e: Exception) {
             logger.warn("ReadToolHandler: 选择文本范围失败", e)
         }
     }
-    
+
     /**
      * 显示通知
      */
