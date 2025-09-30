@@ -1,8 +1,8 @@
 package com.claudecodeplus.plugin.services
 
 import com.claudecodeplus.plugin.interfaces.SessionStateSync
-import com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService.SessionState
-import com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService.SessionUpdate
+import com.claudecodeplus.plugin.types.SessionState
+import com.claudecodeplus.plugin.types.SessionUpdate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 

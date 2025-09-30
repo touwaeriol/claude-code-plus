@@ -80,7 +80,9 @@ fun MarkdownParagraph(
             .padding(vertical = 6.dp)
     ) {
         SelectionContainer {
-            content()
+            Row {
+                content()
+            }
         }
     }
 }

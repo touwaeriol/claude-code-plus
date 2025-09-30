@@ -1,7 +1,5 @@
 package com.claudecodeplus.plugin.services
 
-import com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService.SessionState
-
 /**
  * 项目级会话状态服务
  *

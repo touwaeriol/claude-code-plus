@@ -21,10 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.claudecodeplus.sdk.types.TaskToolUse
-import com.claudecodeplus.sdk.types.TodoWriteToolUse
+import com.claudecodeplus.sdk.types.*
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolCallStatus
+import com.claudecodeplus.ui.models.getDisplaySubtitle
+import com.claudecodeplus.ui.models.shouldOpenInIde
 import com.claudecodeplus.ui.services.StringResources
 import com.claudecodeplus.ui.services.formatStringResource
 import com.claudecodeplus.ui.services.stringResource
@@ -71,14 +72,7 @@ private fun CompactToolCallRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(4.dp))
             .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.08f))
-            .clickable {
-                // 先尝试 IDE 集成
-                val handled = ideIntegration?.handleToolClick(toolCall) ?: false
-                if (!handled) {
-                    expanded = !expanded
-                    onExpandedChange?.invoke(toolCall.id, expanded)
-                }
-            }
+            .clickable { handleToolClick(toolCall, ideIntegration) { expanded = !expanded; onExpandedChange?.invoke(toolCall.id, expanded) } }
             .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
         Row(
@@ -97,33 +91,16 @@ private fun CompactToolCallRow(
                     style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
                 )
 
-                // 子标题：对 TodoWrite 显示进度，其他工具保留参数摘要
-                when (val st = toolCall.specificTool) {
-                    is TodoWriteToolUse -> {
-                        val total = st.todos.size
-                        val completed = st.todos.count { it.status.equals("completed", ignoreCase = true) }
-                        Text(
-                            text = formatStringResource(StringResources.TASK_COMPLETED_COUNT, completed, total),
-                            style = JewelTheme.defaultTextStyle.copy(
-                                fontSize = 10.sp,
-                                color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
-                            )
+                // 子标题：根据工具类型显示不同的信息
+                val subtitle = toolCall.specificTool?.getDisplaySubtitle()
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 10.sp,
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
                         )
-                    }
-                    else -> {
-                        toolCall.parameters.takeIf { it.isNotEmpty() }?.let {
-                            val summary = it.entries
-                                .joinToString(" ") { e -> "${e.key}=${e.value}" }
-                                .take(160)
-                            Text(
-                                text = summary,
-                                style = JewelTheme.defaultTextStyle.copy(
-                                    fontSize = 10.sp,
-                                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
-                                )
-                            )
-                        }
-                    }
+                    )
                 }
             }
             Text(
@@ -164,4 +141,32 @@ private fun statusLabel(status: ToolCallStatus, expanded: Boolean): String {
 private fun defaultExpanded(toolCall: ToolCall): Boolean = when (toolCall.specificTool) {
     is TodoWriteToolUse, is TaskToolUse -> true
     else -> false
+}
+
+/**
+ * 处理工具点击事件
+ *
+ * 统一管理工具的 IDE 集成和 UI 展开逻辑：
+ * - 支持 IDE 集成的工具（SUCCESS 状态）：在 IDEA 中打开
+ * - 其他工具或集成失败：在 UI 中展开/折叠
+ *
+ * @param toolCall 被点击的工具调用
+ * @param ideIntegration IDE 集成适配器
+ * @param onToggleExpand 切换展开状态的回调
+ */
+private fun handleToolClick(
+    toolCall: ToolCall,
+    ideIntegration: com.claudecodeplus.ui.services.IdeIntegration?,
+    onToggleExpand: () -> Unit
+) {
+    // 检查是否应该在 IDE 中打开
+    if (toolCall.shouldOpenInIde()) {
+        val handled = ideIntegration?.handleToolClick(toolCall) ?: false
+        // IDE 集成成功：不切换展开状态
+        // IDE 集成失败：Handler 会显示通知，也不切换展开状态
+        return
+    }
+
+    // 不支持 IDE 集成或状态不符合要求：在 UI 中展开/折叠
+    onToggleExpand()
 }

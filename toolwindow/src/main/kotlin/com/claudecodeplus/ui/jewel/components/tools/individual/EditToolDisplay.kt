@@ -2,10 +2,8 @@
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.claudecodeplus.sdk.types.EditToolUse
@@ -14,8 +12,6 @@ import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolResult
-import org.jetbrains.jewel.ui.component.DefaultButton
-import org.jetbrains.jewel.ui.component.Text
 
 /**
  * Edit 工具专用展示组件
@@ -46,18 +42,7 @@ fun EditToolDisplay(
         }
 
         if (showDetails) {
-            if (onFileClick != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    DefaultButton(onClick = onFileClick) {
-                        Text("在 IDE 中查看差异")
-                    }
-                }
-            }
-
+            // 注意：点击工具本身会在 IDEA 中显示 diff，无需额外按钮
             when (val result = toolCall.result) {
                 is ToolResult.Success -> {
                     DiffDisplay(

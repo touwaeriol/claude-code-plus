@@ -6,7 +6,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.wm.ToolWindow
 import com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService
-import com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService.SessionState
+import com.claudecodeplus.plugin.types.SessionState
 import com.intellij.openapi.components.service
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.firstOrNull

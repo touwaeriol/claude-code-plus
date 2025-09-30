@@ -556,6 +556,7 @@ class CustomToolsHooksTest {
                     )
                 )
             ),
+            systemPrompt = """
                 你现在可以使用以下自定义工具：
                 
                 1. DatabaseQuery - 执行数据库查询

@@ -397,7 +397,49 @@ jetbrains-plugin 是 IntelliJ IDEA 集成层，负责将 Claude Code Plus 功能
   - Shift+Enter - 插入换行
   - Ctrl+J - 备用换行
 
-#### 4. 工具点击处理
+#### 4. IDEA 平台服务
+
+**IdeaPlatformService** (`jetbrains-plugin/src/main/kotlin/com/claudecodeplus/plugin/services/IdeaPlatformService.kt`)
+
+统一的 IDEA 平台操作封装类，提供所有与 IntelliJ IDEA 平台交互的功能：
+
+**文件操作**：
+- `openFile(filePath, line, column, selectContent, content)` - 在编辑器中打开文件并定位
+- `findVirtualFile(filePath)` - 查找虚拟文件（支持绝对路径和相对路径）
+- `refreshFile(filePath)` - 刷新文件系统并查找文件
+- `showDiff(filePath, oldContent, newContent, title)` - 显示文件差异对比
+
+**通知操作**：
+- `showInfo(message)` - 显示信息通知
+- `showWarning(message)` - 显示警告通知
+- `showError(message)` - 显示错误通知
+
+**设计优势**：
+- ✅ 功能集中，易于维护和扩展
+- ✅ 统一的错误处理和日志记录
+- ✅ 支持异步操作，不阻塞 UI
+- ✅ 便于测试（可以 mock 服务）
+- ✅ 后续可扩展更多功能（文件重命名、移动、删除等）
+
+**使用示例**：
+```kotlin
+val platformService = IdeaPlatformService(project)
+
+// 打开文件
+platformService.openFile(filePath = "/path/to/file.kt", line = 42)
+
+// 显示diff
+platformService.showDiff(
+    filePath = "/path/to/file.kt",
+    oldContent = "old text",
+    newContent = "new text"
+)
+
+// 显示通知
+platformService.showInfo("操作成功")
+```
+
+#### 5. 工具点击处理
 
 **ToolClickManager** - 统一管理工具点击：
 ```kotlin
@@ -407,12 +449,17 @@ ToolClickManager.registerHandler("edit", EditToolHandler())
 ToolClickManager.registerHandler("write", WriteToolHandler())
 ```
 
-**专业化处理器**：
-- `ReadToolHandler` - 文件定位和行号跳转
-- `EditToolHandler` - 差异显示和编辑恢复
-- `WriteToolHandler` - 新文件创建和打开
+**专业化处理器**（所有处理器现在都使用 IdeaPlatformService）：
+- `ReadToolHandler` - 使用平台服务打开文件并定位，支持内容选择
+- `EditToolHandler` - 使用平台服务显示 diff 对比视图
+- `WriteToolHandler` - 使用平台服务刷新并打开新文件
 
-#### 5. 服务层
+**重要改进**：
+- ✅ 移除了 `status == SUCCESS` 的限制，任何状态的工具都可以点击
+- ✅ 使用统一的 IdeaPlatformService，代码更简洁（从 300+ 行简化到 ~80 行）
+- ✅ 更好的错误处理和用户反馈
+
+#### 6. 服务层
 
 **应用级服务**：
 - `McpSettingsService` - MCP 配置管理

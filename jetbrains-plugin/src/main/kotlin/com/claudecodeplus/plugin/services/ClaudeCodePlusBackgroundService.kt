@@ -1,5 +1,7 @@
 package com.claudecodeplus.plugin.services
 
+import com.claudecodeplus.plugin.types.SessionState
+import com.claudecodeplus.plugin.types.SessionUpdate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
@@ -10,35 +12,6 @@ import kotlinx.coroutines.flow.flowOf
  * 包含了 jetbrains-plugin 模块所需的基本类型定义。
  */
 class ClaudeCodePlusBackgroundService {
-
-    /**
-     * 会话状态数据类
-     */
-    data class SessionState(
-        var lastFileSize: Long = 0,
-        var lastLineCount: Int = 0,
-        var lastModified: Long = 0,
-        val messageCache: MutableList<SessionMessage> = mutableListOf(),
-        val messages: List<SessionMessage> = emptyList(),
-        var isGenerating: Boolean = false
-    )
-
-    /**
-     * 会话更新事件
-     */
-    sealed class SessionUpdate {
-        data class NewMessage(val message: SessionMessage) : SessionUpdate()
-        data class Compressed(val messageCount: Int) : SessionUpdate()
-        data class Error(val error: Throwable) : SessionUpdate()
-    }
-
-    /**
-     * 会话消息数据类 - 简化版本
-     */
-    data class SessionMessage(
-        val content: String = "",
-        val timestamp: Long = System.currentTimeMillis()
-    )
 
     /**
      * 获取会话状态
