@@ -3,6 +3,7 @@ package com.claudecodeplus.plugin.handlers
 import com.claudecodeplus.sdk.types.ReadToolUse
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolCallStatus
+import com.claudecodeplus.ui.models.ToolResult
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -15,6 +16,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.notification.NotificationType
 import com.intellij.notification.Notifications
 import com.intellij.notification.NotificationGroupManager
+import com.intellij.openapi.util.text.StringUtil
 import java.io.File
 import java.nio.file.Paths
 
@@ -72,11 +74,13 @@ class ReadToolHandler : ToolClickHandler {
      */
     private fun parseReadToolCall(toolCall: ToolCall): ReadFileInfo? {
         val specificTool = toolCall.specificTool as? ReadToolUse ?: return null
+        val resultContent = (toolCall.result as? ToolResult.Success)?.output
 
         return ReadFileInfo(
             filePath = specificTool.filePath,
-            startLine = specificTool.offset,
-            lineCount = specificTool.limit
+            offset = specificTool.offset,
+            limit = specificTool.limit,
+            content = resultContent
         )
     }
     
@@ -100,26 +104,15 @@ class ReadToolHandler : ToolClickHandler {
                 }
                 
                 val fileEditorManager = FileEditorManager.getInstance(project)
-
-                val descriptor = if (fileInfo.startLine != null && fileInfo.startLine > 0) {
-                    val lineNumber = fileInfo.startLine - 1 // IDEA 使用 0 基索引
-                    OpenFileDescriptor(project, virtualFile, lineNumber, 0)
-                } else {
-                    OpenFileDescriptor(project, virtualFile)
-                }
-
+                val descriptor = OpenFileDescriptor(project, virtualFile)
                 val editor = fileEditorManager.openTextEditor(descriptor, true)
 
-                // 选择文本范围（如果指定了行数限制）
-                if (editor != null && fileInfo.startLine != null && fileInfo.lineCount != null) {
-                    selectTextRange(editor, fileInfo.startLine, fileInfo.lineCount)
-                }
+                val highlightedLine = editor?.let { applySelection(it, fileInfo) }
 
                 if (config.showNotifications) {
-                    val message = if (fileInfo.startLine != null) {
-                        "已打开文件并定位到第 ${fileInfo.startLine} 行"
-                    } else {
-                        "已打开文件: ${virtualFile.name}"
+                    val message = when {
+                        highlightedLine != null -> "已打开文件并定位到第 $highlightedLine 行"
+                        else -> "已打开文件: ${virtualFile.name}"
                     }
                     showInfoNotification(project, message)
                 }
@@ -164,34 +157,50 @@ class ReadToolHandler : ToolClickHandler {
     }
     
     /**
-     * 选择文本范围
+     * 根据工具调用信息在编辑器中选择读取到的范围
      */
-    private fun selectTextRange(editor: Editor, startLine: Int, lineCount: Int) {
-        try {
+    private fun applySelection(editor: Editor, fileInfo: ReadFileInfo): Int? {
+        return try {
             val document = editor.document
             if (document.lineCount == 0) {
-                return
+                return null
             }
 
-            val startLineIndex = (startLine - 1).coerceIn(0, document.lineCount - 1)
-            val endLineIndex = (startLineIndex + lineCount - 1)
-                .coerceIn(startLineIndex, document.lineCount - 1)
+            val documentText = document.text
+            val selectionRange = findSelectionRange(documentText, fileInfo)
 
-            val startOffset = document.getLineStartOffset(startLineIndex)
-            val endOffset = document.getLineEndOffset(endLineIndex)
+            if (selectionRange != null) {
+                val startOffset = selectionRange.startOffset.coerceIn(0, document.textLength)
+                val endOffset = selectionRange.endOffset.coerceIn(startOffset, document.textLength)
 
-            val selectionModel = editor.selectionModel
-            selectionModel.setSelection(startOffset, endOffset)
+                if (endOffset > startOffset) {
+                    editor.selectionModel.setSelection(startOffset, endOffset)
 
-            val caretModel = editor.caretModel
-            caretModel.moveToOffset(startOffset)
-            editor.scrollingModel.scrollTo(caretModel.logicalPosition, ScrollType.CENTER)
+                    val caretModel = editor.caretModel
+                    caretModel.moveToOffset(startOffset)
+                    editor.scrollingModel.scrollTo(caretModel.logicalPosition, ScrollType.CENTER)
 
-            val startLineDisplay = startLine.coerceAtLeast(1)
-            val endLineDisplay = endLineIndex + 1
-            logger.info("ReadToolHandler: 已选择第 $startLineDisplay-$endLineDisplay 行")
+                    val startLineIndex = document.getLineNumber(startOffset)
+                    val endLineIndex = document.getLineNumber(endOffset)
+                    logger.info("ReadToolHandler: 已选择第 ${startLineIndex + 1}-${endLineIndex + 1} 行")
+                    return startLineIndex + 1
+                }
+            }
+
+            // 如果没有匹配的内容范围，尝试使用偏移量或行号定位
+            val fallbackOffset = fileInfo.offset?.takeIf { it >= 0 }?.coerceAtMost(document.textLength)
+            if (fallbackOffset != null) {
+                val caretModel = editor.caretModel
+                caretModel.moveToOffset(fallbackOffset)
+                editor.selectionModel.removeSelection()
+                editor.scrollingModel.scrollTo(caretModel.logicalPosition, ScrollType.CENTER)
+                return document.getLineNumber(fallbackOffset) + 1
+            }
+
+            null
         } catch (e: Exception) {
             logger.warn("ReadToolHandler: 选择文本范围失败", e)
+            null
         }
     }
 
@@ -233,6 +242,122 @@ class ReadToolHandler : ToolClickHandler {
  */
 private data class ReadFileInfo(
     val filePath: String,
-    val startLine: Int? = null,
-    val lineCount: Int? = null
+    val offset: Int? = null,
+    val limit: Int? = null,
+    val content: String? = null
 )
+
+private data class SelectionRange(
+    val startOffset: Int,
+    val endOffset: Int
+)
+
+private fun findSelectionRange(documentText: String, fileInfo: ReadFileInfo): SelectionRange? {
+    val contentRange = fileInfo.content
+        ?.takeIf { it.isNotBlank() }
+        ?.let { extractRangeByContent(documentText, it) }
+
+    if (contentRange != null) {
+        return contentRange
+    }
+
+    return extractRangeByOffset(documentText, fileInfo.offset, fileInfo.limit)
+}
+
+private fun extractRangeByContent(documentText: String, snippet: String): SelectionRange? {
+    val normalizedSnippet = StringUtil.convertLineSeparators(snippet)
+    val candidates = listOf(
+        normalizedSnippet,
+        normalizedSnippet.trim('\n')
+    ).filter { it.isNotEmpty() }
+
+    for (candidate in candidates) {
+        val startIndex = documentText.indexOf(candidate)
+        if (startIndex >= 0) {
+            return SelectionRange(startIndex, startIndex + candidate.length)
+        }
+    }
+
+    val nonBlankLines = normalizedSnippet.lines().filter { it.isNotBlank() }
+    if (nonBlankLines.isNotEmpty()) {
+        val firstLine = nonBlankLines.first()
+        val startIndex = documentText.indexOf(firstLine)
+        if (startIndex >= 0) {
+            val lastLine = nonBlankLines.last()
+            val lastIndex = documentText.indexOf(lastLine, startIndex)
+            val endIndex = if (lastIndex >= 0) lastIndex + lastLine.length else startIndex + firstLine.length
+            return SelectionRange(startIndex, endIndex)
+        }
+    }
+
+    return null
+}
+
+private fun extractRangeByOffset(documentText: String, offset: Int?, limit: Int?): SelectionRange? {
+    if (offset == null) return null
+    if (documentText.isEmpty()) return null
+
+    val textLength = documentText.length
+    val offsetsToTry = buildList {
+        add(offset)
+        if (offset > 0) add(offset - 1)
+    }
+
+    offsetsToTry.forEach { candidate ->
+        val start = candidate.coerceIn(0, textLength)
+        val end = when {
+            limit != null && limit > 0 -> (start + limit).coerceAtMost(textLength)
+            else -> findLineEnd(documentText, start)
+        }
+
+        if (end > start) {
+            return SelectionRange(start, end)
+        }
+    }
+
+    // 将 offset 视为行号处理
+    val lineIndex = if (offset > 0) offset - 1 else 0
+    val lineStart = findLineStart(documentText, lineIndex)
+    val lineEnd = if (limit != null && limit > 0) {
+        findLineEndByCount(documentText, lineIndex, limit)
+    } else {
+        findLineEnd(documentText, lineStart)
+    }
+
+    return if (lineEnd > lineStart) SelectionRange(lineStart, lineEnd) else null
+}
+
+private fun findLineStart(text: String, lineIndex: Int): Int {
+    if (lineIndex <= 0) return 0
+    var remaining = lineIndex
+    var index = 0
+    while (index < text.length && remaining > 0) {
+        if (text[index] == '\n') {
+            remaining--
+        }
+        index++
+    }
+    return index.coerceAtMost(text.length)
+}
+
+private fun findLineEnd(text: String, startOffset: Int): Int {
+    if (startOffset >= text.length) return text.length
+    val newlineIndex = text.indexOf('\n', startOffset)
+    return if (newlineIndex >= 0) newlineIndex else text.length
+}
+
+private fun findLineEndByCount(text: String, startLine: Int, lineCount: Int): Int {
+    var index = findLineStart(text, startLine)
+    var remaining = if (lineCount > 0) lineCount else 1
+
+    while (index < text.length && remaining > 0) {
+        val newlineIndex = text.indexOf('\n', index)
+        if (newlineIndex < 0) {
+            return text.length
+        }
+        index = newlineIndex + 1
+        remaining--
+    }
+
+    return index.coerceAtMost(text.length)
+}

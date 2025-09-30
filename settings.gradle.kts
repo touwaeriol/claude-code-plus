@@ -35,5 +35,6 @@ rootProject.name = "claude-code-plus"
 include(
     "toolwindow",
     "jetbrains-plugin",
-    "claude-code-sdk"
+    "claude-code-sdk",
+    "standalone-test"
 )

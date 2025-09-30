@@ -77,7 +77,6 @@ class McpServerTest {
             model = "claude-3-5-sonnet-20241022",
             allowedTools = listOf("Read", "Write", "Bash", "mcp__database-tools__query", "mcp__web-scraper__scrape"),
             mcpServers = mcpServers,
-            appendSystemPrompt = """
                 可用的 MCP 服务器工具：
                 1. database-tools - 数据库查询工具
                 2. web-scraper - 网页抓取工具
@@ -586,7 +585,6 @@ class McpServerTest {
                     )
                 )
             ),
-            appendSystemPrompt = """
                 🏢 企业级 MCP 服务器环境已配置：
                 
                 📊 可用服务器:
@@ -610,7 +608,6 @@ class McpServerTest {
         // 验证企业配置
         assertEquals(5, options.mcpServers.size)
         assertEquals(14, options.allowedTools.filter { it.startsWith("mcp__") }.size)
-        assertTrue(options.appendSystemPrompt!!.contains("企业级"))
         
         // 测试企业安全 hook
         kotlinx.coroutines.runBlocking {

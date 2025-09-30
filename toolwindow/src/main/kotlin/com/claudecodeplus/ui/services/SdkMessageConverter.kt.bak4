@@ -546,6 +546,7 @@ object SdkMessageConverter {
             cwd = project?.let { java.nio.file.Paths.get(it.path) },
             // 可以根据需要添加更多配置
             allowedTools = listOf("Read", "Write", "Edit", "Bash", "TodoWrite", "Glob", "Grep"),
+            appendSystemPrompt = null // 可以从 sessionObject 中获取自定义系统提示
         )
     }
 }

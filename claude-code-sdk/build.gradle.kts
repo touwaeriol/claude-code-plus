@@ -27,3 +27,36 @@ kotlin {
 tasks.test {
     useJUnitPlatform()
 }
+
+// 运行示例的任务
+tasks.register<JavaExec>("runModelTest") {
+    group = "verification"
+    description = "运行模型切换测试示例"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.claudecodeplus.sdk.examples.ModelIdentificationTestKt")
+    standardInput = System.`in`
+}
+
+tasks.register<JavaExec>("runSonnet45Test") {
+    group = "verification"
+    description = "测试切换到 Sonnet 4.5"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.claudecodeplus.sdk.examples.SwitchToSonnet45TestKt")
+    standardInput = System.`in`
+}
+
+tasks.register<JavaExec>("runSlashCommandTest") {
+    group = "verification"
+    description = "测试 /model 斜杠命令"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.claudecodeplus.sdk.examples.SlashCommandModelTestKt")
+    standardInput = System.`in`
+}
+
+tasks.register<JavaExec>("runOpusTest") {
+    group = "verification"
+    description = "测试切换到 Opus 模型"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.claudecodeplus.sdk.examples.OpusSwitchTestKt")
+    standardInput = System.`in`
+}

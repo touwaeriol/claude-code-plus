@@ -1,8 +1,45 @@
 package com.claudecodeplus.sdk.types
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import java.nio.file.Path
+
+/**
+ * System prompt preset configuration.
+ * Allows using pre-defined system prompts like "claude_code".
+ */
+@Serializable
+data class SystemPromptPreset(
+    val type: String = "preset",
+    val preset: String = "claude_code",
+    val append: String? = null
+)
+
+/**
+ * Agent definition for programmatic subagents.
+ * Agents can be defined inline in code using this structure.
+ */
+@Serializable
+data class AgentDefinition(
+    val description: String,
+    val prompt: String,
+    val tools: List<String>? = null,
+    val model: String? = null // "sonnet" | "opus" | "haiku" | "inherit"
+)
+
+/**
+ * Setting sources to load from filesystem.
+ * Controls which configuration files are read.
+ */
+enum class SettingSource {
+    @SerialName("user")
+    USER,
+    @SerialName("project")
+    PROJECT,
+    @SerialName("local")
+    LOCAL
+}
 
 /**
  * MCP stdio server configuration.
@@ -43,17 +80,23 @@ sealed interface McpServerConfig {
 }
 
 /**
- * Claude Code SDK options.
- * Based on Python SDK ClaudeCodeOptions with additional Kotlin-specific enhancements.
+ * Claude Agent SDK options (formerly ClaudeCodeOptions).
+ * Based on Python SDK v0.1.0 ClaudeAgentOptions.
+ *
+ * Breaking changes from previous versions:
+ * - Renamed from ClaudeCodeOptions to ClaudeAgentOptions
+ * - systemPrompt now supports String or SystemPromptPreset
+ * - appendSystemPrompt merged into systemPrompt
+ * - No default system prompt or settings loaded (explicit configuration required)
  */
-data class ClaudeCodeOptions(
+data class ClaudeAgentOptions(
     // Tool configuration
     val allowedTools: List<String> = emptyList(),
     val disallowedTools: List<String> = emptyList(),
 
-    // System prompts
-    val systemPrompt: String? = null,
-    val appendSystemPrompt: String? = null,
+    // System prompt - unified field supporting string or preset
+    // Use SystemPromptPreset(preset = "claude_code") for default Claude Code behavior
+    val systemPrompt: Any? = null, // String | SystemPromptPreset | null
 
     // MCP servers (can be McpServerConfig or McpServer instances)
     val mcpServers: Map<String, Any> = emptyMap(),
@@ -66,8 +109,17 @@ data class ClaudeCodeOptions(
     // Session control
     val continueConversation: Boolean = false,
     val resume: String? = null,
+    val forkSession: Boolean = false, // NEW: Fork session when resuming
     val maxTurns: Int? = null,
-    val maxThinkingTokens: Int = 8000,
+
+    // Streaming configuration
+    val includePartialMessages: Boolean = false, // NEW: Enable partial message streaming
+
+    // Agent definitions - NEW: Programmatic subagents
+    val agents: Map<String, AgentDefinition>? = null,
+
+    // Setting sources - NEW: Control which settings files to load
+    val settingSources: List<SettingSource>? = null,
 
     // Model configuration
     val model: String? = null,
@@ -77,30 +129,45 @@ data class ClaudeCodeOptions(
     val settings: String? = null,
     val addDirs: List<Path> = emptyList(),
     val env: Map<String, String> = emptyMap(),
+    val user: String? = null,
 
     // Hook configurations
     val hooks: Map<HookEvent, List<HookMatcher>>? = null,
 
     // Extra CLI arguments
     val extraArgs: Map<String, String?> = emptyMap(),
+    val maxBufferSize: Int? = null, // Max bytes when buffering CLI stdout
 
     // Debug settings
-    val debugStderr: Any? = null, // File-like object for debug output
+    @Deprecated("Use stderr callback instead", ReplaceWith("stderr"))
+    val debugStderr: Any? = null, // Deprecated: Use stderr callback
+    val stderr: ((String) -> Unit)? = null, // NEW: Callback for stderr output
 
-    // Advanced options from Python SDK
+    // Advanced options
     val timeout: Long? = null, // Timeout in milliseconds
     val verbose: Boolean = false,
-    val print: Boolean = false, // Enable print mode
-    val compact: Boolean = false, // Enable compact mode
-    val maxTokens: Int? = null, // Max tokens limit
-    val temperature: Double? = null, // Model temperature
-    val topP: Double? = null, // Top-p sampling
+    val print: Boolean = false,
+    val compact: Boolean = false,
+    val maxTokens: Int? = null,
+    val maxThinkingTokens: Int = 8000,
+    val temperature: Double? = null,
+    val topP: Double? = null,
     val stopSequences: List<String> = emptyList(),
 
-    // Streaming configuration
+    // Legacy streaming (consider using includePartialMessages instead)
     val stream: Boolean = false,
     val streamingCallback: ((String) -> Unit)? = null
 )
+
+/**
+ * Type alias for backward compatibility.
+ * @deprecated Use ClaudeAgentOptions instead
+ */
+@Deprecated(
+    message = "Use ClaudeAgentOptions instead. The SDK has been renamed from Claude Code to Claude Agent.",
+    replaceWith = ReplaceWith("ClaudeAgentOptions")
+)
+typealias ClaudeCodeOptions = ClaudeAgentOptions
 
 /**
  * Control request types for SDK protocol.
@@ -134,6 +201,12 @@ data class InitializeRequest(
 data class SetPermissionModeRequest(
     override val subtype: String = "set_permission_mode",
     val mode: String
+) : ControlRequest
+
+@Serializable
+data class SetModelRequest(
+    override val subtype: String = "set_model",
+    val model: String?
 ) : ControlRequest
 
 @Serializable

@@ -12,16 +12,18 @@ import kotlinx.serialization.json.*
 import java.util.logging.Logger
 
 /**
- * Client for bidirectional, interactive conversations with Claude Code.
+ * Client for bidirectional, interactive conversations with Claude Agent.
  *
  * This client provides full control over the conversation flow with support
- * for streaming, interrupts, and dynamic message sending. 
+ * for streaming, interrupts, and dynamic message sending.
  *
  * Key features:
  * - **Bidirectional**: Send and receive messages at any time
  * - **Stateful**: Maintains conversation context across messages
  * - **Interactive**: Send follow-ups based on responses
  * - **Control flow**: Support for interrupts and session management
+ * - **Partial messages**: Stream partial message updates (when enabled)
+ * - **Programmatic agents**: Define subagents inline
  *
  * When to use ClaudeCodeSdkClient:
  * - Building chat interfaces or conversational UIs
@@ -30,7 +32,7 @@ import java.util.logging.Logger
  * - When you need to react to Claude's responses
  * - Real-time applications with user input
  * - When you need interrupt capabilities
- * 
+ *
  * API Design:
  * The simplified API provides a clean query → receive_response pattern:
  * - `query()` sends a message to Claude
@@ -40,27 +42,29 @@ import java.util.logging.Logger
  *
  * Example usage:
  * ```kotlin
- * val options = ClaudeCodeOptions(
+ * val options = ClaudeAgentOptions(
  *     model = "claude-3-5-sonnet",
- *     allowedTools = listOf("Read", "Write", "Bash")
+ *     allowedTools = listOf("Read", "Write", "Bash"),
+ *     systemPrompt = SystemPromptPreset(preset = "claude_code")
  * )
  * val client = ClaudeCodeSdkClient(options)
- * 
+ *
  * client.connect()
  * client.query("Hello, Claude!")
- * 
+ *
  * client.receiveResponse().collect { message ->
  *     when (message) {
  *         is AssistantMessage -> println("Claude: ${message.content}")
+ *         is StreamEvent -> println("Partial: ${message.event}")
  *         is ResultMessage -> println("Done!")
  *     }
  * }
- * 
+ *
  * client.disconnect()
  * ```
  */
 class ClaudeCodeSdkClient(
-    private val options: ClaudeCodeOptions = ClaudeCodeOptions(),
+    private val options: ClaudeAgentOptions = ClaudeAgentOptions(),
     private val transport: Transport? = null
 ) {
     private var actualTransport: Transport? = null
@@ -224,7 +228,79 @@ class ClaudeCodeSdkClient(
         ensureConnected()
         controlProtocol!!.interrupt()
     }
-    
+
+    /**
+     * Change permission mode during conversation.
+     *
+     * This allows dynamically switching between permission modes without reconnecting.
+     *
+     * @param mode The permission mode to set:
+     *   - "default": CLI prompts for dangerous tools
+     *   - "acceptEdits": Auto-accept file edits
+     *   - "bypassPermissions": Allow all tools (use with caution)
+     *   - "plan": Plan mode (for planning without executing)
+     *
+     * Example:
+     * ```kotlin
+     * val client = ClaudeCodeSdkClient(options)
+     * client.connect()
+     *
+     * // Start with default permissions
+     * client.query("Analyze this codebase")
+     * client.receiveResponse().collect { ... }
+     *
+     * // Switch to auto-accept edits
+     * client.setPermissionMode("acceptEdits")
+     * client.query("Implement the fix")
+     * client.receiveResponse().collect { ... }
+     * ```
+     */
+    suspend fun setPermissionMode(mode: String) {
+        ensureConnected()
+        logger.info("🔐 设置权限模式: $mode")
+
+        val request = SetPermissionModeRequest(mode = mode)
+        controlProtocol!!.sendControlRequest(request)
+
+        logger.info("✅ 权限模式已更新为: $mode")
+    }
+
+    /**
+     * Change the AI model during conversation.
+     *
+     * This allows switching models mid-conversation for different tasks.
+     *
+     * @param model The model to use, or null to use default. Examples:
+     *   - "claude-sonnet-4-20250514"
+     *   - "claude-opus-4-20250514"
+     *   - "claude-haiku-4-20250514"
+     *   - null (use default model)
+     *
+     * Example:
+     * ```kotlin
+     * val client = ClaudeCodeSdkClient(options)
+     * client.connect()
+     *
+     * // Start with default model
+     * client.query("Explain this architecture")
+     * client.receiveResponse().collect { ... }
+     *
+     * // Switch to a faster model for simple tasks
+     * client.setModel("claude-haiku-4-20250514")
+     * client.query("Add a docstring to this function")
+     * client.receiveResponse().collect { ... }
+     * ```
+     */
+    suspend fun setModel(model: String?) {
+        ensureConnected()
+        logger.info("🤖 设置模型: ${model ?: "default"}")
+
+        val request = SetModelRequest(model = model)
+        controlProtocol!!.sendControlRequest(request)
+
+        logger.info("✅ 模型已更新为: ${model ?: "default"}")
+    }
+
     /**
      * Get server initialization information.
      */

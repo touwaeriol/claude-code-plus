@@ -365,19 +365,6 @@ object SdkMessageConverter {
             isError = message.isError
         )
     }
-
-    /**
-     * 转换流事件为 EnhancedMessage
-     */
-    private fun convertStreamEvent(event: StreamEvent): EnhancedMessage {
-        return EnhancedMessage(
-            id = event.uuid,
-            role = MessageRole.SYSTEM,
-            content = "流事件: ${event.uuid}",
-            timestamp = System.currentTimeMillis(),
-            status = MessageStatus.STREAMING
-        )
-    }
 
     /**
      * 转换具体工具使用类型为 ToolCall
@@ -546,6 +533,7 @@ object SdkMessageConverter {
             cwd = project?.let { java.nio.file.Paths.get(it.path) },
             // 可以根据需要添加更多配置
             allowedTools = listOf("Read", "Write", "Edit", "Bash", "TodoWrite", "Glob", "Grep"),
+            appendSystemPrompt = null // 可以从 sessionObject 中获取自定义系统提示
         )
     }
 }

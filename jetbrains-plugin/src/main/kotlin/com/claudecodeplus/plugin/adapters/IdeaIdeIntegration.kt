@@ -2,14 +2,17 @@ package com.claudecodeplus.plugin.adapters
 
 import com.claudecodeplus.plugin.handlers.ToolClickManager
 import com.claudecodeplus.plugin.handlers.ToolClickConfig
+import com.claudecodeplus.sdk.types.ReadToolUse
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.services.IdeIntegration
 import com.claudecodeplus.ui.services.NotificationType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.ide.ui.UISettings
 import com.intellij.l10n.LocalizationUtil
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import kotlinx.serialization.json.JsonNull
+import java.io.File
 import java.util.*
 
 /**
@@ -42,17 +45,24 @@ class IdeaIdeIntegration(
     
     override fun openFile(filePath: String, line: Int?, column: Int?): Boolean {
         return try {
-            // 创建一个临时的 Read 工具调用
+            val (offsetHint, limitHint) = computeOffsetHints(filePath, line, column)
+
+            val readTool = ReadToolUse(
+                id = "temp_read_${UUID.randomUUID()}",
+                originalParameters = JsonNull,
+                filePath = filePath,
+                offset = offsetHint,
+                limit = limitHint
+            )
+
             val fakeToolCall = ToolCall(
-                id = "temp_read",
-                name = "Read",
-                parameters = mutableMapOf<String, Any>().apply {
-                    put("file_path", filePath)
-                    line?.let { put("offset", it) }
-                },
+                id = readTool.id,
+                name = readTool.toolType.toolName,
+                specificTool = readTool,
+                parameters = readTool.getTypedParameters(),
                 status = com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS
             )
-            
+
             handleToolClick(fakeToolCall)
         } catch (e: Exception) {
             logger.error("打开文件失败", e)
@@ -78,6 +88,43 @@ class IdeaIdeIntegration(
         } catch (e: Exception) {
             logger.error("显示差异失败", e)
             false
+        }
+    }
+
+    private fun computeOffsetHints(filePath: String, line: Int?, column: Int?): Pair<Int?, Int?> {
+        val virtualFile = resolveVirtualFile(filePath) ?: return null to null
+        val document = FileDocumentManager.getInstance().getDocument(virtualFile) ?: return null to null
+
+        if (document.lineCount == 0 || line == null || line <= 0) {
+            return null to null
+        }
+
+        val lineIndex = (line - 1).coerceAtMost(document.lineCount - 1)
+        var startOffset = document.getLineStartOffset(lineIndex)
+        val lineEndOffset = document.getLineEndOffset(lineIndex)
+
+        if (column != null && column > 0) {
+            startOffset = (startOffset + column).coerceAtMost(lineEndOffset)
+        }
+
+        val length = (lineEndOffset - startOffset).coerceAtLeast(0)
+        return startOffset to length
+    }
+
+    private fun resolveVirtualFile(filePath: String): com.intellij.openapi.vfs.VirtualFile? {
+        val file = File(filePath)
+        val localFileSystem = LocalFileSystem.getInstance()
+
+        if (file.isAbsolute && file.exists()) {
+            return localFileSystem.findFileByPath(file.canonicalPath)
+        }
+
+        val basePath = project.basePath ?: return null
+        val absoluteFile = File(basePath, filePath)
+        return if (absoluteFile.exists()) {
+            localFileSystem.findFileByPath(absoluteFile.canonicalPath)
+        } else {
+            null
         }
     }
     

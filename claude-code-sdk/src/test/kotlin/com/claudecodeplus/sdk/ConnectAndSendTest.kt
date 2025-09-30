@@ -16,7 +16,6 @@ class ConnectAndSendTest {
         val options = ClaudeCodeOptions(
             model = "claude-3-5-sonnet-20241022",
             allowedTools = listOf("Read", "Write", "Bash"),
-            appendSystemPrompt = "You can use tools when needed. Be brief in responses."
         )
 
         val client = ClaudeCodeSdkClient(options)
@@ -82,7 +81,6 @@ class ConnectAndSendTest {
     fun `test connection with initial prompt`() = runBlocking {
         val options = ClaudeCodeOptions(
             model = "claude-3-5-sonnet-20241022",
-            appendSystemPrompt = "Be very brief."
         )
 
         val client = ClaudeCodeSdkClient(options)
@@ -127,7 +125,6 @@ class ConnectAndSendTest {
     fun `test session id in queries`() = runBlocking {
         val options = ClaudeCodeOptions(
             model = "claude-3-5-sonnet-20241022",
-            appendSystemPrompt = "Be brief."
         )
 
         val client = ClaudeCodeSdkClient(options)
@@ -173,7 +170,6 @@ class ConnectAndSendTest {
         val options = ClaudeCodeOptions(
             model = "claude-3-5-sonnet-20241022",
             // 使用更保守的超时设置
-            appendSystemPrompt = "Respond immediately with 'OK'."
         )
 
         val client = ClaudeCodeSdkClient(options)
@@ -208,7 +204,6 @@ class ConnectAndSendTest {
         val options = ClaudeCodeOptions(
             model = "claude-3-5-sonnet-20241022",
             allowedTools = emptyList(), // 不允许工具，只测试文本响应
-            appendSystemPrompt = "Provide brief text-only responses."
         )
 
         val client = ClaudeCodeSdkClient(options)

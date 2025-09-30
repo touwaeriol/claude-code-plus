@@ -29,11 +29,52 @@
 * 弹窗: Popup, PopupContainer, Tooltip
 * 进度: HorizontalProgressBar(确定进度), CircularProgressIndicator(旋转动画)
 
-## Claude Code SDK 模块
+## Claude Agent SDK 模块
+
+### SDK 参考资源
+
+- **官方文档**: [Claude Agent SDK - Python](https://docs.claude.com/en/api/agent-sdk/python)
+- **源代码仓库**: [claude-agent-sdk-python](https://github.com/anthropics/claude-agent-sdk-python)
+- **本地源码**: `/Users/erio/codes/python/claude-agent-sdk-python`
+- **最新版本**: v0.1.0 (2025-09-30 更新)
+- **包名**: `claude-agent-sdk` (原 `claude-code-sdk`)
+- **更新分析**: 详见 [SDK_UPDATE_ANALYSIS.md](./SDK_UPDATE_ANALYSIS.md)
 
 ### SDK 架构概览
 
-claude-code-sdk 是一个独立的 Kotlin 模块，提供与 Claude CLI 进行双向交互的完整功能。
+claude-code-sdk 是一个独立的 Kotlin 模块，提供与 Claude CLI 进行双向交互的完整功能。本实现参考官方 Python Agent SDK (v0.1.0) 设计，提供 Kotlin 原生实现。
+
+### 最新更新状态 (2025-09-30)
+
+#### 官方 v0.1.0 主要变更
+1. **重命名**: `claude-code-sdk` → `claude-agent-sdk`
+2. **类型重命名**: `ClaudeCodeOptions` → `ClaudeAgentOptions`
+3. **系统提示简化**: 合并 `custom_system_prompt` 和 `append_system_prompt` 为单一 `system_prompt` 字段
+4. **设置隔离**: 默认不加载文件系统设置，需要显式配置 `setting_sources`
+5. **新功能**:
+   - 编程式子代理 (`agents`)
+   - 会话分叉 (`fork_session`)
+   - 部分消息流 (`include_partial_messages`, `StreamEvent`)
+   - 细粒度设置控制 (`setting_sources`)
+
+#### 我们的 Kotlin SDK 需要更新的内容
+
+**P0 - 关键破坏性变更**:
+- [ ] 重命名 `ClaudeCodeOptions` → `ClaudeAgentOptions`
+- [ ] 添加 `SystemPromptPreset` 类型
+- [ ] 合并系统提示字段
+
+**P1 - 重要新功能**:
+- [ ] 添加 `AgentDefinition` 和 `agents` 字段
+- [ ] 添加 `SettingSource` 和 `setting_sources` 字段
+- [ ] 添加 `StreamEvent` 消息类型
+- [ ] 添加 `include_partial_messages` 字段
+
+**P2 - 增强功能**:
+- [ ] 添加 `fork_session` 字段
+- [ ] 添加 `stderr` 回调，标记 `debugStderr` 为弃用
+
+详细的更新分析、优先级规划和实现建议请查看 [SDK_UPDATE_ANALYSIS.md](./SDK_UPDATE_ANALYSIS.md)。
 
 #### 核心组件
 

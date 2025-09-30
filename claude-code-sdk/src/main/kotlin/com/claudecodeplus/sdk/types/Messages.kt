@@ -69,6 +69,21 @@ data class ResultMessage(
 ) : Message
 
 /**
+ * Stream event for partial message updates during streaming.
+ * Only available when includePartialMessages is enabled.
+ */
+@Serializable
+@SerialName("stream_event")
+data class StreamEvent(
+    val uuid: String,
+    @SerialName("session_id")
+    val sessionId: String,
+    val event: JsonElement, // Raw Anthropic API stream event
+    @SerialName("parent_tool_use_id")
+    val parentToolUseId: String? = null
+) : Message
+
+/**
  * Token usage information.
  */
 @Serializable

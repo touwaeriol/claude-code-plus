@@ -47,7 +47,6 @@ class PromptCacheLimitIntegrationTest {
             model = System.getenv("CLAUDE_MODEL") ?: "claude-3-5-sonnet-20241022",
             // Intentionally add both prompts to increase the chance of >4 cacheable system blocks
             systemPrompt = "You are helpful.",
-            appendSystemPrompt = "Be brief.",
             permissionMode = PermissionMode.BYPASS_PERMISSIONS,
             verbose = true
         )

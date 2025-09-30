@@ -192,7 +192,6 @@ class SimpleHooksExample {
                     )
                 )
             ),
-            appendSystemPrompt = """
                 可用的自定义工具:
                 1. DatabaseQuery - 执行数据库查询
                 2. APICall - 调用外部API

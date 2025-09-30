@@ -7,6 +7,8 @@ import com.claudecodeplus.core.logging.logW
 import com.claudecodeplus.core.models.ParseResult
 import com.claudecodeplus.core.models.SessionEvent
 import com.claudecodeplus.core.models.SessionMetadata
+import com.claudecodeplus.core.preprocessor.MessagePreprocessorChain
+import com.claudecodeplus.core.preprocessor.PreprocessResult
 import com.claudecodeplus.core.services.MessageProcessor
 import com.claudecodeplus.core.services.SessionService
 import com.claudecodeplus.core.services.ToolResultProcessor
@@ -35,7 +37,8 @@ import java.util.UUID
 class SessionServiceImpl(
     private val messageProcessor: MessageProcessor,
     private val toolResultProcessor: ToolResultProcessor = ToolResultProcessor(),
-    private val clientFactory: (ClaudeCodeOptions) -> ClaudeCodeSdkClient = { opts -> ClaudeCodeSdkClient(opts) }
+    private val clientFactory: (ClaudeCodeOptions) -> ClaudeCodeSdkClient = { opts -> ClaudeCodeSdkClient(opts) },
+    private val preprocessorChain: MessagePreprocessorChain = MessagePreprocessorChain.createDefault()
 ) : SessionService {
 
     private val sessionManager = ClaudeSessionManager()
@@ -103,28 +106,54 @@ class SessionServiceImpl(
             ?: throw AppError.SessionError("会话不存在: $sessionId", sessionId = sessionId)
 
         try {
-            // 发射生成开始事件
-            emitSessionEvent(sessionId, SessionEvent.GenerationStarted)
+            // ========== 消息预处理 ==========
+            val preprocessResult = preprocessorChain.process(message, client, sessionId)
 
-            // 发送消息
-            client.query(message, sessionId)
+            when (preprocessResult) {
+                is PreprocessResult.Intercepted -> {
+                    // 命令已被拦截处理，发送反馈消息（如果有）
+                    if (preprocessResult.feedback != null) {
+                        val feedbackMsg = EnhancedMessage(
+                            role = MessageRole.SYSTEM,
+                            content = preprocessResult.feedback,
+                            timestamp = System.currentTimeMillis()
+                        )
+                        emitSessionEvent(sessionId, SessionEvent.MessageReceived(feedbackMsg))
+                    }
+                    logI("消息被预处理器拦截: sessionId=$sessionId")
+                    return@suspendResultOf
+                }
+                is PreprocessResult.Continue -> {
+                    // 继续发送消息（使用可能被修改过的消息）
+                    val finalMessage = preprocessResult.message
+                    logI("消息通过预处理器: sessionId=$sessionId, finalMessage=${finalMessage.take(50)}...")
 
-            // 监听响应
-            client.receiveResponse()
-                .map { sdkMessage ->
-                    SdkMessageConverter.fromSdkMessage(sdkMessage)
-                }
-                .onEach { enhancedMessage ->
-                    // 发射消息接收事件
-                    emitSessionEvent(sessionId, SessionEvent.MessageReceived(enhancedMessage))
-                }
-                .catch { error ->
-                    logE("消息接收失败", error)
-                    emitSessionEvent(sessionId, SessionEvent.ErrorOccurred(error.message ?: "未知错误"))
-                }
-                .collect { }
+                    // 发射生成开始事件
+                    emitSessionEvent(sessionId, SessionEvent.GenerationStarted)
 
-            logI("消息发送成功: sessionId=$sessionId")
+                    // 发送消息
+                    client.query(finalMessage, sessionId)
+
+                    // 监听响应
+                    client.receiveResponse()
+                        .map { sdkMessage ->
+                            SdkMessageConverter.fromSdkMessage(sdkMessage)
+                        }
+                        .onEach { enhancedMessage ->
+                            // 发射消息接收事件
+                            emitSessionEvent(sessionId, SessionEvent.MessageReceived(enhancedMessage))
+                        }
+                        .catch { error ->
+                            logE("消息接收失败", error)
+                            emitSessionEvent(sessionId, SessionEvent.ErrorOccurred(error.message ?: "未知错误"))
+                        }
+                        .collect { }
+
+                    logI("消息发送成功: sessionId=$sessionId")
+                }
+            }
+            // ========== 结束：消息预处理 ==========
+
         } catch (e: Exception) {
             logE("发送消息失败", e)
             emitSessionEvent(sessionId, SessionEvent.ErrorOccurred(e.message ?: "发送失败"))

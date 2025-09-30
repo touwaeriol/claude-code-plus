@@ -17,7 +17,6 @@ class CompactCommandTest {
 
         val options = ClaudeCodeOptions(
             model = "claude-3-5-sonnet-20241022",
-            appendSystemPrompt = "Be very brief in your responses."
         )
         val client = ClaudeCodeSdkClient(options)
 
@@ -174,7 +173,6 @@ class CompactCommandTest {
 
         val options = ClaudeCodeOptions(
             model = "claude-3-5-sonnet-20241022",
-            appendSystemPrompt = "Be brief."
         )
 
         val client = ClaudeCodeSdkClient(options)

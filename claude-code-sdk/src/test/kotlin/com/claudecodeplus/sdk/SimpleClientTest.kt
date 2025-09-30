@@ -44,7 +44,6 @@ class SimpleClientTest {
         val options = ClaudeCodeOptions(
             model = "claude-3-5-sonnet-20241022",
             allowedTools = listOf("Read", "Write"),
-            appendSystemPrompt = "Keep your responses very brief."
         )
 
         val client = ClaudeCodeSdkClient(options)
@@ -110,7 +109,6 @@ class SimpleClientTest {
     fun `test use extension function`() = runBlocking {
         val options = ClaudeCodeOptions(
             model = "claude-3-5-sonnet-20241022",
-            appendSystemPrompt = "Keep your responses very brief."
         )
 
         val client = ClaudeCodeSdkClient(options)
@@ -143,7 +141,6 @@ class SimpleClientTest {
     fun `test simpleQuery convenience function`() = runBlocking {
         val options = ClaudeCodeOptions(
             model = "claude-3-5-sonnet-20241022",
-            appendSystemPrompt = "Keep your responses very brief."
         )
 
         val client = ClaudeCodeSdkClient(options)
@@ -176,7 +173,6 @@ class SimpleClientTest {
             prompt = "What is 5 * 5? Answer with just the number.",
             options = ClaudeCodeOptions(
                 model = "claude-3-5-sonnet-20241022",
-                appendSystemPrompt = "Keep your responses very brief."
             )
         )
 
@@ -203,7 +199,6 @@ class SimpleClientTest {
             ClaudeCodeOptions(
                 model = "claude-3-5-sonnet-20241022",
                 allowedTools = listOf("Read"),
-                appendSystemPrompt = "Be concise."
             )
         )
 
@@ -236,7 +231,6 @@ class SimpleClientTest {
     fun `test multiple queries in same session`() = runBlocking {
         val options = ClaudeCodeOptions(
             model = "claude-3-5-sonnet-20241022",
-            appendSystemPrompt = "Keep responses very brief."
         )
 
         val client = ClaudeCodeSdkClient(options)

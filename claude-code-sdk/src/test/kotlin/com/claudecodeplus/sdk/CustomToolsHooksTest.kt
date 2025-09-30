@@ -556,7 +556,6 @@ class CustomToolsHooksTest {
                     )
                 )
             ),
-            appendSystemPrompt = """
                 你现在可以使用以下自定义工具：
                 
                 1. DatabaseQuery - 执行数据库查询
@@ -590,7 +589,6 @@ class CustomToolsHooksTest {
         // 验证配置的完整性
         assertNotNull(fullSdkOptions.hooks)
         assertNotNull(fullSdkOptions.allowedTools)
-        assertNotNull(fullSdkOptions.appendSystemPrompt)
         
         // 验证自定义工具数量
         assertEquals(14, fullSdkOptions.allowedTools.size) // 6个标准 + 8个自定义
@@ -614,10 +612,6 @@ class CustomToolsHooksTest {
         assertEquals(1, postHooks[0].hooks.size)
         
         // 验证系统提示包含自定义工具说明
-        assertTrue(fullSdkOptions.appendSystemPrompt!!.contains("DatabaseQuery"))
-        assertTrue(fullSdkOptions.appendSystemPrompt!!.contains("APICall"))
-        assertTrue(fullSdkOptions.appendSystemPrompt!!.contains("EmailSender"))
-        assertTrue(fullSdkOptions.appendSystemPrompt!!.contains("安全检查和审计记录"))
         
         // 测试hook执行
         val testInput = mapOf(

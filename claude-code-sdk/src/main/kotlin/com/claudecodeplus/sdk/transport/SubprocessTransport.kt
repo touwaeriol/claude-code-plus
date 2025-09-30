@@ -1,8 +1,9 @@
 package com.claudecodeplus.sdk.transport
 
 import com.claudecodeplus.sdk.exceptions.*
-import com.claudecodeplus.sdk.types.ClaudeCodeOptions
+import com.claudecodeplus.sdk.types.ClaudeAgentOptions
 import com.claudecodeplus.sdk.types.PermissionMode
+import com.claudecodeplus.sdk.types.SystemPromptPreset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -24,7 +25,7 @@ import kotlin.io.path.exists
  * Transport implementation using subprocess for Claude CLI communication.
  */
 class SubprocessTransport(
-    private val options: ClaudeCodeOptions,
+    private val options: ClaudeAgentOptions,
     private val streamingMode: Boolean = true
 ) : Transport {
     
@@ -275,14 +276,35 @@ class SubprocessTransport(
             command.addAll(listOf("--model", model))
         }
         
-        // System prompt
+        // System prompt (supports String or SystemPromptPreset)
         options.systemPrompt?.let { prompt ->
-            command.addAll(listOf("--system-prompt", prompt))
-        }
-        
-        // Append system prompt
-        options.appendSystemPrompt?.let { prompt ->
-            command.addAll(listOf("--append-system-prompt", prompt))
+            when (prompt) {
+                is String -> {
+                    command.addAll(listOf("--system-prompt", prompt))
+                }
+                is SystemPromptPreset -> {
+                    if (prompt.preset == "claude_code") {
+                        // Use the preset flag
+                        command.add("--system-prompt-preset")
+                        command.add(prompt.preset)
+
+                        // Add append if provided
+                        prompt.append?.let { appendText ->
+                            command.add("--append-system-prompt")
+                            command.add(appendText)
+                        }
+                    } else {
+                        // Unknown preset, convert to string
+                        command.add("--system-prompt")
+                        command.add(prompt.preset)
+                    }
+                }
+                else -> {
+                    // Unknown type, convert to string
+                    command.add("--system-prompt")
+                    command.add(prompt.toString())
+                }
+            }
         }
         
         // Allowed tools
