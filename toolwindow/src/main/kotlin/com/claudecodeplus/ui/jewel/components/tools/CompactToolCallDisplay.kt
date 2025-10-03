@@ -86,6 +86,11 @@ private fun CompactToolCallRow(
     val visual = toolVisual(toolCall)
     val viewModel = toolCall.viewModel
     val summary = viewModel?.compactSummary
+    val toolType = viewModel?.toolDetail?.toolType
+    val shouldLimitHeight = when (toolType) {
+        UiToolType.TODO_WRITE, UiToolType.TASK -> false
+        else -> true
+    }
     val toolName = when (viewModel?.toolDetail) {
         is com.claudecodeplus.ui.viewmodels.tool.TodoWriteToolDetail -> stringResource("tool_todowrite")
         else -> toolCall.displayName
@@ -178,16 +183,13 @@ private fun CompactToolCallRow(
         if (expanded) {
             Spacer(modifier = Modifier.height(6.dp))
 
-            val scrollState = rememberScrollState()
-            VerticallyScrollableContainer(
-                scrollState = scrollState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 280.dp)
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
-                    .clip(RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp))
-                    .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.06f))
-            ) {
+            val containerModifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .clip(RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp))
+                .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.06f))
+
+            val innerContent: @Composable () -> Unit = {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -199,6 +201,23 @@ private fun CompactToolCallRow(
                         showDetails = true,
                         ideIntegration = ideIntegration
                     )
+                }
+            }
+
+            if (shouldLimitHeight) {
+                val scrollState = rememberScrollState()
+                VerticallyScrollableContainer(
+                    scrollState = scrollState,
+                    modifier = containerModifier.heightIn(max = 280.dp)
+                ) {
+                    innerContent()
+                }
+            } else {
+                Column(
+                    modifier = containerModifier,
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    innerContent()
                 }
             }
         }
