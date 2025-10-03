@@ -4,14 +4,22 @@ package com.claudecodeplus.ui.jewel.components.tools
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,21 +27,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.claudecodeplus.sdk.types.*
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolCallStatus
-import com.claudecodeplus.ui.models.getDisplaySubtitle
-import com.claudecodeplus.ui.models.shouldOpenInIde
 import com.claudecodeplus.ui.services.StringResources
-import com.claudecodeplus.ui.services.formatStringResource
 import com.claudecodeplus.ui.services.stringResource
+import com.claudecodeplus.ui.jewel.components.tools.TypedToolCallDisplay
+import com.claudecodeplus.ui.viewmodels.tool.UiToolType
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.VerticallyScrollableContainer
 
 /**
- * 紧凑的工具调用显示（最小实现，先恢复编译与基本功能）
+ * 工具调用的紧凑展示列表。
+ *
+ * - 未展开时保持单行高度，突出工具身份与关键信息。
+ * - 展开后在限定高度内滚动查看完整结果。
  */
 @Composable
 fun CompactToolCallDisplay(
@@ -51,7 +64,7 @@ fun CompactToolCallDisplay(
             CompactToolCallRow(
                 toolCall = toolCall,
                 ideIntegration = ideIntegration,
-                isExpanded = expandedTools[toolCall.id] ?: defaultExpanded(toolCall),
+                initialExpanded = expandedTools[toolCall.id] ?: defaultExpanded(toolCall),
                 onExpandedChange = onExpandedChange
             )
         }
@@ -62,111 +75,254 @@ fun CompactToolCallDisplay(
 private fun CompactToolCallRow(
     toolCall: ToolCall,
     ideIntegration: com.claudecodeplus.ui.services.IdeIntegration?,
-    isExpanded: Boolean,
+    initialExpanded: Boolean,
     onExpandedChange: ((String, Boolean) -> Unit)?
 ) {
-    var expanded by remember(toolCall.id) { mutableStateOf(isExpanded) }
+    var expanded by remember(toolCall.id) { mutableStateOf(initialExpanded) }
+    LaunchedEffect(initialExpanded) {
+        expanded = initialExpanded
+    }
+
+    val visual = toolVisual(toolCall)
+    val viewModel = toolCall.viewModel
+    val summary = viewModel?.compactSummary
+    val toolName = when (viewModel?.toolDetail) {
+        is com.claudecodeplus.ui.viewmodels.tool.TodoWriteToolDetail -> stringResource("tool_todowrite")
+        else -> toolCall.displayName
+    }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .border(
+                width = 1.dp,
+                color = JewelTheme.globalColors.borders.focused.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(8.dp)
+            )
             .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.08f))
-            .clickable { handleToolClick(toolCall, ideIntegration) { expanded = !expanded; onExpandedChange?.invoke(toolCall.id, expanded) } }
-            .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 36.dp)
+                .clickable {
+                    handleToolClick(toolCall, ideIntegration) {
+                        val newExpanded = !expanded
+                        expanded = newExpanded
+                        onExpandedChange?.invoke(toolCall.id, newExpanded)
+                    }
+                }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                val title = if (toolCall.specificTool is TodoWriteToolUse) {
-                    // 本地化 TodoWrite 名称
-                    stringResource("tool_todowrite")
-                } else toolCall.name
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .heightIn(min = 24.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(visual.accent)
+            )
 
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = visual.icon,
+                style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
+            )
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            Text(
+                text = "工具",
+                style = JewelTheme.defaultTextStyle.copy(
+                    fontSize = 10.sp,
+                    color = JewelTheme.globalColors.text.disabled
+                )
+            )
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = title,
-                    style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
+                    text = toolName,
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
 
-                // 子标题：根据工具类型显示不同的信息
-                val subtitle = toolCall.specificTool?.getDisplaySubtitle()
-                if (subtitle != null) {
+                summary?.takeIf { it.isNotBlank() }?.let { subtitle ->
+                    Text(
+                        text = " · ",
+                        style = JewelTheme.defaultTextStyle.copy(
+                            fontSize = 12.sp,
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
+                        )
+                    )
+
                     Text(
                         text = subtitle,
                         style = JewelTheme.defaultTextStyle.copy(
-                            fontSize = 10.sp,
-                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
-                        )
+                            fontSize = 12.sp,
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.85f)
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
-            Text(
-                text = statusLabel(toolCall.status, expanded),
-                style = JewelTheme.defaultTextStyle.copy(fontSize = 10.sp)
-            )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            ToolStatusBadge(status = toolCall.status)
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            ExpandChevron(expanded = expanded)
         }
 
         if (expanded) {
-            Column(
+            Spacer(modifier = Modifier.height(6.dp))
+
+            val scrollState = rememberScrollState()
+            VerticallyScrollableContainer(
+                scrollState = scrollState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 6.dp)
+                    .heightIn(max = 280.dp)
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp))
+                    .background(JewelTheme.globalColors.panelBackground.copy(alpha = 0.06f))
             ) {
-                TypedToolCallDisplay(
-                    toolCall = toolCall,
-                    showDetails = true,
-                    ideIntegration = ideIntegration
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TypedToolCallDisplay(
+                        toolCall = toolCall,
+                        showDetails = true,
+                        ideIntegration = ideIntegration
+                    )
+                }
             }
         }
     }
 }
 
-private fun statusLabel(status: ToolCallStatus, expanded: Boolean): String {
-    val statusText = when (status) {
-        ToolCallStatus.PENDING -> stringResource(StringResources.TOOL_STATUS_PENDING)
-        ToolCallStatus.RUNNING -> stringResource(StringResources.TOOL_STATUS_RUNNING)
-        ToolCallStatus.SUCCESS -> stringResource(StringResources.TOOL_STATUS_SUCCESS)
-        ToolCallStatus.FAILED -> stringResource(StringResources.TOOL_STATUS_FAILED)
-        ToolCallStatus.CANCELLED -> stringResource(StringResources.TOOL_STATUS_CANCELLED)
+@Composable
+private fun ToolStatusBadge(status: ToolCallStatus) {
+    val chipColors = toolStatusChipColors(status)
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(chipColors.background)
+    ) {
+        Text(
+            text = statusLabel(status),
+            color = chipColors.content,
+            style = JewelTheme.defaultTextStyle.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+        )
     }
-    val expandText = if (expanded) stringResource(StringResources.UI_EXPANDED)
-    else stringResource(StringResources.UI_COLLAPSED)
-    return "$statusText/$expandText"
 }
 
-private fun defaultExpanded(toolCall: ToolCall): Boolean = when (toolCall.specificTool) {
-    is TodoWriteToolUse, is TaskToolUse -> true
+@Composable
+private fun ExpandChevron(expanded: Boolean) {
+    Text(
+        text = if (expanded) "▴" else "▾",
+        style = JewelTheme.defaultTextStyle.copy(
+            fontSize = 11.sp,
+            color = JewelTheme.globalColors.text.disabled
+        )
+    )
+}
+
+private data class ToolVisual(val icon: String, val accent: Color)
+
+@Composable
+private fun toolVisual(toolCall: ToolCall): ToolVisual {
+    val toolType = toolCall.viewModel?.toolDetail?.toolType
+    return when (toolType) {
+        UiToolType.READ -> ToolVisual("📖", Color(0xFF6A9AE5))
+        UiToolType.WRITE -> ToolVisual("📝", Color(0xFF6A9AE5))
+        UiToolType.EDIT -> ToolVisual("✏️", Color(0xFF9B6EF3))
+        UiToolType.MULTI_EDIT -> ToolVisual("🧰", Color(0xFF9B6EF3))
+        UiToolType.NOTEBOOK_EDIT -> ToolVisual("📒", Color(0xFF9B6EF3))
+        UiToolType.BASH, UiToolType.BASH_OUTPUT -> ToolVisual("💻", Color(0xFF4DB6AC))
+        UiToolType.KILL_SHELL -> ToolVisual("⛔", Color(0xFFE57373))
+        UiToolType.GLOB, UiToolType.GREP -> ToolVisual("🔍", Color(0xFF4DD0E1))
+        UiToolType.TODO_WRITE -> ToolVisual("✅", Color(0xFF66BB6A))
+        UiToolType.TASK -> ToolVisual("🗂", Color(0xFFFFB74D))
+        UiToolType.WEB_FETCH, UiToolType.WEB_SEARCH -> ToolVisual("🌐", Color(0xFF64B5F6))
+        UiToolType.MCP, UiToolType.LIST_MCP_RESOURCES, UiToolType.READ_MCP_RESOURCE -> ToolVisual("🧩", Color(0xFF26C6DA))
+        UiToolType.EXIT_PLAN_MODE -> ToolVisual("🛑", Color(0xFFEF5350))
+        UiToolType.SLASH_COMMAND -> ToolVisual("⌨️", Color(0xFFA1887F))
+        else -> ToolVisual("🛠", Color(0xFF8A8D97))
+    }
+}
+
+private fun statusLabel(status: ToolCallStatus): String = when (status) {
+    ToolCallStatus.PENDING -> stringResource(StringResources.TOOL_STATUS_PENDING)
+    ToolCallStatus.RUNNING -> stringResource(StringResources.TOOL_STATUS_RUNNING)
+    ToolCallStatus.SUCCESS -> stringResource(StringResources.TOOL_STATUS_SUCCESS)
+    ToolCallStatus.FAILED -> stringResource(StringResources.TOOL_STATUS_FAILED)
+    ToolCallStatus.CANCELLED -> stringResource(StringResources.TOOL_STATUS_CANCELLED)
+}
+
+private fun defaultExpanded(toolCall: ToolCall): Boolean = when (toolCall.viewModel?.toolDetail) {
+    is com.claudecodeplus.ui.viewmodels.tool.TodoWriteToolDetail,
+    is com.claudecodeplus.ui.viewmodels.tool.TaskToolDetail -> true
     else -> false
 }
 
-/**
- * 处理工具点击事件
- *
- * 统一管理工具的 IDE 集成和 UI 展开逻辑：
- * - 支持 IDE 集成的工具（SUCCESS 状态）：在 IDEA 中打开
- * - 其他工具或集成失败：在 UI 中展开/折叠
- *
- * @param toolCall 被点击的工具调用
- * @param ideIntegration IDE 集成适配器
- * @param onToggleExpand 切换展开状态的回调
- */
 private fun handleToolClick(
     toolCall: ToolCall,
     ideIntegration: com.claudecodeplus.ui.services.IdeIntegration?,
     onToggleExpand: () -> Unit
 ) {
-    // 检查是否应该在 IDE 中打开
-    if (toolCall.shouldOpenInIde()) {
-        val handled = ideIntegration?.handleToolClick(toolCall) ?: false
-        // IDE 集成成功：不切换展开状态
-        // IDE 集成失败：Handler 会显示通知，也不切换展开状态
+    if (toolCall.status == ToolCallStatus.RUNNING) {
         return
     }
 
-    // 不支持 IDE 集成或状态不符合要求：在 UI 中展开/折叠
+    if (toolCall.viewModel?.shouldUseIdeIntegration() == true) {
+        ideIntegration?.handleToolClick(toolCall)
+        return
+    }
+
     onToggleExpand()
+}
+
+private data class StatusChipColors(val background: Color, val content: Color)
+
+@Composable
+private fun toolStatusChipColors(status: ToolCallStatus): StatusChipColors = when (status) {
+    ToolCallStatus.SUCCESS -> StatusChipColors(
+        background = Color(0x332E7D32),
+        content = Color(0xFF2E7D32)
+    )
+    ToolCallStatus.RUNNING -> StatusChipColors(
+        background = Color(0x332196F3),
+        content = Color(0xFF1976D2)
+    )
+    ToolCallStatus.FAILED -> StatusChipColors(
+        background = Color(0x33E53935),
+        content = Color(0xFFD32F2F)
+    )
+    ToolCallStatus.CANCELLED -> StatusChipColors(
+        background = Color(0x33B0BEC5),
+        content = Color(0xFF546E7A)
+    )
+    ToolCallStatus.PENDING -> StatusChipColors(
+        background = Color(0x33FFB300),
+        content = Color(0xFFFB8C00)
+    )
 }
