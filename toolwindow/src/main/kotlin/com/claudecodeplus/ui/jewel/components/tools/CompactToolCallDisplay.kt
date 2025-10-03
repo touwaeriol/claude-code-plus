@@ -131,22 +131,15 @@ private fun CompactToolCallRow(
                 style = JewelTheme.defaultTextStyle.copy(fontSize = 12.sp)
             )
 
-            Spacer(modifier = Modifier.width(6.dp))
-
-            Text(
-                text = "工具",
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 10.sp,
-                    color = JewelTheme.globalColors.text.disabled
-                )
-            )
-
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(8.dp))
 
             Row(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val hasSummary = !summary.isNullOrBlank()
+                val nameModifier = if (hasSummary) Modifier else Modifier.weight(1f)
+
                 Text(
                     text = toolName,
                     style = JewelTheme.defaultTextStyle.copy(
@@ -154,23 +147,17 @@ private fun CompactToolCallRow(
                         fontWeight = FontWeight.Medium
                     ),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = nameModifier
                 )
 
-                summary?.takeIf { it.isNotBlank() }?.let { subtitle ->
+                if (hasSummary) {
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = " · ",
+                        text = summary!!,
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 12.sp,
-                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.6f)
-                        )
-                    )
-
-                    Text(
-                        text = subtitle,
-                        style = JewelTheme.defaultTextStyle.copy(
-                            fontSize = 12.sp,
-                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.85f)
+                            color = JewelTheme.globalColors.text.normal.copy(alpha = 0.75f)
                         ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
