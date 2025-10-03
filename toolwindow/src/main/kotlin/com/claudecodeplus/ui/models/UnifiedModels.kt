@@ -1,5 +1,8 @@
 package com.claudecodeplus.ui.models
 
+import com.claudecodeplus.ui.viewmodels.tool.GenericToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.ToolCallViewModel
+import com.claudecodeplus.ui.viewmodels.tool.UiToolType
 import java.util.UUID
 
 /**
@@ -647,16 +650,78 @@ enum class ToolType {
 data class ToolCall(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
-    val specificTool: com.claudecodeplus.sdk.types.SpecificToolUse? = null,  // 🎯 新增：存储具体工具类型实例
-    @Deprecated("Use specificTool property instead")
-    val toolType: ToolType = ToolType.OTHER,  // 保留旧的枚举以保持兼容性
+    val viewModel: ToolCallViewModel? = null,  // 🎯 ViewModel (临时可空，便于迁移)
     val displayName: String = name,
-    val parameters: Map<String, Any> = emptyMap(),
     val status: ToolCallStatus = ToolCallStatus.PENDING,
     val result: ToolResult? = null,
     val startTime: Long = System.currentTimeMillis(),
     val endTime: Long? = null
 )
+{
+    companion object {
+        fun createGeneric(
+            id: String = UUID.randomUUID().toString(),
+            name: String,
+            parameters: Map<String, Any> = emptyMap(),
+            status: ToolCallStatus = ToolCallStatus.PENDING,
+            result: ToolResult? = null,
+            startTime: Long = System.currentTimeMillis(),
+            endTime: Long? = null
+        ): ToolCall {
+            val uiToolType = inferUiToolType(name)
+            val detail = GenericToolDetail(
+                toolType = uiToolType,
+                parameters = parameters
+            )
+            val viewModel = ToolCallViewModel(
+                id = id,
+                name = name,
+                toolDetail = detail,
+                status = status,
+                result = result,
+                startTime = startTime,
+                endTime = endTime
+            )
+
+            return ToolCall(
+                id = id,
+                name = name,
+                viewModel = viewModel,
+                displayName = name,
+                status = status,
+                result = result,
+                startTime = startTime,
+                endTime = endTime
+            )
+        }
+
+        private fun inferUiToolType(name: String): UiToolType {
+            val normalized = name.lowercase()
+            return when {
+                "todo" in normalized -> UiToolType.TODO_WRITE
+                "task" in normalized -> UiToolType.TASK
+                "multi" in normalized && "edit" in normalized -> UiToolType.MULTI_EDIT
+                "edit" in normalized -> UiToolType.EDIT
+                "write" in normalized -> UiToolType.WRITE
+                "read" in normalized -> UiToolType.READ
+                "glob" in normalized -> UiToolType.GLOB
+                "grep" in normalized -> UiToolType.GREP
+                "bash_output" in normalized || "bash-output" in normalized -> UiToolType.BASH_OUTPUT
+                "kill_shell" in normalized || "kill-shell" in normalized -> UiToolType.KILL_SHELL
+                "bash" in normalized -> UiToolType.BASH
+                "web_fetch" in normalized -> UiToolType.WEB_FETCH
+                "web_search" in normalized -> UiToolType.WEB_SEARCH
+                "notebook" in normalized -> UiToolType.NOTEBOOK_EDIT
+                "list_mcp" in normalized -> UiToolType.LIST_MCP_RESOURCES
+                "read_mcp" in normalized -> UiToolType.READ_MCP_RESOURCE
+                "mcp" in normalized -> UiToolType.MCP
+                "exit_plan" in normalized || "exit-plan" in normalized -> UiToolType.EXIT_PLAN_MODE
+                "slash" in normalized -> UiToolType.SLASH_COMMAND
+                else -> UiToolType.UNKNOWN
+            }
+        }
+    }
+}
 
 /**
  * 消息时间线元素 - 按时间顺序排列的消息组件
@@ -809,10 +874,8 @@ sealed class ToolResult {
  * 
  * @param id 消息唯一标识符
  * @param role 消息角色
- * @param content 消息内容
  * @param timestamp 时间戳
  * @param contexts 上下文引用列表
- * @param toolCalls 工具调用列表
  * @param model 使用的 AI 模型
  * @param status 消息状态
  * @param isStreaming 是否正在流式传输
@@ -825,18 +888,122 @@ data class
 EnhancedMessage(
     val id: String = UUID.randomUUID().toString(),
     val role: MessageRole,
-    val content: String,
     val timestamp: Long = System.currentTimeMillis(),
     val contexts: List<ContextReference> = emptyList(),      // 上下文引用
-    val toolCalls: List<ToolCall> = emptyList(),            // 工具调用
     val model: AiModel? = null,                              // 使用的模型
     val status: MessageStatus = MessageStatus.COMPLETE,       // 消息状态
     val isStreaming: Boolean = false,                        // 流式传输状态
     val isError: Boolean = false,                            // 错误标记
-    val orderedElements: List<MessageTimelineItem> = emptyList(), // 有序元素
+    val orderedElements: List<MessageTimelineItem> = emptyList(), // 🎯 核心数据：有序元素
     val tokenUsage: TokenUsage? = null,                      // Token 使用情况
     val isCompactSummary: Boolean = false                    // 压缩摘要标记
 ) {
+    /**
+     * 计算属性：合并后的纯文本内容
+     */
+    val content: String
+        get() = orderedElements
+            .filterIsInstance<MessageTimelineItem.ContentItem>()
+            .joinToString(separator = "") { it.content }
+
+    /**
+     * 计算属性：按时间线提取的工具调用
+     */
+    val toolCalls: List<ToolCall>
+        get() = orderedElements
+            .filterIsInstance<MessageTimelineItem.ToolCallItem>()
+            .map { it.toolCall }
+
+    /**
+     * 构建辅助：基于文本 + 工具列表快速创建有序元素
+     */
+    companion object {
+        fun create(
+            id: String = UUID.randomUUID().toString(),
+            role: MessageRole,
+            text: String = "",
+            timestamp: Long = System.currentTimeMillis(),
+            contexts: List<ContextReference> = emptyList(),
+            toolCalls: List<ToolCall> = emptyList(),
+            model: AiModel? = null,
+            status: MessageStatus = MessageStatus.COMPLETE,
+            isStreaming: Boolean = false,
+            isError: Boolean = false,
+            additionalElements: List<MessageTimelineItem> = emptyList(),
+            tokenUsage: TokenUsage? = null,
+            isCompactSummary: Boolean = false
+        ): EnhancedMessage {
+            val elements = buildList {
+                if (text.isNotEmpty()) {
+                    add(MessageTimelineItem.ContentItem(text))
+                }
+                toolCalls.forEach { toolCall ->
+                    add(MessageTimelineItem.ToolCallItem(toolCall))
+                }
+                addAll(additionalElements)
+            }
+
+            return EnhancedMessage(
+                id = id,
+                role = role,
+                timestamp = timestamp,
+                contexts = contexts,
+                model = model,
+                status = status,
+                isStreaming = isStreaming,
+                isError = isError,
+                orderedElements = elements,
+                tokenUsage = tokenUsage,
+                isCompactSummary = isCompactSummary
+            )
+        }
+    }
+
+    fun upsertToolCall(
+        toolCall: ToolCall,
+        timestamp: Long = System.currentTimeMillis()
+    ): EnhancedMessage {
+        val index = orderedElements.indexOfLast { element ->
+            element is MessageTimelineItem.ToolCallItem && element.toolCall.id == toolCall.id
+        }
+
+        val updatedElements = if (index >= 0) {
+            orderedElements.toMutableList().also { elements ->
+                val existing = elements[index] as MessageTimelineItem.ToolCallItem
+                elements[index] = existing.copy(toolCall = toolCall)
+            }
+        } else {
+            orderedElements + MessageTimelineItem.ToolCallItem(toolCall)
+        }
+
+        return copy(
+            orderedElements = updatedElements,
+            timestamp = timestamp
+        )
+    }
+
+    fun withContent(
+        text: String,
+        timestamp: Long = this.timestamp,
+        isStreaming: Boolean = this.isStreaming
+    ): EnhancedMessage {
+        val index = orderedElements.indexOfFirst { it is MessageTimelineItem.ContentItem }
+        val updatedElements = if (index >= 0) {
+            orderedElements.toMutableList().also { elements ->
+                val existing = elements[index] as MessageTimelineItem.ContentItem
+                elements[index] = existing.copy(content = text)
+            }
+        } else {
+            listOf(MessageTimelineItem.ContentItem(text)) + orderedElements
+        }
+
+        return copy(
+            orderedElements = updatedElements,
+            timestamp = timestamp,
+            isStreaming = isStreaming
+        )
+    }
+
     /**
      * 向后兼容属性
      * 保留旧版本中使用的 modelName 属性
@@ -971,9 +1138,6 @@ EnhancedMessage(
     /**
      * 安全地获取工具参数
      */
-    fun ToolCall.getParameter(key: String): Any? {
-        return parameters[key]
-    }
 }
 
 /**

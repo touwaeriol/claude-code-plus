@@ -1,11 +1,17 @@
 package com.claudecodeplus.ui.jewel.components.tools
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -14,28 +20,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolResult
+import com.claudecodeplus.ui.viewmodels.tool.EditToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.MultiEditToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.MultiEditToolDetail.EditOperationVm
+import com.claudecodeplus.ui.viewmodels.tool.WriteToolDetail
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 
-/**
- * Diff 结果展示组件
- * 展示文件编辑的差异
- */
 @Composable
 fun DiffResultDisplay(
     toolCall: ToolCall,
     modifier: Modifier = Modifier
 ) {
-    val diffLines = parseDiffFromResult(toolCall)
-    
+    val diffLines = parseDiffFromDetail(toolCall)
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // 文件路径和统计信息
         DiffHeader(toolCall, diffLines)
-        
-        // Diff 内容
+
         if (diffLines.isNotEmpty()) {
             Box(
                 modifier = Modifier
@@ -60,35 +64,30 @@ fun DiffResultDisplay(
     }
 }
 
-/**
- * Diff 头部信息
- */
 @Composable
 private fun DiffHeader(
     toolCall: ToolCall,
     diffLines: List<DiffLine>
 ) {
-    val filePath = toolCall.parameters["file_path"]?.toString() ?: ""
+    val filePath = resolveFilePath(toolCall)
     val fileName = filePath.substringAfterLast('/').substringAfterLast('\\')
-    
+
     val additions = diffLines.count { it.type == DiffLineType.ADDITION }
     val deletions = diffLines.count { it.type == DiffLineType.DELETION }
-    
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            text = "📝 $fileName",
+            text = "📑 $fileName",
             style = JewelTheme.defaultTextStyle.copy(
                 fontSize = 12.sp,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
             )
         )
-        
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (additions > 0) {
                 Text(
                     text = "+$additions",
@@ -111,9 +110,6 @@ private fun DiffHeader(
     }
 }
 
-/**
- * 单行 Diff 展示
- */
 @Composable
 private fun DiffLine(line: DiffLine) {
     Row(
@@ -127,25 +123,9 @@ private fun DiffLine(line: DiffLine) {
                     else -> Color.Transparent
                 }
             )
-            .padding(horizontal = 8.dp, vertical = 2.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // 行号
-        if (line.lineNumber != null) {
-            Text(
-                text = line.lineNumber.toString().padStart(4),
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)
-                ),
-                modifier = Modifier.width(32.dp)
-            )
-        } else {
-            Spacer(modifier = Modifier.width(32.dp))
-        }
-        
-        // 符号
         Text(
             text = when (line.type) {
                 DiffLineType.ADDITION -> "+"
@@ -161,20 +141,16 @@ private fun DiffLine(line: DiffLine) {
                     else -> JewelTheme.globalColors.text.normal.copy(alpha = 0.5f)
                 }
             ),
-            modifier = Modifier.width(12.dp)
+            modifier = Modifier.padding(end = 4.dp)
         )
-        
-        // 内容
+
         Text(
             text = line.content,
             style = JewelTheme.defaultTextStyle.copy(
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
                 color = JewelTheme.globalColors.text.normal.copy(
-                    alpha = when (line.type) {
-                        DiffLineType.DELETION -> 0.7f
-                        else -> 1f
-                    }
+                    alpha = if (line.type == DiffLineType.DELETION) 0.7f else 1f
                 )
             ),
             modifier = Modifier.weight(1f)
@@ -182,94 +158,112 @@ private fun DiffLine(line: DiffLine) {
     }
 }
 
-/**
- * Diff 行类型
- */
 private enum class DiffLineType {
     ADDITION,
     DELETION,
     CONTEXT
 }
 
-/**
- * Diff 行数据
- */
 private data class DiffLine(
     val type: DiffLineType,
     val content: String,
     val lineNumber: Int? = null
 )
 
-/**
- * 从工具结果中解析 Diff
- */
-private fun parseDiffFromResult(toolCall: ToolCall): List<DiffLine> {
-    val result = toolCall.result ?: return emptyList()
-    
-    // 从参数中获取原始和新内容
-    val oldString = toolCall.parameters["old_string"]?.toString() ?: ""
-    val newString = toolCall.parameters["new_string"]?.toString() ?: ""
-    
-    // 如果是成功的编辑操作，生成diff
-    if (result is ToolResult.Success && (oldString.isNotEmpty() || newString.isNotEmpty())) {
-        return generateDiff(oldString, newString)
-    }
-    
-    // 如果是MultiEdit，解析多个编辑
-    if (toolCall.name.contains("MultiEdit", ignoreCase = true)) {
-        val edits = toolCall.parameters["edits"] as? List<*> ?: return emptyList()
-        val allDiffs = mutableListOf<DiffLine>()
-        
-        edits.forEach { edit ->
-            if (edit is Map<*, *>) {
-                val old = edit["old_string"]?.toString() ?: ""
-                val new = edit["new_string"]?.toString() ?: ""
-                if (old.isNotEmpty() || new.isNotEmpty()) {
-                    if (allDiffs.isNotEmpty()) {
-                        allDiffs.add(DiffLine(DiffLineType.CONTEXT, "..."))
-                    }
-                    allDiffs.addAll(generateDiff(old, new))
-                }
+private fun parseDiffFromDetail(toolCall: ToolCall): List<DiffLine> {
+    val detail = toolCall.viewModel?.toolDetail
+    val result = toolCall.result
+
+    val detailDiff = when (detail) {
+        is EditToolDetail -> {
+            val oldText = detail.oldString.orEmpty()
+            val newText = detail.newString.orEmpty()
+            if (oldText.isNotEmpty() || newText.isNotEmpty()) {
+                generateDiff(oldText, newText)
+            } else {
+                emptyList()
             }
         }
-        
-        return allDiffs
+        is MultiEditToolDetail -> buildList {
+            detail.edits.forEach { edit ->
+                appendDiffFromEdit(edit, this)
+            }
+        }
+        is WriteToolDetail -> {
+            val newText = detail.content.orEmpty()
+            if (newText.isNotEmpty()) {
+                generateDiff("", newText)
+            } else {
+                emptyList()
+            }
+        }
+        else -> emptyList()
     }
-    
+
+    if (detailDiff.isNotEmpty()) {
+        return detailDiff
+    }
+
+    if (result is ToolResult.FileEditResult) {
+        return generateDiff(result.oldContent, result.newContent)
+    }
+
     return emptyList()
 }
 
-/**
- * 生成简单的 Diff
- */
+private fun appendDiffFromEdit(edit: EditOperationVm, accumulator: MutableList<DiffLine>) {
+    val oldText = edit.oldString ?: ""
+    val newText = edit.newString ?: ""
+    if (oldText.isEmpty() && newText.isEmpty()) {
+        return
+    }
+
+    if (accumulator.isNotEmpty()) {
+        accumulator.add(DiffLine(DiffLineType.CONTEXT, "..."))
+    }
+    accumulator.addAll(generateDiff(oldText, newText))
+}
+
+private fun resolveFilePath(toolCall: ToolCall): String {
+    val detail = toolCall.viewModel?.toolDetail
+    val path = when (detail) {
+        is EditToolDetail -> detail.filePath
+        is MultiEditToolDetail -> detail.filePath
+        is WriteToolDetail -> detail.filePath
+        else -> null
+    }
+    return path.orEmpty()
+}
+
 private fun generateDiff(oldText: String, newText: String): List<DiffLine> {
     val result = mutableListOf<DiffLine>()
-    
-    // 简单的逐行对比
+
     val oldLines = oldText.lines()
     val newLines = newText.lines()
-    
-    // 显示删除的行
+
     oldLines.forEachIndexed { index, line ->
         if (line.isNotBlank()) {
-            result.add(DiffLine(
-                type = DiffLineType.DELETION,
-                content = line,
-                lineNumber = index + 1
-            ))
+            result.add(
+                DiffLine(
+                    type = DiffLineType.DELETION,
+                    content = line,
+                    lineNumber = index + 1
+                )
+            )
         }
     }
-    
-    // 显示添加的行
+
     newLines.forEachIndexed { index, line ->
         if (line.isNotBlank()) {
-            result.add(DiffLine(
-                type = DiffLineType.ADDITION,
-                content = line,
-                lineNumber = index + 1
-            ))
+            result.add(
+                DiffLine(
+                    type = DiffLineType.ADDITION,
+                    content = line,
+                    lineNumber = index + 1
+                )
+            )
         }
     }
-    
+
     return result
 }

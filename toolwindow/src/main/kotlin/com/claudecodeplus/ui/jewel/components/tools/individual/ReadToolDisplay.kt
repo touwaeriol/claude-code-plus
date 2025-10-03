@@ -6,10 +6,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolResult
-import com.claudecodeplus.sdk.types.ReadToolUse
+import com.claudecodeplus.ui.viewmodels.tool.ReadToolDetail
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.FileContentDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
+import org.jetbrains.jewel.ui.component.Text
 
 /**
  * Read工具专用展示组件
@@ -20,25 +21,31 @@ import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
 @Composable
 fun ReadToolDisplay(
     toolCall: ToolCall,
-    readTool: ReadToolUse,
     showDetails: Boolean = true,
     onFileClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    // 从 ViewModel 获取工具详情
+    val toolDetail = toolCall.viewModel?.toolDetail as? ReadToolDetail
+    if (toolDetail == null) {
+        Text("错误：无法获取 Read 工具详情")
+        return
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         // 只在非详情模式下显示工具头部信息（避免展开时重复）
         if (!showDetails) {
-            val fileName = readTool.filePath.substringAfterLast('/')
+            val fileName = toolDetail.filePath.substringAfterLast('/')
             val rangeInfo = buildString {
-                if (readTool.offset != null || readTool.limit != null) {
+                if (toolDetail.offset != null || toolDetail.limit != null) {
                     append(" (")
-                    if (readTool.offset != null) append("offset: ${readTool.offset}")
-                    if (readTool.limit != null) {
-                        if (readTool.offset != null) append(", ")
-                        append("limit: ${readTool.limit}")
+                    if (toolDetail.offset != null) append("offset: ${toolDetail.offset}")
+                    if (toolDetail.limit != null) {
+                        if (toolDetail.offset != null) append(", ")
+                        append("limit: ${toolDetail.limit}")
                     }
                     append(")")
                 }
@@ -59,7 +66,7 @@ fun ReadToolDisplay(
                 is ToolResult.Success -> {
                     FileContentDisplay(
                         content = result.output,
-                        filePath = readTool.filePath,
+                        filePath = toolDetail.filePath,
                         maxLines = 15  // 限制显示行数
                     )
                 }

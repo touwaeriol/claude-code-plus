@@ -3,6 +3,7 @@ package com.claudecodeplus.core.services
 import com.claudecodeplus.core.logging.logD
 import com.claudecodeplus.core.logging.logE
 import com.claudecodeplus.ui.models.EnhancedMessage
+import com.claudecodeplus.ui.models.MessageTimelineItem
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolCallStatus
 import com.claudecodeplus.ui.models.ToolResult
@@ -13,12 +14,12 @@ import kotlinx.serialization.json.*
  * 专门处理Claude CLI输出中的工具执行结果
  */
 class ToolResultProcessor {
-    
-    private val json = Json { 
+
+    private val json = Json {
         ignoreUnknownKeys = true
-        isLenient = true 
+        isLenient = true
     }
-    
+
     /**
      * 处理工具结果消息，更新对应的工具调用状态
      * @param jsonLine CLI输出的工具结果消息
@@ -28,43 +29,43 @@ class ToolResultProcessor {
     fun processToolResult(jsonLine: String, messages: List<EnhancedMessage>): List<EnhancedMessage> {
         try {
     //             logD("处理工具结果消息")
-            
+
             if (!jsonLine.trim().startsWith("{")) return messages
-            
+
             val jsonObject = json.parseToJsonElement(jsonLine).jsonObject
             if (jsonObject["type"]?.jsonPrimitive?.content != "user") return messages
-            
+
             val messageObj = jsonObject["message"]?.jsonObject ?: return messages
             val contentElement = messageObj["content"] ?: return messages
-            
+
             // 处理content数组中的工具结果
             if (contentElement is JsonArray) {
                 return processToolResultsFromArray(contentElement, messages)
             }
-            
+
             return messages
         } catch (e: Exception) {
             logE("处理工具结果失败", e)
             return messages
         }
     }
-    
+
     /**
      * 从content数组中处理工具结果
      */
     private fun processToolResultsFromArray(
-        contentArray: JsonArray, 
+        contentArray: JsonArray,
         messages: List<EnhancedMessage>
     ): List<EnhancedMessage> {
         var updatedMessages = messages
-        
+
         contentArray.forEach { arrayElement ->
             val contentObj = arrayElement.jsonObject
             if (contentObj["type"]?.jsonPrimitive?.content == "tool_result") {
                 val toolUseId = contentObj["tool_use_id"]?.jsonPrimitive?.content
                 val resultContent = contentObj["content"]?.jsonPrimitive?.content ?: ""
                 val isError = contentObj["is_error"]?.jsonPrimitive?.content?.toBoolean() ?: false
-                
+
                 if (toolUseId != null) {
     //                     logD("处理工具结果: toolId=$toolUseId, isError=$isError")
                     updatedMessages = updateToolCallResult(
@@ -76,10 +77,10 @@ class ToolResultProcessor {
                 }
             }
         }
-        
+
         return updatedMessages
     }
-    
+
     /**
      * 更新指定工具调用的结果
      */
@@ -93,35 +94,41 @@ class ToolResultProcessor {
         val messageIndex = messages.indexOfLast { message ->
             message.toolCalls.any { it.id == toolUseId }
         }
-        
+
         if (messageIndex >= 0) {
             val message = messages[messageIndex]
-            val updatedToolCalls = message.toolCalls.map { toolCall ->
-                if (toolCall.id == toolUseId) {
+            // 更新 orderedElements 中的工具调用
+            val updatedElements = message.orderedElements.map { element ->
+                if (element is MessageTimelineItem.ToolCallItem &&
+                    element.toolCall.id == toolUseId) {
                     val result = if (isError) {
                         ToolResult.Failure(resultContent)
                     } else {
                         ToolResult.Success(resultContent)
                     }
-                    toolCall.copy(
+                    val updatedToolCall = element.toolCall.copy(
                         status = if (isError) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS,
                         result = result,
                         endTime = System.currentTimeMillis()
                     )
+                    MessageTimelineItem.ToolCallItem(
+                        toolCall = updatedToolCall,
+                        timestamp = element.timestamp
+                    )
                 } else {
-                    toolCall
+                    element
                 }
             }
-            
+
             val updatedMessage = message.copy(
-                toolCalls = updatedToolCalls,
+                orderedElements = updatedElements,
                 timestamp = System.currentTimeMillis()
             )
-            
+
             // 更新消息列表
             val updatedMessages = messages.toMutableList()
             updatedMessages[messageIndex] = updatedMessage
-            
+
     //             logD("工具调用结果已更新: toolId=$toolUseId, isError=$isError")
             return updatedMessages
         } else {
@@ -129,7 +136,7 @@ class ToolResultProcessor {
             return messages
         }
     }
-    
+
     /**
      * 检查是否有工具正在执行
      */
@@ -138,7 +145,7 @@ class ToolResultProcessor {
             message.toolCalls.any { it.status == ToolCallStatus.RUNNING }
         }
     }
-    
+
     /**
      * 获取正在执行的工具调用列表
      */
@@ -147,28 +154,34 @@ class ToolResultProcessor {
             message.toolCalls.filter { it.status == ToolCallStatus.RUNNING }
         }
     }
-    
+
     /**
      * 标记所有运行中的工具为失败状态（用于中断操作）
      */
     fun markRunningToolsAsFailed(
-        messages: List<EnhancedMessage>, 
+        messages: List<EnhancedMessage>,
         reason: String = "操作被中断"
     ): List<EnhancedMessage> {
         return messages.map { message ->
             if (message.toolCalls.any { it.status == ToolCallStatus.RUNNING }) {
-                val updatedToolCalls = message.toolCalls.map { toolCall ->
-                    if (toolCall.status == ToolCallStatus.RUNNING) {
-                        toolCall.copy(
+                // 更新 orderedElements 中的工具调用
+                val updatedElements = message.orderedElements.map { element ->
+                    if (element is MessageTimelineItem.ToolCallItem &&
+                        element.toolCall.status == ToolCallStatus.RUNNING) {
+                        val updatedToolCall = element.toolCall.copy(
                             status = ToolCallStatus.FAILED,
                             result = ToolResult.Failure(reason),
                             endTime = System.currentTimeMillis()
                         )
+                        MessageTimelineItem.ToolCallItem(
+                            toolCall = updatedToolCall,
+                            timestamp = element.timestamp
+                        )
                     } else {
-                        toolCall
+                        element
                     }
                 }
-                message.copy(toolCalls = updatedToolCalls)
+                message.copy(orderedElements = updatedElements)
             } else {
                 message
             }

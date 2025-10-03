@@ -1,11 +1,13 @@
 package com.claudecodeplus.plugin.handlers
 
 import com.claudecodeplus.plugin.services.IdeaPlatformService
-import com.claudecodeplus.sdk.types.EditToolUse
-import com.claudecodeplus.sdk.types.MultiEditToolUse
+import com.claudecodeplus.ui.viewmodels.tool.EditToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.MultiEditToolDetail
 import com.claudecodeplus.ui.models.ToolCall
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
+import java.nio.file.Files
+import java.nio.file.Paths
 
 /**
  * Edit 工具点击处理器
@@ -20,11 +22,8 @@ class EditToolHandler : ToolClickHandler {
     }
 
     override fun canHandle(toolCall: ToolCall): Boolean {
-        // 只有 SUCCESS 状态才能显示 diff
-        // RUNNING/FAILED 状态不处理
-        val specificTool = toolCall.specificTool
-        val isEditTool = specificTool is EditToolUse || specificTool is MultiEditToolUse
-        return isEditTool && toolCall.status == com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS
+        val toolDetail = toolCall.viewModel?.toolDetail
+        return toolDetail is EditToolDetail || toolDetail is MultiEditToolDetail
     }
 
     override fun handleToolClick(
@@ -43,11 +42,11 @@ class EditToolHandler : ToolClickHandler {
         }
 
         return try {
-            when (val specificTool = toolCall.specificTool) {
-                is EditToolUse -> handleSingleEdit(specificTool, project, config)
-                is MultiEditToolUse -> handleMultiEdit(specificTool, project, config)
+            when (val toolDetail = toolCall.viewModel?.toolDetail) {
+                is EditToolDetail -> handleSingleEdit(toolDetail, project, config)
+                is MultiEditToolDetail -> handleMultiEdit(toolDetail, project, config)
                 else -> {
-                    logger.warn("EditToolHandler: specificTool 类型不支持")
+                    logger.warn("EditToolHandler: toolDetail 类型不支持")
                     false
                 }
             }
@@ -61,18 +60,37 @@ class EditToolHandler : ToolClickHandler {
     }
 
     private fun handleSingleEdit(
-        editTool: EditToolUse,
+        editTool: EditToolDetail,
         project: Project,
         config: ToolClickConfig
     ): Boolean {
         val platformService = IdeaPlatformService(project)
+        platformService.refreshFile(editTool.filePath)
 
-        // 显示差异
-        val success = platformService.showDiff(
-            filePath = editTool.filePath,
-            oldContent = editTool.oldString,
-            newContent = editTool.newString
+        val afterContent = loadFileContent(editTool.filePath)
+        val operations = listOf(
+            EditOperation(
+                oldString = editTool.oldString,
+                newString = editTool.newString,
+                replaceAll = editTool.replaceAll
+            )
         )
+        val beforeContent = afterContent?.let { rebuildBeforeContent(it, operations) }
+
+        val diffSuccess = when {
+            beforeContent != null && afterContent != null -> platformService.showDiff(
+                filePath = editTool.filePath,
+                oldContent = beforeContent,
+                newContent = afterContent
+            )
+            else -> platformService.showDiff(
+                filePath = editTool.filePath,
+                oldContent = editTool.oldString,
+                newContent = editTool.newString
+            )
+        }
+
+        val success = diffSuccess
 
         if (success && config.showNotifications) {
             val fileName = editTool.filePath.substringAfterLast('/').substringAfterLast('\\')
@@ -83,27 +101,46 @@ class EditToolHandler : ToolClickHandler {
     }
 
     private fun handleMultiEdit(
-        multiEditTool: MultiEditToolUse,
+        multiEditTool: MultiEditToolDetail,
         project: Project,
         config: ToolClickConfig
     ): Boolean {
         val platformService = IdeaPlatformService(project)
 
-        // MultiEdit: 合并所有变更显示
         if (multiEditTool.edits.isEmpty()) {
             logger.warn("EditToolHandler: MultiEdit 没有编辑内容")
             return false
         }
 
-        // 简单处理：显示第一个编辑的 diff
-        // 未来可以扩展为显示所有编辑的合并 diff
+        platformService.refreshFile(multiEditTool.filePath)
+
+        val afterContent = loadFileContent(multiEditTool.filePath)
+        val operations = multiEditTool.edits.map {
+            EditOperation(
+                oldString = it.oldString,
+                newString = it.newString,
+                replaceAll = it.replaceAll
+            )
+        }
+        val beforeContent = afterContent?.let { rebuildBeforeContent(it, operations) }
+
         val firstEdit = multiEditTool.edits.first()
-        val success = platformService.showDiff(
-            filePath = multiEditTool.filePath,
-            oldContent = firstEdit.oldString,
-            newContent = firstEdit.newString,
-            title = "文件变更: ${multiEditTool.filePath} (${multiEditTool.edits.size} 处修改)"
-        )
+        val diffSuccess = when {
+            beforeContent != null && afterContent != null -> platformService.showDiff(
+                filePath = multiEditTool.filePath,
+                oldContent = beforeContent,
+                newContent = afterContent,
+                title = "文件变更: ${multiEditTool.filePath} (${multiEditTool.edits.size} 处修改)"
+            )
+            else -> platformService.showDiff(
+                filePath = multiEditTool.filePath,
+                oldContent = firstEdit.oldString,
+                newContent = firstEdit.newString,
+                title = "文件变更: ${multiEditTool.filePath} (${multiEditTool.edits.size} 处修改)"
+            )
+        }
+
+        val success = diffSuccess
 
         if (success && config.showNotifications) {
             val fileName = multiEditTool.filePath.substringAfterLast('/').substringAfterLast('\\')
@@ -112,4 +149,36 @@ class EditToolHandler : ToolClickHandler {
 
         return success
     }
+
+    private fun loadFileContent(filePath: String): String? = runCatching {
+        Files.readString(Paths.get(filePath))
+    }.getOrNull()
+
+    private fun rebuildBeforeContent(
+        afterContent: String,
+        operations: List<EditOperation>
+    ): String? {
+        var content = afterContent
+        for (operation in operations.asReversed()) {
+            if (operation.replaceAll) {
+                if (!content.contains(operation.newString)) return null
+                content = content.replace(operation.newString, operation.oldString)
+            } else {
+                val index = content.indexOf(operation.newString)
+                if (index < 0) return null
+                content = buildString {
+                    append(content.substring(0, index))
+                    append(operation.oldString)
+                    append(content.substring(index + operation.newString.length))
+                }
+            }
+        }
+        return content
+    }
+
+    private data class EditOperation(
+        val oldString: String,
+        val newString: String,
+        val replaceAll: Boolean
+    )
 }

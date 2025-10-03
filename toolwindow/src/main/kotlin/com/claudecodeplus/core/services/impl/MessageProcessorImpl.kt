@@ -7,6 +7,7 @@ import com.claudecodeplus.core.models.ParseResult
 import com.claudecodeplus.core.models.parseResultOf
 import com.claudecodeplus.core.services.MessageProcessor
 import com.claudecodeplus.session.models.ClaudeSessionMessage
+import com.claudecodeplus.session.models.toEnhancedMessage
 import com.claudecodeplus.ui.models.*
 import kotlinx.serialization.json.*
 import java.util.*
@@ -79,27 +80,16 @@ class MessageProcessorImpl : MessageProcessor {
     
     override fun parseHistoryMessage(sessionMessage: ClaudeSessionMessage): ParseResult<EnhancedMessage> {
         return parseResultOf {
-    //             logD("解析历史消息: type=${sessionMessage.type}")
-            
-            // 将历史消息转换为实时格式，然后复用实时解析逻辑
-            val realtimeFormat = convertHistoryToRealtime(sessionMessage)
-                ?: return ParseResult.Error("历史消息格式转换失败")
-            
-            // 复用实时消息解析逻辑
-            when (val parseResult = parseRealtimeMessage(realtimeFormat.toString())) {
-                is ParseResult.Success -> {
-                    // 为历史消息设置特殊ID前缀，确保不与实时消息冲突
-                    val historyMessage = parseResult.data.copy(
-                        id = "history_${sessionMessage.uuid ?: System.nanoTime()}",
-                        isStreaming = false // 历史消息都不是流式的
-                    )
-                    historyMessage
-                }
-                is ParseResult.Error -> return ParseResult.Error("历史消息解析失败: ${parseResult.message}")
-                is ParseResult.Ignored -> return ParseResult.Ignored("历史消息被忽略: ${parseResult.reason}")
-            }
+            val enhanced = sessionMessage.toEnhancedMessage()
+                ?: return ParseResult.Ignored("鍘嗗彶娑堟伅蹇界暐: ${sessionMessage.type}")
+
+            enhanced.copy(
+                id = "history_${sessionMessage.uuid ?: System.nanoTime()}",
+                isStreaming = false
+            )
         }
     }
+
     
     override fun validateMessage(message: EnhancedMessage): Boolean {
         return when {
@@ -195,10 +185,10 @@ class MessageProcessorImpl : MessageProcessor {
         
     //         logD("助手消息解析完成: 文本长度=${textContent.length}, 工具调用=${toolCalls.size}")
         
-        return EnhancedMessage(
+        return EnhancedMessage.create(
             id = UUID.randomUUID().toString(),
             role = MessageRole.ASSISTANT,
-            content = textContent,
+            text = textContent,
             timestamp = System.currentTimeMillis(),
             toolCalls = toolCalls,
             tokenUsage = tokenUsage,
@@ -223,10 +213,10 @@ class MessageProcessorImpl : MessageProcessor {
         
     //         logD("用户消息解析完成: 文本长度=${textContent.length}")
         
-        return EnhancedMessage(
+        return EnhancedMessage.create(
             id = UUID.randomUUID().toString(),
             role = MessageRole.USER,
-            content = textContent,
+            text = textContent,
             timestamp = System.currentTimeMillis(),
             toolCalls = emptyList(),
             tokenUsage = null,
@@ -253,7 +243,7 @@ class MessageProcessorImpl : MessageProcessor {
                     convertJsonElementToAny(value)
                 } ?: emptyMap()
                 
-                ToolCall(
+                ToolCall.createGeneric(
                     id = toolId,
                     name = toolName,
                     parameters = parameters,
@@ -302,105 +292,10 @@ class MessageProcessorImpl : MessageProcessor {
     /**
      * 将历史消息格式转换为实时消息格式
      */
-    private fun convertHistoryToRealtime(sessionMessage: ClaudeSessionMessage): JsonObject? {
-        return try {
-            buildJsonObject {
-                put("type", JsonPrimitive(sessionMessage.type ?: "assistant"))
-                
-                sessionMessage.message?.let { message ->
-                    put("message", buildJsonObject {
-                        put("id", JsonPrimitive(message.id ?: ""))
-                        put("type", JsonPrimitive("message"))
-                        put("role", JsonPrimitive(message.role ?: "assistant"))
-                        put("model", JsonPrimitive(message.model ?: ""))
-                        put("stop_reason", JsonNull)
-                        put("stop_sequence", JsonNull)
-                        
-                        // 处理content数组
-                        message.content?.let { contentList ->
-                            put("content", buildJsonArray {
-                                when (contentList) {
-                                    is List<*> -> contentList.forEach { contentItem ->
-                                        try {
-                                            val contentJson = convertContentItemToJson(contentItem)
-                                            add(contentJson)
-                                        } catch (e: Exception) {
-                                            logE("转换content item失败: $contentItem", e)
-                                            // 失败时创建基本文本块
-                                            add(buildJsonObject {
-                                                put("type", JsonPrimitive("text"))
-                                                put("text", JsonPrimitive(contentItem.toString()))
-                                            })
-                                        }
-                                    }
-                                    else -> {
-                                        add(buildJsonObject {
-                                            put("type", JsonPrimitive("text"))
-                                            put("text", JsonPrimitive(contentList.toString()))
-                                        })
-                                    }
-                                }
-                            })
-                        }
-                        
-                        // 处理usage信息
-                        message.usage?.let { usage ->
-                            put("usage", buildJsonObject {
-                                put("input_tokens", JsonPrimitive((usage["input_tokens"] as? Number)?.toInt() ?: 0))
-                                put("output_tokens", JsonPrimitive((usage["output_tokens"] as? Number)?.toInt() ?: 0))
-                                put("cache_creation_input_tokens", JsonPrimitive((usage["cache_creation_input_tokens"] as? Number)?.toInt() ?: 0))
-                                put("cache_read_input_tokens", JsonPrimitive((usage["cache_read_input_tokens"] as? Number)?.toInt() ?: 0))
-                                put("service_tier", JsonPrimitive((usage["service_tier"] as? String) ?: "standard"))
-                            })
-                        }
-                    })
-                }
-            }
-        } catch (e: Exception) {
-            logE("历史消息格式转换失败", e)
-            null
-        }
-    }
+
     
     /**
      * 转换content item为JSON
      */
-    private fun convertContentItemToJson(contentItem: Any?): JsonElement {
-        return when (contentItem) {
-            is String -> {
-                // 如果是字符串，尝试解析为JSON
-                try {
-                    json.parseToJsonElement(contentItem)
-                } catch (e: Exception) {
-                    // 解析失败，作为文本内容处理
-                    buildJsonObject {
-                        put("type", JsonPrimitive("text"))
-                        put("text", JsonPrimitive(contentItem))
-                    }
-                }
-            }
-            is Map<*, *> -> {
-                // 如果是Map，手动构建JsonObject
-                buildJsonObject {
-                    contentItem.forEach { (key, value) ->
-                        val keyStr = key.toString()
-                        when (value) {
-                            is String -> put(keyStr, JsonPrimitive(value))
-                            is Number -> put(keyStr, JsonPrimitive(value))
-                            is Boolean -> put(keyStr, JsonPrimitive(value))
-                            null -> put(keyStr, JsonNull)
-                            else -> put(keyStr, JsonPrimitive(value.toString()))
-                        }
-                    }
-                }
-            }
-            else -> {
-                // 其他类型，作为文本处理
-                buildJsonObject {
-                    put("type", JsonPrimitive("text"))
-                    put("text", JsonPrimitive(contentItem.toString()))
-                }
-            }
-        }
-    }
+
 }

@@ -6,44 +6,46 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.claudecodeplus.ui.models.ToolCall
-import com.claudecodeplus.sdk.types.TodoWriteToolUse
+import com.claudecodeplus.ui.viewmodels.tool.TodoWriteToolDetail
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
 import com.claudecodeplus.ui.jewel.components.tools.EnhancedTodoDisplay
+import org.jetbrains.jewel.ui.component.Text
 
 /**
- * TodoWrite¹¤¾ß×¨ÓÃÕ¹Ê¾×é¼ş
+ * TodoWriteå·¥å…·ä¸“ç”¨å±•ç¤ºç»„ä»¶ï¼ˆæ—§ç‰ˆæœ¬ï¼Œä¿ç•™ä½œä¸ºå¤‡ç”¨ï¼‰
  *
- * ?? Ö°Ôğ£º×¨ÃÅ´¦ÀíTodoWrite¹¤¾ßµÄÕ¹Ê¾
- * ?? ½â¾öµÄºËĞÄÎÊÌâ£ºÖ±½ÓÏÔÊ¾input.todos¶ø²»ÊÇresult.content
+ * ğŸ¯ èŒè´£ï¼šä¸“é—¨å¤„ç†TodoWriteå·¥å…·çš„å±•ç¤º
+ * ğŸ”§ ç‰¹ç‚¹ï¼šç›´æ¥æ˜¾ç¤ºinput.todosï¼Œä¸ç”¨result.content
  */
 @Composable
 fun TodoWriteDisplay(
     toolCall: ToolCall,
-    todoWriteTool: TodoWriteToolUse,
     showDetails: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val toolDetail = toolCall.viewModel?.toolDetail as? TodoWriteToolDetail
+    if (toolDetail == null) {
+        Text("é”™è¯¯ï¼šæ— æ³•è·å– TodoWrite å·¥å…·è¯¦æƒ…")
+        return
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // Ö»ÔÚ·ÇÏêÇéÄ£Ê½ÏÂÏÔÊ¾¹¤¾ßÍ·²¿ĞÅÏ¢£¨±ÜÃâÕ¹¿ªÊ±ÖØ¸´£©
         if (!showDetails) {
             ToolHeaderDisplay(
                 icon = "TODO",
                 toolName = "TodoWrite",
-                subtitle = "${todoWriteTool.todos.size}¸öÈÎÎñ",
+                subtitle = "${toolDetail.todos.size} ä¸ªä»»åŠ¡",
                 status = toolCall.status
             )
         }
 
-        // ?? ºËĞÄ¸Ä½ø£ºÖ±½ÓÏÔÊ¾inputÖĞµÄtodos£¬ÍêÈ«ºöÂÔresult
         if (showDetails) {
-            logD("[TodoWriteDisplay] ?? ÏÔÊ¾input.todos£¬ÈÎÎñÊıÁ¿£º${todoWriteTool.todos.size}")
-
-            // Ê¹ÓÃÏÖÓĞµÄEnhancedTodoDisplay£¬´«ÈëÇ¿ÀàĞÍµÄtodos
+            logD("[TodoWriteDisplay] ğŸ”§ æ˜¾ç¤ºinput.todoså†…å®¹ï¼Œå…±è®¡ï¼š${toolDetail.todos.size}")
             EnhancedTodoDisplay(
-                todos = todoWriteTool.todos,
+                todos = toolDetail.todos,
                 modifier = Modifier.fillMaxWidth()
             )
         }

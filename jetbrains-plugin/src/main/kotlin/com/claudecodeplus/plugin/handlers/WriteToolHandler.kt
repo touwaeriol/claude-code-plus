@@ -1,7 +1,7 @@
 package com.claudecodeplus.plugin.handlers
 
 import com.claudecodeplus.plugin.services.IdeaPlatformService
-import com.claudecodeplus.sdk.types.WriteToolUse
+import com.claudecodeplus.ui.viewmodels.tool.WriteToolDetail
 import com.claudecodeplus.ui.models.ToolCall
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
@@ -19,10 +19,7 @@ class WriteToolHandler : ToolClickHandler {
     }
 
     override fun canHandle(toolCall: ToolCall): Boolean {
-        // 只有 SUCCESS 状态才能打开文件
-        // RUNNING/FAILED 状态不处理
-        return toolCall.specificTool is WriteToolUse &&
-            toolCall.status == com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS
+        return toolCall.viewModel?.toolDetail is WriteToolDetail
     }
 
     override fun handleToolClick(
@@ -41,9 +38,9 @@ class WriteToolHandler : ToolClickHandler {
         }
 
         return try {
-            val writeTool = toolCall.specificTool as? WriteToolUse
+            val writeTool = toolCall.viewModel?.toolDetail as? WriteToolDetail
             if (writeTool == null) {
-                logger.warn("WriteToolHandler: specificTool 不是 WriteToolUse")
+                logger.warn("WriteToolHandler: toolDetail 不是 WriteToolDetail")
                 return false
             }
 

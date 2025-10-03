@@ -1,4 +1,4 @@
-﻿package com.claudecodeplus.ui.jewel.components.tools.individual
+package com.claudecodeplus.ui.jewel.components.tools.individual
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -6,58 +6,58 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolResult
-import com.claudecodeplus.sdk.types.GrepToolUse
+import com.claudecodeplus.ui.viewmodels.tool.GrepToolDetail
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.SearchResultDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
+import org.jetbrains.jewel.ui.component.Text
 
 /**
- * Grep宸ュ叿涓撶敤灞曠ず缁勪欢
+ * Grep工具专用展示组件
  *
- * 馃幆 鑱岃矗锛氫笓闂ㄥ鐞咷rep宸ュ叿鐨勫睍绀? * 馃敡 鐗圭偣锛氭樉绀烘枃鏈悳绱€佸尮閰嶇粨鏋溿€佹悳绱㈤€夐」
+ * 🎯 职责：专门处理Grep工具的展示
+ * 🔧 特点：显示文本搜索、匹配结果、搜索选项
  */
 @Composable
 fun GrepToolDisplay(
     toolCall: ToolCall,
-    grepTool: GrepToolUse,
     showDetails: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val toolDetail = toolCall.viewModel?.toolDetail as? GrepToolDetail
+    if (toolDetail == null) {
+        Text("错误：无法获取 Grep 工具详情")
+        return
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 鍙湪闈炶鎯呮ā寮忎笅鏄剧ず宸ュ叿澶撮儴淇℃伅锛堥伩鍏嶅睍寮€鏃堕噸澶嶏級
         if (!showDetails) {
             val subtitle = buildString {
-                append("search: ${grepTool.pattern}")
+                append("search: ${toolDetail.pattern}")
                 when {
-                    grepTool.glob != null -> append(" in ${grepTool.glob}")
-                    grepTool.type != null -> append(" in *.${grepTool.type}")
-                    grepTool.path != null -> append(" in ${grepTool.path}")
+                    toolDetail.glob != null -> append(" in ${toolDetail.glob}")
+                    toolDetail.path != null -> append(" in ${toolDetail.path}")
                 }
-                if (grepTool.caseInsensitive) append(" [蹇界暐澶у皬鍐橾")
-                if (grepTool.showLineNumbers) append(" [鏄剧ず琛屽彿]")
             }
 
             ToolHeaderDisplay(
-                icon = "馃攳",
+                icon = "🔍",
                 toolName = "Grep",
                 subtitle = subtitle,
                 status = toolCall.status
             )
         }
 
-        // 鏄剧ず鎼滅储缁撴灉
         if (showDetails && toolCall.result != null) {
             when (val result = toolCall.result) {
                 is ToolResult.Success -> {
-                    // 解析搜索结果
                     val searchResults = result.output.split('\n').filter { it.trim().isNotEmpty() }
-
                     SearchResultDisplay(
                         results = searchResults,
-                        searchTerm = grepTool.pattern,
+                        searchTerm = toolDetail.pattern,
                         totalCount = searchResults.size
                     )
                 }

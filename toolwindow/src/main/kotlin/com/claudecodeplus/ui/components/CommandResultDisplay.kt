@@ -11,9 +11,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.claudecodeplus.ui.jewel.components.tools.output.AnsiOutputView
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolResult
-import com.claudecodeplus.ui.jewel.components.tools.output.AnsiOutputView
+import com.claudecodeplus.ui.viewmodels.tool.BashToolDetail
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 
@@ -26,7 +27,7 @@ fun CommandResultDisplay(
     modifier: Modifier = Modifier
 ) {
     val result = toolCall.result
-    val command = toolCall.parameters["command"]?.toString() ?: ""
+    val command = (toolCall.viewModel?.toolDetail as? BashToolDetail)?.command ?: ""
     
     Column(
         modifier = modifier.fillMaxWidth(),

@@ -9,8 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.claudecodeplus.sdk.types.WebFetchToolUse
-import com.claudecodeplus.sdk.types.WebSearchToolUse
+import com.claudecodeplus.ui.viewmodels.tool.WebFetchToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.WebSearchToolDetail
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
 import com.claudecodeplus.ui.models.ToolCall
@@ -18,21 +18,26 @@ import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 
 /**
- * WebFetch ¹¤¾ßÕ¹Ê¾×é¼ş
+ * WebFetch å·¥å…·å±•ç¤ºç»„ä»¶
  */
 @Composable
 fun WebFetchToolDisplay(
     toolCall: ToolCall,
-    webFetchTool: WebFetchToolUse,
     showDetails: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val toolDetail = toolCall.viewModel?.toolDetail as? WebFetchToolDetail
+    if (toolDetail == null) {
+        Text("é”™è¯¯ï¼šæ— æ³•è·å– WebFetch å·¥å…·è¯¦æƒ…")
+        return
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         if (!showDetails) {
-            val domain = webFetchTool.url
+            val domain = toolDetail.url
                 .removePrefix("https://")
                 .removePrefix("http://")
                 .substringBefore('/')
@@ -46,21 +51,21 @@ fun WebFetchToolDisplay(
 
         if (showDetails) {
             Text(
-                text = "URL£º${webFetchTool.url}",
+                text = "URL: ${toolDetail.url}",
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
                 )
             )
 
-            if (!webFetchTool.prompt.isNullOrBlank()) {
+            if (!toolDetail.prompt.isNullOrBlank()) {
                 Text(
-                    text = "Prompt£º",
+                    text = "Prompt:",
                     style = JewelTheme.defaultTextStyle.copy(fontSize = 11.sp)
                 )
                 SelectionContainer {
                     Text(
-                        text = webFetchTool.prompt,
+                        text = toolDetail.prompt,
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 11.sp,
                             color = JewelTheme.globalColors.text.normal.copy(alpha = 0.8f)
@@ -77,15 +82,20 @@ fun WebFetchToolDisplay(
 }
 
 /**
- * WebSearch ¹¤¾ßÕ¹Ê¾×é¼ş
+ * WebSearch å·¥å…·å±•ç¤ºç»„ä»¶
  */
 @Composable
 fun WebSearchToolDisplay(
     toolCall: ToolCall,
-    webSearchTool: WebSearchToolUse,
     showDetails: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val toolDetail = toolCall.viewModel?.toolDetail as? WebSearchToolDetail
+    if (toolDetail == null) {
+        Text("é”™è¯¯ï¼šæ— æ³•è·å– WebSearch å·¥å…·è¯¦æƒ…")
+        return
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -94,30 +104,30 @@ fun WebSearchToolDisplay(
             ToolHeaderDisplay(
                 icon = "SEARCH",
                 toolName = "WebSearch",
-                subtitle = webSearchTool.query.take(30),
+                subtitle = toolDetail.query.take(30),
                 status = toolCall.status
             )
         }
 
         if (showDetails) {
             Text(
-                text = "²éÑ¯£º${webSearchTool.query}",
+                text = "æŸ¥è¯¢: ${toolDetail.query}",
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
                 )
             )
 
-            webSearchTool.allowedDomains?.takeIf { it.isNotEmpty() }?.let { domains ->
+            toolDetail.allowedDomains?.takeIf { it.isNotEmpty() }?.let { domains ->
                 Text(
-                    text = "ÔÊĞíÓòÃû£º${domains.joinToString()}",
+                    text = "å…è®¸åŸŸå: ${domains.joinToString()}",
                     style = JewelTheme.defaultTextStyle.copy(fontSize = 11.sp)
                 )
             }
 
-            webSearchTool.blockedDomains?.takeIf { it.isNotEmpty() }?.let { domains ->
+            toolDetail.blockedDomains?.takeIf { it.isNotEmpty() }?.let { domains ->
                 Text(
-                    text = "½ûÖ¹ÓòÃû£º${domains.joinToString()}",
+                    text = "ç¦æ­¢åŸŸå: ${domains.joinToString()}",
                     style = JewelTheme.defaultTextStyle.copy(fontSize = 11.sp)
                 )
             }

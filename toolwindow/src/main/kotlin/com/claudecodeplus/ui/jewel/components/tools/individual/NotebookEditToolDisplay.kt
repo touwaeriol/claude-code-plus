@@ -1,78 +1,42 @@
 package com.claudecodeplus.ui.jewel.components.tools.individual
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.claudecodeplus.sdk.types.NotebookEditToolUse
-import com.claudecodeplus.ui.jewel.components.tools.shared.FileContentDisplay
+import com.claudecodeplus.ui.models.ToolCall
+import com.claudecodeplus.ui.viewmodels.tool.NotebookEditToolDetail
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
-import com.claudecodeplus.ui.models.ToolCall
-import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 
-/**
- * NotebookEdit ¹¤¾ßÕ¹Ê¾×é¼þ
- */
 @Composable
 fun NotebookEditToolDisplay(
     toolCall: ToolCall,
-    notebookEditTool: NotebookEditToolUse,
     showDetails: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val toolDetail = toolCall.viewModel?.toolDetail as? NotebookEditToolDetail
+    if (toolDetail == null) {
+        Text("é”™è¯¯ï¼šæ— æ³•èŽ·å– NotebookEdit å·¥å…·è¯¦æƒ…")
+        return
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         if (!showDetails) {
-            val fileName = notebookEditTool.notebookPath.substringAfterLast('/')
-                .substringAfterLast('\\')
             ToolHeaderDisplay(
-                icon = "NB",
+                icon = "NOTEBOOK",
                 toolName = "NotebookEdit",
-                subtitle = fileName,
+                subtitle = toolDetail.notebookPath.substringAfterLast('/'),
                 status = toolCall.status
             )
         }
 
-        if (showDetails) {
-            Text(
-                text = "Notebook£º${notebookEditTool.notebookPath}",
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            )
-
-            notebookEditTool.cellId?.let { cellId ->
-                Text(
-                    text = "µ¥Ôª¸ñ£º$cellId (${notebookEditTool.cellType ?: "unknown"})",
-                    style = JewelTheme.defaultTextStyle.copy(fontSize = 11.sp)
-                )
-            }
-
-            notebookEditTool.editMode?.let { mode ->
-                Text(
-                    text = "Ä£Ê½£º$mode",
-                    style = JewelTheme.defaultTextStyle.copy(fontSize = 11.sp)
-                )
-            }
-
-            FileContentDisplay(
-                content = notebookEditTool.newSource,
-                filePath = null,
-                maxLines = 30
-            )
-
-            toolCall.result?.let { result ->
-                ToolResultDisplay(result)
-            }
+        if (showDetails && toolCall.result != null) {
+            ToolResultDisplay(toolCall.result!!)
         }
     }
 }

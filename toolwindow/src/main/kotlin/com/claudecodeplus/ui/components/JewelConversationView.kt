@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.jewel.components.*
 import com.claudecodeplus.ui.jewel.components.markdown.MarkdownRenderer
+import com.claudecodeplus.ui.jewel.components.tools.CompactToolCallDisplay
 import com.claudecodeplus.ui.models.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.DefaultButton
@@ -47,6 +48,7 @@ fun JewelConversationView(
     onClearChat: () -> Unit = {},
     fileIndexService: com.claudecodeplus.ui.services.FileIndexService? = null,
     projectService: com.claudecodeplus.core.services.ProjectService? = null,
+    ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -81,7 +83,10 @@ fun JewelConversationView(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     messages.forEach { message ->
-                        MessageBubble(message = message)
+                        MessageBubble(
+                            message = message,
+                            ideIntegration = ideIntegration
+                        )
                     }
                 }
             }
@@ -189,6 +194,7 @@ private fun SimpleContextDisplay(
 @Composable
 private fun MessageBubble(
     message: EnhancedMessage,
+    ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,
     modifier: Modifier = Modifier
 ) {
     // 所有消息统一布局，不再左右区分
@@ -259,7 +265,11 @@ private fun MessageBubble(
                 message.orderedElements.forEach { element ->
                     when (element) {
                         is MessageTimelineItem.ToolCallItem -> {
-                            SimpleToolCallDisplay(element.toolCall)
+                            CompactToolCallDisplay(
+                                toolCalls = listOf(element.toolCall),
+                                ideIntegration = ideIntegration,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                         is MessageTimelineItem.ContentItem -> {
                             if (element.content.isNotBlank()) {

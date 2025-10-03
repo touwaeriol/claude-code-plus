@@ -1,4 +1,4 @@
-package com.claudecodeplus.core.services.impl
+﻿package com.claudecodeplus.core.services.impl
 
 import com.claudecodeplus.core.logging.logD
 import com.claudecodeplus.core.logging.logE
@@ -27,6 +27,11 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.util.concurrent.ConcurrentHashMap
 import java.util.UUID
 
@@ -113,9 +118,9 @@ class SessionServiceImpl(
                 is PreprocessResult.Intercepted -> {
                     // 命令已被拦截处理，发送反馈消息（如果有）
                     if (preprocessResult.feedback != null) {
-                        val feedbackMsg = EnhancedMessage(
+                        val feedbackMsg = EnhancedMessage.create(
                             role = MessageRole.SYSTEM,
-                            content = preprocessResult.feedback,
+                            text = preprocessResult.feedback,
                             timestamp = System.currentTimeMillis()
                         )
                         emitSessionEvent(sessionId, SessionEvent.MessageReceived(feedbackMsg))
@@ -203,42 +208,83 @@ class SessionServiceImpl(
             var processedToolResults = false
             
             sessionMessages.forEach { sessionMessage ->
+
                 try {
-                    // 首先检查是否为工具结果消息
-                    if (sessionMessage.type == "user" && sessionMessage.message?.content != null) {
-                        val contentList = sessionMessage.message.content
-                        if (contentList is List<*>) {
-                            val hasToolResult = contentList.any { contentItem ->
-                                (contentItem as? Map<*, *>)?.get("type") == "tool_result"
-                            }
-                            
-                            if (hasToolResult) {
-                                // 处理工具结果，更新已有的助手消息
-                                processToolResultFromHistory(contentList, enhancedMessages)
-                                processedToolResults = true
-                                return@forEach
-                            }
+
+                    val contentElement = sessionMessage.message.content
+
+                    val jsonArray = contentElement?.jsonArray
+
+
+
+                    if (jsonArray != null) {
+
+                        val hasToolResult = jsonArray.any { element ->
+
+                            element.jsonObject["type"]?.jsonPrimitive?.content == "tool_result"
+
                         }
+
+
+
+                        if (hasToolResult) {
+
+                            val toolResultPayload = buildJsonObject {
+
+                                put("type", JsonPrimitive("user"))
+
+                                put("message", buildJsonObject {
+
+                                    put("content", jsonArray)
+
+                                })
+
+                            }.toString()
+
+
+
+                            val updatedMessages = toolResultProcessor.processToolResult(
+
+                                toolResultPayload,
+
+                                enhancedMessages
+
+                            )
+
+                            enhancedMessages.clear()
+
+                            enhancedMessages.addAll(updatedMessages)
+
+                            processedToolResults = true
+
+                            return@forEach
+
+                        }
+
                     }
-                    
-                    // 解析普通消息
+
+
+
                     when (val parseResult = messageProcessor.parseHistoryMessage(sessionMessage)) {
-                        is ParseResult.Success -> {
-                            enhancedMessages.add(parseResult.data)
-    //                             logD("历史消息解析成功: ${parseResult.data.role}")
-                        }
-                        is ParseResult.Ignored -> {
-    //                             logD("历史消息被忽略: ${parseResult.reason}")
-                        }
-                        is ParseResult.Error -> {
-                            logW("历史消息解析失败: ${parseResult.message}")
-                        }
+
+                        is ParseResult.Success -> enhancedMessages.add(parseResult.data)
+
+                        is ParseResult.Ignored -> Unit
+
+                        is ParseResult.Error -> logW("历史消息解析失败: ${parseResult.message}")
+
                     }
+
                 } catch (e: Exception) {
+
                     logE("处理历史消息异常", e)
+
                 }
+
             }
-            
+
+
+
             logI("历史消息加载完成: 共${enhancedMessages.size}条，工具结果处理=$processedToolResults")
             
             // 发射历史加载完成事件
@@ -327,56 +373,6 @@ class SessionServiceImpl(
             logE("检查会话存在性失败", e)
             false
         }
-    }
-    
-    /**
-     * 处理历史消息中的工具结果
-     */
-    private fun processToolResultFromHistory(
-        contentList: List<*>,
-        enhancedMessages: MutableList<EnhancedMessage>
-    ) {
-        contentList.forEach { contentItem ->
-            if (contentItem is Map<*, *> && contentItem["type"] == "tool_result") {
-                val toolUseId = contentItem["tool_use_id"] as? String
-                val resultContent = contentItem["content"] as? String ?: ""
-                val isError = (contentItem["is_error"] as? Boolean) ?: false
-
-                if (toolUseId != null) {
-    //                     logD("处理历史工具结果: toolId=$toolUseId, isError=$isError")
-
-                    // 更新对应的工具调用结果
-                    val updatedMessages = toolResultProcessor.processToolResult(
-                        buildToolResultJson(toolUseId, resultContent, isError),
-                        enhancedMessages
-                    )
-
-                    enhancedMessages.clear()
-                    enhancedMessages.addAll(updatedMessages)
-                }
-            }
-        }
-    }
-
-    /**
-     * 构建工具结果的JSON字符串
-     */
-    private fun buildToolResultJson(toolUseId: String, resultContent: String, isError: Boolean): String {
-        return """
-        {
-            "type": "user",
-            "message": {
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": "$toolUseId",
-                        "content": "$resultContent",
-                        "is_error": $isError
-                    }
-                ]
-            }
-        }
-        """.trimIndent()
     }
     
     /**

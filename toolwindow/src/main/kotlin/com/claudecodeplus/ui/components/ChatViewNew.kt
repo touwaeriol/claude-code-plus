@@ -292,10 +292,10 @@ fun ChatViewNew(
             markdownText
         }
 
-        val userMessage = EnhancedMessage(
+        val userMessage = EnhancedMessage.create(
             id = java.util.UUID.randomUUID().toString(),
             role = MessageRole.USER,
-            content = contentWithContexts,
+            text = contentWithContexts,
             timestamp = System.currentTimeMillis(),
             model = sessionObject.selectedModel,
             contexts = sessionObject.contexts
@@ -386,8 +386,8 @@ fun ChatViewNew(
                                 val lastMessage = sessionObject.messages.last()
                                 if (lastMessage.role == MessageRole.ASSISTANT && lastMessage.isStreaming) {
                                     // 后台的 streamingText 已经是完整内容，直接替换
-                                    val updatedMessage = lastMessage.copy(
-                                        content = backendStreamingText.toString(),
+                                    val updatedMessage = lastMessage.withContent(
+                                        text = backendStreamingText.toString(),
                                         isStreaming = backendIsGenerating
                                     )
                                     // 替换最后一条消息

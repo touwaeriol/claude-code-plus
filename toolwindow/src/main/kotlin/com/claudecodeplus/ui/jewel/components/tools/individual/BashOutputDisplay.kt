@@ -6,10 +6,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolResult
-import com.claudecodeplus.sdk.types.BashOutputToolUse
+import com.claudecodeplus.ui.viewmodels.tool.BashOutputToolDetail
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.TerminalOutputDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
+import org.jetbrains.jewel.ui.component.Text
 
 /**
  * BashOutput工具专用展示组件
@@ -20,20 +21,24 @@ import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
 @Composable
 fun BashOutputDisplay(
     toolCall: ToolCall,
-    bashOutputTool: BashOutputToolUse,
     showDetails: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val toolDetail = toolCall.viewModel?.toolDetail as? BashOutputToolDetail
+    if (toolDetail == null) {
+        Text("错误：无法获取 BashOutput 工具详情")
+        return
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 只在非详情模式下显示工具头部信息（避免展开时重复）
         if (!showDetails) {
             val subtitle = buildString {
-                append("bash_id: ${bashOutputTool.bashId}")
-                if (bashOutputTool.filter != null) {
-                    append(" | filter: ${bashOutputTool.filter}")
+                append("bash_id: ${toolDetail.bashId}")
+                if (toolDetail.filter != null) {
+                    append(" | filter: ${toolDetail.filter}")
                 }
             }
 
@@ -45,13 +50,12 @@ fun BashOutputDisplay(
             )
         }
 
-        // 显示Bash输出结果
         if (showDetails && toolCall.result != null) {
             when (val result = toolCall.result) {
                 is ToolResult.Success -> {
                     TerminalOutputDisplay(
                         output = result.output,
-                        command = "BashOutput ${bashOutputTool.bashId}"
+                        command = "BashOutput ${toolDetail.bashId}"
                     )
                 }
                 else -> {

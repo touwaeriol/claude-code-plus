@@ -81,9 +81,8 @@ class MessageProcessor {
                     
                     ProcessResult.Updated(
                         currentMessage.copy(
-                            content = responseBuilder.toString(),
-                            toolCalls = toolCalls.toList(),
-                            orderedElements = elements.toList()
+                            orderedElements = elements.toList(),
+                            timestamp = System.currentTimeMillis()
                         )
                     )
                 } ?: ProcessResult.NoChange
@@ -96,32 +95,16 @@ class MessageProcessor {
                     // 解析工具类型
                     val toolName = sdkMessage.data?.toolName ?: "unknown"
                     val toolInput = sdkMessage.data?.toolInput
-                    val tool = if (toolInput is Map<*, *>) {
-                        try {
-                            // 转换为 JsonObject 以使用 ToolParser
-                            val jsonObject = kotlinx.serialization.json.buildJsonObject {
-                                toolInput.forEach { (key, value) ->
-                                    if (key is String) {
-                                        put(key, kotlinx.serialization.json.JsonPrimitive(value.toString()))
-                                    }
-                                }
-                            }
-                            ToolParser.parseToolParameters(toolName, jsonObject)
-                        } catch (e: Exception) {
-                            null
-                        }
-                    } else {
-                        null
-                    }
-                    
-                    val toolCall = ToolCall(
+                    val parameters = toolInput as? Map<String, Any> ?: emptyMap()
+
+                    val toolCall = ToolCall.createGeneric(
                         id = toolCallId,
                         name = toolName,
-                        toolType = ToolType.OTHER, // 使用默认工具类型
-                        displayName = toolName,
-                        parameters = toolInput as? Map<String, Any> ?: emptyMap(),
+                        parameters = parameters,
                         status = ToolCallStatus.RUNNING,
-                        startTime = System.currentTimeMillis()
+                        result = null,
+                        startTime = System.currentTimeMillis(),
+                        endTime = null
                     )
                     toolCalls.add(toolCall)
                     
@@ -135,9 +118,8 @@ class MessageProcessor {
                     
                     ProcessResult.Updated(
                         currentMessage.copy(
-                            content = responseBuilder.toString(),
-                            toolCalls = toolCalls.toList(),
-                            orderedElements = elements.toList()
+                            orderedElements = elements.toList(),
+                            timestamp = System.currentTimeMillis()
                         )
                     )
                 } else {
@@ -191,9 +173,8 @@ class MessageProcessor {
                         
                         ProcessResult.Updated(
                             currentMessage.copy(
-                                content = responseBuilder.toString(),
-                                toolCalls = toolCalls.toList(),
-                                orderedElements = elements.toList()
+                                orderedElements = elements.toList(),
+                                timestamp = System.currentTimeMillis()
                             )
                         )
                     } else {
@@ -210,11 +191,16 @@ class MessageProcessor {
             MessageType.ERROR -> {
                 val errorMsg = sdkMessage.data?.error ?: "Unknown error"
                 ProcessResult.Error(
-                    currentMessage.copy(
-                        content = "❌ 错误: $errorMsg",
+                    EnhancedMessage.create(
+                        id = currentMessage.id,
+                        role = currentMessage.role,
+                        text = "⚠ 错误: $errorMsg",
+                        timestamp = System.currentTimeMillis(),
                         status = MessageStatus.FAILED,
+                        isStreaming = false,
                         isError = true,
-                        isStreaming = false
+                        contexts = currentMessage.contexts,
+                        model = currentMessage.model
                     )
                 )
             }
@@ -222,11 +208,10 @@ class MessageProcessor {
             MessageType.END -> {
                 ProcessResult.Complete(
                     currentMessage.copy(
-                        content = responseBuilder.toString(),
-                        toolCalls = toolCalls.toList(),
                         orderedElements = elements.toList(),
                         status = MessageStatus.COMPLETE,
-                        isStreaming = false
+                        isStreaming = false,
+                        timestamp = System.currentTimeMillis()
                     )
                 )
             }

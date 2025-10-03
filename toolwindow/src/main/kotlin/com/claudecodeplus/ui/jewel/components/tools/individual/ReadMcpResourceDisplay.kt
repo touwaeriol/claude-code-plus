@@ -5,55 +5,38 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.claudecodeplus.ui.models.ToolCall
-import com.claudecodeplus.ui.models.ToolResult
-import com.claudecodeplus.sdk.types.ReadMcpResourceToolUse
+import com.claudecodeplus.ui.viewmodels.tool.ReadMcpResourceToolDetail
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
-import com.claudecodeplus.ui.jewel.components.tools.shared.FileContentDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
+import org.jetbrains.jewel.ui.component.Text
 
-/**
- * ReadMcpResource工具专用展示组件
- *
- * 🎯 职责：专门处理ReadMcpResource工具的展示
- * 🔧 特点：显示MCP服务器、资源URI、内容
- */
 @Composable
 fun ReadMcpResourceDisplay(
     toolCall: ToolCall,
-    readMcpResourceTool: ReadMcpResourceToolUse,
     showDetails: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val toolDetail = toolCall.viewModel?.toolDetail as? ReadMcpResourceToolDetail
+    if (toolDetail == null) {
+        Text("错误：无法获取 ReadMcpResource 工具详情")
+        return
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // 只在非详情模式下显示工具头部信息（避免展开时重复）
         if (!showDetails) {
-            val subtitle = "${readMcpResourceTool.server}/${readMcpResourceTool.uri.substringAfterLast('/')}"
-
             ToolHeaderDisplay(
-                icon = "📋",
+                icon = "READ",
                 toolName = "ReadMcpResource",
-                subtitle = subtitle,
+                subtitle = "${toolDetail.server}:${toolDetail.uri}",
                 status = toolCall.status
             )
         }
 
-        // 显示资源内容
         if (showDetails && toolCall.result != null) {
-            when (val result = toolCall.result) {
-                is ToolResult.Success -> {
-                    FileContentDisplay(
-                        content = result.output,
-                        filePath = "${readMcpResourceTool.server}:${readMcpResourceTool.uri}",
-                        maxLines = 20
-                    )
-                }
-                else -> {
-                    ToolResultDisplay(result)
-                }
-            }
+            ToolResultDisplay(toolCall.result!!)
         }
     }
 }

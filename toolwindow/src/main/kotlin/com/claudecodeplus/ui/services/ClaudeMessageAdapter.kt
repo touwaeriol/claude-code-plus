@@ -75,20 +75,12 @@ class ClaudeMessageAdapter {
         val content = message.message?.content ?: ""
         val timestamp = parseTimestamp(message.timestamp) ?: System.currentTimeMillis()
 
-        return EnhancedMessage(
+        return EnhancedMessage.create(
             id = message.uuid ?: "",
             role = MessageRole.USER,
-            content = content,
+            text = content,
             timestamp = timestamp,
-            contexts = emptyList(),
-            toolCalls = emptyList(), // 用户消息通常没有工具调用
-            model = null, // 用户消息没有模型信息
-            status = MessageStatus.COMPLETE,
-            isStreaming = false,
-            isError = false,
-            orderedElements = emptyList(),
-            tokenUsage = null, // 用户消息通常没有token统计
-            isCompactSummary = false
+            status = MessageStatus.COMPLETE
         )
     }
 
@@ -116,19 +108,15 @@ class ClaudeMessageAdapter {
         // 提取工具调用（如果有）
         val toolCalls = extractToolCalls(messageContent)
 
-        return EnhancedMessage(
+        return EnhancedMessage.create(
             id = message.uuid ?: "",
             role = MessageRole.ASSISTANT,
-            content = content,
+            text = content,
             timestamp = timestamp,
             toolCalls = toolCalls,
             model = aiModel,
             status = MessageStatus.COMPLETE,
-            isStreaming = false,
-            isError = false,
-            orderedElements = emptyList(),
-            tokenUsage = tokenUsage,
-            isCompactSummary = false
+            tokenUsage = tokenUsage
         )
     }
 
@@ -193,12 +181,17 @@ class ClaudeMessageAdapter {
                         }
                     } ?: emptyMap()
 
-                    toolCalls.add(ToolCall(
-                        id = id,
-                        name = name,
-                        parameters = parameters,
-                        toolType = ToolType.OTHER // 使用默认工具类型
-                    ))
+                    toolCalls.add(
+                        ToolCall.createGeneric(
+                            id = id,
+                            name = name,
+                            parameters = parameters,
+                            status = ToolCallStatus.RUNNING,
+                            result = null,
+                            startTime = System.currentTimeMillis(),
+                            endTime = null
+                        )
+                    )
                 }
             }
 

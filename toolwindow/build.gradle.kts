@@ -77,3 +77,11 @@ dependencies {
 // 🚫 移除Compose Multiplatform相关配置 - 使用IDE平台内置版本
 
 // IDE configuration for source/javadoc download is handled by IDE settings
+
+tasks.named("buildSearchableOptions") {
+    enabled = false
+}
+
+tasks.named("prepareJarSearchableOptions") {
+    enabled = false
+}

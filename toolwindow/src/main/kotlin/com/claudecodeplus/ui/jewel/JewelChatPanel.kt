@@ -26,6 +26,7 @@ class JewelChatPanel(
     private val workingDirectory: String = System.getProperty("user.dir"),
     private val fileIndexService: FileIndexService? = null,
     private val projectService: ProjectService? = null,
+    private val ideIntegration: com.claudecodeplus.ui.services.IdeIntegration? = null,
     themeStyle: JewelThemeStyle = JewelThemeStyle.LIGHT,
     isSystemDark: Boolean = false,
     themeConfig: JewelThemeConfig = JewelThemeConfig.DEFAULT
@@ -90,9 +91,9 @@ class JewelChatPanel(
         // 初始欢迎消息
         LaunchedEffect(Unit) {
             messages.value = listOf(
-                EnhancedMessage(
+                EnhancedMessage.create(
                     role = MessageRole.ASSISTANT,
-                    content = "你好！我是Claude，很高兴为您提供代码和技术方面的帮助。您可以询问任何关于编程、代码审查、调试或技术问题。",
+                    text = "你好！我是Claude，很高兴为您提供代码和技术方面的帮助。您可以询问任何关于编程、代码审查、调试或技术问题。",
                     timestamp = System.currentTimeMillis()
                 )
             )
@@ -143,15 +144,16 @@ class JewelChatPanel(
             },
             onClearChat = { 
                 messages.value = listOf(
-                    EnhancedMessage(
+                    EnhancedMessage.create(
                         role = MessageRole.ASSISTANT,
-                        content = "聊天记录已清空。有什么可以帮助您的吗？",
+                        text = "聊天记录已清空。有什么可以帮助您的吗？",
                         timestamp = System.currentTimeMillis()
                     )
                 )
             },
             fileIndexService = fileIndexService,
-            projectService = projectService
+            projectService = projectService,
+            ideIntegration = ideIntegration
         )
     }
     
@@ -177,11 +179,11 @@ class JewelChatPanel(
         val messageWithContext = MessageBuilderUtils.buildFinalMessage(contexts, textWithMarkdown)
         
         // 创建用户消息
-        val userMessage = EnhancedMessage(
+        val userMessage = EnhancedMessage.create(
             role = MessageRole.USER,
-            content = textWithMarkdown, // 使用原始输入文本，不包含上下文标记
-            contexts = contexts,
-            timestamp = System.currentTimeMillis()
+            text = textWithMarkdown, // 使用原始输入文本，不包含上下文标记
+            timestamp = System.currentTimeMillis(),
+            contexts = contexts
         )
         
         val updatedMessages = currentMessages.toMutableList()
@@ -192,9 +194,9 @@ class JewelChatPanel(
         onGeneratingChange(true)
         
         // 创建 AI 响应消息
-        val assistantMessage = EnhancedMessage(
+        val assistantMessage = EnhancedMessage.create(
             role = MessageRole.ASSISTANT,
-            content = "",
+            text = "",
             timestamp = System.currentTimeMillis(),
             isStreaming = true
         )
@@ -231,9 +233,9 @@ class JewelChatPanel(
                     // 文件监听现在由项目监听器自动处理，无需手动订阅
                 } else {
                     // 命令执行失败
-                    val errorMessage = EnhancedMessage(
+                    val errorMessage = EnhancedMessage.create(
                         role = MessageRole.ASSISTANT,
-                        content = "❌ 错误: ${result["message"] ?: "未知错误"}",
+                        text = "❌ 错误: ${result["message"] ?: "未知错误"}",
                         timestamp = System.currentTimeMillis(),
                         status = MessageStatus.FAILED,
                         isError = true
@@ -244,9 +246,9 @@ class JewelChatPanel(
             } catch (e: Exception) {
                 // 异常处理
                 e.printStackTrace()
-                val errorMessage = EnhancedMessage(
+                val errorMessage = EnhancedMessage.create(
                     role = MessageRole.ASSISTANT,
-                    content = "❌ 发送消息时出错: ${e.message}",
+                    text = "❌ 发送消息时出错: ${e.message}",
                     timestamp = System.currentTimeMillis(),
                     status = MessageStatus.FAILED,
                     isError = true

@@ -88,10 +88,10 @@ object MessageConverter {
             System.currentTimeMillis()
         }
         
-        val enhancedMessage = EnhancedMessage(
+        val enhancedMessage = EnhancedMessage.create(
             id = this.messageId ?: java.util.UUID.randomUUID().toString(),
             role = if (role == "user") MessageRole.USER else MessageRole.ASSISTANT,
-            content = messageContent,
+            text = messageContent,
             timestamp = timestampMillis,
             toolCalls = extractToolCalls(contentJson),
             tokenUsage = extractTokenUsage(contentJson), // 提取真实token信息
@@ -248,7 +248,7 @@ object MessageConverter {
                     } ?: emptyMap()
                     
                     // 创建 RUNNING 状态的工具调用（结果将在后续事件中更新）
-                    val toolCall = com.claudecodeplus.ui.models.ToolCall(
+                    val toolCall = com.claudecodeplus.ui.models.ToolCall.createGeneric(
                         id = toolId,
                         name = toolName,
                         parameters = parameters,

@@ -1,12 +1,12 @@
 # Claude Code Plus
 
-一个 IntelliJ IDEA 插件，通过集成 Claude Code Python SDK 为开发者提供智能编码助手功能。
+一个现代化的 IntelliJ IDEA 插件，基于 Kotlin + Compose Desktop 构建，通过集成 Claude Agent SDK 为开发者提供强大的 AI 智能编码助手功能。
 
 ## 快速开始
 
 ### 运行插件
 
-1. 确保已安装 Python 3
+1. 确保已安装 Python 🐍 3
 2. 设置 Java 环境（推荐使用 GraalVM）：
    ```bash
    export JAVA_HOME=/path/to/your/jdk
@@ -31,7 +31,7 @@ npm install -g @anthropic-ai/claude-code
 # 2. 登录 Claude
 claude login
 
-# 3. 安装 Python SDK
+# 3. 安装 Python 🐍 SDK
 pip install claude-code-sdk
 ```
 
@@ -41,26 +41,37 @@ pip install claude-code-sdk
 
 ## 项目概述
 
-Claude Code Plus 是一个基于 Kotlin 开发的 IDEA 插件，它通过外部 Python 进程集成 Claude Code SDK，在 IDE 中提供类似 JetBrains AI Assistant 的对话界面。插件以会话形式与用户交互，后台通过 Claude Code SDK 进行代理，提供智能编码辅助功能。
+Claude Code Plus 是一个基于 Kotlin 开发的 IDEA 插件，它通过外部 Python 🐍 进程集成 Claude Code SDK，在 IDE 中提供类似 JetBrains AI Assistant 的对话界面。插件以会话形式与用户交互，后台通过 Claude Code SDK 进行代理，提供智能编码辅助功能。
 
-## 主要功能
+## 主要功能 ✨
 
-### 1. 对话界面
-- 提供类似 JetBrains AI Assistant 的浮动对话窗口
-- 支持 Markdown 渲染的对话历史
-- 实时显示 Claude Code 的响应
+### 1. 现代化对话界面 💬
+- 🎨 基于 Compose Desktop + Jewel UI 的原生界面
+- 📝 完整的 Markdown 渲染支持（GFM 语法）
+- ⚡ 实时流式响应显示
+- 🎯 智能代码块高亮（使用 IDE 原生高亮器）
 
-### 2. 智能文件引用
+### 2. 智能上下文引用系统 🔗
 - **@文件引用**：输入 `@` 时自动触发文件搜索和补全
 - **智能搜索**：基于文件名、路径和内容的模糊搜索
-- **路径转换**：自动将相对路径转换为绝对路径
-- **预览支持**：悬停显示文件内容预览
+- **多种引用类型**：
+  - 📄 文件引用（支持行号范围）
+  - 📁 文件夹引用
+  - 🌐 URL 引用
+  - 📋 代码片段引用
+- **智能路径处理**：相对路径自动解析 + 路径验证
+- **拖放支持**：直接拖拽文件到输入框
 
-### 3. Claude Code SDK 集成
-- 通过外部 Python 进程集成 Claude Code SDK
-- 会话管理：支持多会话并发处理
-- 双向通信：通过 JSON 协议进行进程间通信
-- 错误处理和自动重连机制
+### 3. Claude Agent SDK 核心集成 🤖
+- **Kotlin 原生实现**：无需外部 Python 🐍 进程，纯 Kotlin SDK
+- **双向通信协议**：完整实现 Claude CLI 通信协议
+- **MCP 服务器支持**：Model Context Protocol 集成
+- **高级特性**：
+  - 🔄 会话管理与状态持久化
+  - 🎣 Hooks 事件系统
+  - 🛠️ 自定义工具集成
+  - ⚡ 流式响应处理
+  - 🔒 权限管理系统
 
 ### 4. 增强功能
 - 代码高亮显示
@@ -68,15 +79,20 @@ Claude Code Plus 是一个基于 Kotlin 开发的 IDEA 插件，它通过外部 
 - 历史记录保存
 - 快捷键支持
 
-## 技术栈
+## 技术栈 🛠️
 
-- **语言**：Kotlin, Python
-- **UI 框架**：Swing (IDEA Platform)
-- **IDE 平台**：IntelliJ Platform SDK
-- **SDK 集成**：Claude Code SDK
-- **构建工具**：Gradle
-- **最低 IDE 版本**：2023.1
-- **Python 版本**：3.10+
+### 核心技术
+- **开发语言**：Kotlin 1.9+
+- **UI 框架**：Compose Desktop + Jewel UI 组件库
+- **IDE 平台**：IntelliJ Platform SDK 2024.3+
+- **AI 集成**：Claude Agent SDK (Kotlin 原生实现)
+- **构建工具**：Gradle 8.0+
+
+### 架构特点
+- ✅ 纯 Kotlin 实现，类型安全
+- ✅ 响应式编程（Compose State + Kotlin Flow）
+- ✅ 协程并发，异步非阻塞
+- ✅ 模块化设计，清晰分层
 
 ## 架构设计
 
@@ -93,9 +109,9 @@ claude-code-plus/
 │   │   │   └── EnhancedChatViewModel.kt
 │   │   ├── core/            # 核心功能
 │   │   │   ├── ClaudeSession.kt
-│   │   │   ├── GraalPythonSession.kt
+│   │   │   ├── GraalPython 🐍Session.kt
 │   │   │   ├── ClaudeCodeSession.kt
-│   │   │   └── GraalPythonClaudeWrapper.kt
+│   │   │   └── GraalPython 🐍ClaudeWrapper.kt
 │   │   ├── service/         # 后台服务
 │   │   │   └── ClaudeCodeService.kt
 │   │   └── model/           # 数据模型
@@ -104,7 +120,7 @@ claude-code-plus/
 │       ├── META-INF/
 │       │   └── plugin.xml
 │       └── icons/
-├── claude-sdk-wrapper/      # Python SDK 包装器
+├── claude-sdk-wrapper/      # Python 🐍 SDK 包装器
 │   ├── claude_sdk_wrapper/
 │   │   ├── __init__.py
 │   │   ├── wrapper.py
@@ -115,8 +131,8 @@ claude-code-plus/
 
 ### 核心模块
 
-1. **ExternalPythonSession**
-   - 管理外部 Python 进程的生命周期
+1. **ExternalPython 🐍Session**
+   - 管理外部 Python 🐍 进程的生命周期
    - 通过 JSON 协议进行进程间通信
    - 处理消息的发送和接收
 
@@ -139,9 +155,9 @@ claude-code-plus/
 
 ## 实现方式
 
-### Python SDK 集成
-1. **claude_code_sdk_wrapper.py**：Python 脚本，封装 Claude Code SDK 的调用
-2. **外部进程通信**：通过 JSON 协议在 Java 和 Python 进程间通信
+### Python 🐍 SDK 集成
+1. **claude_code_sdk_wrapper.py**：Python 🐍 脚本，封装 Claude Code SDK 的调用
+2. **外部进程通信**：通过 JSON 协议在 Java 和 Python 🐍 进程间通信
 3. **流式响应**：支持实时流式输出，提供更好的用户体验
 
 ### 会话管理
@@ -159,7 +175,7 @@ claude-code-plus/
 ### 安装要求
 - IntelliJ IDEA 2023.1 或更高版本
 - JDK 17 或更高版本
-- Python 3.10+
+- Python 🐍 3.10+
 - Node.js 14.0+
 - Claude Code CLI 和 SDK（见快速开始部分）
 
@@ -186,7 +202,7 @@ MIT License
 
 ## 相关链接
 
-- [Claude Code SDK Python](https://github.com/anthropics/claude-code-sdk-python) - 官方 Python SDK
+- [Claude Code SDK Python 🐍](https://github.com/anthropics/claude-code-sdk-python) - 官方 Python 🐍 SDK
 - [Claude Code CLI](https://github.com/anthropics/claude-code) - 官方命令行工具
 
 ## 架构设计原则

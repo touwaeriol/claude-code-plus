@@ -1,61 +1,44 @@
 package com.claudecodeplus.ui.jewel.components.tools
 
 import com.claudecodeplus.ui.models.ToolCall
+import com.claudecodeplus.ui.viewmodels.tool.BashToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.GenericToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.GlobToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.GrepToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.MultiEditToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.NotebookEditToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.ReadToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.TaskToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.ToolDetailViewModel
+import com.claudecodeplus.ui.viewmodels.tool.TodoWriteToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.UiToolType
+import com.claudecodeplus.ui.viewmodels.tool.WebFetchToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.WebSearchToolDetail
+import com.claudecodeplus.ui.viewmodels.tool.WriteToolDetail
 
 /**
- * 工具显示相关的工具函数
+ * 工具显示相关的辅助方法
  */
 
-/**
- * 单参数工具列表
- */
-val SINGLE_PARAM_TOOLS = setOf(
-    "Read", "LS", "Write", "Glob", "ExitPlanMode",
-    "WebFetch", "NotebookRead", "Bash"
-)
-
-/**
- * 主要参数名映射
- */
-val PRIMARY_PARAM_MAPPING = mapOf(
-    "Read" to "file_path",
-    "Write" to "file_path", 
-    "LS" to "path",
-    "Glob" to "pattern",
-    "WebFetch" to "url",
-    "Bash" to "command",
-    "Search" to "pattern",
-    "Grep" to "pattern",
-    "Edit" to "file_path",
-    "MultiEdit" to "file_path",
-    "NotebookRead" to "notebook_path",
-    "NotebookEdit" to "notebook_path"
-)
-
-/**
- * 判断是否为单参数工具
- */
-fun isSingleParamTool(toolName: String): Boolean {
-    return SINGLE_PARAM_TOOLS.any { toolName.contains(it, ignoreCase = true) }
-}
-
-/**
- * 获取工具的主要参数值
- */
 fun getPrimaryParamValue(toolCall: ToolCall): String? {
-    // 首先检查是否有映射的主要参数
-    val primaryParam = PRIMARY_PARAM_MAPPING.entries
-        .firstOrNull { toolCall.name.contains(it.key, ignoreCase = true) }
-        ?.value
-    
-    if (primaryParam != null) {
-        return toolCall.parameters[primaryParam]?.toString()
+    val detail = toolCall.viewModel?.toolDetail ?: return null
+
+    return when (detail) {
+        is ReadToolDetail -> detail.filePath
+        is WriteToolDetail -> detail.filePath
+        is MultiEditToolDetail -> detail.filePath
+        is GlobToolDetail -> detail.pattern
+        is GrepToolDetail -> detail.pattern
+        is BashToolDetail -> detail.command
+        is WebFetchToolDetail -> detail.url
+        is WebSearchToolDetail -> detail.query
+        is NotebookEditToolDetail -> detail.notebookPath
+        is TaskToolDetail -> detail.description
+        is TodoWriteToolDetail -> detail.generateSubtitle()
+        is GenericToolDetail -> detail.parameters.entries.firstOrNull()?.let { "${it.key}=${it.value}" }
+        else -> when (detail.toolType) {
+            UiToolType.EXIT_PLAN_MODE -> detail.generateSubtitle()
+            else -> null
+        }
     }
-    
-    // 如果是单参数工具且只有一个参数，直接返回该参数值
-    if (isSingleParamTool(toolCall.name) && toolCall.parameters.size == 1) {
-        return toolCall.parameters.values.firstOrNull()?.toString()
-    }
-    
-    return null
 }

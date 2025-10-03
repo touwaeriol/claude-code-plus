@@ -179,10 +179,11 @@ fun SimpleLazySessionDemo(
                 DefaultButton(
                     onClick = {
                         // 添加新消息到顶部
-                        val newMessage = EnhancedMessage(
+                        val newMessage = EnhancedMessage.create(
+
                             id = UUID.randomUUID().toString(),
                             role = MessageRole.USER,
-                            content = "新消息 #${allMessages.size + 1}",
+                            text = "新消息 #${allMessages.size + 1}",
                             timestamp = System.currentTimeMillis()
                         )
                         allMessages = listOf(newMessage) + allMessages
@@ -284,10 +285,10 @@ private fun MessageCard(message: EnhancedMessage) {
  */
 private fun generateMockMessages(count: Int): List<EnhancedMessage> {
     return (1..count).map { index ->
-        EnhancedMessage(
+        EnhancedMessage.create(
             id = UUID.randomUUID().toString(),
             role = if (index % 2 == 0) MessageRole.USER else MessageRole.ASSISTANT,
-            content = "这是第 $index 条消息。${if (index % 2 == 0) "用户提问..." else "AI 回答..."}",
+            text = "这是第 $index 条消息。${if (index % 2 == 0) "用户提问..." else "AI 回答..."}",
             timestamp = System.currentTimeMillis() - (count - index) * 60000L // 每条消息相隔1分钟
         )
     }

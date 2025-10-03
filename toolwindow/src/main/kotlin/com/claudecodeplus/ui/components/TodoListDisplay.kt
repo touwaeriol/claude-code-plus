@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolResult
+import com.claudecodeplus.ui.viewmodels.tool.TodoWriteToolDetail
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 
@@ -36,9 +37,17 @@ fun TodoListDisplay(
     toolCall: ToolCall,
     modifier: Modifier = Modifier
 ) {
-    // 解析待办事项数据
+    val detail = toolCall.viewModel?.toolDetail as? TodoWriteToolDetail
     val todos = remember(toolCall) {
-        parseTodos(toolCall)
+        detail?.todos.orEmpty().mapIndexed { index, todo ->
+            TodoItem(
+                id = (index + 1).toString(),
+                content = todo.content,
+                status = TodoStatus.from(todo.status),
+                priority = TodoPriority.LOW,
+                activeForm = todo.activeForm
+            )
+        }
     }
     
     // 计算统计信息
@@ -408,46 +417,26 @@ private fun TodoResultInfo(result: ToolResult) {
 /**
  * 解析待办事项数据
  */
-private fun parseTodos(toolCall: ToolCall): List<TodoItem> {
-    val todosParam = toolCall.parameters["todos"] as? List<*> ?: return emptyList()
-    
-    return todosParam.mapNotNull { todoData ->
-        when (todoData) {
-            is Map<*, *> -> {
-                val content = todoData["content"]?.toString() ?: return@mapNotNull null
-                val status = when (todoData["status"]?.toString()?.lowercase()) {
-                    "completed" -> TodoStatus.COMPLETED
-                    "in_progress" -> TodoStatus.IN_PROGRESS
-                    else -> TodoStatus.PENDING
-                }
-                val priority = when (todoData["priority"]?.toString()?.lowercase()) {
-                    "high" -> TodoPriority.HIGH
-                    "medium" -> TodoPriority.MEDIUM
-                    else -> TodoPriority.LOW
-                }
-                val id = todoData["id"]?.toString() ?: ""
-                
-                TodoItem(id, content, status, priority)
-            }
-            else -> null
-        }
-    }
-}
-
-/**
- * 待办事项数据类
- */
 private data class TodoItem(
     val id: String,
     val content: String,
     val status: TodoStatus,
-    val priority: TodoPriority
+    val priority: TodoPriority,
+    val activeForm: String
 )
 
 private enum class TodoStatus {
     PENDING,
     IN_PROGRESS,
-    COMPLETED
+    COMPLETED;
+
+    companion object {
+        fun from(raw: String): TodoStatus = when (raw.lowercase()) {
+            "completed" -> COMPLETED
+            "in_progress" -> IN_PROGRESS
+            else -> PENDING
+        }
+    }
 }
 
 private enum class TodoPriority {

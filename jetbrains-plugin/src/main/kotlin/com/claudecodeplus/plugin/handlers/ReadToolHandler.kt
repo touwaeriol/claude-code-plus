@@ -1,7 +1,7 @@
 package com.claudecodeplus.plugin.handlers
 
 import com.claudecodeplus.plugin.services.IdeaPlatformService
-import com.claudecodeplus.sdk.types.ReadToolUse
+import com.claudecodeplus.ui.viewmodels.tool.ReadToolDetail
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolResult
 import com.intellij.openapi.diagnostic.Logger
@@ -20,10 +20,7 @@ class ReadToolHandler : ToolClickHandler {
     }
 
     override fun canHandle(toolCall: ToolCall): Boolean {
-        // 只有 SUCCESS 状态才能打开文件
-        // RUNNING/FAILED 状态不处理
-        return toolCall.specificTool is ReadToolUse &&
-            toolCall.status == com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS
+        return toolCall.viewModel?.toolDetail is ReadToolDetail
     }
 
     override fun handleToolClick(
@@ -42,9 +39,9 @@ class ReadToolHandler : ToolClickHandler {
         }
 
         return try {
-            val readTool = toolCall.specificTool as? ReadToolUse
+            val readTool = toolCall.viewModel?.toolDetail as? ReadToolDetail
             if (readTool == null) {
-                logger.warn("ReadToolHandler: specificTool 不是 ReadToolUse")
+                logger.warn("ReadToolHandler: toolDetail 不是 ReadToolDetail")
                 return false
             }
 
@@ -53,12 +50,14 @@ class ReadToolHandler : ToolClickHandler {
 
             // 获取结果内容
             val content = (toolCall.result as? ToolResult.Success)?.output
+            val selectionRange = buildSelectionRange(readTool, content)
 
             // 使用平台服务打开文件
             val success = platformService.openFile(
                 filePath = readTool.filePath,
-                selectContent = true,
-                content = content
+                selectContent = selectionRange == null && content != null,
+                content = content,
+                selectionRange = selectionRange
             )
 
             if (success && config.showNotifications) {
@@ -74,5 +73,27 @@ class ReadToolHandler : ToolClickHandler {
             }
             config.fallbackBehavior == FallbackBehavior.EXPAND
         }
+    }
+
+    private fun buildSelectionRange(
+        detail: ReadToolDetail,
+        content: String?
+    ): IdeaPlatformService.SelectionRange? {
+        val offset = detail.offset ?: return null
+        if (offset < 0) return null
+
+        val limit = detail.limit
+        val length = when {
+            limit != null && limit > 0 -> limit
+            !content.isNullOrEmpty() -> content.length
+            else -> return null
+        }
+
+        if (length <= 0) return null
+
+        val end = offset + length
+        if (end <= offset) return null
+
+        return IdeaPlatformService.SelectionRange(offset, end)
     }
 }

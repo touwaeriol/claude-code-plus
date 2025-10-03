@@ -126,10 +126,10 @@ fun ClaudeSessionMessage.toEnhancedMessage(): EnhancedMessage? {
         )
     }
     
-    return EnhancedMessage(
+    return EnhancedMessage.create(
         id = uuid,
         role = role,
-        content = textContent,
+        text = textContent,
         timestamp = parseTimestamp(timestamp),
         model = model,
         tokenUsage = tokenUsage,
@@ -183,7 +183,7 @@ private fun extractToolCallsFromContent(contentList: List<Map<*, *>>): List<com.
                 else -> com.claudecodeplus.ui.models.ToolCallStatus.RUNNING
             }
             
-            val toolCall = com.claudecodeplus.ui.models.ToolCall(
+            val toolCall = com.claudecodeplus.ui.models.ToolCall.createGeneric(
                 id = toolId,
                 name = toolName,
                 parameters = parameters,

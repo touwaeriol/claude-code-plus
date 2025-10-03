@@ -6,12 +6,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.claudecodeplus.sdk.types.EditToolUse
+import com.claudecodeplus.ui.viewmodels.tool.EditToolDetail
 import com.claudecodeplus.ui.jewel.components.tools.shared.DiffDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolResult
+import org.jetbrains.jewel.ui.component.Text
 
 /**
  * Edit 工具专用展示组件
@@ -19,18 +20,24 @@ import com.claudecodeplus.ui.models.ToolResult
 @Composable
 fun EditToolDisplay(
     toolCall: ToolCall,
-    editTool: EditToolUse,
     showDetails: Boolean = true,
     onFileClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    // 从 ViewModel 获取工具详情
+    val toolDetail = toolCall.viewModel?.toolDetail as? EditToolDetail
+    if (toolDetail == null) {
+        Text("错误：无法获取 Edit 工具详情")
+        return
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         if (!showDetails) {
-            val fileName = editTool.filePath.substringAfterLast('/')
-            val editType = if (editTool.replaceAll) "替换全部" else "单次替换"
+            val fileName = toolDetail.filePath.substringAfterLast('/')
+            val editType = if (toolDetail.replaceAll) "替换全部" else "单次替换"
 
             ToolHeaderDisplay(
                 icon = "EDIT",
@@ -46,9 +53,9 @@ fun EditToolDisplay(
             when (val result = toolCall.result) {
                 is ToolResult.Success -> {
                     DiffDisplay(
-                        oldContent = editTool.oldString,
-                        newContent = editTool.newString,
-                        filePath = editTool.filePath,
+                        oldContent = toolDetail.oldString,
+                        newContent = toolDetail.newString,
+                        filePath = toolDetail.filePath,
                         changeCount = 1
                     )
                 }
@@ -57,9 +64,9 @@ fun EditToolDisplay(
                 }
                 null -> {
                     DiffDisplay(
-                        oldContent = editTool.oldString,
-                        newContent = editTool.newString,
-                        filePath = editTool.filePath,
+                        oldContent = toolDetail.oldString,
+                        newContent = toolDetail.newString,
+                        filePath = toolDetail.filePath,
                         changeCount = 1
                     )
                 }

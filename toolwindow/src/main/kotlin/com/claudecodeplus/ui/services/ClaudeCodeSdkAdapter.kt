@@ -126,9 +126,9 @@ object ClaudeCodeSdkAdapter {
                         }
                         else -> {
                             logger.severe("❌ 会话 $sessionId 消息处理错误: ${error.message}")
-                            emit(EnhancedMessage(
+                            emit(EnhancedMessage.create(
                                 role = MessageRole.ERROR,
-                                content = "处理消息时发生错误: ${error.message}",
+                                text = "处理消息时发生错误: ${error.message}",
                                 isError = true,
                                 status = MessageStatus.FAILED
                             ))
@@ -147,9 +147,9 @@ object ClaudeCodeSdkAdapter {
 
             // 返回错误流
             return flow {
-                emit(EnhancedMessage(
+                emit(EnhancedMessage.create(
                     role = MessageRole.ERROR,
-                    content = "发送消息失败: ${e.message}",
+                    text = "发送消息失败: ${e.message}",
                     isError = true,
                     status = MessageStatus.FAILED
                 ))
@@ -275,9 +275,9 @@ object ClaudeCodeSdkAdapter {
                 throw e
             } catch (e: Exception) {
                 logger.severe("❌ 会话 $sessionId 消息监听异常: ${e.message}")
-                callback(EnhancedMessage(
+                callback(EnhancedMessage.create(
                     role = MessageRole.ERROR,
-                    content = "消息监听异常: ${e.message}",
+                    text = "消息监听异常: ${e.message}",
                     isError = true,
                     status = MessageStatus.FAILED
                 ))

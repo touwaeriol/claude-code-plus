@@ -2,8 +2,8 @@ package com.claudecodeplus.plugin.adapters
 
 import com.claudecodeplus.plugin.handlers.ToolClickManager
 import com.claudecodeplus.plugin.handlers.ToolClickConfig
-import com.claudecodeplus.sdk.types.ReadToolUse
 import com.claudecodeplus.ui.models.ToolCall
+import com.claudecodeplus.ui.viewmodels.tool.*
 import com.claudecodeplus.ui.services.IdeIntegration
 import com.claudecodeplus.ui.services.NotificationType
 import com.intellij.openapi.project.Project
@@ -11,7 +11,6 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.l10n.LocalizationUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import kotlinx.serialization.json.JsonNull
 import java.io.File
 import java.util.*
 
@@ -31,7 +30,8 @@ class IdeaIdeIntegration(
         logger.info("- 工具ID: ${toolCall.id}")
         logger.info("- 工具状态: ${toolCall.status}")
         logger.info("- 有结果: ${toolCall.result != null}")
-        logger.info("- 参数: ${toolCall.parameters}")
+        val parameterSummary = toolCall.viewModel?.toolDetail?.getKeyParameters().orEmpty()
+        logger.info("- 参数: $parameterSummary")
 
         return try {
             val result = ToolClickManager.handleToolClick(toolCall, project, ToolClickConfig())
@@ -46,21 +46,35 @@ class IdeaIdeIntegration(
     override fun openFile(filePath: String, line: Int?, column: Int?): Boolean {
         return try {
             val (offsetHint, limitHint) = computeOffsetHints(filePath, line, column)
+            val tempId = "temp_read_${UUID.randomUUID()}"
 
-            val readTool = ReadToolUse(
-                id = "temp_read_${UUID.randomUUID()}",
-                originalParameters = JsonNull,
+            // 创建 ReadToolDetail ViewModel
+            val toolDetail = ReadToolDetail(
                 filePath = filePath,
                 offset = offsetHint,
                 limit = limitHint
             )
 
+            // 创建 ToolCallViewModel
+            val viewModel = ToolCallViewModel(
+                id = tempId,
+                name = "Read",
+                toolDetail = toolDetail,
+                status = com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS,
+                result = null,
+                startTime = System.currentTimeMillis(),
+                endTime = null
+            )
+
+            // 创建 ToolCall
             val fakeToolCall = ToolCall(
-                id = readTool.id,
-                name = readTool.toolType.toolName,
-                specificTool = readTool,
-                parameters = readTool.getTypedParameters(),
-                status = com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS
+                id = tempId,
+                name = "Read",
+                viewModel = viewModel,
+                status = com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS,
+                result = null,
+                startTime = viewModel.startTime,
+                endTime = viewModel.endTime
             )
 
             handleToolClick(fakeToolCall)
@@ -72,18 +86,38 @@ class IdeaIdeIntegration(
     
     override fun showDiff(filePath: String, oldContent: String, newContent: String): Boolean {
         return try {
-            // 创建一个临时的 Edit 工具调用
-            val fakeToolCall = ToolCall(
-                id = "temp_edit",
-                name = "Edit",
-                parameters = mutableMapOf<String, Any>().apply {
-                    put("file_path", filePath)
-                    put("old_string", oldContent)
-                    put("new_string", newContent)
-                },
-                status = com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS
+            val tempId = "temp_edit_${UUID.randomUUID()}"
+
+            // 创建 EditToolDetail ViewModel
+            val toolDetail = EditToolDetail(
+                filePath = filePath,
+                oldString = oldContent,
+                newString = newContent,
+                replaceAll = false
             )
-            
+
+            // 创建 ToolCallViewModel
+            val viewModel = ToolCallViewModel(
+                id = tempId,
+                name = "Edit",
+                toolDetail = toolDetail,
+                status = com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS,
+                result = null,
+                startTime = System.currentTimeMillis(),
+                endTime = null
+            )
+
+            // 创建临时的 Edit 工具调用
+            val fakeToolCall = ToolCall(
+                id = tempId,
+                name = "Edit",
+                viewModel = viewModel,
+                status = com.claudecodeplus.ui.models.ToolCallStatus.SUCCESS,
+                result = null,
+                startTime = viewModel.startTime,
+                endTime = viewModel.endTime
+            )
+
             handleToolClick(fakeToolCall)
         } catch (e: Exception) {
             logger.error("显示差异失败", e)

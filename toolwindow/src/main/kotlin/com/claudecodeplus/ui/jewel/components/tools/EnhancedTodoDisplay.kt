@@ -23,22 +23,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.claudecodeplus.sdk.types.TodoWriteToolUse
 import com.claudecodeplus.ui.models.ToolCall
+import com.claudecodeplus.ui.viewmodels.tool.TodoWriteToolDetail
 import com.claudecodeplus.ui.services.StringResources
 import com.claudecodeplus.ui.services.formatStringResource
 import com.claudecodeplus.ui.services.stringResource
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 
 @Composable
 fun EnhancedTodoDisplay(
     toolCall: ToolCall? = null,
-    todos: List<TodoWriteToolUse.TodoItem>? = null,
+    todos: List<TodoWriteToolDetail.TodoItemVm>? = null,
     modifier: Modifier = Modifier
 ) {
     val todoItems = when {
@@ -47,7 +43,7 @@ fun EnhancedTodoDisplay(
                 id = (index + 1).toString(),
                 content = todo.content,
                 status = todo.status,
-                activeForm = todo.activeForm ?: todo.content
+                activeForm = todo.activeForm
             )
         }
         toolCall != null -> parseTodos(toolCall)
@@ -184,40 +180,14 @@ private data class EnhancedTodoItem(
 )
 
 private fun parseTodos(toolCall: ToolCall): List<EnhancedTodoItem> {
-    val todosParam = toolCall.parameters["todos"] ?: return emptyList()
+    val detail = toolCall.viewModel?.toolDetail as? TodoWriteToolDetail ?: return emptyList()
 
-    return when (todosParam) {
-        is List<*> -> todosParam.mapIndexedNotNull { index, item ->
-            when (item) {
-                is Map<*, *> -> {
-                    EnhancedTodoItem(
-                        id = item["id"]?.toString() ?: (index + 1).toString(),
-                        content = item["content"]?.toString() ?: "",
-                        status = item["status"]?.toString() ?: "pending",
-                        activeForm = item["activeForm"]?.toString() ?: item["content"]?.toString()
-                            ?: ""
-                    )
-                }
-                else -> EnhancedTodoItem(
-                    id = (index + 1).toString(),
-                    content = item.toString(),
-                    status = "pending",
-                    activeForm = item.toString()
-                )
-            }
-        }
-        is String -> runCatching {
-            val json = Json { ignoreUnknownKeys = true }
-            json.decodeFromString<List<JsonObject>>(todosParam).mapIndexed { index, jsonObj ->
-                EnhancedTodoItem(
-                    id = (index + 1).toString(),
-                    content = jsonObj["content"]?.jsonPrimitive?.content ?: "",
-                    status = jsonObj["status"]?.jsonPrimitive?.content ?: "pending",
-                    activeForm = jsonObj["activeForm"]?.jsonPrimitive?.content
-                        ?: jsonObj["content"]?.jsonPrimitive?.content ?: ""
-                )
-            }
-        }.getOrElse { emptyList() }
-        else -> emptyList()
+    return detail.todos.mapIndexed { index, todo ->
+        EnhancedTodoItem(
+            id = (index + 1).toString(),
+            content = todo.content,
+            status = todo.status,
+            activeForm = todo.activeForm
+        )
     }
 }

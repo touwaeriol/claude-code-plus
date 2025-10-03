@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.claudecodeplus.ui.models.ToolCall
 import com.claudecodeplus.ui.models.ToolCallStatus
-import com.claudecodeplus.sdk.types.*
+import com.claudecodeplus.ui.viewmodels.tool.*
 import com.claudecodeplus.ui.jewel.components.tools.individual.*
 import com.claudecodeplus.ui.jewel.components.tools.shared.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -26,8 +26,8 @@ import org.jetbrains.jewel.ui.component.Text
 /**
  * 类型安全的工具调用展示组件
  *
- * 这是新一代的工具展示系统入口，基于强类型的SpecificToolUse实现：
- * - 类型安全：充分利用SpecificToolUse的强类型信息
+ * 这是新一代的工具展示系统入口，基于强类型的 ViewModel 实现：
+ * - 类型安全：充分利用 ToolDetailViewModel 的强类型信息
  * - 多态展示：根据具体工具类型自动选择合适的展示组件
  * - 可扩展：新增工具类型只需添加对应的展示组件
  * - 可复用：相似工具共享展示逻辑
@@ -43,150 +43,124 @@ fun TypedToolCallDisplay(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // ?? 核心：基于SpecificToolUse的类型安全路由到专门组件
-        when (val specificTool = toolCall.specificTool) {
-            is TodoWriteToolUse -> {
+        // 🎯 核心：基于 ViewModel 的类型安全路由到专门组件
+        when (val toolDetail = toolCall.viewModel?.toolDetail) {
+            is TodoWriteToolDetail -> {
                 TodoWriteDisplayV2(
                     toolCall = toolCall,
-                    todoWriteTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is ReadToolUse -> {
-                // logD("[TypedToolCallDisplay] ?? 路由到ReadToolDisplay: ${specificTool.filePath}")
+            is ReadToolDetail -> {
                 ReadToolDisplay(
                     toolCall = toolCall,
-                    readTool = specificTool,
                     showDetails = showDetails,
                     onFileClick = { ideIntegration?.handleToolClick(toolCall) }
                 )
             }
-            is EditToolUse -> {
-    //                 logD("[TypedToolCallDisplay] ?? 路由到EditToolDisplay: ${specificTool.filePath}")
+            is EditToolDetail -> {
                 EditToolDisplay(
                     toolCall = toolCall,
-                    editTool = specificTool,
                     showDetails = showDetails,
                     onFileClick = { ideIntegration?.handleToolClick(toolCall) }
                 )
             }
-            is BashToolUse -> {
-                // logD("[TypedToolCallDisplay] ?? 路由到BashToolDisplay: ${specificTool.command}")
+            is BashToolDetail -> {
                 BashToolDisplay(
                     toolCall = toolCall,
-                    bashTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is BashOutputToolUse -> {
-                // logD("[TypedToolCallDisplay] ?? 路由到BashOutputDisplay: ${specificTool.bashId}")
+            is BashOutputToolDetail -> {
                 BashOutputDisplay(
                     toolCall = toolCall,
-                    bashOutputTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is KillShellToolUse -> {
-    //                 logD("[TypedToolCallDisplay] ? 路由到KillShellDisplay: ${specificTool.shellId}")
+            is KillShellToolDetail -> {
                 KillShellDisplay(
                     toolCall = toolCall,
-                    killShellTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is ExitPlanModeToolUse -> {
-                // logD("[TypedToolCallDisplay] ?? 路由到ExitPlanModeDisplay")
+            is ExitPlanModeToolDetail -> {
                 ExitPlanModeDisplay(
                     toolCall = toolCall,
-                    exitPlanModeTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is ListMcpResourcesToolUse -> {
-                // logD("[TypedToolCallDisplay] ?? 路由到ListMcpResourcesDisplay: ${specificTool.server}")
+            is ListMcpResourcesToolDetail -> {
                 ListMcpResourcesDisplay(
                     toolCall = toolCall,
-                    listMcpResourcesTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is ReadMcpResourceToolUse -> {
-                // logD("[TypedToolCallDisplay] ?? 路由到ReadMcpResourceDisplay: ${specificTool.server}/${specificTool.uri}")
+            is ReadMcpResourceToolDetail -> {
                 ReadMcpResourceDisplay(
                     toolCall = toolCall,
-                    readMcpResourceTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is GlobToolUse -> {
-                // logD("[TypedToolCallDisplay] ?? 路由到GlobToolDisplay: ${specificTool.pattern}")
+            is GlobToolDetail -> {
                 GlobToolDisplay(
                     toolCall = toolCall,
-                    globTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is GrepToolUse -> {
-                // logD("[TypedToolCallDisplay] ?? 路由到GrepToolDisplay: ${specificTool.pattern}")
+            is GrepToolDetail -> {
                 GrepToolDisplay(
                     toolCall = toolCall,
-                    grepTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            // 其他未专门实现的工具使用通用展示
-            is WriteToolUse -> {
+            is WriteToolDetail -> {
                 WriteToolDisplay(
                     toolCall = toolCall,
-                    writeTool = specificTool,
                     showDetails = showDetails,
                     onFileClick = { ideIntegration?.handleToolClick(toolCall) }
                 )
             }
-            is MultiEditToolUse -> {
+            is MultiEditToolDetail -> {
                 MultiEditToolDisplay(
                     toolCall = toolCall,
-                    multiEditTool = specificTool,
                     showDetails = showDetails,
                     onFileClick = { ideIntegration?.handleToolClick(toolCall) }
                 )
             }
-            is WebFetchToolUse -> {
+            is WebFetchToolDetail -> {
                 WebFetchToolDisplay(
                     toolCall = toolCall,
-                    webFetchTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is WebSearchToolUse -> {
+            is WebSearchToolDetail -> {
                 WebSearchToolDisplay(
                     toolCall = toolCall,
-                    webSearchTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is TaskToolUse -> {
+            is TaskToolDetail -> {
                 TaskToolDisplay(
                     toolCall = toolCall,
-                    taskTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is NotebookEditToolUse -> {
+            is NotebookEditToolDetail -> {
                 NotebookEditToolDisplay(
                     toolCall = toolCall,
-                    notebookEditTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is McpToolUse -> {
+            is McpToolDetail -> {
                 McpToolDisplay(
                     toolCall = toolCall,
-                    mcpTool = specificTool,
                     showDetails = showDetails
                 )
             }
-            is UnknownToolUse -> {
+            is GenericToolDetail -> {
+                GenericToolDisplay(toolCall, showDetails)
+            }
+            is SlashCommandToolDetail -> {
                 GenericToolDisplay(toolCall, showDetails)
             }
             null -> {

@@ -205,10 +205,10 @@ class SessionObjectV2(
     //             logD("[SessionObjectV2] 发送消息: ${message.take(50)}...")
             
             // 创建用户消息
-            val userMessage = EnhancedMessage(
+            val userMessage = EnhancedMessage.create(
                 id = UUID.randomUUID().toString(),
                 role = MessageRole.USER,
-                content = message,
+                text = message,
                 timestamp = System.currentTimeMillis()
             )
             addMessage(userMessage)

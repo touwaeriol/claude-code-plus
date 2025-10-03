@@ -12,7 +12,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.claudecodeplus.sdk.types.MultiEditToolUse
+import com.claudecodeplus.ui.viewmodels.tool.MultiEditToolDetail
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolHeaderDisplay
 import com.claudecodeplus.ui.jewel.components.tools.shared.ToolResultDisplay
 import com.claudecodeplus.ui.models.ToolCall
@@ -20,27 +20,33 @@ import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 
 /**
- * MultiEdit ¹¤¾ß×¨ÓÃÕ¹Ê¾×é¼þ
+ * MultiEdit å·¥å…·ä¸“ç”¨å±•ç¤ºç»„ä»¶
  */
 @Composable
 fun MultiEditToolDisplay(
     toolCall: ToolCall,
-    multiEditTool: MultiEditToolUse,
     showDetails: Boolean = true,
     onFileClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    // ä»Ž ViewModel èŽ·å–å·¥å…·è¯¦æƒ…
+    val toolDetail = toolCall.viewModel?.toolDetail as? MultiEditToolDetail
+    if (toolDetail == null) {
+        Text("é”™è¯¯ï¼šæ— æ³•èŽ·å– MultiEdit å·¥å…·è¯¦æƒ…")
+        return
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         if (!showDetails) {
-            val fileName = multiEditTool.filePath.substringAfterLast('/')
+            val fileName = toolDetail.filePath.substringAfterLast('/')
                 .substringAfterLast('\\')
             ToolHeaderDisplay(
                 icon = "MULTI",
                 toolName = "MultiEdit",
-                subtitle = "$fileName ¡¤ ${multiEditTool.edits.size} ´¦ÐÞ¸Ä",
+                subtitle = "$fileName - ${toolDetail.edits.size} å¤„ä¿®æ”¹",
                 status = toolCall.status,
                 onHeaderClick = onFileClick
             )
@@ -48,19 +54,19 @@ fun MultiEditToolDisplay(
 
         if (showDetails) {
             Text(
-                text = multiEditTool.filePath,
+                text = toolDetail.filePath,
                 style = JewelTheme.defaultTextStyle.copy(
                     fontSize = 11.sp,
                     color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f)
                 )
             )
 
-            multiEditTool.edits.forEachIndexed { index, edit ->
+            toolDetail.edits.forEachIndexed { index, edit ->
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = "ÐÞ¸Ä #${index + 1}${if (edit.replaceAll) " (È«²¿Ìæ»»)" else ""}",
+                        text = "ï¿½Þ¸ï¿½ #${index + 1}${if (edit.replaceAll) " (È«ï¿½ï¿½ï¿½æ»»)" else ""}",
                         style = JewelTheme.defaultTextStyle.copy(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
@@ -70,7 +76,7 @@ fun MultiEditToolDisplay(
                     SelectionContainer {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = "¾ÉÄÚÈÝ:",
+                                text = "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½:",
                                 style = JewelTheme.defaultTextStyle.copy(fontSize = 11.sp)
                             )
                             Text(
@@ -82,7 +88,7 @@ fun MultiEditToolDisplay(
                                 )
                             )
                             Text(
-                                text = "ÐÂÄÚÈÝ:",
+                                text = "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½:",
                                 style = JewelTheme.defaultTextStyle.copy(fontSize = 11.sp)
                             )
                             Text(
