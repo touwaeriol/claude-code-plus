@@ -35,6 +35,7 @@ object StringResources {
     const val NOTEBOOK_OPERATION_FAILED = "notebook_operation_failed"
     const val MCP_TOOL_FAILED = "mcp_tool_failed"
     const val EDIT_CHANGES = "edit_changes"
+    const val EDIT_DIFF_TITLE = "edit_diff_title"
     const val PARAMETERS_COUNT = "parameters_count"
     const val UPDATE_TASKS = "update_tasks"
     const val TASK_MANAGEMENT = "task_management"
@@ -140,6 +141,7 @@ object StringResources {
             "notebook_operation_failed" to "❌ Notebook operation failed: %1\$s",
             "mcp_tool_failed" to "❌ MCP tool execution failed: %1\$s",
             "edit_changes" to "%1\$s changes",
+            "edit_diff_title" to "Edit Preview - %1\$s",
             "parameters_count" to "%1\$s parameters",
             "update_tasks" to "Update %1\$s tasks",
             "task_management" to "Task Management",

@@ -1,5 +1,9 @@
-﻿package com.claudecodeplus.plugin.services
-
+﻿package com.claudecodeplus.plugin.services
+
+
+
+import com.claudecodeplus.ui.services.StringResources
+import com.claudecodeplus.ui.services.formatStringResource
 import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffManager
 import com.intellij.diff.requests.SimpleDiffRequest
@@ -133,7 +137,7 @@ class IdeaPlatformService(private val project: Project) {
                     val newDiffContent = diffContentFactory.create(newContent)
 
                     val fileName = File(filePath).name
-                    val diffTitle = title ?: "文件变更: $fileName"
+                    val diffTitle = title ?: formatStringResource(StringResources.EDIT_DIFF_TITLE, fileName)
 
                     val diffRequest = SimpleDiffRequest(
                         diffTitle,
@@ -315,4 +319,5 @@ class IdeaPlatformService(private val project: Project) {
             logger.warn("选择文本失败", e)
         }
     }
-}
+}
+
