@@ -8,6 +8,7 @@ package com.claudecodeplus.ui.jewel.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,6 +19,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
@@ -80,6 +82,8 @@ fun ChatInputField(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(JewelTheme.globalColors.panelBackground)
                     .then(
                         if (needsScroll) {
                             Modifier.verticalScroll(scrollState)
@@ -118,6 +122,7 @@ fun ChatInputField(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(Color.Transparent)
                     .padding(vertical = 12.dp)  // 增加垂直内边距，与占位符一致
                     .focusRequester(focusRequester)
                     .onFocusChanged { focusState ->

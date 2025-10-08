@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.flowOf
  * 这是从 cli-wrapper 模块迁移到 claude-code-sdk 的简化版本，
  * 包含了 jetbrains-plugin 模块所需的基本类型定义。
  */
-class ClaudeCodePlusBackgroundService {
+object ClaudeCodePlusBackgroundService {
 
     /**
      * 获取会话状态

@@ -88,33 +88,8 @@
     
     
     <extensions defaultExtensionNs="com.intellij">
-        <!-- 工具窗口 -->
-        <toolWindow id="ClaudeCodePlus" 
-                    displayName="Claude Code Plus"
-                    anchor="right" 
-                    icon="/icons/claude-code-simple.svg"
-                    factoryClass="com.claudecodeplus.plugin.ClaudeCodePlusToolWindowFactory"
-                    canCloseContents="false"
-                    secondary="false"/>
-                    
-        <!-- Claude Code Plus 配置 -->
-        <applicationConfigurable
-            parentId="tools"
-            instance="com.claudecodeplus.settings.ClaudeCodePlusConfigurable"
-            id="com.claudecodeplus.settings"
-            displayName="Claude Code Plus"/>
-            
-        <!-- 应用级别服务 -->
-        <applicationService 
+        <!-- application-level service -->
+        <applicationService
             serviceImplementation="com.claudecodeplus.settings.McpSettingsService"/>
-            
-        <!-- Claude Code Plus 后台服务 -->
-        <applicationService 
-            serviceImplementation="com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService"/>
-            
-        <!-- 项目级别服务 -->
-        <projectService 
-            serviceImplementation="com.claudecodeplus.plugin.services.ProjectSessionStateService"/>
-            
     </extensions>
 </idea-plugin>

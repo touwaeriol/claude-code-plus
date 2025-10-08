@@ -5,7 +5,7 @@ package com.claudecodeplus.plugin.services
  *
  * 提供项目级别的会话状态管理功能
  */
-class ProjectSessionStateService {
+object ProjectSessionStateService {
 
     /**
      * 清理当前会话

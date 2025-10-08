@@ -14,6 +14,7 @@ import com.claudecodeplus.plugin.adapters.ProjectServiceAdapter
 import com.claudecodeplus.plugin.adapters.SimpleFileIndexService
 import com.claudecodeplus.plugin.adapters.IdeaIdeIntegration
 import com.claudecodeplus.plugin.theme.IdeaThemeAdapter
+import com.claudecodeplus.plugin.services.ProjectSessionStateService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,7 +22,6 @@ import com.intellij.openapi.diagnostic.Logger
 import androidx.compose.runtime.mutableStateOf
 import com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService
 import com.claudecodeplus.plugin.services.SessionStateSyncImpl
-import com.intellij.openapi.components.service
 import com.claudecodeplus.plugin.listeners.ClaudeToolWindowListener
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.openapi.wm.ex.ToolWindowManagerEx
@@ -111,12 +111,11 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory, DumbAware {
             
             // ✅ 使用项目级服务清理会话状态（确保每次启动都是新会话）
             try {
-                val sessionStateService = project.service<com.claudecodeplus.plugin.services.ProjectSessionStateService>()
-                sessionStateService.clearCurrentSession()
+                ProjectSessionStateService.clearCurrentSession()
                 logger.info("✅ 已清理项目级会话状态，准备创建新会话")
                 
                 // 打印服务统计信息
-                val stats = sessionStateService.getStats()
+                val stats = ProjectSessionStateService.getStats()
                 logger.info("📊 项目会话服务状态: $stats")
                 
                 // ✅ 清理 SessionIdRegistry 中其他项目的会话映射，防止跨项目会话污染
@@ -139,7 +138,7 @@ class ClaudeCodePlusToolWindowFactory : ToolWindowFactory, DumbAware {
             val cliSessionManager = ClaudeSessionManager()
             
             // 获取后台服务实例
-            val backgroundService = service<ClaudeCodePlusBackgroundService>()
+            val backgroundService = ClaudeCodePlusBackgroundService
             val sessionStateSync = SessionStateSyncImpl()
             logger.info("🔗 已连接到后台服务，统计信息: ${backgroundService.getServiceStats()}")
             

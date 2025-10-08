@@ -7,7 +7,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.wm.ToolWindow
 import com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService
 import com.claudecodeplus.plugin.types.SessionState
-import com.intellij.openapi.components.service
+
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.firstOrNull
 
@@ -32,8 +32,7 @@ class ClaudeToolWindowListener(private val project: Project) : ToolWindowManager
     }
     
     // 后台服务引用
-    private val backgroundService: ClaudeCodePlusBackgroundService
-        get() = service<ClaudeCodePlusBackgroundService>()
+    private val backgroundService = ClaudeCodePlusBackgroundService
     
     // 协程作用域
     private val listenerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)

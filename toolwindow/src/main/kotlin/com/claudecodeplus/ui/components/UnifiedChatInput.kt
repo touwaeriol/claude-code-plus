@@ -233,6 +233,8 @@ fun UnifiedChatInput(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 50.dp, max = 300.dp)  // 减少最小高度，更紧凑
+                .clip(RoundedCornerShape(8.dp))
+                .background(JewelTheme.globalColors.panelBackground)
                 .clickable { focusRequester.requestFocus() }  // 🔑 关键修复：点击整个区域都能聚焦
         ) {
             // 使用简单的 BasicTextField 避免复杂的 TextArea API
@@ -257,6 +259,8 @@ fun UnifiedChatInput(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(JewelTheme.globalColors.panelBackground)
                             .padding(horizontal = 16.dp, vertical = 12.dp)
                             .clickable { focusRequester.requestFocus() }
                     ) {
@@ -282,6 +286,7 @@ fun UnifiedChatInput(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(Color.Transparent)
                     .focusRequester(focusRequester)
                     .onFocusChanged { focusState ->
                         logD("[UnifiedChatInput] 🎯 主输入框焦点变化: isFocused=${focusState.isFocused}, hasFocus=${focusState.hasFocus}")
