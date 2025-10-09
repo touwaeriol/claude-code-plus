@@ -1,10 +1,12 @@
 plugins {
     kotlin("jvm")
     id("org.jetbrains.intellij.platform")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 group = "com.claudecodeplus"
-version = "1.0.3"
+version = "1.0.4"
 
 repositories {
     mavenCentral()
@@ -31,14 +33,15 @@ dependencies {
     
     // IntelliJ Platform dependencies
     intellijPlatform {
-        // 使用较新的版本以确保对 252.* 的兼容性
+        // 使用 2025.1.4.1 版本（稳定支持 Compose）
+        // 注意：虽然 IDE 是 2025.2.3，但插件SDK保持向后兼容
         intellijIdeaCommunity("2025.1.4.1")
         
         // 🎯 Jewel和Compose内置模块 - 官方推荐方式！
         bundledModule("intellij.platform.jewel.foundation")
         bundledModule("intellij.platform.jewel.ui")
         bundledModule("intellij.platform.jewel.ideLafBridge")
-        bundledModule("intellij.libraries.compose.foundation.desktop")  // 唯一可用的Compose库
+        bundledModule("intellij.libraries.compose.foundation.desktop")  // Compose Foundation
         bundledModule("intellij.libraries.skiko")  // Compose的原生渲染库
         
         // 添加 Markdown 插件依赖
@@ -51,9 +54,9 @@ dependencies {
         bundledPlugin("com.intellij.java")
     }
     
-    // 🔧 移除外部Compose依赖，避免与IDE内置版本的类加载器冲突
-    // jetbrains-plugin模块只使用IDE内置的Compose版本
-    
+    // 🔧 添加 Compose Runtime 依赖（编译时需要）
+    compileOnly(compose.runtime)
+
     // 使用 IntelliJ Platform 的 Kotlin 标准库
     compileOnly(kotlin("stdlib"))
     
