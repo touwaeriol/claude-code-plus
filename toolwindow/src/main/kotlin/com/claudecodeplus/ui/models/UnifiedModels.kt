@@ -37,10 +37,27 @@ enum class AiModel(
     SONNET("Sonnet", "sonnet", "Balanced performance, daily coding", 200_000, "Sonnet", "🔷"),
     
     // Plan 模式 - 仅规划不执行
-    OPUS_PLAN("Opus Plan", "opusplan", "Planning mode, analysis only", 200_000, "Plan", "📝"),
-    
-    // 最新版 Opus 4 - 特定版本
-    OPUS_4("Opus 4", "claude-opus-4-20250514", "Latest Opus 4 model", 200_000, "O4", "✨")
+    OPUS_PLAN("Opus Plan", "opusplan", "Planning mode, analysis only", 200_000, "Plan", "📝");
+
+    companion object {
+        fun fromIdentifier(raw: String?): AiModel? {
+            if (raw.isNullOrBlank()) {
+                return null
+            }
+            val normalized = raw.trim().lowercase()
+            return values().firstOrNull { normalized == it.cliName.lowercase() } ?: when {
+                normalized.contains("opusplan") -> OPUS_PLAN
+                normalized.contains("opus") -> OPUS
+                normalized.contains("sonnet") -> SONNET
+                normalized.contains("default") -> DEFAULT
+                else -> null
+            }
+        }
+
+        fun resolveDisplayName(raw: String?): String? = fromIdentifier(raw)?.displayName
+
+        fun resolveShortName(raw: String?): String? = fromIdentifier(raw)?.shortName
+    }
 }
 
 /**

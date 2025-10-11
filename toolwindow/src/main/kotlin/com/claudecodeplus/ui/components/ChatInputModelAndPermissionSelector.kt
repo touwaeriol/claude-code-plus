@@ -27,44 +27,35 @@ import org.jetbrains.jewel.ui.component.*
 
 /**
  * 模型选择器组件 - 使用标准Jewel ListComboBox组件
+ *
+ * @param currentModel 当前选择的模型别名（default/opus/sonnet/opusplan）
+ * @param actualModelId 实际使用的模型ID（如 "claude-sonnet-4-5-20250929"），从 systemInit 消息获取
+ * @param onModelChange 模型切换回调
+ * @param enabled 是否启用
+ * @param compact 是否紧凑显示
  */
 @OptIn(ExperimentalJewelApi::class)
 @Composable
+@Suppress("UNUSED_PARAMETER")
 fun ChatInputModelSelector(
     currentModel: AiModel,
+    actualModelId: String? = null,
     onModelChange: (AiModel) -> Unit,
     enabled: Boolean = true,
     compact: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val models = listOf(AiModel.DEFAULT, AiModel.OPUS, AiModel.SONNET, AiModel.OPUS_PLAN, AiModel.OPUS_4)
-    val currentIndex = models.indexOf(currentModel).takeIf { it >= 0 } ?: 0
-    
-    ListComboBox(
-        items = models,
-        selectedIndex = currentIndex,
-        onSelectedItemChange = { index -> onModelChange(models[index]) },
-        enabled = enabled,
-        modifier = modifier.widthIn(
-            min = if (compact) 70.dp else 85.dp,
-            max = if (compact) 100.dp else 120.dp
+    val displayText = actualModelId?.takeIf { it.isNotBlank() } ?: currentModel.cliName
+    Text(
+        text = displayText,
+        style = JewelTheme.defaultTextStyle.copy(
+            fontSize = if (compact) 11.sp else 12.sp,
+            color = JewelTheme.globalColors.text.info
         ),
-        itemKeys = { _, item -> item.name },
-        itemContent = { item, isSelected, isActive ->
-            Text(
-                text = if (compact) item.shortName else item.displayName,
-                style = JewelTheme.defaultTextStyle.copy(
-                    fontSize = if (compact) 11.sp else 12.sp,
-                    color = when {
-                        !enabled -> JewelTheme.globalColors.text.disabled
-                        isSelected -> JewelTheme.globalColors.text.selected
-                        else -> JewelTheme.globalColors.text.normal
-                    }
-                ),
-                overflow = TextOverflow.Ellipsis,
-                maxLines = 1
-            )
-        }
+        overflow = TextOverflow.Ellipsis,
+        maxLines = 1,
+        modifier = modifier
+            .widthIn(min = if (compact) 120.dp else 180.dp)
     )
 }
 

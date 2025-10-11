@@ -95,11 +95,14 @@ class MessagePreprocessorChain(
          * 2. ContextReferenceResolver - 解析 @file:path 引用
          * 3. MacroExpander - 展开用户自定义宏
          * 4. TemplateProcessor - 处理消息模板
+         *
+         * @param emitEvent 事件发射回调，用于预处理器控制 UI 状态
          */
-        fun createDefault(): MessagePreprocessorChain {
+        fun createDefault(
+            emitEvent: suspend (sessionId: String, event: com.claudecodeplus.core.models.SessionEvent) -> Unit
+        ): MessagePreprocessorChain {
             return MessagePreprocessorChain(
                 listOf(
-                    SlashCommandInterceptor(),
                     // 未来可添加更多预处理器：
                     // ContextReferenceResolver(),
                     // MacroExpander(),

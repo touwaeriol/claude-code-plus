@@ -71,6 +71,7 @@ dependencies {
     // 测试依赖
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:1.13.8")
+    testImplementation("junit:junit:4.13.2")
     // 🚫 移除外部Compose和协程依赖 - 使用IDE平台内置版本
 }
 

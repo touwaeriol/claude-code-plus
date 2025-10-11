@@ -116,4 +116,12 @@ interface SessionService {
      * @return 是否存在
      */
     suspend fun sessionExists(sessionId: String, projectPath: String): Boolean
+
+    /**
+     * 切换会话的AI模型
+     * @param sessionId 会话ID
+     * @param modelAlias 模型别名或完整ID
+     * @return 切换结果，返回真实模型ID
+     */
+    suspend fun switchModel(sessionId: String, modelAlias: String): Result<String>
 }

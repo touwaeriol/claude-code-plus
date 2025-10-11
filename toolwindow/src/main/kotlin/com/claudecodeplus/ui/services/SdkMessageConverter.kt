@@ -291,9 +291,10 @@ object SdkMessageConverter {
      */
     private fun convertSystemMessage(message: SystemMessage): EnhancedMessage {
         val content = when (message.subtype) {
+            "init" -> formatModelSystemMessage("Initialized model", message)
+            "model_changed" -> formatModelSystemMessage("Set model to", message)
             "session_started" -> "会话已开始"
-            "model_changed" -> "模型已切换"
-            else -> "系统消息: ${message.subtype}"
+            else -> formatGenericSystemMessage(message)
         }
 
         return EnhancedMessage.create(
@@ -303,6 +304,33 @@ object SdkMessageConverter {
             timestamp = System.currentTimeMillis(),
             status = MessageStatus.COMPLETE
         )
+    }
+
+    private fun formatGenericSystemMessage(message: SystemMessage): String {
+        val dataObject = message.data.jsonObject
+        val modelId = dataObject["model"]?.jsonPrimitive?.contentOrNull
+        val displayNameOverride = dataObject["model_display_name"]?.jsonPrimitive?.contentOrNull
+        return if (modelId.isNullOrBlank()) {
+            "系统消息: ${message.subtype}"
+        } else {
+            val alias = AiModel.fromIdentifier(modelId) ?: AiModel.fromIdentifier(displayNameOverride)
+            val aliasLabel = displayNameOverride ?: alias?.displayName ?: alias?.shortName ?: modelId
+            "系统消息(${message.subtype}): $aliasLabel ($modelId)"
+        }
+    }
+
+    private fun formatModelSystemMessage(prefix: String, message: SystemMessage): String {
+        val dataObject = message.data.jsonObject
+        val modelId = dataObject["model"]?.jsonPrimitive?.contentOrNull
+        val displayNameOverride = dataObject["model_display_name"]?.jsonPrimitive?.contentOrNull
+        val alias = AiModel.fromIdentifier(modelId) ?: AiModel.fromIdentifier(displayNameOverride)
+        val aliasLabel = displayNameOverride ?: alias?.displayName ?: alias?.shortName
+        return when {
+            modelId != null && aliasLabel != null -> "$prefix $aliasLabel ($modelId)"
+            modelId != null -> "$prefix $modelId"
+            aliasLabel != null -> "$prefix $aliasLabel"
+            else -> "$prefix"
+        }
     }
 
     /**

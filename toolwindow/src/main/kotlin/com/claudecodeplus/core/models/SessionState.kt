@@ -80,6 +80,7 @@ sealed class SessionEvent {
     data class MessageReceived(val message: EnhancedMessage) : SessionEvent()
     data class HistoryLoaded(val messages: List<EnhancedMessage>) : SessionEvent()
     data class SessionIdUpdated(val oldId: String?, val newId: String) : SessionEvent()
+    data class ModelUpdated(val modelId: String) : SessionEvent() // 模型更新事件，从 systemInit 消息获取
     data class ErrorOccurred(val error: String) : SessionEvent()
     object GenerationStarted : SessionEvent()
     object GenerationStopped : SessionEvent()

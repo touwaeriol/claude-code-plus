@@ -51,6 +51,7 @@ fun SendStopButtonGroup(
     isGenerating: Boolean,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    onInterruptAndSend: (() -> Unit)? = null,
     onImageSelected: (File) -> Unit = {},
     hasInput: Boolean = true,
     enabled: Boolean = true,
@@ -87,6 +88,7 @@ fun SendStopButtonGroup(
             isGenerating = isGenerating,
             onSend = onSend,
             onStop = onStop,
+            onInterruptAndSend = onInterruptAndSend,
             hasInput = hasInput,
             enabled = enabled,
             modifier = Modifier.size(36.dp)

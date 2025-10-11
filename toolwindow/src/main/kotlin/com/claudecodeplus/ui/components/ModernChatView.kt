@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.claudecodeplus.core.ApplicationInitializer
@@ -17,6 +18,7 @@ import com.claudecodeplus.ui.viewmodels.ChatUiEffect
 import com.claudecodeplus.ui.viewmodels.ChatUiEvent
 import com.claudecodeplus.ui.viewmodels.ChatUiState
 import com.claudecodeplus.ui.viewmodels.ChatViewModel
+import com.claudecodeplus.ui.viewmodels.PendingTask
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -41,6 +43,7 @@ fun ModernChatView(
     
     // 收集UI状态
     val uiState by viewModel.uiState.collectAsState()
+    val pendingTasks by viewModel.taskState.collectAsState()
     
     // 处理副作用
     LaunchedEffect(Unit) {
@@ -59,6 +62,7 @@ fun ModernChatView(
     // 渲染聊天界面
     ChatScreenContent(
         uiState = uiState,
+        pendingTasks = pendingTasks,
         onEvent = viewModel::handleEvent,
         modifier = modifier
     )
@@ -85,6 +89,7 @@ fun ModernChatView(
 @Composable
 private fun ChatScreenContent(
     uiState: ChatUiState,
+    pendingTasks: List<PendingTask>,
     onEvent: (ChatUiEvent) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -98,6 +103,7 @@ private fun ChatScreenContent(
         
         // 输入区域
         UnifiedChatInput(
+            pendingTasks = pendingTasks,
             contexts = uiState.contexts,
             onContextAdd = { context ->
                 onEvent(ChatUiEvent.AddContext(context))
@@ -116,10 +122,7 @@ private fun ChatScreenContent(
             },
             isGenerating = uiState.isGenerating,
             enabled = true,
-            selectedModel = uiState.selectedModel,
-            onModelChange = { model ->
-                onEvent(ChatUiEvent.ChangeModel(model))
-            },
+            actualModelId = uiState.actualModelId, // 传递实际模型ID
             selectedPermissionMode = uiState.selectedPermissionMode,
             onPermissionModeChange = { mode ->
                 onEvent(ChatUiEvent.ChangePermissionMode(mode))

@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -42,8 +43,7 @@ import java.util.UUID
 class SessionServiceImpl(
     private val messageProcessor: MessageProcessor,
     private val toolResultProcessor: ToolResultProcessor = ToolResultProcessor(),
-    private val clientFactory: (ClaudeCodeOptions) -> ClaudeCodeSdkClient = { opts -> ClaudeCodeSdkClient(opts) },
-    private val preprocessorChain: MessagePreprocessorChain = MessagePreprocessorChain.createDefault()
+    private val clientFactory: (ClaudeCodeOptions) -> ClaudeCodeSdkClient = { opts -> ClaudeCodeSdkClient(opts) }
 ) : SessionService {
 
     private val sessionManager = ClaudeSessionManager()
@@ -51,6 +51,13 @@ class SessionServiceImpl(
 
     // 为每个会话保存一个 SDK 客户端
     private val sessionClients = ConcurrentHashMap<String, ClaudeCodeSdkClient>()
+
+    // 延迟初始化预处理器链，以便访问实例方法 emitSessionEvent
+    private val preprocessorChain: MessagePreprocessorChain by lazy {
+        MessagePreprocessorChain.createDefault { sessionId, event ->
+            emitSessionEvent(sessionId, event)
+        }
+    }
 
     init {
         logI("SessionServiceImpl 初始化，直接使用 ClaudeCodeSdkClient")
@@ -115,21 +122,7 @@ class SessionServiceImpl(
             val preprocessResult = preprocessorChain.process(message, client, sessionId)
 
             when (preprocessResult) {
-                is PreprocessResult.Intercepted -> {
-                    // 命令已被拦截处理，发送反馈消息（如果有）
-                    if (preprocessResult.feedback != null) {
-                        val feedbackMsg = EnhancedMessage.create(
-                            role = MessageRole.SYSTEM,
-                            text = preprocessResult.feedback,
-                            timestamp = System.currentTimeMillis()
-                        )
-                        emitSessionEvent(sessionId, SessionEvent.MessageReceived(feedbackMsg))
-                    }
-                    logI("消息被预处理器拦截: sessionId=$sessionId")
-                    return@suspendResultOf
-                }
                 is PreprocessResult.Continue -> {
-                    // 继续发送消息（使用可能被修改过的消息）
                     val finalMessage = preprocessResult.message
                     logI("消息通过预处理器: sessionId=$sessionId, finalMessage=${finalMessage.take(50)}...")
 
@@ -141,6 +134,14 @@ class SessionServiceImpl(
 
                     // 监听响应
                     client.receiveResponse()
+                        .onEach { sdkMessage ->
+                            if (sdkMessage is com.claudecodeplus.sdk.types.SystemMessage) {
+                                tryExtractModelId(sdkMessage)?.let { modelId ->
+                                    logI("检测到系统消息中的模型信息: subtype=${sdkMessage.subtype}, model=$modelId")
+                                    emitSessionEvent(sessionId, SessionEvent.ModelUpdated(modelId))
+                                }
+                            }
+                        }
                         .map { sdkMessage ->
                             SdkMessageConverter.fromSdkMessage(sdkMessage)
                         }
@@ -154,7 +155,13 @@ class SessionServiceImpl(
                         }
                         .collect { }
 
+                    // 响应流结束后，发射生成停止事件
+                    emitSessionEvent(sessionId, SessionEvent.GenerationStopped)
                     logI("消息发送成功: sessionId=$sessionId")
+                }
+                is PreprocessResult.Intercepted -> {
+                    emitSessionEvent(sessionId, SessionEvent.GenerationStopped)
+                    return@suspendResultOf
                 }
             }
             // ========== 结束：消息预处理 ==========
@@ -374,23 +381,56 @@ class SessionServiceImpl(
             false
         }
     }
-    
+
+    override suspend fun switchModel(sessionId: String, modelAlias: String): Result<String> = suspendResultOf {
+        logI("切换会话模型: sessionId=$sessionId, alias=$modelAlias")
+        val client = sessionClients[sessionId]
+            ?: throw AppError.SessionError("会话不存在: $sessionId", sessionId = sessionId)
+
+        emitSessionEvent(sessionId, SessionEvent.GenerationStarted)
+        try {
+            val realModelId = client.setModel(modelAlias) ?: modelAlias
+            logI("✅ 模型切换成功: sessionId=$sessionId, model=$realModelId")
+            emitSessionEvent(sessionId, SessionEvent.ModelUpdated(realModelId))
+            val successMsg = EnhancedMessage.create(
+                role = MessageRole.SYSTEM,
+                text = "Set model to $modelAlias ($realModelId)",
+                timestamp = System.currentTimeMillis()
+            )
+            emitSessionEvent(sessionId, SessionEvent.MessageReceived(successMsg))
+            realModelId
+        } catch (e: Exception) {
+            logE("模型切换失败", e)
+            emitSessionEvent(sessionId, SessionEvent.ErrorOccurred("模型切换失败: ${e.message}"))
+            val errorMsg = EnhancedMessage.create(
+                role = MessageRole.SYSTEM,
+                text = "❌ 模型切换失败: ${e.message}",
+                timestamp = System.currentTimeMillis(),
+                isError = true
+            )
+            emitSessionEvent(sessionId, SessionEvent.MessageReceived(errorMsg))
+            throw AppError.SessionError("模型切换失败: ${e.message}", sessionId = sessionId)
+        } finally {
+            emitSessionEvent(sessionId, SessionEvent.GenerationStopped)
+        }
+    }
+
     /**
      * 注册会话事件流
      */
     private fun registerSessionEvents(sessionId: String) {
         if (!sessionEvents.containsKey(sessionId)) {
-            sessionEvents[sessionId] = MutableSharedFlow()
+            sessionEvents[sessionId] = MutableSharedFlow(replay = 1, extraBufferCapacity = 16)
     //             logD("已注册会话事件流: sessionId=$sessionId")
         }
     }
-    
+
     /**
      * 获取或创建事件流
      */
     private fun getOrCreateEventFlow(sessionId: String): MutableSharedFlow<SessionEvent> {
         return sessionEvents.getOrPut(sessionId) {
-            MutableSharedFlow<SessionEvent>().also {
+            MutableSharedFlow<SessionEvent>(replay = 1, extraBufferCapacity = 16).also {
     //                 logD("创建新的会话事件流: sessionId=$sessionId")
             }
         }
@@ -399,13 +439,25 @@ class SessionServiceImpl(
     /**
      * 发射会话事件
      */
-    private fun emitSessionEvent(sessionId: String, event: SessionEvent) {
+    private suspend fun emitSessionEvent(sessionId: String, event: SessionEvent) {
         try {
             val eventFlow = getOrCreateEventFlow(sessionId)
-            eventFlow.tryEmit(event)
-    //             logD("发射会话事件: sessionId=$sessionId, event=${event::class.simpleName}")
+            eventFlow.emit(event)
+            logI("📢 发射会话事件: sessionId=$sessionId, event=${event::class.simpleName}")
         } catch (e: Exception) {
             logE("发射会话事件失败", e)
+            throw e
+        }
+    }
+
+    private fun tryExtractModelId(message: com.claudecodeplus.sdk.types.SystemMessage): String? {
+        return try {
+            val dataObject = message.data.jsonObject
+            dataObject["model"]?.jsonPrimitive?.contentOrNull
+                ?: dataObject["model_display_name"]?.jsonPrimitive?.contentOrNull
+        } catch (e: Exception) {
+            logW("解析系统消息模型信息失败: subtype=${message.subtype}", e)
+            null
         }
     }
 }

@@ -8,6 +8,8 @@ import com.claudecodeplus.sdk.types.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
 import java.util.logging.Logger
 
@@ -71,6 +73,8 @@ class ClaudeCodeSdkClient(
     private var controlProtocol: ControlProtocol? = null
     private var clientScope: CoroutineScope? = null
     private var serverInfo: Map<String, Any>? = null
+    private val commandMutex = Mutex()
+    private var pendingModelUpdate: CompletableDeferred<String?>? = null
     
     private val json = Json {
         ignoreUnknownKeys = true
@@ -91,7 +95,9 @@ class ClaudeCodeSdkClient(
         logger.info("🚀 创建SubprocessTransport，流模式: true")
         
         // Create control protocol
-        controlProtocol = ControlProtocol(actualTransport!!, options)
+        controlProtocol = ControlProtocol(actualTransport!!, options).apply {
+            systemInitCallback = { modelId -> onSystemInit(modelId) }
+        }
         logger.info("📡 创建ControlProtocol")
         
         // Create client scope for background tasks
@@ -132,43 +138,41 @@ class ClaudeCodeSdkClient(
      * Send a user message to Claude.
      */
     suspend fun query(prompt: String, sessionId: String = "default") {
-        ensureConnected()
-        
-        logger.info("💬 发送用户消息 [session=$sessionId]: $prompt")
-        
-        val userMessage = UserMessage(
-            content = JsonPrimitive(prompt),
-            sessionId = sessionId
-        )
-        
-        val messageJson = buildJsonObject {
-            put("type", "user")
-            put("message", buildJsonObject {
-                put("role", "user")
-                put("content", prompt)
-            })
-            put("parent_tool_use_id", JsonNull)
-            put("session_id", sessionId)
+        runCommand {
+            ensureConnected()
+
+            logger.info("💬 发送用户消息 [session=$sessionId]: $prompt")
+
+            val messageJson = buildJsonObject {
+                put("type", "user")
+                put("message", buildJsonObject {
+                    put("role", "user")
+                    put("content", prompt)
+                })
+                put("parent_tool_use_id", JsonNull)
+                put("session_id", sessionId)
+            }
+
+            logger.info("📤 发送JSON消息: ${messageJson.toString()}")
+            actualTransport!!.write(messageJson.toString())
+            logger.info("✅ 消息已发送到CLI")
         }
-        
-        logger.info("📤 发送JSON消息: ${messageJson.toString()}")
-        actualTransport!!.write(messageJson.toString())
-        logger.info("✅ 消息已发送到CLI")
     }
     
     /**
      * Send a stream of messages to Claude.
      */
     suspend fun queryStream(messages: Flow<Map<String, Any>>, sessionId: String = "default") {
-        ensureConnected()
-        
-        messages.collect { messageData ->
-            val enhancedMessage = messageData.toMutableMap().apply {
-                put("session_id", sessionId)
+        runCommand {
+            ensureConnected()
+            messages.collect { messageData ->
+                val enhancedMessage = messageData.toMutableMap().apply {
+                    put("session_id", sessionId)
+                }
+
+                val messageJson = Json.encodeToJsonElement(enhancedMessage)
+                actualTransport!!.write(messageJson.toString())
             }
-            
-            val messageJson = Json.encodeToJsonElement(enhancedMessage)
-            actualTransport!!.write(messageJson.toString())
         }
     }
     
@@ -256,13 +260,15 @@ class ClaudeCodeSdkClient(
      * ```
      */
     suspend fun setPermissionMode(mode: String) {
-        ensureConnected()
-        logger.info("🔐 设置权限模式: $mode")
+        runCommand {
+            ensureConnected()
+            logger.info("🔐 设置权限模式: $mode")
 
-        val request = SetPermissionModeRequest(mode = mode)
-        controlProtocol!!.sendControlRequest(request)
+            val request = SetPermissionModeRequest(mode = mode)
+            controlProtocol!!.sendControlRequest(request)
 
-        logger.info("✅ 权限模式已更新为: $mode")
+            logger.info("✅ 权限模式已更新为: $mode")
+        }
     }
 
     /**
@@ -291,14 +297,36 @@ class ClaudeCodeSdkClient(
      * client.receiveResponse().collect { ... }
      * ```
      */
-    suspend fun setModel(model: String?) {
+    suspend fun setModel(model: String?): String? = runCommand {
         ensureConnected()
         logger.info("🤖 设置模型: ${model ?: "default"}")
 
-        val request = SetModelRequest(model = model)
-        controlProtocol!!.sendControlRequest(request)
+        val deferred = CompletableDeferred<String?>()
+        pendingModelUpdate?.cancel()
+        pendingModelUpdate = deferred
 
-        logger.info("✅ 模型已更新为: ${model ?: "default"}")
+        val request = SetModelRequest(model = model)
+
+        try {
+            controlProtocol!!.sendControlRequest(request)
+        } catch (e: Exception) {
+            pendingModelUpdate = null
+            deferred.completeExceptionally(e)
+            throw e
+        }
+
+        val result = try {
+            withTimeout(5_000) { deferred.await() }
+        } catch (e: TimeoutCancellationException) {
+            logger.warning("等待模型切换确认超时，使用请求模型作为回退: ${model ?: "default"}")
+            model
+        } finally {
+            pendingModelUpdate = null
+        }
+
+        updateCachedModel(result ?: model)
+        logger.info("✅ 模型已更新为: ${result ?: model ?: "default"}")
+        result ?: model
     }
 
     /**
@@ -326,6 +354,8 @@ class ClaudeCodeSdkClient(
      */
     suspend fun disconnect() {
         try {
+            pendingModelUpdate?.cancel()
+            pendingModelUpdate = null
             controlProtocol?.stopMessageProcessing()
             actualTransport?.close()
             clientScope?.let { scope ->
@@ -338,6 +368,31 @@ class ClaudeCodeSdkClient(
             controlProtocol = null
             clientScope = null
             serverInfo = null
+        }
+    }
+
+    private fun updateCachedModel(model: String?) {
+        val updated = (serverInfo?.toMutableMap() ?: mutableMapOf()).apply {
+            put("model", model ?: "default")
+            if (!containsKey("status")) {
+                put("status", "connected")
+            }
+            if (!containsKey("mode")) {
+                put("mode", "stream-json")
+            }
+        }
+        serverInfo = updated
+    }
+
+    private suspend fun <T> runCommand(block: suspend () -> T): T {
+        return commandMutex.withLock { block() }
+    }
+
+    internal fun onSystemInit(modelId: String?) {
+        pendingModelUpdate?.let { deferred ->
+            if (!deferred.isCompleted) {
+                deferred.complete(modelId)
+            }
         }
     }
     

@@ -39,6 +39,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.IndexedFileInfo
 import com.claudecodeplus.ui.services.FileIndexService
@@ -52,6 +53,9 @@ import org.jetbrains.jewel.ui.component.TextArea
 import kotlinx.coroutines.launch
 import java.io.File
 import androidx.compose.runtime.DisposableEffect
+import com.claudecodeplus.ui.viewmodels.PendingTask
+import com.claudecodeplus.ui.viewmodels.TaskStatus
+import com.claudecodeplus.ui.viewmodels.TaskType
 
 // 导入内联引用系统
 import com.claudecodeplus.ui.jewel.components.parseInlineReferences
@@ -86,6 +90,7 @@ import com.claudecodeplus.ui.jewel.components.ContextTriggerMode
 @Composable
 fun UnifiedChatInput(
     modifier: Modifier = Modifier,
+    pendingTasks: List<com.claudecodeplus.ui.viewmodels.PendingTask> = emptyList(),
     contexts: List<ContextReference> = emptyList(),
     onContextAdd: (ContextReference) -> Unit = {},
     onContextRemove: (ContextReference) -> Unit = {},
@@ -96,6 +101,7 @@ fun UnifiedChatInput(
     isGenerating: Boolean = false,
     enabled: Boolean = true,
     selectedModel: AiModel = AiModel.OPUS,
+    actualModelId: String? = null, // 实际使用的模型ID（从 systemInit 获取）
     onModelChange: (AiModel) -> Unit = {},
     selectedPermissionMode: PermissionMode = PermissionMode.DEFAULT,
     onPermissionModeChange: (PermissionMode) -> Unit = {},
@@ -205,6 +211,15 @@ fun UnifiedChatInput(
                     isFocused = focusState.hasFocus
                 }
         ) {
+            if (pendingTasks.isNotEmpty()) {
+                PendingTaskBar(
+                    tasks = pendingTasks,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
         // 顶部工具栏：上下文管理（条件显示）
         if (showContextControls && (contexts.isNotEmpty() || enabled)) {
             TopToolbar(
@@ -344,7 +359,7 @@ fun UnifiedChatInput(
                             }
                             // Enter 发送消息 (最低优先级)
                             keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp && !keyEvent.isShiftPressed && !keyEvent.isAltPressed -> {
-                                if (textFieldValue.text.isNotBlank() && !isGenerating) {
+                                if (textFieldValue.text.isNotBlank() && enabled) {
                                     onSend(textFieldValue.text)
                                     sessionObject?.clearInput()
                                 }
@@ -361,6 +376,7 @@ fun UnifiedChatInput(
         
         BottomToolbar(
             selectedModel = selectedModel,
+            actualModelId = actualModelId, // 传递实际模型ID
             onModelChange = onModelChange,
             selectedPermissionMode = selectedPermissionMode,
             onPermissionModeChange = onPermissionModeChange,
@@ -451,6 +467,64 @@ fun UnifiedChatInput(
     }
 }
 
+@Composable
+private fun PendingTaskBar(
+    tasks: List<PendingTask>,
+    modifier: Modifier = Modifier
+) {
+    val visibleTasks = tasks.filter { it.status == TaskStatus.PENDING || it.status == TaskStatus.RUNNING }
+    if (visibleTasks.isEmpty()) {
+        return
+    }
+
+    Column(modifier = modifier) {
+        Text(
+            text = "任务队列 (${visibleTasks.size})",
+            style = JewelTheme.defaultTextStyle,
+            color = JewelTheme.globalColors.text.info,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+
+        visibleTasks.forEach { task ->
+            val label = when (task.type) {
+                TaskType.SWITCH_MODEL -> "/model ${task.alias}"
+                TaskType.QUERY -> task.text.trim()
+            }
+
+            val (statusText, statusColor) = when (task.status) {
+                TaskStatus.PENDING -> "排队中" to JewelTheme.globalColors.text.disabled
+                TaskStatus.RUNNING -> "执行中" to JewelTheme.globalColors.text.selected
+                else -> "" to JewelTheme.globalColors.text.normal
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(JewelTheme.globalColors.panelBackground)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    style = JewelTheme.defaultTextStyle,
+                    color = JewelTheme.globalColors.text.normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = true)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = statusText,
+                    style = JewelTheme.defaultTextStyle,
+                    color = statusColor
+                )
+            }
+        }
+    }
+}
+
 /**
  * 顶部工具栏组件
  */
@@ -497,6 +571,7 @@ private fun TopToolbar(
 @Composable
 private fun BottomToolbar(
     selectedModel: AiModel,
+    actualModelId: String? = null, // 实际模型ID
     onModelChange: (AiModel) -> Unit,
     selectedPermissionMode: PermissionMode,
     onPermissionModeChange: (PermissionMode) -> Unit,
@@ -540,6 +615,7 @@ private fun BottomToolbar(
             ResponsiveControlsGroup(
                 availableWidth = toolbarWidth,  // 使用计算后的工具栏宽度
                 selectedModel = selectedModel,
+                actualModelId = actualModelId, // 传递实际模型ID
                 onModelChange = onModelChange,
                 selectedPermissionMode = selectedPermissionMode,
                 onPermissionModeChange = onPermissionModeChange,
@@ -547,7 +623,8 @@ private fun BottomToolbar(
                 onSkipPermissionsChange = onSkipPermissionsChange,
                 autoCleanupContexts = autoCleanupContexts,
                 onAutoCleanupContextsChange = onAutoCleanupContextsChange,
-                enabled = enabled,  // 保持控件在生成期间可用，允许用户修改设置
+                isGenerating = isGenerating,  // 传递生成状态，在生成期间禁用控件
+                enabled = enabled,
                 showModelSelector = showModelSelector,
                 showPermissionControls = showPermissionControls,
                 modifier = Modifier.weight(1f, fill = false)
@@ -557,8 +634,9 @@ private fun BottomToolbar(
             if (showSendButton) {
                 SendStopButtonGroup(
                     isGenerating = isGenerating,
-                    onSend = {},
-                    onStop = { onStop?.invoke() },
+                    onSend = onSend,
+                    onStop = onStop,
+                    onInterruptAndSend = onInterruptAndSend,
                     onImageSelected = onImageSelected,
                     hasInput = hasInput,
                     enabled = enabled,
@@ -580,6 +658,7 @@ private fun BottomToolbar(
 private fun ResponsiveControlsGroup(
     availableWidth: androidx.compose.ui.unit.Dp,
     selectedModel: AiModel,
+    actualModelId: String? = null, // 实际模型ID
     onModelChange: (AiModel) -> Unit,
     selectedPermissionMode: PermissionMode,
     onPermissionModeChange: (PermissionMode) -> Unit,
@@ -587,11 +666,15 @@ private fun ResponsiveControlsGroup(
     onSkipPermissionsChange: (Boolean) -> Unit,
     autoCleanupContexts: Boolean,
     onAutoCleanupContextsChange: (Boolean) -> Unit,
+    isGenerating: Boolean,  // 新增：生成状态
     enabled: Boolean,
     showModelSelector: Boolean,
     showPermissionControls: Boolean,
     modifier: Modifier = Modifier
 ) {
+    // 计算实际的可用状态：在生成期间禁用所有控件
+    val actuallyEnabled = enabled && !isGenerating
+
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -600,27 +683,28 @@ private fun ResponsiveControlsGroup(
         if (showModelSelector) {
             ChatInputModelSelector(
                 currentModel = selectedModel,
+                actualModelId = actualModelId, // 传递实际模型ID
                 onModelChange = onModelChange,
-                enabled = enabled,
+                enabled = actuallyEnabled,  // 生成时禁用
                 compact = false, // 使用标准模式确保正确显示模型名称
                 modifier = Modifier.widthIn(max = 140.dp) // 与权限选择器宽度统一
             )
         }
-        
+
         if (showPermissionControls) {
             ChatInputPermissionSelector(
                 currentPermissionMode = selectedPermissionMode,
                 onPermissionModeChange = onPermissionModeChange,
-                enabled = enabled,
+                enabled = actuallyEnabled,  // 生成时禁用
                 compact = false, // 使用标准模式显示完整权限名称
                 modifier = Modifier.widthIn(max = 140.dp) // 与模型选择器宽度统一
             )
-            
+
             // 跳过权限复选框 - 标准样式
             SkipPermissionsCheckbox(
                 checked = skipPermissions,
                 onCheckedChange = onSkipPermissionsChange,
-                enabled = enabled
+                enabled = actuallyEnabled  // 生成时禁用
             )
             
             // 自动清理上下文复选框 - 暂时隐藏，默认不自动清理
@@ -737,4 +821,3 @@ private class UnifiedChatContextSearchService(
         }
     }
 }
-

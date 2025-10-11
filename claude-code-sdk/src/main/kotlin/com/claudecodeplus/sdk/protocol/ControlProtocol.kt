@@ -18,6 +18,7 @@ class ControlProtocol(
     private val transport: Transport,
     private val options: ClaudeCodeOptions
 ) {
+    var systemInitCallback: ((String?) -> Unit)? = null
     private val messageParser = MessageParser()
     private val json = Json { 
         ignoreUnknownKeys = true
@@ -226,7 +227,8 @@ class ControlProtocol(
             // Extract server information from init message
             jsonObject["session_id"]?.jsonPrimitive?.content?.let { serverInfo["session_id"] = it }
             jsonObject["cwd"]?.jsonPrimitive?.content?.let { serverInfo["cwd"] = it }
-            jsonObject["model"]?.jsonPrimitive?.content?.let { serverInfo["model"] = it }
+            val modelId = jsonObject["model"]?.jsonPrimitive?.content
+            modelId?.let { serverInfo["model"] = it }
             jsonObject["permissionMode"]?.jsonPrimitive?.content?.let { serverInfo["permissionMode"] = it }
             jsonObject["apiKeySource"]?.jsonPrimitive?.content?.let { serverInfo["apiKeySource"] = it }
             
@@ -263,6 +265,7 @@ class ControlProtocol(
             _systemInitReceived.trySend(serverInfo)
             
             println("System initialization received: $serverInfo")
+            systemInitCallback?.invoke(modelId)
         } catch (e: Exception) {
             println("Failed to handle system init: ${e.message}")
             _systemInitReceived.trySend(mapOf("status" to "error", "error" to (e.message ?: "Unknown error")))

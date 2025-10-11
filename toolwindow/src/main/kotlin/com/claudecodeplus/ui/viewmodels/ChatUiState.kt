@@ -21,6 +21,7 @@ data class ChatUiState(
     
     // 模型和权限设置
     val selectedModel: AiModel = AiModel.OPUS,
+    val actualModelId: String? = null, // 真实模型ID，如 "claude-sonnet-4-5-20250929"
     val selectedPermissionMode: PermissionMode = PermissionMode.DEFAULT,
     val skipPermissions: Boolean = true,
     
@@ -76,7 +77,6 @@ sealed class ChatUiEvent {
     data class RemoveContext(val context: ContextReference) : ChatUiEvent()
     
     // 设置相关事件
-    data class ChangeModel(val model: AiModel) : ChatUiEvent()
     data class ChangePermissionMode(val mode: PermissionMode) : ChatUiEvent()
     data class ToggleSkipPermissions(val skip: Boolean) : ChatUiEvent()
     

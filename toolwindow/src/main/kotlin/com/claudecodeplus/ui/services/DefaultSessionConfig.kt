@@ -140,7 +140,6 @@ object DefaultSessionConfig {
                 "opus" -> AiModel.OPUS
                 "sonnet" -> AiModel.SONNET
                 "opusplan" -> AiModel.OPUS_PLAN
-                "claude-opus-4-20250514" -> AiModel.OPUS_4
                 else -> {
     //                     logD("[DefaultSessionConfig] 未知的 Claude 模型: $modelStr, 使用默认模型")
                     null

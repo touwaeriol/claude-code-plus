@@ -12,11 +12,29 @@ import com.claudecodeplus.core.models.SessionEvent
 import com.claudecodeplus.core.services.ProjectService
 import com.claudecodeplus.core.services.SessionService
 import com.claudecodeplus.core.services.ToolResultProcessor
+import com.claudecodeplus.ui.models.AiModel
 import com.claudecodeplus.ui.models.EnhancedMessage
 import com.claudecodeplus.ui.services.formatStringResource
 import com.claudecodeplus.ui.services.StringResources
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.update
+import java.util.UUID
+
+enum class TaskType { SWITCH_MODEL, QUERY }
+
+enum class TaskStatus { PENDING, RUNNING, SUCCESS, FAILED }
+
+data class PendingTask(
+    val id: String = UUID.randomUUID().toString(),
+    val type: TaskType,
+    val text: String,
+    val alias: String? = null,
+    val status: TaskStatus = TaskStatus.PENDING,
+    val realModelId: String? = null,
+    val error: String? = null
+)
 
 /**
  * 聊天界面ViewModel
@@ -32,6 +50,9 @@ class ChatViewModel {
     // UI状态
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState = _uiState.asStateFlow()
+    private val _taskState = MutableStateFlow<List<PendingTask>>(emptyList())
+    val taskState = _taskState.asStateFlow()
+    private val taskChannel = Channel<PendingTask>(Channel.UNLIMITED)
     
     // 副作用事件
     private val _effects = MutableSharedFlow<ChatUiEffect>()
@@ -41,9 +62,41 @@ class ChatViewModel {
     private val viewModelScope = CoroutineScope(
         Dispatchers.Main + SupervisorJob()
     )
-    
+
     // 会话事件监听作业
     private var sessionEventJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            processTasks()
+        }
+    }
+
+    private fun enqueueTask(rawText: String) {
+        val text = rawText.trim()
+        if (text.isBlank()) {
+            return
+        }
+
+        val pendingTask = if (text.startsWith("/model")) {
+            val alias = text.removePrefix("/model").trim()
+            if (alias.isBlank()) {
+                viewModelScope.launch {
+                    showError("模型别名不能为空")
+                }
+                return
+            }
+            PendingTask(type = TaskType.SWITCH_MODEL, text = rawText, alias = alias)
+        } else {
+            PendingTask(type = TaskType.QUERY, text = rawText)
+        }
+
+        _taskState.update { it + pendingTask }
+        clearInput()
+        viewModelScope.launch {
+            taskChannel.send(pendingTask)
+        }
+    }
     
     /**
      * 处理UI事件
@@ -52,7 +105,7 @@ class ChatViewModel {
         viewModelScope.launch {
             try {
                 when (event) {
-                    is ChatUiEvent.SendMessage -> sendMessage(event.text)
+                    is ChatUiEvent.SendMessage -> enqueueTask(event.text)
                     is ChatUiEvent.InterruptAndSend -> interruptAndSend(event.text)
                     is ChatUiEvent.StopGeneration -> stopGeneration()
                     is ChatUiEvent.LoadHistory -> loadHistory()
@@ -61,7 +114,6 @@ class ChatViewModel {
                     is ChatUiEvent.ToggleContextSelector -> toggleContextSelector(event.show)
                     is ChatUiEvent.AddContext -> addContext(event.context)
                     is ChatUiEvent.RemoveContext -> removeContext(event.context)
-                    is ChatUiEvent.ChangeModel -> changeModel(event.model)
                     is ChatUiEvent.ChangePermissionMode -> changePermissionMode(event.mode)
                     is ChatUiEvent.ToggleSkipPermissions -> toggleSkipPermissions(event.skip)
                     is ChatUiEvent.InitializeSession -> initializeSession(event.sessionId, event.projectPath)
@@ -111,72 +163,127 @@ class ChatViewModel {
         _effects.emit(ChatUiEffect.FocusInput)
     }
     
+    private suspend fun processTasks() {
+        for (task in taskChannel) {
+            markTaskRunning(task.id)
+            when (task.type) {
+                TaskType.SWITCH_MODEL -> executeSwitchModelTask(task)
+                TaskType.QUERY -> executeQueryTask(task)
+            }
+        }
+    }
+
+    private suspend fun executeSwitchModelTask(task: PendingTask) {
+        val alias = task.alias
+        val sessionId = _uiState.value.sessionId
+
+        if (alias.isNullOrBlank()) {
+            markTaskFailure(task.id, "模型别名不能为空")
+            return
+        }
+
+        if (sessionId.isNullOrBlank()) {
+            markTaskFailure(task.id, "尚未建立会话")
+            showError("请先创建会话后再切换模型")
+            return
+        }
+
+        val result = sessionService.switchModel(sessionId, alias)
+
+        result.onSuccess { realId ->
+            markTaskSuccess(task.id, realId)
+        }.onFailure { appError ->
+            val message = appError.message ?: "模型切换失败"
+            markTaskFailure(task.id, message)
+            viewModelScope.launch { showError(message) }
+        }
+    }
+
     /**
      * 发送消息
      */
-    private suspend fun sendMessage(text: String) {
-        if (text.isBlank() || _uiState.value.isGenerating) return
-        
-        logI("发送消息: ${text.take(50)}...")
-        
+    private suspend fun executeQueryTask(task: PendingTask) {
+        val text = task.text
+        if (text.isBlank()) {
+            markTaskFailure(task.id, "消息为空")
+            return
+        }
+
+        logI("执行队列消息: ${text.take(50)}...")
+
         val currentState = _uiState.value
-        
+
         try {
-            updateState { 
-                it.copy(
-                    isGenerating = true,
-                    errorMessage = null
-                )
-            }
-            
-            val sessionId = currentState.sessionId
-            if (sessionId == null) {
-                // 创建新会话
+            updateState { it.copy(errorMessage = null) }
+
+            val sessionId = currentState.sessionId ?: run {
                 val newSessionResult = sessionService.createSession(
                     projectPath = currentState.projectPath,
                     model = currentState.selectedModel,
                     permissionMode = currentState.selectedPermissionMode
                 )
-                
+
                 if (newSessionResult.isSuccess) {
                     val newSessionId = newSessionResult.getOrNull()!!
                     logI("新会话创建成功: $newSessionId")
-                    
-                    updateState { 
+                    updateState {
                         it.copy(
                             sessionId = newSessionId,
                             isNewSession = false
                         )
                     }
-                    
-                    // 启动新会话的事件监听
                     startSessionEventListening(newSessionId)
-                    
-                    // 发送消息到新会话
-                    sendMessageToSession(newSessionId, text)
+                    newSessionId
                 } else {
                     throw Exception(formatStringResource(StringResources.SESSION_CREATION_FAILED, newSessionResult))
                 }
-            } else {
-                // 发送到现有会话
-                sendMessageToSession(sessionId, text)
             }
-            
-            // 清空输入框
-            clearInput()
-            
-            // 滚动到底部
+
+            sendMessageToSession(sessionId, text)
+
             _effects.emit(ChatUiEffect.ScrollToBottom)
-            
+            markTaskSuccess(task.id)
         } catch (e: Exception) {
             logE("发送消息失败", e)
-            updateState { 
+            markTaskFailure(task.id, e.message ?: formatStringResource(StringResources.SEND_MESSAGE_FAILED, ""))
+            updateState {
                 it.copy(
-                    isGenerating = false,
                     errorMessage = formatStringResource(StringResources.SEND_MESSAGE_FAILED, e.message ?: "")
                 )
             }
         }
+    }
+
+    private fun markTaskRunning(taskId: String) {
+        updateTask(taskId) { it.copy(status = TaskStatus.RUNNING) }
+        refreshGeneratingState()
+    }
+
+    private fun markTaskSuccess(taskId: String, realModelId: String? = null) {
+        updateTask(taskId) { it.copy(status = TaskStatus.SUCCESS, realModelId = realModelId) }
+        removeTask(taskId)
+        refreshGeneratingState()
+    }
+
+    private fun markTaskFailure(taskId: String, error: String) {
+        updateTask(taskId) { it.copy(status = TaskStatus.FAILED, error = error) }
+        removeTask(taskId)
+        refreshGeneratingState()
+    }
+
+    private fun updateTask(taskId: String, transform: (PendingTask) -> PendingTask) {
+        _taskState.update { list ->
+            list.map { task -> if (task.id == taskId) transform(task) else task }
+        }
+    }
+
+    private fun removeTask(taskId: String) {
+        _taskState.update { list -> list.filterNot { it.id == taskId } }
+    }
+
+    private fun refreshGeneratingState() {
+        val running = _taskState.value.any { it.status == TaskStatus.RUNNING }
+        updateState { it.copy(isGenerating = running) }
     }
     
     /**
@@ -208,7 +315,7 @@ class ChatViewModel {
         delay(100)
         
         // 发送新消息
-        sendMessage(text)
+        enqueueTask(text)
     }
     
     /**
@@ -302,13 +409,13 @@ class ChatViewModel {
      */
     private suspend fun handleSessionEvent(event: SessionEvent) {
     //         logD("收到会话事件: ${event::class.simpleName}")
-        
+
         when (event) {
             is SessionEvent.MessageReceived -> {
                 addMessage(event.message)
             }
             is SessionEvent.HistoryLoaded -> {
-                updateState { 
+                updateState {
                     it.copy(
                         messages = event.messages,
                         isLoadingHistory = false
@@ -317,23 +424,33 @@ class ChatViewModel {
                 _effects.emit(ChatUiEffect.ScrollToBottom)
             }
             is SessionEvent.SessionIdUpdated -> {
-                updateState { 
+                updateState {
                     it.copy(sessionId = event.newId)
+                }
+            }
+            is SessionEvent.ModelUpdated -> {
+                logI("模型更新事件: ${event.modelId}")
+                updateState {
+                    val resolvedModel = AiModel.fromIdentifier(event.modelId)
+                    it.copy(
+                        actualModelId = event.modelId,
+                        selectedModel = resolvedModel ?: it.selectedModel
+                    )
                 }
             }
             is SessionEvent.ErrorOccurred -> {
                 showError(event.error)
-                updateState { 
+                updateState {
                     it.copy(isGenerating = false)
                 }
             }
             SessionEvent.GenerationStarted -> {
-                updateState { 
+                updateState {
                     it.copy(isGenerating = true)
                 }
             }
             SessionEvent.GenerationStopped -> {
-                updateState { 
+                updateState {
                     it.copy(isGenerating = false)
                 }
             }
@@ -402,16 +519,6 @@ class ChatViewModel {
             state.copy(contexts = state.contexts - context)
         }
     //         logD("移除上下文: ${context}")
-    }
-    
-    /**
-     * 切换模型
-     */
-    private fun changeModel(model: com.claudecodeplus.ui.models.AiModel) {
-        updateState { 
-            it.copy(selectedModel = model)
-        }
-    //         logD("切换模型: ${model.displayName}")
     }
     
     /**
