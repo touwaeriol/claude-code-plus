@@ -104,6 +104,12 @@
                     icon="/icons/claude-code-simple.svg"
                     factoryClass="com.claudecodeplus.plugin.ClaudeCodePlusToolWindowFactory"/>
 
+        <!-- Vue Frontend Tool Window (POC) -->
+        <toolWindow id="Claude Code Plus (Vue)"
+                    anchor="right"
+                    icon="/icons/claude-code-simple.svg"
+                    factoryClass="com.claudecodeplus.toolwindow.VueToolWindowFactory"/>
+
         <!-- application-level service -->
         <applicationService
             serviceImplementation="com.claudecodeplus.settings.McpSettingsService"/>
