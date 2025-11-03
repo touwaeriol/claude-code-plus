@@ -1,9 +1,7 @@
 package com.claudecodeplus.bridge
 
 import com.claudecodeplus.sdk.ClaudeCodeSdkClient
-import com.claudecodeplus.sdk.ClaudeCodeOptions
-import com.claudecodeplus.sdk.messages.AssistantMessage
-import com.claudecodeplus.sdk.messages.UserMessage
+import com.claudecodeplus.sdk.types.*
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.catch
@@ -43,7 +41,7 @@ class ClaudeActionHandler(
     private fun handleConnect(request: FrontendRequest): FrontendResponse {
         try {
             // 解析选项
-            val options = ClaudeCodeOptions(
+            val options = ClaudeAgentOptions(
                 model = "claude-sonnet-4-5-20250929",
                 cwd = project.basePath?.let { java.nio.file.Path.of(it) },
                 debugStderr = true
@@ -120,7 +118,7 @@ class ClaudeActionHandler(
                         ))
                     }
                     .collect { sdkMessage ->
-                        logger.info("📨 Received message from Claude: ${sdkMessage.type}")
+                        logger.info("📨 Received message from Claude: ${sdkMessage::class.simpleName}")
 
                         // 转换消息并推送给前端
                         val messageJson = convertMessage(sdkMessage)
@@ -185,52 +183,40 @@ class ClaudeActionHandler(
     /**
      * 转换 SDK 消息为 JSON
      */
-    private fun convertMessage(message: com.claudecodeplus.sdk.messages.Message): JsonElement {
+    private fun convertMessage(message: Message): JsonElement {
         return when (message) {
             is UserMessage -> buildJsonObject {
                 put("type", "user")
-                put("content", buildJsonArray {
-                    message.content.forEach { block ->
-                        add(buildJsonObject {
-                            put("type", "text")
-                            put("text", block.text)
-                        })
-                    }
-                })
+                put("content", message.content)
             }
 
             is AssistantMessage -> buildJsonObject {
                 put("type", "assistant")
-                put("content", buildJsonArray {
-                    message.content.forEach { block ->
-                        when (block.type) {
-                            "text" -> {
-                                add(buildJsonObject {
-                                    put("type", "text")
-                                    put("text", block.text ?: "")
-                                })
-                            }
-                            "tool_use" -> {
-                                add(buildJsonObject {
-                                    put("type", "tool_use")
-                                    put("id", block.id ?: "")
-                                    put("name", block.name ?: "")
-                                    put("input", JsonObject(emptyMap())) // 简化处理
-                                })
-                            }
-                        }
-                    }
-                })
+                put("content", json.encodeToJsonElement(message.content))
+                put("model", message.model)
             }
 
-            else -> buildJsonObject {
+            is SystemMessage -> buildJsonObject {
                 put("type", "system")
-                put("content", buildJsonArray {
-                    add(buildJsonObject {
-                        put("type", "text")
-                        put("text", message.toString())
-                    })
-                })
+                put("subtype", message.subtype)
+                put("data", message.data)
+            }
+
+            is ResultMessage -> buildJsonObject {
+                put("type", "result")
+                put("subtype", message.subtype)
+                put("duration_ms", message.durationMs)
+                put("is_error", message.isError)
+                put("num_turns", message.numTurns)
+                put("session_id", message.sessionId)
+                message.result?.let { put("result", it) }
+            }
+
+            is StreamEvent -> buildJsonObject {
+                put("type", "stream_event")
+                put("uuid", message.uuid)
+                put("session_id", message.sessionId)
+                put("event", message.event)
             }
         }
     }
