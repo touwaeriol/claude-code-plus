@@ -37,6 +37,9 @@ class FrontendBridge(
     // 后端 -> 前端 (事件推送)
     private var isReady = false
 
+    // Claude 操作处理器
+    private val claudeHandler = ClaudeActionHandler(project, this, scope)
+
     init {
         setupQueryHandler()
         setupThemeListener()
@@ -178,56 +181,7 @@ class FrontendBridge(
      * 处理 Claude 操作
      */
     private fun handleClaudeAction(request: FrontendRequest): FrontendResponse {
-        return when (request.action) {
-            "claude.connect" -> {
-                // TODO: 实现 Claude 连接
-                scope.launch {
-                    // 模拟连接成功
-                    pushEvent(IdeEvent(
-                        type = "claude.connected",
-                        data = mapOf("sessionId" to JsonPrimitive("test-session"))
-                    ))
-                }
-                FrontendResponse(success = true)
-            }
-            "claude.query" -> {
-                val messageData = request.data as? JsonObject
-                val message = messageData?.get("message")?.jsonPrimitive?.content
-
-                if (message == null) {
-                    return FrontendResponse(false, error = "Missing message")
-                }
-
-                // TODO: 实际调用 ClaudeCodeSdkClient
-                scope.launch {
-                    // 模拟响应
-                    pushEvent(IdeEvent(
-                        type = "claude.message",
-                        data = mapOf(
-                            "message" to buildJsonObject {
-                                put("type", "assistant")
-                                put("content", buildJsonArray {
-                                    add(buildJsonObject {
-                                        put("type", "text")
-                                        put("text", "这是来自后端的测试响应: $message")
-                                    })
-                                })
-                            }
-                        )
-                    ))
-                }
-                FrontendResponse(success = true)
-            }
-            "claude.interrupt" -> {
-                // TODO: 实现中断
-                FrontendResponse(success = true)
-            }
-            "claude.disconnect" -> {
-                // TODO: 实现断开连接
-                FrontendResponse(success = true)
-            }
-            else -> FrontendResponse(false, error = "Unknown Claude action: ${request.action}")
-        }
+        return claudeHandler.handle(request)
     }
 
     /**
