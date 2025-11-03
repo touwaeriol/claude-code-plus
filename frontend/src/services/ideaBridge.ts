@@ -125,6 +125,18 @@ export const ideService = {
 
   async showDiff(filePath: string, oldContent: string, newContent: string) {
     return ideaBridge.query('ide.showDiff', { filePath, oldContent, newContent })
+  },
+
+  async searchFiles(query: string, maxResults?: number) {
+    return ideaBridge.query('ide.searchFiles', { query, maxResults: maxResults || 20 })
+  },
+
+  async getFileContent(filePath: string, lineStart?: number, lineEnd?: number) {
+    return ideaBridge.query('ide.getFileContent', { filePath, lineStart, lineEnd })
+  },
+
+  onThemeChange(handler: EventHandler) {
+    ideaBridge.on('ide.themeChanged', handler)
   }
 }
 
