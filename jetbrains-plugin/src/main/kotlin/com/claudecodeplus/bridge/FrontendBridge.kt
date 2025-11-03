@@ -173,6 +173,8 @@ class FrontendBridge(
                 // TODO: 实现 Diff 显示
                 FrontendResponse(success = true)
             }
+            "ide.searchFiles" -> handleSearchFiles(request)
+            "ide.getFileContent" -> handleGetFileContent(request)
             else -> FrontendResponse(false, error = "Unknown IDE action: ${request.action}")
         }
     }
@@ -243,6 +245,107 @@ class FrontendBridge(
             codeBackground = colorToHex(UIUtil.getTextFieldBackground()),
             secondaryForeground = colorToHex(JBColor.gray)
         )
+    }
+
+    /**
+     * 搜索文件
+     */
+    private fun handleSearchFiles(request: FrontendRequest): FrontendResponse {
+        val data = request.data ?: return FrontendResponse(false, error = "Missing data")
+        val query = data["query"]?.toString() ?: return FrontendResponse(false, error = "Missing query")
+        val maxResults = data["maxResults"]?.toString()?.toIntOrNull() ?: 20
+
+        return try {
+            val files = mutableListOf<Map<String, JsonElement>>()
+
+            // 使用 VirtualFileManager 搜索文件
+            com.intellij.openapi.application.ApplicationManager.getApplication().runReadAction {
+                val baseDir = project.baseDir ?: return@runReadAction
+                searchFilesRecursive(baseDir, query, files, maxResults)
+            }
+
+            FrontendResponse(
+                success = true,
+                data = mapOf("files" to JsonArray(files.map { JsonObject(it) }))
+            )
+        } catch (e: Exception) {
+            logger.severe("❌ Failed to search files: ${e.message}")
+            FrontendResponse(false, error = e.message ?: "Failed to search files")
+        }
+    }
+
+    /**
+     * 递归搜索文件
+     */
+    private fun searchFilesRecursive(
+        dir: com.intellij.openapi.vfs.VirtualFile,
+        query: String,
+        results: MutableList<Map<String, JsonElement>>,
+        maxResults: Int
+    ) {
+        if (results.size >= maxResults) return
+
+        dir.children?.forEach { file ->
+            if (results.size >= maxResults) return
+
+            val name = file.name
+            if (name.contains(query, ignoreCase = true)) {
+                results.add(mapOf(
+                    "name" to JsonPrimitive(name),
+                    "path" to JsonPrimitive(file.path),
+                    "isDirectory" to JsonPrimitive(file.isDirectory)
+                ))
+            }
+
+            if (file.isDirectory && !name.startsWith(".") && name != "node_modules") {
+                searchFilesRecursive(file, query, results, maxResults)
+            }
+        }
+    }
+
+    /**
+     * 获取文件内容
+     */
+    private fun handleGetFileContent(request: FrontendRequest): FrontendResponse {
+        val data = request.data ?: return FrontendResponse(false, error = "Missing data")
+        val filePath = data["filePath"]?.toString() ?: return FrontendResponse(false, error = "Missing filePath")
+        val lineStart = data["lineStart"]?.toString()?.toIntOrNull()
+        val lineEnd = data["lineEnd"]?.toString()?.toIntOrNull()
+
+        return try {
+            var content: String? = null
+
+            com.intellij.openapi.application.ApplicationManager.getApplication().runReadAction {
+                val fileManager = com.intellij.openapi.vfs.VirtualFileManager.getInstance()
+                val file = fileManager.findFileByUrl("file://$filePath")
+                    ?: com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByPath(filePath)
+
+                if (file != null && !file.isDirectory) {
+                    val fullContent = String(file.contentsToByteArray(), Charsets.UTF_8)
+
+                    content = if (lineStart != null) {
+                        val lines = fullContent.lines()
+                        val start = (lineStart - 1).coerceAtLeast(0)
+                        val end = (lineEnd ?: lineStart).coerceAtMost(lines.size)
+                        lines.subList(start, end).joinToString("\n")
+                    } else {
+                        fullContent
+                    }
+                }
+            }
+
+            if (content != null) {
+                FrontendResponse(
+                    success = true,
+                    data = mapOf("content" to JsonPrimitive(content))
+                )
+            } else {
+                FrontendResponse(false, error = "File not found: $filePath")
+            }
+        } catch (e: Exception) {
+            logger.severe("❌ Failed to get file content: ${e.message}")
+            FrontendResponse(false, error = e.message ?: "Failed to get file content")
+        }
     }
 
     /**

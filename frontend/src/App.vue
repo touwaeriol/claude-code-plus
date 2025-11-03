@@ -14,38 +14,29 @@
       :is-dark="isDark"
     />
 
-    <div class="input-area">
-      <textarea
-        v-model="inputMessage"
-        placeholder="输入消息... (Ctrl+Enter 发送)"
-        @keydown="handleKeyDown"
-        :disabled="!connected || isLoading"
-        class="input-textarea"
-      />
-      <div class="input-actions">
-        <button
-          @click="connect"
-          v-if="!connected"
-          class="btn btn-primary"
-        >
-          连接 Claude
-        </button>
-        <button
-          @click="sendMessage"
-          v-if="connected"
-          :disabled="!canSend"
-          class="btn btn-primary"
-        >
-          {{ isLoading ? '发送中...' : '发送' }}
-        </button>
-        <button
-          @click="interrupt"
-          v-if="connected && isLoading"
-          class="btn btn-danger"
-        >
-          中断
-        </button>
-      </div>
+    <div v-if="!connected" class="connect-area">
+      <button @click="connect" class="btn btn-primary btn-large">
+        <span class="btn-icon">🔌</span>
+        <span>连接 Claude</span>
+      </button>
+    </div>
+
+    <InputArea
+      v-else
+      v-model="inputMessage"
+      :disabled="isLoading"
+      :is-dark="isDark"
+      :references="contextReferences"
+      :send-button-text="isLoading ? '发送中...' : '发送'"
+      @send="handleSendMessage"
+      @update:references="contextReferences = $event"
+    />
+
+    <div v-if="connected && isLoading" class="interrupt-area">
+      <button @click="interrupt" class="btn btn-danger">
+        <span class="btn-icon">⏸️</span>
+        <span>中断执行</span>
+      </button>
     </div>
 
     <!--调试面板-->
@@ -77,20 +68,19 @@
 import { ref, computed, onMounted } from 'vue'
 import { ideaBridge, claudeService, ideService } from '@/services/ideaBridge'
 import type { Message } from '@/types/message'
+import type { ContextReference } from '@/components/input/InputArea.vue'
 import MessageList from '@/components/chat/MessageList.vue'
+import InputArea from '@/components/input/InputArea.vue'
 
 const messages = ref<Message[]>([])
 const inputMessage = ref('')
+const contextReferences = ref<ContextReference[]>([])
 const isLoading = ref(false)
 const connected = ref(false)
 const bridgeReady = ref(false)
 const isDark = ref(false)
 const showDebug = ref(true)
 const debugExpanded = ref(false)
-
-const canSend = computed(() => {
-  return connected.value && !isLoading.value && inputMessage.value.trim().length > 0
-})
 
 onMounted(async () => {
   console.log('🚀 App mounted')
@@ -169,14 +159,11 @@ async function connect() {
   }
 }
 
-async function sendMessage() {
-  if (!canSend.value) return
-
-  const message = inputMessage.value.trim()
-  inputMessage.value = ''
+async function handleSendMessage(message: string, references: ContextReference[]) {
   isLoading.value = true
 
-  messages.value.push({
+  // 构建用户消息
+  const userMessage: Message = {
     id: `user-${Date.now()}`,
     role: 'user',
     content: [{
@@ -184,11 +171,26 @@ async function sendMessage() {
       text: message
     }],
     timestamp: Date.now()
-  })
+  }
+
+  // 如果有引用，添加到消息内容中
+  if (references.length > 0) {
+    const refContext = references.map(ref => {
+      if (ref.content) {
+        return `\n\n@${ref.name}:\n\`\`\`\n${ref.content}\n\`\`\``
+      } else {
+        return `\n@${ref.name}: ${ref.path}`
+      }
+    }).join('\n')
+
+    userMessage.content[0].text = message + refContext
+  }
+
+  messages.value.push(userMessage)
 
   try {
-    console.log('📤 Sending message:', message)
-    const response = await claudeService.query(message)
+    console.log('📤 Sending message with references:', { message, references })
+    const response = await claudeService.query(userMessage.content[0].text)
 
     if (!response.success) {
       console.error('❌ Failed to send message:', response.error)
@@ -232,12 +234,6 @@ async function getTheme() {
   }
 }
 
-function handleKeyDown(event: KeyboardEvent) {
-  if (event.ctrlKey && event.key === 'Enter') {
-    event.preventDefault()
-    sendMessage()
-  }
-}
 </script>
 
 <style scoped>
@@ -286,54 +282,37 @@ function handleKeyDown(event: KeyboardEvent) {
   color: #6a737d;
 }
 
-.input-area {
-  padding: 16px;
+.connect-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
   background: #f6f8fa;
   border-top: 1px solid #e1e4e8;
 }
 
-.theme-dark .input-area {
+.theme-dark .connect-area {
   background: #24292e;
   border-top-color: #444d56;
 }
 
-.input-textarea {
-  width: 100%;
-  min-height: 80px;
-  max-height: 200px;
-  padding: 12px;
-  border: 1px solid #e1e4e8;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #24292e;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 14px;
-  resize: vertical;
-  outline: none;
-}
-
-.theme-dark .input-textarea {
-  background: #1e1e1e;
-  color: #e1e4e8;
-  border-color: #444d56;
-}
-
-.input-textarea:focus {
-  border-color: #0366d6;
-}
-
-.input-textarea:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.input-actions {
+.interrupt-area {
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
+  justify-content: center;
+  padding: 8px 16px;
+  background: #fff8dc;
+  border-top: 1px solid #ffc107;
+}
+
+.theme-dark .interrupt-area {
+  background: #3d3518;
+  border-top-color: #856404;
 }
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 16px;
   border: none;
   border-radius: 6px;
@@ -341,6 +320,15 @@ function handleKeyDown(event: KeyboardEvent) {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+}
+
+.btn-icon {
+  font-size: 16px;
+}
+
+.btn-large {
+  padding: 12px 24px;
+  font-size: 16px;
 }
 
 .btn-primary {
