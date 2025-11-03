@@ -14,22 +14,35 @@
         :isDark="isDark"
       />
 
-      <!-- 工具调用 -->
-      <div v-for="tool in toolUses" :key="tool.id" class="tool-call">
-        <div class="tool-header">
-          <span class="tool-icon">🔧</span>
-          <span class="tool-name">{{ tool.name }}</span>
+      <!-- 工具调用 - 使用专业化组件 -->
+      <component
+        v-for="tool in toolUses"
+        :key="tool.id"
+        :is="getToolComponent(tool.name)"
+        :toolUse="tool"
+        :result="getToolResult(tool.id)"
+      />
+
+      <!-- 工具结果(如果没有对应的 tool_use) -->
+      <div v-for="result in orphanResults" :key="result.tool_use_id" class="tool-result-orphan">
+        <div class="result-header">
+          <span class="result-icon">📊</span>
+          <span class="result-id">结果: {{ result.tool_use_id }}</span>
         </div>
-        <pre class="tool-input">{{ JSON.stringify(tool.input, null, 2) }}</pre>
+        <pre class="result-content">{{ formatResult(result) }}</pre>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { Message, ToolUseBlock } from '@/types/message'
+import { computed, Component } from 'vue'
+import type { Message, ToolUseBlock, ToolResultBlock } from '@/types/message'
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
+import ReadToolDisplay from '@/components/tools/ReadToolDisplay.vue'
+import EditToolDisplay from '@/components/tools/EditToolDisplay.vue'
+import WriteToolDisplay from '@/components/tools/WriteToolDisplay.vue'
+import BashToolDisplay from '@/components/tools/BashToolDisplay.vue'
 
 interface Props {
   message: Message
@@ -74,6 +87,39 @@ const textContent = computed(() => {
 const toolUses = computed(() => {
   return props.message.content.filter(block => block.type === 'tool_use') as ToolUseBlock[]
 })
+
+const toolResults = computed(() => {
+  return props.message.content.filter(block => block.type === 'tool_result') as ToolResultBlock[]
+})
+
+const orphanResults = computed(() => {
+  // 找出没有对应 tool_use 的结果
+  const toolUseIds = new Set(toolUses.value.map(t => t.id))
+  return toolResults.value.filter(r => !toolUseIds.has(r.tool_use_id))
+})
+
+function getToolComponent(toolName: string): Component {
+  const componentMap: Record<string, Component> = {
+    'Read': ReadToolDisplay,
+    'Edit': EditToolDisplay,
+    'Write': WriteToolDisplay,
+    'Bash': BashToolDisplay
+  }
+
+  // 返回对应组件,如果没有则返回 ReadToolDisplay 作为默认(可以改为通用组件)
+  return componentMap[toolName] || ReadToolDisplay
+}
+
+function getToolResult(toolUseId: string): ToolResultBlock | undefined {
+  return toolResults.value.find(r => r.tool_use_id === toolUseId)
+}
+
+function formatResult(result: ToolResultBlock): string {
+  if (typeof result.content === 'string') {
+    return result.content
+  }
+  return JSON.stringify(result.content, null, 2)
+}
 </script>
 
 <style scoped>
@@ -127,28 +173,33 @@ const toolUses = computed(() => {
   color: #24292e;
 }
 
-.tool-call {
+.tool-result-orphan {
   margin-top: 12px;
   padding: 12px;
-  background: #f6f8fa;
-  border: 1px solid #e1e4e8;
+  background: #fff8dc;
+  border: 1px solid #ffc107;
   border-radius: 6px;
 }
 
-.tool-header {
+.result-header {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
   font-weight: 600;
-  color: #0366d6;
+  color: #856404;
 }
 
-.tool-icon {
+.result-icon {
   font-size: 16px;
 }
 
-.tool-input {
+.result-id {
+  font-size: 13px;
+  font-family: monospace;
+}
+
+.result-content {
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
   font-size: 12px;
   background: #ffffff;
