@@ -43,6 +43,9 @@ import ReadToolDisplay from '@/components/tools/ReadToolDisplay.vue'
 import EditToolDisplay from '@/components/tools/EditToolDisplay.vue'
 import WriteToolDisplay from '@/components/tools/WriteToolDisplay.vue'
 import BashToolDisplay from '@/components/tools/BashToolDisplay.vue'
+import GrepToolDisplay from '@/components/tools/GrepToolDisplay.vue'
+import GlobToolDisplay from '@/components/tools/GlobToolDisplay.vue'
+import TodoWriteDisplay from '@/components/tools/TodoWriteDisplay.vue'
 
 interface Props {
   message: Message
@@ -103,7 +106,10 @@ function getToolComponent(toolName: string): Component {
     'Read': ReadToolDisplay,
     'Edit': EditToolDisplay,
     'Write': WriteToolDisplay,
-    'Bash': BashToolDisplay
+    'Bash': BashToolDisplay,
+    'Grep': GrepToolDisplay,
+    'Glob': GlobToolDisplay,
+    'TodoWrite': TodoWriteDisplay
   }
 
   // 返回对应组件,如果没有则返回 ReadToolDisplay 作为默认(可以改为通用组件)
