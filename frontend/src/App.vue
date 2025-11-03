@@ -1,106 +1,222 @@
 <template>
-  <div class="app">
-    <h1>Claude Code Plus - Vue Frontend POC</h1>
-
-    <div class="section">
-      <h2>1. 通信桥接测试</h2>
-      <button @click="testBridge" :disabled="!bridgeReady">
-        测试桥接
-      </button>
-      <div v-if="bridgeStatus" class="status" :class="{ success: bridgeSuccess, error: !bridgeSuccess }">
-        {{ bridgeStatus }}
+  <div class="app" :class="{ 'theme-dark': isDark }">
+    <div class="header">
+      <h1>Claude Code Plus</h1>
+      <div class="status">
+        <span v-if="!connected" class="status-disconnected">⚪ 未连接</span>
+        <span v-else class="status-connected">🟢 已连接</span>
       </div>
     </div>
 
-    <div class="section">
-      <h2>2. 获取 IDE 主题</h2>
-      <button @click="getTheme">获取主题</button>
-      <pre v-if="theme" class="code">{{ JSON.stringify(theme, null, 2) }}</pre>
-    </div>
+    <MessageList
+      :messages="messages"
+      :is-loading="isLoading"
+      :is-dark="isDark"
+    />
 
-    <div class="section">
-      <h2>3. Claude 消息测试</h2>
-      <div class="input-group">
-        <input
-          v-model="message"
-          placeholder="输入消息..."
-          @keydown.enter="sendMessage"
-        />
-        <button @click="sendMessage" :disabled="sending">
-          {{ sending ? '发送中...' : '发送' }}
+    <div class="input-area">
+      <textarea
+        v-model="inputMessage"
+        placeholder="输入消息... (Ctrl+Enter 发送)"
+        @keydown="handleKeyDown"
+        :disabled="!connected || isLoading"
+        class="input-textarea"
+      />
+      <div class="input-actions">
+        <button
+          @click="connect"
+          v-if="!connected"
+          class="btn btn-primary"
+        >
+          连接 Claude
+        </button>
+        <button
+          @click="sendMessage"
+          v-if="connected"
+          :disabled="!canSend"
+          class="btn btn-primary"
+        >
+          {{ isLoading ? '发送中...' : '发送' }}
+        </button>
+        <button
+          @click="interrupt"
+          v-if="connected && isLoading"
+          class="btn btn-danger"
+        >
+          中断
         </button>
       </div>
-      <div class="messages">
-        <div v-for="(msg, idx) in messages" :key="idx" class="message">
-          <div class="message-header">{{ msg.role }}</div>
-          <div class="message-content">{{ msg.content }}</div>
+    </div>
+
+    <!--调试面板-->
+    <div v-if="showDebug" class="debug-panel">
+      <div class="debug-header" @click="debugExpanded = !debugExpanded">
+        <span>🐛 调试信息</span>
+        <span>{{ debugExpanded ? '▼' : '▶' }}</span>
+      </div>
+      <div v-if="debugExpanded" class="debug-content">
+        <div class="debug-item">
+          <strong>桥接状态:</strong> {{ bridgeReady ? '✅ 就绪' : '⏳ 加载中' }}
         </div>
+        <div class="debug-item">
+          <strong>连接状态:</strong> {{ connected ? '✅ 已连接' : '⚪ 未连接' }}
+        </div>
+        <div class="debug-item">
+          <strong>消息数量:</strong> {{ messages.length }}
+        </div>
+        <div class="debug-item">
+          <strong>主题模式:</strong> {{ isDark ? '🌙 暗色' : '☀️ 亮色' }}
+        </div>
+        <button @click="getTheme" class="btn btn-small">获取主题</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { ideaBridge, ideService, claudeService } from '@/services/ideaBridge'
-import type { IdeTheme } from '@/types/bridge'
+import { ref, computed, onMounted } from 'vue'
+import { ideaBridge, claudeService, ideService } from '@/services/ideaBridge'
+import type { Message } from '@/types/message'
+import MessageList from '@/components/chat/MessageList.vue'
 
+const messages = ref<Message[]>([])
+const inputMessage = ref('')
+const isLoading = ref(false)
+const connected = ref(false)
 const bridgeReady = ref(false)
-const bridgeStatus = ref('')
-const bridgeSuccess = ref(false)
-const theme = ref<IdeTheme | null>(null)
-const message = ref('Hello Claude!')
-const messages = ref<Array<{ role: string; content: string }>>([])
-const sending = ref(false)
+const isDark = ref(false)
+const showDebug = ref(true)
+const debugExpanded = ref(false)
+
+const canSend = computed(() => {
+  return connected.value && !isLoading.value && inputMessage.value.trim().length > 0
+})
 
 onMounted(async () => {
-  console.log('🚀 Vue App mounted')
+  console.log('🚀 App mounted')
 
   try {
     await ideaBridge.waitForReady()
     bridgeReady.value = true
-    bridgeStatus.value = '✅ 桥接已就绪'
-    bridgeSuccess.value = true
-    console.log('✅ Bridge is ready')
+    console.log('✅ Bridge ready')
 
-    // 监听 Claude 消息
-    claudeService.onMessage((data) => {
-      console.log('📨 Received Claude message:', data)
-      messages.value.push({
-        role: 'assistant',
-        content: JSON.stringify(data.message, null, 2)
-      })
-    })
+    const themeResponse = await ideService.getTheme()
+    if (themeResponse.success && themeResponse.data) {
+      isDark.value = themeResponse.data.theme.isDark
+      console.log('🎨 Theme loaded:', isDark.value ? 'dark' : 'light')
+    }
 
-    claudeService.onError((error) => {
-      console.error('❌ Claude error:', error)
-      messages.value.push({
-        role: 'error',
-        content: error
-      })
-    })
-
+    setupClaudeListeners()
   } catch (error) {
-    bridgeStatus.value = `❌ 桥接失败: ${error}`
-    bridgeSuccess.value = false
-    console.error('❌ Bridge initialization failed:', error)
+    console.error('❌ Failed to initialize:', error)
   }
 })
 
-async function testBridge() {
-  bridgeStatus.value = '⏳ 测试中...'
+function setupClaudeListeners() {
+  claudeService.onConnected((data) => {
+    console.log('✅ Claude connected:', data)
+    connected.value = true
+  })
+
+  claudeService.onDisconnected(() => {
+    console.log('🔌 Claude disconnected')
+    connected.value = false
+  })
+
+  claudeService.onMessage((data) => {
+    console.log('📨 Received message:', data)
+    const msg = data.message
+
+    const message: Message = {
+      id: `${Date.now()}-${Math.random()}`,
+      role: msg.type,
+      content: msg.content || [],
+      timestamp: Date.now()
+    }
+
+    messages.value.push(message)
+    isLoading.value = false
+  })
+
+  claudeService.onError((error) => {
+    console.error('❌ Claude error:', error)
+    isLoading.value = false
+
+    messages.value.push({
+      id: `error-${Date.now()}`,
+      role: 'system',
+      content: [{
+        type: 'text',
+        text: `❌ 错误: ${error}`
+      }],
+      timestamp: Date.now()
+    })
+  })
+}
+
+async function connect() {
   try {
-    const response = await ideaBridge.query('test.ping', { timestamp: Date.now() })
-    if (response.success) {
-      bridgeStatus.value = `✅ 桥接正常: ${JSON.stringify(response.data)}`
-      bridgeSuccess.value = true
-    } else {
-      bridgeStatus.value = `❌ 桥接失败: ${response.error}`
-      bridgeSuccess.value = false
+    console.log('🔌 Connecting to Claude...')
+    const response = await claudeService.connect()
+
+    if (!response.success) {
+      console.error('❌ Connection failed:', response.error)
+      alert(`连接失败: ${response.error}`)
     }
   } catch (error) {
-    bridgeStatus.value = `❌ 异常: ${error}`
-    bridgeSuccess.value = false
+    console.error('❌ Connection error:', error)
+    alert(`连接错误: ${error}`)
+  }
+}
+
+async function sendMessage() {
+  if (!canSend.value) return
+
+  const message = inputMessage.value.trim()
+  inputMessage.value = ''
+  isLoading.value = true
+
+  messages.value.push({
+    id: `user-${Date.now()}`,
+    role: 'user',
+    content: [{
+      type: 'text',
+      text: message
+    }],
+    timestamp: Date.now()
+  })
+
+  try {
+    console.log('📤 Sending message:', message)
+    const response = await claudeService.query(message)
+
+    if (!response.success) {
+      console.error('❌ Failed to send message:', response.error)
+      isLoading.value = false
+
+      messages.value.push({
+        id: `error-${Date.now()}`,
+        role: 'system',
+        content: [{
+          type: 'text',
+          text: `❌ 发送失败: ${response.error}`
+        }],
+        timestamp: Date.now()
+      })
+    }
+  } catch (error) {
+    console.error('❌ Send error:', error)
+    isLoading.value = false
+  }
+}
+
+async function interrupt() {
+  try {
+    console.log('⏸️ Interrupting...')
+    await claudeService.interrupt()
+    isLoading.value = false
+  } catch (error) {
+    console.error('❌ Interrupt error:', error)
   }
 }
 
@@ -108,170 +224,196 @@ async function getTheme() {
   try {
     const response = await ideService.getTheme()
     if (response.success) {
-      theme.value = response.data.theme
-      console.log('Theme:', theme.value)
-    } else {
-      console.error('Failed to get theme:', response.error)
+      console.log('🎨 Theme:', response.data.theme)
+      isDark.value = response.data.theme.isDark
     }
   } catch (error) {
-    console.error('Error getting theme:', error)
+    console.error('❌ Failed to get theme:', error)
   }
 }
 
-async function sendMessage() {
-  if (!message.value.trim() || sending.value) return
-
-  sending.value = true
-  const userMessage = message.value
-
-  try {
-    // 添加用户消息
-    messages.value.push({
-      role: 'user',
-      content: userMessage
-    })
-
-    // 发送到 Claude
-    const response = await claudeService.query(userMessage)
-    if (!response.success) {
-      messages.value.push({
-        role: 'error',
-        content: response.error || 'Failed to send message'
-      })
-    }
-
-    message.value = ''
-  } catch (error) {
-    console.error('Error sending message:', error)
-    messages.value.push({
-      role: 'error',
-      content: String(error)
-    })
-  } finally {
-    sending.value = false
+function handleKeyDown(event: KeyboardEvent) {
+  if (event.ctrlKey && event.key === 'Enter') {
+    event.preventDefault()
+    sendMessage()
   }
 }
 </script>
 
 <style scoped>
 .app {
-  padding: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  max-width: 800px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #ffffff;
+  color: #24292e;
 }
 
-h1 {
-  color: #2c3e50;
-  border-bottom: 2px solid #42b983;
-  padding-bottom: 10px;
+.app.theme-dark {
+  background: #1e1e1e;
+  color: #e1e4e8;
 }
 
-.section {
-  margin: 30px 0;
-  padding: 20px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  background: #f9f9f9;
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #f6f8fa;
+  border-bottom: 1px solid #e1e4e8;
 }
 
-h2 {
-  margin-top: 0;
-  color: #42b983;
-  font-size: 18px;
+.theme-dark .header {
+  background: #24292e;
+  border-bottom-color: #444d56;
 }
 
-button {
-  padding: 8px 16px;
-  background: #42b983;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-button:hover:not(:disabled) {
-  background: #35a372;
-}
-
-button:disabled {
-  background: #ccc;
-  cursor: not-allowed;
+.header h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .status {
-  margin-top: 10px;
-  padding: 10px;
-  border-radius: 4px;
-  font-family: monospace;
-}
-
-.status.success {
-  background: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
-}
-
-.status.error {
-  background: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
-}
-
-.code {
-  background: #282c34;
-  color: #abb2bf;
-  padding: 15px;
-  border-radius: 4px;
-  overflow-x: auto;
-  font-size: 12px;
-  margin-top: 10px;
-}
-
-.input-group {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 15px;
-}
-
-input {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-.messages {
-  max-height: 400px;
-  overflow-y: auto;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background: white;
-}
-
-.message {
-  padding: 12px;
-  border-bottom: 1px solid #eee;
-}
-
-.message:last-child {
-  border-bottom: none;
-}
-
-.message-header {
-  font-weight: bold;
-  color: #42b983;
-  margin-bottom: 5px;
-  text-transform: uppercase;
-  font-size: 12px;
-}
-
-.message-content {
-  font-family: monospace;
   font-size: 13px;
-  white-space: pre-wrap;
-  word-break: break-word;
+}
+
+.status-connected {
+  color: #22863a;
+}
+
+.status-disconnected {
+  color: #6a737d;
+}
+
+.input-area {
+  padding: 16px;
+  background: #f6f8fa;
+  border-top: 1px solid #e1e4e8;
+}
+
+.theme-dark .input-area {
+  background: #24292e;
+  border-top-color: #444d56;
+}
+
+.input-textarea {
+  width: 100%;
+  min-height: 80px;
+  max-height: 200px;
+  padding: 12px;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #24292e;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  resize: vertical;
+  outline: none;
+}
+
+.theme-dark .input-textarea {
+  background: #1e1e1e;
+  color: #e1e4e8;
+  border-color: #444d56;
+}
+
+.input-textarea:focus {
+  border-color: #0366d6;
+}
+
+.input-textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: #0366d6;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #0256c0;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  background: #d73a49;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #cb2431;
+}
+
+.btn-small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.debug-panel {
+  border-top: 1px solid #e1e4e8;
+  background: #f6f8fa;
+}
+
+.theme-dark .debug-panel {
+  background: #24292e;
+  border-top-color: #444d56;
+}
+
+.debug-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 16px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.debug-header:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.debug-content {
+  padding: 12px 16px;
+  border-top: 1px solid #e1e4e8;
+}
+
+.theme-dark .debug-content {
+  border-top-color: #444d56;
+}
+
+.debug-item {
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.debug-item strong {
+  color: #0366d6;
+}
+
+.theme-dark .debug-item strong {
+  color: #58a6ff;
 }
 </style>

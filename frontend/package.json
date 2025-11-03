@@ -8,8 +8,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "vue": "^3.4.0",
-    "pinia": "^2.1.7"
+    "github-markdown-css": "^5.8.1",
+    "markdown-it": "^14.1.0",
+    "pinia": "^2.1.7",
+    "shiki": "^3.14.0",
+    "vue": "^3.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
