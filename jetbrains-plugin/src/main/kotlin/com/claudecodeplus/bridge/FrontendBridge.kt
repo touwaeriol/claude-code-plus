@@ -165,14 +165,8 @@ class FrontendBridge(
                     data = mapOf("theme" to json.encodeToJsonElement(theme))
                 )
             }
-            "ide.openFile" -> {
-                // TODO: 实现文件打开
-                FrontendResponse(success = true)
-            }
-            "ide.showDiff" -> {
-                // TODO: 实现 Diff 显示
-                FrontendResponse(success = true)
-            }
+            "ide.openFile" -> handleOpenFile(request)
+            "ide.showDiff" -> handleShowDiff(request)
             "ide.searchFiles" -> handleSearchFiles(request)
             "ide.getFileContent" -> handleGetFileContent(request)
             else -> FrontendResponse(false, error = "Unknown IDE action: ${request.action}")
@@ -345,6 +339,97 @@ class FrontendBridge(
         } catch (e: Exception) {
             logger.severe("❌ Failed to get file content: ${e.message}")
             FrontendResponse(false, error = e.message ?: "Failed to get file content")
+        }
+    }
+
+    /**
+     * 打开文件
+     */
+    private fun handleOpenFile(request: FrontendRequest): FrontendResponse {
+        val data = request.data ?: return FrontendResponse(false, error = "Missing data")
+        val filePath = data["filePath"]?.toString() ?: return FrontendResponse(false, error = "Missing filePath")
+        val line = data["line"]?.toString()?.toIntOrNull()
+        val column = data["column"]?.toString()?.toIntOrNull()
+
+        return try {
+            com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                val fileManager = com.intellij.openapi.vfs.VirtualFileManager.getInstance()
+                val file = fileManager.findFileByUrl("file://$filePath")
+                    ?: com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByPath(filePath)
+
+                if (file != null) {
+                    val fileEditorManager = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project)
+                    fileEditorManager.openFile(file, true)
+
+                    // 如果指定了行号，跳转到指定位置
+                    if (line != null && line > 0) {
+                        val editor = fileEditorManager.selectedTextEditor
+                        if (editor != null) {
+                            val lineIndex = (line - 1).coerceAtLeast(0)
+                            val offset = editor.document.getLineStartOffset(lineIndex.coerceAtMost(editor.document.lineCount - 1))
+                            val targetOffset = if (column != null && column > 0) {
+                                offset + (column - 1)
+                            } else {
+                                offset
+                            }
+                            editor.caretModel.moveToOffset(targetOffset.coerceAtMost(editor.document.textLength))
+                            editor.scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                        }
+                    }
+
+                    logger.info("✅ Opened file: $filePath at line $line")
+                } else {
+                    logger.warning("⚠️ File not found: $filePath")
+                }
+            }
+
+            FrontendResponse(success = true)
+        } catch (e: Exception) {
+            logger.severe("❌ Failed to open file: ${e.message}")
+            FrontendResponse(false, error = e.message ?: "Failed to open file")
+        }
+    }
+
+    /**
+     * 显示文件差异对比
+     */
+    private fun handleShowDiff(request: FrontendRequest): FrontendResponse {
+        val data = request.data ?: return FrontendResponse(false, error = "Missing data")
+        val filePath = data["filePath"]?.toString() ?: return FrontendResponse(false, error = "Missing filePath")
+        val oldContent = data["oldContent"]?.toString() ?: return FrontendResponse(false, error = "Missing oldContent")
+        val newContent = data["newContent"]?.toString() ?: return FrontendResponse(false, error = "Missing newContent")
+        val title = data["title"]?.toString() ?: "文件差异对比"
+
+        return try {
+            com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                val fileName = filePath.split(/[\\/]/).last()
+
+                // 创建虚拟文件内容
+                val leftContent = com.intellij.diff.contents.DiffContentFactory.getInstance()
+                    .create(project, oldContent, com.intellij.openapi.fileTypes.FileTypeManager.getInstance().getFileTypeByFileName(fileName))
+
+                val rightContent = com.intellij.diff.contents.DiffContentFactory.getInstance()
+                    .create(project, newContent, com.intellij.openapi.fileTypes.FileTypeManager.getInstance().getFileTypeByFileName(fileName))
+
+                // 创建 diff 请求
+                val request = com.intellij.diff.requests.SimpleDiffRequest(
+                    title,
+                    leftContent,
+                    rightContent,
+                    "原内容",
+                    "新内容"
+                )
+
+                // 显示 diff 对话框
+                com.intellij.diff.DiffManager.getInstance().showDiff(project, request)
+
+                logger.info("✅ Showing diff for: $filePath")
+            }
+
+            FrontendResponse(success = true)
+        } catch (e: Exception) {
+            logger.severe("❌ Failed to show diff: ${e.message}")
+            FrontendResponse(false, error = e.message ?: "Failed to show diff")
         }
     }
 
