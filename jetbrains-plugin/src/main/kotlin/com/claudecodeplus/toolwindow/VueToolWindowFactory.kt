@@ -70,15 +70,45 @@ class VueToolWindowFactory : ToolWindowFactory, DumbAware {
     }
 
     /**
+     * 读取资源文件内容
+     */
+    private fun readResource(path: String): String? {
+        return try {
+            javaClass.getResourceAsStream(path)?.bufferedReader()?.readText()
+        } catch (e: Exception) {
+            logger.warning("⚠️ Failed to read resource: $path - ${e.message}")
+            null
+        }
+    }
+
+    /**
      * 加载前端页面
      */
     private fun loadFrontend(browser: JBCefBrowser) {
-        // 尝试从打包的资源加载
-        val frontendUrl = javaClass.getResource("/frontend/index.html")
+        // 直接加载HTML内容并内联所有资源
+        val indexHtml = readResource("/frontend/index.html")
 
-        if (frontendUrl != null) {
-            logger.info("📄 Loading frontend from: $frontendUrl")
-            browser.loadURL(frontendUrl.toString())
+        if (indexHtml != null) {
+            logger.info("📄 Loading frontend from embedded resources")
+
+            // 读取所有前端资源（CSS 和 JS）
+            val cssContent = readResource("/frontend/assets/index-Ck88hpVQ.css") ?: ""
+            val jsContent = readResource("/frontend/assets/index-CRYkKq4A.js") ?: ""
+            val vendorJsContent = readResource("/frontend/assets/vendor-D-4j_Sr1.js") ?: ""
+
+            // 创建内联HTML（移除外部资源引用，改为内联）
+            val inlineHtml = indexHtml
+                .replace("""<script type="module" crossorigin src="./assets/index-CRYkKq4A.js"></script>""", "")
+                .replace("""<link rel="modulepreload" crossorigin href="./assets/vendor-D-4j_Sr1.js">""", "")
+                .replace("""<link rel="stylesheet" crossorigin href="./assets/index-Ck88hpVQ.css">""",
+                    """<style>$cssContent</style>""")
+                .replace("</body>",
+                    """<script type="module">$vendorJsContent</script>
+                       <script type="module">$jsContent</script>
+                       </body>""")
+
+            browser.loadHTML(inlineHtml)
+            logger.info("✅ Frontend loaded successfully")
         } else {
             // 开发模式: 从 Vite dev server 加载
             val devServerUrl = "http://localhost:5173"

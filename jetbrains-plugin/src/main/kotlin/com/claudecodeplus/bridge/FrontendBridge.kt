@@ -1,8 +1,13 @@
 package com.claudecodeplus.bridge
 
+import com.intellij.diff.DiffContentFactory
+import com.intellij.diff.DiffManager
+import com.intellij.diff.contents.DocumentContent
+import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.ide.ui.LafManager
 import com.intellij.ide.ui.LafManagerListener
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
 import com.intellij.ui.JBColor
 import com.intellij.ui.jcef.JBCefBrowser
@@ -86,8 +91,9 @@ class FrontendBridge(
                         console.log('🚀 Bridge query:', action, data);
                         const request = JSON.stringify({ action, data });
                         try {
-                            const responseJson = await new Promise((resolve, reject) => {
-                                ${queryHandler.inject("request", "resolve")}
+                            const responseJson = await new Promise((resolve) => {
+                                ${queryHandler.inject("request")}
+                                resolve(arguments[0]);
                             });
                             const response = JSON.parse(responseJson);
                             console.log('✅ Bridge response:', response);
@@ -228,16 +234,16 @@ class FrontendBridge(
             textFieldBackground = colorToHex(UIUtil.getTextFieldBackground()),
             selectionBackground = colorToHex(UIUtil.getListSelectionBackground(true)),
             selectionForeground = colorToHex(UIUtil.getListSelectionForeground(true)),
-            linkColor = colorToHex(JBColor.link()),
-            errorColor = colorToHex(JBColor.red),
-            warningColor = colorToHex(JBColor.yellow),
-            successColor = colorToHex(JBColor.green),
+            linkColor = colorToHex(JBColor.namedColor("Link.foreground", JBColor.BLUE)),
+            errorColor = colorToHex(JBColor.RED),
+            warningColor = colorToHex(JBColor.YELLOW),
+            successColor = colorToHex(JBColor.GREEN),
             separatorColor = colorToHex(JBColor.border()),
             hoverBackground = colorToHex(UIUtil.getListBackground(true)),
-            accentColor = colorToHex(JBColor.namedColor("Accent.focusColor", JBColor.link())),
-            infoBackground = colorToHex(JBColor.namedColor("Component.infoForeground", JBColor.gray)),
+            accentColor = colorToHex(JBColor.namedColor("Accent.focusColor", JBColor.BLUE)),
+            infoBackground = colorToHex(JBColor.namedColor("Component.infoForeground", JBColor.GRAY)),
             codeBackground = colorToHex(UIUtil.getTextFieldBackground()),
-            secondaryForeground = colorToHex(JBColor.gray)
+            secondaryForeground = colorToHex(JBColor.GRAY)
         )
     }
 
@@ -245,9 +251,10 @@ class FrontendBridge(
      * 搜索文件
      */
     private fun handleSearchFiles(request: FrontendRequest): FrontendResponse {
-        val data = request.data ?: return FrontendResponse(false, error = "Missing data")
-        val query = data["query"]?.toString() ?: return FrontendResponse(false, error = "Missing query")
-        val maxResults = data["maxResults"]?.toString()?.toIntOrNull() ?: 20
+        val data = request.data?.let { json.decodeFromJsonElement<Map<String, JsonElement>>(it) }
+            ?: return FrontendResponse(false, error = "Missing data")
+        val query = data["query"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing query")
+        val maxResults = data["maxResults"]?.toString()?.trim('"')?.toIntOrNull() ?: 20
 
         return try {
             val files = mutableListOf<Map<String, JsonElement>>()
@@ -301,10 +308,11 @@ class FrontendBridge(
      * 获取文件内容
      */
     private fun handleGetFileContent(request: FrontendRequest): FrontendResponse {
-        val data = request.data ?: return FrontendResponse(false, error = "Missing data")
-        val filePath = data["filePath"]?.toString() ?: return FrontendResponse(false, error = "Missing filePath")
-        val lineStart = data["lineStart"]?.toString()?.toIntOrNull()
-        val lineEnd = data["lineEnd"]?.toString()?.toIntOrNull()
+        val data = request.data?.let { json.decodeFromJsonElement<Map<String, JsonElement>>(it) }
+            ?: return FrontendResponse(false, error = "Missing data")
+        val filePath = data["filePath"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing filePath")
+        val lineStart = data["lineStart"]?.toString()?.trim('"')?.toIntOrNull()
+        val lineEnd = data["lineEnd"]?.toString()?.trim('"')?.toIntOrNull()
 
         return try {
             var content: String? = null
@@ -346,10 +354,11 @@ class FrontendBridge(
      * 打开文件
      */
     private fun handleOpenFile(request: FrontendRequest): FrontendResponse {
-        val data = request.data ?: return FrontendResponse(false, error = "Missing data")
-        val filePath = data["filePath"]?.toString() ?: return FrontendResponse(false, error = "Missing filePath")
-        val line = data["line"]?.toString()?.toIntOrNull()
-        val column = data["column"]?.toString()?.toIntOrNull()
+        val data = request.data?.let { json.decodeFromJsonElement<Map<String, JsonElement>>(it) }
+            ?: return FrontendResponse(false, error = "Missing data")
+        val filePath = data["filePath"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing filePath")
+        val line = data["line"]?.toString()?.trim('"')?.toIntOrNull()
+        val column = data["column"]?.toString()?.trim('"')?.toIntOrNull()
 
         return try {
             com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
@@ -394,25 +403,27 @@ class FrontendBridge(
      * 显示文件差异对比
      */
     private fun handleShowDiff(request: FrontendRequest): FrontendResponse {
-        val data = request.data ?: return FrontendResponse(false, error = "Missing data")
-        val filePath = data["filePath"]?.toString() ?: return FrontendResponse(false, error = "Missing filePath")
-        val oldContent = data["oldContent"]?.toString() ?: return FrontendResponse(false, error = "Missing oldContent")
-        val newContent = data["newContent"]?.toString() ?: return FrontendResponse(false, error = "Missing newContent")
-        val title = data["title"]?.toString() ?: "文件差异对比"
+        val data = request.data?.let { json.decodeFromJsonElement<Map<String, JsonElement>>(it) }
+            ?: return FrontendResponse(false, error = "Missing data")
+        val filePath = data["filePath"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing filePath")
+        val oldContent = data["oldContent"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing oldContent")
+        val newContent = data["newContent"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing newContent")
+        val title = data["title"]?.toString()?.trim('"') ?: "文件差异对比"
 
         return try {
             com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
-                val fileName = filePath.split(/[\\/]/).last()
+                val fileName = java.io.File(filePath).name
 
                 // 创建虚拟文件内容
-                val leftContent = com.intellij.diff.contents.DiffContentFactory.getInstance()
-                    .create(project, oldContent, com.intellij.openapi.fileTypes.FileTypeManager.getInstance().getFileTypeByFileName(fileName))
+                val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
+                val leftContent = DiffContentFactory.getInstance()
+                    .create(project, oldContent, fileType)
 
-                val rightContent = com.intellij.diff.contents.DiffContentFactory.getInstance()
-                    .create(project, newContent, com.intellij.openapi.fileTypes.FileTypeManager.getInstance().getFileTypeByFileName(fileName))
+                val rightContent = DiffContentFactory.getInstance()
+                    .create(project, newContent, fileType)
 
                 // 创建 diff 请求
-                val request = com.intellij.diff.requests.SimpleDiffRequest(
+                val diffRequest = SimpleDiffRequest(
                     title,
                     leftContent,
                     rightContent,
@@ -421,7 +432,7 @@ class FrontendBridge(
                 )
 
                 // 显示 diff 对话框
-                com.intellij.diff.DiffManager.getInstance().showDiff(project, request)
+                DiffManager.getInstance().showDiff(project, diffRequest)
 
                 logger.info("✅ Showing diff for: $filePath")
             }
