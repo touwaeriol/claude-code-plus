@@ -70,51 +70,20 @@ class VueToolWindowFactory : ToolWindowFactory, DumbAware {
     }
 
     /**
-     * 读取资源文件内容
-     */
-    private fun readResource(path: String): String? {
-        return try {
-            javaClass.getResourceAsStream(path)?.bufferedReader()?.readText()
-        } catch (e: Exception) {
-            logger.warning("⚠️ Failed to read resource: $path - ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * 检查 dev server 是否可用
-     */
-    private fun isDevServerAvailable(): Boolean {
-        return try {
-            val url = java.net.URL("http://localhost:5173")
-            val connection = url.openConnection() as java.net.HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 1000
-            connection.readTimeout = 1000
-            connection.connect()
-            val responseCode = connection.responseCode
-            connection.disconnect()
-            responseCode == 200
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    /**
      * 加载前端页面
      */
     private fun loadFrontend(browser: JBCefBrowser) {
-        // 优先尝试从 dev server 加载（开发模式）
-        if (isDevServerAvailable()) {
-            val devServerUrl = "http://localhost:5173"
-            logger.info("🔧 Development mode: loading from $devServerUrl")
+        val devServerUrl = "http://localhost:5173"
+
+        // 直接尝试加载 dev server，让浏览器自己处理连接失败
+        // 这样可以避免初始化时的检查延迟
+        logger.info("🔧 Attempting to load from dev server: $devServerUrl")
+
+        try {
             browser.loadURL(devServerUrl)
-            logger.info("✅ Frontend loaded from dev server")
-        } else {
-            // 开发模式: 从 Vite dev server 加载
-            val devServerUrl = "http://localhost:5173"
-            logger.info("🔧 Development mode: loading from $devServerUrl")
-            logger.info("⚠️ Make sure to run 'npm run dev' in the frontend directory")
+            logger.info("✅ Loading URL: $devServerUrl")
+        } catch (e: Exception) {
+            logger.warning("⚠️ Failed to load dev server, showing fallback page: ${e.message}")
 
             browser.loadHTML("""
                 <!DOCTYPE html>
@@ -159,6 +128,12 @@ class VueToolWindowFactory : ToolWindowFactory, DumbAware {
                             text-decoration: none;
                             border-radius: 4px;
                             margin-top: 20px;
+                            cursor: pointer;
+                            border: none;
+                            font-size: 14px;
+                        }
+                        .button:hover {
+                            background: #3aa876;
                         }
                     </style>
                 </head>
@@ -166,22 +141,21 @@ class VueToolWindowFactory : ToolWindowFactory, DumbAware {
                     <div class="container">
                         <h1>🚧 开发模式</h1>
                         <div class="status">
-                            <p><strong>前端资源未找到</strong></p>
-                            <p>请在开发时运行 Vite dev server:</p>
+                            <p><strong>Dev server 未检测到</strong></p>
+                            <p>请确保 Vite dev server 正在运行:</p>
                         </div>
                         <div class="command">
                             cd frontend<br>
                             npm install<br>
                             npm run dev
                         </div>
-                        <p>然后刷新此窗口,或者先构建前端:</p>
-                        <div class="command">
-                            cd frontend<br>
-                            npm run build
-                        </div>
-                        <a href="#" onclick="location.reload(); return false;" class="button">
-                            🔄 刷新
-                        </a>
+                        <p>启动后点击下方按钮加载前端:</p>
+                        <button onclick="window.location.href='http://localhost:5173'" class="button">
+                            🔄 加载开发服务器
+                        </button>
+                        <p style="margin-top: 20px; color: #666; font-size: 12px;">
+                            或者构建生产版本: <code>cd frontend && npm run build</code>
+                        </p>
                     </div>
                 </body>
                 </html>
