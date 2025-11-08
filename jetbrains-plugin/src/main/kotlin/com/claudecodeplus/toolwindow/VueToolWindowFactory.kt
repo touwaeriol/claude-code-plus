@@ -100,14 +100,24 @@ class VueToolWindowFactory : ToolWindowFactory, DumbAware {
 
             // 添加页面加载监听器
             browser.jbCefClient.addLoadHandler(object : CefLoadHandlerAdapter() {
+                override fun onLoadStart(cefBrowser: CefBrowser?, frame: CefFrame?, transitionType: org.cef.handler.CefRequest.TransitionType?) {
+                    if (frame?.isMain == true) {
+                        logger.info("🔄 Page loading started: ${frame.url}")
+                        
+                        // ⚡ 在页面加载开始时立即注入 Bridge（在 Vue 初始化之前）
+                        frontendBridge.injectBridgeScript()
+                        logger.info("✅ JCEF Bridge pre-injected")
+                    }
+                }
+                
                 override fun onLoadEnd(cefBrowser: CefBrowser?, frame: CefFrame?, httpStatusCode: Int) {
                     if (frame?.isMain == true) {
                         logger.info("✅ Page loaded with status: $httpStatusCode")
                         logger.info("📄 Page URL: ${frame.url}")
 
-                        // 注入 JCEF Bridge
+                        // 再次确认 Bridge 已注入（防御性编程）
                         frontendBridge.injectBridgeScript()
-                        logger.info("✅ JCEF Bridge injected")
+                        logger.info("✅ JCEF Bridge re-injected (confirmation)")
 
                         // 注入调试脚本
                         val debugScript = """
