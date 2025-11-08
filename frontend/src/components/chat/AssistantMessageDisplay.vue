@@ -1,0 +1,360 @@
+<template>
+  <div class="assistant-message-display">
+    <!-- 模型显示 (对应 lines 36-55) -->
+    <div
+      v-if="message.model"
+      class="model-display"
+    >
+      <span class="model-label">AI</span>
+      <span class="model-name">{{ getModelDisplayName(message.model) }}</span>
+    </div>
+
+    <!-- orderedElements 渲染 (对应 lines 57-97) -->
+    <div
+      v-if="hasOrderedElements"
+      class="ordered-elements"
+    >
+      <div
+        v-for="(element, index) in message.orderedElements"
+        :key="getElementKey(element, index)"
+        class="timeline-element"
+      >
+        <!-- ContentItem - 文本内容 (对应 lines 63-76) -->
+        <div
+          v-if="element.type === 'content'"
+          class="content-item"
+        >
+          <div v-if="isContentNotBlank(element.content)">
+            <MarkdownRenderer
+              :markdown="element.content"
+              class="markdown-content"
+              @link-click="handleLinkClick"
+              @code-action="handleCodeAction"
+            />
+          </div>
+        </div>
+
+        <!-- ToolCallItem - 工具调用 (对应 lines 77-89) -->
+        <CompactToolCallDisplay
+          v-else-if="element.type === 'toolCall'"
+          :tool-calls="[element.toolCall]"
+          :expanded-tools="expandedTools"
+          class="tool-call-item"
+          @expanded-change="handleExpandedChange"
+        />
+
+        <!-- StatusItem - 状态显示 (对应 lines 90-94) -->
+        <StatusMessageRow
+          v-else-if="element.type === 'status'"
+          :status="element"
+          class="status-item"
+        />
+      </div>
+    </div>
+
+    <!-- 降级渲染:无 orderedElements 时显示整体文本 (对应 lines 98-106) -->
+    <div
+      v-else-if="hasFallbackContent"
+      class="fallback-content"
+    >
+      <MarkdownRenderer
+        :markdown="message.content"
+        class="markdown-content"
+        @link-click="handleLinkClick"
+        @code-action="handleCodeAction"
+      />
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
+import CompactToolCallDisplay from '../tools/CompactToolCallDisplay.vue'
+import type { EnhancedMessage, AiModel, MessageTimelineItem } from '@/types/enhancedMessage'
+
+// Props 定义
+interface Props {
+  message: EnhancedMessage
+  expandedTools?: Map<string, boolean>
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  expandedTools: () => new Map()
+})
+
+// Emits 定义
+const emit = defineEmits<{
+  (e: 'expanded-change', toolId: string, expanded: boolean): void
+}>()
+
+// ============================================
+// 计算属性
+// ============================================
+
+const hasOrderedElements = computed(() => {
+  return props.message.orderedElements && props.message.orderedElements.length > 0
+})
+
+const hasFallbackContent = computed(() => {
+  return props.message.content && props.message.content.trim().length > 0
+})
+
+// ============================================
+// 工具函数
+// ============================================
+
+/**
+ * 获取模型显示名称 (对应 model.displayName)
+ */
+function getModelDisplayName(model: AiModel): string {
+  const modelMap: Record<string, string> = {
+    'DEFAULT': '默认',
+    'OPUS': 'Opus',
+    'SONNET': 'Sonnet',
+    'OPUS_PLAN': 'Opus Plan'
+  }
+  return modelMap[model] || model
+}
+
+/**
+ * 获取元素唯一key (对应 "${message.id}-${element.timestamp}-$index-${element::class.simpleName}")
+ */
+function getElementKey(element: MessageTimelineItem, index: number): string {
+  return `${props.message.id}-${element.timestamp}-${index}-${element.type}`
+}
+
+/**
+ * 检查内容是否非空白 (对应 content.isNotBlank())
+ */
+function isContentNotBlank(content: string): boolean {
+  return content && content.trim().length > 0
+}
+
+/**
+ * 日志调试:文本片段渲染 (对应 logD)
+ */
+function _logContentRender(content: string, index: number, total: number) {
+  const preview = content.length > 80 ? content.substring(0, 80) + '...' : content
+  console.log(`[AssistantMessageDisplay] 渲染文本片段(${index + 1}/${total}): ${preview}`)
+}
+
+/**
+ * 日志调试:工具调用渲染 (对应 logD)
+ */
+function _logToolCallRender(toolCall: any) {
+  console.log(`[AssistantMessageDisplay] 渲染工具调用: ${toolCall.name} (${toolCall.id})`)
+}
+
+// ============================================
+// 事件处理器
+// ============================================
+
+/**
+ * 处理链接点击 (对应 onLinkClick)
+ */
+function handleLinkClick(url: string) {
+  console.log('[AssistantMessageDisplay] 链接点击:', url)
+}
+
+/**
+ * 处理代码操作 (对应 onCodeAction)
+ */
+function handleCodeAction(code: string, language: string) {
+  console.log('[AssistantMessageDisplay] 代码操作: 语言=', language)
+}
+
+/**
+ * 处理工具展开状态变化 (对应 onExpandedChange)
+ */
+function handleExpandedChange(toolId: string, expanded: boolean) {
+  emit('expanded-change', toolId, expanded)
+}
+</script>
+
+<!-- StatusMessageRow 子组件 (对应 lines 111-129) -->
+<script setup lang="ts">
+import { defineComponent } from 'vue'
+
+/**
+ * 状态消息行组件
+ * 对应 Kotlin 的 StatusMessageRow
+ */
+const StatusMessageRow = defineComponent({
+  name: 'StatusMessageRow',
+  props: {
+    status: {
+      type: Object as () => MessageTimelineItem & { type: 'status' },
+      required: true
+    }
+  },
+  setup(props) {
+    return () => (
+      <div class="status-message-row">
+        {/* JumpingDots 动画 (对应 lines 116-120) */}
+        {props.status.isStreaming && (
+          <JumpingDots class="jumping-dots" />
+        )}
+
+        {/* 状态文本 (对应 lines 121-127) */}
+        <span class="status-text">{props.status.status}</span>
+      </div>
+    )
+  }
+})
+
+/**
+ * JumpingDots 动画组件
+ * 对应 Kotlin 的 JumpingDots
+ */
+const JumpingDots = defineComponent({
+  name: 'JumpingDots',
+  setup() {
+    return () => (
+      <div class="jumping-dots-container">
+        <span class="dot dot-1">●</span>
+        <span class="dot dot-2">●</span>
+        <span class="dot dot-3">●</span>
+      </div>
+    )
+  }
+})
+
+// 导出子组件供使用
+export { StatusMessageRow, JumpingDots }
+</script>
+
+<style scoped>
+/* 主容器样式 */
+.assistant-message-display {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+/* 模型显示样式 (对应 lines 36-55) */
+.model-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: text;
+}
+
+.model-label {
+  font-size: 12px;
+  color: var(--ide-foreground, #24292e);
+}
+
+.model-name {
+  font-size: 12px;
+  color: var(--ide-secondary-foreground, #586069);
+  opacity: 0.7;
+}
+
+/* orderedElements 容器 */
+.ordered-elements {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 时间线元素 */
+.timeline-element {
+  /* 继承父级样式 */
+}
+
+/* 文本内容项 */
+.content-item {
+  width: 100%;
+}
+
+.markdown-content {
+  width: 100%;
+}
+
+/* 工具调用项 */
+.tool-call-item {
+  width: 100%;
+}
+
+/* 状态项 */
+.status-item {
+  /* 继承父级样式 */
+}
+
+/* 降级内容 */
+.fallback-content {
+  width: 100%;
+}
+
+/* StatusMessageRow 样式 (对应 lines 111-129) */
+.status-message-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-text {
+  font-size: 12px;
+  color: var(--ide-secondary-foreground, #586069);
+  opacity: 0.7;
+}
+
+/* JumpingDots 动画组件样式 */
+.jumping-dots-container {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 2px;
+}
+
+.dot {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--ide-accent, #0366d6);
+  animation: jump 1.4s infinite ease-in-out both;
+}
+
+.dot-1 {
+  animation-delay: -0.32s;
+}
+
+.dot-2 {
+  animation-delay: -0.16s;
+}
+
+.dot-3 {
+  animation-delay: 0s;
+}
+
+@keyframes jump {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  40% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+/* 暗色主题适配 */
+.theme-dark .model-label {
+  color: var(--ide-foreground, #e0e0e0);
+}
+
+.theme-dark .model-name {
+  color: var(--ide-secondary-foreground, #8b949e);
+}
+
+.theme-dark .status-text {
+  color: var(--ide-secondary-foreground, #8b949e);
+}
+
+.theme-dark .dot {
+  background-color: var(--ide-accent, #4a9eff);
+}
+</style>

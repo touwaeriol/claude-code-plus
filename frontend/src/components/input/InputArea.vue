@@ -1,7 +1,13 @@
 <template>
-  <div class="input-area" :class="{ 'theme-dark': isDark }">
+  <div
+    class="input-area"
+    :class="{ 'theme-dark': isDark }"
+  >
     <!-- 上下文引用显示 -->
-    <div v-if="contextReferences.length > 0" class="context-references">
+    <div
+      v-if="contextReferences.length > 0"
+      class="context-references"
+    >
       <div class="references-header">
         <span class="header-icon">📎</span>
         <span class="header-text">上下文引用 ({{ contextReferences.length }})</span>
@@ -15,7 +21,12 @@
         >
           <span class="chip-icon">{{ getRefIcon(ref.type) }}</span>
           <span class="chip-label">{{ formatRefLabel(ref) }}</span>
-          <button class="chip-remove" @click="removeReference(index)">×</button>
+          <button
+            class="chip-remove"
+            @click="removeReference(index)"
+          >
+            ×
+          </button>
         </div>
       </div>
     </div>
@@ -52,7 +63,11 @@
       />
 
       <!-- @ 提及建议 -->
-      <div v-if="showMentionSuggestions" class="mention-suggestions" :style="suggestionPosition">
+      <div
+        v-if="showMentionSuggestions"
+        class="mention-suggestions"
+        :style="suggestionPosition"
+      >
         <div
           v-for="(suggestion, index) in filteredSuggestions"
           :key="index"
@@ -62,8 +77,12 @@
         >
           <span class="suggestion-icon">{{ getSuggestionIcon(suggestion.type) }}</span>
           <div class="suggestion-content">
-            <div class="suggestion-name">{{ suggestion.name }}</div>
-            <div class="suggestion-path">{{ suggestion.path }}</div>
+            <div class="suggestion-name">
+              {{ suggestion.name }}
+            </div>
+            <div class="suggestion-path">
+              {{ suggestion.path }}
+            </div>
           </div>
         </div>
       </div>
@@ -73,22 +92,25 @@
     <div class="input-actions">
       <button
         class="btn btn-secondary"
-        @click="triggerFileSelect"
         :disabled="disabled"
         title="添加文件引用"
+        @click="triggerFileSelect"
       >
         <span class="btn-icon">📎</span>
         <span>添加文件</span>
       </button>
 
-      <div class="actions-spacer"></div>
+      <div class="actions-spacer" />
 
-      <span v-if="charCount > 0" class="char-count">{{ charCount }} 字符</span>
+      <span
+        v-if="charCount > 0"
+        class="char-count"
+      >{{ charCount }} 字符</span>
 
       <button
         class="btn btn-primary"
-        @click="handleSend"
         :disabled="!canSend"
+        @click="handleSend"
       >
         <span>{{ sendButtonText }}</span>
       </button>
@@ -101,7 +123,7 @@
       multiple
       style="display: none"
       @change="handleFileSelect"
-    />
+    >
   </div>
 </template>
 
@@ -335,7 +357,7 @@ function updateSuggestionPosition() {
   if (!textareaRef.value) return
 
   // 简化版本：在光标下方显示
-  const rect = textareaRef.value.getBoundingClientRect()
+  const _rect = textareaRef.value.getBoundingClientRect()
   suggestionPosition.value = {
     top: '100%',
     left: '0px'

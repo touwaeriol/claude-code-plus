@@ -31,9 +31,9 @@ class MarkdownService {
    */
   private setupCustomRules() {
     // 自定义代码块渲染
-    const defaultFence = this.md.renderer.rules.fence!
+    const _defaultFence = this.md.renderer.rules.fence!
 
-    this.md.renderer.rules.fence = (tokens, idx, options, env, slf) => {
+    this.md.renderer.rules.fence = (tokens, idx, _options, _env, _slf) => {
       const token = tokens[idx]
       const lang = token.info.trim() || 'text'
       const code = token.content
@@ -44,15 +44,15 @@ class MarkdownService {
           <span class="language">${lang}</span>
           <button class="copy-btn" data-code="${encodeURIComponent(code)}">复制</button>
         </div>
-        <pre class="code-content"><code class="language-${lang}">${this.escapeHtml(code)}</code></pre>
+        <div class="code-content"><code class="language-${lang}">${this.escapeHtml(code)}</code></div>
       </div>`
     }
 
     // 自定义链接渲染 (支持文件路径)
     const defaultLinkOpen = this.md.renderer.rules.link_open ||
-      ((tokens, idx, options, env, slf) => slf.renderToken(tokens, idx, options))
+      ((tokens, idx, _options, _env, _slf) => slf.renderToken(tokens, idx, options))
 
-    this.md.renderer.rules.link_open = (tokens, idx, options, env, slf) => {
+    this.md.renderer.rules.link_open = (tokens, idx, _options, _env, _slf) => {
       const token = tokens[idx]
       const hrefIndex = token.attrIndex('href')
 
@@ -65,7 +65,7 @@ class MarkdownService {
         }
       }
 
-      return defaultLinkOpen(tokens, idx, options, env, slf)
+      return defaultLinkOpen(tokens, idx, _options, _env, _slf)
     }
   }
 

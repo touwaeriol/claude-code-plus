@@ -5,7 +5,10 @@
       <span class="tool-name">TodoWrite</span>
       <span class="todo-count">{{ todoCount }}</span>
     </div>
-    <div v-if="expanded" class="tool-content">
+    <div
+      v-if="expanded"
+      class="tool-content"
+    >
       <div class="todo-list">
         <div
           v-for="(todo, index) in todos"
@@ -17,14 +20,20 @@
             <span class="todo-status-icon">{{ getStatusIcon(todo.status) }}</span>
             <span class="todo-content">{{ todo.content }}</span>
           </div>
-          <div v-if="todo.status === 'in_progress'" class="todo-active">
+          <div
+            v-if="todo.status === 'in_progress'"
+            class="todo-active"
+          >
             <span class="active-icon">⚡</span>
             <span class="active-text">{{ todo.activeForm }}</span>
           </div>
         </div>
       </div>
 
-      <div v-if="stats" class="todo-stats">
+      <div
+        v-if="stats"
+        class="todo-stats"
+      >
         <div class="stat-item">
           <span class="stat-label">总计:</span>
           <span class="stat-value">{{ stats.total }}</span>
@@ -43,7 +52,10 @@
         </div>
       </div>
     </div>
-    <button class="expand-btn" @click="expanded = !expanded">
+    <button
+      class="expand-btn"
+      @click="expanded = !expanded"
+    >
       {{ expanded ? '收起' : '展开' }}
     </button>
   </div>

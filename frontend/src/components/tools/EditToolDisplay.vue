@@ -5,34 +5,58 @@
       <span class="tool-name">Edit</span>
       <span class="tool-file">{{ fileName }}</span>
     </div>
-    <div v-if="expanded" class="tool-content">
+    <div
+      v-if="expanded"
+      class="tool-content"
+    >
       <div class="file-info">
         <div class="info-row">
           <span class="label">文件:</span>
-          <span class="value clickable" @click="showDiff">{{ filePath }}</span>
+          <span
+            class="value clickable"
+            @click="showDiff"
+          >{{ filePath }}</span>
         </div>
       </div>
       <div class="edit-preview">
         <div class="diff-section">
-          <div class="diff-header old">替换内容 (旧)</div>
+          <div class="diff-header old">
+            替换内容 (旧)
+          </div>
           <pre class="diff-content old">{{ oldString }}</pre>
         </div>
-        <div class="diff-arrow">→</div>
+        <div class="diff-arrow">
+          →
+        </div>
         <div class="diff-section">
-          <div class="diff-header new">新内容</div>
+          <div class="diff-header new">
+            新内容
+          </div>
           <pre class="diff-content new">{{ newString }}</pre>
         </div>
       </div>
-      <div v-if="replaceAll" class="replace-mode">
+      <div
+        v-if="replaceAll"
+        class="replace-mode"
+      >
         <span class="badge">全部替换</span>
       </div>
-      <div v-if="result" class="tool-result">
-        <div class="result-status" :class="resultStatus">
+      <div
+        v-if="result"
+        class="tool-result"
+      >
+        <div
+          class="result-status"
+          :class="resultStatus"
+        >
           {{ resultMessage }}
         </div>
       </div>
     </div>
-    <button class="expand-btn" @click="expanded = !expanded">
+    <button
+      class="expand-btn"
+      @click="expanded = !expanded"
+    >
       {{ expanded ? '收起' : '展开' }}
     </button>
   </div>

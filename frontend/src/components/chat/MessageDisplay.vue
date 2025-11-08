@@ -1,5 +1,8 @@
 <template>
-  <div class="message" :class="`message-${message.role}`">
+  <div
+    class="message"
+    :class="`message-${message.role}`"
+  >
     <div class="message-header">
       <span class="role-icon">{{ roleIcon }}</span>
       <span class="role-name">{{ roleName }}</span>
@@ -11,20 +14,24 @@
       <MarkdownRenderer
         v-if="textContent"
         :content="textContent"
-        :isDark="isDark"
+        :is-dark="isDark"
       />
 
       <!-- 工具调用 - 使用专业化组件 -->
       <component
+        :is="getToolComponent(tool.name)"
         v-for="tool in toolUses"
         :key="tool.id"
-        :is="getToolComponent(tool.name)"
-        :toolUse="tool"
+        :tool-use="tool"
         :result="getToolResult(tool.id)"
       />
 
       <!-- 工具结果(如果没有对应的 tool_use) -->
-      <div v-for="result in orphanResults" :key="result.tool_use_id" class="tool-result-orphan">
+      <div
+        v-for="result in orphanResults"
+        :key="result.tool_use_id"
+        class="tool-result-orphan"
+      >
         <div class="result-header">
           <span class="result-icon">📊</span>
           <span class="result-id">结果: {{ result.tool_use_id }}</span>
@@ -41,11 +48,25 @@ import type { Message, ToolUseBlock, ToolResultBlock } from '@/types/message'
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 import ReadToolDisplay from '@/components/tools/ReadToolDisplay.vue'
 import EditToolDisplay from '@/components/tools/EditToolDisplay.vue'
+import MultiEditToolDisplay from '@/components/tools/MultiEditToolDisplay.vue'
 import WriteToolDisplay from '@/components/tools/WriteToolDisplay.vue'
 import BashToolDisplay from '@/components/tools/BashToolDisplay.vue'
 import GrepToolDisplay from '@/components/tools/GrepToolDisplay.vue'
 import GlobToolDisplay from '@/components/tools/GlobToolDisplay.vue'
 import TodoWriteDisplay from '@/components/tools/TodoWriteDisplay.vue'
+import WebSearchToolDisplay from '@/components/tools/WebSearchToolDisplay.vue'
+import WebFetchToolDisplay from '@/components/tools/WebFetchToolDisplay.vue'
+import AskUserQuestionDisplay from '@/components/tools/AskUserQuestionDisplay.vue'
+import NotebookEditToolDisplay from '@/components/tools/NotebookEditToolDisplay.vue'
+import TaskToolDisplay from '@/components/tools/TaskToolDisplay.vue'
+import SlashCommandToolDisplay from '@/components/tools/SlashCommandToolDisplay.vue'
+import SkillToolDisplay from '@/components/tools/SkillToolDisplay.vue'
+import GenericMcpToolDisplay from '@/components/tools/GenericMcpToolDisplay.vue'
+import BashOutputToolDisplay from '@/components/tools/BashOutputToolDisplay.vue'
+import KillShellToolDisplay from '@/components/tools/KillShellToolDisplay.vue'
+import ListMcpResourcesToolDisplay from '@/components/tools/ListMcpResourcesToolDisplay.vue'
+import ReadMcpResourceToolDisplay from '@/components/tools/ReadMcpResourceToolDisplay.vue'
+import ExitPlanModeToolDisplay from '@/components/tools/ExitPlanModeToolDisplay.vue'
 
 interface Props {
   message: Message
@@ -105,15 +126,38 @@ function getToolComponent(toolName: string): Component {
   const componentMap: Record<string, Component> = {
     'Read': ReadToolDisplay,
     'Edit': EditToolDisplay,
+    'MultiEdit': MultiEditToolDisplay,
     'Write': WriteToolDisplay,
     'Bash': BashToolDisplay,
     'Grep': GrepToolDisplay,
     'Glob': GlobToolDisplay,
-    'TodoWrite': TodoWriteDisplay
+    'TodoWrite': TodoWriteDisplay,
+    'WebSearch': WebSearchToolDisplay,
+    'WebFetch': WebFetchToolDisplay,
+    'AskUserQuestion': AskUserQuestionDisplay,
+    'NotebookEdit': NotebookEditToolDisplay,
+    'Task': TaskToolDisplay,
+    'SlashCommand': SlashCommandToolDisplay,
+    'Skill': SkillToolDisplay,
+    'BashOutput': BashOutputToolDisplay,
+    'KillShell': KillShellToolDisplay,
+    'ListMcpResourcesTool': ListMcpResourcesToolDisplay,
+    'ReadMcpResourceTool': ReadMcpResourceToolDisplay,
+    'ExitPlanMode': ExitPlanModeToolDisplay
   }
 
-  // 返回对应组件,如果没有则返回 ReadToolDisplay 作为默认(可以改为通用组件)
-  return componentMap[toolName] || ReadToolDisplay
+  // 尝试精确匹配
+  if (componentMap[toolName]) {
+    return componentMap[toolName]
+  }
+
+  // MCP 工具使用通用显示器
+  if (toolName.startsWith('mcp__')) {
+    return GenericMcpToolDisplay
+  }
+
+  // 默认返回通用 MCP 显示器
+  return GenericMcpToolDisplay
 }
 
 function getToolResult(toolUseId: string): ToolResultBlock | undefined {

@@ -4,28 +4,51 @@
       <span class="tool-icon">📄</span>
       <span class="tool-name">Read</span>
       <span class="tool-file">{{ fileName }}</span>
-      <span v-if="lineRange" class="tool-lines">{{ lineRange }}</span>
+      <span
+        v-if="lineRange"
+        class="tool-lines"
+      >{{ lineRange }}</span>
     </div>
-    <div v-if="expanded" class="tool-content">
+    <div
+      v-if="expanded"
+      class="tool-content"
+    >
       <div class="file-info">
         <div class="info-row">
           <span class="label">路径:</span>
-          <span class="value clickable" @click="openFile">{{ filePath }}</span>
+          <span
+            class="value clickable"
+            @click="openFile"
+          >{{ filePath }}</span>
         </div>
-        <div v-if="hasLineRange" class="info-row">
+        <div
+          v-if="hasLineRange"
+          class="info-row"
+        >
           <span class="label">行数:</span>
           <span class="value">{{ lineRange }}</span>
         </div>
       </div>
-      <div v-if="result" class="tool-result">
+      <div
+        v-if="result"
+        class="tool-result"
+      >
         <div class="result-header">
           <span>读取结果</span>
-          <button class="copy-btn" @click="copyContent">复制</button>
+          <button
+            class="copy-btn"
+            @click="copyContent"
+          >
+            复制
+          </button>
         </div>
         <pre class="result-content">{{ resultText }}</pre>
       </div>
     </div>
-    <button class="expand-btn" @click="expanded = !expanded">
+    <button
+      class="expand-btn"
+      @click="expanded = !expanded"
+    >
       {{ expanded ? '收起' : '展开' }}
     </button>
   </div>
