@@ -141,9 +141,17 @@ onMounted(async () => {
       }
     }
 
-    // TODO: 从后端获取当前会话ID和项目路径
-    // sessionId.value = await ideaBridge.getCurrentSessionId()
-    // projectPath.value = await ideaBridge.getProjectPath()
+    // 从后端获取项目路径
+    try {
+      const response = await ideaBridge.query('ide.getProjectPath', {})
+      if (response.success && response.data?.projectPath) {
+        projectPath.value = response.data.projectPath as string
+        console.log('📁 Project path:', projectPath.value)
+      }
+    } catch (error) {
+      console.error('❌ Failed to get project path:', error)
+      projectPath.value = '获取失败'
+    }
   } catch (error) {
     console.error('❌ Failed to initialize:', error)
     themeServiceStatus.value = `错误: ${error}`
