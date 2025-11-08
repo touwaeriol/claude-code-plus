@@ -42,9 +42,21 @@ class IdeaBridgeService {
    * 检测运行模式
    */
   private detectMode() {
-    if (window.ideaBridge && typeof window.ideaBridge.query === 'function') {
+    // 检查多个标志来确定是否在 JCEF 环境中
+    const hasIdeaBridge = window.ideaBridge && typeof window.ideaBridge.query === 'function'
+    const hasJcefFlag = window.__jcefMode === true
+    const hasBridgeReadyFlag = window.__bridgeReady === true
+    
+    console.log('🔍 Mode Detection:', { 
+      hasIdeaBridge, 
+      hasJcefFlag,
+      hasBridgeReadyFlag,
+      ideaBridge: window.ideaBridge 
+    })
+    
+    if (hasIdeaBridge || hasJcefFlag || hasBridgeReadyFlag) {
       this.mode = BridgeMode.JCEF
-      console.log('🔌 Bridge Mode: JCEF (Plugin)')
+      console.log('🔌 Bridge Mode: JCEF (Plugin)', { hasIdeaBridge, hasJcefFlag, hasBridgeReadyFlag })
     } else {
       this.mode = BridgeMode.HTTP
       console.log('🌐 Bridge Mode: HTTP (Browser)')
@@ -67,24 +79,45 @@ class IdeaBridgeService {
    */
   private async initJcefMode() {
     return new Promise<void>((resolve) => {
-      if (window.__bridgeReady) {
-        this.isReady = true
-        resolve()
-      } else {
-        window.addEventListener('bridge-ready', () => {
+      const checkBridgeReady = () => {
+        // 多重检查：__bridgeReady 标志或 ideaBridge.isReady
+        if (window.__bridgeReady || (window.ideaBridge && window.ideaBridge.isReady)) {
+          console.log('✅ JCEF Bridge is ready')
           this.isReady = true
           resolve()
-        }, { once: true })
-
-        // 超时检查
-        setTimeout(() => {
-          if (!this.isReady) {
-            console.warn('⚠️ JCEF Bridge not ready after 5s, falling back to HTTP mode')
-            this.mode = BridgeMode.HTTP
-            this.initHttpMode().then(resolve)
-          }
-        }, 5000)
+          return true
+        }
+        return false
       }
+
+      // 立即检查
+      if (checkBridgeReady()) return
+
+      // 监听 bridge-ready 事件
+      window.addEventListener('bridge-ready', () => {
+        console.log('📢 bridge-ready event received')
+        if (checkBridgeReady()) return
+      }, { once: true })
+
+      // 轮询检查（每 100ms 检查一次，最多检查 100 次 = 10 秒）
+      let attempts = 0
+      const maxAttempts = 100
+      const pollInterval = setInterval(() => {
+        attempts++
+        console.log(`🔄 Polling for JCEF Bridge... (attempt ${attempts}/${maxAttempts})`)
+        
+        if (checkBridgeReady()) {
+          clearInterval(pollInterval)
+          return
+        }
+        
+        if (attempts >= maxAttempts) {
+          clearInterval(pollInterval)
+          console.error('❌ JCEF Bridge not ready after 10s, falling back to HTTP mode')
+          this.mode = BridgeMode.HTTP
+          this.initHttpMode().then(resolve)
+        }
+      }, 100)
     })
   }
 
