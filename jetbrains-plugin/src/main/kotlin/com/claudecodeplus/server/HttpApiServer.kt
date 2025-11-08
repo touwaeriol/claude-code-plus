@@ -249,6 +249,13 @@ class HttpApiServer(
                     data = mapOf("theme" to themeJson)
                 )
             }
+            "ide.getProjectPath" -> {
+                val projectPath = project.basePath ?: project.projectFilePath ?: "δ֪"
+                FrontendResponse(
+                    success = true,
+                    data = mapOf("projectPath" to JsonPrimitive(projectPath))
+                )
+            }
             else -> FrontendResponse(false, error = "Unknown IDE action: ${request.action}")
         }
     }

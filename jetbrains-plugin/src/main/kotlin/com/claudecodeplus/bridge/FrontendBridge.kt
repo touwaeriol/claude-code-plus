@@ -40,13 +40,13 @@ class FrontendBridge(
     // 前端 -> 后端 (Request/Response 模式)
     private val queryHandler = JBCefJSQuery.create(browser as JBCefBrowserBase)
 
-    // 后端 -> 前端 (事件推�?
+    // 后端 -> 前端 (事件推�?
     private var isReady = false
 
-    // Claude 操作处理�?
+    // Claude 操作处理�?
     private val claudeHandler = ClaudeActionHandler(project, this, scope)
 
-    // 会话操作处理�?
+    // 会话操作处理�?
     private val sessionHandler = SessionActionHandler(project)
 
     init {
@@ -59,7 +59,7 @@ class FrontendBridge(
     }
 
     /**
-     * 注册请求处理�?
+     * 注册请求处理�?
      */
     private fun setupQueryHandler() {
         queryHandler.addHandler { requestJson ->
@@ -71,7 +71,7 @@ class FrontendBridge(
                 logger.info("📤 Sending response: $responseJson")
                 JBCefJSQuery.Response(responseJson)
             } catch (e: Exception) {
-                logger.severe("�?Error handling request: ${e.message}")
+                logger.severe("�?Error handling request: ${e.message}")
                 e.printStackTrace()
                 val error = FrontendResponse(
                     success = false,
@@ -82,7 +82,7 @@ class FrontendBridge(
         }
 
         // 注意：JavaScript 桥接脚本必须在页面加载完成后注入
-        // 不要在这里调�?injectBridgeScript()
+        // 不要在这里调�?injectBridgeScript()
     }
 
     /**
@@ -113,15 +113,15 @@ class FrontendBridge(
                                     ${queryHandler.inject("request", "resolve", "reject")}
                                 });
                                 const response = JSON.parse(responseJson);
-                                console.log('�?Bridge response:', response);
+                                console.log('�?Bridge response:', response);
                                 return response;
                             } catch (error) {
-                                console.error('�?Bridge query failed:', error);
+                                console.error('�?Bridge query failed:', error);
                                 return { success: false, error: String(error) };
                             }
                         },
 
-                        // 标记桥接已就�?
+                        // 标记桥接已就�?
                         isReady: true
                     };
 
@@ -131,19 +131,19 @@ class FrontendBridge(
                         window.dispatchEvent(new CustomEvent('ide-event', { detail: event }));
                     };
 
-                    // 标记桥接已就�?
+                    // 标记桥接已就�?
                     window.__bridgeReady = true;
                     window.dispatchEvent(new Event('bridge-ready'));
-                    console.log('�?IDEA bridge ready');
+                    console.log('�?IDEA bridge ready');
                 } catch (error) {
-                    console.error('�?Failed to initialize IDEA bridge:', error);
+                    console.error('�?Failed to initialize IDEA bridge:', error);
                     window.__bridgeReady = false;
                     const root = document.getElementById('app');
                     if (root && !root.querySelector('.bridge-init-error')) {
                         root.innerHTML = `
                             <div class="bridge-init-error" style="padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#d22;background:rgba(210,34,34,0.08);border:1px solid rgba(210,34,34,0.3);border-radius:8px;">
-                                <h3 style="margin-bottom:12px;">IDEA 桥接初始化失�?/h3>
-                                <p style="margin-bottom:8px;">请查�?IDE 日志了解详情�?/p>
+                                <h3 style="margin-bottom:12px;">IDEA 桥接初始化失�?/h3>
+                                <p style="margin-bottom:8px;">请查�?IDE 日志了解详情�?/p>
                                 <code style="display:block;white-space:pre-wrap;font-size:12px;color:#a11;">${'$'}{String(error)}</code>
                             </div>`;
                     }
@@ -156,11 +156,11 @@ class FrontendBridge(
         logger.info("🧪 Bridge script preview: ${script.take(200)}...")
         browser.cefBrowser.executeJavaScript(script, browser.cefBrowser.url, 0)
         isReady = true
-        logger.info("�?Bridge script injected")
+        logger.info("�?Bridge script injected")
     }
 
     /**
-     * 处理来自前端的请�?
+     * 处理来自前端的请�?
      */
     private fun handleRequest(request: FrontendRequest): FrontendResponse {
         logger.info("Processing action: ${request.action}")
@@ -209,10 +209,17 @@ class FrontendBridge(
             }
             "ide.getServerUrl" -> {
                 val httpServerService = com.claudecodeplus.server.HttpServerProjectService.getInstance(project)
-                val serverUrl = httpServerService.serverUrl ?: "δ����"
+                val serverUrl = httpServerService.serverUrl ?: "δ����"
                 FrontendResponse(
                     success = true,
                     data = mapOf("serverUrl" to JsonPrimitive(serverUrl))
+                )
+            }
+            "ide.getProjectPath" -> {
+                val projectPath = project.basePath ?: project.projectFilePath ?: "δ֪"
+                FrontendResponse(
+                    success = true,
+                    data = mapOf("projectPath" to JsonPrimitive(projectPath))
                 )
             }
             "ide.openFile" -> handleOpenFile(request)
@@ -252,12 +259,12 @@ class FrontendBridge(
             browser.cefBrowser.executeJavaScript(script, browser.cefBrowser.url, 0)
             logger.info("📤 Pushed event: ${event.type}")
         } catch (e: Exception) {
-            logger.severe("�?Failed to push event: ${e.message}")
+            logger.severe("�?Failed to push event: ${e.message}")
         }
     }
 
     /**
-     * 设置主题监听�?
+     * 设置主题监听�?
      */
     private fun setupThemeListener() {
         ApplicationManager.getApplication().messageBus
@@ -274,7 +281,7 @@ class FrontendBridge(
                         data = mapOf("theme" to themeJson)
                     ))
                 } catch (e: Exception) {
-                    logger.severe("�?Failed to notify theme change: ${e.message}")
+                    logger.severe("�?Failed to notify theme change: ${e.message}")
                     e.printStackTrace()
                 }
             })
@@ -329,7 +336,7 @@ class FrontendBridge(
                 data = mapOf("files" to JsonArray(files.map { JsonObject(it) }))
             )
         } catch (e: Exception) {
-            logger.severe("�?Failed to search files: ${e.message}")
+            logger.severe("�?Failed to search files: ${e.message}")
             FrontendResponse(false, error = e.message ?: "Failed to search files")
         }
     }
@@ -404,7 +411,7 @@ class FrontendBridge(
                 FrontendResponse(false, error = "File not found: $filePath")
             }
         } catch (e: Exception) {
-            logger.severe("�?Failed to get file content: ${e.message}")
+            logger.severe("�?Failed to get file content: ${e.message}")
             FrontendResponse(false, error = e.message ?: "Failed to get file content")
         }
     }
@@ -429,7 +436,7 @@ class FrontendBridge(
                     val fileEditorManager = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project)
                     fileEditorManager.openFile(file, true)
 
-                    // 如果指定了行号，跳转到指定位�?
+                    // 如果指定了行号，跳转到指定位�?
                     if (line != null && line > 0) {
                         val editor = fileEditorManager.selectedTextEditor
                         if (editor != null) {
@@ -445,7 +452,7 @@ class FrontendBridge(
                         }
                     }
 
-                    logger.info("�?Opened file: $filePath at line $line")
+                    logger.info("�?Opened file: $filePath at line $line")
                 } else {
                     logger.warning("⚠️ File not found: $filePath")
                 }
@@ -453,7 +460,7 @@ class FrontendBridge(
 
             FrontendResponse(success = true)
         } catch (e: Exception) {
-            logger.severe("�?Failed to open file: ${e.message}")
+            logger.severe("�?Failed to open file: ${e.message}")
             FrontendResponse(false, error = e.message ?: "Failed to open file")
         }
     }
@@ -486,25 +493,25 @@ class FrontendBridge(
                     title,
                     leftContent,
                     rightContent,
-                    "ԭ����",
-                    "������"
+                    "ԭ����",
+                    "������"
                 )
 
-                // 显示 diff 对话�?
+                // 显示 diff 对话�?
                 DiffManager.getInstance().showDiff(project, diffRequest)
 
-                logger.info("�?Showing diff for: $filePath")
+                logger.info("�?Showing diff for: $filePath")
             }
 
             FrontendResponse(success = true)
         } catch (e: Exception) {
-            logger.severe("�?Failed to show diff: ${e.message}")
+            logger.severe("�?Failed to show diff: ${e.message}")
             FrontendResponse(false, error = e.message ?: "Failed to show diff")
         }
     }
 
     /**
-     * 颜色转十六进�?
+     * 颜色转十六进�?
      */
     private fun colorToHex(color: Color): String {
         return "#%02x%02x%02x".format(color.red, color.green, color.blue)
