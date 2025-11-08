@@ -7,13 +7,15 @@
       <h3 class="header-title">
         会话历史
       </h3>
-      <button
+      <el-button
         class="btn-icon"
         title="新建会话"
+        text
+        circle
         @click="$emit('new-session')"
       >
         <span>➕</span>
-      </button>
+      </el-button>
     </div>
 
     <div
@@ -57,20 +59,24 @@
           class="session-actions"
           @click.stop
         >
-          <button
+          <el-button
             class="btn-icon-small"
             title="重命名"
+            text
+            size="small"
             @click="startRename(session)"
           >
             ✏️
-          </button>
-          <button
+          </el-button>
+          <el-button
             class="btn-icon-small"
             title="删除"
+            text
+            size="small"
             @click="$emit('delete-session', session)"
           >
             🗑️
-          </button>
+          </el-button>
         </div>
       </div>
     </div>
@@ -83,28 +89,28 @@
     >
       <div class="dialog-content">
         <h4>重命名会话</h4>
-        <input
+        <el-input
           ref="renameInputRef"
           v-model="newName"
-          type="text"
           class="rename-input"
           placeholder="输入新名称"
           @keydown.enter="confirmRename"
           @keydown.esc="cancelRename"
-        >
+        />
         <div class="dialog-actions">
-          <button
-            class="btn btn-secondary"
+          <el-button
+            class="btn-secondary"
             @click="cancelRename"
           >
             取消
-          </button>
-          <button
-            class="btn btn-primary"
+          </el-button>
+          <el-button
+            class="btn-primary"
+            type="primary"
             @click="confirmRename"
           >
             确定
-          </button>
+          </el-button>
         </div>
       </div>
     </div>
@@ -211,25 +217,19 @@ function cancelRename() {
   color: var(--ide-foreground);
 }
 
-.btn-icon {
+/* Element Plus 按钮样式覆盖 */
+.btn-icon :deep(.el-button) {
   width: 28px;
   height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  border-radius: 4px;
+  padding: 0;
   font-size: 16px;
-  transition: background 0.2s;
 }
 
-.btn-icon:hover {
+.btn-icon:hover :deep(.el-button) {
   background: rgba(0, 0, 0, 0.05);
 }
 
-.theme-dark .btn-icon:hover {
+.theme-dark .btn-icon:hover :deep(.el-button) {
   background: rgba(255, 255, 255, 0.05);
 }
 
@@ -353,29 +353,25 @@ function cancelRename() {
   display: flex;
 }
 
-.btn-icon-small {
+.btn-icon-small :deep(.el-button) {
   width: 24px;
   height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  border-radius: 4px;
+  padding: 0;
   font-size: 14px;
-  transition: background 0.2s;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
 }
 
-.btn-icon-small:hover {
+.btn-icon-small:hover :deep(.el-button) {
   background: rgba(0, 0, 0, 0.2);
 }
 
-.session-item.active .btn-icon-small {
+.session-item.active .btn-icon-small :deep(.el-button) {
   background: rgba(255, 255, 255, 0.2);
+  color: white;
 }
 
-.session-item.active .btn-icon-small:hover {
+.session-item.active .btn-icon-small:hover :deep(.el-button) {
   background: rgba(255, 255, 255, 0.3);
 }
 
@@ -409,21 +405,25 @@ function cancelRename() {
   color: var(--ide-foreground);
 }
 
+/* Element Plus input 样式覆盖 */
 .rename-input {
   width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--ide-input-border);
-  border-radius: 4px;
-  background: var(--ide-input-background);
-  color: var(--ide-input-foreground);
-  font-size: 14px;
-  outline: none;
   margin-bottom: 16px;
 }
 
-.rename-input:focus {
-  border-color: var(--ide-accent);
-  box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.1);
+.rename-input :deep(.el-input__wrapper) {
+  padding: 8px 12px;
+  background: var(--ide-input-background);
+  box-shadow: 0 0 0 1px var(--ide-input-border) inset;
+}
+
+.rename-input :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px var(--ide-accent) inset, 0 0 0 3px rgba(3, 102, 214, 0.1);
+}
+
+.rename-input :deep(.el-input__inner) {
+  color: var(--ide-input-foreground);
+  font-size: 14px;
 }
 
 .dialog-actions {
@@ -432,32 +432,30 @@ function cancelRename() {
   justify-content: flex-end;
 }
 
-.btn {
-  padding: 6px 16px;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-secondary {
+/* Element Plus 对话框按钮样式覆盖 */
+.btn-secondary :deep(.el-button) {
   background: var(--ide-panel-background);
   color: var(--ide-foreground);
   border: 1px solid var(--ide-border);
+  padding: 6px 16px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover :deep(.el-button) {
   background: var(--ide-border);
 }
 
-.btn-primary {
+.btn-primary :deep(.el-button) {
   background: var(--ide-button-background);
   color: var(--ide-button-foreground);
+  border: none;
+  padding: 6px 16px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.btn-primary:hover {
+.btn-primary:hover :deep(.el-button) {
   background: var(--ide-button-hover-background);
 }
 </style>

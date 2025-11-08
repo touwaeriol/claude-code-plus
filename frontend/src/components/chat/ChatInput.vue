@@ -87,25 +87,42 @@
           v-if="showModelSelector"
           class="model-selector-wrapper"
         >
-          <select
+          <el-select
             v-model="selectedModelValue"
             class="model-selector"
             :disabled="!enabled || isGenerating"
+            placement="top-start"
+            :teleported="false"
+            :popper-options="{
+              strategy: 'fixed',
+              modifiers: [
+                {
+                  name: 'flip',
+                  options: {
+                    fallbackPlacements: ['top-start', 'top'],
+                  }
+                }
+              ]
+            }"
             @change="$emit('model-change', selectedModelValue)"
           >
-            <option value="DEFAULT">
-              默认
-            </option>
-            <option value="OPUS">
-              Opus
-            </option>
-            <option value="SONNET">
-              Sonnet
-            </option>
-            <option value="OPUS_PLAN">
-              Opus Plan
-            </option>
-          </select>
+            <el-option
+              value="DEFAULT"
+              label="默认"
+            />
+            <el-option
+              value="OPUS"
+              label="Opus"
+            />
+            <el-option
+              value="SONNET"
+              label="Sonnet"
+            />
+            <el-option
+              value="OPUS_PLAN"
+              label="Opus Plan"
+            />
+          </el-select>
           <span
             v-if="actualModelId"
             class="actual-model-hint"
@@ -116,26 +133,43 @@
         </div>
 
         <!-- 权限选择器 -->
-        <select
+        <el-select
           v-if="showPermissionControls"
           v-model="selectedPermissionValue"
           class="permission-selector"
           :disabled="!enabled || isGenerating"
+          placement="top-start"
+          :teleported="false"
+          :popper-options="{
+            strategy: 'fixed',
+            modifiers: [
+              {
+                name: 'flip',
+                options: {
+                  fallbackPlacements: ['top-start', 'top'],
+                }
+              }
+            ]
+          }"
           @change="$emit('permission-change', selectedPermissionValue)"
         >
-          <option value="DEFAULT">
-            默认权限
-          </option>
-          <option value="ACCEPT">
-            接受编辑
-          </option>
-          <option value="BYPASS">
-            绕过权限
-          </option>
-          <option value="PLAN">
-            计划模式
-          </option>
-        </select>
+          <el-option
+            value="DEFAULT"
+            label="默认权限"
+          />
+          <el-option
+            value="ACCEPT"
+            label="接受编辑"
+          />
+          <el-option
+            value="BYPASS"
+            label="绕过权限"
+          />
+          <el-option
+            value="PLAN"
+            label="计划模式"
+          />
+        </el-select>
 
         <!-- Skip Permissions 复选框 -->
         <label
@@ -724,25 +758,54 @@ onMounted(() => {
 
 .model-selector,
 .permission-selector {
-  padding: 6px 10px;
+  width: 140px;
+  font-size: 12px;
+}
+
+/* Element Plus el-select 样式覆盖 */
+.model-selector :deep(.el-select__wrapper),
+.permission-selector :deep(.el-select__wrapper) {
+  padding: 4px 10px;
   border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 4px;
   background: var(--ide-background, #ffffff);
-  color: var(--ide-foreground, #24292e);
-  font-size: 12px;
-  cursor: pointer;
-  max-width: 140px;
+  box-shadow: none;
+  min-height: 28px;
 }
 
-.model-selector:hover:not(:disabled),
-.permission-selector:hover:not(:disabled) {
+.model-selector :deep(.el-select__wrapper):hover,
+.permission-selector :deep(.el-select__wrapper):hover {
   border-color: var(--ide-accent, #0366d6);
 }
 
-.model-selector:disabled,
-.permission-selector:disabled {
+.model-selector :deep(.el-select__wrapper.is-focused),
+.permission-selector :deep(.el-select__wrapper.is-focused) {
+  border-color: var(--ide-accent, #0366d6);
+  box-shadow: none;
+}
+
+.model-selector :deep(.el-select__placeholder),
+.permission-selector :deep(.el-select__placeholder) {
+  color: var(--ide-secondary-foreground, #6a737d);
+  font-size: 12px;
+}
+
+.model-selector :deep(.el-select__selection),
+.permission-selector :deep(.el-select__selection) {
+  color: var(--ide-foreground, #24292e);
+  font-size: 12px;
+}
+
+.model-selector :deep(.el-select__suffix),
+.permission-selector :deep(.el-select__suffix) {
+  color: var(--ide-secondary-foreground, #6a737d);
+}
+
+.model-selector.is-disabled :deep(.el-select__wrapper),
+.permission-selector.is-disabled :deep(.el-select__wrapper) {
   opacity: 0.5;
   cursor: not-allowed;
+  background: var(--ide-panel-background, #f6f8fa);
 }
 
 .actual-model-hint {
