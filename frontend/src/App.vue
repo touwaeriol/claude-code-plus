@@ -26,22 +26,43 @@
         class="debug-content"
       >
         <div class="debug-item">
-          桥接: {{ bridgeReady ? '✅' : '⏳' }}
+          <strong>运行模式:</strong> {{ currentMode }}
         </div>
         <div class="debug-item">
-          主题: {{ isDark ? '🌙 暗色' : '☀️ 亮色' }}
+          <strong>桥接状态:</strong> {{ bridgeReady ? '✅ 已连接' : '⏳ 连接中' }}
         </div>
         <div class="debug-item">
-          Session: {{ sessionId || '默认' }}
+          <strong>主题模式:</strong> {{ isDark ? '🌙 暗色' : '☀️ 亮色' }}
         </div>
         <div class="debug-item">
-          项目路径: {{ projectPath }}
+          <strong>HTML Class:</strong> {{ htmlClasses }}
+        </div>
+        <div class="debug-item">
+          <strong>主题服务:</strong> {{ themeServiceStatus }}
+        </div>
+        <div class="debug-item">
+          <strong>Session:</strong> {{ sessionId || '默认' }}
+        </div>
+        <div class="debug-item">
+          <strong>项目路径:</strong> {{ projectPath || '未设置' }}
         </div>
         <button
           class="debug-button"
           @click="testBridge"
         >
           测试桥接
+        </button>
+        <button
+          class="debug-button"
+          @click="testTheme"
+        >
+          测试主题
+        </button>
+        <button
+          class="debug-button"
+          @click="toggleTheme"
+        >
+          切换主题
         </button>
       </div>
     </div>
@@ -58,6 +79,9 @@ const bridgeReady = ref(false)
 const isDark = ref(false)
 const showDebug = ref(true) // 可以改为 false 隐藏调试面板
 const debugExpanded = ref(false)
+const currentMode = ref('unknown')
+const htmlClasses = ref('')
+const themeServiceStatus = ref('未初始化')
 
 // 会话ID和项目路径（可以从后端获取）
 const sessionId = ref<string | undefined>(undefined)
@@ -66,6 +90,13 @@ const projectPath = ref<string>('') // 将从后端获取
 onMounted(async () => {
   console.log('🚀 App mounted - ModernChatView loaded')
 
+  // 更新 HTML class 显示
+  const updateHtmlClasses = () => {
+    htmlClasses.value = document.documentElement.className || '(空)'
+  }
+  updateHtmlClasses()
+  setInterval(updateHtmlClasses, 1000) // 每秒更新一次
+
   try {
     await ideaBridge.waitForReady()
     bridgeReady.value = true
@@ -73,31 +104,49 @@ onMounted(async () => {
 
     // 只在插件模式（JCEF）下适配 IDEA 主题
     const mode = ideaBridge.getMode()
+    currentMode.value = mode
     console.log(`🔍 Current mode detected: "${mode}" (type: ${typeof mode})`)
     
     if (mode === 'jcef') {
       console.log('🔌 Plugin mode - adapting IDEA theme')
+      themeServiceStatus.value = '初始化中...'
+      
       // 初始化主题服务
       await themeService.initialize()
+      themeServiceStatus.value = '已激活'
+      console.log('✅ Theme service initialized')
 
       // 监听主题变化
       themeService.onThemeChange((theme) => {
         isDark.value = theme.isDark
-        console.log('🎨 Theme updated:', theme.isDark ? 'dark' : 'light')
+        console.log('🎨 Theme updated:', theme.isDark ? 'dark' : 'light', theme)
         
         // 为 Element Plus 添加/移除 dark class
         if (theme.isDark) {
           document.documentElement.classList.add('dark')
-          console.log('✅ Added "dark" class to <html>')
+          document.documentElement.classList.add('theme-dark')
+          console.log('✅ Added "dark" and "theme-dark" classes to <html>')
         } else {
           document.documentElement.classList.remove('dark')
-          console.log('✅ Removed "dark" class from <html>')
+          document.documentElement.classList.remove('theme-dark')
+          console.log('✅ Removed "dark" and "theme-dark" classes from <html>')
         }
+        updateHtmlClasses()
+        themeServiceStatus.value = `已激活 (${theme.isDark ? '暗色' : '亮色'})`
       })
+      
+      // 手动触发一次主题获取
+      const currentTheme = themeService.getCurrentTheme()
+      if (currentTheme) {
+        console.log('📋 Current theme:', currentTheme)
+        isDark.value = currentTheme.isDark
+      }
     } else {
       console.log(`🌐 Web mode (mode="${mode}") - using default light theme`)
+      themeServiceStatus.value = '未启用 (Web 模式)'
       isDark.value = false
       document.documentElement.classList.remove('dark')
+      document.documentElement.classList.remove('theme-dark')
     }
 
     // TODO: 从后端获取当前会话ID和项目路径
@@ -105,12 +154,41 @@ onMounted(async () => {
     // projectPath.value = await ideaBridge.getProjectPath()
   } catch (error) {
     console.error('❌ Failed to initialize:', error)
+    themeServiceStatus.value = `错误: ${error}`
   }
 })
 
 function testBridge() {
   console.log('🧪 Testing bridge...')
   alert('桥接状态: ' + (bridgeReady.value ? '正常' : '未就绪'))
+}
+
+async function testTheme() {
+  console.log('🧪 Testing theme...')
+  try {
+    const response = await ideaBridge.query('ide.getTheme')
+    console.log('🎨 Theme response:', response)
+    alert(`主题信息:\n${JSON.stringify(response, null, 2)}`)
+  } catch (error) {
+    console.error('❌ Theme test error:', error)
+    alert(`主题测试失败: ${error}`)
+  }
+}
+
+function toggleTheme() {
+  console.log('🔄 Manually toggling theme...')
+  isDark.value = !isDark.value
+  
+  if (isDark.value) {
+    document.documentElement.classList.add('dark')
+    document.documentElement.classList.add('theme-dark')
+  } else {
+    document.documentElement.classList.remove('dark')
+    document.documentElement.classList.remove('theme-dark')
+  }
+  
+  console.log(`✅ Theme toggled to: ${isDark.value ? 'dark' : 'light'}`)
+  alert(`主题已切换为: ${isDark.value ? '暗色' : '亮色'}`)
 }
 
 </script>
@@ -191,22 +269,37 @@ function testBridge() {
 }
 
 .debug-item {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.debug-item strong {
+  min-width: 80px;
+  flex-shrink: 0;
+  color: var(--ide-accent, #007bff);
 }
 
 .debug-button {
   margin-top: 8px;
+  margin-right: 6px;
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: 11px;
   border: 1px solid var(--ide-accent, #007bff);
   border-radius: 4px;
   background: transparent;
   color: var(--ide-accent, #007bff);
   cursor: pointer;
+  transition: all 0.2s;
 }
 
 .debug-button:hover {
   background: var(--ide-accent, #007bff);
   color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
 }
 </style>
