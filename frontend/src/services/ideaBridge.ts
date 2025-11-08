@@ -26,16 +26,11 @@ class IdeaBridgeService {
 
   // HTTP 模式配置
   private readonly httpBaseUrl = 'http://localhost:8765'
-  private readonly wsUrl = 'ws://localhost:8766'
-  private ws: WebSocket | null = null
-  private wsReconnectTimer: number | null = null
-  private wsReconnectAttempts = 0
-  private readonly maxReconnectAttempts = 5
+  private eventSource: EventSource | null = null
 
   constructor() {
-    this.detectMode()
     this.setupEventListener()
-    this.init()
+    // 延迟模式检测和初始化到 waitForReady()
   }
 
   /**
@@ -137,8 +132,8 @@ class IdeaBridgeService {
         console.log('✅ HTTP API connected')
         this.isReady = true
 
-        // 连接 WebSocket
-        this.connectWebSocket()
+        // 连接 SSE（替换 WebSocket）
+        this.connectSSE()
       } else {
         throw new Error(`HTTP API returned ${response.status}`)
       }
@@ -151,83 +146,57 @@ class IdeaBridgeService {
   }
 
   /**
-   * 连接 WebSocket（HTTP 模式）
+   * 连接 SSE（HTTP 模式）
    */
-  private connectWebSocket() {
+  private connectSSE() {
     if (this.mode !== BridgeMode.HTTP) return
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) return
+    if (this.eventSource) return
 
     try {
-      console.log(`🔌 Connecting to WebSocket: ${this.wsUrl}`)
-      this.ws = new WebSocket(this.wsUrl)
+      console.log(`🔌 Connecting to SSE: ${this.httpBaseUrl}/api/events`)
+      this.eventSource = new EventSource(`${this.httpBaseUrl}/api/events`)
 
-      this.ws.onopen = () => {
-        console.log('✅ WebSocket connected')
-        this.wsReconnectAttempts = 0
-
-        // 清除重连定时器
-        if (this.wsReconnectTimer) {
-          clearTimeout(this.wsReconnectTimer)
-          this.wsReconnectTimer = null
-        }
+      this.eventSource.onopen = () => {
+        console.log('✅ SSE connected')
       }
 
-      this.ws.onmessage = (event) => {
+      // 监听主题事件
+      this.eventSource.addEventListener('theme', (event) => {
+        console.log('🎨 Theme event received via SSE')
+        try {
+          const theme = JSON.parse(event.data)
+          this.emit('theme.changed', { theme })
+        } catch (error) {
+          console.error('❌ Failed to parse theme event:', error)
+        }
+      })
+
+      // 监听其他 IDE 事件
+      this.eventSource.addEventListener('ide-event', (event) => {
         try {
           const data = JSON.parse(event.data)
-
-          // 处理批量消息（数组）
-          if (Array.isArray(data)) {
-            // 使用 requestAnimationFrame 批量处理，避免阻塞渲染
-            requestAnimationFrame(() => {
-              data.forEach((ideEvent: IdeEvent) => {
-                this.dispatchEvent(ideEvent)
-              })
-            })
-          } else {
-            // 单条消息
-            this.dispatchEvent(data as IdeEvent)
-          }
+          this.emit(data.type, data.data)
         } catch (error) {
-          console.error('❌ Failed to parse WebSocket message:', error)
+          console.error('❌ Failed to parse IDE event:', error)
         }
-      }
+      })
 
-      this.ws.onerror = (error) => {
-        console.error('❌ WebSocket error:', error)
-      }
+      this.eventSource.onerror = (error) => {
+        console.error('❌ SSE error:', error)
+        this.eventSource?.close()
+        this.eventSource = null
 
-      this.ws.onclose = () => {
-        console.warn('⚠️ WebSocket disconnected')
-        this.ws = null
-
-        // 自动重连
-        this.scheduleReconnect()
+        // 5 秒后尝试重连
+        setTimeout(() => {
+          console.log('🔄 Reconnecting SSE...')
+          this.connectSSE()
+        }, 5000)
       }
     } catch (error) {
-      console.error('❌ Failed to create WebSocket:', error)
-      this.scheduleReconnect()
+      console.error('❌ Failed to connect SSE:', error)
     }
   }
 
-  /**
-   * 调度 WebSocket 重连
-   */
-  private scheduleReconnect() {
-    if (this.wsReconnectAttempts >= this.maxReconnectAttempts) {
-      console.error(`❌ WebSocket reconnect failed after ${this.maxReconnectAttempts} attempts`)
-      return
-    }
-
-    const delay = Math.min(1000 * Math.pow(2, this.wsReconnectAttempts), 30000)
-    this.wsReconnectAttempts++
-
-    console.log(`🔄 Reconnecting WebSocket in ${delay}ms (attempt ${this.wsReconnectAttempts}/${this.maxReconnectAttempts})`)
-
-    this.wsReconnectTimer = window.setTimeout(() => {
-      this.connectWebSocket()
-    }, delay)
-  }
 
   /**
    * 等待桥接就绪
@@ -235,6 +204,16 @@ class IdeaBridgeService {
   async waitForReady(): Promise<void> {
     if (this.isReady) return
 
+    // 等待一小段时间确保早期标志已设置
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    // 检测模式
+    this.detectMode()
+
+    // 初始化
+    await this.init()
+
+    // 等待就绪
     return new Promise((resolve) => {
       const checkInterval = setInterval(() => {
         if (this.isReady) {

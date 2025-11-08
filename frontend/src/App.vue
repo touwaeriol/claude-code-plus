@@ -100,53 +100,45 @@ onMounted(async () => {
   try {
     await ideaBridge.waitForReady()
     bridgeReady.value = true
-    console.log('✅ Bridge ready')
-
-    // 只在插件模式（JCEF）下适配 IDEA 主题
+    
     const mode = ideaBridge.getMode()
     currentMode.value = mode
-    console.log(`🔍 Current mode detected: "${mode}" (type: ${typeof mode})`)
-    
-    if (mode === 'jcef') {
-      console.log('🔌 Plugin mode - adapting IDEA theme')
-      themeServiceStatus.value = '初始化中...'
-      
-      // 初始化主题服务
-      await themeService.initialize()
-      themeServiceStatus.value = '已激活'
-      console.log('✅ Theme service initialized')
+    console.log(`✅ Bridge ready, mode: ${mode}`)
 
-      // 监听主题变化
-      themeService.onThemeChange((theme) => {
-        isDark.value = theme.isDark
-        console.log('🎨 Theme updated:', theme.isDark ? 'dark' : 'light', theme)
-        
-        // 为 Element Plus 添加/移除 dark class
-        if (theme.isDark) {
-          document.documentElement.classList.add('dark')
-          document.documentElement.classList.add('theme-dark')
-          console.log('✅ Added "dark" and "theme-dark" classes to <html>')
-        } else {
-          document.documentElement.classList.remove('dark')
-          document.documentElement.classList.remove('theme-dark')
-          console.log('✅ Removed "dark" and "theme-dark" classes from <html>')
-        }
-        updateHtmlClasses()
-        themeServiceStatus.value = `已激活 (${theme.isDark ? '暗色' : '亮色'})`
-      })
+    // 两种模式都使用相同的主题初始化逻辑
+    console.log('🎨 Initializing theme service...')
+    themeServiceStatus.value = '初始化中...'
+    
+    // 初始化主题服务（会通过 HTTP 获取初始主题）
+    await themeService.initialize()
+    themeServiceStatus.value = '已激活'
+    console.log('✅ Theme service initialized')
+
+    // 监听主题变化（JCEF 通过回调，HTTP 通过 SSE）
+    themeService.onThemeChange((theme) => {
+      isDark.value = theme.isDark
+      console.log('🎨 Theme updated:', theme.isDark ? 'dark' : 'light')
       
-      // 手动触发一次主题获取
-      const currentTheme = themeService.getCurrentTheme()
-      if (currentTheme) {
-        console.log('📋 Current theme:', currentTheme)
-        isDark.value = currentTheme.isDark
+      // 为 Element Plus 添加/移除 dark class
+      if (theme.isDark) {
+        document.documentElement.classList.add('dark')
+        console.log('✅ Added "dark" class to <html>')
+      } else {
+        document.documentElement.classList.remove('dark')
+        console.log('✅ Removed "dark" class from <html>')
       }
-    } else {
-      console.log(`🌐 Web mode (mode="${mode}") - using default light theme`)
-      themeServiceStatus.value = '未启用 (Web 模式)'
-      isDark.value = false
-      document.documentElement.classList.remove('dark')
-      document.documentElement.classList.remove('theme-dark')
+      updateHtmlClasses()
+      themeServiceStatus.value = `已激活 (${theme.isDark ? '暗色' : '亮色'})`
+    })
+    
+    // 获取当前主题并应用
+    const currentTheme = themeService.getCurrentTheme()
+    if (currentTheme) {
+      console.log('📋 Current theme:', currentTheme)
+      isDark.value = currentTheme.isDark
+      if (currentTheme.isDark) {
+        document.documentElement.classList.add('dark')
+      }
     }
 
     // TODO: 从后端获取当前会话ID和项目路径
