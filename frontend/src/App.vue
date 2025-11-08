@@ -71,14 +71,34 @@ onMounted(async () => {
     bridgeReady.value = true
     console.log('✅ Bridge ready')
 
-    // 初始化主题服务
-    await themeService.initialize()
+    // 只在插件模式（JCEF）下适配 IDEA 主题
+    const mode = ideaBridge.getMode()
+    console.log(`🔍 Current mode detected: "${mode}" (type: ${typeof mode})`)
+    
+    if (mode === 'jcef') {
+      console.log('🔌 Plugin mode - adapting IDEA theme')
+      // 初始化主题服务
+      await themeService.initialize()
 
-    // 监听主题变化
-    themeService.onThemeChange((theme) => {
-      isDark.value = theme.isDark
-      console.log('🎨 Theme updated:', theme.isDark ? 'dark' : 'light')
-    })
+      // 监听主题变化
+      themeService.onThemeChange((theme) => {
+        isDark.value = theme.isDark
+        console.log('🎨 Theme updated:', theme.isDark ? 'dark' : 'light')
+        
+        // 为 Element Plus 添加/移除 dark class
+        if (theme.isDark) {
+          document.documentElement.classList.add('dark')
+          console.log('✅ Added "dark" class to <html>')
+        } else {
+          document.documentElement.classList.remove('dark')
+          console.log('✅ Removed "dark" class from <html>')
+        }
+      })
+    } else {
+      console.log(`🌐 Web mode (mode="${mode}") - using default light theme`)
+      isDark.value = false
+      document.documentElement.classList.remove('dark')
+    }
 
     // TODO: 从后端获取当前会话ID和项目路径
     // sessionId.value = await ideaBridge.getCurrentSessionId()

@@ -11,13 +11,15 @@
       <!-- 头部 -->
       <div class="panel-header">
         <h2>设置</h2>
-        <button
+        <el-button
           class="btn-close"
           title="关闭"
+          text
+          circle
           @click="close"
         >
           ✕
-        </button>
+        </el-button>
       </div>
 
       <!-- 内容 -->
@@ -30,19 +32,31 @@
 
           <div class="setting-item">
             <label class="setting-label">AI 模型</label>
-            <select
+            <el-select
               v-model="localSettings.model"
               class="setting-select"
+              placement="top-start"
+              :teleported="false"
+              :popper-options="{
+                strategy: 'fixed',
+                modifiers: [
+                  {
+                    name: 'flip',
+                    options: {
+                      fallbackPlacements: ['top-start', 'top'],
+                    }
+                  }
+                ]
+              }"
               @change="handleModelChange"
             >
-              <option
+              <el-option
                 v-for="(label, model) in MODEL_LABELS"
                 :key="model"
                 :value="model"
-              >
-                {{ label }}
-              </option>
-            </select>
+                :label="label"
+              />
+            </el-select>
             <p class="setting-description">
               选择使用的 Claude AI 模型。Sonnet 提供最佳性价比,Opus 提供最强性能。
             </p>
@@ -57,19 +71,31 @@
 
           <div class="setting-item">
             <label class="setting-label">权限模式</label>
-            <select
+            <el-select
               v-model="localSettings.permissionMode"
               class="setting-select"
+              placement="top-start"
+              :teleported="false"
+              :popper-options="{
+                strategy: 'fixed',
+                modifiers: [
+                  {
+                    name: 'flip',
+                    options: {
+                      fallbackPlacements: ['top-start', 'top'],
+                    }
+                  }
+                ]
+              }"
               @change="handlePermissionModeChange"
             >
-              <option
+              <el-option
                 v-for="(label, mode) in PERMISSION_MODE_LABELS"
                 :key="mode"
                 :value="mode"
-              >
-                {{ label }}
-              </option>
-            </select>
+                :label="label"
+              />
+            </el-select>
             <p class="setting-description">
               {{ PERMISSION_MODE_DESCRIPTIONS[localSettings.permissionMode] }}
             </p>
@@ -84,29 +110,28 @@
 
           <div class="setting-item">
             <label class="setting-label">最大对话轮次</label>
-            <input
-              v-model.number="localSettings.maxTurns"
-              type="number"
+            <el-input-number
+              v-model="localSettings.maxTurns"
               class="setting-input"
-              min="1"
-              max="100"
+              :min="1"
+              :max="100"
               placeholder="不限制"
+              controls-position="right"
               @blur="handleMaxTurnsChange"
-            >
+            />
             <p class="setting-description">
               限制单次对话的最大轮次,防止无限循环。留空表示不限制。
             </p>
           </div>
 
           <div class="setting-item">
-            <label class="setting-checkbox">
-              <input
-                v-model="localSettings.continueConversation"
-                type="checkbox"
-                @change="handleContinueConversationChange"
-              >
-              <span>继续上次对话</span>
-            </label>
+            <el-checkbox
+              v-model="localSettings.continueConversation"
+              class="setting-checkbox"
+              @change="handleContinueConversationChange"
+            >
+              继续上次对话
+            </el-checkbox>
             <p class="setting-description">
               新建会话时自动加载上次对话的上下文。
             </p>
@@ -121,15 +146,15 @@
 
           <div class="setting-item">
             <label class="setting-label">最大生成令牌数</label>
-            <input
-              v-model.number="localSettings.maxTokens"
-              type="number"
+            <el-input-number
+              v-model="localSettings.maxTokens"
               class="setting-input"
-              min="100"
-              max="8000"
+              :min="100"
+              :max="8000"
               placeholder="默认"
+              controls-position="right"
               @blur="handleMaxTokensChange"
-            >
+            />
             <p class="setting-description">
               限制模型单次响应的最大令牌数。留空使用模型默认值。
             </p>
@@ -137,14 +162,14 @@
 
           <div class="setting-item">
             <label class="setting-label">思考令牌数</label>
-            <input
-              v-model.number="localSettings.maxThinkingTokens"
-              type="number"
+            <el-input-number
+              v-model="localSettings.maxThinkingTokens"
               class="setting-input"
-              min="1000"
-              max="16000"
+              :min="1000"
+              :max="16000"
+              controls-position="right"
               @blur="handleMaxThinkingTokensChange"
-            >
+            />
             <p class="setting-description">
               设置模型的思考令牌预算。默认 8000。
             </p>
@@ -152,30 +177,30 @@
 
           <div class="setting-item">
             <label class="setting-label">温度 (Temperature)</label>
-            <input
-              v-model.number="localSettings.temperature"
-              type="number"
+            <el-input-number
+              v-model="localSettings.temperature"
               class="setting-input"
-              min="0"
-              max="1"
-              step="0.1"
+              :min="0"
+              :max="1"
+              :step="0.1"
+              :precision="1"
               placeholder="默认"
+              controls-position="right"
               @blur="handleTemperatureChange"
-            >
+            />
             <p class="setting-description">
               控制模型的创造性。0 = 确定性, 1 = 高创造性。留空使用默认值。
             </p>
           </div>
 
           <div class="setting-item">
-            <label class="setting-checkbox">
-              <input
-                v-model="localSettings.verbose"
-                type="checkbox"
-                @change="handleVerboseChange"
-              >
-              <span>详细日志模式</span>
-            </label>
+            <el-checkbox
+              v-model="localSettings.verbose"
+              class="setting-checkbox"
+              @change="handleVerboseChange"
+            >
+              详细日志模式
+            </el-checkbox>
             <p class="setting-description">
               输出详细的调试日志,用于问题排查。
             </p>
@@ -185,25 +210,26 @@
 
       <!-- 底部操作栏 -->
       <div class="panel-footer">
-        <button
-          class="btn btn-secondary"
+        <el-button
+          class="btn-secondary"
           @click="resetSettings"
         >
           重置为默认
-        </button>
+        </el-button>
         <div class="footer-actions">
-          <button
-            class="btn btn-secondary"
+          <el-button
+            class="btn-secondary"
             @click="close"
           >
             取消
-          </button>
-          <button
-            class="btn btn-primary"
+          </el-button>
+          <el-button
+            class="btn-primary"
+            type="primary"
             @click="saveAndClose"
           >
             保存
-          </button>
+          </el-button>
         </div>
       </div>
     </div>
