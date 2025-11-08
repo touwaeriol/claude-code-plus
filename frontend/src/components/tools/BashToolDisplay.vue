@@ -4,28 +4,63 @@
       <span class="tool-icon">⚡</span>
       <span class="tool-name">Bash</span>
       <code class="tool-command">{{ commandPreview }}</code>
-      <span v-if="timeout" class="timeout">{{ timeoutText }}</span>
+      <span
+        v-if="timeout"
+        class="timeout"
+      >{{ timeoutText }}</span>
     </div>
-    <div v-if="expanded" class="tool-content">
+    <div
+      v-if="expanded"
+      class="tool-content"
+    >
       <div class="command-section">
-        <div class="section-header">执行命令</div>
+        <div class="section-header">
+          执行命令
+        </div>
         <pre class="command-text">{{ command }}</pre>
       </div>
-      <div v-if="description" class="description-section">
-        <div class="section-header">说明</div>
-        <p class="description-text">{{ description }}</p>
+      <div
+        v-if="description"
+        class="description-section"
+      >
+        <div class="section-header">
+          说明
+        </div>
+        <p class="description-text">
+          {{ description }}
+        </p>
       </div>
-      <div v-if="result" class="output-section">
+      <div
+        v-if="result"
+        class="output-section"
+      >
         <div class="section-header">
           <span>执行结果</span>
-          <span class="exit-code" :class="exitCodeClass">{{ exitCodeText }}</span>
+          <span
+            class="exit-code"
+            :class="exitCodeClass"
+          >{{ exitCodeText }}</span>
         </div>
-        <pre v-if="stdout" class="output stdout">{{ stdout }}</pre>
-        <pre v-if="stderr" class="output stderr">{{ stderr }}</pre>
-        <div v-if="!stdout && !stderr" class="no-output">无输出</div>
+        <pre
+          v-if="stdout"
+          class="output stdout"
+        >{{ stdout }}</pre>
+        <pre
+          v-if="stderr"
+          class="output stderr"
+        >{{ stderr }}</pre>
+        <div
+          v-if="!stdout && !stderr"
+          class="no-output"
+        >
+          无输出
+        </div>
       </div>
     </div>
-    <button class="expand-btn" @click="expanded = !expanded">
+    <button
+      class="expand-btn"
+      @click="expanded = !expanded"
+    >
       {{ expanded ? '收起' : '展开' }}
     </button>
   </div>

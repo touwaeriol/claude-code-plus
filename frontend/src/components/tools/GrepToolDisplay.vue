@@ -4,43 +4,74 @@
       <span class="tool-icon">🔍</span>
       <span class="tool-name">Grep</span>
       <code class="tool-pattern">{{ pattern }}</code>
-      <span v-if="glob" class="tool-glob">{{ glob }}</span>
+      <span
+        v-if="glob"
+        class="tool-glob"
+      >{{ glob }}</span>
     </div>
-    <div v-if="expanded" class="tool-content">
+    <div
+      v-if="expanded"
+      class="tool-content"
+    >
       <div class="search-info">
         <div class="info-row">
           <span class="label">搜索模式:</span>
           <code class="value">{{ pattern }}</code>
         </div>
-        <div v-if="path" class="info-row">
+        <div
+          v-if="path"
+          class="info-row"
+        >
           <span class="label">搜索路径:</span>
           <span class="value">{{ path }}</span>
         </div>
-        <div v-if="glob" class="info-row">
+        <div
+          v-if="glob"
+          class="info-row"
+        >
           <span class="label">文件过滤:</span>
           <code class="value">{{ glob }}</code>
         </div>
-        <div v-if="type" class="info-row">
+        <div
+          v-if="type"
+          class="info-row"
+        >
           <span class="label">文件类型:</span>
           <span class="value">{{ type }}</span>
         </div>
-        <div v-if="outputMode" class="info-row">
+        <div
+          v-if="outputMode"
+          class="info-row"
+        >
           <span class="label">输出模式:</span>
           <span class="value">{{ outputModeText }}</span>
         </div>
       </div>
 
-      <div v-if="options.length > 0" class="search-options">
-        <span v-for="opt in options" :key="opt" class="option-badge">{{ opt }}</span>
+      <div
+        v-if="options.length > 0"
+        class="search-options"
+      >
+        <span
+          v-for="opt in options"
+          :key="opt"
+          class="option-badge"
+        >{{ opt }}</span>
       </div>
 
-      <div v-if="result" class="search-results">
+      <div
+        v-if="result"
+        class="search-results"
+      >
         <div class="results-header">
           <span>搜索结果</span>
           <span class="match-count">{{ matchCount }}</span>
         </div>
         <div class="results-content">
-          <div v-if="isFilesList" class="file-list">
+          <div
+            v-if="isFilesList"
+            class="file-list"
+          >
             <div
               v-for="(file, index) in filesList"
               :key="index"
@@ -50,11 +81,17 @@
               📄 {{ file }}
             </div>
           </div>
-          <pre v-else class="search-output">{{ resultText }}</pre>
+          <pre
+            v-else
+            class="search-output"
+          >{{ resultText }}</pre>
         </div>
       </div>
     </div>
-    <button class="expand-btn" @click="expanded = !expanded">
+    <button
+      class="expand-btn"
+      @click="expanded = !expanded"
+    >
       {{ expanded ? '收起' : '展开' }}
     </button>
   </div>

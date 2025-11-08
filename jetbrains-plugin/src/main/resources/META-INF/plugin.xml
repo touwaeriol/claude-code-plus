@@ -98,17 +98,19 @@
     
     
     <extensions defaultExtensionNs="com.intellij">
-        <!-- Tool Window -->
+        <!-- Vue Frontend Tool Window (Primary) -->
         <toolWindow id="Claude Code Plus"
                     anchor="right"
                     icon="/icons/claude-code-simple.svg"
-                    factoryClass="com.claudecodeplus.plugin.ClaudeCodePlusToolWindowFactory"/>
+                    factoryClass="com.claudecodeplus.toolwindow.VueToolWindowFactory"/>
 
-        <!-- Vue Frontend Tool Window (POC) -->
-        <toolWindow id="Claude Code Plus (Vue)"
+        <!-- Compose Version (Backup) -->
+        <!--
+        <toolWindow id="Claude Code Plus (Compose)"
                     anchor="right"
                     icon="/icons/claude-code-simple.svg"
-                    factoryClass="com.claudecodeplus.toolwindow.VueToolWindowFactory"/>
+                    factoryClass="com.claudecodeplus.plugin.ClaudeCodePlusToolWindowFactory"/>
+        -->
 
         <!-- application-level service -->
         <applicationService
@@ -120,6 +122,10 @@
         <!-- project-level service -->
         <projectService
             serviceImplementation="com.claudecodeplus.plugin.services.ProjectSessionStateService"/>
+
+        <!-- HTTP Server Service (Auto-starts with project) -->
+        <projectService
+            serviceImplementation="com.claudecodeplus.server.HttpServerProjectService"/>
 
         <!-- Tool Window Listener -->
         <toolWindow.listener

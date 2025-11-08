@@ -1,0 +1,522 @@
+<template>
+  <div
+    v-if="show"
+    class="settings-panel-overlay"
+    @click.self="close"
+  >
+    <div
+      class="settings-panel"
+      :class="{ 'theme-dark': isDark }"
+    >
+      <!-- 头部 -->
+      <div class="panel-header">
+        <h2>设置</h2>
+        <button
+          class="btn-close"
+          title="关闭"
+          @click="close"
+        >
+          ✕
+        </button>
+      </div>
+
+      <!-- 内容 -->
+      <div class="panel-content">
+        <!-- 模型选择 -->
+        <div class="setting-section">
+          <h3 class="section-title">
+            模型配置
+          </h3>
+
+          <div class="setting-item">
+            <label class="setting-label">AI 模型</label>
+            <select
+              v-model="localSettings.model"
+              class="setting-select"
+              @change="handleModelChange"
+            >
+              <option
+                v-for="(label, model) in MODEL_LABELS"
+                :key="model"
+                :value="model"
+              >
+                {{ label }}
+              </option>
+            </select>
+            <p class="setting-description">
+              选择使用的 Claude AI 模型。Sonnet 提供最佳性价比,Opus 提供最强性能。
+            </p>
+          </div>
+        </div>
+
+        <!-- 权限模式 -->
+        <div class="setting-section">
+          <h3 class="section-title">
+            权限控制
+          </h3>
+
+          <div class="setting-item">
+            <label class="setting-label">权限模式</label>
+            <select
+              v-model="localSettings.permissionMode"
+              class="setting-select"
+              @change="handlePermissionModeChange"
+            >
+              <option
+                v-for="(label, mode) in PERMISSION_MODE_LABELS"
+                :key="mode"
+                :value="mode"
+              >
+                {{ label }}
+              </option>
+            </select>
+            <p class="setting-description">
+              {{ PERMISSION_MODE_DESCRIPTIONS[localSettings.permissionMode] }}
+            </p>
+          </div>
+        </div>
+
+        <!-- 会话控制 -->
+        <div class="setting-section">
+          <h3 class="section-title">
+            会话控制
+          </h3>
+
+          <div class="setting-item">
+            <label class="setting-label">最大对话轮次</label>
+            <input
+              v-model.number="localSettings.maxTurns"
+              type="number"
+              class="setting-input"
+              min="1"
+              max="100"
+              placeholder="不限制"
+              @blur="handleMaxTurnsChange"
+            >
+            <p class="setting-description">
+              限制单次对话的最大轮次,防止无限循环。留空表示不限制。
+            </p>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-checkbox">
+              <input
+                v-model="localSettings.continueConversation"
+                type="checkbox"
+                @change="handleContinueConversationChange"
+              >
+              <span>继续上次对话</span>
+            </label>
+            <p class="setting-description">
+              新建会话时自动加载上次对话的上下文。
+            </p>
+          </div>
+        </div>
+
+        <!-- 高级选项 -->
+        <div class="setting-section">
+          <h3 class="section-title">
+            高级选项
+          </h3>
+
+          <div class="setting-item">
+            <label class="setting-label">最大生成令牌数</label>
+            <input
+              v-model.number="localSettings.maxTokens"
+              type="number"
+              class="setting-input"
+              min="100"
+              max="8000"
+              placeholder="默认"
+              @blur="handleMaxTokensChange"
+            >
+            <p class="setting-description">
+              限制模型单次响应的最大令牌数。留空使用模型默认值。
+            </p>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">思考令牌数</label>
+            <input
+              v-model.number="localSettings.maxThinkingTokens"
+              type="number"
+              class="setting-input"
+              min="1000"
+              max="16000"
+              @blur="handleMaxThinkingTokensChange"
+            >
+            <p class="setting-description">
+              设置模型的思考令牌预算。默认 8000。
+            </p>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">温度 (Temperature)</label>
+            <input
+              v-model.number="localSettings.temperature"
+              type="number"
+              class="setting-input"
+              min="0"
+              max="1"
+              step="0.1"
+              placeholder="默认"
+              @blur="handleTemperatureChange"
+            >
+            <p class="setting-description">
+              控制模型的创造性。0 = 确定性, 1 = 高创造性。留空使用默认值。
+            </p>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-checkbox">
+              <input
+                v-model="localSettings.verbose"
+                type="checkbox"
+                @change="handleVerboseChange"
+              >
+              <span>详细日志模式</span>
+            </label>
+            <p class="setting-description">
+              输出详细的调试日志,用于问题排查。
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部操作栏 -->
+      <div class="panel-footer">
+        <button
+          class="btn btn-secondary"
+          @click="resetSettings"
+        >
+          重置为默认
+        </button>
+        <div class="footer-actions">
+          <button
+            class="btn btn-secondary"
+            @click="close"
+          >
+            取消
+          </button>
+          <button
+            class="btn btn-primary"
+            @click="saveAndClose"
+          >
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, watch } from 'vue'
+import { useSettingsStore } from '@/stores/settingsStore'
+import {
+  MODEL_LABELS,
+  PERMISSION_MODE_LABELS,
+  PERMISSION_MODE_DESCRIPTIONS,
+  type Settings
+} from '@/types/settings'
+
+interface Props {
+  show: boolean
+  isDark?: boolean
+}
+
+interface Emits {
+  (e: 'close'): void
+  (e: 'save', settings: Settings): void
+}
+
+const _props = withDefaults(defineProps<Props>(), {
+  isDark: false
+})
+
+const emit = defineEmits<Emits>()
+const settingsStore = useSettingsStore()
+
+// 本地设置副本(用于编辑,不立即保存)
+const localSettings = ref<Settings>({ ...settingsStore.settings })
+
+// 监听 store 设置变化,同步到本地副本
+watch(() => settingsStore.settings, (newSettings) => {
+  localSettings.value = { ...newSettings }
+}, { deep: true })
+
+// 自动保存的处理函数
+async function handleModelChange() {
+  await settingsStore.updateModel(localSettings.value.model)
+}
+
+async function handlePermissionModeChange() {
+  await settingsStore.updatePermissionMode(localSettings.value.permissionMode)
+}
+
+async function handleMaxTurnsChange() {
+  await settingsStore.updateMaxTurns(localSettings.value.maxTurns)
+}
+
+async function handleContinueConversationChange() {
+  await settingsStore.saveSettings({
+    continueConversation: localSettings.value.continueConversation
+  })
+}
+
+async function handleMaxTokensChange() {
+  await settingsStore.saveSettings({
+    maxTokens: localSettings.value.maxTokens
+  })
+}
+
+async function handleMaxThinkingTokensChange() {
+  await settingsStore.saveSettings({
+    maxThinkingTokens: localSettings.value.maxThinkingTokens
+  })
+}
+
+async function handleTemperatureChange() {
+  await settingsStore.saveSettings({
+    temperature: localSettings.value.temperature
+  })
+}
+
+async function handleVerboseChange() {
+  await settingsStore.saveSettings({
+    verbose: localSettings.value.verbose
+  })
+}
+
+async function resetSettings() {
+  if (confirm('确定要重置所有设置为默认值吗?')) {
+    await settingsStore.resetToDefaults()
+  }
+}
+
+function close() {
+  emit('close')
+}
+
+async function saveAndClose() {
+  await settingsStore.saveSettings(localSettings.value)
+  emit('save', localSettings.value)
+  close()
+}
+</script>
+
+<style scoped>
+.settings-panel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.settings-panel {
+  background: var(--ide-background);
+  border: 1px solid var(--ide-border);
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--ide-border);
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ide-foreground);
+}
+
+.btn-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 18px;
+  color: var(--ide-foreground);
+  transition: background 0.2s;
+}
+
+.btn-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.theme-dark .btn-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.setting-section {
+  margin-bottom: 32px;
+}
+
+.setting-section:last-child {
+  margin-bottom: 0;
+}
+
+.section-title {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ide-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.setting-item {
+  margin-bottom: 20px;
+}
+
+.setting-item:last-child {
+  margin-bottom: 0;
+}
+
+.setting-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ide-foreground);
+}
+
+.setting-select,
+.setting-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--ide-input-border);
+  border-radius: 4px;
+  background: var(--ide-input-background);
+  color: var(--ide-input-foreground);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.setting-select:focus,
+.setting-input:focus {
+  border-color: var(--ide-accent);
+  box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.1);
+}
+
+.setting-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.setting-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.setting-checkbox span {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ide-foreground);
+}
+
+.setting-description {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  color: var(--ide-foreground);
+  opacity: 0.7;
+  line-height: 1.5;
+}
+
+.panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-top: 1px solid var(--ide-border);
+  background: var(--ide-panel-background);
+}
+
+.footer-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: var(--ide-button-background);
+  color: var(--ide-button-foreground);
+}
+
+.btn-primary:hover {
+  background: var(--ide-button-hover-background);
+}
+
+.btn-secondary {
+  background: var(--ide-panel-background);
+  color: var(--ide-foreground);
+  border: 1px solid var(--ide-border);
+}
+
+.btn-secondary:hover {
+  background: var(--ide-border);
+}
+</style>

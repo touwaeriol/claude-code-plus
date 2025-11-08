@@ -1,13 +1,13 @@
 <template>
   <div
     class="markdown-body"
-    v-html="renderedHtml"
     @click="handleClick"
-  ></div>
+    v-html="renderedHtml"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { _computed, onMounted, ref, watch } from 'vue'
 import { markdownService } from '@/services/markdownService'
 import { highlightService } from '@/services/highlightService'
 import { ideService } from '@/services/ideaBridge'
@@ -165,13 +165,13 @@ function showCopyFeedback(button: HTMLElement) {
 
 .markdown-body h1 {
   font-size: 2em;
-  border-bottom: 1px solid #eaecef;
+  border-bottom: 1px solid var(--ide-border);
   padding-bottom: 0.3em;
 }
 
 .markdown-body h2 {
   font-size: 1.5em;
-  border-bottom: 1px solid #eaecef;
+  border-bottom: 1px solid var(--ide-border);
   padding-bottom: 0.3em;
 }
 
@@ -193,13 +193,14 @@ function showCopyFeedback(button: HTMLElement) {
 
 .markdown-body blockquote {
   padding: 0 1em;
-  color: #6a737d;
-  border-left: 0.25em solid #dfe2e5;
+  color: var(--ide-foreground);
+  opacity: 0.7;
+  border-left: 0.25em solid var(--ide-border);
   margin: 0 0 16px 0;
 }
 
 .markdown-body a {
-  color: #0366d6;
+  color: var(--ide-link);
   text-decoration: none;
 }
 
@@ -208,20 +209,21 @@ function showCopyFeedback(button: HTMLElement) {
 }
 
 .markdown-body a.file-link {
-  color: #0366d6;
+  color: var(--ide-link);
   font-family: monospace;
 }
 
 .markdown-body a.file-link:hover {
   text-decoration: underline;
-  background: #f6f8fa;
+  background: var(--ide-panel-background);
 }
 
 .markdown-body code {
   padding: 0.2em 0.4em;
   margin: 0;
   font-size: 85%;
-  background-color: rgba(27, 31, 35, 0.05);
+  background-color: var(--ide-code-background);
+  color: var(--ide-code-foreground);
   border-radius: 3px;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
 }
@@ -231,7 +233,7 @@ function showCopyFeedback(button: HTMLElement) {
   overflow: auto;
   font-size: 85%;
   line-height: 1.45;
-  background-color: #f6f8fa;
+  background-color: var(--ide-code-background);
   border-radius: 6px;
   margin-bottom: 16px;
 }
@@ -250,7 +252,7 @@ function showCopyFeedback(button: HTMLElement) {
 /* 代码块包装器 */
 .code-block-wrapper {
   margin: 16px 0;
-  border: 1px solid #e1e4e8;
+  border: 1px solid var(--ide-border);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -260,13 +262,14 @@ function showCopyFeedback(button: HTMLElement) {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: #f6f8fa;
-  border-bottom: 1px solid #e1e4e8;
+  background: var(--ide-panel-background);
+  border-bottom: 1px solid var(--ide-border);
 }
 
 .code-block-header .language {
   font-size: 12px;
-  color: #586069;
+  color: var(--ide-foreground);
+  opacity: 0.7;
   text-transform: uppercase;
   font-weight: 600;
 }
@@ -274,22 +277,22 @@ function showCopyFeedback(button: HTMLElement) {
 .code-block-header .copy-btn {
   padding: 4px 8px;
   font-size: 12px;
-  border: 1px solid #e1e4e8;
-  background: white;
+  border: 1px solid var(--ide-border);
+  background: var(--ide-background);
   border-radius: 3px;
   cursor: pointer;
-  color: #586069;
+  color: var(--ide-foreground);
   transition: all 0.2s;
 }
 
 .code-block-header .copy-btn:hover {
-  background: #f3f4f6;
-  border-color: #d1d5da;
+  background: var(--ide-panel-background);
+  border-color: var(--ide-accent);
 }
 
 .code-block-header .copy-btn.copied {
-  color: #22863a;
-  border-color: #34d058;
+  color: var(--ide-success);
+  border-color: var(--ide-success);
 }
 
 .code-content {
@@ -328,21 +331,21 @@ function showCopyFeedback(button: HTMLElement) {
 .markdown-body table th,
 .markdown-body table td {
   padding: 6px 13px;
-  border: 1px solid #dfe2e5;
+  border: 1px solid var(--ide-border);
 }
 
 .markdown-body table tr {
-  background-color: #fff;
-  border-top: 1px solid #c6cbd1;
+  background-color: var(--ide-background);
+  border-top: 1px solid var(--ide-border);
 }
 
 .markdown-body table tr:nth-child(2n) {
-  background-color: #f6f8fa;
+  background-color: var(--ide-panel-background);
 }
 
 .markdown-body table th {
   font-weight: 600;
-  background-color: #f6f8fa;
+  background-color: var(--ide-panel-background);
 }
 
 /* HR */
@@ -350,7 +353,7 @@ function showCopyFeedback(button: HTMLElement) {
   height: 0.25em;
   padding: 0;
   margin: 24px 0;
-  background-color: #e1e4e8;
+  background-color: var(--ide-border);
   border: 0;
 }
 </style>

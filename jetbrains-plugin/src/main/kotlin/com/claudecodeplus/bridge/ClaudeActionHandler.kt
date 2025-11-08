@@ -15,12 +15,26 @@ import java.util.logging.Logger
  */
 class ClaudeActionHandler(
     private val project: Project,
-    private val bridge: FrontendBridge,
+    private val bridge: EventBridge,
     private val scope: CoroutineScope
 ) {
     private val logger = Logger.getLogger(javaClass.name)
     private var claudeClient: ClaudeCodeSdkClient? = null
     private val json = Json { ignoreUnknownKeys = true }
+
+    // 会话处理器引用(用于保存消息历史)
+    var sessionHandler: SessionActionHandler? = null
+
+    // 当前会话ID（用于自动保存消息）
+    private var currentSessionId: String? = null
+
+    /**
+     * 设置当前会话ID（从 SessionActionHandler 同步）
+     */
+    fun setCurrentSessionId(sessionId: String?) {
+        currentSessionId = sessionId
+        logger.info("🔄 Current session ID updated: $sessionId")
+    }
 
     /**
      * 处理 Claude 操作
@@ -122,6 +136,12 @@ class ClaudeActionHandler(
 
                         // 转换消息并推送给前端
                         val messageJson = convertMessage(sdkMessage)
+
+                        // 保存所有消息到当前会话历史（除了 StreamEvent，它们是中间状态）
+                        if (currentSessionId != null && sdkMessage !is StreamEvent && messageJson is JsonObject) {
+                            sessionHandler?.saveMessage(currentSessionId!!, messageJson)
+                            logger.info("💾 Auto-saved message to session: $currentSessionId")
+                        }
 
                         bridge.pushEvent(IdeEvent(
                             type = "claude.message",

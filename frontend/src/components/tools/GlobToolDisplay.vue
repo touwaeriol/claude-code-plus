@@ -4,27 +4,42 @@
       <span class="tool-icon">🗂️</span>
       <span class="tool-name">Glob</span>
       <code class="tool-pattern">{{ pattern }}</code>
-      <span v-if="path" class="tool-path">in {{ pathName }}</span>
+      <span
+        v-if="path"
+        class="tool-path"
+      >in {{ pathName }}</span>
     </div>
-    <div v-if="expanded" class="tool-content">
+    <div
+      v-if="expanded"
+      class="tool-content"
+    >
       <div class="glob-info">
         <div class="info-row">
           <span class="label">匹配模式:</span>
           <code class="value">{{ pattern }}</code>
         </div>
-        <div v-if="path" class="info-row">
+        <div
+          v-if="path"
+          class="info-row"
+        >
           <span class="label">搜索目录:</span>
           <span class="value">{{ path }}</span>
         </div>
       </div>
 
-      <div v-if="result" class="glob-results">
+      <div
+        v-if="result"
+        class="glob-results"
+      >
         <div class="results-header">
           <span>匹配文件</span>
           <span class="file-count">{{ fileCount }}</span>
         </div>
         <div class="results-content">
-          <div v-if="filesList.length > 0" class="file-list">
+          <div
+            v-if="filesList.length > 0"
+            class="file-list"
+          >
             <div
               v-for="(file, index) in filesList"
               :key="index"
@@ -36,14 +51,20 @@
               <span class="file-path">{{ getFilePath(file) }}</span>
             </div>
           </div>
-          <div v-else class="no-matches">
+          <div
+            v-else
+            class="no-matches"
+          >
             <span class="empty-icon">📭</span>
             <span class="empty-text">没有匹配的文件</span>
           </div>
         </div>
       </div>
     </div>
-    <button class="expand-btn" @click="expanded = !expanded">
+    <button
+      class="expand-btn"
+      @click="expanded = !expanded"
+    >
       {{ expanded ? '收起' : '展开' }}
     </button>
   </div>

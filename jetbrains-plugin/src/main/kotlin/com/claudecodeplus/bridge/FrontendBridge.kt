@@ -1,4 +1,4 @@
-package com.claudecodeplus.bridge
+﻿package com.claudecodeplus.bridge
 
 import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffManager
@@ -22,48 +22,56 @@ import java.awt.Color
 import java.util.logging.Logger
 
 /**
- * 前后端通信桥接
- * 负责 JCEF 浏览器与 Kotlin 后端的双向通信
+ * 鍓嶅悗绔€氫俊妗ユ帴
+ * 璐熻矗 JCEF 娴忚鍣ㄤ笌 Kotlin 鍚庣鐨勫弻鍚戦€氫俊
  */
 class FrontendBridge(
     private val project: Project,
     private val browser: JBCefBrowser,
     private val scope: CoroutineScope
-) {
+) : EventBridge {
     private val logger = Logger.getLogger(javaClass.name)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        encodeDefaults = true
     }
 
-    // 前端 -> 后端 (Request/Response 模式)
+    // 鍓嶇 -> 鍚庣 (Request/Response 妯″紡)
     private val queryHandler = JBCefJSQuery.create(browser as JBCefBrowserBase)
 
-    // 后端 -> 前端 (事件推送)
+    // 鍚庣 -> 鍓嶇 (浜嬩欢鎺ㄩ€?
     private var isReady = false
 
-    // Claude 操作处理器
+    // Claude 鎿嶄綔澶勭悊鍣?
     private val claudeHandler = ClaudeActionHandler(project, this, scope)
 
+    // 浼氳瘽鎿嶄綔澶勭悊鍣?
+    private val sessionHandler = SessionActionHandler(project)
+
     init {
+        // 璁剧疆 Claude 澶勭悊鍣ㄤ笌浼氳瘽澶勭悊鍣ㄧ殑鍏宠仈锛堝弻鍚戝紩鐢級
+        claudeHandler.sessionHandler = sessionHandler
+        sessionHandler.claudeHandler = claudeHandler
+
         setupQueryHandler()
         setupThemeListener()
     }
 
     /**
-     * 注册请求处理器
+     * 娉ㄥ唽璇锋眰澶勭悊鍣?
      */
     private fun setupQueryHandler() {
         queryHandler.addHandler { requestJson ->
             try {
-                logger.info("📨 Received request: $requestJson")
+                logger.info("馃摠 Received request: $requestJson")
                 val request = json.decodeFromString<FrontendRequest>(requestJson)
                 val response = handleRequest(request)
                 val responseJson = json.encodeToString(response)
-                logger.info("📤 Sending response: $responseJson")
+                logger.info("馃摛 Sending response: $responseJson")
                 JBCefJSQuery.Response(responseJson)
             } catch (e: Exception) {
-                logger.severe("❌ Error handling request: ${e.message}")
+                logger.severe("鉂?Error handling request: ${e.message}")
                 e.printStackTrace()
                 val error = FrontendResponse(
                     success = false,
@@ -73,62 +81,86 @@ class FrontendBridge(
             }
         }
 
-        // 注入 JavaScript 桥接代码
-        injectBridgeScript()
+        // 娉ㄦ剰锛欽avaScript 妗ユ帴鑴氭湰蹇呴』鍦ㄩ〉闈㈠姞杞藉畬鎴愬悗娉ㄥ叆
+        // 涓嶈鍦ㄨ繖閲岃皟鐢?injectBridgeScript()
     }
 
     /**
-     * 注入前端可调用的 JavaScript API
+     * 娉ㄥ叆鍓嶇鍙皟鐢ㄧ殑 JavaScript API
+     * 蹇呴』鍦ㄩ〉闈㈠姞杞藉悗璋冪敤
      */
-    private fun injectBridgeScript() {
+    fun injectBridgeScript() {
         val script = """
             (function() {
-                console.log('🔧 Injecting IDEA bridge...');
-
-                // 前端调用后端 (异步)
-                window.ideaBridge = {
-                    query: async function(action, data) {
-                        console.log('🚀 Bridge query:', action, data);
-                        const request = JSON.stringify({ action, data });
-                        try {
-                            const responseJson = await new Promise((resolve) => {
-                                ${queryHandler.inject("request")}
-                                resolve(arguments[0]);
-                            });
-                            const response = JSON.parse(responseJson);
-                            console.log('✅ Bridge response:', response);
-                            return response;
-                        } catch (error) {
-                            console.error('❌ Bridge query failed:', error);
-                            return { success: false, error: String(error) };
-                        }
+                const markThemeLoaded = () => {
+                    if (!document.body) {
+                        return;
                     }
+                    document.body.classList.remove('theme-loading');
+                    document.body.classList.add('theme-loaded');
                 };
 
-                // 后端推送事件给前端
-                window.onIdeEvent = function(event) {
-                    console.log('📥 IDE Event:', event);
-                    window.dispatchEvent(new CustomEvent('ide-event', { detail: event }));
-                };
+                try {
+                    console.log('馃敡 Injecting IDEA bridge...');
 
-                // 标记桥接已就绪
-                window.__bridgeReady = true;
-                window.dispatchEvent(new Event('bridge-ready'));
-                console.log('✅ IDEA bridge ready');
+                    // 鍓嶇璋冪敤鍚庣 (寮傛)
+                    window.ideaBridge = {
+                        query: async function(action, data) {
+                            console.log('馃殌 Bridge query:', action, data);
+                            const request = JSON.stringify({ action, data });
+                            try {
+                                const responseJson = await new Promise((resolve, reject) => {
+                                    ${queryHandler.inject("request", "resolve", "reject")}
+                                });
+                                const response = JSON.parse(responseJson);
+                                console.log('鉁?Bridge response:', response);
+                                return response;
+                            } catch (error) {
+                                console.error('鉂?Bridge query failed:', error);
+                                return { success: false, error: String(error) };
+                            }
+                        },
 
-                // 移除加载样式
-                document.body.classList.remove('theme-loading');
-                document.body.classList.add('theme-loaded');
+                        // 鏍囪妗ユ帴宸插氨缁?
+                        isReady: true
+                    };
+
+                    // 鍚庣鎺ㄩ€佷簨浠剁粰鍓嶇
+                    window.onIdeEvent = function(event) {
+                        console.log('馃摜 IDE Event:', event);
+                        window.dispatchEvent(new CustomEvent('ide-event', { detail: event }));
+                    };
+
+                    // 鏍囪妗ユ帴宸插氨缁?
+                    window.__bridgeReady = true;
+                    window.dispatchEvent(new Event('bridge-ready'));
+                    console.log('鉁?IDEA bridge ready');
+                } catch (error) {
+                    console.error('鉂?Failed to initialize IDEA bridge:', error);
+                    window.__bridgeReady = false;
+                    const root = document.getElementById('app');
+                    if (root && !root.querySelector('.bridge-init-error')) {
+                        root.innerHTML = `
+                            <div class="bridge-init-error" style="padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#d22;background:rgba(210,34,34,0.08);border:1px solid rgba(210,34,34,0.3);border-radius:8px;">
+                                <h3 style="margin-bottom:12px;">IDEA 妗ユ帴鍒濆鍖栧け璐?/h3>
+                                <p style="margin-bottom:8px;">璇锋煡鐪?IDE 鏃ュ織浜嗚В璇︽儏銆?/p>
+                                <code style="display:block;white-space:pre-wrap;font-size:12px;color:#a11;">${'$'}{String(error)}</code>
+                            </div>`;
+                    }
+                } finally {
+                    markThemeLoaded();
+                }
             })();
         """.trimIndent()
 
+        logger.info("馃И Bridge script preview: ${script.take(200)}...")
         browser.cefBrowser.executeJavaScript(script, browser.cefBrowser.url, 0)
         isReady = true
-        logger.info("✅ Bridge script injected")
+        logger.info("鉁?Bridge script injected")
     }
 
     /**
-     * 处理来自前端的请求
+     * 澶勭悊鏉ヨ嚜鍓嶇鐨勮姹?
      */
     private fun handleRequest(request: FrontendRequest): FrontendResponse {
         logger.info("Processing action: ${request.action}")
@@ -137,12 +169,13 @@ class FrontendBridge(
             request.action.startsWith("test.") -> handleTestAction(request)
             request.action.startsWith("ide.") -> handleIdeAction(request)
             request.action.startsWith("claude.") -> handleClaudeAction(request)
+            request.action.startsWith("session.") -> handleSessionAction(request)
             else -> FrontendResponse(false, error = "Unknown action: ${request.action}")
         }
     }
 
     /**
-     * 处理测试操作
+     * 澶勭悊娴嬭瘯鎿嶄綔
      */
     private fun handleTestAction(request: FrontendRequest): FrontendResponse {
         return when (request.action) {
@@ -160,15 +193,26 @@ class FrontendBridge(
     }
 
     /**
-     * 处理 IDE 操作
+     * 澶勭悊 IDE 鎿嶄綔
      */
     private fun handleIdeAction(request: FrontendRequest): FrontendResponse {
         return when (request.action) {
             "ide.getTheme" -> {
                 val theme = extractIdeTheme()
+                // 鍏堝簭鍒楀寲鎴愬瓧绗︿覆,鍐嶈В鏋愭垚 JsonElement
+                val themeJsonString = json.encodeToString(theme)
+                val themeJson = json.parseToJsonElement(themeJsonString)
                 FrontendResponse(
                     success = true,
-                    data = mapOf("theme" to json.encodeToJsonElement(theme))
+                    data = mapOf("theme" to themeJson)
+                )
+            }
+            "ide.getServerUrl" -> {
+                val httpServerService = com.claudecodeplus.server.HttpServerProjectService.getInstance(project)
+                val serverUrl = httpServerService.serverUrl ?: "未启动"
+                FrontendResponse(
+                    success = true,
+                    data = mapOf("serverUrl" to JsonPrimitive(serverUrl))
                 )
             }
             "ide.openFile" -> handleOpenFile(request)
@@ -180,18 +224,25 @@ class FrontendBridge(
     }
 
     /**
-     * 处理 Claude 操作
+     * 澶勭悊 Claude 鎿嶄綔
      */
     private fun handleClaudeAction(request: FrontendRequest): FrontendResponse {
         return claudeHandler.handle(request)
     }
 
     /**
-     * 推送事件给前端
+     * 澶勭悊浼氳瘽鎿嶄綔
      */
-    fun pushEvent(event: IdeEvent) {
+    private fun handleSessionAction(request: FrontendRequest): FrontendResponse {
+        return sessionHandler.handle(request)
+    }
+
+    /**
+     * 鎺ㄩ€佷簨浠剁粰鍓嶇
+     */
+    override fun pushEvent(event: IdeEvent) {
         if (!isReady) {
-            logger.warning("⚠️ Bridge not ready, cannot push event: ${event.type}")
+            logger.warning("鈿狅笍 Bridge not ready, cannot push event: ${event.type}")
             return
         }
 
@@ -199,30 +250,38 @@ class FrontendBridge(
             val eventJson = json.encodeToString(event)
             val script = "window.onIdeEvent($eventJson);"
             browser.cefBrowser.executeJavaScript(script, browser.cefBrowser.url, 0)
-            logger.info("📤 Pushed event: ${event.type}")
+            logger.info("馃摛 Pushed event: ${event.type}")
         } catch (e: Exception) {
-            logger.severe("❌ Failed to push event: ${e.message}")
+            logger.severe("鉂?Failed to push event: ${e.message}")
         }
     }
 
     /**
-     * 设置主题监听器
+     * 璁剧疆涓婚鐩戝惉鍣?
      */
     private fun setupThemeListener() {
         ApplicationManager.getApplication().messageBus
             .connect()
             .subscribe(LafManagerListener.TOPIC, LafManagerListener {
-                logger.info("🎨 Theme changed, notifying frontend")
-                val theme = extractIdeTheme()
-                pushEvent(IdeEvent(
-                    type = "theme.changed",
-                    data = mapOf("theme" to json.encodeToJsonElement(theme))
-                ))
+                try {
+                    logger.info("馃帹 Theme changed, notifying frontend")
+                    val theme = extractIdeTheme()
+                    // 鍏堝簭鍒楀寲鎴愬瓧绗︿覆,鍐嶈В鏋愭垚 JsonElement
+                    val themeJsonString = json.encodeToString(theme)
+                    val themeJson = json.parseToJsonElement(themeJsonString)
+                    pushEvent(IdeEvent(
+                        type = "theme.changed",
+                        data = mapOf("theme" to themeJson)
+                    ))
+                } catch (e: Exception) {
+                    logger.severe("鉂?Failed to notify theme change: ${e.message}")
+                    e.printStackTrace()
+                }
             })
     }
 
     /**
-     * 提取 IDE 主题
+     * 鎻愬彇 IDE 涓婚
      */
     private fun extractIdeTheme(): IdeTheme {
         return IdeTheme(
@@ -248,7 +307,7 @@ class FrontendBridge(
     }
 
     /**
-     * 搜索文件
+     * 鎼滅储鏂囦欢
      */
     private fun handleSearchFiles(request: FrontendRequest): FrontendResponse {
         val data = request.data?.let { json.decodeFromJsonElement<Map<String, JsonElement>>(it) }
@@ -259,7 +318,7 @@ class FrontendBridge(
         return try {
             val files = mutableListOf<Map<String, JsonElement>>()
 
-            // 使用 VirtualFileManager 搜索文件
+            // 浣跨敤 VirtualFileManager 鎼滅储鏂囦欢
             com.intellij.openapi.application.ApplicationManager.getApplication().runReadAction {
                 val baseDir = project.baseDir ?: return@runReadAction
                 searchFilesRecursive(baseDir, query, files, maxResults)
@@ -270,13 +329,13 @@ class FrontendBridge(
                 data = mapOf("files" to JsonArray(files.map { JsonObject(it) }))
             )
         } catch (e: Exception) {
-            logger.severe("❌ Failed to search files: ${e.message}")
+            logger.severe("鉂?Failed to search files: ${e.message}")
             FrontendResponse(false, error = e.message ?: "Failed to search files")
         }
     }
 
     /**
-     * 递归搜索文件
+     * 閫掑綊鎼滅储鏂囦欢
      */
     private fun searchFilesRecursive(
         dir: com.intellij.openapi.vfs.VirtualFile,
@@ -305,7 +364,7 @@ class FrontendBridge(
     }
 
     /**
-     * 获取文件内容
+     * 鑾峰彇鏂囦欢鍐呭
      */
     private fun handleGetFileContent(request: FrontendRequest): FrontendResponse {
         val data = request.data?.let { json.decodeFromJsonElement<Map<String, JsonElement>>(it) }
@@ -345,13 +404,13 @@ class FrontendBridge(
                 FrontendResponse(false, error = "File not found: $filePath")
             }
         } catch (e: Exception) {
-            logger.severe("❌ Failed to get file content: ${e.message}")
+            logger.severe("鉂?Failed to get file content: ${e.message}")
             FrontendResponse(false, error = e.message ?: "Failed to get file content")
         }
     }
 
     /**
-     * 打开文件
+     * 鎵撳紑鏂囦欢
      */
     private fun handleOpenFile(request: FrontendRequest): FrontendResponse {
         val data = request.data?.let { json.decodeFromJsonElement<Map<String, JsonElement>>(it) }
@@ -370,7 +429,7 @@ class FrontendBridge(
                     val fileEditorManager = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project)
                     fileEditorManager.openFile(file, true)
 
-                    // 如果指定了行号，跳转到指定位置
+                    // 濡傛灉鎸囧畾浜嗚鍙凤紝璺宠浆鍒版寚瀹氫綅缃?
                     if (line != null && line > 0) {
                         val editor = fileEditorManager.selectedTextEditor
                         if (editor != null) {
@@ -386,21 +445,21 @@ class FrontendBridge(
                         }
                     }
 
-                    logger.info("✅ Opened file: $filePath at line $line")
+                    logger.info("鉁?Opened file: $filePath at line $line")
                 } else {
-                    logger.warning("⚠️ File not found: $filePath")
+                    logger.warning("鈿狅笍 File not found: $filePath")
                 }
             }
 
             FrontendResponse(success = true)
         } catch (e: Exception) {
-            logger.severe("❌ Failed to open file: ${e.message}")
+            logger.severe("鉂?Failed to open file: ${e.message}")
             FrontendResponse(false, error = e.message ?: "Failed to open file")
         }
     }
 
     /**
-     * 显示文件差异对比
+     * 鏄剧ず鏂囦欢宸紓瀵规瘮
      */
     private fun handleShowDiff(request: FrontendRequest): FrontendResponse {
         val data = request.data?.let { json.decodeFromJsonElement<Map<String, JsonElement>>(it) }
@@ -408,13 +467,13 @@ class FrontendBridge(
         val filePath = data["filePath"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing filePath")
         val oldContent = data["oldContent"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing oldContent")
         val newContent = data["newContent"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing newContent")
-        val title = data["title"]?.toString()?.trim('"') ?: "文件差异对比"
+        val title = data["title"]?.toString()?.trim('"') ?: "鏂囦欢宸紓瀵规瘮"
 
         return try {
             com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
                 val fileName = java.io.File(filePath).name
 
-                // 创建虚拟文件内容
+                // 鍒涘缓铏氭嫙鏂囦欢鍐呭
                 val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
                 val leftContent = DiffContentFactory.getInstance()
                     .create(project, oldContent, fileType)
@@ -422,7 +481,7 @@ class FrontendBridge(
                 val rightContent = DiffContentFactory.getInstance()
                     .create(project, newContent, fileType)
 
-                // 创建 diff 请求
+                // 鍒涘缓 diff 璇锋眰
                 val diffRequest = SimpleDiffRequest(
                     title,
                     leftContent,
@@ -431,21 +490,21 @@ class FrontendBridge(
                     "新内容"
                 )
 
-                // 显示 diff 对话框
+                // 鏄剧ず diff 瀵硅瘽妗?
                 DiffManager.getInstance().showDiff(project, diffRequest)
 
-                logger.info("✅ Showing diff for: $filePath")
+                logger.info("鉁?Showing diff for: $filePath")
             }
 
             FrontendResponse(success = true)
         } catch (e: Exception) {
-            logger.severe("❌ Failed to show diff: ${e.message}")
+            logger.severe("鉂?Failed to show diff: ${e.message}")
             FrontendResponse(false, error = e.message ?: "Failed to show diff")
         }
     }
 
     /**
-     * 颜色转十六进制
+     * 棰滆壊杞崄鍏繘鍒?
      */
     private fun colorToHex(color: Color): String {
         return "#%02x%02x%02x".format(color.red, color.green, color.blue)
