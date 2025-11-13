@@ -289,12 +289,25 @@
         </div>
       </div>
     </div>
+
+    <!-- @ Symbol File Popup (@ 符号文件选择弹窗) -->
+    <AtSymbolFilePopup
+      :visible="showAtSymbolPopup"
+      :files="atSymbolSearchResults"
+      :anchor-element="textareaRef"
+      :at-position="atSymbolPosition"
+      @select="handleAtSymbolFileSelect"
+      @dismiss="dismissAtSymbolPopup"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted } from 'vue'
 import type { ContextReference, AiModel, PermissionMode } from '@/types/enhancedMessage'
+import AtSymbolFilePopup from '@/components/input/AtSymbolFilePopup.vue'
+import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
+import { isInAtQuery, replaceAtQuery } from '@/utils/atSymbolDetector'
 
 interface PendingTask {
   id: string
@@ -374,6 +387,11 @@ const showContextSelectorPopup = ref(false)
 const contextSearchQuery = ref('')
 const contextSearchResults = ref<any[]>([])
 
+// @ Symbol File Popup State
+const showAtSymbolPopup = ref(false)
+const atSymbolPosition = ref(0)
+const atSymbolSearchResults = ref<IndexedFileInfo[]>([])
+
 // Local state for props
 const selectedModelValue = ref(props.selectedModel)
 const selectedPermissionValue = ref(props.selectedPermission)
@@ -410,6 +428,11 @@ watch(() => props.autoCleanupContexts, (newValue) => {
   autoCleanupValue.value = newValue
 })
 
+// Watch input text and cursor position for @ symbol detection
+watch([inputText, () => textareaRef.value?.selectionStart], () => {
+  checkAtSymbol()
+})
+
 // Methods
 function focusInput() {
   textareaRef.value?.focus()
@@ -426,7 +449,75 @@ function adjustHeight() {
   })
 }
 
+// @ Symbol File Reference Functions
+async function checkAtSymbol() {
+  const textarea = textareaRef.value
+  if (!textarea) return
+
+  const cursorPosition = textarea.selectionStart
+  const atResult = isInAtQuery(inputText.value, cursorPosition)
+
+  if (atResult) {
+    // 在 @ 查询中
+    atSymbolPosition.value = atResult.atPosition
+
+    // 搜索文件
+    try {
+      if (atResult.query.length === 0) {
+        // 空查询，显示最近文件
+        atSymbolSearchResults.value = await fileSearchService.getRecentFiles(10)
+      } else {
+        // 搜索文件
+        atSymbolSearchResults.value = await fileSearchService.searchFiles(atResult.query, 10)
+      }
+      showAtSymbolPopup.value = atSymbolSearchResults.value.length > 0
+    } catch (error) {
+      console.error('文件搜索失败:', error)
+      atSymbolSearchResults.value = []
+      showAtSymbolPopup.value = false
+    }
+  } else {
+    // 不在 @ 查询中
+    showAtSymbolPopup.value = false
+    atSymbolSearchResults.value = []
+  }
+}
+
+function handleAtSymbolFileSelect(file: IndexedFileInfo) {
+  const textarea = textareaRef.value
+  if (!textarea) return
+
+  const fileReference = `@${file.relativePath}`
+  const cursorPosition = textarea.selectionStart
+
+  const { newText, newCursorPosition } = replaceAtQuery(
+    inputText.value,
+    atSymbolPosition.value,
+    cursorPosition,
+    fileReference
+  )
+
+  inputText.value = newText
+
+  // 更新光标位置
+  nextTick(() => {
+    textarea.selectionStart = textarea.selectionEnd = newCursorPosition
+    textarea.focus()
+  })
+
+  // 关闭弹窗
+  dismissAtSymbolPopup()
+}
+
+function dismissAtSymbolPopup() {
+  showAtSymbolPopup.value = false
+  atSymbolSearchResults.value = []
+}
+
 function handleKeydown(event: KeyboardEvent) {
+  // 如果 @ 符号弹窗显示，键盘事件由弹窗组件处理
+  // 这里不需要额外处理，因为 AtSymbolFilePopup 组件会监听全局键盘事件
+
   // Alt+Enter - 打断并发送
   if (event.key === 'Enter' && event.altKey) {
     event.preventDefault()
