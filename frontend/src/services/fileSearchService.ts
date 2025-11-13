@@ -3,7 +3,7 @@
  * 提供文件搜索和最近文件获取功能
  */
 
-import { httpService } from './httpService'
+import { apiClient } from './apiClient'
 
 export interface IndexedFileInfo {
   name: string
@@ -22,14 +22,14 @@ export class FileSearchService {
    */
   async searchFiles(query: string, maxResults: number = 10): Promise<IndexedFileInfo[]> {
     try {
-      const response = await httpService.get<IndexedFileInfo[]>(
+      const response = await apiClient.get<IndexedFileInfo[]>(
         `/api/files/search?query=${encodeURIComponent(query)}&maxResults=${maxResults}`
       )
-      
+
       if (response.success && response.data) {
         return response.data
       }
-      
+
       console.warn('文件搜索失败:', response.error)
       return []
     } catch (error) {
@@ -44,14 +44,14 @@ export class FileSearchService {
    */
   async getRecentFiles(maxResults: number = 10): Promise<IndexedFileInfo[]> {
     try {
-      const response = await httpService.get<IndexedFileInfo[]>(
+      const response = await apiClient.get<IndexedFileInfo[]>(
         `/api/files/recent?maxResults=${maxResults}`
       )
-      
+
       if (response.success && response.data) {
         return response.data
       }
-      
+
       console.warn('获取最近文件失败:', response.error)
       return []
     } catch (error) {
