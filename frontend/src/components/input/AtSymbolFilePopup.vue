@@ -137,8 +137,8 @@ onUnmounted(() => {
 
 <style scoped>
 .at-symbol-popup {
-  background: var(--vscode-editorSuggestWidget-background);
-  border: 1px solid var(--vscode-editorSuggestWidget-border);
+  background: var(--ide-background, #ffffff);
+  border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   min-width: 300px;
@@ -167,7 +167,7 @@ onUnmounted(() => {
 
 .file-item:hover,
 .file-item.selected {
-  background: var(--vscode-list-hoverBackground);
+  background: var(--ide-hover-background, #f6f8fa);
 }
 
 .file-icon {
@@ -183,7 +183,7 @@ onUnmounted(() => {
 
 .file-name {
   font-size: 13px;
-  color: var(--vscode-editorSuggestWidget-foreground);
+  color: var(--ide-foreground, #24292e);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -192,7 +192,7 @@ onUnmounted(() => {
 
 .file-path {
   font-size: 11px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--ide-text-secondary, #6a737d);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
