@@ -116,7 +116,8 @@ import { claudeService } from '@/services/claudeService'
 import MessageList from './MessageList.vue'
 import ChatInput from './ChatInput.vue'
 import type { Message } from '@/types/message'
-import type { ContextReference, AiModel, PermissionMode } from '@/types/enhancedMessage'
+import type { ContextReference, AiModel, PermissionMode, EnhancedMessage, TokenUsage as EnhancedTokenUsage } from '@/types/enhancedMessage'
+import { MessageRole } from '@/types/enhancedMessage'
 import type { PendingTask } from '@/types/pendingTask'
 
 // Props 定义
@@ -169,11 +170,11 @@ const uiState = ref<ChatUiState>({
 const messages = computed<Message[]>(() => sessionStore.currentMessages)
 
 // 计算会话级别的 Token 使用量（从最新的 assistant 消息中提取）
-const sessionTokenUsage = computed(() => {
-  const enhancedMessages = messages.value as any[]
+const sessionTokenUsage = computed((): EnhancedTokenUsage | null => {
+  const enhancedMessages = messages.value as EnhancedMessage[]
   for (let i = enhancedMessages.length - 1; i >= 0; i--) {
     const msg = enhancedMessages[i]
-    if (msg.role === 'ASSISTANT' && msg.tokenUsage) {
+    if (msg.role === MessageRole.ASSISTANT && msg.tokenUsage) {
       return msg.tokenUsage
     }
   }
@@ -274,13 +275,17 @@ function handleAddContext(context: ContextReference) {
   uiState.value.contexts.push(context)
 }
 
+/**
+ * 移除上下文引用
+ * 使用 uri 作为唯一标识符，因为不是所有上下文都有 path 属性（如 ImageReference）
+ */
 function handleRemoveContext(context: ContextReference) {
   console.log('➖ Removing context:', context)
-  const index = uiState.value.contexts.findIndex(c =>
-    c.type === context.type && c.path === context.path
-  )
+  const index = uiState.value.contexts.findIndex(c => c.uri === context.uri)
   if (index !== -1) {
     uiState.value.contexts.splice(index, 1)
+  } else {
+    console.warn('⚠️ Context not found for removal:', context)
   }
 }
 

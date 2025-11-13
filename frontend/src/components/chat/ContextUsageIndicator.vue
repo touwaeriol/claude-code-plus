@@ -15,6 +15,14 @@ import type { EnhancedMessage, AiModel, TokenUsage } from '@/types/enhancedMessa
 import { MessageRole } from '@/types/enhancedMessage'
 import { getModelContextLength } from '@/config/modelConfig'
 
+// Token 使用量阈值常量（基于 Claude Code 的设计）
+const TOKEN_USAGE_THRESHOLDS = {
+  CRITICAL: 95,  // 危险红色 - 上下文窗口即将用完
+  WARNING: 92,   // 警告橙色 - Claude Code 自动压缩阈值
+  CAUTION: 75,   // 注意黄色 - 接近压缩阈值
+  NORMAL: 0      // 正常灰色
+} as const
+
 interface Props {
   currentModel: AiModel
   messageHistory?: EnhancedMessage[]
@@ -52,10 +60,10 @@ const percentage = computed(() => {
  */
 const statusClass = computed(() => {
   const p = percentage.value
-  if (p >= 95) return 'status-critical'  // 危险红色
-  if (p >= 92) return 'status-warning'   // 警告橙色 - Claude Code 自动压缩阈值
-  if (p >= 75) return 'status-caution'   // 注意黄色
-  return 'status-normal'                 // 正常灰色
+  if (p >= TOKEN_USAGE_THRESHOLDS.CRITICAL) return 'status-critical'
+  if (p >= TOKEN_USAGE_THRESHOLDS.WARNING) return 'status-warning'
+  if (p >= TOKEN_USAGE_THRESHOLDS.CAUTION) return 'status-caution'
+  return 'status-normal'
 })
 
 /**
@@ -68,9 +76,28 @@ const formattedMaxTokens = computed(() => formatTokenCount(maxTokens.value))
  * 悬浮提示文本
  */
 const tooltipText = computed(() => {
-  let text = `上下文使用: ${totalTokens.value.toLocaleString()} / ${maxTokens.value.toLocaleString()} tokens (${percentage.value}%)`
-  
-  text += '\n\n📊 统计原理:'
+  const sections = [
+    getUsageText(),
+    getStatisticsText(),
+    getCacheOptimizationText(),
+    getStatusHintText()
+  ].filter(Boolean)
+
+  return sections.join('\n\n')
+})
+
+/**
+ * 获取使用量文本
+ */
+function getUsageText(): string {
+  return `上下文使用: ${totalTokens.value.toLocaleString()} / ${maxTokens.value.toLocaleString()} tokens (${percentage.value}%)`
+}
+
+/**
+ * 获取统计原理说明文本
+ */
+function getStatisticsText(): string {
+  let text = '📊 统计原理:'
   if (props.messageHistory.length > 0) {
     text += '\n• 基于 Claude Code 的 VE→HY5→zY5 函数链'
     text += '\n• VE: 逆序遍历找最新 assistant 消息'
@@ -79,25 +106,44 @@ const tooltipText = computed(() => {
   } else {
     text += '\n• 新会话，暂无 API 调用数据'
   }
-  
-  // 缓存优化说明
-  if (props.sessionTokenUsage && props.sessionTokenUsage.cacheCreationTokens > 0) {
-    text += '\n\n⚡ 缓存优化:'
-    text += `\n• 缓存创建: ${props.sessionTokenUsage.cacheCreationTokens.toLocaleString()} tokens`
-    if (props.sessionTokenUsage.cacheReadTokens > 0) {
-      text += `\n• 缓存复用: ${props.sessionTokenUsage.cacheReadTokens.toLocaleString()} tokens`
-    }
-  }
-  
-  // 状态提示
-  const p = percentage.value
-  if (p >= 95) text += '\n\n🚨 上下文窗口即将用完！建议立即开启新对话'
-  else if (p >= 92) text += '\n\n⚠️ 已达到 Claude Code 的 92% 自动压缩阈值'
-  else if (p >= 75) text += '\n\n💡 接近 92% 阈值，可考虑开启新对话'
-  else if (p >= 50) text += '\n\n💡 上下文已使用一半，注意管理'
-  
   return text
-})
+}
+
+/**
+ * 获取缓存优化说明文本
+ */
+function getCacheOptimizationText(): string {
+  if (!props.sessionTokenUsage || props.sessionTokenUsage.cacheCreationTokens === 0) {
+    return ''
+  }
+
+  let text = '⚡ 缓存优化:'
+  text += `\n• 缓存创建: ${props.sessionTokenUsage.cacheCreationTokens.toLocaleString()} tokens`
+  if (props.sessionTokenUsage.cacheReadTokens > 0) {
+    text += `\n• 缓存复用: ${props.sessionTokenUsage.cacheReadTokens.toLocaleString()} tokens`
+  }
+  return text
+}
+
+/**
+ * 获取状态提示文本
+ */
+function getStatusHintText(): string {
+  const p = percentage.value
+  if (p >= TOKEN_USAGE_THRESHOLDS.CRITICAL) {
+    return '🚨 上下文窗口即将用完！建议立即开启新对话'
+  }
+  if (p >= TOKEN_USAGE_THRESHOLDS.WARNING) {
+    return '⚠️ 已达到 Claude Code 的 92% 自动压缩阈值'
+  }
+  if (p >= TOKEN_USAGE_THRESHOLDS.CAUTION) {
+    return '💡 接近 92% 阈值，可考虑开启新对话'
+  }
+  if (p >= 50) {
+    return '💡 上下文已使用一半，注意管理'
+  }
+  return ''
+}
 
 /**
  * 🎯 实现 Claude Code 的 VE 函数：逆序遍历找最新 token usage
@@ -114,15 +160,24 @@ function findLatestTokenUsage(messageHistory: EnhancedMessage[]): TokenUsage | n
 
 /**
  * 🎯 实现 Claude Code 的 HY5 函数：验证 assistant 消息有效性
+ * 过滤掉合成消息，只使用真实 API 调用的数据
  */
 function isValidAssistantMessage(message: EnhancedMessage): boolean {
-  return (
-    message.role === MessageRole.ASSISTANT &&
-    message.tokenUsage != null &&
-    !message.orderedElements.some(item => 
-      item.type === 'content' && (item as any).content?.includes('<synthetic>')
-    )
-  )
+  // 必须是 assistant 消息且有 token 使用量
+  if (message.role !== MessageRole.ASSISTANT || !message.tokenUsage) {
+    return false
+  }
+
+  // 检查是否包含 synthetic 标记（合成消息）
+  const hasSyntheticContent = message.orderedElements.some(item => {
+    if (item.type === 'content') {
+      const contentItem = item as { type: 'content'; content: string }
+      return contentItem.content?.includes('<synthetic>')
+    }
+    return false
+  })
+
+  return !hasSyntheticContent
 }
 
 /**
@@ -183,21 +238,21 @@ function formatTokenCount(tokens: number): string {
   white-space: nowrap;
 }
 
-/* 状态颜色 */
+/* 状态颜色 - 使用 CSS 变量以支持主题 */
 .status-normal {
   color: var(--ide-text-secondary, #6a737d);
 }
 
 .status-caution {
-  color: #FFA500;
+  color: var(--ide-warning-caution, #ffa500);
 }
 
 .status-warning {
-  color: #FF8800;
+  color: var(--ide-warning, #ff8800);
 }
 
 .status-critical {
-  color: #FF4444;
+  color: var(--ide-error, #ff4444);
   font-weight: 600;
 }
 </style>
