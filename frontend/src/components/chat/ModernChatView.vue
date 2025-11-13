@@ -23,6 +23,9 @@
         :selected-permission="uiState.selectedPermissionMode"
         :skip-permissions="uiState.skipPermissions"
         :selected-model="uiState.selectedModel"
+        :auto-cleanup-contexts="uiState.autoCleanupContexts"
+        :message-history="messages"
+        :session-token-usage="sessionTokenUsage"
         :show-context-controls="true"
         :show-model-selector="true"
         :show-permission-controls="true"
@@ -36,6 +39,7 @@
         @update:selected-model="handleModelChange"
         @update:selected-permission="handlePermissionModeChange"
         @update:skip-permissions="handleSkipPermissionsChange"
+        @auto-cleanup-change="handleAutoCleanupChange"
       />
     </div>
 
@@ -144,6 +148,7 @@ interface ChatUiState {
   selectedModel: AiModel
   selectedPermissionMode: PermissionMode
   skipPermissions: boolean
+  autoCleanupContexts: boolean
 }
 
 // 状态定义 (messages 从 sessionStore 获取)
@@ -156,11 +161,24 @@ const uiState = ref<ChatUiState>({
   actualModelId: undefined,
   selectedModel: 'DEFAULT' as AiModel,
   selectedPermissionMode: 'DEFAULT' as PermissionMode,
-  skipPermissions: false
+  skipPermissions: false,
+  autoCleanupContexts: false
 })
 
 // 从 sessionStore 获取真实消息
 const messages = computed<Message[]>(() => sessionStore.currentMessages)
+
+// 计算会话级别的 Token 使用量（从最新的 assistant 消息中提取）
+const sessionTokenUsage = computed(() => {
+  const enhancedMessages = messages.value as any[]
+  for (let i = enhancedMessages.length - 1; i >= 0; i--) {
+    const msg = enhancedMessages[i]
+    if (msg.role === 'ASSISTANT' && msg.tokenUsage) {
+      return msg.tokenUsage
+    }
+  }
+  return null
+})
 
 const pendingTasks = ref<PendingTask[]>([])
 const debugExpanded = ref(false)
@@ -224,6 +242,12 @@ function handleSendMessage(text: string) {
 
     uiState.value.isGenerating = true
     claudeService.sendMessage(sessionId, text)
+
+    // 自动清理上下文（如果启用）
+    if (uiState.value.autoCleanupContexts) {
+      console.log('🧹 Auto-cleaning contexts after send')
+      uiState.value.contexts = []
+    }
   } catch (error) {
     console.error('❌ Failed to send message:', error)
     uiState.value.hasError = true
@@ -276,6 +300,11 @@ function handleSkipPermissionsChange(skip: boolean) {
   console.log('⏭️ Toggle skip permissions:', skip)
   uiState.value.skipPermissions = skip
   // TODO: 通知后端切换跳过权限设置
+}
+
+function handleAutoCleanupChange(cleanup: boolean) {
+  console.log('🧹 Changing auto cleanup contexts:', cleanup)
+  uiState.value.autoCleanupContexts = cleanup
 }
 
 function handleClearError() {

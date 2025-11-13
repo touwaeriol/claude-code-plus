@@ -99,6 +99,17 @@ export interface FolderReference extends ContextReference {
 }
 
 /**
+ * 图片引用
+ */
+export interface ImageReference extends ContextReference {
+  type: 'image'
+  name: string
+  mimeType: string
+  base64Data: string
+  size?: number
+}
+
+/**
  * 工具调用结果
  */
 export type ToolResult =

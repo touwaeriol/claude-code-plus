@@ -42,12 +42,38 @@
         <span class="btn-text">添加上下文</span>
       </button>
 
+      <!-- 图片上传按钮 -->
+      <button
+        class="add-image-btn"
+        :disabled="!enabled"
+        title="上传图片"
+        @click="handleImageUploadClick"
+      >
+        <span class="btn-icon">📷</span>
+        <span class="btn-text">图片</span>
+      </button>
+      <input
+        ref="imageInputRef"
+        type="file"
+        accept="image/jpeg,image/jpg,image/png,image/gif,image/bmp,image/webp"
+        style="display: none"
+        @change="handleImageFileSelect"
+      >
+
       <!-- Context Tags (上下文标签) -->
       <div
         v-for="(context, index) in contexts"
         :key="`context-${index}`"
         class="context-tag"
+        :class="{ 'image-tag': isImageContext(context) }"
       >
+        <!-- 图片预览 -->
+        <img
+          v-if="isImageContext(context)"
+          :src="getImagePreviewUrl(context)"
+          class="tag-image-preview"
+          :alt="getContextDisplay(context)"
+        >
         <span class="tag-icon">{{ getContextIcon(context) }}</span>
         <span class="tag-text">{{ getContextDisplay(context) }}</span>
         <button
@@ -210,20 +236,32 @@
           <span>跳过权限</span>
         </label>
 
-        <!-- Auto Cleanup Contexts 复选框 (暂时隐藏) -->
-        <!-- <label v-if="showPermissionControls" class="checkbox-label">
+        <!-- Auto Cleanup Contexts 复选框 -->
+        <label
+          v-if="showPermissionControls"
+          class="checkbox-label"
+          title="发送消息后自动清空上下文标签"
+        >
           <input
+            v-model="autoCleanupContextsValue"
             type="checkbox"
-            v-model="autoCleanupValue"
             :disabled="!enabled || isGenerating"
-            @change="$emit('auto-cleanup-change', autoCleanupValue)"
-          />
-          <span>自动清理</span>
-        </label> -->
+            @change="handleAutoCleanupChange"
+          >
+          <span>自动清理上下文</span>
+        </label>
       </div>
 
       <!-- 右侧按钮组 -->
       <div class="toolbar-right">
+        <!-- 上下文使用量指示器 -->
+        <ContextUsageIndicator
+          v-if="messageHistory && messageHistory.length > 0"
+          :current-model="selectedModelValue"
+          :message-history="messageHistory"
+          :session-token-usage="sessionTokenUsage"
+        />
+
         <!-- 统计信息 -->
         <div
           v-if="tokenUsage"
@@ -321,10 +359,12 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted } from 'vue'
-import type { ContextReference, AiModel, PermissionMode } from '@/types/enhancedMessage'
+import type { ContextReference, AiModel, PermissionMode, EnhancedMessage, TokenUsage as EnhancedTokenUsage, ImageReference } from '@/types/enhancedMessage'
 import AtSymbolFilePopup from '@/components/input/AtSymbolFilePopup.vue'
+import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
 import { isInAtQuery, replaceAtQuery } from '@/utils/atSymbolDetector'
+import { ContextDisplayType } from '@/types/enhancedMessage'
 
 interface PendingTask {
   id: string
@@ -360,6 +400,8 @@ interface Props {
   showSendButton?: boolean
   tokenUsage?: TokenUsage
   placeholderText?: string
+  messageHistory?: EnhancedMessage[]  // 消息历史（用于Token计算）
+  sessionTokenUsage?: EnhancedTokenUsage | null  // 会话级Token使用量
 }
 
 interface Emits {
@@ -396,6 +438,7 @@ const emit = defineEmits<Emits>()
 const textareaRef = ref<HTMLTextAreaElement>()
 const addContextButtonRef = ref<HTMLButtonElement>()
 const contextPopupRef = ref<HTMLDivElement>()
+const imageInputRef = ref<HTMLInputElement>()
 
 // State
 const inputText = ref('')
@@ -416,7 +459,12 @@ const isDragging = ref(false)
 const selectedModelValue = ref(props.selectedModel)
 const selectedPermissionValue = ref(props.selectedPermission)
 const skipPermissionsValue = ref(props.skipPermissions)
-const autoCleanupValue = ref(props.autoCleanupContexts)
+
+// 自动清理上下文选项 - 从 localStorage 读取
+const AUTO_CLEANUP_KEY = 'claude-code-plus-auto-cleanup-contexts'
+const autoCleanupContextsValue = ref(
+  localStorage.getItem(AUTO_CLEANUP_KEY) === 'true' || props.autoCleanupContexts
+)
 
 // Computed
 const visibleTasks = computed(() => {
@@ -663,6 +711,12 @@ function handleContextSelect(result: IndexedFileInfo) {
 }
 
 function getContextDisplay(context: ContextReference): string {
+  if ('type' in context) {
+    const typed = context as any
+    if (typed.type === 'image' && typed.name) {
+      return typed.name
+    }
+  }
   if ('path' in context) {
     const pathStr = (context as any).path
     return pathStr.split(/[\\/]/).pop() || pathStr
@@ -673,7 +727,26 @@ function getContextDisplay(context: ContextReference): string {
   return context.uri
 }
 
+function isImageContext(context: ContextReference): boolean {
+  return 'type' in context && (context as any).type === 'image'
+}
+
+function getImagePreviewUrl(context: ContextReference): string {
+  if (isImageContext(context)) {
+    const imageRef = context as any as ImageReference
+    return `data:${imageRef.mimeType};base64,${imageRef.base64Data}`
+  }
+  return ''
+}
+
 function getContextIcon(context: ContextReference): string {
+  if ('type' in context) {
+    const typed = context as any
+    if (typed.type === 'file') return '📄'
+    if (typed.type === 'image') return '🖼️'
+    if (typed.type === 'web') return '🌐'
+    if (typed.type === 'folder') return '📁'
+  }
   if ('path' in context) return '📄'
   if ('url' in context) return '🌐'
   return '📎'
@@ -735,6 +808,12 @@ async function handleDrop(event: DragEvent) {
 
 async function addFileToContext(file: File) {
   try {
+    // 检查是否为图片文件
+    if (file.type.startsWith('image/')) {
+      await addImageToContext(file)
+      return
+    }
+
     // 读取文件内容
     const content = await readFileContent(file)
 
@@ -744,10 +823,10 @@ async function addFileToContext(file: File) {
       name: file.name,
       path: file.name, // 在实际项目中应该获取相对路径
       content: content
-    }
+    } as any
 
     // 添加到上下文列表
-    emit('add-context', contextRef)
+    emit('context-add', contextRef)
   } catch (error) {
     console.error('Failed to read file:', error)
     // 可以添加错误提示
@@ -761,6 +840,74 @@ function readFileContent(file: File): Promise<string> {
     reader.onerror = reject
     reader.readAsText(file)
   })
+}
+
+// 图片上传功能
+function handleImageUploadClick() {
+  imageInputRef.value?.click()
+}
+
+async function handleImageFileSelect(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = input.files
+  if (!files || files.length === 0) return
+
+  for (let i = 0; i < files.length; i++) {
+    await addImageToContext(files[i])
+  }
+
+  // 清空 input，允许重复选择同一文件
+  input.value = ''
+}
+
+async function addImageToContext(file: File) {
+  try {
+    // 验证文件类型
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      console.error('不支持的图片格式:', file.type)
+      return
+    }
+
+    // 读取图片为 base64
+    const base64Data = await readImageAsBase64(file)
+
+    // 创建图片引用
+    const imageRef: ImageReference = {
+      type: 'image',
+      displayType: ContextDisplayType.TAG,
+      uri: `image://${file.name}`,
+      name: file.name,
+      mimeType: file.type,
+      base64Data: base64Data,
+      size: file.size
+    }
+
+    // 添加到上下文列表
+    emit('context-add', imageRef as any)
+  } catch (error) {
+    console.error('Failed to read image:', error)
+  }
+}
+
+function readImageAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const result = e.target?.result as string
+      // 移除 data:image/xxx;base64, 前缀
+      const base64 = result.split(',')[1]
+      resolve(base64)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+// 自动清理上下文选项
+function handleAutoCleanupChange() {
+  localStorage.setItem(AUTO_CLEANUP_KEY, autoCleanupContextsValue.value.toString())
+  emit('auto-cleanup-change', autoCleanupContextsValue.value)
 }
 
 // Lifecycle
@@ -912,6 +1059,31 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
+.add-image-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  height: 20px;
+  border: 1px solid var(--ide-border, #e1e4e8);
+  border-radius: 4px;
+  background: var(--ide-background, #ffffff);
+  color: var(--ide-foreground, #24292e);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-image-btn:hover:not(:disabled) {
+  background: var(--ide-hover-background, #f6f8fa);
+  border-color: var(--ide-accent, #0366d6);
+}
+
+.add-image-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .context-tag {
   display: flex;
   align-items: center;
@@ -921,6 +1093,18 @@ onMounted(() => {
   border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 4px;
   font-size: 12px;
+}
+
+.context-tag.image-tag {
+  padding: 4px;
+}
+
+.tag-image-preview {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 3px;
+  border: 1px solid var(--ide-border, #e1e4e8);
 }
 
 .tag-icon {
