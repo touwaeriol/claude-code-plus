@@ -60,10 +60,27 @@
       </div>
     </div>
 
+    <!-- 拖放区域提示 -->
+    <div
+      v-if="isDragging"
+      class="drop-zone-overlay"
+      @drop.prevent="handleDrop"
+      @dragover.prevent
+      @dragleave="handleDragLeave"
+    >
+      <div class="drop-zone-content">
+        <span class="drop-icon">📁</span>
+        <span class="drop-text">释放文件以添加到上下文</span>
+      </div>
+    </div>
+
     <!-- 输入区域 -->
     <div
       class="input-area"
       @click="focusInput"
+      @drop.prevent="handleDrop"
+      @dragover.prevent="handleDragOver"
+      @dragleave="handleDragLeave"
     >
       <textarea
         ref="textareaRef"
@@ -392,6 +409,9 @@ const showAtSymbolPopup = ref(false)
 const atSymbolPosition = ref(0)
 const atSymbolSearchResults = ref<IndexedFileInfo[]>([])
 
+// Drag and Drop State
+const isDragging = ref(false)
+
 // Local state for props
 const selectedModelValue = ref(props.selectedModel)
 const selectedPermissionValue = ref(props.selectedPermission)
@@ -686,6 +706,63 @@ function getTokenTooltip(): string {
   return `输入: ${u.inputTokens}, 输出: ${u.outputTokens}, 缓存创建: ${u.cacheCreationTokens}, 缓存读取: ${u.cacheReadTokens}`
 }
 
+// Drag and Drop Functions
+function handleDragOver(event: DragEvent) {
+  event.preventDefault()
+  isDragging.value = true
+}
+
+function handleDragLeave(event: DragEvent) {
+  event.preventDefault()
+  // 只有当离开整个拖放区域时才设置为 false
+  if (event.target === event.currentTarget) {
+    isDragging.value = false
+  }
+}
+
+async function handleDrop(event: DragEvent) {
+  event.preventDefault()
+  isDragging.value = false
+
+  const files = event.dataTransfer?.files
+  if (!files || files.length === 0) return
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    await addFileToContext(file)
+  }
+}
+
+async function addFileToContext(file: File) {
+  try {
+    // 读取文件内容
+    const content = await readFileContent(file)
+
+    // 创建上下文引用
+    const contextRef: ContextReference = {
+      type: 'file',
+      name: file.name,
+      path: file.name, // 在实际项目中应该获取相对路径
+      content: content
+    }
+
+    // 添加到上下文列表
+    emit('add-context', contextRef)
+  } catch (error) {
+    console.error('Failed to read file:', error)
+    // 可以添加错误提示
+  }
+}
+
+function readFileContent(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => resolve(e.target?.result as string)
+    reader.onerror = reject
+    reader.readAsText(file)
+  })
+}
+
 // Lifecycle
 onMounted(() => {
   nextTick(() => {
@@ -698,6 +775,7 @@ onMounted(() => {
 
 <style scoped>
 .unified-chat-input-container {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--ide-panel-background, #f6f8fa);
@@ -710,6 +788,44 @@ onMounted(() => {
 .unified-chat-input-container.focused {
   border-color: var(--ide-accent, #0366d6);
   box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.1);
+}
+
+/* Drop Zone Overlay */
+.drop-zone-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(3, 102, 214, 0.1);
+  border: 2px dashed var(--ide-accent, #0366d6);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.drop-zone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px;
+  background: var(--ide-background, #ffffff);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.drop-icon {
+  font-size: 48px;
+}
+
+.drop-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ide-accent, #0366d6);
 }
 
 /* Pending Task Bar */
