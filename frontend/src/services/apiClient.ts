@@ -86,6 +86,63 @@ export class ApiClient {
   // ==================== RESTful API 方法（新版） ====================
 
   /**
+   * 通用 GET 请求
+   */
+  async get<T = any>(path: string): Promise<FrontendResponse<T>> {
+    try {
+      const url = path.startsWith('http') ? path : `${this.baseUrl}${path}`
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const result: FrontendResponse<T> = await response.json()
+      return result
+    } catch (error) {
+      console.error(`❌ GET request failed [${path}]:`, error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error'
+      }
+    }
+  }
+
+  /**
+   * 通用 POST 请求
+   */
+  async post<T = any>(path: string, data?: any): Promise<FrontendResponse<T>> {
+    try {
+      const url = path.startsWith('http') ? path : `${this.baseUrl}${path}`
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data || {})
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const result: FrontendResponse<T> = await response.json()
+      return result
+    } catch (error) {
+      console.error(`❌ POST request failed [${path}]:`, error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error'
+      }
+    }
+  }
+
+  /**
    * 获取会话列表
    */
   async getSessions(): Promise<Session[]> {
