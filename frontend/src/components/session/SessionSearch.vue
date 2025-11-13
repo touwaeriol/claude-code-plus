@@ -177,28 +177,28 @@ function highlightedSnippet(match: SessionSearchResult['matchedMessages'][0]) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--vscode-sideBar-background);
+  background: var(--ide-panel-background, #f6f8fa);
 }
 
 .search-input-container {
   position: relative;
   padding: 12px;
-  border-bottom: 1px solid var(--vscode-panel-border);
+  border-bottom: 1px solid var(--ide-border, #e1e4e8);
 }
 
 .search-input {
   width: 100%;
   padding: 8px 32px 8px 12px;
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border);
+  background: var(--ide-input-background, #ffffff);
+  color: var(--ide-foreground, #24292e);
+  border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 4px;
   font-size: 13px;
   outline: none;
 }
 
 .search-input:focus {
-  border-color: var(--vscode-focusBorder);
+  border-color: var(--ide-accent, #0366d6);
 }
 
 .clear-btn {
@@ -208,7 +208,7 @@ function highlightedSnippet(match: SessionSearchResult['matchedMessages'][0]) {
   transform: translateY(-50%);
   background: none;
   border: none;
-  color: var(--vscode-input-foreground);
+  color: var(--ide-foreground, #24292e);
   cursor: pointer;
   padding: 4px 8px;
   opacity: 0.6;
@@ -226,8 +226,8 @@ function highlightedSnippet(match: SessionSearchResult['matchedMessages'][0]) {
 .results-header {
   padding: 8px 12px;
   font-size: 12px;
-  color: var(--vscode-descriptionForeground);
-  border-bottom: 1px solid var(--vscode-panel-border);
+  color: var(--ide-text-secondary, #6a737d);
+  border-bottom: 1px solid var(--ide-border, #e1e4e8);
 }
 
 .results-list {
@@ -237,38 +237,38 @@ function highlightedSnippet(match: SessionSearchResult['matchedMessages'][0]) {
 .result-item {
   padding: 12px;
   cursor: pointer;
-  border-bottom: 1px solid var(--vscode-panel-border);
+  border-bottom: 1px solid var(--ide-border, #e1e4e8);
   transition: background-color 0.15s;
 }
 
 .result-item:hover {
-  background: var(--vscode-list-hoverBackground);
+  background: var(--ide-hover-background, #f6f8fa);
 }
 
 .result-title {
   font-size: 14px;
   font-weight: 500;
   margin-bottom: 6px;
-  color: var(--vscode-foreground);
+  color: var(--ide-foreground, #24292e);
 }
 
 .result-snippet {
   font-size: 12px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--ide-text-secondary, #6a737d);
   margin: 4px 0;
   line-height: 1.5;
 }
 
 .result-meta {
   font-size: 11px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--ide-text-secondary, #6a737d);
   margin-top: 6px;
   opacity: 0.7;
 }
 
 .highlighted {
   background: #ffeb3b;
-  color: var(--vscode-editor-foreground);
+  color: var(--ide-foreground, #24292e);
   padding: 0 2px;
   border-radius: 2px;
 }
@@ -280,7 +280,7 @@ function highlightedSnippet(match: SessionSearchResult['matchedMessages'][0]) {
   align-items: center;
   justify-content: center;
   padding: 48px 24px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--ide-text-secondary, #6a737d);
 }
 
 .empty-icon {
@@ -296,8 +296,8 @@ function highlightedSnippet(match: SessionSearchResult['matchedMessages'][0]) {
 .loading-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid var(--vscode-panel-border);
-  border-top-color: var(--vscode-progressBar-background);
+  border: 3px solid var(--ide-border, #e1e4e8);
+  border-top-color: var(--ide-accent, #0366d6);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 16px;

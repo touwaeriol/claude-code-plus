@@ -328,7 +328,7 @@ function getTagSessionCount(tagId: string): number {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: var(--vscode-foreground);
+  color: var(--ide-foreground, #24292e);
 }
 
 .create-btn {
@@ -336,8 +336,8 @@ function getTagSessionCount(tagId: string): number {
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
+  background: var(--ide-accent, #0366d6);
+  color: #ffffff;
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -345,7 +345,7 @@ function getTagSessionCount(tagId: string): number {
 }
 
 .create-btn:hover {
-  background: var(--vscode-button-hoverBackground);
+  background: var(--ide-accent-hover, #0256c7);
 }
 
 .icon {
@@ -361,7 +361,7 @@ function getTagSessionCount(tagId: string): number {
 
 .group-item {
   border-left: 3px solid;
-  background: var(--vscode-editor-background);
+  background: var(--ide-background, #ffffff);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -376,7 +376,7 @@ function getTagSessionCount(tagId: string): number {
 }
 
 .group-header:hover {
-  background: var(--vscode-list-hoverBackground);
+  background: var(--ide-hover-background, #f6f8fa);
 }
 
 .group-icon {
@@ -386,28 +386,28 @@ function getTagSessionCount(tagId: string): number {
 .group-name {
   flex: 1;
   font-weight: 500;
-  color: var(--vscode-foreground);
+  color: var(--ide-foreground, #24292e);
 }
 
 .session-count {
   font-size: 12px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--ide-text-secondary, #6a737d);
 }
 
 .collapse-icon {
   font-size: 12px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--ide-text-secondary, #6a737d);
 }
 
 .group-content {
   padding: 0 12px 12px 12px;
-  border-top: 1px solid var(--vscode-panel-border);
+  border-top: 1px solid var(--ide-border, #e1e4e8);
 }
 
 .group-description {
   margin: 8px 0;
   font-size: 13px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--ide-text-secondary, #6a737d);
 }
 
 .group-actions {
@@ -418,21 +418,22 @@ function getTagSessionCount(tagId: string): number {
 
 .action-btn {
   padding: 4px 12px;
-  background: var(--vscode-button-secondaryBackground);
-  color: var(--vscode-button-secondaryForeground);
-  border: none;
+  background: var(--ide-button-secondary, #f6f8fa);
+  color: var(--ide-foreground, #24292e);
+  border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 3px;
   cursor: pointer;
   font-size: 12px;
 }
 
 .action-btn:hover {
-  background: var(--vscode-button-secondaryHoverBackground);
+  background: var(--ide-hover-background, #e1e4e8);
 }
 
 .action-btn.danger {
-  background: var(--vscode-errorForeground);
+  background: var(--ide-error, #d73a49);
   color: white;
+  border-color: var(--ide-error, #d73a49);
 }
 
 .action-btn.danger:hover {
