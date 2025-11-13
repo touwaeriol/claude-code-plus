@@ -237,6 +237,46 @@ class HttpApiServer(
                         }
                     }
 
+                    // 文件搜索 API
+                    route("/files") {
+                        // 搜索文件
+                        get("/search") {
+                            try {
+                                val query = call.request.queryParameters["query"] ?: ""
+                                val maxResults = call.request.queryParameters["maxResults"]?.toIntOrNull() ?: 10
+
+                                val fileIndexService = project.getService(com.claudecodeplus.plugin.adapters.SimpleFileIndexService::class.java)
+                                val results = fileIndexService.searchFiles(query, maxResults)
+
+                                call.respond(FrontendResponse.success(results))
+                            } catch (e: Exception) {
+                                logger.severe("❌ Failed to search files: ${e.message}")
+                                call.respond(
+                                    HttpStatusCode.InternalServerError,
+                                    FrontendResponse.error<List<Any>>(e.message ?: "Unknown error")
+                                )
+                            }
+                        }
+
+                        // 获取最近打开的文件
+                        get("/recent") {
+                            try {
+                                val maxResults = call.request.queryParameters["maxResults"]?.toIntOrNull() ?: 10
+
+                                val fileIndexService = project.getService(com.claudecodeplus.plugin.adapters.SimpleFileIndexService::class.java)
+                                val results = fileIndexService.getRecentFiles(maxResults)
+
+                                call.respond(FrontendResponse.success(results))
+                            } catch (e: Exception) {
+                                logger.severe("❌ Failed to get recent files: ${e.message}")
+                                call.respond(
+                                    HttpStatusCode.InternalServerError,
+                                    FrontendResponse.error<List<Any>>(e.message ?: "Unknown error")
+                                )
+                            }
+                        }
+                    }
+
                     // 配置 API
                     route("/config") {
                         get {

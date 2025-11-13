@@ -2,7 +2,7 @@
   "sharedRules": [
     {
       "path": "CLAUDE.md",
-      "type": "manual"
+      "type": "ALWAYS"
     }
   ]
-}
+} 
