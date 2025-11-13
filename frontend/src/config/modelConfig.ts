@@ -45,13 +45,19 @@ export const MODEL_CONFIGS: Record<AiModel, ModelConfig> = {
 
 /**
  * 获取模型配置
+ * @throws {Error} 如果模型不存在
  */
 export function getModelConfig(model: AiModel): ModelConfig {
-  return MODEL_CONFIGS[model] || MODEL_CONFIGS[AiModel.DEFAULT]
+  const config = MODEL_CONFIGS[model]
+  if (!config) {
+    throw new Error(`Unknown AI model: ${model}. Available models: ${Object.keys(MODEL_CONFIGS).join(', ')}`)
+  }
+  return config
 }
 
 /**
  * 获取模型的上下文长度
+ * @throws {Error} 如果模型不存在
  */
 export function getModelContextLength(model: AiModel): number {
   return getModelConfig(model).contextLength

@@ -493,7 +493,7 @@ watch(() => props.skipPermissions, (newValue) => {
 })
 
 watch(() => props.autoCleanupContexts, (newValue) => {
-  autoCleanupValue.value = newValue
+  autoCleanupContextsValue.value = newValue
 })
 
 // Watch input text and cursor position for @ symbol detection
@@ -710,45 +710,41 @@ function handleContextSelect(result: IndexedFileInfo) {
   contextSearchResults.value = []
 }
 
+/**
+ * 获取上下文显示文本（使用类型守卫）
+ */
 function getContextDisplay(context: ContextReference): string {
-  if ('type' in context) {
-    const typed = context as any
-    if (typed.type === 'image' && typed.name) {
-      return typed.name
-    }
+  if (isImageReference(context)) {
+    return context.name
   }
-  if ('path' in context) {
-    const pathStr = (context as any).path
-    return pathStr.split(/[\\/]/).pop() || pathStr
+  if (isFileReference(context)) {
+    return context.path.split(/[\\/]/).pop() || context.path
   }
-  if ('url' in context) {
-    return (context as any).title || (context as any).url
+  if (isUrlReference(context)) {
+    return context.title || context.url
   }
   return context.uri
 }
 
-function isImageContext(context: ContextReference): boolean {
-  return 'type' in context && (context as any).type === 'image'
-}
-
+/**
+ * 获取图片预览 URL（使用类型守卫）
+ */
 function getImagePreviewUrl(context: ContextReference): string {
-  if (isImageContext(context)) {
-    const imageRef = context as any as ImageReference
-    return `data:${imageRef.mimeType};base64,${imageRef.base64Data}`
+  if (isImageReference(context)) {
+    return `data:${context.mimeType};base64,${context.base64Data}`
   }
   return ''
 }
 
+/**
+ * 获取上下文图标（使用类型守卫）
+ */
 function getContextIcon(context: ContextReference): string {
-  if ('type' in context) {
-    const typed = context as any
-    if (typed.type === 'file') return '📄'
-    if (typed.type === 'image') return '🖼️'
-    if (typed.type === 'web') return '🌐'
-    if (typed.type === 'folder') return '📁'
-  }
+  if (isImageReference(context)) return '�️'
+  if (isFileReference(context)) return '�'
+  if (isUrlReference(context)) return '🌐'
+  if ('type' in context && (context as any).type === 'folder') return '📁'
   if ('path' in context) return '📄'
-  if ('url' in context) return '🌐'
   return '📎'
 }
 
@@ -860,11 +856,34 @@ async function handleImageFileSelect(event: Event) {
   input.value = ''
 }
 
+// 支持的图片 MIME 类型常量
+const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/webp'] as const
+
+/**
+ * 类型守卫：检查是否为图片上下文
+ */
+function isImageReference(context: ContextReference): context is ImageReference {
+  return 'type' in context && (context as any).type === 'image'
+}
+
+/**
+ * 类型守卫：检查是否为文件上下文
+ */
+function isFileReference(context: ContextReference): context is { type: 'file'; path: string; name: string } {
+  return 'type' in context && (context as any).type === 'file'
+}
+
+/**
+ * 类型守卫：检查是否为 URL 上下文
+ */
+function isUrlReference(context: ContextReference): context is { type: 'web'; url: string; title?: string } {
+  return 'url' in context || ('type' in context && (context as any).type === 'web')
+}
+
 async function addImageToContext(file: File) {
   try {
     // 验证文件类型
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/webp']
-    if (!validTypes.includes(file.type)) {
+    if (!VALID_IMAGE_TYPES.includes(file.type as any)) {
       console.error('不支持的图片格式:', file.type)
       return
     }
