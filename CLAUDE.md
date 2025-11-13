@@ -7,6 +7,13 @@
 你需要在我提出对应的修改要求时**自动更新**相关文档
 
 
+ ## 快速链接
+
+- **[故障排除指南](docs/TROUBLESHOOTING.md)** - 遇到问题时的诊断和解决方案
+- **[HTTP API 架构](docs/HTTP_API_ARCHITECTURE.md)** - 前后端通信架构说明
+- **[主题系统](docs/THEME_SYSTEM.md)** - Vue 前端主题适配系统说明
+
+
 
 ## 组件库
 

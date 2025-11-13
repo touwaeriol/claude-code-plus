@@ -1,9 +1,29 @@
 /**
  * 统一的 HTTP API 客户端
  * 负责所有与后端的 HTTP 通信
+ *
+ * 架构升级：
+ * - 保留旧的统一 POST /api/ 接口（向后兼容）
+ * - 新增 RESTful API 方法（推荐使用）
  */
 
 import type { FrontendResponse } from '@/types/bridge'
+
+// 会话数据接口
+export interface Session {
+  id: string
+  name: string
+  createdAt: number
+  updatedAt: number
+  messageCount: number
+}
+
+// 消息接口
+export interface Message {
+  type: string
+  content: any
+  [key: string]: any
+}
 
 export class ApiClient {
   private baseUrl: string = ''
@@ -29,7 +49,8 @@ export class ApiClient {
   }
 
   /**
-   * 统一的 API 请求方法
+   * 统一的 API 请求方法（旧版，向后兼容）
+   * @deprecated 推荐使用新的 RESTful API 方法
    */
   async request<T = any>(
     action: string,
@@ -61,6 +82,170 @@ export class ApiClient {
       }
     }
   }
+
+  // ==================== RESTful API 方法（新版） ====================
+
+  /**
+   * 获取会话列表
+   */
+  async getSessions(): Promise<Session[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/sessions`)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      const data = await response.json()
+      return data.sessions || []
+    } catch (error) {
+      console.error('❌ Failed to get sessions:', error)
+      return []
+    }
+  }
+
+  /**
+   * 创建新会话
+   */
+  async createSession(name?: string): Promise<Session | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name })
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('❌ Failed to create session:', error)
+      return null
+    }
+  }
+
+  /**
+   * 获取会话历史消息
+   */
+  async getSessionHistory(sessionId: string): Promise<Message[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}/history`)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      const data = await response.json()
+      return data.messages || []
+    } catch (error) {
+      console.error('❌ Failed to get session history:', error)
+      return []
+    }
+  }
+
+  /**
+   * 删除会话
+   */
+  async deleteSession(sessionId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}`, {
+        method: 'DELETE'
+      })
+      return response.ok
+    } catch (error) {
+      console.error('❌ Failed to delete session:', error)
+      return false
+    }
+  }
+
+  /**
+   * 重命名会话
+   */
+  async renameSession(sessionId: string, newName: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: newName })
+      })
+      return response.ok
+    } catch (error) {
+      console.error('❌ Failed to rename session:', error)
+      return false
+    }
+  }
+
+  /**
+   * 获取配置
+   */
+  async getConfig(): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/config`)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      return await response.json()
+    } catch (error) {
+      console.error('❌ Failed to get config:', error)
+      return {}
+    }
+  }
+
+  /**
+   * 保存配置
+   */
+  async saveConfig(config: any): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config)
+      })
+      return response.ok
+    } catch (error) {
+      console.error('❌ Failed to save config:', error)
+      return false
+    }
+  }
+
+  /**
+   * 获取 IDE 主题
+   */
+  async getTheme(): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/theme`)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      return await response.json()
+    } catch (error) {
+      console.error('❌ Failed to get theme:', error)
+      return null
+    }
+  }
+
+  /**
+   * 获取项目路径
+   */
+  async getProjectPath(): Promise<string> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/project-path`)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      const data = await response.json()
+      return data.projectPath || ''
+    } catch (error) {
+      console.error('❌ Failed to get project path:', error)
+      return ''
+    }
+  }
+
+  // ==================== 通用方法 ====================
 
   /**
    * 获取服务器健康状态

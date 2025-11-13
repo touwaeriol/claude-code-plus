@@ -92,10 +92,14 @@
             class="model-selector"
             :disabled="!enabled || isGenerating"
             placement="top-start"
-            :teleported="false"
+            :teleported="true"
+            popper-class="chat-input-select-dropdown"
             :popper-options="{
-              strategy: 'fixed',
               modifiers: [
+                {
+                  name: 'preventOverflow',
+                  options: { boundary: 'viewport' }
+                },
                 {
                   name: 'flip',
                   options: {
@@ -128,7 +132,7 @@
             class="actual-model-hint"
             :title="actualModelId"
           >
-            ({{ actualModelId.split('-').pop() }})
+            实际模型: {{ actualModelId }}
           </span>
         </div>
 
@@ -139,10 +143,14 @@
           class="permission-selector"
           :disabled="!enabled || isGenerating"
           placement="top-start"
-          :teleported="false"
+          :teleported="true"
+          popper-class="chat-input-select-dropdown"
           :popper-options="{
-            strategy: 'fixed',
             modifiers: [
+              {
+                name: 'preventOverflow',
+                options: { boundary: 'viewport' }
+              },
               {
                 name: 'flip',
                 options: {

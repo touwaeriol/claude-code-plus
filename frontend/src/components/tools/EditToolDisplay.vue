@@ -64,7 +64,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ideService } from '@/services/ideaBridge'
+import { ideService } from '@/services/ideService'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
 
 interface Props {
@@ -100,18 +100,28 @@ const resultMessage = computed(() => {
 })
 
 async function showDiff() {
-  // 调用 IDE 服务显示 diff
-  await ideService.showDiff(filePath.value, oldString.value, newString.value)
+  // 使用增强功能：从文件重建完整 Diff
+  await ideService.showDiff({
+    filePath: filePath.value,
+    oldContent: oldString.value,
+    newContent: newString.value,
+    rebuildFromFile: true,
+    edits: [{
+      oldString: oldString.value,
+      newString: newString.value,
+      replaceAll: false
+    }]
+  })
 }
 </script>
 
 <style scoped>
 .edit-tool {
-  border-color: #f9826c;
+  border-color: var(--ide-error, #f9826c);
 }
 
 .edit-tool .tool-name {
-  color: #d73a49;
+  color: var(--ide-error, #d73a49);
 }
 
 .edit-preview {
@@ -122,7 +132,7 @@ async function showDiff() {
 }
 
 .diff-section {
-  border: 1px solid #e1e4e8;
+  border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -131,17 +141,17 @@ async function showDiff() {
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 600;
-  border-bottom: 1px solid #e1e4e8;
+  border-bottom: 1px solid var(--ide-border, #e1e4e8);
 }
 
 .diff-header.old {
   background: #ffeef0;
-  color: #d73a49;
+  color: var(--ide-error, #d73a49);
 }
 
 .diff-header.new {
   background: #e6ffed;
-  color: #22863a;
+  color: var(--ide-success, #22863a);
 }
 
 .diff-content {
@@ -151,7 +161,8 @@ async function showDiff() {
   font-family: 'Consolas', 'Monaco', monospace;
   max-height: 200px;
   overflow: auto;
-  background: white;
+  background: var(--ide-background, white);
+  color: var(--ide-code-foreground, #24292e);
 }
 
 .diff-content.old {
@@ -167,7 +178,8 @@ async function showDiff() {
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  color: #586069;
+  color: var(--ide-foreground, #586069);
+  opacity: 0.7;
 }
 
 .replace-mode {
@@ -177,7 +189,7 @@ async function showDiff() {
 .badge {
   display: inline-block;
   padding: 4px 8px;
-  background: #0366d6;
+  background: var(--ide-accent, #0366d6);
   color: white;
   font-size: 11px;
   font-weight: 600;
@@ -194,16 +206,45 @@ async function showDiff() {
 
 .result-status.pending {
   background: #f1f8ff;
-  color: #0366d6;
+  color: var(--ide-accent, #0366d6);
 }
 
 .result-status.success {
   background: #e6ffed;
-  color: #22863a;
+  color: var(--ide-success, #22863a);
 }
 
 .result-status.error {
   background: #ffeef0;
-  color: #d73a49;
+  color: var(--ide-error, #d73a49);
+}
+
+/* 暗色主题适配 */
+.theme-dark .diff-header.old {
+  background: #3d1f1f;
+}
+
+.theme-dark .diff-header.new {
+  background: #1f3d1f;
+}
+
+.theme-dark .diff-content.old {
+  background: #3d1f1f;
+}
+
+.theme-dark .diff-content.new {
+  background: #1f3d1f;
+}
+
+.theme-dark .result-status.pending {
+  background: #1a2a3a;
+}
+
+.theme-dark .result-status.success {
+  background: #1f3d1f;
+}
+
+.theme-dark .result-status.error {
+  background: #3d1f1f;
 }
 </style>

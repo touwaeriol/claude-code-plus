@@ -1,0 +1,8 @@
+{
+  "sharedRules": [
+    {
+      "path": "CLAUDE.md",
+      "type": "manual"
+    }
+  ]
+}

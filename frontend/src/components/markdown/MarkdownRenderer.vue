@@ -7,7 +7,7 @@
 </template>
 
 <script setup lang="ts">
-import { _computed, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { markdownService } from '@/services/markdownService'
 import { highlightService } from '@/services/highlightService'
 import { ideService } from '@/services/ideaBridge'

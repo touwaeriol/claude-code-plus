@@ -77,7 +77,7 @@ import { themeService } from '@/services/themeService'
 
 const bridgeReady = ref(false)
 const isDark = ref(false)
-const showDebug = ref(true) // 可以改为 false 隐藏调试面板
+const showDebug = ref(false) // 默认隐藏调试面板,避免干扰界面
 const debugExpanded = ref(false)
 const currentMode = ref('unknown')
 const htmlClasses = ref('')
@@ -152,6 +152,27 @@ onMounted(async () => {
       console.error('❌ Failed to get project path:', error)
       projectPath.value = '获取失败'
     }
+
+    // 检查关键 DOM 元素的高度 (用于调试布局问题)
+    setTimeout(() => {
+      const app = document.getElementById('app')
+      const chatView = document.querySelector('.main-chat-view')
+      const modernChatView = document.querySelector('.modern-chat-view')
+      const messageList = document.querySelector('.message-list-wrapper')
+
+      console.log('📏 DOM 元素高度检查:')
+      console.log('  #app:', app?.offsetHeight || 0, 'px')
+      console.log('  .main-chat-view:', chatView?.offsetHeight || 0, 'px')
+      console.log('  .modern-chat-view:', modernChatView?.offsetHeight || 0, 'px')
+      console.log('  .message-list-wrapper:', messageList?.offsetHeight || 0, 'px')
+
+      if (!app || app.offsetHeight === 0) {
+        console.error('❌ #app 高度为 0 - 可能导致界面空白!')
+      }
+      if (!messageList || messageList.offsetHeight === 0) {
+        console.error('❌ .message-list-wrapper 高度为 0 - 消息列表不可见!')
+      }
+    }, 1000) // 延迟1秒检查,确保组件已挂载
   } catch (error) {
     console.error('❌ Failed to initialize:', error)
     themeServiceStatus.value = `错误: ${error}`
@@ -203,7 +224,8 @@ function toggleTheme() {
 .app {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 100vh; /* 使用 vh 确保有明确高度 */
+  min-height: 100vh; /* 防止塌陷 */
   background: var(--ide-background, #f5f5f5);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
@@ -217,6 +239,9 @@ function toggleTheme() {
 .main-chat-view {
   flex: 1;
   overflow: hidden;
+  min-height: 0; /* 允许内容滚动 */
+  display: flex; /* 确保是 flex 容器 */
+  flex-direction: column;
 }
 
 /* 调试面板 */

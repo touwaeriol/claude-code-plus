@@ -56,7 +56,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ideService } from '@/services/ideaBridge'
+import { ideService } from '@/services/ideService'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
 
 interface Props {
@@ -95,7 +95,12 @@ const resultText = computed(() => {
 
 async function openFile() {
   const line = offset.value || 1
-  await ideService.openFile(filePath.value, line)
+  // 使用增强功能：选择读取的内容
+  await ideService.openFile(filePath.value, {
+    line,
+    selectContent: true,
+    content: resultText.value
+  })
 }
 
 async function copyContent() {
@@ -107,9 +112,9 @@ async function copyContent() {
 
 <style scoped>
 .tool-display {
-  border: 1px solid #e1e4e8;
+  border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 6px;
-  background: #f6f8fa;
+  background: var(--ide-panel-background, #f6f8fa);
   margin: 8px 0;
 }
 
@@ -127,21 +132,22 @@ async function copyContent() {
 
 .tool-name {
   font-weight: 600;
-  color: #0366d6;
+  color: var(--ide-accent, #0366d6);
 }
 
 .tool-file {
   font-family: monospace;
-  color: #24292e;
+  color: var(--ide-foreground, #24292e);
 }
 
 .tool-lines {
-  color: #586069;
+  color: var(--ide-foreground, #586069);
+  opacity: 0.7;
   font-size: 12px;
 }
 
 .tool-content {
-  border-top: 1px solid #e1e4e8;
+  border-top: 1px solid var(--ide-border, #e1e4e8);
   padding: 12px;
 }
 
@@ -158,28 +164,30 @@ async function copyContent() {
 
 .info-row .label {
   font-weight: 600;
-  color: #586069;
+  color: var(--ide-foreground, #586069);
+  opacity: 0.7;
   min-width: 60px;
 }
 
 .info-row .value {
   font-family: monospace;
-  color: #24292e;
+  color: var(--ide-foreground, #24292e);
 }
 
 .clickable {
   cursor: pointer;
-  color: #0366d6;
+  color: var(--ide-link, #0366d6);
   text-decoration: underline;
 }
 
 .clickable:hover {
-  color: #0256c0;
+  color: var(--ide-link, #0256c0);
+  opacity: 0.8;
 }
 
 .tool-result {
-  background: #ffffff;
-  border: 1px solid #e1e4e8;
+  background: var(--ide-background, #ffffff);
+  border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -189,23 +197,25 @@ async function copyContent() {
   justify-content: space-between;
   align-items: center;
   padding: 6px 12px;
-  background: #f6f8fa;
-  border-bottom: 1px solid #e1e4e8;
+  background: var(--ide-panel-background, #f6f8fa);
+  border-bottom: 1px solid var(--ide-border, #e1e4e8);
   font-size: 12px;
   font-weight: 600;
+  color: var(--ide-foreground, #24292e);
 }
 
 .copy-btn {
   padding: 2px 8px;
   font-size: 11px;
-  border: 1px solid #e1e4e8;
+  border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 3px;
-  background: white;
+  background: var(--ide-background, white);
+  color: var(--ide-foreground, #24292e);
   cursor: pointer;
 }
 
 .copy-btn:hover {
-  background: #f6f8fa;
+  background: var(--ide-panel-background, #f6f8fa);
 }
 
 .result-content {
@@ -213,6 +223,7 @@ async function copyContent() {
   padding: 12px;
   font-size: 12px;
   font-family: 'Consolas', 'Monaco', monospace;
+  color: var(--ide-code-foreground, #24292e);
   overflow-x: auto;
   max-height: 400px;
   overflow-y: auto;
@@ -222,14 +233,15 @@ async function copyContent() {
   width: 100%;
   padding: 6px;
   border: none;
-  border-top: 1px solid #e1e4e8;
-  background: #fafbfc;
-  color: #586069;
+  border-top: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--ide-panel-background, #fafbfc);
+  color: var(--ide-foreground, #586069);
   font-size: 12px;
   cursor: pointer;
 }
 
 .expand-btn:hover {
-  background: #f6f8fa;
+  background: var(--ide-panel-background, #f6f8fa);
+  opacity: 0.9;
 }
 </style>

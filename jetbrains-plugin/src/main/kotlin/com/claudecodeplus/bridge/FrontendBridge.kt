@@ -418,6 +418,11 @@ class FrontendBridge(
 
     /**
      * 打开文件
+     *
+     * 增强功能：
+     * - 支持行号、列号定位
+     * - 支持内容选择（selectContent + content）
+     * - 支持选择范围（selectionStart + selectionEnd）
      */
     private fun handleOpenFile(request: FrontendRequest): FrontendResponse {
         val data = request.data?.let { json.decodeFromJsonElement<Map<String, JsonElement>>(it) }
@@ -425,6 +430,10 @@ class FrontendBridge(
         val filePath = data["filePath"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing filePath")
         val line = data["line"]?.toString()?.trim('"')?.toIntOrNull()
         val column = data["column"]?.toString()?.trim('"')?.toIntOrNull()
+        val selectContent = data["selectContent"]?.toString()?.trim('"')?.toBoolean() ?: false
+        val content = data["content"]?.toString()?.trim('"')
+        val selectionStart = data["selectionStart"]?.toString()?.trim('"')?.toIntOrNull()
+        val selectionEnd = data["selectionEnd"]?.toString()?.trim('"')?.toIntOrNull()
 
         return try {
             com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
@@ -436,23 +445,50 @@ class FrontendBridge(
                     val fileEditorManager = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project)
                     fileEditorManager.openFile(file, true)
 
-                    // 如果指定了行号，跳转到指定位�?
-                    if (line != null && line > 0) {
-                        val editor = fileEditorManager.selectedTextEditor
-                        if (editor != null) {
-                            val lineIndex = (line - 1).coerceAtLeast(0)
-                            val offset = editor.document.getLineStartOffset(lineIndex.coerceAtMost(editor.document.lineCount - 1))
-                            val targetOffset = if (column != null && column > 0) {
-                                offset + (column - 1)
-                            } else {
-                                offset
+                    val editor = fileEditorManager.selectedTextEditor
+                    if (editor != null) {
+                        when {
+                            // 优先级1：使用指定的选择范围
+                            selectionStart != null && selectionEnd != null -> {
+                                val start = selectionStart.coerceIn(0, editor.document.textLength)
+                                val end = selectionEnd.coerceIn(start, editor.document.textLength)
+                                editor.selectionModel.setSelection(start, end)
+                                editor.caretModel.moveToOffset(start)
+                                editor.scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                                logger.info("✅ Selected range [$start, $end] in $filePath")
                             }
-                            editor.caretModel.moveToOffset(targetOffset.coerceAtMost(editor.document.textLength))
-                            editor.scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                            // 优先级2：选择指定内容
+                            selectContent && content != null && content.isNotEmpty() -> {
+                                val text = editor.document.text
+                                val index = text.indexOf(content)
+                                if (index >= 0) {
+                                    val start = index
+                                    val end = index + content.length
+                                    editor.selectionModel.setSelection(start, end)
+                                    editor.caretModel.moveToOffset(start)
+                                    editor.scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                                    logger.info("✅ Selected content in $filePath")
+                                } else {
+                                    logger.warning("⚠️ Content not found in file: $filePath")
+                                }
+                            }
+                            // 优先级3：跳转到行号
+                            line != null && line > 0 -> {
+                                val lineIndex = (line - 1).coerceAtLeast(0)
+                                val offset = editor.document.getLineStartOffset(lineIndex.coerceAtMost(editor.document.lineCount - 1))
+                                val targetOffset = if (column != null && column > 0) {
+                                    offset + (column - 1)
+                                } else {
+                                    offset
+                                }
+                                editor.caretModel.moveToOffset(targetOffset.coerceAtMost(editor.document.textLength))
+                                editor.scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                                logger.info("✅ Navigated to line $line in $filePath")
+                            }
                         }
                     }
 
-                    logger.info("�?Opened file: $filePath at line $line")
+                    logger.info("✅ Opened file: $filePath")
                 } else {
                     logger.warning("⚠️ File not found: $filePath")
                 }
@@ -460,13 +496,18 @@ class FrontendBridge(
 
             FrontendResponse(success = true)
         } catch (e: Exception) {
-            logger.severe("�?Failed to open file: ${e.message}")
+            logger.severe("❌ Failed to open file: ${e.message}")
             FrontendResponse(false, error = e.message ?: "Failed to open file")
         }
     }
 
     /**
      * 显示文件差异对比
+     *
+     * 增强功能：
+     * - 支持完整文件 Diff（rebuildFromFile = true）
+     * - 支持多个编辑操作的重建（edits 数组）
+     * - 自动从当前文件重建修改前内容
      */
     private fun handleShowDiff(request: FrontendRequest): FrontendResponse {
         val data = request.data?.let { json.decodeFromJsonElement<Map<String, JsonElement>>(it) }
@@ -474,40 +515,129 @@ class FrontendBridge(
         val filePath = data["filePath"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing filePath")
         val oldContent = data["oldContent"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing oldContent")
         val newContent = data["newContent"]?.toString()?.trim('"') ?: return FrontendResponse(false, error = "Missing newContent")
-        val title = data["title"]?.toString()?.trim('"') ?: "文件差异对比"
+        val title = data["title"]?.toString()?.trim('"')
+        val rebuildFromFile = data["rebuildFromFile"]?.toString()?.trim('"')?.toBoolean() ?: false
+        val editsJson = data["edits"]
 
         return try {
             com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
                 val fileName = java.io.File(filePath).name
-
-                // 创建虚拟文件内容
                 val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
+
+                // 确定要显示的内容
+                val (finalOldContent, finalNewContent, finalTitle) = if (rebuildFromFile) {
+                    // 从文件重建完整 Diff（对齐 Compose UI 实现）
+                    val fileManager = com.intellij.openapi.vfs.VirtualFileManager.getInstance()
+                    val file = fileManager.findFileByUrl("file://$filePath")
+                        ?: com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByPath(filePath)
+                        ?: throw IllegalStateException("文件不存在: $filePath")
+
+                    // 刷新文件（确保读取最新内容）
+                    file.refresh(false, false)
+
+                    val currentContent = String(file.contentsToByteArray(), Charsets.UTF_8)
+
+                    // 解析编辑操作
+                    val edits = if (editsJson != null) {
+                        json.decodeFromJsonElement<List<EditOperation>>(editsJson)
+                    } else {
+                        listOf(EditOperation(oldContent, newContent, false))
+                    }
+
+                    // 重建修改前内容（失败时抛出异常）
+                    val rebuiltOldContent = rebuildBeforeContent(currentContent, edits)
+
+                    Triple(
+                        rebuiltOldContent,
+                        currentContent,
+                        title ?: "文件变更: $fileName (${edits.size} 处修改)"
+                    )
+                } else {
+                    Triple(oldContent, newContent, title ?: "文件差异对比: $fileName")
+                }
+
+                // 创建 Diff 内容
                 val leftContent = DiffContentFactory.getInstance()
-                    .create(project, oldContent, fileType)
+                    .create(project, finalOldContent, fileType)
 
                 val rightContent = DiffContentFactory.getInstance()
-                    .create(project, newContent, fileType)
+                    .create(project, finalNewContent, fileType)
 
                 // 创建 diff 请求
                 val diffRequest = SimpleDiffRequest(
-                    title,
+                    finalTitle,
                     leftContent,
                     rightContent,
-                    "ԭ����",
-                    "������"
+                    "$fileName (修改前)",
+                    "$fileName (修改后)"
                 )
 
-                // 显示 diff 对话�?
+                // 显示 diff 对话框
                 DiffManager.getInstance().showDiff(project, diffRequest)
 
-                logger.info("�?Showing diff for: $filePath")
+                logger.info("✅ Showing diff for: $filePath")
             }
 
             FrontendResponse(success = true)
         } catch (e: Exception) {
-            logger.severe("�?Failed to show diff: ${e.message}")
+            logger.severe("❌ Failed to show diff: ${e.message}")
             FrontendResponse(false, error = e.message ?: "Failed to show diff")
         }
+    }
+
+    /**
+     * 编辑操作数据类
+     */
+    @kotlinx.serialization.Serializable
+    private data class EditOperation(
+        val oldString: String,
+        val newString: String,
+        val replaceAll: Boolean
+    )
+
+    /**
+     * 从修改后的内容重建修改前的内容
+     *
+     * 通过反向应用所有编辑操作来重建原始内容
+     *
+     * @param afterContent 修改后的文件内容（当前文件内容）
+     * @param operations 编辑操作列表
+     * @return 重建的修改前内容
+     * @throws IllegalStateException 如果重建失败（newString 不在文件中）
+     */
+    private fun rebuildBeforeContent(afterContent: String, operations: List<EditOperation>): String {
+        var content = afterContent
+
+        // 反向应用所有操作（从后往前）
+        for (operation in operations.asReversed()) {
+            if (operation.replaceAll) {
+                // 全局替换：将所有 newString 替换回 oldString
+                if (!content.contains(operation.newString)) {
+                    throw IllegalStateException(
+                        "重建失败：文件中找不到 newString (replace_all)\n" +
+                        "期望找到: ${operation.newString.take(100)}..."
+                    )
+                }
+                content = content.replace(operation.newString, operation.oldString)
+            } else {
+                // 单次替换：只替换第一个匹配
+                val index = content.indexOf(operation.newString)
+                if (index < 0) {
+                    throw IllegalStateException(
+                        "重建失败：文件中找不到 newString\n" +
+                        "期望找到: ${operation.newString.take(100)}..."
+                    )
+                }
+                content = buildString {
+                    append(content.substring(0, index))
+                    append(operation.oldString)
+                    append(content.substring(index + operation.newString.length))
+                }
+            }
+        }
+
+        logger.info("✅ Successfully rebuilt before content (${operations.size} operations)")
+        return content
     }
 
     /**

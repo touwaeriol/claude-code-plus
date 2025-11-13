@@ -7,7 +7,7 @@
     <div class="chat-screen-content">
       <!-- 消息列表 -->
       <MessageList
-        :messages="uiState.messages"
+        :messages="messages"
         :is-loading="uiState.isLoadingHistory"
         :is-dark="isDark"
         class="message-list-area"
@@ -19,7 +19,7 @@
         :contexts="uiState.contexts"
         :is-generating="uiState.isGenerating"
         :enabled="true"
-        :actual-model-id="uiState.actualModelId"
+        :actual-model-id="sessionStore.currentModelId || undefined"
         :selected-permission="uiState.selectedPermissionMode"
         :skip-permissions="uiState.skipPermissions"
         :selected-model="uiState.selectedModel"
@@ -89,7 +89,7 @@
           项目路径: {{ projectPath }}
         </div>
         <div class="debug-item">
-          消息数: {{ uiState.messages.length }}
+          消息数: {{ messages.length }}
         </div>
         <div class="debug-item">
           生成中: {{ uiState.isGenerating ? '是' : '否' }}
@@ -106,10 +106,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useSessionStore } from '@/stores/sessionStore'
+import { claudeService } from '@/services/claudeService'
 import MessageList from './MessageList.vue'
 import ChatInput from './ChatInput.vue'
-import type { EnhancedMessage, ContextReference, AiModel, PermissionMode } from '@/types/enhancedMessage'
+import type { Message } from '@/types/message'
+import type { ContextReference, AiModel, PermissionMode } from '@/types/enhancedMessage'
 import type { PendingTask } from '@/types/pendingTask'
 
 // Props 定义
@@ -127,9 +130,11 @@ const props = withDefaults(defineProps<Props>(), {
   showDebug: false
 })
 
+// 使用 sessionStore
+const sessionStore = useSessionStore()
+
 // UI State 接口定义 (对应 ChatUiState)
 interface ChatUiState {
-  messages: EnhancedMessage[]
   contexts: ContextReference[]
   isGenerating: boolean
   isLoadingHistory: boolean
@@ -141,9 +146,8 @@ interface ChatUiState {
   skipPermissions: boolean
 }
 
-// 状态定义
+// 状态定义 (messages 从 sessionStore 获取)
 const uiState = ref<ChatUiState>({
-  messages: [],
   contexts: [],
   isGenerating: false,
   isLoadingHistory: false,
@@ -155,270 +159,131 @@ const uiState = ref<ChatUiState>({
   skipPermissions: false
 })
 
+// 从 sessionStore 获取真实消息
+const messages = computed<Message[]>(() => sessionStore.currentMessages)
+
 const pendingTasks = ref<PendingTask[]>([])
 const debugExpanded = ref(false)
 
-// ViewModel 引用 (模拟 ChatViewModel)
-let viewModel: any = null
-
 // 生命周期钩子
 onMounted(async () => {
-  console.log('🚀 ModernChatView mounted')
+  console.log('🚀 ModernChatView mounted (Live Mode)')
 
-  // 确保应用程序已初始化 (对应 ApplicationInitializer.initialize())
-  await initializeApplication()
+  try {
+    await sessionStore.loadSessions()
 
-  // 创建 ViewModel (对应 remember { ChatViewModel() })
-  viewModel = await createChatViewModel()
-
-  // 收集 UI 状态 (对应 viewModel.uiState.collectAsState())
-  subscribeToUiState()
-
-  // 收集待处理任务 (对应 viewModel.taskState.collectAsState())
-  subscribeToTaskState()
-
-  // 处理副作用 (对应 viewModel.effects.collect)
-  subscribeToEffects()
-
-  // 初始化会话 (对应 LaunchedEffect(sessionId, projectPath))
-  await initializeSession()
+    if (props.sessionId) {
+      console.log('📡 Switching to session:', props.sessionId)
+      await sessionStore.switchSession(props.sessionId)
+    } else if (!sessionStore.currentSessionId && sessionStore.sessions.length === 0) {
+      const newSession = await sessionStore.createSession()
+      if (!newSession) {
+        throw new Error('无法创建会话')
+      }
+    }
+  } catch (error) {
+    console.error('❌ Failed to initialize session:', error)
+    uiState.value.hasError = true
+    uiState.value.errorMessage = `初始化会话失败: ${error instanceof Error ? error.message : '未知错误'}`
+  }
 })
 
 onBeforeUnmount(() => {
-  // 清理 ViewModel (对应 DisposableEffect onDispose)
-  if (viewModel && typeof viewModel.onCleared === 'function') {
-    viewModel.onCleared()
+  console.log('🧹 ModernChatView unmounting')
+  // 清理工作由 sessionStore 和 claudeService 内部处理
+})
+
+// 监听外部传入的 sessionId 变化
+watch(() => props.sessionId, async (newSessionId) => {
+  if (!newSessionId) return
+  console.log('🔄 Session ID changed:', newSessionId)
+  try {
+    await sessionStore.switchSession(newSessionId)
+  } catch (error) {
+    console.error('❌ Failed to switch session:', error)
+    uiState.value.hasError = true
+    uiState.value.errorMessage = `切换会话失败: ${error instanceof Error ? error.message : '未知错误'}`
   }
 })
 
-// 监听 sessionId 和 projectPath 变化
-watch([() => props.sessionId, () => props.projectPath], async () => {
-  await initializeSession()
-})
-
 // ============================================
-// 初始化函数
-// ============================================
-
-async function initializeApplication() {
-  // 对应 ApplicationInitializer.initialize()
-  // 这里可以初始化全局服务、主题等
-  console.log('📦 Initializing application...')
-}
-
-async function createChatViewModel() {
-  // 对应 remember { ChatViewModel() }
-  // 这里应该创建实际的 ViewModel 或使用 Pinia store
-  console.log('🎨 Creating ChatViewModel...')
-
-  // 暂时返回一个 mock ViewModel
-  return {
-    handleEvent: (event: ChatUiEvent) => {
-      console.log('📨 Handling event:', event)
-      handleChatEvent(event)
-    },
-    onCleared: () => {
-      console.log('🧹 Cleaning up ViewModel')
-    }
-  }
-}
-
-function subscribeToUiState() {
-  // 对应 val uiState by viewModel.uiState.collectAsState()
-  // 这里应该订阅实际的 ViewModel 状态变化
-  console.log('👂 Subscribing to UI state')
-}
-
-function subscribeToTaskState() {
-  // 对应 val pendingTasks by viewModel.taskState.collectAsState()
-  console.log('👂 Subscribing to task state')
-}
-
-function subscribeToEffects() {
-  // 对应 LaunchedEffect(Unit) { viewModel.effects.collect { effect -> handleEffect(effect) } }
-  console.log('👂 Subscribing to effects')
-}
-
-async function initializeSession() {
-  // 对应 viewModel.handleEvent(ChatUiEvent.InitializeSession(sessionId, projectPath))
-  console.log('🔌 Initializing session:', props.sessionId, props.projectPath)
-
-  if (viewModel) {
-    viewModel.handleEvent({
-      type: 'InitializeSession',
-      sessionId: props.sessionId,
-      projectPath: props.projectPath
-    })
-  }
-}
-
-// ============================================
-// ChatUiEvent 类型定义和处理
-// ============================================
-
-interface ChatUiEvent {
-  type: string
-  [key: string]: any
-}
-
-function handleChatEvent(event: ChatUiEvent) {
-  switch (event.type) {
-    case 'InitializeSession':
-      // 初始化会话逻辑
-      break
-    case 'SendMessage':
-      // 发送消息逻辑
-      break
-    case 'InterruptAndSend':
-      // 打断并发送逻辑
-      break
-    case 'StopGeneration':
-      // 停止生成逻辑
-      break
-    case 'AddContext':
-      // 添加上下文逻辑
-      break
-    case 'RemoveContext':
-      // 移除上下文逻辑
-      break
-    case 'ChangeModel':
-      // 切换模型逻辑
-      break
-    case 'ChangePermissionMode':
-      // 切换权限模式逻辑
-      break
-    case 'ToggleSkipPermissions':
-      // 切换跳过权限逻辑
-      break
-    case 'ClearError':
-      // 清除错误逻辑
-      uiState.value.hasError = false
-      uiState.value.errorMessage = undefined
-      break
-    default:
-      console.warn('Unknown event type:', event.type)
-  }
-}
-
-// ============================================
-// 事件处理器 (对应 onEvent 回调)
+// 事件处理器
 // ============================================
 
 function handleSendMessage(text: string) {
-  // 对应 onEvent(ChatUiEvent.SendMessage(text))
-  if (viewModel) {
-    viewModel.handleEvent({
-      type: 'SendMessage',
-      text
-    })
+  console.log('📤 Sending message:', text)
+
+  try {
+    const sessionId = sessionStore.currentSessionId
+    if (!sessionId) {
+      console.error('❌ No active session')
+      uiState.value.hasError = true
+      uiState.value.errorMessage = '当前没有激活的会话'
+      return
+    }
+
+    uiState.value.isGenerating = true
+    claudeService.sendMessage(sessionId, text)
+  } catch (error) {
+    console.error('❌ Failed to send message:', error)
+    uiState.value.hasError = true
+    uiState.value.errorMessage = `发送消息失败: ${error instanceof Error ? error.message : '未知错误'}`
   }
 }
 
 function handleInterruptAndSend(text: string) {
-  // 对应 onEvent(ChatUiEvent.InterruptAndSend(text))
-  if (viewModel) {
-    viewModel.handleEvent({
-      type: 'InterruptAndSend',
-      text
-    })
-  }
+  console.log('⛔ Interrupt and send:', text)
+  // TODO: 实现打断并发送新消息的逻辑
+  // 先停止当前生成,然后发送新消息
+  handleStopGeneration()
+  handleSendMessage(text)
 }
 
 function handleStopGeneration() {
-  // 对应 onEvent(ChatUiEvent.StopGeneration)
-  if (viewModel) {
-    viewModel.handleEvent({
-      type: 'StopGeneration'
-    })
-  }
+  console.log('🛑 Stopping generation')
+  uiState.value.isGenerating = false
+  // TODO: 调用后端 API 停止生成
 }
 
 function handleAddContext(context: ContextReference) {
-  // 对应 onEvent(ChatUiEvent.AddContext(context))
-  if (viewModel) {
-    viewModel.handleEvent({
-      type: 'AddContext',
-      context
-    })
-  }
+  console.log('➕ Adding context:', context)
+  uiState.value.contexts.push(context)
 }
 
 function handleRemoveContext(context: ContextReference) {
-  // 对应 onEvent(ChatUiEvent.RemoveContext(context))
-  if (viewModel) {
-    viewModel.handleEvent({
-      type: 'RemoveContext',
-      context
-    })
+  console.log('➖ Removing context:', context)
+  const index = uiState.value.contexts.findIndex(c =>
+    c.type === context.type && c.path === context.path
+  )
+  if (index !== -1) {
+    uiState.value.contexts.splice(index, 1)
   }
 }
 
 function handleModelChange(model: AiModel) {
-  // 对应 onEvent(ChatUiEvent.ChangeModel(model))
-  if (viewModel) {
-    viewModel.handleEvent({
-      type: 'ChangeModel',
-      model
-    })
-  }
+  console.log('🤖 Changing model:', model)
+  uiState.value.selectedModel = model
+  // TODO: 通知后端切换模型
 }
 
 function handlePermissionModeChange(mode: PermissionMode) {
-  // 对应 onEvent(ChatUiEvent.ChangePermissionMode(mode))
-  if (viewModel) {
-    viewModel.handleEvent({
-      type: 'ChangePermissionMode',
-      mode
-    })
-  }
+  console.log('🔐 Changing permission mode:', mode)
+  uiState.value.selectedPermissionMode = mode
+  // TODO: 通知后端切换权限模式
 }
 
 function handleSkipPermissionsChange(skip: boolean) {
-  // 对应 onEvent(ChatUiEvent.ToggleSkipPermissions(skip))
-  if (viewModel) {
-    viewModel.handleEvent({
-      type: 'ToggleSkipPermissions',
-      skip
-    })
-  }
+  console.log('⏭️ Toggle skip permissions:', skip)
+  uiState.value.skipPermissions = skip
+  // TODO: 通知后端切换跳过权限设置
 }
 
 function handleClearError() {
-  // 对应 onEvent(ChatUiEvent.ClearError)
-  if (viewModel) {
-    viewModel.handleEvent({
-      type: 'ClearError'
-    })
-  }
+  console.log('✅ Clearing error')
+  uiState.value.hasError = false
+  uiState.value.errorMessage = undefined
 }
 
-// ============================================
-// 副作用处理 (对应 handleEffect)
-// ============================================
-
-interface ChatUiEffect {
-  type: string
-  [key: string]: any
-}
-
-function _handleEffect(effect: ChatUiEffect) {
-  switch (effect.type) {
-    case 'ScrollToBottom':
-      // 滚动到底部的逻辑已在MessageList中处理
-      break
-    case 'FocusInput':
-      // 输入框焦点的逻辑在ChatInput中处理
-      break
-    case 'ShowSnackbar':
-      console.log('提示:', effect.message)
-      break
-    case 'NavigateToSession':
-      console.log('导航到会话:', effect.sessionId)
-      break
-    default:
-      console.warn('Unknown effect type:', effect.type)
-  }
-}
 </script>
 
 <style scoped>
@@ -426,6 +291,7 @@ function _handleEffect(effect: ChatUiEffect) {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 100%; /* 防止塌陷 */
   background: var(--ide-background, #fafbfc);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
@@ -441,6 +307,8 @@ function _handleEffect(effect: ChatUiEffect) {
   flex-direction: column;
   height: 100%;
   width: 100%;
+  flex: 1; /* 确保占据剩余空间 */
+  min-height: 0; /* 允许内容滚动 */
 }
 
 /* 消息列表区域 (对应 Modifier.weight(1f)) */
@@ -448,6 +316,8 @@ function _handleEffect(effect: ChatUiEffect) {
   flex: 1;
   overflow: hidden;
   min-height: 0; /* 防止 flex 溢出 */
+  display: flex; /* 确保虚拟列表有容器 */
+  flex-direction: column;
 }
 
 /* 输入区域 (对应 Modifier.fillMaxWidth()) */

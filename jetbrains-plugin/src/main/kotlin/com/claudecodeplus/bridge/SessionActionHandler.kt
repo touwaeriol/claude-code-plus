@@ -67,7 +67,19 @@ class SessionActionHandler(
      * 获取会话列表
      */
     private fun handleListSessions(): FrontendResponse {
-        val sessionList = sessions.values.map { session ->
+        val sessionList = listSessions()
+        logger.info("📋 Listing ${sessionList.size} sessions")
+        return FrontendResponse(
+            success = true,
+            data = mapOf("sessions" to JsonArray(sessionList))
+        )
+    }
+
+    /**
+     * 获取会话列表（公开方法，供 RESTful API 调用）
+     */
+    fun listSessions(): List<JsonObject> {
+        return sessions.values.map { session ->
             buildJsonObject {
                 put("id", session.id)
                 put("name", session.name)
@@ -76,12 +88,6 @@ class SessionActionHandler(
                 put("messageCount", session.messageCount)
             }
         }.sortedByDescending { it["updatedAt"]?.jsonPrimitive?.long }
-
-        logger.info("📋 Listing ${sessionList.size} sessions")
-        return FrontendResponse(
-            success = true,
-            data = mapOf("sessions" to JsonArray(sessionList))
-        )
     }
 
     /**
@@ -91,9 +97,23 @@ class SessionActionHandler(
         val data = request.data?.let { json.decodeFromJsonElement<Map<String, JsonElement>>(it) }
         val name = data?.get("name")?.jsonPrimitive?.contentOrNull ?: "新会话 ${System.currentTimeMillis()}"
 
+        val session = createSession(name)
+
+        return FrontendResponse(
+            success = true,
+            data = mapOf("session" to session)
+        )
+    }
+
+    /**
+     * 创建新会话（公开方法，供 RESTful API 调用）
+     */
+    fun createSession(name: String? = null): JsonObject {
+        val sessionName = name ?: "新会话 ${System.currentTimeMillis()}"
+
         val newSession = SessionData(
             id = UUID.randomUUID().toString(),
-            name = name,
+            name = sessionName,
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis(),
             messageCount = 0
@@ -104,20 +124,15 @@ class SessionActionHandler(
         // 同步到 ClaudeActionHandler
         claudeHandler?.setCurrentSessionId(newSession.id)
 
-        logger.info("✅ Created new session: ${newSession.id} - $name")
+        logger.info("✅ Created new session: ${newSession.id} - $sessionName")
 
-        return FrontendResponse(
-            success = true,
-            data = mapOf(
-                "session" to buildJsonObject {
-                    put("id", newSession.id)
-                    put("name", newSession.name)
-                    put("createdAt", newSession.createdAt)
-                    put("updatedAt", newSession.updatedAt)
-                    put("messageCount", newSession.messageCount)
-                }
-            )
-        )
+        return buildJsonObject {
+            put("id", newSession.id)
+            put("name", newSession.name)
+            put("createdAt", newSession.createdAt)
+            put("updatedAt", newSession.updatedAt)
+            put("messageCount", newSession.messageCount)
+        }
     }
 
     /**
@@ -153,8 +168,20 @@ class SessionActionHandler(
         val sessionId = data["sessionId"]?.jsonPrimitive?.contentOrNull
             ?: return FrontendResponse(false, error = "Missing sessionId")
 
+        return try {
+            deleteSession(sessionId)
+            FrontendResponse(success = true)
+        } catch (e: IllegalArgumentException) {
+            FrontendResponse(false, error = e.message)
+        }
+    }
+
+    /**
+     * 删除会话（公开方法，供 RESTful API 调用）
+     */
+    fun deleteSession(sessionId: String) {
         if (!sessions.containsKey(sessionId)) {
-            return FrontendResponse(false, error = "Session not found: $sessionId")
+            throw IllegalArgumentException("Session not found: $sessionId")
         }
 
         sessions.remove(sessionId)
@@ -166,8 +193,6 @@ class SessionActionHandler(
         }
 
         logger.info("🗑️ Deleted session: $sessionId")
-
-        return FrontendResponse(success = true)
     }
 
     /**
@@ -182,8 +207,20 @@ class SessionActionHandler(
         val newName = data["name"]?.jsonPrimitive?.contentOrNull
             ?: return FrontendResponse(false, error = "Missing name")
 
+        return try {
+            renameSession(sessionId, newName)
+            FrontendResponse(success = true)
+        } catch (e: IllegalArgumentException) {
+            FrontendResponse(false, error = e.message)
+        }
+    }
+
+    /**
+     * 重命名会话（公开方法，供 RESTful API 调用）
+     */
+    fun renameSession(sessionId: String, newName: String) {
         val session = sessions[sessionId]
-            ?: return FrontendResponse(false, error = "Session not found: $sessionId")
+            ?: throw IllegalArgumentException("Session not found: $sessionId")
 
         sessions[sessionId] = session.copy(
             name = newName,
@@ -191,8 +228,6 @@ class SessionActionHandler(
         )
 
         logger.info("✏️ Renamed session $sessionId to: $newName")
-
-        return FrontendResponse(success = true)
     }
 
     /**
@@ -205,14 +240,23 @@ class SessionActionHandler(
         val sessionId = data["sessionId"]?.jsonPrimitive?.contentOrNull
             ?: return FrontendResponse(false, error = "Missing sessionId")
 
+        val messages = getHistory(sessionId)
+
+        return FrontendResponse(
+            success = true,
+            data = mapOf("messages" to JsonArray(messages))
+        )
+    }
+
+    /**
+     * 获取会话历史（公开方法，供 RESTful API 调用）
+     */
+    fun getHistory(sessionId: String): List<JsonObject> {
         // 检查缓存
         val cachedHistory = historyCache[sessionId]
         if (cachedHistory != null) {
             logger.info("📋 Returning cached history for session: $sessionId (${cachedHistory.size} messages)")
-            return FrontendResponse(
-                success = true,
-                data = mapOf("messages" to JsonArray(cachedHistory))
-            )
+            return cachedHistory
         }
 
         // TODO: 从实际存储加载历史
@@ -224,10 +268,7 @@ class SessionActionHandler(
 
         logger.info("📋 Loaded history for session: $sessionId (${messages.size} messages)")
 
-        return FrontendResponse(
-            success = true,
-            data = mapOf("messages" to JsonArray(messages))
-        )
+        return messages
     }
 
     /**
