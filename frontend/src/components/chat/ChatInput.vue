@@ -590,20 +590,56 @@ function removeContext(context: ContextReference) {
   emit('context-remove', context)
 }
 
-function handleAddContextClick() {
+async function handleAddContextClick() {
   showContextSelectorPopup.value = true
+  contextSearchQuery.value = ''
+
+  // 显示最近文件
+  try {
+    const recentFiles = await fileSearchService.getRecentFiles(10)
+    contextSearchResults.value = recentFiles
+  } catch (error) {
+    console.error('获取最近文件失败:', error)
+    contextSearchResults.value = []
+  }
 }
 
-function handleContextSearch() {
-  // TODO: 实现文件搜索逻辑
-  // 暂时返回空结果
-  contextSearchResults.value = []
+async function handleContextSearch() {
+  const query = contextSearchQuery.value.trim()
+
+  if (query.length === 0) {
+    // 空查询，显示最近文件
+    try {
+      const recentFiles = await fileSearchService.getRecentFiles(10)
+      contextSearchResults.value = recentFiles
+    } catch (error) {
+      console.error('获取最近文件失败:', error)
+      contextSearchResults.value = []
+    }
+  } else {
+    // 搜索文件
+    try {
+      const results = await fileSearchService.searchFiles(query, 10)
+      contextSearchResults.value = results
+    } catch (error) {
+      console.error('文件搜索失败:', error)
+      contextSearchResults.value = []
+    }
+  }
 }
 
-function handleContextSelect(_result: any) {
-  // TODO: 将搜索结果转换为 ContextReference
-  // emit('context-add', contextRef)
+function handleContextSelect(result: IndexedFileInfo) {
+  // 将文件转换为 ContextReference
+  const contextRef: ContextReference = {
+    type: 'file',
+    path: result.relativePath,
+    name: result.name
+  }
+
+  emit('context-add', contextRef)
   showContextSelectorPopup.value = false
+  contextSearchQuery.value = ''
+  contextSearchResults.value = []
 }
 
 function getContextDisplay(context: ContextReference): string {
