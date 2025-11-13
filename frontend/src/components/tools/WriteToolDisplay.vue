@@ -61,7 +61,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ideService } from '@/services/ideaBridge'
+import { ideService } from '@/services/ideService'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
 
 interface Props {
@@ -114,6 +114,7 @@ const resultMessage = computed(() => {
 })
 
 async function openFile() {
+  // 打开新创建的文件
   await ideService.openFile(filePath.value)
 }
 

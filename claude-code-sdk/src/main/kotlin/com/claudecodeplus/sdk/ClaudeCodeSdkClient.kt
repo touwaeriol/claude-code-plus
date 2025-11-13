@@ -179,13 +179,13 @@ class ClaudeCodeSdkClient(
     /**
      * Receive a single complete response (until ResultMessage).
      * This is the main method for receiving Claude's responses.
-     * 
+     *
      * The Flow will automatically complete after receiving a ResultMessage.
      */
     fun receiveResponse(): Flow<Message> {
         ensureConnected()
         logger.info("📬 开始接收Claude响应消息...")
-        
+
         return channelFlow {
             val job = launch {
                 controlProtocol!!.sdkMessages.collect { message ->
@@ -209,20 +209,33 @@ class ClaudeCodeSdkClient(
                             logger.info("📄 其他消息: ${message::class.simpleName}")
                         }
                     }
-                    
+
                     send(message)
-                    
+
                     if (message is ResultMessage) {
                         logger.info("🏁 收到ResultMessage，响应流结束")
                         close() // Close channel after ResultMessage, terminating the Flow
                     }
                 }
             }
-            awaitClose { 
+            awaitClose {
                 logger.info("🚪 响应流已关闭")
-                job.cancel() 
+                job.cancel()
             }
         }
+    }
+
+    /**
+     * 获取底层的持续消息流（不会在 ResultMessage 后结束）
+     *
+     * 这个流会持续推送所有来自 Claude 的消息，适用于需要持续监听的场景（如 WebSocket）。
+     * 与 receiveResponse() 不同，这个流不会自动结束。
+     *
+     * @return 持续的消息流
+     */
+    fun getAllMessages(): Flow<Message> {
+        ensureConnected()
+        return controlProtocol!!.sdkMessages
     }
     
     /**

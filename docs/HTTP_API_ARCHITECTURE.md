@@ -273,27 +273,53 @@ Content-Type: application/json
 }
 ```
 
-**ide.openFile** - 打开文件
+**ide.openFile** - 打开文件并跳转到指定位置
 ```json
 请求: {
   "action": "ide.openFile",
   "data": {
     "filePath": "/path/to/file.kt",
-    "line": 42,
-    "column": 10
+    "line": 42,          // 可选，行号（从1开始）
+    "column": 10         // 可选，列号（从1开始）
   }
 }
 响应: { "success": true }
 ```
 
-**ide.showDiff** - 显示差异对比
+**功能说明**：
+- 在 IntelliJ IDEA 中打开指定文件
+- 如果提供 `line` 参数，光标会跳转到指定行
+- 如果同时提供 `column` 参数，光标会精确定位到指定列
+- 自动滚动到光标位置（居中显示）
+- 用于工具点击功能（Read、Write 工具）
+
+**ide.showDiff** - 显示文件差异对比
 ```json
 请求: {
   "action": "ide.showDiff",
   "data": {
     "filePath": "/path/to/file.kt",
     "oldContent": "old text",
-    "newContent": "new text"
+    "newContent": "new text",
+    "title": "文件差异对比"  // 可选，对话框标题
+  }
+}
+响应: { "success": true }
+```
+
+**功能说明**：
+- 使用 IntelliJ 内置的 DiffManager 显示差异对比窗口
+- 支持语法高亮（根据文件扩展名自动识别）
+- 左侧显示原内容，右侧显示新内容
+- 用于工具点击功能（Edit、MultiEdit 工具）
+
+**ide.getProjectPath** - 获取项目路径
+```json
+请求: { "action": "ide.getProjectPath" }
+响应: {
+  "success": true,
+  "data": {
+    "projectPath": "/path/to/project"
   }
 }
 ```
@@ -548,5 +574,240 @@ if (!target.startsWith(frontendDir)) {
 
 ---
 
-**最后更新**: 2025-11-07
+## 🔧 工具点击功能
+
+### 概述
+
+工具点击功能允许用户点击工具调用结果中的文件路径，直接在 IDEA 中打开文件或查看差异对比。
+
+### 支持的工具
+
+| 工具 | 功能 | API 调用 |
+|------|------|---------|
+| **Read** | 打开文件并跳转到指定行 | `ide.openFile` |
+| **Edit** | 显示编辑前后的差异对比 | `ide.showDiff` |
+| **MultiEdit** | 批量显示多个文件的差异 | `ide.showDiff`（多次） |
+| **Write** | 打开新创建的文件 | `ide.openFile` |
+
+### 实现架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Vue 工具组件                              │
+│                                                              │
+│  ReadToolDisplay.vue                                        │
+│  ├─ <span @click="openFile">{{ filePath }}</span>          │
+│  └─ openFile() → ideService.openFile(path, line)           │
+│                                                              │
+│  EditToolDisplay.vue                                        │
+│  ├─ <span @click="showDiff">{{ filePath }}</span>          │
+│  └─ showDiff() → ideService.showDiff(path, old, new)       │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│              ideService.ts (前端服务)                        │
+│                                                              │
+│  async openFile(path, line, column) {                       │
+│    return apiClient.request('ide.openFile', {...})          │
+│  }                                                           │
+│                                                              │
+│  async showDiff(path, oldContent, newContent) {             │
+│    return apiClient.request('ide.showDiff', {...})          │
+│  }                                                           │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ▼ HTTP API / JCEF Bridge
+┌─────────────────────────────────────────────────────────────┐
+│              HttpApiServer.kt (后端)                         │
+│                                                              │
+│  handleIdeAction(request) {                                 │
+│    when (request.action) {                                  │
+│      "ide.openFile" → handleOpenFile()                      │
+│      "ide.showDiff" → handleShowDiff()                      │
+│    }                                                         │
+│  }                                                           │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│              IntelliJ Platform API                          │
+│                                                              │
+│  FileEditorManager.openFile(file)                           │
+│  CaretModel.moveToOffset(offset)                            │
+│  ScrollingModel.scrollToCaret()                             │
+│  DiffManager.showDiff(request)                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 详细实现
+
+#### 1. Read 工具 - 打开文件并跳转
+
+**前端组件** (`ReadToolDisplay.vue`):
+```vue
+<template>
+  <span class="value clickable" @click="openFile">{{ filePath }}</span>
+</template>
+
+<script setup lang="ts">
+import { ideService } from '@/services/ideService'
+
+async function openFile() {
+  const line = offset.value || 1  // 从工具参数获取行号
+  await ideService.openFile(filePath.value, line)
+}
+</script>
+```
+
+**后端处理** (`HttpApiServer.kt`):
+```kotlin
+private fun handleOpenFile(request: FrontendRequest): FrontendResponse {
+    val filePath = data["filePath"]?.toString()?.trim('"')
+    val line = data["line"]?.toString()?.trim('"')?.toIntOrNull()
+    val column = data["column"]?.toString()?.trim('"')?.toIntOrNull()
+
+    ApplicationManager.getApplication().invokeLater {
+        val file = LocalFileSystem.getInstance().findFileByPath(filePath)
+        if (file != null) {
+            val fileEditorManager = FileEditorManager.getInstance(project)
+            fileEditorManager.openFile(file, true)
+
+            // 跳转到指定行号
+            if (line != null && line > 0) {
+                val editor = fileEditorManager.selectedTextEditor
+                if (editor != null) {
+                    val lineIndex = (line - 1).coerceAtLeast(0)
+                    val offset = editor.document.getLineStartOffset(lineIndex)
+                    val targetOffset = if (column != null) {
+                        offset + (column - 1)
+                    } else {
+                        offset
+                    }
+                    editor.caretModel.moveToOffset(targetOffset)
+                    editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
+                }
+            }
+        }
+    }
+    return FrontendResponse(success = true)
+}
+```
+
+#### 2. Edit 工具 - 显示差异对比
+
+**前端组件** (`EditToolDisplay.vue`):
+```vue
+<template>
+  <span class="value clickable" @click="showDiff">{{ filePath }}</span>
+</template>
+
+<script setup lang="ts">
+import { ideService } from '@/services/ideService'
+
+async function showDiff() {
+  await ideService.showDiff(
+    filePath.value,
+    oldString.value,  // 编辑前内容
+    newString.value   // 编辑后内容
+  )
+}
+</script>
+```
+
+**后端处理** (`HttpApiServer.kt`):
+```kotlin
+private fun handleShowDiff(request: FrontendRequest): FrontendResponse {
+    val filePath = data["filePath"]?.toString()?.trim('"')
+    val oldContent = data["oldContent"]?.toString()?.trim('"')
+    val newContent = data["newContent"]?.toString()?.trim('"')
+    val title = data["title"]?.toString()?.trim('"') ?: "文件差异对比"
+
+    ApplicationManager.getApplication().invokeLater {
+        val fileName = File(filePath).name
+        val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
+
+        // 创建虚拟文件内容
+        val leftContent = DiffContentFactory.getInstance()
+            .create(project, oldContent, fileType)
+        val rightContent = DiffContentFactory.getInstance()
+            .create(project, newContent, fileType)
+
+        // 创建并显示 diff 请求
+        val diffRequest = SimpleDiffRequest(
+            title,
+            leftContent,
+            rightContent,
+            "原内容",
+            "新内容"
+        )
+        DiffManager.getInstance().showDiff(project, diffRequest)
+    }
+    return FrontendResponse(success = true)
+}
+```
+
+### 用户体验
+
+#### 视觉反馈
+
+**可点击样式**：
+```css
+.clickable {
+  cursor: pointer;
+  color: var(--ide-link, #0366d6);
+  text-decoration: underline;
+}
+
+.clickable:hover {
+  opacity: 0.8;
+}
+```
+
+#### 错误处理
+
+**文件不存在**：
+```kotlin
+if (file == null) {
+    logger.warning("⚠️ File not found: $filePath")
+    return FrontendResponse(false, error = "File not found: $filePath")
+}
+```
+
+**前端提示**：
+```typescript
+const response = await ideService.openFile(path, line)
+if (!response.success) {
+  console.error('Failed to open file:', response.error)
+  // 可选：显示通知
+}
+```
+
+### 性能优化
+
+1. **异步处理**：使用 `invokeLater` 避免阻塞 UI 线程
+2. **路径缓存**：避免重复解析文件路径
+3. **批量操作**：MultiEdit 工具支持批量显示差异
+
+### 测试建议
+
+#### 功能测试
+
+- [ ] Read 工具：点击文件路径，验证文件打开
+- [ ] Read 工具：验证光标跳转到正确行号
+- [ ] Edit 工具：点击文件路径，验证差异窗口显示
+- [ ] Edit 工具：验证语法高亮正确
+- [ ] MultiEdit 工具：验证批量差异显示
+- [ ] Write 工具：验证新文件打开
+
+#### 边界测试
+
+- [ ] 文件不存在时的错误处理
+- [ ] 行号超出范围时的处理
+- [ ] 特殊字符路径的处理
+- [ ] 大文件的性能表现
+
+---
+
+**最后更新**: 2025-11-13
 **作者**: Claude Code Plus Team

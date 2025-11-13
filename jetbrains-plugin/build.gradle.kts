@@ -68,11 +68,12 @@ dependencies {
     // 🔧 Kotlin serialization 运行时依赖
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${rootProject.extra["serializationVersion"]}")
 
-    // Ktor 服务器依赖 - 使用 3.0.3 版本（支持 SSE）
+    // Ktor 服务器依赖 - 使用 3.0.3 版本（支持 SSE 和 WebSocket）
     val ktorVersion = "3.0.3"
     implementation("io.ktor:ktor-server-core:$ktorVersion")
     implementation("io.ktor:ktor-server-cio:$ktorVersion")
     implementation("io.ktor:ktor-server-sse:$ktorVersion")
+    implementation("io.ktor:ktor-server-websockets:$ktorVersion")  // ✅ WebSocket 支持
     implementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
     implementation("io.ktor:ktor-server-cors:$ktorVersion")
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")

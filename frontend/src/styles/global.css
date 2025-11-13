@@ -17,6 +17,7 @@
   /* 状态颜色 */
   --ide-error: #d73a49;
   --ide-warning: #ffc107;
+  --ide-warning-background: #fff8dc;
   --ide-success: #28a745;
   --ide-info: #0366d6;
 
@@ -33,6 +34,10 @@
   --ide-button-background: #0366d6;
   --ide-button-foreground: #ffffff;
   --ide-button-hover-background: #0256c0;
+
+  /* 选择相关 */
+  --ide-selection-background: #e8f2ff;
+  --ide-selection-foreground: #24292e;
 }
 
 /* 暗色主题 */
@@ -50,6 +55,7 @@
   /* 状态颜色 */
   --ide-error: #f85149;
   --ide-warning: #ffc107;
+  --ide-warning-background: #3d3416;
   --ide-success: #56d364;
   --ide-info: #58a6ff;
 
@@ -66,6 +72,10 @@
   --ide-button-background: #238636;
   --ide-button-foreground: #ffffff;
   --ide-button-hover-background: #2ea043;
+
+  /* 选择相关 */
+  --ide-selection-background: #1a3a52;
+  --ide-selection-foreground: #e1e4e8;
 }
 
 /* 基础样式重置 */

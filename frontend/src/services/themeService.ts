@@ -128,6 +128,15 @@ export class ThemeService {
     root.style.setProperty('--ide-error', theme.errorColor)
     root.style.setProperty('--ide-warning', theme.warningColor)
     root.style.setProperty('--ide-success', theme.successColor)
+    root.style.setProperty('--ide-accent', theme.linkColor) // 使用 linkColor 作为 accent
+
+    // 代码相关颜色
+    root.style.setProperty('--ide-code-background', theme.panelBackground)
+    root.style.setProperty('--ide-code-foreground', theme.foreground)
+
+    // 警告背景色（根据主题动态计算）
+    const warningBg = theme.isDark ? '#3d3416' : '#fff8dc'
+    root.style.setProperty('--ide-warning-background', warningBg)
     root.style.setProperty('--ide-separator', theme.separatorColor)
     root.style.setProperty('--ide-hover-background', theme.hoverBackground)
     root.style.setProperty('--ide-accent', theme.accentColor)

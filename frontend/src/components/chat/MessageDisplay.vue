@@ -69,16 +69,21 @@ import ReadMcpResourceToolDisplay from '@/components/tools/ReadMcpResourceToolDi
 import ExitPlanModeToolDisplay from '@/components/tools/ExitPlanModeToolDisplay.vue'
 
 interface Props {
-  message: Message
+  // VirtualList 会把当前项作为 source 传入
+  source: Message
   isDark?: boolean
+  index?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
   isDark: false
 })
 
+// 为了模板可读性,提供一个 message 计算属性
+const message = computed(() => props.source)
+
 const roleIcon = computed(() => {
-  switch (props.message.role) {
+  switch (message.value.role) {
     case 'user': return '👤'
     case 'assistant': return '🤖'
     case 'system': return '⚙️'
@@ -87,7 +92,7 @@ const roleIcon = computed(() => {
 })
 
 const roleName = computed(() => {
-  switch (props.message.role) {
+  switch (message.value.role) {
     case 'user': return '你'
     case 'assistant': return 'Claude'
     case 'system': return '系统'
@@ -96,7 +101,7 @@ const roleName = computed(() => {
 })
 
 const formattedTime = computed(() => {
-  const date = new Date(props.message.timestamp)
+  const date = new Date(message.value.timestamp)
   return date.toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit'
@@ -104,16 +109,16 @@ const formattedTime = computed(() => {
 })
 
 const textContent = computed(() => {
-  const textBlocks = props.message.content.filter(block => block.type === 'text')
+  const textBlocks = message.value.content.filter(block => block.type === 'text')
   return textBlocks.map(block => (block as any).text).join('\n\n')
 })
 
 const toolUses = computed(() => {
-  return props.message.content.filter(block => block.type === 'tool_use') as ToolUseBlock[]
+  return message.value.content.filter(block => block.type === 'tool_use') as ToolUseBlock[]
 })
 
 const toolResults = computed(() => {
-  return props.message.content.filter(block => block.type === 'tool_result') as ToolResultBlock[]
+  return message.value.content.filter(block => block.type === 'tool_result') as ToolResultBlock[]
 })
 
 const orphanResults = computed(() => {
@@ -177,21 +182,27 @@ function formatResult(result: ToolResultBlock): string {
   padding: 16px;
   margin-bottom: 12px;
   border-radius: 8px;
-  border: 1px solid #e1e4e8;
-  background: #ffffff;
+  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--ide-background, #ffffff);
+  transition: box-shadow 0.2s;
+}
+
+.message:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .message-user {
-  background: #f6f8fa;
+  background: var(--ide-selection-background, #f6f8fa);
+  border-color: var(--ide-accent, #0366d6);
 }
 
 .message-assistant {
-  background: #ffffff;
+  background: var(--ide-background, #ffffff);
 }
 
 .message-system {
-  background: #fff8dc;
-  border-color: #ffc107;
+  background: var(--ide-warning-background, #fff8dc);
+  border-color: var(--ide-warning, #ffc107);
 }
 
 .message-header {
@@ -200,7 +211,7 @@ function formatResult(result: ToolResultBlock): string {
   gap: 8px;
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #e1e4e8;
+  border-bottom: 1px solid var(--ide-border, #e1e4e8);
 }
 
 .role-icon {
@@ -210,24 +221,25 @@ function formatResult(result: ToolResultBlock): string {
 .role-name {
   font-weight: 600;
   font-size: 14px;
-  color: #24292e;
+  color: var(--ide-foreground, #24292e);
 }
 
 .timestamp {
   margin-left: auto;
   font-size: 12px;
-  color: #586069;
+  color: var(--ide-foreground, #586069);
+  opacity: 0.7;
 }
 
 .message-content {
-  color: #24292e;
+  color: var(--ide-foreground, #24292e);
 }
 
 .tool-result-orphan {
   margin-top: 12px;
   padding: 12px;
-  background: #fff8dc;
-  border: 1px solid #ffc107;
+  background: var(--ide-warning-background, #fff8dc);
+  border: 1px solid var(--ide-warning, #ffc107);
   border-radius: 6px;
 }
 
@@ -237,7 +249,7 @@ function formatResult(result: ToolResultBlock): string {
   gap: 6px;
   margin-bottom: 8px;
   font-weight: 600;
-  color: #856404;
+  color: var(--ide-warning, #856404);
 }
 
 .result-icon {
@@ -252,11 +264,16 @@ function formatResult(result: ToolResultBlock): string {
 .result-content {
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
   font-size: 12px;
-  background: #ffffff;
+  background: var(--ide-code-background, #ffffff);
   padding: 8px;
   border-radius: 4px;
   overflow-x: auto;
   margin: 0;
-  color: #24292e;
+  color: var(--ide-code-foreground, #24292e);
+}
+
+/* 暗色主题适配 */
+.theme-dark .message:hover {
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.08);
 }
 </style>

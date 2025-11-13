@@ -120,7 +120,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ideService } from '@/services/ideaBridge'
+import { ideService } from '@/services/ideService'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
 
 interface EditOperation {
@@ -188,20 +188,19 @@ async function openFile() {
 }
 
 async function showAllDiffs() {
-  // 构建包含所有修改的完整 diff
-  // 这里我们简化处理:逐个应用修改后显示最终结果
-  // 实际实现可能需要后端支持生成完整 diff
-
-  // 简化版本:构建一个展示所有修改的文本
-  let oldContent = `文件: ${filePath.value}\n\n`
-  let newContent = `文件: ${filePath.value}\n\n`
-
-  edits.value.forEach((edit, index) => {
-    oldContent += `=== 修改 #${index + 1} ===\n${edit.old_string}\n\n`
-    newContent += `=== 修改 #${index + 1} ===\n${edit.new_string}\n\n`
+  // 使用增强功能：从文件重建完整 Diff，显示所有修改
+  await ideService.showDiff({
+    filePath: filePath.value,
+    oldContent: edits.value[0]?.old_string || '',
+    newContent: edits.value[0]?.new_string || '',
+    rebuildFromFile: true,
+    title: `文件变更: ${filePath.value} (${edits.value.length} 处修改)`,
+    edits: edits.value.map(edit => ({
+      oldString: edit.old_string,
+      newString: edit.new_string,
+      replaceAll: edit.replace_all || false
+    }))
   })
-
-  await ideService.showDiff(filePath.value, oldContent, newContent)
 }
 
 async function copyText(text: string) {

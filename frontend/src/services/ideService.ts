@@ -6,6 +6,46 @@
 import { apiClient } from './apiClient'
 import type { FrontendResponse, IdeTheme } from '@/types/bridge'
 
+/**
+ * 打开文件选项
+ */
+export interface OpenFileOptions {
+  /** 行号（1-based） */
+  line?: number
+  /** 列号（1-based） */
+  column?: number
+  /** 是否选择内容 */
+  selectContent?: boolean
+  /** 要选择的内容文本 */
+  content?: string
+  /** 选择范围起始位置（字符偏移量） */
+  selectionStart?: number
+  /** 选择范围结束位置（字符偏移量） */
+  selectionEnd?: number
+}
+
+/**
+ * 显示 Diff 选项
+ */
+export interface ShowDiffOptions {
+  /** 文件路径 */
+  filePath: string
+  /** 旧内容 */
+  oldContent: string
+  /** 新内容 */
+  newContent: string
+  /** Diff 标题 */
+  title?: string
+  /** 是否从文件重建完整 Diff */
+  rebuildFromFile?: boolean
+  /** 编辑操作列表（用于重建） */
+  edits?: Array<{
+    oldString: string
+    newString: string
+    replaceAll: boolean
+  }>
+}
+
 export class IdeService {
   /**
    * 获取 IDE 主题
@@ -16,16 +56,31 @@ export class IdeService {
 
   /**
    * 在 IDE 中打开文件
+   *
+   * @param filePath 文件路径
+   * @param options 打开选项
    */
-  async openFile(filePath: string, line?: number, column?: number): Promise<FrontendResponse> {
-    return apiClient.request('ide.openFile', { filePath, line, column })
+  async openFile(filePath: string, options?: OpenFileOptions): Promise<FrontendResponse> {
+    return apiClient.request('ide.openFile', {
+      filePath,
+      ...options
+    })
   }
 
   /**
    * 显示文件差异对比
+   *
+   * @param options Diff 选项
    */
-  async showDiff(filePath: string, oldContent: string, newContent: string): Promise<FrontendResponse> {
-    return apiClient.request('ide.showDiff', { filePath, oldContent, newContent })
+  async showDiff(options: ShowDiffOptions): Promise<FrontendResponse> {
+    return apiClient.request('ide.showDiff', options)
+  }
+
+  /**
+   * 显示文件差异对比（简化版本，向后兼容）
+   */
+  async showDiffSimple(filePath: string, oldContent: string, newContent: string): Promise<FrontendResponse> {
+    return this.showDiff({ filePath, oldContent, newContent })
   }
 
   /**
