@@ -42,24 +42,6 @@
         <span class="btn-text">添加上下文</span>
       </button>
 
-      <!-- 图片上传按钮 -->
-      <button
-        class="add-image-btn"
-        :disabled="!enabled"
-        title="上传图片"
-        @click="handleImageUploadClick"
-      >
-        <span class="btn-icon">📷</span>
-        <span class="btn-text">图片</span>
-      </button>
-      <input
-        ref="imageInputRef"
-        type="file"
-        accept="image/jpeg,image/jpg,image/png,image/gif,image/bmp,image/webp"
-        style="display: none"
-        @change="handleImageFileSelect"
-      >
-
       <!-- Context Tags (上下文标签) -->
       <div
         v-for="(context, index) in contexts"
@@ -271,13 +253,32 @@
           {{ formatTokenUsage(tokenUsage) }}
         </div>
 
+        <!-- 图片上传按钮 -->
+        <button
+          class="image-upload-btn"
+          :disabled="!enabled || isGenerating"
+          title="上传图片"
+          @click="handleImageUploadClick"
+        >
+          <span class="btn-icon">📷</span>
+        </button>
+        <input
+          ref="imageInputRef"
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/bmp,image/webp"
+          multiple
+          style="display: none"
+          @change="handleImageFileSelect"
+        >
+
         <!-- 发送/停止按钮 -->
         <button
           v-if="!isGenerating"
           class="send-btn"
           :disabled="!canSend"
-          title="发送消息 (Enter)"
+          title="发送消息 (Enter) | 右键查看更多选项"
           @click="handleSend"
+          @contextmenu="handleSendButtonContextMenu"
         >
           <span class="btn-icon">📤</span>
           <span class="btn-text">发送</span>
@@ -306,6 +307,40 @@
         </button>
       </div>
     </div>
+
+    <!-- Send Button Context Menu (发送按钮右键菜单) -->
+    <div
+      v-if="showSendContextMenu"
+      class="send-context-menu"
+      :style="{
+        left: sendContextMenuPosition.x + 'px',
+        top: sendContextMenuPosition.y + 'px'
+      }"
+      @click.stop
+    >
+      <div
+        class="context-menu-item"
+        @click="handleSendFromContextMenu"
+      >
+        <span class="menu-icon">📤</span>
+        <span class="menu-text">发送</span>
+      </div>
+      <div
+        v-if="isGenerating && hasInput"
+        class="context-menu-item"
+        @click="handleInterruptAndSendFromContextMenu"
+      >
+        <span class="menu-icon">⚡</span>
+        <span class="menu-text">打断并发送</span>
+      </div>
+    </div>
+
+    <!-- Context Menu Backdrop (点击外部关闭菜单) -->
+    <div
+      v-if="showSendContextMenu"
+      class="context-menu-backdrop"
+      @click="closeSendContextMenu"
+    />
 
     <!-- Context Selector Popup (上下文选择器弹窗) -->
     <div
@@ -456,6 +491,10 @@ const atSymbolSearchResults = ref<IndexedFileInfo[]>([])
 
 // Drag and Drop State
 const isDragging = ref(false)
+
+// Send Button Context Menu State
+const showSendContextMenu = ref(false)
+const sendContextMenuPosition = ref({ x: 0, y: 0 })
 
 // Local state for props
 const selectedModelValue = ref(props.selectedModel)
@@ -654,6 +693,30 @@ function handleInterruptAndSend() {
     inputText.value = ''
     adjustHeight()
   }
+}
+
+// 发送按钮右键菜单处理
+function handleSendButtonContextMenu(event: MouseEvent) {
+  event.preventDefault()
+  showSendContextMenu.value = true
+  sendContextMenuPosition.value = {
+    x: event.clientX,
+    y: event.clientY
+  }
+}
+
+function handleSendFromContextMenu() {
+  showSendContextMenu.value = false
+  handleSend()
+}
+
+function handleInterruptAndSendFromContextMenu() {
+  showSendContextMenu.value = false
+  handleInterruptAndSend()
+}
+
+function closeSendContextMenu() {
+  showSendContextMenu.value = false
 }
 
 function removeContext(context: ContextReference) {
@@ -1359,6 +1422,37 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
+/* 图片上传按钮 (底部工具栏) */
+.image-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--ide-accent, #0366d6);
+  opacity: 0.15;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.image-upload-btn:hover:not(:disabled) {
+  opacity: 0.25;
+  transform: scale(1.05);
+}
+
+.image-upload-btn:disabled {
+  opacity: 0.05;
+  cursor: not-allowed;
+}
+
+.image-upload-btn .btn-icon {
+  font-size: 18px;
+  color: var(--ide-accent, #0366d6);
+}
+
 .send-btn,
 .stop-btn,
 .interrupt-send-btn {
@@ -1506,6 +1600,54 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--ide-secondary-foreground, #6a737d);
   font-family: monospace;
+}
+
+/* Send Button Context Menu (发送按钮右键菜单) */
+.send-context-menu {
+  position: fixed;
+  background: var(--ide-background, #ffffff);
+  border: 1px solid var(--ide-border, #e1e4e8);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  min-width: 160px;
+  padding: 4px;
+  transform: translate(-50%, -100%);
+  margin-top: -8px;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 14px;
+}
+
+.context-menu-item:hover {
+  background: var(--ide-hover-background, #f6f8fa);
+}
+
+.menu-icon {
+  font-size: 16px;
+}
+
+.menu-text {
+  font-weight: 500;
+  color: var(--ide-foreground, #24292e);
+}
+
+.context-menu-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  background: transparent;
 }
 
 /* 暗色主题适配 */
