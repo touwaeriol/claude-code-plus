@@ -332,10 +332,11 @@
         >
         <div class="context-results">
           <div
-            v-for="result in contextSearchResults"
+            v-for="(result, index) in contextSearchResults"
             :key="result.path"
-            class="context-result-item"
+            :class="['context-result-item', { selected: index === contextSelectedIndex }]"
             @click="handleContextSelect(result)"
+            @mouseenter="contextSelectedIndex = index"
           >
             <span class="result-icon">📄</span>
             <span class="result-name">{{ result.name }}</span>
@@ -358,7 +359,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch, onMounted } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import type { ContextReference, AiModel, PermissionMode, EnhancedMessage, TokenUsage as EnhancedTokenUsage, ImageReference } from '@/types/enhancedMessage'
 import AtSymbolFilePopup from '@/components/input/AtSymbolFilePopup.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
@@ -446,6 +447,7 @@ const isFocused = ref(false)
 const showContextSelectorPopup = ref(false)
 const contextSearchQuery = ref('')
 const contextSearchResults = ref<any[]>([])
+const contextSelectedIndex = ref(0)
 
 // @ Symbol File Popup State
 const showAtSymbolPopup = ref(false)
@@ -661,6 +663,7 @@ function removeContext(context: ContextReference) {
 async function handleAddContextClick() {
   showContextSelectorPopup.value = true
   contextSearchQuery.value = ''
+  contextSelectedIndex.value = 0
 
   // 显示最近文件
   try {
@@ -694,6 +697,9 @@ async function handleContextSearch() {
       contextSearchResults.value = []
     }
   }
+
+  // 重置选中索引
+  contextSelectedIndex.value = 0
 }
 
 function handleContextSelect(result: IndexedFileInfo) {
@@ -708,6 +714,46 @@ function handleContextSelect(result: IndexedFileInfo) {
   showContextSelectorPopup.value = false
   contextSearchQuery.value = ''
   contextSearchResults.value = []
+  contextSelectedIndex.value = 0
+}
+
+/**
+ * 处理 Context Selector 弹窗的键盘事件
+ */
+function handleContextPopupKeyDown(event: KeyboardEvent) {
+  if (!showContextSelectorPopup.value || contextSearchResults.value.length === 0) {
+    return
+  }
+
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault()
+      contextSelectedIndex.value = Math.min(
+        contextSelectedIndex.value + 1,
+        contextSearchResults.value.length - 1
+      )
+      break
+    case 'ArrowUp':
+      event.preventDefault()
+      contextSelectedIndex.value = Math.max(contextSelectedIndex.value - 1, 0)
+      break
+    case 'Enter':
+      event.preventDefault()
+      if (
+        contextSelectedIndex.value >= 0 &&
+        contextSelectedIndex.value < contextSearchResults.value.length
+      ) {
+        handleContextSelect(contextSearchResults.value[contextSelectedIndex.value])
+      }
+      break
+    case 'Escape':
+      event.preventDefault()
+      showContextSelectorPopup.value = false
+      contextSearchQuery.value = ''
+      contextSearchResults.value = []
+      contextSelectedIndex.value = 0
+      break
+  }
 }
 
 /**
@@ -929,6 +975,17 @@ function handleAutoCleanupChange() {
   emit('auto-cleanup-change', autoCleanupContextsValue.value)
 }
 
+// Watch for popup visibility changes
+watch(() => showContextSelectorPopup.value, (newVisible) => {
+  if (newVisible) {
+    contextSelectedIndex.value = 0
+  }
+})
+
+watch(() => contextSearchResults.value, () => {
+  contextSelectedIndex.value = 0
+})
+
 // Lifecycle
 onMounted(() => {
   nextTick(() => {
@@ -936,6 +993,14 @@ onMounted(() => {
       focusInput()
     }, 200)
   })
+
+  // 添加 Context Selector 键盘事件监听
+  document.addEventListener('keydown', handleContextPopupKeyDown)
+})
+
+onUnmounted(() => {
+  // 移除 Context Selector 键盘事件监听
+  document.removeEventListener('keydown', handleContextPopupKeyDown)
 })
 </script>
 
@@ -1423,7 +1488,8 @@ onMounted(() => {
   transition: background 0.2s;
 }
 
-.context-result-item:hover {
+.context-result-item:hover,
+.context-result-item.selected {
   background: var(--ide-hover-background, #f6f8fa);
 }
 
