@@ -49,16 +49,31 @@ export default defineConfig({
   },
   server: {
     host: 'localhost',
-    port: 5173,
-    strictPort: true,
+    port: 5174,
+    strictPort: false,
     cors: true,
     hmr: {
       host: 'localhost',
-      port: 5173
+      port: 5174
+    },
+    proxy: {
+      '/ws': {
+        target: 'ws://127.0.0.1:60529',
+        ws: true,
+        changeOrigin: true
+      },
+      '/api': {
+        target: 'http://127.0.0.1:60529',
+        changeOrigin: true
+      },
+      '/events': {
+        target: 'http://127.0.0.1:60529',
+        changeOrigin: true
+      }
     }
   },
   build: {
-    outDir: '../jetbrains-plugin/src/main/resources/frontend',
+    outDir: 'dist',
     emptyOutDir: true,
     // 🔧 针对 JCEF 的兼容性配置
     target: 'es2020', // JCEF 的 Chromium 支持 ES2020
