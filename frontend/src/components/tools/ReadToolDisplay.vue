@@ -1,18 +1,11 @@
 <template>
-  <div class="tool-display read-tool">
-    <div class="tool-header">
-      <span class="tool-icon">📄</span>
-      <span class="tool-name">Read</span>
-      <span class="tool-file">{{ fileName }}</span>
-      <span
-        v-if="lineRange"
-        class="tool-lines"
-      >{{ lineRange }}</span>
-    </div>
-    <div
-      v-if="expanded"
-      class="tool-content"
-    >
+  <CompactToolCard
+    :display-info="displayInfo"
+    :is-expanded="expanded"
+    :has-details="true"
+    @click="handleCardClick"
+  >
+    <template #details>
       <div class="file-info">
         <div class="info-row">
           <span class="label">路径:</span>
@@ -42,22 +35,20 @@
             复制
           </button>
         </div>
-        <pre class="result-content">{{ resultText }}</pre>
+        <CodeSnippet :code="resultText" :language="language" />
       </div>
-    </div>
-    <button
-      class="expand-btn"
-      @click="expanded = !expanded"
-    >
-      {{ expanded ? '收起' : '展开' }}
-    </button>
-  </div>
+    </template>
+  </CompactToolCard>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ideService } from '@/services/ideService'
+import { ideService } from '@/services/ideaBridge'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
+import CompactToolCard from './CompactToolCard.vue'
+import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
+import { useEnvironment } from '@/composables/useEnvironment'
+import CodeSnippet from './CodeSnippet.vue'
 
 interface Props {
   toolUse: ToolUseBlock
@@ -65,9 +56,16 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+// 默认折叠，点击后展开查看详情
 const expanded = ref(false)
 
-const filePath = computed(() => props.toolUse.input.file_path || '')
+// 环境检测
+const { isInIde } = useEnvironment()
+
+// 提取显示信息
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolUse, props.result))
+
+const filePath = computed(() => props.toolUse.input.path || props.toolUse.input.file_path || '')
 const fileName = computed(() => {
   const path = filePath.value
   return path.split(/[\\/]/).pop() || path
@@ -76,9 +74,16 @@ const fileName = computed(() => {
 const offset = computed(() => props.toolUse.input.offset)
 const limit = computed(() => props.toolUse.input.limit)
 
-const hasLineRange = computed(() => offset.value !== undefined || limit.value !== undefined)
+const hasLineRange = computed(() => {
+  const viewRange = props.toolUse.input.view_range
+  return Array.isArray(viewRange) || offset.value !== undefined || limit.value !== undefined
+})
 
 const lineRange = computed(() => {
+  const viewRange = props.toolUse.input.view_range
+  if (Array.isArray(viewRange)) {
+    return `L${viewRange[0]}-${viewRange[1]}`
+  }
   if (!hasLineRange.value) return ''
   const start = offset.value || 1
   const end = limit.value ? start + limit.value - 1 : '∞'
@@ -87,17 +92,89 @@ const lineRange = computed(() => {
 
 const resultText = computed(() => {
   if (!props.result) return ''
-  if (typeof props.result.content === 'string') {
-    return props.result.content
+  const content = props.result.content
+
+  // 处理字符串
+  if (typeof content === 'string') {
+    return content
   }
-  return JSON.stringify(props.result.content, null, 2)
+
+  // 处理数组（ContentBlock[]）
+  if (Array.isArray(content)) {
+    return content
+      .filter((item: any) => item.type === 'text')
+      .map((item: any) => item.text)
+      .join('\n')
+  }
+
+  // 处理对象
+  return JSON.stringify(content, null, 2)
 })
 
+const language = computed(() => {
+  const path = filePath.value
+  const extension = path.split('.').pop()?.toLowerCase() || ''
+  const langMap: Record<string, string> = {
+    'js': 'javascript',
+    'ts': 'typescript',
+    'kt': 'kotlin',
+    'java': 'java',
+    'py': 'python',
+    'sh': 'shell',
+    'bash': 'shell',
+    'md': 'markdown',
+    'json': 'json',
+    'css': 'css',
+    'html': 'html',
+    'xml': 'xml'
+  }
+  return langMap[extension] || 'plaintext'
+})
+
+
+// 检查是否应该使用 IDE 集成（不展开，直接打开文件）
+function shouldUseIdeIntegration(): boolean {
+  return isInIde.value && displayInfo.value.status === 'success'
+}
+
+function handleCardClick() {
+  if (shouldUseIdeIntegration()) {
+    // IDE 操作：直接打开文件
+    openFile()
+  } else {
+    // 其他情况：切换展开状态
+    expanded.value = !expanded.value
+  }
+}
+
 async function openFile() {
-  const line = offset.value || 1
-  // 使用增强功能：选择读取的内容
+  const viewRange = props.toolUse.input.view_range
+  let startLine: number
+  let endLine: number | undefined
+
+  // 计算起始和结束行号
+  if (Array.isArray(viewRange) && viewRange.length >= 2) {
+    // 使用 view_range
+    startLine = viewRange[0]
+    endLine = viewRange[1]
+  } else if (offset.value !== undefined && limit.value !== undefined) {
+    // 使用 offset 和 limit 计算范围
+    startLine = offset.value
+    endLine = offset.value + limit.value - 1
+  } else if (offset.value !== undefined) {
+    // 只有 offset，没有 limit
+    startLine = offset.value
+    endLine = undefined
+  } else {
+    // 默认从第一行开始
+    startLine = 1
+    endLine = undefined
+  }
+
+  // 打开文件并选中行范围
   await ideService.openFile(filePath.value, {
-    line,
+    line: startLine,
+    endLine: endLine,
     selectContent: true,
     content: resultText.value
   })
