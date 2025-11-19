@@ -158,5 +158,96 @@ class IdeaBridgeService {
   }
 }
 
-// 导出单例
-export const ideaBridge = new IdeaBridgeService()
+// 延迟初始化单例
+let _ideaBridge: IdeaBridgeService | null = null
+
+function getIdeaBridge(): IdeaBridgeService {
+  if (!_ideaBridge && typeof window !== 'undefined') {
+    _ideaBridge = new IdeaBridgeService()
+  }
+  // 在构建时返回一个空对象，避免访问 window
+  return _ideaBridge || ({} as IdeaBridgeService)
+}
+
+// 导出单例访问器对象
+export const ideaBridge = {
+  query: (action: string, data?: any) => getIdeaBridge().query(action, data),
+  getServerUrl: () => getIdeaBridge().getServerUrl(),
+  getMode: () => getIdeaBridge().getMode(),
+  isInIde: () => getIdeaBridge().isInIde(),
+  isInBrowser: () => getIdeaBridge().isInBrowser(),
+  checkReady: () => getIdeaBridge().checkReady(),
+  getServerPort: () => getIdeaBridge().getServerPort(),
+  on: (eventType: string, handler: EventHandler) => getIdeaBridge().on(eventType, handler),
+  off: (eventType: string, handler: EventHandler) => getIdeaBridge().off(eventType, handler),
+  waitForReady: () => getIdeaBridge().waitForReady()
+}
+
+// ��� API - ʹ����������
+export async function getTheme() {
+  return getIdeaBridge().query('ide.getTheme')
+}
+
+export async function openFile(filePath: string, options?: OpenFileOptions) {
+  return getIdeaBridge().query('ide.openFile', { filePath, ...options })
+}
+
+export async function showDiff(options: ShowDiffOptions) {
+  return getIdeaBridge().query('ide.showDiff', options)
+}
+
+export async function searchFiles(query: string, maxResults?: number) {
+  return getIdeaBridge().query('ide.searchFiles', { query, maxResults: maxResults || 20 })
+}
+
+export async function getFileContent(filePath: string, lineStart?: number, lineEnd?: number) {
+  return getIdeaBridge().query('ide.getFileContent', { filePath, lineStart, lineEnd })
+}
+
+export function onThemeChange(handler: EventHandler) {
+  getIdeaBridge().on('ide.themeChanged', handler)
+}
+
+// Ϊ�������ݣ�Ҳ����������ʽ
+export const ideService = {
+  getTheme,
+  openFile,
+  showDiff,
+  searchFiles,
+  getFileContent,
+  onThemeChange
+}
+
+export const claudeService = {
+  async connect(options?: any) {
+    return ideaBridge.query('claude.connect', options)
+  },
+
+  async query(message: string) {
+    return ideaBridge.query('claude.query', { message })
+  },
+
+  async interrupt() {
+    return ideaBridge.query('claude.interrupt')
+  },
+
+  async disconnect() {
+    return ideaBridge.query('claude.disconnect')
+  },
+
+  onMessage(handler: EventHandler) {
+    ideaBridge.on('claude.message', handler)
+  },
+
+  onConnected(handler: EventHandler) {
+    ideaBridge.on('claude.connected', handler)
+  },
+
+  onDisconnected(handler: EventHandler) {
+    ideaBridge.on('claude.disconnected', handler)
+  },
+
+  onError(handler: (error: string) => void) {
+    ideaBridge.on('claude.error', (data) => handler(data.error))
+  }
+}
