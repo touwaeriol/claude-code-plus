@@ -1,71 +1,42 @@
 <template>
-  <div class="tool-display edit-tool">
-    <div class="tool-header">
-      <span class="tool-icon">✏️</span>
-      <span class="tool-name">Edit</span>
-      <span class="tool-file">{{ fileName }}</span>
-    </div>
-    <div
-      v-if="expanded"
-      class="tool-content"
-    >
-      <div class="file-info">
-        <div class="info-row">
-          <span class="label">文件:</span>
-          <span
-            class="value clickable"
-            @click="showDiff"
-          >{{ filePath }}</span>
-        </div>
-      </div>
-      <div class="edit-preview">
-        <div class="diff-section">
-          <div class="diff-header old">
-            替换内容 (旧)
+  <CompactToolCard
+    :display-info="displayInfo"
+    :is-expanded="expanded"
+    :has-details="true"
+    @click="handleCardClick"
+  >
+    <template #details>
+      <div class="edit-tool-details">
+        <div class="file-info">
+          <div class="info-row">
+            <span class="label">文件:</span>
+            <span class="value clickable" @click="showDiff">{{ filePath }}</span>
           </div>
-          <pre class="diff-content old">{{ oldString }}</pre>
         </div>
-        <div class="diff-arrow">
-          →
+
+        <DiffViewer :old-content="oldString" :new-content="newString" />
+
+        <div v-if="replaceAll" class="replace-mode">
+          <span class="badge">全部替换</span>
         </div>
-        <div class="diff-section">
-          <div class="diff-header new">
-            新内容
+
+        <div v-if="result" class="tool-result">
+          <div class="result-status" :class="resultStatus">
+            {{ resultMessage }}
           </div>
-          <pre class="diff-content new">{{ newString }}</pre>
         </div>
       </div>
-      <div
-        v-if="replaceAll"
-        class="replace-mode"
-      >
-        <span class="badge">全部替换</span>
-      </div>
-      <div
-        v-if="result"
-        class="tool-result"
-      >
-        <div
-          class="result-status"
-          :class="resultStatus"
-        >
-          {{ resultMessage }}
-        </div>
-      </div>
-    </div>
-    <button
-      class="expand-btn"
-      @click="expanded = !expanded"
-    >
-      {{ expanded ? '收起' : '展开' }}
-    </button>
-  </div>
+    </template>
+  </CompactToolCard>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ideService } from '@/services/ideService'
+import { ideService } from '@/services/ideaBridge'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
+import CompactToolCard from './CompactToolCard.vue'
+import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
+import { useEnvironment } from '@/composables/useEnvironment'
 
 interface Props {
   toolUse: ToolUseBlock
@@ -73,7 +44,31 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+// 默认折叠，点击后展开查看详情
 const expanded = ref(false)
+
+import DiffViewer from './DiffViewer.vue'
+// 环境检测
+const { isInIde } = useEnvironment()
+
+// 提取工具显示信息
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolUse, props.result))
+
+// 判断是否应该使用 IDE 集成
+function shouldUseIdeIntegration(): boolean {
+  return isInIde.value && displayInfo.value.status === 'success'
+}
+
+// 处理卡片点击
+function handleCardClick() {
+  if (shouldUseIdeIntegration()) {
+    // IDE 操作：直接打开文件
+    showDiff()
+  } else {
+    // 其他情况：切换展开状态
+    expanded.value = !expanded.value
+  }
+}
 
 const filePath = computed(() => props.toolUse.input.file_path || '')
 const fileName = computed(() => {
@@ -88,7 +83,19 @@ const replaceAll = computed(() => props.toolUse.input.replace_all || false)
 const resultStatus = computed(() => {
   if (!props.result) return 'pending'
   // 简单判断:如果 content 包含 "success" 或没有 "error"
-  const content = JSON.stringify(props.result.content).toLowerCase()
+  // 将 content 转换为字符串
+  let contentStr = ''
+  if (typeof props.result.content === 'string') {
+    contentStr = props.result.content
+  } else if (Array.isArray(props.result.content)) {
+    contentStr = props.result.content
+      .filter((item: any) => item.type === 'text')
+      .map((item: any) => item.text)
+      .join('\n')
+  } else {
+    contentStr = JSON.stringify(props.result.content)
+  }
+  const content = contentStr.toLowerCase()
   if (content.includes('error') || content.includes('failed')) return 'error'
   return 'success'
 })

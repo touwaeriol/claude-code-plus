@@ -152,6 +152,115 @@ class HttpApiServer(
 
                 // RESTful API 路由
                 route("/api") {
+                    // 通用 RPC 端点（用于前端测试连接和通用调用）
+                    post("/") {
+                        try {
+                            val requestBody = call.receiveText()
+                            logger.info("📥 Received request: $requestBody")
+
+                            // 简单解析 JSON (避免序列化问题)
+                            val actionMatch = """"action"\s*:\s*"([^"]+)"""".toRegex().find(requestBody)
+                            val action = actionMatch?.groupValues?.get(1) ?: ""
+
+                            when (action) {
+                                "test.ping" -> {
+                                    call.respondText("""{"success":true,"message":"pong"}""", ContentType.Application.Json)
+                                }
+                                "ide.getTheme" -> {
+                                    // 返回默认主题配置
+                                    call.respondText(
+                                        """{"success":true,"data":{"isDark":false,"background":"#ffffff","foreground":"#24292e","panelBackground":"#f6f8fa"}}""",
+                                        ContentType.Application.Json
+                                    )
+                                }
+                                "ide.getProjectPath" -> {
+                                    // 返回项目路径
+                                    val projectPath = System.getProperty("user.dir")
+                                    call.respondText(
+                                        """{"success":true,"data":"${projectPath.replace("\\", "\\\\")}"}""",
+                                        ContentType.Application.Json
+                                    )
+                                }
+                                "ide.openFile" -> {
+                                    // 解析请求数据
+                                    val request = json.decodeFromString<FrontendRequest>(requestBody)
+                                    val response = ideActionBridge.openFile(request)
+                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
+                                }
+                                "ide.showDiff" -> {
+                                    // 解析请求数据
+                                    val request = json.decodeFromString<FrontendRequest>(requestBody)
+                                    val response = ideActionBridge.showDiff(request)
+                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
+                                }
+                                "ide.searchFiles" -> {
+                                    // 解析请求数据
+                                    val dataMatch = """"data"\s*:\s*\{([^}]+)\}""".toRegex().find(requestBody)
+                                    val queryMatch = """"query"\s*:\s*"([^"]+)"""".toRegex().find(dataMatch?.value ?: "")
+                                    val maxResultsMatch = """"maxResults"\s*:\s*(\d+)""".toRegex().find(dataMatch?.value ?: "")
+
+                                    val query = queryMatch?.groupValues?.get(1) ?: ""
+                                    val maxResults = maxResultsMatch?.groupValues?.get(1)?.toIntOrNull() ?: 20
+
+                                    val results = ideActionBridge.searchFiles(query, maxResults)
+                                    call.respondText(
+                                        """{"success":true,"data":${json.encodeToString(results)}}""",
+                                        ContentType.Application.Json
+                                    )
+                                }
+                                "ide.getFileContent" -> {
+                                    // 解析请求数据
+                                    val dataMatch = """"data"\s*:\s*\{([^}]+)\}""".toRegex().find(requestBody)
+                                    val filePathMatch = """"filePath"\s*:\s*"([^"]+)"""".toRegex().find(dataMatch?.value ?: "")
+                                    val lineStartMatch = """"lineStart"\s*:\s*(\d+)""".toRegex().find(dataMatch?.value ?: "")
+                                    val lineEndMatch = """"lineEnd"\s*:\s*(\d+)""".toRegex().find(dataMatch?.value ?: "")
+
+                                    val filePath = filePathMatch?.groupValues?.get(1) ?: ""
+                                    val lineStart = lineStartMatch?.groupValues?.get(1)?.toIntOrNull()
+                                    val lineEnd = lineEndMatch?.groupValues?.get(1)?.toIntOrNull()
+
+                                    // 读取文件内容
+                                    val file = java.io.File(filePath)
+                                    if (!file.exists()) {
+                                        call.respondText(
+                                            """{"success":false,"error":"File not found: $filePath"}""",
+                                            ContentType.Application.Json,
+                                            HttpStatusCode.NotFound
+                                        )
+                                    } else {
+                                        val lines = file.readLines()
+                                        val content = if (lineStart != null && lineEnd != null) {
+                                            lines.subList(
+                                                (lineStart - 1).coerceAtLeast(0),
+                                                lineEnd.coerceAtMost(lines.size)
+                                            ).joinToString("\n")
+                                        } else {
+                                            lines.joinToString("\n")
+                                        }
+                                        call.respondText(
+                                            """{"success":true,"data":"${content.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}"}""",
+                                            ContentType.Application.Json
+                                        )
+                                    }
+                                }
+                                else -> {
+                                    call.respondText(
+                                        """{"success":false,"error":"Unknown action: $action"}""",
+                                        ContentType.Application.Json,
+                                        HttpStatusCode.BadRequest
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {
+                            logger.severe("❌ RPC call failed: ${e.message}")
+                            e.printStackTrace()
+                            call.respondText(
+                                """{"success":false,"error":"${e.message?.replace("\"", "\\\"") ?: "Unknown error"}"}""",
+                                ContentType.Application.Json,
+                                HttpStatusCode.InternalServerError
+                            )
+                        }
+                    }
 
                     // 文件搜索 API
                     route("/files") {
@@ -343,10 +452,44 @@ class HttpApiServer(
                     call.respondText("""{"status":"ok","port":$serverPort}""", ContentType.Application.Json)
                 }
 
-                // 静态资源 - 放在最后以避免拦截 API 请求
-                staticFiles("/", frontendDir.toFile()) {
-                    default("index.html")
+                // 动态处理 index.html，根据 URL 参数注入环境变量
+                get("/") {
+                    val indexFile = frontendDir.resolve("index.html").toFile()
+                    if (indexFile.exists()) {
+                        var html = indexFile.readText()
+
+                        // 检查是否来自 IDEA 插件（通过 URL 参数 ?ide=true）
+                        val isIdeMode = call.request.queryParameters["ide"] == "true"
+
+                        if (isIdeMode) {
+                            // IDEA 插件模式：注入 window.__serverUrl
+                            val injection = """
+                                <script>
+                                    window.__serverUrl = 'http://localhost:$serverPort';
+                                    console.log('✅ Environment: IDEA Plugin Mode');
+                                    console.log('🔗 Server URL:', window.__serverUrl);
+                                </script>
+                            """.trimIndent()
+                            html = html.replace("</head>", "$injection\n</head>")
+                        } else {
+                            // 浏览器模式：不注入（前端会使用默认值）
+                            val injection = """
+                                <script>
+                                    console.log('✅ Environment: Browser Mode');
+                                    console.log('🔗 Using default server URL');
+                                </script>
+                            """.trimIndent()
+                            html = html.replace("</head>", "$injection\n</head>")
+                        }
+
+                        call.respondText(html, ContentType.Text.Html)
+                    } else {
+                        call.respondText("index.html not found", ContentType.Text.Plain, HttpStatusCode.NotFound)
+                    }
                 }
+
+                // 静态资源 - 放在最后以避免拦截 API 请求
+                staticFiles("/", frontendDir.toFile())
             }
         }.start(wait = false)
 

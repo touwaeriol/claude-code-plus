@@ -120,7 +120,8 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ideService } from '@/services/ideService'
+import { ideService } from '@/services/ideaBridge'
+import { useEnvironment } from '@/composables/useEnvironment'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
 
 interface EditOperation {
@@ -154,7 +155,19 @@ const allExpanded = computed(() => {
 
 const resultStatus = computed(() => {
   if (!props.result) return 'pending'
-  const content = JSON.stringify(props.result.content).toLowerCase()
+  // 将 content 转换为字符串
+  let contentStr = ''
+  if (typeof props.result.content === 'string') {
+    contentStr = props.result.content
+  } else if (Array.isArray(props.result.content)) {
+    contentStr = props.result.content
+      .filter((item: any) => item.type === 'text')
+      .map((item: any) => item.text)
+      .join('\n')
+  } else {
+    contentStr = JSON.stringify(props.result.content)
+  }
+  const content = contentStr.toLowerCase()
   if (content.includes('error') || content.includes('failed')) return 'error'
   return 'success'
 })

@@ -1,6 +1,6 @@
 package com.claudecodeplus.toolwindow
 
-import com.claudecodeplus.bridge.FrontendBridge
+
 import com.claudecodeplus.server.HttpServerProjectService
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -66,7 +66,7 @@ class VueToolWindowFactory : ToolWindowFactory, DumbAware {
             // 创建 JCEF 浏览器
             val browser = JBCefBrowser()
             logger.info("✅ JCEF browser created")
-            
+
             // 🔧 启用开发者工具
             browser.jbCefClient.setProperty("dev.tools", true)
             logger.info("🔧 JCEF developer tools enabled")
@@ -91,30 +91,20 @@ class VueToolWindowFactory : ToolWindowFactory, DumbAware {
                 }
             }, browser.cefBrowser)
 
-            // 创建协程作用域
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-            // 创建 FrontendBridge 用于 JCEF 通信
-            val frontendBridge = FrontendBridge(project, browser, scope)
-            logger.info("✅ FrontendBridge created")
-
             // 添加页面加载监听器
             browser.jbCefClient.addLoadHandler(object : CefLoadHandlerAdapter() {
                 override fun onLoadEnd(cefBrowser: CefBrowser?, frame: CefFrame?, httpStatusCode: Int) {
                     if (frame?.isMain == true) {
                         logger.info("✅ Page loaded with status: $httpStatusCode")
-                        logger.info("📄 Page URL: ${frame.url}")
-
-                        // 注入 JCEF Bridge（页面加载完成后立即注入）
-                        frontendBridge.injectBridgeScript()
+                        logger.info("✅ JCEF communication is now handled by the HTTP/WebSocket server.")
                         logger.info("✅ JCEF Bridge injected")
 
-                        // 注入调试脚本
+                        // 注入调试脚本（环境变量已在 HTML 中注入）
                         val debugScript = """
                             (function() {
                                 console.log('🔧 Debug script injected');
-                                console.log('🌐 Server URL: $serverUrl');
-                                console.log('🔌 Bridge Mode: JCEF (via FrontendBridge)');
+                                console.log('🌐 Server URL:', window.__serverUrl || 'Not injected');
+                                console.log('🔌 Running in IDEA Plugin Mode');
 
                                 // 捕获所有未处理的错误
                                 window.addEventListener('error', function(e) {
@@ -148,26 +138,117 @@ class VueToolWindowFactory : ToolWindowFactory, DumbAware {
                 }
             }, browser.cefBrowser)
 
-            // 添加右键菜单：打开开发者工具
+            // 🔧 使用 CefContextMenuHandler 禁用默认右键菜单并显示自定义菜单
+            browser.jbCefClient.addContextMenuHandler(object : org.cef.handler.CefContextMenuHandlerAdapter() {
+                override fun onBeforeContextMenu(
+                    cefBrowser: CefBrowser?,
+                    frame: CefFrame?,
+                    params: org.cef.callback.CefContextMenuParams?,
+                    model: org.cef.callback.CefMenuModel?
+                ) {
+                    // 清空默认菜单项
+                    model?.clear()
+                    logger.info("🔧 Default context menu cleared")
+                }
+
+                override fun onContextMenuCommand(
+                    cefBrowser: CefBrowser?,
+                    frame: CefFrame?,
+                    params: org.cef.callback.CefContextMenuParams?,
+                    commandId: Int,
+                    eventFlags: Int
+                ): Boolean {
+                    // 返回 true 表示已处理，不显示默认菜单
+                    return true
+                }
+
+                override fun onContextMenuDismissed(cefBrowser: CefBrowser?, frame: CefFrame?) {
+                    // 菜单关闭时的回调
+                }
+            }, browser.cefBrowser)
+
+            // 添加 Swing 层面的右键菜单监听器
             val component = browser.component
             component.addMouseListener(object : java.awt.event.MouseAdapter() {
-                override fun mouseClicked(e: java.awt.event.MouseEvent) {
+                override fun mousePressed(e: java.awt.event.MouseEvent) {
                     if (javax.swing.SwingUtilities.isRightMouseButton(e)) {
-                        val popup = javax.swing.JPopupMenu()
-                        popup.add(javax.swing.JMenuItem("Open DevTools").apply {
-                            addActionListener {
-                                browser.openDevtools()
-                                logger.info("🔧 DevTools opened")
-                            }
-                        })
-                        popup.add(javax.swing.JMenuItem("Reload Page").apply {
-                            addActionListener {
-                                browser.cefBrowser.reload()
-                                logger.info("🔄 Page reloaded")
-                            }
-                        })
-                        popup.show(component, e.x, e.y)
+                        showCustomContextMenu(e)
                     }
+                }
+
+                override fun mouseReleased(e: java.awt.event.MouseEvent) {
+                    if (javax.swing.SwingUtilities.isRightMouseButton(e)) {
+                        showCustomContextMenu(e)
+                    }
+                }
+
+                private fun showCustomContextMenu(e: java.awt.event.MouseEvent) {
+                    val popup = javax.swing.JPopupMenu()
+
+                    // 打开 Console 窗口
+                    popup.add(javax.swing.JMenuItem("打开 Console").apply {
+                        addActionListener {
+                            try {
+                                // 获取 Console Tool Window
+                                val toolWindowManager = com.intellij.openapi.wm.ToolWindowManager.getInstance(project)
+                                val consoleWindow = toolWindowManager.getToolWindow("Claude Console")
+
+                                if (consoleWindow == null) {
+                                    logger.warning("⚠️ Console window not found")
+                                    return@addActionListener
+                                }
+
+                                // 清空旧内容（关键：确保每次都是新的 DevTools）
+                                consoleWindow.contentManager.removeAllContents(true)
+                                logger.info("✅ Old console content removed")
+
+                                // 获取 DevTools 的 CefBrowser
+                                val devToolsCefBrowser = browser.cefBrowser.getDevTools()
+                                logger.info("✅ DevTools CefBrowser obtained")
+
+                                // 创建 JBCefBrowser 包装 DevTools
+                                val devToolsBrowser = com.intellij.ui.jcef.JBCefBrowser.createBuilder()
+                                    .setClient(browser.jbCefClient)
+                                    .setCefBrowser(devToolsCefBrowser)
+                                    .setUrl("about:blank")
+                                    .build()
+                                logger.info("✅ DevTools browser created")
+
+                                // 创建面板并添加 DevTools 组件
+                                val panel = javax.swing.JPanel(java.awt.BorderLayout())
+                                panel.add(devToolsBrowser.component, java.awt.BorderLayout.CENTER)
+
+                                // 创建内容
+                                val content = com.intellij.ui.content.ContentFactory.getInstance()
+                                    .createContent(panel, "", false)
+
+                                // 注册资源清理
+                                com.intellij.openapi.util.Disposer.register(content, devToolsBrowser)
+                                logger.info("✅ Disposer registered")
+
+                                // 添加内容到窗口
+                                consoleWindow.contentManager.addContent(content)
+
+                                // 显示窗口
+                                consoleWindow.show()
+                                logger.info("✅ Console window opened with fresh DevTools")
+
+                            } catch (ex: Exception) {
+                                logger.severe("❌ Failed to open console: ${ex.message}")
+                                ex.printStackTrace()
+                            }
+                        }
+                    })
+
+                    // 刷新页面
+                    popup.add(javax.swing.JMenuItem("刷新页面").apply {
+                        addActionListener {
+                            browser.cefBrowser.reload()
+                            logger.info("🔄 Page reloaded")
+                        }
+                    })
+
+                    popup.show(component, e.x, e.y)
                 }
             })
             
@@ -213,18 +294,10 @@ class VueToolWindowFactory : ToolWindowFactory, DumbAware {
                 browser.dispose()
             }
 
-            // 🚀 在加载页面前注入早期 JCEF 标志
-            val earlyScript = """
-                window.__jcefMode = true;
-                window.__bridgeReady = false;
-                console.log('✅ Early JCEF mode flag set');
-            """.trimIndent()
-            browser.cefBrowser.executeJavaScript(earlyScript, "about:blank", 0)
-            logger.info("✅ Early JCEF flag injected")
-
-            // 加载前端页面
-            logger.info("📄 Loading frontend from: $serverUrl")
-            browser.loadURL(serverUrl)
+            // 加载前端页面（带上 ide=true 参数，告诉后端这是 IDEA 插件环境）
+            val ideUrl = "$serverUrl?ide=true"
+            logger.info("📄 Loading frontend from: $ideUrl")
+            browser.loadURL(ideUrl)
 
             logger.info("✅ Vue tool window created successfully")
             logger.info("🔍 Users can also access at: $serverUrl")

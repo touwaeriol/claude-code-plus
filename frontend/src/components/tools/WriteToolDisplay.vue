@@ -1,68 +1,48 @@
 <template>
-  <div class="tool-display write-tool">
-    <div class="tool-header">
-      <span class="tool-icon">📝</span>
-      <span class="tool-name">Write</span>
-      <span class="tool-file">{{ fileName }}</span>
-      <span
-        v-if="isNewFile"
-        class="badge new-file"
-      >新文件</span>
-    </div>
-    <div
-      v-if="expanded"
-      class="tool-content"
-    >
-      <div class="file-info">
-        <div class="info-row">
-          <span class="label">路径:</span>
-          <span
-            class="value clickable"
-            @click="openFile"
-          >{{ filePath }}</span>
+  <CompactToolCard
+    :display-info="displayInfo"
+    :is-expanded="expanded"
+    :has-details="true"
+    @click="handleCardClick"
+  >
+    <template #details>
+      <div class="write-tool-details">
+        <div class="file-info">
+          <div class="info-row">
+            <span class="label">路径:</span>
+            <span class="value clickable" @click="openFile">{{ filePath }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">大小:</span>
+            <span class="value">{{ contentSize }}</span>
+          </div>
         </div>
-        <div class="info-row">
-          <span class="label">大小:</span>
-          <span class="value">{{ contentSize }}</span>
+
+        <div class="content-preview">
+          <div class="preview-header">
+            <span>内容预览</span>
+            <button class="copy-btn" @click="copyContent">复制</button>
+          </div>
+          <pre class="preview-content">{{ previewText }}</pre>
         </div>
-      </div>
-      <div class="content-preview">
-        <div class="preview-header">
-          <span>内容预览</span>
-          <button
-            class="copy-btn"
-            @click="copyContent"
-          >
-            复制
-          </button>
-        </div>
-        <pre class="preview-content">{{ previewText }}</pre>
-      </div>
-      <div
-        v-if="result"
-        class="tool-result"
-      >
-        <div
-          class="result-status"
-          :class="resultStatus"
-        >
-          {{ resultMessage }}
+
+        <div v-if="result" class="tool-result">
+          <div class="result-status" :class="resultStatus">
+            {{ resultMessage }}
+          </div>
         </div>
       </div>
-    </div>
-    <button
-      class="expand-btn"
-      @click="expanded = !expanded"
-    >
-      {{ expanded ? '收起' : '展开' }}
-    </button>
-  </div>
+    </template>
+  </CompactToolCard>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ideService } from '@/services/ideService'
+import { ideService } from '@/services/ideaBridge'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
+import CompactToolCard from './CompactToolCard.vue'
+import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
+import { useEnvironment } from '@/composables/useEnvironment'
 
 interface Props {
   toolUse: ToolUseBlock
@@ -70,7 +50,30 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+// 默认折叠，点击后展开查看详情
 const expanded = ref(false)
+
+// 环境检测
+const { isInIde } = useEnvironment()
+
+// 提取工具显示信息
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolUse, props.result))
+
+// 判断是否应该使用 IDE 集成
+function shouldUseIdeIntegration(): boolean {
+  return isInIde.value && displayInfo.value.status === 'success'
+}
+
+// 处理卡片点击
+function handleCardClick() {
+  if (shouldUseIdeIntegration()) {
+    // IDE 操作：直接打开文件
+    openFile()
+  } else {
+    // 其他情况：切换展开状态
+    expanded.value = !expanded.value
+  }
+}
 
 const filePath = computed(() => props.toolUse.input.file_path || '')
 const fileName = computed(() => {
@@ -102,7 +105,19 @@ const previewText = computed(() => {
 
 const resultStatus = computed(() => {
   if (!props.result) return 'pending'
-  const content = JSON.stringify(props.result.content).toLowerCase()
+  // 将 content 转换为字符串
+  let contentStr = ''
+  if (typeof props.result.content === 'string') {
+    contentStr = props.result.content
+  } else if (Array.isArray(props.result.content)) {
+    contentStr = props.result.content
+      .filter((item: any) => item.type === 'text')
+      .map((item: any) => item.text)
+      .join('\n')
+  } else {
+    contentStr = JSON.stringify(props.result.content)
+  }
+  const content = contentStr.toLowerCase()
   if (content.includes('error') || content.includes('failed')) return 'error'
   return 'success'
 })
