@@ -53,9 +53,9 @@ function isMessageContentEmpty(content: ContentBlock[]): boolean {
  */
 export interface StreamEventProcessResult {
   shouldUpdateMessages: boolean  // 是否需要更新 messages
-  shouldUpdateDisplayItems: boolean  // 是否需要更新 displayItems
   shouldSetGenerating: boolean | null  // 是否需要设置生成状态 (null = 不改变)
   messageUpdated: boolean  // 消息是否被更新
+  newMessage?: Message  // 新创建的消息（用于添加到 displayItems）
 }
 
 /**
@@ -105,7 +105,6 @@ export function processMessageStart(
 
     return {
       shouldUpdateMessages: true,
-      shouldUpdateDisplayItems: false,
       shouldSetGenerating: true,
       messageUpdated: true
     }
@@ -122,9 +121,9 @@ export function processMessageStart(
 
   return {
     shouldUpdateMessages: true,
-    shouldUpdateDisplayItems: true,
     shouldSetGenerating: true,
-    messageUpdated: true
+    messageUpdated: true,
+    newMessage: newMessage  // ✅ 返回新消息，让 sessionStore 添加到 displayItems
   }
 }
 
@@ -161,7 +160,6 @@ export function processContentBlockDelta(
 
   return {
     shouldUpdateMessages: true,
-    shouldUpdateDisplayItems: true,  // 增量更新需要实时反映到 UI
     shouldSetGenerating: true,
     messageUpdated: success
   }
@@ -194,7 +192,6 @@ export function processContentBlockStart(
 
   return {
     shouldUpdateMessages: blockAdded,
-    shouldUpdateDisplayItems: blockAdded,
     shouldSetGenerating: true,
     messageUpdated: blockAdded
   }
@@ -293,7 +290,6 @@ export function processContentBlockStop(
 
   return {
     shouldUpdateMessages: false,
-    shouldUpdateDisplayItems: true,
     shouldSetGenerating: null,
     messageUpdated: false
   }
@@ -313,7 +309,6 @@ export function processMessageDelta(
   // message_delta 通常不需要更新 UI，只是元数据
   return {
     shouldUpdateMessages: false,
-    shouldUpdateDisplayItems: false,
     shouldSetGenerating: null,
     messageUpdated: false
   }
@@ -353,7 +348,6 @@ export function processMessageStop(
   // isGenerating 只在 handleResultMessage() 中设置为 false
   return {
     shouldUpdateMessages: true,
-    shouldUpdateDisplayItems: true,
     shouldSetGenerating: null,  // 不修改 isGenerating，等待 ResultMessage
     messageUpdated: true
   }
@@ -365,7 +359,6 @@ export function processMessageStop(
 function createNoOpResult(): StreamEventProcessResult {
   return {
     shouldUpdateMessages: false,
-    shouldUpdateDisplayItems: false,
     shouldSetGenerating: null,
     messageUpdated: false
   }

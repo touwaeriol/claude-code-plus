@@ -4,12 +4,14 @@ import { claudeService } from '@/services/claudeService'
 import type { ConnectOptions } from '@/services/claudeService'
 import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock } from '@/types/message'
 import type { SessionState } from '@/types/session'
-import { convertToDisplayItems } from '@/utils/displayItemConverter'
+import { convertToDisplayItems, convertMessageToDisplayItems } from '@/utils/displayItemConverter'
 import { ConnectionStatus, ToolCallStatus } from '@/types/display'
+import type { DisplayItem } from '@/types/display'
 import type { StreamEvent } from '@/types/streamEvent'
 import { parseStreamEventData } from '@/utils/streamEventHandler'
 import { processStreamEvent, type StreamEventContext, type StreamEventProcessResult } from '@/utils/streamEventProcessor'
-import { isToolUseBlock } from '@/utils/contentBlockUtils'
+import { isToolUseBlock, isTextBlock } from '@/utils/contentBlockUtils'
+import type { TextBlock } from '@/types/message'
 import { loggers } from '@/utils/logger'
 
 const log = loggers.session
@@ -410,6 +412,15 @@ export const useSessionStore = defineStore('session', () => {
    * 处理普通消息（assistant/user 消息）
    */
   function handleNormalMessage(sessionId: string, sessionState: SessionState, message: Message) {
+    // 🔍 打印完整消息内容用于调试
+    console.log('🔍 [RPC Message]', {
+      role: message.role,
+      id: message.id,
+      contentLength: message.content.length,
+      contentTypes: message.content.map(b => b.type),
+      fullContent: JSON.stringify(message.content, null, 2)
+    })
+
     // 确保消息有 id 字段
     if (!message.id) {
       message.id = generateMessageId(message.role)
@@ -419,19 +430,22 @@ export const useSessionStore = defineStore('session', () => {
     const isToolResultMessage = message.role === 'user' &&
       message.content.some((block: ContentBlock) => block.type === 'tool_result')
 
-    // 处理消息（添加到消息列表）
+    // ✅ 流式模式下，assistant 消息已通过 handleStreamEvent 处理
+    // RPC 消息中的 assistant 消息是重复的，直接跳过
     if (message.role === 'assistant') {
-      const replaced = replacePlaceholderMessage(sessionId, message)
-      if (!replaced) {
-        mergeOrAddMessage(sessionId, message)
-      }
-    } else if (!isToolResultMessage) {
-      addMessage(sessionId, message)
+      log.debug(`跳过 RPC assistant 消息（已通过流式事件处理）: ${message.id}`)
+      return
     }
 
-    // 更新 displayItems
-    sessionState.displayItems = convertToDisplayItems(sessionState.messages, sessionState.pendingToolCalls)
-    touchSession(sessionId)
+    // 只处理非 assistant 消息
+    if (!isToolResultMessage) {
+      addMessage(sessionId, message)
+      // ✅ addMessage 已经增量更新了 displayItems，不需要再次重建
+    } else {
+      // tool_result 消息：只更新工具状态，不添加新消息
+      // displayItems 中的工具调用对象是响应式的，状态更新会自动反映
+      touchSession(sessionId)
+    }
 
     // 处理 tool_result
     if (isToolResultMessage) {
@@ -478,7 +492,10 @@ export const useSessionStore = defineStore('session', () => {
 
     const newMessages = [...sessionState.messages, message]
     sessionState.messages = newMessages
-    sessionState.displayItems = convertToDisplayItems(newMessages, sessionState.pendingToolCalls)
+
+    // ✅ 增量更新：只转换新消息并追加
+    const newDisplayItems = convertMessageToDisplayItems(message, sessionState.pendingToolCalls)
+    sessionState.displayItems.push(...newDisplayItems)
 
     log.debug(`添加消息到会话 ${sessionId}, 共 ${newMessages.length} 条`)
     touchSession(sessionId)
@@ -644,6 +661,13 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
 
+    // ✅ 检查消息是否已存在（避免流式事件和 RPC 消息重复）
+    const existingMessage = sessionState.messages.find(m => m.id === newMessage.id)
+    if (existingMessage) {
+      log.debug(`消息 ${newMessage.id} 已存在，跳过添加`)
+      return
+    }
+
     // 查找最近的消息
     const lastIndex = sessionState.messages.length - 1
     const lastMessage = lastIndex >= 0 ? sessionState.messages[lastIndex] : null
@@ -710,30 +734,148 @@ export const useSessionStore = defineStore('session', () => {
       setSessionGenerating(sessionId, result.shouldSetGenerating)
     }
 
-    // 更新消息数组（如果消息被修改）
+    // 如果有新消息，添加到 displayItems
+    if (result.newMessage) {
+      const newDisplayItems = convertMessageToDisplayItems(result.newMessage, sessionState.pendingToolCalls)
+      sessionState.displayItems.push(...newDisplayItems)
+      log.debug(`流式事件创建新消息，添加 ${newDisplayItems.length} 个 displayItems`)
+    }
+
+    // 🔧 关键修复：当消息内容被流式更新时，同步更新 displayItems
+    // 因为 displayItems 中的对象是独立的副本，不会自动反映 message.content 的变化
     if (result.messageUpdated && result.shouldUpdateMessages) {
-      const lastAssistantMessage = context.messages
+      // 找到最后一个 assistant 消息
+      const lastAssistantMessage = sessionState.messages
         .slice()
         .reverse()
         .find(m => m.role === 'assistant')
       
       if (lastAssistantMessage) {
-        const messageIndex = sessionState.messages.findIndex(m => m.id === lastAssistantMessage.id)
-        if (messageIndex !== -1) {
-          const newMessages = [...sessionState.messages]
-          newMessages[messageIndex] = { ...lastAssistantMessage }
-          sessionState.messages = newMessages
+        // 同步更新 displayItems 中对应的文本块
+        syncDisplayItemsForMessage(lastAssistantMessage, sessionState)
+      }
+    }
+  }
+
+  /**
+   * 同步 displayItems 以反映消息内容的变化
+   * 
+   * 当流式更新修改了 message.content 时，需要更新 displayItems 中对应的对象
+   * 
+   * 🔧 关键：按照 message.content 的顺序来同步 displayItems，确保顺序正确
+   */
+  function syncDisplayItemsForMessage(message: Message, sessionState: SessionState) {
+    // 1. 找到该消息对应的所有 displayItems 的索引范围
+    let messageStartIndex = -1
+    let messageEndIndex = -1
+    
+    for (let i = 0; i < sessionState.displayItems.length; i++) {
+      const item = sessionState.displayItems[i]
+      const isMessageItem = 
+        (item.type === 'assistantText' && item.id.startsWith(`${message.id}-text-`)) ||
+        (item.type === 'toolCall' && message.content.some(block => 
+          isToolUseBlock(block) && block.id === item.id
+        ))
+      
+      if (isMessageItem) {
+        if (messageStartIndex === -1) {
+          messageStartIndex = i
+        }
+        messageEndIndex = i
+      } else if (messageStartIndex !== -1) {
+        // 已经找到了消息的结束位置
+        break
+      }
+    }
+
+    // 2. 收集所有文本块的索引（用于标记最后一个文本块）
+    const textBlockIndices: number[] = []
+    message.content.forEach((block, idx) => {
+      if (isTextBlock(block) && block.text.trim()) {
+        textBlockIndices.push(idx)
+      }
+    })
+    const lastTextBlockIndex = textBlockIndices.length > 0 ? textBlockIndices[textBlockIndices.length - 1] : -1
+
+    // 3. 按照 message.content 的顺序，构建新的 displayItems
+    const newDisplayItems: DisplayItem[] = []
+    const existingItemsMap = new Map<string, DisplayItem>()
+    
+    // 收集现有的 displayItems（用于复用）
+    if (messageStartIndex !== -1 && messageEndIndex !== -1) {
+      for (let i = messageStartIndex; i <= messageEndIndex; i++) {
+        const item = sessionState.displayItems[i]
+        existingItemsMap.set(item.id, item)
+      }
+    }
+
+    // 按照 message.content 的顺序构建
+    for (let blockIdx = 0; blockIdx < message.content.length; blockIdx++) {
+      const block = message.content[blockIdx]
+
+      if (isTextBlock(block) && block.text.trim()) {
+        const textBlock = block as TextBlock
+        const expectedId = `${message.id}-text-${blockIdx}`
+        const existingItem = existingItemsMap.get(expectedId)
+        
+        if (existingItem && existingItem.type === 'assistantText') {
+          // 更新现有文本块
+          const assistantText = existingItem as any
+          assistantText.content = textBlock.text
+          assistantText.isLastInMessage = blockIdx === lastTextBlockIndex
+          newDisplayItems.push(existingItem)
+        } else {
+          // 创建新的文本块
+          const isLastTextBlock = blockIdx === lastTextBlockIndex
+          const assistantText = {
+            type: 'assistantText' as const,
+            id: expectedId,
+            content: textBlock.text,
+            timestamp: message.timestamp,
+            isLastInMessage: isLastTextBlock,
+            stats: undefined
+          }
+          newDisplayItems.push(assistantText)
+        }
+      } else if (isToolUseBlock(block)) {
+        // 工具调用块：复用现有的或创建新的
+        const existingItem = existingItemsMap.get(block.id)
+        
+        if (existingItem && existingItem.type === 'toolCall') {
+          // 复用现有的工具调用（保留状态），但同步更新 input
+          const toolUseBlock = block as ToolUseBlock
+          // 始终同步 input（即使为空对象，也要更新以确保状态同步）
+          if (toolUseBlock.input !== undefined) {
+            existingItem.input = toolUseBlock.input
+          }
+          // 同时更新 pendingToolCalls 中的对象
+          const pendingToolCall = sessionState.pendingToolCalls.get(block.id)
+          if (pendingToolCall && toolUseBlock.input !== undefined) {
+            pendingToolCall.input = toolUseBlock.input
+          }
+          newDisplayItems.push(existingItem)
+        } else {
+          // 创建新的工具调用
+          const toolCall = convertMessageToDisplayItems(message, sessionState.pendingToolCalls)
+            .find(item => item.type === 'toolCall' && item.id === block.id)
+          if (toolCall) {
+            newDisplayItems.push(toolCall)
+          }
         }
       }
     }
 
-    // 更新 displayItems（如果需要）
-    if (result.shouldUpdateDisplayItems) {
-      sessionState.displayItems = convertToDisplayItems(
-        sessionState.messages,
-        sessionState.pendingToolCalls
-      )
+    // 4. 替换旧的 displayItems
+    if (messageStartIndex !== -1 && messageEndIndex !== -1) {
+      // 删除旧的 displayItems，插入新的
+      sessionState.displayItems.splice(messageStartIndex, messageEndIndex - messageStartIndex + 1, ...newDisplayItems)
+    } else {
+      // 如果找不到旧的位置，直接追加到末尾
+      sessionState.displayItems.push(...newDisplayItems)
     }
+
+    // 5. 触发响应式更新
+    sessionState.displayItems = [...sessionState.displayItems]
   }
 
   /**
@@ -1066,6 +1208,11 @@ export const useSessionStore = defineStore('session', () => {
    * 当收到 tool_use 消息时调用
    */
   function registerToolCall(block: ToolUseBlock) {
+    // 如果已经注册过，跳过（避免重复注册导致状态被重置）
+    if (toolCallsMap.value.has(block.id)) {
+      return
+    }
+
     toolCallsMap.value.set(block.id, {
       id: block.id,
       name: block.name,
