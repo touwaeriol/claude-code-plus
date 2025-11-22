@@ -116,10 +116,7 @@ const enhancedMessage = computed((): EnhancedMessage => {
       const viewModel = buildToolViewModel(block)
       console.log(`    ✅ 构建 viewModel: toolType=${viewModel.toolDetail.toolType}, summary="${viewModel.compactSummary}"`)
 
-      // 🔧 注册工具调用到 store
-      sessionStore.registerToolCall(block)
-
-      // 🔧 从 store 获取实时状态
+      // 🔧 从 store 获取实时状态（注册已在 streamEventProcessor 中完成）
       const toolStatus = sessionStore.getToolStatus(block.id)
       const toolResult = sessionStore.getToolResult(block.id)
 

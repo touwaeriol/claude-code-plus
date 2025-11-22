@@ -156,7 +156,100 @@ export function updateToolCallResult(toolCall: ToolCall, resultBlock: ToolResult
 }
 
 /**
- * 将 Message 数组转换为 DisplayItem 数组
+ * 将单个 Message 转换为 DisplayItem 数组（增量更新用）
+ *
+ * @param message 单个消息
+ * @param pendingToolCalls 待处理的工具调用 Map
+ * @returns DisplayItem 数组
+ */
+export function convertMessageToDisplayItems(
+  message: Message,
+  pendingToolCalls: Map<string, ToolCall>
+): DisplayItem[] {
+  const displayItems: DisplayItem[] = []
+
+  if (message.role === 'user') {
+    // 用户消息
+    const textBlocks = message.content.filter(b => b.type === 'text') as TextBlock[]
+    const imageBlocks = message.content.filter(b => b.type === 'image') as ImageBlock[]
+
+    if (textBlocks.length > 0 || imageBlocks.length > 0) {
+      const userMessage: UserMessage = {
+        type: 'userMessage',
+        id: message.id,
+        content: textBlocks.map(b => b.text).join('\n'),
+        images: imageBlocks.length > 0 ? imageBlocks : undefined,
+        timestamp: message.timestamp
+      }
+      displayItems.push(userMessage)
+    }
+
+    // 处理 tool_result（更新工具调用状态）
+    const toolResults = message.content.filter(b => b.type === 'tool_result') as ToolResultBlock[]
+    for (const resultBlock of toolResults) {
+      const toolCall = pendingToolCalls.get(resultBlock.tool_use_id)
+      if (toolCall) {
+        updateToolCallResult(toolCall, resultBlock)
+      }
+    }
+  } else if (message.role === 'assistant') {
+    // AI 助手消息
+    const textBlockIndices: number[] = []
+    message.content.forEach((block, idx) => {
+      if (isTextBlock(block) && block.text.trim()) {
+        textBlockIndices.push(idx)
+      }
+    })
+    const lastTextBlockIndex = textBlockIndices.length > 0 ? textBlockIndices[textBlockIndices.length - 1] : -1
+
+    for (let blockIdx = 0; blockIdx < message.content.length; blockIdx++) {
+      const block = message.content[blockIdx]
+
+      if (isTextBlock(block) && block.text.trim()) {
+        const isLastTextBlock = blockIdx === lastTextBlockIndex
+        let stats = undefined
+        if (isLastTextBlock && message.tokenUsage) {
+          stats = {
+            requestDuration: 0,
+            inputTokens: message.tokenUsage.input_tokens,
+            outputTokens: message.tokenUsage.output_tokens
+          }
+        }
+
+        const assistantText = {
+          type: 'assistantText' as const,
+          id: `${message.id}-text-${blockIdx}`,
+          content: block.text,
+          timestamp: message.timestamp,
+          isLastInMessage: isLastTextBlock,
+          stats
+        }
+        displayItems.push(assistantText)
+      } else if (isToolUseBlock(block)) {
+        const toolCall = createToolCall(block, pendingToolCalls)
+        displayItems.push(toolCall)
+      }
+    }
+  } else if (message.role === 'system') {
+    // 系统消息
+    const textBlocks = message.content.filter(b => b.type === 'text') as TextBlock[]
+    if (textBlocks.length > 0) {
+      const systemMessage: SystemMessage = {
+        type: 'systemMessage',
+        id: message.id,
+        content: textBlocks.map(b => b.text).join('\n'),
+        level: 'info',
+        timestamp: message.timestamp
+      }
+      displayItems.push(systemMessage)
+    }
+  }
+
+  return displayItems
+}
+
+/**
+ * 将 Message 数组转换为 DisplayItem 数组（初始化用）
  *
  * @param messages 原始消息数组
  * @param pendingToolCalls 待处理的工具调用 Map

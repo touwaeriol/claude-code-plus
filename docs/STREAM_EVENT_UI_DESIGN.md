@@ -284,3 +284,5 @@ sessionStore.toolInputJsonAccumulator
 - [ ] 添加 Thinking 内容的显示选项
 - [ ] 支持消息编辑和重新生成
 
+
+
