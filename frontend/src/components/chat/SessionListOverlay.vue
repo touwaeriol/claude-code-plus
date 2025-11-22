@@ -313,7 +313,7 @@ onBeforeUnmount(() => {
   width: 100%;
   border: 1px solid transparent;
   border-radius: 12px;
-  padding: 12px;
+  padding: 6px 8px;
   background: transparent;
   cursor: pointer;
   text-align: left;

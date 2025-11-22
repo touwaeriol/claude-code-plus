@@ -373,7 +373,7 @@ async function copyOutput() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
   cursor: pointer;
   user-select: none;
 }
@@ -436,7 +436,7 @@ async function copyOutput() {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 .error-icon {

@@ -1,0 +1,18 @@
+# 工具演示文件
+
+这是一个用于演示 Claude Code Plus 工具的示例文件。
+
+## 功能列表
+- Read: 读取文件内容
+- Write: 创建新文件
+- Edit: 编辑现有文件
+- MultiEdit: 批量编辑多处
+
+## 示例代码
+function hello(name: string) {
+  console.log(`你好，${name}！`);
+  return `欢迎使用 Claude Code Plus`;
+}
+
+## 更新记录
+- 2025-11-23: 使用 Write 工具创建/更新文件

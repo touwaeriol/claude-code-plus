@@ -123,22 +123,22 @@ const toolResultBlock = computed(() => {
 
 <style scoped>
 .tool-call-display {
-  margin: 12px 0;
+  margin: 2px 0;
 }
 
 .generic-tool {
-  padding: 12px;
+  padding: 4px 8px;
   background: #f5f5f5;
   border: 1px solid #ddd;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 .tool-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  font-size: 13px;
+  gap: 4px;
+  margin-bottom: 2px;
+  font-size: 12px;
 }
 
 .tool-icon {

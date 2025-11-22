@@ -210,7 +210,7 @@ async function openFile(filePath: string) {
 }
 
 .search-info {
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .info-row {
@@ -235,7 +235,7 @@ async function openFile(filePath: string) {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .option-badge {

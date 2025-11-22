@@ -414,7 +414,7 @@ function retrySubmit() {
 }
 
 .question-header {
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .question-tag {
@@ -587,7 +587,7 @@ function retrySubmit() {
 }
 
 .answered-state {
-  padding: 16px;
+  padding: 6px 8px;
   background: var(--ide-success-background, #e6ffed);
   border: 1px solid var(--ide-success, #22863a);
   border-radius: 6px;
@@ -596,7 +596,7 @@ function retrySubmit() {
 
 .answer-preview strong {
   display: block;
-  margin-bottom: 12px;
+  margin-bottom: 2px;
   color: var(--ide-success, #22863a);
   font-size: 14px;
 }

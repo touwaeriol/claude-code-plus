@@ -137,18 +137,18 @@ const statusMessage = computed(() => {
 }
 
 .plan-section {
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .section-header {
   font-size: 12px;
   font-weight: 600;
   color: #586069;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 .plan-content {
-  padding: 16px;
+  padding: 6px 8px;
   background: #ffffff;
   border: 2px solid #fd7e14;
   border-radius: 6px;

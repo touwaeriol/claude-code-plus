@@ -309,7 +309,7 @@ function getTagSessionCount(tagId: string): number {
 
 <style scoped>
 .session-group-manager {
-  padding: 16px;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
   gap: 24px;

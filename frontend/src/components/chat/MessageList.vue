@@ -288,12 +288,12 @@ function scrollToBottom() {
   flex: 1;
   overflow-y: auto !important;
   overflow-x: hidden;
-  padding: 16px;
+  padding: 4px 6px;
 }
 
 /* 虚拟列表内部容器样式 */
 .message-list :deep(.virtual-list-item) {
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .empty-state {
@@ -302,7 +302,7 @@ function scrollToBottom() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 48px 24px;
+  padding: 12px;
   color: var(--ide-foreground, #24292e);
 }
 
@@ -347,22 +347,22 @@ function scrollToBottom() {
 .empty-title {
   font-size: 24px;
   font-weight: 600;
-  margin: 0 0 12px 0;
+  margin: 0 0 6px 0;
   color: var(--ide-foreground, #24292e);
 }
 
 .empty-description {
   font-size: 14px;
   line-height: 1.6;
-  margin: 0 0 32px 0;
+  margin: 0 0 12px 0;
   color: var(--ide-secondary-foreground, #6a737d);
 }
 
 .empty-tips {
   display: flex;
-  gap: 16px;
+  gap: 8px;
   justify-content: center;
-  margin-bottom: 32px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
 }
 
@@ -370,8 +370,8 @@ function scrollToBottom() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 16px;
+  gap: 4px;
+  padding: 8px 12px;
   background: var(--ide-panel-background, #f6f8fa);
   border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 8px;
@@ -426,13 +426,13 @@ function scrollToBottom() {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 8px 16px;
-  margin: 0 16px;
+  gap: 6px;
+  padding: 4px 12px;
+  margin: 0 8px;
   background: var(--ide-card-background, #ffffff);
   border: 1px solid var(--ide-accent, #0366d6);
-  border-radius: 8px 8px 0 0;
-  font-size: 13px;
+  border-radius: 6px 6px 0 0;
+  font-size: 12px;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
   color: var(--ide-text-secondary, #586069);
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
@@ -456,12 +456,12 @@ function scrollToBottom() {
 .loading-indicator {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px;
-  margin: 0 16px 16px 16px;
+  gap: 8px;
+  padding: 4px 8px;
+  margin: 0 8px 8px 8px;
   background: var(--ide-card-background, #ffffff);
   border: 1px solid var(--ide-border, #e1e4e8);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--ide-text-secondary, #586069);
 }
 

@@ -24,8 +24,13 @@ import kotlinx.serialization.json.contentOrNull
 import java.io.File
 import java.util.logging.Logger
 import com.intellij.openapi.project.Project
+import com.intellij.l10n.LocalizationUtil
+import java.util.Locale
+import com.intellij.ide.util.PropertiesComponent
 
 class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
+
+    private val PREFERRED_LOCALE_KEY = "com.claudecodeplus.locale"
 
     override fun getTheme(): IdeTheme {
         return IdeTheme(
@@ -56,6 +61,33 @@ class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
 
     override fun getProjectPath(): String {
         return project.basePath ?: ""
+    }
+    
+    override fun getLocale(): String {
+        // Check for user preference first
+        val preferred = PropertiesComponent.getInstance().getValue(PREFERRED_LOCALE_KEY)
+        if (!preferred.isNullOrBlank()) {
+            return preferred
+        }
+
+        return try {
+            val locale = LocalizationUtil.getLocale(true) // true for restarting (though we just need the value)
+            "${locale.language}-${locale.country}"
+        } catch (e: Exception) {
+            val locale = Locale.getDefault()
+            "${locale.language}-${locale.country}"
+        }
+    }
+
+    override fun setLocale(locale: String): Boolean {
+        try {
+            PropertiesComponent.getInstance().setValue(PREFERRED_LOCALE_KEY, locale)
+            logger.info("Locale preference set to: $locale")
+            return true
+        } catch (e: Exception) {
+            logger.warning("Failed to set locale preference: ${e.message}")
+            return false
+        }
     }
 
     private val logger = Logger.getLogger(IdeActionBridgeImpl::class.java.name)
@@ -221,4 +253,3 @@ class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
         return FileEditorManager.getInstance(project).openFiles.mapNotNull { it.path }.take(maxResults)
     }
 }
-

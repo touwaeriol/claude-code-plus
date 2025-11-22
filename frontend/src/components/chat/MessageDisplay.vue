@@ -317,7 +317,7 @@ const textContent = computed(() => {
 
 .tool-result-orphan {
   margin-top: 12px;
-  padding: 12px;
+  padding: 6px 8px;
   background: var(--ide-warning-background, #fff8dc);
   border: 1px solid var(--ide-warning, #ffc107);
   border-radius: 6px;

@@ -171,6 +171,7 @@ export interface MultiEditToolCall extends BaseToolCall {
     edits: Array<{
       old_string: string
       new_string: string
+      replace_all?: boolean
     }>
   }
 }

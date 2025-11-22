@@ -93,9 +93,9 @@ function getBadgeClass(changes: string): string {
 .compact-tool-card {
   display: flex;
   flex-direction: column;
-  padding: 8px 12px;
-  margin-bottom: 6px;
-  border-radius: 6px;
+  padding: 3px 6px;
+  margin-bottom: 1px;
+  border-radius: 4px;
   background: var(--ide-background, #ffffff);
   border: 1px solid var(--ide-border, rgba(0, 0, 0, 0.1));
   transition: all 0.2s ease;
@@ -113,13 +113,13 @@ function getBadgeClass(changes: string): string {
 .card-content {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  line-height: 1.4;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 .tool-icon {
-  font-size: 16px;
+  font-size: 14px;
   flex-shrink: 0;
 }
 
@@ -215,8 +215,8 @@ function getBadgeClass(changes: string): string {
 
 /* 展开内容 */
 .expanded-content {
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 6px;
+  padding-top: 6px;
   border-top: 1px solid var(--ide-border, rgba(0, 0, 0, 0.1));
   animation: slideDown 0.2s ease;
 }

@@ -167,7 +167,7 @@ const resourceCount = computed(() => {
 }
 
 .tool-meta {
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .info-row {
@@ -199,7 +199,7 @@ const resourceCount = computed(() => {
   font-size: 12px;
   font-weight: 600;
   color: #586069;
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .count-text {
@@ -223,7 +223,7 @@ const resourceCount = computed(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 .resource-icon {

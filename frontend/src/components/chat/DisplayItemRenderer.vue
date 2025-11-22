@@ -66,7 +66,7 @@ import { computed } from 'vue'
 }
 
 .unknown-item {
-  padding: 12px;
+  padding: 6px 8px;
   background: #fff3cd;
   border: 1px solid #ffc107;
   border-radius: 6px;

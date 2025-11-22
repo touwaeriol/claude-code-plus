@@ -360,7 +360,7 @@ async function copyContent() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 .content-label {

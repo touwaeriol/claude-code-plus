@@ -13,6 +13,10 @@ import { processStreamEvent, type StreamEventContext, type StreamEventProcessRes
 import { isToolUseBlock, isTextBlock } from '@/utils/contentBlockUtils'
 import type { TextBlock } from '@/types/message'
 import { loggers } from '@/utils/logger'
+import { ideService } from '@/services/ideaBridge'
+import { ideaBridge } from '@/services/ideaBridge'
+import { TOOL_TYPE } from '@/constants/toolTypes'
+import type { ReadToolCall, WriteToolCall, EditToolCall, MultiEditToolCall } from '@/types/display'
 
 const log = loggers.session
 
@@ -469,12 +473,117 @@ export const useSessionStore = defineStore('session', () => {
     for (const result of toolResults) {
       const toolCall = sessionState.pendingToolCalls.get(result.tool_use_id)
       if (toolCall) {
+        const wasSuccess = !result.is_error
         toolCall.status = result.is_error ? ToolCallStatus.FAILED : ToolCallStatus.SUCCESS
         toolCall.endTime = Date.now()
         toolCall.result = result.is_error
           ? { type: 'error', error: typeof result.content === 'string' ? result.content : JSON.stringify(result.content) }
           : { type: 'success', output: typeof result.content === 'string' ? result.content : JSON.stringify(result.content) }
+
+        // 在 IDEA 环境下，工具调用成功后自动执行 IDEA 操作
+        if (wasSuccess && ideaBridge.isInIde()) {
+          executeIdeActionForTool(toolCall)
+        }
       }
+    }
+  }
+
+  /**
+   * 为工具调用执行对应的 IDEA 操作
+   */
+  async function executeIdeActionForTool(toolCall: any) {
+    try {
+      const toolType = toolCall.toolType
+
+      switch (toolType) {
+        case TOOL_TYPE.READ: {
+          const readCall = toolCall as ReadToolCall
+          const filePath = readCall.input.file_path || readCall.input.path || ''
+          if (!filePath) break
+
+          const viewRange = readCall.input.view_range
+          let startLine: number | undefined
+          let endLine: number | undefined
+
+          if (Array.isArray(viewRange) && viewRange.length >= 2) {
+            startLine = viewRange[0]
+            endLine = viewRange[1]
+          } else if (readCall.input.offset !== undefined) {
+            startLine = readCall.input.offset
+            if (readCall.input.limit !== undefined) {
+              endLine = startLine + readCall.input.limit - 1
+            }
+          }
+
+          await ideService.openFile(filePath, {
+            line: startLine,
+            endLine: endLine,
+            selectContent: true
+          })
+          log.debug(`[executeIdeActionForTool] READ: 打开文件 ${filePath}，行号 ${startLine}`)
+          break
+        }
+
+        case TOOL_TYPE.WRITE: {
+          const writeCall = toolCall as WriteToolCall
+          const filePath = writeCall.input.file_path || writeCall.input.path || ''
+          if (!filePath) break
+
+          await ideService.openFile(filePath)
+          log.debug(`[executeIdeActionForTool] WRITE: 打开文件 ${filePath}`)
+          break
+        }
+
+        case TOOL_TYPE.EDIT: {
+          const editCall = toolCall as EditToolCall
+          const filePath = editCall.input.file_path || ''
+          if (!filePath) break
+
+          await ideService.showDiff({
+            filePath,
+            oldContent: editCall.input.old_string || '',
+            newContent: editCall.input.new_string || '',
+            rebuildFromFile: true,
+            edits: [{
+              oldString: editCall.input.old_string || '',
+              newString: editCall.input.new_string || '',
+              replaceAll: editCall.input.replace_all || false
+            }]
+          })
+          log.debug(`[executeIdeActionForTool] EDIT: 显示 Diff ${filePath}`)
+          break
+        }
+
+        case TOOL_TYPE.MULTI_EDIT: {
+          const multiEditCall = toolCall as MultiEditToolCall
+          const filePath = multiEditCall.input.file_path || ''
+          if (!filePath) break
+
+          const edits = multiEditCall.input.edits || []
+          if (edits.length === 0) break
+
+          await ideService.showDiff({
+            filePath,
+            oldContent: edits[0]?.old_string || '',
+            newContent: edits[0]?.new_string || '',
+            rebuildFromFile: true,
+            title: `文件变更: ${filePath} (${edits.length} 处修改)`,
+            edits: edits.map(edit => ({
+              oldString: edit.old_string || '',
+              newString: edit.new_string || '',
+              replaceAll: edit.replace_all || false
+            }))
+          })
+          log.debug(`[executeIdeActionForTool] MULTI_EDIT: 显示 Diff ${filePath}，${edits.length} 处修改`)
+          break
+        }
+
+        default:
+          // 其他工具类型不需要自动执行 IDEA 操作
+          break
+      }
+    } catch (error) {
+      log.warn(`[executeIdeActionForTool] 执行 IDEA 操作失败: ${error}`)
     }
   }
 

@@ -115,8 +115,8 @@ function handleDragEnd() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
-  height: 40px;
+  padding: 3px 6px;
+  height: 32px;
   border-bottom: 1px solid var(--ide-border, #e1e4e8);
   background: var(--ide-panel-background, #f6f8fa);
   box-sizing: border-box;
@@ -161,12 +161,12 @@ function handleDragEnd() {
   display: inline-flex;
   align-items: center;
   max-width: 180px;
-  padding: 4px 10px;
+  padding: 3px 8px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--ide-foreground, #24292e);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -226,8 +226,8 @@ function handleDragEnd() {
 }
 
 .icon-btn {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
@@ -235,7 +235,7 @@ function handleDragEnd() {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--ide-foreground, #24292e);
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }

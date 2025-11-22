@@ -514,7 +514,7 @@ async function copyResult() {
 .content-actions {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 .copy-btn {
@@ -555,7 +555,7 @@ async function copyResult() {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 .error-icon {

@@ -465,7 +465,7 @@ function handleSend() {
 .input-area {
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 6px 8px;
   background: #f6f8fa;
   border-top: 1px solid #e1e4e8;
   position: relative;

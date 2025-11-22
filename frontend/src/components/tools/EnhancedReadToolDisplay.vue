@@ -336,7 +336,7 @@ async function copyContent() {
 }
 
 .file-info {
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .info-row {

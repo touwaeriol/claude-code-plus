@@ -263,6 +263,14 @@ export async function getFileContent(filePath: string, lineStart?: number, lineE
   return getIdeaBridge().query('ide.getFileContent', { filePath, lineStart, lineEnd })
 }
 
+export async function getLocale() {
+  return getIdeaBridge().query('ide.getLocale')
+}
+
+export async function setLocale(locale: string) {
+  return getIdeaBridge().query('ide.setLocale', locale)
+}
+
 export function onThemeChange(handler: EventHandler) {
   getIdeaBridge().on('ide.themeChanged', handler)
 }
@@ -274,6 +282,8 @@ export const ideService = {
   showDiff,
   searchFiles,
   getFileContent,
+  getLocale,
+  setLocale,
   onThemeChange
 }
 
