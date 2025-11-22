@@ -10,7 +10,7 @@ export function formatTime(timestamp: number): string {
 
   // 计算日期差异
   const diffMs = now.getTime() - date.getTime()
-  const _diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
   const timeStr = date.toLocaleTimeString('zh-CN', {
     hour: '2-digit',
@@ -50,7 +50,6 @@ export function formatRelativeTime(timestamp: number): string {
   const diffSeconds = Math.floor(diffMs / 1000)
   const diffMinutes = Math.floor(diffSeconds / 60)
   const diffHours = Math.floor(diffMinutes / 60)
-  const _diffDays = Math.floor(diffHours / 24)
 
   if (diffSeconds < 60) {
     return '刚刚'

@@ -1,0 +1,19 @@
+# 工具演示文件 - 2025-11-22
+
+## 项目信息
+- 项目名: Claude Code Plus
+- 插件版本: v2.0.0 (已通过 Edit 工具升级)
+- 平台版本: 2025.2.4
+
+## 待办事项
+- [x] 任务一: 已完成 (MultiEdit #1)
+- [x] 任务二: 已完成 (MultiEdit #2)
+- [x] 任务三: 已完成 (MultiEdit #3)
+
+## 变量列表
+- 变量A = 新值 (MultiEdit #4)
+- 变量B = 新值 (MultiEdit #5)
+- 变量C = 新值 (MultiEdit #6)
+
+## 说明
+这个文件用于演示 Claude Code 的 Write、Edit 和 MultiEdit 工具。

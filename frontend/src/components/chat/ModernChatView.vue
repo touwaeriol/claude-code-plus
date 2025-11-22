@@ -3,13 +3,23 @@
     class="modern-chat-view"
     :class="{ 'theme-dark': isDark }"
   >
+    <ChatHeader
+      class="chat-header-bar"
+      :is-dark="isDark"
+      @toggle-history="toggleHistoryOverlay"
+    />
+
     <!-- 聊天界面内容 -->
     <div class="chat-screen-content">
       <!-- 消息列表 -->
       <MessageList
-        :messages="messages"
+        :display-items="displayItems"
         :is-loading="uiState.isLoadingHistory"
         :is-dark="isDark"
+        :is-streaming="currentSessionIsStreaming"
+        :streaming-start-time="streamingStartTime"
+        :input-tokens="streamingInputTokens"
+        :output-tokens="streamingOutputTokens"
         class="message-list-area"
       />
 
@@ -42,6 +52,8 @@
         @auto-cleanup-change="handleAutoCleanupChange"
       />
     </div>
+
+    <!-- 流式状态指示器已移至 MessageList 底部 -->
 
     <!-- 错误对话框 -->
     <div
@@ -106,15 +118,27 @@
         </div>
       </div>
     </div>
+
+    <SessionListOverlay
+      :visible="isHistoryOverlayVisible"
+      :sessions="historySessions"
+      :current-session-id="sessionStore.currentSessionId"
+      :loading="sessionStore.loading"
+      :is-dark="isDark"
+      @close="isHistoryOverlayVisible = false"
+      @select-session="handleHistorySelect"
+      @new-session="handleCreateNewSession"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
-import { claudeService } from '@/services/claudeService'
 import MessageList from './MessageList.vue'
 import ChatInput from './ChatInput.vue'
+import ChatHeader from './ChatHeader.vue'
+import SessionListOverlay from './SessionListOverlay.vue'
 import type { Message } from '@/types/message'
 import type { ContextReference, AiModel, PermissionMode, EnhancedMessage, TokenUsage as EnhancedTokenUsage } from '@/types/enhancedMessage'
 import { MessageRole } from '@/types/enhancedMessage'
@@ -137,6 +161,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 // 使用 sessionStore
 const sessionStore = useSessionStore()
+const isHistoryOverlayVisible = ref(false)
 
 // UI State 接口定义 (对应 ChatUiState)
 interface ChatUiState {
@@ -169,6 +194,19 @@ const uiState = ref<ChatUiState>({
 // 从 sessionStore 获取真实消息
 const messages = computed<Message[]>(() => sessionStore.currentMessages)
 
+// 从 sessionStore 获取 displayItems（用于新的 UI 组件）
+const displayItems = computed(() => sessionStore.currentDisplayItems)
+
+const historySessions = computed(() => {
+  return sessionStore.allSessions.map(session => ({
+    id: session.id,
+    name: session.name,
+    timestamp: session.lastActiveAt ?? session.updatedAt,
+    messageCount: session.messages.length,
+    isGenerating: session.isGenerating
+  }))
+})
+
 // 计算会话级别的 Token 使用量（从最新的 assistant 消息中提取）
 const sessionTokenUsage = computed((): EnhancedTokenUsage | null => {
   const enhancedMessages = messages.value as EnhancedMessage[]
@@ -181,6 +219,29 @@ const sessionTokenUsage = computed((): EnhancedTokenUsage | null => {
   return null
 })
 
+// Streaming 状态相关的计算属性
+const currentSessionIsStreaming = computed(() => {
+  return sessionStore.currentSession?.isGenerating ?? false
+})
+
+const currentRequestTracker = computed(() => {
+  const sessionId = sessionStore.currentSessionId
+  if (!sessionId) return null
+  return sessionStore.requestTracker.get(sessionId) ?? null
+})
+
+const streamingStartTime = computed(() => {
+  return currentRequestTracker.value?.requestStartTime ?? Date.now()
+})
+
+const streamingInputTokens = computed(() => {
+  return currentRequestTracker.value?.inputTokens ?? 0
+})
+
+const streamingOutputTokens = computed(() => {
+  return currentRequestTracker.value?.outputTokens ?? 0
+})
+
 const pendingTasks = ref<PendingTask[]>([])
 const debugExpanded = ref(false)
 
@@ -189,16 +250,32 @@ onMounted(async () => {
   console.log('🚀 ModernChatView mounted (Live Mode)')
 
   try {
-    await sessionStore.loadSessions()
-
+    // 会话数据由后端 SDK 管理，前端不需要加载
+    // 如果有指定的 sessionId，切换到该会话
     if (props.sessionId) {
-      console.log('📡 Switching to session:', props.sessionId)
-      await sessionStore.switchSession(props.sessionId)
-    } else if (!sessionStore.currentSessionId && sessionStore.sessions.length === 0) {
-      const newSession = await sessionStore.createSession()
-      if (!newSession) {
-        throw new Error('无法创建会话')
+      console.log('📡 External session detected:', props.sessionId)
+      const resolvedId = sessionStore.resolveSessionIdentifier(props.sessionId)
+      if (resolvedId) {
+        await sessionStore.switchSession(resolvedId)
+      } else {
+        const resumed = await sessionStore.resumeSession(props.sessionId)
+        if (!resumed) {
+          throw new Error('无法恢复指定会话')
+        }
       }
+      return
+    }
+
+    // 没有传入 sessionId 时，第一次进入需要自动创建一个连接好的会话
+    const hasSessions = sessionStore.allSessions.length > 0
+    if (!sessionStore.currentSessionId && !hasSessions) {
+      console.log('🆕 No existing sessions detected, creating one by default...')
+      const createFn = sessionStore.startNewSession ?? sessionStore.createSession
+      const session = await createFn?.()
+      if (!session) {
+        throw new Error('自动创建会话失败')
+      }
+      console.log('✅ Default session created:', session.id)
     }
   } catch (error) {
     console.error('❌ Failed to initialize session:', error)
@@ -209,15 +286,24 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   console.log('🧹 ModernChatView unmounting')
-  // 清理工作由 sessionStore 和 claudeService 内部处理
+  // 清理工作由 sessionStore 和 ClaudeCodeClient 内部处理
 })
 
 // 监听外部传入的 sessionId 变化
+// 注意：onMounted 中的自动创建逻辑不会修改 props.sessionId，因此不会触发此 watcher，避免了冲突
 watch(() => props.sessionId, async (newSessionId) => {
   if (!newSessionId) return
   console.log('🔄 Session ID changed:', newSessionId)
   try {
-    await sessionStore.switchSession(newSessionId)
+    const resolvedId = sessionStore.resolveSessionIdentifier(newSessionId)
+    if (resolvedId) {
+      await sessionStore.switchSession(resolvedId)
+      return
+    }
+    const resumed = await sessionStore.resumeSession(newSessionId)
+    if (!resumed) {
+      throw new Error('无法恢复指定会话')
+    }
   } catch (error) {
     console.error('❌ Failed to switch session:', error)
     uiState.value.hasError = true
@@ -229,10 +315,19 @@ watch(() => props.sessionId, async (newSessionId) => {
 // 事件处理器
 // ============================================
 
-function handleSendMessage(text: string) {
+async function handleSendMessage(text: string) {
   console.log('📤 Sending message:', text)
 
   try {
+    // ✅ 懒加载：检查是否有会话，没有则创建
+    if (!sessionStore.currentSessionId) {
+      console.log('🆕 没有活跃会话，创建新会话...')
+      const newSession = await sessionStore.createSession()
+      if (!newSession) {
+        throw new Error('无法创建会话')
+      }
+    }
+
     const sessionId = sessionStore.currentSessionId
     if (!sessionId) {
       console.error('❌ No active session')
@@ -241,10 +336,56 @@ function handleSendMessage(text: string) {
       return
     }
 
-    uiState.value.isGenerating = true
-    claudeService.sendMessage(sessionId, text)
+    // 1. 收集上下文中的图片
+    const imageContexts = uiState.value.contexts.filter(
+      (c: any) => c.type === 'image' && c.base64Data
+    )
+    console.log(`📸 收集到 ${imageContexts.length} 张图片`)
 
-    // 自动清理上下文（如果启用）
+    // 2. 立即添加用户消息到 UI
+    const userMessageId = `user-${Date.now()}`
+    const userMessage: Message = {
+      id: userMessageId,
+      role: 'user',
+      content: [{ type: 'text', text }],
+      timestamp: Date.now()
+    }
+    sessionStore.addMessage(sessionId, userMessage)
+    console.log('👤 用户消息已添加到UI')
+
+    // 3. 添加助手占位符消息到消息列表（显示为气泡）
+    const placeholderMessageId = `assistant-placeholder-${Date.now()}`
+    const placeholderMessage: Message = {
+      id: placeholderMessageId,
+      role: 'assistant',
+      content: [],  // 真正的空内容，processMessageStart 会检查 content.length === 0
+      timestamp: Date.now(),
+      isStreaming: true  // 标记为流式消息，用于显示加载动画
+    }
+    sessionStore.addMessage(sessionId, placeholderMessage)
+    console.log('🤖 助手占位符消息已添加到UI')
+
+    // 开始追踪请求统计（传入占位符消息 ID）
+    sessionStore.startRequestTracking(sessionId, userMessageId, placeholderMessageId)
+
+    // 4. 发送消息到后端（包含图片时使用 sendMessageWithContent）
+    if (imageContexts.length > 0) {
+      // 构建 stream-json content 数组
+      const content: any[] = [{ type: 'text', text }]
+      imageContexts.forEach((img: any) => {
+        content.push({
+          type: 'image',
+          data: img.base64Data,
+          mimeType: img.mimeType || 'image/png'
+        })
+      })
+      console.log('📤 发送带图片的消息')
+      sessionStore.sendMessageWithContent(content)
+    } else {
+      sessionStore.sendMessage(text)
+    }
+
+    // 4. 自动清理上下文（如果启用）
     if (uiState.value.autoCleanupContexts) {
       console.log('🧹 Auto-cleaning contexts after send')
       uiState.value.contexts = []
@@ -253,6 +394,15 @@ function handleSendMessage(text: string) {
     console.error('❌ Failed to send message:', error)
     uiState.value.hasError = true
     uiState.value.errorMessage = `发送消息失败: ${error instanceof Error ? error.message : '未知错误'}`
+    // 移除占位符消息
+    const sessionId = sessionStore.currentSessionId
+    if (sessionId) {
+      const messages = sessionStore.getMessages(sessionId)
+      const placeholderIndex = messages.findIndex(m => m.id && m.id.startsWith('assistant-placeholder-'))
+      if (placeholderIndex !== -1) {
+        sessionStore.removeMessage(sessionId, placeholderIndex)
+      }
+    }
   }
 }
 
@@ -318,6 +468,23 @@ function handleClearError() {
   uiState.value.errorMessage = undefined
 }
 
+function toggleHistoryOverlay() {
+  isHistoryOverlayVisible.value = !isHistoryOverlayVisible.value
+}
+
+async function handleHistorySelect(sessionId: string) {
+  await sessionStore.switchSession(sessionId)
+  isHistoryOverlayVisible.value = false
+}
+
+async function handleCreateNewSession() {
+  const session = await sessionStore.startNewSession?.()
+  if (session?.id) {
+    await sessionStore.switchSession(session.id)
+  }
+  isHistoryOverlayVisible.value = false
+}
+
 </script>
 
 <style scoped>
@@ -328,6 +495,15 @@ function handleClearError() {
   min-height: 100%; /* 防止塌陷 */
   background: var(--ide-background, #fafbfc);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.chat-header-bar {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--ide-border, #e1e4e8);
+}
+
+.theme-dark .chat-header-bar {
+  border-color: var(--ide-border, #30363d);
 }
 
 .modern-chat-view.theme-dark {

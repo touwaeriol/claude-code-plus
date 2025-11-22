@@ -1,8 +1,13 @@
 /**
  * Claude 会话对象 - 基于 WebSocket RPC
- * 
+ *
  * 架构原则: 一个 ClaudeSession 实例 = 一个 WebSocket 连接 = 一个 Claude 会话
  */
+
+import { resolveServerWsUrl } from '@/utils/serverUrl'
+import { loggers } from '@/utils/logger'
+
+const log = loggers.claude
 
 export interface Message {
   type: string
@@ -11,13 +16,55 @@ export interface Message {
 }
 
 export interface ConnectOptions {
+  print?: boolean
+  outputFormat?: string
+  verbose?: boolean
+  includePartialMessages?: boolean
+  dangerouslySkipPermissions?: boolean
+  allowDangerouslySkipPermissions?: boolean
+  // 其他可选参数（保留向后兼容）
   model?: string
   permissionMode?: string
   maxTurns?: number
   systemPrompt?: string
-  dangerouslySkipPermissions?: boolean
-  allowDangerouslySkipPermissions?: boolean
   [key: string]: any
+}
+
+/**
+ * 内容块类型 (stream-json 格式)
+ *
+ * 包含文本、图片、工具调用和工具结果
+ */
+export type ContentBlock = TextContent | ImageContent | ToolUseContent | ToolResultContent | ThinkingContent
+
+export interface TextContent {
+  type: 'text'
+  text: string
+}
+
+export interface ImageContent {
+  type: 'image'
+  data: string      // base64 encoded
+  mimeType: string  // e.g., 'image/png', 'image/jpeg'
+}
+
+export interface ToolUseContent {
+  type: 'tool_use'
+  id: string
+  name: string
+  input: Record<string, unknown>
+}
+
+export interface ToolResultContent {
+  type: 'tool_result'
+  tool_use_id: string
+  content: string | any[]
+  is_error?: boolean
+}
+
+export interface ThinkingContent {
+  type: 'thinking'
+  thinking: string
 }
 
 export interface RpcRequest {
@@ -60,16 +107,12 @@ export class ClaudeSession {
   private wsUrl: string
 
   constructor(wsUrl?: string) {
-    // 自动检测 WebSocket URL
     if (wsUrl) {
       this.wsUrl = wsUrl
-    } else if (typeof window !== 'undefined') {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const host = window.location.host
-      this.wsUrl = `${protocol}//${host}/ws`
     } else {
-      this.wsUrl = 'ws://localhost:8080/ws'
+      this.wsUrl = resolveServerWsUrl()
     }
+    log.debug(`WebSocket URL: ${this.wsUrl}`)
   }
 
   get isConnected(): boolean {
@@ -84,19 +127,29 @@ export class ClaudeSession {
    * 连接到服务器并初始化 Claude 会话
    */
   async connect(options?: ConnectOptions): Promise<string> {
+    log.debug('connect: 开始连接', options?.model ? `model=${options.model}` : '')
+
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(this.wsUrl)
 
       this.ws.onopen = async () => {
-        console.log('🔌 WebSocket 连接已建立')
+        log.debug('WebSocket 连接已建立')
 
         try {
           // 发送 connect RPC 请求
           const result = await this.sendRequest('connect', options)
           this.sessionId = result.sessionId
           this._isConnected = true
-          console.log('✅ Claude 会话已连接:', this.sessionId)
-          resolve(this.sessionId!)
+          log.info(`会话已连接: ${this.sessionId}`)
+
+          // 安全检查：确保 sessionId 已设置
+          if (!this.sessionId) {
+            const error = new Error('连接成功但未返回 sessionId')
+            this.handleError(error)
+            reject(error)
+            return
+          }
+          resolve(this.sessionId)
         } catch (error) {
           this.handleError(error as Error)
           reject(error)
@@ -108,14 +161,14 @@ export class ClaudeSession {
       }
 
       this.ws.onerror = (error) => {
-        console.error('❌ WebSocket 错误:', error)
+        log.error('WebSocket 错误:', error)
         const err = new Error('WebSocket connection failed')
         this.handleError(err)
         reject(err)
       }
 
       this.ws.onclose = () => {
-        console.log('🔌 WebSocket 连接已关闭')
+        log.debug('WebSocket 连接已关闭')
         this._isConnected = false
         this.sessionId = null
       }
@@ -123,7 +176,7 @@ export class ClaudeSession {
   }
 
   /**
-   * 发送消息查询
+   * 发送消息查询 (纯文本)
    */
   async sendMessage(message: string): Promise<void> {
     if (!this._isConnected) {
@@ -131,7 +184,23 @@ export class ClaudeSession {
     }
 
     // 发送 query 请求 (流式响应)
-    await this.sendRequest('query', message)
+    // 注意: 后端期望 params 是 {message: "..."}
+    await this.sendRequest('query', { message })
+  }
+
+  /**
+   * 发送消息查询 (支持图片)
+   *
+   * Content 格式:
+   * - 文本: { type: 'text', text: '...' }
+   * - 图片: { type: 'image', data: 'base64...', mimeType: 'image/png' }
+   */
+  async sendMessageWithContent(content: ContentBlock[]): Promise<void> {
+    if (!this._isConnected) {
+      throw new Error('Session not connected')
+    }
+
+    await this.sendRequest('queryWithContent', { content })
   }
 
   /**
@@ -196,8 +265,17 @@ export class ClaudeSession {
       const id = `req-${++this.requestIdCounter}`
       const request: RpcRequest = { id, method, params }
 
+      log.debug(`sendRequest: method=${method}, id=${id}`)
+
       this.pendingRequests.set(id, { resolve, reject })
-      this.ws?.send(JSON.stringify(request))
+
+      if (!this.ws) {
+        const error = new Error('WebSocket 未初始化')
+        reject(error)
+        return
+      }
+
+      this.ws.send(JSON.stringify(request))
     })
   }
 
@@ -217,7 +295,13 @@ export class ClaudeSession {
 
       // 处理流完成
       if (message.type === 'complete') {
-        // 流结束,不需要特殊处理
+        const completeMsg = message as RpcStreamComplete
+        log.debug(`handleMessage: 流完成, id=${completeMsg.id}`)
+        const pending = this.pendingRequests.get(completeMsg.id)
+        if (pending) {
+          this.pendingRequests.delete(completeMsg.id)
+          pending.resolve({ status: 'complete' })
+        }
         return
       }
 
@@ -237,7 +321,7 @@ export class ClaudeSession {
         }
       }
     } catch (error) {
-      console.error('❌ 处理消息失败:', error)
+      log.error('处理消息失败:', error)
       this.handleError(error as Error)
     }
   }
@@ -250,7 +334,7 @@ export class ClaudeSession {
       try {
         handler(error)
       } catch (err) {
-        console.error('❌ 错误处理器执行失败:', err)
+        log.error('错误处理器执行失败:', err)
       }
     })
   }

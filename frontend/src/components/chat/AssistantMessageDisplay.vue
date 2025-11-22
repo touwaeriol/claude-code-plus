@@ -1,6 +1,6 @@
 <template>
   <div class="assistant-message-display">
-    <!-- 模型显示 (对应 lines 36-55) -->
+    <!-- 模型显示 -->
     <div
       v-if="message.model"
       class="model-display"
@@ -9,24 +9,21 @@
       <span class="model-name">{{ getModelDisplayName(message.model) }}</span>
     </div>
 
-    <!-- orderedElements 渲染 (对应 lines 57-97) -->
-    <div
-      v-if="hasOrderedElements"
-      class="ordered-elements"
-    >
+    <!-- orderedElements 渲染 -->
+    <div class="ordered-elements">
       <div
         v-for="(element, index) in message.orderedElements"
         :key="getElementKey(element, index)"
         class="timeline-element"
       >
-        <!-- ContentItem - 文本内容 (对应 lines 63-76) -->
+        <!-- ContentItem - 文本内容 -->
         <div
           v-if="element.type === 'content'"
           class="content-item"
         >
           <div v-if="isContentNotBlank(element.content)">
             <MarkdownRenderer
-              :markdown="element.content"
+              :content="element.content"
               class="markdown-content"
               @link-click="handleLinkClick"
               @code-action="handleCodeAction"
@@ -34,7 +31,7 @@
           </div>
         </div>
 
-        <!-- ToolCallItem - 工具调用 (对应 lines 77-89) -->
+        <!-- ToolCallItem - 工具调用 -->
         <CompactToolCallDisplay
           v-else-if="element.type === 'toolCall'"
           :tool-calls="[element.toolCall]"
@@ -43,26 +40,19 @@
           @expanded-change="handleExpandedChange"
         />
 
-        <!-- StatusItem - 状态显示 (对应 lines 90-94) -->
-        <StatusMessageRow
+        <!-- StatusItem - 状态显示 -->
+        <div
           v-else-if="element.type === 'status'"
-          :status="element"
-          class="status-item"
-        />
+          class="status-item status-message-row"
+        >
+          <div v-if="element.isStreaming" class="jumping-dots-container">
+            <span class="jumping-dot"></span>
+            <span class="jumping-dot"></span>
+            <span class="jumping-dot"></span>
+          </div>
+          <span class="status-text">{{ element.status }}</span>
+        </div>
       </div>
-    </div>
-
-    <!-- 降级渲染:无 orderedElements 时显示整体文本 (对应 lines 98-106) -->
-    <div
-      v-else-if="hasFallbackContent"
-      class="fallback-content"
-    >
-      <MarkdownRenderer
-        :markdown="message.content"
-        class="markdown-content"
-        @link-click="handleLinkClick"
-        @code-action="handleCodeAction"
-      />
     </div>
   </div>
 </template>
@@ -87,18 +77,6 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'expanded-change', toolId: string, expanded: boolean): void
 }>()
-
-// ============================================
-// 计算属性
-// ============================================
-
-const hasOrderedElements = computed(() => {
-  return props.message.orderedElements && props.message.orderedElements.length > 0
-})
-
-const hasFallbackContent = computed(() => {
-  return props.message.content && props.message.content.trim().length > 0
-})
 
 // ============================================
 // 工具函数
@@ -172,58 +150,6 @@ function handleExpandedChange(toolId: string, expanded: boolean) {
 }
 </script>
 
-<!-- StatusMessageRow 子组件 (对应 lines 111-129) -->
-<script setup lang="ts">
-import { defineComponent } from 'vue'
-
-/**
- * 状态消息行组件
- * 对应 Kotlin 的 StatusMessageRow
- */
-const StatusMessageRow = defineComponent({
-  name: 'StatusMessageRow',
-  props: {
-    status: {
-      type: Object as () => MessageTimelineItem & { type: 'status' },
-      required: true
-    }
-  },
-  setup(props) {
-    return () => (
-      <div class="status-message-row">
-        {/* JumpingDots 动画 (对应 lines 116-120) */}
-        {props.status.isStreaming && (
-          <JumpingDots class="jumping-dots" />
-        )}
-
-        {/* 状态文本 (对应 lines 121-127) */}
-        <span class="status-text">{props.status.status}</span>
-      </div>
-    )
-  }
-})
-
-/**
- * JumpingDots 动画组件
- * 对应 Kotlin 的 JumpingDots
- */
-const JumpingDots = defineComponent({
-  name: 'JumpingDots',
-  setup() {
-    return () => (
-      <div class="jumping-dots-container">
-        <span class="dot dot-1">●</span>
-        <span class="dot dot-2">●</span>
-        <span class="dot dot-3">●</span>
-      </div>
-    )
-  }
-})
-
-// 导出子组件供使用
-export { StatusMessageRow, JumpingDots }
-</script>
-
 <style scoped>
 /* 主容器样式 */
 .assistant-message-display {
@@ -233,7 +159,7 @@ export { StatusMessageRow, JumpingDots }
   width: 100%;
 }
 
-/* 模型显示样式 (对应 lines 36-55) */
+/* 模型显示样式 */
 .model-display {
   display: flex;
   align-items: center;
@@ -305,8 +231,39 @@ export { StatusMessageRow, JumpingDots }
 .jumping-dots-container {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding-right: 2px;
+  gap: 3px;
+  padding-right: 6px;
+}
+
+.jumping-dot {
+  width: 4px;
+  height: 4px;
+  background-color: var(--ide-secondary-foreground, #586069);
+  border-radius: 50%;
+  animation: jump 1.4s infinite ease-in-out;
+}
+
+.jumping-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.jumping-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.jumping-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes jump {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  40% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
 }
 
 .dot {

@@ -7,23 +7,10 @@
   >
     <template #details>
       <div class="edit-tool-details">
-        <div class="file-info">
-          <div class="info-row">
-            <span class="label">文件:</span>
-            <span class="value clickable" @click="showDiff">{{ filePath }}</span>
-          </div>
-        </div>
-
         <DiffViewer :old-content="oldString" :new-content="newString" />
 
         <div v-if="replaceAll" class="replace-mode">
           <span class="badge">全部替换</span>
-        </div>
-
-        <div v-if="result" class="tool-result">
-          <div class="result-status" :class="resultStatus">
-            {{ resultMessage }}
-          </div>
         </div>
       </div>
     </template>
@@ -79,32 +66,6 @@ const fileName = computed(() => {
 const oldString = computed(() => props.toolUse.input.old_string || '')
 const newString = computed(() => props.toolUse.input.new_string || '')
 const replaceAll = computed(() => props.toolUse.input.replace_all || false)
-
-const resultStatus = computed(() => {
-  if (!props.result) return 'pending'
-  // 简单判断:如果 content 包含 "success" 或没有 "error"
-  // 将 content 转换为字符串
-  let contentStr = ''
-  if (typeof props.result.content === 'string') {
-    contentStr = props.result.content
-  } else if (Array.isArray(props.result.content)) {
-    contentStr = props.result.content
-      .filter((item: any) => item.type === 'text')
-      .map((item: any) => item.text)
-      .join('\n')
-  } else {
-    contentStr = JSON.stringify(props.result.content)
-  }
-  const content = contentStr.toLowerCase()
-  if (content.includes('error') || content.includes('failed')) return 'error'
-  return 'success'
-})
-
-const resultMessage = computed(() => {
-  if (!props.result) return '等待执行...'
-  if (resultStatus.value === 'error') return '编辑失败'
-  return '编辑成功'
-})
 
 async function showDiff() {
   // 使用增强功能：从文件重建完整 Diff
@@ -203,29 +164,6 @@ async function showDiff() {
   border-radius: 12px;
 }
 
-.result-status {
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 600;
-  margin-top: 12px;
-}
-
-.result-status.pending {
-  background: #f1f8ff;
-  color: var(--ide-accent, #0366d6);
-}
-
-.result-status.success {
-  background: #e6ffed;
-  color: var(--ide-success, #22863a);
-}
-
-.result-status.error {
-  background: #ffeef0;
-  color: var(--ide-error, #d73a49);
-}
-
 /* 暗色主题适配 */
 .theme-dark .diff-header.old {
   background: #3d1f1f;
@@ -241,17 +179,5 @@ async function showDiff() {
 
 .theme-dark .diff-content.new {
   background: #1f3d1f;
-}
-
-.theme-dark .result-status.pending {
-  background: #1a2a3a;
-}
-
-.theme-dark .result-status.success {
-  background: #1f3d1f;
-}
-
-.theme-dark .result-status.error {
-  background: #3d1f1f;
 }
 </style>

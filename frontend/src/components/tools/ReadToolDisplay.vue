@@ -6,36 +6,24 @@
     @click="handleCardClick"
   >
     <template #details>
-      <div class="file-info">
-        <div class="info-row">
-          <span class="label">路径:</span>
-          <span
-            class="value clickable"
-            @click="openFile"
-          >{{ filePath }}</span>
-        </div>
-        <div
-          v-if="hasLineRange"
-          class="info-row"
-        >
-          <span class="label">行数:</span>
-          <span class="value">{{ lineRange }}</span>
-        </div>
-      </div>
       <div
         v-if="result"
         class="tool-result"
       >
         <div class="result-header">
-          <span>读取结果</span>
+          <span></span>
           <button
             class="copy-btn"
             @click="copyContent"
+            title="复制"
           >
-            复制
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
           </button>
         </div>
-        <CodeSnippet :code="resultText" :language="language" />
+        <CodeSnippet :code="resultText" :language="language" :start-line="startLineNumber" />
       </div>
     </template>
   </CompactToolCard>
@@ -56,8 +44,8 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-// 默认折叠，点击后展开查看详情
-const expanded = ref(false)
+// Read 工具默认展开，显示文件内容
+const expanded = ref(true)
 
 // 环境检测
 const { isInIde } = useEnvironment()
@@ -90,25 +78,88 @@ const lineRange = computed(() => {
   return `L${start}-${end}`
 })
 
+/**
+ * 提取 SDK 返回的行号和代码内容
+ * SDK 返回的格式：     1→代码内容
+ * 返回：{ content: 代码内容, startLine: 起始行号 }
+ */
+function extractLineNumbersAndContent(text: string): { content: string; startLine: number } {
+  const lines = text.split('\n')
+  let startLine = 1
+  let firstLineNumberFound = false
+
+  const contentLines = lines.map(line => {
+    // 匹配行首的 "空格 + 数字 + →"
+    const match = line.match(/^\s*(\d+)→/)
+    if (match) {
+      const lineNum = parseInt(match[1], 10)
+      // 记录第一行的行号
+      if (!firstLineNumberFound) {
+        startLine = lineNum
+        firstLineNumberFound = true
+      }
+      // 移除行号部分
+      return line.substring(match[0].length)
+    }
+    return line
+  })
+
+  return {
+    content: contentLines.join('\n'),
+    startLine
+  }
+}
+
 const resultText = computed(() => {
   if (!props.result) return ''
   const content = props.result.content
 
+  let rawText = ''
+
   // 处理字符串
   if (typeof content === 'string') {
-    return content
+    rawText = content
+  }
+  // 处理数组（ContentBlock[]）
+  else if (Array.isArray(content)) {
+    rawText = content
+      .filter((item: any) => item.type === 'text')
+      .map((item: any) => item.text)
+      .join('\n')
+  }
+  // 处理对象
+  else {
+    rawText = JSON.stringify(content, null, 2)
   }
 
-  // 处理数组（ContentBlock[]）
-  if (Array.isArray(content)) {
-    return content
+  // 提取行号和内容
+  const { content: cleanContent } = extractLineNumbersAndContent(rawText)
+
+  // 去除尾部空行
+  const lines = cleanContent.split('\n')
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+    lines.pop()
+  }
+  return lines.join('\n')
+})
+
+// 提取起始行号
+const startLineNumber = computed(() => {
+  if (!props.result) return 1
+  const content = props.result.content
+
+  let rawText = ''
+  if (typeof content === 'string') {
+    rawText = content
+  } else if (Array.isArray(content)) {
+    rawText = content
       .filter((item: any) => item.type === 'text')
       .map((item: any) => item.text)
       .join('\n')
   }
 
-  // 处理对象
-  return JSON.stringify(content, null, 2)
+  const { startLine } = extractLineNumbersAndContent(rawText)
+  return startLine
 })
 
 const language = computed(() => {
@@ -282,16 +333,20 @@ async function copyContent() {
 }
 
 .copy-btn {
-  padding: 2px 8px;
-  font-size: 11px;
-  border: 1px solid var(--ide-border, #e1e4e8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
   border-radius: 3px;
-  background: var(--ide-background, white);
+  background: transparent;
   color: var(--ide-foreground, #24292e);
   cursor: pointer;
+  opacity: 0.6;
 }
 
 .copy-btn:hover {
+  opacity: 1;
   background: var(--ide-panel-background, #f6f8fa);
 }
 

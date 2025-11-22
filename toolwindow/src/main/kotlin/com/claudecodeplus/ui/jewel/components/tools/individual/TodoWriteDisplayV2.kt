@@ -34,11 +34,31 @@ fun TodoWriteDisplayV2(
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         if (!showDetails) {
-            val total = toolDetail.todos.size
+            // 优先显示正在进行的任务，如果没有则显示统计信息
+            val inProgressTasks = toolDetail.todos.filter {
+                it.status.equals("in_progress", ignoreCase = true)
+            }
+
+            val subtitle = if (inProgressTasks.isNotEmpty()) {
+                // 显示第一个进行中的任务内容（限制长度避免过长）
+                val taskContent = inProgressTasks.first().content
+                if (taskContent.length > 50) {
+                    taskContent.take(47) + "..."
+                } else {
+                    taskContent
+                }
+            } else {
+                // 没有进行中的任务，显示统计信息
+                val completed = toolDetail.todos.count {
+                    it.status.equals("completed", ignoreCase = true)
+                }
+                "$completed / ${toolDetail.todos.size} 已完成"
+            }
+
             ToolHeaderDisplay(
                 icon = "TODO",
                 toolName = "TodoWrite",
-                subtitle = formatStringResource(StringResources.UPDATE_TASKS, total),
+                subtitle = subtitle,
                 status = toolCall.status
             )
         }

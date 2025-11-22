@@ -1,0 +1,29 @@
+# Claude Code Tools Demo - New Session
+# =====================================
+
+## 工具演示文件
+
+这个文件通过 Write 工具创建，用于演示 Claude Code 的各种工具：
+
+1. Read 工具 - 读取文件内容
+2. Write 工具 - 创建新文件 (当前演示)
+3. Edit 工具 - 编辑现有文件
+4. MultiEdit 工具 - 多处编辑
+
+## 示例数据
+
+name: demo-session
+version: 2.0.0
+status: completed
+updated: 2025-11-22 (via Edit tool)
+created: 2025-11-22
+
+## 待修改区域
+
+- 任务A: 已完成 [MultiEdit #1]
+- 任务B: 进行中 [MultiEdit #2]
+- 任务C: 已取消 [MultiEdit #3]
+
+## 备注
+
+此文件将用于后续的 Edit 和 MultiEdit 演示。

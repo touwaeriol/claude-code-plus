@@ -58,16 +58,16 @@ export default defineConfig({
     },
     proxy: {
       '/ws': {
-        target: 'ws://127.0.0.1:60529',
+        target: 'ws://127.0.0.1:8765',
         ws: true,
         changeOrigin: true
       },
       '/api': {
-        target: 'http://127.0.0.1:60529',
+        target: 'http://127.0.0.1:8765',
         changeOrigin: true
       },
       '/events': {
-        target: 'http://127.0.0.1:60529',
+        target: 'http://127.0.0.1:8765',
         changeOrigin: true
       }
     }

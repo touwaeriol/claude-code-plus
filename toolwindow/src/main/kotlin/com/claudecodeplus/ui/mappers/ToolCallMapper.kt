@@ -198,12 +198,6 @@ object ToolCallMapper {
                 toolType = UiToolType.UNKNOWN,
                 parameters = sdkTool.getTypedParameters()
             )
-
-            // 其他未匹配的类型（理论上不会到达这里）
-            else -> GenericToolDetail(
-                toolType = mapToolType(sdkTool.toolType),
-                parameters = sdkTool.getTypedParameters()
-            )
         }
     }
 

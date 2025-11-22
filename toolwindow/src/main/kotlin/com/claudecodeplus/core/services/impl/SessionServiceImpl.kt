@@ -19,7 +19,7 @@ import com.claudecodeplus.session.ClaudeSessionManager
 import com.claudecodeplus.ui.models.*
 import com.claudecodeplus.ui.services.SdkMessageConverter
 import com.claudecodeplus.sdk.ClaudeCodeSdkClient
-import com.claudecodeplus.sdk.types.ClaudeCodeOptions
+import com.claudecodeplus.sdk.types.ClaudeAgentOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -43,7 +43,7 @@ import java.util.UUID
 class SessionServiceImpl(
     private val messageProcessor: MessageProcessor,
     private val toolResultProcessor: ToolResultProcessor = ToolResultProcessor(),
-    private val clientFactory: (ClaudeCodeOptions) -> ClaudeCodeSdkClient = { opts -> ClaudeCodeSdkClient(opts) }
+    private val clientFactory: (ClaudeAgentOptions) -> ClaudeCodeSdkClient = { opts -> ClaudeCodeSdkClient(opts) }
 ) : SessionService {
 
     private val sessionManager = ClaudeSessionManager()
@@ -74,8 +74,8 @@ class SessionServiceImpl(
         val sessionId = UUID.randomUUID().toString()
 
         try {
-            // 创建 ClaudeCodeOptions
-            val options = ClaudeCodeOptions(
+            // 创建 ClaudeAgentOptions
+            val options = ClaudeAgentOptions(
                 model = model.cliName,
                 cwd = java.nio.file.Paths.get(projectPath),
                 permissionMode = when (permissionMode) {

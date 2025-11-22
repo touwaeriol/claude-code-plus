@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket RPC 测试工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .section {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .section:last-child {
+            border-bottom: none;
+        }
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .control-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .control-group label {
+            min-width: 100px;
+            font-size: 14px;
+            color: #666;
+        }
+        .control-group input,
+        .control-group select,
+        .control-group textarea {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .control-group textarea {
+            min-height: 80px;
+            font-family: 'Courier New', monospace;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #38a169;
+        }
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+        .btn-secondary {
+            background: #718096;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #4a5568;
+        }
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .status.disconnected {
+            background: #fed7d7;
+            color: #c53030;
+        }
+        .status.connected {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .status.disconnected .status-indicator {
+            background: #f56565;
+        }
+        .status.connected .status-indicator {
+            background: #48bb78;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .message-log {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 4px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .message-item {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .message-item.sent {
+            background: rgba(102, 126, 234, 0.1);
+            border-left: 3px solid #667eea;
+        }
+        .message-item.received {
+            background: rgba(72, 187, 120, 0.1);
+            border-left: 3px solid #48bb78;
+        }
+        .message-item.error {
+            background: rgba(245, 101, 101, 0.1);
+            border-left: 3px solid #f56565;
+        }
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        .message-type {
+            font-weight: 600;
+        }
+        .message-time {
+            opacity: 0.7;
+        }
+        .message-content {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .quick-test-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔌 WebSocket RPC 测试工具</h1>
+            <p>测试 Claude Code Plus WebSocket RPC 功能</p>
+        </div>
+
+        <!-- 连接控制区 -->
+        <div class="section">
+            <div class="section-title">📡 连接控制</div>
+            <div class="control-group">
+                <label>WebSocket URL:</label>
+                <input type="text" id="wsUrl" value="ws://localhost:56985/ws" />
+            </div>
+            <div class="control-group">
+                <button class="btn btn-success" id="connectBtn">🟢 连接 (Connect)</button>
+                <button class="btn btn-danger" id="disconnectBtn" disabled>🔴 断开 (Disconnect)</button>
+                <span class="status disconnected" id="statusIndicator">
+                    <span class="status-indicator"></span>
+                    未连接
+                </span>
+            </div>
+        </div>
+
+        <!-- RPC 方法按钮区 -->
+        <div class="section">
+            <div class="section-title">🎮 RPC 方法</div>
+            <div class="quick-test-buttons">
+                <button class="btn btn-success" id="rpcConnectBtn" disabled>🔌 Connect (连接会话)</button>
+                <button class="btn btn-danger" id="rpcDisconnectBtn" disabled>🔌 Disconnect (断开会话)</button>
+                <button class="btn btn-secondary" id="rpcInterruptBtn" disabled>⏸️ Interrupt (中断操作)</button>
+                <button class="btn btn-secondary" id="rpcSetModelBtn" disabled>⚙️ SetModel (设置模型)</button>
+                <button class="btn btn-secondary" id="rpcGetHistoryBtn" disabled>📜 GetHistory (获取历史)</button>
+            </div>
+        </div>
+
+        <!-- Query 消息发送区 -->
+        <div class="section">
+            <div class="section-title">💬 Query - 发送消息查询</div>
+            <div class="control-group">
+                <label>消息内容:</label>
+                <textarea id="messageContent" placeholder='使用todowrite工具记录进度，演示edit write read multiEdit工具的使用'>使用todowrite工具记录进度，演示edit write read multiEdit工具的使用</textarea>
+            </div>
+            <div class="control-group">
+                <button class="btn btn-primary" id="sendQueryBtn" disabled>📨 发送 Query</button>
+            </div>
+        </div>
+
+        <!-- 消息日志区 -->
+        <div class="section">
+            <div class="section-title">
+                📋 消息日志
+                <button class="btn btn-secondary" id="clearLogBtn" style="float: right; padding: 5px 15px;">清空日志</button>
+            </div>
+            <div class="message-log" id="messageLog">
+                <div style="opacity: 0.5; text-align: center; padding: 20px;">
+                    等待连接...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let messageId = 1;
+
+        const wsUrlInput = document.getElementById('wsUrl');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const messageContentTextarea = document.getElementById('messageContent');
+        const sendQueryBtn = document.getElementById('sendQueryBtn');
+        const messageLog = document.getElementById('messageLog');
+        const clearLogBtn = document.getElementById('clearLogBtn');
+
+        // RPC 方法按钮
+        const rpcConnectBtn = document.getElementById('rpcConnectBtn');
+        const rpcDisconnectBtn = document.getElementById('rpcDisconnectBtn');
+        const rpcInterruptBtn = document.getElementById('rpcInterruptBtn');
+        const rpcSetModelBtn = document.getElementById('rpcSetModelBtn');
+        const rpcGetHistoryBtn = document.getElementById('rpcGetHistoryBtn');
+
+        // 添加日志消息
+        function addLog(type, method, content, timestamp = new Date()) {
+            const messageItem = document.createElement('div');
+            messageItem.className = `message-item ${type}`;
+
+            const typeLabel = type === 'sent' ? '⬆️ 发送' : type === 'received' ? '⬇️ 接收' : '❌ 错误';
+            const timeStr = timestamp.toLocaleTimeString('zh-CN', { hour12: false });
+
+            messageItem.innerHTML = `
+                <div class="message-header">
+                    <span class="message-type">${typeLabel}: ${method}</span>
+                    <span class="message-time">${timeStr}</span>
+                </div>
+                <div class="message-content">${content}</div>
+            `;
+
+            messageLog.appendChild(messageItem);
+            messageLog.scrollTop = messageLog.scrollHeight;
+        }
+
+        // 连接 WebSocket
+        function connect() {
+            const url = wsUrlInput.value;
+            addLog('sent', 'WebSocket', `正在连接到: ${url}`);
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = () => {
+                    addLog('received', 'WebSocket', '✅ WebSocket 连接成功!');
+                    updateConnectionStatus(true);
+                };
+
+                ws.onmessage = (event) => {
+                    addLog('received', 'Message', event.data);
+                };
+
+                ws.onerror = (error) => {
+                    addLog('error', 'WebSocket', `连接错误: ${error.message || '未知错误'}`);
+                };
+
+                ws.onclose = () => {
+                    addLog('received', 'WebSocket', '❌ WebSocket 连接已关闭');
+                    updateConnectionStatus(false);
+                };
+            } catch (error) {
+                addLog('error', 'WebSocket', `连接失败: ${error.message}`);
+            }
+        }
+
+        // 断开连接
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        // 发送 RPC 消息的通用函数
+        function sendRpcMessage(method, params = {}) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLog('error', 'Send', '❌ WebSocket 未连接');
+                return;
+            }
+
+            const message = {
+                jsonrpc: '2.0',
+                id: messageId++,
+                method: method,
+                params: params
+            };
+
+            const messageStr = JSON.stringify(message, null, 2);
+            ws.send(messageStr);
+            addLog('sent', method, messageStr);
+        }
+
+        // 发送 Query 消息
+        function sendQuery() {
+            const messageText = messageContentTextarea.value.trim();
+            if (!messageText) {
+                addLog('error', 'Query', '❌ 消息内容不能为空');
+                return;
+            }
+
+            sendRpcMessage('query', { message: messageText });
+        }
+
+        // RPC 方法按钮处理函数
+        function rpcConnect() {
+            sendRpcMessage('connect', {});
+        }
+
+        function rpcDisconnect() {
+            sendRpcMessage('disconnect', {});
+        }
+
+        function rpcInterrupt() {
+            sendRpcMessage('interrupt', {});
+        }
+
+        function rpcSetModel() {
+            const model = prompt('请输入模型名称:', 'claude-sonnet-4-5-20250929');
+            if (model) {
+                sendRpcMessage('setModel', { model: model });
+            }
+        }
+
+        function rpcGetHistory() {
+            sendRpcMessage('getHistory', {});
+        }
+
+        // 更新连接状态
+        function updateConnectionStatus(connected) {
+            if (connected) {
+                statusIndicator.className = 'status connected';
+                statusIndicator.innerHTML = '<span class="status-indicator"></span>已连接';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendQueryBtn.disabled = false;
+
+                // 启用所有 RPC 方法按钮
+                rpcConnectBtn.disabled = false;
+                rpcDisconnectBtn.disabled = false;
+                rpcInterruptBtn.disabled = false;
+                rpcSetModelBtn.disabled = false;
+                rpcGetHistoryBtn.disabled = false;
+            } else {
+                statusIndicator.className = 'status disconnected';
+                statusIndicator.innerHTML = '<span class="status-indicator"></span>未连接';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                sendQueryBtn.disabled = true;
+
+                // 禁用所有 RPC 方法按钮
+                rpcConnectBtn.disabled = true;
+                rpcDisconnectBtn.disabled = true;
+                rpcInterruptBtn.disabled = true;
+                rpcSetModelBtn.disabled = true;
+                rpcGetHistoryBtn.disabled = true;
+            }
+        }
+
+        // 清空日志
+        function clearLog() {
+            messageLog.innerHTML = '<div style="opacity: 0.5; text-align: center; padding: 20px;">日志已清空</div>';
+        }
+
+        // 事件监听器
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        sendQueryBtn.addEventListener('click', sendQuery);
+        clearLogBtn.addEventListener('click', clearLog);
+
+        // RPC 方法按钮事件监听
+        rpcConnectBtn.addEventListener('click', rpcConnect);
+        rpcDisconnectBtn.addEventListener('click', rpcDisconnect);
+        rpcInterruptBtn.addEventListener('click', rpcInterrupt);
+        rpcSetModelBtn.addEventListener('click', rpcSetModel);
+        rpcGetHistoryBtn.addEventListener('click', rpcGetHistory);
+
+        // 支持 Ctrl+Enter 发送消息
+        messageContentTextarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                e.preventDefault();
+                sendQuery();
+            }
+        });
+
+        // 初始化日志
+        addLog('received', 'System', '🚀 WebSocket RPC 测试工具已就绪');
+        addLog('received', 'System', '📝 请先点击"连接"按钮建立 WebSocket 连接');
+    </script>
+</body>
+</html>

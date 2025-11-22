@@ -92,7 +92,6 @@ fun AssistantMessageDisplay(
                             StatusMessageRow(status = element)
                         }
                     }
-                    else -> Unit
                 }
             }
         } else if (message.content.isNotBlank()) {

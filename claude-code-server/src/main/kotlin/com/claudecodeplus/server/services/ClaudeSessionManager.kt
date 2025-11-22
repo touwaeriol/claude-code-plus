@@ -342,18 +342,17 @@ object ClaudeSessionManager {
         ideActionBridge: com.claudecodeplus.server.IdeActionBridge,
         sessionOptions: kotlinx.serialization.json.JsonObject? = null
     ): ClaudeAgentOptions {
-        // 从前端配置中提取参数（如果有）
+        // 从前端配置中提取参数，不添加任何默认值（cwd 除外，由服务端指定）
         val model = sessionOptions?.get("model")?.jsonPrimitive?.contentOrNull
-            ?: "claude-sonnet-4-5-20250929"
 
         val maxTurns = sessionOptions?.get("maxTurns")?.jsonPrimitive?.intOrNull
-            ?: 50
 
         val dangerouslySkipPermissions = sessionOptions?.get("dangerouslySkipPermissions")?.jsonPrimitive?.booleanOrNull
-            ?: true
 
         val allowDangerouslySkipPermissions = sessionOptions?.get("allowDangerouslySkipPermissions")?.jsonPrimitive?.booleanOrNull
-            ?: true
+
+        // 提取流式输出配置
+        val includePartialMessages = sessionOptions?.get("includePartialMessages")?.jsonPrimitive?.booleanOrNull
 
         val permissionModeStr = sessionOptions?.get("permissionMode")?.jsonPrimitive?.contentOrNull
         val permissionMode = when (permissionModeStr) {
@@ -361,30 +360,31 @@ object ClaudeSessionManager {
             "acceptEdits" -> PermissionMode.ACCEPT_EDITS
             "plan" -> PermissionMode.PLAN
             "default" -> PermissionMode.DEFAULT
+            "dontAsk" -> PermissionMode.DONT_ASK
             else -> null
         }
 
-        // 提取系统提示词（如果前端提供）
+        // 提取系统提示词
         val systemPromptStr = sessionOptions?.get("systemPrompt")?.jsonPrimitive?.contentOrNull
         val systemPrompt: Any? = if (!systemPromptStr.isNullOrBlank()) {
-            // 如果前端提供了自定义系统提示词，使用字符串形式
             systemPromptStr
         } else {
-            // 否则使用默认的 claude_code preset（不添加任何参数，让 CLI 使用默认）
             null
         }
 
-        logger.info("🔧 构建 Claude 配置: model=$model, maxTurns=$maxTurns, permissionMode=$permissionModeStr, dangerouslySkipPermissions=$dangerouslySkipPermissions, allowDangerouslySkipPermissions=$allowDangerouslySkipPermissions, systemPrompt=${if (systemPrompt != null) "自定义" else "默认"}")
+        logger.info("🔧 构建 Claude 配置: model=$model, maxTurns=$maxTurns, permissionMode=$permissionModeStr, dangerouslySkipPermissions=$dangerouslySkipPermissions, allowDangerouslySkipPermissions=$allowDangerouslySkipPermissions, includePartialMessages=$includePartialMessages, systemPrompt=${if (systemPrompt != null) "自定义" else "null"}")
 
+        // cwd 由服务端指定（从项目路径获取）
         return ClaudeAgentOptions(
             model = model,
-            cwd = ideActionBridge.getProjectPath()?.let { java.nio.file.Path.of(it) },
-            debugStderr = true,
+            cwd = ideActionBridge.getProjectPath()?.let { java.nio.file.Path.of(it) },  // 服务端指定
+            debugStderr = true,  // 调试用，保留
             maxTurns = maxTurns,
             permissionMode = permissionMode,
             dangerouslySkipPermissions = dangerouslySkipPermissions,
             allowDangerouslySkipPermissions = allowDangerouslySkipPermissions,
-            systemPrompt = systemPrompt  // 使用前端提供的系统提示词，或 null（使用 CLI 默认）
+            systemPrompt = systemPrompt,
+            includePartialMessages = includePartialMessages ?: false
         )
     }
 }

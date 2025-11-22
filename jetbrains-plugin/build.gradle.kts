@@ -1,66 +1,47 @@
 plugins {
     kotlin("jvm")
-    kotlin("plugin.serialization")
     id("org.jetbrains.intellij.platform")
-    id("org.jetbrains.compose")
-    id("org.jetbrains.kotlin.plugin.compose")
 }
 
-group = "com.claudecodeplus"
-version = "1.0.4"
+group = providers.gradleProperty("pluginGroup").get()
+version = providers.gradleProperty("pluginVersion").get()
 
-repositories {
-    mavenCentral()
-    
-    // IntelliJ Platform Gradle Plugin Repositories Extension
-    intellijPlatform {
-        defaultRepositories()
-        marketplace()
-    }
-}
+
 
 dependencies {
-    // 依赖其他模块 - 按照官方方式排除整个 kotlinx 组
-    implementation(project(":toolwindow")) {
-        exclude(group = "org.jetbrains.kotlinx")
-        // 🎯 现在toolwindow使用内建依赖，不需要复杂的排除规则
-    }
+    implementation(project(":claude-code-server"))
+
+
+
+
+
+
+
 
     // 添加 claude-code-sdk 依赖
     implementation(project(":claude-code-sdk"))
-    
+
     // 🎯 使用IDE平台内置的Jewel模块 - 替换外部依赖
     // 移除所有外部Jewel依赖，使用IDE内置版本
-    
+
     // IntelliJ Platform dependencies
     intellijPlatform {
-        // 使用 2025.1.4.1 版本（稳定支持 Compose）
-        // 注意：虽然 IDE 是 2025.2.3，但插件SDK保持向后兼容
-        intellijIdeaCommunity("2025.1.4.1")
-        
-        // 🎯 Jewel和Compose内置模块 - 官方推荐方式！
+        create(providers.gradleProperty("platformType"), providers.gradleProperty("platformVersion"))
+
+        // 依赖 toolwindow 子模块
+        pluginComposedModule(implementation(project(":toolwindow")))
+
+        // 声明内置的 Jewel 和 Compose 模块依赖
         bundledModule("intellij.platform.jewel.foundation")
         bundledModule("intellij.platform.jewel.ui")
         bundledModule("intellij.platform.jewel.ideLafBridge")
-        bundledModule("intellij.libraries.compose.foundation.desktop")  // Compose Foundation
-        bundledModule("intellij.libraries.skiko")  // Compose的原生渲染库
-        
-        // 添加 Markdown 插件依赖
-        bundledPlugin("org.intellij.plugins.markdown")
-        
-        // 添加 Git 插件依赖
-        bundledPlugin("Git4Idea")
-        
-        // 添加 Java 插件依赖（用于 PSI 类）
-        bundledPlugin("com.intellij.java")
+        bundledModule("intellij.libraries.compose.foundation.desktop")
+        bundledModule("intellij.libraries.skiko")
     }
-    
-    // 🔧 添加 Compose Runtime 依赖（编译时需要）
-    compileOnly(compose.runtime)
 
     // 使用 IntelliJ Platform 的 Kotlin 标准库
     compileOnly(kotlin("stdlib"))
-    
+
     // 🔧 编译时需要协程 API，但运行时会被排除，使用 IntelliJ Platform 内置版本
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:${rootProject.extra["coroutinesVersion"]}")
@@ -78,38 +59,36 @@ dependencies {
     implementation("io.ktor:ktor-server-cors:$ktorVersion")
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
 
-    // 测试依赖
-    testImplementation(kotlin("test"))
+    // 测试依赖 - 使用 compileOnly 避免与 IDE 内置版本冲突
+    testCompileOnly(kotlin("stdlib"))
     testImplementation("io.mockk:mockk:1.13.8")
 }
 
 // IntelliJ 平台配置
 intellijPlatform {
     pluginConfiguration {
-        name = "Claude Code Plus"
-        version = project.version.toString()
+        name.set(providers.gradleProperty("pluginName"))
+        version.set(providers.gradleProperty("pluginVersion"))
 
         ideaVersion {
-            sinceBuild = "243"
-            untilBuild = "252.*"
+            sinceBuild.set(providers.gradleProperty("pluginSinceBuild"))
+            untilBuild.set(providers.gradleProperty("pluginUntilBuild"))
         }
-
-        // description 和 changeNotes 会从 plugin.xml 自动读取，无需手动配置
     }
-    
+
     // 签名配置（需要证书）
     // 注意：首次发布可以不签名，后续建议添加签名
     // signing {
     //     certificateChainFile = file("certificate-chain.crt")
-    //     privateKeyFile = file("private-key.pem") 
+    //     privateKeyFile = file("private-key.pem")
     //     password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
     // }
-    
+
     // 发布配置
     publishing {
         token = providers.environmentVariable("ORG_GRADLE_PROJECT_intellijPlatformPublishingToken")
             .orElse(providers.gradleProperty("intellijPlatformPublishingToken"))
-        
+
         // 发布渠道：stable, beta, alpha, eap
         channels = listOf("stable")
     }
@@ -151,11 +130,10 @@ val installFrontendDeps by tasks.registering(Exec::class) {
     dependsOn(checkNodeInstalled)
 
     workingDir = file("../frontend")
-    commandLine(npmCommand, "install")
+    commandLine(npmCommand, "install", "--legacy-peer-deps")  // 使用 legacy-peer-deps 解决依赖冲突
 
     // 只有当 package.json 改变或 node_modules 不存在时才执行
     inputs.file("../frontend/package.json")
-    inputs.file("../frontend/package-lock.json")
     outputs.dir("../frontend/node_modules")
 
     // 🔧 禁用状态跟踪以避免 Windows 符号链接问题
@@ -185,27 +163,52 @@ val buildFrontendWithVite by tasks.registering(Exec::class) {
     // 输出：前端 dist 目录
     outputs.dir("../frontend/dist")
 
+    // 🔧 禁用增量构建缓存 - 确保前端修改总是生效
+    // 前端构建很快（~6秒），不需要缓存优化
+    outputs.upToDateWhen { false }
+
     doFirst {
         println("🔨 Building Vue frontend with Vite...")
     }
 
     doLast {
         println("✅ Vue frontend built successfully")
-        // 构建完成后复制到资源目录
-        copy {
-            from("../frontend/dist")
-            into("src/main/resources/frontend")
-        }
-        println("📦 Frontend resources copied to resources/frontend")
     }
 }
 
 // 主构建任务 - 依赖 Vite 构建
-val buildFrontend by tasks.registering {
+val copyFrontendFiles by tasks.registering(Copy::class) {
     group = "frontend"
-    description = "Build frontend (uses Vite)"
+    description = "Copy frontend build artifacts to resources"
 
     dependsOn(buildFrontendWithVite)
+
+    from("../frontend/dist")
+    into("src/main/resources/frontend")
+
+    // 🔧 修复 Windows 文件被占用问题
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
+    // 🔧 在复制前删除目标目录，避免文件占用冲突
+    doFirst {
+        val targetDir = file("src/main/resources/frontend")
+        if (targetDir.exists()) {
+            println("🗑️  Deleting existing frontend resources...")
+            targetDir.deleteRecursively()
+        }
+    }
+
+    doLast {
+        println("📦 Frontend resources copied to resources/frontend")
+    }
+}
+
+// 主构建任务 - 依赖复制任务
+val buildFrontend by tasks.registering {
+    group = "frontend"
+    description = "Build frontend and copy files"
+
+    dependsOn(copyFrontendFiles)
 }
 
 // 清理前端构建产物
@@ -221,9 +224,9 @@ val cleanFrontend by tasks.registering(Delete::class) {
 // ===== 集成到主构建流程 =====
 
 tasks {
-    // 在处理资源之前先构建前端
+    // 在处理资源之前先复制前端文件
     processResources {
-        dependsOn(buildFrontend)
+        dependsOn(copyFrontendFiles)
     }
 
     // 清理时也清理前端
@@ -235,8 +238,12 @@ tasks {
         // 确保运行前构建了前端
         dependsOn(buildFrontend)
 
+        // 🔧 增加内存配置以避免 OOM
         jvmArgs(
-            "-Xmx2048m",
+            "-Xmx4096m",  // 堆内存从 2GB 增加到 4GB
+            "-XX:MaxMetaspaceSize=1024m",  // 元空间增加到 1GB
+            "-XX:ReservedCodeCacheSize=512m",  // 代码缓存增加
+            "-XX:+UseG1GC",  // 使用 G1 垃圾收集器
             "-Dfile.encoding=UTF-8",
             "-Dconsole.encoding=UTF-8",
             "-Dsun.stdout.encoding=UTF-8",
@@ -247,6 +254,20 @@ tasks {
     buildSearchableOptions {
         enabled = false
     }
+
+
+// 🔧 对于插件模块，只排除运行时的 kotlinx-coroutines，保留编译时
+configurations {
+    // 只排除运行时配置，保留编译时配置
+    named("runtimeClasspath") {
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-swing")
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-debug")
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-test")
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-jdk8")
+    }
+}
 
     // 构建插件前先构建前端
     buildPlugin {

@@ -91,9 +91,8 @@
     ]]></change-notes>
     
     <depends>com.intellij.modules.platform</depends>
-    <depends>org.intellij.plugins.markdown</depends>
-    
-    <idea-version since-build="243.0" until-build="252.*"/>
+
+    <idea-version since-build="242.0" until-build="252.*"/>
     
     
     
@@ -103,6 +102,13 @@
                     anchor="right"
                     icon="/icons/claude-code-simple.svg"
                     factoryClass="com.claudecodeplus.toolwindow.VueToolWindowFactory"/>
+
+        <!-- Console Tool Window (JavaScript Console) -->
+        <toolWindow id="Claude Console"
+                    anchor="bottom"
+                    icon="/icons/claude-code-simple.svg"
+                    factoryClass="com.claudecodeplus.console.ConsoleToolWindowFactory"
+                    secondary="true"/>
 
         <!-- Compose Version (Backup) -->
         <!--

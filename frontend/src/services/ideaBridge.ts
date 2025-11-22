@@ -4,6 +4,7 @@
  */
 
 import type { FrontendResponse, IdeEvent } from '@/types/bridge'
+import { resolveServerHttpUrl } from '@/utils/serverUrl'
 
 type EventHandler = (data: any) => void
 
@@ -36,13 +37,22 @@ export interface ShowDiffOptions {
 class IdeaBridgeService {
   private listeners = new Map<string, Set<EventHandler>>()
   private isReady = false
+  private mode: 'ide' | 'browser' = 'browser'
 
-  // 从 window.__serverUrl 获取后端地址，或使用默认值
+  // 从统一解析器获取后端地址
   private getBaseUrl(): string {
-    return (window as any).__serverUrl || 'http://localhost:8765'
+    return resolveServerHttpUrl()
+  }
+
+  private detectMode(): 'ide' | 'browser' {
+    if (typeof window === 'undefined') {
+      return 'browser' // 构建时默认值
+    }
+    return (window as any).__serverUrl ? 'ide' : 'browser'
   }
 
   constructor() {
+    // 正常初始化，方法内部会做安全检查
     this.setupEventListener()
     this.init()
   }
@@ -51,6 +61,11 @@ class IdeaBridgeService {
    * 初始化桥接服务
    */
   private async init() {
+    // 只在浏览器环境初始化
+    if (typeof window === 'undefined') {
+      return // 构建时跳过初始化
+    }
+    this.mode = this.detectMode()
     // 简单标记为就绪
     this.isReady = true
     console.log('🌐 Bridge Mode: HTTP')
@@ -61,6 +76,10 @@ class IdeaBridgeService {
    * 设置事件监听器
    */
   private setupEventListener() {
+    // 只在浏览器环境设置监听器
+    if (typeof window === 'undefined') {
+      return // 构建时跳过
+    }
     window.addEventListener('ide-event', ((event: CustomEvent<IdeEvent>) => {
       const { type, data } = event.detail
       this.dispatchEvent({ type, data })
@@ -141,6 +160,46 @@ class IdeaBridgeService {
   }
 
   /**
+   * 获取运行模式
+   */
+  getMode(): 'ide' | 'browser' {
+    return this.mode
+  }
+
+  /**
+   * 是否运行在 IDE 模式
+   */
+  isInIde(): boolean {
+    return this.mode === 'ide'
+  }
+
+  /**
+   * 是否运行在浏览器模式
+   */
+  isInBrowser(): boolean {
+    return this.mode === 'browser'
+  }
+
+  /**
+   * 当前桥接是否就绪
+   */
+  checkReady(): boolean {
+    return this.isReady
+  }
+
+  /**
+   * 获取服务器端口
+   */
+  getServerPort(): string {
+    try {
+      const url = new URL(this.getBaseUrl())
+      return url.port || '80'
+    } catch {
+      return '8765'
+    }
+  }
+
+  /**
    * 监听后端事件
    */
   on(eventType: string, handler: EventHandler): void {
@@ -162,11 +221,11 @@ class IdeaBridgeService {
 let _ideaBridge: IdeaBridgeService | null = null
 
 function getIdeaBridge(): IdeaBridgeService {
-  if (!_ideaBridge && typeof window !== 'undefined') {
+  // 懒加载初始化：只在第一次使用时创建实例
+  if (!_ideaBridge) {
     _ideaBridge = new IdeaBridgeService()
   }
-  // 在构建时返回一个空对象，避免访问 window
-  return _ideaBridge || ({} as IdeaBridgeService)
+  return _ideaBridge
 }
 
 // 导出单例访问器对象

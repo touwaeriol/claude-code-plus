@@ -109,6 +109,21 @@
           </h3>
 
           <div class="setting-item">
+            <label class="setting-label">系统提示词</label>
+            <el-input
+              v-model="localSettings.systemPrompt"
+              class="setting-input"
+              type="textarea"
+              :rows="3"
+              placeholder="输入自定义系统提示词（可选，留空使用默认）"
+              @blur="handleSystemPromptChange"
+            />
+            <p class="setting-description">
+              自定义系统提示词，用于控制 Claude 的行为和角色。留空使用默认的 claude_code 提示词。
+            </p>
+          </div>
+
+          <div class="setting-item">
             <label class="setting-label">最大对话轮次</label>
             <el-input-number
               v-model="localSettings.maxTurns"
@@ -278,6 +293,12 @@ async function handleModelChange() {
 
 async function handlePermissionModeChange() {
   await settingsStore.updatePermissionMode(localSettings.value.permissionMode)
+}
+
+async function handleSystemPromptChange() {
+  await settingsStore.saveSettings({
+    systemPrompt: localSettings.value.systemPrompt
+  })
 }
 
 async function handleMaxTurnsChange() {

@@ -1,0 +1,15 @@
+# 工具演示文件
+# 创建时间: 2025-11-22
+
+## 用户列表
+- Alice: admin
+- Bob: user
+- Charlie: user
+
+## 配置项
+debug_mode = true  # 已启用调试模式
+max_connections = 100
+timeout = 30
+
+## 备注
+这是一个演示文件，用于展示 Write 和 Edit 工具的功能。

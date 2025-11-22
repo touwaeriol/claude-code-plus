@@ -10,7 +10,7 @@ export const useToastStore = defineStore('toast', () => {
    * 生成唯一 ID
    */
   function generateId(): string {
-    return `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    return `toast-${Date.now()}-${crypto.randomUUID().substring(0, 9)}`
   }
 
   /**
@@ -19,8 +19,7 @@ export const useToastStore = defineStore('toast', () => {
   function addToast(message: string, options: ToastOptions = {}): string {
     const {
       type = ToastType.INFO,
-      duration = TOAST_DEFAULTS.duration,
-      _closable = TOAST_DEFAULTS.closable
+      duration = TOAST_DEFAULTS.duration
     } = options
 
     const toast: Toast = {

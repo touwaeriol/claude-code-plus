@@ -285,7 +285,6 @@ class MessageProcessorImpl : MessageProcessor {
             is JsonPrimitive -> element.content
             is JsonArray -> element.map { convertJsonElementToAny(it) }
             is JsonObject -> element.mapValues { (_, v) -> convertJsonElementToAny(v) }
-            else -> element.toString()
         }
     }
     

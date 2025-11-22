@@ -28,6 +28,7 @@ class WebSocketHandler(
         ignoreUnknownKeys = true
         prettyPrint = false
         isLenient = true
+        encodeDefaults = true  // 确保序列化默认值（如 RpcStreamData.type）
     }
 
     /**
@@ -101,7 +102,42 @@ class WebSocketHandler(
                         sendStreamComplete(request.id)
                     }
                 }
-                
+
+                "queryWithContent" -> {
+                    val paramsObj = request.params as? JsonObject
+                        ?: throw IllegalArgumentException("Invalid params format")
+                    val content = paramsObj["content"] as? JsonArray
+                        ?: throw IllegalArgumentException("Missing content parameter")
+
+                    // 发送流式响应
+                    launch {
+                        var messageCount = 0
+                        var hasResultMessage = false
+
+                        rpcService.queryWithContent(content)
+                            .catch { e ->
+                                logger.severe("❌ 带内容查询错误: ${e.message}")
+                                sendError(request.id, e.message ?: "Query failed")
+                            }
+                            .collect { msg ->
+                                messageCount++
+                                val msgType = msg.jsonObject["type"]?.jsonPrimitive?.contentOrNull
+                                logger.info("📨 [WebSocket] 收到消息 #$messageCount: type=$msgType")
+
+                                if (msgType == "result") {
+                                    hasResultMessage = true
+                                    logger.info("✅ [WebSocket] 收到 ResultMessage!")
+                                }
+
+                                sendStreamData(request.id, msg)
+                            }
+
+                        logger.info("📊 [WebSocket] 流结束，共收到 $messageCount 条消息，hasResultMessage=$hasResultMessage")
+                        // 流结束
+                        sendStreamComplete(request.id)
+                    }
+                }
+
                 "interrupt" -> {
                     val result = rpcService.interrupt()
                     sendResponse(request.id, result)
@@ -153,7 +189,10 @@ class WebSocketHandler(
         data: JsonElement
     ) {
         val response = RpcStreamData(id = id, data = data)
-        send(json.encodeToString(response))
+        val jsonString = json.encodeToString(response)
+        logger.info("📤 [WebSocket] 发送流式数据: ${jsonString.take(200)}...")
+        send(jsonString)
+        logger.info("✅ [WebSocket] 流式数据已发送")
     }
 
     /**

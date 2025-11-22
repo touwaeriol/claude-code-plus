@@ -3,9 +3,7 @@ plugins {
     application
 }
 
-repositories {
-    mavenCentral()
-}
+
 
 dependencies {
     implementation(project(":claude-code-sdk"))
@@ -20,6 +18,11 @@ tasks.named<JavaExec>("run") {
     environment("CLAUDE_API_KEY", System.getenv("CLAUDE_API_KEY") ?: "")
 }
 
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    kotlinOptions.jvmTarget = "17"
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+kotlin {
+    jvmToolchain(17)
 }

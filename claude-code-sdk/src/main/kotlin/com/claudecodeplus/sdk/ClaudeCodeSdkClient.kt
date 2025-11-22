@@ -10,8 +10,22 @@ import kotlinx.coroutines.channels.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.polymorphic
+import kotlinx.serialization.modules.subclass
 import java.util.logging.Logger
+
+/**
+ * JSON 配置：使用 "type" 作为多态类型鉴别器
+ * 这样 TextInput 序列化为 {"type": "text", "text": "..."}
+ */
+private val streamJsonFormat = Json {
+    classDiscriminator = "type"
+    encodeDefaults = true
+    ignoreUnknownKeys = true
+}
 
 /**
  * Client for bidirectional, interactive conversations with Claude Agent.
@@ -84,11 +98,41 @@ class ClaudeCodeSdkClient(
     private val logger = Logger.getLogger(ClaudeCodeSdkClient::class.java.name)
     
     /**
+     * Format systemPrompt for logging (handles String, SystemPromptPreset, or null).
+     */
+    private fun formatSystemPrompt(systemPrompt: Any?): String {
+        return when (systemPrompt) {
+            null -> "null"
+            is String -> {
+                val truncated = if (systemPrompt.length > 100) {
+                    systemPrompt.substring(0, 100) + "..."
+                } else {
+                    systemPrompt
+                }
+                "\"$truncated\""
+            }
+            else -> systemPrompt.toString().take(100)
+        }
+    }
+
+    /**
      * Connect to Claude with optional initial prompt.
      */
     suspend fun connect(prompt: String? = null) {
-        logger.info("🔌 开始连接到Claude CLI...")
-        logger.info("📋 使用配置: model=${options.model}, allowedTools=${options.allowedTools}")
+        logger.info("🔌 [SDK] 开始连接到Claude CLI...")
+        
+        // 打印 connect 参数
+        logger.info("📋 [SDK] connect 调用参数:")
+        logger.info("  - prompt: ${prompt ?: "null"}")
+        logger.info("📋 [SDK] 客户端配置 (在创建时传入):")
+        logger.info("  - model: ${options.model}")
+        logger.info("  - permissionMode: ${options.permissionMode}")
+        logger.info("  - maxTurns: ${options.maxTurns}")
+        logger.info("  - systemPrompt: ${formatSystemPrompt(options.systemPrompt)}")
+        logger.info("  - dangerouslySkipPermissions: ${options.dangerouslySkipPermissions}")
+        logger.info("  - allowDangerouslySkipPermissions: ${options.allowDangerouslySkipPermissions}")
+        logger.info("  - allowedTools: ${options.allowedTools}")
+        logger.info("  - includePartialMessages: ${options.includePartialMessages}")
         
         // Create or use provided transport
         actualTransport = transport ?: SubprocessTransport(options, streamingMode = true)
@@ -135,30 +179,50 @@ class ClaudeCodeSdkClient(
     }
     
     /**
-     * Send a user message to Claude.
+     * Send a user message to Claude (text only).
      */
     suspend fun query(prompt: String, sessionId: String = "default") {
+        val message = StreamJsonUserMessage(
+            message = UserMessagePayload(prompt),
+            sessionId = sessionId
+        )
+        query(message)
+    }
+
+    /**
+     * Send a user message with arbitrary content blocks.
+     *
+     * @param content List of content blocks (TextInput, ImageInput)
+     * @param sessionId Session ID
+     */
+    suspend fun query(content: List<UserInputContent>, sessionId: String = "default") {
+        val message = StreamJsonUserMessage(
+            message = UserMessagePayload(content = content),
+            sessionId = sessionId
+        )
+        query(message)
+    }
+
+    /**
+     * Send a complete StreamJsonUserMessage to Claude.
+     *
+     * This is the core method - all other query overloads delegate to this.
+     *
+     * @param message Complete stream-json user message
+     */
+    suspend fun query(message: StreamJsonUserMessage) {
         runCommand {
             ensureConnected()
 
-            logger.info("💬 发送用户消息 [session=$sessionId]: $prompt")
+            logger.info("💬 发送用户消息 [session=${message.sessionId}]: ${message.message.content.size} 个内容块")
 
-            val messageJson = buildJsonObject {
-                put("type", "user")
-                put("message", buildJsonObject {
-                    put("role", "user")
-                    put("content", prompt)
-                })
-                put("parent_tool_use_id", JsonNull)
-                put("session_id", sessionId)
-            }
-
-            logger.info("📤 发送JSON消息: ${messageJson.toString()}")
-            actualTransport!!.write(messageJson.toString())
+            val jsonString = streamJsonFormat.encodeToString(StreamJsonUserMessage.serializer(), message)
+            logger.info("📤 发送JSON消息: $jsonString")
+            actualTransport!!.write(jsonString)
             logger.info("✅ 消息已发送到CLI")
         }
     }
-    
+
     /**
      * Send a stream of messages to Claude.
      */

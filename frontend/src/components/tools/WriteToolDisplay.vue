@@ -7,29 +7,17 @@
   >
     <template #details>
       <div class="write-tool-details">
-        <div class="file-info">
-          <div class="info-row">
-            <span class="label">路径:</span>
-            <span class="value clickable" @click="openFile">{{ filePath }}</span>
-          </div>
-          <div class="info-row">
-            <span class="label">大小:</span>
-            <span class="value">{{ contentSize }}</span>
-          </div>
-        </div>
-
         <div class="content-preview">
           <div class="preview-header">
-            <span>内容预览</span>
-            <button class="copy-btn" @click="copyContent">复制</button>
+            <span></span>
+            <button class="copy-btn" title="复制" @click.stop="copyContent">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
           </div>
-          <pre class="preview-content">{{ previewText }}</pre>
-        </div>
-
-        <div v-if="result" class="tool-result">
-          <div class="result-status" :class="resultStatus">
-            {{ resultMessage }}
-          </div>
+          <pre class="preview-content code-with-lines"><code><span v-for="(line, index) in previewLines" :key="index" class="code-line">{{ line }}</span></code></pre>
         </div>
       </div>
     </template>
@@ -103,29 +91,8 @@ const previewText = computed(() => {
   return text.substring(0, maxLength) + '\n\n... (内容已截断)'
 })
 
-const resultStatus = computed(() => {
-  if (!props.result) return 'pending'
-  // 将 content 转换为字符串
-  let contentStr = ''
-  if (typeof props.result.content === 'string') {
-    contentStr = props.result.content
-  } else if (Array.isArray(props.result.content)) {
-    contentStr = props.result.content
-      .filter((item: any) => item.type === 'text')
-      .map((item: any) => item.text)
-      .join('\n')
-  } else {
-    contentStr = JSON.stringify(props.result.content)
-  }
-  const content = contentStr.toLowerCase()
-  if (content.includes('error') || content.includes('failed')) return 'error'
-  return 'success'
-})
-
-const resultMessage = computed(() => {
-  if (!props.result) return '等待执行...'
-  if (resultStatus.value === 'error') return '写入失败'
-  return '写入成功'
+const previewLines = computed(() => {
+  return previewText.value.split('\n')
 })
 
 async function openFile() {
@@ -177,47 +144,65 @@ async function copyContent() {
 }
 
 .copy-btn {
-  padding: 2px 8px;
-  font-size: 11px;
-  border: 1px solid #e1e4e8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
   border-radius: 3px;
-  background: white;
+  background: transparent;
+  color: var(--ide-foreground, #24292e);
   cursor: pointer;
+  opacity: 0.6;
 }
 
 .copy-btn:hover {
-  background: #f6f8fa;
+  opacity: 1;
+  background: var(--ide-panel-background, #f6f8fa);
 }
 
 .preview-content {
   margin: 0;
-  padding: 12px;
+  padding: 12px 12px 12px 0;
   font-size: 12px;
   font-family: 'Consolas', 'Monaco', monospace;
   max-height: 300px;
   overflow: auto;
 }
 
-.result-status {
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 600;
-  margin-top: 12px;
+/* 带行号的代码块 */
+.code-with-lines {
+  counter-reset: line;
 }
 
-.result-status.pending {
-  background: #f1f8ff;
-  color: #0366d6;
+.code-with-lines code {
+  display: block;
 }
 
-.result-status.success {
-  background: #e6ffed;
-  color: #22863a;
+/* 每一行代码 */
+.code-line {
+  display: block;
+  counter-increment: line;
+  white-space: pre;
 }
 
-.result-status.error {
-  background: #ffeef0;
-  color: #d73a49;
+/* 为每一行添加行号 */
+.code-line::before {
+  content: counter(line);
+  display: inline-block;
+  width: 3em;
+  padding-right: 1em;
+  margin-right: 0.5em;
+  text-align: right;
+  color: var(--ide-secondary-foreground, #999);
+  user-select: none; /* 行号不可选中复制 */
+  border-right: 1px solid #e1e4e8;
 }
+
+/* 暗色主题适配 */
+.theme-dark .code-line::before {
+  color: var(--ide-secondary-foreground, #666);
+  border-right-color: rgba(255, 255, 255, 0.1);
+}
+
 </style>

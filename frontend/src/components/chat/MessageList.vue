@@ -4,7 +4,7 @@
     class="message-list-wrapper"
   >
     <div
-      v-if="messages.length === 0"
+      v-if="displayMessages.length === 0"
       class="empty-state"
     >
       <div class="empty-content">
@@ -63,15 +63,24 @@
       class="message-list"
       :data-key="'id'"
       :data-sources="displayMessages"
-      :data-component="MessageDisplay"
+      :data-component="messageComponent"
       :extra-props="{ isDark }"
       :keeps="30"
       :estimate-size="120"
       @scroll="handleScroll"
     />
 
+    <!-- Streaming 状态指示器 -->
     <div
-      v-if="isLoading"
+      v-if="isStreaming"
+      class="streaming-indicator"
+    >
+      <span class="streaming-dot">●</span>
+      <span class="streaming-stats">{{ streamingStats }}</span>
+    </div>
+
+    <div
+      v-else-if="isLoading"
       class="loading-indicator"
     >
       <div class="loading-spinner" />
@@ -97,20 +106,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import VirtualList from 'vue3-virtual-scroll-list'
 import type { Message } from '@/types/message'
+import type { DisplayItem } from '@/types/display'
 import MessageDisplay from './MessageDisplay.vue'
+import DisplayItemRenderer from './DisplayItemRenderer.vue'
 
 interface Props {
-  messages: Message[]
+  messages?: Message[]  // 保留向后兼容
+  displayItems?: DisplayItem[]  // 新的 prop
   isLoading?: boolean
   isDark?: boolean
+  isStreaming?: boolean  // 是否正在流式响应
+  streamingStartTime?: number  // 流式响应开始时间
+  inputTokens?: number  // 上行 token
+  outputTokens?: number  // 下行 token
 }
 
 const props = withDefaults(defineProps<Props>(), {
   isLoading: false,
-  isDark: false
+  isDark: false,
+  isStreaming: false,
+  streamingStartTime: 0,
+  inputTokens: 0,
+  outputTokens: 0
 })
 
 const wrapperRef = ref<HTMLElement>()
@@ -120,11 +140,86 @@ const newMessageCount = ref(0)
 const isNearBottom = ref(true)
 const lastMessageCount = ref(0)
 
+// Streaming 计时器
+const elapsedTime = ref(0)
+let timerId: number | null = null
+
+// 格式化耗时
+function formatDuration(ms: number): string {
+  const seconds = Math.floor(ms / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSecs = seconds % 60
+  if (minutes < 60) return `${minutes}m${remainingSecs}s`
+  const hours = Math.floor(minutes / 60)
+  const remainingMins = minutes % 60
+  return `${hours}h${remainingMins}m${remainingSecs}s`
+}
+
+// 格式化 token 数量
+function formatTokens(count: number): string {
+  if (count < 1000) return `${count}`
+  return `${(count / 1000).toFixed(1)}k`
+}
+
+// Streaming 状态显示
+const streamingStats = computed(() => {
+  const duration = formatDuration(elapsedTime.value)
+  const input = formatTokens(props.inputTokens)
+  const output = formatTokens(props.outputTokens)
+  return `${duration} ↑${input} ↓${output} tokens`
+})
+
+// 启动计时器
+function startTimer() {
+  if (timerId !== null) return
+  const startTime = props.streamingStartTime || Date.now()
+  elapsedTime.value = Date.now() - startTime
+  timerId = window.setInterval(() => {
+    elapsedTime.value = Date.now() - startTime
+  }, 100)
+}
+
+// 停止计时器
+function stopTimer() {
+  if (timerId !== null) {
+    clearInterval(timerId)
+    timerId = null
+  }
+}
+
+// 监听 isStreaming 变化
+watch(
+  () => props.isStreaming,
+  (streaming) => {
+    if (streaming) {
+      startTimer()
+    } else {
+      stopTimer()
+    }
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  if (props.isStreaming) {
+    startTimer()
+  }
+})
+
+onUnmounted(() => {
+  stopTimer()
+})
+
 // 为虚拟列表准备数据源
-const displayMessages = computed(() => props.messages)
+// 优先使用 displayItems，如果没有则使用 messages（向后兼容）
+const displayMessages = computed(() => props.displayItems || props.messages || [])
+
+// 使用新的 DisplayItemRenderer 还是旧的 MessageDisplay
+const messageComponent = computed(() => props.displayItems ? DisplayItemRenderer : MessageDisplay)
 
 // 监听消息变化
-watch(() => props.messages.length, async (newCount, oldCount) => {
+watch(() => displayMessages.value.length, async (newCount, oldCount) => {
   // 如果不在底部，计数新消息
   if (!isNearBottom.value && newCount > oldCount) {
     newMessageCount.value += (newCount - oldCount)
@@ -322,6 +417,40 @@ function scrollToBottom() {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   color: var(--ide-foreground, #24292e);
   font-weight: 600;
+}
+
+/* Streaming 状态指示器 - 固定在底部（输入框上方） */
+.streaming-indicator {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  margin: 0 16px;
+  background: var(--ide-card-background, #ffffff);
+  border: 1px solid var(--ide-accent, #0366d6);
+  border-radius: 8px 8px 0 0;
+  font-size: 13px;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  color: var(--ide-text-secondary, #586069);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+}
+
+.streaming-dot {
+  color: var(--ide-accent, #0366d6);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.streaming-stats {
+  color: var(--ide-foreground, #24292e);
 }
 
 .loading-indicator {

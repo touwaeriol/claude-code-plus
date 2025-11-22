@@ -1,0 +1,24 @@
+# Claude Code Plus - 工具演示文件
+
+## 这是一个演示文件
+
+创建时间: 2025-11-22
+
+### 功能列表
+1. Read 工具 - 读取文件
+2. Write 工具 - 创建/覆盖文件
+3. Edit 工具 - 编辑文件
+4. MultiEdit 工具 - 多处编辑
+
+### 待办事项
+- [x] 完成 Read 演示
+- [x] 完成 Write 演示
+- [x] 完成 Edit 演示
+- [x] 完成 MultiEdit 演示
+
+### 配置信息
+name: demo-file
+version: 1.0.1
+status: edited
+lastModified: 2025-11-22
+editor: Claude

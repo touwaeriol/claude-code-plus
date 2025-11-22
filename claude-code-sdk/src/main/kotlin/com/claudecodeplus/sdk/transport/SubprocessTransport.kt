@@ -59,10 +59,15 @@ class SubprocessTransport(
                     logger.info("🌐 设置环境变量: ${options.env}")
                     environment().putAll(options.env)
                 }
-                
+
                 // Set environment entrypoint
                 environment()["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kt-client"
                 logger.info("🏷️ 设置环境入口点: sdk-kt-client")
+
+                // Disable Ink UI to prevent "Raw mode is not supported" error
+                environment()["CI"] = "true"
+                environment()["FORCE_COLOR"] = "0"
+                logger.info("🎨 禁用 Ink UI (CI=true, FORCE_COLOR=0)")
             }
             
             logger.info("⚡ 启动Claude CLI进程...")
@@ -80,6 +85,9 @@ class SubprocessTransport(
                         environment().putAll(options.env)
                     }
                     environment()["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kt-client"
+                    // Disable Ink UI to prevent "Raw mode is not supported" error
+                    environment()["CI"] = "true"
+                    environment()["FORCE_COLOR"] = "0"
                 }.start()
             } else {
                 processBuilder.start()
@@ -252,14 +260,27 @@ class SubprocessTransport(
         // Base command - try to find claude executable
         command.add(findClaudeExecutable())
         
-        // Output format with print flag
-        command.addAll(listOf("--output-format", "stream-json"))
+        // Output format (从 extraArgs 或默认使用 stream-json)
+        val outputFormat = options.extraArgs["output-format"] ?: "stream-json"
+        command.addAll(listOf("--output-format", outputFormat))
 
-        // Verbose output (required for stream-json)
-        command.add("--verbose")
+        // Verbose output
+        // 注意：当使用 --print 和 --output-format=stream-json 时，必须同时使用 --verbose
+        val needsVerbose = options.verbose ||
+            (options.print && outputFormat == "stream-json")
+        if (needsVerbose) {
+            command.add("--verbose")
+        }
 
-        // Print flag (required for stream-json output format)
-        command.add("--print")
+        // Print flag (根据选项决定)
+        if (options.print) {
+            command.add("--print")
+        }
+
+        // Include partial messages for real-time token usage information (根据选项决定)
+        if (options.includePartialMessages) {
+            command.add("--include-partial-messages")
+        }
 
         // Input format for streaming mode
         if (streamingMode) {
@@ -324,10 +345,21 @@ class SubprocessTransport(
                 PermissionMode.ACCEPT_EDITS -> "acceptEdits"
                 PermissionMode.PLAN -> "plan"
                 PermissionMode.BYPASS_PERMISSIONS -> "bypassPermissions"
+                PermissionMode.DONT_ASK -> "dontAsk"
             }
             command.addAll(listOf("--permission-mode", permissionModeValue))
         }
-        
+
+        // Dangerously skip permissions
+        if (options.dangerouslySkipPermissions == true) {
+            command.add("--dangerously-skip-permissions")
+        }
+
+        // Allow dangerously skip permissions
+        if (options.allowDangerouslySkipPermissions == true) {
+            command.add("--allow-dangerously-skip-permissions")
+        }
+
         // Continue conversation
         if (options.continueConversation) {
             command.add("--continue-conversation")

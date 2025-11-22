@@ -1,5 +1,21 @@
 <template>
+  <!-- 用户消息 - 使用新的气泡组件 -->
+  <UserMessageBubble
+    v-if="message.role === 'user'"
+    :message="message"
+  />
+
+  <!-- AI 助手消息 - 使用新的 AssistantMessageDisplay 组件 -->
+  <AssistantMessageDisplay
+    v-else-if="message.role === 'assistant'"
+    :message="enhancedMessage"
+    :expanded-tools="expandedTools"
+    @expanded-change="handleExpandedChange"
+  />
+
+  <!-- 系统消息 - 使用原有样式 -->
   <div
+    v-else
     class="message"
     :class="`message-${message.role}`"
   >
@@ -16,57 +32,19 @@
         :content="textContent"
         :is-dark="isDark"
       />
-
-      <!-- 工具调用 - 使用专业化组件 -->
-      <component
-        :is="getToolComponent(tool.name)"
-        v-for="tool in toolUses"
-        :key="tool.id"
-        :tool-use="tool"
-        :result="getToolResult(tool.id)"
-      />
-
-      <!-- 工具结果(如果没有对应的 tool_use) -->
-      <div
-        v-for="result in orphanResults"
-        :key="result.tool_use_id"
-        class="tool-result-orphan"
-      >
-        <div class="result-header">
-          <span class="result-icon">📊</span>
-          <span class="result-id">结果: {{ result.tool_use_id }}</span>
-        </div>
-        <pre class="result-content">{{ formatResult(result) }}</pre>
-      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, Component } from 'vue'
-import type { Message, ToolUseBlock, ToolResultBlock } from '@/types/message'
+import { computed, ref } from 'vue'
+import type { Message } from '@/types/message'
+import type { EnhancedMessage } from '@/types/enhancedMessage'
+import UserMessageBubble from './UserMessageBubble.vue'
+import AssistantMessageDisplay from './AssistantMessageDisplay.vue'
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
-import ReadToolDisplay from '@/components/tools/ReadToolDisplay.vue'
-import EditToolDisplay from '@/components/tools/EditToolDisplay.vue'
-import MultiEditToolDisplay from '@/components/tools/MultiEditToolDisplay.vue'
-import WriteToolDisplay from '@/components/tools/WriteToolDisplay.vue'
-import BashToolDisplay from '@/components/tools/BashToolDisplay.vue'
-import GrepToolDisplay from '@/components/tools/GrepToolDisplay.vue'
-import GlobToolDisplay from '@/components/tools/GlobToolDisplay.vue'
-import TodoWriteDisplay from '@/components/tools/TodoWriteDisplay.vue'
-import WebSearchToolDisplay from '@/components/tools/WebSearchToolDisplay.vue'
-import WebFetchToolDisplay from '@/components/tools/WebFetchToolDisplay.vue'
-import AskUserQuestionDisplay from '@/components/tools/AskUserQuestionDisplay.vue'
-import NotebookEditToolDisplay from '@/components/tools/NotebookEditToolDisplay.vue'
-import TaskToolDisplay from '@/components/tools/TaskToolDisplay.vue'
-import SlashCommandToolDisplay from '@/components/tools/SlashCommandToolDisplay.vue'
-import SkillToolDisplay from '@/components/tools/SkillToolDisplay.vue'
-import GenericMcpToolDisplay from '@/components/tools/GenericMcpToolDisplay.vue'
-import BashOutputToolDisplay from '@/components/tools/BashOutputToolDisplay.vue'
-import KillShellToolDisplay from '@/components/tools/KillShellToolDisplay.vue'
-import ListMcpResourcesToolDisplay from '@/components/tools/ListMcpResourcesToolDisplay.vue'
-import ReadMcpResourceToolDisplay from '@/components/tools/ReadMcpResourceToolDisplay.vue'
-import ExitPlanModeToolDisplay from '@/components/tools/ExitPlanModeToolDisplay.vue'
+import { buildToolViewModel } from '@/utils/ToolViewModelBuilder'
+import { useSessionStore } from '@/stores/sessionStore'
 
 interface Props {
   // VirtualList 会把当前项作为 source 传入
@@ -81,6 +59,117 @@ const props = withDefaults(defineProps<Props>(), {
 
 // 为了模板可读性,提供一个 message 计算属性
 const message = computed(() => props.source)
+
+// 工具展开状态（本地管理）
+const expandedTools = ref<Map<string, boolean>>(new Map())
+
+// 获取 sessionStore（用于读取工具状态）
+const sessionStore = useSessionStore()
+
+// 处理工具展开状态变化
+function handleExpandedChange(toolId: string, expanded: boolean) {
+  expandedTools.value.set(toolId, expanded)
+}
+
+// 将 Message 转换为 EnhancedMessage
+const enhancedMessage = computed((): EnhancedMessage => {
+  const msg = message.value
+
+  // 🔧 访问 toolCallsMap 以建立响应式依赖
+  // 这样当 toolCallsMap 变化时,computed 会重新计算
+  const _ = sessionStore.toolCallsMap.value
+
+  // 提取所有工具结果（用于查找）
+  const toolResults = msg.content.filter(block => block.type === 'tool_result')
+
+  // 构造 orderedElements（按原始顺序遍历）
+  const orderedElements: any[] = []
+  let allTextContent = '' // 用于 EnhancedMessage.content 字段
+
+  // 按原始顺序遍历 content 数组
+  console.log(`🔍 [MessageDisplay] 处理消息内容，共 ${msg.content.length} 个块`)
+  console.log(`🔍 [MessageDisplay] 完整 content 数据:`, JSON.stringify(msg.content, null, 2))
+  msg.content.forEach((block: any, index: number) => {
+    console.log(`  [${index}] type="${block.type}"`)
+    console.log(`  [${index}] 块数据:`, block)
+
+    if (block.type === 'text') {
+      // 文本块：添加到 orderedElements
+      console.log(`    ✅ 添加文本块，长度=${block.text?.length || 0}`)
+      orderedElements.push({
+        type: 'content',
+        content: block.text,
+        timestamp: msg.timestamp
+      })
+      // 同时累积到 allTextContent
+      if (allTextContent) allTextContent += '\n\n'
+      allTextContent += block.text
+    } else if (block.type === 'tool_use' || block.type.endsWith('_tool_use')) {
+      // 工具调用块：查找对应的结果
+      // 支持两种格式：
+      // 1. 通用格式: type="tool_use"
+      // 2. 具体工具格式: type="todo_write_tool_use", "write_tool_use" 等
+      const result = toolResults.find((r: any) => r.tool_use_id === block.id)
+      console.log(`    🔧 添加工具调用: name=${block.name}, id=${block.id}, type=${block.type}, hasResult=${!!result}`)
+
+      // 🎯 构建 ViewModel
+      const viewModel = buildToolViewModel(block)
+      console.log(`    ✅ 构建 viewModel: toolType=${viewModel.toolDetail.toolType}, summary="${viewModel.compactSummary}"`)
+
+      // 🔧 注册工具调用到 store
+      sessionStore.registerToolCall(block)
+
+      // 🔧 从 store 获取实时状态
+      const toolStatus = sessionStore.getToolStatus(block.id)
+      const toolResult = sessionStore.getToolResult(block.id)
+
+      // 将 store 状态转换为 EnhancedMessage 期望的格式
+      let status: 'RUNNING' | 'SUCCESS' | 'FAILED' = 'RUNNING'
+      if (toolStatus === 'success') {
+        status = 'SUCCESS'
+      } else if (toolStatus === 'failed') {
+        status = 'FAILED'
+      }
+
+      orderedElements.push({
+        type: 'toolCall',
+        toolCall: {
+          id: block.id,
+          name: block.name,
+          viewModel: viewModel, // ✅ 使用构建的 ViewModel
+          displayName: block.name,
+          status: status, // ✅ 使用 store 中的实时状态
+          result: toolResult ? {
+            type: status === 'FAILED' ? 'failure' : 'success', // ✅ 添加 type 字段以符合 ToolResult 类型定义
+            output: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
+            error: status === 'FAILED' ? (typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult)) : undefined
+          } : undefined,
+          startTime: msg.timestamp,
+          endTime: toolResult ? msg.timestamp : undefined
+        },
+        timestamp: msg.timestamp
+      })
+    } else if (block.type === 'tool_result') {
+      // 🔧 tool_result 块：跳过，因为已经包含在 tool_use 的 result 中
+      console.log(`    ⏭️ 跳过 tool_result 块: tool_use_id=${block.tool_use_id}`)
+    } else {
+      console.log(`    ⚠️ 未知块类型: ${block.type}`)
+    }
+    // tool_result 块不需要单独渲染，已经包含在 tool_use 的 result 中
+  })
+
+  console.log(`📊 [MessageDisplay] 构造完成，orderedElements 共 ${orderedElements.length} 个元素`)
+
+  return {
+    id: msg.id,
+    role: msg.role as any,
+    content: allTextContent,
+    timestamp: msg.timestamp,
+    model: null, // 暂时为 null
+    orderedElements: orderedElements,
+    isStreaming: msg.isStreaming || false
+  }
+})
 
 const roleIcon = computed(() => {
   switch (message.value.role) {
@@ -112,97 +201,32 @@ const textContent = computed(() => {
   const textBlocks = message.value.content.filter(block => block.type === 'text')
   return textBlocks.map(block => (block as any).text).join('\n\n')
 })
-
-const toolUses = computed(() => {
-  return message.value.content.filter(block => block.type === 'tool_use') as ToolUseBlock[]
-})
-
-const toolResults = computed(() => {
-  return message.value.content.filter(block => block.type === 'tool_result') as ToolResultBlock[]
-})
-
-const orphanResults = computed(() => {
-  // 找出没有对应 tool_use 的结果
-  const toolUseIds = new Set(toolUses.value.map(t => t.id))
-  return toolResults.value.filter(r => !toolUseIds.has(r.tool_use_id))
-})
-
-function getToolComponent(toolName: string): Component {
-  const componentMap: Record<string, Component> = {
-    'Read': ReadToolDisplay,
-    'Edit': EditToolDisplay,
-    'MultiEdit': MultiEditToolDisplay,
-    'Write': WriteToolDisplay,
-    'Bash': BashToolDisplay,
-    'Grep': GrepToolDisplay,
-    'Glob': GlobToolDisplay,
-    'TodoWrite': TodoWriteDisplay,
-    'WebSearch': WebSearchToolDisplay,
-    'WebFetch': WebFetchToolDisplay,
-    'AskUserQuestion': AskUserQuestionDisplay,
-    'NotebookEdit': NotebookEditToolDisplay,
-    'Task': TaskToolDisplay,
-    'SlashCommand': SlashCommandToolDisplay,
-    'Skill': SkillToolDisplay,
-    'BashOutput': BashOutputToolDisplay,
-    'KillShell': KillShellToolDisplay,
-    'ListMcpResourcesTool': ListMcpResourcesToolDisplay,
-    'ReadMcpResourceTool': ReadMcpResourceToolDisplay,
-    'ExitPlanMode': ExitPlanModeToolDisplay
-  }
-
-  // 尝试精确匹配
-  if (componentMap[toolName]) {
-    return componentMap[toolName]
-  }
-
-  // MCP 工具使用通用显示器
-  if (toolName.startsWith('mcp__')) {
-    return GenericMcpToolDisplay
-  }
-
-  // 默认返回通用 MCP 显示器
-  return GenericMcpToolDisplay
-}
-
-function getToolResult(toolUseId: string): ToolResultBlock | undefined {
-  return toolResults.value.find(r => r.tool_use_id === toolUseId)
-}
-
-function formatResult(result: ToolResultBlock): string {
-  if (typeof result.content === 'string') {
-    return result.content
-  }
-  return JSON.stringify(result.content, null, 2)
-}
 </script>
 
 <style scoped>
 .message {
-  padding: 16px;
-  margin-bottom: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--ide-border, #e1e4e8);
-  background: var(--ide-background, #ffffff);
-  transition: box-shadow 0.2s;
+  padding: 16px 0;
+  margin-bottom: 20px;
+  transition: opacity 0.2s;
 }
 
 .message:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  opacity: 0.95;
 }
 
-.message-user {
-  background: var(--ide-selection-background, #f6f8fa);
-  border-color: var(--ide-accent, #0366d6);
-}
-
+/* AI 助手消息 - 极简设计，无背景 */
 .message-assistant {
-  background: var(--ide-background, #ffffff);
+  background: transparent;
+  border: none;
+  padding: 12px 0;
 }
 
+/* 系统消息 - 保留轻微背景提示 */
 .message-system {
-  background: var(--ide-warning-background, #fff8dc);
-  border-color: var(--ide-warning, #ffc107);
+  background: var(--ide-warning-background, rgba(255, 193, 7, 0.1));
+  border-left: 3px solid var(--ide-warning, #ffc107);
+  padding: 12px 16px;
+  border-radius: 4px;
 }
 
 .message-header {
@@ -210,29 +234,88 @@ function formatResult(result: ToolResultBlock): string {
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--ide-border, #e1e4e8);
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* AI 助手消息头部 - 更简洁 */
+.message-assistant .message-header {
+  margin-bottom: 8px;
+  opacity: 0.7;
 }
 
 .role-icon {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .role-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--ide-foreground, #24292e);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.6));
 }
 
 .timestamp {
   margin-left: auto;
-  font-size: 12px;
-  color: var(--ide-foreground, #586069);
-  opacity: 0.7;
+  font-size: 11px;
+  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.5));
 }
 
 .message-content {
   color: var(--ide-foreground, #24292e);
+  line-height: 1.6;
+}
+
+/* AI 助手消息内容 - 优化排版 */
+.message-assistant .message-content {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* 加载占位符样式 */
+.loading-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.loading-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ide-primary, #0366d6);
+  animation: bounce 1.4s infinite ease-in-out both;
+}
+
+.dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.loading-text {
+  font-size: 14px;
+  color: var(--ide-foreground, #586069);
+  opacity: 0.8;
 }
 
 .tool-result-orphan {

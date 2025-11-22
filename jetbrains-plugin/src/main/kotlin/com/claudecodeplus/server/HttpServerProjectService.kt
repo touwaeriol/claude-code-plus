@@ -1,4 +1,6 @@
 package com.claudecodeplus.server
+import com.claudecodeplus.plugin.bridge.IdeActionBridgeImpl
+
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
@@ -43,7 +45,11 @@ class HttpServerProjectService(private val project: Project) : Disposable {
             logger.info("📂 Frontend directory: $frontendDir")
 
             // 启动 Ktor HTTP 服务器
-            val server = HttpApiServer(project, scope, frontendDir)
+            // 创建 IdeActionBridge 的实现
+            val ideActionBridge = IdeActionBridgeImpl(project)
+
+            // 启动 Ktor HTTP 服务器
+            val server = HttpApiServer(ideActionBridge, scope, frontendDir)
             val url = server.start()
             httpServer = server
             serverUrl = url

@@ -1,0 +1,1 @@
+C:/Users/16790/IdeaProjects/claude-code-plus/.augment/rules/imported/CLAUDE.md

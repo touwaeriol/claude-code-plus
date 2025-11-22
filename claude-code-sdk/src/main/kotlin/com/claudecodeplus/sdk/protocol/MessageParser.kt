@@ -28,6 +28,7 @@ class MessageParser {
                 "assistant" -> parseAssistantMessage(jsonObject)
                 "system" -> parseSystemMessage(jsonObject)
                 "result" -> parseResultMessage(jsonObject)
+                "stream_event" -> parseStreamEvent(jsonObject)
                 else -> throw MessageParsingException("Unknown message type: $type")
             }
         } catch (e: Exception) {
@@ -106,6 +107,26 @@ class MessageParser {
         return SystemMessage(
             subtype = subtype,
             data = data
+        )
+    }
+    
+    /**
+     * Parse stream event message.
+     */
+    private fun parseStreamEvent(jsonObject: JsonObject): StreamEvent {
+        val uuid = jsonObject["uuid"]?.jsonPrimitive?.content
+            ?: throw MessageParsingException("Missing 'uuid' in stream_event message")
+        val sessionId = jsonObject["session_id"]?.jsonPrimitive?.content
+            ?: throw MessageParsingException("Missing 'session_id' in stream_event message")
+        val event = jsonObject["event"]
+            ?: throw MessageParsingException("Missing 'event' in stream_event message")
+        val parentToolUseId = jsonObject["parent_tool_use_id"]?.jsonPrimitive?.contentOrNull
+        
+        return StreamEvent(
+            uuid = uuid,
+            sessionId = sessionId,
+            event = event,
+            parentToolUseId = parentToolUseId
         )
     }
     

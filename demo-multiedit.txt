@@ -1,0 +1,8 @@
+旧变量名称: betterVariableName
+使用 betterVariableName 进行计算
+betterVariableName 的值是 10
+返回 betterVariableName 的结果
+
+配置项: DEBUG_MODE = true
+配置项: DEBUG_MODE = false
+另一个配置: DEBUG_MODE = true
