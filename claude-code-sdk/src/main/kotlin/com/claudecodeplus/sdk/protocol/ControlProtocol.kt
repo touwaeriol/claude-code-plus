@@ -1,6 +1,6 @@
 package com.claudecodeplus.sdk.protocol
 
-import com.claudecodeplus.sdk.exceptions.ControlProtocolException
+import   com.claudecodeplus.sdk.exceptions.ControlProtocolException
 import com.claudecodeplus.sdk.transport.Transport
 import com.claudecodeplus.sdk.types.*
 import com.claudecodeplus.sdk.mcp.*
@@ -198,7 +198,7 @@ class ControlProtocol(
                 val deferred = pendingRequests.remove(response.requestId)
                 deferred?.complete(response)
             }
-            "assistant", "user", "result" -> {
+            "assistant", "user", "result", "stream_event" -> {
                 // Regular SDK messages
                 try {
                     val message = messageParser.parseMessage(jsonElement)

@@ -9,7 +9,8 @@ enum class PermissionMode {
     DEFAULT,
     ACCEPT_EDITS,
     PLAN,
-    BYPASS_PERMISSIONS
+    BYPASS_PERMISSIONS,
+    DONT_ASK
 }
 
 /**

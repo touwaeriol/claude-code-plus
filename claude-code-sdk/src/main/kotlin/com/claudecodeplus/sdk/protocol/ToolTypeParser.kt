@@ -62,7 +62,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return BashToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             command = params["command"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'command' in Bash tool"),
             description = params["description"]?.jsonPrimitive?.contentOrNull,
@@ -78,7 +79,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return EditToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             filePath = params["file_path"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'file_path' in Edit tool"),
             oldString = params["old_string"]?.jsonPrimitive?.content
@@ -110,7 +112,8 @@ object ToolTypeParser {
 
         return MultiEditToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             filePath = params["file_path"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'file_path' in MultiEdit tool"),
             edits = edits
@@ -124,7 +127,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return ReadToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             filePath = params["file_path"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'file_path' in Read tool"),
             offset = params["offset"]?.jsonPrimitive?.intOrNull,
@@ -139,7 +143,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return WriteToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             filePath = params["file_path"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'file_path' in Write tool"),
             content = params["content"]?.jsonPrimitive?.content
@@ -154,7 +159,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return GlobToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             pattern = params["pattern"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'pattern' in Glob tool"),
             path = params["path"]?.jsonPrimitive?.contentOrNull
@@ -168,7 +174,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return GrepToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             pattern = params["pattern"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'pattern' in Grep tool"),
             path = params["path"]?.jsonPrimitive?.contentOrNull,
@@ -190,7 +197,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return WebFetchToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             url = params["url"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'url' in WebFetch tool"),
             prompt = params["prompt"]?.jsonPrimitive?.content
@@ -205,7 +213,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return WebSearchToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             query = params["query"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'query' in WebSearch tool"),
             allowedDomains = params["allowed_domains"]?.jsonArray?.map { it.jsonPrimitive.content },
@@ -235,7 +244,8 @@ object ToolTypeParser {
 
         return TodoWriteToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             todos = todos
         )
     }
@@ -247,7 +257,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return TaskToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             description = params["description"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'description' in Task tool"),
             prompt = params["prompt"]?.jsonPrimitive?.content
@@ -264,7 +275,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return NotebookEditToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             notebookPath = params["notebook_path"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'notebook_path' in NotebookEdit tool"),
             newSource = params["new_source"]?.jsonPrimitive?.content
@@ -289,7 +301,8 @@ object ToolTypeParser {
 
         return McpToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             fullToolName = block.name,
             serverName = serverName,
             functionName = functionName,
@@ -304,7 +317,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return BashOutputToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             bashId = params["bash_id"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'bash_id' in BashOutput tool"),
             filter = params["filter"]?.jsonPrimitive?.contentOrNull
@@ -318,7 +332,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return KillShellToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             shellId = params["shell_id"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'shell_id' in KillShell tool")
         )
@@ -331,7 +346,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return ExitPlanModeToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             plan = params["plan"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'plan' in ExitPlanMode tool")
         )
@@ -344,7 +360,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return ListMcpResourcesToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             server = params["server"]?.jsonPrimitive?.contentOrNull
         )
     }
@@ -356,7 +373,8 @@ object ToolTypeParser {
         val params = block.input.jsonObject
         return ReadMcpResourceToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             server = params["server"]?.jsonPrimitive?.content
                 ?: throw MessageParsingException("Missing 'server' in ReadMcpResource tool"),
             uri = params["uri"]?.jsonPrimitive?.content
@@ -371,7 +389,8 @@ object ToolTypeParser {
         val parameters = parseJsonElementToMap(block.input)
         return UnknownToolUse(
             id = block.id,
-            originalParameters = block.input,
+            name = block.name,
+            input = block.input,
             toolName = block.name,
             parameters = parameters
         )

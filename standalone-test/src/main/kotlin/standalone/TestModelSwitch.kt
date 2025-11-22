@@ -2,7 +2,7 @@ package standalone
 
 import com.claudecodeplus.sdk.ClaudeCodeSdkClient
 import com.claudecodeplus.sdk.types.AssistantMessage
-import com.claudecodeplus.sdk.types.ClaudeCodeOptions
+import com.claudecodeplus.sdk.types.ClaudeAgentOptions
 import com.claudecodeplus.sdk.types.ResultMessage
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -22,7 +22,7 @@ fun main() = runBlocking {
     println("🧪 真实模型切换测试")
     println("=".repeat(60))
 
-    val options = ClaudeCodeOptions(
+    val options = ClaudeAgentOptions(
         model = "claude-sonnet-4-20250514",
         maxTurns = 5
     )

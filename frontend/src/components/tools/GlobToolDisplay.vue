@@ -97,7 +97,23 @@ const resultText = computed(() => {
   if (typeof props.result.content === 'string') {
     return props.result.content
   }
-  return JSON.stringify(props.result.content, null, 2)
+  const content = props.result.content
+
+  // 处理字符串
+  if (typeof content === 'string') {
+    return content
+  }
+
+  // 处理数组（ContentBlock[]）
+  if (Array.isArray(content)) {
+    return content
+      .filter((item: any) => item.type === 'text')
+      .map((item: any) => item.text)
+      .join('\n')
+  }
+
+  // 处理对象
+  return JSON.stringify(content, null, 2)
 })
 
 const filesList = computed(() => {

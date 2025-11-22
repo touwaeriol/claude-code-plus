@@ -1,5 +1,6 @@
 package com.claudecodeplus.sdk.types
 
+
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 

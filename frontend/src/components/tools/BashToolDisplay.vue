@@ -1,73 +1,36 @@
 <template>
-  <div class="tool-display bash-tool">
-    <div class="tool-header">
-      <span class="tool-icon">⚡</span>
-      <span class="tool-name">Bash</span>
-      <code class="tool-command">{{ commandPreview }}</code>
-      <span
-        v-if="timeout"
-        class="timeout"
-      >{{ timeoutText }}</span>
-    </div>
-    <div
-      v-if="expanded"
-      class="tool-content"
-    >
-      <div class="command-section">
-        <div class="section-header">
-          执行命令
-        </div>
-        <pre class="command-text">{{ command }}</pre>
-      </div>
-      <div
-        v-if="description"
-        class="description-section"
-      >
-        <div class="section-header">
-          说明
-        </div>
-        <p class="description-text">
-          {{ description }}
-        </p>
-      </div>
-      <div
-        v-if="result"
-        class="output-section"
-      >
-        <div class="section-header">
-          <span>执行结果</span>
-          <span
-            class="exit-code"
-            :class="exitCodeClass"
-          >{{ exitCodeText }}</span>
-        </div>
-        <pre
-          v-if="stdout"
-          class="output stdout"
-        >{{ stdout }}</pre>
-        <pre
-          v-if="stderr"
-          class="output stderr"
-        >{{ stderr }}</pre>
-        <div
-          v-if="!stdout && !stderr"
-          class="no-output"
-        >
-          无输出
-        </div>
-      </div>
-    </div>
-    <button
-      class="expand-btn"
+  <div class="bash-tool-display">
+    <!-- 紧凑卡片（未展开状态） -->
+    <CompactToolCard
+      :display-info="displayInfo"
+      :is-expanded="expanded"
+      :has-details="true"
       @click="expanded = !expanded"
     >
-      {{ expanded ? '收起' : '展开' }}
-    </button>
+      <!-- 展开内容 -->
+      <template #details>
+        <div class="bash-details">
+          <!-- Command -->
+          <div class="command-section">
+            <pre class="command-text">{{ command }}</pre>
+          </div>
+
+          <!-- Output -->
+          <div v-if="result" class="output-section">
+            <pre v-if="stdout" class="output stdout">{{ stdout }}</pre>
+            <pre v-if="stderr" class="output stderr">{{ stderr }}</pre>
+            <div v-if="!stdout && !stderr" class="no-output">No output</div>
+          </div>
+        </div>
+      </template>
+    </CompactToolCard>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import CompactToolCard from './CompactToolCard.vue'
+import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
 
 interface Props {
@@ -78,16 +41,16 @@ interface Props {
 const props = defineProps<Props>()
 const expanded = ref(false)
 
+// 获取显示信息
+const displayInfo = computed(() => {
+  return extractToolDisplayInfo(props.toolUse, props.result)
+})
+
+// 命令相关
 const command = computed(() => props.toolUse.input.command || '')
 const description = computed(() => props.toolUse.input.description || '')
+const cwd = computed(() => props.toolUse.input.cwd || '')
 const timeout = computed(() => props.toolUse.input.timeout)
-
-const commandPreview = computed(() => {
-  const cmd = command.value
-  const maxLength = 60
-  if (cmd.length <= maxLength) return cmd
-  return cmd.substring(0, maxLength) + '...'
-})
 
 const timeoutText = computed(() => {
   if (!timeout.value) return ''
@@ -95,12 +58,12 @@ const timeoutText = computed(() => {
   return `${seconds}s`
 })
 
+// 输出解析
 const stdout = computed(() => {
   if (!props.result || !props.result.content) return ''
   if (typeof props.result.content === 'string') {
     return props.result.content
   }
-  // 假设结构: { stdout: "...", stderr: "...", exit_code: 0 }
   if (typeof props.result.content === 'object' && 'stdout' in props.result.content) {
     return (props.result.content as any).stdout || ''
   }
@@ -135,35 +98,28 @@ const exitCodeText = computed(() => {
 </script>
 
 <style scoped>
-.bash-tool {
-  border-color: #6f42c1;
+.bash-tool-display {
+  width: 100%;
 }
 
-.bash-tool .tool-name {
-  color: #6f42c1;
-}
-
-.tool-command {
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
-  background: rgba(111, 66, 193, 0.1);
-  padding: 2px 6px;
-  border-radius: 3px;
-  color: #24292e;
-}
-
-.timeout {
-  font-size: 11px;
-  color: #586069;
+.bash-details {
+  padding: 12px;
   background: #f6f8fa;
-  padding: 2px 6px;
-  border-radius: 3px;
+  border-top: 1px solid #e1e4e8;
 }
 
 .command-section,
+.cwd-section,
 .description-section,
 .output-section {
-  margin: 12px 0;
+  margin-bottom: 16px;
+}
+
+.command-section:last-child,
+.cwd-section:last-child,
+.description-section:last-child,
+.output-section:last-child {
+  margin-bottom: 0;
 }
 
 .section-header {
@@ -173,18 +129,38 @@ const exitCodeText = computed(() => {
   font-size: 12px;
   font-weight: 600;
   color: #586069;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.timeout {
+  font-size: 11px;
+  color: #586069;
+  background: #ffffff;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid #e1e4e8;
 }
 
 .command-text {
   margin: 0;
   padding: 12px;
-  background: #f6f8fa;
+  background: #ffffff;
   border: 1px solid #e1e4e8;
   border-radius: 4px;
   font-size: 12px;
   font-family: 'Consolas', 'Monaco', monospace;
   overflow-x: auto;
+  color: #24292e;
+}
+
+.cwd-text {
+  padding: 8px 12px;
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #586069;
 }
 
 .description-text {
@@ -250,5 +226,8 @@ const exitCodeText = computed(() => {
   color: #586069;
   font-size: 13px;
   font-style: italic;
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  border-radius: 4px;
 }
 </style>

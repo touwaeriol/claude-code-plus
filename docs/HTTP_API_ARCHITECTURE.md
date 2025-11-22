@@ -81,7 +81,7 @@
 ### 模式 2: HTTP API（浏览器）
 
 **优势**：
-- ✅ 浏览器直接访问（http://localhost:8765）
+- ✅ 浏览器直接访问（解析顺序：`window.__serverUrl` → `VITE_SERVER_URL` → `VITE_BACKEND_PORT` → 回退 `http://localhost:8765`）
 - ✅ 跨平台（任何浏览器）
 - ✅ 便于调试（Chrome DevTools）
 
@@ -89,12 +89,12 @@
 
 **工作流程**：
 ```
-前端 → POST http://localhost:8765/api/
+前端 → POST resolveServerHttpUrl()/api/
      → JSON { action, data }
      → Kotlin 处理
      → 返回 JSON { success, data, error }
 
-后端推送 → WebSocket (ws://localhost:8766)
+后端推送 → WebSocket (resolveServerWsUrl()，默认 ws://localhost:8765/ws)
          → 前端接收 JSON 消息
          → 分发给监听器
 ```

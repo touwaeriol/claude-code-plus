@@ -99,6 +99,7 @@
         @focus="isFocused = true"
         @blur="isFocused = false"
         @keydown="handleKeydown"
+        @paste="handlePaste"
         @input="adjustHeight"
       />
     </div>
@@ -673,6 +674,68 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
+/**
+ * 处理粘贴事件
+ * 检测粘贴内容是否包含图片，如果是则转为 base64 添加到上下文
+ */
+async function handlePaste(event: ClipboardEvent) {
+  console.log('📋 [handlePaste] 粘贴事件触发')
+
+  const items = event.clipboardData?.items
+  if (!items) {
+    console.log('📋 [handlePaste] 没有 clipboardData.items')
+    return
+  }
+
+  console.log(`📋 [handlePaste] 检测到 ${items.length} 个粘贴项`)
+
+  // 检查是否包含图片
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    console.log(`📋 [handlePaste] 项 ${i}: kind=${item.kind}, type=${item.type}`)
+
+    if (item.type && item.type.startsWith('image/')) {
+      console.log(`📋 [handlePaste] 检测到图片: ${item.type}`)
+
+      // 阻止默认粘贴行为
+      event.preventDefault()
+
+      const file = item.getAsFile()
+      if (!file) {
+        console.log('📋 [handlePaste] getAsFile() 返回 null')
+        continue
+      }
+
+      console.log(`📋 [handlePaste] 获取到文件: name=${file.name}, size=${file.size}, type=${file.type}`)
+
+      // 直接添加到上下文（转为 base64）
+      await addImageToContext(file)
+    }
+  }
+}
+
+/**
+ * 在光标位置插入文本
+ */
+function insertAtCursor(text: string) {
+  const textarea = textareaRef.value
+  if (!textarea) return
+
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  const currentText = inputText.value
+
+  // 插入文本
+  inputText.value = currentText.substring(0, start) + text + currentText.substring(end)
+
+  // 更新光标位置
+  nextTick(() => {
+    const newPos = start + text.length
+    textarea.selectionStart = textarea.selectionEnd = newPos
+    textarea.focus()
+  })
+}
+
 function handleSend() {
   if (!canSend.value) return
 
@@ -914,7 +977,7 @@ async function handleDrop(event: DragEvent) {
 async function addFileToContext(file: File) {
   try {
     // 检查是否为图片文件
-    if (file.type.startsWith('image/')) {
+    if (file.type && file.type.startsWith('image/')) {
       await addImageToContext(file)
       return
     }
@@ -990,15 +1053,19 @@ function isUrlReference(context: ContextReference): context is { type: 'web'; ur
 }
 
 async function addImageToContext(file: File) {
+  console.log(`🖼️ [addImageToContext] 开始处理图片: ${file.name}`)
+
   try {
     // 验证文件类型
     if (!VALID_IMAGE_TYPES.includes(file.type as any)) {
-      console.error('不支持的图片格式:', file.type)
+      console.error(`🖼️ [addImageToContext] 不支持的图片格式: ${file.type}`)
       return
     }
 
     // 读取图片为 base64
+    console.log('🖼️ [addImageToContext] 读取图片为 base64...')
     const base64Data = await readImageAsBase64(file)
+    console.log(`🖼️ [addImageToContext] base64 长度: ${base64Data.length}`)
 
     // 创建图片引用
     const imageRef: ImageReference = {
@@ -1011,10 +1078,19 @@ async function addImageToContext(file: File) {
       size: file.size
     }
 
+    console.log('🖼️ [addImageToContext] 创建图片引用:', {
+      type: imageRef.type,
+      name: imageRef.name,
+      mimeType: imageRef.mimeType,
+      size: imageRef.size,
+      base64Length: base64Data.length
+    })
+
     // 添加到上下文列表
     emit('context-add', imageRef as any)
+    console.log('🖼️ [addImageToContext] 已发送 context-add 事件')
   } catch (error) {
-    console.error('Failed to read image:', error)
+    console.error('🖼️ [addImageToContext] 读取图片失败:', error)
   }
 }
 

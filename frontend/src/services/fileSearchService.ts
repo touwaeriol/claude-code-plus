@@ -3,8 +3,6 @@
  * 提供文件搜索和最近文件获取功能
  */
 
-import { apiClient } from './apiClient'
-
 export interface IndexedFileInfo {
   name: string
   relativePath: string
@@ -22,15 +20,22 @@ export class FileSearchService {
    */
   async searchFiles(query: string, maxResults: number = 10): Promise<IndexedFileInfo[]> {
     try {
-      const response = await apiClient.get<IndexedFileInfo[]>(
+      const response = await fetch(
         `/api/files/search?query=${encodeURIComponent(query)}&maxResults=${maxResults}`
       )
 
-      if (response.success && response.data) {
-        return response.data
+      if (!response.ok) {
+        console.warn('文件搜索失败:', response.statusText)
+        return []
       }
 
-      console.warn('文件搜索失败:', response.error)
+      const result = await response.json()
+
+      if (result.success && result.data) {
+        return result.data
+      }
+
+      console.warn('文件搜索失败:', result.error)
       return []
     } catch (error) {
       console.error('文件搜索异常:', error)
@@ -44,15 +49,22 @@ export class FileSearchService {
    */
   async getRecentFiles(maxResults: number = 10): Promise<IndexedFileInfo[]> {
     try {
-      const response = await apiClient.get<IndexedFileInfo[]>(
+      const response = await fetch(
         `/api/files/recent?maxResults=${maxResults}`
       )
 
-      if (response.success && response.data) {
-        return response.data
+      if (!response.ok) {
+        console.warn('获取最近文件失败:', response.statusText)
+        return []
       }
 
-      console.warn('获取最近文件失败:', response.error)
+      const result = await response.json()
+
+      if (result.success && result.data) {
+        return result.data
+      }
+
+      console.warn('获取最近文件失败:', result.error)
       return []
     } catch (error) {
       console.error('获取最近文件异常:', error)

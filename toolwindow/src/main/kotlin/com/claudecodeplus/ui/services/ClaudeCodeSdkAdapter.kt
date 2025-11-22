@@ -51,7 +51,7 @@ object ClaudeCodeSdkAdapter {
             logger.info("📱 为会话 $sessionId 创建新的 SDK 客户端")
 
             // 构建配置选项
-            val options = SdkMessageConverter.buildClaudeCodeOptions(sessionObject, project)
+            val options = SdkMessageConverter.buildClaudeAgentOptions(sessionObject, project)
 
             // 创建客户端
             val client = ClaudeCodeSdkClient(options)

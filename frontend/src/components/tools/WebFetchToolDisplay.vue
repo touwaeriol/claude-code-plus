@@ -78,11 +78,14 @@
             >{{ contentSize }}</span>
             <button
               v-if="canCopy"
-              class="action-btn"
-              title="复制内容"
+              class="copy-btn"
+              title="复制"
               @click="copyContent"
             >
-              📋 复制
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
             </button>
             <button
               v-if="isTruncated"
@@ -445,6 +448,24 @@ function toggleFullContent() {
 .action-btn:hover {
   background: #f6f8fa;
   border-color: #d1d5da;
+}
+
+.copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ide-foreground, #24292e);
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.copy-btn:hover {
+  opacity: 1;
+  background: var(--ide-panel-background, #f6f8fa);
 }
 
 .result-content {

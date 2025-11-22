@@ -1,6 +1,7 @@
 package com.claudecodeplus.rpc.api
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
@@ -20,11 +21,23 @@ interface ClaudeRpcService {
     suspend fun connect(options: JsonObject?): JsonObject
 
     /**
-     * 发送查询消息
+     * 发送查询消息 (纯文本)
      * @param message 用户消息
      * @return 流式响应 (Flow<JsonElement>)
      */
     fun query(message: String): Flow<JsonElement>
+
+    /**
+     * 发送查询消息 (stream-json 格式，支持图片)
+     *
+     * Content 格式:
+     * - 文本: { "type": "text", "text": "..." }
+     * - 图片: { "type": "image", "data": "base64...", "mimeType": "image/png" }
+     *
+     * @param content 内容块数组
+     * @return 流式响应 (Flow<JsonElement>)
+     */
+    fun queryWithContent(content: JsonArray): Flow<JsonElement>
 
     /**
      * 中断当前操作

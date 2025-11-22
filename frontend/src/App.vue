@@ -3,8 +3,12 @@
     class="app"
     :class="{ 'theme-dark': isDark }"
   >
+    <!-- 测试模式：显示 TestDisplayItems -->
+    <TestDisplayItems v-if="showTest" />
+
     <!-- 完整的 ModernChatView 组件 -->
     <ModernChatView
+      v-else
       :session-id="sessionId"
       :project-path="projectPath"
       class="main-chat-view"
@@ -72,8 +76,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import ModernChatView from '@/components/chat/ModernChatView.vue'
+import TestDisplayItems from '@/views/TestDisplayItems.vue'
 import { ideaBridge } from '@/services/ideaBridge'
 import { themeService } from '@/services/themeService'
+import { useEnvironment } from '@/composables/useEnvironment'
 
 const bridgeReady = ref(false)
 const isDark = ref(false)
@@ -83,12 +89,20 @@ const currentMode = ref('unknown')
 const htmlClasses = ref('')
 const themeServiceStatus = ref('未初始化')
 
+// 测试模式开关（URL 参数 ?test=1 启用）
+const showTest = ref(new URLSearchParams(window.location.search).get('test') === '1')
+
 // 会话ID和项目路径（可以从后端获取）
 const sessionId = ref<string | undefined>(undefined)
 const projectPath = ref<string>('') // 将从后端获取
 
+const { detectEnvironment } = useEnvironment()
+
 onMounted(async () => {
   console.log('🚀 App mounted - ModernChatView loaded')
+
+  // 全局环境检测
+  await detectEnvironment()
 
   // 更新 HTML class 显示
   const updateHtmlClasses = () => {

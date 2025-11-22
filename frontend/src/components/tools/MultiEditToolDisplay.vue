@@ -10,20 +10,6 @@
       v-if="expanded"
       class="tool-content"
     >
-      <div class="file-info">
-        <div class="info-row">
-          <span class="label">文件:</span>
-          <span
-            class="value clickable"
-            @click="openFile"
-          >{{ filePath }}</span>
-        </div>
-        <div class="info-row">
-          <span class="label">修改数:</span>
-          <span class="value">{{ edits.length }} 处</span>
-        </div>
-      </div>
-
       <!-- 修改列表 -->
       <div class="edits-list">
         <div
@@ -50,30 +36,38 @@
             <div class="edit-preview">
               <div class="diff-section">
                 <div class="diff-header old">
-                  替换内容 (旧)
+                  <span></span>
+                  <button
+                    class="copy-btn"
+                    title="复制"
+                    @click="copyText(edit.old_string)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  </button>
                 </div>
                 <pre class="diff-content old">{{ edit.old_string }}</pre>
-                <button
-                  class="copy-btn"
-                  @click="copyText(edit.old_string)"
-                >
-                  复制
-                </button>
               </div>
               <div class="diff-arrow">
                 →
               </div>
               <div class="diff-section">
                 <div class="diff-header new">
-                  新内容
+                  <span></span>
+                  <button
+                    class="copy-btn"
+                    title="复制"
+                    @click="copyText(edit.new_string)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  </button>
                 </div>
                 <pre class="diff-content new">{{ edit.new_string }}</pre>
-                <button
-                  class="copy-btn"
-                  @click="copyText(edit.new_string)"
-                >
-                  复制
-                </button>
               </div>
             </div>
           </div>
@@ -94,19 +88,6 @@
         >
           {{ allExpanded ? '全部收起' : '全部展开' }}
         </button>
-      </div>
-
-      <!-- 执行结果 -->
-      <div
-        v-if="result"
-        class="tool-result"
-      >
-        <div
-          class="result-status"
-          :class="resultStatus"
-        >
-          {{ resultMessage }}
-        </div>
       </div>
     </div>
     <button
@@ -151,31 +132,6 @@ const edits = computed<EditOperation[]>(() => {
 
 const allExpanded = computed(() => {
   return expandedEdits.value.size === edits.value.length
-})
-
-const resultStatus = computed(() => {
-  if (!props.result) return 'pending'
-  // 将 content 转换为字符串
-  let contentStr = ''
-  if (typeof props.result.content === 'string') {
-    contentStr = props.result.content
-  } else if (Array.isArray(props.result.content)) {
-    contentStr = props.result.content
-      .filter((item: any) => item.type === 'text')
-      .map((item: any) => item.text)
-      .join('\n')
-  } else {
-    contentStr = JSON.stringify(props.result.content)
-  }
-  const content = contentStr.toLowerCase()
-  if (content.includes('error') || content.includes('failed')) return 'error'
-  return 'success'
-})
-
-const resultMessage = computed(() => {
-  if (!props.result) return '等待执行...'
-  if (resultStatus.value === 'error') return '批量编辑失败'
-  return `成功应用 ${edits.value.length} 处修改`
 })
 
 function toggleEdit(index: number) {
@@ -311,6 +267,9 @@ async function copyText(text: string) {
 }
 
 .diff-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 600;
@@ -382,23 +341,21 @@ async function copyText(text: string) {
 }
 
 .copy-btn {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  padding: 2px 8px;
-  font-size: 11px;
-  border: 1px solid var(--ide-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
   border-radius: 3px;
-  background: var(--ide-background);
-  color: var(--ide-foreground);
+  background: transparent;
+  color: var(--ide-foreground, #24292e);
   cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.2s;
+  opacity: 0.6;
 }
 
 .copy-btn:hover {
   opacity: 1;
-  background: var(--ide-panel-background);
+  background: var(--ide-panel-background, #f6f8fa);
 }
 
 .actions {
@@ -434,42 +391,5 @@ async function copyText(text: string) {
   border-color: var(--ide-button-hover-background);
 }
 
-.result-status {
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 600;
-  margin-top: 12px;
-}
 
-.result-status.pending {
-  background: #f1f8ff;
-  color: #0366d6;
-}
-
-.result-status.success {
-  background: #e6ffed;
-  color: #22863a;
-}
-
-.result-status.error {
-  background: #ffeef0;
-  color: #d73a49;
-}
-
-/* 暗色主题下的结果状态 */
-.theme-dark .result-status.pending {
-  background: #1f3d5c;
-  color: #58a6ff;
-}
-
-.theme-dark .result-status.success {
-  background: #1f3d1f;
-  color: #56d364;
-}
-
-.theme-dark .result-status.error {
-  background: #3d1f1f;
-  color: #f85149;
-}
 </style>

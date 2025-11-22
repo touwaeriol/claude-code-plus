@@ -2,6 +2,8 @@ package com.claudecodeplus.server
 
 import com.claudecodeplus.bridge.IdeEvent
 import com.claudecodeplus.bridge.IdeTheme
+import com.claudecodeplus.bridge.FrontendRequest
+import com.claudecodeplus.bridge.FrontendResponse
 
 import io.ktor.http.*
 import io.ktor.http.content.*
@@ -34,10 +36,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.Serializable
+import kotlinx.coroutines.runBlocking
 import java.awt.Color
 import java.io.IOException
-import java.net.BindException
-import java.net.ServerSocket
 import java.nio.file.Path
 import java.util.logging.Logger
 import kotlin.time.Duration.Companion.seconds
@@ -55,7 +56,7 @@ import kotlin.time.Duration.Companion.seconds
 class HttpApiServer(
     private val ideActionBridge: IdeActionBridge,
     private val scope: CoroutineScope,
-    private val frontendDir: Path
+    private val frontendDir: Path? = null  // 开发模式下可以为 null
 ) : com.claudecodeplus.bridge.EventBridge {
     private val logger = Logger.getLogger(javaClass.name)
     private val json = Json {
@@ -84,35 +85,16 @@ class HttpApiServer(
 
     /**
      * 启动服务器
-     * @param preferredPort 外部指定端口（可选）
+     * @param preferredPort 外部指定端口（可选，null 则使用随机端口）
      * @return 服务器 URL
      */
     fun start(preferredPort: Int? = null): String {
         val configuredPort = preferredPort
             ?: System.getenv("CLAUDE_HTTP_PORT")?.toIntOrNull()
-            ?: DEFAULT_PORT
+            ?: 0  // 使用 0 让操作系统自动分配端口
 
-        val portInUse = try {
-            startServerOn(configuredPort)
-        } catch (e: Exception) {
-            if (e is BindException) {
-                val fallbackPort = findAvailablePort()
-                logger.warning("⚠️ Port $configuredPort is busy, falling back to $fallbackPort")
-                startServerOn(fallbackPort)
-            } else {
-                throw e
-            }
-        }
-
-        val url = "http://$DEFAULT_HOST:$portInUse"
-        baseUrl = url
-        logger.info("🚀 Ktor server started at: $url")
-        return url
-    }
-
-    private fun startServerOn(port: Int): Int {
         // 启动 Ktor 服务器 (使用 Netty 引擎)
-        server = embeddedServer(Netty, port = port, host = DEFAULT_HOST) {
+        server = embeddedServer(Netty, port = configuredPort, host = DEFAULT_HOST) {
             // 重新启用 ContentNegotiation
             install(ContentNegotiation) {
                 json(json)
@@ -142,7 +124,7 @@ class HttpApiServer(
 
             // 路由配置
             routing {
-                val serverPort = port
+                val serverPort = configuredPort
 
                 // WebSocket RPC 路由 (新架构)
                 val wsHandler = WebSocketHandler(ideActionBridge)
@@ -452,48 +434,82 @@ class HttpApiServer(
                     call.respondText("""{"status":"ok","port":$serverPort}""", ContentType.Application.Json)
                 }
 
-                // 动态处理 index.html，根据 URL 参数注入环境变量
-                get("/") {
-                    val indexFile = frontendDir.resolve("index.html").toFile()
-                    if (indexFile.exists()) {
-                        var html = indexFile.readText()
+                // 动态处理 index.html，根据 URL 参数注入环境变量（仅在生产模式下）
+                if (frontendDir != null) {
+                    get("/") {
+                        val indexFile = frontendDir.resolve("index.html").toFile()
+                        if (indexFile.exists()) {
+                            var html = indexFile.readText()
 
-                        // 检查是否来自 IDEA 插件（通过 URL 参数 ?ide=true）
-                        val isIdeMode = call.request.queryParameters["ide"] == "true"
+                            // 检查是否来自 IDEA 插件（通过 URL 参数 ?ide=true）
+                            val isIdeMode = call.request.queryParameters["ide"] == "true"
 
-                        if (isIdeMode) {
-                            // IDEA 插件模式：注入 window.__serverUrl
-                            val injection = """
-                                <script>
-                                    window.__serverUrl = 'http://localhost:$serverPort';
-                                    console.log('✅ Environment: IDEA Plugin Mode');
-                                    console.log('🔗 Server URL:', window.__serverUrl);
-                                </script>
-                            """.trimIndent()
-                            html = html.replace("</head>", "$injection\n</head>")
+                            if (isIdeMode) {
+                                // IDEA 插件模式：注入 window.__serverUrl
+                                val injection = """
+                                    <script>
+                                        window.__serverUrl = 'http://localhost:$serverPort';
+                                        console.log('✅ Environment: IDEA Plugin Mode');
+                                        console.log('🔗 Server URL:', window.__serverUrl);
+                                    </script>
+                                """.trimIndent()
+                                html = html.replace("</head>", "$injection\n</head>")
+                            } else {
+                                // 浏览器模式：不注入（前端会使用默认值）
+                                val injection = """
+                                    <script>
+                                        console.log('✅ Environment: Browser Mode');
+                                        console.log('🔗 Using default server URL');
+                                    </script>
+                                """.trimIndent()
+                                html = html.replace("</head>", "$injection\n</head>")
+                            }
+
+                            call.respondText(html, ContentType.Text.Html)
                         } else {
-                            // 浏览器模式：不注入（前端会使用默认值）
-                            val injection = """
-                                <script>
-                                    console.log('✅ Environment: Browser Mode');
-                                    console.log('🔗 Using default server URL');
-                                </script>
-                            """.trimIndent()
-                            html = html.replace("</head>", "$injection\n</head>")
+                            call.respondText("index.html not found", ContentType.Text.Plain, HttpStatusCode.NotFound)
                         }
+                    }
 
-                        call.respondText(html, ContentType.Text.Html)
-                    } else {
-                        call.respondText("index.html not found", ContentType.Text.Plain, HttpStatusCode.NotFound)
+                    // 静态资源 - 放在最后以避免拦截 API 请求
+                    staticFiles("/", frontendDir.toFile())
+                } else {
+                    // 开发模式：返回提示信息
+                    get("/") {
+                        call.respondText(
+                            """
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <title>Claude Code Plus - Dev Mode</title>
+                            </head>
+                            <body>
+                                <h1>🔧 Development Mode</h1>
+                                <p>Backend server is running on port $serverPort</p>
+                                <p>Please start the frontend development server separately:</p>
+                                <pre>cd frontend && npm run dev</pre>
+                                <p>WebSocket endpoint: ws://localhost:$serverPort/ws</p>
+                                <p>API endpoint: http://localhost:$serverPort/api/</p>
+                            </body>
+                            </html>
+                            """.trimIndent(),
+                            ContentType.Text.Html
+                        )
                     }
                 }
-
-                // 静态资源 - 放在最后以避免拦截 API 请求
-                staticFiles("/", frontendDir.toFile())
             }
         }.start(wait = false)
 
-        return port
+        // 获取实际分配的端口
+        // 在 Ktor 3.0 中，embeddedServer() 返回 EmbeddedServer，需要通过 engine 属性访问 ApplicationEngine
+        val actualPort = runBlocking {
+            server!!.engine.resolvedConnectors().first().port
+        }
+
+        val url = "http://$DEFAULT_HOST:$actualPort"
+        baseUrl = url
+        logger.info("🚀 Ktor server started at: $url (configured: $configuredPort, actual: $actualPort)")
+        return url
     }
 
     /**
@@ -515,22 +531,6 @@ class HttpApiServer(
     override fun pushEvent(event: IdeEvent) {
         _eventFlow.tryEmit(event)
         logger.info("📤 Pushed event: ${event.type}")
-    }
-
-
-
-
-
-
-
-    /**
-     * 查找可用端口（系统自动分配）
-     * 使用 ServerSocket(0) 让操作系统自动分配一个可用的随机端口
-     */
-    private fun findAvailablePort(): Int {
-        ServerSocket(0).use { socket ->
-            return socket.localPort
-        }
     }
 }
 

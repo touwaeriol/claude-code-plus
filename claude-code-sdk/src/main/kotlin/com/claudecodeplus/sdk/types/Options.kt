@@ -103,6 +103,8 @@ data class ClaudeAgentOptions(
 
     // Permission settings
     val permissionMode: PermissionMode? = null,
+    val dangerouslySkipPermissions: Boolean? = null,
+    val allowDangerouslySkipPermissions: Boolean? = null,
     val permissionPromptToolName: String? = null,
     val canUseTool: CanUseTool? = null,
 

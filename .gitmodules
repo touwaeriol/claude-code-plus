@@ -1,12 +1,9 @@
-[submodule "claude-agent-sdk-demos"]
-	path = claude-agent-sdk-demos
-	url = https://github.com/anthropics/claude-agent-sdk-demos
-[submodule "claude-agent-sdk-typescript"]
-	path = claude-agent-sdk-typescript
-	url = https://github.com/anthropics/claude-agent-sdk-typescript
 [submodule "external/claude-agent-sdk-demos"]
 	path = external/claude-agent-sdk-demos
 	url = https://github.com/anthropics/claude-agent-sdk-demos.git
 [submodule "external/claude-agent-sdk-typescript"]
 	path = external/claude-agent-sdk-typescript
 	url = https://github.com/anthropics/claude-agent-sdk-typescript.git
+[submodule "external/claude-agent-sdk-python"]
+	path = external/claude-agent-sdk-python
+	url = https://github.com/anthropics/claude-agent-sdk-python

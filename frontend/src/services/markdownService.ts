@@ -50,7 +50,7 @@ class MarkdownService {
 
     // 自定义链接渲染 (支持文件路径)
     const defaultLinkOpen = this.md.renderer.rules.link_open ||
-      ((tokens, idx, _options, _env, _slf) => slf.renderToken(tokens, idx, options))
+      ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options))
 
     this.md.renderer.rules.link_open = (tokens, idx, _options, _env, _slf) => {
       const token = tokens[idx]

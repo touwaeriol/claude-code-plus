@@ -170,11 +170,13 @@ get("/") {
 }
 ```
 
-**浏览器模式**: 使用默认地址
+**浏览器模式**: 通过统一解析器获取地址
 ```typescript
 // frontend/src/services/ideaBridge.ts
+import { resolveServerHttpUrl } from '@/utils/serverUrl'
+
 private getBaseUrl(): string {
-  return (window as any).__serverUrl || 'http://localhost:8765'
+  return resolveServerHttpUrl()
 }
 
 // 环境检测
@@ -182,6 +184,12 @@ getMode(): 'ide' | 'browser' {
   return (window as any).__serverUrl ? 'ide' : 'browser'
 }
 ```
+
+`resolveServerHttpUrl()` 的优先级：
+1. `window.__serverUrl`（IDEA 注入或提前设置）
+2. `VITE_SERVER_URL`
+3. `VITE_BACKEND_PORT`（默认 `http://localhost:<port>`）
+4. 回退到 `http://localhost:8765`
 
 **优势**:
 - ✅ **时序可靠**: HTML 加载时就已注入，Vue 初始化前就能读取
@@ -373,7 +381,7 @@ override fun openFile(request: FrontendRequest): FrontendResponse {
 1. **启动后端服务器** (手动或脚本)
 2. **启动前端开发服务器** (`npm run dev`)
 3. **打开浏览器** (`http://localhost:5173`)
-4. **前端使用默认 URL** (`http://localhost:8765`)
+4. **前端通过解析器解析 URL**（若无注入，则回退 `http://localhost:8765`）
 5. **功能受限**: IDEA 集成功能不可用（打开文件、显示 Diff）
 
 ---

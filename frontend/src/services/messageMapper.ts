@@ -1,11 +1,13 @@
-import type { Message, ContentBlock, TextBlock } from '@/types/message'
+import type { Message, ContentBlock, TextBlock, ToolResultBlock } from '@/types/message'
 import type { WebSocketResponse } from './websocketClient'
 import {
   isUserMessage,
   isAssistantMessage,
   isSystemMessage,
   isErrorMessage,
-  isSystemMessageSent
+  isSystemMessageSent,
+  isStreamEvent,
+  isResultMessage
 } from '@/utils/typeGuards'
 
 let messageCounter = 0
@@ -15,8 +17,16 @@ function nextMessageId(prefix: string): string {
   return `${prefix}-${Date.now()}-${messageCounter}`
 }
 
+/**
+ * 将原始内容转换为 ContentBlock 数组
+ *
+ * 注意：此函数是纯函数，不会产生副作用
+ * 工具调用的注册应由调用方（如 sessionStore）处理
+ */
 function mapAssistantContent(rawContent: any): ContentBlock[] {
-  if (!rawContent) return []
+  if (!rawContent) {
+    return []
+  }
 
   // 已经是内容块数组
   if (Array.isArray(rawContent)) {
@@ -25,46 +35,55 @@ function mapAssistantContent(rawContent: any): ContentBlock[] {
 
   // 单纯字符串
   if (typeof rawContent === 'string') {
-    const block: TextBlock = { type: 'text', text: rawContent }
-    return [block]
+    return [{ type: 'text', text: rawContent }]
   }
 
   // Anthropic 风格 content 数组
-  if (Array.isArray((rawContent as any).content)) {
-    return (rawContent as any).content as ContentBlock[]
+  if (rawContent.content && Array.isArray(rawContent.content)) {
+    return rawContent.content as ContentBlock[]
   }
 
   return []
 }
 
-function extractUserText(rawContent: any): string {
-  if (!rawContent) return ''
+/**
+ * 提取用户消息内容
+ *
+ * 注意：此函数是纯函数，不会产生副作用
+ * 工具结果的处理应由调用方（如 sessionStore）处理
+ */
+function extractUserContent(rawContent: any): ContentBlock[] {
+  if (!rawContent) return []
 
-  if (typeof rawContent === 'string') return rawContent
-
-  // UserMessage.content 也可能是数组或对象
+  // 如果是数组
   if (Array.isArray(rawContent)) {
-    const parts: string[] = []
-    rawContent.forEach((el) => {
+    const blocks: ContentBlock[] = []
+    for (const el of rawContent) {
       if (typeof el === 'string') {
-        parts.push(el)
+        blocks.push({ type: 'text', text: el })
       } else if (el && typeof el === 'object') {
-        const type = (el as any).type
-        if (type === 'text' && typeof (el as any).text === 'string') {
-          parts.push((el as any).text)
+        const type = el.type
+        if (type === 'text' && typeof el.text === 'string') {
+          blocks.push(el as TextBlock)
+        } else if (type === 'tool_result') {
+          blocks.push(el as ToolResultBlock)
         }
       }
-    })
-    return parts.join('\n')
+    }
+    return blocks
   }
 
-  if (rawContent && typeof rawContent === 'object') {
-    // 兼容 { content: [...] }
-    const inner = (rawContent as any).content
-    return extractUserText(inner)
+  // 单纯字符串
+  if (typeof rawContent === 'string') {
+    return [{ type: 'text', text: rawContent }]
   }
 
-  return ''
+  // 对象格式 { content: [...] }
+  if (rawContent && typeof rawContent === 'object' && rawContent.content) {
+    return extractUserContent(rawContent.content)
+  }
+
+  return []
 }
 
 /**
@@ -90,15 +109,14 @@ export function mapWebSocketResponseToMessages(response: WebSocketResponse): Mes
 
   // ✅ 类型安全：用户消息
   if (isUserMessage(response)) {
-    // response.message 现在是 { content: string }
-    const text = extractUserText(response.message.content)
-    if (!text) return []
+    // response.message 现在是 { content: string | ContentBlock[] }
+    const contentBlocks = extractUserContent(response.message.content)
+    if (contentBlocks.length === 0) return []
 
-    const block: TextBlock = { type: 'text', text }
     const msg: Message = {
       id: nextMessageId('user'),
       role: 'user',
-      content: [block],
+      content: contentBlocks,
       timestamp: Date.now()
     }
     return [msg]
@@ -140,6 +158,31 @@ export function mapWebSocketResponseToMessages(response: WebSocketResponse): Mes
     return [msg]
   }
 
-  // result / stream_event 暂时不直接映射到可见消息
+  // 流式事件：不在这里处理，由 sessionStore.handleStreamEvent 处理
+  if (isStreamEvent(response)) {
+    return []
+  }
+
+  // ✅ 处理 result 消息中的错误
+  if (isResultMessage(response)) {
+    // 检查是否有错误
+    if (response.message.is_error && response.message.result) {
+      const block: TextBlock = {
+        type: 'text',
+        text: response.message.result
+      }
+      const msg: Message = {
+        id: nextMessageId('system'),
+        role: 'system',
+        content: [block],
+        timestamp: Date.now()
+      }
+      return [msg]
+    }
+    // 非错误的 result 消息仍然不显示
+    return []
+  }
+
+  // 其他未处理的消息类型
   return []
 }

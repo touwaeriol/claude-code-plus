@@ -10,7 +10,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { markdownService } from '@/services/markdownService'
 import { highlightService } from '@/services/highlightService'
-import { ideService } from '@/services/ideaBridge'
+import { ideaBridge } from '@/services/ideaBridge'
 
 interface Props {
   content: string
@@ -111,7 +111,7 @@ function handleClick(event: MouseEvent) {
     if (href && (href.startsWith('/') || href.startsWith('file://'))) {
       event.preventDefault()
       const filePath = href.replace('file://', '')
-      ideService.openFile(filePath)
+      ideaBridge.query('ide.openFile', { filePath })
     }
   }
 }

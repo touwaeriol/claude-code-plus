@@ -9,7 +9,8 @@ export enum PermissionMode {
   DEFAULT = 'default',           // 默认模式 - 需要用户确认
   ACCEPT_EDITS = 'accept_edits', // 自动接受编辑
   PLAN = 'plan',                 // 计划模式
-  BYPASS_PERMISSIONS = 'bypass'  // 绕过权限检查
+  BYPASS_PERMISSIONS = 'bypass', // 绕过权限检查
+  DONT_ASK = 'dontAsk'           // 不询问模式
 }
 
 /**
@@ -33,6 +34,7 @@ export interface Settings {
   permissionMode: PermissionMode
 
   // 会话控制
+  systemPrompt: string | null  // 系统提示词
   maxTurns: number | null
   continueConversation: boolean
 
@@ -54,6 +56,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   model: ModelType.SONNET,
   permissionMode: PermissionMode.DEFAULT,
+  systemPrompt: null,  // 默认使用 claude_code 提示词
   maxTurns: 10,
   continueConversation: false,
   maxTokens: null,
@@ -70,7 +73,8 @@ export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
   [PermissionMode.DEFAULT]: '默认 - 需要确认',
   [PermissionMode.ACCEPT_EDITS]: '自动接受编辑',
   [PermissionMode.PLAN]: '计划模式',
-  [PermissionMode.BYPASS_PERMISSIONS]: '绕过权限检查'
+  [PermissionMode.BYPASS_PERMISSIONS]: '绕过权限检查',
+  [PermissionMode.DONT_ASK]: '不询问模式'
 }
 
 /**
@@ -90,5 +94,6 @@ export const PERMISSION_MODE_DESCRIPTIONS: Record<PermissionMode, string> = {
   [PermissionMode.DEFAULT]: '每个工具调用都需要用户确认',
   [PermissionMode.ACCEPT_EDITS]: '自动接受文件编辑操作',
   [PermissionMode.PLAN]: '先制定计划,再执行操作',
-  [PermissionMode.BYPASS_PERMISSIONS]: '自动执行所有操作(谨慎使用)'
+  [PermissionMode.BYPASS_PERMISSIONS]: '自动执行所有操作(谨慎使用)',
+  [PermissionMode.DONT_ASK]: '不询问直接执行'
 }

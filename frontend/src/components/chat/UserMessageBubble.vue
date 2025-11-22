@@ -1,0 +1,371 @@
+<template>
+  <div class="user-message-bubble">
+    <!-- 时间戳 -->
+    <!-- 隐藏时间戳，使消息展示更紧凑 -->
+    <!-- <div class="timestamp">{{ formattedTime }}</div> -->
+    
+    <!-- 消息内容 -->
+    <div class="bubble-content" :class="{ collapsed: isCollapsed && isLongMessage }">
+      <!-- 文本内容 -->
+      <div v-if="messageText" class="message-text">{{ messageText }}</div>
+
+      <!-- 图片内容 -->
+      <div v-if="imageBlocks.length > 0" class="message-images">
+        <div
+          v-for="(image, index) in imageBlocks"
+          :key="index"
+          class="image-item"
+        >
+          <img
+            :src="getImageSrc(image)"
+            :alt="`Image ${index + 1}`"
+            class="message-image"
+            @click="openImagePreview(image)"
+          />
+          <div class="image-info">
+            <span class="image-name">{{ getImageName(image, index) }}</span>
+            <span class="image-size">{{ getImageSize(image) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 上下文引用（如果有） -->
+      <div v-if="hasContexts" class="contexts">
+        <div v-for="(context, index) in contexts" :key="index" class="context-item">
+          <span class="context-icon">{{ getContextIcon(context.type) }}</span>
+          <span class="context-label">{{ context.label }}</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 折叠/展开按钮（长消息） -->
+    <button
+      v-if="isLongMessage"
+      class="toggle-button"
+      @click="toggleCollapse"
+    >
+      <span class="toggle-icon">{{ isCollapsed ? '▾' : '▴' }}</span>
+      <span class="toggle-text">{{ isCollapsed ? '展开' : '收起' }}</span>
+    </button>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import type { Message, ImageBlock } from '@/types/message'
+
+interface Props {
+  message: Message
+  contexts?: Array<{
+    type: 'file' | 'folder' | 'url' | 'code'
+    label: string
+    path?: string
+  }>
+}
+
+const props = defineProps<Props>()
+
+// 折叠状态
+const isCollapsed = ref(true)
+
+// 提取消息文本内容
+const messageText = computed(() => {
+  if (!props.message.content || !Array.isArray(props.message.content)) {
+    return ''
+  }
+
+  // 从 ContentBlock[] 中提取所有文本
+  return props.message.content
+    .filter(block => block.type === 'text')
+    .map(block => (block as any).text)
+    .join('\n')
+})
+
+// 提取图片内容
+const imageBlocks = computed(() => {
+  if (!props.message.content || !Array.isArray(props.message.content)) {
+    return []
+  }
+
+  return props.message.content
+    .filter(block => block.type === 'image') as ImageBlock[]
+})
+
+// 判断是否为长消息（超过 200 字符或有多张图片）
+const isLongMessage = computed(() => {
+  return messageText.value.length > 200 || imageBlocks.value.length > 2
+})
+
+// 是否有上下文引用
+const hasContexts = computed(() => {
+  return props.contexts && props.contexts.length > 0
+})
+
+// 格式化时间戳
+const formattedTime = computed(() => {
+  const date = new Date(props.message.timestamp)
+  const hours = date.getHours().toString().padStart(2, '0')
+  const minutes = date.getMinutes().toString().padStart(2, '0')
+  return `${hours}:${minutes}`
+})
+
+// 切换折叠状态
+function toggleCollapse() {
+  isCollapsed.value = !isCollapsed.value
+}
+
+// 获取上下文图标
+function getContextIcon(type: string): string {
+  const icons: Record<string, string> = {
+    file: '📄',
+    folder: '📁',
+    url: '🔗',
+    code: '💻'
+  }
+  return icons[type] || '📎'
+}
+
+// 获取图片源地址
+function getImageSrc(image: ImageBlock): string {
+  if (image.source.type === 'url' && image.source.url) {
+    return image.source.url
+  }
+  if (image.source.type === 'base64' && image.source.data) {
+    return `data:${image.source.media_type};base64,${image.source.data}`
+  }
+  return ''
+}
+
+// 获取图片名称
+function getImageName(image: ImageBlock, index: number): string {
+  if (image.source.type === 'url' && image.source.url) {
+    const urlParts = image.source.url.split('/')
+    return urlParts[urlParts.length - 1] || `image-${index + 1}`
+  }
+  const ext = image.source.media_type.split('/')[1] || 'png'
+  return `image.${ext}`
+}
+
+// 获取图片大小（估算）
+function getImageSize(image: ImageBlock): string {
+  if (image.source.type === 'base64' && image.source.data) {
+    // Base64 编码后的大小约为原始大小的 4/3
+    const bytes = (image.source.data.length * 3) / 4
+    if (bytes < 1024) return `${bytes.toFixed(0)} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+  return ''
+}
+
+// 打开图片预览
+function openImagePreview(image: ImageBlock) {
+  const src = getImageSrc(image)
+  if (src) {
+    window.open(src, '_blank')
+  }
+}
+</script>
+
+<style scoped>
+.user-message-bubble {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  margin-bottom: 16px;
+  max-width: 100%;
+}
+
+.timestamp {
+  font-size: 11px;
+  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.5));
+  padding: 0 8px;
+}
+
+.bubble-content {
+  background: #E3F2FD;
+  border-radius: 12px;
+  padding: 12px 16px;
+  max-width: 80%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.bubble-content.collapsed {
+  max-height: 120px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bubble-content.collapsed::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(to bottom, transparent, #E3F2FD);
+}
+
+.message-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ide-foreground, #1a1a1a);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 8px;
+}
+
+.message-text:last-child {
+  margin-bottom: 0;
+}
+
+/* 图片显示样式 */
+.message-images {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.image-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  padding: 8px;
+  transition: background 0.2s ease;
+}
+
+.image-item:hover {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.message-image {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 6px;
+  cursor: pointer;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+}
+
+.message-image:hover {
+  transform: scale(1.02);
+}
+
+.image-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.6));
+}
+
+.image-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.image-size {
+  margin-left: 8px;
+  opacity: 0.7;
+}
+
+.contexts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.context-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.7));
+}
+
+.context-icon {
+  font-size: 14px;
+}
+
+.context-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toggle-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.6));
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggle-button:hover {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.3);
+}
+
+.toggle-icon {
+  font-size: 10px;
+}
+
+.toggle-text {
+  font-size: 11px;
+}
+
+/* 暗色主题适配 */
+.theme-dark .bubble-content {
+  background: #1E3A5F;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.theme-dark .bubble-content.collapsed::after {
+  background: linear-gradient(to bottom, transparent, #1E3A5F);
+}
+
+.theme-dark .message-text {
+  color: var(--ide-foreground, #e0e0e0);
+}
+
+.theme-dark .timestamp {
+  color: var(--ide-secondary-foreground, rgba(255, 255, 255, 0.5));
+}
+
+.theme-dark .contexts {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.theme-dark .context-item {
+  color: var(--ide-secondary-foreground, rgba(255, 255, 255, 0.7));
+}
+
+.theme-dark .toggle-button {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--ide-secondary-foreground, rgba(255, 255, 255, 0.6));
+}
+
+.theme-dark .toggle-button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+</style>
+

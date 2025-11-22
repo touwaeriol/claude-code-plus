@@ -68,6 +68,17 @@ export interface UserMessage extends BaseDisplayItem {
   content: string
   images?: ImageBlock[]
   contexts?: ContextReference[]
+  requestStats?: RequestStats  // 请求统计信息（请求完成后填充）
+  isStreaming?: boolean        // 是否正在流式响应
+}
+
+/**
+ * 请求统计信息
+ */
+export interface RequestStats {
+  requestDuration: number     // 请求耗时（毫秒）
+  inputTokens: number         // 上行 tokens
+  outputTokens: number        // 下行 tokens
 }
 
 /**
@@ -76,6 +87,8 @@ export interface UserMessage extends BaseDisplayItem {
 export interface AssistantText extends BaseDisplayItem {
   type: 'assistantText'
   content: string
+  stats?: RequestStats        // 请求统计信息（仅最后一个文本块有）
+  isLastInMessage?: boolean   // 是否是该消息的最后一个文本块
 }
 
 /**

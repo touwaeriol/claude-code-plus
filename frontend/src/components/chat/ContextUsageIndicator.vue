@@ -102,7 +102,7 @@ function getStatisticsText(): string {
     text += '\n• 基于 Claude Code 的 VE→HY5→zY5 函数链'
     text += '\n• VE: 逆序遍历找最新 assistant 消息'
     text += '\n• HY5: 过滤 synthetic 消息，取真实 API 调用'
-    text += '\n• zY5: 累加 input+output+cache_creation+cache_read'
+    text += '\n• zY5: 累加 input（上行）+ output（下行）tokens'
   } else {
     text += '\n• 新会话，暂无 API 调用数据'
   }
@@ -181,15 +181,12 @@ function isValidAssistantMessage(message: EnhancedMessage): boolean {
 }
 
 /**
- * 🎯 实现 Claude Code 的 zY5 函数：计算总 token 数
+ * 🎯 计算此次请求的上下行 token 消耗
+ * inputTokens: 上行（上传）token
+ * outputTokens: 下行（下载）token
  */
 function calculateTotalTokens(usage: TokenUsage): number {
-  return (
-    usage.inputTokens +
-    usage.outputTokens +
-    usage.cacheCreationTokens +
-    usage.cacheReadTokens
-  )
+  return usage.inputTokens + usage.outputTokens
 }
 
 /**

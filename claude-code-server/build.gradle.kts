@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "com.claudecodeplus"
-version = "1.0.4" // Align with the main plugin version
+version = "1.0.5" // Align with the main plugin version
 
 
 
@@ -47,6 +47,14 @@ dependencies {
 
 application {
     mainClass.set("com.claudecodeplus.server.StandaloneServerKt")
+    
+    // 设置 JVM 参数，确保使用 UTF-8 编码
+    applicationDefaultJvmArgs = listOf(
+        "-Dfile.encoding=UTF-8",
+        "-Dconsole.encoding=UTF-8",
+        "-Duser.language=en",
+        "-Duser.country=US"
+    )
 }
 
 kotlin {

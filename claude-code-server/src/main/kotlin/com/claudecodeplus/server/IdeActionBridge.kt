@@ -19,10 +19,11 @@ interface IdeActionBridge {
 
     /**
      * A mock implementation for standalone testing.
+     * @param projectPath 项目根目录路径（可选，默认使用当前工作目录）
      */
-    class Mock : IdeActionBridge {
+    class Mock(private val projectPath: String? = null) : IdeActionBridge {
         override fun getTheme(): IdeTheme = IdeTheme(isDark = true)
-        override fun getProjectPath(): String = System.getProperty("user.dir")
+        override fun getProjectPath(): String = projectPath ?: System.getProperty("user.dir")
         override fun openFile(request: FrontendRequest): FrontendResponse {
             println("[Mock] Opening file: ${request.data}")
             return FrontendResponse(true, data = mapOf("message" to JsonPrimitive("Mock openFile success")))
