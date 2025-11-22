@@ -26,7 +26,9 @@ dependencies {
 
     // IntelliJ Platform dependencies
     intellijPlatform {
-        create(providers.gradleProperty("platformType"), providers.gradleProperty("platformVersion"))
+        // 🔧 使用具体的方法而不是通用的 create()，以支持 runIde 任务
+        // IC = IntelliJ IDEA Community
+        intellijIdeaCommunity(providers.gradleProperty("platformVersion").get())
 
         // 依赖 toolwindow 子模块
         pluginComposedModule(implementation(project(":toolwindow")))

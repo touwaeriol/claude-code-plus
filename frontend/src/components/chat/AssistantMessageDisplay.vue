@@ -155,7 +155,7 @@ function handleExpandedChange(toolId: string, expanded: boolean) {
 .assistant-message-display {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0px;
   width: 100%;
 }
 
@@ -182,7 +182,7 @@ function handleExpandedChange(toolId: string, expanded: boolean) {
 .ordered-elements {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0px;
 }
 
 /* 时间线元素 */

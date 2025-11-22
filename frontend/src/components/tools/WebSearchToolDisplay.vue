@@ -253,13 +253,13 @@ function openLink(url: string) {
 }
 
 .search-info {
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .info-row {
   display: flex;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
   font-size: 13px;
   align-items: flex-start;
 }
@@ -336,7 +336,7 @@ function openLink(url: string) {
 
 .search-result {
   padding: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
   background: #ffffff;
   border: 1px solid #e1e4e8;
   border-radius: 6px;

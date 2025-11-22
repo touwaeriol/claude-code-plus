@@ -162,11 +162,10 @@ object SdkMessageConverter {
                     }
     //                     logD("[SdkMessageConverter] ✅ 添加文本到content: ${textContent.length} 字符")
                 }
-                // ImageBlock 在当前 SDK 版本中不存在，已移除
-                // is ImageBlock -> {
-                //     // 图片块暂时忽略，因为 AI 回复中不应该包含图片
-                //     logD("[SdkMessageConverter] 🖼️ 忽略ImageBlock（AI回复不应包含图片）")
-                // }
+                is ImageBlock -> {
+                    // 图片块暂时忽略，因为 AI 回复中不应该包含图片
+                    logD("[SdkMessageConverter] 🖼️ 忽略ImageBlock（AI回复不应包含图片）")
+                }
                 is ThinkingBlock -> {
                     // 思考过程作为特殊的文本项添加
                     orderedElements.add(

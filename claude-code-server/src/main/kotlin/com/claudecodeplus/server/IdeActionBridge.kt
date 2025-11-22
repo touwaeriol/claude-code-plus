@@ -4,6 +4,7 @@ import com.claudecodeplus.bridge.FrontendRequest
 import com.claudecodeplus.bridge.FrontendResponse
 import com.claudecodeplus.bridge.IdeTheme
 import kotlinx.serialization.json.JsonPrimitive
+import java.util.Locale
 
 /**
  * An interface to abstract away IDE-specific actions, allowing the server
@@ -12,6 +13,8 @@ import kotlinx.serialization.json.JsonPrimitive
 interface IdeActionBridge {
     fun getTheme(): IdeTheme
     fun getProjectPath(): String
+    fun getLocale(): String
+    fun setLocale(locale: String): Boolean
     fun openFile(request: FrontendRequest): FrontendResponse
     fun showDiff(request: FrontendRequest): FrontendResponse
     fun searchFiles(query: String, maxResults: Int): List<Any>
@@ -22,8 +25,23 @@ interface IdeActionBridge {
      * @param projectPath 项目根目录路径（可选，默认使用当前工作目录）
      */
     class Mock(private val projectPath: String? = null) : IdeActionBridge {
+        private var mockLocale: String? = null
+
         override fun getTheme(): IdeTheme = IdeTheme(isDark = true)
         override fun getProjectPath(): String = projectPath ?: System.getProperty("user.dir")
+        
+        override fun getLocale(): String {
+            if (mockLocale != null) return mockLocale!!
+            val locale = Locale.getDefault()
+            return "${locale.language}-${locale.country}"
+        }
+
+        override fun setLocale(locale: String): Boolean {
+            mockLocale = locale
+            println("[Mock] Locale set to: $locale")
+            return true
+        }
+
         override fun openFile(request: FrontendRequest): FrontendResponse {
             println("[Mock] Opening file: ${request.data}")
             return FrontendResponse(true, data = mapOf("message" to JsonPrimitive("Mock openFile success")))
@@ -42,4 +60,3 @@ interface IdeActionBridge {
         }
     }
 }
-

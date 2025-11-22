@@ -145,7 +145,7 @@ const resultIcon = computed(() => {
 }
 
 .tool-meta {
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .info-row {
@@ -174,7 +174,7 @@ const resultIcon = computed(() => {
   font-size: 12px;
   font-weight: 600;
   color: #586069;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 .result-message {

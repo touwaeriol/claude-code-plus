@@ -49,8 +49,11 @@ class HttpServerProjectService(private val project: Project) : Disposable {
             val ideActionBridge = IdeActionBridgeImpl(project)
 
             // 启动 Ktor HTTP 服务器
+            // 开发模式：使用环境变量指定端口（默认 8765）
+            // 生产模式：随机端口（支持多项目）
             val server = HttpApiServer(ideActionBridge, scope, frontendDir)
-            val url = server.start()
+            val devPort = System.getenv("CLAUDE_DEV_PORT")?.toIntOrNull()
+            val url = server.start(preferredPort = devPort)
             httpServer = server
             serverUrl = url
             logger.info("🚀 HTTP Server started at: $url")

@@ -186,7 +186,7 @@ async function openFile(filePath: string) {
 }
 
 .glob-info {
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .info-row {
@@ -286,7 +286,7 @@ async function openFile(filePath: string) {
 
 .empty-icon {
   font-size: 48px;
-  margin-bottom: 12px;
+  margin-bottom: 2px;
   opacity: 0.5;
 }
 

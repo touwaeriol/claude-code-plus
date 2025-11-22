@@ -63,8 +63,10 @@ class VueToolWindowFactory : ToolWindowFactory, DumbAware {
 
             logger.info("✅ Using HTTP Server at: $serverUrl")
 
-            // 创建 JCEF 浏览器
-            val browser = JBCefBrowser()
+            // 创建 JCEF 浏览器（无 UI 装饰）
+            val browser = JBCefBrowser.createBuilder()
+                .setOffScreenRendering(false)
+                .build()
             logger.info("✅ JCEF browser created")
 
             // 🔧 启用开发者工具
@@ -252,35 +254,8 @@ class VueToolWindowFactory : ToolWindowFactory, DumbAware {
                 }
             })
             
-            // 创建包含地址栏和浏览器的面板
-            val mainPanel = JPanel(BorderLayout()).apply {
-                // 创建顶部地址栏面板
-                val urlBarPanel = JPanel(BorderLayout()).apply {
-                    border = BorderFactory.createEmptyBorder(5, 8, 5, 8)
-
-                    // URL 标签
-                    val urlLabel = JLabel("URL: ").apply {
-                        border = BorderFactory.createEmptyBorder(0, 0, 0, 5)
-                    }
-
-                    // URL 文本框
-                    val urlTextField = JTextField(serverUrl).apply {
-                        isEditable = false
-                        preferredSize = Dimension(preferredSize.width, 28)
-                        border = BorderFactory.createCompoundBorder(
-                            BorderFactory.createLineBorder(java.awt.Color(0x80, 0x80, 0x80)),
-                            BorderFactory.createEmptyBorder(4, 8, 4, 8)
-                        )
-                    }
-
-                    add(urlLabel, BorderLayout.WEST)
-                    add(urlTextField, BorderLayout.CENTER)
-                }
-
-                // 添加组件
-                add(urlBarPanel, BorderLayout.NORTH)
-                add(browser.component, BorderLayout.CENTER)
-            }
+            // 直接使用浏览器组件（无地址栏）
+            val mainPanel = browser.component
 
             // 添加到工具窗口
             val content = ContentFactory.getInstance()

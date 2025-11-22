@@ -152,7 +152,7 @@ async function copyOutput() {
 }
 
 .tool-meta {
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .info-row {
@@ -190,7 +190,7 @@ async function copyOutput() {
   font-size: 12px;
   font-weight: 600;
   color: #586069;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 .header-actions {

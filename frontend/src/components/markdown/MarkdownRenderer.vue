@@ -157,46 +157,46 @@ function showCopyFeedback(button: HTMLElement) {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-  margin-top: 24px;
-  margin-bottom: 16px;
+  margin-top: 8px;
+  margin-bottom: 4px;
   font-weight: 600;
   line-height: 1.25;
 }
 
 .markdown-body h1 {
-  font-size: 2em;
+  font-size: 1.5em;
   border-bottom: 1px solid var(--ide-border);
-  padding-bottom: 0.3em;
+  padding-bottom: 0.2em;
 }
 
 .markdown-body h2 {
-  font-size: 1.5em;
+  font-size: 1.3em;
   border-bottom: 1px solid var(--ide-border);
-  padding-bottom: 0.3em;
+  padding-bottom: 0.2em;
 }
 
 .markdown-body p {
   margin-top: 0;
-  margin-bottom: 16px;
+  margin-bottom: 4px;
 }
 
 .markdown-body ul,
 .markdown-body ol {
-  padding-left: 2em;
+  padding-left: 1.5em;
   margin-top: 0;
-  margin-bottom: 16px;
+  margin-bottom: 4px;
 }
 
 .markdown-body li {
-  margin-top: 0.25em;
+  margin-top: 0.1em;
 }
 
 .markdown-body blockquote {
-  padding: 0 1em;
+  padding: 0 0.8em;
   color: var(--ide-foreground);
   opacity: 0.7;
   border-left: 0.25em solid var(--ide-border);
-  margin: 0 0 16px 0;
+  margin: 0 0 6px 0;
 }
 
 .markdown-body a {
@@ -229,13 +229,13 @@ function showCopyFeedback(button: HTMLElement) {
 }
 
 .markdown-body pre {
-  padding: 16px;
+  padding: 4px 6px;
   overflow: auto;
   font-size: 85%;
   line-height: 1.45;
   background-color: var(--ide-code-background);
-  border-radius: 6px;
-  margin-bottom: 16px;
+  border-radius: 4px;
+  margin-bottom: 6px;
 }
 
 .markdown-body pre code {
@@ -251,9 +251,9 @@ function showCopyFeedback(button: HTMLElement) {
 
 /* 代码块包装器 */
 .code-block-wrapper {
-  margin: 16px 0;
+  margin: 6px 0;
   border: 1px solid var(--ide-border);
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
@@ -261,7 +261,7 @@ function showCopyFeedback(button: HTMLElement) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  padding: 4px 8px;
   background: var(--ide-panel-background);
   border-bottom: 1px solid var(--ide-border);
 }
@@ -302,7 +302,7 @@ function showCopyFeedback(button: HTMLElement) {
 
 .code-content pre {
   margin: 0;
-  padding: 16px;
+  padding: 4px 6px;
   background: transparent;
   border-radius: 0;
 }
@@ -321,7 +321,7 @@ function showCopyFeedback(button: HTMLElement) {
   border-spacing: 0;
   border-collapse: collapse;
   margin-top: 0;
-  margin-bottom: 16px;
+  margin-bottom: 6px;
   display: block;
   width: max-content;
   max-width: 100%;
@@ -352,7 +352,7 @@ function showCopyFeedback(button: HTMLElement) {
 .markdown-body hr {
   height: 0.25em;
   padding: 0;
-  margin: 24px 0;
+  margin: 8px 0;
   background-color: var(--ide-border);
   border: 0;
 }

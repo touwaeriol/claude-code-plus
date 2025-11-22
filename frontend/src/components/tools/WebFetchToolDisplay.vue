@@ -370,7 +370,7 @@ function toggleFullContent() {
 }
 
 .fetch-info {
-  margin-bottom: 12px;
+  margin-bottom: 2px;
 }
 
 .info-row {

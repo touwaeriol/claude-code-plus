@@ -389,7 +389,7 @@ function getStatusLabel(status: ToolCallStatus): string {
 .compact-tool-call-display {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 1px;
   width: 100%;
 }
 
@@ -405,9 +405,9 @@ function getStatusLabel(status: ToolCallStatus): string {
 .tool-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 8px 12px;
+  gap: 6px;
+  min-height: 24px;
+  padding: 4px 8px;
   cursor: pointer;
   user-select: none;
   transition: background 0.2s;
@@ -419,12 +419,12 @@ function getStatusLabel(status: ToolCallStatus): string {
 
 .status-indicator {
   width: 3px;
-  min-height: 24px;
+  min-height: 16px;
   border-radius: 999px;
 }
 
 .tool-icon {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .tool-info {
@@ -436,7 +436,7 @@ function getStatusLabel(status: ToolCallStatus): string {
 }
 
 .tool-name {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -444,7 +444,7 @@ function getStatusLabel(status: ToolCallStatus): string {
 }
 
 .tool-summary {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.75));
   white-space: nowrap;
   overflow: hidden;
@@ -453,7 +453,7 @@ function getStatusLabel(status: ToolCallStatus): string {
 }
 
 .primary-info {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--ide-foreground, #333);
   font-weight: 500;
   white-space: nowrap;
@@ -462,7 +462,7 @@ function getStatusLabel(status: ToolCallStatus): string {
 }
 
 .secondary-info {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.6));
   font-style: italic;
   white-space: nowrap;
@@ -522,12 +522,12 @@ function getStatusLabel(status: ToolCallStatus): string {
 }
 
 .tool-content {
-  padding: 6px 12px 12px;
+  padding: 4px 8px 8px;
 }
 
 .tool-details {
-  padding: 10px;
-  border-radius: 6px;
+  padding: 6px;
+  border-radius: 4px;
   background: var(--ide-panel-background, rgba(0, 0, 0, 0.06));
 }
 

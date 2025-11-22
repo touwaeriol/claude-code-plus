@@ -9,7 +9,7 @@
       class="pending-task-bar"
     >
       <div class="task-header">
-        任务队列 ({{ visibleTasks.length }})
+        {{ t('chat.taskQueueCount', { count: visibleTasks.length }) }}
       </div>
       <div
         v-for="task in visibleTasks"
@@ -39,7 +39,7 @@
         @click="handleAddContextClick"
       >
         <span class="btn-icon">📎</span>
-        <span class="btn-text">添加上下文</span>
+        <span class="btn-text">{{ t('chat.addContext') }}</span>
       </button>
 
       <!-- Context Tags (上下文标签) -->
@@ -60,7 +60,7 @@
         <span class="tag-text">{{ getContextDisplay(context) }}</span>
         <button
           class="tag-remove"
-          title="移除"
+          :title="t('common.remove')"
           @click="removeContext(context)"
         >
           ×
@@ -78,7 +78,7 @@
     >
       <div class="drop-zone-content">
         <span class="drop-icon">📁</span>
-        <span class="drop-text">释放文件以添加到上下文</span>
+        <span class="drop-text">{{ t('chat.dropFileToAddContext') }}</span>
       </div>
     </div>
 
@@ -223,7 +223,7 @@
         <label
           v-if="showPermissionControls"
           class="checkbox-label"
-          title="发送消息后自动清空上下文标签"
+          :title="t('chat.autoCleanupContextTooltip')"
         >
           <input
             v-model="autoCleanupContextsValue"
@@ -231,7 +231,7 @@
             :disabled="!enabled || isGenerating"
             @change="handleAutoCleanupChange"
           >
-          <span>自动清理上下文</span>
+          <span>{{ t('chat.autoCleanupContext') }}</span>
         </label>
       </div>
 
@@ -277,19 +277,19 @@
           v-if="!isGenerating"
           class="send-btn"
           :disabled="!canSend"
-          title="发送消息 (Enter) | 右键查看更多选项"
+          :title="t('chat.sendMessageShortcut')"
           @click="handleSend"
           @contextmenu="handleSendButtonContextMenu"
         >
           <span class="btn-icon">📤</span>
-          <span class="btn-text">发送</span>
+          <span class="btn-text">{{ t('common.send') }}</span>
         </button>
 
         <!-- 停止按钮 -->
         <button
           v-else
           class="stop-btn"
-          title="停止生成"
+          :title="t('chat.stopGenerating')"
           @click="$emit('stop')"
         >
           <span class="btn-icon">⏸</span>
@@ -350,7 +350,7 @@
       class="context-selector-popup"
     >
       <div class="popup-header">
-        <span>添加上下文</span>
+        <span>{{ t('chat.addContext') }}</span>
         <button
           class="close-btn"
           @click="showContextSelectorPopup = false"
@@ -363,7 +363,7 @@
           v-model="contextSearchQuery"
           type="text"
           class="context-search-input"
-          placeholder="搜索文件..."
+          :placeholder="t('tools.search')"
           @input="handleContextSearch"
         >
         <div class="context-results">
@@ -396,6 +396,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from '@/composables/useI18n'
 import type { ContextReference, AiModel, PermissionMode, EnhancedMessage, TokenUsage as EnhancedTokenUsage, ImageReference } from '@/types/enhancedMessage'
 import AtSymbolFilePopup from '@/components/input/AtSymbolFilePopup.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
@@ -466,10 +467,13 @@ const props = withDefaults(defineProps<Props>(), {
   showModelSelector: true,
   showPermissionControls: true,
   showSendButton: true,
-  placeholderText: '输入消息... (Enter 发送, Shift+Enter 换行, Alt+Enter 打断发送)'
+  placeholderText: ''
 })
 
 const emit = defineEmits<Emits>()
+
+// i18n
+const { t } = useI18n()
 
 // Refs
 const textareaRef = ref<HTMLTextAreaElement>()
@@ -519,6 +523,17 @@ const hasInput = computed(() => inputText.value.trim().length > 0)
 
 const canSend = computed(() => {
   return hasInput.value && props.enabled && !props.isGenerating
+})
+
+const placeholderText = computed(() => {
+  if (props.placeholderText) {
+    return props.placeholderText
+  }
+  // 根据操作系统使用不同的快捷键提示
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+  return isMac
+    ? t('chat.placeholderWithShortcuts')
+    : t('chat.placeholderWithShortcutsCtrl')
 })
 
 // Watch props changes
@@ -929,10 +944,10 @@ function getTaskLabel(task: PendingTask): string {
 
 function getTaskStatusText(status: string): string {
   const map: Record<string, string> = {
-    PENDING: '排队中',
-    RUNNING: '执行中',
-    SUCCESS: '成功',
-    FAILED: '失败'
+    PENDING: t('chat.taskStatus.pending'),
+    RUNNING: t('chat.taskStatus.running'),
+    SUCCESS: t('chat.taskStatus.success'),
+    FAILED: t('chat.taskStatus.failed')
   }
   return map[status] || status
 }
@@ -1200,7 +1215,7 @@ onUnmounted(() => {
 
 /* Pending Task Bar */
 .pending-task-bar {
-  padding: 12px 16px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--ide-border, #e1e4e8);
   background: var(--ide-info-background, #f0f8ff);
 }
@@ -1252,8 +1267,8 @@ onUnmounted(() => {
 .top-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 16px;
+  gap: 6px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--ide-border, #e1e4e8);
 }
 
@@ -1357,15 +1372,15 @@ onUnmounted(() => {
 
 /* Input Area */
 .input-area {
-  padding: 12px 16px;
+  padding: 8px 12px;
   cursor: text;
-  min-height: 50px;
+  min-height: 40px;
   max-height: 300px;
 }
 
 .message-textarea {
   width: 100%;
-  min-height: 50px;
+  min-height: 40px;
   max-height: 300px;
   border: none;
   outline: none;
@@ -1391,7 +1406,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 16px;
+  padding: 6px 12px;
   border-top: 1px solid var(--ide-border, #e1e4e8);
   background: var(--ide-panel-background, #f6f8fa);
 }
@@ -1631,7 +1646,7 @@ onUnmounted(() => {
 }
 
 .popup-content {
-  padding: 16px;
+  padding: 6px 8px;
 }
 
 .context-search-input {

@@ -129,7 +129,7 @@ const exitCodeText = computed(() => {
   font-size: 12px;
   font-weight: 600;
   color: #586069;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 .timeout {
@@ -211,7 +211,7 @@ const exitCodeText = computed(() => {
 .output.stdout {
   background: #ffffff;
   color: #24292e;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 .output.stderr {

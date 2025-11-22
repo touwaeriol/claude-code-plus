@@ -148,10 +148,35 @@ class HttpApiServer(
                                 "test.ping" -> {
                                     call.respondText("""{"success":true,"message":"pong"}""", ContentType.Application.Json)
                                 }
-                                "ide.getTheme" -> {
-                                    // 返回默认主题配置
+                                "ide.getLocale" -> {
+                                    val locale = ideActionBridge.getLocale()
                                     call.respondText(
-                                        """{"success":true,"data":{"isDark":false,"background":"#ffffff","foreground":"#24292e","panelBackground":"#f6f8fa"}}""",
+                                        """{"success":true,"data":"$locale"}""",
+                                        ContentType.Application.Json
+                                    )
+                                }
+                                "ide.setLocale" -> {
+                                    val request = json.decodeFromString<FrontendRequest>(requestBody)
+                                    val locale = request.data?.jsonPrimitive?.contentOrNull
+                                    
+                                    if (!locale.isNullOrBlank()) {
+                                        val success = ideActionBridge.setLocale(locale)
+                                        call.respondText(
+                                            """{"success":$success}""",
+                                            ContentType.Application.Json
+                                        )
+                                    } else {
+                                        call.respondText(
+                                            """{"success":false,"error":"Missing locale"}""",
+                                            ContentType.Application.Json
+                                        )
+                                    }
+                                }
+                                "ide.getTheme" -> {
+                                    // 调用 ideActionBridge 获取主题
+                                    val theme = ideActionBridge.getTheme()
+                                    call.respondText(
+                                        """{"success":true,"data":${json.encodeToString(theme)}}""",
                                         ContentType.Application.Json
                                     )
                                 }

@@ -67,17 +67,17 @@
       <div class="error-content">
         <div class="error-header">
           <span class="error-icon">⚠️</span>
-          <span class="error-title">错误</span>
+          <span class="error-title">{{ t('chat.error.title') }}</span>
         </div>
         <div class="error-message">
-          {{ uiState.errorMessage || '未知错误' }}
+          {{ uiState.errorMessage || t('chat.error.unknown') }}
         </div>
         <div class="error-actions">
           <button
             class="error-dismiss-btn"
             @click="handleClearError"
           >
-            确定
+            {{ t('common.ok') }}
           </button>
         </div>
       </div>
@@ -92,29 +92,29 @@
         class="debug-header"
         @click="debugExpanded = !debugExpanded"
       >
-        🐛 调试信息 {{ debugExpanded ? '▼' : '▶' }}
+        🐛 {{ t('chat.debug.title') }} {{ debugExpanded ? '▼' : '▶' }}
       </div>
       <div
         v-show="debugExpanded"
         class="debug-content"
       >
         <div class="debug-item">
-          会话ID: {{ sessionId || '未设置' }}
+          {{ t('chat.debug.sessionId') }}: {{ sessionId || t('chat.debug.notSet') }}
         </div>
         <div class="debug-item">
-          项目路径: {{ projectPath }}
+          {{ t('chat.debug.projectPath') }}: {{ projectPath }}
         </div>
         <div class="debug-item">
-          消息数: {{ messages.length }}
+          {{ t('chat.debug.messageCount') }}: {{ messages.length }}
         </div>
         <div class="debug-item">
-          生成中: {{ uiState.isGenerating ? '是' : '否' }}
+          {{ t('chat.debug.generating') }}: {{ uiState.isGenerating ? t('common.yes') : t('common.no') }}
         </div>
         <div class="debug-item">
-          待处理任务: {{ pendingTasks.length }}
+          {{ t('chat.debug.pendingTasks') }}: {{ pendingTasks.length }}
         </div>
         <div class="debug-item">
-          上下文: {{ uiState.contexts.length }}
+          {{ t('chat.debug.contexts') }}: {{ uiState.contexts.length }}
         </div>
       </div>
     </div>
@@ -135,6 +135,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useI18n } from '@/composables/useI18n'
 import MessageList from './MessageList.vue'
 import ChatInput from './ChatInput.vue'
 import ChatHeader from './ChatHeader.vue'
@@ -161,6 +162,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 // 使用 sessionStore
 const sessionStore = useSessionStore()
+const { t } = useI18n()
 const isHistoryOverlayVisible = ref(false)
 
 // UI State 接口定义 (对应 ChatUiState)
@@ -280,7 +282,9 @@ onMounted(async () => {
   } catch (error) {
     console.error('❌ Failed to initialize session:', error)
     uiState.value.hasError = true
-    uiState.value.errorMessage = `初始化会话失败: ${error instanceof Error ? error.message : '未知错误'}`
+    uiState.value.errorMessage = t('chat.error.initSessionFailed', {
+      message: error instanceof Error ? error.message : t('chat.error.unknown')
+    })
   }
 })
 
@@ -307,7 +311,9 @@ watch(() => props.sessionId, async (newSessionId) => {
   } catch (error) {
     console.error('❌ Failed to switch session:', error)
     uiState.value.hasError = true
-    uiState.value.errorMessage = `切换会话失败: ${error instanceof Error ? error.message : '未知错误'}`
+    uiState.value.errorMessage = t('chat.error.switchSessionFailed', {
+      message: error instanceof Error ? error.message : t('chat.error.unknown')
+    })
   }
 })
 
@@ -393,7 +399,9 @@ async function handleSendMessage(text: string) {
   } catch (error) {
     console.error('❌ Failed to send message:', error)
     uiState.value.hasError = true
-    uiState.value.errorMessage = `发送消息失败: ${error instanceof Error ? error.message : '未知错误'}`
+    uiState.value.errorMessage = t('chat.error.sendMessageFailed', {
+      message: error instanceof Error ? error.message : t('chat.error.unknown')
+    })
     // 移除占位符消息
     const sessionId = sessionStore.currentSessionId
     if (sessionId) {

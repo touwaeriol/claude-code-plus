@@ -28,41 +28,19 @@ function httpUrlToWsUrl(serverUrl: string): string {
 }
 
 export function resolveServerHttpUrl(): string {
-  const windowUrl = getWindowServerUrl()
-  if (windowUrl) {
-    return windowUrl
+  // 1. 直接使用当前页面的地址（前后端共享端口）
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname, port } = window.location
+    return `${protocol}//${hostname}${port ? ':' + port : ''}`
   }
 
-  const envUrl = import.meta.env.VITE_SERVER_URL
-  if (envUrl) {
-    return envUrl
-  }
-
-  const backendPort = import.meta.env.VITE_BACKEND_PORT
-  if (backendPort) {
-    return `http://localhost:${backendPort}`
-  }
-
+  // 2. 回退：默认端口 8765（构建时）
   return DEFAULT_HTTP_URL
 }
 
 export function resolveServerWsUrl(): string {
-  const windowUrl = getWindowServerUrl()
-  if (windowUrl) {
-    return httpUrlToWsUrl(windowUrl)
-  }
-
-  const envUrl = import.meta.env.VITE_SERVER_URL
-  if (envUrl) {
-    return httpUrlToWsUrl(envUrl)
-  }
-
-  const backendPort = import.meta.env.VITE_BACKEND_PORT
-  if (backendPort) {
-    return `ws://localhost:${backendPort}/ws`
-  }
-
-  return DEFAULT_WS_URL
+  // 直接使用当前页面的地址转换为 WebSocket（前后端共享端口）
+  return httpUrlToWsUrl(resolveServerHttpUrl())
 }
 
 

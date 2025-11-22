@@ -46,6 +46,9 @@ build/
 ### IntelliJ Platform Plugin ###
 .intellijPlatform/
 
+# IDEA source code / test data (should not be indexed)
+temp_idea_source/
+
 ### IDEA specific ###
 .idea/workspace.xml
 .idea/tasks.xml
