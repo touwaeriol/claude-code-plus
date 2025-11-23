@@ -1,9 +1,9 @@
 package com.claudecodeplus.plugin.handlers
 
 import com.claudecodeplus.plugin.services.IdeaPlatformService
-import com.claudecodeplus.ui.viewmodels.tool.EditToolDetail
-import com.claudecodeplus.ui.viewmodels.tool.MultiEditToolDetail
-import com.claudecodeplus.ui.models.ToolCall
+import com.claudecodeplus.plugin.types.EditToolDetail
+import com.claudecodeplus.plugin.types.MultiEditToolDetail
+import com.claudecodeplus.plugin.types.LegacyToolCall
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import java.nio.file.Files
@@ -21,13 +21,13 @@ class EditToolHandler : ToolClickHandler {
         private val logger = Logger.getInstance(EditToolHandler::class.java)
     }
 
-    override fun canHandle(toolCall: ToolCall): Boolean {
-        val toolDetail = toolCall.viewModel?.toolDetail
-        return toolDetail is EditToolDetail || toolDetail is MultiEditToolDetail
+    override fun canHandle(toolCall: LegacyToolCall): Boolean {
+        val toolDetail = toolCall.viewModel as? Any
+        return false  // 临时禁用，待重构
     }
 
     override fun handleToolClick(
-        toolCall: ToolCall,
+        toolCall: LegacyToolCall,
         project: Project?,
         config: ToolClickConfig
     ): Boolean {
@@ -42,14 +42,8 @@ class EditToolHandler : ToolClickHandler {
         }
 
         return try {
-            when (val toolDetail = toolCall.viewModel?.toolDetail) {
-                is EditToolDetail -> handleSingleEdit(toolDetail, project, config)
-                is MultiEditToolDetail -> handleMultiEdit(toolDetail, project, config)
-                else -> {
-                    logger.warn("EditToolHandler: toolDetail 类型不支持")
-                    false
-                }
-            }
+            // 临时简化处理
+            false
         } catch (e: Exception) {
             logger.error("EditToolHandler: 处理失败", e)
             if (config.fallbackBehavior == FallbackBehavior.SHOW_ERROR) {

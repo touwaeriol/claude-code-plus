@@ -1,13 +1,208 @@
 # Claude Code Plus - 架构迁移设计文档
 
 ## 文档版本
-- **版本**: 2.0
-- **日期**: 2025-01-18
-- **状态**: ✅ 迁移完成
+- **版本**: 3.0
+- **日期**: 2025-11-23
+- **状态**: ✅ 服务器迁移完成，⏳ UI 迁移进行中
 
 ---
 
-## 1. 迁移概述
+## 0. IntelliJ 插件 UI 框架选择
+
+### 0.1 技术选型
+
+**最终方案**：**Swing + IntelliJ JB UI 组件库**（官方推荐）
+
+#### 为什么选择 Swing？
+
+1. **官方推荐**: IntelliJ Platform SDK 官方推荐使用 Swing 作为插件 UI 框架
+2. **深度集成**: IntelliJ 平台原生基于 Swing，提供完善的 UI 组件库和工具类
+3. **成熟稳定**: Swing 在 IDE 开发中有超过 20 年的实践经验
+4. **丰富的组件**: IntelliJ 提供了大量针对 IDE 场景优化的 JB UI 组件
+5. **一致性**: 与 IDE 原生界面保持一致的视觉效果和交互体验
+
+#### 为什么不使用 Compose Multiplatform？
+
+1. **非官方方案**: Compose Multiplatform 不在 IntelliJ 插件开发官方推荐方案中
+2. **集成不成熟**: 与 IntelliJ Platform 的集成尚未完善，可能导致兼容性问题
+3. **额外复杂度**: 需要额外的桥接层和适配代码
+4. **维护风险**: 非主流方案可能面临长期维护问题
+5. **社区支持有限**: 相比 Swing，社区示例和问题解决方案较少
+
+### 0.2 技术栈
+
+#### 核心组件
+
+1. **标准 Swing 组件**
+   - `JPanel` - 面板容器
+   - `JButton` - 按钮
+   - `JLabel` - 标签
+   - `JScrollPane` - 滚动容器
+   - `JTextArea` - 文本区域
+
+2. **IntelliJ JB UI 组件**
+   - `JBTextArea` - 增强的文本区域
+   - `JBScrollPane` - 增强的滚动容器
+   - `JBList` - 增强的列表组件
+   - `JBTabbedPane` - 增强的标签页
+   - `JBPanel` - 增强的面板
+
+3. **IntelliJ UI 工具类**
+   - `JBUI` - UI 缩放和尺寸工具
+   - `UIUtil` - UI 实用工具（颜色、字体等）
+   - `JBUIScale` - DPI 缩放工具
+   - `JBColor` - 主题感知颜色
+
+4. **可选增强：Kotlin UI DSL**
+   - `com.intellij.ui.dsl.builder.*` - IntelliJ 平台内置的声明式 UI 构建器
+   - 更现代化的 API，类型安全的布局 DSL
+   - 无需额外依赖，已集成在 IntelliJ Platform SDK 中
+   - 注意：这不是 Jewel 或 Compose，而是基于 Swing 的 DSL 封装
+
+#### 状态管理
+
+- **StateFlow**: Kotlin 协程的响应式状态流
+- **SwingUtilities.invokeLater**: 确保 UI 更新在 EDT 线程
+- **ViewModel 模式**: 分离业务逻辑和 UI 逻辑
+
+### 0.3 UI 架构层次
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        UI 层 (Swing)                        │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  ModernChatView (JPanel + BorderLayout)              │  │
+│  │  ├── ChatHeader (JBPanel)                            │  │
+│  │  ├── MessageListPanel (JBScrollPane + JPanel)        │  │
+│  │  └── ChatInputPanel (JBPanel)                        │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                            ↕ StateFlow
+┌─────────────────────────────────────────────────────────────┐
+│                    ViewModel 层 (Kotlin)                    │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  ChatViewModel                                       │  │
+│  │  ├── StateFlow<ChatState>                           │  │
+│  │  ├── StateFlow<List<Message>>                       │  │
+│  │  └── StateFlow<GeneratingState>                     │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                            ↕ suspend fun
+┌─────────────────────────────────────────────────────────────┐
+│                     Service 层 (Kotlin)                     │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  ClaudeService, FileSearchService, ThemeService      │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 0.4 从 Vue 到 Swing 的迁移策略
+
+#### 组件映射
+
+| Vue 组件 | Swing 组件 | 说明 |
+|---------|-----------|------|
+| `<div>` | `JPanel` | 容器 |
+| `<button>` | `JButton` | 按钮 |
+| `<input>` | `JTextField` | 单行输入 |
+| `<textarea>` | `JBTextArea` | 多行输入 |
+| `<select>` | `JComboBox` | 下拉选择 |
+| `<ul>/<li>` | `JBList` | 列表 |
+| `v-for` | 循环创建组件 | 动态生成 |
+| `v-if/v-show` | `setVisible()` | 显示/隐藏 |
+| `@click` | `addActionListener` | 事件监听 |
+
+#### 状态管理映射
+
+| Vue | Swing + Kotlin | 说明 |
+|-----|---------------|------|
+| `ref()` | `StateFlow<T>` | 响应式状态 |
+| `computed()` | `StateFlow.map{}` | 计算属性 |
+| `watch()` | `StateFlow.collect{}` | 监听变化 |
+| `onMounted()` | `init {}` | 初始化 |
+| `emit()` | 回调函数 | 事件传递 |
+
+#### 布局映射
+
+| Vue/CSS | Swing | 说明 |
+|---------|-------|------|
+| Flexbox | `BoxLayout` | 流式布局 |
+| Grid | `GridBagLayout` | 网格布局 |
+| Absolute | `null` layout | 绝对定位 |
+| `display: flex; flex-direction: column` | `BoxLayout.Y_AXIS` | 垂直布局 |
+| `display: flex; flex-direction: row` | `BoxLayout.X_AXIS` | 水平布局 |
+
+### 0.5 最佳实践
+
+#### 1. 线程安全
+
+```kotlin
+// ✅ 正确：在 EDT 线程更新 UI
+SwingUtilities.invokeLater {
+    messageLabel.text = "New message"
+}
+
+// ❌ 错误：在后台线程直接更新 UI
+messageLabel.text = "New message"  // 可能导致线程安全问题
+```
+
+#### 2. 主题适配
+
+```kotlin
+// ✅ 正确：使用主题感知的颜色
+panel.background = UIUtil.getPanelBackground()
+label.foreground = UIUtil.getLabelForeground()
+
+// ❌ 错误：硬编码颜色
+panel.background = Color.WHITE  // 在暗色主题下显示不正确
+```
+
+#### 3. DPI 缩放
+
+```kotlin
+// ✅ 正确：使用 JBUI 进行缩放
+panel.border = JBUI.Borders.empty(10)  // 自动适配 DPI
+button.preferredSize = JBUI.size(100, 30)
+
+// ❌ 错误：硬编码像素值
+panel.border = EmptyBorder(10, 10, 10, 10)  // 高 DPI 下显示过小
+```
+
+#### 4. 响应式状态管理
+
+```kotlin
+// ViewModel
+class ChatViewModel {
+    private val _messages = MutableStateFlow<List<Message>>(emptyList())
+    val messages: StateFlow<List<Message>> = _messages.asStateFlow()
+    
+    fun addMessage(message: Message) {
+        _messages.value = _messages.value + message
+    }
+}
+
+// UI 组件
+class ChatPanel(private val viewModel: ChatViewModel) : JPanel() {
+    init {
+        viewModel.messages.onEach { messages ->
+            SwingUtilities.invokeLater {
+                updateMessageList(messages)
+            }
+        }.launchIn(scope)
+    }
+}
+```
+
+### 0.6 参考资料
+
+- [IntelliJ Platform UI Guidelines](https://plugins.jetbrains.com/docs/intellij/user-interface-components.html)
+- [IntelliJ Platform SDK DevGuide](https://plugins.jetbrains.com/docs/intellij/welcome.html)
+- [Swing Tutorial](https://docs.oracle.com/javase/tutorial/uiswing/)
+- [Kotlin Coroutines Guide](https://kotlinlang.org/docs/coroutines-guide.html)
+
+---
+
+## 1. 服务器架构迁移概述
 
 ### 1.1 迁移目标
 

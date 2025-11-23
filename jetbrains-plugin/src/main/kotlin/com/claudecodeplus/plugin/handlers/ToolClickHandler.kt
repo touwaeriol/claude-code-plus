@@ -1,6 +1,6 @@
 package com.claudecodeplus.plugin.handlers
 
-import com.claudecodeplus.ui.models.ToolCall
+import com.claudecodeplus.plugin.types.LegacyToolCall
 import com.intellij.openapi.project.Project
 
 /**
@@ -18,7 +18,7 @@ interface ToolClickHandler {
      * @return true 表示已处理，false 表示使用默认展开行为
      */
     fun handleToolClick(
-        toolCall: ToolCall,
+        toolCall: LegacyToolCall,
         project: Project?,
         config: ToolClickConfig = ToolClickConfig()
     ): Boolean
@@ -26,7 +26,7 @@ interface ToolClickHandler {
     /**
      * 检查是否支持处理指定的工具
      */
-    fun canHandle(toolCall: ToolCall): Boolean
+    fun canHandle(toolCall: LegacyToolCall): Boolean
 }
 
 /**

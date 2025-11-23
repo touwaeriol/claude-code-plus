@@ -2,6 +2,7 @@ package com.claudecodeplus.server
 
 import com.claudecodeplus.rpc.api.ClaudeRpcService
 import com.claudecodeplus.server.rpc.ClaudeRpcServiceImpl
+import com.claudecodeplus.server.tools.IdeTools
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
@@ -21,7 +22,7 @@ import java.util.logging.Logger
  * 4. 流式响应：实时推送 SDK 消息给客户端
  */
 class WebSocketHandler(
-    private val ideActionBridge: IdeActionBridge
+    private val ideTools: IdeTools
 ) {
     private val logger = Logger.getLogger(javaClass.name)
     private val json = Json {
@@ -39,7 +40,7 @@ class WebSocketHandler(
             logger.info("🔌 WebSocket 连接建立: ${call.request.local.remoteHost}")
             
             // 为每个连接创建独立的 RPC 服务实例
-            val rpcService: ClaudeRpcService = ClaudeRpcServiceImpl(ideActionBridge)
+            val rpcService: ClaudeRpcService = ClaudeRpcServiceImpl(ideTools)
             
             try {
                 // 处理客户端消息

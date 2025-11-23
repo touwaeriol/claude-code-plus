@@ -97,26 +97,11 @@
     
     
     <extensions defaultExtensionNs="com.intellij">
-        <!-- Vue Frontend Tool Window (Primary) -->
+        <!-- Native Swing UI Tool Window -->
         <toolWindow id="Claude Code Plus"
                     anchor="right"
                     icon="/icons/claude-code-simple.svg"
-                    factoryClass="com.claudecodeplus.toolwindow.VueToolWindowFactory"/>
-
-        <!-- Console Tool Window (JavaScript Console) -->
-        <toolWindow id="Claude Console"
-                    anchor="bottom"
-                    icon="/icons/claude-code-simple.svg"
-                    factoryClass="com.claudecodeplus.console.ConsoleToolWindowFactory"
-                    secondary="true"/>
-
-        <!-- Compose Version (Backup) -->
-        <!--
-        <toolWindow id="Claude Code Plus (Compose)"
-                    anchor="right"
-                    icon="/icons/claude-code-simple.svg"
-                    factoryClass="com.claudecodeplus.plugin.ClaudeCodePlusToolWindowFactory"/>
-        -->
+                    factoryClass="com.claudecodeplus.plugin.ui.NativeToolWindowFactory"/>
 
         <!-- application-level service -->
         <applicationService
@@ -129,6 +114,10 @@
         <projectService
             serviceImplementation="com.claudecodeplus.plugin.services.ProjectSessionStateService"/>
 
+        <!-- Session Manager Service -->
+        <projectService
+            serviceImplementation="com.claudecodeplus.plugin.ui.SessionManager"/>
+
         <!-- HTTP Server Service (Auto-starts with project) -->
         <projectService
             serviceImplementation="com.claudecodeplus.server.HttpServerProjectService"/>
@@ -137,5 +126,80 @@
         <toolWindow.listener
             topic="com.intellij.openapi.wm.ex.ToolWindowManagerListener"
             implementation="com.claudecodeplus.plugin.listeners.ClaudeToolWindowListener"/>
+        
+        <!-- Notification Group -->
+        <notificationGroup id="Claude Code Plus Notifications"
+                          displayType="BALLOON"
+                          isLogByDefault="true"/>
     </extensions>
+    
+    <!-- Actions -->
+    <actions>
+        <!-- Main Menu Actions -->
+        <group id="ClaudeCodePlus.MainMenu"
+               text="Claude"
+               description="Claude Code Plus Actions"
+               popup="true">
+            <add-to-group group-id="MainMenu" anchor="after" relative-to-action="HelpMenu"/>
+            
+            <action id="ClaudeCodePlus.NewSession"
+                    class="com.claudecodeplus.plugin.actions.NewClaudeSessionAction"
+                    text="New Session"
+                    description="Create a new Claude chat session">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl N" second-keystroke="ctrl C"/>
+                <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta N" second-keystroke="meta C"/>
+            </action>
+            
+            <action id="ClaudeCodePlus.FocusInput"
+                    class="com.claudecodeplus.plugin.actions.FocusClaudeInputAction"
+                    text="Focus Input"
+                    description="Focus on Claude input field">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl K"/>
+                <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta K"/>
+            </action>
+            
+            <action id="ClaudeCodePlus.ToggleSearch"
+                    class="com.claudecodeplus.plugin.actions.ToggleClaudeSearchAction"
+                    text="Toggle Search"
+                    description="Toggle message search">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl SLASH"/>
+                <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta SLASH"/>
+            </action>
+            
+            <separator/>
+            
+            <action id="ClaudeCodePlus.ShowTokenStats"
+                    class="com.claudecodeplus.plugin.actions.ShowTokenStatsAction"
+                    text="Token Statistics"
+                    description="Show token usage statistics"/>
+            
+            <action id="ClaudeCodePlus.ShowContextManager"
+                    class="com.claudecodeplus.plugin.actions.ShowContextManagerAction"
+                    text="Context Manager"
+                    description="Manage conversation context files"/>
+            
+            <separator/>
+            
+            <action id="ClaudeCodePlus.ShowSettings"
+                    class="com.claudecodeplus.plugin.actions.ShowClaudeSettingsAction"
+                    text="Settings..."
+                    description="Open Claude Code Plus settings">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl COMMA" second-keystroke="ctrl C"/>
+                <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta COMMA" second-keystroke="meta C"/>
+            </action>
+        </group>
+        
+        <!-- Editor Context Menu Actions -->
+        <group id="ClaudeCodePlus.EditorContextMenu"
+               text="Claude"
+               description="Claude Code Plus Actions"
+               popup="true">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            
+            <action id="ClaudeCodePlus.AskAboutSelection"
+                    class="com.claudecodeplus.plugin.actions.NewClaudeSessionAction"
+                    text="Ask Claude About This"
+                    description="Ask Claude about the selected code"/>
+        </group>
+    </actions>
 </idea-plugin>

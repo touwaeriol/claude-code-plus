@@ -21,24 +21,16 @@ dependencies {
     // 添加 claude-code-sdk 依赖
     implementation(project(":claude-code-sdk"))
 
-    // 🎯 使用IDE平台内置的Jewel模块 - 替换外部依赖
-    // 移除所有外部Jewel依赖，使用IDE内置版本
-
     // IntelliJ Platform dependencies
     intellijPlatform {
         // 🔧 使用具体的方法而不是通用的 create()，以支持 runIde 任务
         // IC = IntelliJ IDEA Community
         intellijIdeaCommunity(providers.gradleProperty("platformVersion").get())
-
-        // 依赖 toolwindow 子模块
-        pluginComposedModule(implementation(project(":toolwindow")))
-
-        // 声明内置的 Jewel 和 Compose 模块依赖
-        bundledModule("intellij.platform.jewel.foundation")
-        bundledModule("intellij.platform.jewel.ui")
-        bundledModule("intellij.platform.jewel.ideLafBridge")
-        bundledModule("intellij.libraries.compose.foundation.desktop")
-        bundledModule("intellij.libraries.skiko")
+        
+        // UI 框架说明：
+        // 本项目使用 Swing + IntelliJ JB UI 组件（官方推荐方案）
+        // 可选使用 Kotlin UI DSL (com.intellij.ui.dsl.builder.*) - 已内置在 IntelliJ Platform 中，无需额外依赖
+        // 不使用 Compose Multiplatform 或 Jewel（未使用相关 API）
     }
 
     // 使用 IntelliJ Platform 的 Kotlin 标准库
@@ -50,6 +42,11 @@ dependencies {
 
     // 🔧 Kotlin serialization 运行时依赖
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${rootProject.extra["serializationVersion"]}")
+    
+    // Markdown 渲染支持
+    implementation("org.commonmark:commonmark:0.21.0")
+    implementation("org.commonmark:commonmark-ext-gfm-tables:0.21.0")
+    implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.21.0")
 
     // Ktor 服务器依赖 - 使用 3.0.3 版本（支持 SSE 和 WebSocket）
     val ktorVersion = "3.0.3"

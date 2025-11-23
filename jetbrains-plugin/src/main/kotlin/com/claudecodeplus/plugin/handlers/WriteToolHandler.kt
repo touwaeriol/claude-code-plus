@@ -1,8 +1,8 @@
 package com.claudecodeplus.plugin.handlers
 
 import com.claudecodeplus.plugin.services.IdeaPlatformService
-import com.claudecodeplus.ui.viewmodels.tool.WriteToolDetail
-import com.claudecodeplus.ui.models.ToolCall
+import com.claudecodeplus.plugin.types.WriteToolDetail
+import com.claudecodeplus.plugin.types.LegacyToolCall
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 
@@ -18,12 +18,12 @@ class WriteToolHandler : ToolClickHandler {
         private val logger = Logger.getInstance(WriteToolHandler::class.java)
     }
 
-    override fun canHandle(toolCall: ToolCall): Boolean {
-        return toolCall.viewModel?.toolDetail is WriteToolDetail
+    override fun canHandle(toolCall: LegacyToolCall): Boolean {
+        return false  // 临时禁用
     }
 
     override fun handleToolClick(
-        toolCall: ToolCall,
+        toolCall: LegacyToolCall,
         project: Project?,
         config: ToolClickConfig
     ): Boolean {
@@ -37,41 +37,7 @@ class WriteToolHandler : ToolClickHandler {
             return false
         }
 
-        return try {
-            val writeTool = toolCall.viewModel?.toolDetail as? WriteToolDetail
-            if (writeTool == null) {
-                logger.warn("WriteToolHandler: toolDetail 不是 WriteToolDetail")
-                return false
-            }
-
-            // 创建平台服务
-            val platformService = IdeaPlatformService(project)
-
-            // 先刷新文件系统，确保能找到刚写入的文件
-            val virtualFile = platformService.refreshFile(writeTool.filePath)
-            if (virtualFile == null) {
-                logger.warn("WriteToolHandler: 无法找到文件 - ${writeTool.filePath}")
-                platformService.showWarning("文件未找到: ${writeTool.filePath}")
-                return false
-            }
-
-            // 使用平台服务打开文件
-            val success = platformService.openFile(
-                filePath = writeTool.filePath
-            )
-
-            if (success && config.showNotifications) {
-                val fileName = writeTool.filePath.substringAfterLast('/').substringAfterLast('\\')
-                platformService.showInfo("已打开文件: $fileName")
-            }
-
-            success
-        } catch (e: Exception) {
-            logger.error("WriteToolHandler: 处理失败", e)
-            if (config.fallbackBehavior == FallbackBehavior.SHOW_ERROR) {
-                IdeaPlatformService(project).showError("打开文件失败: ${e.message}")
-            }
-            config.fallbackBehavior == FallbackBehavior.EXPAND
-        }
+        // 临时简化处理 - 待重构后重新实现
+        return false
     }
 }
