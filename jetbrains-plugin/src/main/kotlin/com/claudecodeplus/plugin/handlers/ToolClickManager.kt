@@ -1,6 +1,6 @@
 package com.claudecodeplus.plugin.handlers
 
-import com.claudecodeplus.ui.models.ToolCall
+import com.claudecodeplus.plugin.types.LegacyToolCall
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import java.util.concurrent.ConcurrentHashMap
@@ -90,7 +90,7 @@ object ToolClickManager {
      * @return true 表示已被处理器处理，false 表示使用默认行为（展开）
      */
     fun handleToolClick(
-        toolCall: ToolCall,
+        toolCall: LegacyToolCall,
         project: Project?,
         config: ToolClickConfig = defaultConfig
     ): Boolean {
@@ -135,7 +135,7 @@ object ToolClickManager {
     /**
      * 检查是否有注册的处理器可以处理指定工具
      */
-    fun canHandle(toolCall: ToolCall): Boolean {
+    fun canHandle(toolCall: LegacyToolCall): Boolean {
         val normalizedName = toolCall.name.lowercase()
         val handler = handlers[normalizedName]
         return handler?.canHandle(toolCall) == true

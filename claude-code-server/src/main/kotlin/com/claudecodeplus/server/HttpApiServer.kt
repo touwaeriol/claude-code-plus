@@ -4,6 +4,9 @@ import com.claudecodeplus.bridge.IdeEvent
 import com.claudecodeplus.bridge.IdeTheme
 import com.claudecodeplus.bridge.FrontendRequest
 import com.claudecodeplus.bridge.FrontendResponse
+import com.claudecodeplus.server.tools.IdeTools
+import com.claudecodeplus.server.tools.DiffRequest
+import com.claudecodeplus.server.tools.EditOperation
 
 import io.ktor.http.*
 import io.ktor.http.content.*
@@ -54,7 +57,7 @@ import kotlin.time.Duration.Companion.seconds
  * - SSE: 实时事件推送（主题变化、Claude 消息等）
  */
 class HttpApiServer(
-    private val ideActionBridge: IdeActionBridge,
+    private val ideTools: IdeTools,
     private val scope: CoroutineScope,
     private val frontendDir: Path? = null  // 开发模式下可以为 null
 ) : com.claudecodeplus.bridge.EventBridge {
@@ -127,7 +130,7 @@ class HttpApiServer(
                 val serverPort = configuredPort
 
                 // WebSocket RPC 路由 (新架构)
-                val wsHandler = WebSocketHandler(ideActionBridge)
+                val wsHandler = WebSocketHandler(ideTools)
                 with(wsHandler) {
                     configureWebSocket()
                 }
@@ -149,7 +152,7 @@ class HttpApiServer(
                                     call.respondText("""{"success":true,"message":"pong"}""", ContentType.Application.Json)
                                 }
                                 "ide.getLocale" -> {
-                                    val locale = ideActionBridge.getLocale()
+                                    val locale = ideTools.getLocale()
                                     call.respondText(
                                         """{"success":true,"data":"$locale"}""",
                                         ContentType.Application.Json
@@ -160,7 +163,8 @@ class HttpApiServer(
                                     val locale = request.data?.jsonPrimitive?.contentOrNull
                                     
                                     if (!locale.isNullOrBlank()) {
-                                        val success = ideActionBridge.setLocale(locale)
+                                        val result = ideTools.setLocale(locale)
+                                        val success = result.isSuccess
                                         call.respondText(
                                             """{"success":$success}""",
                                             ContentType.Application.Json
@@ -173,8 +177,8 @@ class HttpApiServer(
                                     }
                                 }
                                 "ide.getTheme" -> {
-                                    // 调用 ideActionBridge 获取主题
-                                    val theme = ideActionBridge.getTheme()
+                                    // 调用 ideTools 获取主题
+                                    val theme = ideTools.getTheme()
                                     call.respondText(
                                         """{"success":true,"data":${json.encodeToString(theme)}}""",
                                         ContentType.Application.Json
@@ -182,7 +186,7 @@ class HttpApiServer(
                                 }
                                 "ide.getProjectPath" -> {
                                     // 返回项目路径
-                                    val projectPath = System.getProperty("user.dir")
+                                    val projectPath = ideTools.getProjectPath()
                                     call.respondText(
                                         """{"success":true,"data":"${projectPath.replace("\\", "\\\\")}"}""",
                                         ContentType.Application.Json
@@ -191,13 +195,56 @@ class HttpApiServer(
                                 "ide.openFile" -> {
                                     // 解析请求数据
                                     val request = json.decodeFromString<FrontendRequest>(requestBody)
-                                    val response = ideActionBridge.openFile(request)
+                                    val data = request.data?.jsonObject
+                                    val filePath = data?.get("filePath")?.jsonPrimitive?.contentOrNull ?: ""
+                                    val line = data?.get("line")?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+                                    val column = data?.get("column")?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+                                    
+                                    val result = ideTools.openFile(filePath, line, column)
+                                    val response = result.fold(
+                                        onSuccess = { FrontendResponse(success = true) },
+                                        onFailure = { FrontendResponse(success = false, error = it.message) }
+                                    )
                                     call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
                                 "ide.showDiff" -> {
                                     // 解析请求数据
                                     val request = json.decodeFromString<FrontendRequest>(requestBody)
-                                    val response = ideActionBridge.showDiff(request)
+                                    val data = request.data?.jsonObject
+                                    val filePath = data?.get("filePath")?.jsonPrimitive?.contentOrNull ?: ""
+                                    val oldContent = data?.get("oldContent")?.jsonPrimitive?.contentOrNull ?: ""
+                                    val newContent = data?.get("newContent")?.jsonPrimitive?.contentOrNull ?: ""
+                                    val title = data?.get("title")?.jsonPrimitive?.contentOrNull
+                                    val rebuildFromFile = data?.get("rebuildFromFile")?.jsonPrimitive?.contentOrNull?.toBoolean() ?: false
+                                    
+                                    val editsJson = data?.get("edits")
+                                    val edits = if (editsJson != null && editsJson is JsonArray) {
+                                        editsJson.mapNotNull { editElement ->
+                                            val editObj = editElement as? JsonObject
+                                            if (editObj != null) {
+                                                EditOperation(
+                                                    oldString = editObj["oldString"]?.jsonPrimitive?.content ?: "",
+                                                    newString = editObj["newString"]?.jsonPrimitive?.content ?: "",
+                                                    replaceAll = editObj["replaceAll"]?.jsonPrimitive?.content?.toBoolean() ?: false
+                                                )
+                                            } else null
+                                        }
+                                    } else null
+                                    
+                                    val diffRequest = DiffRequest(
+                                        filePath = filePath,
+                                        oldContent = oldContent,
+                                        newContent = newContent,
+                                        title = title,
+                                        rebuildFromFile = rebuildFromFile,
+                                        edits = edits
+                                    )
+                                    
+                                    val result = ideTools.showDiff(diffRequest)
+                                    val response = result.fold(
+                                        onSuccess = { FrontendResponse(success = true) },
+                                        onFailure = { FrontendResponse(success = false, error = it.message) }
+                                    )
                                     call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
                                 "ide.searchFiles" -> {
@@ -209,11 +256,16 @@ class HttpApiServer(
                                     val query = queryMatch?.groupValues?.get(1) ?: ""
                                     val maxResults = maxResultsMatch?.groupValues?.get(1)?.toIntOrNull() ?: 20
 
-                                    val results = ideActionBridge.searchFiles(query, maxResults)
-                                    call.respondText(
-                                        """{"success":true,"data":${json.encodeToString(results)}}""",
-                                        ContentType.Application.Json
+                                    val result = ideTools.searchFiles(query, maxResults)
+                                    val response = result.fold(
+                                        onSuccess = { files ->
+                                            val filePaths = files.map { it.path }
+                                            // 前端期望data字段包含文件路径数组
+                                            FrontendResponse(success = true, data = mapOf("files" to JsonPrimitive(json.encodeToString(filePaths))))
+                                        },
+                                        onFailure = { FrontendResponse(success = false, error = it.message) }
                                     )
+                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
                                 "ide.getFileContent" -> {
                                     // 解析请求数据
@@ -226,29 +278,14 @@ class HttpApiServer(
                                     val lineStart = lineStartMatch?.groupValues?.get(1)?.toIntOrNull()
                                     val lineEnd = lineEndMatch?.groupValues?.get(1)?.toIntOrNull()
 
-                                    // 读取文件内容
-                                    val file = java.io.File(filePath)
-                                    if (!file.exists()) {
-                                        call.respondText(
-                                            """{"success":false,"error":"File not found: $filePath"}""",
-                                            ContentType.Application.Json,
-                                            HttpStatusCode.NotFound
-                                        )
-                                    } else {
-                                        val lines = file.readLines()
-                                        val content = if (lineStart != null && lineEnd != null) {
-                                            lines.subList(
-                                                (lineStart - 1).coerceAtLeast(0),
-                                                lineEnd.coerceAtMost(lines.size)
-                                            ).joinToString("\n")
-                                        } else {
-                                            lines.joinToString("\n")
-                                        }
-                                        call.respondText(
-                                            """{"success":true,"data":"${content.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}"}""",
-                                            ContentType.Application.Json
-                                        )
-                                    }
+                                    val result = ideTools.getFileContent(filePath, lineStart, lineEnd)
+                                    val response = result.fold(
+                                        onSuccess = { content ->
+                                            FrontendResponse(success = true, data = mapOf("content" to JsonPrimitive(content)))
+                                        },
+                                        onFailure = { FrontendResponse(success = false, error = it.message) }
+                                    )
+                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
                                 else -> {
                                     call.respondText(
@@ -277,9 +314,10 @@ class HttpApiServer(
                                 val query = call.request.queryParameters["query"] ?: ""
                                 val maxResults = call.request.queryParameters["maxResults"]?.toIntOrNull() ?: 10
 
-                                val results = ideActionBridge.searchFiles(query, maxResults)
-
-                                call.respond(mapOf("success" to true, "data" to results))
+                                val result = ideTools.searchFiles(query, maxResults)
+                                val files = result.getOrElse { emptyList() }
+                                val filePaths = files.map { it.path }
+                                call.respond(mapOf("success" to true, "data" to filePaths))
                             } catch (e: Exception) {
                                 logger.severe("❌ Failed to search files: ${e.message}")
                                 call.respond(
@@ -294,9 +332,10 @@ class HttpApiServer(
                             try {
                                 val maxResults = call.request.queryParameters["maxResults"]?.toIntOrNull() ?: 10
 
-                                val results = ideActionBridge.getRecentFiles(maxResults)
-
-                                call.respond(mapOf("success" to true, "data" to results))
+                                val result = ideTools.getRecentFiles(maxResults)
+                                val files = result.getOrElse { emptyList() }
+                                val filePaths = files.map { it.path }
+                                call.respond(mapOf("success" to true, "data" to filePaths))
                             } catch (e: Exception) {
                                 logger.severe("❌ Failed to get recent files: ${e.message}")
                                 call.respond(
@@ -322,13 +361,13 @@ class HttpApiServer(
 
                     // 主题 API
                     get("/theme") {
-                        val theme = ideActionBridge.getTheme()
+                        val theme = ideTools.getTheme()
                         call.respond(theme)
                     }
 
                     // 项目路径 API
                     get("/project-path") {
-                        val projectPath = ideActionBridge.getProjectPath()
+                        val projectPath = ideTools.getProjectPath()
                         call.respond(mapOf("projectPath" to projectPath))
                     }
 
@@ -432,7 +471,7 @@ class HttpApiServer(
 
                     try {
                         // 发送初始主题
-                        val theme = ideActionBridge.getTheme()
+                        val theme = ideTools.getTheme()
                         send(io.ktor.sse.ServerSentEvent(
                             data = json.encodeToString(theme),
                             event = "theme",

@@ -435,10 +435,15 @@ export const useSessionStore = defineStore('session', () => {
       message.content.some((block: ContentBlock) => block.type === 'tool_result')
 
     // ✅ 流式模式下，assistant 消息已通过 handleStreamEvent 处理
-    // RPC 消息中的 assistant 消息是重复的，直接跳过
+    // RPC 消息中的 assistant 消息可能是重复的，使用消息 ID 判断
     if (message.role === 'assistant') {
-      log.debug(`跳过 RPC assistant 消息（已通过流式事件处理）: ${message.id}`)
-      return
+      // 检查最后一条消息的 ID 是否相同
+      const lastMsg = sessionState.messages[sessionState.messages.length - 1]
+      if (lastMsg && lastMsg.id === message.id) {
+        log.debug(`跳过重复的 assistant 消息: ${message.id}`)
+        return
+      }
+      // ID 不同，继续处理（可能是 StreamEvent 丢失的情况）
     }
 
     // 只处理非 assistant 消息

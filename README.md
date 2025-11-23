@@ -1,6 +1,6 @@
 # Claude Code Plus
 
-一个现代化的 IntelliJ IDEA 插件，基于 Kotlin + Compose Desktop 构建，通过集成 Claude Agent SDK 为开发者提供强大的 AI 智能编码助手功能。
+一个现代化的 IntelliJ IDEA 插件，基于 Kotlin + Swing + IntelliJ JB UI 组件构建，通过集成 Claude Agent SDK 为开发者提供强大的 AI 智能编码助手功能。
 
 ## 快速开始
 
@@ -46,7 +46,7 @@ Claude Code Plus 是一个基于 Kotlin 开发的 IDEA 插件，它通过外部 
 ## 主要功能 ✨
 
 ### 1. 现代化对话界面 💬
-- 🎨 基于 Compose Desktop + Jewel UI 的原生界面
+- 🎨 基于 Swing + IntelliJ JB UI 组件的原生界面
 - 📝 完整的 Markdown 渲染支持（GFM 语法）
 - ⚡ 实时流式响应显示
 - 🎯 智能代码块高亮（使用 IDE 原生高亮器）
@@ -83,75 +83,115 @@ Claude Code Plus 是一个基于 Kotlin 开发的 IDEA 插件，它通过外部 
 
 ### 核心技术
 - **开发语言**：Kotlin 1.9+
-- **UI 框架**：Compose Desktop + Jewel UI 组件库
+- **UI 框架**：Swing + IntelliJ JB UI 组件库（官方推荐）
+  - 标准 Swing 组件：`JPanel`, `JButton`, `JLabel` 等
+  - IntelliJ JB UI 组件：`JBTextArea`, `JBScrollPane`, `JBList` 等
+  - IntelliJ UI 工具类：`JBUI`, `UIUtil` 等
+  - 可选增强：Kotlin UI DSL（`com.intellij.ui.dsl.builder.*`）- 平台内置，无需额外依赖
 - **IDE 平台**：IntelliJ Platform SDK 2024.3+
 - **AI 集成**：Claude Agent SDK (Kotlin 原生实现)
 - **构建工具**：Gradle 8.0+
 
 ### 架构特点
 - ✅ 纯 Kotlin 实现，类型安全
-- ✅ 响应式编程（Compose State + Kotlin Flow）
+- ✅ 响应式编程（StateFlow + Kotlin Flow）
 - ✅ 协程并发，异步非阻塞
 - ✅ 模块化设计，清晰分层
+- ✅ 与 IntelliJ IDE 深度集成，原生用户体验
 
 ## 架构设计
 
+### UI 框架选择
+
+本项目使用 **Swing + IntelliJ JB UI 组件**（IntelliJ 插件开发官方推荐方案）：
+
+- **为什么选择 Swing？**
+  - IntelliJ Platform SDK 原生基于 Swing
+  - 与 IDE 深度集成，提供一致的用户体验
+  - 成熟稳定，有丰富的 IntelliJ UI 组件库支持
+  - 官方推荐并广泛使用的插件 UI 方案
+
+- **为什么不使用 Compose Multiplatform？**
+  - 不在 IntelliJ 插件开发推荐方案中
+  - 与 IntelliJ Platform 的集成尚未成熟
+  - 可能导致兼容性问题和额外的复杂度
+
 ### 组件结构
 ```
-claude-code-plus/
-├── src/main/kotlin/
-│   ├── com/claudecodeplus/
-│   │   ├── ui/              # UI 组件
-│   │   │   ├── ChatWindow.kt
-│   │   │   ├── MessageList.kt
-│   │   │   ├── AdaptiveInputField.kt
-│   │   │   ├── SelectionPanel.kt
-│   │   │   └── EnhancedChatViewModel.kt
-│   │   ├── core/            # 核心功能
-│   │   │   ├── ClaudeSession.kt
-│   │   │   ├── GraalPython 🐍Session.kt
-│   │   │   ├── ClaudeCodeSession.kt
-│   │   │   └── GraalPython 🐍ClaudeWrapper.kt
-│   │   ├── service/         # 后台服务
-│   │   │   └── ClaudeCodeService.kt
-│   │   └── model/           # 数据模型
-│   │       └── SessionModels.kt
-│   └── resources/
-│       ├── META-INF/
-│       │   └── plugin.xml
-│       └── icons/
-├── claude-sdk-wrapper/      # Python 🐍 SDK 包装器
-│   ├── claude_sdk_wrapper/
-│   │   ├── __init__.py
-│   │   ├── wrapper.py
-│   │   └── models.py
-│   └── setup.py
-└── build.gradle.kts
+jetbrains-plugin/src/main/kotlin/com/claudecodeplus/plugin/
+├── ui/                              # UI 组件层（Swing）
+│   ├── chat/                        # 主聊天界面
+│   │   ├── ModernChatView.kt        # 主聊天面板
+│   │   ├── ChatHeader.kt            # 聊天头部栏
+│   │   ├── MessageListPanel.kt      # 消息列表面板
+│   │   ├── ChatInputPanel.kt        # 输入组件面板
+│   │   ├── SessionListOverlay.kt    # 会话列表覆盖层
+│   │   └── components/              # 子组件
+│   │       ├── UserMessageBubble.kt
+│   │       ├── AssistantTextDisplay.kt
+│   │       ├── ToolCallDisplay.kt
+│   │       ├── ContextUsageIndicator.kt
+│   │       └── StreamingStatusIndicator.kt
+│   ├── tools/                       # 工具显示组件
+│   │   ├── ReadToolDisplay.kt
+│   │   ├── EditToolDisplay.kt
+│   │   └── ... (20+ 工具组件)
+│   ├── session/                     # 会话管理 UI
+│   │   ├── SessionList.kt
+│   │   ├── SessionListWithGroups.kt
+│   │   └── SessionSearch.kt
+│   ├── markdown/                    # Markdown 渲染
+│   │   └── MarkdownRenderer.kt
+│   ├── toast/                       # Toast 通知
+│   │   └── ToastContainer.kt
+│   └── settings/                    # 设置面板
+│       └── SettingsPanel.kt
+├── viewmodel/                       # 视图模型层
+│   └── ChatViewModel.kt             # 聊天视图模型
+├── service/                         # 服务层
+│   ├── ClaudeService.kt             # Claude API 服务
+│   ├── FileSearchService.kt         # 文件搜索服务
+│   └── ThemeService.kt              # 主题服务
+├── model/                           # 数据模型层
+│   ├── SessionModels.kt
+│   ├── MessageModels.kt
+│   └── ToolModels.kt
+└── tools/                           # IDE 工具抽象层
+    ├── IdeTools.kt                  # IDE 工具接口
+    └── IdeToolsImpl.kt              # IDE 工具实现
 ```
 
 ### 核心模块
 
-1. **ExternalPython 🐍Session**
-   - 管理外部 Python 🐍 进程的生命周期
-   - 通过 JSON 协议进行进程间通信
-   - 处理消息的发送和接收
+1. **ModernChatView（主聊天界面）**
+   - 基于 Swing + IntelliJ JB UI 组件的聊天界面
+   - 使用 `JPanel` + `BorderLayout` 布局管理
+   - 集成消息列表、输入框、头部栏等组件
+   - 支持会话切换和错误处理
 
-2. **ClaudeSession 接口**
-   - 定义会话的标准操作接口
-   - 支持多种实现方式（GraalVM、外部进程等）
-   - 管理会话生命周期和消息历史
+2. **ChatViewModel（视图模型）**
+   - 管理聊天状态（会话、消息、工具调用）
+   - 使用 `StateFlow` 实现响应式 UI 更新
+   - 处理流式事件和工具调用状态
+   - 协调服务层和 UI 层的交互
 
-3. **ChatWindow**
-   - 基于 Swing 的聊天界面
-   - 支持 ANSI 样式渲染
-   - 自适应输入模式（文本/选择）
-   - 处理用户输入和显示流式响应
+3. **ClaudeService（Claude API 服务）**
+   - 管理 Claude Agent SDK 集成
+   - 处理消息发送和流式响应接收
+   - 实现 MCP（Model Context Protocol）支持
+   - 管理会话生命周期和状态持久化
 
-4. **ClaudeCodeService**
-   - 作为 IDE 应用级服务运行
-   - 管理多个会话实例
-   - 协调各组件之间的通信
-   - 提供全局配置管理
+4. **IdeTools（IDE 工具抽象层）**
+   - 统一的 IDE 工具接口
+   - 封装文件操作、编辑器操作、Diff 显示等
+   - 提供类型安全的 API
+   - 支持测试和生产环境的不同实现
+
+5. **消息显示组件**
+   - UserMessageBubble：用户消息气泡
+   - AssistantTextDisplay：助手文本显示（Markdown 渲染）
+   - ToolCallDisplay：工具调用显示（20+ 种工具）
+   - SystemMessageDisplay：系统消息显示
 
 ## 实现方式
 
@@ -166,9 +206,10 @@ claude-code-plus/
 - 自动恢复中断的会话
 
 ### UI 交互
-- 自适应输入框：根据 Claude 响应自动切换文本/选择模式
-- ANSI 样式支持：保留 Claude 输出的终端样式
-- 浮动选择面板：优雅处理多选交互
+- 响应式状态管理：使用 StateFlow + SwingUtilities.invokeLater 确保线程安全
+- Markdown 渲染：完整支持 GFM 语法，使用 CommonMark 库
+- 主题适配：自动适配 IDE 的暗色/亮色主题
+- 高 DPI 支持：使用 JBUI.scale() 适配高分辨率屏幕
 
 ## 使用说明
 
@@ -198,7 +239,7 @@ MIT License
 ## 致谢
 
 - Claude Code 团队提供的优秀命令行工具
-- JetBrains 提供的 IntelliJ Platform SDK 和 Compose Multiplatform
+- JetBrains 提供的 IntelliJ Platform SDK 和完善的 UI 组件库
 
 ## 相关链接
 
@@ -257,8 +298,15 @@ JewelChatApp(
 
 #### 主题配置
 
-测试应用支持主题配置，但使用的是 `toolwindow` 模块提供的主题系统：
+应用自动适配 IntelliJ IDE 的主题系统：
 
-- **主题提供者**：使用 `DefaultJewelThemeProvider` 或 `PluginJewelThemeProvider`
-- **主题工具**：通过 `JewelThemeUtils.getThemeDefinition()` 获取主题
-- **主题切换**：通过 `JewelChatApp` 组件的 `onThemeChange` 回调处理
+- **主题获取**：通过 `IdeTools.getTheme()` 获取当前 IDE 主题信息
+- **颜色系统**：使用 `UIUtil.getPanelBackground()` 等工具方法获取主题颜色
+- **自动适配**：UI 组件自动跟随 IDE 主题变化（暗色/亮色）
+- **高 DPI 支持**：使用 `JBUI.scale()` 适配高分辨率屏幕
+
+## 相关文档
+
+- [架构迁移指南](docs/ARCHITECTURE_MIGRATION.md) - 从 Vue 到 Swing 的迁移详细说明
+- [UI 框架选型说明](docs/UI_FRAMEWORK_DECISION.md) - 技术选型依据和对比
+- [IDEA 原生 UI 与浏览器方案](docs/IDEA_NATIVE_UI_AND_BROWSER_PLAN.md) - 两种方案的对比和实施计划

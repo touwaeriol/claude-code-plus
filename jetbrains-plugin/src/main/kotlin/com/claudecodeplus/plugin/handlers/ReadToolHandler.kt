@@ -1,9 +1,9 @@
 package com.claudecodeplus.plugin.handlers
 
 import com.claudecodeplus.plugin.services.IdeaPlatformService
-import com.claudecodeplus.ui.viewmodels.tool.ReadToolDetail
-import com.claudecodeplus.ui.models.ToolCall
-import com.claudecodeplus.ui.models.ToolResult
+import com.claudecodeplus.plugin.types.ReadToolDetail
+import com.claudecodeplus.plugin.types.LegacyToolCall
+import com.claudecodeplus.plugin.types.ToolResult
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 
@@ -19,12 +19,12 @@ class ReadToolHandler : ToolClickHandler {
         private val logger = Logger.getInstance(ReadToolHandler::class.java)
     }
 
-    override fun canHandle(toolCall: ToolCall): Boolean {
-        return toolCall.viewModel?.toolDetail is ReadToolDetail
+    override fun canHandle(toolCall: LegacyToolCall): Boolean {
+        return false  // 临时禁用
     }
 
     override fun handleToolClick(
-        toolCall: ToolCall,
+        toolCall: LegacyToolCall,
         project: Project?,
         config: ToolClickConfig
     ): Boolean {
@@ -38,41 +38,8 @@ class ReadToolHandler : ToolClickHandler {
             return false
         }
 
-        return try {
-            val readTool = toolCall.viewModel?.toolDetail as? ReadToolDetail
-            if (readTool == null) {
-                logger.warn("ReadToolHandler: toolDetail 不是 ReadToolDetail")
-                return false
-            }
-
-            // 创建平台服务
-            val platformService = IdeaPlatformService(project)
-
-            // 获取结果内容
-            val content = (toolCall.result as? ToolResult.Success)?.output
-            val selectionRange = buildSelectionRange(readTool, content)
-
-            // 使用平台服务打开文件
-            val success = platformService.openFile(
-                filePath = readTool.filePath,
-                selectContent = selectionRange == null && content != null,
-                content = content,
-                selectionRange = selectionRange
-            )
-
-            if (success && config.showNotifications) {
-                val fileName = readTool.filePath.substringAfterLast('/').substringAfterLast('\\')
-                platformService.showInfo("已打开文件: $fileName")
-            }
-
-            success
-        } catch (e: Exception) {
-            logger.error("ReadToolHandler: 处理失败", e)
-            if (config.fallbackBehavior == FallbackBehavior.SHOW_ERROR) {
-                IdeaPlatformService(project).showError("打开文件失败: ${e.message}")
-            }
-            config.fallbackBehavior == FallbackBehavior.EXPAND
-        }
+        // 临时简化处理 - 待重构后重新实现
+        return false
     }
 
     private fun buildSelectionRange(

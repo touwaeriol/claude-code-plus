@@ -3,9 +3,10 @@ package com.claudecodeplus.plugin.actions
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.diagnostic.Logger
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.TextRange
-import com.claudecodeplus.ui.models.SessionObject
+import com.claudecodeplus.plugin.types.SessionObject
+
+// 注意：这些 Action 类目前不可用，因为 SessionObject 不包含 UI 相关的字段
+// 如果需要使用，需要重新设计为 Swing UI 实现
 
 /**
  * 聊天输入框快捷键动作集合
@@ -15,6 +16,8 @@ import com.claudecodeplus.ui.models.SessionObject
 /**
  * Ctrl+U: 删除光标位置到行首的文本
  * 标准Unix/Linux终端行为
+ * 
+ * 注意：此实现需要 Swing UI 支持，当前暂时禁用
  */
 class DeleteToLineStartAction(
     private val getSessionObject: () -> SessionObject?
@@ -25,50 +28,20 @@ class DeleteToLineStartAction(
     }
     
     override fun actionPerformed(e: AnActionEvent) {
-        val sessionObject = getSessionObject()
-        if (sessionObject == null) {
-            logger.debug("SessionObject is null, ignoring Ctrl+U action")
-            return
-        }
-        
-        val textFieldValue = sessionObject.inputTextFieldValue
-        val currentText = textFieldValue.text
-        val cursorPos = textFieldValue.selection.start
-        
-        logger.debug("Executing Ctrl+U: cursor at $cursorPos, text length ${currentText.length}")
-        
-        // 找到当前行的开始位置
-        val lineStart = if (cursorPos == 0) {
-            0
-        } else {
-            val lineBreakPos = currentText.lastIndexOf('\n', cursorPos - 1)
-            if (lineBreakPos == -1) 0 else lineBreakPos + 1
-        }
-        
-        // 删除从行首到光标位置的文本
-        val newText = currentText.substring(0, lineStart) + 
-                      currentText.substring(cursorPos)
-        
-        logger.debug("Deleting from $lineStart to $cursorPos, new text length: ${newText.length}")
-        
-        // 更新文本并将光标移动到行首
-        sessionObject.updateInputText(
-            TextFieldValue(
-                text = newText,
-                selection = TextRange(lineStart)
-            )
-        )
+        // TODO: 实现 Swing UI 版本
+        logger.debug("DeleteToLineStartAction: 需要 Swing UI 实现")
     }
     
     override fun update(e: AnActionEvent) {
-        // 只有当有会话对象时才启用
-        e.presentation.isEnabled = getSessionObject() != null
+        e.presentation.isEnabled = false  // 暂时禁用
     }
 }
 
 /**
  * Shift+Enter: 插入换行符
  * 与现有逻辑保持一致的备用实现
+ * 
+ * 注意：此实现需要 Swing UI 支持，当前暂时禁用
  */
 class InsertNewLineAction(
     private val getSessionObject: () -> SessionObject?
@@ -79,30 +52,12 @@ class InsertNewLineAction(
     }
     
     override fun actionPerformed(e: AnActionEvent) {
-        val sessionObject = getSessionObject()
-        if (sessionObject == null) {
-            logger.debug("SessionObject is null, ignoring Shift+Enter action")
-            return
-        }
-        
-        val textFieldValue = sessionObject.inputTextFieldValue
-        val currentPos = textFieldValue.selection.start
-        val newText = textFieldValue.text.substring(0, currentPos) + "\n" + 
-                      textFieldValue.text.substring(currentPos)
-        val newPosition = currentPos + 1
-        
-        logger.debug("Inserting newline at position $currentPos")
-        
-        sessionObject.updateInputText(
-            TextFieldValue(
-                text = newText,
-                selection = TextRange(newPosition)
-            )
-        )
+        // TODO: 实现 Swing UI 版本
+        logger.debug("InsertNewLineAction: 需要 Swing UI 实现")
     }
     
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabled = getSessionObject() != null
+        e.presentation.isEnabled = false  // 暂时禁用
     }
 }
 

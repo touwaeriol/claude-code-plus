@@ -1,5 +1,5 @@
 package com.claudecodeplus.server
-import com.claudecodeplus.plugin.bridge.IdeActionBridgeImpl
+import com.claudecodeplus.plugin.tools.IdeToolsImpl
 
 
 import com.intellij.openapi.Disposable
@@ -45,13 +45,13 @@ class HttpServerProjectService(private val project: Project) : Disposable {
             logger.info("📂 Frontend directory: $frontendDir")
 
             // 启动 Ktor HTTP 服务器
-            // 创建 IdeActionBridge 的实现
-            val ideActionBridge = IdeActionBridgeImpl(project)
+            // 创建 IdeTools 的实现
+            val ideTools = IdeToolsImpl(project)
 
             // 启动 Ktor HTTP 服务器
             // 开发模式：使用环境变量指定端口（默认 8765）
             // 生产模式：随机端口（支持多项目）
-            val server = HttpApiServer(ideActionBridge, scope, frontendDir)
+            val server = HttpApiServer(ideTools, scope, frontendDir)
             val devPort = System.getenv("CLAUDE_DEV_PORT")?.toIntOrNull()
             val url = server.start(preferredPort = devPort)
             httpServer = server

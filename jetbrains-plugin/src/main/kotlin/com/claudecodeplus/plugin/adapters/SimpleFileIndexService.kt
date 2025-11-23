@@ -1,7 +1,6 @@
 package com.claudecodeplus.plugin.adapters
 
-import com.claudecodeplus.ui.services.*
-import com.claudecodeplus.ui.models.SymbolType
+import com.claudecodeplus.plugin.services.*
 import com.intellij.openapi.project.Project
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope

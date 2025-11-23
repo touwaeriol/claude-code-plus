@@ -3,7 +3,7 @@ package com.claudecodeplus.server.rpc
 import com.claudecodeplus.rpc.api.ClaudeRpcService
 import com.claudecodeplus.sdk.ClaudeCodeSdkClient
 import com.claudecodeplus.sdk.types.*
-import com.claudecodeplus.server.IdeActionBridge
+import com.claudecodeplus.server.tools.IdeTools
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.first
@@ -19,7 +19,7 @@ import java.util.logging.Logger
  * 架构原则: 一个连接 = 一个会话 = 一个 ClaudeCodeSdkClient 实例
  */
 class ClaudeRpcServiceImpl(
-    private val ideActionBridge: IdeActionBridge
+    private val ideTools: IdeTools
 ) : ClaudeRpcService {
     private val logger = Logger.getLogger(javaClass.name)
     private val sessionId = UUID.randomUUID().toString()
@@ -281,7 +281,7 @@ class ClaudeRpcServiceImpl(
         )
 
         // cwd 由服务端指定（从项目路径获取）
-        val cwd = ideActionBridge.getProjectPath()?.let { java.nio.file.Path.of(it) }
+        val cwd = ideTools.getProjectPath().takeIf { it.isNotBlank() }?.let { java.nio.file.Path.of(it) }
 
         return ClaudeAgentOptions(
             model = model,

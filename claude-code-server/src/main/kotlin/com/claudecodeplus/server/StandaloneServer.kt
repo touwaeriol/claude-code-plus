@@ -119,9 +119,9 @@ fun main(args: Array<String>) = runBlocking {
         println("🔌 Preferred port from CLI: $it")
     }
 
-    // 2. 创建模拟的 IDE 动作桥接器（传入项目路径）
-    val mockIdeBridge = IdeActionBridge.Mock(projectPath = projectRoot.absolutePath)
-    println("🔧 Using Mock IdeActionBridge with project path: ${projectRoot.absolutePath}")
+    // 2. 创建模拟的 IDE 工具（传入项目路径）
+    val mockIdeTools = com.claudecodeplus.server.tools.IdeToolsMock(projectPath = projectRoot.absolutePath)
+    println("🔧 Using Mock IdeTools with project path: ${projectRoot.absolutePath}")
 
     // 3. 创建协程作用域
     val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -140,7 +140,7 @@ fun main(args: Array<String>) = runBlocking {
 
     // 5. 实例化 HttpApiServer
     val server = HttpApiServer(
-        ideActionBridge = mockIdeBridge,
+        ideTools = mockIdeTools,
         scope = scope,
         frontendDir = if (devMode) null else frontendDistDir
     )

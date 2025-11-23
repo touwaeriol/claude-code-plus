@@ -1,10 +1,5 @@
 package com.claudecodeplus.plugin.types
 
-import com.claudecodeplus.ui.models.EnhancedMessage
-import com.claudecodeplus.ui.models.ContextReference
-import com.claudecodeplus.ui.models.AiModel
-import com.claudecodeplus.ui.models.PermissionMode
-
 /**
  * 兼容层：JetBrains 插件侧使用的简化会话类型。
  *
@@ -19,7 +14,7 @@ data class SessionState(
     val contexts: List<ContextReference> = emptyList(),
     val isGenerating: Boolean = false,
     val selectedModel: AiModel = AiModel.OPUS,
-    val permissionMode: PermissionMode = PermissionMode.DEFAULT
+    val permissionMode: UiPermissionMode = UiPermissionMode.DEFAULT
 )
 
 /**

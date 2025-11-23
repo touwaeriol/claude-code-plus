@@ -260,19 +260,19 @@ class SubprocessTransport(
         // Base command - try to find claude executable
         command.add(findClaudeExecutable())
         
-        // Output format (从 extraArgs 或默认使用 stream-json)
-        val outputFormat = options.extraArgs["output-format"] ?: "stream-json"
-        command.addAll(listOf("--output-format", outputFormat))
-
-        // Verbose output
+        // Verbose output - 必须在 --print 之前设置
         // 注意：当使用 --print 和 --output-format=stream-json 时，必须同时使用 --verbose
+        val outputFormat = options.extraArgs["output-format"] ?: "stream-json"
         val needsVerbose = options.verbose ||
             (options.print && outputFormat == "stream-json")
         if (needsVerbose) {
             command.add("--verbose")
         }
 
-        // Print flag (根据选项决定)
+        // Output format (从 extraArgs 或默认使用 stream-json)
+        command.addAll(listOf("--output-format", outputFormat))
+
+        // Print flag (根据选项决定) - 必须在 --verbose 之后
         if (options.print) {
             command.add("--print")
         }
