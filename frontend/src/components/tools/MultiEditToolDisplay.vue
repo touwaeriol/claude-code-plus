@@ -102,7 +102,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { ideService } from '@/services/ideaBridge'
-import { useEnvironment } from '@/composables/useEnvironment'
+import { toolEnhancement } from '@/services/toolEnhancement'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
 
 interface EditOperation {
@@ -152,24 +152,34 @@ function expandAll() {
   }
 }
 
-async function openFile() {
-  await ideService.openFile(filePath.value)
-}
-
 async function showAllDiffs() {
-  // 使用增强功能：从文件重建完整 Diff，显示所有修改
-  await ideService.showDiff({
-    filePath: filePath.value,
-    oldContent: edits.value[0]?.old_string || '',
-    newContent: edits.value[0]?.new_string || '',
-    rebuildFromFile: true,
-    title: `文件变更: ${filePath.value} (${edits.value.length} 处修改)`,
-    edits: edits.value.map(edit => ({
-      oldString: edit.old_string,
-      newString: edit.new_string,
-      replaceAll: edit.replace_all || false
-    }))
-  })
+  // 使用拦截器统一处理增强
+  const action = await toolEnhancement.intercept(props.toolUse, props.result)
+  
+  if (action) {
+    // 在 JCEF 环境中，执行增强动作（显示 Diff）
+    const context = {
+      toolType: props.toolUse.name,
+      input: props.toolUse.input,
+      result: props.result,
+      isSuccess: !props.result?.is_error
+    }
+    await toolEnhancement.executeAction(action, context)
+  } else {
+    // 非 JCEF 环境，使用 HTTP API 作为回退
+    await ideService.showDiff({
+      filePath: filePath.value,
+      oldContent: edits.value[0]?.old_string || '',
+      newContent: edits.value[0]?.new_string || '',
+      rebuildFromFile: true,
+      title: `文件变更: ${filePath.value} (${edits.value.length} 处修改)`,
+      edits: edits.value.map(edit => ({
+        oldString: edit.old_string,
+        newString: edit.new_string,
+        replaceAll: edit.replace_all || false
+      }))
+    })
+  }
 }
 
 async function copyText(text: string) {

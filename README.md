@@ -32,7 +32,7 @@ npm install -g @anthropic-ai/claude-code
 claude login
 
 # 3. 安装 Python 🐍 SDK
-pip install claude-code-sdk
+pip install claude-agent-sdk
 ```
 
 安装完成后，运行插件即可自动使用 Claude Code SDK。如果未安装，插件会使用 Mock 模式进行测试。
@@ -243,7 +243,7 @@ MIT License
 
 ## 相关链接
 
-- [Claude Code SDK Python 🐍](https://github.com/anthropics/claude-code-sdk-python) - 官方 Python 🐍 SDK
+- [Claude Code SDK Python 🐍](https://github.com/anthropics/claude-agent-sdk-python) - 官方 Python 🐍 SDK
 - [Claude Code CLI](https://github.com/anthropics/claude-code) - 官方命令行工具
 
 ## 架构设计原则

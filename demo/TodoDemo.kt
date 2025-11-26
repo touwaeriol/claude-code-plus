@@ -1,4 +1,4 @@
-package com.claudecodeplus.demo
+package com.asakii.demo
 
 /**
  * TodoWrite 工具演示

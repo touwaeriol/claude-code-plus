@@ -5,7 +5,7 @@
  */
 
 import { reactive } from 'vue'
-import type { Message, TextBlock, ToolUseBlock, ToolResultBlock, ImageBlock } from '@/types/message'
+import type { Message, TextBlock, ToolUseBlock, ToolResultBlock, ImageBlock, ContentBlock } from '@/types/message'
 import type {
   DisplayItem,
   UserMessage,
@@ -14,6 +14,7 @@ import type {
   ToolCall,
   ToolResult,
   RequestStats,
+  ContextReference,
   ReadToolCall,
   WriteToolCall,
   EditToolCall,
@@ -29,6 +30,7 @@ import type {
 import { ToolCallStatus } from '@/types/display'
 import { TOOL_TYPE } from '@/constants/toolTypes'
 import { isToolUseBlock, isTextBlock } from '@/utils/contentBlockUtils'
+import { parseUserMessage } from '@/utils/userMessageBuilder'
 
 /**
  * 工具名称到类型的映射
@@ -169,16 +171,32 @@ export function convertMessageToDisplayItems(
   const displayItems: DisplayItem[] = []
 
   if (message.role === 'user') {
-    // 用户消息
-    const textBlocks = message.content.filter(b => b.type === 'text') as TextBlock[]
-    const imageBlocks = message.content.filter(b => b.type === 'image') as ImageBlock[]
-
-    if (textBlocks.length > 0 || imageBlocks.length > 0) {
+    // 用户消息：使用 parseUserMessage 解析上下文和用户输入
+    const parsed = parseUserMessage(message.content)
+    
+    // 构建上下文引用（文件引用 + Context 图片）
+    const contexts: ContextReference[] = [...parsed.contexts]
+    
+    // 将 Context 图片转换为 ContextReference
+    for (const imgBlock of parsed.contextImages) {
+      if (imgBlock.source.type === 'base64') {
+        contexts.push({
+          type: 'image',
+          uri: `image://context-${message.id}-${contexts.length}`,
+          displayType: 'TAG',
+          mimeType: imgBlock.source.media_type,
+          base64Data: imgBlock.source.data
+        })
+      }
+    }
+    
+    // 构建用户消息（content 是 ContentBlock[]，包含用户输入的文本和图片）
+    if (parsed.userContent.length > 0 || contexts.length > 0) {
       const userMessage: UserMessage = {
         type: 'userMessage',
         id: message.id,
-        content: textBlocks.map(b => b.text).join('\n'),
-        images: imageBlocks.length > 0 ? imageBlocks : undefined,
+        contexts: contexts.length > 0 ? contexts : undefined,
+        content: parsed.userContent, // ContentBlock[]，保持原始顺序
         timestamp: message.timestamp
       }
       displayItems.push(userMessage)
@@ -263,17 +281,37 @@ export function convertToDisplayItems(
 
   for (const message of messages) {
     if (message.role === 'user') {
-      // 用户消息
-      const textBlocks = message.content.filter(b => b.type === 'text') as TextBlock[]
-      const imageBlocks = message.content.filter(b => b.type === 'image') as ImageBlock[]
-
-      // 只有文本或图片时才创建用户消息
-      if (textBlocks.length > 0 || imageBlocks.length > 0) {
+    // 用户消息 - 解析 contexts 和 content
+    // 过滤掉 tool_use 和 tool_result（这些会单独处理）
+    const userContentBlocks = message.content.filter(
+      block => block.type === 'text' || block.type === 'image'
+    )
+    
+    if (userContentBlocks.length > 0) {
+      // 解析用户消息：分离 contexts 和 content
+      const parsed = parseUserMessage(userContentBlocks)
+      
+      // 构建 contexts（文件引用 + Context 图片）
+      const contexts: ContextReference[] = [
+        ...parsed.contexts,
+        // Context 图片也加入 contexts
+        ...parsed.contextImages.map(img => ({
+          type: 'image' as const,
+          uri: `image://context`,
+          displayType: 'TAG' as const,
+          mimeType: img.source.media_type,
+          base64Data: img.source.type === 'base64' ? img.source.data : undefined
+        }))
+      ]
+      
+      // content 只包含用户直接输入的内容（第一个普通文本块之后的内容，保持原始顺序）
+      const content = parsed.userContent
+      
         const userMessage: UserMessage = {
           type: 'userMessage',
           id: message.id,
-          content: textBlocks.map(b => b.text).join('\n'),
-          images: imageBlocks.length > 0 ? imageBlocks : undefined,
+        contexts: contexts.length > 0 ? contexts : undefined,
+        content: content.length > 0 ? content : [],
           timestamp: message.timestamp
         }
         displayItems.push(userMessage)

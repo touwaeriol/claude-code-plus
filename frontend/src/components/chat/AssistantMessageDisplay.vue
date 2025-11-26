@@ -31,6 +31,23 @@
           </div>
         </div>
 
+        <!-- ThinkingItem - 思考链 -->
+        <div
+          v-else-if="element.type === 'thinking'"
+          class="thinking-item"
+        >
+          <div class="thinking-header">
+            <span class="thinking-icon">💭</span>
+            <span class="thinking-label">思考过程</span>
+          </div>
+          <div class="thinking-content">
+            <MarkdownRenderer
+              :content="element.content"
+              class="markdown-content"
+            />
+          </div>
+        </div>
+
         <!-- ToolCallItem - 工具调用 -->
         <CompactToolCallDisplay
           v-else-if="element.type === 'toolCall'"
@@ -197,6 +214,41 @@ function handleExpandedChange(toolId: string, expanded: boolean) {
 
 .markdown-content {
   width: 100%;
+}
+
+/* 思考链项 */
+.thinking-item {
+  width: 100%;
+  margin: 8px 0;
+  padding: 12px;
+  background: var(--ide-background-secondary, #f6f8fa);
+  border-left: 3px solid var(--ide-accent, #0366d6);
+  border-radius: 4px;
+}
+
+.thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ide-foreground, #24292e);
+}
+
+.thinking-icon {
+  font-size: 16px;
+}
+
+.thinking-label {
+  opacity: 0.8;
+}
+
+.thinking-content {
+  font-size: 12px;
+  color: var(--ide-secondary-foreground, #6b7280);
+  font-style: italic;
+  line-height: 1.6;
 }
 
 /* 工具调用项 */

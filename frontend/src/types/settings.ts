@@ -13,22 +13,14 @@ export enum PermissionMode {
   DONT_ASK = 'dontAsk'           // 不询问模式
 }
 
-/**
- * 模型类型
- */
-export enum ModelType {
-  SONNET = 'sonnet',       // Claude Sonnet
-  OPUS = 'opus',           // Claude Opus
-  HAIKU = 'haiku',         // Claude Haiku
-  SONNET_45 = 'sonnet-4-5' // Claude Sonnet 4.5
-}
+import { UiModelOption } from '@/constants/models'
 
 /**
  * 设置配置
  */
 export interface Settings {
   // 模型配置
-  model: ModelType
+  model: UiModelOption
 
   // 权限模式
   permissionMode: PermissionMode
@@ -40,6 +32,20 @@ export interface Settings {
 
   // 高级选项
   maxTokens: number | null
+  /**
+   * 是否启用扩展思考
+   *
+   * true: 根据 Claude settings 中的 env.MAX_THINKING_TOKENS 或默认值 1024 计算思考 token 预算
+   * false: 强制关闭思考（服务端会将 maxThinkingTokens 视为 0）
+   */
+  thinkingEnabled: boolean
+
+  /**
+   * 思考令牌预算（仅用于显示与后端同步，不再由前端直接控制）
+   *
+   * 实际值由服务端根据 thinkingEnabled + Claude settings 合成，
+   * 前端保存该值是为了在设置面板中展示当前配置结果。
+   */
   maxThinkingTokens: number
   temperature: number | null
 
@@ -54,12 +60,13 @@ export interface Settings {
  * 默认设置
  */
 export const DEFAULT_SETTINGS: Settings = {
-  model: ModelType.SONNET,
+  model: UiModelOption.OPUS_45_THINKING,
   permissionMode: PermissionMode.DEFAULT,
   systemPrompt: null,  // 默认使用 claude_code 提示词
   maxTurns: 10,
   continueConversation: false,
   maxTokens: null,
+  thinkingEnabled: true,
   maxThinkingTokens: 8000,
   temperature: null,
   verbose: false,
@@ -80,11 +87,13 @@ export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
 /**
  * 模型显示名称
  */
-export const MODEL_LABELS: Record<ModelType, string> = {
-  [ModelType.SONNET]: 'Claude 3.5 Sonnet',
-  [ModelType.OPUS]: 'Claude 3 Opus',
-  [ModelType.HAIKU]: 'Claude 3 Haiku',
-  [ModelType.SONNET_45]: 'Claude 4.5 Sonnet'
+export const MODEL_LABELS: Record<UiModelOption, string> = {
+  [UiModelOption.SONNET_45]: 'Sonnet 4.5',
+  [UiModelOption.SONNET_45_THINKING]: 'Sonnet 4.5 (Thinking)',
+  [UiModelOption.OPUS_45]: 'Opus 4.5',
+  [UiModelOption.OPUS_45_THINKING]: 'Opus 4.5 (Thinking)',
+  [UiModelOption.HAIKU_45]: 'Haiku 4.5',
+  [UiModelOption.HAIKU_45_THINKING]: 'Haiku 4.5 (Thinking)'
 }
 
 /**

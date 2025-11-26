@@ -146,6 +146,14 @@ const enhancedMessage = computed((): EnhancedMessage => {
         },
         timestamp: msg.timestamp
       })
+    } else if (block.type === 'thinking') {
+      // 思考链块：添加到 orderedElements
+      console.log(`    💭 添加思考链块，长度=${block.thinking?.length || 0}`)
+      orderedElements.push({
+        type: 'thinking',
+        content: block.thinking,
+        timestamp: msg.timestamp
+      })
     } else if (block.type === 'tool_result') {
       // 🔧 tool_result 块：跳过，因为已经包含在 tool_use 的 result 中
       console.log(`    ⏭️ 跳过 tool_result 块: tool_use_id=${block.tool_use_id}`)

@@ -63,14 +63,14 @@ rm -rf /tmp/claude-frontend-*
 <toolWindow id="Claude Code Plus"
             anchor="right"
             icon="/icons/claude-code-simple.svg"
-            factoryClass="com.claudecodeplus.toolwindow.VueToolWindowFactory"/>
+            factoryClass="com.asakii.toolwindow.VueToolWindowFactory"/>
 -->
 
 <!-- 启用 Compose 版本 -->
 <toolWindow id="Claude Code Plus"
             anchor="right"
             icon="/icons/claude-code-simple.svg"
-            factoryClass="com.claudecodeplus.plugin.ClaudeCodePlusToolWindowFactory"/>
+            factoryClass="com.asakii.plugin.ClaudeCodePlusToolWindowFactory"/>
 ```
 
 然后重新构建：
@@ -120,7 +120,7 @@ npm run build
 #### 1. 启用详细日志
 在 Help → Diagnostic Tools → Debug Log Settings 中添加：
 ```
-com.claudecodeplus
+com.asakii
 ```
 
 然后重启 IDE 并重现问题，日志将包含更多详细信息。

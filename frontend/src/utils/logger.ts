@@ -104,7 +104,8 @@ export const loggers = {
   rpc: createLogger('RPC'),
   stream: createLogger('StreamEvent'),
   display: createLogger('Display'),
-  claude: createLogger('ClaudeService')
+  claude: createLogger('ClaudeService'),
+  agent: createLogger('AiAgentService')
 }
 
 // 全局 logger（无模块前缀）

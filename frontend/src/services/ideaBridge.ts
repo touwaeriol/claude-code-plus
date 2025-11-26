@@ -4,7 +4,6 @@
  */
 
 import type { FrontendResponse, IdeEvent } from '@/types/bridge'
-import { resolveServerHttpUrl } from '@/utils/serverUrl'
 
 type EventHandler = (data: any) => void
 
@@ -39,9 +38,30 @@ class IdeaBridgeService {
   private isReady = false
   private mode: 'ide' | 'browser' = 'browser'
 
-  // 从统一解析器获取后端地址
+  // 获取基础 URL：
+  // - IDE 插件模式：使用后端注入的 window.__serverUrl（随机端口）
+  // - 浏览器开发模式：固定指向 http://localhost:8765（StandaloneServer 默认端口）
   private getBaseUrl(): string {
-    return resolveServerHttpUrl()
+    if (typeof window === 'undefined') {
+      // 构建时 / SSR 场景：返回空字符串，避免报错
+      return ''
+    }
+
+    const anyWindow = window as any
+
+    // IDEA 插件模式：后端通过 ?ide=true 注入 __serverUrl
+    if (anyWindow.__serverUrl) {
+      return anyWindow.__serverUrl as string
+    }
+
+    // 浏览器开发模式：前端跑在 Vite (通常 5173)，后端独立跑在 8765
+    // 这里直接固定到 localhost:8765，方便本地开发
+    if (import.meta.env.DEV) {
+      return 'http://localhost:8765'
+    }
+
+    // 兜底：使用当前 origin（用于将来可能的同源部署）
+    return window.location.origin
   }
 
   private detectMode(): 'ide' | 'browser' {
@@ -242,11 +262,6 @@ export const ideaBridge = {
   waitForReady: () => getIdeaBridge().waitForReady()
 }
 
-// ��� API - ʹ����������
-export async function getTheme() {
-  return getIdeaBridge().query('ide.getTheme')
-}
-
 export async function openFile(filePath: string, options?: OpenFileOptions) {
   return getIdeaBridge().query('ide.openFile', { filePath, ...options })
 }
@@ -271,23 +286,17 @@ export async function setLocale(locale: string) {
   return getIdeaBridge().query('ide.setLocale', locale)
 }
 
-export function onThemeChange(handler: EventHandler) {
-  getIdeaBridge().on('ide.themeChanged', handler)
-}
-
 // Ϊ�������ݣ�Ҳ����������ʽ
 export const ideService = {
-  getTheme,
   openFile,
   showDiff,
   searchFiles,
   getFileContent,
   getLocale,
-  setLocale,
-  onThemeChange
+  setLocale
 }
 
-export const claudeService = {
+export const aiAgentBridgeService = {
   async connect(options?: any) {
     return ideaBridge.query('claude.connect', options)
   },

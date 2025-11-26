@@ -30,7 +30,7 @@ import { ideService } from '@/services/ideaBridge'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
 import CompactToolCard from './CompactToolCard.vue'
 import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
-import { useEnvironment } from '@/composables/useEnvironment'
+import { toolEnhancement } from '@/services/toolEnhancement'
 
 interface Props {
   toolUse: ToolUseBlock
@@ -41,24 +41,25 @@ const props = defineProps<Props>()
 // 默认折叠，点击后展开查看详情
 const expanded = ref(false)
 
-// 环境检测
-const { isInIde } = useEnvironment()
-
 // 提取工具显示信息
 const displayInfo = computed(() => extractToolDisplayInfo(props.toolUse, props.result))
 
-// 判断是否应该使用 IDE 集成
-function shouldUseIdeIntegration(): boolean {
-  return isInIde.value && displayInfo.value.status === 'success'
-}
-
-// 处理卡片点击
-function handleCardClick() {
-  if (shouldUseIdeIntegration()) {
-    // IDE 操作：直接打开文件
-    openFile()
+// 处理卡片点击：使用拦截器统一处理增强
+async function handleCardClick() {
+  // 尝试获取增强动作
+  const action = await toolEnhancement.intercept(props.toolUse, props.result)
+  
+  if (action) {
+    // 在 JCEF 环境中，执行增强动作（打开文件）
+    const context = {
+      toolType: props.toolUse.name,
+      input: props.toolUse.input,
+      result: props.result,
+      isSuccess: !props.result?.is_error
+    }
+    await toolEnhancement.executeAction(action, context)
   } else {
-    // 其他情况：切换展开状态
+    // 非 JCEF 环境或没有增强规则，切换展开状态
     expanded.value = !expanded.value
   }
 }
@@ -94,11 +95,6 @@ const previewText = computed(() => {
 const previewLines = computed(() => {
   return previewText.value.split('\n')
 })
-
-async function openFile() {
-  // 打开新创建的文件
-  await ideService.openFile(filePath.value)
-}
 
 async function copyContent() {
   await navigator.clipboard.writeText(content.value)

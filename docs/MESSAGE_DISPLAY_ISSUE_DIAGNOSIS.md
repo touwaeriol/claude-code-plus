@@ -215,5 +215,25 @@ client.receiveResponse().collect { sdkMessage ->
 
 <function_calls>
 <invoke name="read_file">
-<parameter name="target_file">claude-code-sdk/src/test/kotlin/com/claudecodeplus/sdk/IncludePartialMessagesTest.kt
+<parameter name="target_file">claude-agent-sdk/src/test/kotlin/com/claudecodeplus/sdk/IncludePartialMessagesTest.kt
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

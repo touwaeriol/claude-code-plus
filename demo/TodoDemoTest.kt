@@ -1,4 +1,4 @@
-package com.claudecodeplus.demo
+package com.asakii.demo
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*

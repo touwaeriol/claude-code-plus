@@ -18,6 +18,10 @@ export interface Message {
   content: ContentBlock[]
   timestamp: number
   tokenUsage?: MessageTokenUsage  // Token 使用统计
+  /**
+   * 是否为流式占位消息（用于前端 UI 展示加载状态）
+   */
+  isStreaming?: boolean
 }
 
 export type ContentBlock = TextBlock | ImageBlock | ToolUseBlock | ToolResultBlock | ThinkingBlock

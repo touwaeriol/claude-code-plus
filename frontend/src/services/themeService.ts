@@ -1,5 +1,3 @@
-import { ideaBridge } from './ideaBridge'
-
 /**
  * IDE 主题接口 - 与后端 BridgeProtocol.IdeTheme 保持一致
  */
@@ -24,43 +22,105 @@ export interface IdeTheme {
   secondaryForeground: string
 }
 
+type ThemeBridge = {
+  getCurrent?: () => IdeTheme | null
+  push?: (theme: IdeTheme) => void
+  onChange?: ((theme: IdeTheme) => void) | null
+}
+
 export class ThemeService {
   private currentTheme: IdeTheme | null = null
   private listeners: Set<(theme: IdeTheme) => void> = new Set()
+  private initialized = false
+  private bridgeReadyHandler: ((event: Event) => void) | null = null
 
   /**
    * 初始化主题服务
    */
   async initialize() {
+    if (this.initialized) {
+      console.log('🎨 Theme service already initialized')
+      return
+    }
+    this.initialized = true
     console.log('🎨 Initializing theme service...')
 
-    // 获取初始主题
-    await this.fetchAndApplyTheme()
+    if (typeof window === 'undefined') {
+      this.applyDefaultTheme()
+      return
+    }
 
-    // 监听主题变化事件
-    ideaBridge.on('theme.changed', (data) => {
-      console.log('🎨 Theme changed event received:', data)
-      if (data.theme) {
-        this.applyTheme(data.theme)
-      }
-    })
+    if (this.bindThemeBridge()) {
+      return
+    }
+
+    console.log('🎨 [Browser] Theme bridge unavailable, using default light theme')
+    this.applyDefaultTheme()
+    this.waitForThemeBridge()
   }
 
   /**
-   * 获取并应用主题
+   * 绑定 IDE 注入的主题桥
    */
-  async fetchAndApplyTheme() {
-    try {
-      const response = await ideaBridge.query('ide.getTheme')
-      if (response.success && response.data?.theme) {
-        this.applyTheme(response.data.theme)
-      } else {
-        console.warn('⚠️ Failed to fetch theme, using default')
-        this.applyDefaultTheme()
+  private bindThemeBridge(): boolean {
+    const bridge = this.resolveThemeBridge()
+    if (!bridge) {
+      return false
+    }
+
+    bridge.onChange = (theme: IdeTheme) => {
+      if (theme) {
+        this.applyTheme(theme)
       }
+    }
+
+    const currentTheme = this.safeGetCurrentTheme(bridge)
+    if (currentTheme) {
+      this.applyTheme(currentTheme)
+    }
+
+    this.clearBridgeReadyHandler()
+    console.log('🎨 [IDE] Theme bridge connected')
+    return true
+  }
+
+  private resolveThemeBridge(): ThemeBridge | null {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    const bridge = (window as any).__themeBridge
+    if (!bridge || typeof bridge !== 'object') {
+      return null
+    }
+    return bridge as ThemeBridge
+  }
+
+  private waitForThemeBridge() {
+    if (typeof window === 'undefined' || this.bridgeReadyHandler) {
+      return
+    }
+    this.bridgeReadyHandler = () => {
+      if (this.bindThemeBridge()) {
+        this.clearBridgeReadyHandler()
+      }
+    }
+    window.addEventListener('claude:themeBridgeReady', this.bridgeReadyHandler!)
+  }
+
+  private clearBridgeReadyHandler() {
+    if (typeof window === 'undefined' || !this.bridgeReadyHandler) {
+      return
+    }
+    window.removeEventListener('claude:themeBridgeReady', this.bridgeReadyHandler)
+    this.bridgeReadyHandler = null
+  }
+
+  private safeGetCurrentTheme(bridge: ThemeBridge): IdeTheme | null {
+    try {
+      return typeof bridge.getCurrent === 'function' ? bridge.getCurrent() ?? null : null
     } catch (error) {
-      console.error('❌ Failed to fetch theme:', error)
-      this.applyDefaultTheme()
+      console.error('❌ Failed to read theme from bridge:', error)
+      return null
     }
   }
 
@@ -198,6 +258,29 @@ export class ThemeService {
    */
   isDarkTheme(): boolean {
     return this.currentTheme?.isDark ?? false
+  }
+
+  /**
+   * 设置主题（供 JCEF 桥接调用）
+   * 只支持接收完整主题对象，禁止降级处理
+   * 如果没有 JCEF 环境，使用默认亮色主题
+   */
+  setTheme(theme: IdeTheme | 'light' | 'dark') {
+    // 如果接收的是完整主题对象，直接应用
+    if (typeof theme === 'object' && theme !== null && 'isDark' in theme) {
+      console.log('🎨 [JCEF] Received full theme object, applying directly')
+      this.applyTheme(theme)
+      return
+    }
+
+    // 如果接收的是字符串，直接忽略（禁止降级处理）
+    console.warn('⚠️ [Theme] Received theme string, ignoring (no fallback). Use default light theme if no JCEF environment.')
+    
+    // 如果没有当前主题，使用默认亮色主题
+    if (!this.currentTheme) {
+      console.log('🎨 [Theme] No current theme, applying default light theme')
+      this.applyDefaultTheme()
+    }
   }
 }
 

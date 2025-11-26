@@ -1,46 +1,63 @@
-const DEFAULT_HTTP_PORT = '8765'
-const DEFAULT_HTTP_URL = `http://localhost:${DEFAULT_HTTP_PORT}`
-const DEFAULT_WS_URL = `ws://localhost:${DEFAULT_HTTP_PORT}/ws`
+/**
+ * 服务器 URL 解析工具
+ *
+ * - 浏览器开发模式（Vite）：后端固定跑在 http://localhost:8765
+ * - IDE 插件模式：前端由 Ktor 随机端口服务，使用相同 origin
+ */
 
-function getWindowServerUrl(): string | undefined {
+const DEFAULT_HTTP_URL = 'http://localhost:8765'
+const DEFAULT_WS_URL = 'ws://localhost:8765/ws'
+
+/**
+ * 获取 HTTP 基础 URL（用于 API 调用）
+ */
+export function resolveServerHttpUrl(): string {
   if (typeof window === 'undefined') {
-    return undefined
+    return DEFAULT_HTTP_URL
   }
-  return (window as any).__serverUrl
+
+  const anyWindow = window as any
+
+  // IDEA 插件模式：使用注入的 __serverUrl
+  if (anyWindow.__serverUrl) {
+    return anyWindow.__serverUrl as string
+  }
+
+  // Vite 开发模式：前后端分离，后端固定端口 8765
+  if (import.meta.env.DEV) {
+    return DEFAULT_HTTP_URL
+  }
+
+  // 生产部署兜底：同源
+  return window.location.origin
 }
 
-function httpUrlToWsUrl(serverUrl: string): string {
-  try {
-    const url = new URL(serverUrl)
-
-    if (url.protocol === 'ws:' || url.protocol === 'wss:') {
-      if (!url.pathname || url.pathname === '/') {
-        url.pathname = '/ws'
-      }
-      return url.toString()
-    }
-
-    const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${url.host}/ws`
-  } catch {
+/**
+ * 获取 WebSocket URL
+ */
+export function resolveServerWsUrl(): string {
+  if (typeof window === 'undefined') {
     return DEFAULT_WS_URL
   }
-}
 
-export function resolveServerHttpUrl(): string {
-  // 1. 直接使用当前页面的地址（前后端共享端口）
-  if (typeof window !== 'undefined') {
-    const { protocol, hostname, port } = window.location
-    return `${protocol}//${hostname}${port ? ':' + port : ''}`
+  const anyWindow = window as any
+
+  // IDEA 插件模式
+  if (anyWindow.__serverUrl) {
+    const url = new URL(anyWindow.__serverUrl as string)
+    const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${wsProtocol}//${url.host}/ws`
   }
 
-  // 2. 回退：默认端口 8765（构建时）
-  return DEFAULT_HTTP_URL
-}
+  // Vite 开发模式：直接连 8765
+  if (import.meta.env.DEV) {
+    return DEFAULT_WS_URL
+  }
 
-export function resolveServerWsUrl(): string {
-  // 直接使用当前页面的地址转换为 WebSocket（前后端共享端口）
-  return httpUrlToWsUrl(resolveServerHttpUrl())
+  // 生产同源
+  const { protocol, host } = window.location
+  const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${wsProtocol}//${host}/ws`
 }
 
 

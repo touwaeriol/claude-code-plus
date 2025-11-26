@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm")
+    kotlin("plugin.serialization")
     id("org.jetbrains.intellij.platform")
 }
 
@@ -9,7 +10,7 @@ version = providers.gradleProperty("pluginVersion").get()
 
 
 dependencies {
-    implementation(project(":claude-code-server"))
+    implementation(project(":ai-agent-server"))
 
 
 
@@ -18,8 +19,8 @@ dependencies {
 
 
 
-    // 添加 claude-code-sdk 依赖
-    implementation(project(":claude-code-sdk"))
+    // 添加 claude-agent-sdk 依赖
+    implementation(project(":claude-agent-sdk"))
 
     // IntelliJ Platform dependencies
     intellijPlatform {

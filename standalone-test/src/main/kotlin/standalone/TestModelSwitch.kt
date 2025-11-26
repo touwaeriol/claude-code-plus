@@ -1,9 +1,9 @@
 package standalone
 
-import com.claudecodeplus.sdk.ClaudeCodeSdkClient
-import com.claudecodeplus.sdk.types.AssistantMessage
-import com.claudecodeplus.sdk.types.ClaudeAgentOptions
-import com.claudecodeplus.sdk.types.ResultMessage
+import com.asakii.claude.agent.sdk.ClaudeCodeSdkClient
+import com.asakii.claude.agent.sdk.types.AssistantMessage
+import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
+import com.asakii.claude.agent.sdk.types.ResultMessage
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 

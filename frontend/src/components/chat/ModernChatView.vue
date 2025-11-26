@@ -4,6 +4,7 @@
     :class="{ 'theme-dark': isDark }"
   >
     <ChatHeader
+      v-if="!isIdeMode"
       class="chat-header-bar"
       :is-dark="isDark"
       @toggle-history="toggleHistoryOverlay"
@@ -34,7 +35,7 @@
         :skip-permissions="uiState.skipPermissions"
         :selected-model="uiState.selectedModel"
         :auto-cleanup-contexts="uiState.autoCleanupContexts"
-        :message-history="messages"
+        :message-history="[]"
         :session-token-usage="sessionTokenUsage"
         :show-context-controls="true"
         :show-model-selector="true"
@@ -44,8 +45,8 @@
         @send="handleSendMessage"
         @interrupt-and-send="handleInterruptAndSend"
         @stop="handleStopGeneration"
-        @add-context="handleAddContext"
-        @remove-context="handleRemoveContext"
+        @context-add="handleAddContext"
+        @context-remove="handleRemoveContext"
         @update:selected-model="handleModelChange"
         @update:selected-permission="handlePermissionModeChange"
         @update:skip-permissions="handleSkipPermissionsChange"
@@ -104,8 +105,9 @@
         <div class="debug-item">
           {{ t('chat.debug.projectPath') }}: {{ projectPath }}
         </div>
+        <!-- 使用 displayItems 估算消息数量（更贴近 UI 展示层） -->
         <div class="debug-item">
-          {{ t('chat.debug.messageCount') }}: {{ messages.length }}
+          {{ t('chat.debug.messageCount') }}: {{ displayItems.length }}
         </div>
         <div class="debug-item">
           {{ t('chat.debug.generating') }}: {{ uiState.isGenerating ? t('common.yes') : t('common.no') }}
@@ -136,14 +138,16 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useI18n } from '@/composables/useI18n'
+import { useEnvironment } from '@/composables/useEnvironment'
+import { setupIdeSessionBridge, onIdeHostCommand } from '@/bridges/ideSessionBridge'
 import MessageList from './MessageList.vue'
 import ChatInput from './ChatInput.vue'
 import ChatHeader from './ChatHeader.vue'
 import SessionListOverlay from './SessionListOverlay.vue'
 import type { Message } from '@/types/message'
-import type { ContextReference, AiModel, PermissionMode, EnhancedMessage, TokenUsage as EnhancedTokenUsage } from '@/types/enhancedMessage'
-import { MessageRole } from '@/types/enhancedMessage'
+import type { ContextReference, AiModel, PermissionMode, TokenUsage as EnhancedTokenUsage } from '@/types/enhancedMessage'
 import type { PendingTask } from '@/types/pendingTask'
+import { buildUserMessageContent } from '@/utils/userMessageBuilder'
 
 // Props 定义
 interface Props {
@@ -163,6 +167,10 @@ const props = withDefaults(defineProps<Props>(), {
 // 使用 sessionStore
 const sessionStore = useSessionStore()
 const { t } = useI18n()
+const { isInIde, detectEnvironment } = useEnvironment()
+const isIdeMode = isInIde
+let disposeIdeBridge: (() => void) | null = null
+let disposeHostCommand: (() => void) | null = null
 const isHistoryOverlayVisible = ref(false)
 
 // UI State 接口定义 (对应 ChatUiState)
@@ -193,9 +201,6 @@ const uiState = ref<ChatUiState>({
   autoCleanupContexts: false
 })
 
-// 从 sessionStore 获取真实消息
-const messages = computed<Message[]>(() => sessionStore.currentMessages)
-
 // 从 sessionStore 获取 displayItems（用于新的 UI 组件）
 const displayItems = computed(() => sessionStore.currentDisplayItems)
 
@@ -209,15 +214,8 @@ const historySessions = computed(() => {
   }))
 })
 
-// 计算会话级别的 Token 使用量（从最新的 assistant 消息中提取）
-const sessionTokenUsage = computed((): EnhancedTokenUsage | null => {
-  const enhancedMessages = messages.value as EnhancedMessage[]
-  for (let i = enhancedMessages.length - 1; i >= 0; i--) {
-    const msg = enhancedMessages[i]
-    if (msg.role === MessageRole.ASSISTANT && msg.tokenUsage) {
-      return msg.tokenUsage
-    }
-  }
+// 计算会话级别的 Token 使用量（暂时由 ContextUsageIndicator 内部基于 messageHistory 计算，这里返回 null）
+const sessionTokenUsage = computed<EnhancedTokenUsage | null>(() => {
   return null
 })
 
@@ -250,6 +248,18 @@ const debugExpanded = ref(false)
 // 生命周期钩子
 onMounted(async () => {
   console.log('🚀 ModernChatView mounted (Live Mode)')
+
+  await detectEnvironment()
+  if (isIdeMode.value) {
+    disposeIdeBridge = setupIdeSessionBridge(sessionStore)
+    disposeHostCommand = onIdeHostCommand((command) => {
+      if (command.type === 'toggleHistory') {
+        toggleHistoryOverlay()
+      } else if (command.type === 'openHistory') {
+        isHistoryOverlayVisible.value = true
+      }
+    })
+  }
 
   try {
     // 会话数据由后端 SDK 管理，前端不需要加载
@@ -291,6 +301,10 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   console.log('🧹 ModernChatView unmounting')
   // 清理工作由 sessionStore 和 ClaudeCodeClient 内部处理
+  disposeIdeBridge?.()
+  disposeIdeBridge = null
+  disposeHostCommand?.()
+  disposeHostCommand = null
 })
 
 // 监听外部传入的 sessionId 变化
@@ -321,8 +335,8 @@ watch(() => props.sessionId, async (newSessionId) => {
 // 事件处理器
 // ============================================
 
-async function handleSendMessage(text: string) {
-  console.log('📤 Sending message:', text)
+async function handleSendMessage(text: string, inlineImages?: File[]) {
+  console.log('📤 Sending message:', text, inlineImages ? `with ${inlineImages.length} inline images` : '')
 
   try {
     // ✅ 懒加载：检查是否有会话，没有则创建
@@ -342,24 +356,66 @@ async function handleSendMessage(text: string) {
       return
     }
 
-    // 1. 收集上下文中的图片
-    const imageContexts = uiState.value.contexts.filter(
-      (c: any) => c.type === 'image' && c.base64Data
-    )
-    console.log(`📸 收集到 ${imageContexts.length} 张图片`)
+    // 1. 获取当前活动文件（如果可用）
+    let activeFile: { path: string; line?: number } | undefined
+    try {
+      if (isIdeMode.value) {
+        // TODO: 实现获取当前活动文件的 API
+        // 目前先留空，后续可以通过 IDEA bridge 获取
+        // activeFile = await ideService.getActiveFile()
+      }
+    } catch (error) {
+      console.warn('获取当前活动文件失败:', error)
+    }
 
-    // 2. 立即添加用户消息到 UI
+    // 2. 使用新的消息构建函数构建内容
+    const content = buildUserMessageContent({
+      text,
+      contexts: uiState.value.contexts,
+      activeFile
+    })
+
+    // 2.5. 处理内嵌图片：转换为 ImageBlock 并追加到 content（在用户文本之后）
+    if (inlineImages && inlineImages.length > 0) {
+      console.log(`🖼️ 处理 ${inlineImages.length} 个内嵌图片`)
+      const { fileToImageBlock } = await import('@/utils/userMessageBuilder')
+      for (const file of inlineImages) {
+        try {
+          const imageBlock = await fileToImageBlock(file)
+          content.push(imageBlock)
+          console.log(`✅ 内嵌图片已添加: ${file.name}`)
+        } catch (error) {
+          console.error(`❌ 转换内嵌图片失败: ${file.name}`, error)
+        }
+      }
+    }
+
+    console.log(`📦 构建的消息内容: ${content.length} 个内容块`)
+    console.log('📋 内容详情:', content.map(b => ({ type: b.type, preview: b.type === 'text' ? (b as any).text?.substring(0, 50) : '...' })))
+
+    // 2.5. 立即清空图片上下文（在发送前清空，避免发送过程中还显示图片）
+    const imageContexts = uiState.value.contexts.filter(
+      (c: any) => c.type === 'image'
+    )
+    if (imageContexts.length > 0) {
+      console.log('🧹 立即清空图片上下文（发送前）')
+      uiState.value.contexts = uiState.value.contexts.filter(
+        (c: any) => c.type !== 'image'
+      )
+    }
+
+    // 3. 立即添加用户消息到 UI
     const userMessageId = `user-${Date.now()}`
     const userMessage: Message = {
       id: userMessageId,
       role: 'user',
-      content: [{ type: 'text', text }],
+      content,
       timestamp: Date.now()
     }
     sessionStore.addMessage(sessionId, userMessage)
     console.log('👤 用户消息已添加到UI')
 
-    // 3. 添加助手占位符消息到消息列表（显示为气泡）
+    // 4. 添加助手占位符消息到消息列表（显示为气泡）
     const placeholderMessageId = `assistant-placeholder-${Date.now()}`
     const placeholderMessage: Message = {
       id: placeholderMessageId,
@@ -374,26 +430,14 @@ async function handleSendMessage(text: string) {
     // 开始追踪请求统计（传入占位符消息 ID）
     sessionStore.startRequestTracking(sessionId, userMessageId, placeholderMessageId)
 
-    // 4. 发送消息到后端（包含图片时使用 sendMessageWithContent）
-    if (imageContexts.length > 0) {
-      // 构建 stream-json content 数组
-      const content: any[] = [{ type: 'text', text }]
-      imageContexts.forEach((img: any) => {
-        content.push({
-          type: 'image',
-          data: img.base64Data,
-          mimeType: img.mimeType || 'image/png'
-        })
-      })
-      console.log('📤 发送带图片的消息')
-      sessionStore.sendMessageWithContent(content)
-    } else {
-      sessionStore.sendMessage(text)
-    }
+    // 5. 发送消息到后端（使用 sendMessageWithContent）
+    console.log('📤 发送消息到后端:', content.length, '个内容块')
+    await sessionStore.sendMessageWithContent(content)
 
-    // 4. 自动清理上下文（如果启用）
+    // 6. 清理上下文（图片已在发送前清空，这里只处理其他上下文）
     if (uiState.value.autoCleanupContexts) {
-      console.log('🧹 Auto-cleaning contexts after send')
+      // 启用自动清理时，清除所有上下文
+      console.log('🧹 Auto-cleaning all contexts after send')
       uiState.value.contexts = []
     }
   } catch (error) {
@@ -414,12 +458,12 @@ async function handleSendMessage(text: string) {
   }
 }
 
-function handleInterruptAndSend(text: string) {
-  console.log('⛔ Interrupt and send:', text)
+function handleInterruptAndSend(text: string, inlineImages?: File[]) {
+  console.log('⛔ Interrupt and send:', text, inlineImages ? `with ${inlineImages.length} inline images` : '')
   // TODO: 实现打断并发送新消息的逻辑
   // 先停止当前生成,然后发送新消息
   handleStopGeneration()
-  handleSendMessage(text)
+  handleSendMessage(text, inlineImages)
 }
 
 function handleStopGeneration() {

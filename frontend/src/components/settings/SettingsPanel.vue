@@ -160,6 +160,19 @@
           </h3>
 
           <div class="setting-item">
+            <el-checkbox
+              v-model="localSettings.thinkingEnabled"
+              class="setting-checkbox"
+              @change="handleThinkingEnabledChange"
+            >
+              启用扩展思考
+            </el-checkbox>
+            <p class="setting-description">
+              开启后,服务端会根据 Claude settings 中的 MAX_THINKING_TOKENS 或默认值 1024 分配思考令牌预算;关闭则完全禁用思考过程。
+            </p>
+          </div>
+
+          <div class="setting-item">
             <label class="setting-label">最大生成令牌数</label>
             <el-input-number
               v-model="localSettings.maxTokens"
@@ -314,6 +327,12 @@ async function handleContinueConversationChange() {
 async function handleMaxTokensChange() {
   await settingsStore.saveSettings({
     maxTokens: localSettings.value.maxTokens
+  })
+}
+
+async function handleThinkingEnabledChange() {
+  await settingsStore.saveSettings({
+    thinkingEnabled: localSettings.value.thinkingEnabled
   })
 }
 

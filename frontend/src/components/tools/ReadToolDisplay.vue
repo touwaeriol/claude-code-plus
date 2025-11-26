@@ -35,7 +35,7 @@ import { ideService } from '@/services/ideaBridge'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
 import CompactToolCard from './CompactToolCard.vue'
 import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
-import { useEnvironment } from '@/composables/useEnvironment'
+import { toolEnhancement } from '@/services/toolEnhancement'
 import CodeSnippet from './CodeSnippet.vue'
 
 interface Props {
@@ -46,9 +46,6 @@ interface Props {
 const props = defineProps<Props>()
 // Read 工具默认展开，显示文件内容
 const expanded = ref(true)
-
-// 环境检测
-const { isInIde } = useEnvironment()
 
 // 提取显示信息
 const displayInfo = computed(() => extractToolDisplayInfo(props.toolUse, props.result))
@@ -183,52 +180,24 @@ const language = computed(() => {
 })
 
 
-// 检查是否应该使用 IDE 集成（不展开，直接打开文件）
-function shouldUseIdeIntegration(): boolean {
-  return isInIde.value && displayInfo.value.status === 'success'
-}
-
-function handleCardClick() {
-  if (shouldUseIdeIntegration()) {
-    // IDE 操作：直接打开文件
-    openFile()
+// 处理卡片点击：使用拦截器统一处理增强
+async function handleCardClick() {
+  // 尝试获取增强动作
+  const action = await toolEnhancement.intercept(props.toolUse, props.result)
+  
+  if (action) {
+    // 在 JCEF 环境中，执行增强动作（打开文件）
+    const context = {
+      toolType: props.toolUse.name,
+      input: props.toolUse.input,
+      result: props.result,
+      isSuccess: !props.result?.is_error
+    }
+    await toolEnhancement.executeAction(action, context)
   } else {
-    // 其他情况：切换展开状态
+    // 非 JCEF 环境或没有增强规则，切换展开状态
     expanded.value = !expanded.value
   }
-}
-
-async function openFile() {
-  const viewRange = props.toolUse.input.view_range
-  let startLine: number
-  let endLine: number | undefined
-
-  // 计算起始和结束行号
-  if (Array.isArray(viewRange) && viewRange.length >= 2) {
-    // 使用 view_range
-    startLine = viewRange[0]
-    endLine = viewRange[1]
-  } else if (offset.value !== undefined && limit.value !== undefined) {
-    // 使用 offset 和 limit 计算范围
-    startLine = offset.value
-    endLine = offset.value + limit.value - 1
-  } else if (offset.value !== undefined) {
-    // 只有 offset，没有 limit
-    startLine = offset.value
-    endLine = undefined
-  } else {
-    // 默认从第一行开始
-    startLine = 1
-    endLine = undefined
-  }
-
-  // 打开文件并选中行范围
-  await ideService.openFile(filePath.value, {
-    line: startLine,
-    endLine: endLine,
-    selectContent: true,
-    content: resultText.value
-  })
 }
 
 async function copyContent() {

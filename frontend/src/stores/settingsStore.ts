@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { ideaBridge } from '@/services/ideaBridge'
-import { DEFAULT_SETTINGS, type Settings, PermissionMode, ModelType } from '@/types/settings'
+import { DEFAULT_SETTINGS, type Settings, PermissionMode } from '@/types/settings'
 
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<Settings>({ ...DEFAULT_SETTINGS })
@@ -71,7 +71,7 @@ export const useSettingsStore = defineStore('settings', () => {
   /**
    * 更新模型
    */
-  async function updateModel(model: ModelType) {
+  async function updateModel(model: Settings['model']) {
     return await saveSettings({ model })
   }
 

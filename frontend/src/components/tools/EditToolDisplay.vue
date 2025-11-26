@@ -23,7 +23,7 @@ import { ideService } from '@/services/ideaBridge'
 import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
 import CompactToolCard from './CompactToolCard.vue'
 import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
-import { useEnvironment } from '@/composables/useEnvironment'
+import { toolEnhancement } from '@/services/toolEnhancement'
 
 interface Props {
   toolUse: ToolUseBlock
@@ -35,24 +35,26 @@ const props = defineProps<Props>()
 const expanded = ref(false)
 
 import DiffViewer from './DiffViewer.vue'
-// 环境检测
-const { isInIde } = useEnvironment()
 
 // 提取工具显示信息
 const displayInfo = computed(() => extractToolDisplayInfo(props.toolUse, props.result))
 
-// 判断是否应该使用 IDE 集成
-function shouldUseIdeIntegration(): boolean {
-  return isInIde.value && displayInfo.value.status === 'success'
-}
-
-// 处理卡片点击
-function handleCardClick() {
-  if (shouldUseIdeIntegration()) {
-    // IDE 操作：直接打开文件
-    showDiff()
+// 处理卡片点击：使用拦截器统一处理增强
+async function handleCardClick() {
+  // 尝试获取增强动作
+  const action = await toolEnhancement.intercept(props.toolUse, props.result)
+  
+  if (action) {
+    // 在 JCEF 环境中，执行增强动作（显示 Diff）
+    const context = {
+      toolType: props.toolUse.name,
+      input: props.toolUse.input,
+      result: props.result,
+      isSuccess: !props.result?.is_error
+    }
+    await toolEnhancement.executeAction(action, context)
   } else {
-    // 其他情况：切换展开状态
+    // 非 JCEF 环境或没有增强规则，切换展开状态
     expanded.value = !expanded.value
   }
 }
@@ -66,21 +68,6 @@ const fileName = computed(() => {
 const oldString = computed(() => props.toolUse.input.old_string || '')
 const newString = computed(() => props.toolUse.input.new_string || '')
 const replaceAll = computed(() => props.toolUse.input.replace_all || false)
-
-async function showDiff() {
-  // 使用增强功能：从文件重建完整 Diff
-  await ideService.showDiff({
-    filePath: filePath.value,
-    oldContent: oldString.value,
-    newContent: newString.value,
-    rebuildFromFile: true,
-    edits: [{
-      oldString: oldString.value,
-      newString: newString.value,
-      replaceAll: false
-    }]
-  })
-}
 </script>
 
 <style scoped>

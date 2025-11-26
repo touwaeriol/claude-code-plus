@@ -129,7 +129,7 @@ export interface InputJsonDelta {
  */
 export interface ThinkingDelta {
   type: 'thinking_delta'
-  delta: string
+  thinking: string
 }
 
 /**

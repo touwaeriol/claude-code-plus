@@ -1,9 +1,9 @@
 /**
  * 代码高亮服务
- * 基于 Shiki 实现语法高亮
+ * 基于 Shiki 实现语法高亮（按需动态加载，避免主包体过大）
  */
 
-import { createHighlighter, type Highlighter, type BundledLanguage, type BundledTheme } from 'shiki'
+import type { Highlighter, BundledLanguage, BundledTheme } from 'shiki'
 
 class HighlightService {
   private highlighter: Highlighter | null = null
@@ -21,6 +21,8 @@ class HighlightService {
       try {
         console.log('🎨 Initializing syntax highlighter...')
 
+        // 动态加载 Shiki，拆分大体积依赖为独立 chunk
+        const { createHighlighter } = await import('shiki')
         this.highlighter = await createHighlighter({
           themes: ['github-light', 'github-dark'],
           langs: [
