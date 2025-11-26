@@ -7,3 +7,6 @@
 [submodule "external/claude-agent-sdk-python"]
 	path = external/claude-agent-sdk-python
 	url = https://github.com/anthropics/claude-agent-sdk-python
+[submodule "external/openai-codex"]
+	path = external/openai-codex
+	url = org-14957082@github.com:openai/codex.git
