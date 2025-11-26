@@ -1,5 +1,5 @@
 <idea-plugin>
-    <id>com.claudecodeplus</id>
+    <id>com.asakii</id>
     <name>Claude Code Plus</name>
     <vendor email="liuxiongfenglove@gmail.com" url="https://github.com/touwaeriol/claude-code-plus">Claude Code Plus Team</vendor>
     
@@ -52,7 +52,7 @@
     <h3>Version 1.0.3 - Architecture Modernization and Code Cleanup</h3>
     <ul>
         <li><strong>Architecture Refactoring:</strong> Completely removed cli-wrapper module and simplified project structure</li>
-        <li><strong>SDK Migration:</strong> Migrated essential services to claude-code-sdk module for better organization</li>
+        <li><strong>SDK Migration:</strong> Migrated essential services to claude-agent-sdk module for better organization</li>
         <li><strong>Performance Improvements:</strong> Eliminated 19,000+ lines of legacy code, reducing plugin size by ~88%</li>
         <li><strong>Enhanced Token Statistics:</strong> Improved context usage indicators with visual progress rings</li>
         <li><strong>Code Quality:</strong> Removed deprecated components and consolidated duplicate functionality</li>
@@ -101,31 +101,27 @@
         <toolWindow id="Claude Code Plus"
                     anchor="right"
                     icon="/icons/claude-code-simple.svg"
-                    factoryClass="com.claudecodeplus.plugin.ui.NativeToolWindowFactory"/>
+                    factoryClass="com.asakii.plugin.ui.NativeToolWindowFactory"/>
 
         <!-- application-level service -->
         <applicationService
-            serviceImplementation="com.claudecodeplus.settings.McpSettingsService"/>
+            serviceImplementation="com.asakii.settings.McpSettingsService"/>
 
         <applicationService
-            serviceImplementation="com.claudecodeplus.plugin.services.ClaudeCodePlusBackgroundService"/>
+            serviceImplementation="com.asakii.plugin.services.ClaudeCodePlusBackgroundService"/>
 
         <!-- project-level service -->
         <projectService
-            serviceImplementation="com.claudecodeplus.plugin.services.ProjectSessionStateService"/>
-
-        <!-- Session Manager Service -->
-        <projectService
-            serviceImplementation="com.claudecodeplus.plugin.ui.SessionManager"/>
+            serviceImplementation="com.asakii.plugin.services.ProjectSessionStateService"/>
 
         <!-- HTTP Server Service (Auto-starts with project) -->
         <projectService
-            serviceImplementation="com.claudecodeplus.server.HttpServerProjectService"/>
+            serviceImplementation="com.asakii.server.HttpServerProjectService"/>
 
         <!-- Tool Window Listener -->
         <toolWindow.listener
             topic="com.intellij.openapi.wm.ex.ToolWindowManagerListener"
-            implementation="com.claudecodeplus.plugin.listeners.ClaudeToolWindowListener"/>
+            implementation="com.asakii.plugin.listeners.ClaudeToolWindowListener"/>
         
         <!-- Notification Group -->
         <notificationGroup id="Claude Code Plus Notifications"
@@ -133,73 +129,5 @@
                           isLogByDefault="true"/>
     </extensions>
     
-    <!-- Actions -->
-    <actions>
-        <!-- Main Menu Actions -->
-        <group id="ClaudeCodePlus.MainMenu"
-               text="Claude"
-               description="Claude Code Plus Actions"
-               popup="true">
-            <add-to-group group-id="MainMenu" anchor="after" relative-to-action="HelpMenu"/>
-            
-            <action id="ClaudeCodePlus.NewSession"
-                    class="com.claudecodeplus.plugin.actions.NewClaudeSessionAction"
-                    text="New Session"
-                    description="Create a new Claude chat session">
-                <keyboard-shortcut keymap="$default" first-keystroke="ctrl N" second-keystroke="ctrl C"/>
-                <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta N" second-keystroke="meta C"/>
-            </action>
-            
-            <action id="ClaudeCodePlus.FocusInput"
-                    class="com.claudecodeplus.plugin.actions.FocusClaudeInputAction"
-                    text="Focus Input"
-                    description="Focus on Claude input field">
-                <keyboard-shortcut keymap="$default" first-keystroke="ctrl K"/>
-                <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta K"/>
-            </action>
-            
-            <action id="ClaudeCodePlus.ToggleSearch"
-                    class="com.claudecodeplus.plugin.actions.ToggleClaudeSearchAction"
-                    text="Toggle Search"
-                    description="Toggle message search">
-                <keyboard-shortcut keymap="$default" first-keystroke="ctrl SLASH"/>
-                <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta SLASH"/>
-            </action>
-            
-            <separator/>
-            
-            <action id="ClaudeCodePlus.ShowTokenStats"
-                    class="com.claudecodeplus.plugin.actions.ShowTokenStatsAction"
-                    text="Token Statistics"
-                    description="Show token usage statistics"/>
-            
-            <action id="ClaudeCodePlus.ShowContextManager"
-                    class="com.claudecodeplus.plugin.actions.ShowContextManagerAction"
-                    text="Context Manager"
-                    description="Manage conversation context files"/>
-            
-            <separator/>
-            
-            <action id="ClaudeCodePlus.ShowSettings"
-                    class="com.claudecodeplus.plugin.actions.ShowClaudeSettingsAction"
-                    text="Settings..."
-                    description="Open Claude Code Plus settings">
-                <keyboard-shortcut keymap="$default" first-keystroke="ctrl COMMA" second-keystroke="ctrl C"/>
-                <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta COMMA" second-keystroke="meta C"/>
-            </action>
-        </group>
-        
-        <!-- Editor Context Menu Actions -->
-        <group id="ClaudeCodePlus.EditorContextMenu"
-               text="Claude"
-               description="Claude Code Plus Actions"
-               popup="true">
-            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
-            
-            <action id="ClaudeCodePlus.AskAboutSelection"
-                    class="com.claudecodeplus.plugin.actions.NewClaudeSessionAction"
-                    text="Ask Claude About This"
-                    description="Ask Claude about the selected code"/>
-        </group>
-    </actions>
+    <!-- Actions section removed: legacy Swing actions no longer available -->
 </idea-plugin>

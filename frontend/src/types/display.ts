@@ -4,7 +4,7 @@
  * 这些类型用于 UI 展示，是从后端 Message 转换而来的 ViewModel
  */
 
-import type { ImageBlock } from './message'
+import type { ImageBlock, ContentBlock } from './message'
 import { TOOL_TYPE } from '@/constants/toolTypes'
 
 // ============ 基础类型 ============
@@ -62,14 +62,22 @@ export interface BaseDisplayItem {
 
 /**
  * 用户消息
+ * 
+ * 设计说明：
+ * - contexts: 上下文引用（@文件路径、图片等），从 content 开头解析出来
+ * - content: 用户直接输入的内容（第一个普通文本块之后的内容，保持顺序）
+ *   - 主要是文本，偶尔有图片（用户直接上传的）
  */
 export interface UserMessage extends BaseDisplayItem {
   type: 'userMessage'
-  content: string
-  images?: ImageBlock[]
+  /** 上下文引用（@文件路径、图片等），从 content 开头解析出来 */
   contexts?: ContextReference[]
-  requestStats?: RequestStats  // 请求统计信息（请求完成后填充）
-  isStreaming?: boolean        // 是否正在流式响应
+  /** 用户直接输入的内容（第一个普通文本块之后的内容，保持顺序） */
+  content: ContentBlock[]
+  /** 请求统计信息（请求完成后填充） */
+  requestStats?: RequestStats
+  /** 是否正在流式响应 */
+  isStreaming?: boolean
 }
 
 /**

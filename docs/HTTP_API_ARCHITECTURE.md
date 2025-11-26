@@ -34,12 +34,10 @@
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │                HttpApiServer                         │   │
+│  │           HttpApiServer (ai-agent-server)            │   │
 │  │                                                       │   │
 │  │  ┌────────────────┐    ┌──────────────────────────┐ │   │
 │  │  │  HTTP Server   │    │   WebSocket Server       │ │   │
-│  │  │  :8765         │    │   :8766                  │ │   │
-│  │  │                │    │   (支持批处理优化)       │ │   │
 │  │  │  静态资源      │    │   - 50ms 批处理间隔      │ │   │
 │  │  │  REST API      │    │   - 最大100条/批次       │ │   │
 │  │  └────────────────┘    └──────────────────────────┘ │   │
@@ -98,6 +96,61 @@
          → 前端接收 JSON 消息
          → 分发给监听器
 ```
+
+## 🧱 AI Agent RPC 协议（强类型）
+
+- WebSocket 层使用 `AiAgentRpcService`，所有请求/响应都通过 `kotlinx.serialization` 定义的 DTO（`RpcConnectOptions`、`RpcConnectResult`、`RpcUiEvent` 等），`classDiscriminator = "type"`，不再手写 JSON。
+- 服务端 `AiAgentRpcServiceImpl` 只负责 `UiStreamEvent → RpcUiEvent` 的映射，WebSocketHandler 统一 `Json.encodeToJsonElement()` 序列化；前端 `AiAgentSession` 直接消费等价的 TypeScript 类型。
+
+**连接请求**
+```json
+{
+  "id": "req-1",
+  "method": "connect",
+  "params": {
+    "provider": "claude",
+    "model": "claude-3.5-sonnet",
+    "claude": {
+      "includePartialMessages": true,
+      "dangerouslySkipPermissions": true
+    }
+  }
+}
+```
+
+**连接响应**
+```json
+{
+  "id": "req-1",
+  "result": {
+    "type": "rpc.connect_result",
+    "sessionId": "c8f1...",
+    "provider": "claude",
+    "model": "claude-3.5-sonnet",
+    "status": "connected"
+  }
+}
+```
+
+**流式事件**
+```json
+{
+  "id": "req-2",
+  "type": "stream",
+  "data": {
+    "type": "ui.tool_complete",
+    "toolId": "tool-42",
+    "provider": "claude",
+    "result": {
+      "type": "tool_result",
+      "tool_use_id": "tool-42",
+      "content": { "text": "done" }
+    }
+  }
+}
+```
+
+> 事件链：`UnifiedAgentClient.streamEvents()` → `RpcUiEvent` → WebSocket JSON → 前端 `AgentStreamEvent`。JSON 只是强类型 DTO 的序列化结果，协议演进可通过新增字段/子类完成。
 
 ## 🚀 性能优化
 
@@ -561,7 +614,7 @@ if (!target.startsWith(frontendDir)) {
 ## 📚 相关文档
 
 - [CLAUDE.md](../CLAUDE.md) - 项目总文档
-- [Claude Code SDK](../claude-code-sdk/) - SDK 文档
+- [Claude Code SDK](../claude-agent-sdk/) - SDK 文档
 - [Frontend README](../frontend/README.md) - 前端文档
 
 ## 🤝 贡献指南

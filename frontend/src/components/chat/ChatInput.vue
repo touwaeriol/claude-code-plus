@@ -1,7 +1,7 @@
 <template>
   <div
     class="unified-chat-input-container"
-    :class="{ focused: isFocused }"
+    :class="{ focused: isFocused, generating: isGenerating }"
   >
     <!-- Pending Task Bar (任务队列显示) -->
     <div
@@ -42,9 +42,9 @@
         <span class="btn-text">{{ t('chat.addContext') }}</span>
       </button>
 
-      <!-- Context Tags (上下文标签) -->
+      <!-- Context Tags (上下文标签) - 只显示前三个 -->
       <div
-        v-for="(context, index) in contexts"
+        v-for="(context, index) in visibleContexts"
         :key="`context-${index}`"
         class="context-tag"
         :class="{ 'image-tag': isImageContext(context) }"
@@ -66,6 +66,15 @@
           ×
         </button>
       </div>
+
+      <!-- 更多 Context 提示 -->
+      <div
+        v-if="hiddenContextsCount > 0"
+        class="context-more-hint"
+        :title="`还有 ${hiddenContextsCount} 个上下文`"
+      >
+        +{{ hiddenContextsCount }}
+      </div>
     </div>
 
     <!-- 拖放区域提示 -->
@@ -85,17 +94,52 @@
     <!-- 输入区域 -->
     <div
       class="input-area"
+      :class="{ 'generating-state': isGenerating }"
       @click="focusInput"
       @drop.prevent="handleDrop"
       @dragover.prevent="handleDragOver"
       @dragleave="handleDragLeave"
     >
+      <!-- 生成中指示器 -->
+      <div
+        v-if="isGenerating"
+        class="generating-indicator"
+      >
+        <div class="generating-spinner" />
+        <span class="generating-text">生成中...</span>
+      </div>
+      
+      <!-- 内嵌图片预览 -->
+      <div
+        v-if="inlineImages.length > 0"
+        class="inline-images-preview"
+      >
+        <div
+          v-for="(image, index) in inlineImages"
+          :key="index"
+          class="inline-image-item"
+        >
+          <img
+            :src="getInlineImagePreviewUrl(image)"
+            class="inline-image-preview"
+            :alt="image.name"
+          >
+          <button
+            class="inline-image-remove"
+            :title="t('common.remove')"
+            @click="removeInlineImage(index)"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+      
       <textarea
         ref="textareaRef"
         v-model="inputText"
         class="message-textarea"
         :placeholder="placeholderText"
-        :disabled="!enabled"
+        :disabled="!enabled || isGenerating"
         @focus="isFocused = true"
         @blur="isFocused = false"
         @keydown="handleKeydown"
@@ -134,24 +178,19 @@
                 }
               ]
             }"
-            @change="$emit('model-change', selectedModelValue)"
+            @change="handleUiModelChange"
           >
             <el-option
-              value="DEFAULT"
-              label="默认"
-            />
-            <el-option
-              value="OPUS"
-              label="Opus"
-            />
-            <el-option
-              value="SONNET"
-              label="Sonnet"
-            />
-            <el-option
-              value="OPUS_PLAN"
-              label="Opus Plan"
-            />
+              v-for="option in uiModelOptions"
+              :key="option"
+              :value="option"
+              :label="getUiModelLabel(option)"
+            >
+              <span class="model-option-label">
+                {{ getUiModelLabel(option) }}
+                <span v-if="isThinkingOption(option)" class="model-brain-icon">🧠</span>
+              </span>
+            </el-option>
           </el-select>
           <span
             v-if="actualModelId"
@@ -233,6 +272,7 @@
           >
           <span>{{ t('chat.autoCleanupContext') }}</span>
         </label>
+
       </div>
 
       <!-- 右侧按钮组 -->
@@ -403,6 +443,8 @@ import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
 import { isInAtQuery, replaceAtQuery } from '@/utils/atSymbolDetector'
 import { ContextDisplayType } from '@/types/enhancedMessage'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { UiModelOption, UI_MODEL_LABELS, UI_MODEL_SHOW_BRAIN } from '@/constants/models'
 
 interface PendingTask {
   id: string
@@ -443,8 +485,8 @@ interface Props {
 }
 
 interface Emits {
-  (e: 'send', text: string): void
-  (e: 'interrupt-and-send', text: string): void
+  (e: 'send', text: string, inlineImages?: File[]): void
+  (e: 'interrupt-and-send', text: string, inlineImages?: File[]): void
   (e: 'stop'): void
   (e: 'context-add', context: ContextReference): void
   (e: 'context-remove', context: ContextReference): void
@@ -452,6 +494,7 @@ interface Emits {
   (e: 'permission-change', permission: PermissionMode): void
   (e: 'skip-permissions-change', skip: boolean): void
   (e: 'auto-cleanup-change', cleanup: boolean): void
+  (e: 'inline-images-change', images: File[]): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -472,8 +515,30 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>()
 
-// i18n
+// i18n & settings
 const { t } = useI18n()
+const settingsStore = useSettingsStore()
+const settingsState = settingsStore.settings
+
+// 安全获取当前 UI 模型，避免 settingsState 还未初始化时访问 undefined.model
+function getSafeUiModel(): UiModelOption {
+  try {
+    const allOptions = Object.values(UiModelOption) as UiModelOption[]
+    const raw = (settingsState.value as any)?.model as UiModelOption | undefined
+    if (raw && allOptions.includes(raw)) {
+      return raw
+    }
+  } catch (e) {
+    console.warn('⚠️ getSafeUiModel 读取 settingsState 失败，使用默认模型:', e)
+  }
+  // 默认使用 Opus 4.5 思考模型，和 DEFAULT_SETTINGS 保持一致
+  return UiModelOption.OPUS_45_THINKING
+}
+const thinkingTogglePending = ref(false)
+const thinkingEnabled = computed(() => {
+  const current = getSafeUiModel()
+  return UI_MODEL_SHOW_BRAIN[current] ?? false
+})
 
 // Refs
 const textareaRef = ref<HTMLTextAreaElement>()
@@ -501,8 +566,13 @@ const isDragging = ref(false)
 const showSendContextMenu = ref(false)
 const sendContextMenuPosition = ref({ x: 0, y: 0 })
 
+// Inline Images State (内嵌图片，当输入框有文本时粘贴的图片)
+const inlineImages = ref<File[]>([])
+// 缓存内嵌图片的 URL 对象，用于预览和清理
+const inlineImageUrls = new Map<File, string>()
+
 // Local state for props
-const selectedModelValue = ref(props.selectedModel)
+const selectedModelValue = ref<UiModelOption>(getSafeUiModel())
 const selectedPermissionValue = ref(props.selectedPermission)
 const skipPermissionsValue = ref(props.skipPermissions)
 
@@ -522,7 +592,17 @@ const visibleTasks = computed(() => {
 const hasInput = computed(() => inputText.value.trim().length > 0)
 
 const canSend = computed(() => {
-  return hasInput.value && props.enabled && !props.isGenerating
+  return (hasInput.value || inlineImages.value.length > 0) && props.enabled && !props.isGenerating
+})
+
+// 只显示前三个 context
+const visibleContexts = computed(() => {
+  return props.contexts.slice(0, 3)
+})
+
+// 隐藏的 context 数量
+const hiddenContextsCount = computed(() => {
+  return Math.max(0, props.contexts.length - 3)
 })
 
 const placeholderText = computed(() => {
@@ -537,10 +617,7 @@ const placeholderText = computed(() => {
 })
 
 // Watch props changes
-watch(() => props.selectedModel, (newValue) => {
-  selectedModelValue.value = newValue
-})
-
+// Model selection is now driven by settingsStore (UiModelOption)，不再直接依赖 props.selectedModel
 watch(() => props.selectedPermission, (newValue) => {
   selectedPermissionValue.value = newValue
 })
@@ -639,7 +716,17 @@ function dismissAtSymbolPopup() {
   atSymbolSearchResults.value = []
 }
 
-function handleKeydown(event: KeyboardEvent) {
+async function handleKeydown(event: KeyboardEvent) {
+  if (
+    event.key === 'Tab' &&
+    !event.shiftKey &&
+    !event.ctrlKey &&
+    !event.metaKey
+  ) {
+    event.preventDefault()
+    await toggleThinkingEnabled('keyboard')
+    return
+  }
   // 如果 @ 符号弹窗显示，键盘事件由弹窗组件处理
   // 这里不需要额外处理，因为 AtSymbolFilePopup 组件会监听全局键盘事件
 
@@ -689,9 +776,41 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
+async function toggleThinkingEnabled(source: 'click' | 'keyboard' = 'click') {
+  if (thinkingTogglePending.value) return
+  thinkingTogglePending.value = true
+  try {
+    const nextValue = !thinkingEnabled.value
+    console.log(`🧠 [ThinkingToggle] ${source} -> ${nextValue}`)
+    await settingsStore.saveSettings({ thinkingEnabled: nextValue })
+  } catch (error) {
+    console.error('❌ 切换思考开关失败:', error)
+  } finally {
+    thinkingTogglePending.value = false
+  }
+}
+
+const uiModelOptions = Object.values(UiModelOption)
+
+function getUiModelLabel(option: UiModelOption): string {
+  return UI_MODEL_LABELS[option] ?? option
+}
+
+function isThinkingOption(option: UiModelOption): boolean {
+  return UI_MODEL_SHOW_BRAIN[option] ?? false
+}
+
+async function handleUiModelChange(option: UiModelOption) {
+  selectedModelValue.value = option
+  // 更新全局设置中的模型，触发下次 connect 使用新的模型与思考模式
+  await settingsStore.updateModel(option)
+}
+
 /**
  * 处理粘贴事件
- * 检测粘贴内容是否包含图片，如果是则转为 base64 添加到上下文
+ * 检测粘贴内容是否包含图片：
+ * - 如果输入框有文本，图片作为内嵌图片（添加到用户消息内容中）
+ * - 如果输入框为空，图片作为上下文（添加到 contexts）
  */
 async function handlePaste(event: ClipboardEvent) {
   console.log('📋 [handlePaste] 粘贴事件触发')
@@ -723,8 +842,19 @@ async function handlePaste(event: ClipboardEvent) {
 
       console.log(`📋 [handlePaste] 获取到文件: name=${file.name}, size=${file.size}, type=${file.type}`)
 
-      // 直接添加到上下文（转为 base64）
+      // 判断光标是否在最前面
+      const cursorAtStart = textareaRef.value?.selectionStart === 0
+      
+      if (cursorAtStart) {
+        // 光标在最前面：作为上下文处理
+        console.log('📋 [handlePaste] 光标在最前面，将图片作为上下文')
       await addImageToContext(file)
+      } else {
+        // 光标不在最前面：作为内嵌图片处理
+        console.log('📋 [handlePaste] 光标不在最前面，将图片作为内嵌图片')
+        inlineImages.value.push(file)
+        emit('inline-images-change', inlineImages.value)
+      }
     }
   }
 }
@@ -755,22 +885,44 @@ function handleSend() {
   if (!canSend.value) return
 
   const text = inputText.value.trim()
-  if (text) {
-    emit('send', text)
+  if (text || inlineImages.value.length > 0) {
+    const imagesToSend = [...inlineImages.value]
+    emit('send', text, imagesToSend)
+    
+    // 清理内嵌图片和 URL
+    inlineImages.value.forEach(image => {
+      const url = inlineImageUrls.get(image)
+      if (url) {
+        URL.revokeObjectURL(url)
+        inlineImageUrls.delete(image)
+      }
+    })
     inputText.value = ''
+    inlineImages.value = []
+    emit('inline-images-change', [])
     adjustHeight()
   }
 }
 
 function handleInterruptAndSend() {
-  if (!hasInput.value || !props.isGenerating) return
+  if ((!hasInput.value && inlineImages.value.length === 0) || !props.isGenerating) return
 
   const text = inputText.value.trim()
-  if (text) {
-    emit('interrupt-and-send', text)
+  const imagesToSend = [...inlineImages.value]
+  emit('interrupt-and-send', text, imagesToSend)
+  
+  // 清理内嵌图片和 URL
+  inlineImages.value.forEach(image => {
+    const url = inlineImageUrls.get(image)
+    if (url) {
+      URL.revokeObjectURL(url)
+      inlineImageUrls.delete(image)
+    }
+  })
     inputText.value = ''
+  inlineImages.value = []
+  emit('inline-images-change', [])
     adjustHeight()
-  }
 }
 
 // 发送按钮右键菜单处理
@@ -983,20 +1135,36 @@ async function handleDrop(event: DragEvent) {
   const files = event.dataTransfer?.files
   if (!files || files.length === 0) return
 
+  // 判断光标是否在最前面
+  const cursorAtStart = textareaRef.value?.selectionStart === 0
+
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
-    await addFileToContext(file)
+
+    // 检查是否为图片文件
+    if (file.type && file.type.startsWith('image/')) {
+      if (cursorAtStart) {
+        // 光标在最前面：作为上下文处理
+        console.log('📋 [handleDrop] 光标在最前面，将图片作为上下文')
+      await addImageToContext(file)
+      } else {
+        // 光标不在最前面：作为内嵌图片处理
+        console.log('📋 [handleDrop] 光标不在最前面，将图片作为内嵌图片')
+        inlineImages.value.push(file)
+      }
+    } else {
+      // 非图片文件：作为上下文处理
+      await addFileToContext(file)
+    }
+  }
+
+  if (!cursorAtStart) {
+    emit('inline-images-change', inlineImages.value)
   }
 }
 
 async function addFileToContext(file: File) {
   try {
-    // 检查是否为图片文件
-    if (file.type && file.type.startsWith('image/')) {
-      await addImageToContext(file)
-      return
-    }
-
     // 读取文件内容
     const content = await readFileContent(file)
 
@@ -1035,8 +1203,21 @@ async function handleImageFileSelect(event: Event) {
   const files = input.files
   if (!files || files.length === 0) return
 
+  // 判断光标是否在最前面
+  const cursorAtStart = textareaRef.value?.selectionStart === 0
+
   for (let i = 0; i < files.length; i++) {
+    if (cursorAtStart) {
+      // 光标在最前面：作为上下文处理
     await addImageToContext(files[i])
+    } else {
+      // 光标不在最前面：作为内嵌图片处理
+      inlineImages.value.push(files[i])
+    }
+  }
+
+  if (!cursorAtStart) {
+    emit('inline-images-change', inlineImages.value)
   }
 
   // 清空 input，允许重复选择同一文件
@@ -1052,6 +1233,9 @@ const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 
 function isImageReference(context: ContextReference): context is ImageReference {
   return 'type' in context && (context as any).type === 'image'
 }
+
+// 别名，用于模板中调用
+const isImageContext = isImageReference
 
 /**
  * 类型守卫：检查是否为文件上下文
@@ -1123,6 +1307,34 @@ function readImageAsBase64(file: File): Promise<string> {
   })
 }
 
+/**
+ * 获取内嵌图片预览 URL（用于内嵌图片预览）
+ */
+function getInlineImagePreviewUrl(file: File): string {
+  if (!inlineImageUrls.has(file)) {
+    const url = URL.createObjectURL(file)
+    inlineImageUrls.set(file, url)
+  }
+  return inlineImageUrls.get(file)!
+}
+
+/**
+ * 移除内嵌图片
+ */
+function removeInlineImage(index: number) {
+  const image = inlineImages.value[index]
+  if (image) {
+    // 清理 URL 对象
+    const url = inlineImageUrls.get(image)
+    if (url) {
+      URL.revokeObjectURL(url)
+      inlineImageUrls.delete(image)
+    }
+    inlineImages.value.splice(index, 1)
+    emit('inline-images-change', inlineImages.value)
+  }
+}
+
 // 自动清理上下文选项
 function handleAutoCleanupChange() {
   localStorage.setItem(AUTO_CLEANUP_KEY, autoCleanupContextsValue.value.toString())
@@ -1155,6 +1367,13 @@ onMounted(() => {
 onUnmounted(() => {
   // 移除 Context Selector 键盘事件监听
   document.removeEventListener('keydown', handleContextPopupKeyDown)
+  
+  // 清理内嵌图片的 URL 对象，避免内存泄漏
+  inlineImageUrls.forEach(url => {
+    URL.revokeObjectURL(url)
+  })
+  inlineImageUrls.clear()
+  inlineImages.value = []
 })
 </script>
 
@@ -1173,6 +1392,21 @@ onUnmounted(() => {
 .unified-chat-input-container.focused {
   border-color: var(--ide-accent, #0366d6);
   box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.1);
+}
+
+.unified-chat-input-container.generating {
+  border-color: var(--ide-accent, #0366d6);
+  box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.15);
+  animation: generating-pulse 2s ease-in-out infinite;
+}
+
+@keyframes generating-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.25);
+  }
 }
 
 /* Drop Zone Overlay */
@@ -1370,12 +1604,61 @@ onUnmounted(() => {
   color: var(--ide-error, #d73a49);
 }
 
+.context-more-hint {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  background: var(--ide-background, #ffffff);
+  border: 1px solid var(--ide-border, #e1e4e8);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--ide-secondary-foreground, #6a737d);
+  cursor: default;
+}
+
 /* Input Area */
 .input-area {
+  position: relative;
   padding: 8px 12px;
   cursor: text;
   min-height: 40px;
   max-height: 300px;
+}
+
+.input-area.generating-state {
+  padding-top: 32px;
+}
+
+/* 生成中指示器 */
+.generating-indicator {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1;
+}
+
+.generating-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--ide-border, #e1e4e8);
+  border-top-color: var(--ide-accent, #0366d6);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.generating-text {
+  font-size: 12px;
+  color: var(--ide-accent, #0366d6);
+  font-weight: 500;
 }
 
 .message-textarea {
@@ -1399,6 +1682,62 @@ onUnmounted(() => {
 .message-textarea:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* 内嵌图片预览 */
+.inline-images-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+  margin-bottom: 4px;
+}
+
+.inline-image-item {
+  position: relative;
+  display: inline-block;
+}
+
+.inline-image-preview {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--ide-border, #e1e4e8);
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.inline-image-preview:hover {
+  transform: scale(1.05);
+}
+
+.inline-image-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: var(--ide-error, #d73a49);
+  color: white;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
+}
+
+.inline-image-remove:hover {
+  transform: scale(1.1);
+}
+
+:global(.theme-dark) .inline-image-preview {
+  border-color: var(--ide-border, #3c3c3c);
 }
 
 /* Bottom Toolbar */
@@ -1468,6 +1807,62 @@ onUnmounted(() => {
   color: var(--ide-foreground, #24292e);
   font-size: 12px;
 }
+/* 模型下拉弹层基础样式，使用主题变量 */
+.chat-input-select-dropdown {
+  background-color: var(--ide-background, #ffffff);
+  border: 1px solid var(--ide-border, #e1e4e8);
+}
+
+.chat-input-select-dropdown .el-select-dropdown__item {
+  color: var(--ide-foreground, #24292e);
+}
+
+.chat-input-select-dropdown .el-select-dropdown__item.hover,
+.chat-input-select-dropdown .el-select-dropdown__item:hover {
+  background-color: var(--ide-hover-background, #f6f8fa);
+}
+
+/* 选中项高亮：背景用 accent，文字用背景色，保证对比度 */
+.chat-input-select-dropdown .el-select-dropdown__item.is-selected {
+  background-color: var(--ide-accent, #0366d6);
+}
+
+.chat-input-select-dropdown .el-select-dropdown__item.is-selected .model-option-label {
+  color: var(--ide-background, #ffffff);
+}
+
+.chat-input-select-dropdown .model-option-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-input-select-dropdown .model-brain-icon {
+  font-size: 14px;
+}
+
+/* 暗色主题下的模型下拉弹层适配 */
+::global(.theme-dark) .chat-input-select-dropdown {
+  background-color: var(--ide-background, #2b2b2b);
+  border-color: var(--ide-border, #3c3c3c);
+}
+
+::global(.theme-dark) .chat-input-select-dropdown .el-select-dropdown__item {
+  color: var(--ide-foreground, #e6edf3);
+}
+
+::global(.theme-dark) .chat-input-select-dropdown .el-select-dropdown__item.hover,
+::global(.theme-dark) .chat-input-select-dropdown .el-select-dropdown__item:hover {
+  background-color: var(--ide-hover-background, #30363d);
+}
+
+::global(.theme-dark) .chat-input-select-dropdown .el-select-dropdown__item.is-selected {
+  background-color: var(--ide-accent, #58a6ff);
+}
+
+::global(.theme-dark) .chat-input-select-dropdown .el-select-dropdown__item.is-selected .model-option-label {
+  color: var(--ide-background, #0d1117);
+}
 
 .model-selector :deep(.el-select__suffix),
 .permission-selector :deep(.el-select__suffix) {
@@ -1502,6 +1897,47 @@ onUnmounted(() => {
 
 .checkbox-label input[type="checkbox"]:disabled {
   cursor: not-allowed;
+}
+
+.thinking-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--ide-border, #e1e4e8);
+  border-radius: 999px;
+  background: var(--ide-background, #ffffff);
+  font-size: 12px;
+  color: var(--ide-secondary-foreground, #6a737d);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.thinking-toggle .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ide-border, #d0d7de);
+  transition: background 0.2s ease;
+}
+
+.thinking-toggle.active {
+  border-color: var(--ide-accent, #0366d6);
+  color: var(--ide-accent, #0366d6);
+  background: rgba(3, 102, 214, 0.08);
+}
+
+.thinking-toggle.active .status-dot {
+  background: var(--ide-accent, #0366d6);
+}
+
+.thinking-toggle:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.thinking-toggle .status-text {
+  font-weight: 500;
 }
 
 .token-stats {
@@ -1745,6 +2181,20 @@ onUnmounted(() => {
 :global(.theme-dark) .unified-chat-input-container {
   background: var(--ide-panel-background, #2b2b2b);
   border-color: var(--ide-border, #3c3c3c);
+}
+
+:global(.theme-dark) .unified-chat-input-container.generating {
+  border-color: var(--ide-accent, #58a6ff);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+}
+
+:global(.theme-dark) .generating-spinner {
+  border-color: var(--ide-border, #3c3c3c);
+  border-top-color: var(--ide-accent, #58a6ff);
+}
+
+:global(.theme-dark) .generating-text {
+  color: var(--ide-accent, #58a6ff);
 }
 
 :global(.theme-dark) .top-toolbar,

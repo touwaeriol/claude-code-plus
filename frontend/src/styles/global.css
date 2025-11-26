@@ -4,6 +4,9 @@
 
 /* 默认亮色主题 */
 :root {
+  /* 初始值使用 100vh，JS 会在运行时更新为实际高度 */
+  /* 重要：JCEF 环境下 100vh 可能不准确，但作为回退值可以防止布局塌陷 */
+  --app-viewport-height: 100vh;
   /* 主要颜色 */
   --ide-background: #ffffff;
   --ide-foreground: #24292e;
@@ -88,10 +91,20 @@
 html, body {
   width: 100%;
   height: 100%;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
 }
 
 body {
+  /* 使用绝对定位确保填充整个视口，避免 JCEF 100vh 问题 */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
@@ -102,6 +115,10 @@ body {
 }
 
 #app {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   width: 100%;
   height: 100%;
 }

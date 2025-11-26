@@ -13,7 +13,7 @@
 
 ### 问题 1: 命令行参数顺序错误
 
-在 `claude-code-sdk/src/main/kotlin/com/claudecodeplus/sdk/transport/SubprocessTransport.kt` 中，构建 Claude CLI 命令时参数顺序不正确。
+在 `claude-agent-sdk/src/main/kotlin/com/claudecodeplus/sdk/transport/SubprocessTransport.kt` 中，构建 Claude CLI 命令时参数顺序不正确。
 
 **错误的顺序**（导致 CLI 解析失败）：
 1. `--output-format stream-json`
@@ -52,7 +52,7 @@ verbose = false,                 // ❌ 应该是 true
 
 ### 修复 1: 调整命令行参数顺序
 
-**文件**: `claude-code-sdk/src/main/kotlin/com/claudecodeplus/sdk/transport/SubprocessTransport.kt`
+**文件**: `claude-agent-sdk/src/main/kotlin/com/claudecodeplus/sdk/transport/SubprocessTransport.kt`
 
 **修改内容**（第 263-278 行）：
 ```kotlin
@@ -169,7 +169,7 @@ private fun buildClaudeOptions(): ClaudeAgentOptions {
 
 ### 2. 参数文档化
 
-在 `claude-code-sdk` 中添加：
+在 `claude-agent-sdk` 中添加：
 ```kotlin
 /**
  * 推荐的生产环境配置
@@ -201,7 +201,7 @@ object RecommendedOptions {
 
 ## 相关文件
 
-- `claude-code-sdk/src/main/kotlin/com/claudecodeplus/sdk/transport/SubprocessTransport.kt`
+- `claude-agent-sdk/src/main/kotlin/com/claudecodeplus/sdk/transport/SubprocessTransport.kt`
 - `jetbrains-plugin/src/main/kotlin/com/claudecodeplus/plugin/ui/ChatViewModel.kt`
 - `frontend/src/stores/sessionStore.ts`
 - `claude-code-server/src/main/kotlin/com/claudecodeplus/server/rpc/ClaudeRpcServiceImpl.kt`
@@ -213,5 +213,25 @@ object RecommendedOptions {
 2. **参数一致性问题**：统一了 IDEA 插件与 Vue Web 前端的行为
 
 现在所有客户端（Web 前端、IDEA 插件）都使用相同的参数配置，确保了一致的用户体验和功能完整性。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

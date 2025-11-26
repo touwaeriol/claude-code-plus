@@ -6,12 +6,16 @@ plugins {
 
 
 dependencies {
-    implementation(project(":claude-code-sdk"))
+    implementation(project(":claude-agent-sdk"))
+    implementation(project(":ai-agent-sdk"))
+    implementation(project(":ai-agent-server"))
+    implementation(project(":ai-agent-rpc-api"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 }
 
+val mainOverride = project.findProperty("mainClass") as String?
 application {
-    mainClass.set("standalone.TestModelSwitchKt")
+    mainClass.set(mainOverride ?: "standalone.TestModelSwitchKt")
 }
 
 tasks.named<JavaExec>("run") {

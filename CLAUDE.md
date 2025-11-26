@@ -1,4 +1,8 @@
+特别提醒：请使用简体中文
+
 # Claude Code Plus - 架构说明
+
+
 
 ## 📋 项目概述
 
@@ -467,5 +471,13 @@ await ideService.myNewFeature({ foo: 'bar' })
 - [前端重构设计](docs/frontend-refactoring-design.md)
 - [工具显示规范](docs/tool-display-specification.md)
 - [主题系统](docs/THEME_SYSTEM.md)
+
+---
+
+## 📦 外部子模块
+
+- `external/openai-codex`
+  - 来源仓库：`org-14957082@github.com:openai/codex.git`
+  - 管理方式：作为 git submodule 引入，位于 `external/` 目录，后续可通过 `git submodule update --init --recursive` 同步。
 
 

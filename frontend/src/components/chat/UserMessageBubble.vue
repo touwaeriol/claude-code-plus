@@ -4,6 +4,32 @@
     <!-- 隐藏时间戳，使消息展示更紧凑 -->
     <!-- <div class="timestamp">{{ formattedTime }}</div> -->
     
+    <!-- 上下文引用（如果有）- 从左边开始排列 -->
+    <div v-if="hasContexts" class="contexts-wrapper">
+      <div class="contexts">
+        <div v-for="(context, index) in contexts" :key="index" class="context-item">
+          <span class="context-icon">{{ getContextIcon(context.type) }}</span>
+          <span class="context-label">{{ context.label }}</span>
+        </div>
+      </div>
+      
+      <!-- 上下文图片预览（如果有） -->
+      <div v-if="parsedMessage.contextImages.length > 0" class="context-images">
+        <div
+          v-for="(image, index) in parsedMessage.contextImages"
+          :key="`context-image-${index}`"
+          class="context-image-item"
+        >
+          <img
+            :src="getImageSrc(image)"
+            :alt="`Context image ${index + 1}`"
+            class="context-image-preview"
+            @click="openImagePreview(image)"
+          />
+        </div>
+      </div>
+    </div>
+    
     <!-- 消息内容 -->
     <div class="bubble-content" :class="{ collapsed: isCollapsed && isLongMessage }">
       <!-- 文本内容 -->
@@ -28,14 +54,6 @@
           </div>
         </div>
       </div>
-
-      <!-- 上下文引用（如果有） -->
-      <div v-if="hasContexts" class="contexts">
-        <div v-for="(context, index) in contexts" :key="index" class="context-item">
-          <span class="context-icon">{{ getContextIcon(context.type) }}</span>
-          <span class="context-label">{{ context.label }}</span>
-        </div>
-      </div>
     </div>
     
     <!-- 折叠/展开按钮（长消息） -->
@@ -48,11 +66,21 @@
       <span class="toggle-text">{{ isCollapsed ? '展开' : '收起' }}</span>
     </button>
   </div>
+
+  <!-- 图片预览模态框 -->
+  <ImagePreviewModal
+    :visible="previewVisible"
+    :image-src="previewImageSrc"
+    :image-alt="previewImageAlt"
+    @close="closeImagePreview"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { Message, ImageBlock } from '@/types/message'
+import type { Message, ImageBlock, ContentBlock } from '@/types/message'
+import { parseUserMessage, isFileReference } from '@/utils/userMessageBuilder'
+import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 
 interface Props {
   message: Message
@@ -68,27 +96,76 @@ const props = defineProps<Props>()
 // 折叠状态
 const isCollapsed = ref(true)
 
-// 提取消息文本内容
-const messageText = computed(() => {
+// 解析用户消息，分离上下文和用户输入
+const parsedMessage = computed(() => {
   if (!props.message.content || !Array.isArray(props.message.content)) {
+    return {
+      contexts: [],
+      contextImages: [],
+      userContent: []
+    }
+  }
+  return parseUserMessage(props.message.content as ContentBlock[])
+})
+
+// 提取用户输入的文本内容（排除文件引用）
+const messageText = computed(() => {
+  const userContent = parsedMessage.value.userContent
+  if (!userContent || userContent.length === 0) {
     return ''
   }
 
-  // 从 ContentBlock[] 中提取所有文本
-  return props.message.content
-    .filter(block => block.type === 'text')
+  // 从用户输入内容块中提取文本（排除文件引用）
+  return userContent
+    .filter(block => {
+      if (block.type === 'text') {
+        const text = (block as any).text?.trim() || ''
+        // 排除文件引用格式的文本
+        return !isFileReference(text)
+      }
+      return false
+    })
     .map(block => (block as any).text)
     .join('\n')
 })
 
-// 提取图片内容
+// 提取用户输入的图片内容（排除上下文图片）
 const imageBlocks = computed(() => {
-  if (!props.message.content || !Array.isArray(props.message.content)) {
+  const userContent = parsedMessage.value.userContent
+  if (!userContent || userContent.length === 0) {
     return []
   }
 
-  return props.message.content
+  // 只返回用户输入区域的图片（内嵌图片）
+  return userContent
     .filter(block => block.type === 'image') as ImageBlock[]
+})
+
+// 提取上下文引用
+const contexts = computed(() => {
+  const parsed = parsedMessage.value
+  const result: Array<{ type: string; label: string; path?: string }> = []
+  
+  // 添加文件上下文
+  parsed.contexts.forEach(ctx => {
+    if (ctx.type === 'file' && ctx.path) {
+      result.push({
+        type: 'file',
+        label: ctx.path,
+        path: ctx.path
+      })
+    }
+  })
+  
+  // 添加图片上下文
+  if (parsed.contextImages.length > 0) {
+    result.push({
+      type: 'image',
+      label: `图片 (${parsed.contextImages.length})`
+    })
+  }
+  
+  return result
 })
 
 // 判断是否为长消息（超过 200 字符或有多张图片）
@@ -98,7 +175,7 @@ const isLongMessage = computed(() => {
 
 // 是否有上下文引用
 const hasContexts = computed(() => {
-  return props.contexts && props.contexts.length > 0
+  return contexts.value.length > 0
 })
 
 // 格式化时间戳
@@ -158,12 +235,24 @@ function getImageSize(image: ImageBlock): string {
   return ''
 }
 
+// 图片预览状态
+const previewVisible = ref(false)
+const previewImageSrc = ref('')
+const previewImageAlt = ref('')
+
 // 打开图片预览
 function openImagePreview(image: ImageBlock) {
   const src = getImageSrc(image)
   if (src) {
-    window.open(src, '_blank')
+    previewImageSrc.value = src
+    previewImageAlt.value = getImageName(image, 0)
+    previewVisible.value = true
   }
+}
+
+// 关闭图片预览
+function closeImagePreview() {
+  previewVisible.value = false
 }
 </script>
 
@@ -172,9 +261,19 @@ function openImagePreview(image: ImageBlock) {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
+  gap: 8px;
   margin-bottom: 16px;
   max-width: 100%;
+}
+
+/* 上下文包装器 - 从左边开始排列 */
+.contexts-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  max-width: 80%;
 }
 
 .timestamp {
@@ -279,11 +378,9 @@ function openImagePreview(image: ImageBlock) {
 
 .contexts {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  align-items: flex-start;
 }
 
 .context-item {
@@ -292,6 +389,10 @@ function openImagePreview(image: ImageBlock) {
   gap: 6px;
   font-size: 12px;
   color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.7));
+  background: rgba(255, 255, 255, 0.6);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .context-icon {
@@ -303,6 +404,39 @@ function openImagePreview(image: ImageBlock) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 上下文图片预览 */
+.context-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.context-image-item {
+  flex-shrink: 0;
+}
+
+.context-image-preview {
+  max-width: 100px;
+  max-height: 100px;
+  border-radius: 6px;
+  cursor: pointer;
+  object-fit: contain;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease;
+}
+
+.context-image-preview:hover {
+  transform: scale(1.05);
+}
+
+.theme-dark .context-images {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.theme-dark .context-image-preview {
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .toggle-button {
@@ -350,12 +484,10 @@ function openImagePreview(image: ImageBlock) {
   color: var(--ide-secondary-foreground, rgba(255, 255, 255, 0.5));
 }
 
-.theme-dark .contexts {
-  border-top-color: rgba(255, 255, 255, 0.1);
-}
-
 .theme-dark .context-item {
   color: var(--ide-secondary-foreground, rgba(255, 255, 255, 0.7));
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .theme-dark .toggle-button {

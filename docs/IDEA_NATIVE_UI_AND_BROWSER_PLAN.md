@@ -63,6 +63,15 @@
 3. `IdeTools` 暂未发布到公共 Kotlin module，IDEA 插件与服务器通过源码依赖耦合。
 4. 浏览器 WebSocket 与插件 SDK 逻辑分裂，缺少统一仿真层。
 
+### 4.5 Vue vs Swing UI 核心差异（2025-11-24 补充）
+
+- **消息架构**：Vue 前端使用 `DisplayItem` 类型系统（UserMessage、AssistantText、ToolCall、SystemMessage），配合 `displayItemConverter.ts` 与 `MessageList.vue` 实现组件化分发；Swing 侧仍停留在 `Message(type, content)` 的扁平结构，无法区分流式文本与工具调用，导致工具内容展示成纯文本。
+- **StreamEvent 交互**：浏览器端的 `streamEventProcessor.ts` 会处理 `message_start/content_block_delta/message_stop`，实时更新 Delta、工具输入 JSON 以及 thinking 块；Swing 版在 `ChatViewModel.receiveResponse()` 中仅记录日志，缺少增量渲染，用户看不到 Claude 的思考过程、工具入参构建，也无法在工具执行前中断。
+- **工具卡片**：Vue 端拥有 30+ 专用 Tool 组件（Read/Edit/Write/MultiEdit/Bash/Grep/TodoWrite/MCP 等），同时提供 `CompactToolCard` 折叠展示；Swing 仅有单一 `ToolCallDisplay.kt`，缺乏文件路径、高亮 diff、命令输出等关键信息，也没有可点击打开文件或显示 Diff 的 UI 元素。
+- **输入区域**：Vue `ChatInput.vue` 集成上下文标签、拖拽文件、@ 文件引用、模型/权限下拉、token 统计与任务队列；Swing `ChatPanel` 只有 `JBTextArea + JButton`，缺少上下文可视化与模型切换，无法提示当前 token 使用情况。
+- **滚动与性能**：Vue 使用虚拟列表（`VirtualList`）保证大量消息时的流畅滚动；Swing 现有 `BoxLayout + JBScrollPane` 会在长会话中频繁触发布局计算，且没有惰性加载策略。
+- **主题一致性**：Vue 通过 CSS 变量与 `themeStore` 适配暗/亮主题，工具卡、消息卡具备统一圆角、阴影与 hover 状态；Swing 仍沿用默认 `JPanel` 背景，缺少集中式 `UiPalette` 与指标体系，暗色模式下对比度不足。
+
 ---
 
 ## 5. 目标架构概览
@@ -94,7 +103,7 @@
 | 阶段 | 时间 | 目标 | 关键交付物 | 验收 |
 |------|------|------|------------|------|
 | Phase 0：基线确认 | 立即（1天） | 梳理依赖、目录、约束 | 本文档、责任人列表、追踪表 | 负责人认可 |
-| Phase 1：工具层整合 | 3 天 | `IdeTools` 产物化、公共 module 化 | `claude-code-server` & `jetbrains-plugin` 共用 `:claude-code-sdk:idetools` 子模块、接口文档 | `./gradlew build` 通过 |
+| Phase 1：工具层整合 | 3 天 | `IdeTools` 产物化、公共 module 化 | `claude-code-server` & `jetbrains-plugin` 共用 `:claude-agent-sdk:idetools` 子模块、接口文档 | `./gradlew build` 通过 |
 | Phase 2：Kotlin UI DSL 工具窗口 | 5 天 | Swing UI → Kotlin UI DSL v2 | `ChatPanelDsl.kt`、`ChatViewModel` 绑定、DSL 主题策略、快速操作条 | `runIde` 实测、UI 评审 |
 | Phase 3：浏览器协同 & API 净化 | 4 天 | HTTP/WS API 对齐 DSL 行为 | `ideaBridge`/`ClaudeSession` 重构、批操作、缓存、Tool 回放 | 前端 `npm run test`、功能对比 |
 | Phase 4：验证与交付 | 2 天 | 性能/回归/文档 | Benchmarks、QA checklist、更新 `README/CHANGELOG` | Demo & 文档签收 |
@@ -105,7 +114,7 @@
 
 | 编号 | 模块 | 任务 | 输出 | 前置 |
 |------|------|------|------|------|
-| T1 | 工具层 | 将 `IdeTools`/`DiffRequest` 抽到 `:claude-code-sdk:idetools`，JetBrains & Ktor 端依赖同一 module | `claude-code-sdk/idetools/build.gradle.kts`、API 文档 | Phase 0 |
+| T1 | 工具层 | 将 `IdeTools`/`DiffRequest` 抽到 `:claude-agent-sdk:idetools`，JetBrains & Ktor 端依赖同一 module | `claude-agent-sdk/idetools/build.gradle.kts`、API 文档 | Phase 0 |
 | T2 | 工具层 | 为 `IdeTools` 所有方法编写契约测试（IDEA 使用 Mock 项目，浏览器使用 `IdeToolsMock`） | `IdeToolsContractTest.kt` | T1 |
 | T3 | 插件 UI | 构建 `ChatPanel`（使用 Swing + JB UI 组件，可选 Kotlin UI DSL `panel { row { } }`）并迁移输入区域、按钮、快捷操作 | Swing 面板类、`NativeToolWindowFactory` 注入 | T1 |
 | T4 | 插件 UI | 将消息流 + ToolCall 渲染改成 Swing 组合组件（`JBScrollPane` + 自定义面板） | `MessageListPanel.kt`、`ToolCallList.kt` | T3 |

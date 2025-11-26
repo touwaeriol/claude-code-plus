@@ -66,7 +66,7 @@
       :data-component="messageComponent"
       :extra-props="{ isDark }"
       :keeps="30"
-      :estimate-size="120"
+      :estimate-size="estimatedItemSize"
       @scroll="handleScroll"
     />
 
@@ -218,6 +218,23 @@ const displayMessages = computed(() => props.displayItems || props.messages || [
 // 使用新的 DisplayItemRenderer 还是旧的 MessageDisplay
 const messageComponent = computed(() => props.displayItems ? DisplayItemRenderer : MessageDisplay)
 
+// 动态估算项目高度：根据内容类型调整
+const estimatedItemSize = computed(() => {
+  // 如果有工具调用，使用更大的估算值（因为工具卡片可能展开）
+  const hasToolCalls = displayMessages.value.some((item: any) => 
+    item.type === 'toolCall' || item.type === 'toolResult'
+  )
+  // 如果有图片，也需要更大的高度
+  const hasImages = displayMessages.value.some((item: any) => 
+    item.type === 'userMessage' && item.content?.some((block: any) => block.type === 'image')
+  )
+  
+  if (hasToolCalls || hasImages) {
+    return 200  // 工具卡片和图片需要更大的高度
+  }
+  return 120  // 普通文本消息
+})
+
 // 监听消息变化
 watch(() => displayMessages.value.length, async (newCount, oldCount) => {
   // 如果不在底部，计数新消息
@@ -233,7 +250,51 @@ watch(() => displayMessages.value.length, async (newCount, oldCount) => {
   }
 
   lastMessageCount.value = newCount
+  
+  // 强制虚拟列表重新计算高度（解决工具卡片初始渲染问题）
+  await nextTick()
+  updateVirtualListHeight()
 })
+
+// 监听 displayItems 内容变化（不仅仅是长度），强制更新虚拟列表
+watch(() => displayMessages.value, async () => {
+  // 等待 DOM 更新后，强制虚拟列表重新计算
+  await nextTick()
+  updateVirtualListHeight()
+}, { deep: true })
+
+// 强制虚拟列表重新计算高度的辅助函数
+// 解决工具卡片初始渲染不正确的问题（需要拖动才能正常显示）
+function updateVirtualListHeight() {
+  // 使用 requestAnimationFrame 确保在下一帧更新
+  requestAnimationFrame(() => {
+    if (virtualListRef.value) {
+      // 通过触发滚动事件来强制虚拟列表重新计算可见区域
+      const listElement = virtualListRef.value.$el as HTMLElement
+      if (listElement) {
+        // 触发一个微小的滚动来强制重新计算
+        const currentScroll = listElement.scrollTop
+        const scrollHeight = listElement.scrollHeight
+        const clientHeight = listElement.clientHeight
+        
+        // 如果已经在底部，直接滚动到底部来触发重新计算
+        if (isNearBottom.value || currentScroll + clientHeight >= scrollHeight - 10) {
+          // 在底部时，稍微向上滚动再回到底部，触发重新计算
+          listElement.scrollTop = currentScroll - 1
+          requestAnimationFrame(() => {
+            listElement.scrollTop = scrollHeight - clientHeight
+          })
+        } else {
+          // 不在底部时，微调滚动位置来触发虚拟列表的重新计算
+          listElement.scrollTop = currentScroll + 0.1
+          requestAnimationFrame(() => {
+            listElement.scrollTop = currentScroll
+          })
+        }
+      }
+    }
+  })
+}
 
 watch(() => props.isLoading, async (newValue) => {
   if (newValue && isNearBottom.value) {

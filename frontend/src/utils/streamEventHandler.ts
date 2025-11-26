@@ -1,6 +1,6 @@
 /**
  * Stream Event 处理工具函数
- * 
+ *
  * 提供类型安全的 stream event 解析和处理功能
  */
 
@@ -19,6 +19,9 @@ import type {
 } from '@/types/streamEvent'
 import type { Message, TextBlock, ToolUseBlock, ThinkingBlock } from '@/types/message'
 import { isToolUseBlock } from '@/utils/contentBlockUtils'
+import { loggers } from '@/utils/logger'
+
+const log = loggers.stream
 
 /**
  * 解析 Stream Event 数据
@@ -106,7 +109,7 @@ export function isInputJsonDelta(delta: any): delta is InputJsonDelta {
  * 类型守卫：检查是否为 ThinkingDelta
  */
 export function isThinkingDelta(delta: any): delta is ThinkingDelta {
-  return delta && delta.type === 'thinking_delta' && typeof delta.delta === 'string'
+  return delta && delta.type === 'thinking_delta' && typeof delta.thinking === 'string'
 }
 
 /**
@@ -248,7 +251,7 @@ export function applyThinkingDelta(
   index: number,
   delta: ThinkingDelta
 ): boolean {
-  if (!delta.delta) {
+  if (!delta.thinking) {
     return false
   }
 
@@ -260,7 +263,7 @@ export function applyThinkingDelta(
     // 追加到现有 thinking 块
     const updatedBlock: ThinkingBlock = {
       ...existingBlock,
-      thinking: existingBlock.thinking + delta.delta
+      thinking: existingBlock.thinking + delta.thinking
     }
     const newContent = [...message.content]
     newContent[index] = updatedBlock
@@ -270,7 +273,7 @@ export function applyThinkingDelta(
     // 创建新的 thinking 块
     const newBlock: ThinkingBlock = {
       type: 'thinking',
-      thinking: delta.delta,
+      thinking: delta.thinking,
       signature: undefined // 将在 content_block_stop 时设置
     }
     
@@ -320,4 +323,3 @@ export function findOrCreateLastAssistantMessage(messages: Message[]): Message {
   messages.push(placeholder)
   return placeholder
 }
-

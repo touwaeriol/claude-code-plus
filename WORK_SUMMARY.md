@@ -61,7 +61,7 @@
 ```
 claude-code-rpc-api (RPC 接口定义)
     ↓
-claude-code-sdk (Claude Agent SDK)
+claude-agent-sdk (Claude Agent SDK)
     ↓
 claude-code-server (后端服务器)
     ↓

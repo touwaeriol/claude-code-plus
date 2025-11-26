@@ -198,15 +198,13 @@ function testBridge() {
   alert('桥接状态: ' + (bridgeReady.value ? '正常' : '未就绪'))
 }
 
-async function testTheme() {
+function testTheme() {
   console.log('🧪 Testing theme...')
-  try {
-    const response = await ideaBridge.query('ide.getTheme')
-    console.log('🎨 Theme response:', response)
-    alert(`主题信息:\n${JSON.stringify(response, null, 2)}`)
-  } catch (error) {
-    console.error('❌ Theme test error:', error)
-    alert(`主题测试失败: ${error}`)
+  const theme = themeService.getCurrentTheme()
+  if (theme) {
+    alert(`主题信息:\n${JSON.stringify(theme, null, 2)}`)
+  } else {
+    alert('当前没有可用的主题数据')
   }
 }
 
@@ -238,8 +236,8 @@ function toggleTheme() {
 .app {
   display: flex;
   flex-direction: column;
-  height: 100vh; /* 使用 vh 确保有明确高度 */
-  min-height: 100vh; /* 防止塌陷 */
+  height: 100%; /* 依赖父级高度，避免 JCEF 初次加载高度错误 */
+  min-height: 0; /* 防止 flex 塌陷 */
   background: var(--ide-background, #f5f5f5);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }

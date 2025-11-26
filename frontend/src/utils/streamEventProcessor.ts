@@ -27,6 +27,30 @@ import { isToolUseBlock } from '@/utils/contentBlockUtils'
 
 const log = loggers.stream
 
+function generateAssistantMessageId(): string {
+  return `assistant-${Date.now()}-${crypto.randomUUID().substring(0, 8)}`
+}
+
+function ensureUniqueMessageId(
+  desiredId: string | undefined,
+  messages: Message[],
+  excludeId?: string
+): string {
+  if (!desiredId) {
+    return generateAssistantMessageId()
+  }
+  const hasConflict = messages.some(message => {
+    if (excludeId && message.id === excludeId) {
+      return false
+    }
+    return message.id === desiredId
+  })
+  if (!hasConflict) {
+    return desiredId
+  }
+  return `${desiredId}-${crypto.randomUUID().substring(0, 8)}`
+}
+
 /**
  * 判断消息内容是否实际为空
  *
@@ -95,11 +119,11 @@ export function processMessageStart(
   // 情况1：有空的占位符消息，继续使用它
   // 使用 isMessageContentEmpty 判断，考虑空文本块的情况
   if (lastMessage && isMessageContentEmpty(lastMessage.content)) {
-    // 更新消息 ID（如果后端返回了 ID）
-    if (eventMessageId && lastMessage.id !== eventMessageId) {
+    const resolvedId = ensureUniqueMessageId(eventMessageId, context.messages, lastMessage.id)
+    if (lastMessage.id !== resolvedId) {
       const messageIndex = context.messages.findIndex(m => m.id === lastMessage.id)
       if (messageIndex !== -1) {
-        context.messages[messageIndex] = { ...lastMessage, id: eventMessageId }
+        context.messages[messageIndex] = { ...lastMessage, id: resolvedId }
       }
     }
 
@@ -112,9 +136,9 @@ export function processMessageStart(
 
   // 情况2：没有消息或最后一条消息已有实际内容，创建新消息
   const newMessage: Message = {
-    id: eventMessageId || `assistant-placeholder-${Date.now()}-${crypto.randomUUID().substring(0, 8)}`,
+    id: ensureUniqueMessageId(eventMessageId, context.messages),
     role: 'assistant',
-    content: [],
+    content: event.message?.content ?? [],
     timestamp: Date.now()
   }
   context.messages.push(newMessage)

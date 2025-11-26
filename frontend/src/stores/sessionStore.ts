@@ -1,8 +1,9 @@
 import { ref, computed, reactive } from 'vue'
 import { defineStore } from 'pinia'
-import { claudeService } from '@/services/claudeService'
-import type { ConnectOptions } from '@/services/claudeService'
-import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock } from '@/types/message'
+import { aiAgentService } from '@/services/aiAgentService'
+import type { ConnectOptions } from '@/services/aiAgentService'
+import type { AgentStreamEvent } from '@/services/AiAgentSession'
+import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock } from '@/types/message'
 import type { SessionState } from '@/types/session'
 import { convertToDisplayItems, convertMessageToDisplayItems } from '@/utils/displayItemConverter'
 import { ConnectionStatus, ToolCallStatus } from '@/types/display'
@@ -217,8 +218,8 @@ export const useSessionStore = defineStore('session', () => {
       // 设置连接状态
       connectionStatuses.value.set('pending', ConnectionStatus.CONNECTING)
 
-      // 使用 claudeService 创建会话
-      const sessionId = await claudeService.connect(options, (rawMessage: any) => {
+      // 使用 aiAgentService 创建会话
+      const sessionId = await aiAgentService.connect(options, (rawMessage: any) => {
         const normalized = normalizeRpcMessage(rawMessage)
         if (normalized) {
           handleMessage(sessionId, normalized)
@@ -273,7 +274,7 @@ export const useSessionStore = defineStore('session', () => {
       })
 
       connectionStatuses.value.set('pending', ConnectionStatus.CONNECTING)
-      const sessionId = await claudeService.connect(options, (rawMessage: any) => {
+      const sessionId = await aiAgentService.connect(options, (rawMessage: any) => {
         const normalized = normalizeRpcMessage(rawMessage)
         if (normalized) {
           handleMessage(sessionId, normalized)
@@ -335,23 +336,37 @@ export const useSessionStore = defineStore('session', () => {
    */
   function normalizeRpcMessage(raw: any): NormalizedRpcMessage | null {
     if (!raw || typeof raw !== 'object') {
+      log.warn('normalizeRpcMessage: 收到无效消息', raw)
       return null
     }
+
+    // 🔍 调试：打印原始消息格式
+    log.debug('🔍 [normalizeRpcMessage] 收到原始消息:', {
+      hasType: 'type' in raw,
+      hasRole: 'role' in raw,
+      type: raw.type,
+      role: raw.role,
+      keys: Object.keys(raw),
+      preview: JSON.stringify(raw).substring(0, 200)
+    })
 
     const type = raw.type || raw.role
 
     // 处理 stream_event 消息
     if (type === 'stream_event') {
+      log.debug('✅ [normalizeRpcMessage] 识别为 stream_event')
       return { kind: 'stream_event', data: raw }
     }
 
     // 处理 result 消息（包含 usage 统计信息）
     if (type === 'result') {
+      log.debug('✅ [normalizeRpcMessage] 识别为 result')
       return { kind: 'result', data: raw }
     }
 
     // 处理 assistant 消息
     if (type === 'assistant') {
+      log.debug('✅ [normalizeRpcMessage] 识别为 assistant')
       const content: ContentBlock[] = Array.isArray(raw.content) ? raw.content : []
       const timestamp = typeof raw.timestamp === 'number' ? raw.timestamp : Date.now()
 
@@ -368,6 +383,7 @@ export const useSessionStore = defineStore('session', () => {
 
     // 处理 user 消息（包含 tool_result）
     if (type === 'user') {
+      log.debug('✅ [normalizeRpcMessage] 识别为 user')
       const content: ContentBlock[] = Array.isArray(raw.content) ? raw.content : []
       const hasToolResult = content.some((block: ContentBlock) => block.type === 'tool_result')
 
@@ -384,6 +400,7 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     // 其他类型的消息忽略
+    log.warn('⚠️ [normalizeRpcMessage] 未识别的消息类型:', type, raw)
     return null
   }
 
@@ -697,7 +714,18 @@ export const useSessionStore = defineStore('session', () => {
         content: mergedContent
       }
       sessionState.messages = newMessages
-      sessionState.displayItems = convertToDisplayItems(newMessages, sessionState.pendingToolCalls)
+
+      // ✅ 去重：不重建 displayItems，避免重复显示
+      // 流式事件已经创建了 displayItems，这里只需要确保消息 ID 正确
+      // 如果占位符 ID 和新消息 ID 不同，需要更新 displayItems 中的 ID
+      if (placeholder.id !== message.id) {
+        sessionState.displayItems.forEach(item => {
+          if (item.id.startsWith(placeholder.id)) {
+            item.id = item.id.replace(placeholder.id, message.id)
+          }
+        })
+      }
+
       // 注意：不在这里设置 isGenerating，只在 handleResultMessage 中设置
       touchSession(sessionId)
       return true
@@ -816,12 +844,27 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
 
+    // 🔍 调试：打印收到的 stream event 数据
+    log.debug('🔍 [handleStreamEvent] 收到 stream event 数据:', {
+      dataType: typeof streamEventData,
+      hasType: streamEventData && 'type' in streamEventData,
+      hasEvent: streamEventData && 'event' in streamEventData,
+      keys: streamEventData && typeof streamEventData === 'object' ? Object.keys(streamEventData) : 'N/A',
+      preview: JSON.stringify(streamEventData).substring(0, 300)
+    })
+
     // 解析 stream event 数据
     const parsed = parseStreamEventData(streamEventData)
     if (!parsed || !parsed.event) {
-      log.warn('handleStreamEvent: 无效的 event 数据')
+      log.warn('❌ [handleStreamEvent] 无效的 event 数据:', streamEventData)
       return
     }
+
+    log.debug('✅ [handleStreamEvent] 解析成功:', {
+      eventType: parsed.event.type,
+      hasUuid: !!parsed.uuid,
+      hasSessionId: !!parsed.session_id
+    })
 
     const event: StreamEvent = parsed.event
     const eventType = event.type
@@ -868,6 +911,7 @@ export const useSessionStore = defineStore('session', () => {
         // 同步更新 displayItems 中对应的文本块
         syncDisplayItemsForMessage(lastAssistantMessage, sessionState)
       }
+
     }
   }
 
@@ -1177,7 +1221,7 @@ export const useSessionStore = defineStore('session', () => {
       log.info(`删除会话: ${sessionId}`)
 
       // 断开连接
-      await claudeService.disconnect(sessionId)
+      await aiAgentService.disconnect(sessionId)
 
       // 清除连接状态
       connectionStatuses.value.delete(sessionId)
@@ -1238,7 +1282,7 @@ export const useSessionStore = defineStore('session', () => {
       log.debug(`加载历史消息: ${sessionId}`)
       // getHistory 返回的是简化的 Message 类型，需要转换
       // TODO: 在新架构中，历史消息应该通过 resume 会话时的 stream event 获取
-      const messages = await claudeService.getHistory(sessionId) as any as Message[]
+      const messages = await aiAgentService.getHistory(sessionId) as any as Message[]
       log.debug(`加载了 ${messages.length} 条历史消息`)
       return messages
     } catch (error) {
@@ -1270,7 +1314,7 @@ export const useSessionStore = defineStore('session', () => {
       throw new Error('当前没有活跃的会话')
     }
 
-    await claudeService.sendMessage(currentSessionId.value, message)
+    await aiAgentService.sendMessage(currentSessionId.value, message)
   }
 
   /**
@@ -1283,7 +1327,7 @@ export const useSessionStore = defineStore('session', () => {
       throw new Error('当前没有活跃的会话')
     }
 
-    await claudeService.sendMessageWithContent(currentSessionId.value, content)
+    await aiAgentService.sendMessageWithContent(currentSessionId.value, content)
   }
 
   /**
@@ -1294,7 +1338,7 @@ export const useSessionStore = defineStore('session', () => {
       throw new Error('当前没有活跃的会话')
     }
 
-    await claudeService.interrupt(currentSessionId.value)
+    await aiAgentService.interrupt(currentSessionId.value)
   }
 
   /**
@@ -1305,7 +1349,7 @@ export const useSessionStore = defineStore('session', () => {
       throw new Error('当前没有活跃的会话')
     }
 
-    await claudeService.setModel(currentSessionId.value, model)
+    await aiAgentService.setModel(currentSessionId.value, model)
 
     // 更新本地记录
     sessionModelIds.value.set(currentSessionId.value, model)
@@ -1425,3 +1469,4 @@ export const useSessionStore = defineStore('session', () => {
     requestTracker  // 暴露给组件访问实时数据
   }
 })
+

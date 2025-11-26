@@ -35,8 +35,10 @@ rootProject.name = "claude-code-plus"
 include(
     "toolwindow",
     "jetbrains-plugin",
-    "claude-code-sdk",
-    "claude-code-rpc-api",
+    "claude-agent-sdk",
+    "codex-agent-sdk",
+    "ai-agent-sdk",
+    "ai-agent-rpc-api",
     "standalone-test",
-    "claude-code-server"
+    "ai-agent-server"
 )

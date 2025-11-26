@@ -16,11 +16,11 @@
 
     <!-- 图片 -->
     <div
-      v-if="message.images && message.images.length > 0"
+      v-if="inlineImages.length > 0"
       class="message-images"
     >
       <img
-        v-for="(image, index) in message.images"
+        v-for="(image, index) in inlineImages"
         :key="`image-${index}`"
         :src="getImageSrc(image)"
         alt="User uploaded image"
@@ -29,21 +29,44 @@
     </div>
 
     <!-- 文本内容 -->
-    <div class="message-content">
-      {{ message.content }}
+    <div
+      v-if="textContent"
+      class="message-content"
+    >
+      {{ textContent }}
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { UserMessage } from '@/types/display'
-import type { ImageBlock } from '@/types/message'
+import type { ContentBlock, ImageBlock, TextBlock } from '@/types/message'
 
 interface Props {
   message: UserMessage
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
+
+// 解析文本内容（保持用户输入顺序）
+const textContent = computed(() => {
+  if (!props.message.content || props.message.content.length === 0) {
+    return ''
+  }
+
+  return props.message.content
+    .filter((block): block is TextBlock => block.type === 'text')
+    .map(block => block.text ?? '')
+    .join('\n\n')
+    .trim()
+})
+
+// 提取内嵌图片（用户上传）
+const inlineImages = computed(() => {
+  if (!props.message.content) return []
+  return props.message.content.filter(isImageBlock)
+})
 
 function getContextDisplay(context: any): string {
   if (context.type === 'file') {
@@ -63,6 +86,10 @@ function getImageSrc(image: ImageBlock): string {
     return image.source.url
   }
   return ''
+}
+
+function isImageBlock(block: ContentBlock): block is ImageBlock {
+  return block.type === 'image'
 }
 </script>
 
