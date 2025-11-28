@@ -2,12 +2,12 @@
   <CompactToolCard
     :display-info="displayInfo"
     :is-expanded="expanded"
-    :has-details="true"
+    :has-details="hasContent"
     @click="handleCardClick"
   >
     <template #details>
       <div
-        v-if="toolCall.result"
+        v-if="hasContent"
         class="tool-result"
       >
         <div class="result-header">
@@ -52,6 +52,14 @@ const expanded = ref(false)
 const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall, props.toolCall.result))
 
 const filePath = computed(() => props.toolCall.input.path || props.toolCall.input.file_path || '')
+
+// Read 工具展示的是文件内容（结果），只有成功且有内容时才显示详情
+// 错误信息由 CompactToolCard 的 errorMessage 处理
+const hasContent = computed(() => {
+  const result = props.toolCall.result
+  if (!result || result.is_error) return false
+  return !!resultText.value
+})
 
 /**
  * 提取 SDK 返回的行号和代码内容
