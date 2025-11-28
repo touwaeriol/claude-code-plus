@@ -374,6 +374,7 @@ function processToolStart(
     type: 'tool_use',
     id: event.toolId,
     toolName: event.toolName,
+    toolType: event.toolType,  // 保存后端传来的 toolType
     input: {}  // 初始为空，等待 tool_progress 填充
   }
 
