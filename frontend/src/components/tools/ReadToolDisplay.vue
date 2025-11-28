@@ -88,15 +88,16 @@ function extractLineNumbersAndContent(text: string): { content: string; startLin
 
 const resultText = computed(() => {
   const result = props.toolCall.result
-  if (!result || result.type !== 'success') return ''
-  const content = result.output
+  // 使用后端格式：检查 is_error
+  if (!result || result.is_error) return ''
+  const content = result.content
 
   let rawText = ''
 
   if (typeof content === 'string') {
     rawText = content
   } else if (Array.isArray(content)) {
-    rawText = content
+    rawText = (content as any[])
       .filter((item: any) => item.type === 'text')
       .map((item: any) => item.text)
       .join('\n')
@@ -117,14 +118,15 @@ const resultText = computed(() => {
 // 提取起始行号
 const startLineNumber = computed(() => {
   const result = props.toolCall.result
-  if (!result || result.type !== 'success') return 1
-  const content = result.output
+  // 使用后端格式：检查 is_error
+  if (!result || result.is_error) return 1
+  const content = result.content
 
   let rawText = ''
   if (typeof content === 'string') {
     rawText = content
   } else if (Array.isArray(content)) {
-    rawText = content
+    rawText = (content as any[])
       .filter((item: any) => item.type === 'text')
       .map((item: any) => item.text)
       .join('\n')

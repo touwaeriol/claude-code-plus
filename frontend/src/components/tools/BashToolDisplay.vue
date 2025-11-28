@@ -52,16 +52,18 @@ const timeoutText = computed(() => {
 const stdout = computed(() => {
   const result = props.toolCall.result
   if (!result) return ''
-  if (result.type === 'success') {
-    return typeof result.output === 'string' ? result.output : JSON.stringify(result.output)
+  // 使用后端格式：非错误时显示 content
+  if (!result.is_error) {
+    return typeof result.content === 'string' ? result.content : JSON.stringify(result.content)
   }
   return ''
 })
 
 const stderr = computed(() => {
   const result = props.toolCall.result
-  if (result && result.type === 'error') {
-    return result.error || ''
+  // 使用后端格式：is_error 为 true 时显示错误
+  if (result && result.is_error) {
+    return typeof result.content === 'string' ? result.content : JSON.stringify(result.content)
   }
   return ''
 })

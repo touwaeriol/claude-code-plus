@@ -295,17 +295,21 @@ class ToolEnhancementInterceptor {
   private extractResultContent(result?: ToolCall['result']): string {
     if (!result) return ''
 
-    if (result.type === 'error') {
-      return result.error || result.details || ''
-    }
-
-    const content = result.output || result.summary || result.details
+    // 使用后端格式：直接读取 content
+    const content = result.content
     if (!content) {
       return ''
     }
 
     if (typeof content === 'string') {
       return content
+    }
+
+    if (Array.isArray(content)) {
+      return (content as any[])
+        .filter((item: any) => item.type === 'text')
+        .map((item: any) => item.text)
+        .join('\n')
     }
 
     return JSON.stringify(content, null, 2)
