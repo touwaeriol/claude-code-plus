@@ -4,7 +4,7 @@
     <div class="groups-section">
       <div class="section-header">
         <h3>会话分组</h3>
-        <button @click="showCreateGroupDialog = true" class="create-btn">
+        <button class="create-btn" @click="showCreateGroupDialog = true">
           <span class="icon">➕</span>
           新建分组
         </button>
@@ -27,8 +27,8 @@
           <div v-if="!group.isCollapsed" class="group-content">
             <p v-if="group.description" class="group-description">{{ group.description }}</p>
             <div class="group-actions">
-              <button @click="editGroup(group)" class="action-btn">编辑</button>
-              <button @click="deleteGroup(group.id)" class="action-btn danger">删除</button>
+              <button class="action-btn" @click="editGroup(group)">编辑</button>
+              <button class="action-btn danger" @click="deleteGroup(group.id)">删除</button>
             </div>
           </div>
         </div>
@@ -39,7 +39,7 @@
     <div class="tags-section">
       <div class="section-header">
         <h3>会话标签</h3>
-        <button @click="showCreateTagDialog = true" class="create-btn">
+        <button class="create-btn" @click="showCreateTagDialog = true">
           <span class="icon">🏷️</span>
           新建标签
         </button>
@@ -55,8 +55,8 @@
           <span class="tag-name" :style="{ color: tag.color }">{{ tag.name }}</span>
           <span class="session-count">({{ getTagSessionCount(tag.id) }})</span>
           <div class="tag-actions">
-            <button @click="editTag(tag)" class="action-btn-small">✏️</button>
-            <button @click="deleteTag(tag.id)" class="action-btn-small">🗑️</button>
+            <button class="action-btn-small" @click="editTag(tag)">✏️</button>
+            <button class="action-btn-small" @click="deleteTag(tag.id)">🗑️</button>
           </div>
         </div>
       </div>
@@ -102,8 +102,8 @@
           </div>
         </div>
         <div class="dialog-actions">
-          <button @click="closeGroupDialog" class="cancel-btn">取消</button>
-          <button @click="saveGroup" class="save-btn">保存</button>
+          <button class="cancel-btn" @click="closeGroupDialog">取消</button>
+          <button class="save-btn" @click="saveGroup">保存</button>
         </div>
       </div>
     </div>
@@ -134,8 +134,8 @@
           </div>
         </div>
         <div class="dialog-actions">
-          <button @click="closeTagDialog" class="cancel-btn">取消</button>
-          <button @click="saveTag" class="save-btn">保存</button>
+          <button class="cancel-btn" @click="closeTagDialog">取消</button>
+          <button class="save-btn" @click="saveTag">保存</button>
         </div>
       </div>
     </div>
@@ -143,7 +143,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { sessionGroupService } from '@/services/sessionGroupService'
 import type { SessionGroup, SessionTag } from '@/types/sessionGroup'
 import { GROUP_COLORS, TAG_COLORS, GROUP_ICONS } from '@/types/sessionGroup'

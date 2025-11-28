@@ -53,6 +53,13 @@ interface AiAgentRpcService {
     suspend fun setModel(model: String): RpcSetModelResult
 
     /**
+     * 设置权限模式
+     * @param mode 权限模式枚举
+     * @return 切换结果
+     */
+    suspend fun setPermissionMode(mode: RpcPermissionMode): RpcSetPermissionModeResult
+
+    /**
      * 获取历史消息
      * @return 消息列表
      */

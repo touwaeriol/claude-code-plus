@@ -201,7 +201,11 @@ function calculateAccurateTokens(
   if (latestUsage) {
     return calculateTotalTokens(latestUsage)
   }
-  
+
+  if (sessionTokenUsage) {
+    return calculateTotalTokens(sessionTokenUsage)
+  }
+
   return 0
 }
 

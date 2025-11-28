@@ -1,27 +1,33 @@
 <template>
   <div class="display-item-renderer">
     <!-- 用户消息 -->
-    <UserMessageDisplay
-      v-if="item.type === 'userMessage'"
+    <UserMessageBubble
+      v-if="item.displayType === 'userMessage'"
       :message="item"
     />
 
     <!-- AI 文本回复 -->
     <AssistantTextDisplay
-      v-else-if="item.type === 'assistantText'"
+      v-else-if="item.displayType === 'assistantText'"
       :message="item"
       :is-dark="isDark"
     />
 
+    <!-- 思考内容 -->
+    <ThinkingDisplay
+      v-else-if="item.displayType === 'thinking'"
+      :thinking="item"
+    />
+
     <!-- 工具调用 -->
     <ToolCallDisplay
-      v-else-if="item.type === 'toolCall'"
+      v-else-if="item.displayType === 'toolCall'"
       :tool-call="item"
     />
 
     <!-- 系统消息 -->
     <SystemMessageDisplay
-      v-else-if="item.type === 'systemMessage'"
+      v-else-if="item.displayType === 'systemMessage'"
       :message="item"
     />
 
@@ -30,15 +36,16 @@
       v-else
       class="unknown-item"
     >
-      <span>Unknown item type: {{ (item as any).type }}</span>
+      <span>Unknown item displayType: {{ 'displayType' in item ? item.displayType : 'undefined' }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { DisplayItem } from '@/types/display'
-import UserMessageDisplay from './UserMessageDisplay.vue'
+import UserMessageBubble from './UserMessageBubble.vue'
 import AssistantTextDisplay from './AssistantTextDisplay.vue'
+import ThinkingDisplay from './ThinkingDisplay.vue'
 import ToolCallDisplay from './ToolCallDisplay.vue'
 import SystemMessageDisplay from './SystemMessageDisplay.vue'
 
@@ -63,6 +70,10 @@ import { computed } from 'vue'
 <style scoped>
 .display-item-renderer {
   width: 100%;
+  /* DynamicScroller 高度计算不包含外边距，把间距放在内边距避免重叠 */
+  padding: 2px 0;
+  box-sizing: border-box;
+  min-height: 20px;
 }
 
 .unknown-item {
@@ -75,4 +86,3 @@ import { computed } from 'vue'
   text-align: center;
 }
 </style>
-

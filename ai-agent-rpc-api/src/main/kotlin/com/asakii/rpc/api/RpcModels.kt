@@ -86,10 +86,17 @@ enum class RpcSandboxMode {
 }
 
 /**
- * Connect 请求参数
+ * Connect 请求参数（统一扁平结构）
+ *
+ * 所有配置项都在顶层，根据 provider 能力决定哪些配置生效：
+ * - Claude: permissionMode, dangerouslySkipPermissions, allowDangerouslySkipPermissions,
+ *           includePartialMessages, continueConversation, thinkingEnabled
+ * - Codex: baseUrl, apiKey, sandboxMode
+ * - 通用: provider, model, systemPrompt, initialPrompt, sessionId, resumeSessionId, metadata
  */
 @Serializable
 data class RpcConnectOptions(
+    // === 通用配置 ===
     val provider: RpcProvider? = null,
     val model: String? = null,
     val systemPrompt: String? = null,
@@ -97,32 +104,34 @@ data class RpcConnectOptions(
     val sessionId: String? = null,
     val resumeSessionId: String? = null,
     val metadata: Map<String, String> = emptyMap(),
-    val claude: RpcClaudeOptions? = null,
-    val codex: RpcCodexOptions? = null
-)
 
-/**
- * Claude 专属配置
- */
-@Serializable
-data class RpcClaudeOptions(
+    // === Claude 相关配置（根据 provider 能力生效）===
     val permissionMode: RpcPermissionMode? = null,
     val dangerouslySkipPermissions: Boolean? = null,
     val allowDangerouslySkipPermissions: Boolean? = null,
     val includePartialMessages: Boolean? = null,
     val continueConversation: Boolean? = null,
-    val resume: String? = null,
-    val thinkingEnabled: Boolean? = null
-)
+    val thinkingEnabled: Boolean? = null,
 
-/**
- * Codex 专属配置
- */
-@Serializable
-data class RpcCodexOptions(
+    // === Codex 相关配置（根据 provider 能力生效）===
     val baseUrl: String? = null,
     val apiKey: String? = null,
     val sandboxMode: RpcSandboxMode? = null
+)
+
+/**
+ * Agent 能力声明 - 描述当前 provider 支持的功能
+ */
+@Serializable
+data class RpcCapabilities(
+    val canInterrupt: Boolean,
+    val canSwitchModel: Boolean,
+    val canSwitchPermissionMode: Boolean,
+    val supportedPermissionModes: List<RpcPermissionMode>,
+    val canSkipPermissions: Boolean,
+    val canSendRichContent: Boolean,
+    val canThink: Boolean,
+    val canResumeSession: Boolean
 )
 
 /**
@@ -133,7 +142,17 @@ data class RpcConnectResult(
     val sessionId: String,
     val provider: RpcProvider,
     val status: RpcSessionStatus = RpcSessionStatus.CONNECTED,
-    val model: String? = null
+    val model: String? = null,
+    val capabilities: RpcCapabilities? = null
+)
+
+/**
+ * 切换权限模式结果
+ */
+@Serializable
+data class RpcSetPermissionModeResult(
+    val mode: RpcPermissionMode,
+    val success: Boolean = true
 )
 
 /**
@@ -195,7 +214,8 @@ data class RpcThinkingDelta(
 @SerialName("tool_start")
 data class RpcToolStart(
     val toolId: String,
-    val toolName: String,
+    val toolName: String,        // 显示名称: "Read", "Write", "mcp__xxx"
+    val toolType: String,        // 类型标识: "CLAUDE_READ", "CLAUDE_WRITE", "MCP"
     val inputPreview: String? = null,
     override val provider: RpcProvider?
 ) : RpcUiEvent
@@ -225,6 +245,26 @@ data class RpcMessageComplete(
 ) : RpcUiEvent
 
 @Serializable
+@SerialName("result")
+data class RpcResultMessage(
+    @SerialName("duration_ms")
+    val durationMs: Long? = null,
+    @SerialName("duration_api_ms")
+    val durationApiMs: Long? = null,
+    @SerialName("is_error")
+    val isError: Boolean = false,
+    @SerialName("num_turns")
+    val numTurns: Int = 0,
+    @SerialName("session_id")
+    val sessionId: String? = null,
+    @SerialName("total_cost_usd")
+    val totalCostUsd: Double? = null,
+    val usage: JsonElement? = null,
+    val result: String? = null,
+    override val provider: RpcProvider?
+) : RpcUiEvent
+
+@Serializable
 @SerialName("error")
 data class RpcError(
     val message: String,
@@ -238,6 +278,13 @@ data class RpcError(
 @Serializable
 @SerialName("assistant")
 data class RpcAssistantMessage(
+    val content: List<RpcContentBlock>,
+    override val provider: RpcProvider?
+) : RpcUiEvent
+
+@Serializable
+@SerialName("user")
+data class RpcUserMessage(
     val content: List<RpcContentBlock>,
     override val provider: RpcProvider?
 ) : RpcUiEvent
@@ -277,7 +324,8 @@ data class RpcThinkingBlock(
 @SerialName("tool_use")
 data class RpcToolUseBlock(
     val id: String,
-    val name: String,
+    val toolName: String,        // 显示名称: "Read", "Write", "mcp__xxx"（原 name 字段）
+    val toolType: String,        // 类型标识: "CLAUDE_READ", "CLAUDE_WRITE", "MCP"
     val input: JsonElement? = null,
     val status: RpcContentStatus = RpcContentStatus.IN_PROGRESS
 ) : RpcContentBlock

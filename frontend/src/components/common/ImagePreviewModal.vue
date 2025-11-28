@@ -1,30 +1,34 @@
 <template>
-  <div
-    v-if="visible && imageSrc"
-    class="image-preview-overlay"
-    @click.self="handleClose"
-  >
-    <div class="image-preview-modal">
-      <button
-        class="close-button"
-        type="button"
-        title="关闭"
-        @click="handleClose"
-      >
-        ✕
-      </button>
-      <div class="image-wrapper">
-        <img
-          :src="imageSrc"
-          :alt="imageAlt || '预览图片'"
-          class="preview-image"
-        />
+  <Teleport to="body">
+    <div
+      v-if="visible && imageSrc"
+      class="image-preview-overlay"
+      @click.self="handleClose"
+    >
+      <div class="image-preview-modal">
+        <button
+          class="close-button"
+          type="button"
+          title="关闭"
+          @click="handleClose"
+        >
+          ✕
+        </button>
+        <div class="image-wrapper">
+          <img
+            :src="imageSrc"
+            :alt="imageAlt || '预览图片'"
+            class="preview-image"
+          />
+        </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
+import { watch, onUnmounted } from 'vue'
+
 interface Props {
   visible: boolean
   imageSrc: string
@@ -41,17 +45,37 @@ const emit = defineEmits<Emits>()
 function handleClose() {
   emit('close')
 }
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    handleClose()
+  }
+}
+
+// 监听 visible 变化，添加/移除键盘事件
+watch(() => props.visible, (visible) => {
+  if (visible) {
+    document.addEventListener('keydown', handleKeydown)
+  } else {
+    document.removeEventListener('keydown', handleKeydown)
+  }
+}, { immediate: true })
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
-<style scoped>
+<style>
+/* 使用非 scoped 样式，因为 Teleport 会将元素移到 body */
 .image-preview-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  z-index: 9999;
 }
 
 .image-preview-modal {
@@ -59,30 +83,31 @@ function handleClose() {
   max-width: 90vw;
   max-height: 90vh;
   background: #1e1e1e;
-  border-radius: 8px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
-  padding: 32px 24px 24px;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  overflow: visible;
 }
 
-.image-wrapper {
+.image-preview-modal .image-wrapper {
   max-width: 80vw;
-  max-height: 70vh;
+  max-height: 80vh;
 }
 
-.preview-image {
+.image-preview-modal .preview-image {
   display: block;
   max-width: 100%;
-  max-height: 100%;
+  max-height: 80vh;
   object-fit: contain;
   border-radius: 4px;
 }
 
-.close-button {
+.image-preview-modal .close-button {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 28px;
-  height: 28px;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   border: none;
   background: rgba(0, 0, 0, 0.5);
@@ -91,15 +116,21 @@ function handleClose() {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1;
   transition: background 0.2s ease;
+  z-index: 1;
 }
 
-.close-button:hover {
+.image-preview-modal .close-button:hover {
   background: rgba(0, 0, 0, 0.8);
 }
 </style>
+
+
+
+
+
 
 
 

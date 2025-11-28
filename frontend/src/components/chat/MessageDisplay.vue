@@ -40,11 +40,13 @@
 import { computed, ref } from 'vue'
 import type { Message } from '@/types/message'
 import type { EnhancedMessage } from '@/types/enhancedMessage'
+import { MessageRole, MessageStatus, ToolCallStatus } from '@/types/enhancedMessage'
 import UserMessageBubble from './UserMessageBubble.vue'
 import AssistantMessageDisplay from './AssistantMessageDisplay.vue'
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 import { buildToolViewModel } from '@/utils/ToolViewModelBuilder'
 import { useSessionStore } from '@/stores/sessionStore'
+import { resolveToolStatus, toToolCallStatus } from '@/utils/toolStatusResolver'
 
 interface Props {
   // VirtualList 会把当前项作为 source 传入
@@ -74,10 +76,8 @@ function handleExpandedChange(toolId: string, expanded: boolean) {
 // 将 Message 转换为 EnhancedMessage
 const enhancedMessage = computed((): EnhancedMessage => {
   const msg = message.value
-
-  // 🔧 访问 toolCallsMap 以建立响应式依赖
-  // 这样当 toolCallsMap 变化时,computed 会重新计算
-  const _ = sessionStore.toolCallsMap.value
+  // 获取当前会话的消息列表，用于 resolveToolStatus 查找 tool_result
+  const messages = sessionStore.currentMessages
 
   // 提取所有工具结果（用于查找）
   const toolResults = msg.content.filter(block => block.type === 'tool_result')
@@ -110,31 +110,26 @@ const enhancedMessage = computed((): EnhancedMessage => {
       // 1. 通用格式: type="tool_use"
       // 2. 具体工具格式: type="todo_write_tool_use", "write_tool_use" 等
       const result = toolResults.find((r: any) => r.tool_use_id === block.id)
-      console.log(`    🔧 添加工具调用: name=${block.name}, id=${block.id}, type=${block.type}, hasResult=${!!result}`)
+      console.log(`    🔧 添加工具调用: toolName=${block.toolName}, id=${block.id}, type=${block.type}, hasResult=${!!result}`)
 
       // 🎯 构建 ViewModel
       const viewModel = buildToolViewModel(block)
       console.log(`    ✅ 构建 viewModel: toolType=${viewModel.toolDetail.toolType}, summary="${viewModel.compactSummary}"`)
 
-      // 🔧 从 store 获取实时状态（注册已在 streamEventProcessor 中完成）
-      const toolStatus = sessionStore.getToolStatus(block.id)
-      const toolResult = sessionStore.getToolResult(block.id)
+      // 🔧 使用 resolveToolStatus 从消息列表实时计算工具状态
+      const statusInfo = resolveToolStatus(block.id, messages)
+      const toolResult = statusInfo.result?.content
 
-      // 将 store 状态转换为 EnhancedMessage 期望的格式
-      let status: 'RUNNING' | 'SUCCESS' | 'FAILED' = 'RUNNING'
-      if (toolStatus === 'success') {
-        status = 'SUCCESS'
-      } else if (toolStatus === 'failed') {
-        status = 'FAILED'
-      }
+      // 将状态转换为 EnhancedMessage 期望的格式
+      const status = toToolCallStatus(statusInfo.status)
 
       orderedElements.push({
         type: 'toolCall',
         toolCall: {
           id: block.id,
-          name: block.name,
+          toolName: block.toolName,
           viewModel: viewModel, // ✅ 使用构建的 ViewModel
-          displayName: block.name,
+          displayName: block.toolName,
           status: status, // ✅ 使用 store 中的实时状态
           result: toolResult ? {
             type: status === 'FAILED' ? 'failure' : 'success', // ✅ 添加 type 字段以符合 ToolResult 类型定义
@@ -148,10 +143,12 @@ const enhancedMessage = computed((): EnhancedMessage => {
       })
     } else if (block.type === 'thinking') {
       // 思考链块：添加到 orderedElements
-      console.log(`    💭 添加思考链块，长度=${block.thinking?.length || 0}`)
+      const thinkingContent = (block as any).thinking || ''
+      console.log(`    💭 添加思考链块，长度=${thinkingContent.length}`)
+      console.log(`    💭 思考内容预览: "${thinkingContent.substring(0, 100)}${thinkingContent.length > 100 ? '...' : ''}"`)
       orderedElements.push({
         type: 'thinking',
-        content: block.thinking,
+        content: thinkingContent,
         timestamp: msg.timestamp
       })
     } else if (block.type === 'tool_result') {
@@ -165,15 +162,24 @@ const enhancedMessage = computed((): EnhancedMessage => {
 
   console.log(`📊 [MessageDisplay] 构造完成，orderedElements 共 ${orderedElements.length} 个元素`)
 
+  const roleMap: Record<string, MessageRole> = {
+    user: MessageRole.USER,
+    assistant: MessageRole.ASSISTANT,
+    system: MessageRole.SYSTEM
+  }
+
   return {
     id: msg.id,
-    role: msg.role as any,
-    content: allTextContent,
+    role: roleMap[msg.role] || MessageRole.ASSISTANT,
     timestamp: msg.timestamp,
-    model: null, // 暂时为 null
+    contexts: [],
+    model: undefined,
+    status: msg.isStreaming ? MessageStatus.STREAMING : MessageStatus.COMPLETE,
+    isStreaming: msg.isStreaming || false,
+    isError: false,
     orderedElements: orderedElements,
-    isStreaming: msg.isStreaming || false
-  }
+    isCompactSummary: false
+  } as EnhancedMessage
 })
 
 const roleIcon = computed(() => {
@@ -204,7 +210,12 @@ const formattedTime = computed(() => {
 
 const textContent = computed(() => {
   const textBlocks = message.value.content.filter(block => block.type === 'text')
-  return textBlocks.map(block => (block as any).text).join('\n\n')
+  return textBlocks.map(block => {
+    if (block.type === 'text' && 'text' in block) {
+      return block.text
+    }
+    return ''
+  }).join('\n\n')
 })
 </script>
 

@@ -31,13 +31,15 @@ data class ThinkingBlock(
 
 /**
  * Tool use content block.
+ *
+ * 注意：在 content_block_start 事件中，input 可能是空对象或不存在
  */
 @Serializable
 @SerialName("tool_use")
 data class ToolUseBlock(
     val id: String,
     val name: String,
-    val input: JsonElement
+    val input: JsonElement = kotlinx.serialization.json.JsonObject(emptyMap())  // 默认为空对象，因为 stream 开始时 input 可能为空
 ) : ContentBlock
 
 /**

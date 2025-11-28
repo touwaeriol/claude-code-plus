@@ -9,11 +9,17 @@ import {
   ContentBlock
 } from './AiAgentSession'
 import type { AgentStreamEvent } from './AiAgentSession'
+import type { RpcStreamEvent, RpcCapabilities, RpcPermissionMode, RpcSetPermissionModeResult } from '@/types/rpc'
 
 export type ConnectOptions = SessionConnectOptions
 
-// 这里的 message 是 WebSocket RPC 的原始消息, 在 sessionStore 中再做归一化
-export type MessageHandler = (message: any) => void
+export type MessageHandler = (message: RpcStreamEvent | Record<string, unknown>) => void
+
+/** connect 返回结果 */
+export interface ConnectResult {
+  sessionId: string
+  capabilities: RpcCapabilities | null
+}
 
 export class AiAgentService {
   // 会话管理 - sessionId -> AiAgentSession
@@ -24,12 +30,12 @@ export class AiAgentService {
    *
    * @param options 连接选项
    * @param onMessage 消息处理回调
-   * @returns 会话ID
+   * @returns 连接结果（sessionId + capabilities）
    */
   async connect(
     options: ConnectOptions = {},
     onMessage: MessageHandler
-  ): Promise<string> {
+  ): Promise<ConnectResult> {
     const session = new AiAgentSession()
 
     // 订阅消息
@@ -41,8 +47,11 @@ export class AiAgentService {
     // 保存会话实例
     this.sessions.set(sessionId, session)
 
-    console.log(`🔌 会话已连接: ${sessionId}`)
-    return sessionId
+    console.log(`🔌 会话已连接: ${sessionId}`, session.capabilities)
+    return {
+      sessionId,
+      capabilities: session.capabilities
+    }
   }
 
   /**
@@ -171,6 +180,35 @@ export class AiAgentService {
     }
 
     return await session.getHistory()
+  }
+
+  /**
+   * 设置权限模式
+   *
+   * @param sessionId 会话ID
+   * @param mode 权限模式
+   */
+  async setPermissionMode(sessionId: string, mode: RpcPermissionMode): Promise<RpcSetPermissionModeResult> {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      throw new Error(`会话不存在: ${sessionId}`)
+    }
+
+    console.log(`🔧 设置权限模式: ${sessionId} -> ${mode}`)
+    return await session.setPermissionMode(mode)
+  }
+
+  /**
+   * 获取会话能力信息
+   *
+   * @param sessionId 会话ID
+   */
+  getCapabilities(sessionId: string): RpcCapabilities | null {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      return null
+    }
+    return session.capabilities
   }
 }
 

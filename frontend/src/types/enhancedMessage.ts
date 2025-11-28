@@ -44,65 +44,18 @@ export enum AiModel {
   OPUS_PLAN = 'OPUS_PLAN'
 }
 
-/**
- * 权限模式
- */
-export enum PermissionMode {
-  DEFAULT = 'DEFAULT',
-  ACCEPT = 'ACCEPT',
-  BYPASS = 'BYPASS',
-  PLAN = 'PLAN'
-}
+import type { ContextReference } from './display'
+// PermissionMode 统一使用 RpcPermissionMode，从 rpc.ts 导入
+export type { RpcPermissionMode as PermissionMode } from './rpc'
+export type { ContextDisplayType } from './display'
 
 /**
- * 上下文显示类型
+ * 图片引用（扩展 ContextReference）
  */
-export enum ContextDisplayType {
-  TAG = 'TAG',
-  INLINE = 'INLINE'
-}
-
-/**
- * 上下文引用基类
- */
-export interface ContextReference {
-  displayType: ContextDisplayType
-  uri: string
-}
-
-/**
- * 文件引用
- */
-export interface FileReference extends ContextReference {
-  type: 'file'
-  path: string
-  fullPath: string
-}
-
-/**
- * Web 引用
- */
-export interface WebReference extends ContextReference {
-  type: 'web'
-  url: string
-  title?: string
-}
-
-/**
- * 文件夹引用
- */
-export interface FolderReference extends ContextReference {
-  type: 'folder'
-  path: string
-  fileCount?: number
-  totalSize?: number
-}
-
-/**
- * 图片引用
- */
-export interface ImageReference extends ContextReference {
+export interface ImageReference {
   type: 'image'
+  uri: string
+  displayType: 'TAG' | 'INLINE'
   name: string
   mimeType: string
   base64Data: string
@@ -136,11 +89,14 @@ export interface ToolCall {
 
 /**
  * 消息时间线元素
+ *
+ * 注：displayType 用于统一与 DisplayItem 的命名规范
  */
 export type MessageTimelineItem =
-  | { type: 'toolCall'; toolCall: ToolCall; timestamp: number }
-  | { type: 'content'; content: string; timestamp: number }
-  | { type: 'status'; status: string; isStreaming: boolean; timestamp: number }
+  | { displayType: 'toolCall'; toolCall: ToolCall; timestamp: number }
+  | { displayType: 'content'; content: string; timestamp: number }
+  | { displayType: 'thinking'; content: string; signature?: string; timestamp: number }
+  | { displayType: 'status'; status: string; isStreaming: boolean; timestamp: number }
 
 /**
  * Token 使用信息
@@ -175,7 +131,7 @@ export interface EnhancedMessage {
  */
 export function getMessageContent(message: EnhancedMessage): string {
   return message.orderedElements
-    .filter(item => item.type === 'content')
+    .filter(item => item.displayType === 'content')
     .map(item => (item as any).content)
     .join('')
 }
@@ -185,7 +141,7 @@ export function getMessageContent(message: EnhancedMessage): string {
  */
 export function getMessageToolCalls(message: EnhancedMessage): ToolCall[] {
   return message.orderedElements
-    .filter(item => item.type === 'toolCall')
+    .filter(item => item.displayType === 'toolCall')
     .map(item => (item as any).toolCall)
 }
 
@@ -193,7 +149,7 @@ export function getMessageToolCalls(message: EnhancedMessage): ToolCall[] {
  * 辅助函数：检查消息是否包含工具调用
  */
 export function hasToolCalls(message: EnhancedMessage): boolean {
-  return message.orderedElements.some(item => item.type === 'toolCall')
+  return message.orderedElements.some(item => item.displayType === 'toolCall')
 }
 
 /**

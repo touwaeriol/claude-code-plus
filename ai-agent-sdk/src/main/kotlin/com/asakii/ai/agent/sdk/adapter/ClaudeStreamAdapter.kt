@@ -4,6 +4,7 @@ import com.asakii.ai.agent.sdk.AiAgentProvider
 import com.asakii.ai.agent.sdk.model.*
 import com.asakii.claude.agent.sdk.types.*
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -27,33 +28,72 @@ class ClaudeStreamAdapter(
         is StreamEvent -> handleStreamEvent(message)
         is AssistantMessage -> handleAssistantMessage(message)
         is ResultMessage -> handleResultMessage(message)
+        is UserMessage -> handleUserMessage(message)
         else -> emptyList()
     }
 
     private fun handleAssistantMessage(message: AssistantMessage): List<NormalizedStreamEvent> {
-        // AssistantMessage 是 Claude Code CLI 在流式事件结束后发送的完整消息
-        // 由于内容已经通过 ContentBlockStopEvent 完成了，这里不再生成重复事件
-        // 仅在调试时记录
-        return emptyList()
+        val contentBlocks = message.content.map { convertContentBlock(it) }
+        val usage = message.tokenUsage?.let {
+            UnifiedUsage(
+                inputTokens = it.inputTokens,
+                outputTokens = it.outputTokens,
+                cachedInputTokens = it.cacheReadInputTokens ?: it.cacheCreationInputTokens,
+                provider = AiAgentProvider.CLAUDE,
+                raw = json.encodeToJsonElement(TokenUsage.serializer(), it)
+            )
+        }
+        return listOf(
+            AssistantMessageEvent(
+                provider = AiAgentProvider.CLAUDE,
+                content = contentBlocks,
+                model = message.model,
+                tokenUsage = usage
+            )
+        )
     }
 
     private fun handleResultMessage(message: ResultMessage): List<NormalizedStreamEvent> {
-        val usage = message.usage?.let { toUnifiedUsage(it) }
+        // ResultMessage 是整个查询的最终汇总消息
+        // 不需要再发送 TurnCompletedEvent，因为 MessageDeltaEvent 已经发送了
+        // 只有在错误情况下才需要发送 TurnFailedEvent
+        val summary = ResultSummaryEvent(
+            provider = AiAgentProvider.CLAUDE,
+            durationMs = message.durationMs,
+            durationApiMs = message.durationApiMs,
+            isError = message.isError,
+            numTurns = message.numTurns,
+            sessionId = message.sessionId,
+            totalCostUsd = message.totalCostUsd,
+            usage = message.usage,
+            result = message.result
+        )
+
         return if (message.isError) {
-            listOf(
-                TurnFailedEvent(
-                    provider = AiAgentProvider.CLAUDE,
-                    error = message.result ?: "Claude CLI 返回错误"
-                )
+            // 错误情况下，发送 TurnFailedEvent
+            val failedEvent = TurnFailedEvent(
+                provider = AiAgentProvider.CLAUDE,
+                error = message.result ?: "Claude CLI 返回错误"
             )
+            listOf(summary, failedEvent)
         } else {
-            listOf(
-                TurnCompletedEvent(
-                    provider = AiAgentProvider.CLAUDE,
-                    usage = usage
-                )
-            )
+            // 正常情况下，只发送 ResultSummaryEvent
+            // TurnCompletedEvent 已经在 MessageDeltaEvent 时发送了
+            listOf(summary)
         }
+    }
+
+    private fun handleUserMessage(message: UserMessage): List<NormalizedStreamEvent> {
+        val contentBlocks = parseUserContent(message.content)
+        if (contentBlocks.isEmpty()) {
+            return emptyList()
+        }
+        return listOf(
+            UserMessageEvent(
+                provider = AiAgentProvider.CLAUDE,
+                content = contentBlocks
+            )
+        )
     }
 
     private fun handleStreamEvent(message: StreamEvent): List<NormalizedStreamEvent> {
@@ -78,7 +118,8 @@ class ClaudeStreamAdapter(
                         events += ContentStartedEvent(
                             provider = AiAgentProvider.CLAUDE,
                             id = state.id,
-                            contentType = state.block?.let { it::class.simpleName?.lowercase() } ?: "unknown"
+                            contentType = state.block?.let { it::class.simpleName?.lowercase() } ?: "unknown",
+                            toolName = (state.block as? ToolUseBlock)?.name
                         )
                         buildInitialDelta(state)?.let { delta ->
                             events += ContentDeltaEvent(
@@ -103,10 +144,18 @@ class ClaudeStreamAdapter(
                     // 已有初始块（可能来自 message_start），不重复创建
                     return events
                 }
-                val blockId = "${message.sessionId}-${parsed.index}-${idGenerator()}"
-                val block = runCatching {
-                    json.decodeFromJsonElement(ContentBlock.serializer(), parsed.contentBlock)
-                }.getOrNull()
+
+                // contentBlock 现在是强类型 ContentBlock，直接使用
+                val block = parsed.contentBlock
+
+                // 对于 ToolUseBlock，使用 Claude 原始 ID (toolu_xxx)
+                // 对于其他块，生成自定义 ID
+                val blockId = when (block) {
+                    is ToolUseBlock -> block.id  // 使用 Claude 原始 ID
+                    else -> "${message.sessionId}-${parsed.index}-${idGenerator()}"
+                }
+                val toolName = (block as? ToolUseBlock)?.name
+
                 blockBuffer[parsed.index] = ContentBlockState(
                     id = blockId,
                     block = block
@@ -114,7 +163,8 @@ class ClaudeStreamAdapter(
                 events += ContentStartedEvent(
                     provider = AiAgentProvider.CLAUDE,
                     id = blockId,
-                    contentType = block?.let { it::class.simpleName?.lowercase() } ?: "unknown"
+                    contentType = block::class.simpleName?.lowercase() ?: "unknown",
+                    toolName = toolName
                 )
             }
 
@@ -200,6 +250,21 @@ class ClaudeStreamAdapter(
         }
     }
 
+    private fun parseUserContent(element: JsonElement): List<UnifiedContentBlock> {
+        return when (element) {
+            is JsonArray -> element.mapNotNull { item ->
+                runCatching {
+                    val block = json.decodeFromJsonElement(ContentBlock.serializer(), item)
+                    convertContentBlock(block)
+                }.getOrNull()
+            }
+            else -> {
+                val text = element.jsonPrimitive.contentOrNull ?: return emptyList()
+                listOf(TextContent(text))
+            }
+        }
+    }
+
     private fun extractMessageId(element: JsonElement): String? {
         val messageObj = element.jsonObject
         return messageObj["id"]?.jsonPrimitive?.contentOrNull
@@ -253,21 +318,41 @@ class ClaudeStreamAdapter(
     }
 
     private fun parseInitialBlocks(messageElement: JsonElement): List<ContentBlockState> {
-        val contentArray = messageElement.jsonObject["content"]?.jsonArray ?: return emptyList()
         val messageId = extractMessageId(messageElement) ?: "msg"
-        return contentArray.mapIndexedNotNull { index, element ->
-            val block = runCatching { json.decodeFromJsonElement(ContentBlock.serializer(), element) }.getOrNull()
-            val buffer = StringBuilder()
-            when (block) {
-                is TextBlock -> buffer.append(block.text)
-                is ThinkingBlock -> buffer.append(block.thinking)
-                else -> {}
+        val contentElement = messageElement.jsonObject["content"] ?: return emptyList()
+
+        // content 可能是数组或字符串
+        return when (contentElement) {
+            is JsonArray -> contentElement.mapIndexedNotNull { index, element ->
+                val block = runCatching { json.decodeFromJsonElement(ContentBlock.serializer(), element) }.getOrNull()
+                val buffer = StringBuilder()
+                when (block) {
+                    is TextBlock -> buffer.append(block.text)
+                    is ThinkingBlock -> buffer.append(block.thinking)
+                    else -> {}
+                }
+                // 对于 ToolUseBlock，使用 Claude 原始 ID
+                val blockId = when (block) {
+                    is ToolUseBlock -> block.id
+                    else -> "$messageId-$index-${idGenerator()}"
+                }
+                ContentBlockState(
+                    id = blockId,
+                    block = block,
+                    buffer = buffer
+                )
             }
-            ContentBlockState(
-                id = "$messageId-$index-${idGenerator()}",
-                block = block,
-                buffer = buffer
-            )
+            else -> {
+                // content 是字符串，转换为单个 TextBlock
+                val text = contentElement.jsonPrimitive.contentOrNull ?: return emptyList()
+                listOf(
+                    ContentBlockState(
+                        id = "$messageId-0-${idGenerator()}",
+                        block = TextBlock(text),
+                        buffer = StringBuilder(text)
+                    )
+                )
+            }
         }
     }
 

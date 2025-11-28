@@ -1,62 +1,119 @@
 /**
- * 消息类型定义
+ * 统一消息类型定义（兼容旧字段名 role，同时对齐 ai-agent-sdk 数据）
  */
 
-/**
- * Token 使用统计
- */
-export interface MessageTokenUsage {
-  input_tokens: number
-  output_tokens: number
-  cache_creation_input_tokens?: number
-  cache_read_input_tokens?: number
+export type MessageRole = 'user' | 'assistant' | 'system' | 'result'
+
+export interface MessageMetadata {
+  model?: string
+  usage?: UnifiedUsage
+  sessionId?: string
+  threadId?: string
+  provider?: 'claude' | 'codex'
+  raw?: unknown
 }
 
-export interface Message {
+export interface UnifiedMessage {
   id: string
-  role: 'user' | 'assistant' | 'system'
-  content: ContentBlock[]
+  role: MessageRole
   timestamp: number
-  tokenUsage?: MessageTokenUsage  // Token 使用统计
-  /**
-   * 是否为流式占位消息（用于前端 UI 展示加载状态）
-   */
+  content: ContentBlock[]
+  metadata?: MessageMetadata
   isStreaming?: boolean
+  tokenUsage?: UnifiedUsage
 }
 
-export type ContentBlock = TextBlock | ImageBlock | ToolUseBlock | ToolResultBlock | ThinkingBlock
+export interface UnifiedUsage {
+  inputTokens?: number
+  outputTokens?: number
+  cachedInputTokens?: number
+  provider?: 'claude' | 'codex'
+  raw?: unknown
+}
 
-export interface ThinkingBlock {
+export type ContentStatus = 'in_progress' | 'completed' | 'failed'
+
+// === 统一内容块定义 ===
+export interface TextContent {
+  type: 'text'
+  text: string
+}
+
+export interface ThinkingContent {
   type: 'thinking'
   thinking: string
   signature?: string
 }
 
-export interface TextBlock {
-  type: 'text'
-  text: string
-}
-
-export interface ImageBlock {
-  type: 'image'
-  source: {
-    type: 'base64' | 'url'
-    media_type: string  // e.g., 'image/png', 'image/jpeg'
-    data?: string       // base64 encoded image data
-    url?: string        // image URL
-  }
-}
-
-export interface ToolUseBlock {
-  type: 'tool_use' | string  // 支持 'tool_use' 和具体工具类型 (如 'edit_tool_use')
+// 统一工具块（带 toolUseId 字段，兼容旧 tool_use_id 名称）
+export interface ToolUseContent {
+  type: 'tool_use'
   id: string
-  name: string
-  input: Record<string, any>
+  /** 工具名称（如 "Read", "Write", "mcp__xxx"） */
+  toolName: string
+  input?: unknown
+  status?: ContentStatus
 }
 
-export interface ToolResultBlock {
+export interface ToolResultContent {
   type: 'tool_result'
   tool_use_id: string
-  content: string | any[]
+  content?: unknown
   is_error?: boolean
 }
+
+export interface CommandExecutionContent {
+  type: 'command_execution'
+  command: string
+  output?: string
+  exitCode?: number
+  status: ContentStatus
+}
+
+export interface FileChangeContent {
+  type: 'file_change'
+  changes: unknown[]
+  status: ContentStatus
+}
+
+export interface McpToolCallContent {
+  type: 'mcp_tool_call'
+  server?: string
+  tool?: string
+  arguments?: unknown
+  result?: unknown
+  status: ContentStatus
+}
+
+export interface WebSearchContent {
+  type: 'web_search'
+  query: string
+}
+
+export interface TodoListContent {
+  type: 'todo_list'
+  items: Array<{ text: string; completed: boolean }>
+}
+
+export interface ErrorContent {
+  type: 'error'
+  message: string
+}
+
+// === 联合类型 ===
+export type ContentBlock =
+  | TextContent
+  | ThinkingContent
+  | ToolUseContent
+  | ToolResultContent
+  | CommandExecutionContent
+  | FileChangeContent
+  | McpToolCallContent
+  | WebSearchContent
+  | TodoListContent
+  | ErrorContent
+
+// === 兼容旧名称 ===
+export type ToolUseBlock = ToolUseContent
+export type ToolResultBlock = ToolResultContent
+export type Message = UnifiedMessage

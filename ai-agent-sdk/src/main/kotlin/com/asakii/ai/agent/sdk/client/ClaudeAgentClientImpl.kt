@@ -2,6 +2,10 @@ package com.asakii.ai.agent.sdk.client
 
 import com.asakii.ai.agent.sdk.AiAgentProvider
 import com.asakii.ai.agent.sdk.AiAgentStreamBridge
+import com.asakii.ai.agent.sdk.capabilities.AgentCapabilities
+import com.asakii.ai.agent.sdk.capabilities.ClaudeCapabilities
+import com.asakii.ai.agent.sdk.capabilities.AiPermissionMode
+import com.asakii.claude.agent.sdk.types.PermissionMode as ClaudePermissionMode
 import com.asakii.ai.agent.sdk.connect.AiAgentConnectContext
 import com.asakii.ai.agent.sdk.connect.AiAgentConnectOptions
 import com.asakii.ai.agent.sdk.connect.normalize
@@ -40,6 +44,7 @@ class ClaudeAgentClientImpl(
 
     private var client: ClaudeCodeSdkClient? = null
     private var context: AiAgentConnectContext? = null
+    private var currentPermissionMode: AiPermissionMode = AiPermissionMode.DEFAULT
 
     override suspend fun connect(options: AiAgentConnectOptions) {
         val normalized = options.normalize()
@@ -79,14 +84,62 @@ class ClaudeAgentClientImpl(
                 }
                 logger.info("✅ [ClaudeAgentClientImpl] 消息已发送，开始接收响应...")
 
+                logger.info("🔄 [ClaudeAgentClientImpl] 开始收集 receiveResponse() 流")
                 val flow = streamBridge.fromClaude(activeClient.receiveResponse())
                 var eventCount = 0
+                var lastEventType: String? = null
                 flow.collect { event ->
                     eventCount++
-                    logger.info("📨 [ClaudeAgentClientImpl] 收到事件 #$eventCount: ${event::class.simpleName}")
-                    eventFlow.emit(event)
+                    val eventType = event::class.simpleName
+                    lastEventType = eventType
+                    logger.info("📨 [ClaudeAgentClientImpl] 收到事件 #$eventCount: $eventType")
+                    
+                    // 记录关键事件的详情
+                    when (event) {
+                        is com.asakii.ai.agent.sdk.model.UiMessageComplete -> {
+                            logger.info("✅ [ClaudeAgentClientImpl] UiMessageComplete: usage=${event.usage}")
+                        }
+                        is com.asakii.ai.agent.sdk.model.UiError -> {
+                            logger.severe("❌ [ClaudeAgentClientImpl] UiError: ${event.message}")
+                        }
+                        is com.asakii.ai.agent.sdk.model.UiToolComplete -> {
+                            logger.info("🔧 [ClaudeAgentClientImpl] UiToolComplete: toolId=${event.toolId}, resultType=${event.result::class.simpleName}")
+                        }
+                        is com.asakii.ai.agent.sdk.model.UiToolStart -> {
+                            logger.info("🚀 [ClaudeAgentClientImpl] UiToolStart: toolId=${event.toolId}, toolName=${event.toolName}")
+                        }
+                        is com.asakii.ai.agent.sdk.model.UiToolProgress -> {
+                            logger.info("⏳ [ClaudeAgentClientImpl] UiToolProgress: toolId=${event.toolId}, status=${event.status}")
+                        }
+                        is com.asakii.ai.agent.sdk.model.UiMessageStart -> {
+                            logger.info("📝 [ClaudeAgentClientImpl] UiMessageStart: messageId=${event.messageId}")
+                        }
+                        is com.asakii.ai.agent.sdk.model.UiTextDelta -> {
+                            logger.info("📝 [ClaudeAgentClientImpl] UiTextDelta: textLength=${event.text.length}")
+                        }
+                        is com.asakii.ai.agent.sdk.model.UiThinkingDelta -> {
+                            logger.info("💭 [ClaudeAgentClientImpl] UiThinkingDelta: thinkingLength=${event.thinking.length}")
+                        }
+                        is com.asakii.ai.agent.sdk.model.UiAssistantMessage -> {
+                            logger.info("🤖 [ClaudeAgentClientImpl] UiAssistantMessage: contentBlocks=${event.content.size}")
+                        }
+                        is com.asakii.ai.agent.sdk.model.UiResultMessage -> {
+                            logger.info("📊 [ClaudeAgentClientImpl] UiResultMessage: duration=${event.durationMs}ms, turns=${event.numTurns}, resultPreview=${event.result?.take(80)}")
+                        }
+                        is com.asakii.ai.agent.sdk.model.UiUserMessage -> {
+                            logger.info("👤 [ClaudeAgentClientImpl] UiUserMessage: contentBlocks=${event.content.size}")
+                        }
+                    }
+                    
+                    try {
+                        eventFlow.emit(event)
+                        logger.info("✅ [ClaudeAgentClientImpl] 事件 #$eventCount ($eventType) 已发送到 eventFlow")
+                    } catch (e: Exception) {
+                        logger.severe("❌ [ClaudeAgentClientImpl] 发送事件到 eventFlow 失败: ${e.message}")
+                        e.printStackTrace()
+                    }
                 }
-                logger.info("✅ [ClaudeAgentClientImpl] 响应接收完成，共 $eventCount 个事件")
+                logger.info("✅ [ClaudeAgentClientImpl] 响应接收完成，共 $eventCount 个事件，最后事件类型: $lastEventType")
             } catch (t: Throwable) {
                 logger.severe("❌ [ClaudeAgentClientImpl] 发送消息失败: ${t.message}")
                 t.printStackTrace()
@@ -116,6 +169,47 @@ class ClaudeAgentClientImpl(
     override suspend fun disconnect() {
         client?.disconnect()
         context = null
+    }
+
+    // ==================== 能力相关方法 ====================
+
+    override fun getCapabilities(): AgentCapabilities = ClaudeCapabilities
+
+    override suspend fun setModel(model: String): String? {
+        checkCapability(getCapabilities().canSwitchModel, "setModel")
+        return client?.setModel(model)
+    }
+
+    override suspend fun setPermissionMode(mode: AiPermissionMode) {
+        val caps = getCapabilities()
+        checkCapability(caps.canSwitchPermissionMode, "setPermissionMode")
+        require(mode in caps.supportedPermissionModes) {
+            "Mode $mode is not supported. Supported: ${caps.supportedPermissionModes}"
+        }
+        client?.setPermissionMode(mode.toClaudePermissionMode())
+        currentPermissionMode = mode
+        logger.info("✅ [ClaudeAgentClientImpl] 权限模式已切换为: $mode")
+    }
+
+    override fun getCurrentPermissionMode(): AiPermissionMode = currentPermissionMode
+
+    private fun checkCapability(supported: Boolean, method: String) {
+        if (!supported) {
+            throw UnsupportedOperationException(
+                "$method is not supported by ${provider.name}"
+            )
+        }
+    }
+
+    /**
+     * 将统一 AiPermissionMode 转换为 Claude SDK 的 PermissionMode 枚举
+     */
+    private fun AiPermissionMode.toClaudePermissionMode(): ClaudePermissionMode = when (this) {
+        AiPermissionMode.DEFAULT -> ClaudePermissionMode.DEFAULT
+        AiPermissionMode.ACCEPT_EDITS -> ClaudePermissionMode.ACCEPT_EDITS
+        AiPermissionMode.BYPASS_PERMISSIONS -> ClaudePermissionMode.BYPASS_PERMISSIONS
+        AiPermissionMode.PLAN -> ClaudePermissionMode.PLAN
+        AiPermissionMode.DONT_ASK -> ClaudePermissionMode.DONT_ASK
     }
 }
 

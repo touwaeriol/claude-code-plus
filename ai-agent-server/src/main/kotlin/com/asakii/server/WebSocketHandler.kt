@@ -8,12 +8,8 @@ import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Logger
 
 /**
@@ -43,101 +39,20 @@ class WebSocketHandler(
     fun Route.configureWebSocket() {
         webSocket("/ws") {
             logger.info("🔌 WebSocket 连接建立: ${call.request.local.remoteHost}")
-            
+
             // 为每个连接创建独立的 RPC 服务实例
             val rpcService: AiAgentRpcService = AiAgentRpcServiceImpl(ideTools)
-            
-            // 请求队列：确保同一时间只处理一个请求
-            val requestQueue = Channel<String>(Channel.UNLIMITED)
-            val requestMutex = Mutex()
-            val isProcessing = AtomicBoolean(false)  // 使用原子变量，可以在锁外检查
-            
-            // 启动请求处理协程（串行处理）
-            val processor = launch {
-                for (requestText in requestQueue) {
-                    requestMutex.withLock {
-                        // 检查是否是生成请求（query/queryWithContent）
-                        val isGenerationRequest = try {
-                            val request = json.decodeFromString<RpcRequest>(requestText)
-                            request.method == "query" || request.method == "queryWithContent"
-                        } catch (e: Exception) {
-                            false
-                        }
-                        
-                        // 注意：对于生成请求，isProcessing 标志已经在接收消息时设置
-                        // 这里只需要处理请求，并在完成时清除标志
-                        try {
-                            handleRpcRequest(requestText, rpcService, requestMutex) {
-                                if (isGenerationRequest) {
-                                    isProcessing.set(false)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            logger.severe("❌ 处理 RPC 请求时出错: ${e.message}")
-                            e.printStackTrace()
-                            if (isGenerationRequest) {
-                                isProcessing.set(false)
-                            }
-                        }
-                    }
-                }
-            }
-            
+
             try {
-                // 接收客户端消息并检查是否可以处理
+                // 直接处理收到的消息，不做队列/同步检查
+                // 同步由前端处理，后端直接转发给 SDK
+                // 每个请求启动独立协程，避免 collect 阻塞消息接收
                 for (frame in incoming) {
                     if (frame is Frame.Text) {
                         val text = frame.readText()
-                        
-                        // 快速检查：如果是生成请求且正在处理，立即返回错误
-                        var shouldEnqueue = true
-                        try {
-                            val request = json.decodeFromString<RpcRequest>(text)
-                            val isGenerationRequest = request.method == "query" || request.method == "queryWithContent"
-                            
-                            if (isGenerationRequest) {
-                                // 使用 compareAndSet 原子性地尝试设置处理标志
-                                // 如果当前是 false，设置为 true 并返回 true（可以处理）
-                                // 如果当前是 true，返回 false（已有请求在处理）
-                                val canProcess = isProcessing.compareAndSet(false, true)
-                                
-                                if (!canProcess) {
-                                    logger.warning("⚠️ 拒绝请求：上一个生成请求还在处理中，id=${request.id}")
-                                    // 立即返回错误，不加入队列
-                                    try {
-                                        sendError(request.id, "上一个请求还在处理中，请等待完成后再发送新消息")
-                                    } catch (e: Exception) {
-                                        logger.severe("❌ 发送错误响应失败: ${e.message}")
-                                        e.printStackTrace()
-                                    }
-                                    shouldEnqueue = false
-                                } else {
-                                    // 成功设置标志，请求可以加入队列
-                                    logger.info("✅ 接受生成请求，id=${request.id}")
-                                }
-                            }
-                        } catch (e: Exception) {
-                            // 解析失败，继续加入队列，让处理器处理错误
-                            logger.warning("⚠️ 解析请求失败，加入队列让处理器处理: ${e.message}")
-                        }
-                        
-                        // 加入队列
-                        if (shouldEnqueue) {
-                            try {
-                                requestQueue.trySend(text).getOrThrow()
-                            } catch (e: Exception) {
-                                logger.severe("❌ 无法将请求加入队列: ${e.message}")
-                                e.printStackTrace()
-                                // 如果加入队列失败且是生成请求，需要清除标志
-                                try {
-                                    val request = json.decodeFromString<RpcRequest>(text)
-                                    if (request.method == "query" || request.method == "queryWithContent") {
-                                        isProcessing.set(false)
-                                    }
-                                } catch (e2: Exception) {
-                                    // 忽略解析错误
-                                }
-                            }
+                        // 启动独立协程处理请求
+                        launch {
+                            handleRpcRequest(text, rpcService)
                         }
                     }
                 }
@@ -145,10 +60,6 @@ class WebSocketHandler(
                 logger.warning("⚠️ WebSocket 错误: ${e.message}")
                 e.printStackTrace()
             } finally {
-                // 关闭队列
-                requestQueue.close()
-                processor.cancel()
-                
                 // 连接关闭时自动断开 Claude 会话
                 try {
                     rpcService.disconnect()
@@ -161,72 +72,54 @@ class WebSocketHandler(
     }
     
     /**
-     * 处理 RPC 请求
+     * 处理 RPC 请求 - 直接转发给 SDK，不做同步控制
      */
     private suspend fun DefaultWebSocketServerSession.handleRpcRequest(
         requestText: String,
-        rpcService: AiAgentRpcService,
-        requestMutex: Mutex,
-        onComplete: () -> Unit
+        rpcService: AiAgentRpcService
     ) {
         try {
             val request = json.decodeFromString<RpcRequest>(requestText)
             logger.info("📨 收到 RPC 请求: ${request.method}")
-            
+
             when (request.method) {
                 "connect" -> {
                     val options = request.params?.let { json.decodeFromJsonElement<RpcConnectOptions>(it) }
                     val result = rpcService.connect(options)
                     val payload = json.encodeToJsonElement(RpcConnectResult.serializer(), result)
                     sendResponse(request.id, payload)
-                    onComplete()
                 }
-                
+
                 "query" -> {
                     val params = request.params?.let { json.decodeFromJsonElement<QueryParams>(it) }
                         ?: throw IllegalArgumentException("Missing params")
 
-                    // 发送流式响应（在请求处理协程中直接处理，不启动新的协程）
+                    var messageCount = 0
+
                     try {
                         logger.info("🚀 [WebSocket] 开始处理 query: id=${request.id}, message=${params.message.take(50)}...")
                         rpcService.query(params.message)
                             .catch { e ->
-                                // CancellationException 应该被重新抛出，让协程取消机制处理
-                                if (e is kotlinx.coroutines.CancellationException) {
-                                    throw e
-                                }
+                                if (e is kotlinx.coroutines.CancellationException) throw e
                                 logger.severe("❌ [WebSocket] 查询错误: id=${request.id}, error=${e.message}")
                                 e.printStackTrace()
                                 sendError(request.id, e.message ?: "Query failed")
                             }
                             .collect { event ->
-                                try {
+                                messageCount++
                                 val payload = json.encodeToJsonElement(RpcUiEvent.serializer(), event)
                                 sendStreamData(request.id, payload)
-                                } catch (e: Exception) {
-                                    // CancellationException 应该被重新抛出
-                                    if (e is kotlinx.coroutines.CancellationException) {
-                                        throw e
-                                    }
-                                    logger.severe("❌ [WebSocket] 发送流式数据失败: id=${request.id}, error=${e.message}")
-                                    e.printStackTrace()
-                                    // 继续处理下一个事件，不中断整个流
-                                }
                             }
 
-                        // 流结束
-                        logger.info("✅ [WebSocket] query 流结束: id=${request.id}")
+                        logger.info("✅ [WebSocket] query 流正常结束: id=${request.id}, 共收到 $messageCount 条消息")
                         sendStreamComplete(request.id)
                     } catch (e: kotlinx.coroutines.CancellationException) {
-                        // 正常取消，不需要记录错误
-                        logger.info("ℹ️ [WebSocket] query 被取消: id=${request.id}")
-                        throw e  // 重新抛出，让协程取消机制处理
+                        logger.info("ℹ️ [WebSocket] query 被用户取消: id=${request.id}")
+                        throw e
                     } catch (e: Exception) {
                         logger.severe("❌ [WebSocket] query 处理异常: id=${request.id}, error=${e.message}")
                         e.printStackTrace()
                         sendError(request.id, e.message ?: "Query failed")
-                    } finally {
-                        onComplete()
                     }
                 }
 
@@ -234,12 +127,10 @@ class WebSocketHandler(
                     val params = request.params?.let { json.decodeFromJsonElement<QueryWithContentParams>(it) }
                         ?: throw IllegalArgumentException("Missing params")
 
-                    // 发送流式响应（在请求处理协程中直接处理，不启动新的协程）
-                        var messageCount = 0
-                        var hasResultMessage = false
+                    var messageCount = 0
 
                     try {
-                        val contentPreview = params.content.take(1).joinToString { 
+                        val contentPreview = params.content.take(1).joinToString {
                             when (it) {
                                 is com.asakii.rpc.api.RpcTextBlock -> "text:${it.text.take(30)}"
                                 is com.asakii.rpc.api.RpcImageBlock -> "image"
@@ -247,54 +138,28 @@ class WebSocketHandler(
                             }
                         }
                         logger.info("🚀 [WebSocket] 开始处理 queryWithContent: id=${request.id}, contentBlocks=${params.content.size}, preview=$contentPreview...")
-                        logger.info("⏳ [WebSocket] 如果上一个请求还在处理，此请求将等待...")
                         rpcService.queryWithContent(params.content)
                             .catch { e ->
-                                // CancellationException 应该被重新抛出，让协程取消机制处理
-                                if (e is kotlinx.coroutines.CancellationException) {
-                                    throw e
-                                }
+                                if (e is kotlinx.coroutines.CancellationException) throw e
                                 logger.severe("❌ [WebSocket] 带内容查询错误: id=${request.id}, error=${e.message}")
                                 e.printStackTrace()
                                 sendError(request.id, e.message ?: "Query failed")
                             }
                             .collect { event ->
-                                try {
-                                val payload = json.encodeToJsonElement(RpcUiEvent.serializer(), event)
                                 messageCount++
-                                val msgType = payload.jsonObject["type"]?.jsonPrimitive?.contentOrNull
-                                    logger.info("📨 [WebSocket] 收到消息 #$messageCount: id=${request.id}, type=$msgType")
-
-                                if (msgType == "result") {
-                                    hasResultMessage = true
-                                    logger.info("✅ [WebSocket] 收到 ResultMessage!")
-                                }
-
+                                val payload = json.encodeToJsonElement(RpcUiEvent.serializer(), event)
                                 sendStreamData(request.id, payload)
-                                } catch (e: Exception) {
-                                    // CancellationException 应该被重新抛出
-                                    if (e is kotlinx.coroutines.CancellationException) {
-                                        throw e
-                                    }
-                                    logger.severe("❌ [WebSocket] 发送流式数据失败: id=${request.id}, error=${e.message}")
-                                    e.printStackTrace()
-                                    // 继续处理下一个事件，不中断整个流
-                                }
                             }
 
-                        logger.info("📊 [WebSocket] 流结束: id=${request.id}, 共收到 $messageCount 条消息，hasResultMessage=$hasResultMessage")
-                        // 流结束
+                        logger.info("✅ [WebSocket] queryWithContent 流正常结束: id=${request.id}, 共收到 $messageCount 条消息")
                         sendStreamComplete(request.id)
                     } catch (e: kotlinx.coroutines.CancellationException) {
-                        // 正常取消，不需要记录错误
-                        logger.info("ℹ️ [WebSocket] queryWithContent 被取消: id=${request.id}")
-                        throw e  // 重新抛出，让协程取消机制处理
+                        logger.info("ℹ️ [WebSocket] queryWithContent 被用户取消: id=${request.id}")
+                        throw e
                     } catch (e: Exception) {
                         logger.severe("❌ [WebSocket] queryWithContent 处理异常: id=${request.id}, error=${e.message}")
                         e.printStackTrace()
                         sendError(request.id, e.message ?: "Query failed")
-                    } finally {
-                        onComplete()
                     }
                 }
 
@@ -302,35 +167,38 @@ class WebSocketHandler(
                     val result = rpcService.interrupt()
                     val payload = json.encodeToJsonElement(RpcStatusResult.serializer(), result)
                     sendResponse(request.id, payload)
-                    onComplete()
                 }
-                
+
                 "disconnect" -> {
                     val result = rpcService.disconnect()
                     val payload = json.encodeToJsonElement(RpcStatusResult.serializer(), result)
                     sendResponse(request.id, payload)
-                    onComplete()
                 }
-                
+
                 "setModel" -> {
                     val model = (request.params as? JsonPrimitive)?.content
                         ?: throw IllegalArgumentException("Missing model parameter")
                     val result = rpcService.setModel(model)
                     val payload = json.encodeToJsonElement(RpcSetModelResult.serializer(), result)
                     sendResponse(request.id, payload)
-                    onComplete()
                 }
-                
+
+                "setPermissionMode" -> {
+                    val params = request.params?.let { json.decodeFromJsonElement<SetPermissionModeParams>(it) }
+                        ?: throw IllegalArgumentException("Missing params")
+                    val result = rpcService.setPermissionMode(params.mode)
+                    val payload = json.encodeToJsonElement(RpcSetPermissionModeResult.serializer(), result)
+                    sendResponse(request.id, payload)
+                }
+
                 "getHistory" -> {
                     val result = rpcService.getHistory()
                     val payload = json.encodeToJsonElement(RpcHistory.serializer(), result)
                     sendResponse(request.id, payload)
-                    onComplete()
                 }
-                
+
                 else -> {
                     sendError(request.id, "Unknown method: ${request.method}")
-                    onComplete()
                 }
             }
         } catch (e: Exception) {
@@ -342,7 +210,6 @@ class WebSocketHandler(
             } catch (_: Exception) {
                 // 如果无法解析请求，忽略错误
             }
-            onComplete()
         }
     }
     
@@ -444,5 +311,10 @@ data class QueryParams(
 @kotlinx.serialization.Serializable
 data class QueryWithContentParams(
     val content: List<RpcContentBlock>
+)
+
+@kotlinx.serialization.Serializable
+data class SetPermissionModeParams(
+    val mode: RpcPermissionMode
 )
 

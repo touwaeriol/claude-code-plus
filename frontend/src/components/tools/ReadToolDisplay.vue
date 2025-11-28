@@ -7,15 +7,15 @@
   >
     <template #details>
       <div
-        v-if="result"
+        v-if="toolCall.result"
         class="tool-result"
       >
         <div class="result-header">
           <span></span>
           <button
             class="copy-btn"
+            :title="t('common.copy')"
             @click="copyContent"
-            title="复制"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -31,53 +31,32 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ideService } from '@/services/ideaBridge'
-import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
+import { useI18n } from '@/composables/useI18n'
+import type { ClaudeReadToolCall } from '@/types/display'
 import CompactToolCard from './CompactToolCard.vue'
 import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
-import { toolEnhancement } from '@/services/toolEnhancement'
 import CodeSnippet from './CodeSnippet.vue'
 
+const { t } = useI18n()
+
 interface Props {
-  toolUse: ToolUseBlock
-  result?: ToolResultBlock
+  toolCall: ClaudeReadToolCall
 }
 
 const props = defineProps<Props>()
-// Read 工具默认展开，显示文件内容
-const expanded = ref(true)
+// Read 工具默认折叠，点击后展开查看文件内容
+// 根据设计文档，Read 展开后显示读取的内容（结果），用户关心读取的内容
+const expanded = ref(false)
 
-// 提取显示信息
-const displayInfo = computed(() => extractToolDisplayInfo(props.toolUse, props.result))
+// 提取显示信息（使用工具卡通用提取函数）
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall, props.toolCall.result))
 
-const filePath = computed(() => props.toolUse.input.path || props.toolUse.input.file_path || '')
-const fileName = computed(() => {
-  const path = filePath.value
-  return path.split(/[\\/]/).pop() || path
-})
-
-const offset = computed(() => props.toolUse.input.offset)
-const limit = computed(() => props.toolUse.input.limit)
-
-const hasLineRange = computed(() => {
-  const viewRange = props.toolUse.input.view_range
-  return Array.isArray(viewRange) || offset.value !== undefined || limit.value !== undefined
-})
-
-const lineRange = computed(() => {
-  const viewRange = props.toolUse.input.view_range
-  if (Array.isArray(viewRange)) {
-    return `L${viewRange[0]}-${viewRange[1]}`
-  }
-  if (!hasLineRange.value) return ''
-  const start = offset.value || 1
-  const end = limit.value ? start + limit.value - 1 : '∞'
-  return `L${start}-${end}`
-})
+const filePath = computed(() => props.toolCall.input.path || props.toolCall.input.file_path || '')
 
 /**
  * 提取 SDK 返回的行号和代码内容
- * SDK 返回的格式：     1→代码内容
+ * SDK 返回的格式：
+ *     1→代码内容
  * 返回：{ content: 代码内容, startLine: 起始行号 }
  */
 function extractLineNumbersAndContent(text: string): { content: string; startLine: number } {
@@ -86,7 +65,7 @@ function extractLineNumbersAndContent(text: string): { content: string; startLin
   let firstLineNumberFound = false
 
   const contentLines = lines.map(line => {
-    // 匹配行首的 "空格 + 数字 + →"
+    // 匹配行首的"空格 + 数字 + →"
     const match = line.match(/^\s*(\d+)→/)
     if (match) {
       const lineNum = parseInt(match[1], 10)
@@ -108,28 +87,23 @@ function extractLineNumbersAndContent(text: string): { content: string; startLin
 }
 
 const resultText = computed(() => {
-  if (!props.result) return ''
-  const content = props.result.content
+  const result = props.toolCall.result
+  if (!result || result.type !== 'success') return ''
+  const content = result.output
 
   let rawText = ''
 
-  // 处理字符串
   if (typeof content === 'string') {
     rawText = content
-  }
-  // 处理数组（ContentBlock[]）
-  else if (Array.isArray(content)) {
+  } else if (Array.isArray(content)) {
     rawText = content
       .filter((item: any) => item.type === 'text')
       .map((item: any) => item.text)
       .join('\n')
-  }
-  // 处理对象
-  else {
+  } else {
     rawText = JSON.stringify(content, null, 2)
   }
 
-  // 提取行号和内容
   const { content: cleanContent } = extractLineNumbersAndContent(rawText)
 
   // 去除尾部空行
@@ -142,8 +116,9 @@ const resultText = computed(() => {
 
 // 提取起始行号
 const startLineNumber = computed(() => {
-  if (!props.result) return 1
-  const content = props.result.content
+  const result = props.toolCall.result
+  if (!result || result.type !== 'success') return 1
+  const content = result.output
 
   let rawText = ''
   if (typeof content === 'string') {
@@ -153,6 +128,8 @@ const startLineNumber = computed(() => {
       .filter((item: any) => item.type === 'text')
       .map((item: any) => item.text)
       .join('\n')
+  } else {
+    rawText = JSON.stringify(content, null, 2)
   }
 
   const { startLine } = extractLineNumbersAndContent(rawText)
@@ -179,25 +156,9 @@ const language = computed(() => {
   return langMap[extension] || 'plaintext'
 })
 
-
-// 处理卡片点击：使用拦截器统一处理增强
+// 处理卡片点击：目前直接切换展开状态
 async function handleCardClick() {
-  // 尝试获取增强动作
-  const action = await toolEnhancement.intercept(props.toolUse, props.result)
-  
-  if (action) {
-    // 在 JCEF 环境中，执行增强动作（打开文件）
-    const context = {
-      toolType: props.toolUse.name,
-      input: props.toolUse.input,
-      result: props.result,
-      isSuccess: !props.result?.is_error
-    }
-    await toolEnhancement.executeAction(action, context)
-  } else {
-    // 非 JCEF 环境或没有增强规则，切换展开状态
-    expanded.value = !expanded.value
-  }
+  expanded.value = !expanded.value
 }
 
 async function copyContent() {

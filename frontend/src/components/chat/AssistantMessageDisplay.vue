@@ -18,7 +18,7 @@
       >
         <!-- ContentItem - 文本内容 -->
         <div
-          v-if="element.type === 'content'"
+          v-if="element.displayType === 'content'"
           class="content-item"
         >
           <div v-if="isContentNotBlank(element.content)">
@@ -33,12 +33,12 @@
 
         <!-- ThinkingItem - 思考链 -->
         <div
-          v-else-if="element.type === 'thinking'"
+          v-else-if="element.displayType === 'thinking'"
           class="thinking-item"
         >
           <div class="thinking-header">
             <span class="thinking-icon">💭</span>
-            <span class="thinking-label">思考过程</span>
+            <span class="thinking-label">{{ t('chat.thinkingLabel') }}</span>
           </div>
           <div class="thinking-content">
             <MarkdownRenderer
@@ -50,7 +50,7 @@
 
         <!-- ToolCallItem - 工具调用 -->
         <CompactToolCallDisplay
-          v-else-if="element.type === 'toolCall'"
+          v-else-if="element.displayType === 'toolCall'"
           :tool-calls="[element.toolCall]"
           :expanded-tools="expandedTools"
           class="tool-call-item"
@@ -59,7 +59,7 @@
 
         <!-- StatusItem - 状态显示 -->
         <div
-          v-else-if="element.type === 'status'"
+          v-else-if="element.displayType === 'status'"
           class="status-item status-message-row"
         >
           <div v-if="element.isStreaming" class="jumping-dots-container">
@@ -75,10 +75,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
 import CompactToolCallDisplay from '../tools/CompactToolCallDisplay.vue'
 import type { EnhancedMessage, AiModel, MessageTimelineItem } from '@/types/enhancedMessage'
+import { useI18n } from '@/composables/useI18n'
 
 // Props 定义
 interface Props {
@@ -94,6 +94,9 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'expanded-change', toolId: string, expanded: boolean): void
 }>()
+
+// i18n
+const { t } = useI18n()
 
 // ============================================
 // 工具函数
@@ -138,7 +141,7 @@ function _logContentRender(content: string, index: number, total: number) {
  * 日志调试:工具调用渲染 (对应 logD)
  */
 function _logToolCallRender(toolCall: any) {
-  console.log(`[AssistantMessageDisplay] 渲染工具调用: ${toolCall.name} (${toolCall.id})`)
+  console.log(`[AssistantMessageDisplay] 渲染工具调用: ${toolCall.toolName} (${toolCall.id})`)
 }
 
 // ============================================
@@ -221,8 +224,8 @@ function handleExpandedChange(toolId: string, expanded: boolean) {
   width: 100%;
   margin: 8px 0;
   padding: 12px;
-  background: var(--ide-background-secondary, #f6f8fa);
-  border-left: 3px solid var(--ide-accent, #0366d6);
+  background: rgba(107, 114, 128, 0.05); /* 淡灰色背景 */
+  border-left: 3px solid rgba(107, 114, 128, 0.3); /* 灰色左边框 */
   border-radius: 4px;
 }
 
@@ -231,24 +234,46 @@ function handleExpandedChange(toolId: string, expanded: boolean) {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  font-size: 13px;
+  font-size: 12px; /* 稍小一点 */
   font-weight: 500;
-  color: var(--ide-foreground, #24292e);
+  color: #6b7280; /* 灰色 */
 }
 
 .thinking-icon {
-  font-size: 16px;
+  font-size: 14px; /* 稍小一点 */
+  opacity: 0.7;
 }
 
 .thinking-label {
-  opacity: 0.8;
+  opacity: 0.7; /* 更淡 */
+  font-style: italic; /* 斜体 */
+}
+
+/* 深色模式下的思考块 */
+@media (prefers-color-scheme: dark) {
+  .thinking-item {
+    background: rgba(156, 163, 175, 0.08);
+    border-left-color: rgba(156, 163, 175, 0.3);
+  }
+  
+  .thinking-header {
+    color: #9ca3af;
+  }
 }
 
 .thinking-content {
-  font-size: 12px;
-  color: var(--ide-secondary-foreground, #6b7280);
+  font-size: 11px;
+  color: #6b7280; /* 明确使用灰色，不依赖主题变量 */
   font-style: italic;
   line-height: 1.6;
+  opacity: 0.85; /* 增加透明度让文字更"淡" */
+}
+
+/* 深色模式下的思考内容 */
+@media (prefers-color-scheme: dark) {
+  .thinking-content {
+    color: #9ca3af; /* 深色模式下的灰色 */
+  }
 }
 
 /* 工具调用项 */

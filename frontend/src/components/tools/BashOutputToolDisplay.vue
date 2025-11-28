@@ -4,268 +4,203 @@
       <span class="tool-icon">📟</span>
       <span class="tool-name">BashOutput</span>
       <code class="shell-id">Shell: {{ shellId }}</code>
-      <span
-        v-if="filter"
-        class="filter-badge"
-      >🔍 {{ filter }}</span>
+      <span v-if="filter" class="filter-badge">🔍 {{ filter }}</span>
     </div>
-    <div
-      v-if="expanded"
-      class="tool-content"
-    >
+    <div v-if="expanded" class="tool-content">
       <div class="tool-meta">
         <div class="info-row">
           <span class="label">Shell ID:</span>
           <span class="value">{{ shellId }}</span>
         </div>
-        <div
-          v-if="filter"
-          class="info-row"
-        >
-          <span class="label">过滤器:</span>
+        <div v-if="filter" class="info-row">
+          <span class="label">{{ t('tools.label.filter') }}:</span>
           <code class="value filter-text">{{ filter }}</code>
         </div>
       </div>
 
-      <div
-        v-if="result"
-        class="output-section"
-      >
+      <div v-if="stdout || stderr" class="output-section">
         <div class="section-header">
-          <span>输出内容</span>
+          <span>{{ t('tools.label.output') }}</span>
           <div class="header-actions">
             <span
               v-if="status"
               class="status-badge"
               :class="statusClass"
             >{{ status }}</span>
-            <button
-              v-if="output"
-              class="copy-btn"
-              title="复制"
-              @click="copyOutput"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-            </button>
           </div>
         </div>
-        <pre
-          v-if="output"
-          class="output-content"
-        >{{ output }}</pre>
-        <div
-          v-else
-          class="no-output"
-        >
-          无输出
-        </div>
+
+        <pre v-if="stdout" class="output stdout">{{ stdout }}</pre>
+        <pre v-if="stderr" class="output stderr">{{ stderr }}</pre>
+        <div v-if="!stdout && !stderr" class="no-output">{{ t('tools.noOutput') }}</div>
       </div>
     </div>
-    <button
-      class="expand-btn"
-      @click="expanded = !expanded"
-    >
-      {{ expanded ? '收起' : '展开' }}
-    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
+import { useI18n } from '@/composables/useI18n'
+import type { GenericToolCall } from '@/types/display'
+
+const { t } = useI18n()
 
 interface Props {
-  toolUse: ToolUseBlock
-  result?: ToolResultBlock
+  toolCall: GenericToolCall
 }
 
 const props = defineProps<Props>()
+// 默认折叠，点击后展开查看输出
 const expanded = ref(false)
 
-const shellId = computed(() => props.toolUse.input.bash_id || '')
-const filter = computed(() => props.toolUse.input.filter || '')
+const shellId = computed(() => (props.toolCall.input as any)?.bash_id || '')
+const filter = computed(() => (props.toolCall.input as any)?.filter || '')
 
-const resultContent = computed(() => {
-  if (!props.result?.content) return null
-  if (typeof props.result.content === 'string') {
-    try {
-      return JSON.parse(props.result.content)
-    } catch {
-      return { output: props.result.content }
-    }
+const stdout = computed(() => {
+  const r = props.toolCall.result
+  if (!r || r.type !== 'success') return ''
+  const content = r.output
+  if (typeof content === 'string') return content
+  if (content && typeof content === 'object' && 'stdout' in content) {
+    return (content as any).stdout || ''
   }
-  return props.result.content
+  return ''
 })
 
-const output = computed(() => {
-  if (!resultContent.value) return ''
-  return resultContent.value.output || ''
+const stderr = computed(() => {
+  const r = props.toolCall.result
+  if (!r || r.type !== 'error') return ''
+  return r.error || ''
 })
 
-const status = computed(() => {
-  if (!resultContent.value) return ''
-  return resultContent.value.status || ''
-})
-
+const status = computed(() => props.toolCall.status)
 const statusClass = computed(() => {
-  const s = status.value.toLowerCase()
-  if (s.includes('running') || s.includes('active')) return 'status-running'
-  if (s.includes('completed') || s.includes('done')) return 'status-success'
-  if (s.includes('failed') || s.includes('error')) return 'status-error'
-  return 'status-neutral'
-})
-
-async function copyOutput() {
-  if (output.value) {
-    await navigator.clipboard.writeText(output.value)
+  switch (props.toolCall.status) {
+    case 'SUCCESS':
+      return 'success'
+    case 'FAILED':
+      return 'error'
+    default:
+      return 'info'
   }
-}
+})
 </script>
 
 <style scoped>
-.bash-output-tool {
-  border-color: #17a2b8;
+.tool-display {
+  border: 1px solid var(--ide-border, #e1e4e8);
+  border-radius: 6px;
+  background: var(--ide-panel-background, #f6f8fa);
+  margin: 8px 0;
 }
 
-.bash-output-tool .tool-name {
-  color: #17a2b8;
+.tool-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.tool-icon {
+  font-size: 16px;
+}
+
+.tool-name {
+  font-weight: 600;
 }
 
 .shell-id {
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
-  background: rgba(23, 162, 184, 0.1);
-  padding: 2px 6px;
-  border-radius: 3px;
-  color: #24292e;
+  margin-left: auto;
+  font-family: monospace;
+  color: #586069;
 }
 
 .filter-badge {
-  font-size: 11px;
-  background: #fff3cd;
-  color: #856404;
+  font-size: 12px;
+  background: #eef2ff;
+  color: #4338ca;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 10px;
+}
+
+.tool-content {
+  padding: 8px 12px 12px;
 }
 
 .tool-meta {
-  margin-bottom: 2px;
+  margin-bottom: 8px;
 }
 
 .info-row {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  font-size: 12px;
   margin-bottom: 4px;
-  font-size: 13px;
 }
 
-.info-row .label {
-  font-weight: 600;
+.label {
   color: #586069;
-  min-width: 80px;
+  min-width: 70px;
 }
 
-.info-row .value {
-  font-family: monospace;
+.value {
   color: #24292e;
-}
-
-.filter-text {
-  background: #f6f8fa;
-  padding: 2px 4px;
-  border-radius: 2px;
-}
-
-.output-section {
-  margin-top: 12px;
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 4px;
   font-size: 12px;
   font-weight: 600;
-  color: #586069;
-  margin-bottom: 2px;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .status-badge {
-  padding: 2px 8px;
+  padding: 2px 6px;
   border-radius: 10px;
   font-size: 11px;
-  font-weight: 600;
 }
 
-.status-running {
-  background: #f1f8ff;
-  color: #0366d6;
-}
-
-.status-success {
+.status-badge.success {
   background: #e6ffed;
   color: #22863a;
 }
 
-.status-error {
+.status-badge.error {
   background: #ffeef0;
   color: #d73a49;
 }
 
-.status-neutral {
-  background: #f6f8fa;
-  color: #586069;
+.status-badge.info {
+  background: #fff8e1;
+  color: #b26a00;
 }
 
-.copy-btn {
+.output-section {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--ide-foreground, #24292e);
-  cursor: pointer;
-  opacity: 0.6;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.copy-btn:hover {
-  opacity: 1;
-  background: var(--ide-panel-background, #f6f8fa);
-}
-
-.output-content {
+.output {
   margin: 0;
-  padding: 12px;
-  background: #ffffff;
-  border: 1px solid #e1e4e8;
+  padding: 8px;
+  background: #111;
+  color: #eee;
   border-radius: 4px;
-  font-size: 12px;
   font-family: 'Consolas', 'Monaco', monospace;
-  max-height: 400px;
-  overflow: auto;
   white-space: pre-wrap;
-  word-wrap: break-word;
+}
+
+.output.stderr {
+  background: #2d1a1a;
+  color: #ffb3b3;
 }
 
 .no-output {
-  padding: 12px;
-  text-align: center;
-  color: #586069;
-  font-size: 13px;
-  font-style: italic;
-  background: #f6f8fa;
-  border: 1px solid #e1e4e8;
-  border-radius: 4px;
+  font-size: 12px;
+  color: #888;
 }
 </style>

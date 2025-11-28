@@ -441,16 +441,6 @@ await ideService.myNewFeature({ foo: 'bar' })
 
 ### 查看 HTTP 请求
 
-**浏览器**: 打开开发者工具 → Network 标签
-
-**IDEA**: 查看 `IDEA.log` 文件
-
-### 查看 WebSocket 消息
-
-**浏览器**: 开发者工具 → Network → WS 标签
-
-**后端**: 日志输出 WebSocket 消息
-
 ### 常见问题
 
 **问题**: 前端无法连接后端

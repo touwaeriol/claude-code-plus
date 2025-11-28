@@ -111,7 +111,7 @@
           </div>
         </div>
         <div class="dialog-actions">
-          <button @click="closeMoveToGroupDialog" class="cancel-btn">取消</button>
+          <button class="cancel-btn" @click="closeMoveToGroupDialog">取消</button>
         </div>
       </div>
     </div>
@@ -133,7 +133,7 @@
           </div>
         </div>
         <div class="dialog-actions">
-          <button @click="closeAddTagDialog" class="save-btn">完成</button>
+          <button class="save-btn" @click="closeAddTagDialog">完成</button>
         </div>
       </div>
     </div>

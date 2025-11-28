@@ -13,6 +13,9 @@ export type RpcSessionStatus = 'connected' | 'disconnected' | 'interrupted' | 'm
 
 export type RpcContentStatus = 'in_progress' | 'completed' | 'failed'
 
+/** 权限模式枚举 */
+export type RpcPermissionMode = 'default' | 'bypassPermissions' | 'acceptEdits' | 'plan' | 'dontAsk'
+
 // ===== Stream Events (核心流式事件) =====
 
 export interface RpcMessageStart {
@@ -37,7 +40,8 @@ export interface RpcThinkingDelta {
 export interface RpcToolStart {
   type: 'tool_start'
   toolId: string
-  toolName: string
+  toolName: string       // 显示名称: "Read", "Write", "mcp__xxx"
+  toolType: string       // 类型标识: "CLAUDE_READ", "CLAUDE_WRITE", "MCP"
   inputPreview?: string
   provider: RpcProvider
 }
@@ -63,6 +67,19 @@ export interface RpcMessageComplete {
   provider: RpcProvider
 }
 
+export interface RpcResultMessage {
+  type: 'result'
+  duration_ms?: number
+  duration_api_ms?: number
+  is_error?: boolean
+  num_turns?: number
+  session_id?: string
+  total_cost_usd?: number
+  usage?: unknown
+  result?: string | null
+  provider: RpcProvider
+}
+
 export interface RpcErrorEvent {
   type: 'error'
   message: string
@@ -79,6 +96,12 @@ export interface RpcAssistantMessage {
   provider: RpcProvider
 }
 
+export interface RpcUserMessage {
+  type: 'user'
+  content: RpcContentBlock[]
+  provider: RpcProvider
+}
+
 /** 流式事件联合类型 */
 export type RpcStreamEvent =
   | RpcMessageStart
@@ -88,6 +111,8 @@ export type RpcStreamEvent =
   | RpcToolProgress
   | RpcToolComplete
   | RpcMessageComplete
+  | RpcResultMessage
+  | RpcUserMessage
   | RpcErrorEvent
   | RpcAssistantMessage
 
@@ -152,7 +177,8 @@ export interface RpcThinkingBlock {
 export interface RpcToolUseBlock {
   type: 'tool_use'
   id: string
-  name: string
+  toolName: string       // 显示名称: "Read", "Write", "mcp__xxx"（原 name 字段）
+  toolType: string       // 类型标识: "CLAUDE_READ", "CLAUDE_WRITE", "MCP"
   input?: unknown
   status?: RpcContentStatus
 }
@@ -257,7 +283,17 @@ export interface RpcUsage {
 
 // ===== Connect Options & Results =====
 
+/**
+ * 连接选项（统一扁平结构）
+ *
+ * 所有配置项都在顶层，根据 provider 能力决定哪些配置生效：
+ * - Claude: permissionMode, dangerouslySkipPermissions, allowDangerouslySkipPermissions,
+ *           includePartialMessages, continueConversation, thinkingEnabled
+ * - Codex: baseUrl, apiKey, sandboxMode
+ * - 通用: provider, model, systemPrompt, initialPrompt, sessionId, resumeSessionId, metadata
+ */
 export interface RpcConnectOptions {
+  // === 通用配置 ===
   provider?: RpcProvider
   model?: string
   systemPrompt?: string
@@ -265,24 +301,31 @@ export interface RpcConnectOptions {
   sessionId?: string
   resumeSessionId?: string
   metadata?: Record<string, string>
-  claude?: RpcClaudeOptions
-  codex?: RpcCodexOptions
-}
 
-export interface RpcClaudeOptions {
+  // === Claude 相关配置（根据 provider 能力生效）===
   permissionMode?: 'default' | 'bypassPermissions' | 'acceptEdits' | 'plan' | 'dontAsk'
   dangerouslySkipPermissions?: boolean
   allowDangerouslySkipPermissions?: boolean
   includePartialMessages?: boolean
   continueConversation?: boolean
-  resume?: string
   thinkingEnabled?: boolean
-}
 
-export interface RpcCodexOptions {
+  // === Codex 相关配置（根据 provider 能力生效）===
   baseUrl?: string
   apiKey?: string
   sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access'
+}
+
+/** Agent 能力声明 */
+export interface RpcCapabilities {
+  canInterrupt: boolean
+  canSwitchModel: boolean
+  canSwitchPermissionMode: boolean
+  supportedPermissionModes: RpcPermissionMode[]
+  canSkipPermissions: boolean
+  canSendRichContent: boolean
+  canThink: boolean
+  canResumeSession: boolean
 }
 
 export interface RpcConnectResult {
@@ -290,6 +333,7 @@ export interface RpcConnectResult {
   provider: RpcProvider
   status: RpcSessionStatus
   model?: string
+  capabilities?: RpcCapabilities
 }
 
 export interface RpcStatusResult {
@@ -299,4 +343,9 @@ export interface RpcStatusResult {
 export interface RpcSetModelResult {
   status: RpcSessionStatus
   model: string
+}
+
+export interface RpcSetPermissionModeResult {
+  mode: RpcPermissionMode
+  success: boolean
 }

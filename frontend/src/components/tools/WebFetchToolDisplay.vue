@@ -3,498 +3,84 @@
     <div class="tool-header">
       <span class="tool-icon">🌐</span>
       <span class="tool-name">WebFetch</span>
-      <a
-        :href="url"
-        class="tool-url"
-        target="_blank"
-        rel="noopener noreferrer"
-        @click.prevent="openLink(url)"
-      >
-        {{ domain }}
-      </a>
-      <span
-        v-if="statusCode"
-        class="status-badge"
-        :class="statusClass"
-      >{{ statusCode }}</span>
+      <span class="tool-url">{{ urlPreview }}</span>
     </div>
-    <div
-      v-if="expanded"
-      class="tool-content"
-    >
-      <div class="fetch-info">
-        <div class="info-row">
-          <span class="label">目标 URL:</span>
-          <a
-            :href="url"
-            class="value url-link"
-            target="_blank"
-            rel="noopener noreferrer"
-            @click.prevent="openLink(url)"
-          >
-            {{ url }}
-          </a>
-        </div>
-        <div
-          v-if="prompt"
-          class="info-row"
-        >
-          <span class="label">Prompt:</span>
-          <span class="value">{{ prompt }}</span>
-        </div>
-        <div
-          v-if="statusCode"
-          class="info-row"
-        >
-          <span class="label">状态码:</span>
-          <span class="value">{{ statusCode }} {{ statusText }}</span>
-        </div>
-        <div
-          v-if="contentType"
-          class="info-row"
-        >
-          <span class="label">内容类型:</span>
-          <span class="value">{{ contentType }}</span>
-        </div>
-        <div
-          v-if="fetchTime"
-          class="info-row"
-        >
-          <span class="label">抓取时间:</span>
-          <span class="value">{{ fetchTime }}</span>
-        </div>
+    <div v-if="expanded" class="tool-content">
+      <div class="info-row">
+        <span class="label">URL:</span>
+        <span class="value">{{ url }}</span>
       </div>
-
-      <div
-        v-if="result"
-        class="fetch-result"
-      >
-        <div class="result-header">
-          <span>抓取内容</span>
-          <div class="header-actions">
-            <span
-              v-if="contentLength"
-              class="content-size"
-            >{{ contentSize }}</span>
-            <button
-              v-if="canCopy"
-              class="copy-btn"
-              title="复制"
-              @click="copyContent"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-            </button>
-            <button
-              v-if="isTruncated"
-              class="action-btn"
-              @click="toggleFullContent"
-            >
-              {{ showFullContent ? '收起' : '查看完整内容' }}
-            </button>
-          </div>
-        </div>
-        <div
-          class="result-content"
-          :class="{ 'full-content': showFullContent }"
-        >
-          <div
-            v-if="isMarkdown"
-            class="markdown-preview"
-          >
-            <MarkdownRenderer :content="displayContent" />
-          </div>
-          <pre
-            v-else-if="isJson"
-            class="json-content"
-          >{{ formattedJson }}</pre>
-          <pre
-            v-else
-            class="text-content"
-          >{{ displayContent }}</pre>
-        </div>
+      <div class="info-row">
+        <span class="label">Prompt:</span>
+        <span class="value">{{ prompt }}</span>
       </div>
     </div>
-    <button
-      class="expand-btn"
-      @click="expanded = !expanded"
-    >
-      {{ expanded ? '收起' : '展开' }}
-    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
-import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
+import type { ClaudeWebFetchToolCall } from '@/types/display'
 
 interface Props {
-  toolUse: ToolUseBlock
-  result?: ToolResultBlock
+  toolCall: ClaudeWebFetchToolCall
 }
 
 const props = defineProps<Props>()
+// 默认折叠，点击后展开查看网页内容
 const expanded = ref(false)
-const showFullContent = ref(false)
 
-const url = computed(() => props.toolUse.input.url || '')
-const prompt = computed(() => props.toolUse.input.prompt || '')
-
-const domain = computed(() => {
-  const urlStr = url.value
-  try {
-    const urlObj = new URL(urlStr)
-    return urlObj.hostname
-  } catch (e) {
-    // 如果不是完整 URL，尝试提取域名部分
-    return urlStr
-      .replace(/^https?:\/\//, '')
-      .replace(/^www\./, '')
-      .split('/')[0]
-      .substring(0, 40)
-  }
-})
-
-// 解析结果内容
-const resultContent = computed(() => {
-  if (!props.result) return null
-
-  try {
-    let content = props.result.content
-    if (typeof content === 'string') {
-      // 尝试解析 JSON
-      try {
-        content = JSON.parse(content)
-      } catch {
-        // 如果不是 JSON，保持原样
-      }
-    }
-    return content
-  } catch (e) {
-    console.warn('Failed to parse result content:', e)
-    return null
-  }
-})
-
-const statusCode = computed(() => {
-  if (!resultContent.value || typeof resultContent.value !== 'object') return null
-  return (resultContent.value as any).status_code || (resultContent.value as any).statusCode
-})
-
-const statusText = computed(() => {
-  if (!statusCode.value) return ''
-  const code = statusCode.value
-  if (code >= 200 && code < 300) return 'OK'
-  if (code >= 300 && code < 400) return 'Redirect'
-  if (code >= 400 && code < 500) return 'Client Error'
-  if (code >= 500) return 'Server Error'
-  return ''
-})
-
-const statusClass = computed(() => {
-  const code = statusCode.value
-  if (!code) return 'unknown'
-  if (code >= 200 && code < 300) return 'success'
-  if (code >= 300 && code < 400) return 'redirect'
-  if (code >= 400 && code < 500) return 'client-error'
-  if (code >= 500) return 'server-error'
-  return 'unknown'
-})
-
-const contentType = computed(() => {
-  if (!resultContent.value || typeof resultContent.value !== 'object') return null
-  return (resultContent.value as any).content_type || (resultContent.value as any).contentType
-})
-
-const fetchTime = computed(() => {
-  if (!resultContent.value || typeof resultContent.value !== 'object') return null
-  const timestamp = (resultContent.value as any).timestamp
-  if (!timestamp) return null
-
-  try {
-    const date = new Date(timestamp)
-    return date.toLocaleString('zh-CN')
-  } catch (e) {
-    return null
-  }
-})
-
-const rawContent = computed(() => {
-  if (!resultContent.value) return ''
-
-  // 如果是字符串，直接返回
-  if (typeof resultContent.value === 'string') {
-    return resultContent.value
-  }
-
-  // 如果是对象，尝试提取 content 字段
-  if (typeof resultContent.value === 'object' && 'content' in resultContent.value) {
-    const content = (resultContent.value as any).content
-    return typeof content === 'string' ? content : JSON.stringify(content, null, 2)
-  }
-
-  // 否则返回 JSON 字符串
-  return JSON.stringify(resultContent.value, null, 2)
-})
-
-const contentLength = computed(() => rawContent.value.length)
-
-const contentSize = computed(() => {
-  const bytes = contentLength.value
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-})
-
-const maxPreviewLength = 2000
-const isTruncated = computed(() => contentLength.value > maxPreviewLength)
-
-const displayContent = computed(() => {
-  if (showFullContent.value || !isTruncated.value) {
-    return rawContent.value
-  }
-  return rawContent.value.substring(0, maxPreviewLength) + '\n\n... (内容已截断)'
-})
-
-const isMarkdown = computed(() => {
-  const ct = contentType.value?.toLowerCase() || ''
-  return ct.includes('markdown') || ct.includes('md')
-})
-
-const isJson = computed(() => {
-  const ct = contentType.value?.toLowerCase() || ''
-  if (ct.includes('json')) return true
-
-  // 尝试解析内容判断是否为 JSON
-  try {
-    JSON.parse(rawContent.value)
-    return true
-  } catch {
-    return false
-  }
-})
-
-const formattedJson = computed(() => {
-  try {
-    const obj = JSON.parse(displayContent.value)
-    return JSON.stringify(obj, null, 2)
-  } catch {
-    return displayContent.value
-  }
-})
-
-const canCopy = computed(() => contentLength.value > 0)
-
-function openLink(url: string) {
-  if (!url) return
-  try {
-    new URL(url)
-    window.open(url, '_blank', 'noopener,noreferrer')
-  } catch (e) {
-    console.error('Invalid URL:', url)
-  }
-}
-
-async function copyContent() {
-  try {
-    await navigator.clipboard.writeText(rawContent.value)
-    // TODO: 显示成功提示
-  } catch (e) {
-    console.error('Failed to copy content:', e)
-  }
-}
-
-function toggleFullContent() {
-  showFullContent.value = !showFullContent.value
-}
+const url = computed(() => props.toolCall.input.url || '')
+const prompt = computed(() => props.toolCall.input.prompt || '')
+const urlPreview = computed(() => url.value.length > 50 ? `${url.value.slice(0, 50)}...` : url.value)
 </script>
 
 <style scoped>
-.webfetch-tool {
-  border-color: #28a745;
+.tool-display {
+  border: 1px solid var(--ide-border, #e1e4e8);
+  border-radius: 6px;
+  background: var(--ide-panel-background, #f6f8fa);
+  margin: 8px 0;
+  padding: 8px 12px;
 }
 
-.webfetch-tool .tool-name {
-  color: #28a745;
+.tool-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.tool-icon {
+  font-size: 16px;
+}
+
+.tool-name {
+  font-weight: 600;
 }
 
 .tool-url {
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
   color: #0366d6;
-  text-decoration: none;
-  padding: 2px 6px;
-  background: rgba(40, 167, 69, 0.1);
-  border-radius: 3px;
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 12px;
 }
 
-.tool-url:hover {
-  text-decoration: underline;
-  color: #0256c0;
-}
-
-.status-badge {
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: 10px;
-  font-family: monospace;
-}
-
-.status-badge.success {
-  background: #e6ffed;
-  color: #22863a;
-}
-
-.status-badge.redirect {
-  background: #fff8c5;
-  color: #735c0f;
-}
-
-.status-badge.client-error,
-.status-badge.server-error {
-  background: #ffeef0;
-  color: #d73a49;
-}
-
-.status-badge.unknown {
-  background: #f6f8fa;
-  color: #586069;
-}
-
-.fetch-info {
-  margin-bottom: 2px;
+.tool-content {
+  margin-top: 8px;
 }
 
 .info-row {
   display: flex;
-  gap: 8px;
-  margin-bottom: 6px;
-  font-size: 13px;
-  align-items: flex-start;
-}
-
-.info-row .label {
-  font-weight: 600;
-  color: #586069;
-  min-width: 90px;
-  flex-shrink: 0;
-}
-
-.info-row .value {
-  color: #24292e;
-  flex: 1;
-  word-wrap: break-word;
-}
-
-.url-link {
-  color: #0366d6;
-  text-decoration: none;
-}
-
-.url-link:hover {
-  text-decoration: underline;
-  color: #0256c0;
-}
-
-.fetch-result {
-  background: #ffffff;
-  border: 1px solid #e1e4e8;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.result-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: #f6f8fa;
-  border-bottom: 1px solid #e1e4e8;
+  gap: 6px;
   font-size: 12px;
-  font-weight: 600;
+  margin-bottom: 4px;
 }
 
-.header-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.content-size {
+.label {
   color: #586069;
-  font-size: 11px;
-  font-weight: normal;
+  min-width: 60px;
 }
 
-.action-btn {
-  padding: 3px 8px;
-  font-size: 11px;
-  border: 1px solid #e1e4e8;
-  border-radius: 3px;
-  background: white;
-  color: #586069;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.action-btn:hover {
-  background: #f6f8fa;
-  border-color: #d1d5da;
-}
-
-.copy-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--ide-foreground, #24292e);
-  cursor: pointer;
-  opacity: 0.6;
-}
-
-.copy-btn:hover {
-  opacity: 1;
-  background: var(--ide-panel-background, #f6f8fa);
-}
-
-.result-content {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.result-content.full-content {
-  max-height: 800px;
-}
-
-.markdown-preview {
-  padding: 12px;
-}
-
-.json-content,
-.text-content {
-  margin: 0;
-  padding: 12px;
-  font-size: 12px;
-  font-family: 'Consolas', 'Monaco', monospace;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-wrap: break-word;
+.value {
   color: #24292e;
-  line-height: 1.5;
-}
-
-.json-content {
-  background: #f6f8fa;
 }
 </style>

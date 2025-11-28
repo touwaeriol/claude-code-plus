@@ -9,50 +9,59 @@ import kotlinx.serialization.json.JsonElement
  * 工具类型枚举
  *
  * 定义所有已知的Claude Code工具类型。
- * 这些类型与官方文档中的工具名称保持一致。
+ *
+ * @param toolName 工具显示名称（原始名称），如 "Read", "Write"
+ * @param type 工具类型标识（带前缀），如 "CLAUDE_READ", "CLAUDE_WRITE"
  */
-enum class ToolType(val toolName: String) {
+enum class ToolType(
+    val toolName: String,   // 工具名称（显示用），避免与 Enum.name 冲突
+    val type: String        // 类型标识（判断用，带 CLAUDE_ 前缀）
+) {
     // 基础文件操作工具
-    BASH("Bash"),
-    BASH_OUTPUT("BashOutput"),
-    KILL_SHELL("KillShell"),
-    EDIT("Edit"),
-    MULTI_EDIT("MultiEdit"),
-    READ("Read"),
-    WRITE("Write"),
+    BASH("Bash", "CLAUDE_BASH"),
+    BASH_OUTPUT("BashOutput", "CLAUDE_BASH_OUTPUT"),
+    KILL_SHELL("KillShell", "CLAUDE_KILL_SHELL"),
+    EDIT("Edit", "CLAUDE_EDIT"),
+    MULTI_EDIT("MultiEdit", "CLAUDE_MULTI_EDIT"),
+    READ("Read", "CLAUDE_READ"),
+    WRITE("Write", "CLAUDE_WRITE"),
 
     // 搜索和查找工具
-    GLOB("Glob"),
-    GREP("Grep"),
+    GLOB("Glob", "CLAUDE_GLOB"),
+    GREP("Grep", "CLAUDE_GREP"),
 
     // 网络工具
-    WEB_FETCH("WebFetch"),
-    WEB_SEARCH("WebSearch"),
+    WEB_FETCH("WebFetch", "CLAUDE_WEB_FETCH"),
+    WEB_SEARCH("WebSearch", "CLAUDE_WEB_SEARCH"),
 
     // 开发和任务管理工具
-    TODO_WRITE("TodoWrite"),
-    TASK("Task"),
-    EXIT_PLAN_MODE("ExitPlanMode"),
+    TODO_WRITE("TodoWrite", "CLAUDE_TODO_WRITE"),
+    TASK("Task", "CLAUDE_TASK"),
+    EXIT_PLAN_MODE("ExitPlanMode", "CLAUDE_EXIT_PLAN_MODE"),
+    ASK_USER_QUESTION("AskUserQuestion", "CLAUDE_ASK_USER_QUESTION"),
+    SKILL("Skill", "CLAUDE_SKILL"),
+    SLASH_COMMAND("SlashCommand", "CLAUDE_SLASH_COMMAND"),
+    ENTER_PLAN_MODE("EnterPlanMode", "CLAUDE_ENTER_PLAN_MODE"),
 
     // Jupyter notebook工具
-    NOTEBOOK_EDIT("NotebookEdit"),
+    NOTEBOOK_EDIT("NotebookEdit", "CLAUDE_NOTEBOOK_EDIT"),
 
     // MCP (Model Context Protocol) 工具
-    MCP_TOOL("mcp__"),  // MCP工具通常以mcp__开头
-    LIST_MCP_RESOURCES("ListMcpResourcesTool"),
-    READ_MCP_RESOURCE("ReadMcpResourceTool"),
+    MCP_TOOL("mcp__", "MCP"),  // MCP工具通常以mcp__开头
+    LIST_MCP_RESOURCES("ListMcpResourcesTool", "CLAUDE_LIST_MCP_RESOURCES"),
+    READ_MCP_RESOURCE("ReadMcpResourceTool", "CLAUDE_READ_MCP_RESOURCE"),
 
     // 未知工具类型
-    UNKNOWN("unknown");
+    UNKNOWN("unknown", "UNKNOWN");
 
     companion object {
         /**
          * 根据工具名称获取对应的工具类型
          */
-        fun fromToolName(name: String): ToolType {
+        fun fromToolName(toolName: String): ToolType {
             return when {
-                name.startsWith("mcp__") -> MCP_TOOL
-                else -> values().find { it.toolName == name } ?: UNKNOWN
+                toolName.startsWith("mcp__") -> MCP_TOOL
+                else -> entries.find { it.toolName == toolName } ?: UNKNOWN
             }
         }
     }

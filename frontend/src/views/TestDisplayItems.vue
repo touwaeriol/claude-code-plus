@@ -55,7 +55,7 @@ import { useSessionStore } from '@/stores/sessionStore'
 import DisplayItemRenderer from '@/components/chat/DisplayItemRenderer.vue'
 import type { DisplayItem, UserMessage, AssistantText, SystemMessage } from '@/types/display'
 import { ToolCallStatus } from '@/types/display'
-import { TOOL_TYPE } from '@/constants/toolTypes'
+import { CLAUDE_TOOL_TYPE } from '@/constants/toolTypes'
 
 const sessionStore = useSessionStore()
 
@@ -68,15 +68,15 @@ const messageCount = computed(() => sessionStore.currentMessages.length)
 const mockDisplayItems: DisplayItem[] = [
   // 用户消息
   {
-    type: 'userMessage',
+    displayType: 'userMessage',
     id: 'mock-user-1',
-    content: '你好！请帮我读取 package.json 文件',
+    content: [{ type: 'text', text: '你好！请帮我读取 package.json 文件' }],
     timestamp: Date.now() - 10000
   } as UserMessage,
 
   // AI 文本回复
   {
-    type: 'assistantText',
+    displayType: 'assistantText',
     id: 'mock-assistant-1',
     content: '好的，我来帮你读取 package.json 文件。',
     timestamp: Date.now() - 9000
@@ -84,8 +84,9 @@ const mockDisplayItems: DisplayItem[] = [
 
   // 工具调用（Read）
   reactive({
-    type: 'toolCall',
-    toolType: TOOL_TYPE.READ,
+    displayType: 'toolCall',
+    toolName: 'Read',
+    toolType: CLAUDE_TOOL_TYPE.READ,
     id: 'mock-tool-1',
     status: ToolCallStatus.SUCCESS,
     startTime: Date.now() - 8000,
@@ -103,7 +104,7 @@ const mockDisplayItems: DisplayItem[] = [
 
   // AI 文本回复
   {
-    type: 'assistantText',
+    displayType: 'assistantText',
     id: 'mock-assistant-2',
     content: '我已经成功读取了 package.json 文件。这是一个名为 "claude-code-plus" 的项目。',
     timestamp: Date.now() - 6000
@@ -111,7 +112,7 @@ const mockDisplayItems: DisplayItem[] = [
 
   // 系统消息
   {
-    type: 'systemMessage',
+    displayType: 'systemMessage',
     id: 'mock-system-1',
     content: '会话已保存',
     level: 'info',

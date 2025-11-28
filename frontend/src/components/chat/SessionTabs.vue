@@ -1,0 +1,234 @@
+<template>
+  <div class="session-tabs">
+    <div class="tabs-scroll">
+      <draggable
+        v-model="localTabs"
+        :animation="200"
+        item-key="id"
+        class="draggable-tabs"
+        @end="handleDragEnd"
+      >
+        <template #item="{ element: tab }">
+          <div
+            class="session-tab"
+            :class="{ active: tab.id === currentSessionId, generating: tab.isGenerating }"
+            @click="handleTabClick(tab.id)"
+            @click.middle.prevent="handleCloseTab(tab.id)"
+          >
+            <span class="tab-name">{{ tab.name || '未命名会话' }}</span>
+            <span
+              v-if="tab.isGenerating"
+              class="generating-dot"
+              title="正在生成中"
+            />
+            <button
+              v-if="canClose"
+              class="close-btn"
+              type="button"
+              title="关闭会话"
+              @click.stop="handleCloseTab(tab.id)"
+            >
+              ×
+            </button>
+          </div>
+        </template>
+      </draggable>
+
+      <span v-if="sessions.length === 0" class="tab-placeholder">
+        暂无活动会话
+      </span>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import draggable from 'vuedraggable'
+
+export interface SessionTabInfo {
+  id: string
+  name: string
+  isGenerating?: boolean
+  isConnected?: boolean
+}
+
+const props = withDefaults(defineProps<{
+  sessions: SessionTabInfo[]
+  currentSessionId: string | null
+  canClose?: boolean
+}>(), {
+  canClose: true
+})
+
+const emit = defineEmits<{
+  (e: 'switch', sessionId: string): void
+  (e: 'close', sessionId: string): void
+  (e: 'reorder', order: string[]): void
+}>()
+
+// 本地 tabs 列表，用于拖拽
+const localTabs = ref<SessionTabInfo[]>([...props.sessions])
+
+// 监听外部 sessions 变化，同步到本地
+watch(() => props.sessions, (newSessions) => {
+  localTabs.value = [...newSessions]
+}, { deep: true })
+
+function handleTabClick(sessionId: string) {
+  if (sessionId === props.currentSessionId) return
+  emit('switch', sessionId)
+}
+
+function handleCloseTab(sessionId: string) {
+  emit('close', sessionId)
+}
+
+function handleDragEnd() {
+  const newOrder = localTabs.value.map(tab => tab.id)
+  emit('reorder', newOrder)
+}
+</script>
+
+<style scoped>
+.session-tabs {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tabs-scroll {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.draggable-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.session-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 180px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ide-foreground, #24292e);
+  font-size: 11px;
+  cursor: grab;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+
+.session-tab:active {
+  cursor: grabbing;
+}
+
+.session-tab:hover {
+  background: var(--ide-hover-background, rgba(0, 0, 0, 0.03));
+}
+
+.session-tab:hover .close-btn {
+  opacity: 1;
+}
+
+.session-tab.active {
+  background: var(--ide-card-background, #ffffff);
+  border-color: var(--ide-accent, #0366d6);
+  color: var(--ide-accent, #0366d6);
+}
+
+.session-tab.generating {
+  /* 生成中的会话边框带动画 */
+}
+
+:global(.theme-dark) .session-tab {
+  color: var(--ide-foreground, #e6edf3);
+}
+
+:global(.theme-dark) .session-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+:global(.theme-dark) .session-tab.active {
+  background: var(--ide-card-background, #161b22);
+  border-color: var(--ide-accent, #58a6ff);
+  color: var(--ide-accent, #58a6ff);
+}
+
+.tab-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.generating-dot {
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--ide-success, #28a745);
+  animation: pulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.85);
+  }
+}
+
+.close-btn {
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ide-secondary-foreground, #6a737d);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn:hover {
+  background: var(--ide-error, #d73a49);
+  color: #ffffff;
+}
+
+.session-tab.active .close-btn {
+  opacity: 0.6;
+}
+
+.session-tab.active .close-btn:hover {
+  opacity: 1;
+}
+
+.tab-placeholder {
+  font-size: 12px;
+  color: var(--ide-secondary-foreground, #6a737d);
+  opacity: 0.8;
+}
+</style>

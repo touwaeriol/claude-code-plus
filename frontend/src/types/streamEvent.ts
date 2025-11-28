@@ -1,6 +1,8 @@
 /**
  * Stream Event 类型定义
  * 
+ * @deprecated 此类型定义已废弃，请使用 RpcStreamEvent (from '@/types/rpc') 代替
+ * 
  * 对应 Anthropic Claude API 的流式事件类型
  * 参考: https://docs.anthropic.com/claude/reference/streaming
  */

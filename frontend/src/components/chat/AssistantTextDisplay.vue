@@ -6,6 +6,25 @@
         :is-dark="isDark"
       />
     </div>
+    <div
+      v-if="showStats"
+      class="message-stats"
+      :title="statsTooltip"
+    >
+      <span class="stat-item duration">
+        {{ formatDuration(stats.requestDuration) }}
+      </span>
+      <span class="stat-separator">•</span>
+      <span class="stat-item tokens">
+        ↑ {{ formatNumber(stats.inputTokens) }}
+        <span class="stat-label">tokens</span>
+      </span>
+      <span class="stat-separator">/</span>
+      <span class="stat-item tokens">
+        ↓ {{ formatNumber(stats.outputTokens) }}
+        <span class="stat-label">tokens</span>
+      </span>
+    </div>
   </div>
 </template>
 
@@ -69,8 +88,8 @@ function formatNumber(num: number): string {
 
 <style scoped>
 .assistant-text {
-  margin: 16px 0;
-  padding: 8px 0;
+  margin: 0;
+  padding: 4px 0;
   max-width: 100%;
 }
 

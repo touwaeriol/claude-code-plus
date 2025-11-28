@@ -3,7 +3,7 @@
  * 参考 Augment Code 的紧凑单行设计
  */
 
-import type { ToolUseBlock } from '@/types/message'
+import type { ToolUseContent, ToolResultContent } from '@/types/message'
 
 export interface ToolDisplayInfo {
   /** 工具图标 */
@@ -20,6 +20,8 @@ export interface ToolDisplayInfo {
   status: 'success' | 'error' | 'pending'
   /** 输入参数是否还在加载中（stream event 增量更新时为 true） */
   isInputLoading?: boolean
+  /** 错误信息（仅当 status 为 error 时有值） */
+  errorMessage?: string
 }
 
 /**
@@ -120,11 +122,11 @@ const ACTION_TYPES: Record<string, string> = {
  * 提取工具显示信息
  */
 export function extractToolDisplayInfo(
-  tool: ToolUseBlock,
-  result?: { is_error?: boolean; content?: any }
+  tool: ToolUseContent | { toolName?: string; toolType?: string; input?: any },
+  result?: ToolResultContent | { is_error?: boolean; content?: any }
 ): ToolDisplayInfo {
-  // 防御性检查：确保 tool 和 tool.name 存在
-  const toolName = tool?.name || ''
+  // 统一使用 toolName 字段
+  const toolName = (tool as any)?.toolName || ''
   const toolInput = tool?.input || {}
 
   const icon = TOOL_ICONS[toolName] || '🔧'
@@ -164,12 +166,13 @@ export function extractToolDisplayInfo(
       break
 
     case 'multi-edit':
-    case 'MultiEdit':
+    case 'MultiEdit': {
       // 折叠状态：显示文件名 (N处修改)
       const editsCount = toolInput.edits?.length || 0
       primaryInfo = `${extractFileName(toolInput.file_path || toolInput.path || '')} (${editsCount}处)`
       secondaryInfo = toolInput.file_path || toolInput.path || ''
       break
+    }
 
     case 'bash':
     case 'Bash':
@@ -207,11 +210,12 @@ export function extractToolDisplayInfo(
       break
 
     case 'todo-write':
-    case 'TodoWrite':
+    case 'TodoWrite': {
       const todos = toolInput.todos || []
       primaryInfo = `${todos.length}项任务`
       secondaryInfo = ''
       break
+    }
 
     case 'task':
     case 'Task':
@@ -226,11 +230,12 @@ export function extractToolDisplayInfo(
       break
 
     case 'ask-user-question':
-    case 'AskUserQuestion':
+    case 'AskUserQuestion': {
       const questions = toolInput.questions || []
       primaryInfo = questions.length > 0 ? questions[0].question : 'Asking question'
       secondaryInfo = questions.length > 1 ? `+${questions.length - 1} more` : ''
       break
+    }
 
     case 'codebase-retrieval':
       primaryInfo = 'Retrieving from: <> Codebase'
@@ -249,6 +254,28 @@ export function extractToolDisplayInfo(
     }
   }
 
+  // 提取错误信息
+  let errorMessage: string | undefined
+  if (status === 'error' && result) {
+    // 尝试从不同格式的 result 中提取错误信息
+    if (typeof result.content === 'string') {
+      errorMessage = result.content
+    } else if (Array.isArray(result.content)) {
+      // 如果 content 是数组，提取文本内容
+      const textContent = result.content
+        .filter((item: any) => item.type === 'text')
+        .map((item: any) => item.text)
+        .join('\n')
+      if (textContent) {
+        errorMessage = textContent
+      }
+    }
+    // 如果还没有错误信息，尝试其他字段
+    if (!errorMessage && (result as any).error) {
+      errorMessage = (result as any).error
+    }
+  }
+
   return {
     icon,
     actionType,
@@ -257,6 +284,7 @@ export function extractToolDisplayInfo(
     lineChanges,
     status,
     isInputLoading,
+    errorMessage,
   }
 }
 
@@ -452,4 +480,3 @@ function extractGenericSecondaryInfo(input: any): string {
   if (input.description) return input.description
   return ''
 }
-

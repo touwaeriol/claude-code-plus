@@ -26,11 +26,6 @@ interface Props {
 
 const props = defineProps<Props>()
 
-const formattedTime = computed(() => {
-  const date = new Date(props.message.timestamp)
-  return date.toLocaleTimeString()
-})
-
 const levelIcon = computed(() => {
   switch (props.message.level) {
     case 'info':

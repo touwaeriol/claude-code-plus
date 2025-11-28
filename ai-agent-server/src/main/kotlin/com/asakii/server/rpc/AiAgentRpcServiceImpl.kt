@@ -1,6 +1,8 @@
 package com.asakii.server.rpc
 
 import com.asakii.ai.agent.sdk.AiAgentProvider
+import com.asakii.ai.agent.sdk.capabilities.AgentCapabilities
+import com.asakii.ai.agent.sdk.capabilities.AiPermissionMode as SdkPermissionMode
 import com.asakii.ai.agent.sdk.client.AgentMessageInput
 import com.asakii.ai.agent.sdk.client.UnifiedAgentClient
 import com.asakii.ai.agent.sdk.client.UnifiedAgentClientFactory
@@ -10,6 +12,7 @@ import com.asakii.ai.agent.sdk.connect.CodexOverrides
 import com.asakii.ai.agent.sdk.model.*
 import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
 import com.asakii.claude.agent.sdk.types.PermissionMode
+import com.asakii.claude.agent.sdk.types.ToolType
 import com.asakii.codex.agent.sdk.CodexClientOptions
 import com.asakii.codex.agent.sdk.SandboxMode
 import com.asakii.codex.agent.sdk.ThreadOptions
@@ -26,8 +29,6 @@ import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.nio.file.Path
 import java.util.UUID
 import java.util.logging.Logger
@@ -47,26 +48,13 @@ class AiAgentRpcServiceImpl(
     private val logger = Logger.getLogger(javaClass.name)
     private val sessionId = UUID.randomUUID().toString()
     private val messageHistory = mutableListOf<RpcUiEvent>()
+    // 🔧 事件去重：使用 UUID 或事件内容 hash 来检测重复事件
+    private val sentEventIds = mutableSetOf<String>()
     private var client: UnifiedAgentClient? = null
     private var currentProvider: AiAgentProvider = serviceConfig.defaultProvider
     private var lastConnectOptions: RpcConnectOptions? = null
     
-    /**
-     * 会话级别的互斥锁
-     * 
-     * 保证同一会话在同一时刻只有一个协程在执行操作。
-     * 用于防止并发执行导致的冲突，确保操作的原子性和顺序性。
-     * 
-     * 当前使用场景：
-     * - query() 方法：通过 executeTurn() 使用此锁
-     * - queryWithContent() 方法：通过 executeTurn() 使用此锁
-     * 
-     * 后续可能扩展：
-     * - interrupt() 方法：可能需要加锁以确保与 query 的互斥
-     * - setModel() 方法：可能需要加锁以确保与 query 的互斥
-     * - 其他需要串行化的操作
-     */
-    private val sessionMutex = Mutex()
+    // 同步控制由前端负责，后端直接转发给 SDK
 
     override suspend fun connect(options: RpcConnectOptions?): RpcConnectResult {
         logger.info("🔌 [AI-Agent] 建立会话: $sessionId")
@@ -94,11 +82,15 @@ class AiAgentRpcServiceImpl(
             "✅ [AI-Agent] 已连接 provider=${connectOptions.provider} model=${connectOptions.model ?: "default"}"
         )
 
+        // 获取并转换能力信息
+        val capabilities = newClient.getCapabilities().toRpcCapabilities()
+
         return RpcConnectResult(
             sessionId = sessionId,
             provider = rpcProvider,
             model = connectOptions.model,
-            status = RpcSessionStatus.CONNECTED
+            status = RpcSessionStatus.CONNECTED,
+            capabilities = capabilities
         )
     }
 
@@ -138,6 +130,18 @@ class AiAgentRpcServiceImpl(
         return RpcSetModelResult(model = model)
     }
 
+    override suspend fun setPermissionMode(mode: RpcPermissionMode): RpcSetPermissionModeResult {
+        logger.info("⚙️ [AI-Agent] 切换权限模式 -> $mode")
+        val activeClient = client ?: error("AI Agent 尚未连接，请先调用 connect()")
+
+        // 将 RPC 权限模式转换为 SDK 权限模式
+        val sdkMode = mode.toSdkPermissionModeInternal()
+        activeClient.setPermissionMode(sdkMode)
+
+        logger.info("✅ [AI-Agent] 权限模式已切换为: $mode")
+        return RpcSetPermissionModeResult(mode = mode)
+    }
+
     override suspend fun getHistory(): RpcHistory =
         RpcHistory(messages = messageHistory.toList())
 
@@ -145,80 +149,149 @@ class AiAgentRpcServiceImpl(
         val activeClient = client ?: error("AI Agent 尚未连接，请先调用 connect()")
 
         return channelFlow {
-            // 使用会话级别的互斥锁，确保同一会话同一时刻只有一个协程在执行
-            sessionMutex.withLock {
-                logger.info("🔒 [executeTurn] 获取会话锁 (sessionId=$sessionId)，开始执行")
-                
-                // 使用 CompletableDeferred 确保 collector 已开始监听
-                val collectorReady = kotlinx.coroutines.CompletableDeferred<Unit>()
+            // 🔧 每次执行新回合时，清空事件去重集合
+            sentEventIds.clear()
+            logger.info("🚀 [executeTurn] 开始执行 (sessionId=$sessionId)")
 
-                val collector = launch {
-                    // 标记 collector 已准备好
-                    collectorReady.complete(Unit)
+            // 使用 CompletableDeferred 确保 collector 已开始监听
+            val collectorReady = kotlinx.coroutines.CompletableDeferred<Unit>()
 
-                    try {
-                        activeClient.streamEvents().collect { event ->
-                            try {
-                                logger.info("📨 [executeTurn] 收到流式事件: ${event::class.simpleName}")
-                                val rpcEvent = event.toRpcEvent(currentProvider)
-                                messageHistory.add(rpcEvent)
-                                
-                                // 尝试发送事件，如果 channel 已关闭则记录日志但不抛出异常
-                                try {
-                                    send(rpcEvent)
-                                } catch (e: kotlinx.coroutines.channels.ClosedSendChannelException) {
-                                    logger.warning("⚠️ [executeTurn] Channel 已关闭，无法发送事件: ${event::class.simpleName}")
-                                    cancel() // 取消收集器
-                                    return@collect
-                                } catch (e: Exception) {
-                                    logger.severe("❌ [executeTurn] 发送事件失败: ${e.message}")
-                                    e.printStackTrace()
-                                    // 不取消，继续尝试发送后续事件
+            val collector = launch {
+                // 标记 collector 已准备好
+                collectorReady.complete(Unit)
+
+                var eventCount = 0
+                try {
+                    logger.info("🔄 [executeTurn] 开始收集 streamEvents() 流")
+                    activeClient.streamEvents().collect { event ->
+                        eventCount++
+                        try {
+                            val eventType = event::class.simpleName
+                            logger.info("📨 [executeTurn] 收到流式事件 #$eventCount: $eventType")
+
+                            // 记录关键事件详情
+                            when (event) {
+                                is UiMessageComplete -> {
+                                    logger.info("✅ [executeTurn] UiMessageComplete: usage=${event.usage}")
                                 }
-
-                                if (event is UiMessageComplete || event is UiError) {
-                                    logger.info("📨 [executeTurn] 收到结束事件，取消收集器")
-                                    cancel()
+                                is UiResultMessage -> {
+                                    logger.info("🏁 [executeTurn] UiResultMessage: duration=${event.durationMs}ms isError=${event.isError}")
                                 }
-                            } catch (e: Exception) {
-                                logger.severe("❌ [executeTurn] 处理流式事件时出错: ${e.message}")
-                                e.printStackTrace()
-                                // 继续处理下一个事件
+                                is UiUserMessage -> {
+                                    logger.info("👤 [executeTurn] UiUserMessage: contentBlocks=${event.content.size}")
+                                }
+                                is UiError -> {
+                                    logger.severe("❌ [executeTurn] UiError: ${event.message}")
+                                }
+                                is UiToolComplete -> {
+                                    logger.info("🔧 [executeTurn] UiToolComplete: toolId=${event.toolId}, resultType=${event.result::class.simpleName}")
+                                }
+                                is UiToolStart -> {
+                                    logger.info("🚀 [executeTurn] UiToolStart: toolId=${event.toolId}, toolName=${event.toolName}")
+                                }
+                                is UiToolProgress -> {
+                                    logger.info("⏳ [executeTurn] UiToolProgress: toolId=${event.toolId}, status=${event.status}")
+                                }
+                                is UiMessageStart -> {
+                                    logger.info("📝 [executeTurn] UiMessageStart: messageId=${event.messageId}")
+                                }
+                                is UiTextDelta -> {
+                                    logger.info("📝 [executeTurn] UiTextDelta: textLength=${event.text.length}")
+                                }
+                                is UiThinkingDelta -> {
+                                    logger.info("💭 [executeTurn] UiThinkingDelta: thinkingLength=${event.thinking.length}")
+                                }
+                                is UiAssistantMessage -> {
+                                    logger.info("🤖 [executeTurn] UiAssistantMessage: contentBlocks=${event.content.size}")
+                                }
                             }
+
+                            val rpcEvent = event.toRpcEvent(currentProvider)
+
+                            // 🔧 事件去重：生成事件唯一标识
+                            val eventId = when (event) {
+                                is UiTextDelta -> "text_${event.text.hashCode()}_${eventCount}"
+                                is UiThinkingDelta -> "thinking_${event.thinking.hashCode()}_${eventCount}"
+                                is UiMessageStart -> "msg_start_${event.messageId}"
+                                is UiMessageComplete -> "msg_complete_${eventCount}"
+                                is UiToolStart -> "tool_start_${event.toolId}"
+                                is UiToolComplete -> "tool_complete_${event.toolId}"
+                                is UiToolProgress -> "tool_progress_${event.toolId}_${eventCount}"
+                                is UiAssistantMessage -> "assistant_${eventCount}"
+                                is UiUserMessage -> "user_${eventCount}"
+                                is UiResultMessage -> "result_${eventCount}"
+                                is UiError -> "error_${event.message.hashCode()}_${eventCount}"
+                                else -> "unknown_${eventCount}"
+                            }
+
+                            // 检查是否已发送过相同的事件
+                            if (sentEventIds.contains(eventId)) {
+                                logger.warning("⚠️ [executeTurn] 检测到重复事件，跳过: eventId=$eventId, type=$eventType")
+                                return@collect
+                            }
+                            sentEventIds.add(eventId)
+
+                            messageHistory.add(rpcEvent)
+
+                            // 尝试发送事件
+                            try {
+                                send(rpcEvent)
+                                logger.info("✅ [executeTurn] 事件 #$eventCount ($eventType) 已发送")
+                            } catch (e: kotlinx.coroutines.channels.ClosedSendChannelException) {
+                                logger.warning("⚠️ [executeTurn] Channel 已关闭，停止收集")
+                                cancel()
+                                return@collect
+                            } catch (e: Exception) {
+                                logger.severe("❌ [executeTurn] 发送事件失败 #$eventCount: ${e.message}")
+                                e.printStackTrace()
+                            }
+
+                            // 🔧 关键：收到 result 或 error 后立即停止收集
+                            if (event is UiResultMessage) {
+                                logger.info("🏁 [executeTurn] 收到 result 事件，停止收集器")
+                                cancel()
+                            }
+                            if (event is UiError) {
+                                logger.severe("❌ [executeTurn] 收到错误事件，取消收集器")
+                                cancel()
+                            }
+                        } catch (e: Exception) {
+                            logger.severe("❌ [executeTurn] 处理流式事件时出错 #$eventCount: ${e.message}")
+                            e.printStackTrace()
                         }
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        logger.info("ℹ️ [executeTurn] 收集器被取消")
-                        throw e
-                    } catch (e: Exception) {
-                        logger.severe("❌ [executeTurn] 收集流式事件时出错: ${e.message}")
-                        e.printStackTrace()
-                        throw e
                     }
+                    logger.info("📊 [executeTurn] streamEvents() 流收集完成，共 $eventCount 个事件")
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    logger.info("ℹ️ [executeTurn] 收集器被取消")
+                    throw e
+                } catch (e: Exception) {
+                    logger.severe("❌ [executeTurn] 收集流式事件时出错: ${e.message}")
+                    e.printStackTrace()
+                    throw e
                 }
-
-                // 等待 collector 准备好再执行 block
-                collectorReady.await()
-                logger.info("✅ [executeTurn] collector 已准备好，开始执行 block")
-
-                try {
-                    block(activeClient)
-                    logger.info("✅ [executeTurn] block 执行完成")
-                } catch (t: Throwable) {
-                    logger.severe("❌ [executeTurn] block 执行失败: ${t.message}")
-                    collector.cancel()
-                    throw t
-                }
-
-                try {
-                    collector.join()
-                    logger.info("✅ [executeTurn] collector 已完成")
-                } catch (_: CancellationException) {
-                    // ignore – turn finished normally
-                    logger.info("ℹ️ [executeTurn] collector 正常取消")
-                }
-                
-                logger.info("🔓 [executeTurn] 释放会话锁 (sessionId=$sessionId)，执行完成")
             }
+
+            // 等待 collector 准备好再执行 block
+            collectorReady.await()
+            logger.info("✅ [executeTurn] collector 已准备好，开始执行 block")
+
+            try {
+                block(activeClient)
+                logger.info("✅ [executeTurn] block 执行完成")
+            } catch (t: Throwable) {
+                logger.severe("❌ [executeTurn] block 执行失败: ${t.message}")
+                collector.cancel()
+                throw t
+            }
+
+            try {
+                collector.join()
+                logger.info("✅ [executeTurn] collector 已完成")
+            } catch (_: CancellationException) {
+                logger.info("ℹ️ [executeTurn] collector 正常取消")
+            }
+
+            logger.info("🏁 [executeTurn] 执行完成 (sessionId=$sessionId)")
         }
     }
 
@@ -238,11 +311,12 @@ class AiAgentRpcServiceImpl(
         val systemPrompt = options.systemPrompt ?: serviceConfig.defaultSystemPrompt
         val initialPrompt = options.initialPrompt
         val sessionHint = options.sessionId
-        val resume = options.resumeSessionId ?: options.claude?.resume
+        val resume = options.resumeSessionId
         val metadata = options.metadata.ifEmpty { emptyMap() }
 
-        val claudeOverrides = buildClaudeOverrides(model, systemPrompt, options.claude, metadata)
-        val codexOverrides = buildCodexOverrides(model, options.codex)
+        // 从顶层 options 读取配置（统一扁平结构）
+        val claudeOverrides = buildClaudeOverrides(model, systemPrompt, options, metadata)
+        val codexOverrides = buildCodexOverrides(model, options)
 
         return AiAgentConnectOptions(
             provider = provider,
@@ -260,18 +334,19 @@ class AiAgentRpcServiceImpl(
     private fun buildClaudeOverrides(
         model: String?,
         systemPrompt: String?,
-        options: RpcClaudeOptions?,
+        options: RpcConnectOptions,
         metadata: Map<String, String>
     ): ClaudeOverrides {
         val cwd = ideTools.getProjectPath().takeIf { it.isNotBlank() }?.let { Path.of(it) }
         val defaults = serviceConfig.claude
 
-        val permissionMode = options?.permissionMode?.toSdkPermissionMode()
+        // 从顶层 options 读取配置（统一扁平结构）
+        val permissionMode = options.permissionMode?.toSdkPermissionMode()
             ?: defaults.permissionMode?.let { it.toPermissionModeOrNull() }
             ?: PermissionMode.DEFAULT
 
         val metadataThinkingEnabled = metadata["thinkingEnabled"]?.toBooleanStrictOrNull()
-        val thinkingEnabled = options?.thinkingEnabled ?: metadataThinkingEnabled ?: true
+        val thinkingEnabled = options.thinkingEnabled ?: metadataThinkingEnabled ?: true
 
         val claudeSettings = ClaudeSettingsLoader.loadMergedSettings(cwd)
         val maxThinkingTokens = ClaudeSettingsLoader.resolveMaxThinkingTokens(claudeSettings, thinkingEnabled)
@@ -280,23 +355,21 @@ class AiAgentRpcServiceImpl(
         val extraArgs = mutableMapOf<String, String?>(
             "output-format" to "stream-json"
         )
-        
+
         val claudeOptions = ClaudeAgentOptions(
             model = model,
             cwd = cwd,
             systemPrompt = systemPrompt,
-            dangerouslySkipPermissions = options?.dangerouslySkipPermissions
+            dangerouslySkipPermissions = options.dangerouslySkipPermissions
                 ?: defaults.dangerouslySkipPermissions,
-            allowDangerouslySkipPermissions = options?.allowDangerouslySkipPermissions
+            allowDangerouslySkipPermissions = options.allowDangerouslySkipPermissions
                 ?: defaults.allowDangerouslySkipPermissions,
-            includePartialMessages = options?.includePartialMessages
+            includePartialMessages = options.includePartialMessages
                 ?: defaults.includePartialMessages,
             permissionMode = permissionMode,
-            continueConversation = options?.continueConversation ?: false,
-            resume = options?.resume,
+            continueConversation = options.continueConversation ?: false,
+            resume = options.resumeSessionId,  // 使用统一的 resumeSessionId
             maxThinkingTokens = maxThinkingTokens,
-            // 确保在使用 stream-json 时，如果启用了 print，也启用 verbose
-            // 注意：print 和 verbose 默认都是 false，只有在明确设置时才启用
             extraArgs = extraArgs
         )
 
@@ -305,16 +378,17 @@ class AiAgentRpcServiceImpl(
 
     private fun buildCodexOverrides(
         model: String?,
-        options: RpcCodexOptions?
+        options: RpcConnectOptions
     ): CodexOverrides {
         val codexDefaults = serviceConfig.codex
 
+        // 从顶层 options 读取配置（统一扁平结构）
         val clientOptions = CodexClientOptions(
-            baseUrl = options?.baseUrl ?: codexDefaults.baseUrl,
-            apiKey = options?.apiKey ?: codexDefaults.apiKey
+            baseUrl = options.baseUrl ?: codexDefaults.baseUrl,
+            apiKey = options.apiKey ?: codexDefaults.apiKey
         )
 
-        val sandboxMode = options?.sandboxMode?.toSdkSandboxMode()
+        val sandboxMode = options.sandboxMode?.toSdkSandboxMode()
             ?: codexDefaults.sandboxMode?.let {
                 runCatching { SandboxMode.valueOf(it.uppercase()) }.getOrNull()
             }
@@ -350,7 +424,7 @@ class AiAgentRpcServiceImpl(
                 }
                 is RpcToolUseBlock -> {
                     builder.appendLine()
-                        .append("[Tool: ${block.name} #${block.id}]")
+                        .append("[Tool: ${block.toolName} #${block.id}]")
                     block.input?.let { builder.appendLine(it.toString()) }
                 }
                 is RpcToolResultBlock -> {
@@ -379,6 +453,7 @@ class AiAgentRpcServiceImpl(
         is UiToolStart -> RpcToolStart(
             toolId = toolId,
             toolName = toolName,
+            toolType = toolType,  // 类型标识: "CLAUDE_READ", "CLAUDE_WRITE", "MCP" 等
             inputPreview = inputPreview,
             provider = provider.toRpcProvider()
         )
@@ -397,6 +472,21 @@ class AiAgentRpcServiceImpl(
             usage = usage?.toRpcUsage(),
             provider = provider.toRpcProvider()
         )
+        is UiResultMessage -> RpcResultMessage(
+            durationMs = durationMs,
+            durationApiMs = durationApiMs,
+            isError = isError,
+            numTurns = numTurns,
+            sessionId = sessionId,
+            totalCostUsd = totalCostUsd,
+            usage = usage,
+            result = result,
+            provider = provider.toRpcProvider()
+        )
+        is UiUserMessage -> RpcUserMessage(
+            content = content.map { it.toRpcContentBlock() },
+            provider = provider.toRpcProvider()
+        )
         is UiError -> RpcError(
             message = message,
             provider = provider.toRpcProvider()
@@ -411,12 +501,16 @@ class AiAgentRpcServiceImpl(
         is TextContent -> RpcTextBlock(text = text)
         is ImageContent -> RpcImageBlock(source = RpcImageSource(type = "base64", mediaType = mediaType, data = data))
         is ThinkingContent -> RpcThinkingBlock(thinking = thinking, signature = signature)
-        is ToolUseContent -> RpcToolUseBlock(
-            id = id,
-            name = name,
-            input = input,
-            status = status.toRpcStatus()
-        )
+        is ToolUseContent -> {
+            val toolTypeEnum = ToolType.fromToolName(name)
+            RpcToolUseBlock(
+                id = id,
+                toolName = name,           // 显示名称
+                toolType = toolTypeEnum.type,  // 类型标识: "CLAUDE_READ" 等
+                input = input,
+                status = status.toRpcStatus()
+            )
+        }
         is ToolResultContent -> RpcToolResultBlock(
             toolUseId = toolUseId,
             content = content,
@@ -512,5 +606,43 @@ class AiAgentRpcServiceImpl(
         is RpcTodoListBlock,
         is RpcErrorBlock,
         is RpcUnknownBlock -> null
+    }
+
+    // ==================== 能力相关转换函数 ====================
+
+    /**
+     * 将 SDK AgentCapabilities 转换为 RPC RpcCapabilities
+     */
+    private fun AgentCapabilities.toRpcCapabilities(): RpcCapabilities = RpcCapabilities(
+        canInterrupt = canInterrupt,
+        canSwitchModel = canSwitchModel,
+        canSwitchPermissionMode = canSwitchPermissionMode,
+        supportedPermissionModes = supportedPermissionModes.map { it.toRpcPermissionMode() },
+        canSkipPermissions = canSkipPermissions,
+        canSendRichContent = canSendRichContent,
+        canThink = canThink,
+        canResumeSession = canResumeSession
+    )
+
+    /**
+     * 将 SDK PermissionMode 转换为 RPC RpcPermissionMode
+     */
+    private fun SdkPermissionMode.toRpcPermissionMode(): RpcPermissionMode = when (this) {
+        SdkPermissionMode.DEFAULT -> RpcPermissionMode.DEFAULT
+        SdkPermissionMode.ACCEPT_EDITS -> RpcPermissionMode.ACCEPT_EDITS
+        SdkPermissionMode.BYPASS_PERMISSIONS -> RpcPermissionMode.BYPASS_PERMISSIONS
+        SdkPermissionMode.PLAN -> RpcPermissionMode.PLAN
+        SdkPermissionMode.DONT_ASK -> RpcPermissionMode.DONT_ASK
+    }
+
+    /**
+     * 将 RPC RpcPermissionMode 转换为 SDK PermissionMode（用于 setPermissionMode）
+     */
+    private fun RpcPermissionMode.toSdkPermissionModeInternal(): SdkPermissionMode = when (this) {
+        RpcPermissionMode.DEFAULT -> SdkPermissionMode.DEFAULT
+        RpcPermissionMode.ACCEPT_EDITS -> SdkPermissionMode.ACCEPT_EDITS
+        RpcPermissionMode.BYPASS_PERMISSIONS -> SdkPermissionMode.BYPASS_PERMISSIONS
+        RpcPermissionMode.PLAN -> SdkPermissionMode.PLAN
+        RpcPermissionMode.DONT_ASK -> SdkPermissionMode.DONT_ASK
     }
 }

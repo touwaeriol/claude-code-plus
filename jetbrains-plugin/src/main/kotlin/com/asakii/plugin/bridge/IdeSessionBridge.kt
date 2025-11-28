@@ -87,6 +87,9 @@ class IdeSessionBridge(
 
         injectThemeBridge(frame)
         notifyThemeChange()
+
+        // 推送语言设置（前端会根据 IDEA 语言自动切换）
+        pushLocale()
     }
 
     /**
@@ -250,6 +253,25 @@ class IdeSessionBridge(
 
     fun toggleHistoryOverlay() {
         sendCommand("toggleHistory")
+    }
+
+    /**
+     * 关闭指定会话
+     */
+    fun closeSession(sessionId: String) {
+        val payload = buildJsonObject { put("sessionId", sessionId) }
+        sendCommand("closeSession", payload)
+    }
+
+    /**
+     * 推送当前 IDEA 语言设置到前端
+     * 前端收到后会刷新页面应用新语言
+     */
+    fun pushLocale() {
+        val locale = ideActionBridge.getLocale()
+        val payload = buildJsonObject { put("locale", locale) }
+        sendCommand("setLocale", payload)
+        logger.info("🌐 Pushed locale to frontend: $locale")
     }
 
     private fun sendCommand(type: String, payload: JsonObject? = null) {
