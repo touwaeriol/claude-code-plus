@@ -36,8 +36,13 @@
               />
             </div>
 
-            <!-- 文本内容 -->
-            <div v-if="messageText" class="message-text">{{ messageText }}</div>
+            <!-- 文本内容（支持链接渲染） -->
+            <div
+              v-if="messageText"
+              class="message-text"
+              v-html="renderedText"
+              @click="handleMessageClick"
+            ></div>
 
             <!-- 内嵌图片（用户输入的图片） -->
             <div v-if="imageBlocks.length > 0" class="inline-images">
@@ -97,8 +102,10 @@ import { onClickOutside } from '@vueuse/core'
 import type { ImageBlock, ContentBlock } from '@/types/message'
 import type { ContextReference } from '@/types/display'
 import { isFileReference } from '@/utils/userMessageBuilder'
+import { linkifyText, getLinkFromEvent, handleLinkClick } from '@/utils/linkify'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 import ChatInput from './ChatInput.vue'
+import { ideaBridge } from '@/services/ideaBridge'
 
 // 兼容 Message 和 UserMessage (DisplayItem) 类型
 interface Props {
@@ -216,6 +223,27 @@ const messageText = computed(() => {
     })
     .join('\n')
 })
+
+// 渲染后的文本（带链接）
+const renderedText = computed(() => {
+  if (!messageText.value) return ''
+  const result = linkifyText(messageText.value)
+  return result.html
+})
+
+// 处理消息文本中的链接点击
+function handleMessageClick(event: MouseEvent) {
+  const linkInfo = getLinkFromEvent(event)
+  if (!linkInfo) return
+
+  event.preventDefault()
+
+  // 打开链接
+  handleLinkClick(linkInfo.href, linkInfo.type, (filePath) => {
+    // 文件路径：调用 IDE 打开文件
+    ideaBridge.query('ide.openFile', { filePath })
+  })
+}
 
 // 提取用户输入的图片内容（内嵌图片，在 content 中的图片）
 const imageBlocks = computed(() => {
@@ -451,6 +479,24 @@ function closeImagePreview() {
   margin-bottom: 0;
 }
 
+/* 链接样式 */
+.message-text :deep(.linkified-link) {
+  color: var(--el-color-primary, var(--ide-link, #409eff));
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.message-text :deep(.linkified-link:hover) {
+  text-decoration: underline;
+}
+
+/* 文件路径链接 */
+.message-text :deep(.file-link) {
+  background: var(--el-fill-color-light, var(--ide-badge-bg, #f5f7fa));
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
 /* 上下文图片 - 横向排列 */
 .context-images {
   display: flex;
@@ -530,6 +576,14 @@ function closeImagePreview() {
 
 .theme-dark .message-text {
   color: var(--ide-foreground, #e0e0e0);
+}
+
+.theme-dark .message-text :deep(.linkified-link) {
+  color: var(--el-color-primary, var(--ide-link, #58a6ff));
+}
+
+.theme-dark .message-text :deep(.file-link) {
+  background: var(--el-fill-color-light, var(--ide-badge-bg, #30363d));
 }
 
 .theme-dark .timestamp {

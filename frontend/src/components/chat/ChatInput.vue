@@ -114,8 +114,8 @@
         <span class="generating-text">{{ t('chat.generating') }}</span>
       </div>
 
-      <textarea
-        ref="textareaRef"
+      <RichTextInput
+        ref="richTextInputRef"
         v-model="inputText"
         class="message-textarea"
         :placeholder="placeholderText"
@@ -123,8 +123,8 @@
         @focus="isFocused = true"
         @blur="isFocused = false"
         @keydown="handleKeydown"
-        @paste="handlePaste"
-        @input="adjustHeight"
+        @paste-image="handlePasteImage"
+        @submit="handleRichTextSubmit"
       />
 
       <!-- 内嵌图片预览（在文字下方） -->
@@ -444,6 +444,7 @@ import type { ContentBlock } from '@/types/message'
 import AtSymbolFilePopup from '@/components/input/AtSymbolFilePopup.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
+import RichTextInput from './RichTextInput.vue'
 import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
 import { isInAtQuery, replaceAtQuery } from '@/utils/atSymbolDetector'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -549,7 +550,8 @@ const thinkingEnabled = computed(() => {
 })
 
 // Refs
-const textareaRef = ref<HTMLTextAreaElement>()
+const richTextInputRef = ref<InstanceType<typeof RichTextInput>>()
+const textareaRef = ref<HTMLTextAreaElement>() // 保留用于兼容 @ 符号检测
 const addContextButtonRef = ref<HTMLButtonElement>()
 const contextPopupRef = ref<HTMLDivElement>()
 const imageInputRef = ref<HTMLInputElement>()
@@ -642,18 +644,86 @@ watch([inputText, () => textareaRef.value?.selectionStart], () => {
 
 // Methods
 function focusInput() {
-  textareaRef.value?.focus()
+  richTextInputRef.value?.focus()
 }
 
 function adjustHeight() {
-  nextTick(() => {
-    const textarea = textareaRef.value
-    if (!textarea) return
+  // RichTextInput 自动处理高度，这里保留空实现以兼容现有调用
+}
 
-    textarea.style.height = 'auto'
-    const newHeight = Math.min(textarea.scrollHeight, 300)
-    textarea.style.height = `${newHeight}px`
-  })
+/**
+ * 处理 RichTextInput 的图片粘贴事件
+ */
+function handlePasteImage(file: File) {
+  console.log('📋 [handlePasteImage] 接收到粘贴图片:', file.name)
+
+  // 判断是否应该作为上下文还是内嵌图片
+  // 如果没有文本内容，作为上下文；否则作为内嵌图片
+  const text = inputText.value.trim()
+
+  if (!text) {
+    // 没有文本，作为上下文
+    console.log('📋 [handlePasteImage] 没有文本，将图片作为上下文')
+    addImageToContext(file)
+  } else {
+    // 有文本，作为内嵌图片
+    console.log('📋 [handlePasteImage] 有文本，将图片作为内嵌图片')
+    inlineImages.value.push(file)
+    emit('inline-images-change', inlineImages.value)
+  }
+}
+
+/**
+ * 处理 RichTextInput 的提交事件
+ */
+async function handleRichTextSubmit(content: { text: string; images: { id: string; data: string; mimeType: string; name: string }[] }) {
+  if (!props.enabled || props.isGenerating) return
+
+  const text = content.text.trim()
+  const hasContent = text || content.images.length > 0 || inlineImages.value.length > 0
+
+  if (!hasContent) return
+
+  // 构建 ContentBlock[]
+  const contents: ContentBlock[] = []
+
+  // 文本块
+  if (text) {
+    contents.push({ type: 'text', text } as ContentBlock)
+  }
+
+  // RichTextInput 中的图片
+  for (const img of content.images) {
+    contents.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: img.mimeType,
+        data: img.data
+      }
+    } as ContentBlock)
+  }
+
+  // 内嵌图片（从 inlineImages 数组）
+  for (const file of inlineImages.value) {
+    const base64 = await readImageAsBase64(file)
+    contents.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: file.type,
+        data: base64
+      }
+    } as ContentBlock)
+  }
+
+  emit('send', contents)
+
+  // 清理
+  richTextInputRef.value?.clear()
+  clearInlineImages()
+  inputText.value = ''
+  emit('inline-images-change', [])
 }
 
 // @ Symbol File Reference Functions
@@ -922,6 +992,7 @@ async function handleSend() {
 
     // 清理内嵌图片和 URL
     clearInlineImages()
+    richTextInputRef.value?.clear()
     inputText.value = ''
     emit('inline-images-change', [])
     adjustHeight()
@@ -958,6 +1029,7 @@ async function handleInterruptAndSend() {
 
   // 清理内嵌图片和 URL
   clearInlineImages()
+  richTextInputRef.value?.clear()
   inputText.value = ''
   emit('inline-images-change', [])
   adjustHeight()
