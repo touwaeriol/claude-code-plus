@@ -502,9 +502,13 @@ export const useSessionStore = defineStore('session', () => {
         const wasSuccess = !result.is_error
         toolCall.status = result.is_error ? ToolCallStatus.FAILED : ToolCallStatus.SUCCESS
         toolCall.endTime = Date.now()
-        toolCall.result = result.is_error
-          ? { type: 'error', error: typeof result.content === 'string' ? result.content : JSON.stringify(result.content) }
-          : { type: 'success', output: typeof result.content === 'string' ? result.content : JSON.stringify(result.content) }
+        // 直接使用后端格式，保留 is_error 字段
+        toolCall.result = {
+          type: result.type,
+          tool_use_id: result.tool_use_id,
+          content: result.content as string | unknown[],
+          is_error: result.is_error
+        }
 
         // 在 IDEA 环境下，工具调用成功后自动执行 IDEA 操作
         if (wasSuccess && ideaBridge.isInIde()) {
