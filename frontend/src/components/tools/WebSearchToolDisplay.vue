@@ -1,94 +1,97 @@
 <template>
-  <div class="tool-display websearch-tool">
-    <div class="tool-header">
-      <span class="tool-icon">🔍</span>
-      <span class="tool-name">WebSearch</span>
-      <code class="tool-query">{{ queryPreview }}</code>
-    </div>
-    <div v-if="expanded" class="tool-content">
-      <div class="search-info">
-        <div class="info-row">
-          <span class="label">{{ t('tools.label.query') }}:</span>
-          <span class="value">{{ query }}</span>
-        </div>
-        <div v-if="allowedDomains.length > 0" class="info-row">
-          <span class="label">{{ t('tools.label.allowedDomains') }}:</span>
-          <div class="domain-list">
-            <span v-for="(domain, index) in allowedDomains" :key="index" class="domain-tag allowed">
-              {{ domain }}
-            </span>
+  <CompactToolCard
+    :display-info="displayInfo"
+    :is-expanded="expanded"
+    :has-details="hasDetails"
+    @click="expanded = !expanded"
+  >
+    <template #details>
+      <div class="websearch-details">
+        <!-- 参数区域 -->
+        <div class="params-section">
+          <div class="info-row">
+            <span class="label">Query:</span>
+            <span class="value query">"{{ query }}"</span>
+          </div>
+          <div v-if="allowedDomains.length > 0" class="info-row">
+            <span class="label">允许域名:</span>
+            <div class="domain-list">
+              <span v-for="(domain, index) in allowedDomains" :key="index" class="domain-tag allowed">
+                {{ domain }}
+              </span>
+            </div>
+          </div>
+          <div v-if="blockedDomains.length > 0" class="info-row">
+            <span class="label">排除域名:</span>
+            <div class="domain-list">
+              <span v-for="(domain, index) in blockedDomains" :key="index" class="domain-tag blocked">
+                {{ domain }}
+              </span>
+            </div>
           </div>
         </div>
-        <div v-if="blockedDomains.length > 0" class="info-row">
-          <span class="label">{{ t('tools.label.blockedDomains') }}:</span>
-          <div class="domain-list">
-            <span v-for="(domain, index) in blockedDomains" :key="index" class="domain-tag blocked">
-              {{ domain }}
-            </span>
-          </div>
+        <!-- 结果区域 -->
+        <div v-if="hasResult" class="result-section">
+          <div class="section-title">搜索结果</div>
+          <pre class="result-content">{{ resultText }}</pre>
         </div>
       </div>
-    </div>
-  </div>
+    </template>
+  </CompactToolCard>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useI18n } from '@/composables/useI18n'
-import type { ClaudeWebSearchToolCall } from '@/types/display'
-
-const { t } = useI18n()
+import type { GenericToolCall } from '@/types/display'
+import CompactToolCard from './CompactToolCard.vue'
+import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
 
 interface Props {
-  toolCall: ClaudeWebSearchToolCall
+  toolCall: GenericToolCall
 }
 
 const props = defineProps<Props>()
-// 默认折叠，点击后展开查看搜索结果
+// WebSearch 默认折叠（搜索结果可能很长）
 const expanded = ref(false)
 
-const query = computed(() => props.toolCall.input.query || '')
-const queryPreview = computed(() => query.value.length > 40 ? `${query.value.slice(0, 40)}...` : query.value)
-const allowedDomains = computed(() => props.toolCall.input.allowed_domains || [])
-const blockedDomains = computed(() => props.toolCall.input.blocked_domains || [])
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
+
+const query = computed(() => props.toolCall.input?.query || '')
+const allowedDomains = computed(() => props.toolCall.input?.allowed_domains || [])
+const blockedDomains = computed(() => props.toolCall.input?.blocked_domains || [])
+
+// 结果文本
+const resultText = computed(() => {
+  const r = props.toolCall.result
+  if (!r || r.is_error) return ''
+  if (typeof r.content === 'string') return r.content
+  if (Array.isArray(r.content)) {
+    return (r.content as any[])
+      .filter((item: any) => item.type === 'text')
+      .map((item: any) => item.text)
+      .join('\n')
+  }
+  return JSON.stringify(r.content, null, 2)
+})
+
+// 是否有结果
+const hasResult = computed(() => {
+  const r = props.toolCall.result
+  return r && !r.is_error && resultText.value
+})
+
+// 始终有参数可展示
+const hasDetails = computed(() => !!query.value)
 </script>
 
 <style scoped>
-.tool-display {
-  border: 1px solid var(--ide-border, #e1e4e8);
-  border-radius: 6px;
-  background: var(--ide-panel-background, #f6f8fa);
-  margin: 8px 0;
-  padding: 8px 12px;
-}
-
-.tool-header {
+.websearch-details {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.tool-icon {
-  font-size: 16px;
-}
-
-.tool-name {
-  font-weight: 600;
-}
-
-.tool-query {
-  background: #eef2ff;
-  color: #4338ca;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.tool-content {
-  margin-top: 8px;
-}
-
-.search-info {
+.params-section {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -98,15 +101,22 @@ const blockedDomains = computed(() => props.toolCall.input.blocked_domains || []
   display: flex;
   gap: 8px;
   font-size: 12px;
+  align-items: baseline;
 }
 
 .label {
-  color: #586069;
-  min-width: 72px;
+  color: var(--ide-secondary-foreground, #586069);
+  min-width: 70px;
+  flex-shrink: 0;
 }
 
 .value {
-  color: #24292e;
+  color: var(--ide-foreground, #24292e);
+}
+
+.value.query {
+  color: var(--ide-accent, #4338ca);
+  font-weight: 500;
 }
 
 .domain-list {
@@ -116,7 +126,7 @@ const blockedDomains = computed(() => props.toolCall.input.blocked_domains || []
 }
 
 .domain-tag {
-  padding: 2px 6px;
+  padding: 2px 8px;
   border-radius: 10px;
   font-size: 11px;
 }
@@ -129,5 +139,32 @@ const blockedDomains = computed(() => props.toolCall.input.blocked_domains || []
 .domain-tag.blocked {
   background: #ffeef0;
   color: #d73a49;
+}
+
+.result-section {
+  border-top: 1px solid var(--ide-border, #e1e4e8);
+  padding-top: 8px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ide-secondary-foreground, #586069);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.result-content {
+  margin: 0;
+  padding: 8px;
+  background: var(--ide-code-background, #f6f8fa);
+  border: 1px solid var(--ide-border, #e1e4e8);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
 }
 </style>

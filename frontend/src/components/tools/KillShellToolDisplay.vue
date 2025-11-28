@@ -1,80 +1,115 @@
 <template>
-  <div class="tool-display kill-shell-tool">
-    <div class="tool-header">
-      <span class="tool-icon">⚡</span>
-      <span class="tool-name">KillShell</span>
-      <span class="shell-id">Shell: {{ shellId }}</span>
-    </div>
-    <div v-if="expanded" class="tool-content">
-      <div class="info-row">
-        <span class="label">Shell ID:</span>
-        <span class="value">{{ shellId }}</span>
+  <CompactToolCard
+    :display-info="displayInfo"
+    :is-expanded="expanded"
+    :has-details="hasDetails"
+    @click="expanded = !expanded"
+  >
+    <template #details>
+      <div class="killshell-details">
+        <div class="params-section">
+          <div class="info-row">
+            <span class="label">Shell ID:</span>
+            <code class="value">{{ shellId }}</code>
+          </div>
+        </div>
+        <div v-if="hasResult" class="result-section">
+          <div class="section-title">结果</div>
+          <pre class="result-content">{{ resultText }}</pre>
+        </div>
       </div>
-    </div>
-  </div>
+    </template>
+  </CompactToolCard>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { GenericToolCall } from '@/types/display'
+import CompactToolCard from './CompactToolCard.vue'
+import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
 
 interface Props {
   toolCall: GenericToolCall
 }
 
 const props = defineProps<Props>()
-// 默认折叠，点击后展开查看详情
 const expanded = ref(false)
 
-const shellId = computed(() => (props.toolCall.input as any)?.shell_id || '')
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
+const shellId = computed(() => props.toolCall.input?.shell_id || '')
+
+const resultText = computed(() => {
+  const r = props.toolCall.result
+  if (!r || r.is_error) return ''
+  if (typeof r.content === 'string') return r.content
+  return JSON.stringify(r.content, null, 2)
+})
+
+const hasResult = computed(() => {
+  const r = props.toolCall.result
+  return r && !r.is_error && resultText.value
+})
+
+const hasDetails = computed(() => !!shellId.value)
 </script>
 
 <style scoped>
-.tool-display {
-  border: 1px solid var(--ide-border, #e1e4e8);
-  border-radius: 6px;
-  background: var(--ide-panel-background, #f6f8fa);
-  margin: 8px 0;
-  padding: 8px 12px;
-}
-
-.tool-header {
+.killshell-details {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.tool-icon {
-  font-size: 16px;
-}
-
-.tool-name {
-  font-weight: 600;
-}
-
-.shell-id {
-  margin-left: auto;
-  font-size: 12px;
-  color: #586069;
-}
-
-.tool-content {
-  margin-top: 8px;
+.params-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .info-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
+  align-items: baseline;
 }
 
 .label {
-  color: #586069;
+  color: var(--ide-secondary-foreground, #586069);
   min-width: 70px;
 }
 
 .value {
-  color: #24292e;
+  color: var(--ide-foreground, #24292e);
+}
+
+code.value {
+  background: var(--ide-code-background, #f0f4f8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.result-section {
+  border-top: 1px solid var(--ide-border, #e1e4e8);
+  padding-top: 8px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ide-secondary-foreground, #586069);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.result-content {
+  margin: 0;
+  padding: 8px;
+  background: var(--ide-code-background, #f6f8fa);
+  border: 1px solid var(--ide-border, #e1e4e8);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
+  white-space: pre-wrap;
 }
 </style>

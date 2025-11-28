@@ -1,206 +1,137 @@
 <template>
-  <div class="tool-display bash-output-tool">
-    <div class="tool-header">
-      <span class="tool-icon">📟</span>
-      <span class="tool-name">BashOutput</span>
-      <code class="shell-id">Shell: {{ shellId }}</code>
-      <span v-if="filter" class="filter-badge">🔍 {{ filter }}</span>
-    </div>
-    <div v-if="expanded" class="tool-content">
-      <div class="tool-meta">
-        <div class="info-row">
-          <span class="label">Shell ID:</span>
-          <span class="value">{{ shellId }}</span>
-        </div>
-        <div v-if="filter" class="info-row">
-          <span class="label">{{ t('tools.label.filter') }}:</span>
-          <code class="value filter-text">{{ filter }}</code>
-        </div>
-      </div>
-
-      <div v-if="stdout || stderr" class="output-section">
-        <div class="section-header">
-          <span>{{ t('tools.label.output') }}</span>
-          <div class="header-actions">
-            <span
-              v-if="status"
-              class="status-badge"
-              :class="statusClass"
-            >{{ status }}</span>
+  <CompactToolCard
+    :display-info="displayInfo"
+    :is-expanded="expanded"
+    :has-details="hasDetails"
+    @click="expanded = !expanded"
+  >
+    <template #details>
+      <div class="bashoutput-details">
+        <!-- 参数区域 -->
+        <div class="params-section">
+          <div class="info-row">
+            <span class="label">Shell ID:</span>
+            <code class="value">{{ bashId }}</code>
+          </div>
+          <div v-if="filter" class="info-row">
+            <span class="label">Filter:</span>
+            <code class="value">{{ filter }}</code>
           </div>
         </div>
-
-        <pre v-if="stdout" class="output stdout">{{ stdout }}</pre>
-        <pre v-if="stderr" class="output stderr">{{ stderr }}</pre>
-        <div v-if="!stdout && !stderr" class="no-output">{{ t('tools.noOutput') }}</div>
+        <!-- 结果区域 -->
+        <div v-if="hasResult" class="result-section">
+          <div class="section-title">输出内容</div>
+          <pre class="result-content">{{ resultText }}</pre>
+        </div>
       </div>
-    </div>
-  </div>
+    </template>
+  </CompactToolCard>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useI18n } from '@/composables/useI18n'
 import type { GenericToolCall } from '@/types/display'
-
-const { t } = useI18n()
+import CompactToolCard from './CompactToolCard.vue'
+import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
 
 interface Props {
   toolCall: GenericToolCall
 }
 
 const props = defineProps<Props>()
-// 默认折叠，点击后展开查看输出
+// BashOutput 默认折叠
 const expanded = ref(false)
 
-const shellId = computed(() => (props.toolCall.input as any)?.bash_id || '')
-const filter = computed(() => (props.toolCall.input as any)?.filter || '')
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
 
-const stdout = computed(() => {
+const bashId = computed(() => props.toolCall.input?.bash_id || props.toolCall.input?.shell_id || '')
+const filter = computed(() => props.toolCall.input?.filter || '')
+
+// 结果文本
+const resultText = computed(() => {
   const r = props.toolCall.result
-  if (!r || r.type !== 'success') return ''
-  const content = r.output
-  if (typeof content === 'string') return content
-  if (content && typeof content === 'object' && 'stdout' in content) {
-    return (content as any).stdout || ''
+  if (!r || r.is_error) return ''
+  if (typeof r.content === 'string') return r.content
+  if (Array.isArray(r.content)) {
+    return (r.content as any[])
+      .filter((item: any) => item.type === 'text')
+      .map((item: any) => item.text)
+      .join('\n')
   }
-  return ''
+  return JSON.stringify(r.content, null, 2)
 })
 
-const stderr = computed(() => {
+// 是否有结果
+const hasResult = computed(() => {
   const r = props.toolCall.result
-  if (!r || r.type !== 'error') return ''
-  return r.error || ''
+  return r && !r.is_error && resultText.value
 })
 
-const status = computed(() => props.toolCall.status)
-const statusClass = computed(() => {
-  switch (props.toolCall.status) {
-    case 'SUCCESS':
-      return 'success'
-    case 'FAILED':
-      return 'error'
-    default:
-      return 'info'
-  }
-})
+// 始终有参数可展示
+const hasDetails = computed(() => !!bashId.value)
 </script>
 
 <style scoped>
-.tool-display {
-  border: 1px solid var(--ide-border, #e1e4e8);
-  border-radius: 6px;
-  background: var(--ide-panel-background, #f6f8fa);
-  margin: 8px 0;
-}
-
-.tool-header {
+.bashoutput-details {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.tool-icon {
-  font-size: 16px;
-}
-
-.tool-name {
-  font-weight: 600;
-}
-
-.shell-id {
-  margin-left: auto;
-  font-family: monospace;
-  color: #586069;
-}
-
-.filter-badge {
-  font-size: 12px;
-  background: #eef2ff;
-  color: #4338ca;
-  padding: 2px 6px;
-  border-radius: 10px;
-}
-
-.tool-content {
-  padding: 8px 12px 12px;
-}
-
-.tool-meta {
-  margin-bottom: 8px;
+.params-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .info-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
-  margin-bottom: 4px;
+  align-items: baseline;
 }
 
 .label {
-  color: #586069;
+  color: var(--ide-secondary-foreground, #586069);
   min-width: 70px;
+  flex-shrink: 0;
 }
 
 .value {
-  color: #24292e;
+  color: var(--ide-foreground, #24292e);
 }
 
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.status-badge {
+code.value {
+  background: var(--ide-code-background, #f0f4f8);
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.result-section {
+  border-top: 1px solid var(--ide-border, #e1e4e8);
+  padding-top: 8px;
+}
+
+.section-title {
   font-size: 11px;
+  font-weight: 600;
+  color: var(--ide-secondary-foreground, #586069);
+  margin-bottom: 6px;
+  text-transform: uppercase;
 }
 
-.status-badge.success {
-  background: #e6ffed;
-  color: #22863a;
-}
-
-.status-badge.error {
-  background: #ffeef0;
-  color: #d73a49;
-}
-
-.status-badge.info {
-  background: #fff8e1;
-  color: #b26a00;
-}
-
-.output-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.output {
+.result-content {
   margin: 0;
   padding: 8px;
-  background: #111;
-  color: #eee;
+  background: var(--ide-code-background, #f6f8fa);
+  border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 4px;
-  font-family: 'Consolas', 'Monaco', monospace;
-  white-space: pre-wrap;
-}
-
-.output.stderr {
-  background: #2d1a1a;
-  color: #ffb3b3;
-}
-
-.no-output {
   font-size: 12px;
-  color: #888;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
 }
 </style>
