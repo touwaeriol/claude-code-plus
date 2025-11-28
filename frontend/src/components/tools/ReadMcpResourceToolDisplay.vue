@@ -40,9 +40,15 @@ const uri = computed(() => (props.toolCall.input as any)?.uri || '')
 const resultText = computed(() => {
   const r = props.toolCall.result
   if (!r) return ''
-  if (r.type === 'success') return typeof r.output === 'string' ? r.output : JSON.stringify(r.output)
-  if (r.type === 'error') return r.error || ''
-  return ''
+  // 使用后端格式：直接读取 content
+  if (typeof r.content === 'string') return r.content
+  if (Array.isArray(r.content)) {
+    return (r.content as any[])
+      .filter((item: any) => item.type === 'text')
+      .map((item: any) => item.text)
+      .join('\n')
+  }
+  return JSON.stringify(r.content, null, 2)
 })
 </script>
 

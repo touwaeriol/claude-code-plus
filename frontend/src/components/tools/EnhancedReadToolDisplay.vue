@@ -179,11 +179,15 @@ function getResultContent(): string {
   const result = props.toolCall.result
   if (!result) return ''
 
-  if (result.type === 'success') {
-    return result.output
-  }
-  if (result.type === 'fileRead') {
+  // 使用后端格式：直接读取 content
+  if (typeof result.content === 'string') {
     return result.content
+  }
+  if (Array.isArray(result.content)) {
+    return (result.content as any[])
+      .filter((item: any) => item.type === 'text')
+      .map((item: any) => item.text)
+      .join('\n')
   }
 
   return JSON.stringify(result, null, 2)
@@ -193,8 +197,17 @@ function getErrorMessage(): string {
   const result = props.toolCall.result
   if (!result) return ''
 
-  if (result.type === 'failure') {
-    return result.details || result.error
+  // 使用后端格式：is_error 为 true 时读取 content
+  if (result.is_error) {
+    if (typeof result.content === 'string') {
+      return result.content
+    }
+    if (Array.isArray(result.content)) {
+      return (result.content as any[])
+        .filter((item: any) => item.type === 'text')
+        .map((item: any) => item.text)
+        .join('\n')
+    }
   }
 
   return 'Unknown error'

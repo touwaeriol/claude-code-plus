@@ -72,18 +72,8 @@ export function createToolCall(
 export function updateToolCallResult(toolCall: ToolCall, resultBlock: ToolResultContent) {
   toolCall.status = resultBlock.is_error ? ToolCallStatus.FAILED : ToolCallStatus.SUCCESS
   toolCall.endTime = Date.now()
-
-  const result: ToolResult = resultBlock.is_error
-    ? {
-        type: 'error',
-        error: typeof resultBlock.content === 'string' ? resultBlock.content : JSON.stringify(resultBlock.content)
-      }
-    : {
-        type: 'success',
-        output: typeof resultBlock.content === 'string' ? resultBlock.content : JSON.stringify(resultBlock.content)
-      }
-
-  toolCall.result = result
+  // 直接存储后端数据，不做格式转换，保留 is_error 字段
+  toolCall.result = resultBlock as ToolResult
 }
 
 export function convertMessageToDisplayItems(

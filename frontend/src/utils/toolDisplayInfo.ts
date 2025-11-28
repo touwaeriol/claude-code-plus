@@ -131,6 +131,8 @@ export function extractToolDisplayInfo(
 
   const icon = TOOL_ICONS[toolName] || '🔧'
   const actionType = ACTION_TYPES[toolName] || toolName || 'Unknown'
+
+  // 直接使用后端格式：result.is_error
   const status = result?.is_error ? 'error' : (result ? 'success' : 'pending')
 
   // 检查 input 是否还在加载中（stream event 增量更新时 input 可能为空）
@@ -254,25 +256,20 @@ export function extractToolDisplayInfo(
     }
   }
 
-  // 提取错误信息
+  // 提取错误信息（直接使用后端格式：result.content）
   let errorMessage: string | undefined
   if (status === 'error' && result) {
-    // 尝试从不同格式的 result 中提取错误信息
     if (typeof result.content === 'string') {
       errorMessage = result.content
     } else if (Array.isArray(result.content)) {
       // 如果 content 是数组，提取文本内容
-      const textContent = result.content
+      const textContent = (result.content as any[])
         .filter((item: any) => item.type === 'text')
         .map((item: any) => item.text)
         .join('\n')
       if (textContent) {
         errorMessage = textContent
       }
-    }
-    // 如果还没有错误信息，尝试其他字段
-    if (!errorMessage && (result as any).error) {
-      errorMessage = (result as any).error
     }
   }
 

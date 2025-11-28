@@ -148,10 +148,15 @@ export interface BaseToolCall extends BaseDisplayItem {
 
 /**
  * 工具调用结果
+ *
+ * 直接使用后端格式（与 ToolResultContent 保持一致），不做格式转换
  */
-export type ToolResult =
-  | { type: 'success'; output: string; summary?: string; details?: string; affectedFiles?: string[] }
-  | { type: 'error'; error: string; details?: string }
+export type ToolResult = {
+  type?: 'tool_result'
+  tool_use_id?: string
+  content?: string | unknown[]
+  is_error?: boolean
+}
 
 // ============ Claude SDK 工具调用类型 ============
 
