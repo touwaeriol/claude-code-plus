@@ -89,20 +89,20 @@ export function buildUserMessageContent(options: BuildUserMessageContentOptions)
 
   for (const context of contexts) {
     if (context.type === 'file') {
-      const rawPath = (context as any).fullPath || (context as any).path || context.uri?.replace(/^file:\/\//, '')
+      const rawPath = context.fullPath || context.path || context.uri?.replace(/^file:\/\//, '')
       if (rawPath) {
         const fileUri = rawPath.startsWith('file://') ? rawPath : `file://${rawPath}`
         content.push({ type: 'text', text: `@${fileUri}` } as TextBlock)
       }
     } else if (context.type === 'image') {
-      const mediaType = (context as any).mimeType || 'image/png'
-      if ((context as any).base64Data) {
+      const mediaType = context.mimeType || 'image/png'
+      if (context.base64Data) {
         content.push({
           type: 'image',
           source: {
             type: 'base64',
             media_type: mediaType,
-            data: (context as any).base64Data
+            data: context.base64Data
           }
         } as ImageBlock)
       } else if (context.uri) {
@@ -116,8 +116,8 @@ export function buildUserMessageContent(options: BuildUserMessageContentOptions)
           }
         } as ImageBlock)
       }
-    } else if (context.type === 'web' && ((context as any).url || context.uri)) {
-      const url = (context as any).url || context.uri
+    } else if (context.type === 'web' && (context.url || context.uri)) {
+      const url = context.url || context.uri
       if (url) {
         content.push({ type: 'text', text: url } as TextBlock)
       }

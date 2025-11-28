@@ -66,7 +66,7 @@ fun main() = runBlocking {
         println("=== 阶段 2: 切换到编辑模式 (acceptEdits) ===")
         println("🔐 切换权限模式到 acceptEdits...")
 
-        client.setPermissionMode("acceptEdits")
+        client.setPermissionMode(PermissionMode.ACCEPT_EDITS)
         println("✅ 权限模式已切换\n")
 
         client.query("现在请实施你建议的改进")
@@ -132,7 +132,7 @@ fun main() = runBlocking {
         println("🔄 切换回强大模型和默认权限...")
 
         client.setModel("claude-sonnet-4-20250514")
-        client.setPermissionMode("default")
+        client.setPermissionMode(PermissionMode.DEFAULT)
         println("✅ 已切换回初始配置\n")
 
         client.query("请验证刚才的修改是否正确")

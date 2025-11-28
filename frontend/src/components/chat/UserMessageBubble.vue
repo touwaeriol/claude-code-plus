@@ -1,70 +1,85 @@
 <template>
-  <div class="user-message-bubble">
-    <!-- 时间戳 -->
-    <!-- 隐藏时间戳，使消息展示更紧凑 -->
-    <!-- <div class="timestamp">{{ formattedTime }}</div> -->
-    
-    <!-- 上下文引用（如果有）- 从左边开始排列 -->
-    <div v-if="hasContexts" class="contexts-wrapper">
-      <div class="contexts">
-        <div v-for="(context, index) in contexts" :key="index" class="context-item">
-          <span class="context-icon">{{ getContextIcon(context.type) }}</span>
-          <span class="context-label">{{ context.label }}</span>
-        </div>
-      </div>
-      
-      <!-- 上下文图片预览（如果有） -->
-      <div v-if="parsedMessage.contextImages.length > 0" class="context-images">
-        <div
-          v-for="(image, index) in parsedMessage.contextImages"
-          :key="`context-image-${index}`"
-          class="context-image-item"
+  <div
+    class="user-message-row"
+    :class="{ 'is-editing': isEditing }"
+    @mouseenter="showEditButton = true"
+    @mouseleave="showEditButton = false"
+  >
+    <!-- 显示模式 -->
+    <template v-if="!isEditing">
+      <!-- 左侧占位元素，填充空白区域使整行可交互 -->
+      <div class="row-spacer"></div>
+      <div class="message-wrapper">
+        <!-- 编辑按钮（悬浮显示，紧贴气泡左侧） -->
+        <button
+          v-show="showEditButton"
+          class="edit-button"
+          title="编辑消息"
+          @click="enterEditMode"
         >
-          <img
-            :src="getImageSrc(image)"
-            :alt="`Context image ${index + 1}`"
-            class="context-image-preview"
-            @click="openImagePreview(image)"
-          />
-        </div>
-      </div>
-    </div>
-    
-    <!-- 消息内容 -->
-    <div class="bubble-content" :class="{ collapsed: isCollapsed && isLongMessage }">
-      <!-- 文本内容 -->
-      <div v-if="messageText" class="message-text">{{ messageText }}</div>
+          <span class="edit-icon">✏️</span>
+        </button>
 
-      <!-- 图片内容 -->
-      <div v-if="imageBlocks.length > 0" class="message-images">
-        <div
-          v-for="(image, index) in imageBlocks"
-          :key="index"
-          class="image-item"
-        >
-          <img
-            :src="getImageSrc(image)"
-            :alt="`Image ${index + 1}`"
-            class="message-image"
-            @click="openImagePreview(image)"
-          />
-          <div class="image-info">
-            <span class="image-name">{{ getImageName(image, index) }}</span>
-            <span class="image-size">{{ getImageSize(image) }}</span>
+        <!-- 消息气泡 -->
+        <div class="user-message-bubble">
+          <!-- 单一气泡容器 -->
+          <div class="bubble-content" :class="{ collapsed: isCollapsed && isLongMessage }">
+            <!-- 上下文图片（在文字上方） -->
+            <div v-if="contextImagesAsBlocks.length > 0" class="context-images">
+              <img
+                v-for="(image, index) in contextImagesAsBlocks"
+                :key="`ctx-${index}`"
+                :src="getImageSrc(image)"
+                :alt="`Context image ${index + 1}`"
+                class="context-thumb"
+                @click="openImagePreview(image)"
+              />
+            </div>
+
+            <!-- 文本内容 -->
+            <div v-if="messageText" class="message-text">{{ messageText }}</div>
+
+            <!-- 内嵌图片（用户输入的图片） -->
+            <div v-if="imageBlocks.length > 0" class="inline-images">
+              <img
+                v-for="(image, index) in imageBlocks"
+                :key="`img-${index}`"
+                :src="getImageSrc(image)"
+                :alt="`Image ${index + 1}`"
+                class="inline-thumb"
+                @click="openImagePreview(image)"
+              />
+            </div>
           </div>
+
+          <!-- 折叠/展开按钮 -->
+          <button
+            v-if="isLongMessage"
+            class="toggle-button"
+            @click="toggleCollapse"
+          >
+            {{ isCollapsed ? '展开 ▾' : '收起 ▴' }}
+          </button>
         </div>
       </div>
+    </template>
+
+    <!-- 编辑模式：内嵌 ChatInput -->
+    <div v-else ref="editorContainerRef" class="inline-editor-container">
+      <ChatInput
+        ref="chatInputRef"
+        :inline="true"
+        :edit-disabled="true"
+        :contexts="editContexts"
+        :show-context-controls="true"
+        :show-model-selector="true"
+        :show-permission-controls="true"
+        @send="handleEditSubmit"
+        @cancel="exitEditMode"
+        @context-add="handleContextAdd"
+        @context-remove="handleContextRemove"
+      />
     </div>
-    
-    <!-- 折叠/展开按钮（长消息） -->
-    <button
-      v-if="isLongMessage"
-      class="toggle-button"
-      @click="toggleCollapse"
-    >
-      <span class="toggle-icon">{{ isCollapsed ? '▾' : '▴' }}</span>
-      <span class="toggle-text">{{ isCollapsed ? '展开' : '收起' }}</span>
-    </button>
   </div>
 
   <!-- 图片预览模态框 -->
@@ -77,18 +92,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import type { Message, ImageBlock, ContentBlock } from '@/types/message'
-import { parseUserMessage, isFileReference } from '@/utils/userMessageBuilder'
+import { ref, computed, nextTick, watch } from 'vue'
+import { onClickOutside } from '@vueuse/core'
+import type { ImageBlock, ContentBlock } from '@/types/message'
+import type { ContextReference } from '@/types/display'
+import { isFileReference } from '@/utils/userMessageBuilder'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
+import ChatInput from './ChatInput.vue'
 
+// 兼容 Message 和 UserMessage (DisplayItem) 类型
 interface Props {
-  message: Message
-  contexts?: Array<{
-    type: 'file' | 'folder' | 'url' | 'code'
-    label: string
-    path?: string
-  }>
+  message: {
+    id?: string
+    content?: ContentBlock[]
+    contexts?: ContextReference[]  // DisplayItem 中的 contexts 已经包含图片
+    [key: string]: unknown
+  }
 }
 
 const props = defineProps<Props>()
@@ -96,58 +115,128 @@ const props = defineProps<Props>()
 // 折叠状态
 const isCollapsed = ref(true)
 
-// 解析用户消息，分离上下文和用户输入
-const parsedMessage = computed(() => {
-  if (!props.message.content || !Array.isArray(props.message.content)) {
-    return {
-      contexts: [],
-      contextImages: [],
-      userContent: []
-    }
+// 编辑模式状态
+const isEditing = ref(false)
+const showEditButton = ref(false)
+const chatInputRef = ref<InstanceType<typeof ChatInput>>()
+const editorContainerRef = ref<HTMLDivElement>()
+
+// 编辑时的上下文（从原始消息复制，可在编辑时修改）
+const editContexts = ref<ContextReference[]>([])
+
+// 点击外部退出编辑模式
+onClickOutside(editorContainerRef, () => {
+  if (isEditing.value) {
+    exitEditMode()
   }
-  return parseUserMessage(props.message.content as ContentBlock[])
+})
+
+// 进入编辑模式
+function enterEditMode() {
+  isEditing.value = true
+
+  // 复制原始上下文到编辑上下文
+  editContexts.value = props.message.contexts ? [...props.message.contexts] : []
+
+  // 恢复内容到输入框
+  nextTick(() => {
+    if (chatInputRef.value && props.message.content) {
+      chatInputRef.value.setContent(props.message.content)
+    }
+  })
+}
+
+// 退出编辑模式
+function exitEditMode() {
+  isEditing.value = false
+  editContexts.value = []
+}
+
+// 处理编辑提交（当前阶段禁用，预留接口）
+function handleEditSubmit(_contents: ContentBlock[]) {
+  // 当前阶段不实现，预留接口
+  // 后续开放时：调用 sessionStore 更新消息
+  exitEditMode()
+}
+
+// 处理上下文添加
+function handleContextAdd(context: ContextReference) {
+  editContexts.value.push(context)
+}
+
+// 处理上下文移除
+function handleContextRemove(context: ContextReference) {
+  const index = editContexts.value.findIndex(c => c.uri === context.uri)
+  if (index !== -1) {
+    editContexts.value.splice(index, 1)
+  }
+}
+
+// 从 DisplayItem.contexts 中提取图片上下文（ContextReference 类型）
+const contextImageRefs = computed(() => {
+  const ctxs = props.message.contexts
+  if (!ctxs || !Array.isArray(ctxs)) return []
+  return ctxs.filter(ctx => ctx.type === 'image' && ctx.base64Data)
+})
+
+// 将 ContextReference 转换为 ImageBlock 格式（用于复用 getImageSrc 等函数）
+const contextImagesAsBlocks = computed((): ImageBlock[] => {
+  return contextImageRefs.value.map(ctx => ({
+    type: 'image' as const,
+    source: {
+      type: 'base64' as const,
+      media_type: ctx.mimeType || 'image/png',
+      data: ctx.base64Data || ''
+    }
+  }))
 })
 
 // 提取用户输入的文本内容（排除文件引用）
 const messageText = computed(() => {
-  const userContent = parsedMessage.value.userContent
-  if (!userContent || userContent.length === 0) {
+  const content = props.message.content
+  if (!content || !Array.isArray(content)) {
     return ''
   }
 
   // 从用户输入内容块中提取文本（排除文件引用）
-  return userContent
+  return content
     .filter(block => {
-      if (block.type === 'text') {
+      if (block.type === 'text' && 'text' in block) {
         const text = (block as any).text?.trim() || ''
         // 排除文件引用格式的文本
         return !isFileReference(text)
       }
       return false
     })
-    .map(block => (block as any).text)
+    .map(block => {
+      if (block.type === 'text' && 'text' in block) {
+        return (block as any).text
+      }
+      return ''
+    })
     .join('\n')
 })
 
-// 提取用户输入的图片内容（排除上下文图片）
+// 提取用户输入的图片内容（内嵌图片，在 content 中的图片）
 const imageBlocks = computed(() => {
-  const userContent = parsedMessage.value.userContent
-  if (!userContent || userContent.length === 0) {
+  const content = props.message.content
+  if (!content || !Array.isArray(content)) {
     return []
   }
 
-  // 只返回用户输入区域的图片（内嵌图片）
-  return userContent
-    .filter(block => block.type === 'image') as ImageBlock[]
+  // 返回 content 中的图片块
+  return content.filter(block => block.type === 'image') as ImageBlock[]
 })
 
-// 提取上下文引用
+// 提取上下文引用（用于显示标签）
 const contexts = computed(() => {
-  const parsed = parsedMessage.value
+  const ctxs = props.message.contexts
+  if (!ctxs || !Array.isArray(ctxs)) return []
+
   const result: Array<{ type: string; label: string; path?: string }> = []
-  
+
   // 添加文件上下文
-  parsed.contexts.forEach(ctx => {
+  ctxs.forEach(ctx => {
     if (ctx.type === 'file' && ctx.path) {
       result.push({
         type: 'file',
@@ -156,15 +245,16 @@ const contexts = computed(() => {
       })
     }
   })
-  
-  // 添加图片上下文
-  if (parsed.contextImages.length > 0) {
+
+  // 添加图片上下文计数
+  const imageCount = contextImageRefs.value.length
+  if (imageCount > 0) {
     result.push({
       type: 'image',
-      label: `图片 (${parsed.contextImages.length})`
+      label: `图片 (${imageCount})`
     })
   }
-  
+
   return result
 })
 
@@ -173,17 +263,9 @@ const isLongMessage = computed(() => {
   return messageText.value.length > 200 || imageBlocks.value.length > 2
 })
 
-// 是否有上下文引用
+// 是否有上下文引用（包括文件上下文和图片上下文）
 const hasContexts = computed(() => {
-  return contexts.value.length > 0
-})
-
-// 格式化时间戳
-const formattedTime = computed(() => {
-  const date = new Date(props.message.timestamp)
-  const hours = date.getHours().toString().padStart(2, '0')
-  const minutes = date.getMinutes().toString().padStart(2, '0')
-  return `${hours}:${minutes}`
+  return contexts.value.length > 0 || contextImagesAsBlocks.value.length > 0
 })
 
 // 切换折叠状态
@@ -257,23 +339,72 @@ function closeImagePreview() {
 </script>
 
 <style scoped>
+/* 消息行容器 */
+.user-message-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 4px 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 左侧占位元素 - 填充空白使整行可交互 */
+.row-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 消息包装器 - 编辑按钮+气泡作为整体 */
+.message-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 95%;
+  flex-shrink: 0;
+}
+
+/* 编辑按钮 - flex 项，紧贴气泡左侧 */
+.edit-button {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.message-wrapper:hover .edit-button {
+  opacity: 1;
+}
+
+.edit-button:hover {
+  background: var(--ide-hover-background, rgba(0, 0, 0, 0.06));
+}
+
+.edit-icon {
+  font-size: 14px;
+}
+
+/* 内嵌编辑器容器 */
+.inline-editor-container {
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 编辑模式下的行样式 */
+.user-message-row.is-editing {
+  justify-content: stretch;
+}
+
 .user-message-bubble {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-  margin-bottom: 16px;
   max-width: 100%;
-}
-
-/* 上下文包装器 - 从左边开始排列 */
-.contexts-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  width: 100%;
-  max-width: 80%;
 }
 
 .timestamp {
@@ -285,8 +416,8 @@ function closeImagePreview() {
 .bubble-content {
   background: #E3F2FD;
   border-radius: 12px;
-  padding: 12px 16px;
-  max-width: 80%;
+  padding: 10px 14px;
+  max-width: 100%;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   transition: all 0.2s ease;
 }
@@ -308,146 +439,75 @@ function closeImagePreview() {
 }
 
 .message-text {
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.4;
   color: var(--ide-foreground, #1a1a1a);
   white-space: pre-wrap;
   word-break: break-word;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .message-text:last-child {
   margin-bottom: 0;
 }
 
-/* 图片显示样式 */
-.message-images {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.image-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 8px;
-  padding: 8px;
-  transition: background 0.2s ease;
-}
-
-.image-item:hover {
-  background: rgba(255, 255, 255, 0.8);
-}
-
-.message-image {
-  max-width: 100%;
-  max-height: 300px;
-  border-radius: 6px;
-  cursor: pointer;
-  object-fit: contain;
-  transition: transform 0.2s ease;
-}
-
-.message-image:hover {
-  transform: scale(1.02);
-}
-
-.image-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.6));
-}
-
-.image-name {
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-
-.image-size {
-  margin-left: 8px;
-  opacity: 0.7;
-}
-
-.contexts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: flex-start;
-}
-
-.context-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.7));
-  background: rgba(255, 255, 255, 0.6);
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.context-icon {
-  font-size: 14px;
-}
-
-.context-label {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 上下文图片预览 */
+/* 上下文图片 - 横向排列 */
 .context-images {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
-.context-image-item {
-  flex-shrink: 0;
-}
-
-.context-image-preview {
-  max-width: 100px;
-  max-height: 100px;
+/* 上下文缩略图 */
+.context-thumb {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
   border-radius: 6px;
   cursor: pointer;
-  object-fit: contain;
   border: 1px solid rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease;
+  transition: transform 0.2s;
 }
 
-.context-image-preview:hover {
+.context-thumb:hover {
   transform: scale(1.05);
 }
 
-.theme-dark .context-images {
-  border-top-color: rgba(255, 255, 255, 0.1);
+/* 内嵌图片 - 横向排列 */
+.inline-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
 }
 
-.theme-dark .context-image-preview {
-  border-color: rgba(255, 255, 255, 0.1);
+.inline-thumb {
+  max-width: 80px;
+  max-height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.inline-thumb:hover {
+  transform: scale(1.02);
+}
+
+/* 暗色主题 - 图片边框 */
+.theme-dark .context-thumb,
+.theme-dark .inline-thumb {
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .toggle-button {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 12px;
+  padding: 4px 10px;
+  margin-top: 6px;
   background: transparent;
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  border-radius: 6px;
-  font-size: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  font-size: 11px;
   color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.6));
   cursor: pointer;
   transition: all 0.2s ease;
@@ -455,15 +515,7 @@ function closeImagePreview() {
 
 .toggle-button:hover {
   background: rgba(0, 0, 0, 0.05);
-  border-color: rgba(0, 0, 0, 0.3);
-}
-
-.toggle-icon {
-  font-size: 10px;
-}
-
-.toggle-text {
-  font-size: 11px;
+  border-color: rgba(0, 0, 0, 0.25);
 }
 
 /* 暗色主题适配 */

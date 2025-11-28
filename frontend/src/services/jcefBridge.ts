@@ -36,9 +36,8 @@ class JcefBridgeService {
     if (typeof window === 'undefined') {
       return false
     }
-    const ideHost = (window as any).__CLAUDE_IDE_HOST__
-    const ideBridge = (window as any).__CLAUDE_IDE_BRIDGE__
-    return !!(ideHost || ideBridge)
+    // 检测 JCEF 原生注入的 cefQuery 函数
+    return typeof (window as any).cefQuery === 'function'
   }
 
   async init(): Promise<void> {

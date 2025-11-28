@@ -1,5 +1,6 @@
 import { watch, type WatchStopHandle } from 'vue'
 import { ideaBridge } from '@/services/ideaBridge'
+import localeService from '@/services/localeService'
 import type { useSessionStore } from '@/stores/sessionStore'
 
 export interface HostCommand {
@@ -118,6 +119,47 @@ function registerDefaultHandler(store: SessionStore) {
           const session = await createFn?.()
           if (session?.id) {
             await store.switchSession(session.id)
+          }
+          break
+        }
+        case 'closeSession': {
+          const sessionId = command.payload?.sessionId
+          if (sessionId) {
+            const sessions = resolveSessionList(store)
+            // 如果只有一个会话，不允许关闭
+            if (sessions.length <= 1) {
+              console.warn('[IDE Bridge] Cannot close the last session')
+              break
+            }
+            // 如果关闭的是当前会话，先切换到其他会话
+            const currentId = (store.currentSessionId as any)?.value ?? store.currentSessionId
+            if (sessionId === currentId) {
+              const otherSession = sessions.find((s: any) => s.id !== sessionId)
+              if (otherSession) {
+                await store.switchSession(otherSession.id)
+              }
+            }
+            // 删除会话
+            if (typeof store.deleteSession === 'function') {
+              await store.deleteSession(sessionId)
+            }
+          }
+          break
+        }
+        case 'setLocale': {
+          // IDEA 推送语言设置，前端应用并刷新页面
+          const locale = command.payload?.locale
+          if (locale) {
+            const currentLocale = localeService.getLocale()
+            // 只有语言不同时才刷新页面
+            if (locale !== currentLocale) {
+              console.log(`[IDE Bridge] Locale changed: ${currentLocale} -> ${locale}`)
+              await localeService.setLocale(locale)
+              // 刷新页面应用新语言
+              window.location.reload()
+            } else {
+              console.log(`[IDE Bridge] Locale unchanged: ${locale}`)
+            }
           }
           break
         }

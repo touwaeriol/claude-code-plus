@@ -10,7 +10,7 @@
         <div class="content-preview">
           <div class="preview-header">
             <span></span>
-            <button class="copy-btn" title="复制" @click.stop="copyContent">
+            <button class="copy-btn" :title="t('common.copy')" @click.stop="copyContent">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -26,15 +26,16 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ideService } from '@/services/ideaBridge'
-import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
+import { useI18n } from '@/composables/useI18n'
+import type { ClaudeWriteToolCall } from '@/types/display'
 import CompactToolCard from './CompactToolCard.vue'
 import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
 import { toolEnhancement } from '@/services/toolEnhancement'
 
+const { t } = useI18n()
+
 interface Props {
-  toolUse: ToolUseBlock
-  result?: ToolResultBlock
+  toolCall: ClaudeWriteToolCall
 }
 
 const props = defineProps<Props>()
@@ -42,20 +43,20 @@ const props = defineProps<Props>()
 const expanded = ref(false)
 
 // 提取工具显示信息
-const displayInfo = computed(() => extractToolDisplayInfo(props.toolUse, props.result))
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall, props.toolCall.result))
 
 // 处理卡片点击：使用拦截器统一处理增强
 async function handleCardClick() {
   // 尝试获取增强动作
-  const action = await toolEnhancement.intercept(props.toolUse, props.result)
+  const action = await toolEnhancement.intercept(props.toolCall, props.toolCall.result as any)
   
   if (action) {
     // 在 JCEF 环境中，执行增强动作（打开文件）
     const context = {
-      toolType: props.toolUse.name,
-      input: props.toolUse.input,
-      result: props.result,
-      isSuccess: !props.result?.is_error
+      toolType: props.toolCall.toolType,
+      input: props.toolCall.input,
+      result: props.toolCall.result,
+      isSuccess: props.toolCall.status === 'SUCCESS'
     }
     await toolEnhancement.executeAction(action, context)
   } else {
@@ -64,32 +65,13 @@ async function handleCardClick() {
   }
 }
 
-const filePath = computed(() => props.toolUse.input.file_path || '')
-const fileName = computed(() => {
-  const path = filePath.value
-  return path.split(/[\\/]/).pop() || path
-})
-
-const content = computed(() => props.toolUse.input.content || '')
-
-const isNewFile = computed(() => {
-  // 可以根据结果或输入判断是否是新文件
-  // 简化处理:假设 Write 都可能创建新文件
-  return true
-})
-
-const contentSize = computed(() => {
-  const bytes = new Blob([content.value]).size
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-})
+const content = computed(() => props.toolCall.input.content || '')
 
 const previewText = computed(() => {
   const text = content.value
   const maxLength = 500
   if (text.length <= maxLength) return text
-  return text.substring(0, maxLength) + '\n\n... (内容已截断)'
+  return text.substring(0, maxLength) + '\n\n... (' + t('tools.contentTruncated') + ')'
 })
 
 const previewLines = computed(() => {

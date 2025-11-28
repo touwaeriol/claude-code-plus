@@ -1,198 +1,72 @@
 <template>
-  <div class="tool-display exit-plan-mode-tool">
+  <div class="tool-display exit-plan-tool">
     <div class="tool-header">
-      <span class="tool-icon">📋</span>
+      <span class="tool-icon">🛑</span>
       <span class="tool-name">ExitPlanMode</span>
-      <span class="plan-label">计划确认</span>
-      <span
-        v-if="result"
-        class="status-badge"
-        :class="statusClass"
-      >{{ statusText }}</span>
     </div>
-    <div
-      v-if="expanded"
-      class="tool-content"
-    >
-      <div class="plan-section">
-        <div class="section-header">
-          执行计划
-        </div>
-        <div class="plan-content">
-          <MarkdownRenderer :content="plan" />
-        </div>
-      </div>
-
-      <div
-        v-if="result"
-        class="status-section"
-      >
-        <div
-          class="status-indicator"
-          :class="statusClass"
-        >
-          <span class="status-icon">{{ statusIcon }}</span>
-          <span class="status-message">{{ statusMessage }}</span>
-        </div>
-      </div>
+    <div v-if="expanded" class="tool-content">
+      <div class="section-title">Plan</div>
+      <pre>{{ plan }}</pre>
     </div>
-    <button
-      class="expand-btn"
-      @click="expanded = !expanded"
-    >
-      {{ expanded ? '收起' : '展开' }}
-    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
-import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
+import type { GenericToolCall } from '@/types/display'
 
 interface Props {
-  toolUse: ToolUseBlock
-  result?: ToolResultBlock
+  toolCall: GenericToolCall
 }
 
 const props = defineProps<Props>()
+// 默认折叠，点击后展开查看计划内容
 const expanded = ref(false)
 
-const plan = computed(() => props.toolUse.input.plan || '')
-
-const resultContent = computed(() => {
-  if (!props.result?.content) return null
-  if (typeof props.result.content === 'string') {
-    try {
-      return JSON.parse(props.result.content)
-    } catch {
-      return { success: true }
-    }
-  }
-  return props.result.content
-})
-
-const success = computed(() => {
-  if (!resultContent.value) return false
-  return resultContent.value.success === true
-})
-
-const statusClass = computed(() => {
-  if (!props.result) return 'status-pending'
-  return success.value ? 'status-confirmed' : 'status-error'
-})
-
-const statusText = computed(() => {
-  if (!props.result) return '待确认'
-  return success.value ? '已确认' : '失败'
-})
-
-const statusIcon = computed(() => {
-  if (!props.result) return '⏳'
-  return success.value ? '✅' : '❌'
-})
-
-const statusMessage = computed(() => {
-  if (!props.result) return '等待用户确认计划...'
-  return success.value ? '计划已确认，开始执行' : '计划确认失败'
-})
+const plan = computed(() => (props.toolCall.input as any)?.plan || '')
 </script>
 
 <style scoped>
-.exit-plan-mode-tool {
-  border-color: #fd7e14;
-}
-
-.exit-plan-mode-tool .tool-name {
-  color: #fd7e14;
-}
-
-.plan-label {
-  font-size: 12px;
-  color: #586069;
-  font-weight: 600;
-}
-
-.status-badge {
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  margin-left: auto;
-}
-
-.status-pending {
-  background: #fff3cd;
-  color: #856404;
-}
-
-.status-confirmed {
-  background: #e6ffed;
-  color: #22863a;
-}
-
-.status-error {
-  background: #ffeef0;
-  color: #d73a49;
-}
-
-.plan-section {
-  margin-bottom: 2px;
-}
-
-.section-header {
-  font-size: 12px;
-  font-weight: 600;
-  color: #586069;
-  margin-bottom: 2px;
-}
-
-.plan-content {
-  padding: 6px 8px;
-  background: #ffffff;
-  border: 2px solid #fd7e14;
+.tool-display {
+  border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 6px;
-  max-height: 400px;
-  overflow: auto;
+  background: var(--ide-panel-background, #f6f8fa);
+  margin: 8px 0;
+  padding: 8px 12px;
 }
 
-.status-section {
-  margin-top: 12px;
-}
-
-.status-indicator {
+.tool-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px;
-  border-radius: 6px;
   font-size: 13px;
-  font-weight: 500;
 }
 
-.status-indicator.status-pending {
-  background: #fff3cd;
-  border: 1px solid #ffc107;
-  color: #856404;
+.tool-icon {
+  font-size: 16px;
 }
 
-.status-indicator.status-confirmed {
-  background: #e6ffed;
-  border: 1px solid #34d058;
-  color: #22863a;
+.tool-name {
+  font-weight: 600;
 }
 
-.status-indicator.status-error {
-  background: #ffeef0;
-  border: 1px solid #f97583;
-  color: #d73a49;
+.tool-content {
+  margin-top: 8px;
 }
 
-.status-icon {
-  font-size: 18px;
+.section-title {
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 4px;
 }
 
-.status-message {
-  flex: 1;
+pre {
+  margin: 0;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e1e4e8;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: pre-wrap;
 }
 </style>

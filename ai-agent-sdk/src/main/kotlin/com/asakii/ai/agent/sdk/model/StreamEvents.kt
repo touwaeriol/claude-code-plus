@@ -1,6 +1,7 @@
 package com.asakii.ai.agent.sdk.model
 
 import com.asakii.ai.agent.sdk.AiAgentProvider
+import kotlinx.serialization.json.JsonElement
 
 /**
  * 原始流事件，保留底层 SDK 的原始 payload，便于调试。
@@ -42,7 +43,9 @@ data class TurnStartedEvent(
 data class ContentStartedEvent(
     override val provider: AiAgentProvider,
     val id: String,
-    val contentType: String
+    val contentType: String,
+    /** 工具名称（仅当 contentType 为 tool_use 类型时有值） */
+    val toolName: String? = null
 ) : NormalizedStreamEvent
 
 data class ContentDeltaEvent(
@@ -67,6 +70,30 @@ data class TurnFailedEvent(
     val error: String
 ) : NormalizedStreamEvent
 
+data class ResultSummaryEvent(
+    override val provider: AiAgentProvider,
+    val durationMs: Long,
+    val durationApiMs: Long,
+    val isError: Boolean,
+    val numTurns: Int,
+    val sessionId: String,
+    val totalCostUsd: Double? = null,
+    val usage: JsonElement? = null,
+    val result: String? = null
+) : NormalizedStreamEvent
+
+data class AssistantMessageEvent(
+    override val provider: AiAgentProvider,
+    val content: List<UnifiedContentBlock>,
+    val model: String? = null,
+    val tokenUsage: UnifiedUsage? = null
+) : NormalizedStreamEvent
+
+data class UserMessageEvent(
+    override val provider: AiAgentProvider,
+    val content: List<UnifiedContentBlock>
+) : NormalizedStreamEvent
+
 /**
  * UI 直接消费的事件。
  */
@@ -87,7 +114,8 @@ data class UiThinkingDelta(
 
 data class UiToolStart(
     val toolId: String,
-    val toolName: String,
+    val toolName: String,      // 显示名称: "Read", "Write", "mcp__xxx"
+    val toolType: String,      // 类型标识: "CLAUDE_READ", "CLAUDE_WRITE", "MCP"
     val inputPreview: String? = null
 ) : UiStreamEvent
 
@@ -115,6 +143,21 @@ data class UiError(
  * 在流式响应结束后发送，包含完整的内容块列表
  */
 data class UiAssistantMessage(
+    val content: List<UnifiedContentBlock>
+) : UiStreamEvent
+
+data class UiResultMessage(
+    val durationMs: Long,
+    val durationApiMs: Long,
+    val isError: Boolean,
+    val numTurns: Int,
+    val sessionId: String,
+    val totalCostUsd: Double? = null,
+    val usage: JsonElement? = null,
+    val result: String? = null
+) : UiStreamEvent
+
+data class UiUserMessage(
     val content: List<UnifiedContentBlock>
 ) : UiStreamEvent
 

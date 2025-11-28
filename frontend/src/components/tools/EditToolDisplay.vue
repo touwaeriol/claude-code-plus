@@ -10,7 +10,7 @@
         <DiffViewer :old-content="oldString" :new-content="newString" />
 
         <div v-if="replaceAll" class="replace-mode">
-          <span class="badge">全部替换</span>
+          <span class="badge">{{ t('tools.replaceAll') }}</span>
         </div>
       </div>
     </template>
@@ -19,15 +19,16 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ideService } from '@/services/ideaBridge'
-import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
+import { useI18n } from '@/composables/useI18n'
+import type { ClaudeEditToolCall } from '@/types/display'
 import CompactToolCard from './CompactToolCard.vue'
 import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
 import { toolEnhancement } from '@/services/toolEnhancement'
 
+const { t } = useI18n()
+
 interface Props {
-  toolUse: ToolUseBlock
-  result?: ToolResultBlock
+  toolCall: ClaudeEditToolCall
 }
 
 const props = defineProps<Props>()
@@ -37,20 +38,20 @@ const expanded = ref(false)
 import DiffViewer from './DiffViewer.vue'
 
 // 提取工具显示信息
-const displayInfo = computed(() => extractToolDisplayInfo(props.toolUse, props.result))
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
 
 // 处理卡片点击：使用拦截器统一处理增强
 async function handleCardClick() {
   // 尝试获取增强动作
-  const action = await toolEnhancement.intercept(props.toolUse, props.result)
+  const action = await toolEnhancement.intercept(props.toolCall as any, props.toolCall.result as any)
   
   if (action) {
     // 在 JCEF 环境中，执行增强动作（显示 Diff）
     const context = {
-      toolType: props.toolUse.name,
-      input: props.toolUse.input,
-      result: props.result,
-      isSuccess: !props.result?.is_error
+      toolType: props.toolCall.toolType,
+      input: props.toolCall.input,
+      result: props.toolCall.result,
+      isSuccess: props.toolCall.status === 'SUCCESS'
     }
     await toolEnhancement.executeAction(action, context)
   } else {
@@ -59,15 +60,9 @@ async function handleCardClick() {
   }
 }
 
-const filePath = computed(() => props.toolUse.input.file_path || '')
-const fileName = computed(() => {
-  const path = filePath.value
-  return path.split(/[\\/]/).pop() || path
-})
-
-const oldString = computed(() => props.toolUse.input.old_string || '')
-const newString = computed(() => props.toolUse.input.new_string || '')
-const replaceAll = computed(() => props.toolUse.input.replace_all || false)
+const oldString = computed(() => props.toolCall.input.old_string || '')
+const newString = computed(() => props.toolCall.input.new_string || '')
+const replaceAll = computed(() => props.toolCall.input.replace_all || false)
 </script>
 
 <style scoped>

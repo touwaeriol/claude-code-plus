@@ -71,7 +71,7 @@ data class ContentBlockDeltaEvent(
 data class ContentBlockStartEvent(
     val index: Int,
     @SerialName("content_block")
-    val contentBlock: JsonElement
+    val contentBlock: ContentBlock
 ) : StreamEventType {
     override val type: String = "content_block_start"
 }

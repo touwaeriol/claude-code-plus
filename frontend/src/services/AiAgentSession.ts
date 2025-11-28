@@ -18,7 +18,11 @@ import type {
   RpcProvider,
   RpcContentBlock,
   RpcStreamEvent,
-  RpcConnectOptions
+  RpcConnectOptions,
+  RpcCapabilities,
+  RpcPermissionMode,
+  RpcConnectResult,
+  RpcSetPermissionModeResult
 } from '@/types/rpc'
 
 const log = loggers.agent
@@ -35,13 +39,14 @@ export type AgentStreamEvent = RpcStreamEvent
 /** 内容块（向后兼容别名） */
 export type ContentBlock = RpcContentBlock
 
-type MessageHandler = (message: AgentStreamEvent) => void
+type MessageHandler = (message: RpcStreamEvent) => void
 type ErrorHandler = (error: Error) => void
 
 export class AiAgentSession {
   private ws: WebSocket | null = null
   private _isConnected = false
   private sessionId: string | null = null
+  private _capabilities: RpcCapabilities | null = null
   private messageHandlers = new Set<MessageHandler>()
   private errorHandlers = new Set<ErrorHandler>()
   private pendingRequests = new Map<string, {
@@ -69,6 +74,13 @@ export class AiAgentSession {
   }
 
   /**
+   * 获取当前 Agent 的能力声明
+   */
+  get capabilities(): RpcCapabilities | null {
+    return this._capabilities
+  }
+
+  /**
    * 连接到服务器并初始化会话
    */
   async connect(options?: ConnectOptions): Promise<string> {
@@ -82,10 +94,11 @@ export class AiAgentSession {
 
         try {
           // 发送 connect RPC 请求
-          const result = await this.sendRequest('connect', options) as { sessionId: string }
+          const result = await this.sendRequest('connect', options) as RpcConnectResult
           this.sessionId = result.sessionId
+          this._capabilities = result.capabilities || null
           this._isConnected = true
-          log.info(`会话已连接: ${this.sessionId}`)
+          log.info(`会话已连接: ${this.sessionId}`, this._capabilities ? `capabilities=${JSON.stringify(this._capabilities)}` : '')
 
           // 安全检查：确保 sessionId 已设置
           if (!this.sessionId) {
@@ -180,6 +193,32 @@ export class AiAgentSession {
   }
 
   /**
+   * 设置权限模式
+   * @param mode 权限模式
+   * @throws 如果当前 provider 不支持切换权限模式
+   */
+  async setPermissionMode(mode: RpcPermissionMode): Promise<RpcSetPermissionModeResult> {
+    this.checkCapability('canSwitchPermissionMode', 'setPermissionMode')
+    const result = await this.sendRequest('setPermissionMode', { mode }) as RpcSetPermissionModeResult
+    log.info(`权限模式已切换为: ${result.mode}`)
+    return result
+  }
+
+  /**
+   * 检查能力是否支持
+   * @param cap 能力名称
+   * @param method 方法名称（用于错误消息）
+   */
+  private checkCapability(cap: keyof RpcCapabilities, method: string): void {
+    if (!this._capabilities) {
+      throw new Error(`${method}: 能力信息未加载，请先调用 connect()`)
+    }
+    if (!this._capabilities[cap]) {
+      throw new Error(`${method}: 当前 provider 不支持此操作`)
+    }
+  }
+
+  /**
    * 获取历史消息
    */
   async getHistory(): Promise<AgentStreamEvent[]> {
@@ -240,6 +279,9 @@ export class AiAgentSession {
       }
 
       const messageType = 'type' in message ? message.type : ('result' in message ? 'result' : 'error')
+      
+      // 使用 console.log 确保总是可见
+      console.log(`📨 [AiAgentSession] 收到消息: type=${messageType}, id=${message.id}, handlers=${this.messageHandlers.size}`)
       log.info('📨 [AiAgentSession] 收到消息:', {
         type: messageType,
         id: message.id,
@@ -250,6 +292,7 @@ export class AiAgentSession {
       if (isRpcStreamWrapper(message)) {
         const streamEvent = extractStreamEvent(message)
         if (streamEvent) {
+          console.log(`📤 [AiAgentSession] 转发流式事件: type=${streamEvent.type}, handlers=${this.messageHandlers.size}`)
           log.info('📤 [AiAgentSession] 转发流式事件:', {
             id: message.id,
             eventType: streamEvent.type,
@@ -259,10 +302,12 @@ export class AiAgentSession {
             try {
               handler(streamEvent)
             } catch (error) {
+              console.error('❌ [AiAgentSession] 消息处理器执行失败:', error, streamEvent)
               log.error('❌ [AiAgentSession] 消息处理器执行失败:', error, streamEvent)
             }
           })
         } else {
+          console.warn('⚠️ [AiAgentSession] 无法提取流式事件:', message)
           log.warn('⚠️ [AiAgentSession] 无法提取流式事件:', message)
         }
         return

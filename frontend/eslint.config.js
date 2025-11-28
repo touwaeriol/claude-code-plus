@@ -3,6 +3,7 @@ import typescript from '@typescript-eslint/eslint-plugin'
 import tsParser from '@typescript-eslint/parser'
 import vue from 'eslint-plugin-vue'
 import vueParser from 'vue-eslint-parser'
+import globals from 'globals'
 
 export default [
   // 基础推荐规则
@@ -19,17 +20,8 @@ export default [
         sourceType: 'module',
       },
       globals: {
-        // 浏览器环境
-        console: 'readonly',
-        window: 'readonly',
-        document: 'readonly',
-        navigator: 'readonly',
-        // Node 环境
-        process: 'readonly',
-        __dirname: 'readonly',
-        __filename: 'readonly',
-        module: 'readonly',
-        require: 'readonly',
+        ...globals.browser,
+        ...globals.node,
       },
     },
     plugins: {

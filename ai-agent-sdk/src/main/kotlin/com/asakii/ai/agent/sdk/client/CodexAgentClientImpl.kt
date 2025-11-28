@@ -2,6 +2,9 @@ package com.asakii.ai.agent.sdk.client
 
 import com.asakii.ai.agent.sdk.AiAgentProvider
 import com.asakii.ai.agent.sdk.AiAgentStreamBridge
+import com.asakii.ai.agent.sdk.capabilities.AgentCapabilities
+import com.asakii.ai.agent.sdk.capabilities.CodexCapabilities
+import com.asakii.ai.agent.sdk.capabilities.AiPermissionMode
 import com.asakii.ai.agent.sdk.connect.AiAgentConnectContext
 import com.asakii.ai.agent.sdk.connect.AiAgentConnectOptions
 import com.asakii.ai.agent.sdk.connect.normalize
@@ -107,5 +110,23 @@ class CodexAgentClientImpl(
         session = null
         context = null
     }
+
+    // ==================== 能力相关方法 ====================
+
+    override fun getCapabilities(): AgentCapabilities = CodexCapabilities
+
+    override suspend fun setModel(model: String): String? {
+        throw UnsupportedOperationException(
+            "setModel is not supported by ${provider.name}"
+        )
+    }
+
+    override suspend fun setPermissionMode(mode: AiPermissionMode) {
+        throw UnsupportedOperationException(
+            "setPermissionMode is not supported by ${provider.name}"
+        )
+    }
+
+    override fun getCurrentPermissionMode(): AiPermissionMode? = null
 }
 

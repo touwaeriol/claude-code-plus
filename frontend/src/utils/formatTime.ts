@@ -15,7 +15,13 @@ export function formatTime(timestamp: number): string {
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
   const locale = localeService.getLocale()
-  const localeCode = locale === 'zh-CN' ? 'zh-CN' : 'en-US'
+  const localeCodeMap: Record<string, string> = {
+    'zh-CN': 'zh-CN',
+    'en-US': 'en-US',
+    'ko-KR': 'ko-KR',
+    'ja-JP': 'ja-JP'
+  }
+  const localeCode = localeCodeMap[locale] || 'en-US'
 
   const timeStr = date.toLocaleTimeString(localeCode, {
     hour: '2-digit',
@@ -28,7 +34,13 @@ export function formatTime(timestamp: number): string {
     return timeStr
   } else if (diffDays === 1) {
     // 昨天
-    const yesterdayText = locale === 'zh-CN' ? '昨天' : 'Yesterday'
+    const yesterdayTextMap: Record<string, string> = {
+      'zh-CN': '昨天',
+      'en-US': 'Yesterday',
+      'ko-KR': '어제',
+      'ja-JP': '昨日'
+    }
+    const yesterdayText = yesterdayTextMap[locale] || 'Yesterday'
     return `${yesterdayText} ${timeStr}`
   } else {
     // 更早
@@ -58,18 +70,36 @@ export function formatRelativeTime(timestamp: number): string {
   const diffHours = Math.floor(diffMinutes / 60)
 
   const locale = localeService.getLocale()
-  const isChinese = locale === 'zh-CN'
+
+  const justNowMap: Record<string, string> = {
+    'zh-CN': '刚刚',
+    'en-US': 'Just now',
+    'ko-KR': '방금',
+    'ja-JP': 'たった今'
+  }
+
+  const minutesAgoMap: Record<string, (n: number) => string> = {
+    'zh-CN': (n) => `${n}分钟前`,
+    'en-US': (n) => `${n} minute${n > 1 ? 's' : ''} ago`,
+    'ko-KR': (n) => `${n}분 전`,
+    'ja-JP': (n) => `${n}分前`
+  }
+
+  const hoursAgoMap: Record<string, (n: number) => string> = {
+    'zh-CN': (n) => `${n}小时前`,
+    'en-US': (n) => `${n} hour${n > 1 ? 's' : ''} ago`,
+    'ko-KR': (n) => `${n}시간 전`,
+    'ja-JP': (n) => `${n}時間前`
+  }
 
   if (diffSeconds < 60) {
-    return isChinese ? '刚刚' : 'Just now'
+    return justNowMap[locale] || justNowMap['en-US']
   } else if (diffMinutes < 60) {
-    return isChinese 
-      ? `${diffMinutes}分钟前` 
-      : `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`
+    const formatter = minutesAgoMap[locale] || minutesAgoMap['en-US']
+    return formatter(diffMinutes)
   } else if (diffHours < 24) {
-    return isChinese 
-      ? `${diffHours}小时前` 
-      : `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`
+    const formatter = hoursAgoMap[locale] || hoursAgoMap['en-US']
+    return formatter(diffHours)
   } else {
     return formatTime(timestamp)
   }

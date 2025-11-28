@@ -68,7 +68,9 @@ class IdeaBridgeService {
     if (typeof window === 'undefined') {
       return 'browser' // 构建时默认值
     }
-    return (window as any).__serverUrl ? 'ide' : 'browser'
+    // 检测 JCEF 环境：cefQuery 是 JCEF 框架原生注入的函数
+    // 这是最可靠的检测方式，不依赖任何自定义注入
+    return typeof (window as any).cefQuery === 'function' ? 'ide' : 'browser'
   }
 
   constructor() {
@@ -100,10 +102,12 @@ class IdeaBridgeService {
     if (typeof window === 'undefined') {
       return // 构建时跳过
     }
-    window.addEventListener('ide-event', ((event: CustomEvent<IdeEvent>) => {
-      const { type, data } = event.detail
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent<IdeEvent>
+      const { type, data } = customEvent.detail
       this.dispatchEvent({ type, data })
-    }) as EventListener)
+    }
+    window.addEventListener('ide-event', handler)
   }
 
   /**

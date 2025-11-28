@@ -3,42 +3,17 @@
     class="chat-header"
     :class="{ 'theme-dark': isDark }"
   >
-    <div class="tab-container">
-      <div class="tab-scroll">
-        <draggable
-          v-model="tabsList"
-          :animation="200"
-          item-key="id"
-          class="draggable-tabs"
-          @end="handleDragEnd"
-        >
-          <template #item="{ element: tab }">
-            <button
-              class="chat-tab"
-              :class="{ active: tab.id === currentSessionId }"
-              @click="handleTabClick(tab.id)"
-            >
-              <span class="tab-name">
-                {{ tab.name || '未命名会话' }}
-              </span>
-              <span
-                v-if="tab.isGenerating"
-                class="tab-dot"
-                title="正在生成中"
-              />
-            </button>
-          </template>
-        </draggable>
+    <!-- 左侧：会话 Tab 列表 -->
+    <SessionTabs
+      :sessions="sessionTabList"
+      :current-session-id="currentSessionId"
+      :can-close="activeTabs.length > 1"
+      @switch="handleSwitchSession"
+      @close="handleCloseSession"
+      @reorder="handleReorder"
+    />
 
-        <span
-          v-if="activeTabs.length === 0"
-          class="tab-placeholder"
-        >
-          暂无活动会话
-        </span>
-      </div>
-    </div>
-
+    <!-- 右侧：功能按钮 -->
     <div class="header-actions">
       <button
         class="icon-btn"
@@ -56,17 +31,20 @@
       >
         ➕
       </button>
+      <ThemeSwitcher />
+      <LanguageSwitcher />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import draggable from 'vuedraggable'
 import { useSessionStore } from '@/stores/sessionStore'
-import type { SessionState } from '@/types/session'
+import SessionTabs, { type SessionTabInfo } from './SessionTabs.vue'
+import ThemeSwitcher from '@/components/toolbar/ThemeSwitcher.vue'
+import LanguageSwitcher from '@/components/toolbar/LanguageSwitcher.vue'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   isDark?: boolean
 }>(), {
   isDark: false
@@ -81,19 +59,35 @@ const sessionStore = useSessionStore()
 const activeTabs = computed(() => sessionStore.activeTabs || [])
 const currentSessionId = computed(() => sessionStore.currentSessionId)
 
-// 用于vuedraggable的双向绑定
-const tabsList = computed({
-  get: () => activeTabs.value,
-  set: (newList: SessionState[]) => {
-    // 更新order
-    const newOrder = newList.map(tab => tab.id)
-    sessionStore.updateTabOrder(newOrder)
-  }
+// 转换为 SessionTabInfo 格式
+const sessionTabList = computed<SessionTabInfo[]>(() => {
+  return activeTabs.value.map(tab => ({
+    id: tab.id,
+    name: tab.name,
+    isGenerating: tab.isGenerating,
+    isConnected: tab.connectionStatus === 'CONNECTED'
+  }))
 })
 
-async function handleTabClick(sessionId: string) {
+async function handleSwitchSession(sessionId: string) {
   if (sessionId === currentSessionId.value) return
   await sessionStore.switchSession(sessionId)
+}
+
+async function handleCloseSession(sessionId: string) {
+  // 如果只有一个会话，不允许关闭
+  if (activeTabs.value.length <= 1) return
+
+  // 如果关闭的是当前会话，先切换到其他会话
+  if (sessionId === currentSessionId.value) {
+    const otherSession = activeTabs.value.find(tab => tab.id !== sessionId)
+    if (otherSession) {
+      await sessionStore.switchSession(otherSession.id)
+    }
+  }
+
+  // 删除会话
+  await sessionStore.deleteSession(sessionId)
 }
 
 async function handleNewSession() {
@@ -104,9 +98,8 @@ async function handleNewSession() {
   }
 }
 
-function handleDragEnd() {
-  // 拖拽结束后，order已经通过tabsList的setter更新了
-  // 这里可以添加额外的逻辑，比如保存到本地存储
+function handleReorder(newOrder: string[]) {
+  sessionStore.updateTabOrder(newOrder)
 }
 </script>
 
@@ -125,97 +118,6 @@ function handleDragEnd() {
 .theme-dark.chat-header {
   background: var(--ide-panel-background, #1f2428);
   border-color: var(--ide-border, #30363d);
-}
-
-.tab-container {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.tab-scroll {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-
-.draggable-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
-.draggable-tabs .chat-tab {
-  cursor: grab;
-}
-
-.draggable-tabs .chat-tab:active {
-  cursor: grabbing;
-}
-
-.chat-tab {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  max-width: 180px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--ide-foreground, #24292e);
-  font-size: 11px;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.chat-tab:hover {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.03));
-}
-
-.chat-tab.active {
-  background: var(--ide-card-background, #ffffff);
-  border-color: var(--ide-accent, #0366d6);
-  color: var(--ide-accent, #0366d6);
-}
-
-.theme-dark .chat-tab {
-  color: var(--ide-foreground, #e6edf3);
-}
-
-.theme-dark .chat-tab:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.theme-dark .chat-tab.active {
-  background: var(--ide-card-background, #161b22);
-  border-color: var(--ide-accent, #58a6ff);
-  color: var(--ide-accent, #58a6ff);
-}
-
-.tab-name {
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tab-dot {
-  width: 8px;
-  height: 8px;
-  margin-left: 6px;
-  border-radius: 50%;
-  background: var(--ide-success, #28a745);
-}
-
-.tab-placeholder {
-  font-size: 12px;
-  color: var(--ide-secondary-foreground, #6a737d);
-  opacity: 0.8;
 }
 
 .header-actions {
@@ -276,5 +178,3 @@ function handleDragEnd() {
   background: var(--ide-accent-hover, #388bfd);
 }
 </style>
-
-

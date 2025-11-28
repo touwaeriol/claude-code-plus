@@ -24,8 +24,18 @@
         class="message-list-area"
       />
 
+      <!-- 会话统计栏 -->
+      <SessionStatsBar :stats="toolStats" />
+
+      <!-- 待发送队列（生成中时显示） -->
+      <PendingMessageQueue
+        @edit="handleEditPendingMessage"
+        @remove="handleRemovePendingMessage"
+      />
+
       <!-- 输入区域 -->
       <ChatInput
+        ref="chatInputRef"
         :pending-tasks="pendingTasks"
         :contexts="uiState.contexts"
         :is-generating="uiState.isGenerating"
@@ -144,7 +154,10 @@ import MessageList from './MessageList.vue'
 import ChatInput from './ChatInput.vue'
 import ChatHeader from './ChatHeader.vue'
 import SessionListOverlay from './SessionListOverlay.vue'
-import type { Message } from '@/types/message'
+import SessionStatsBar from './SessionStatsBar.vue'
+import PendingMessageQueue from './PendingMessageQueue.vue'
+import { calculateToolStats } from '@/utils/toolStatistics'
+import type { ContentBlock } from '@/types/message'
 import type { ContextReference, AiModel, PermissionMode, TokenUsage as EnhancedTokenUsage } from '@/types/enhancedMessage'
 import type { PendingTask } from '@/types/pendingTask'
 import { buildUserMessageContent } from '@/utils/userMessageBuilder'
@@ -196,13 +209,16 @@ const uiState = ref<ChatUiState>({
   errorMessage: undefined,
   actualModelId: undefined,
   selectedModel: 'DEFAULT' as AiModel,
-  selectedPermissionMode: 'DEFAULT' as PermissionMode,
-  skipPermissions: false,
+  selectedPermissionMode: 'default' as PermissionMode,
+  skipPermissions: true,  // 默认跳过权限
   autoCleanupContexts: false
 })
 
 // 从 sessionStore 获取 displayItems（用于新的 UI 组件）
 const displayItems = computed(() => sessionStore.currentDisplayItems)
+
+// 计算工具使用统计
+const toolStats = computed(() => calculateToolStats(displayItems.value))
 
 const historySessions = computed(() => {
   return sessionStore.allSessions.map(session => ({
@@ -244,6 +260,7 @@ const streamingOutputTokens = computed(() => {
 
 const pendingTasks = ref<PendingTask[]>([])
 const debugExpanded = ref(false)
+const chatInputRef = ref<InstanceType<typeof ChatInput>>()
 
 // 生命周期钩子
 onMounted(async () => {
@@ -335,8 +352,16 @@ watch(() => props.sessionId, async (newSessionId) => {
 // 事件处理器
 // ============================================
 
-async function handleSendMessage(text: string, inlineImages?: File[]) {
-  console.log('📤 Sending message:', text, inlineImages ? `with ${inlineImages.length} inline images` : '')
+/**
+ * 处理发送消息
+ * 逻辑：入队到 sessionStore，由 sessionStore 统一处理发送
+ *
+ * sessionStore.enqueueMessage 会：
+ * 1. 将消息加入队列
+ * 2. 自动调用 processMessageQueue 检查并发送
+ */
+async function handleSendMessage(contents: ContentBlock[]) {
+  console.log('📤 handleSendMessage:', contents.length, 'content blocks')
 
   try {
     // ✅ 懒加载：检查是否有会话，没有则创建
@@ -348,122 +373,64 @@ async function handleSendMessage(text: string, inlineImages?: File[]) {
       }
     }
 
-    const sessionId = sessionStore.currentSessionId
-    if (!sessionId) {
+    if (!sessionStore.currentSessionId) {
       console.error('❌ No active session')
       uiState.value.hasError = true
       uiState.value.errorMessage = '当前没有激活的会话'
       return
     }
 
-    // 1. 获取当前活动文件（如果可用）
-    let activeFile: { path: string; line?: number } | undefined
-    try {
-      if (isIdeMode.value) {
-        // TODO: 实现获取当前活动文件的 API
-        // 目前先留空，后续可以通过 IDEA bridge 获取
-        // activeFile = await ideService.getActiveFile()
-      }
-    } catch (error) {
-      console.warn('获取当前活动文件失败:', error)
-    }
+    const currentContexts = [...uiState.value.contexts]
 
-    // 2. 使用新的消息构建函数构建内容
-    const content = buildUserMessageContent({
-      text,
-      contexts: uiState.value.contexts,
-      activeFile
+    // 清空上下文
+    uiState.value.contexts = []
+
+    // 入队（sessionStore 会自动处理发送）
+    console.log('📋 消息入队')
+    sessionStore.enqueueMessage({
+      contexts: currentContexts,
+      contents
     })
-
-    // 2.5. 处理内嵌图片：转换为 ImageBlock 并追加到 content（在用户文本之后）
-    if (inlineImages && inlineImages.length > 0) {
-      console.log(`🖼️ 处理 ${inlineImages.length} 个内嵌图片`)
-      const { fileToImageBlock } = await import('@/utils/userMessageBuilder')
-      for (const file of inlineImages) {
-        try {
-          const imageBlock = await fileToImageBlock(file)
-          content.push(imageBlock)
-          console.log(`✅ 内嵌图片已添加: ${file.name}`)
-        } catch (error) {
-          console.error(`❌ 转换内嵌图片失败: ${file.name}`, error)
-        }
-      }
-    }
-
-    console.log(`📦 构建的消息内容: ${content.length} 个内容块`)
-    console.log('📋 内容详情:', content.map(b => ({ type: b.type, preview: b.type === 'text' ? (b as any).text?.substring(0, 50) : '...' })))
-
-    // 2.5. 立即清空图片上下文（在发送前清空，避免发送过程中还显示图片）
-    const imageContexts = uiState.value.contexts.filter(
-      (c: any) => c.type === 'image'
-    )
-    if (imageContexts.length > 0) {
-      console.log('🧹 立即清空图片上下文（发送前）')
-      uiState.value.contexts = uiState.value.contexts.filter(
-        (c: any) => c.type !== 'image'
-      )
-    }
-
-    // 3. 立即添加用户消息到 UI
-    const userMessageId = `user-${Date.now()}`
-    const userMessage: Message = {
-      id: userMessageId,
-      role: 'user',
-      content,
-      timestamp: Date.now()
-    }
-    sessionStore.addMessage(sessionId, userMessage)
-    console.log('👤 用户消息已添加到UI')
-
-    // 4. 添加助手占位符消息到消息列表（显示为气泡）
-    const placeholderMessageId = `assistant-placeholder-${Date.now()}`
-    const placeholderMessage: Message = {
-      id: placeholderMessageId,
-      role: 'assistant',
-      content: [],  // 真正的空内容，processMessageStart 会检查 content.length === 0
-      timestamp: Date.now(),
-      isStreaming: true  // 标记为流式消息，用于显示加载动画
-    }
-    sessionStore.addMessage(sessionId, placeholderMessage)
-    console.log('🤖 助手占位符消息已添加到UI')
-
-    // 开始追踪请求统计（传入占位符消息 ID）
-    sessionStore.startRequestTracking(sessionId, userMessageId, placeholderMessageId)
-
-    // 5. 发送消息到后端（使用 sendMessageWithContent）
-    console.log('📤 发送消息到后端:', content.length, '个内容块')
-    await sessionStore.sendMessageWithContent(content)
-
-    // 6. 清理上下文（图片已在发送前清空，这里只处理其他上下文）
-    if (uiState.value.autoCleanupContexts) {
-      // 启用自动清理时，清除所有上下文
-      console.log('🧹 Auto-cleaning all contexts after send')
-      uiState.value.contexts = []
-    }
   } catch (error) {
     console.error('❌ Failed to send message:', error)
     uiState.value.hasError = true
     uiState.value.errorMessage = t('chat.error.sendMessageFailed', {
       message: error instanceof Error ? error.message : t('chat.error.unknown')
     })
-    // 移除占位符消息
-    const sessionId = sessionStore.currentSessionId
-    if (sessionId) {
-      const messages = sessionStore.getMessages(sessionId)
-      const placeholderIndex = messages.findIndex(m => m.id && m.id.startsWith('assistant-placeholder-'))
-      if (placeholderIndex !== -1) {
-        sessionStore.removeMessage(sessionId, placeholderIndex)
-      }
-    }
   }
 }
 
-function handleInterruptAndSend(text: string, inlineImages?: File[]) {
-  console.log('⛔ Interrupt and send:', text, inlineImages ? `with ${inlineImages.length} inline images` : '')
-  // TODO: 实现打断并发送新消息的逻辑
-  // 先停止当前生成,然后发送新消息
-  handleStopGeneration()
-  handleSendMessage(text, inlineImages)
+/**
+ * 处理打断并发送
+ */
+async function handleInterruptAndSend(contents: ContentBlock[]) {
+  console.log('⛔ Interrupt and send:', contents.length, 'content blocks')
+  // 先停止当前生成
+  await sessionStore.interrupt()
+  // 然后发送新消息（入队后会自动发送，因为 isGenerating 已经变为 false）
+  await handleSendMessage(contents)
+}
+
+/**
+ * 处理编辑队列消息
+ */
+function handleEditPendingMessage(id: string) {
+  console.log('✏️ Edit pending message:', id)
+  const msg = sessionStore.editQueueMessage(id)
+  if (msg) {
+    // 恢复 contexts 到 uiState
+    uiState.value.contexts = [...msg.contexts]
+    // 调用 ChatInput 的 setContent 方法恢复 contents
+    chatInputRef.value?.setContent(msg.contents)
+  }
+}
+
+/**
+ * 处理删除队列消息
+ */
+function handleRemovePendingMessage(id: string) {
+  console.log('🗑️ Remove pending message:', id)
+  sessionStore.removeFromQueue(id)
 }
 
 function handleStopGeneration() {
@@ -500,13 +467,13 @@ function handleModelChange(model: AiModel) {
 function handlePermissionModeChange(mode: PermissionMode) {
   console.log('🔐 Changing permission mode:', mode)
   uiState.value.selectedPermissionMode = mode
-  // TODO: 通知后端切换权限模式
+  sessionStore.setPermissionMode(mode)
 }
 
 function handleSkipPermissionsChange(skip: boolean) {
   console.log('⏭️ Toggle skip permissions:', skip)
   uiState.value.skipPermissions = skip
-  // TODO: 通知后端切换跳过权限设置
+  sessionStore.setSkipPermissions(skip)
 }
 
 function handleAutoCleanupChange(cleanup: boolean) {
@@ -571,6 +538,9 @@ async function handleCreateNewSession() {
   width: 100%;
   flex: 1; /* 确保占据剩余空间 */
   min-height: 0; /* 允许内容滚动 */
+  padding: 8px 12px; /* 左右边距 */
+  box-sizing: border-box;
+  gap: 8px; /* 消息列表和输入框之间的间距 */
 }
 
 /* 消息列表区域 (对应 Modifier.weight(1f)) */
@@ -580,12 +550,17 @@ async function handleCreateNewSession() {
   min-height: 0; /* 防止 flex 溢出 */
   display: flex; /* 确保虚拟列表有容器 */
   flex-direction: column;
+  border: 1px solid var(--ide-border, #e1e4e8);
+  border-radius: 8px;
+  background: var(--ide-card-background, #ffffff);
 }
 
 /* 输入区域 (对应 Modifier.fillMaxWidth()) */
 .input-area {
   flex-shrink: 0;
   width: 100%;
+  padding: 0; /* 移除内边距，由 chat-screen-content 的 padding 控制 */
+  box-sizing: border-box;
 }
 
 /* 错误对话框 (对应 ErrorDialog) */

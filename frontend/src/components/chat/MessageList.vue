@@ -31,44 +31,64 @@
           </svg>
         </div>
         <h2 class="empty-title">
-          开始与 Claude 对话
+          {{ t('chat.welcomeScreen.title') }}
         </h2>
         <p class="empty-description">
-          输入您的问题或想法，Claude 将帮助您编写代码、解答疑问
+          {{ t('chat.welcomeScreen.description') }}
         </p>
         <div class="empty-tips">
           <div class="tip-item">
             <span class="tip-icon">💡</span>
-            <span class="tip-text">询问代码问题</span>
+            <span class="tip-text">{{ t('chat.welcomeScreen.askCode') }}</span>
           </div>
           <div class="tip-item">
             <span class="tip-icon">🔧</span>
-            <span class="tip-text">重构现有代码</span>
+            <span class="tip-text">{{ t('chat.welcomeScreen.refactor') }}</span>
           </div>
           <div class="tip-item">
             <span class="tip-icon">🐛</span>
-            <span class="tip-text">调试错误</span>
+            <span class="tip-text">{{ t('chat.welcomeScreen.debug') }}</span>
           </div>
         </div>
         <div class="empty-hint">
-          <kbd class="keyboard-key">Enter</kbd> 发送消息 ·
-          <kbd class="keyboard-key">Shift</kbd> + <kbd class="keyboard-key">Enter</kbd> 换行
+          <kbd class="keyboard-key">Enter</kbd> {{ t('chat.welcomeScreen.sendHint') }} ·
+          <kbd class="keyboard-key">Shift</kbd> + <kbd class="keyboard-key">Enter</kbd> {{ t('chat.welcomeScreen.newLineHint') }}
         </div>
       </div>
     </div>
 
-    <VirtualList
+    <!-- 使用 vue-virtual-scroller 的 DynamicScroller -->
+    <DynamicScroller
       v-else
-      ref="virtualListRef"
+      ref="scrollerRef"
       class="message-list"
-      :data-key="'id'"
-      :data-sources="displayMessages"
-      :data-component="messageComponent"
-      :extra-props="{ isDark }"
-      :keeps="30"
-      :estimate-size="estimatedItemSize"
+      :items="displayMessages"
+      :min-item-size="60"
+      :buffer="200"
+      key-field="id"
       @scroll="handleScroll"
-    />
+    >
+      <template #default="{ item, index, active }">
+        <DynamicScrollerItem
+          :item="item"
+          :active="active"
+          :data-index="index"
+          :size-dependencies="[
+            item.content,
+            item.status,
+            item.result,
+            item.input
+          ]"
+          :emit-resize="true"
+        >
+          <component
+            :is="messageComponent"
+            :source="item"
+            :is-dark="isDark"
+          />
+        </DynamicScrollerItem>
+      </template>
+    </DynamicScroller>
 
     <!-- Streaming 状态指示器 -->
     <div
@@ -84,7 +104,7 @@
       class="loading-indicator"
     >
       <div class="loading-spinner" />
-      <span>Claude 正在思考...</span>
+      <span>{{ t('chat.claudeThinking') }}</span>
     </div>
 
     <!-- 回到底部按钮 -->
@@ -92,7 +112,7 @@
       <button
         v-if="showScrollToBottom"
         class="scroll-to-bottom-btn"
-        title="回到底部"
+        :title="t('chat.scrollToBottom')"
         @click="scrollToBottom"
       >
         <span class="btn-icon">↓</span>
@@ -107,11 +127,15 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
-import VirtualList from 'vue3-virtual-scroll-list'
+import { useI18n } from '@/composables/useI18n'
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import type { Message } from '@/types/message'
 import type { DisplayItem } from '@/types/display'
 import MessageDisplay from './MessageDisplay.vue'
 import DisplayItemRenderer from './DisplayItemRenderer.vue'
+
+const { t } = useI18n()
 
 interface Props {
   messages?: Message[]  // 保留向后兼容
@@ -134,7 +158,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const wrapperRef = ref<HTMLElement>()
-const virtualListRef = ref<InstanceType<typeof VirtualList>>()
+const scrollerRef = ref<InstanceType<typeof DynamicScroller>>()
 const showScrollToBottom = ref(false)
 const newMessageCount = ref(0)
 const isNearBottom = ref(true)
@@ -218,23 +242,6 @@ const displayMessages = computed(() => props.displayItems || props.messages || [
 // 使用新的 DisplayItemRenderer 还是旧的 MessageDisplay
 const messageComponent = computed(() => props.displayItems ? DisplayItemRenderer : MessageDisplay)
 
-// 动态估算项目高度：根据内容类型调整
-const estimatedItemSize = computed(() => {
-  // 如果有工具调用，使用更大的估算值（因为工具卡片可能展开）
-  const hasToolCalls = displayMessages.value.some((item: any) => 
-    item.type === 'toolCall' || item.type === 'toolResult'
-  )
-  // 如果有图片，也需要更大的高度
-  const hasImages = displayMessages.value.some((item: any) => 
-    item.type === 'userMessage' && item.content?.some((block: any) => block.type === 'image')
-  )
-  
-  if (hasToolCalls || hasImages) {
-    return 200  // 工具卡片和图片需要更大的高度
-  }
-  return 120  // 普通文本消息
-})
-
 // 监听消息变化
 watch(() => displayMessages.value.length, async (newCount, oldCount) => {
   // 如果不在底部，计数新消息
@@ -250,50 +257,24 @@ watch(() => displayMessages.value.length, async (newCount, oldCount) => {
   }
 
   lastMessageCount.value = newCount
-  
-  // 强制虚拟列表重新计算高度（解决工具卡片初始渲染问题）
+
+  // 强制 DynamicScroller 重新计算尺寸
   await nextTick()
-  updateVirtualListHeight()
+  forceUpdateScroller()
 })
 
-// 监听 displayItems 内容变化（不仅仅是长度），强制更新虚拟列表
+// 监听消息内容变化（深度监听），强制重新计算尺寸
 watch(() => displayMessages.value, async () => {
-  // 等待 DOM 更新后，强制虚拟列表重新计算
   await nextTick()
-  updateVirtualListHeight()
+  forceUpdateScroller()
 }, { deep: true })
 
-// 强制虚拟列表重新计算高度的辅助函数
-// 解决工具卡片初始渲染不正确的问题（需要拖动才能正常显示）
-function updateVirtualListHeight() {
-  // 使用 requestAnimationFrame 确保在下一帧更新
-  requestAnimationFrame(() => {
-    if (virtualListRef.value) {
-      // 通过触发滚动事件来强制虚拟列表重新计算可见区域
-      const listElement = virtualListRef.value.$el as HTMLElement
-      if (listElement) {
-        // 触发一个微小的滚动来强制重新计算
-        const currentScroll = listElement.scrollTop
-        const scrollHeight = listElement.scrollHeight
-        const clientHeight = listElement.clientHeight
-        
-        // 如果已经在底部，直接滚动到底部来触发重新计算
-        if (isNearBottom.value || currentScroll + clientHeight >= scrollHeight - 10) {
-          // 在底部时，稍微向上滚动再回到底部，触发重新计算
-          listElement.scrollTop = currentScroll - 1
-          requestAnimationFrame(() => {
-            listElement.scrollTop = scrollHeight - clientHeight
-          })
-        } else {
-          // 不在底部时，微调滚动位置来触发虚拟列表的重新计算
-          listElement.scrollTop = currentScroll + 0.1
-          requestAnimationFrame(() => {
-            listElement.scrollTop = currentScroll
-          })
-        }
-      }
-    }
-  })
+// 强制 DynamicScroller 重新计算所有项目尺寸
+function forceUpdateScroller() {
+  if (scrollerRef.value) {
+    // @ts-ignore - forceUpdate 是 DynamicScroller 的方法
+    scrollerRef.value.forceUpdate?.()
+  }
 }
 
 watch(() => props.isLoading, async (newValue) => {
@@ -304,28 +285,30 @@ watch(() => props.isLoading, async (newValue) => {
 })
 
 // 处理滚动事件
-function handleScroll(event: Event) {
-  const target = event.target as HTMLElement
-  if (!target) return
+function handleScroll() {
+  if (!scrollerRef.value) return
 
-  const scrollTop = target.scrollTop
-  const scrollHeight = target.scrollHeight
-  const clientHeight = target.clientHeight
+  const el = scrollerRef.value.$el as HTMLElement
+  if (!el) return
+
+  const scrollTop = el.scrollTop
+  const scrollHeight = el.scrollHeight
+  const clientHeight = el.clientHeight
 
   // 判断是否在底部（允许 100px 的误差）
   const distanceFromBottom = scrollHeight - scrollTop - clientHeight
   isNearBottom.value = distanceFromBottom < 100
 
   // 更新按钮显示状态
-  showScrollToBottom.value = !isNearBottom.value && props.messages.length > 0
+  showScrollToBottom.value = !isNearBottom.value && displayMessages.value.length > 0
 }
 
 function scrollToBottom() {
-  // 使用虚拟列表的 scrollToBottom 方法
-  if (virtualListRef.value) {
-    virtualListRef.value.scrollToBottom()
+  if (scrollerRef.value) {
+    // 使用 DynamicScroller 的 scrollToBottom 方法
+    scrollerRef.value.scrollToBottom()
   } else if (wrapperRef.value) {
-    // 降级方案:空消息列表时使用原始滚动
+    // 降级方案: 消息列表为空时虚拟列表未渲染，使用原生滚动
     wrapperRef.value.scrollTop = wrapperRef.value.scrollHeight
   }
 
@@ -342,19 +325,25 @@ function scrollToBottom() {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0; /* 关键：防止 flex 子元素溢出 */
   background: var(--ide-background, #fafbfc);
 }
 
 .message-list {
   flex: 1;
+  min-height: 0; /* 关键：防止 flex 子元素溢出 */
   overflow-y: auto !important;
   overflow-x: hidden;
-  padding: 4px 6px;
+  padding: 4px 6px 16px 6px; /* 底部留出空隙 */
 }
 
-/* 虚拟列表内部容器样式 */
-.message-list :deep(.virtual-list-item) {
-  margin-bottom: 2px;
+/* 修复 vue-virtual-scroller 的默认样式可能导致的内容截断 */
+.message-list :deep(.vue-recycle-scroller__item-wrapper) {
+  overflow: visible !important;
+}
+
+.message-list :deep(.vue-recycle-scroller__item-view) {
+  overflow: visible !important;
 }
 
 .empty-state {

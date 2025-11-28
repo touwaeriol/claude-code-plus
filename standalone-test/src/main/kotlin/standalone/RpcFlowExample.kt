@@ -1,7 +1,6 @@
 package standalone
 
 import com.asakii.bridge.IdeTheme
-import com.asakii.rpc.api.RpcClaudeOptions
 import com.asakii.rpc.api.RpcConnectOptions
 import com.asakii.rpc.api.RpcTextBlock
 import com.asakii.server.rpc.AiAgentRpcServiceImpl
@@ -27,11 +26,10 @@ fun main() = runBlocking {
         val connectResult = rpcService.connect(
             RpcConnectOptions(
                 model = System.getenv("AI_AGENT_MODEL"),
-                claude = RpcClaudeOptions(
-                    includePartialMessages = true,
-                    dangerouslySkipPermissions = true,
-                    allowDangerouslySkipPermissions = true
-                )
+                // Claude 相关配置（统一扁平结构）
+                includePartialMessages = true,
+                dangerouslySkipPermissions = true,
+                allowDangerouslySkipPermissions = true
             )
         )
         println("✅ Connected session=${connectResult.sessionId} provider=${connectResult.provider}")

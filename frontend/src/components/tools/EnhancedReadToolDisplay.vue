@@ -31,7 +31,7 @@
     >
       <div class="file-info">
         <div class="info-row">
-          <span class="label">路径:</span>
+          <span class="label">{{ t('tools.label.path') }}:</span>
           <span
             class="value clickable"
             @click="openFile"
@@ -41,21 +41,21 @@
           v-if="hasLineRange"
           class="info-row"
         >
-          <span class="label">行数:</span>
+          <span class="label">{{ t('tools.label.lines') }}:</span>
           <span class="value">{{ lineRange }}</span>
         </div>
         <div
           v-if="toolCall.startTime"
           class="info-row"
         >
-          <span class="label">开始:</span>
+          <span class="label">{{ t('tools.label.start') }}:</span>
           <span class="value">{{ formatTime(toolCall.startTime) }}</span>
         </div>
         <div
           v-if="toolCall.endTime"
           class="info-row"
         >
-          <span class="label">耗时:</span>
+          <span class="label">{{ t('tools.label.duration') }}:</span>
           <span class="value">{{ duration }}ms</span>
         </div>
       </div>
@@ -66,18 +66,18 @@
         class="tool-result success"
       >
         <div class="result-header">
-          <span>读取结果</span>
+          <span>{{ t('tools.readTool.readResult') }}</span>
           <div class="result-actions">
             <button
               class="copy-btn"
-              title="复制内容"
+              :title="t('tools.copyContent')"
               @click="copyContent"
             >
               📋
             </button>
             <button
               class="view-btn"
-              title="在编辑器中打开"
+              :title="t('tools.openInEditor')"
               @click="openFile"
             >
               📂
@@ -93,7 +93,7 @@
         class="tool-result failure"
       >
         <div class="result-header error">
-          <span>❌ 执行失败</span>
+          <span>❌ {{ t('tools.status.failed') }}</span>
         </div>
         <pre class="result-content">{{ getErrorMessage() }}</pre>
       </div>
@@ -105,7 +105,7 @@
       >
         <div class="loading-indicator">
           <div class="loading-spinner" />
-          <span>正在读取文件...</span>
+          <span>{{ t('tools.readTool.reading') }}</span>
         </div>
       </div>
     </div>
@@ -114,8 +114,11 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from '@/composables/useI18n'
 import { ideService } from '@/services/ideaBridge'
 import type { ToolCall, ToolCallStatus } from '@/types/enhancedMessage'
+
+const { t } = useI18n()
 
 interface Props {
   toolCall: ToolCall
@@ -158,11 +161,11 @@ function toggleExpanded() {
 
 function getStatusText(status: ToolCallStatus): string {
   const statusMap: Record<ToolCallStatus, string> = {
-    PENDING: '等待',
-    RUNNING: '执行中',
-    SUCCESS: '成功',
-    FAILED: '失败',
-    CANCELLED: '已取消'
+    PENDING: t('tools.status.pending'),
+    RUNNING: t('tools.status.running'),
+    SUCCESS: t('tools.status.success'),
+    FAILED: t('tools.status.failed'),
+    CANCELLED: t('tools.status.cancelled')
   }
   return statusMap[status] || status
 }

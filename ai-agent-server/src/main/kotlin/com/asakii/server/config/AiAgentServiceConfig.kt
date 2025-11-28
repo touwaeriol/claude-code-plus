@@ -11,7 +11,9 @@ data class AiAgentServiceConfig(
 )
 
 data class ClaudeDefaults(
-    val dangerouslySkipPermissions: Boolean = envFlag("AI_AGENT_CLAUDE_SKIP_PERMISSIONS"),
+    // 默认启用跳过权限检查，便于开发时自动执行工具调用
+    // 可通过环境变量 AI_AGENT_CLAUDE_SKIP_PERMISSIONS=false 关闭
+    val dangerouslySkipPermissions: Boolean = envFlag("AI_AGENT_CLAUDE_SKIP_PERMISSIONS", defaultValue = true),
     val allowDangerouslySkipPermissions: Boolean = envFlag("AI_AGENT_CLAUDE_ALLOW_SKIP", defaultValue = true),
     val includePartialMessages: Boolean = envFlag("AI_AGENT_CLAUDE_INCLUDE_PARTIALS", defaultValue = true),
     val permissionMode: String? = System.getenv("AI_AGENT_CLAUDE_PERMISSION_MODE")
@@ -34,6 +36,15 @@ private fun resolveProvider(): AiAgentProvider {
 private fun envFlag(name: String, defaultValue: Boolean = false): Boolean {
     return System.getenv(name)?.equals("true", ignoreCase = true) ?: defaultValue
 }
+
+
+
+
+
+
+
+
+
 
 
 

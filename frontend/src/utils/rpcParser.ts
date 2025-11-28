@@ -19,8 +19,9 @@ import type {
   RpcToolProgress,
   RpcToolComplete,
   RpcMessageComplete,
-  RpcErrorEvent,
-  RpcAssistantMessage
+  RpcResultMessage,
+  RpcUserMessage,
+  RpcErrorEvent
 } from '@/types/rpc'
 
 // ===== 常量 =====
@@ -34,6 +35,8 @@ export const STREAM_EVENT_TYPES: readonly RpcStreamEventType[] = [
   'tool_progress',
   'tool_complete',
   'message_complete',
+  'result',
+   'user',
   'error',
   'assistant'
 ] as const
@@ -95,6 +98,16 @@ export function isRpcToolComplete(value: unknown): value is RpcToolComplete {
 /** 检查是否为 RpcMessageComplete */
 export function isRpcMessageComplete(value: unknown): value is RpcMessageComplete {
   return hasType(value) && value.type === 'message_complete'
+}
+
+/** 检查是否为 RpcResultMessage */
+export function isRpcResultMessage(value: unknown): value is RpcResultMessage {
+  return hasType(value) && value.type === 'result'
+}
+
+/** 检查是否为 RpcUserMessage */
+export function isRpcUserMessage(value: unknown): value is RpcUserMessage {
+  return hasType(value) && value.type === 'user'
 }
 
 /** 检查是否为 RpcErrorEvent */

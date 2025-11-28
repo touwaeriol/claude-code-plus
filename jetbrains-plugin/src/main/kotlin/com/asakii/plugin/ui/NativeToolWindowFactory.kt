@@ -1,9 +1,10 @@
 package com.asakii.plugin.ui
 
 import com.asakii.plugin.bridge.IdeSessionBridge
+import com.asakii.plugin.ui.title.HistorySessionAction
+import com.asakii.plugin.ui.title.NewSessionAction
 import com.asakii.plugin.ui.title.SessionTabsAction
 import com.asakii.server.HttpServerProjectService
-import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ex.CustomComponentAction
@@ -81,22 +82,14 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         Disposer.register(content, browser)
         Disposer.register(content, sessionBridge)
 
-        // 会话标签动作
+        // 会话标签动作（下拉选择器）
         titleActions.add(SessionTabsAction(sessionBridge))
 
         // 历史会话入口
-        titleActions.add(object : AnAction("历史会话", "显示历史会话", AllIcons.Actions.Search) {
-            override fun actionPerformed(e: AnActionEvent) {
-                sessionBridge.toggleHistoryOverlay()
-            }
-        })
+        titleActions.add(HistorySessionAction(sessionBridge))
 
         // 新建会话入口
-        titleActions.add(object : AnAction("新建会话", "创建新会话", AllIcons.General.Add) {
-            override fun actionPerformed(e: AnActionEvent) {
-                sessionBridge.requestNewSession()
-            }
-        })
+        titleActions.add(NewSessionAction(sessionBridge))
 
         toolWindowEx?.setTitleActions(titleActions)
     }

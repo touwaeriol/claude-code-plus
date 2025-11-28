@@ -1,7 +1,7 @@
 <template>
   <div
     class="unified-chat-input-container"
-    :class="{ focused: isFocused, generating: isGenerating }"
+    :class="{ focused: isFocused, generating: isGenerating, 'inline-mode': inline }"
   >
     <!-- Pending Task Bar (任务队列显示) -->
     <div
@@ -49,15 +49,20 @@
         class="context-tag"
         :class="{ 'image-tag': isImageContext(context) }"
       >
-        <!-- 图片预览 -->
-        <img
-          v-if="isImageContext(context)"
-          :src="getImagePreviewUrl(context)"
-          class="tag-image-preview"
-          :alt="getContextDisplay(context)"
-        >
-        <span class="tag-icon">{{ getContextIcon(context) }}</span>
-        <span class="tag-text">{{ getContextDisplay(context) }}</span>
+        <!-- 图片：只显示缩略图，点击可预览 -->
+        <template v-if="isImageContext(context)">
+          <img
+            :src="getImagePreviewUrl(context)"
+            class="tag-image-preview"
+            alt="图片"
+            @click="openImagePreview(context)"
+          >
+        </template>
+        <!-- 非图片：显示图标和文字 -->
+        <template v-else>
+          <span class="tag-icon">{{ getContextIcon(context) }}</span>
+          <span class="tag-text">{{ getContextDisplay(context) }}</span>
+        </template>
         <button
           class="tag-remove"
           :title="t('common.remove')"
@@ -71,7 +76,7 @@
       <div
         v-if="hiddenContextsCount > 0"
         class="context-more-hint"
-        :title="`还有 ${hiddenContextsCount} 个上下文`"
+        :title="t('chat.moreContexts', { count: hiddenContextsCount })"
       >
         +{{ hiddenContextsCount }}
       </div>
@@ -106,10 +111,23 @@
         class="generating-indicator"
       >
         <div class="generating-spinner" />
-        <span class="generating-text">生成中...</span>
+        <span class="generating-text">{{ t('chat.generating') }}</span>
       </div>
-      
-      <!-- 内嵌图片预览 -->
+
+      <textarea
+        ref="textareaRef"
+        v-model="inputText"
+        class="message-textarea"
+        :placeholder="placeholderText"
+        :disabled="!enabled || isGenerating"
+        @focus="isFocused = true"
+        @blur="isFocused = false"
+        @keydown="handleKeydown"
+        @paste="handlePaste"
+        @input="adjustHeight"
+      />
+
+      <!-- 内嵌图片预览（在文字下方） -->
       <div
         v-if="inlineImages.length > 0"
         class="inline-images-preview"
@@ -133,34 +151,79 @@
           </button>
         </div>
       </div>
-      
-      <textarea
-        ref="textareaRef"
-        v-model="inputText"
-        class="message-textarea"
-        :placeholder="placeholderText"
-        :disabled="!enabled || isGenerating"
-        @focus="isFocused = true"
-        @blur="isFocused = false"
-        @keydown="handleKeydown"
-        @paste="handlePaste"
-        @input="adjustHeight"
-      />
     </div>
 
     <!-- Bottom Toolbar (底部工具栏) -->
     <div class="bottom-toolbar">
-      <!-- 左侧控件组 -->
+      <!-- 左侧控件组 - Cursor 风格紧凑布局 -->
       <div class="toolbar-left">
-        <!-- 模型选择器 -->
-        <div
-          v-if="showModelSelector"
-          class="model-selector-wrapper"
-        >
+        <div class="cursor-style-selectors">
+          <!-- 模式选择器 - Cursor 风格（带灰色背景） -->
           <el-select
+            v-if="showPermissionControls"
+            v-model="selectedPermissionValue"
+            class="cursor-selector mode-selector"
+            :disabled="!enabled"
+            placement="top-start"
+            :teleported="true"
+            popper-class="chat-input-select-dropdown mode-dropdown"
+            :popper-options="{
+              modifiers: [
+                {
+                  name: 'preventOverflow',
+                  options: { boundary: 'viewport' }
+                },
+                {
+                  name: 'flip',
+                  options: {
+                    fallbackPlacements: ['top-start', 'top'],
+                  }
+                }
+              ]
+            }"
+            @change="$emit('permission-change', selectedPermissionValue)"
+          >
+            <template #prefix>
+              <span class="mode-prefix-icon">{{ getModeIcon(selectedPermissionValue) }}</span>
+            </template>
+            <el-option value="default" label="Default">
+              <span class="mode-option-label">
+                <span class="mode-icon">?</span>
+                <span>Default</span>
+              </span>
+            </el-option>
+            <el-option value="acceptEdits" label="Accept Edits">
+              <span class="mode-option-label">
+                <span class="mode-icon">✎</span>
+                <span>Accept Edits</span>
+              </span>
+            </el-option>
+            <el-option value="bypassPermissions" label="Bypass">
+              <span class="mode-option-label">
+                <span class="mode-icon">∞</span>
+                <span>Bypass</span>
+              </span>
+            </el-option>
+            <el-option value="plan" label="Plan">
+              <span class="mode-option-label">
+                <span class="mode-icon">☰</span>
+                <span>Plan</span>
+              </span>
+            </el-option>
+            <el-option value="dontAsk" label="Don't Ask">
+              <span class="mode-option-label">
+                <span class="mode-icon">🔇</span>
+                <span>Don't Ask</span>
+              </span>
+            </el-option>
+          </el-select>
+
+          <!-- 模型选择器 - Cursor 风格 -->
+          <el-select
+            v-if="showModelSelector"
             v-model="selectedModelValue"
-            class="model-selector"
-            :disabled="!enabled || isGenerating"
+            class="cursor-selector model-selector"
+            :disabled="!enabled"
             placement="top-start"
             :teleported="true"
             popper-class="chat-input-select-dropdown"
@@ -192,87 +255,23 @@
               </span>
             </el-option>
           </el-select>
-          <span
-            v-if="actualModelId"
-            class="actual-model-hint"
-            :title="actualModelId"
+
+          <!-- Skip Permissions 复选框 - Cursor 风格 -->
+          <label
+            v-if="showPermissionControls"
+            class="cursor-checkbox"
+            :class="{ checked: skipPermissionsValue, disabled: !enabled }"
           >
-            实际模型: {{ actualModelId }}
-          </span>
+            <input
+              v-model="skipPermissionsValue"
+              type="checkbox"
+              :disabled="!enabled"
+              @change="$emit('skip-permissions-change', skipPermissionsValue)"
+            >
+            <span class="checkbox-icon">{{ skipPermissionsValue ? '☑' : '☐' }}</span>
+            <span class="checkbox-text">Skip</span>
+          </label>
         </div>
-
-        <!-- 权限选择器 -->
-        <el-select
-          v-if="showPermissionControls"
-          v-model="selectedPermissionValue"
-          class="permission-selector"
-          :disabled="!enabled || isGenerating"
-          placement="top-start"
-          :teleported="true"
-          popper-class="chat-input-select-dropdown"
-          :popper-options="{
-            modifiers: [
-              {
-                name: 'preventOverflow',
-                options: { boundary: 'viewport' }
-              },
-              {
-                name: 'flip',
-                options: {
-                  fallbackPlacements: ['top-start', 'top'],
-                }
-              }
-            ]
-          }"
-          @change="$emit('permission-change', selectedPermissionValue)"
-        >
-          <el-option
-            value="DEFAULT"
-            label="默认权限"
-          />
-          <el-option
-            value="ACCEPT"
-            label="接受编辑"
-          />
-          <el-option
-            value="BYPASS"
-            label="绕过权限"
-          />
-          <el-option
-            value="PLAN"
-            label="计划模式"
-          />
-        </el-select>
-
-        <!-- Skip Permissions 复选框 -->
-        <label
-          v-if="showPermissionControls"
-          class="checkbox-label"
-        >
-          <input
-            v-model="skipPermissionsValue"
-            type="checkbox"
-            :disabled="!enabled || isGenerating"
-            @change="$emit('skip-permissions-change', skipPermissionsValue)"
-          >
-          <span>跳过权限</span>
-        </label>
-
-        <!-- Auto Cleanup Contexts 复选框 -->
-        <label
-          v-if="showPermissionControls"
-          class="checkbox-label"
-          :title="t('chat.autoCleanupContextTooltip')"
-        >
-          <input
-            v-model="autoCleanupContextsValue"
-            type="checkbox"
-            :disabled="!enabled || isGenerating"
-            @change="handleAutoCleanupChange"
-          >
-          <span>{{ t('chat.autoCleanupContext') }}</span>
-        </label>
-
       </div>
 
       <!-- 右侧按钮组 -->
@@ -294,14 +293,16 @@
           {{ formatTokenUsage(tokenUsage) }}
         </div>
 
-        <!-- 图片上传按钮 -->
+        <!-- 图片上传按钮 - 简洁图标 -->
         <button
-          class="image-upload-btn"
+          class="icon-btn attach-btn"
           :disabled="!enabled || isGenerating"
-          title="上传图片"
+          :title="t('chat.uploadImage')"
           @click="handleImageUploadClick"
         >
-          <span class="btn-icon">📷</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+          </svg>
         </button>
         <input
           ref="imageInputRef"
@@ -312,39 +313,31 @@
           @change="handleImageFileSelect"
         >
 
-        <!-- 发送/停止按钮 -->
+        <!-- 发送按钮 - 简洁图标 (三角形播放图标) -->
         <button
           v-if="!isGenerating"
-          class="send-btn"
+          class="icon-btn send-icon-btn"
+          :class="{ active: canSend }"
           :disabled="!canSend"
           :title="t('chat.sendMessageShortcut')"
           @click="handleSend"
           @contextmenu="handleSendButtonContextMenu"
         >
-          <span class="btn-icon">📤</span>
-          <span class="btn-text">{{ t('common.send') }}</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5.14v14l11-7-11-7z"/>
+          </svg>
         </button>
 
-        <!-- 停止按钮 -->
+        <!-- 停止按钮 - 简洁图标 -->
         <button
           v-else
-          class="stop-btn"
+          class="icon-btn stop-icon-btn"
           :title="t('chat.stopGenerating')"
           @click="$emit('stop')"
         >
-          <span class="btn-icon">⏸</span>
-          <span class="btn-text">停止</span>
-        </button>
-
-        <!-- 打断并发送按钮 -->
-        <button
-          v-if="isGenerating && hasInput"
-          class="interrupt-send-btn"
-          title="打断并发送 (Alt+Enter)"
-          @click="handleInterruptAndSend"
-        >
-          <span class="btn-icon">⚡</span>
-          <span class="btn-text">打断发送</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="4" y="4" width="16" height="16" rx="2"/>
+          </svg>
         </button>
       </div>
     </div>
@@ -364,7 +357,7 @@
         @click="handleSendFromContextMenu"
       >
         <span class="menu-icon">📤</span>
-        <span class="menu-text">发送</span>
+        <span class="menu-text">{{ t('common.send') }}</span>
       </div>
       <div
         v-if="isGenerating && hasInput"
@@ -372,7 +365,7 @@
         @click="handleInterruptAndSendFromContextMenu"
       >
         <span class="menu-icon">⚡</span>
-        <span class="menu-text">打断并发送</span>
+        <span class="menu-text">{{ t('chat.interruptAndSend') }}</span>
       </div>
     </div>
 
@@ -431,20 +424,31 @@
       @select="handleAtSymbolFileSelect"
       @dismiss="dismissAtSymbolPopup"
     />
+
+    <!-- 图片预览模态框 -->
+    <ImagePreviewModal
+      :visible="previewVisible"
+      :image-src="previewImageSrc"
+      image-alt="图片预览"
+      @close="closeImagePreview"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from '@/composables/useI18n'
-import type { ContextReference, AiModel, PermissionMode, EnhancedMessage, TokenUsage as EnhancedTokenUsage, ImageReference } from '@/types/enhancedMessage'
+import type { AiModel, PermissionMode, EnhancedMessage, TokenUsage as EnhancedTokenUsage, ImageReference } from '@/types/enhancedMessage'
+import type { ContextReference, ContextDisplayType } from '@/types/display'
+import type { ContentBlock } from '@/types/message'
 import AtSymbolFilePopup from '@/components/input/AtSymbolFilePopup.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
+import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
 import { isInAtQuery, replaceAtQuery } from '@/utils/atSymbolDetector'
-import { ContextDisplayType } from '@/types/enhancedMessage'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { UiModelOption, UI_MODEL_LABELS, UI_MODEL_SHOW_BRAIN } from '@/constants/models'
+import { useSessionStore } from '@/stores/sessionStore'
+import { UiModelOption, UI_MODEL_LABELS, UI_MODEL_SHOW_BRAIN, MODEL_RESOLUTION_MAP } from '@/constants/models'
 
 interface PendingTask {
   id: string
@@ -473,7 +477,6 @@ interface Props {
   actualModelId?: string  // 实际模型ID
   selectedPermission?: PermissionMode
   skipPermissions?: boolean
-  autoCleanupContexts?: boolean
   showContextControls?: boolean
   showModelSelector?: boolean
   showPermissionControls?: boolean
@@ -482,19 +485,22 @@ interface Props {
   placeholderText?: string
   messageHistory?: EnhancedMessage[]  // 消息历史（用于Token计算）
   sessionTokenUsage?: EnhancedTokenUsage | null  // 会话级Token使用量
+  // 内嵌编辑模式相关
+  inline?: boolean           // 是否为内嵌模式（用于编辑消息）
+  editDisabled?: boolean     // 是否禁用发送（当前阶段用于编辑模式）
 }
 
 interface Emits {
-  (e: 'send', text: string, inlineImages?: File[]): void
-  (e: 'interrupt-and-send', text: string, inlineImages?: File[]): void
+  (e: 'send', contents: ContentBlock[]): void
+  (e: 'interrupt-and-send', contents: ContentBlock[]): void
   (e: 'stop'): void
   (e: 'context-add', context: ContextReference): void
   (e: 'context-remove', context: ContextReference): void
   (e: 'model-change', model: AiModel): void
   (e: 'permission-change', permission: PermissionMode): void
   (e: 'skip-permissions-change', skip: boolean): void
-  (e: 'auto-cleanup-change', cleanup: boolean): void
   (e: 'inline-images-change', images: File[]): void
+  (e: 'cancel'): void  // 取消编辑（仅 inline 模式）
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -503,28 +509,30 @@ const props = withDefaults(defineProps<Props>(), {
   isGenerating: false,
   enabled: true,
   selectedModel: 'SONNET',
-  selectedPermission: 'DEFAULT',
+  selectedPermission: 'default',
   skipPermissions: true,
-  autoCleanupContexts: false,
   showContextControls: true,
   showModelSelector: true,
   showPermissionControls: true,
   showSendButton: true,
-  placeholderText: ''
+  placeholderText: '',
+  inline: false,
+  editDisabled: false
 })
 
 const emit = defineEmits<Emits>()
 
-// i18n & settings
+// i18n & settings & session
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
+const sessionStore = useSessionStore()
 const settingsState = settingsStore.settings
 
 // 安全获取当前 UI 模型，避免 settingsState 还未初始化时访问 undefined.model
 function getSafeUiModel(): UiModelOption {
   try {
     const allOptions = Object.values(UiModelOption) as UiModelOption[]
-    const raw = (settingsState.value as any)?.model as UiModelOption | undefined
+    const raw = settingsState.value?.model as UiModelOption | undefined
     if (raw && allOptions.includes(raw)) {
       return raw
     }
@@ -571,16 +579,15 @@ const inlineImages = ref<File[]>([])
 // 缓存内嵌图片的 URL 对象，用于预览和清理
 const inlineImageUrls = new Map<File, string>()
 
+// Image Preview State (图片预览)
+const previewVisible = ref(false)
+const previewImageSrc = ref('')
+
 // Local state for props
 const selectedModelValue = ref<UiModelOption>(getSafeUiModel())
 const selectedPermissionValue = ref(props.selectedPermission)
 const skipPermissionsValue = ref(props.skipPermissions)
 
-// 自动清理上下文选项 - 从 localStorage 读取
-const AUTO_CLEANUP_KEY = 'claude-code-plus-auto-cleanup-contexts'
-const autoCleanupContextsValue = ref(
-  localStorage.getItem(AUTO_CLEANUP_KEY) === 'true' || props.autoCleanupContexts
-)
 
 // Computed
 const visibleTasks = computed(() => {
@@ -592,6 +599,8 @@ const visibleTasks = computed(() => {
 const hasInput = computed(() => inputText.value.trim().length > 0)
 
 const canSend = computed(() => {
+  // 如果是编辑模式且禁用发送，则不能发送
+  if (props.editDisabled) return false
   return (hasInput.value || inlineImages.value.length > 0) && props.enabled && !props.isGenerating
 })
 
@@ -624,10 +633,6 @@ watch(() => props.selectedPermission, (newValue) => {
 
 watch(() => props.skipPermissions, (newValue) => {
   skipPermissionsValue.value = newValue
-})
-
-watch(() => props.autoCleanupContexts, (newValue) => {
-  autoCleanupContextsValue.value = newValue
 })
 
 // Watch input text and cursor position for @ symbol detection
@@ -717,6 +722,13 @@ function dismissAtSymbolPopup() {
 }
 
 async function handleKeydown(event: KeyboardEvent) {
+  // ESC 键 - 取消编辑（仅 inline 模式）
+  if (event.key === 'Escape' && props.inline) {
+    event.preventDefault()
+    emit('cancel')
+    return
+  }
+
   if (
     event.key === 'Tab' &&
     !event.shiftKey &&
@@ -796,14 +808,35 @@ function getUiModelLabel(option: UiModelOption): string {
   return UI_MODEL_LABELS[option] ?? option
 }
 
+// 获取模式对应的图标
+function getModeIcon(mode: string): string {
+  const icons: Record<string, string> = {
+    'default': '?',
+    'acceptEdits': '✎',
+    'bypassPermissions': '∞',
+    'plan': '☰',
+    'dontAsk': '🔇'
+  }
+  return icons[mode] ?? '?'
+}
+
 function isThinkingOption(option: UiModelOption): boolean {
   return UI_MODEL_SHOW_BRAIN[option] ?? false
 }
 
-async function handleUiModelChange(option: UiModelOption) {
+function handleUiModelChange(option: UiModelOption) {
   selectedModelValue.value = option
-  // 更新全局设置中的模型，触发下次 connect 使用新的模型与思考模式
-  await settingsStore.updateModel(option)
+
+  // 解析模型配置
+  const config = MODEL_RESOLUTION_MAP[option]
+  if (config) {
+    // 更新本地期望配置（Query 前会通过 RPC 同步到后端）
+    sessionStore.setModel({
+      modelId: config.modelId,
+      thinkingEnabled: config.thinkingEnabled
+    })
+    console.log(`🔄 [handleUiModelChange] 模型配置已更新: ${config.modelId}, thinking=${config.thinkingEnabled}`)
+  }
 }
 
 /**
@@ -844,11 +877,11 @@ async function handlePaste(event: ClipboardEvent) {
 
       // 判断光标是否在最前面
       const cursorAtStart = textareaRef.value?.selectionStart === 0
-      
+
       if (cursorAtStart) {
         // 光标在最前面：作为上下文处理
         console.log('📋 [handlePaste] 光标在最前面，将图片作为上下文')
-      await addImageToContext(file)
+        await addImageToContext(file)
       } else {
         // 光标不在最前面：作为内嵌图片处理
         console.log('📋 [handlePaste] 光标不在最前面，将图片作为内嵌图片')
@@ -859,70 +892,75 @@ async function handlePaste(event: ClipboardEvent) {
   }
 }
 
-/**
- * 在光标位置插入文本
- */
-function insertAtCursor(text: string) {
-  const textarea = textareaRef.value
-  if (!textarea) return
-
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-  const currentText = inputText.value
-
-  // 插入文本
-  inputText.value = currentText.substring(0, start) + text + currentText.substring(end)
-
-  // 更新光标位置
-  nextTick(() => {
-    const newPos = start + text.length
-    textarea.selectionStart = textarea.selectionEnd = newPos
-    textarea.focus()
-  })
-}
-
-function handleSend() {
+async function handleSend() {
   if (!canSend.value) return
 
   const text = inputText.value.trim()
   if (text || inlineImages.value.length > 0) {
-    const imagesToSend = [...inlineImages.value]
-    emit('send', text, imagesToSend)
-    
+    // 构建 ContentBlock[]
+    const contents: ContentBlock[] = []
+
+    // 文本块
+    if (text) {
+      contents.push({ type: 'text', text } as ContentBlock)
+    }
+
+    // 内嵌图片转换为 ImageBlock
+    for (const file of inlineImages.value) {
+      const base64 = await readImageAsBase64(file)
+      contents.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: file.type,
+          data: base64
+        }
+      } as ContentBlock)
+    }
+
+    emit('send', contents)
+
     // 清理内嵌图片和 URL
-    inlineImages.value.forEach(image => {
-      const url = inlineImageUrls.get(image)
-      if (url) {
-        URL.revokeObjectURL(url)
-        inlineImageUrls.delete(image)
-      }
-    })
+    clearInlineImages()
     inputText.value = ''
-    inlineImages.value = []
     emit('inline-images-change', [])
     adjustHeight()
   }
 }
 
-function handleInterruptAndSend() {
+async function handleInterruptAndSend() {
   if ((!hasInput.value && inlineImages.value.length === 0) || !props.isGenerating) return
 
   const text = inputText.value.trim()
-  const imagesToSend = [...inlineImages.value]
-  emit('interrupt-and-send', text, imagesToSend)
-  
+
+  // 构建 ContentBlock[]
+  const contents: ContentBlock[] = []
+
+  // 文本块
+  if (text) {
+    contents.push({ type: 'text', text } as ContentBlock)
+  }
+
+  // 内嵌图片转换为 ImageBlock
+  for (const file of inlineImages.value) {
+    const base64 = await readImageAsBase64(file)
+    contents.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: file.type,
+        data: base64
+      }
+    } as ContentBlock)
+  }
+
+  emit('interrupt-and-send', contents)
+
   // 清理内嵌图片和 URL
-  inlineImages.value.forEach(image => {
-    const url = inlineImageUrls.get(image)
-    if (url) {
-      URL.revokeObjectURL(url)
-      inlineImageUrls.delete(image)
-    }
-  })
-    inputText.value = ''
-  inlineImages.value = []
+  clearInlineImages()
+  inputText.value = ''
   emit('inline-images-change', [])
-    adjustHeight()
+  adjustHeight()
 }
 
 // 发送按钮右键菜单处理
@@ -999,7 +1037,10 @@ function handleContextSelect(result: IndexedFileInfo) {
   // 将文件转换为 ContextReference
   const contextRef: ContextReference = {
     type: 'file',
+    uri: result.relativePath,
+    displayType: 'TAG',
     path: result.relativePath,
+    fullPath: result.relativePath,
     name: result.name
   }
 
@@ -1054,7 +1095,7 @@ function handleContextPopupKeyDown(event: KeyboardEvent) {
  */
 function getContextDisplay(context: ContextReference): string {
   if (isImageReference(context)) {
-    return context.name
+    return '图片'  // 简化显示，不显示无意义的文件名
   }
   if (isFileReference(context)) {
     return context.path.split(/[\\/]/).pop() || context.path
@@ -1076,13 +1117,31 @@ function getImagePreviewUrl(context: ContextReference): string {
 }
 
 /**
+ * 打开图片预览
+ */
+function openImagePreview(context: ContextReference) {
+  if (isImageReference(context)) {
+    previewImageSrc.value = getImagePreviewUrl(context)
+    previewVisible.value = true
+  }
+}
+
+/**
+ * 关闭图片预览
+ */
+function closeImagePreview() {
+  previewVisible.value = false
+  previewImageSrc.value = ''
+}
+
+/**
  * 获取上下文图标（使用类型守卫）
  */
 function getContextIcon(context: ContextReference): string {
-  if (isImageReference(context)) return '�️'
-  if (isFileReference(context)) return '�'
+  if (isImageReference(context)) return '🖼️'
+  if (isFileReference(context)) return '📄'
   if (isUrlReference(context)) return '🌐'
-  if ('type' in context && (context as any).type === 'folder') return '📁'
+  if (context.type === 'folder') return '📁'
   if ('path' in context) return '📄'
   return '📎'
 }
@@ -1111,7 +1170,12 @@ function formatTokenUsage(usage: TokenUsage): string {
 function getTokenTooltip(): string {
   if (!props.tokenUsage) return ''
   const u = props.tokenUsage
-  return `输入: ${u.inputTokens}, 输出: ${u.outputTokens}, 缓存创建: ${u.cacheCreationTokens}, 缓存读取: ${u.cacheReadTokens}`
+  return t('chat.tokenTooltip', {
+    input: u.inputTokens,
+    output: u.outputTokens,
+    cacheCreation: u.cacheCreationTokens,
+    cacheRead: u.cacheReadTokens
+  })
 }
 
 // Drag and Drop Functions
@@ -1165,16 +1229,14 @@ async function handleDrop(event: DragEvent) {
 
 async function addFileToContext(file: File) {
   try {
-    // 读取文件内容
-    const content = await readFileContent(file)
-
     // 创建上下文引用
     const contextRef: ContextReference = {
       type: 'file',
-      name: file.name,
+      uri: file.name,
+      displayType: 'TAG',
       path: file.name, // 在实际项目中应该获取相对路径
-      content: content
-    } as any
+      fullPath: file.name
+    }
 
     // 添加到上下文列表
     emit('context-add', contextRef)
@@ -1182,15 +1244,6 @@ async function addFileToContext(file: File) {
     console.error('Failed to read file:', error)
     // 可以添加错误提示
   }
-}
-
-function readFileContent(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => resolve(e.target?.result as string)
-    reader.onerror = reject
-    reader.readAsText(file)
-  })
 }
 
 // 图片上传功能
@@ -1231,7 +1284,7 @@ const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 
  * 类型守卫：检查是否为图片上下文
  */
 function isImageReference(context: ContextReference): context is ImageReference {
-  return 'type' in context && (context as any).type === 'image'
+  return context.type === 'image'
 }
 
 // 别名，用于模板中调用
@@ -1240,15 +1293,15 @@ const isImageContext = isImageReference
 /**
  * 类型守卫：检查是否为文件上下文
  */
-function isFileReference(context: ContextReference): context is { type: 'file'; path: string; name: string } {
-  return 'type' in context && (context as any).type === 'file'
+function isFileReference(context: ContextReference): boolean {
+  return context.type === 'file'
 }
 
 /**
  * 类型守卫：检查是否为 URL 上下文
  */
-function isUrlReference(context: ContextReference): context is { type: 'web'; url: string; title?: string } {
-  return 'url' in context || ('type' in context && (context as any).type === 'web')
+function isUrlReference(context: ContextReference): boolean {
+  return 'url' in context || context.type === 'web'
 }
 
 async function addImageToContext(file: File) {
@@ -1256,7 +1309,7 @@ async function addImageToContext(file: File) {
 
   try {
     // 验证文件类型
-    if (!VALID_IMAGE_TYPES.includes(file.type as any)) {
+    if (!VALID_IMAGE_TYPES.includes(file.type as typeof VALID_IMAGE_TYPES[number])) {
       console.error(`🖼️ [addImageToContext] 不支持的图片格式: ${file.type}`)
       return
     }
@@ -1269,7 +1322,7 @@ async function addImageToContext(file: File) {
     // 创建图片引用
     const imageRef: ImageReference = {
       type: 'image',
-      displayType: ContextDisplayType.TAG,
+      displayType: 'TAG' as ContextDisplayType,
       uri: `image://${file.name}`,
       name: file.name,
       mimeType: file.type,
@@ -1286,7 +1339,7 @@ async function addImageToContext(file: File) {
     })
 
     // 添加到上下文列表
-    emit('context-add', imageRef as any)
+    emit('context-add', imageRef)
     console.log('🖼️ [addImageToContext] 已发送 context-add 事件')
   } catch (error) {
     console.error('🖼️ [addImageToContext] 读取图片失败:', error)
@@ -1335,11 +1388,71 @@ function removeInlineImage(index: number) {
   }
 }
 
-// 自动清理上下文选项
-function handleAutoCleanupChange() {
-  localStorage.setItem(AUTO_CLEANUP_KEY, autoCleanupContextsValue.value.toString())
-  emit('auto-cleanup-change', autoCleanupContextsValue.value)
+/**
+ * 清空所有内嵌图片
+ */
+function clearInlineImages() {
+  inlineImages.value.forEach(image => {
+    const url = inlineImageUrls.get(image)
+    if (url) {
+      URL.revokeObjectURL(url)
+      inlineImageUrls.delete(image)
+    }
+  })
+  inlineImages.value = []
 }
+
+/**
+ * 辅助函数：base64 转 File
+ */
+function base64ToFile(base64: string, filename: string, mimeType: string): File {
+  const byteString = atob(base64)
+  const ab = new ArrayBuffer(byteString.length)
+  const ia = new Uint8Array(ab)
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i)
+  }
+  return new File([ab], filename, { type: mimeType })
+}
+
+/**
+ * 暴露方法供父组件调用（用于编辑队列消息时恢复内容）
+ */
+defineExpose({
+  /**
+   * 设置输入框内容（从 ContentBlock[] 恢复）
+   */
+  setContent(contents: ContentBlock[]) {
+    // 清空当前状态
+    inputText.value = ''
+    clearInlineImages()
+
+    // 解析 contents 填充到对应状态
+    for (const block of contents) {
+      if (block.type === 'text' && 'text' in block) {
+        // 文本块：追加到 inputText（多个文本块用换行连接）
+        if (inputText.value) inputText.value += '\n'
+        inputText.value += (block as any).text
+      } else if (block.type === 'image' && 'source' in block) {
+        // 图片块：转换为 File 对象添加到 inlineImages
+        const imageBlock = block as any
+        if (imageBlock.source?.type === 'base64') {
+          const ext = imageBlock.source.media_type.split('/')[1] || 'png'
+          const file = base64ToFile(
+            imageBlock.source.data,
+            `image-${Date.now()}.${ext}`,
+            imageBlock.source.media_type
+          )
+          inlineImages.value.push(file)
+        }
+      }
+    }
+
+    // 调整高度并通知图片变化
+    adjustHeight()
+    emit('inline-images-change', inlineImages.value)
+  }
+})
 
 // Watch for popup visibility changes
 watch(() => showContextSelectorPopup.value, (newVisible) => {
@@ -1398,6 +1511,12 @@ onUnmounted(() => {
   border-color: var(--ide-accent, #0366d6);
   box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.15);
   animation: generating-pulse 2s ease-in-out infinite;
+}
+
+/* Inline 模式样式 - 用于编辑消息 */
+.unified-chat-input-container.inline-mode {
+  border-radius: 8px;
+  margin: 0;
 }
 
 @keyframes generating-pulse {
@@ -1568,15 +1687,44 @@ onUnmounted(() => {
 }
 
 .context-tag.image-tag {
-  padding: 4px;
+  position: relative;
+  padding: 2px;
+}
+
+/* 图片标签的删除按钮 - 右上角叠加 */
+.context-tag.image-tag .tag-remove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 14px;
+  height: 14px;
+  font-size: 10px;
+  background: var(--ide-error, #d73a49);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.context-tag.image-tag:hover .tag-remove {
+  opacity: 1;
 }
 
 .tag-image-preview {
   width: 32px;
   height: 32px;
   object-fit: cover;
-  border-radius: 3px;
+  border-radius: 4px;
   border: 1px solid var(--ide-border, #e1e4e8);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.tag-image-preview:hover {
+  transform: scale(1.05);
 }
 
 .tag-icon {
@@ -1753,7 +1901,7 @@ onUnmounted(() => {
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 4px;
 }
 
 .toolbar-right {
@@ -1762,51 +1910,144 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-.model-selector-wrapper {
+/* ========== Cursor 风格选择器容器 ========== */
+.cursor-style-selectors {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
-.model-selector,
-.permission-selector {
-  width: 140px;
-  font-size: 12px;
+/* ========== Cursor 风格选择器 - 无边框紧凑样式 ========== */
+.cursor-selector {
+  font-size: 13px;
 }
 
-/* Element Plus el-select 样式覆盖 */
-.model-selector :deep(.el-select__wrapper),
-.permission-selector :deep(.el-select__wrapper) {
-  padding: 4px 10px;
-  border: 1px solid var(--ide-border, #e1e4e8);
-  border-radius: 4px;
-  background: var(--ide-background, #ffffff);
-  box-shadow: none;
-  min-height: 28px;
+/* 模式选择器 - 带灰色背景 */
+.cursor-selector.mode-selector {
+  width: auto;
+  min-width: 100px;
 }
 
-.model-selector :deep(.el-select__wrapper):hover,
-.permission-selector :deep(.el-select__wrapper):hover {
-  border-color: var(--ide-accent, #0366d6);
+.cursor-selector.mode-selector :deep(.el-select__wrapper) {
+  background: rgba(0, 0, 0, 0.08) !important;
+  border-radius: 6px;
+  padding: 4px 8px;
 }
 
-.model-selector :deep(.el-select__wrapper.is-focused),
-.permission-selector :deep(.el-select__wrapper.is-focused) {
-  border-color: var(--ide-accent, #0366d6);
-  box-shadow: none;
-}
-
-.model-selector :deep(.el-select__placeholder),
-.permission-selector :deep(.el-select__placeholder) {
+/* 模式选择器前缀图标 */
+.mode-prefix-icon {
+  font-size: 14px;
   color: var(--ide-secondary-foreground, #6a737d);
+  margin-right: 2px;
+}
+
+.cursor-selector.model-selector {
+  width: auto;
+  min-width: 90px;
+}
+
+/* 移除边框和背景，使用纯文字样式 */
+.cursor-selector :deep(.el-select__wrapper) {
+  padding: 4px 6px;
+  border: none !important;
+  border-radius: 4px;
+  background: transparent !important;
+  box-shadow: none !important;
+  min-height: 24px;
+  gap: 2px;
+}
+
+.cursor-selector :deep(.el-select__wrapper):hover {
+  background: var(--ide-hover-background, rgba(0, 0, 0, 0.05)) !important;
+}
+
+.cursor-selector :deep(.el-select__wrapper.is-focused) {
+  background: var(--ide-hover-background, rgba(0, 0, 0, 0.05)) !important;
+  box-shadow: none !important;
+}
+
+.cursor-selector :deep(.el-select__placeholder) {
+  color: var(--ide-secondary-foreground, #6a737d);
+  font-size: 13px;
+}
+
+.cursor-selector :deep(.el-select__selection) {
+  color: var(--ide-secondary-foreground, #6a737d);
+  font-size: 13px;
+}
+
+.cursor-selector :deep(.el-select__suffix) {
+  color: var(--ide-secondary-foreground, #9ca3af);
+  margin-left: 0;
+}
+
+.cursor-selector :deep(.el-select__suffix .el-icon) {
   font-size: 12px;
 }
 
-.model-selector :deep(.el-select__selection),
-.permission-selector :deep(.el-select__selection) {
-  color: var(--ide-foreground, #24292e);
-  font-size: 12px;
+.cursor-selector.is-disabled :deep(.el-select__wrapper) {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
+
+/* ========== Cursor 风格复选框 ========== */
+.cursor-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--ide-secondary-foreground, #6a737d);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.cursor-checkbox:hover:not(.disabled) {
+  background: var(--ide-hover-background, rgba(0, 0, 0, 0.05));
+}
+
+.cursor-checkbox.checked {
+  color: var(--ide-accent, #0366d6);
+}
+
+.cursor-checkbox.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cursor-checkbox input[type="checkbox"] {
+  display: none;
+}
+
+.cursor-checkbox .checkbox-icon {
+  font-size: 14px;
+}
+
+.cursor-checkbox .checkbox-text {
+  font-size: 13px;
+}
+
+/* ========== 模式选择器下拉选项样式 ========== */
+.mode-option-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-option-label .mode-icon {
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
+  color: var(--ide-secondary-foreground, #6a737d);
+}
+
+/* 模式下拉弹层样式 */
+.mode-dropdown .el-select-dropdown__item.is-selected .mode-icon {
+  color: var(--ide-background, #ffffff);
+}
+
 /* 模型下拉弹层基础样式，使用主题变量 */
 .chat-input-select-dropdown {
   background-color: var(--ide-background, #ffffff);
@@ -1822,9 +2063,10 @@ onUnmounted(() => {
   background-color: var(--ide-hover-background, #f6f8fa);
 }
 
-/* 选中项高亮：背景用 accent，文字用背景色，保证对比度 */
+/* 选中项高亮：背景用 accent，文字用背景色（形成对比） */
 .chat-input-select-dropdown .el-select-dropdown__item.is-selected {
   background-color: var(--ide-accent, #0366d6);
+  color: var(--ide-background, #ffffff) !important;
 }
 
 .chat-input-select-dropdown .el-select-dropdown__item.is-selected .model-option-label {
@@ -1858,6 +2100,7 @@ onUnmounted(() => {
 
 ::global(.theme-dark) .chat-input-select-dropdown .el-select-dropdown__item.is-selected {
   background-color: var(--ide-accent, #58a6ff);
+  color: var(--ide-background, #0d1117) !important;
 }
 
 ::global(.theme-dark) .chat-input-select-dropdown .el-select-dropdown__item.is-selected .model-option-label {
@@ -1865,39 +2108,17 @@ onUnmounted(() => {
 }
 
 .model-selector :deep(.el-select__suffix),
-.permission-selector :deep(.el-select__suffix) {
+.mode-selector :deep(.el-select__suffix) {
   color: var(--ide-secondary-foreground, #6a737d);
 }
 
 .model-selector.is-disabled :deep(.el-select__wrapper),
-.permission-selector.is-disabled :deep(.el-select__wrapper) {
+.mode-selector.is-disabled :deep(.el-select__wrapper) {
   opacity: 0.5;
   cursor: not-allowed;
   background: var(--ide-panel-background, #f6f8fa);
 }
 
-.actual-model-hint {
-  font-size: 10px;
-  color: var(--ide-secondary-foreground, #6a737d);
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--ide-foreground, #24292e);
-  cursor: pointer;
-  user-select: none;
-}
-
-.checkbox-label input[type="checkbox"] {
-  cursor: pointer;
-}
-
-.checkbox-label input[type="checkbox"]:disabled {
-  cursor: not-allowed;
-}
 
 .thinking-toggle {
   display: inline-flex;
@@ -1949,95 +2170,89 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-/* 图片上传按钮 (底部工具栏) */
-.image-upload-btn {
+/* ========== 简洁图标按钮 (Augment Code 风格) ========== */
+.icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: none;
-  border-radius: 50%;
-  background: var(--ide-accent, #0366d6);
-  opacity: 0.15;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ide-secondary-foreground, #6a737d);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
 }
 
-.image-upload-btn:hover:not(:disabled) {
-  opacity: 0.25;
-  transform: scale(1.05);
+.icon-btn:hover:not(:disabled) {
+  background: var(--ide-hover-background, rgba(0, 0, 0, 0.06));
+  color: var(--ide-foreground, #24292e);
 }
 
-.image-upload-btn:disabled {
-  opacity: 0.05;
+.icon-btn:disabled {
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
-.image-upload-btn .btn-icon {
-  font-size: 18px;
+/* 附件按钮 */
+.icon-btn.attach-btn {
+  color: var(--ide-secondary-foreground, #6a737d);
+}
+
+.icon-btn.attach-btn:hover:not(:disabled) {
   color: var(--ide-accent, #0366d6);
 }
 
-.send-btn,
-.stop-btn,
-.interrupt-send-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
+/* 发送按钮 */
+.icon-btn.send-icon-btn {
+  color: var(--ide-secondary-foreground, #9ca3af);
 }
 
-.send-btn {
-  background: var(--ide-accent, #0366d6);
-  color: white;
+.icon-btn.send-icon-btn.active {
+  color: var(--ide-foreground, #24292e);
 }
 
-.send-btn:hover:not(:disabled) {
-  background: var(--ide-accent, #0256c2);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(3, 102, 214, 0.3);
+.icon-btn.send-icon-btn.active:hover {
+  color: var(--ide-accent, #0366d6);
+  background: rgba(3, 102, 214, 0.1);
 }
 
-.send-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+/* 停止按钮 */
+.icon-btn.stop-icon-btn {
+  color: var(--ide-error, #d73a49);
 }
 
-.stop-btn {
-  background: var(--ide-error, #d73a49);
-  color: white;
+.icon-btn.stop-icon-btn:hover {
+  background: rgba(215, 58, 73, 0.1);
 }
 
-.stop-btn:hover {
-  background: var(--ide-error, #c82333);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+/* 暗色主题 */
+:global(.theme-dark) .icon-btn {
+  color: var(--ide-secondary-foreground, #8b949e);
 }
 
-.interrupt-send-btn {
-  background: var(--ide-warning, #ffc107);
-  color: #000;
+:global(.theme-dark) .icon-btn:hover:not(:disabled) {
+  background: var(--ide-hover-background, rgba(255, 255, 255, 0.08));
+  color: var(--ide-foreground, #e6edf3);
 }
 
-.interrupt-send-btn:hover {
-  background: var(--ide-warning, #ffb300);
-  transform: translateY(-1px);
+:global(.theme-dark) .icon-btn.send-icon-btn.active {
+  color: var(--ide-foreground, #e6edf3);
 }
 
-.btn-icon {
-  font-size: 16px;
+:global(.theme-dark) .icon-btn.send-icon-btn.active:hover {
+  color: var(--ide-accent, #58a6ff);
+  background: rgba(88, 166, 255, 0.15);
 }
 
-.btn-text {
-  font-size: 13px;
+:global(.theme-dark) .icon-btn.stop-icon-btn {
+  color: var(--ide-error, #f85149);
+}
+
+:global(.theme-dark) .icon-btn.stop-icon-btn:hover {
+  background: rgba(248, 81, 73, 0.15);
 }
 
 /* Context Selector Popup */
@@ -2204,11 +2419,40 @@ onUnmounted(() => {
 
 :global(.theme-dark) .add-context-btn,
 :global(.theme-dark) .context-tag,
-:global(.theme-dark) .model-selector,
-:global(.theme-dark) .permission-selector,
 :global(.theme-dark) .token-stats {
   background: var(--ide-background, #2b2b2b);
   border-color: var(--ide-border, #3c3c3c);
+}
+
+/* Cursor 风格选择器暗色主题 */
+:global(.theme-dark) .cursor-selector :deep(.el-select__wrapper):hover,
+:global(.theme-dark) .cursor-selector :deep(.el-select__wrapper.is-focused) {
+  background: var(--ide-hover-background, rgba(255, 255, 255, 0.08)) !important;
+}
+
+/* 模式选择器暗色主题 - 灰色背景 */
+:global(.theme-dark) .cursor-selector.mode-selector :deep(.el-select__wrapper) {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+:global(.theme-dark) .cursor-selector :deep(.el-select__selection) {
+  color: var(--ide-secondary-foreground, #9ca3af);
+}
+
+:global(.theme-dark) .mode-option-label .mode-icon {
+  color: var(--ide-secondary-foreground, #9ca3af);
+}
+
+:global(.theme-dark) .cursor-checkbox {
+  color: var(--ide-secondary-foreground, #9ca3af);
+}
+
+:global(.theme-dark) .cursor-checkbox:hover:not(.disabled) {
+  background: var(--ide-hover-background, rgba(255, 255, 255, 0.08));
+}
+
+:global(.theme-dark) .cursor-checkbox.checked {
+  color: var(--ide-accent, #58a6ff);
 }
 
 :global(.theme-dark) .context-selector-popup {

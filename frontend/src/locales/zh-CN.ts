@@ -22,7 +22,9 @@ export default {
     ok: '确定',
     pending: '等待',
     cancelled: '已取消',
-    copyFailed: '复制失败'
+    copyFailed: '复制失败',
+    copied: '已复制',
+    renderFailed: '渲染失败'
   },
   chat: {
     placeholder: '输入消息...',
@@ -44,6 +46,7 @@ export default {
     dropFileToAddContext: '释放文件以添加到上下文',
     taskQueue: '任务队列',
     taskQueueCount: '任务队列 ({count})',
+    pendingQueue: '待发送 ({count})',
     taskStatus: {
       pending: '排队中',
       running: '执行中',
@@ -69,9 +72,29 @@ export default {
       generatingStatus: '正在生成中'
     },
     enterToSend: 'Enter 发送消息 ·',
-    noMessages: '没有消息。请创建会话并发送消息。'
+    noMessages: '没有消息。请创建会话并发送消息。',
+    thinkingLabel: '思考过程',
+    generating: '生成中...',
+    actualModel: '实际模型',
+    uploadImage: '上传图片',
+    interruptAndSend: '打断发送',
+    interruptAndSendShortcut: '打断并发送 (Alt+Enter)',
+    moreContexts: '还有 {count} 个上下文',
+    tokenTooltip: '输入: {input}, 输出: {output}, 缓存创建: {cacheCreation}, 缓存读取: {cacheRead}',
+    welcomeScreen: {
+      title: '开始与 Claude 对话',
+      description: '输入您的问题或想法，Claude 将帮助您编写代码、解答疑问',
+      askCode: '询问代码问题',
+      refactor: '重构现有代码',
+      debug: '调试错误',
+      sendHint: '发送消息',
+      newLineHint: '换行'
+    },
+    claudeThinking: 'Claude 正在思考...',
+    scrollToBottom: '回到底部'
   },
   tools: {
+    error: '错误',
     read: '读取文件',
     write: '写入文件',
     edit: '编辑文件',
@@ -90,7 +113,60 @@ export default {
     editFailed: '编辑失败',
     confirmed: '已确认',
     terminated: '已终止',
-    copyContent: '复制内容'
+    copyContent: '复制内容',
+    openInEditor: '在编辑器中打开',
+    parsingParams: '正在解析参数...',
+    contentTruncated: '内容已截断',
+    noOutput: '无输出',
+    replaceAll: '全部替换',
+    changeNumber: '修改 #{number}',
+    questions: '{count} 个问题',
+    subtask: '子任务',
+    newContent: '新内容',
+    label: {
+      path: '路径',
+      pattern: '模式',
+      lines: '行数',
+      start: '开始',
+      duration: '耗时',
+      filter: '过滤器',
+      output: '输出内容',
+      result: '结果',
+      searchPattern: '搜索模式',
+      searchPath: '搜索路径',
+      fileFilter: '文件过滤',
+      fileType: '文件类型',
+      outputMode: '输出模式',
+      cell: '单元',
+      mode: '模式',
+      agentType: '代理类型',
+      model: '模型',
+      prompt: '提示',
+      query: '搜索查询',
+      allowedDomains: '允许域名',
+      blockedDomains: '屏蔽域名'
+    },
+    readTool: {
+      reading: '正在读取文件...',
+      readResult: '读取结果'
+    },
+    grepTool: {
+      outputModes: {
+        content: '内容',
+        filesWithMatches: '匹配文件',
+        count: '计数'
+      },
+      options: {
+        ignoreCase: '忽略大小写',
+        showLineNumbers: '显示行号',
+        multiline: '多行匹配'
+      }
+    },
+    todoTool: {
+      pending: '待处理',
+      inProgress: '进行中',
+      completed: '已完成'
+    }
   },
   settings: {
     title: '设置',

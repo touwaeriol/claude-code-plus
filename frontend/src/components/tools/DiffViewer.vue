@@ -6,7 +6,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { diffLines as computeDiffLines, type Change } from 'diff'
+import { diffLines as computeDiffLines } from 'diff'
 
 interface Props {
   oldContent: string

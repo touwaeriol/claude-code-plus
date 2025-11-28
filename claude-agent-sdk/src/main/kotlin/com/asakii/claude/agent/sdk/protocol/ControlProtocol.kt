@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import java.util.logging.Logger
 
 /**
  * Control protocol handler for managing bidirectional communication with Claude CLI.
@@ -50,24 +51,35 @@ class ControlProtocol(
     private var initialized = false
     private val _initializationResult = CompletableDeferred<Map<String, Any>>()
     
+    // Logger
+    private val logger = Logger.getLogger(ControlProtocol::class.java.name)
+    
     /**
      * Start processing messages from transport.
      */
     fun startMessageProcessing(scope: CoroutineScope) {
+        logger.info("🚀 [ControlProtocol] 开始消息处理任务")
         messageProcessingJob = scope.launch {
+            var messageCount = 0
             try {
                 transport.readMessages().collect { jsonElement ->
+                    messageCount++
                     try {
+                        logger.info("📥 [ControlProtocol] 从 Transport 收到原始消息 #$messageCount")
                         routeMessage(jsonElement)
                     } catch (e: Exception) {
-                        println("Error processing message: ${e.message}")
+                        logger.severe("❌ [ControlProtocol] 处理消息失败: ${e.message}")
+                        e.printStackTrace()
                     }
                 }
             } catch (e: CancellationException) {
+                logger.info("ℹ️ [ControlProtocol] 消息处理任务被取消")
                 throw e
             } catch (e: Exception) {
                 val errorMessage = e.message ?: e::class.simpleName ?: "Unknown transport error"
-                println("Failed to read from transport: $errorMessage")
+                logger.severe("❌ [ControlProtocol] 从 Transport 读取消息失败: $errorMessage")
+                logger.severe("📊 [ControlProtocol] 统计: 共处理 $messageCount 条消息")
+                e.printStackTrace()
                 // Push an error result so上层能够收到错误事件而不是卡死
                 _sdkMessages.trySend(
                     ResultMessage(
@@ -81,6 +93,7 @@ class ControlProtocol(
                     )
                 )
                 _sdkMessages.close()
+                logger.info("🔒 [ControlProtocol] sdkMessages channel 已关闭")
             }
         }
     }
@@ -193,43 +206,83 @@ class ControlProtocol(
         val jsonObject = jsonElement.jsonObject
         val type = jsonObject["type"]?.jsonPrimitive?.content
         
-        // Route messages based on type
+        logger.info("🔀 [ControlProtocol] 路由消息: type=$type")
         
+        // Route messages based on type
         when (type) {
             "system" -> {
                 val subtype = jsonObject["subtype"]?.jsonPrimitive?.content
+                logger.info("🔧 [ControlProtocol] 系统消息: subtype=$subtype")
                 if (subtype == "init") {
                     handleSystemInit(jsonElement)
                 } else {
                     // Other system messages
                     try {
                         val message = messageParser.parseMessage(jsonElement)
+                        logger.info("📤 [ControlProtocol] 发送系统消息到 sdkMessages: ${message::class.simpleName}")
                         _sdkMessages.send(message)
+                        logger.info("✅ [ControlProtocol] 系统消息已发送")
                     } catch (e: Exception) {
-                        println("Failed to parse system message: ${e.message}")
+                        logger.severe("❌ [ControlProtocol] 解析系统消息失败: ${e.message}")
+                        e.printStackTrace()
                     }
                 }
             }
             "control_request" -> {
+                logger.info("🎮 [ControlProtocol] 控制请求消息")
                 val (requestId, request) = messageParser.parseControlRequest(jsonElement)
                 handleControlRequest(requestId, request)
             }
             "control_response" -> {
+                logger.info("🎮 [ControlProtocol] 控制响应消息")
                 val response = messageParser.parseControlResponse(jsonElement)
                 val deferred = pendingRequests.remove(response.requestId)
                 deferred?.complete(response)
             }
             "assistant", "user", "result", "stream_event" -> {
                 // Regular SDK messages
+                logger.info("📨 [ControlProtocol] SDK 消息: type=$type")
                 try {
                     val message = messageParser.parseMessage(jsonElement)
+                    val messageType = message::class.simpleName
+                    logger.info("📤 [ControlProtocol] 解析成功，准备发送到 sdkMessages: $messageType")
+                    
+                    // 记录消息详情
+                    when (message) {
+                        is ResultMessage -> {
+                            logger.info("🎯 [ControlProtocol] ResultMessage 详情: subtype=${message.subtype}, isError=${message.isError}, sessionId=${message.sessionId}")
+                        }
+                        is StreamEvent -> {
+                            val eventType = try {
+                                message.event.jsonObject["type"]?.jsonPrimitive?.contentOrNull ?: "unknown"
+                            } catch (e: Exception) {
+                                "parse_error"
+                            }
+                            logger.info("🌊 [ControlProtocol] StreamEvent 详情: eventType=$eventType, sessionId=${message.sessionId}, uuid=${message.uuid}")
+                        }
+                        is AssistantMessage -> {
+                            logger.info("🤖 [ControlProtocol] AssistantMessage 详情: model=${message.model}, contentBlocks=${message.content.size}")
+                        }
+                        is SystemMessage -> {
+                            logger.info("🔧 [ControlProtocol] SystemMessage 详情: subtype=${message.subtype}")
+                        }
+                        is UserMessage -> {
+                            logger.info("👤 [ControlProtocol] UserMessage 详情: sessionId=${message.sessionId}, parentToolUseId=${message.parentToolUseId}")
+                        }
+                        else -> {
+                            logger.info("📄 [ControlProtocol] 其他消息类型: $messageType")
+                        }
+                    }
+                    
                     _sdkMessages.send(message)
+                    logger.info("✅ [ControlProtocol] SDK 消息 ($messageType) 已发送到 sdkMessages channel")
                 } catch (e: Exception) {
-                    println("Failed to parse SDK message: ${e.message}")
+                    logger.severe("❌ [ControlProtocol] 解析 SDK 消息失败: type=$type, error=${e.message}")
+                    e.printStackTrace()
                 }
             }
             else -> {
-                println("Unknown message type: $type")
+                logger.warning("⚠️ [ControlProtocol] 未知消息类型: $type")
             }
         }
     }

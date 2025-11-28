@@ -64,7 +64,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const elapsedTime = ref(0)
 let startTime = 0
-let timer: NodeJS.Timeout | null = null
+let timer: ReturnType<typeof setInterval> | null = null
 
 const isVisible = computed(() => props.isGenerating)
 

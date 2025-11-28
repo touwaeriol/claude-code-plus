@@ -4,9 +4,10 @@
  * 设计原则：每个 SessionState 拥有自己的连接和状态，不通过 sessionId 查找
  */
 
-import type { Message } from './message'
-import type { DisplayItem, ToolCall, ConnectionStatus } from './display'
+import type { UnifiedMessage, ContentBlock } from './message'
+import type { DisplayItem, ToolCall, ConnectionStatus, ContextReference } from './display'
 import type { AiAgentSession } from '@/services/AiAgentSession'
+import type { RpcCapabilities, RpcPermissionMode } from '@/types/rpc'
 
 /**
  * UI 状态（用于切换会话时保存/恢复）
@@ -40,7 +41,7 @@ export interface SessionState {
   order: number  // Tab显示顺序（用于拖拽排序）
 
   // 原始数据（来自后端，用于持久化）
-  messages: Message[]
+  messages: UnifiedMessage[]
 
   // ViewModel（用于 UI 展示）
   displayItems: DisplayItem[]
@@ -54,6 +55,18 @@ export interface SessionState {
   // 连接状态
   connectionStatus: ConnectionStatus
   modelId: string | null
+
+  // Agent 能力信息（connect 时获取）
+  capabilities: RpcCapabilities | null
+
+  // 当前权限模式
+  permissionMode: RpcPermissionMode
+
+  // 是否跳过权限（连接时确定，切换需要重连）
+  skipPermissions: boolean
+
+  // 是否启用思考（连接时确定，切换需要重连）
+  thinkingEnabled: boolean
 
   // 执行状态（是否正在生成）
   isGenerating: boolean
@@ -73,7 +86,20 @@ export interface SerializableSessionData {
   name: string
   createdAt: number
   updatedAt: number
-  messages: Message[]
+  messages: UnifiedMessage[]
   modelId: string | null
 }
 
+/**
+ * 待发送消息（用于消息队列）
+ *
+ * 当用户在 AI 生成中发送消息时，消息会被加入队列等待发送
+ * - contexts: 上下文栏引用（文件、图片等）
+ * - contents: 输入框内容（文本块、图片块等 ContentBlock）
+ */
+export interface PendingMessage {
+  id: string                        // 唯一标识（用于删除/编辑）
+  contexts: ContextReference[]      // 上下文栏引用（文件、图片）
+  contents: ContentBlock[]          // 输入框内容（文本块、图片块）
+  createdAt: number                 // 创建时间
+}

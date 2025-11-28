@@ -250,48 +250,69 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
      * This is the main method for receiving Claude's responses.
      *
      * The Flow will automatically complete after receiving a ResultMessage.
+     * 使用 transformWhile 让 Flow 自然结束，不会抛出 CancellationException。
      */
     fun receiveResponse(): Flow<Message> {
         ensureConnected()
-        logger.info("📬 开始接收Claude响应消息...")
+        logger.info("📬 [receiveResponse] 开始接收Claude响应消息...")
 
-        return channelFlow {
-            val job = launch {
-                controlProtocol!!.sdkMessages.collect { message ->
-                    logger.info("📨 收到消息: ${message::class.simpleName}")
-                    when (message) {
-                        is AssistantMessage -> {
-                            val content = message.content.filterIsInstance<TextBlock>()
-                                .joinToString("") { it.text }
-                            logger.info("🤖 Claude回复: ${content.take(100)}${if (content.length > 100) "..." else ""}")
-                        }
-                        is SystemMessage -> {
-                            logger.info("🔧 系统消息: ${message.subtype} - ${message.data}")
-                        }
-                        is ResultMessage -> {
-                            logger.info("🎯 结果消息: ${message.subtype}, error=${message.isError}")
-                        }
-                        is UserMessage -> {
-                            logger.info("👤 用户消息: ${message.content}")
-                        }
-                        else -> {
-                            logger.info("📄 其他消息: ${message::class.simpleName}")
-                        }
+        var messageCount = 0
+
+        return controlProtocol!!.sdkMessages
+            .onEach { message ->
+                messageCount++
+                val messageType = message::class.simpleName
+                logger.info("📨 [receiveResponse] 收到消息 #$messageCount: $messageType")
+
+                when (message) {
+                    is AssistantMessage -> {
+                        val content = message.content.filterIsInstance<TextBlock>()
+                            .joinToString("") { it.text }
+                        logger.info("🤖 [receiveResponse] Claude回复: ${content.take(100)}${if (content.length > 100) "..." else ""}")
+                        logger.info("📊 [receiveResponse] AssistantMessage 详情: model=${message.model}, contentBlocks=${message.content.size}")
                     }
-
-                    send(message)
-
-                    if (message is ResultMessage) {
-                        logger.info("🏁 收到ResultMessage，响应流结束")
-                        close() // Close channel after ResultMessage, terminating the Flow
+                    is SystemMessage -> {
+                        logger.info("🔧 [receiveResponse] 系统消息: subtype=${message.subtype}, data=${message.data}")
+                    }
+                    is ResultMessage -> {
+                        logger.info("🎯 [receiveResponse] 结果消息: subtype=${message.subtype}, isError=${message.isError}, sessionId=${message.sessionId}")
+                        logger.info("📊 [receiveResponse] ResultMessage 详情: durationMs=${message.durationMs}, numTurns=${message.numTurns}, totalCostUsd=${message.totalCostUsd}")
+                        if (message.usage != null) {
+                            logger.info("💾 [receiveResponse] ResultMessage usage: ${message.usage}")
+                        }
+                        logger.info("🏁 [receiveResponse] 收到ResultMessage，Flow 将自然结束")
+                        logger.info("📊 [receiveResponse] 统计: 共收到 $messageCount 条消息")
+                    }
+                    is UserMessage -> {
+                        logger.info("👤 [receiveResponse] 用户消息: sessionId=${message.sessionId}, parentToolUseId=${message.parentToolUseId}")
+                    }
+                    is StreamEvent -> {
+                        val eventType = try {
+                            val eventJson = message.event.jsonObject
+                            eventJson["type"]?.jsonPrimitive?.contentOrNull ?: "unknown"
+                        } catch (e: Exception) {
+                            "parse_error"
+                        }
+                        logger.info("🌊 [receiveResponse] StreamEvent: type=$eventType, sessionId=${message.sessionId}, uuid=${message.uuid}")
+                    }
+                    else -> {
+                        logger.info("📄 [receiveResponse] 其他消息: $messageType")
                     }
                 }
             }
-            awaitClose {
-                logger.info("🚪 响应流已关闭")
-                job.cancel()
+            .transformWhile { message ->
+                emit(message)
+                // 返回 true 继续，返回 false 结束 Flow
+                // ResultMessage 发送后返回 false，Flow 自然完成
+                message !is ResultMessage
             }
-        }
+            .onCompletion { cause ->
+                if (cause == null) {
+                    logger.info("✅ [receiveResponse] Flow 正常完成，共收到 $messageCount 条消息")
+                } else {
+                    logger.info("⚠️ [receiveResponse] Flow 异常结束: ${cause.message}")
+                }
+            }
     }
 
     /**
@@ -336,21 +357,33 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
      * client.receiveResponse().collect { ... }
      *
      * // Switch to auto-accept edits
-     * client.setPermissionMode("acceptEdits")
+     * client.setPermissionMode(PermissionMode.ACCEPT_EDITS)
      * client.query("Implement the fix")
      * client.receiveResponse().collect { ... }
      * ```
      */
-    suspend fun setPermissionMode(mode: String) {
+    suspend fun setPermissionMode(mode: PermissionMode) {
         runCommand {
             ensureConnected()
-            logger.info("🔐 设置权限模式: $mode")
+            val modeString = mode.toCliString()
+            logger.info("🔐 设置权限模式: $mode ($modeString)")
 
-            val request = SetPermissionModeRequest(mode = mode)
+            val request = SetPermissionModeRequest(mode = modeString)
             controlProtocol!!.sendControlRequest(request)
 
             logger.info("✅ 权限模式已更新为: $mode")
         }
+    }
+
+    /**
+     * 将 PermissionMode 枚举转换为 CLI 期望的字符串格式
+     */
+    private fun PermissionMode.toCliString(): String = when (this) {
+        PermissionMode.DEFAULT -> "default"
+        PermissionMode.ACCEPT_EDITS -> "acceptEdits"
+        PermissionMode.BYPASS_PERMISSIONS -> "bypassPermissions"
+        PermissionMode.PLAN -> "plan"
+        PermissionMode.DONT_ASK -> "dontAsk"
     }
 
     /**

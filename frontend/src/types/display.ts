@@ -1,11 +1,16 @@
 /**
  * 前端显示层类型定义
- * 
+ *
  * 这些类型用于 UI 展示，是从后端 Message 转换而来的 ViewModel
+ *
+ * 字段命名规范：
+ * - displayType: DisplayItem 的种类（如 'toolCall', 'userMessage'）
+ * - toolName: 工具显示名称（如 'Read', 'mcp__excel__read'）
+ * - toolType: 工具类型标识（如 'CLAUDE_READ', 'MCP'）
  */
 
-import type { ImageBlock, ContentBlock } from './message'
-import { TOOL_TYPE } from '@/constants/toolTypes'
+import type { ContentBlock } from './message'
+import { CLAUDE_TOOL_TYPE, OTHER_TOOL_TYPE, type ToolType } from '@/constants/toolTypes'
 
 // ============ 基础类型 ============
 
@@ -29,12 +34,17 @@ export enum ConnectionStatus {
 }
 
 /**
+ * 上下文显示类型
+ */
+export type ContextDisplayType = 'TAG' | 'INLINE'
+
+/**
  * 上下文引用
  */
 export interface ContextReference {
   type: 'file' | 'web' | 'folder' | 'image'
   uri: string
-  displayType: 'TAG' | 'INLINE'
+  displayType: ContextDisplayType
   // 具体类型的额外字段
   path?: string
   fullPath?: string
@@ -55,6 +65,7 @@ export interface ContextReference {
  */
 export interface BaseDisplayItem {
   id: string
+  displayType: string    // 原 type，改为 displayType
   timestamp: number
 }
 
@@ -62,14 +73,14 @@ export interface BaseDisplayItem {
 
 /**
  * 用户消息
- * 
+ *
  * 设计说明：
  * - contexts: 上下文引用（@文件路径、图片等），从 content 开头解析出来
  * - content: 用户直接输入的内容（第一个普通文本块之后的内容，保持顺序）
  *   - 主要是文本，偶尔有图片（用户直接上传的）
  */
 export interface UserMessage extends BaseDisplayItem {
-  type: 'userMessage'
+  displayType: 'userMessage'
   /** 上下文引用（@文件路径、图片等），从 content 开头解析出来 */
   contexts?: ContextReference[]
   /** 用户直接输入的内容（第一个普通文本块之后的内容，保持顺序） */
@@ -93,7 +104,7 @@ export interface RequestStats {
  * AI 文本回复
  */
 export interface AssistantText extends BaseDisplayItem {
-  type: 'assistantText'
+  displayType: 'assistantText'
   content: string
   stats?: RequestStats        // 请求统计信息（仅最后一个文本块有）
   isLastInMessage?: boolean   // 是否是该消息的最后一个文本块
@@ -103,9 +114,18 @@ export interface AssistantText extends BaseDisplayItem {
  * 系统消息
  */
 export interface SystemMessage extends BaseDisplayItem {
-  type: 'systemMessage'
+  displayType: 'systemMessage'
   content: string
   level: 'info' | 'warning' | 'error'
+}
+
+/**
+ * 思考内容
+ */
+export interface ThinkingContent extends BaseDisplayItem {
+  displayType: 'thinking'
+  content: string
+  signature?: string
 }
 
 // ============ 工具调用类型 ============
@@ -114,8 +134,11 @@ export interface SystemMessage extends BaseDisplayItem {
  * 工具调用基础接口
  */
 export interface BaseToolCall extends BaseDisplayItem {
-  type: 'toolCall'
-  toolType: string
+  displayType: 'toolCall'
+  /** 工具显示名称（如 "Read", "Write", "mcp__excel__read"） */
+  toolName: string
+  /** 工具类型标识（如 "CLAUDE_READ", "CLAUDE_WRITE", "MCP"） */
+  toolType: ToolType
   status: ToolCallStatus
   startTime: number
   endTime?: number
@@ -130,11 +153,13 @@ export type ToolResult =
   | { type: 'success'; output: string; summary?: string; details?: string; affectedFiles?: string[] }
   | { type: 'error'; error: string; details?: string }
 
+// ============ Claude SDK 工具调用类型 ============
+
 /**
- * Read 工具调用
+ * Claude Read 工具调用
  */
-export interface ReadToolCall extends BaseToolCall {
-  toolType: typeof TOOL_TYPE.READ
+export interface ClaudeReadToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.READ
   input: {
     file_path?: string
     path?: string
@@ -145,10 +170,10 @@ export interface ReadToolCall extends BaseToolCall {
 }
 
 /**
- * Write 工具调用
+ * Claude Write 工具调用
  */
-export interface WriteToolCall extends BaseToolCall {
-  toolType: typeof TOOL_TYPE.WRITE
+export interface ClaudeWriteToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.WRITE
   input: {
     file_path?: string
     path?: string
@@ -157,10 +182,10 @@ export interface WriteToolCall extends BaseToolCall {
 }
 
 /**
- * Edit 工具调用
+ * Claude Edit 工具调用
  */
-export interface EditToolCall extends BaseToolCall {
-  toolType: typeof TOOL_TYPE.EDIT
+export interface ClaudeEditToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.EDIT
   input: {
     file_path: string
     old_string: string
@@ -170,10 +195,10 @@ export interface EditToolCall extends BaseToolCall {
 }
 
 /**
- * MultiEdit 工具调用
+ * Claude MultiEdit 工具调用
  */
-export interface MultiEditToolCall extends BaseToolCall {
-  toolType: typeof TOOL_TYPE.MULTI_EDIT
+export interface ClaudeMultiEditToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.MULTI_EDIT
   input: {
     file_path: string
     edits: Array<{
@@ -185,10 +210,10 @@ export interface MultiEditToolCall extends BaseToolCall {
 }
 
 /**
- * TodoWrite 工具调用
+ * Claude TodoWrite 工具调用
  */
-export interface TodoWriteToolCall extends BaseToolCall {
-  toolType: typeof TOOL_TYPE.TODO_WRITE
+export interface ClaudeTodoWriteToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.TODO_WRITE
   input: {
     todos: Array<{
       content: string
@@ -199,10 +224,10 @@ export interface TodoWriteToolCall extends BaseToolCall {
 }
 
 /**
- * Bash 工具调用
+ * Claude Bash 工具调用
  */
-export interface BashToolCall extends BaseToolCall {
-  toolType: typeof TOOL_TYPE.BASH
+export interface ClaudeBashToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.BASH
   input: {
     command: string
     description?: string
@@ -212,10 +237,31 @@ export interface BashToolCall extends BaseToolCall {
 }
 
 /**
- * Grep 工具调用
+ * Claude BashOutput 工具调用
  */
-export interface GrepToolCall extends BaseToolCall {
-  toolType: typeof TOOL_TYPE.GREP
+export interface ClaudeBashOutputToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.BASH_OUTPUT
+  input: {
+    bash_id: string
+    filter?: string
+  }
+}
+
+/**
+ * Claude KillShell 工具调用
+ */
+export interface ClaudeKillShellToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.KILL_SHELL
+  input: {
+    shell_id: string
+  }
+}
+
+/**
+ * Claude Grep 工具调用
+ */
+export interface ClaudeGrepToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.GREP
   input: {
     pattern: string
     path?: string
@@ -226,10 +272,10 @@ export interface GrepToolCall extends BaseToolCall {
 }
 
 /**
- * Glob 工具调用
+ * Claude Glob 工具调用
  */
-export interface GlobToolCall extends BaseToolCall {
-  toolType: typeof TOOL_TYPE.GLOB
+export interface ClaudeGlobToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.GLOB
   input: {
     pattern: string
     path?: string
@@ -237,10 +283,10 @@ export interface GlobToolCall extends BaseToolCall {
 }
 
 /**
- * WebSearch 工具调用
+ * Claude WebSearch 工具调用
  */
-export interface WebSearchToolCall extends BaseToolCall {
-  toolType: typeof TOOL_TYPE.WEB_SEARCH
+export interface ClaudeWebSearchToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.WEB_SEARCH
   input: {
     query: string
     allowed_domains?: string[]
@@ -249,10 +295,10 @@ export interface WebSearchToolCall extends BaseToolCall {
 }
 
 /**
- * WebFetch 工具调用
+ * Claude WebFetch 工具调用
  */
-export interface WebFetchToolCall extends BaseToolCall {
-  toolType: typeof TOOL_TYPE.WEB_FETCH
+export interface ClaudeWebFetchToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.WEB_FETCH
   input: {
     url: string
     prompt: string
@@ -260,36 +306,197 @@ export interface WebFetchToolCall extends BaseToolCall {
 }
 
 /**
- * 通用工具调用（用于未知或 MCP 工具）
+ * Claude Task 工具调用
  */
-export interface GenericToolCall extends BaseToolCall {
-  toolType: string
+export interface ClaudeTaskToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.TASK
+  input: {
+    description: string
+    prompt: string
+    subagent_type: string
+  }
+}
+
+/**
+ * Claude AskUserQuestion 工具调用
+ */
+export interface ClaudeAskUserQuestionToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.ASK_USER_QUESTION
+  input: {
+    questions: Array<{
+      question: string
+      header: string
+      options: Array<{
+        label: string
+        description: string
+      }>
+      multiSelect: boolean
+    }>
+  }
+}
+
+/**
+ * Claude NotebookEdit 工具调用
+ */
+export interface ClaudeNotebookEditToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.NOTEBOOK_EDIT
+  input: {
+    notebook_path: string
+    new_source: string
+    cell_id?: string
+    cell_type?: string
+    edit_mode?: string
+  }
+}
+
+/**
+ * Claude ExitPlanMode 工具调用
+ */
+export interface ClaudeExitPlanModeToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.EXIT_PLAN_MODE
   input: Record<string, any>
 }
+
+/**
+ * Claude EnterPlanMode 工具调用
+ */
+export interface ClaudeEnterPlanModeToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.ENTER_PLAN_MODE
+  input: Record<string, any>
+}
+
+/**
+ * Claude Skill 工具调用
+ */
+export interface ClaudeSkillToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.SKILL
+  input: {
+    skill: string
+  }
+}
+
+/**
+ * Claude SlashCommand 工具调用
+ */
+export interface ClaudeSlashCommandToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.SLASH_COMMAND
+  input: {
+    command: string
+  }
+}
+
+/**
+ * Claude ListMcpResources 工具调用
+ */
+export interface ClaudeListMcpResourcesToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.LIST_MCP_RESOURCES
+  input: {
+    server?: string
+  }
+}
+
+/**
+ * Claude ReadMcpResource 工具调用
+ */
+export interface ClaudeReadMcpResourceToolCall extends BaseToolCall {
+  toolType: typeof CLAUDE_TOOL_TYPE.READ_MCP_RESOURCE
+  input: {
+    server: string
+    uri: string
+  }
+}
+
+// ============ 其他工具类型 ============
+
+/**
+ * MCP 工具调用
+ */
+export interface McpToolCall extends BaseToolCall {
+  toolType: typeof OTHER_TOOL_TYPE.MCP
+  input: Record<string, any>
+}
+
+/**
+ * 未知工具调用
+ */
+export interface UnknownToolCall extends BaseToolCall {
+  toolType: typeof OTHER_TOOL_TYPE.UNKNOWN
+  input: Record<string, any>
+}
+
+// ============ 联合类型 ============
 
 /**
  * 工具调用联合类型
  */
 export type ToolCall =
-  | ReadToolCall
-  | WriteToolCall
-  | EditToolCall
-  | MultiEditToolCall
-  | TodoWriteToolCall
-  | BashToolCall
-  | GrepToolCall
-  | GlobToolCall
-  | WebSearchToolCall
-  | WebFetchToolCall
-  | GenericToolCall
-
-// ============ DisplayItem 联合类型 ============
+  | ClaudeReadToolCall
+  | ClaudeWriteToolCall
+  | ClaudeEditToolCall
+  | ClaudeMultiEditToolCall
+  | ClaudeTodoWriteToolCall
+  | ClaudeBashToolCall
+  | ClaudeBashOutputToolCall
+  | ClaudeKillShellToolCall
+  | ClaudeGrepToolCall
+  | ClaudeGlobToolCall
+  | ClaudeWebSearchToolCall
+  | ClaudeWebFetchToolCall
+  | ClaudeTaskToolCall
+  | ClaudeAskUserQuestionToolCall
+  | ClaudeNotebookEditToolCall
+  | ClaudeExitPlanModeToolCall
+  | ClaudeEnterPlanModeToolCall
+  | ClaudeSkillToolCall
+  | ClaudeSlashCommandToolCall
+  | ClaudeListMcpResourcesToolCall
+  | ClaudeReadMcpResourceToolCall
+  | McpToolCall
+  | UnknownToolCall
 
 /**
- * 所有显示项的联合类型
+ * 所有显示项的联合类型（使用 displayType 作为判别器）
  */
 export type DisplayItem =
   | UserMessage
   | AssistantText
+  | ThinkingContent
   | ToolCall
   | SystemMessage
+
+// ============ 类型守卫 ============
+
+/**
+ * 判断是否为工具调用
+ */
+export function isToolCall(item: DisplayItem): item is ToolCall {
+  return item.displayType === 'toolCall'
+}
+
+/**
+ * 判断是否为用户消息
+ */
+export function isUserMessage(item: DisplayItem): item is UserMessage {
+  return item.displayType === 'userMessage'
+}
+
+/**
+ * 判断是否为助手文本
+ */
+export function isAssistantText(item: DisplayItem): item is AssistantText {
+  return item.displayType === 'assistantText'
+}
+
+/**
+ * 判断是否为思考内容
+ */
+export function isThinkingContent(item: DisplayItem): item is ThinkingContent {
+  return item.displayType === 'thinking'
+}
+
+/**
+ * 判断是否为系统消息
+ */
+export function isSystemMessage(item: DisplayItem): item is SystemMessage {
+  return item.displayType === 'systemMessage'
+}

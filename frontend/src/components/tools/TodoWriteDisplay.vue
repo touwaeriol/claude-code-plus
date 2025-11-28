@@ -2,8 +2,8 @@
   <CompactToolCard
     :display-info="displayInfo"
     :is-expanded="expanded"
-    :has-details="true"
-    @click="expanded = !expanded"
+    :has-details="todos.length > 0"
+    @click="handleCardClick"
   >
     <template #details>
       <div class="todo-list">
@@ -11,17 +11,11 @@
           v-for="(todo, index) in todos"
           :key="index"
           class="todo-item"
-          :class="`todo-${todo.status}`"
+          :class="todo.status"
         >
-          <span class="todo-status-icon">{{ getStatusIcon(todo.status) }}</span>
-          <span class="todo-content">{{ todo.content }}</span>
-          <div
-            v-if="todo.status === 'in_progress'"
-            class="todo-active"
-          >
-            <span class="active-icon">⚡</span>
-            <span class="active-text">{{ todo.activeForm }}</span>
-          </div>
+          <span class="status-dot" />
+          <span class="todo-text">{{ todo.content }}</span>
+          <span class="todo-status">{{ getStatusText(todo.status) }}</span>
         </div>
       </div>
     </template>
@@ -30,145 +24,125 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
+import { useI18n } from '@/composables/useI18n'
+import type { ClaudeTodoWriteToolCall } from '@/types/display'
 import CompactToolCard from './CompactToolCard.vue'
 import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
 
-interface Todo {
+const { t } = useI18n()
+
+interface TodoItem {
   content: string
   status: 'pending' | 'in_progress' | 'completed'
-  activeForm: string
+  activeForm?: string
 }
 
 interface Props {
-  toolUse: ToolUseBlock
-  result?: ToolResultBlock
+  toolCall: ClaudeTodoWriteToolCall
 }
 
 const props = defineProps<Props>()
-
-// 默认展开
+// TodoWrite 工具默认展开，显示任务列表
 const expanded = ref(true)
 
-const todos = computed(() => {
-  if (!props.toolUse.input.todos) return []
-  return props.toolUse.input.todos as Todo[]
-})
+// 提取工具显示信息
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
 
-// 获取当前正在执行的任务
-const currentTask = computed(() => {
-  const inProgress = todos.value.find(t => t.status === 'in_progress')
-  return inProgress?.activeForm || inProgress?.content || ''
-})
+const todos = computed(() => (props.toolCall.input.todos || []) as TodoItem[])
 
-// 提取显示信息，并添加当前任务到 primaryInfo
-const displayInfo = computed(() => {
-  const baseInfo = extractToolDisplayInfo(props.toolUse, props.result)
-  return {
-    ...baseInfo,
-    primaryInfo: `${todos.value.length}项任务`,
-    // 在 secondaryInfo 显示当前正在执行的任务
-    secondaryInfo: currentTask.value ? `⚡ ${currentTask.value}` : ''
+// 处理卡片点击：切换展开状态
+function handleCardClick() {
+  expanded.value = !expanded.value
+}
+
+// 获取状态文本
+function getStatusText(status: string): string {
+  const statusMap: Record<string, string> = {
+    'pending': t('tools.todoTool.pending'),
+    'in_progress': t('tools.todoTool.inProgress'),
+    'completed': t('tools.todoTool.completed')
   }
-})
-
-function getStatusIcon(status: string): string {
-  const icons = {
-    'pending': '⏳',
-    'in_progress': '▶️',
-    'completed': '✅'
-  }
-  return icons[status as keyof typeof icons] || '❓'
+  return statusMap[status] || status
 }
 </script>
 
 <style scoped>
-/* 紧凑的任务列表 */
 .todo-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  padding: 4px 0;
 }
 
-/* 任务项 - 紧凑布局 */
 .todo-item {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 6px 8px;
-  font-size: 13px;
-  line-height: 1.5;
-  border-radius: 3px;
-  transition: background-color 0.2s;
-}
-
-/* 任务状态图标 */
-.todo-status-icon {
-  font-size: 14px;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-/* 任务内容 */
-.todo-content {
-  flex: 1;
-  color: var(--ide-foreground);
-}
-
-/* 已完成任务样式 */
-.todo-item.todo-completed {
-  opacity: 0.6;
-}
-
-.todo-item.todo-completed .todo-content {
-  text-decoration: line-through;
-  color: var(--ide-foreground);
-}
-
-/* 进行中任务样式 */
-.todo-item.todo-in_progress {
-  background: var(--ide-warning-background);
-}
-
-/* 待处理任务样式 */
-.todo-item.todo-pending {
-  background: transparent;
-}
-
-/* 进行中任务的活动表单 */
-.todo-active {
-  display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  padding: 4px 6px;
-  background: rgba(255, 193, 7, 0.15);
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: var(--ide-background, #ffffff);
+  border: 1px solid var(--ide-border, rgba(0, 0, 0, 0.08));
+  transition: background-color 0.15s ease;
+}
+
+.todo-item:hover {
+  background: var(--ide-hover-background, rgba(0, 0, 0, 0.02));
+}
+
+.todo-item.pending .status-dot {
+  background: #fb8c00;
+  box-shadow: 0 0 0 2px rgba(251, 140, 0, 0.15);
+}
+
+.todo-item.in_progress .status-dot {
+  background: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
+}
+
+.todo-item.completed .status-dot {
+  background: #2e7d32;
+  box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.15);
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.todo-text {
+  flex: 1;
+  color: var(--ide-foreground, #1a1a1a);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.todo-status {
+  font-size: 11px;
+  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.5));
+  font-weight: 500;
+  padding: 2px 6px;
   border-radius: 3px;
-  font-size: 12px;
-  color: var(--ide-warning);
-  font-style: italic;
+  background: var(--ide-panel-background, rgba(0, 0, 0, 0.02));
 }
 
-.active-icon {
-  font-size: 12px;
-  animation: pulse 1.5s ease-in-out infinite;
+/* 暗色主题适配 */
+.theme-dark .todo-item {
+  background: var(--ide-background, #1e1e1e);
+  border-color: var(--ide-border, rgba(255, 255, 255, 0.1));
 }
 
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
+.theme-dark .todo-item:hover {
+  background: var(--ide-hover-background, rgba(255, 255, 255, 0.05));
 }
 
-/* 主题适配 - 暗色模式 */
-html.dark .todo-item.todo-in_progress {
-  background: var(--ide-warning-background);
+.theme-dark .todo-text {
+  color: var(--ide-foreground, #e0e0e0);
 }
 
-html.dark .todo-active {
-  background: rgba(255, 193, 7, 0.1);
+.theme-dark .todo-status {
+  color: var(--ide-secondary-foreground, rgba(255, 255, 255, 0.5));
+  background: var(--ide-panel-background, rgba(255, 255, 255, 0.05));
 }
 </style>

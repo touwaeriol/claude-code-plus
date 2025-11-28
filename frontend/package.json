@@ -21,7 +21,7 @@
     "pinia": "^2.1.7",
     "shiki": "^3.14.0",
     "vue": "^3.4.0",
-    "vue3-virtual-scroll-list": "^0.2.1",
+    "vue-virtual-scroller": "^2.0.0-beta.8",
     "vuedraggable": "^4.1.0"
   },
   "devDependencies": {

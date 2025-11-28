@@ -4,10 +4,12 @@ import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import en from 'element-plus/es/locale/lang/en'
+import koKr from 'element-plus/es/locale/lang/ko'
+import jaJp from 'element-plus/es/locale/lang/ja'
 import App from './App.vue'
 import './styles/global.css'
 import { resolveServerHttpUrl } from '@/utils/serverUrl'
-import localeService from '@/services/localeService'
+import { i18n, getLocale } from '@/i18n'
 import { jcefBridge } from '@/services/jcefBridge'
 import { toolEnhancement } from '@/services/toolEnhancement'
 
@@ -64,16 +66,25 @@ jcefBridge.init().then(() => {
   console.error('❌ Failed to initialize JCEF Bridge:', error)
 })
 
+function getElementPlusLocale(locale: string) {
+  const localeMap: Record<string, any> = {
+    'zh-CN': zhCn,
+    'en-US': en,
+    'ko-KR': koKr,
+    'ja-JP': jaJp
+  }
+  return localeMap[locale] || en
+}
+
 async function initApp() {
-  // 初始化语言服务
-  await localeService.init()
-  const locale = localeService.getElementPlusLocale()
-  const elementPlusLocale = locale === 'zh-cn' ? zhCn : en
+  const locale = getLocale()
+  const elementPlusLocale = getElementPlusLocale(locale)
 
   const app = createApp(App)
   const pinia = createPinia()
 
   app.use(pinia)
+  app.use(i18n)  // 注册 vue-i18n
   app.use(ElementPlus, {
     locale: elementPlusLocale,
     size: 'default',
@@ -82,7 +93,7 @@ async function initApp() {
 
   app.mount('#app')
 
-  console.log('✅ Vue application mounted with locale:', localeService.getLocale())
+  console.log('✅ Vue application mounted with locale:', locale)
 }
 
 initApp().catch((error) => {

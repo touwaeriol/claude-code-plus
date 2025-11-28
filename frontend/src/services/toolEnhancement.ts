@@ -10,7 +10,9 @@
  */
 
 import { jcefBridge } from './jcefBridge'
-import type { ToolUseBlock, ToolResultBlock } from '@/types/message'
+import type { ToolCall } from '@/types/display'
+import { ToolCallStatus } from '@/types/display'
+import { CLAUDE_TOOL_TYPE } from '@/constants/toolTypes'
 
 /**
  * 工具增强上下文
@@ -21,7 +23,7 @@ export interface ToolEnhancementContext {
   /** 工具输入 */
   input: any
   /** 工具结果 */
-  result?: ToolResultBlock
+  result?: ToolCall['result']
   /** 是否成功 */
   isSuccess: boolean
 }
@@ -83,7 +85,7 @@ class ToolEnhancementInterceptor {
   private registerDefaultRules() {
     // Read 工具：成功时打开文件
     this.registerRule({
-      toolType: ['read', 'Read'],
+      toolType: [CLAUDE_TOOL_TYPE.READ, 'read', 'Read'],
       condition: (ctx) => ctx.isSuccess,
       action: {
         type: 'openFile',
@@ -102,7 +104,7 @@ class ToolEnhancementInterceptor {
 
     // Edit 工具：成功时显示 Diff
     this.registerRule({
-      toolType: ['edit', 'Edit'],
+      toolType: [CLAUDE_TOOL_TYPE.EDIT, 'edit', 'Edit'],
       condition: (ctx) => ctx.isSuccess,
       action: {
         type: 'showDiff',
@@ -123,7 +125,7 @@ class ToolEnhancementInterceptor {
 
     // MultiEdit 工具：成功时显示 Diff
     this.registerRule({
-      toolType: ['multi-edit', 'MultiEdit'],
+      toolType: [CLAUDE_TOOL_TYPE.MULTI_EDIT, 'multi-edit', 'MultiEdit'],
       condition: (ctx) => ctx.isSuccess && ctx.input.edits?.length > 0,
       action: {
         type: 'showDiff',
@@ -147,7 +149,7 @@ class ToolEnhancementInterceptor {
 
     // Write 工具：成功时打开文件
     this.registerRule({
-      toolType: ['write', 'Write'],
+      toolType: [CLAUDE_TOOL_TYPE.WRITE, 'write', 'Write'],
       condition: (ctx) => ctx.isSuccess,
       action: {
         type: 'openFile',
@@ -183,8 +185,8 @@ class ToolEnhancementInterceptor {
    * 拦截工具调用，应用增强
    */
   async intercept(
-    toolUse: ToolUseBlock,
-    result?: ToolResultBlock
+    toolCall: ToolCall,
+    result?: ToolCall['result']
   ): Promise<ToolEnhancementAction | null> {
     if (!this.initialized) {
       await this.init()
@@ -195,11 +197,13 @@ class ToolEnhancementInterceptor {
       return null
     }
 
+    const effectiveResult = result ?? toolCall.result
+
     const context: ToolEnhancementContext = {
-      toolType: toolUse.name,
-      input: toolUse.input,
-      result,
-      isSuccess: !result?.is_error
+      toolType: toolCall.toolType,
+      input: toolCall.input,
+      result: effectiveResult,
+      isSuccess: toolCall.status === ToolCallStatus.SUCCESS
     }
 
     // 查找匹配的规则
@@ -288,19 +292,22 @@ class ToolEnhancementInterceptor {
   /**
    * 提取工具结果内容
    */
-  private extractResultContent(result?: ToolResultBlock): string {
+  private extractResultContent(result?: ToolCall['result']): string {
     if (!result) return ''
-    
-    const content = result.content
+
+    if (result.type === 'error') {
+      return result.error || result.details || ''
+    }
+
+    const content = result.output || result.summary || result.details
+    if (!content) {
+      return ''
+    }
+
     if (typeof content === 'string') {
       return content
     }
-    if (Array.isArray(content)) {
-      return content
-        .filter((item: any) => item.type === 'text')
-        .map((item: any) => item.text)
-        .join('\n')
-    }
+
     return JSON.stringify(content, null, 2)
   }
 }
@@ -318,8 +325,8 @@ function getInterceptor(): ToolEnhancementInterceptor {
 // 导出单例访问器
 export const toolEnhancement = {
   init: () => getInterceptor().init(),
-  intercept: (toolUse: ToolUseBlock, result?: ToolResultBlock) => 
-    getInterceptor().intercept(toolUse, result),
+  intercept: (toolCall: ToolCall, result?: ToolCall['result']) => 
+    getInterceptor().intercept(toolCall, result),
   executeAction: (action: ToolEnhancementAction, context: ToolEnhancementContext) =>
     getInterceptor().executeAction(action, context),
   registerRule: (rule: ToolEnhancementRule) => getInterceptor().registerRule(rule),

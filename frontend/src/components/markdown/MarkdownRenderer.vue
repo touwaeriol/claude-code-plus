@@ -8,9 +8,12 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
+import { useI18n } from '@/composables/useI18n'
 import { markdownService } from '@/services/markdownService'
 import { highlightService } from '@/services/highlightService'
 import { ideaBridge } from '@/services/ideaBridge'
+
+const { t } = useI18n()
 
 interface Props {
   content: string
@@ -52,7 +55,7 @@ async function renderContent() {
     renderedHtml.value = html
   } catch (error) {
     console.error('Failed to render markdown:', error)
-    renderedHtml.value = `<p>渲染失败: ${error}</p>`
+    renderedHtml.value = `<p>${t('common.renderFailed')}: ${error}</p>`
   } finally {
     isHighlighting.value = false
   }
@@ -132,7 +135,7 @@ async function copyToClipboard(text: string) {
  */
 function showCopyFeedback(button: HTMLElement) {
   const originalText = button.textContent
-  button.textContent = '✓ 已复制'
+  button.textContent = '✓ ' + t('common.copied')
   button.classList.add('copied')
 
   setTimeout(() => {

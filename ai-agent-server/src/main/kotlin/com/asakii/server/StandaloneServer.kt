@@ -1,15 +1,15 @@
 package com.asakii.server
 
+import com.asakii.server.logging.StandaloneLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
-import java.nio.file.Files
-import java.nio.file.Paths
 import java.io.File
-import java.nio.charset.StandardCharsets
-import java.util.logging.LogManager
 import java.io.InputStream
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.util.logging.LogManager
 
 fun main(args: Array<String>) = runBlocking {
     // 设置系统编码为 UTF-8，解决 Windows 控制台乱码问题
@@ -108,6 +108,13 @@ fun main(args: Array<String>) = runBlocking {
     }
 
     println("📂 Project root: $projectRoot")
+
+    // 1.0 配置日志输出到 <project>/.log 目录（包含 websocket 专用日志）
+    try {
+        StandaloneLogging.configure(projectRoot)
+    } catch (e: Exception) {
+        System.err.println("⚠️ Failed to configure logging: ${e.message}")
+    }
 
     // 1.1 解析端口（支持 --port=XXXX / --port XXXX / 第二个位置参数）
     // Standalone 模式下默认使用固定端口 8765（便于前端开发时固定后端地址）

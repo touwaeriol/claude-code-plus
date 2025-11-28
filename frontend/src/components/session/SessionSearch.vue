@@ -170,7 +170,7 @@ function highlightedSnippet(match: SessionSearchResult['matchedMessages'][0]) {
   return sessionSearchService.highlightText(match.snippet, match.highlights)
 }
 
-
+</script>
 
 <style scoped>
 .session-search {

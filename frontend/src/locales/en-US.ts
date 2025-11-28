@@ -22,7 +22,9 @@ export default {
     ok: 'OK',
     pending: 'Pending',
     cancelled: 'Cancelled',
-    copyFailed: 'Copy failed'
+    copyFailed: 'Copy failed',
+    copied: 'Copied',
+    renderFailed: 'Render failed'
   },
   chat: {
     placeholder: 'Type a message...',
@@ -44,6 +46,7 @@ export default {
     dropFileToAddContext: 'Drop files here to add to context',
     taskQueue: 'Task Queue',
     taskQueueCount: 'Task Queue ({count})',
+    pendingQueue: 'Pending ({count})',
     taskStatus: {
       pending: 'Pending',
       running: 'Running',
@@ -69,9 +72,29 @@ export default {
       generatingStatus: 'Generating'
     },
     enterToSend: 'Enter to send message ·',
-    noMessages: 'No messages. Please create a session and send a message.'
+    noMessages: 'No messages. Please create a session and send a message.',
+    thinkingLabel: 'Thinking',
+    generating: 'Generating...',
+    actualModel: 'Actual model',
+    uploadImage: 'Upload image',
+    interruptAndSend: 'Interrupt & Send',
+    interruptAndSendShortcut: 'Interrupt and send (Alt+Enter)',
+    moreContexts: '{count} more contexts',
+    tokenTooltip: 'Input: {input}, Output: {output}, Cache creation: {cacheCreation}, Cache read: {cacheRead}',
+    welcomeScreen: {
+      title: 'Start a conversation with Claude',
+      description: 'Enter your questions or ideas, Claude will help you write code and answer questions',
+      askCode: 'Ask code questions',
+      refactor: 'Refactor existing code',
+      debug: 'Debug errors',
+      sendHint: 'send message',
+      newLineHint: 'new line'
+    },
+    claudeThinking: 'Claude is thinking...',
+    scrollToBottom: 'Scroll to bottom'
   },
   tools: {
+    error: 'Error',
     read: 'Read File',
     write: 'Write File',
     edit: 'Edit File',
@@ -90,7 +113,60 @@ export default {
     editFailed: 'Edit failed',
     confirmed: 'Confirmed',
     terminated: 'Terminated',
-    copyContent: 'Copy Content'
+    copyContent: 'Copy Content',
+    openInEditor: 'Open in editor',
+    parsingParams: 'Parsing parameters...',
+    contentTruncated: 'Content truncated',
+    noOutput: 'No output',
+    replaceAll: 'Replace all',
+    changeNumber: 'Change #{number}',
+    questions: '{count} questions',
+    subtask: 'Subtask',
+    newContent: 'New content',
+    label: {
+      path: 'Path',
+      pattern: 'Pattern',
+      lines: 'Lines',
+      start: 'Start',
+      duration: 'Duration',
+      filter: 'Filter',
+      output: 'Output',
+      result: 'Result',
+      searchPattern: 'Search pattern',
+      searchPath: 'Search path',
+      fileFilter: 'File filter',
+      fileType: 'File type',
+      outputMode: 'Output mode',
+      cell: 'Cell',
+      mode: 'Mode',
+      agentType: 'Agent type',
+      model: 'Model',
+      prompt: 'Prompt',
+      query: 'Search query',
+      allowedDomains: 'Allowed domains',
+      blockedDomains: 'Blocked domains'
+    },
+    readTool: {
+      reading: 'Reading file...',
+      readResult: 'Read result'
+    },
+    grepTool: {
+      outputModes: {
+        content: 'Content',
+        filesWithMatches: 'Files with matches',
+        count: 'Count'
+      },
+      options: {
+        ignoreCase: 'Ignore case',
+        showLineNumbers: 'Show line numbers',
+        multiline: 'Multiline'
+      }
+    },
+    todoTool: {
+      pending: 'Pending',
+      inProgress: 'In progress',
+      completed: 'Completed'
+    }
   },
   settings: {
     title: 'Settings',
