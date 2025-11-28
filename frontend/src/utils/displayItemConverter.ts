@@ -44,11 +44,11 @@ export function createToolCall(
   }
 
   // 🔧 调试日志
-  console.log('📦 [createToolCall] block:', { id: block.id, toolName: block.toolName, type: block.type })
+  console.log('📦 [createToolCall] block:', { id: block.id, toolName: block.toolName, toolType: block.toolType, type: block.type })
 
-  // 使用 resolveToolType 解析工具类型
-  const toolType = resolveToolType(block.toolName)
-  console.log('📦 [createToolCall] resolveToolType:', { toolName: block.toolName, toolType })
+  // 优先使用后端传来的 toolType，否则通过 toolName 解析
+  const toolType = block.toolType || resolveToolType(block.toolName)
+  console.log('📦 [createToolCall] resolved toolType:', { toolName: block.toolName, blockToolType: block.toolType, resolvedToolType: toolType })
 
   const timestamp = Date.now()
 

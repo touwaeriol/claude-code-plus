@@ -39,6 +39,16 @@ export interface TextContent {
   text: string
 }
 
+// 图片内容块
+export interface ImageContent {
+  type: 'image'
+  source: {
+    type: 'base64'
+    media_type: string  // 例如 'image/png', 'image/jpeg'
+    data: string        // base64 编码的图片数据
+  }
+}
+
 export interface ThinkingContent {
   type: 'thinking'
   thinking: string
@@ -51,6 +61,8 @@ export interface ToolUseContent {
   id: string
   /** 工具名称（如 "Read", "Write", "mcp__xxx"） */
   toolName: string
+  /** 工具类型标识（如 "CLAUDE_READ", "CLAUDE_WRITE", "MCP"） */
+  toolType?: string
   input?: unknown
   status?: ContentStatus
 }
@@ -103,6 +115,7 @@ export interface ErrorContent {
 // === 联合类型 ===
 export type ContentBlock =
   | TextContent
+  | ImageContent
   | ThinkingContent
   | ToolUseContent
   | ToolResultContent

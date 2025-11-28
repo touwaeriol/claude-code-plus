@@ -81,10 +81,10 @@ class UiStreamAdapter {
 
     private fun convertContentComplete(event: ContentCompletedEvent): List<UiStreamEvent> {
         return when (val content = event.content) {
-            // TextContent 和 ThinkingContent：发送完整消息用于校验
-            // 使用 UiAssistantMessage 而不是 UiTextDelta，避免前端重复追加
-            is TextContent -> listOf(UiAssistantMessage(listOf(content)))
-            is ThinkingContent -> listOf(UiAssistantMessage(listOf(content)))
+            // TextContent 和 ThinkingContent：不再单独发送，因为 AssistantMessageEvent 已包含完整内容
+            // 避免前端重复显示消息
+            is TextContent -> emptyList()
+            is ThinkingContent -> emptyList()
             is ToolUseContent,
             is CommandExecutionContent,
             is ToolResultContent,
