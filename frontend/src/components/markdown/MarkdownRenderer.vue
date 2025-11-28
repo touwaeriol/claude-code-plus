@@ -26,6 +26,10 @@ const props = withDefaults(defineProps<Props>(), {
 
 const renderedHtml = ref('')
 const isHighlighting = ref(false)
+// 标记是否有待处理的更新
+let hasPendingUpdate = false
+// 记录上次渲染的内容，用于判断是否需要重新渲染
+let lastRenderedContent = ''
 
 // 初始化代码高亮
 onMounted(async () => {
@@ -39,25 +43,41 @@ watch(() => props.isDark, renderContent)
 
 /**
  * 渲染 Markdown 内容
+ * 支持流式更新：如果正在渲染，标记待处理，渲染完成后检查最新内容
  */
 async function renderContent() {
-  if (isHighlighting.value) return
+  // 如果正在渲染，标记有待处理更新
+  if (isHighlighting.value) {
+    hasPendingUpdate = true
+    return
+  }
 
   try {
     isHighlighting.value = true
+    const contentToRender = props.content
 
     // 先用 markdown-it 渲染基础 HTML
-    let html = markdownService.render(props.content)
+    let html = markdownService.render(contentToRender)
 
     // 然后对代码块进行高亮处理
     html = await highlightCodeBlocks(html)
 
     renderedHtml.value = html
+    lastRenderedContent = contentToRender
   } catch (error) {
     console.error('Failed to render markdown:', error)
     renderedHtml.value = `<p>${t('common.renderFailed')}: ${error}</p>`
   } finally {
     isHighlighting.value = false
+
+    // 检查是否有待处理的更新，且内容确实有变化
+    if (hasPendingUpdate) {
+      hasPendingUpdate = false
+      // 如果当前 props.content 与上次渲染的不同，则重新渲染
+      if (props.content !== lastRenderedContent) {
+        await renderContent()
+      }
+    }
   }
 }
 
