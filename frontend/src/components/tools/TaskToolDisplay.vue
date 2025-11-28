@@ -1,186 +1,165 @@
 <template>
-  <div class="tool-display task-tool" :class="statusClass">
-    <div class="tool-header">
-      <span class="tool-icon">🤖</span>
-      <span class="tool-name">{{ t('tools.subtask') }}</span>
-      <span class="task-info">
-        <span class="task-description">{{ description }}</span>
-        <span class="agent-type-badge">{{ subagentType }}</span>
-        <span class="status-badge" :class="statusClass">{{ statusText }}</span>
-      </span>
-    </div>
-    <div v-if="expanded" class="tool-content">
-      <div class="task-meta">
-        <div class="meta-row">
-          <span class="meta-label">{{ t('tools.label.agentType') }}:</span>
-          <span class="meta-value agent-type">{{ subagentType }}</span>
-        </div>
-        <div v-if="model" class="meta-row">
-          <span class="meta-label">{{ t('tools.label.model') }}:</span>
-          <span class="meta-value">{{ model }}</span>
-        </div>
-        <div class="meta-row">
-          <span class="meta-label">{{ t('tools.status.pending').split(' ')[0] }}:</span>
-          <span class="meta-value" :class="statusClass">{{ statusText }}</span>
-        </div>
-      </div>
+  <CompactToolCard
+    :display-info="displayInfo"
+    :is-expanded="expanded"
+    :has-details="hasDetails"
+    @click="expanded = !expanded"
+  >
+    <template #details>
       <div class="task-details">
-        <div class="detail-row">
-          <span class="detail-label">{{ t('tools.label.prompt') }}:</span>
-          <span class="detail-value">{{ prompt || '—' }}</span>
+        <!-- 参数区域 -->
+        <div class="params-section">
+          <div v-if="description" class="info-row">
+            <span class="label">描述:</span>
+            <span class="value">{{ description }}</span>
+          </div>
+          <div v-if="subagentType" class="info-row">
+            <span class="label">Agent:</span>
+            <span class="value badge">{{ subagentType }}</span>
+          </div>
+          <div v-if="model" class="info-row">
+            <span class="label">Model:</span>
+            <span class="value">{{ model }}</span>
+          </div>
+          <div v-if="prompt" class="prompt-section">
+            <div class="section-title">Prompt</div>
+            <pre class="prompt-content">{{ prompt }}</pre>
+          </div>
+        </div>
+        <!-- 结果区域 -->
+        <div v-if="hasResult" class="result-section">
+          <div class="section-title">执行结果</div>
+          <pre class="result-content">{{ resultText }}</pre>
         </div>
       </div>
-    </div>
-  </div>
+    </template>
+  </CompactToolCard>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useI18n } from '@/composables/useI18n'
 import type { GenericToolCall } from '@/types/display'
-import { ToolCallStatus } from '@/types/display'
-
-const { t } = useI18n()
+import CompactToolCard from './CompactToolCard.vue'
+import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
 
 interface Props {
   toolCall: GenericToolCall
 }
 
 const props = defineProps<Props>()
-// 默认折叠，点击后展开查看任务详情
-const expanded = ref(false)
+// Task 默认展开（用户关注任务进度）
+const expanded = ref(true)
 
-const description = computed(() => (props.toolCall.input as any)?.description || t('tools.subtask'))
-const prompt = computed(() => (props.toolCall.input as any)?.prompt || '')
-const subagentType = computed(() => (props.toolCall.input as any)?.subagent_type || 'general-purpose')
-const model = computed(() => (props.toolCall.input as any)?.model || '')
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
 
-const statusClass = computed(() => {
-  switch (props.toolCall.status) {
-    case ToolCallStatus.SUCCESS:
-      return 'success'
-    case ToolCallStatus.FAILED:
-      return 'failed'
-    case ToolCallStatus.RUNNING:
-    default:
-      return 'running'
+const description = computed(() => props.toolCall.input?.description || '')
+const subagentType = computed(() => props.toolCall.input?.subagent_type || '')
+const model = computed(() => props.toolCall.input?.model || '')
+const prompt = computed(() => props.toolCall.input?.prompt || '')
+
+// 结果文本
+const resultText = computed(() => {
+  const r = props.toolCall.result
+  if (!r || r.is_error) return ''
+  if (typeof r.content === 'string') return r.content
+  if (Array.isArray(r.content)) {
+    return (r.content as any[])
+      .filter((item: any) => item.type === 'text')
+      .map((item: any) => item.text)
+      .join('\n')
   }
+  return JSON.stringify(r.content, null, 2)
 })
 
-const statusText = computed(() => {
-  switch (props.toolCall.status) {
-    case ToolCallStatus.SUCCESS:
-      return t('tools.status.success')
-    case ToolCallStatus.FAILED:
-      return t('tools.status.failed')
-    case ToolCallStatus.RUNNING:
-    default:
-      return t('tools.status.running')
-  }
+// 是否有结果
+const hasResult = computed(() => {
+  const r = props.toolCall.result
+  return r && !r.is_error && resultText.value
 })
+
+// 始终有参数可展示
+const hasDetails = computed(() => !!description.value || !!prompt.value)
 </script>
 
 <style scoped>
-.tool-display {
-  border: 1px solid var(--ide-border, #e1e4e8);
-  border-radius: 6px;
-  background: var(--ide-panel-background, #f6f8fa);
-  margin: 8px 0;
-  padding: 8px 12px;
-}
-
-.tool-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.tool-icon {
-  font-size: 16px;
-}
-
-.tool-name {
-  font-weight: 600;
-}
-
-.task-info {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.task-description {
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-type-badge {
-  padding: 2px 6px;
-  border-radius: 10px;
-  background: #e6f7ff;
-  color: #0366d6;
-}
-
-.status-badge {
-  padding: 2px 6px;
-  border-radius: 10px;
-  font-weight: 600;
-}
-
-.status-badge.success {
-  background: #e6ffed;
-  color: #22863a;
-}
-
-.status-badge.failed {
-  background: #ffeef0;
-  color: #d73a49;
-}
-
-.status-badge.running {
-  background: #fff8e1;
-  color: #b26a00;
-}
-
-.tool-content {
-  margin-top: 8px;
-}
-
-.task-meta,
 .task-details {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 12px;
 }
 
-.meta-row,
-.detail-row {
+.params-section {
   display: flex;
+  flex-direction: column;
   gap: 6px;
+}
+
+.info-row {
+  display: flex;
+  gap: 8px;
   font-size: 12px;
+  align-items: baseline;
 }
 
-.meta-label,
-.detail-label {
-  color: #586069;
-  min-width: 64px;
+.label {
+  color: var(--ide-secondary-foreground, #586069);
+  min-width: 60px;
+  flex-shrink: 0;
 }
 
-.meta-value,
-.detail-value {
-  color: #24292e;
+.value {
+  color: var(--ide-foreground, #24292e);
 }
 
-.success {
-  border-color: #34d058;
+.value.badge {
+  background: var(--ide-badge-background, #eef2ff);
+  color: var(--ide-badge-foreground, #4338ca);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
 }
 
-.failed {
-  border-color: #d73a49;
+.prompt-section {
+  margin-top: 8px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ide-secondary-foreground, #586069);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.prompt-content {
+  margin: 0;
+  padding: 8px;
+  background: var(--ide-code-background, #f6f8fa);
+  border: 1px solid var(--ide-border, #e1e4e8);
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.result-section {
+  border-top: 1px solid var(--ide-border, #e1e4e8);
+  padding-top: 8px;
+}
+
+.result-content {
+  margin: 0;
+  padding: 8px;
+  background: var(--ide-code-background, #f6f8fa);
+  border: 1px solid var(--ide-border, #e1e4e8);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
 }
 </style>

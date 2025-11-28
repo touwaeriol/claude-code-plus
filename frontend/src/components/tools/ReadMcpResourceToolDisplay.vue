@@ -1,46 +1,51 @@
 <template>
-  <div class="tool-display read-mcp-tool">
-    <div class="tool-header">
-      <span class="tool-icon">🧩</span>
-      <span class="tool-name">ReadMcpResource</span>
-      <span class="server">{{ serverName }}</span>
-    </div>
-    <div v-if="expanded" class="tool-content">
-      <div class="info-row">
-        <span class="label">Server:</span>
-        <span class="value">{{ serverName }}</span>
+  <CompactToolCard
+    :display-info="displayInfo"
+    :is-expanded="expanded"
+    :has-details="hasDetails"
+    @click="expanded = !expanded"
+  >
+    <template #details>
+      <div class="mcp-details">
+        <div class="params-section">
+          <div class="info-row">
+            <span class="label">Server:</span>
+            <code class="value">{{ server }}</code>
+          </div>
+          <div class="info-row">
+            <span class="label">URI:</span>
+            <span class="value uri">{{ uri }}</span>
+          </div>
+        </div>
+        <div v-if="hasResult" class="result-section">
+          <div class="section-title">资源内容</div>
+          <pre class="result-content">{{ resultText }}</pre>
+        </div>
       </div>
-      <div class="info-row">
-        <span class="label">URI:</span>
-        <span class="value">{{ uri }}</span>
-      </div>
-      <div v-if="resultText" class="result">
-        <div class="section-title">Result</div>
-        <pre>{{ resultText }}</pre>
-      </div>
-    </div>
-  </div>
+    </template>
+  </CompactToolCard>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { GenericToolCall } from '@/types/display'
+import CompactToolCard from './CompactToolCard.vue'
+import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
 
 interface Props {
   toolCall: GenericToolCall
 }
 
 const props = defineProps<Props>()
-// 默认折叠，点击后展开查看资源内容
 const expanded = ref(false)
 
-const serverName = computed(() => (props.toolCall.input as any)?.server || '')
-const uri = computed(() => (props.toolCall.input as any)?.uri || '')
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
+const server = computed(() => props.toolCall.input?.server || '')
+const uri = computed(() => props.toolCall.input?.uri || '')
 
 const resultText = computed(() => {
   const r = props.toolCall.result
-  if (!r) return ''
-  // 使用后端格式：直接读取 content
+  if (!r || r.is_error) return ''
   if (typeof r.content === 'string') return r.content
   if (Array.isArray(r.content)) {
     return (r.content as any[])
@@ -50,70 +55,80 @@ const resultText = computed(() => {
   }
   return JSON.stringify(r.content, null, 2)
 })
+
+const hasResult = computed(() => {
+  const r = props.toolCall.result
+  return r && !r.is_error && resultText.value
+})
+
+const hasDetails = computed(() => !!server.value || !!uri.value)
 </script>
 
 <style scoped>
-.tool-display {
-  border: 1px solid var(--ide-border, #e1e4e8);
-  border-radius: 6px;
-  background: var(--ide-panel-background, #f6f8fa);
-  margin: 8px 0;
-  padding: 8px 12px;
-}
-
-.tool-header {
+.mcp-details {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.tool-icon {
-  font-size: 16px;
-}
-
-.tool-name {
-  font-weight: 600;
-}
-
-.server {
-  margin-left: auto;
-  font-size: 12px;
-  color: #586069;
-}
-
-.tool-content {
-  margin-top: 8px;
+.params-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .info-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
+  align-items: baseline;
 }
 
 .label {
-  color: #586069;
+  color: var(--ide-secondary-foreground, #586069);
   min-width: 60px;
 }
 
 .value {
-  color: #24292e;
+  color: var(--ide-foreground, #24292e);
+}
+
+code.value {
+  background: var(--ide-code-background, #f0f4f8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.value.uri {
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.result-section {
+  border-top: 1px solid var(--ide-border, #e1e4e8);
+  padding-top: 8px;
 }
 
 .section-title {
+  font-size: 11px;
   font-weight: 600;
-  font-size: 12px;
-  margin-top: 6px;
+  color: var(--ide-secondary-foreground, #586069);
+  margin-bottom: 6px;
+  text-transform: uppercase;
 }
 
-pre {
+.result-content {
   margin: 0;
-  padding: 6px;
-  background: #fff;
-  border: 1px solid #e1e4e8;
+  padding: 8px;
+  background: var(--ide-code-background, #f6f8fa);
+  border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 4px;
   font-size: 12px;
+  font-family: monospace;
   white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
 }
 </style>

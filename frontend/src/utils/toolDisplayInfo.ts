@@ -48,6 +48,9 @@ const TOOL_ICONS: Record<string, string> = {
   BashOutput: '📤',
   KillShell: '🛑',
   ListMcpResources: '📚',
+  ReadMcpResource: '📖',
+  ExitPlanMode: '✅',
+  EnterPlanMode: '📝',
   // 小写格式（兼容旧格式）
   read: '📄',
   write: '✏️',
@@ -95,6 +98,9 @@ const ACTION_TYPES: Record<string, string> = {
   BashOutput: 'Output',
   KillShell: 'Kill',
   ListMcpResources: 'ListMCP',
+  ReadMcpResource: 'ReadMCP',
+  ExitPlanMode: 'ExitPlan',
+  EnterPlanMode: 'EnterPlan',
   // 小写格式（兼容旧格式）
   read: 'Read',
   write: 'Write',
@@ -247,6 +253,54 @@ export function extractToolDisplayInfo(
     case 'sequential-thinking':
       primaryInfo = toolInput.thought || ''
       secondaryInfo = `Thought ${toolInput.thought_number || 0}/${toolInput.total_thoughts || 0}`
+      break
+
+    case 'bash-output':
+    case 'BashOutput':
+      primaryInfo = toolInput.bash_id || toolInput.shell_id || ''
+      secondaryInfo = ''
+      break
+
+    case 'kill-shell':
+    case 'KillShell':
+      primaryInfo = toolInput.shell_id || ''
+      secondaryInfo = ''
+      break
+
+    case 'skill':
+    case 'Skill':
+      primaryInfo = toolInput.skill || ''
+      secondaryInfo = ''
+      break
+
+    case 'slash-command':
+    case 'SlashCommand':
+      primaryInfo = toolInput.command || ''
+      secondaryInfo = ''
+      break
+
+    case 'exit-plan-mode':
+    case 'ExitPlanMode':
+      primaryInfo = 'Exit plan mode'
+      secondaryInfo = ''
+      break
+
+    case 'enter-plan-mode':
+    case 'EnterPlanMode':
+      primaryInfo = 'Enter plan mode'
+      secondaryInfo = ''
+      break
+
+    case 'list-mcp-resources':
+    case 'ListMcpResources':
+      primaryInfo = toolInput.server || ''
+      secondaryInfo = ''
+      break
+
+    case 'read-mcp-resource':
+    case 'ReadMcpResource':
+      primaryInfo = toolInput.uri || ''
+      secondaryInfo = toolInput.server || ''
       break
 
     default:

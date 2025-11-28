@@ -1,114 +1,159 @@
 <template>
-  <div class="tool-display notebook-edit-tool">
-    <div class="tool-header">
-      <span class="tool-icon">📒</span>
-      <span class="tool-name">NotebookEdit</span>
-      <span class="file-path">{{ notebookPath }}</span>
-    </div>
-    <div v-if="expanded" class="tool-content">
-      <div class="info-row">
-        <span class="label">{{ t('tools.label.path') }}:</span>
-        <span class="value">{{ notebookPath }}</span>
+  <CompactToolCard
+    :display-info="displayInfo"
+    :is-expanded="expanded"
+    :has-details="hasDetails"
+    @click="expanded = !expanded"
+  >
+    <template #details>
+      <div class="notebook-details">
+        <!-- 参数区域 -->
+        <div class="params-section">
+          <div class="info-row">
+            <span class="label">Path:</span>
+            <span class="value path">{{ notebookPath }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Cell:</span>
+            <span class="value">#{{ cellId }} ({{ cellType }})</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Mode:</span>
+            <span class="value badge">{{ editMode }}</span>
+          </div>
+          <div v-if="newSource" class="source-section">
+            <div class="section-title">新内容</div>
+            <pre class="source-content">{{ newSource }}</pre>
+          </div>
+        </div>
+        <!-- 结果区域 -->
+        <div v-if="hasResult" class="result-section">
+          <div class="section-title">结果</div>
+          <pre class="result-content">{{ resultText }}</pre>
+        </div>
       </div>
-      <div class="info-row">
-        <span class="label">{{ t('tools.label.cell') }}:</span>
-        <span class="value">#{{ cellId }} ({{ cellType }})</span>
-      </div>
-      <div class="info-row">
-        <span class="label">{{ t('tools.label.mode') }}:</span>
-        <span class="value">{{ editMode }}</span>
-      </div>
-      <div class="section-title">{{ t('tools.newContent') }}</div>
-      <pre>{{ newSource }}</pre>
-    </div>
-  </div>
+    </template>
+  </CompactToolCard>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useI18n } from '@/composables/useI18n'
 import type { GenericToolCall } from '@/types/display'
-
-const { t } = useI18n()
+import CompactToolCard from './CompactToolCard.vue'
+import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
 
 interface Props {
   toolCall: GenericToolCall
 }
 
 const props = defineProps<Props>()
-// 默认折叠，点击后展开查看 Cell 内容
 const expanded = ref(false)
 
-const notebookPath = computed(() => (props.toolCall.input as any)?.notebook_path || '')
-const cellId = computed(() => (props.toolCall.input as any)?.cell_id || (props.toolCall.input as any)?.cell_number || 0)
-const newSource = computed(() => (props.toolCall.input as any)?.new_source || '')
-const cellType = computed(() => (props.toolCall.input as any)?.cell_type || 'code')
-const editMode = computed(() => (props.toolCall.input as any)?.edit_mode || 'replace')
+const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
+
+const notebookPath = computed(() => props.toolCall.input?.notebook_path || '')
+const cellId = computed(() => props.toolCall.input?.cell_id || props.toolCall.input?.cell_number || 0)
+const newSource = computed(() => props.toolCall.input?.new_source || '')
+const cellType = computed(() => props.toolCall.input?.cell_type || 'code')
+const editMode = computed(() => props.toolCall.input?.edit_mode || 'replace')
+
+const resultText = computed(() => {
+  const r = props.toolCall.result
+  if (!r || r.is_error) return ''
+  if (typeof r.content === 'string') return r.content
+  return JSON.stringify(r.content, null, 2)
+})
+
+const hasResult = computed(() => {
+  const r = props.toolCall.result
+  return r && !r.is_error && resultText.value
+})
+
+const hasDetails = computed(() => !!notebookPath.value)
 </script>
 
 <style scoped>
-.tool-display {
-  border: 1px solid var(--ide-border, #e1e4e8);
-  border-radius: 6px;
-  background: var(--ide-panel-background, #f6f8fa);
-  margin: 8px 0;
-  padding: 8px 12px;
-}
-
-.tool-header {
+.notebook-details {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.tool-icon {
-  font-size: 16px;
-}
-
-.tool-name {
-  font-weight: 600;
-}
-
-.file-path {
-  margin-left: auto;
-  font-size: 12px;
-  color: #586069;
-}
-
-.tool-content {
-  margin-top: 8px;
+.params-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .info-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
-  margin-bottom: 4px;
+  align-items: baseline;
 }
 
 .label {
-  color: #586069;
-  min-width: 60px;
+  color: var(--ide-secondary-foreground, #586069);
+  min-width: 50px;
+  flex-shrink: 0;
 }
 
 .value {
-  color: #24292e;
+  color: var(--ide-foreground, #24292e);
+}
+
+.value.path {
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.value.badge {
+  background: var(--ide-badge-background, #eef2ff);
+  color: var(--ide-badge-foreground, #4338ca);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.source-section {
+  margin-top: 8px;
 }
 
 .section-title {
-  margin-top: 6px;
+  font-size: 11px;
   font-weight: 600;
-  font-size: 12px;
+  color: var(--ide-secondary-foreground, #586069);
+  margin-bottom: 6px;
+  text-transform: uppercase;
 }
 
-pre {
+.source-content {
   margin: 0;
-  padding: 6px;
-  background: #fff;
-  border: 1px solid #e1e4e8;
+  padding: 8px;
+  background: var(--ide-code-background, #f6f8fa);
+  border: 1px solid var(--ide-border, #e1e4e8);
   border-radius: 4px;
   font-size: 12px;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.result-section {
+  border-top: 1px solid var(--ide-border, #e1e4e8);
+  padding-top: 8px;
+}
+
+.result-content {
+  margin: 0;
+  padding: 8px;
+  background: var(--ide-code-background, #f6f8fa);
+  border: 1px solid var(--ide-border, #e1e4e8);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
   white-space: pre-wrap;
 }
 </style>
