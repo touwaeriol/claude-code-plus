@@ -71,13 +71,14 @@ class EditToolHandler : ToolClickHandler {
         )
         val beforeContent = afterContent?.let { rebuildBeforeContent(it, operations) }
 
-        val diffSuccess = when {
-            beforeContent != null && afterContent != null -> platformService.showDiff(
+        val diffSuccess = if (afterContent != null && beforeContent != null) {
+            platformService.showDiff(
                 filePath = editTool.filePath,
                 oldContent = beforeContent,
                 newContent = afterContent
             )
-            else -> platformService.showDiff(
+        } else {
+            platformService.showDiff(
                 filePath = editTool.filePath,
                 oldContent = editTool.oldString,
                 newContent = editTool.newString
@@ -119,14 +120,15 @@ class EditToolHandler : ToolClickHandler {
         val beforeContent = afterContent?.let { rebuildBeforeContent(it, operations) }
 
         val firstEdit = multiEditTool.edits.first()
-        val diffSuccess = when {
-            beforeContent != null && afterContent != null -> platformService.showDiff(
+        val diffSuccess = if (afterContent != null && beforeContent != null) {
+            platformService.showDiff(
                 filePath = multiEditTool.filePath,
                 oldContent = beforeContent,
                 newContent = afterContent,
                 title = "文件变更: ${multiEditTool.filePath} (${multiEditTool.edits.size} 处修改)"
             )
-            else -> platformService.showDiff(
+        } else {
+            platformService.showDiff(
                 filePath = multiEditTool.filePath,
                 oldContent = firstEdit.oldString,
                 newContent = firstEdit.newString,

@@ -1,7 +1,6 @@
 <template>
   <div
     class="toast-container"
-    :class="{ 'theme-dark': isDark }"
   >
     <TransitionGroup
       name="toast"
@@ -37,13 +36,7 @@ import { computed } from 'vue'
 import { useToastStore } from '@/stores/toastStore'
 import { TOAST_ICONS } from '@/types/toast'
 
-interface Props {
-  isDark?: boolean
-}
-
-const _props = withDefaults(defineProps<Props>(), {
-  isDark: false
-})
+// No props needed
 
 const toastStore = useToastStore()
 const toasts = computed(() => toastStore.toasts)
@@ -77,8 +70,8 @@ function handleToastClick(id: string) {
   min-width: 300px;
   max-width: 400px;
   padding: 12px 16px;
-  background: var(--ide-background);
-  border: 1px solid var(--ide-border);
+  background: var(--theme-background);
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   cursor: pointer;
@@ -93,19 +86,19 @@ function handleToastClick(id: string) {
 
 /* Toast 类型样式 */
 .toast-info {
-  border-left: 4px solid var(--ide-info);
+  border-left: 4px solid var(--theme-info);
 }
 
 .toast-success {
-  border-left: 4px solid var(--ide-success);
+  border-left: 4px solid var(--theme-success);
 }
 
 .toast-warning {
-  border-left: 4px solid var(--ide-warning);
+  border-left: 4px solid var(--theme-warning);
 }
 
 .toast-error {
-  border-left: 4px solid var(--ide-error);
+  border-left: 4px solid var(--theme-error);
 }
 
 .toast-icon {
@@ -123,7 +116,7 @@ function handleToastClick(id: string) {
   display: block;
   font-size: 14px;
   line-height: 1.5;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
   word-wrap: break-word;
 }
 
@@ -138,7 +131,7 @@ function handleToastClick(id: string) {
   cursor: pointer;
   border-radius: 3px;
   font-size: 14px;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
   opacity: 0.5;
   transition: all 0.2s;
   flex-shrink: 0;
@@ -147,10 +140,6 @@ function handleToastClick(id: string) {
 .toast-close:hover {
   opacity: 1;
   background: rgba(0, 0, 0, 0.1);
-}
-
-.theme-dark .toast-close:hover {
-  background: rgba(255, 255, 255, 0.1);
 }
 
 /* 进入/离开动画 */

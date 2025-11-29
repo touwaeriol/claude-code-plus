@@ -31,7 +31,7 @@ defineProps<Props>()
 .tool-call-item {
   padding: 4px;
   border-radius: 8px;
-  background: var(--ide-panel-background, #f6f8fa);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-panel-background, #f6f8fa);
+  border: 1px solid var(--theme-border, #e1e4e8);
 }
 </style>

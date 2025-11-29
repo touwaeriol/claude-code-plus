@@ -6,7 +6,6 @@
   >
     <div
       class="settings-panel"
-      :class="{ 'theme-dark': isDark }"
     >
       <!-- 头部 -->
       <div class="panel-header">
@@ -276,7 +275,6 @@ import {
 
 interface Props {
   show: boolean
-  isDark?: boolean
 }
 
 interface Emits {
@@ -284,9 +282,7 @@ interface Emits {
   (e: 'save', settings: Settings): void
 }
 
-const _props = withDefaults(defineProps<Props>(), {
-  isDark: false
-})
+const _props = defineProps<Props>()
 
 const emit = defineEmits<Emits>()
 const settingsStore = useSettingsStore()
@@ -396,8 +392,8 @@ async function saveAndClose() {
 }
 
 .settings-panel {
-  background: var(--ide-background);
-  border: 1px solid var(--ide-border);
+  background: var(--theme-background);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   width: 90%;
   max-width: 600px;
@@ -424,14 +420,14 @@ async function saveAndClose() {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--ide-border);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .panel-header h2 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
 }
 
 .btn-close {
@@ -445,16 +441,12 @@ async function saveAndClose() {
   cursor: pointer;
   border-radius: 4px;
   font-size: 18px;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
   transition: background 0.2s;
 }
 
 .btn-close:hover {
   background: rgba(0, 0, 0, 0.1);
-}
-
-.theme-dark .btn-close:hover {
-  background: rgba(255, 255, 255, 0.1);
 }
 
 .panel-content {
@@ -475,7 +467,7 @@ async function saveAndClose() {
   margin: 0 0 16px 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--ide-accent);
+  color: var(--theme-accent);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -493,17 +485,17 @@ async function saveAndClose() {
   margin-bottom: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
 }
 
 .setting-select,
 .setting-input {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid var(--ide-input-border);
+  border: 1px solid var(--theme-input-border);
   border-radius: 4px;
-  background: var(--ide-input-background);
-  color: var(--ide-input-foreground);
+  background: var(--theme-input-background);
+  color: var(--theme-input-foreground);
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s;
@@ -511,7 +503,7 @@ async function saveAndClose() {
 
 .setting-select:focus,
 .setting-input:focus {
-  border-color: var(--ide-accent);
+  border-color: var(--theme-accent);
   box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.1);
 }
 
@@ -532,13 +524,13 @@ async function saveAndClose() {
 .setting-checkbox span {
   font-size: 14px;
   font-weight: 500;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
 }
 
 .setting-description {
   margin: 8px 0 0 0;
   font-size: 12px;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
   opacity: 0.7;
   line-height: 1.5;
 }
@@ -548,8 +540,8 @@ async function saveAndClose() {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-top: 1px solid var(--ide-border);
-  background: var(--ide-panel-background);
+  border-top: 1px solid var(--theme-border);
+  background: var(--theme-panel-background);
 }
 
 .footer-actions {
@@ -568,21 +560,21 @@ async function saveAndClose() {
 }
 
 .btn-primary {
-  background: var(--ide-button-background);
-  color: var(--ide-button-foreground);
+  background: var(--theme-button-background);
+  color: var(--theme-button-foreground);
 }
 
 .btn-primary:hover {
-  background: var(--ide-button-hover-background);
+  background: var(--theme-button-hover-background);
 }
 
 .btn-secondary {
-  background: var(--ide-panel-background);
-  color: var(--ide-foreground);
-  border: 1px solid var(--ide-border);
+  background: var(--theme-panel-background);
+  color: var(--theme-foreground);
+  border: 1px solid var(--theme-border);
 }
 
 .btn-secondary:hover {
-  background: var(--ide-border);
+  background: var(--theme-border);
 }
 </style>

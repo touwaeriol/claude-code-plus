@@ -3,6 +3,8 @@
  * 提供文件搜索和最近文件获取功能
  */
 
+import { resolveServerHttpUrl } from '@/utils/serverUrl'
+
 export interface IndexedFileInfo {
   name: string
   relativePath: string
@@ -13,6 +15,11 @@ export interface IndexedFileInfo {
 }
 
 export class FileSearchService {
+  private getApiUrl(path: string): string {
+    const baseUrl = resolveServerHttpUrl()
+    return `${baseUrl}${path}`
+  }
+
   /**
    * 搜索文件
    * @param query 搜索关键词
@@ -21,7 +28,7 @@ export class FileSearchService {
   async searchFiles(query: string, maxResults: number = 10): Promise<IndexedFileInfo[]> {
     try {
       const response = await fetch(
-        `/api/files/search?query=${encodeURIComponent(query)}&maxResults=${maxResults}`
+        this.getApiUrl(`/api/files/search?query=${encodeURIComponent(query)}&maxResults=${maxResults}`)
       )
 
       if (!response.ok) {
@@ -50,7 +57,7 @@ export class FileSearchService {
   async getRecentFiles(maxResults: number = 10): Promise<IndexedFileInfo[]> {
     try {
       const response = await fetch(
-        `/api/files/recent?maxResults=${maxResults}`
+        this.getApiUrl(`/api/files/recent?maxResults=${maxResults}`)
       )
 
       if (!response.ok) {

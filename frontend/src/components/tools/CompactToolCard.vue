@@ -62,14 +62,29 @@
 import { computed } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import type { ToolDisplayInfo } from '@/utils/toolDisplayInfo'
+import { toolShowInterceptor } from '@/services/toolShowInterceptor'
 
 const { t } = useI18n()
+
+/**
+ * 工具调用数据（用于拦截器）
+ */
+export interface ToolCallData {
+  toolType: string
+  input: Record<string, unknown>
+  result?: {
+    content?: string | unknown[]
+    is_error?: boolean
+  }
+}
 
 interface Props {
   displayInfo: ToolDisplayInfo
   isExpanded?: boolean
   hasDetails?: boolean
   clickable?: boolean
+  /** 工具调用数据（用于拦截器） */
+  toolCall?: ToolCallData
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -80,6 +95,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   click: []
+  /** 拦截器放行后触发，用于展开/折叠 */
+  toggle: []
 }>()
 
 const isClickable = computed(() => {
@@ -87,9 +104,27 @@ const isClickable = computed(() => {
 })
 
 function handleClick() {
-  if (isClickable.value) {
-    emit('click')
+  if (!isClickable.value) {
+    return
   }
+
+  // 如果提供了 toolCall，尝试拦截
+  if (props.toolCall) {
+    const intercepted = toolShowInterceptor.intercept({
+      toolType: props.toolCall.toolType,
+      input: props.toolCall.input,
+      result: props.toolCall.result
+    })
+
+    if (intercepted) {
+      // 拦截成功，IDEA 已处理，不触发任何事件
+      return
+    }
+  }
+
+  // 放行，触发 toggle 事件（展开/折叠）
+  emit('toggle')
+  emit('click') // 保持向后兼容
 }
 
 function getBadgeClass(changes: string): string {
@@ -107,8 +142,8 @@ function getBadgeClass(changes: string): string {
   padding: 6px 10px;
   margin-bottom: 2px;
   border-radius: 6px;
-  background: var(--ide-background, #ffffff);
-  border: 1px solid var(--ide-border, rgba(0, 0, 0, 0.08));
+  background: var(--theme-background, #ffffff);
+  border: 1px solid var(--theme-border, rgba(0, 0, 0, 0.08));
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
@@ -118,8 +153,8 @@ function getBadgeClass(changes: string): string {
 }
 
 .compact-tool-card.clickable:hover {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.02));
-  border-color: var(--ide-accent, rgba(0, 102, 214, 0.4));
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.02));
+  border-color: var(--theme-accent, rgba(0, 102, 214, 0.4));
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
   transform: translateX(2px);
 }
@@ -146,7 +181,7 @@ function getBadgeClass(changes: string): string {
 
 .action-type {
   font-weight: 600;
-  color: var(--ide-foreground, #1a1a1a);
+  color: var(--theme-foreground, #1a1a1a);
   flex-shrink: 0;
   font-size: 12px;
   letter-spacing: 0.02em;
@@ -154,18 +189,18 @@ function getBadgeClass(changes: string): string {
 
 .primary-info {
   font-weight: 400;
-  color: var(--ide-foreground, #1a1a1a);
+  color: var(--theme-foreground, #1a1a1a);
   flex-shrink: 0;
 }
 
 .primary-info.loading {
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.5));
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
   font-style: italic;
 }
 
 .secondary-info {
   font-size: 12px;
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.5));
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -244,7 +279,7 @@ function getBadgeClass(changes: string): string {
   width: 14px;
   height: 14px;
   border: 2px solid rgba(0, 0, 0, 0.08);
-  border-top-color: var(--ide-accent, #0366d6);
+  border-top-color: var(--theme-accent, #0366d6);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -259,7 +294,7 @@ function getBadgeClass(changes: string): string {
 .expanded-content {
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid var(--ide-border, rgba(0, 0, 0, 0.1));
+  border-top: 1px solid var(--theme-border, rgba(0, 0, 0, 0.1));
   animation: slideDown 0.2s ease;
 }
 
@@ -272,35 +307,6 @@ function getBadgeClass(changes: string): string {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-/* 暗色主题适配 */
-.theme-dark .compact-tool-card {
-  background: var(--ide-background, #1e1e1e);
-  border-color: var(--ide-border, rgba(255, 255, 255, 0.1));
-}
-
-.theme-dark .compact-tool-card.clickable:hover {
-  background: var(--ide-hover-background, rgba(255, 255, 255, 0.05));
-  border-color: var(--ide-accent, rgba(88, 166, 255, 0.3));
-}
-
-.theme-dark .action-type,
-.theme-dark .primary-info {
-  color: var(--ide-foreground, #e0e0e0);
-}
-
-.theme-dark .secondary-info {
-  color: var(--ide-secondary-foreground, rgba(255, 255, 255, 0.5));
-}
-
-.theme-dark .expanded-content {
-  border-top-color: var(--ide-border, rgba(255, 255, 255, 0.1));
-}
-
-.theme-dark .status-indicator .spinner {
-  border-color: rgba(255, 255, 255, 0.1);
-  border-top-color: var(--ide-accent, #58a6ff);
 }
 
 /* 错误信息框样式 */
@@ -352,21 +358,6 @@ function getBadgeClass(changes: string): string {
   max-height: 200px;
   overflow-y: auto;
   line-height: 1.5;
-}
-
-/* 暗色主题错误样式 */
-.theme-dark .error-message-box {
-  background: rgba(248, 81, 73, 0.1);
-  border-color: rgba(248, 81, 73, 0.3);
-}
-
-.theme-dark .error-title {
-  color: #f85149;
-}
-
-.theme-dark .error-content {
-  background: rgba(248, 81, 73, 0.08);
-  color: #ffa7a3;
 }
 </style>
 

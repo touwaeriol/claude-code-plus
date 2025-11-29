@@ -74,30 +74,30 @@ const hasDetails = computed(() => !!skill.value)
 }
 
 .label {
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   min-width: 50px;
 }
 
 .value {
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 code.value {
-  background: var(--ide-code-background, #f0f4f8);
+  background: var(--theme-code-background, #f0f4f8);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: monospace;
 }
 
 .result-section {
-  border-top: 1px solid var(--ide-border, #e1e4e8);
+  border-top: 1px solid var(--theme-border, #e1e4e8);
   padding-top: 8px;
 }
 
 .section-title {
   font-size: 11px;
   font-weight: 600;
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   margin-bottom: 6px;
   text-transform: uppercase;
 }
@@ -105,8 +105,8 @@ code.value {
 .result-content {
   margin: 0;
   padding: 8px;
-  background: var(--ide-code-background, #f6f8fa);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-code-background, #f6f8fa);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   font-size: 12px;
   font-family: monospace;

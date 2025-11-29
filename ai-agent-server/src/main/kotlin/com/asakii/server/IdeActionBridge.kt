@@ -2,7 +2,7 @@ package com.asakii.server
 
 import com.asakii.bridge.FrontendRequest
 import com.asakii.bridge.FrontendResponse
-import com.asakii.bridge.IdeTheme
+import com.asakii.rpc.api.IdeTheme
 import kotlinx.serialization.json.JsonPrimitive
 import java.util.Locale
 
@@ -27,7 +27,7 @@ interface IdeActionBridge {
     class Mock(private val projectPath: String? = null) : IdeActionBridge {
         private var mockLocale: String? = null
 
-        override fun getTheme(): IdeTheme = IdeTheme(isDark = true)
+        override fun getTheme(): IdeTheme = IdeTheme()
         override fun getProjectPath(): String = projectPath ?: System.getProperty("user.dir")
         
         override fun getLocale(): String {

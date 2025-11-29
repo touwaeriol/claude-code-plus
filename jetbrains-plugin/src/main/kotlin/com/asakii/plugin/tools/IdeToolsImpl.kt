@@ -222,9 +222,8 @@ class IdeToolsImpl(
     override fun getRecentFiles(maxResults: Int): Result<List<FileInfo>> {
         return try {
             val files = FileEditorManager.getInstance(project).openFiles
-            val result = files.take(maxResults).mapNotNull { file ->
-                val path = file.path
-                if (path != null) FileInfo(path) else null
+            val result = files.take(maxResults).map { file ->
+                FileInfo(file.path)
             }
             Result.success(result)
         } catch (e: Exception) {
@@ -235,7 +234,6 @@ class IdeToolsImpl(
     
     override fun getTheme(): IdeTheme {
         return IdeTheme(
-            isDark = UIUtil.isUnderDarcula(),
             background = colorToHex(UIUtil.getPanelBackground()),
             foreground = colorToHex(UIUtil.getLabelForeground()),
             borderColor = colorToHex(JBColor.border()),
@@ -248,7 +246,7 @@ class IdeToolsImpl(
             warningColor = colorToHex(JBColor.YELLOW),
             successColor = colorToHex(JBColor.GREEN),
             separatorColor = colorToHex(JBColor.border()),
-            hoverBackground = colorToHex(UIUtil.getListBackground(true)),
+            hoverBackground = colorToHex(JBColor.namedColor("List.hoverBackground", UIUtil.getPanelBackground())),
             accentColor = colorToHex(JBColor.namedColor("Accent.focusColor", JBColor.BLUE)),
             infoBackground = colorToHex(JBColor.namedColor("Component.infoForeground", JBColor.GRAY)),
             codeBackground = colorToHex(UIUtil.getTextFieldBackground()),

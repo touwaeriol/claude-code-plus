@@ -4,6 +4,8 @@
       <draggable
         v-model="localTabs"
         :animation="200"
+        :delay="150"
+        :delay-on-touch-only="true"
         item-key="id"
         class="draggable-tabs"
         @end="handleDragEnd"
@@ -64,6 +66,7 @@ const emit = defineEmits<{
   (e: 'switch', sessionId: string): void
   (e: 'close', sessionId: string): void
   (e: 'reorder', order: string[]): void
+  (e: 'toggle-list'): void
 }>()
 
 // 本地 tabs 列表，用于拖拽
@@ -75,7 +78,11 @@ watch(() => props.sessions, (newSessions) => {
 }, { deep: true })
 
 function handleTabClick(sessionId: string) {
-  if (sessionId === props.currentSessionId) return
+  if (sessionId === props.currentSessionId) {
+    // 点击当前会话时，展开会话列表
+    emit('toggle-list')
+    return
+  }
   emit('switch', sessionId)
 }
 
@@ -120,7 +127,7 @@ function handleDragEnd() {
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
   font-size: 11px;
   cursor: grab;
   white-space: nowrap;
@@ -135,7 +142,7 @@ function handleDragEnd() {
 }
 
 .session-tab:hover {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.03));
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.03));
 }
 
 .session-tab:hover .close-btn {
@@ -143,28 +150,15 @@ function handleDragEnd() {
 }
 
 .session-tab.active {
-  background: var(--ide-card-background, #ffffff);
-  border-color: var(--ide-accent, #0366d6);
-  color: var(--ide-accent, #0366d6);
+  background: var(--theme-card-background, #ffffff);
+  border-color: var(--theme-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
 }
 
 .session-tab.generating {
   /* 生成中的会话边框带动画 */
 }
 
-:global(.theme-dark) .session-tab {
-  color: var(--ide-foreground, #e6edf3);
-}
-
-:global(.theme-dark) .session-tab:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-:global(.theme-dark) .session-tab.active {
-  background: var(--ide-card-background, #161b22);
-  border-color: var(--ide-accent, #58a6ff);
-  color: var(--ide-accent, #58a6ff);
-}
 
 .tab-name {
   max-width: 120px;
@@ -177,7 +171,7 @@ function handleDragEnd() {
   height: 6px;
   margin-left: 6px;
   border-radius: 50%;
-  background: var(--ide-success, #28a745);
+  background: var(--theme-success, #28a745);
   animation: pulse 1.5s ease-in-out infinite;
   flex-shrink: 0;
 }
@@ -201,7 +195,7 @@ function handleDragEnd() {
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
@@ -214,7 +208,7 @@ function handleDragEnd() {
 }
 
 .close-btn:hover {
-  background: var(--ide-error, #d73a49);
+  background: var(--theme-error, #d73a49);
   color: #ffffff;
 }
 
@@ -228,7 +222,7 @@ function handleDragEnd() {
 
 .tab-placeholder {
   font-size: 12px;
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
   opacity: 0.8;
 }
 </style>

@@ -177,6 +177,7 @@ export default {
     temperatureDescription: '모델 창의성을 제어합니다. 0 = 결정적, 1 = 높은 창의성. 기본값을 사용하려면 비워두세요.'
   },
   session: {
+    defaultName: '세션 {time}',
     group: {
       today: '오늘',
       yesterday: '어제',
@@ -191,7 +192,30 @@ export default {
     editTag: '태그 편집',
     createTag: '태그 만들기',
     deleteSession: '세션 삭제',
-    searchFailed: '검색 실패'
+    searchFailed: '검색 실패',
+    history: '세션 기록',
+    sessionCount: '개의 세션',
+    noHistory: '기록 없음',
+    active: '활성',
+    noActive: '활성 세션 없음',
+    historySection: '기록',
+    unnamed: '이름 없는 세션',
+    messages: '개의 메시지'
+  },
+  time: {
+    justNow: '방금',
+    minutesAgo: '{n}분 전',
+    hoursAgo: '{n}시간 전',
+    daysAgo: '{n}일 전'
+  },
+  thinking: {
+    label: '사고',
+    enabled: '켜짐',
+    disabled: '꺼짐',
+    alwaysOn: '이 모델은 사고가 항상 활성화됩니다',
+    notSupported: '이 모델은 사고를 지원하지 않습니다',
+    toggleOn: '클릭하여 사고 활성화',
+    toggleOff: '클릭하여 사고 비활성화'
   },
   context: {
     usage: '컨텍스트 사용량: {used} / {max} 토큰 ({percentage}%)',

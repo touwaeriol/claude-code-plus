@@ -6,17 +6,70 @@
     <EditorContent
       :editor="editor"
       class="rich-text-editor"
+      @mouseover="handleImageHover"
+      @mouseout="handleImageLeave"
     />
+    <!-- 浮动删除按钮 -->
+    <button
+      v-if="hoveredImage"
+      ref="deleteBtnRef"
+      class="floating-delete-btn"
+      :style="deleteBtnStyle"
+      @click="deleteHoveredImage"
+    >
+      ×
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount, computed } from 'vue'
+import type { ContentBlock } from '@/types/message'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
+import { Node, mergeAttributes } from '@tiptap/core'
+
+// 文件引用扩展 - 用于在编辑器中显示 @文件路径
+const FileReference = Node.create({
+  name: 'fileReference',
+  group: 'inline',
+  inline: true,
+  atom: true,  // 不可分割，Backspace 整体删除
+
+  addAttributes() {
+    return {
+      path: {
+        default: '',
+      },
+    }
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'span[data-file-ref]',
+        getAttrs: (node) => {
+          if (typeof node === 'string') return false
+          return { path: node.getAttribute('data-file-ref') }
+        },
+      },
+    ]
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    return [
+      'span',
+      mergeAttributes(HTMLAttributes, {
+        class: 'file-reference',
+        'data-file-ref': node.attrs.path,
+      }),
+      `@${node.attrs.path}`,
+    ]
+  },
+})
 
 interface ImageData {
   id: string
@@ -40,6 +93,7 @@ interface Emits {
   (e: 'update:modelValue', value: string): void
   (e: 'submit', content: RichContent): void
   (e: 'paste-image', file: File): void
+  (e: 'preview-image', src: string): void
   (e: 'focus'): void
   (e: 'blur'): void
   (e: 'keydown', event: KeyboardEvent): void
@@ -54,6 +108,62 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<Emits>()
 
 const isFocused = ref(false)
+
+// 浮动删除按钮状态
+const hoveredImage = ref<HTMLImageElement | null>(null)
+const deleteBtnPosition = ref({ top: 0, left: 0 })
+
+const deleteBtnStyle = computed(() => ({
+  top: `${deleteBtnPosition.value.top}px`,
+  left: `${deleteBtnPosition.value.left}px`,
+}))
+
+// 处理图片 hover
+function handleImageHover(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (target.tagName === 'IMG' && target.classList.contains('inline-image')) {
+    hoveredImage.value = target as HTMLImageElement
+    updateDeleteBtnPosition()
+  }
+}
+
+function handleImageLeave(event: MouseEvent) {
+  const relatedTarget = event.relatedTarget as HTMLElement
+  // 如果移动到删除按钮上，不隐藏
+  if (relatedTarget?.classList?.contains('floating-delete-btn')) {
+    return
+  }
+  hoveredImage.value = null
+}
+
+function updateDeleteBtnPosition() {
+  if (!hoveredImage.value) return
+  const rect = hoveredImage.value.getBoundingClientRect()
+  const wrapperRect = hoveredImage.value.closest('.rich-text-input-wrapper')?.getBoundingClientRect()
+  if (wrapperRect) {
+    deleteBtnPosition.value = {
+      top: rect.top - wrapperRect.top - 4,
+      left: rect.right - wrapperRect.left - 10,
+    }
+  }
+}
+
+function deleteHoveredImage() {
+  if (!hoveredImage.value || !editor.value) return
+  const src = hoveredImage.value.getAttribute('src')
+  if (src) {
+    let deleted = false
+    editor.value.state.doc.descendants((node, pos) => {
+      if (!deleted && node.type.name === 'image' && node.attrs.src === src) {
+        editor.value?.chain().focus().deleteRange({ from: pos, to: pos + node.nodeSize }).run()
+        deleted = true
+        return false
+      }
+      return true
+    })
+  }
+  hoveredImage.value = null
+}
 
 // Tiptap editor
 const editor = useEditor({
@@ -92,10 +202,37 @@ const editor = useEditor({
     Placeholder.configure({
       placeholder: props.placeholder,
     }),
+    FileReference,
   ],
   editorProps: {
     attributes: {
       class: 'prose-editor',
+    },
+    handleClick(view, pos, event) {
+      const target = event.target as HTMLElement
+
+      // 检查点击的是否是图片 - 打开预览
+      if (target.tagName === 'IMG' && target.classList.contains('inline-image')) {
+        const src = target.getAttribute('src')
+        if (src) {
+          emit('preview-image', src)
+          return true
+        }
+      }
+
+      // 检查点击的是否是文件引用 - 通过 HTTP API 打开文件
+      if (target.classList.contains('file-reference')) {
+        const filePath = target.getAttribute('data-file-ref')
+        if (filePath) {
+          // 通过 HTTP API 调用，IDEA 插件和 Web 环境都支持
+          import('@/services/ideaBridge').then(({ ideService }) => {
+            ideService.openFile(filePath)
+          })
+          return true
+        }
+      }
+
+      return false
     },
     handleKeyDown(view, event) {
       // 传递键盘事件给父组件
@@ -194,6 +331,62 @@ function extractContent(): RichContent {
   return { text, images }
 }
 
+// 提取内容块（保持顺序）
+function extractContentBlocks(): ContentBlock[] {
+  if (!editor.value) return []
+
+  const blocks: ContentBlock[] = []
+  let currentText = ''
+
+  editor.value.state.doc.descendants((node) => {
+    if (node.isText && node.text) {
+      currentText += node.text
+    } else if (node.type.name === 'fileReference') {
+      // 文件引用节点 - 先保存累积的文本
+      if (currentText.trim()) {
+        blocks.push({ type: 'text', text: currentText.trim() })
+        currentText = ''
+      }
+      // 文件引用作为独立 TextBlock，格式为 @路径
+      const path = node.attrs.path as string
+      if (path) {
+        blocks.push({ type: 'text', text: `@${path}` })
+      }
+    } else if (node.type.name === 'image') {
+      // 先保存累积的文本
+      if (currentText.trim()) {
+        blocks.push({ type: 'text', text: currentText.trim() })
+        currentText = ''
+      }
+      // 添加图片块
+      const src = node.attrs.src as string
+      if (src?.startsWith('data:')) {
+        const match = src.match(/^data:([^;]+);base64,(.+)$/)
+        if (match) {
+          blocks.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: match[1],
+              data: match[2]
+            }
+          })
+        }
+      }
+    } else if (node.type.name === 'hardBreak') {
+      currentText += '\n'
+    }
+    return true
+  })
+
+  // 保存剩余文本
+  if (currentText.trim()) {
+    blocks.push({ type: 'text', text: currentText.trim() })
+  }
+
+  return blocks
+}
+
 // 提交内容
 function handleSubmit() {
   const content = extractContent()
@@ -217,7 +410,59 @@ function insertImage(base64Data: string, mimeType: string) {
   if (!editor.value) return
 
   const src = `data:${mimeType};base64,${base64Data}`
-  editor.value.chain().focus().setImage({ src }).run()
+  editor.value.chain()
+    .focus()
+    .setImage({ src })
+    .insertContent(' ')  // 插入空格确保光标可以移动到图片后
+    .run()
+}
+
+// 在光标位置插入文件引用
+function insertFileReference(path: string) {
+  if (!editor.value) return
+
+  editor.value.chain()
+    .focus()
+    .insertContent({
+      type: 'fileReference',
+      attrs: { path },
+    })
+    .insertContent(' ')  // 插入空格确保光标可以移动到文件引用后
+    .run()
+}
+
+// 获取光标位置（相对于纯文本）
+function getCursorPosition(): number {
+  if (!editor.value) return 0
+  return editor.value.state.selection.from - 1  // -1 因为 ProseMirror 位置从 1 开始
+}
+
+// 删除指定范围的文本并插入文件引用
+function replaceRangeWithFileReference(from: number, to: number, path: string) {
+  if (!editor.value) return
+
+  // ProseMirror 位置从 1 开始，所以需要 +1
+  const proseMirrorFrom = from + 1
+  const proseMirrorTo = to + 1
+
+  editor.value.chain()
+    .focus()
+    .deleteRange({ from: proseMirrorFrom, to: proseMirrorTo })
+    .insertContent({
+      type: 'fileReference',
+      attrs: { path },
+    })
+    .insertContent(' ')
+    .run()
+}
+
+// 判断光标是否在编辑器最前面
+function isCursorAtStart(): boolean {
+  if (!editor.value) return true
+
+  const { from } = editor.value.state.selection
+  // 位置 1 表示文档开头（位置 0 是文档节点本身）
+  return from <= 1
 }
 
 // 获取纯文本
@@ -230,6 +475,7 @@ function setContent(text: string) {
   editor.value?.commands.setContent(text)
 }
 
+
 // 清理
 onBeforeUnmount(() => {
   editor.value?.destroy()
@@ -240,9 +486,14 @@ defineExpose({
   clear,
   focus,
   insertImage,
+  insertFileReference,
+  replaceRangeWithFileReference,
+  getCursorPosition,
+  isCursorAtStart,
   getText,
   setContent,
   extractContent,
+  extractContentBlocks,
 })
 </script>
 
@@ -250,12 +501,40 @@ defineExpose({
 .rich-text-input-wrapper {
   position: relative;
   width: 100%;
+  height: 100%;  /* 填充父容器 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* 浮动删除按钮 - 与 contexts 图片一致 */
+.floating-delete-btn {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--theme-error, #d73a49);
+  color: white;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  padding: 0;
+  z-index: 100;
+  transition: transform 0.15s;
+}
+
+.floating-delete-btn:hover {
+  transform: scale(1.15);
 }
 
 .rich-text-editor {
   width: 100%;
   min-height: 40px;
-  max-height: 300px;
+  flex: 1;  /* 填充剩余空间 */
   overflow-y: auto;
 }
 
@@ -265,7 +544,7 @@ defineExpose({
   font-size: 14px;
   line-height: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -277,7 +556,7 @@ defineExpose({
 /* 占位符样式 */
 .rich-text-editor :deep(.ProseMirror p.is-editor-empty:first-child::before) {
   content: attr(data-placeholder);
-  color: var(--el-text-color-placeholder, var(--ide-text-disabled, #a8abb2));
+  color: var(--el-text-color-placeholder, var(--theme-text-disabled, #a8abb2));
   pointer-events: none;
   float: left;
   height: 0;
@@ -291,7 +570,7 @@ defineExpose({
 
 /* 链接样式 */
 .rich-text-editor :deep(.linkified-link) {
-  color: var(--el-color-primary, var(--ide-link, #409eff));
+  color: var(--el-color-primary, var(--theme-link, #409eff));
   text-decoration: none;
   cursor: pointer;
 }
@@ -300,27 +579,39 @@ defineExpose({
   text-decoration: underline;
 }
 
-/* 内嵌图片样式 */
+/* 内嵌图片样式 - 与 contexts 图片一致 (32x32) */
 .rich-text-editor :deep(.inline-image) {
-  max-width: 64px;
-  max-height: 64px;
-  vertical-align: middle;
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
   border-radius: 4px;
-  margin: 2px;
   cursor: pointer;
+  vertical-align: middle;
+  margin: 2px;
+  border: 1px solid var(--theme-border, #e1e4e8);
+  transition: transform 0.15s;
 }
 
 .rich-text-editor :deep(.inline-image:hover) {
-  opacity: 0.9;
+  transform: scale(1.05);
 }
 
-/* 暗色主题适配 */
-:global(.theme-dark) .rich-text-editor :deep(.ProseMirror) {
-  color: var(--ide-foreground, #e6edf3);
+
+/* 文件引用样式 - 蓝色文字 + 下划线 */
+.rich-text-editor :deep(.file-reference) {
+  color: var(--theme-link, #0366d6);
+  text-decoration: underline;
+  text-decoration-style: solid;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
 }
 
-:global(.theme-dark) .rich-text-editor :deep(.linkified-link) {
-  color: var(--el-color-primary, var(--ide-link, #58a6ff));
+.rich-text-editor :deep(.file-reference:hover) {
+  color: var(--theme-link-hover, #0550ae);
+  text-decoration-thickness: 2px;
 }
+
 
 </style>

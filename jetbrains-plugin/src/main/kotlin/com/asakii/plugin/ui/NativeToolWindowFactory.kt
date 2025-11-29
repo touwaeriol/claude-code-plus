@@ -92,6 +92,16 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         titleActions.add(NewSessionAction(sessionBridge))
 
         toolWindowEx?.setTitleActions(titleActions)
+
+        // 三个点菜单中添加 DevTools
+        val gearActions = com.intellij.openapi.actionSystem.DefaultActionGroup().apply {
+            add(object : AnAction("Open DevTools", "打开浏览器开发者工具 (调试 JCEF)", com.intellij.icons.AllIcons.Toolwindows.ToolWindowDebugger) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    browser.openDevtools()
+                }
+            })
+        }
+        toolWindowEx?.setAdditionalGearActions(gearActions)
     }
 
     /**

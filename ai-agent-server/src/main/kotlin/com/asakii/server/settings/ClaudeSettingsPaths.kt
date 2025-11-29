@@ -42,3 +42,7 @@ object ClaudeSettingsPaths {
 
 
 
+
+
+
+

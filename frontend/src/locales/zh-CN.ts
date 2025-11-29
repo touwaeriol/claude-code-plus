@@ -179,6 +179,7 @@ export default {
     temperatureDescription: '控制模型的创造性。0 = 确定性, 1 = 高创造性。留空使用默认值。'
   },
   session: {
+    defaultName: '会话 {time}',
     group: {
       today: '今天',
       yesterday: '昨天',
@@ -193,7 +194,30 @@ export default {
     editTag: '编辑标签',
     createTag: '创建标签',
     deleteSession: '删除会话',
-    searchFailed: '搜索失败'
+    searchFailed: '搜索失败',
+    history: '会话历史',
+    sessionCount: '个会话',
+    noHistory: '暂无历史',
+    active: '激活中',
+    noActive: '无激活会话',
+    historySection: '历史',
+    unnamed: '未命名会话',
+    messages: '条消息'
+  },
+  time: {
+    justNow: '刚刚',
+    minutesAgo: '{n} 分钟前',
+    hoursAgo: '{n} 小时前',
+    daysAgo: '{n} 天前'
+  },
+  thinking: {
+    label: '思考',
+    enabled: '已开启',
+    disabled: '已关闭',
+    alwaysOn: '此模型强制开启思考',
+    notSupported: '此模型不支持思考',
+    toggleOn: '点击开启思考',
+    toggleOff: '点击关闭思考'
   },
   context: {
     usage: '上下文使用: {used} / {max} tokens ({percentage}%)',

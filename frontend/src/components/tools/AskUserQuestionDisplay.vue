@@ -81,7 +81,7 @@ const hasDetails = computed(() => questions.value.length > 0)
 
 .question-item {
   padding: 8px;
-  background: var(--ide-panel-background, #f6f8fa);
+  background: var(--theme-panel-background, #f6f8fa);
   border-radius: 6px;
 }
 
@@ -93,7 +93,7 @@ const hasDetails = computed(() => questions.value.length > 0)
 }
 
 .question-badge {
-  background: var(--ide-accent, #0366d6);
+  background: var(--theme-accent, #0366d6);
   color: white;
   padding: 2px 8px;
   border-radius: 10px;
@@ -103,7 +103,7 @@ const hasDetails = computed(() => questions.value.length > 0)
 
 .question-text {
   font-size: 13px;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
   font-weight: 500;
 }
 
@@ -118,30 +118,30 @@ const hasDetails = computed(() => questions.value.length > 0)
   display: flex;
   flex-direction: column;
   padding: 4px 8px;
-  background: var(--ide-background, #ffffff);
+  background: var(--theme-background, #ffffff);
   border-radius: 4px;
   font-size: 12px;
 }
 
 .option-label {
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
   font-weight: 500;
 }
 
 .option-desc {
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   font-size: 11px;
 }
 
 .result-section {
-  border-top: 1px solid var(--ide-border, #e1e4e8);
+  border-top: 1px solid var(--theme-border, #e1e4e8);
   padding-top: 8px;
 }
 
 .section-title {
   font-size: 11px;
   font-weight: 600;
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   margin-bottom: 6px;
   text-transform: uppercase;
 }
@@ -149,8 +149,8 @@ const hasDetails = computed(() => questions.value.length > 0)
 .result-content {
   margin: 0;
   padding: 8px;
-  background: var(--ide-code-background, #f6f8fa);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-code-background, #f6f8fa);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   font-size: 12px;
   font-family: monospace;

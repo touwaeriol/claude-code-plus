@@ -328,7 +328,7 @@ function getTagSessionCount(tagId: string): number {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .create-btn {
@@ -336,7 +336,7 @@ function getTagSessionCount(tagId: string): number {
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  background: var(--ide-accent, #0366d6);
+  background: var(--theme-accent, #0366d6);
   color: #ffffff;
   border: none;
   border-radius: 4px;
@@ -345,7 +345,7 @@ function getTagSessionCount(tagId: string): number {
 }
 
 .create-btn:hover {
-  background: var(--ide-accent-hover, #0256c7);
+  background: var(--theme-accent-hover, #0256c7);
 }
 
 .icon {
@@ -361,7 +361,7 @@ function getTagSessionCount(tagId: string): number {
 
 .group-item {
   border-left: 3px solid;
-  background: var(--ide-background, #ffffff);
+  background: var(--theme-background, #ffffff);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -376,7 +376,7 @@ function getTagSessionCount(tagId: string): number {
 }
 
 .group-header:hover {
-  background: var(--ide-hover-background, #f6f8fa);
+  background: var(--theme-hover-background, #f6f8fa);
 }
 
 .group-icon {
@@ -386,28 +386,28 @@ function getTagSessionCount(tagId: string): number {
 .group-name {
   flex: 1;
   font-weight: 500;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .session-count {
   font-size: 12px;
-  color: var(--ide-text-secondary, #6a737d);
+  color: var(--theme-text-secondary, #6a737d);
 }
 
 .collapse-icon {
   font-size: 12px;
-  color: var(--ide-text-secondary, #6a737d);
+  color: var(--theme-text-secondary, #6a737d);
 }
 
 .group-content {
   padding: 0 12px 12px 12px;
-  border-top: 1px solid var(--ide-border, #e1e4e8);
+  border-top: 1px solid var(--theme-border, #e1e4e8);
 }
 
 .group-description {
   margin: 8px 0;
   font-size: 13px;
-  color: var(--ide-text-secondary, #6a737d);
+  color: var(--theme-text-secondary, #6a737d);
 }
 
 .group-actions {
@@ -418,22 +418,22 @@ function getTagSessionCount(tagId: string): number {
 
 .action-btn {
   padding: 4px 12px;
-  background: var(--ide-button-secondary, #f6f8fa);
-  color: var(--ide-foreground, #24292e);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-button-secondary, #f6f8fa);
+  color: var(--theme-foreground, #24292e);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 3px;
   cursor: pointer;
   font-size: 12px;
 }
 
 .action-btn:hover {
-  background: var(--ide-hover-background, #e1e4e8);
+  background: var(--theme-hover-background, #e1e4e8);
 }
 
 .action-btn.danger {
-  background: var(--ide-error, #d73a49);
+  background: var(--theme-error, #d73a49);
   color: white;
-  border-color: var(--ide-error, #d73a49);
+  border-color: var(--theme-error, #d73a49);
 }
 
 .action-btn.danger:hover {

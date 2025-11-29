@@ -3,7 +3,8 @@
     :display-info="displayInfo"
     :is-expanded="expanded"
     :has-details="true"
-    @click="handleCardClick"
+    :tool-call="toolCallData"
+    @toggle="expanded = !expanded"
   >
     <template #details>
       <div class="write-tool-details">
@@ -30,7 +31,6 @@ import { useI18n } from '@/composables/useI18n'
 import type { ClaudeWriteToolCall } from '@/types/display'
 import CompactToolCard from './CompactToolCard.vue'
 import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
-import { toolEnhancement } from '@/services/toolEnhancement'
 
 const { t } = useI18n()
 
@@ -45,25 +45,12 @@ const expanded = ref(false)
 // 提取工具显示信息
 const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall, props.toolCall.result))
 
-// 处理卡片点击：使用拦截器统一处理增强
-async function handleCardClick() {
-  // 尝试获取增强动作
-  const action = await toolEnhancement.intercept(props.toolCall, props.toolCall.result as any)
-  
-  if (action) {
-    // 在 JCEF 环境中，执行增强动作（打开文件）
-    const context = {
-      toolType: props.toolCall.toolType,
-      input: props.toolCall.input,
-      result: props.toolCall.result,
-      isSuccess: props.toolCall.status === 'SUCCESS'
-    }
-    await toolEnhancement.executeAction(action, context)
-  } else {
-    // 非 JCEF 环境或没有增强规则，切换展开状态
-    expanded.value = !expanded.value
-  }
-}
+// 构造拦截器所需的工具调用数据
+const toolCallData = computed(() => ({
+  toolType: 'Write',
+  input: props.toolCall.input as Record<string, unknown>,
+  result: props.toolCall.result
+}))
 
 const content = computed(() => props.toolCall.input.content || '')
 
@@ -129,14 +116,14 @@ async function copyContent() {
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
   cursor: pointer;
   opacity: 0.6;
 }
 
 .copy-btn:hover {
   opacity: 1;
-  background: var(--ide-panel-background, #f6f8fa);
+  background: var(--theme-panel-background, #f6f8fa);
 }
 
 .preview-content {
@@ -172,15 +159,8 @@ async function copyContent() {
   padding-right: 1em;
   margin-right: 0.5em;
   text-align: right;
-  color: var(--ide-secondary-foreground, #999);
+  color: var(--theme-secondary-foreground, #999);
   user-select: none; /* 行号不可选中复制 */
   border-right: 1px solid #e1e4e8;
 }
-
-/* 暗色主题适配 */
-.theme-dark .code-line::before {
-  color: var(--ide-secondary-foreground, #666);
-  border-right-color: rgba(255, 255, 255, 0.1);
-}
-
 </style>

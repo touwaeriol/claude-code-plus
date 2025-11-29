@@ -10,8 +10,8 @@ import App from './App.vue'
 import './styles/global.css'
 import { resolveServerHttpUrl } from '@/utils/serverUrl'
 import { i18n, getLocale } from '@/i18n'
-import { jcefBridge } from '@/services/jcefBridge'
-import { toolEnhancement } from '@/services/toolEnhancement'
+// 导入以触发自动初始化
+import '@/services/toolShowInterceptor'
 
 console.log('🚀 Initializing Vue application...')
 
@@ -58,14 +58,6 @@ if (!(window as any).__serverUrl) {
   console.log('🔧 Bootstrap: Backend URL resolved to', (window as any).__serverUrl)
 }
 
-// 初始化 JCEF 桥接和工具增强拦截器
-jcefBridge.init().then(() => {
-  toolEnhancement.init()
-  console.log('✅ JCEF Bridge and Tool Enhancement initialized')
-}).catch(error => {
-  console.error('❌ Failed to initialize JCEF Bridge:', error)
-})
-
 function getElementPlusLocale(locale: string) {
   const localeMap: Record<string, any> = {
     'zh-CN': zhCn,
@@ -102,6 +94,7 @@ initApp().catch((error) => {
   const app = createApp(App)
   const pinia = createPinia()
   app.use(pinia)
+  app.use(i18n)  // 确保 i18n 也被注册
   app.use(ElementPlus, {
     locale: en,
     size: 'default',

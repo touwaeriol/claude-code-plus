@@ -47,10 +47,10 @@ const diffLines = computed(() => {
 
 <style scoped>
 .diff-viewer {
-  border: 1px solid var(--ide-border, #e1e4e8);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   overflow: hidden;
-  background: var(--ide-background, white);
+  background: var(--theme-background, white);
 }
 
 .diff-code-block {

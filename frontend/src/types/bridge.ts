@@ -21,9 +21,8 @@ export interface IdeEvent {
   data?: any
 }
 
-// IDE 主题定义
+// IDE 主题定义（与 themeService.ThemeColors 保持一致）
 export interface IdeTheme {
-  isDark: boolean
   background: string
   foreground: string
   borderColor: string

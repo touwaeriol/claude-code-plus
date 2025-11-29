@@ -232,7 +232,7 @@ function formatTokenCount(tokens: number): string {
 }
 
 .context-usage-indicator:hover {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.05));
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.05));
 }
 
 .usage-text {
@@ -241,19 +241,19 @@ function formatTokenCount(tokens: number): string {
 
 /* 状态颜色 - 使用 CSS 变量以支持主题 */
 .status-normal {
-  color: var(--ide-text-secondary, #6a737d);
+  color: var(--theme-text-secondary, #6a737d);
 }
 
 .status-caution {
-  color: var(--ide-warning-caution, #ffa500);
+  color: var(--theme-warning-caution, #ffa500);
 }
 
 .status-warning {
-  color: var(--ide-warning, #ff8800);
+  color: var(--theme-warning, #ff8800);
 }
 
 .status-critical {
-  color: var(--ide-error, #ff4444);
+  color: var(--theme-error, #ff4444);
   font-weight: 600;
 }
 </style>

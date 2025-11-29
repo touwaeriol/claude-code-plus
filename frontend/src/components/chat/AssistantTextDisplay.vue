@@ -3,7 +3,6 @@
     <div class="message-content">
       <MarkdownRenderer
         :content="message.content"
-        :is-dark="isDark"
       />
     </div>
     <div
@@ -35,12 +34,9 @@ import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 
 interface Props {
   message: AssistantText
-  isDark?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  isDark: false
-})
+const props = defineProps<Props>()
 
 // 是否显示统计信息
 const showStats = computed(() => {
@@ -104,54 +100,36 @@ function formatNumber(num: number): string {
   gap: 4px;
   margin-top: 8px;
   padding: 4px 10px;
-  background: var(--ide-panel-background, #f6f8fa);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-panel-background, #f6f8fa);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 12px;
   font-size: 11px;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   cursor: default;
   user-select: none;
 }
 
 .stat-item {
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .stat-item.duration {
-  color: var(--ide-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
 }
 
 .stat-item.tokens {
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
 }
 
 .stat-separator {
-  color: var(--ide-border, #e1e4e8);
+  color: var(--theme-border, #e1e4e8);
   margin: 0 2px;
 }
 
 .stat-label {
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   opacity: 0.7;
   margin-left: 2px;
-}
-
-/* 暗色主题 */
-:global(.theme-dark) .message-stats {
-  background: var(--ide-panel-background, #21262d);
-  border-color: var(--ide-border, #30363d);
-}
-
-:global(.theme-dark) .stat-item {
-  color: var(--ide-foreground, #c9d1d9);
-}
-
-:global(.theme-dark) .stat-item.duration {
-  color: var(--ide-accent, #58a6ff);
-}
-
-:global(.theme-dark) .stat-item.tokens {
-  color: var(--ide-secondary-foreground, #8b949e);
 }
 </style>

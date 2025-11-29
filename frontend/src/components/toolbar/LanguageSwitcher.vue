@@ -64,8 +64,8 @@ function handleCommand(newLocale: SupportedLocale) {
   height: 24px;
   padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid var(--ide-border, #e1e4e8);
-  background: var(--ide-card-background, #ffffff);
+  border: 1px solid var(--theme-border, #e1e4e8);
+  background: var(--theme-card-background, #ffffff);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -74,8 +74,8 @@ function handleCommand(newLocale: SupportedLocale) {
 }
 
 .lang-btn:hover {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.04));
-  border-color: var(--ide-accent, #0366d6);
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.04));
+  border-color: var(--theme-accent, #0366d6);
 }
 
 .lang-btn:active {
@@ -86,21 +86,7 @@ function handleCommand(newLocale: SupportedLocale) {
   font-size: 11px;
   font-weight: 500;
   line-height: 1;
-  color: var(--ide-foreground, #24292e);
-}
-
-:global(.theme-dark) .lang-btn {
-  background: var(--ide-card-background, #161b22);
-  border-color: var(--ide-border, #30363d);
-}
-
-:global(.theme-dark) .lang-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--ide-accent, #58a6ff);
-}
-
-:global(.theme-dark) .lang-code {
-  color: var(--ide-foreground, #e6edf3);
+  color: var(--theme-foreground, #24292e);
 }
 
 :deep(.el-dropdown-menu__item) {
@@ -111,7 +97,7 @@ function handleCommand(newLocale: SupportedLocale) {
 }
 
 :deep(.el-dropdown-menu__item.active) {
-  color: var(--ide-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
   font-weight: 500;
 }
 
@@ -121,6 +107,6 @@ function handleCommand(newLocale: SupportedLocale) {
 
 .check-mark {
   margin-left: 8px;
-  color: var(--ide-success, #28a745);
+  color: var(--theme-success, #28a745);
 }
 </style>

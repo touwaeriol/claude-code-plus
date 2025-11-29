@@ -219,6 +219,12 @@ class ClaudeStreamAdapter(
             name = block.name,
             input = block.input
         )
+        // SpecificToolUse 子类型（EditToolUse, ReadToolUse, TodoWriteToolUse 等）
+        is SpecificToolUse -> ToolUseContent(
+            id = block.id,
+            name = block.name,
+            input = block.input
+        )
         is ToolResultBlock -> ToolResultContent(
             toolUseId = block.toolUseId,
             content = block.content,
@@ -236,6 +242,13 @@ class ClaudeStreamAdapter(
                 signature = block.signature
             )
             is ToolUseBlock -> ToolUseContent(
+                id = block.id,
+                name = block.name,
+                input = runCatching { json.parseToJsonElement(accumulated) }.getOrNull() ?: block.input,
+                status = ContentStatus.COMPLETED
+            )
+            // SpecificToolUse 子类型（EditToolUse, ReadToolUse, TodoWriteToolUse 等）
+            is SpecificToolUse -> ToolUseContent(
                 id = block.id,
                 name = block.name,
                 input = runCatching { json.parseToJsonElement(accumulated) }.getOrNull() ?: block.input,

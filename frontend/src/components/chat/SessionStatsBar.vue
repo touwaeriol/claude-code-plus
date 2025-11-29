@@ -48,10 +48,10 @@ const hasStats = computed(() => hasToolStats(props.stats))
   align-items: center;
   gap: 16px;
   padding: 8px 16px;
-  background: var(--ide-panel-background, rgba(0, 0, 0, 0.02));
-  border-top: 1px solid var(--ide-border, rgba(0, 0, 0, 0.08));
+  background: var(--theme-panel-background, rgba(0, 0, 0, 0.02));
+  border-top: 1px solid var(--theme-border, rgba(0, 0, 0, 0.08));
   font-size: 12px;
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.6));
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.6));
 }
 
 .stat-item {
@@ -66,28 +66,15 @@ const hasStats = computed(() => hasToolStats(props.stats))
 
 .stat-value {
   font-weight: 600;
-  color: var(--ide-foreground, #1a1a1a);
+  color: var(--theme-foreground, #1a1a1a);
 }
 
 .stat-label {
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.5));
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
 }
 
 .stat-total {
   margin-left: auto;
 }
 
-/* 暗色主题 */
-.theme-dark .session-stats-bar {
-  background: var(--ide-panel-background, rgba(255, 255, 255, 0.02));
-  border-top-color: var(--ide-border, rgba(255, 255, 255, 0.08));
-}
-
-.theme-dark .stat-value {
-  color: var(--ide-foreground, #e0e0e0);
-}
-
-.theme-dark .stat-label {
-  color: var(--ide-secondary-foreground, rgba(255, 255, 255, 0.5));
-}
 </style>

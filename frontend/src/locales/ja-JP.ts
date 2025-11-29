@@ -177,6 +177,7 @@ export default {
     temperatureDescription: 'モデルの創造性を制御します。0 = 確定的、1 = 高創造性。デフォルト値を使用するには空欄にしてください。'
   },
   session: {
+    defaultName: 'セッション {time}',
     group: {
       today: '今日',
       yesterday: '昨日',
@@ -191,7 +192,30 @@ export default {
     editTag: 'タグを編集',
     createTag: 'タグを作成',
     deleteSession: 'セッションを削除',
-    searchFailed: '検索失敗'
+    searchFailed: '検索失敗',
+    history: 'セッション履歴',
+    sessionCount: '件のセッション',
+    noHistory: '履歴なし',
+    active: 'アクティブ',
+    noActive: 'アクティブなセッションなし',
+    historySection: '履歴',
+    unnamed: '無題のセッション',
+    messages: '件のメッセージ'
+  },
+  time: {
+    justNow: 'たった今',
+    minutesAgo: '{n}分前',
+    hoursAgo: '{n}時間前',
+    daysAgo: '{n}日前'
+  },
+  thinking: {
+    label: '思考',
+    enabled: 'オン',
+    disabled: 'オフ',
+    alwaysOn: 'このモデルは思考が常に有効です',
+    notSupported: 'このモデルは思考をサポートしていません',
+    toggleOn: 'クリックして思考を有効にする',
+    toggleOff: 'クリックして思考を無効にする'
   },
   context: {
     usage: 'コンテキスト使用量: {used} / {max} トークン ({percentage}%)',
