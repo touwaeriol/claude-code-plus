@@ -4,6 +4,7 @@
  */
 
 import type { Highlighter, BundledLanguage, BundledTheme } from 'shiki'
+import { themeService } from './themeService'
 
 class HighlightService {
   private highlighter: Highlighter | null = null
@@ -70,7 +71,7 @@ class HighlightService {
   /**
    * 高亮代码
    */
-  async highlight(code: string, lang: string, isDark: boolean): Promise<string> {
+  async highlight(code: string, lang: string): Promise<string> {
     await this.init()
 
     if (!this.highlighter) {
@@ -78,6 +79,7 @@ class HighlightService {
     }
 
     try {
+      const isDark = this.isDarkTheme()
       const theme = (isDark ? 'github-dark' : 'github-light') as BundledTheme
       const validLang = this.normalizeLanguage(lang)
 
@@ -89,6 +91,41 @@ class HighlightService {
       console.warn(`Failed to highlight ${lang}:`, error)
       return `<pre><code>${this.escapeHtml(code)}</code></pre>`
     }
+  }
+
+  /**
+   * 判断当前是否为暗色主题
+   */
+  private isDarkTheme(): boolean {
+    const currentTheme = themeService.getCurrentTheme()
+
+    if (currentTheme) {
+      // 通过背景色亮度判断
+      return this.isColorDark(currentTheme.background)
+    }
+
+    // 回退：使用系统主题偏好
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+  }
+
+  /**
+   * 判断颜色是否为暗色
+   * @param color - 十六进制颜色值 (如 '#1e1e1e')
+   */
+  private isColorDark(color: string): boolean {
+    // 移除 # 符号
+    const hex = color.replace('#', '')
+
+    // 转换为 RGB
+    const r = parseInt(hex.substring(0, 2), 16)
+    const g = parseInt(hex.substring(2, 4), 16)
+    const b = parseInt(hex.substring(4, 6), 16)
+
+    // 使用相对亮度公式 (ITU-R BT.709)
+    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    // 亮度小于 128 认为是暗色
+    return luminance < 128
   }
 
   /**

@@ -53,8 +53,8 @@ const lineNumbers = computed(() => {
 
 <style scoped>
 .code-snippet-wrapper {
-  background: var(--ide-panel-background, #f6f8fa);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-panel-background, #f6f8fa);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -69,8 +69,8 @@ const lineNumbers = computed(() => {
 .line-numbers {
   flex-shrink: 0;
   padding: 12px 0;
-  background: var(--ide-panel-background, #f6f8fa);
-  border-right: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-panel-background, #f6f8fa);
+  border-right: 1px solid var(--theme-border, #e1e4e8);
   user-select: none; /* 整个行号列不可选中 */
   -webkit-user-select: none;
   -moz-user-select: none;
@@ -83,7 +83,7 @@ const lineNumbers = computed(() => {
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--ide-secondary-foreground, #999);
+  color: var(--theme-secondary-foreground, #999);
   min-width: 3em;
 }
 
@@ -104,16 +104,6 @@ const lineNumbers = computed(() => {
 .code-line {
   line-height: 1.5;
   white-space: pre;
-}
-
-/* 暗色主题适配 */
-.theme-dark .line-numbers {
-  background: var(--ide-panel-background, #1e1e1e);
-  border-right-color: var(--ide-border, rgba(255, 255, 255, 0.1));
-}
-
-.theme-dark .line-number {
-  color: var(--ide-secondary-foreground, #666);
 }
 </style>
 

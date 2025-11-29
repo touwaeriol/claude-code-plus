@@ -26,25 +26,5 @@ data class IdeEvent(
     val data: Map<String, JsonElement>? = null
 )
 
-@Serializable
-data class IdeTheme(
-    val isDark: Boolean,
-    val background: String = "",
-    val foreground: String = "",
-    val borderColor: String = "",
-    val panelBackground: String = "",
-    val textFieldBackground: String = "",
-    val selectionBackground: String = "",
-    val selectionForeground: String = "",
-    val linkColor: String = "",
-    val errorColor: String = "",
-    val warningColor: String = "",
-    val successColor: String = "",
-    val separatorColor: String = "",
-    val hoverBackground: String = "",
-    val accentColor: String = "",
-    val infoBackground: String = "",
-    val codeBackground: String = "",
-    val secondaryForeground: String = ""
-)
+// IdeTheme 已移至 com.asakii.rpc.api.IdeTheme
 

@@ -179,6 +179,7 @@ export default {
     temperatureDescription: 'Controls model creativity. 0 = deterministic, 1 = highly creative. Leave empty to use default value.'
   },
   session: {
+    defaultName: 'Session {time}',
     group: {
       today: 'Today',
       yesterday: 'Yesterday',
@@ -193,7 +194,30 @@ export default {
     editTag: 'Edit Tag',
     createTag: 'Create Tag',
     deleteSession: 'Delete Session',
-    searchFailed: 'Search failed'
+    searchFailed: 'Search failed',
+    history: 'Session History',
+    sessionCount: 'sessions',
+    noHistory: 'No history',
+    active: 'Active',
+    noActive: 'No active sessions',
+    historySection: 'History',
+    unnamed: 'Unnamed session',
+    messages: 'messages'
+  },
+  time: {
+    justNow: 'Just now',
+    minutesAgo: '{n} min ago',
+    hoursAgo: '{n} hr ago',
+    daysAgo: '{n} days ago'
+  },
+  thinking: {
+    label: 'Thinking',
+    enabled: 'Enabled',
+    disabled: 'Disabled',
+    alwaysOn: 'Thinking is always enabled for this model',
+    notSupported: 'This model does not support thinking',
+    toggleOn: 'Click to enable thinking',
+    toggleOff: 'Click to disable thinking'
   },
   context: {
     usage: 'Context usage: {used} / {max} tokens ({percentage}%)',

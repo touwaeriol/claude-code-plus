@@ -2,7 +2,6 @@
   <div
     v-if="isVisible"
     class="streaming-status"
-    :class="{ 'theme-dark': isDark }"
   >
     <div class="status-content">
       <!-- 状态指示器 -->
@@ -51,13 +50,11 @@ import type { TokenUsage } from '@/types/enhancedMessage'
 
 interface Props {
   isGenerating: boolean
-  isDark?: boolean
   tokenUsage?: TokenUsage | null
   currentPrefix?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  isDark: false,
   tokenUsage: null,
   currentPrefix: ''
 })
@@ -143,12 +140,6 @@ function formatTime(ms: number): string {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   z-index: 1000;
   animation: slideUp 0.3s ease-out;
-}
-
-.theme-dark .streaming-status {
-  background: rgba(30, 30, 30, 0.95);
-  border-color: var(--el-border-color-darker);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 @keyframes slideUp {
@@ -263,9 +254,5 @@ function formatTime(ms: number): string {
   border-radius: 4px;
   font-size: 12px;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-}
-
-.theme-dark .prefix-value {
-  background: var(--el-fill-color-dark);
 }
 </style>

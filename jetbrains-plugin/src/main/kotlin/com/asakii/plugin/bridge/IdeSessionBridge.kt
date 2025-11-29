@@ -1,11 +1,14 @@
 package com.asakii.plugin.bridge
 
-import com.asakii.bridge.IdeTheme
+import com.asakii.rpc.api.IdeTheme
+import com.asakii.plugin.services.IdeaPlatformService
 import com.asakii.plugin.theme.IdeaThemeAdapter
+import com.asakii.server.HttpServerProjectService
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.ui.jcef.JBCefBrowser
+import com.intellij.ui.jcef.JBCefBrowserBase
 import com.intellij.ui.jcef.JBCefJSQuery
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -40,9 +43,44 @@ class IdeSessionBridge(
     private var themeChangeListener: (() -> Unit)? = null
     private val ideActionBridge = IdeActionBridgeImpl(project)
 
-    private val sessionStateQuery = JBCefJSQuery.create(browser).apply {
+    // ====== JBCefJSQuery ======
+
+    private val sessionStateQuery = JBCefJSQuery.create(browser as JBCefBrowserBase).apply {
         addHandler { payload ->
             handleSessionState(payload)
+            null
+        }
+    }
+
+    /**
+     * 打开文件并选中范围
+     * payload: { filePath, startLine?, endLine?, startOffset?, endOffset? }
+     */
+    private val openFileWithSelectionQuery = JBCefJSQuery.create(browser as JBCefBrowserBase).apply {
+        addHandler { payload ->
+            handleOpenFileWithSelection(payload)
+            null
+        }
+    }
+
+    /**
+     * 显示 Diff
+     * payload: { filePath, oldContent, newContent, title? }
+     */
+    private val showDiffQuery = JBCefJSQuery.create(browser as JBCefBrowserBase).apply {
+        addHandler { payload ->
+            handleShowDiff(payload)
+            null
+        }
+    }
+
+    /**
+     * 显示 MultiEdit Diff（多个编辑合并展示）
+     * payload: { filePath, edits: [{oldString, newString, replaceAll}], currentContent }
+     */
+    private val showMultiEditDiffQuery = JBCefJSQuery.create(browser as JBCefBrowserBase).apply {
+        addHandler { payload ->
+            handleShowMultiEditDiff(payload)
             null
         }
     }
@@ -51,104 +89,222 @@ class IdeSessionBridge(
         browser.jbCefClient.addLoadHandler(object : CefLoadHandlerAdapter() {
             override fun onLoadEnd(browser: CefBrowser?, frame: CefFrame?, httpStatusCode: Int) {
                 if (frame?.isMain == true) {
-                    injectBridge(frame)
-                    injectJcefBridge(frame)
-                    setupThemeListener()
+                    injectIdeaJcefBridge(frame)  // 统一注入，包含初始主题
+                    setupThemeListener()  // 监听后续主题变化
                 }
             }
         }, browser.cefBrowser)
     }
 
-    private fun injectBridge(frame: CefFrame) {
-        val script = """
-            window.__CLAUDE_IDE_HOST__ = window.__CLAUDE_IDE_HOST__ || {};
-            window.__CLAUDE_IDE_HOST__.postSessionState = function(payload) {
-                ${sessionStateQuery.inject("payload")}
-            };
-        """.trimIndent()
-        frame.executeJavaScript(script, browser.cefBrowser.url ?: "", 0)
-        logger.info("✅ Injected IDE session bridge bootstrap script")
-    }
-
     /**
-     * 注入 JCEF 桥接脚本，供前端检测 JCEF 环境
-     * 同时推送初始主题
+     * 统一注入 IDEA JCEF 桥接
+     * 整合：服务器地址、工具展示、主题（含初始值）、会话状态
      */
-    private fun injectJcefBridge(frame: CefFrame) {
+    private fun injectIdeaJcefBridge(frame: CefFrame) {
+        // 获取服务器 URL
+        val serverUrl = HttpServerProjectService.getInstance(project).serverUrl ?: "http://localhost:8765"
+
+        // 获取当前主题作为初始值
+        val initialTheme = ideActionBridge.getTheme()
+        val initialThemeJson = json.encodeToString(IdeTheme.serializer(), initialTheme)
+
         val script = """
             (function() {
-                window.__CLAUDE_IDE_BRIDGE__ = window.__CLAUDE_IDE_BRIDGE__ || {};
-                window.__CLAUDE_IDE_HOST__ = window.__CLAUDE_IDE_HOST__ || {};
-                console.log('✅ JCEF Bridge injected');
-            })();
-        """.trimIndent()
-        frame.executeJavaScript(script, browser.cefBrowser.url ?: "", 0)
-        logger.info("✅ Injected JCEF bridge script")
+                // 注入服务器地址（优先级最高）
+                window.__serverUrl = '$serverUrl';
+                console.log('🔗 Server URL injected via JCEF:', window.__serverUrl);
 
-        injectThemeBridge(frame)
-        notifyThemeChange()
+                // 初始主题
+                var initialTheme = $initialThemeJson;
 
-        // 推送语言设置（前端会根据 IDEA 语言自动切换）
-        pushLocale()
-    }
-
-    /**
-     * 注入主题桥接脚本，供 Vue 直接读取/订阅 IDE 主题
-     */
-    private fun injectThemeBridge(frame: CefFrame) {
-        val script = """
-            (function() {
-                var bridge = window.__themeBridge;
-                if (!bridge) {
-                    var currentTheme = null;
-                    bridge = {
-                        onChange: null,
-                        getCurrent: function() {
-                            return currentTheme;
+                window.__IDEA_JCEF__ = {
+                    // ====== 工具展示 API ======
+                    toolShow: {
+                        openFile: function(payload) {
+                            ${openFileWithSelectionQuery.inject("JSON.stringify(payload)")}
                         },
+                        showDiff: function(payload) {
+                            ${showDiffQuery.inject("JSON.stringify(payload)")}
+                        },
+                        showMultiEditDiff: function(payload) {
+                            ${showMultiEditDiffQuery.inject("JSON.stringify(payload)")}
+                        }
+                    },
+
+                    // ====== 主题 API ======
+                    theme: {
+                        _current: initialTheme,  // 初始值
+                        _onChange: null,
                         push: function(theme) {
-                            currentTheme = theme;
-                            if (typeof bridge.onChange === 'function') {
+                            this._current = theme;
+                            if (typeof this._onChange === 'function') {
                                 try {
-                                    bridge.onChange(theme);
+                                    this._onChange(theme);
                                 } catch (err) {
-                                    console.error('[themeBridge] onChange failed', err);
+                                    console.error('[IDEA_JCEF] theme.onChange failed', err);
                                 }
                             }
-                            try {
-                                window.dispatchEvent(new CustomEvent('claude:themeBridgePush', { detail: theme }));
-                            } catch (eventErr) {
-                                console.warn('[themeBridge] Failed to dispatch push event', eventErr);
-                            }
+                            window.dispatchEvent(new CustomEvent('idea:themeChange', { detail: theme }));
+                        },
+                        getCurrent: function() {
+                            return this._current;
+                        },
+                        set onChange(fn) { this._onChange = fn; },
+                        get onChange() { return this._onChange; }
+                    },
+
+                    // ====== 会话 API ======
+                    session: {
+                        postState: function(payload) {
+                            ${sessionStateQuery.inject("payload")}
                         }
-                    };
-                    window.__themeBridge = bridge;
-                }
-                try {
-                    window.dispatchEvent(new CustomEvent('claude:themeBridgeReady'));
-                } catch (err) {
-                    console.warn('[themeBridge] Failed to dispatch ready event', err);
-                }
-                console.log('✅ Theme bridge ready');
+                    }
+                };
+
+                console.log('✅ IDEA JCEF Bridge injected with initial theme');
+                window.dispatchEvent(new CustomEvent('idea:jcefReady'));
             })();
         """.trimIndent()
         frame.executeJavaScript(script, browser.cefBrowser.url ?: "", 0)
+        logger.info("✅ Injected unified IDEA JCEF bridge with serverUrl=$serverUrl")
     }
+
+    // ====== IDEA 工具处理函数 ======
+
+    @Serializable
+    private data class OpenFilePayload(
+        val filePath: String,
+        val startLine: Int? = null,
+        val endLine: Int? = null,
+        val startOffset: Int? = null,
+        val endOffset: Int? = null
+    )
+
+    @Serializable
+    private data class ShowDiffPayload(
+        val filePath: String,
+        val oldContent: String,
+        val newContent: String,
+        val title: String? = null
+    )
+
+    @Serializable
+    private data class EditOperation(
+        val oldString: String,
+        val newString: String,
+        val replaceAll: Boolean = false
+    )
+
+    @Serializable
+    private data class ShowMultiEditDiffPayload(
+        val filePath: String,
+        val edits: List<EditOperation>,
+        val currentContent: String? = null
+    )
+
+    private fun handleOpenFileWithSelection(payload: String) {
+        runCatching {
+            val data = json.decodeFromString(OpenFilePayload.serializer(), payload)
+            logger.info("📂 Opening file with selection: ${data.filePath}")
+
+            val platformService = IdeaPlatformService(project)
+
+            // 构建选择范围
+            val selectionRange = if (data.startOffset != null && data.endOffset != null) {
+                IdeaPlatformService.SelectionRange(data.startOffset, data.endOffset)
+            } else {
+                null
+            }
+
+            platformService.openFile(
+                filePath = data.filePath,
+                line = data.startLine,
+                selectionRange = selectionRange
+            )
+        }.onFailure { e ->
+            logger.warn("❌ Failed to open file with selection: ${e.message}", e)
+        }
+    }
+
+    private fun handleShowDiff(payload: String) {
+        runCatching {
+            val data = json.decodeFromString(ShowDiffPayload.serializer(), payload)
+            logger.info("📝 Showing diff for: ${data.filePath}")
+
+            val platformService = IdeaPlatformService(project)
+            platformService.showDiff(
+                filePath = data.filePath,
+                oldContent = data.oldContent,
+                newContent = data.newContent,
+                title = data.title
+            )
+        }.onFailure { e ->
+            logger.warn("❌ Failed to show diff: ${e.message}", e)
+        }
+    }
+
+    private fun handleShowMultiEditDiff(payload: String) {
+        runCatching {
+            val data = json.decodeFromString(ShowMultiEditDiffPayload.serializer(), payload)
+            logger.info("📝 Showing multi-edit diff for: ${data.filePath} (${data.edits.size} edits)")
+
+            // 从文件读取当前内容，反推修改前内容
+            val file = java.io.File(data.filePath)
+            if (!file.exists()) {
+                logger.warn("❌ File not found: ${data.filePath}")
+                return
+            }
+
+            val currentContent = data.currentContent ?: file.readText()
+            val beforeContent = rebuildBeforeContent(currentContent, data.edits)
+
+            val platformService = IdeaPlatformService(project)
+            platformService.showDiff(
+                filePath = data.filePath,
+                oldContent = beforeContent,
+                newContent = currentContent,
+                title = "Multi-Edit: ${file.name} (${data.edits.size} changes)"
+            )
+        }.onFailure { e ->
+            logger.warn("❌ Failed to show multi-edit diff: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 从修改后的内容和编辑操作列表，反推修改前的内容
+     */
+    private fun rebuildBeforeContent(afterContent: String, operations: List<EditOperation>): String {
+        var content = afterContent
+        for (operation in operations.asReversed()) {
+            if (operation.replaceAll) {
+                content = content.replace(operation.newString, operation.oldString)
+            } else {
+                val index = content.indexOf(operation.newString)
+                if (index >= 0) {
+                    content = buildString {
+                        append(content.substring(0, index))
+                        append(operation.oldString)
+                        append(content.substring(index + operation.newString.length))
+                    }
+                }
+            }
+        }
+        return content
+    }
+
 
     /**
      * 设置主题变化监听器
+     * 注意：初始主题已在 JCEF 注入时包含，这里只监听后续变化
      */
     private fun setupThemeListener() {
         themeChangeListener = {
             notifyThemeChange()
         }
-        
+
         IdeaThemeAdapter.registerThemeChangeListener { isDark ->
             themeChangeListener?.invoke()
         }
-        
-        // 立即通知一次当前主题
-        themeChangeListener?.invoke()
     }
 
     /**
@@ -158,17 +314,17 @@ class IdeSessionBridge(
         runCatching {
             val theme = ideActionBridge.getTheme()
             val themeJson = json.encodeToString(IdeTheme.serializer(), theme)
-        val script = """
+            val script = """
                 (function(theme) {
-                    if (window.__themeBridge && typeof window.__themeBridge.push === 'function') {
-                        window.__themeBridge.push(theme);
-            } else {
-                        console.warn('Theme bridge is not ready, drop theme update');
-            }
+                    if (window.__IDEA_JCEF__?.theme) {
+                        window.__IDEA_JCEF__.theme.push(theme);
+                    } else {
+                        console.warn('[IDEA_JCEF] Theme bridge is not ready, drop theme update');
+                    }
                 })($themeJson);
-        """.trimIndent()
+            """.trimIndent()
             executeScript(script)
-            logger.info("🎨 Notified frontend of theme change: ${if (theme.isDark) "dark" else "light"}")
+            logger.info("🎨 Notified frontend of theme change")
         }.onFailure { e ->
             logger.warn("❌ Failed to notify theme change: ${e.message}", e)
         }
@@ -288,6 +444,9 @@ class IdeSessionBridge(
 
     override fun dispose() {
         sessionStateQuery.dispose()
+        openFileWithSelectionQuery.dispose()
+        showDiffQuery.dispose()
+        showMultiEditDiffQuery.dispose()
         listeners.clear()
         pendingCommands.clear()
         themeChangeListener = null

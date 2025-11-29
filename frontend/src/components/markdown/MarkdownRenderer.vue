@@ -7,22 +7,19 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
-import { useI18n } from '@/composables/useI18n'
-import { markdownService } from '@/services/markdownService'
-import { highlightService } from '@/services/highlightService'
-import { ideaBridge } from '@/services/ideaBridge'
+import {onMounted, ref, watch} from 'vue'
+import {useI18n} from '@/composables/useI18n'
+import {markdownService} from '@/services/markdownService'
+import {highlightService} from '@/services/highlightService'
+import {ideaBridge} from '@/services/ideaBridge'
 
 const { t } = useI18n()
 
 interface Props {
   content: string
-  isDark?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  isDark: false
-})
+const props = defineProps<Props>()
 
 const renderedHtml = ref('')
 const isHighlighting = ref(false)
@@ -39,7 +36,6 @@ onMounted(async () => {
 
 // 监听内容变化
 watch(() => props.content, renderContent)
-watch(() => props.isDark, renderContent)
 
 /**
  * 渲染 Markdown 内容
@@ -96,7 +92,7 @@ async function highlightCodeBlocks(html: string): Promise<string> {
     if (codeElement) {
       const code = codeElement.textContent || ''
       try {
-        const highlightedHtml = await highlightService.highlight(code, lang, props.isDark)
+        const highlightedHtml = await highlightService.highlight(code, lang)
         const contentDiv = block.querySelector('.code-content')
         if (contentDiv) {
           contentDiv.innerHTML = highlightedHtml
@@ -188,13 +184,13 @@ function showCopyFeedback(button: HTMLElement) {
 
 .markdown-body h1 {
   font-size: 1.5em;
-  border-bottom: 1px solid var(--ide-border);
+  border-bottom: 1px solid var(--theme-border);
   padding-bottom: 0.2em;
 }
 
 .markdown-body h2 {
   font-size: 1.3em;
-  border-bottom: 1px solid var(--ide-border);
+  border-bottom: 1px solid var(--theme-border);
   padding-bottom: 0.2em;
 }
 
@@ -216,14 +212,14 @@ function showCopyFeedback(button: HTMLElement) {
 
 .markdown-body blockquote {
   padding: 0 0.8em;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
   opacity: 0.7;
-  border-left: 0.25em solid var(--ide-border);
+  border-left: 0.25em solid var(--theme-border);
   margin: 0 0 6px 0;
 }
 
 .markdown-body a {
-  color: var(--ide-link);
+  color: var(--theme-link);
   text-decoration: none;
 }
 
@@ -232,21 +228,21 @@ function showCopyFeedback(button: HTMLElement) {
 }
 
 .markdown-body a.file-link {
-  color: var(--ide-link);
+  color: var(--theme-link);
   font-family: monospace;
 }
 
 .markdown-body a.file-link:hover {
   text-decoration: underline;
-  background: var(--ide-panel-background);
+  background: var(--theme-panel-background);
 }
 
 .markdown-body code {
   padding: 0.2em 0.4em;
   margin: 0;
   font-size: 85%;
-  background-color: var(--ide-code-background);
-  color: var(--ide-code-foreground);
+  background-color: var(--theme-code-background);
+  color: var(--theme-code-foreground);
   border-radius: 3px;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
 }
@@ -256,7 +252,7 @@ function showCopyFeedback(button: HTMLElement) {
   overflow: auto;
   font-size: 85%;
   line-height: 1.45;
-  background-color: var(--ide-code-background);
+  background-color: var(--theme-code-background);
   border-radius: 4px;
   margin-bottom: 6px;
 }
@@ -275,7 +271,7 @@ function showCopyFeedback(button: HTMLElement) {
 /* 代码块包装器 */
 .code-block-wrapper {
   margin: 6px 0;
-  border: 1px solid var(--ide-border);
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -285,13 +281,13 @@ function showCopyFeedback(button: HTMLElement) {
   justify-content: space-between;
   align-items: center;
   padding: 4px 8px;
-  background: var(--ide-panel-background);
-  border-bottom: 1px solid var(--ide-border);
+  background: var(--theme-panel-background);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .code-block-header .language {
   font-size: 12px;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
   opacity: 0.7;
   text-transform: uppercase;
   font-weight: 600;
@@ -300,22 +296,22 @@ function showCopyFeedback(button: HTMLElement) {
 .code-block-header .copy-btn {
   padding: 4px 8px;
   font-size: 12px;
-  border: 1px solid var(--ide-border);
-  background: var(--ide-background);
+  border: 1px solid var(--theme-border);
+  background: var(--theme-background);
   border-radius: 3px;
   cursor: pointer;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
   transition: all 0.2s;
 }
 
 .code-block-header .copy-btn:hover {
-  background: var(--ide-panel-background);
-  border-color: var(--ide-accent);
+  background: var(--theme-panel-background);
+  border-color: var(--theme-accent);
 }
 
 .code-block-header .copy-btn.copied {
-  color: var(--ide-success);
-  border-color: var(--ide-success);
+  color: var(--theme-success);
+  border-color: var(--theme-success);
 }
 
 .code-content {
@@ -354,21 +350,21 @@ function showCopyFeedback(button: HTMLElement) {
 .markdown-body table th,
 .markdown-body table td {
   padding: 6px 13px;
-  border: 1px solid var(--ide-border);
+  border: 1px solid var(--theme-border);
 }
 
 .markdown-body table tr {
-  background-color: var(--ide-background);
-  border-top: 1px solid var(--ide-border);
+  background-color: var(--theme-background);
+  border-top: 1px solid var(--theme-border);
 }
 
 .markdown-body table tr:nth-child(2n) {
-  background-color: var(--ide-panel-background);
+  background-color: var(--theme-panel-background);
 }
 
 .markdown-body table th {
   font-weight: 600;
-  background-color: var(--ide-panel-background);
+  background-color: var(--theme-panel-background);
 }
 
 /* HR */
@@ -376,7 +372,7 @@ function showCopyFeedback(button: HTMLElement) {
   height: 0.25em;
   padding: 0;
   margin: 8px 0;
-  background-color: var(--ide-border);
+  background-color: var(--theme-border);
   border: 0;
 }
 </style>

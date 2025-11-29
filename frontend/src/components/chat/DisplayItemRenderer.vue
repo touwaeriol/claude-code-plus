@@ -10,7 +10,6 @@
     <AssistantTextDisplay
       v-else-if="item.displayType === 'assistantText'"
       :message="item"
-      :is-dark="isDark"
     />
 
     <!-- 思考内容 -->
@@ -52,12 +51,9 @@ import SystemMessageDisplay from './SystemMessageDisplay.vue'
 interface Props {
   // VirtualList 会把当前项作为 source 传入
   source: DisplayItem
-  isDark?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  isDark: false
-})
+const props = defineProps<Props>()
 
 // 为了模板可读性，提供一个 item 计算属性
 const item = computed(() => props.source)

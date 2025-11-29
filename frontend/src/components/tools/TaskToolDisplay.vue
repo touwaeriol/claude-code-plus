@@ -102,18 +102,18 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
 }
 
 .label {
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   min-width: 60px;
   flex-shrink: 0;
 }
 
 .value {
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .value.badge {
-  background: var(--ide-badge-background, #eef2ff);
-  color: var(--ide-badge-foreground, #4338ca);
+  background: var(--theme-badge-background, #eef2ff);
+  color: var(--theme-badge-foreground, #4338ca);
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 11px;
@@ -126,7 +126,7 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
 .section-title {
   font-size: 11px;
   font-weight: 600;
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   margin-bottom: 6px;
   text-transform: uppercase;
 }
@@ -134,8 +134,8 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
 .prompt-content {
   margin: 0;
   padding: 8px;
-  background: var(--ide-code-background, #f6f8fa);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-code-background, #f6f8fa);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   font-size: 12px;
   white-space: pre-wrap;
@@ -145,15 +145,15 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
 }
 
 .result-section {
-  border-top: 1px solid var(--ide-border, #e1e4e8);
+  border-top: 1px solid var(--theme-border, #e1e4e8);
   padding-top: 8px;
 }
 
 .result-content {
   margin: 0;
   padding: 8px;
-  background: var(--ide-code-background, #f6f8fa);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-code-background, #f6f8fa);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   font-size: 12px;
   font-family: monospace;

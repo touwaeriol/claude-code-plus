@@ -1,8 +1,7 @@
 /**
- * IDE 主题接口 - 与后端 BridgeProtocol.IdeTheme 保持一致
+ * 主题颜色接口
  */
-export interface IdeTheme {
-  isDark: boolean
+export interface ThemeColors {
   background: string
   foreground: string
   panelBackground: string
@@ -24,15 +23,8 @@ export interface IdeTheme {
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
-type ThemeBridge = {
-  getCurrent?: () => IdeTheme | null
-  push?: (theme: IdeTheme) => void
-  onChange?: ((theme: IdeTheme) => void) | null
-}
-
-// 默认主题配置
-const DARK_THEME: IdeTheme = {
-  isDark: true,
+// Web 环境预定义主题
+const DARK_THEME: ThemeColors = {
   background: '#1e1e1e',
   foreground: '#d4d4d4',
   panelBackground: '#252526',
@@ -52,8 +44,7 @@ const DARK_THEME: IdeTheme = {
   secondaryForeground: '#858585'
 }
 
-const LIGHT_THEME: IdeTheme = {
-  isDark: false,
+const LIGHT_THEME: ThemeColors = {
   background: '#ffffff',
   foreground: '#24292e',
   panelBackground: '#f6f8fa',
@@ -74,8 +65,8 @@ const LIGHT_THEME: IdeTheme = {
 }
 
 export class ThemeService {
-  private currentTheme: IdeTheme | null = null
-  private listeners: Set<(theme: IdeTheme) => void> = new Set()
+  private currentTheme: ThemeColors | null = null
+  private listeners: Set<(theme: ThemeColors) => void> = new Set()
   private initialized = false
   private bridgeReadyHandler: ((event: Event) => void) | null = null
   private themeMode: ThemeMode = 'system'
@@ -102,34 +93,40 @@ export class ThemeService {
       return
     }
 
-    // 无 IDE 桥接，应用用户偏好
-    console.log('🎨 [Browser] No IDE bridge, applying preference:', this.themeMode)
-    this.setTheme(this.themeMode)
+    // IDEA 模式但 JCEF 还没注入：等待注入后再初始化主题
+    const anyWindow = window as any
+    if (anyWindow.__IDEA_MODE__) {
+      console.log('🎨 [IDE] Waiting for JCEF bridge...')
+      this.waitForThemeBridge()
+      return
+    }
+
+    // 浏览器模式：应用系统主题偏好
+    console.log('🎨 [Browser] No IDE bridge, applying system preference')
+    this.setTheme('system')
     this.watchSystemTheme()
     this.waitForThemeBridge()
   }
 
   /**
-   * 🎯 核心方法：设置主题
-   * 所有主题切换都通过此方法
-   *
-   * @param mode - 'light' | 'dark' | 'system' 或完整的 IdeTheme 对象
+   * 设置主题
+   * @param mode - 'light' | 'dark' | 'system' 或完整的 ThemeColors 对象
    */
-  setTheme(mode: ThemeMode | IdeTheme) {
-    let theme: IdeTheme
+  setTheme(mode: ThemeMode | ThemeColors) {
+    let theme: ThemeColors
 
     if (typeof mode === 'object') {
-      // 接收完整主题对象（来自 IDE）
+      // IDE 模式：直接使用 IDE 返回的完整主题
       theme = mode
-      console.log('🎨 [IDE] Applying theme:', theme.isDark ? 'dark' : 'light')
+      console.log('🎨 [IDE] Applying IDE theme')
     } else {
-      // 接收模式字符串
+      // Web 模式：使用预定义主题
       this.themeMode = mode
 
       if (mode === 'system') {
-        const isDark = this.detectSystemTheme()
-        theme = isDark ? DARK_THEME : LIGHT_THEME
-        console.log('🎨 [System] Detected:', isDark ? 'dark' : 'light')
+        const prefersDark = this.detectSystemTheme()
+        theme = prefersDark ? DARK_THEME : LIGHT_THEME
+        console.log('🎨 [System] Detected:', prefersDark ? 'dark' : 'light')
       } else {
         theme = mode === 'dark' ? DARK_THEME : LIGHT_THEME
         console.log('🎨 [User] Selected:', mode)
@@ -140,11 +137,15 @@ export class ThemeService {
   }
 
   /**
-   * 切换主题（亮/暗）
+   * 切换主题（仅 Web 模式有效）
    */
   toggleTheme() {
-    const currentIsDark = this.currentTheme?.isDark ?? false
-    this.setTheme(currentIsDark ? 'light' : 'dark')
+    if (this.hasIdeBridge) {
+      console.log('🎨 Toggle theme not available in IDE mode')
+      return
+    }
+    const newMode = this.themeMode === 'dark' ? 'light' : 'dark'
+    this.setTheme(newMode)
   }
 
   /**
@@ -157,15 +158,8 @@ export class ThemeService {
   /**
    * 获取当前主题
    */
-  getCurrentTheme(): IdeTheme | null {
+  getCurrentTheme(): ThemeColors | null {
     return this.currentTheme
-  }
-
-  /**
-   * 是否为暗色主题
-   */
-  isDarkTheme(): boolean {
-    return this.currentTheme?.isDark ?? false
   }
 
   /**
@@ -178,7 +172,7 @@ export class ThemeService {
   /**
    * 监听主题变化
    */
-  onThemeChange(listener: (theme: IdeTheme) => void) {
+  onThemeChange(listener: (theme: ThemeColors) => void) {
     this.listeners.add(listener)
     if (this.currentTheme) {
       listener(this.currentTheme)
@@ -204,13 +198,13 @@ export class ThemeService {
     })
   }
 
-  private applyTheme(theme: IdeTheme) {
+  private applyTheme(theme: ThemeColors) {
     this.currentTheme = theme
     this.injectCssVariables(theme)
     this.notifyListeners(theme)
   }
 
-  private notifyListeners(theme: IdeTheme) {
+  private notifyListeners(theme: ThemeColors) {
     this.listeners.forEach(listener => {
       try {
         listener(theme)
@@ -221,20 +215,20 @@ export class ThemeService {
   }
 
   private bindThemeBridge(): boolean {
-    const bridge = (window as any).__themeBridge as ThemeBridge | undefined
-    if (!bridge?.getCurrent) return false
+    const ideaJcef = (window as any).__IDEA_JCEF__
+    if (!ideaJcef?.theme?.getCurrent) return false
 
-    bridge.onChange = (theme: IdeTheme) => {
+    ideaJcef.theme.onChange = (theme: ThemeColors) => {
       if (theme) this.setTheme(theme)
     }
 
-    const currentTheme = bridge.getCurrent()
+    const currentTheme = ideaJcef.theme.getCurrent()
     if (currentTheme) {
       this.setTheme(currentTheme)
     }
 
     this.clearBridgeReadyHandler()
-    console.log('🎨 [IDE] Theme bridge connected')
+    console.log('🎨 [IDE] IDEA JCEF theme bridge connected')
     return true
   }
 
@@ -246,51 +240,52 @@ export class ThemeService {
         this.clearBridgeReadyHandler()
       }
     }
-    window.addEventListener('claude:themeBridgeReady', this.bridgeReadyHandler)
+    window.addEventListener('idea:jcefReady', this.bridgeReadyHandler)
+    window.addEventListener('idea:themeChange', ((e: CustomEvent<ThemeColors>) => {
+      if (e.detail) {
+        this.hasIdeBridge = true
+        this.setTheme(e.detail)
+      }
+    }) as EventListener)
   }
 
   private clearBridgeReadyHandler() {
     if (this.bridgeReadyHandler) {
-      window.removeEventListener('claude:themeBridgeReady', this.bridgeReadyHandler)
+      window.removeEventListener('idea:jcefReady', this.bridgeReadyHandler)
       this.bridgeReadyHandler = null
     }
   }
 
-  private injectCssVariables(theme: IdeTheme) {
+  private injectCssVariables(theme: ThemeColors) {
     const root = document.documentElement
-
-    // 设置主题类
-    root.classList.toggle('theme-dark', theme.isDark)
-    root.classList.toggle('theme-light', !theme.isDark)
 
     // 注入 CSS 变量
     const vars: Record<string, string> = {
-      '--ide-background': theme.background,
-      '--ide-foreground': theme.foreground,
-      '--ide-panel-background': theme.panelBackground,
-      '--ide-border': theme.borderColor,
-      '--ide-text-field-background': theme.textFieldBackground,
-      '--ide-selection-background': theme.selectionBackground,
-      '--ide-selection-foreground': theme.selectionForeground,
-      '--ide-link': theme.linkColor,
-      '--ide-error': theme.errorColor,
-      '--ide-warning': theme.warningColor,
-      '--ide-success': theme.successColor,
-      '--ide-separator': theme.separatorColor,
-      '--ide-hover-background': theme.hoverBackground,
-      '--ide-accent': theme.accentColor,
-      '--ide-info-background': theme.infoBackground,
-      '--ide-code-background': theme.codeBackground,
-      '--ide-secondary-foreground': theme.secondaryForeground,
-      '--ide-warning-background': theme.isDark ? '#3d3416' : '#fff8dc',
-      '--ide-card-background': theme.isDark ? '#252526' : '#ffffff'
+      '--theme-background': theme.background,
+      '--theme-foreground': theme.foreground,
+      '--theme-panel-background': theme.panelBackground,
+      '--theme-border': theme.borderColor,
+      '--theme-text-field-background': theme.textFieldBackground,
+      '--theme-selection-background': theme.selectionBackground,
+      '--theme-selection-foreground': theme.selectionForeground,
+      '--theme-link': theme.linkColor,
+      '--theme-error': theme.errorColor,
+      '--theme-warning': theme.warningColor,
+      '--theme-success': theme.successColor,
+      '--theme-separator': theme.separatorColor,
+      '--theme-hover-background': theme.hoverBackground,
+      '--theme-accent': theme.accentColor,
+      '--theme-info-background': theme.infoBackground,
+      '--theme-code-background': theme.codeBackground,
+      '--theme-secondary-foreground': theme.secondaryForeground,
+      '--theme-card-background': theme.panelBackground
     }
 
     Object.entries(vars).forEach(([key, value]) => {
       root.style.setProperty(key, value)
     })
 
-    console.log('✅ Theme applied:', theme.isDark ? 'dark' : 'light')
+    console.log('✅ Theme CSS variables injected')
   }
 }
 

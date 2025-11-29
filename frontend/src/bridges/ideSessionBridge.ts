@@ -62,10 +62,11 @@ function notifyHostCommand(command: HostCommand) {
 
 function postSessionState(payload: SessionStatePayload): boolean {
   if (typeof window === 'undefined') return false
-  const host = window.__CLAUDE_IDE_HOST__
-  if (host?.postSessionState) {
+  // 使用统一的 __IDEA_JCEF__ 桥接
+  const jcef = window.__IDEA_JCEF__
+  if (jcef?.session?.postState) {
     try {
-      host.postSessionState(JSON.stringify(payload))
+      jcef.session.postState(JSON.stringify(payload))
       return true
     } catch (error) {
       console.warn('[IDE Bridge] Failed to post session state:', error)

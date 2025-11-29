@@ -9,7 +9,6 @@
           v-for="item in mockDisplayItems"
           :key="item.id"
           :source="item"
-          :is-dark="false"
         />
       </div>
     </div>
@@ -32,7 +31,6 @@
           v-for="item in displayItems"
           :key="item.id"
           :source="item"
-          :is-dark="false"
         />
       </div>
     </div>

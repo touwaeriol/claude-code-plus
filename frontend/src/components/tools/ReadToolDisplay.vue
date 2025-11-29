@@ -3,7 +3,8 @@
     :display-info="displayInfo"
     :is-expanded="expanded"
     :has-details="hasContent"
-    @click="handleCardClick"
+    :tool-call="toolCallData"
+    @toggle="expanded = !expanded"
   >
     <template #details>
       <div
@@ -52,6 +53,13 @@ const expanded = ref(false)
 const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall, props.toolCall.result))
 
 const filePath = computed(() => props.toolCall.input.path || props.toolCall.input.file_path || '')
+
+// 构造拦截器所需的工具调用数据
+const toolCallData = computed(() => ({
+  toolType: 'Read',
+  input: props.toolCall.input as Record<string, unknown>,
+  result: props.toolCall.result
+}))
 
 // Read 工具展示的是文件内容（结果），只有成功且有内容时才显示详情
 // 错误信息由 CompactToolCard 的 errorMessage 处理
@@ -166,11 +174,6 @@ const language = computed(() => {
   return langMap[extension] || 'plaintext'
 })
 
-// 处理卡片点击：目前直接切换展开状态
-async function handleCardClick() {
-  expanded.value = !expanded.value
-}
-
 async function copyContent() {
   if (resultText.value) {
     await navigator.clipboard.writeText(resultText.value)
@@ -180,9 +183,9 @@ async function copyContent() {
 
 <style scoped>
 .tool-display {
-  border: 1px solid var(--ide-border, #e1e4e8);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 6px;
-  background: var(--ide-panel-background, #f6f8fa);
+  background: var(--theme-panel-background, #f6f8fa);
   margin: 8px 0;
 }
 
@@ -200,22 +203,22 @@ async function copyContent() {
 
 .tool-name {
   font-weight: 600;
-  color: var(--ide-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
 }
 
 .tool-file {
   font-family: monospace;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .tool-lines {
-  color: var(--ide-foreground, #586069);
+  color: var(--theme-foreground, #586069);
   opacity: 0.7;
   font-size: 12px;
 }
 
 .tool-content {
-  border-top: 1px solid var(--ide-border, #e1e4e8);
+  border-top: 1px solid var(--theme-border, #e1e4e8);
   padding: 12px;
 }
 
@@ -232,30 +235,30 @@ async function copyContent() {
 
 .info-row .label {
   font-weight: 600;
-  color: var(--ide-foreground, #586069);
+  color: var(--theme-foreground, #586069);
   opacity: 0.7;
   min-width: 60px;
 }
 
 .info-row .value {
   font-family: monospace;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .clickable {
   cursor: pointer;
-  color: var(--ide-link, #0366d6);
+  color: var(--theme-link, #0366d6);
   text-decoration: underline;
 }
 
 .clickable:hover {
-  color: var(--ide-link, #0256c0);
+  color: var(--theme-link, #0256c0);
   opacity: 0.8;
 }
 
 .tool-result {
-  background: var(--ide-background, #ffffff);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-background, #ffffff);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -265,11 +268,11 @@ async function copyContent() {
   justify-content: space-between;
   align-items: center;
   padding: 6px 12px;
-  background: var(--ide-panel-background, #f6f8fa);
-  border-bottom: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-panel-background, #f6f8fa);
+  border-bottom: 1px solid var(--theme-border, #e1e4e8);
   font-size: 12px;
   font-weight: 600;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .copy-btn {
@@ -280,14 +283,14 @@ async function copyContent() {
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
   cursor: pointer;
   opacity: 0.6;
 }
 
 .copy-btn:hover {
   opacity: 1;
-  background: var(--ide-panel-background, #f6f8fa);
+  background: var(--theme-panel-background, #f6f8fa);
 }
 
 .result-content {
@@ -295,7 +298,7 @@ async function copyContent() {
   padding: 12px;
   font-size: 12px;
   font-family: 'Consolas', 'Monaco', monospace;
-  color: var(--ide-code-foreground, #24292e);
+  color: var(--theme-code-foreground, #24292e);
   overflow-x: auto;
   max-height: 400px;
   overflow-y: auto;
@@ -305,15 +308,15 @@ async function copyContent() {
   width: 100%;
   padding: 6px;
   border: none;
-  border-top: 1px solid var(--ide-border, #e1e4e8);
-  background: var(--ide-panel-background, #fafbfc);
-  color: var(--ide-foreground, #586069);
+  border-top: 1px solid var(--theme-border, #e1e4e8);
+  background: var(--theme-panel-background, #fafbfc);
+  color: var(--theme-foreground, #586069);
   font-size: 12px;
   cursor: pointer;
 }
 
 .expand-btn:hover {
-  background: var(--ide-panel-background, #f6f8fa);
+  background: var(--theme-panel-background, #f6f8fa);
   opacity: 0.9;
 }
 </style>

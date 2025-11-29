@@ -116,7 +116,6 @@ data class FileInfo(
  */
 @Serializable
 data class IdeTheme(
-    val isDark: Boolean = true,
     val background: String = "#2b2b2b",
     val foreground: String = "#a9b7c6",
     val borderColor: String = "#3c3f41",

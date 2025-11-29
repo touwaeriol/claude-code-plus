@@ -2,7 +2,7 @@ package com.asakii.plugin.bridge
 
 import com.asakii.bridge.FrontendRequest
 import com.asakii.bridge.FrontendResponse
-import com.asakii.bridge.IdeTheme
+import com.asakii.rpc.api.IdeTheme
 import com.asakii.server.IdeActionBridge
 import com.intellij.ui.JBColor
 import com.intellij.util.ui.UIUtil
@@ -34,7 +34,6 @@ class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
 
     override fun getTheme(): IdeTheme {
         return IdeTheme(
-            isDark = UIUtil.isUnderDarcula(),
             background = colorToHex(UIUtil.getPanelBackground()),
             foreground = colorToHex(UIUtil.getLabelForeground()),
             borderColor = colorToHex(JBColor.border()),
@@ -47,7 +46,7 @@ class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
             warningColor = colorToHex(JBColor.YELLOW),
             successColor = colorToHex(JBColor.GREEN),
             separatorColor = colorToHex(JBColor.border()),
-            hoverBackground = colorToHex(UIUtil.getListBackground(true)),
+            hoverBackground = colorToHex(JBColor.namedColor("List.hoverBackground", UIUtil.getPanelBackground())),
             accentColor = colorToHex(JBColor.namedColor("Accent.focusColor", JBColor.BLUE)),
             infoBackground = colorToHex(JBColor.namedColor("Component.infoForeground", JBColor.GRAY)),
             codeBackground = colorToHex(UIUtil.getTextFieldBackground()),

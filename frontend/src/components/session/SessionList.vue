@@ -1,7 +1,6 @@
 <template>
   <div
     class="session-list"
-    :class="{ 'theme-dark': isDark }"
   >
     <div class="session-header">
       <h3 class="header-title">
@@ -131,7 +130,6 @@ interface Props {
   sessions: Session[]
   currentSessionId?: string
   loading?: boolean
-  isDark?: boolean
 }
 
 interface Emits {
@@ -142,8 +140,7 @@ interface Emits {
 }
 
 const _props = withDefaults(defineProps<Props>(), {
-  loading: false,
-  isDark: false
+  loading: false
 })
 
 const emit = defineEmits<Emits>()
@@ -198,8 +195,8 @@ function cancelRename() {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--ide-panel-background);
-  border-right: 1px solid var(--ide-border);
+  background: var(--theme-panel-background);
+  border-right: 1px solid var(--theme-border);
 }
 
 .session-header {
@@ -207,14 +204,14 @@ function cancelRename() {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--ide-border);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .header-title {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
 }
 
 /* Element Plus 按钮样式覆盖 */
@@ -229,10 +226,6 @@ function cancelRename() {
   background: rgba(0, 0, 0, 0.05);
 }
 
-.theme-dark .btn-icon:hover :deep(.el-button) {
-  background: rgba(255, 255, 255, 0.05);
-}
-
 /* 加载状态 */
 .session-loading {
   display: flex;
@@ -241,15 +234,15 @@ function cancelRename() {
   justify-content: center;
   gap: 12px;
   padding: 32px 16px;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
   opacity: 0.6;
 }
 
 .loading-spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid var(--ide-border);
-  border-top-color: var(--ide-accent);
+  border: 2px solid var(--theme-border);
+  border-top-color: var(--theme-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -267,7 +260,7 @@ function cancelRename() {
   align-items: center;
   gap: 8px;
   padding: 32px 16px;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
   opacity: 0.6;
 }
 
@@ -302,14 +295,10 @@ function cancelRename() {
   background: rgba(0, 0, 0, 0.03);
 }
 
-.theme-dark .session-item:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
 .session-item.active {
-  background: var(--ide-accent);
+  background: var(--theme-accent);
   color: white;
-  border-color: var(--ide-accent);
+  border-color: var(--theme-accent);
 }
 
 .session-item.active .session-meta {
@@ -335,7 +324,7 @@ function cancelRename() {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
   opacity: 0.6;
 }
 
@@ -390,8 +379,8 @@ function cancelRename() {
 }
 
 .dialog-content {
-  background: var(--ide-background);
-  border: 1px solid var(--ide-border);
+  background: var(--theme-background);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   padding: 20px;
   min-width: 300px;
@@ -402,7 +391,7 @@ function cancelRename() {
   margin: 0 0 16px 0;
   font-size: 16px;
   font-weight: 600;
-  color: var(--ide-foreground);
+  color: var(--theme-foreground);
 }
 
 /* Element Plus input 样式覆盖 */
@@ -413,16 +402,16 @@ function cancelRename() {
 
 .rename-input :deep(.el-input__wrapper) {
   padding: 8px 12px;
-  background: var(--ide-input-background);
-  box-shadow: 0 0 0 1px var(--ide-input-border) inset;
+  background: var(--theme-input-background);
+  box-shadow: 0 0 0 1px var(--theme-input-border) inset;
 }
 
 .rename-input :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px var(--ide-accent) inset, 0 0 0 3px rgba(3, 102, 214, 0.1);
+  box-shadow: 0 0 0 1px var(--theme-accent) inset, 0 0 0 3px rgba(3, 102, 214, 0.1);
 }
 
 .rename-input :deep(.el-input__inner) {
-  color: var(--ide-input-foreground);
+  color: var(--theme-input-foreground);
   font-size: 14px;
 }
 
@@ -434,21 +423,21 @@ function cancelRename() {
 
 /* Element Plus 对话框按钮样式覆盖 */
 .btn-secondary :deep(.el-button) {
-  background: var(--ide-panel-background);
-  color: var(--ide-foreground);
-  border: 1px solid var(--ide-border);
+  background: var(--theme-panel-background);
+  color: var(--theme-foreground);
+  border: 1px solid var(--theme-border);
   padding: 6px 16px;
   font-size: 14px;
   font-weight: 600;
 }
 
 .btn-secondary:hover :deep(.el-button) {
-  background: var(--ide-border);
+  background: var(--theme-border);
 }
 
 .btn-primary :deep(.el-button) {
-  background: var(--ide-button-background);
-  color: var(--ide-button-foreground);
+  background: var(--theme-button-background);
+  color: var(--theme-button-foreground);
   border: none;
   padding: 6px 16px;
   font-size: 14px;
@@ -456,6 +445,6 @@ function cancelRename() {
 }
 
 .btn-primary:hover :deep(.el-button) {
-  background: var(--ide-button-hover-background);
+  background: var(--theme-button-hover-background);
 }
 </style>

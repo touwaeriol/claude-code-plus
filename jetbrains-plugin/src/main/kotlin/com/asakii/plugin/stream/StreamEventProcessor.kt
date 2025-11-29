@@ -83,7 +83,7 @@ object StreamEventProcessor {
         // 情况1：有空的占位符消息，继续使用它
         if (lastMessage != null && StreamEventHandler.isMessageContentEmpty(lastMessage.content)) {
             // 更新消息 ID（如果后端返回了 ID）
-            if (eventMessageId != null && lastMessage != null) {
+            if (eventMessageId != null) {
                 // 由于 AssistantMessage 是不可变的，这里简化处理
                 logger.info("复用现有空消息")
             }

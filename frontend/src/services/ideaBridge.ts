@@ -39,7 +39,7 @@ class IdeaBridgeService {
   private mode: 'ide' | 'browser' = 'browser'
 
   // 获取基础 URL：
-  // - IDE 插件模式：使用后端注入的 window.__serverUrl（随机端口）
+  // - IDE 插件模式：使用 JCEF 注入的 window.__serverUrl（随机端口）
   // - 浏览器开发模式：固定指向 http://localhost:8765（StandaloneServer 默认端口）
   private getBaseUrl(): string {
     if (typeof window === 'undefined') {
@@ -49,9 +49,14 @@ class IdeaBridgeService {
 
     const anyWindow = window as any
 
-    // IDEA 插件模式：后端通过 ?ide=true 注入 __serverUrl
+    // IDEA 插件模式：JCEF 注入 __serverUrl
     if (anyWindow.__serverUrl) {
       return anyWindow.__serverUrl as string
+    }
+
+    // IDEA 模式但 __serverUrl 尚未注入：使用当前 origin（页面就是从后端加载的）
+    if (anyWindow.__IDEA_MODE__ || anyWindow.__IDEA_JCEF__) {
+      return window.location.origin
     }
 
     // 浏览器开发模式：前端跑在 Vite (通常 5173)，后端独立跑在 8765
@@ -68,9 +73,11 @@ class IdeaBridgeService {
     if (typeof window === 'undefined') {
       return 'browser' // 构建时默认值
     }
-    // 检测 JCEF 环境：cefQuery 是 JCEF 框架原生注入的函数
-    // 这是最可靠的检测方式，不依赖任何自定义注入
-    return typeof (window as any).cefQuery === 'function' ? 'ide' : 'browser'
+    // 检测 IDEA 插件环境：
+    // 1. __IDEA_JCEF__ - JCEF 注入的桥接对象（最可靠）
+    // 2. __IDEA_MODE__ - HTML 注入的标记（备用）
+    const anyWindow = window as any
+    return (anyWindow.__IDEA_JCEF__ || anyWindow.__IDEA_MODE__) ? 'ide' : 'browser'
   }
 
   constructor() {

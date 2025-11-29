@@ -228,9 +228,9 @@ async function copyContent() {
 
 <style scoped>
 .tool-display {
-  border: 1px solid var(--ide-border, #e1e4e8);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 6px;
-  background: var(--ide-panel-background, #f6f8fa);
+  background: var(--theme-panel-background, #f6f8fa);
   margin: 8px 0;
   overflow: hidden;
   transition: all 0.2s ease;
@@ -242,23 +242,23 @@ async function copyContent() {
 
 /* 状态颜色 */
 .status-pending {
-  border-left: 3px solid var(--ide-warning, #ffc107);
+  border-left: 3px solid var(--theme-warning, #ffc107);
 }
 
 .status-running {
-  border-left: 3px solid var(--ide-accent, #0366d6);
+  border-left: 3px solid var(--theme-accent, #0366d6);
 }
 
 .status-success {
-  border-left: 3px solid var(--ide-success, #28a745);
+  border-left: 3px solid var(--theme-success, #28a745);
 }
 
 .status-failed {
-  border-left: 3px solid var(--ide-error, #d73a49);
+  border-left: 3px solid var(--theme-error, #d73a49);
 }
 
 .status-cancelled {
-  border-left: 3px solid var(--ide-secondary-foreground, #6a737d);
+  border-left: 3px solid var(--theme-secondary-foreground, #6a737d);
 }
 
 .tool-header {
@@ -269,11 +269,11 @@ async function copyContent() {
   font-size: 13px;
   cursor: pointer;
   user-select: none;
-  background: var(--ide-hover-background, #f6f8fa);
+  background: var(--theme-hover-background, #f6f8fa);
 }
 
 .tool-header:hover {
-  background: var(--ide-hover-background, #e1e4e8);
+  background: var(--theme-hover-background, #e1e4e8);
 }
 
 .tool-icon {
@@ -282,17 +282,17 @@ async function copyContent() {
 
 .tool-name {
   font-weight: 600;
-  color: var(--ide-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
 }
 
 .tool-file {
   font-family: 'Consolas', 'Monaco', monospace;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
   flex: 1;
 }
 
 .tool-lines {
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   font-size: 11px;
   font-family: monospace;
 }
@@ -306,27 +306,27 @@ async function copyContent() {
 }
 
 .status-badge.status-pending {
-  background: var(--ide-warning, #ffc107);
+  background: var(--theme-warning, #ffc107);
   color: #000;
 }
 
 .status-badge.status-running {
-  background: var(--ide-accent, #0366d6);
+  background: var(--theme-accent, #0366d6);
   color: #fff;
 }
 
 .status-badge.status-success {
-  background: var(--ide-success, #28a745);
+  background: var(--theme-success, #28a745);
   color: #fff;
 }
 
 .status-badge.status-failed {
-  background: var(--ide-error, #d73a49);
+  background: var(--theme-error, #d73a49);
   color: #fff;
 }
 
 .status-badge.status-cancelled {
-  background: var(--ide-secondary-foreground, #6a737d);
+  background: var(--theme-secondary-foreground, #6a737d);
   color: #fff;
 }
 
@@ -336,19 +336,19 @@ async function copyContent() {
   height: 20px;
   border: none;
   background: transparent;
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   cursor: pointer;
   font-size: 10px;
 }
 
 .expand-btn-inline:hover {
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .tool-content {
-  border-top: 1px solid var(--ide-border, #e1e4e8);
+  border-top: 1px solid var(--theme-border, #e1e4e8);
   padding: 12px;
-  background: var(--ide-background, #ffffff);
+  background: var(--theme-background, #ffffff);
 }
 
 .file-info {
@@ -364,43 +364,43 @@ async function copyContent() {
 
 .info-row .label {
   font-weight: 600;
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   min-width: 50px;
 }
 
 .info-row .value {
   font-family: 'Consolas', 'Monaco', monospace;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .clickable {
   cursor: pointer;
-  color: var(--ide-link, #0366d6);
+  color: var(--theme-link, #0366d6);
   text-decoration: underline;
 }
 
 .clickable:hover {
-  color: var(--ide-link, #0256c0);
+  color: var(--theme-link, #0256c0);
 }
 
 .tool-result {
-  background: var(--ide-code-background, #f6f8fa);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-code-background, #f6f8fa);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   overflow: hidden;
 }
 
 .tool-result.success {
-  border-color: var(--ide-success, #28a745);
+  border-color: var(--theme-success, #28a745);
 }
 
 .tool-result.failure {
-  border-color: var(--ide-error, #d73a49);
+  border-color: var(--theme-error, #d73a49);
   background: rgba(215, 58, 73, 0.05);
 }
 
 .tool-result.running {
-  border-color: var(--ide-accent, #0366d6);
+  border-color: var(--theme-accent, #0366d6);
 }
 
 .result-header {
@@ -408,15 +408,15 @@ async function copyContent() {
   justify-content: space-between;
   align-items: center;
   padding: 6px 12px;
-  background: var(--ide-panel-background, #f6f8fa);
-  border-bottom: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-panel-background, #f6f8fa);
+  border-bottom: 1px solid var(--theme-border, #e1e4e8);
   font-size: 11px;
   font-weight: 600;
 }
 
 .result-header.error {
   background: rgba(215, 58, 73, 0.1);
-  color: var(--ide-error, #d73a49);
+  color: var(--theme-error, #d73a49);
 }
 
 .result-actions {
@@ -428,16 +428,16 @@ async function copyContent() {
 .view-btn {
   padding: 2px 6px;
   font-size: 11px;
-  border: 1px solid var(--ide-border, #e1e4e8);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 3px;
-  background: var(--ide-background, #ffffff);
+  background: var(--theme-background, #ffffff);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .copy-btn:hover,
 .view-btn:hover {
-  background: var(--ide-hover-background, #f6f8fa);
+  background: var(--theme-hover-background, #f6f8fa);
   transform: translateY(-1px);
 }
 
@@ -465,8 +465,8 @@ async function copyContent() {
 .loading-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid var(--ide-border, #e1e4e8);
-  border-top-color: var(--ide-accent, #0366d6);
+  border: 2px solid var(--theme-border, #e1e4e8);
+  border-top-color: var(--theme-accent, #0366d6);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -488,11 +488,11 @@ async function copyContent() {
 }
 
 .result-content::-webkit-scrollbar-thumb {
-  background: var(--ide-scrollbar-thumb, #d1d5da);
+  background: var(--theme-scrollbar-thumb, #d1d5da);
   border-radius: 4px;
 }
 
 .result-content::-webkit-scrollbar-thumb:hover {
-  background: var(--ide-scrollbar-thumb-hover, #959da5);
+  background: var(--theme-scrollbar-thumb-hover, #959da5);
 }
 </style>

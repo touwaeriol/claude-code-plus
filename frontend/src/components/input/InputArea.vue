@@ -1,7 +1,6 @@
 <template>
   <div
     class="input-area"
-    :class="{ 'theme-dark': isDark }"
   >
     <!-- 上下文引用显示 -->
     <div
@@ -149,7 +148,6 @@ interface MentionSuggestion {
 interface Props {
   modelValue: string
   disabled?: boolean
-  isDark?: boolean
   placeholder?: string
   sendButtonText?: string
   references?: ContextReference[]
@@ -163,7 +161,6 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   disabled: false,
-  isDark: false,
   placeholder: '输入消息... (Ctrl+Enter 发送, Shift+Enter 换行)',
   sendButtonText: '发送',
   references: () => []
@@ -471,11 +468,6 @@ function handleSend() {
   position: relative;
 }
 
-.input-area.theme-dark {
-  background: #24292e;
-  border-top-color: #444d56;
-}
-
 /* 上下文引用 */
 .context-references {
   margin-bottom: 12px;
@@ -483,11 +475,6 @@ function handleSend() {
   background: #ffffff;
   border: 1px solid #e1e4e8;
   border-radius: 6px;
-}
-
-.theme-dark .context-references {
-  background: #1e1e1e;
-  border-color: #444d56;
 }
 
 .references-header {
@@ -516,12 +503,6 @@ function handleSend() {
   border-radius: 12px;
   font-size: 12px;
   color: #24292e;
-}
-
-.theme-dark .reference-chip {
-  background: #2d333b;
-  border-color: #444d56;
-  color: #e1e4e8;
 }
 
 .reference-file {
@@ -588,10 +569,6 @@ function handleSend() {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.theme-dark .drop-zone-content {
-  background: #2d333b;
-}
-
 .drop-icon {
   font-size: 48px;
 }
@@ -623,12 +600,6 @@ function handleSend() {
   outline: none;
 }
 
-.theme-dark .input-textarea {
-  background: #1e1e1e;
-  color: #e1e4e8;
-  border-color: #444d56;
-}
-
 .input-textarea:focus {
   border-color: #0366d6;
   box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.1);
@@ -655,11 +626,6 @@ function handleSend() {
   margin-bottom: 4px;
 }
 
-.theme-dark .mention-suggestions {
-  background: #2d333b;
-  border-color: #444d56;
-}
-
 .suggestion-item {
   display: flex;
   align-items: center;
@@ -672,11 +638,6 @@ function handleSend() {
 .suggestion-item:hover,
 .suggestion-item.selected {
   background: #f6f8fa;
-}
-
-.theme-dark .suggestion-item:hover,
-.theme-dark .suggestion-item.selected {
-  background: #373e47;
 }
 
 .suggestion-icon {
@@ -693,10 +654,6 @@ function handleSend() {
   font-size: 13px;
   font-weight: 600;
   color: #24292e;
-}
-
-.theme-dark .suggestion-name {
-  color: #e1e4e8;
 }
 
 .suggestion-path {
@@ -756,16 +713,6 @@ function handleSend() {
 .btn-secondary:hover:not(:disabled) {
   background: #f6f8fa;
   border-color: #d1d5da;
-}
-
-.theme-dark .btn-secondary {
-  background: #2d333b;
-  color: #e1e4e8;
-  border-color: #444d56;
-}
-
-.theme-dark .btn-secondary:hover:not(:disabled) {
-  background: #373e47;
 }
 
 .btn-primary {

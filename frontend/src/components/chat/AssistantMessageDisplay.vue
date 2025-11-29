@@ -189,12 +189,12 @@ function handleExpandedChange(toolId: string, expanded: boolean) {
 
 .model-label {
   font-size: 12px;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .model-name {
   font-size: 12px;
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   opacity: 0.7;
 }
 
@@ -300,7 +300,7 @@ function handleExpandedChange(toolId: string, expanded: boolean) {
 
 .status-text {
   font-size: 12px;
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   opacity: 0.7;
 }
 
@@ -315,7 +315,7 @@ function handleExpandedChange(toolId: string, expanded: boolean) {
 .jumping-dot {
   width: 4px;
   height: 4px;
-  background-color: var(--ide-secondary-foreground, #586069);
+  background-color: var(--theme-secondary-foreground, #586069);
   border-radius: 50%;
   animation: jump 1.4s infinite ease-in-out;
 }
@@ -348,7 +348,7 @@ function handleExpandedChange(toolId: string, expanded: boolean) {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background-color: var(--ide-accent, #0366d6);
+  background-color: var(--theme-accent, #0366d6);
   animation: jump 1.4s infinite ease-in-out both;
 }
 
@@ -375,20 +375,4 @@ function handleExpandedChange(toolId: string, expanded: boolean) {
   }
 }
 
-/* 暗色主题适配 */
-.theme-dark .model-label {
-  color: var(--ide-foreground, #e0e0e0);
-}
-
-.theme-dark .model-name {
-  color: var(--ide-secondary-foreground, #8b949e);
-}
-
-.theme-dark .status-text {
-  color: var(--ide-secondary-foreground, #8b949e);
-}
-
-.theme-dark .dot {
-  background-color: var(--ide-accent, #4a9eff);
-}
 </style>

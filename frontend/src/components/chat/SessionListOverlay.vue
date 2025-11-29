@@ -4,7 +4,6 @@
       <div
         v-if="visible"
         class="session-overlay"
-        :class="{ 'theme-dark': isDark }"
       >
         <div
           class="overlay-backdrop"
@@ -14,21 +13,14 @@
         <div class="overlay-panel">
           <div class="overlay-header">
             <div class="overlay-title-group">
-              <h3>会话历史</h3>
-              <p>{{ sessions.length }} 个会话</p>
+              <h3>{{ $t('session.history') }}</h3>
+              <p>{{ sessions.length }} {{ $t('session.sessionCount') }}</p>
             </div>
             <div class="overlay-actions">
               <button
-                class="overlay-btn primary"
-                type="button"
-                @click="handleNewSession"
-              >
-                新建会话
-              </button>
-              <button
                 class="overlay-btn ghost"
                 type="button"
-                aria-label="关闭"
+                :aria-label="$t('common.close')"
                 @click="handleClose"
               >
                 ✕
@@ -42,7 +34,7 @@
               class="state-block"
             >
               <span class="spinner" />
-              <span>加载中...</span>
+              <span>{{ $t('common.loading') }}</span>
             </div>
 
             <div
@@ -50,37 +42,78 @@
               class="state-block empty"
             >
               <span class="empty-icon">📭</span>
-              <span>暂无历史会话</span>
+              <span>{{ $t('session.noHistory') }}</span>
             </div>
 
             <div
               v-else
               class="session-list"
             >
-              <button
-                v-for="session in sessions"
-                :key="session.id"
-                type="button"
-                class="session-item"
-                :class="{ active: session.id === currentSessionId }"
-                @click="handleSelect(session.id)"
-              >
-                <div class="session-item-main">
-                  <div class="session-name">
-                    <span>{{ session.name || '未命名会话' }}</span>
-                    <span
-                      v-if="session.isGenerating"
-                      class="session-dot"
-                      title="生成中"
-                    />
-                  </div>
-                  <div class="session-meta">
-                    <span>{{ formatRelativeTime(session.timestamp) }}</span>
-                    <span>·</span>
-                    <span>{{ session.messageCount }} 条消息</span>
-                  </div>
+              <!-- 激活会话分组 -->
+              <div class="session-group">
+                <div class="session-group-header">{{ $t('session.active') }}</div>
+                <div
+                  v-if="activeSessions.length === 0"
+                  class="session-group-empty"
+                >
+                  {{ $t('session.noActive') }}
                 </div>
-              </button>
+                <button
+                  v-for="session in activeSessions"
+                  :key="session.id"
+                  type="button"
+                  class="session-item"
+                  :class="{ active: session.id === currentSessionId }"
+                  @click="handleSelect(session.id)"
+                >
+                  <span class="session-status-icon active">🟢</span>
+                  <div class="session-item-main">
+                    <div class="session-name">
+                      <span>{{ session.name || $t('session.unnamed') }}</span>
+                      <span
+                        v-if="session.id === currentSessionId"
+                        class="session-current-mark"
+                      >✓</span>
+                    </div>
+                    <div class="session-meta">
+                      <span>{{ formatRelativeTime(session.timestamp) }}</span>
+                      <span>·</span>
+                      <span>{{ session.messageCount }} {{ $t('session.messages') }}</span>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <!-- 历史会话分组 -->
+              <div class="session-group">
+                <div class="session-group-header">{{ $t('session.historySection') }}</div>
+                <div
+                  v-if="historySessions.length === 0"
+                  class="session-group-empty"
+                >
+                  {{ $t('session.noHistory') }}
+                </div>
+                <button
+                  v-for="session in historySessions"
+                  :key="session.id"
+                  type="button"
+                  class="session-item"
+                  :class="{ active: session.id === currentSessionId }"
+                  @click="handleSelect(session.id)"
+                >
+                  <span class="session-status-icon history">📝</span>
+                  <div class="session-item-main">
+                    <div class="session-name">
+                      <span>{{ session.name || $t('session.unnamed') }}</span>
+                    </div>
+                    <div class="session-meta">
+                      <span>{{ formatRelativeTime(session.timestamp) }}</span>
+                      <span>·</span>
+                      <span>{{ session.messageCount }} {{ $t('session.messages') }}</span>
+                    </div>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -90,7 +123,10 @@
 </template>
 
 <script setup lang="ts">
-import { watch, onBeforeUnmount } from 'vue'
+import { watch, onBeforeUnmount, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 interface SessionListItem {
   id: string
@@ -98,6 +134,7 @@ interface SessionListItem {
   timestamp: number
   messageCount: number
   isGenerating?: boolean
+  isConnected?: boolean
 }
 
 interface Props {
@@ -105,20 +142,27 @@ interface Props {
   sessions: SessionListItem[]
   currentSessionId?: string | null
   loading?: boolean
-  isDark?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
-  isDark: false,
   currentSessionId: null
 })
 
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'select-session', sessionId: string): void
-  (e: 'new-session'): void
 }>()
+
+// 激活的会话（已连接）
+const activeSessions = computed(() =>
+  props.sessions.filter(s => s.isConnected)
+)
+
+// 历史会话（未连接）
+const historySessions = computed(() =>
+  props.sessions.filter(s => !s.isConnected)
+)
 
 function handleClose() {
   emit('close')
@@ -128,22 +172,18 @@ function handleSelect(sessionId: string) {
   emit('select-session', sessionId)
 }
 
-function handleNewSession() {
-  emit('new-session')
-}
-
 function formatRelativeTime(timestamp: number): string {
   const diff = Date.now() - timestamp
   const minutes = Math.floor(diff / 60000)
   const hours = Math.floor(diff / 3600000)
   const days = Math.floor(diff / 86400000)
 
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes} 分钟前`
-  if (hours < 24) return `${hours} 小时前`
-  if (days < 7) return `${days} 天前`
+  if (minutes < 1) return t('time.justNow')
+  if (minutes < 60) return t('time.minutesAgo', { n: minutes })
+  if (hours < 24) return t('time.hoursAgo', { n: hours })
+  if (days < 7) return t('time.daysAgo', { n: days })
 
-  return new Date(timestamp).toLocaleDateString('zh-CN', {
+  return new Date(timestamp).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric'
   })
@@ -193,18 +233,12 @@ onBeforeUnmount(() => {
   width: 360px;
   max-height: calc(100vh - 120px);
   border-radius: 16px;
-  background: var(--ide-panel-background, #ffffff);
-  border: 1px solid var(--ide-border, rgba(0, 0, 0, 0.08));
+  background: var(--theme-panel-background, #ffffff);
+  border: 1px solid var(--theme-border, rgba(0, 0, 0, 0.08));
   box-shadow: 0 30px 60px rgba(0, 0, 0, 0.2);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-}
-
-.theme-dark .overlay-panel {
-  background: var(--ide-panel-background, #161b22);
-  border-color: var(--ide-border, #30363d);
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
 }
 
 .overlay-header {
@@ -212,20 +246,20 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--ide-border, rgba(0, 0, 0, 0.08));
+  border-bottom: 1px solid var(--theme-border, rgba(0, 0, 0, 0.08));
 }
 
 .overlay-title-group h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: var(--ide-foreground, #111);
+  color: var(--theme-foreground, #111);
 }
 
 .overlay-title-group p {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.6));
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.6));
 }
 
 .overlay-actions {
@@ -243,31 +277,22 @@ onBeforeUnmount(() => {
 }
 
 .overlay-btn.primary {
-  background: var(--ide-accent, #0366d6);
+  background: var(--theme-accent, #0366d6);
   color: #fff;
 }
 
 .overlay-btn.primary:hover {
-  background: var(--ide-accent-hover, #0256c2);
+  background: var(--theme-accent-hover, #0256c2);
 }
 
 .overlay-btn.ghost {
   background: transparent;
-  color: var(--ide-foreground, #333);
-  border-color: var(--ide-border, rgba(0, 0, 0, 0.1));
+  color: var(--theme-foreground, #333);
+  border-color: var(--theme-border, rgba(0, 0, 0, 0.1));
 }
 
 .overlay-btn.ghost:hover {
   background: rgba(0, 0, 0, 0.04);
-}
-
-.theme-dark .overlay-btn.ghost {
-  color: var(--ide-foreground, #e6edf3);
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-.theme-dark .overlay-btn.ghost:hover {
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .overlay-body {
@@ -283,15 +308,15 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.5));
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
 }
 
 .state-block .spinner {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 2px solid var(--ide-border, rgba(0, 0, 0, 0.15));
-  border-top-color: var(--ide-accent, #0366d6);
+  border: 2px solid var(--theme-border, rgba(0, 0, 0, 0.15));
+  border-top-color: var(--theme-accent, #0366d6);
   animation: spin 0.8s linear infinite;
 }
 
@@ -302,14 +327,38 @@ onBeforeUnmount(() => {
 .session-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 16px;
   padding-right: 12px;
   max-height: calc(100% - 12px);
   overflow-y: auto;
 }
 
+.session-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.session-group-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
+  padding: 0 8px 4px;
+  border-bottom: 1px solid var(--theme-border, rgba(0, 0, 0, 0.08));
+  margin-bottom: 4px;
+}
+
+.session-group-empty {
+  font-size: 12px;
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.4));
+  padding: 8px;
+  text-align: center;
+}
+
 .session-item {
   display: flex;
+  align-items: flex-start;
+  gap: 8px;
   width: 100%;
   border: 1px solid transparent;
   border-radius: 12px;
@@ -326,17 +375,14 @@ onBeforeUnmount(() => {
 }
 
 .session-item.active {
-  border-color: var(--ide-accent, #0366d6);
+  border-color: var(--theme-accent, #0366d6);
   background: rgba(3, 102, 214, 0.08);
 }
 
-.theme-dark .session-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.theme-dark .session-item.active {
-  background: rgba(65, 132, 228, 0.18);
-  border-color: var(--ide-accent, #58a6ff);
+.session-status-icon {
+  font-size: 14px;
+  line-height: 1.5;
+  flex-shrink: 0;
 }
 
 .session-item-main {
@@ -344,6 +390,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 4px;
   flex: 1;
+  min-width: 0;
 }
 
 .session-name {
@@ -352,30 +399,27 @@ onBeforeUnmount(() => {
   gap: 6px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--ide-foreground, #111);
+  color: var(--theme-foreground, #111);
 }
 
-.theme-dark .session-name {
-  color: var(--ide-foreground, #e6edf3);
+.session-name span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.session-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ide-success, #1a7f37);
+.session-current-mark {
+  color: var(--theme-accent, #0366d6);
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .session-meta {
   font-size: 12px;
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.6));
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.6));
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.theme-dark .session-meta {
-  color: rgba(255, 255, 255, 0.6);
 }
 
 .session-overlay-enter-active,

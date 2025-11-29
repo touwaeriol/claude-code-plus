@@ -1,12 +1,12 @@
 package com.asakii.server
 
 import com.asakii.bridge.IdeEvent
-import com.asakii.bridge.IdeTheme
 import com.asakii.bridge.FrontendRequest
 import com.asakii.bridge.FrontendResponse
-import com.asakii.server.tools.IdeTools
-import com.asakii.server.tools.DiffRequest
-import com.asakii.server.tools.EditOperation
+import com.asakii.rpc.api.IdeTools
+import com.asakii.rpc.api.IdeTheme
+import com.asakii.rpc.api.DiffRequest
+import com.asakii.rpc.api.EditOperation
 
 import io.ktor.http.*
 import io.ktor.http.content.*
@@ -305,11 +305,28 @@ class HttpApiServer(
                             try {
                                 val query = call.request.queryParameters["query"] ?: ""
                                 val maxResults = call.request.queryParameters["maxResults"]?.toIntOrNull() ?: 10
+                                val projectPath = ideTools.getProjectPath()
 
                                 val result = ideTools.searchFiles(query, maxResults)
                                 val files = result.getOrElse { emptyList() }
-                                val filePaths = files.map { it.path }
-                                call.respond(mapOf("success" to true, "data" to filePaths))
+                                // 转换为前端期望的 IndexedFileInfo 格式
+                                val fileInfos = files.map { fileInfo ->
+                                    val file = java.io.File(fileInfo.path)
+                                    val relativePath = if (fileInfo.path.startsWith(projectPath)) {
+                                        fileInfo.path.removePrefix(projectPath).removePrefix("/").removePrefix("\\")
+                                    } else {
+                                        fileInfo.path
+                                    }
+                                    mapOf(
+                                        "name" to file.name,
+                                        "relativePath" to relativePath,
+                                        "absolutePath" to fileInfo.path,
+                                        "fileType" to (file.extension.ifEmpty { "unknown" }),
+                                        "size" to (if (file.exists()) file.length() else 0L),
+                                        "lastModified" to (if (file.exists()) file.lastModified() else 0L)
+                                    )
+                                }
+                                call.respond(mapOf("success" to true, "data" to fileInfos))
                             } catch (e: Exception) {
                                 logger.severe("❌ Failed to search files: ${e.message}")
                                 call.respond(
@@ -323,11 +340,28 @@ class HttpApiServer(
                         get("/recent") {
                             try {
                                 val maxResults = call.request.queryParameters["maxResults"]?.toIntOrNull() ?: 10
+                                val projectPath = ideTools.getProjectPath()
 
                                 val result = ideTools.getRecentFiles(maxResults)
                                 val files = result.getOrElse { emptyList() }
-                                val filePaths = files.map { it.path }
-                                call.respond(mapOf("success" to true, "data" to filePaths))
+                                // 转换为前端期望的 IndexedFileInfo 格式
+                                val fileInfos = files.map { fileInfo ->
+                                    val file = java.io.File(fileInfo.path)
+                                    val relativePath = if (fileInfo.path.startsWith(projectPath)) {
+                                        fileInfo.path.removePrefix(projectPath).removePrefix("/").removePrefix("\\")
+                                    } else {
+                                        fileInfo.path
+                                    }
+                                    mapOf(
+                                        "name" to file.name,
+                                        "relativePath" to relativePath,
+                                        "absolutePath" to fileInfo.path,
+                                        "fileType" to (file.extension.ifEmpty { "unknown" }),
+                                        "size" to (if (file.exists()) file.length() else 0L),
+                                        "lastModified" to (if (file.exists()) file.lastModified() else 0L)
+                                    )
+                                }
+                                call.respond(mapOf("success" to true, "data" to fileInfos))
                             } catch (e: Exception) {
                                 logger.severe("❌ Failed to get recent files: ${e.message}")
                                 call.respond(
@@ -510,12 +544,13 @@ class HttpApiServer(
                             val isIdeMode = call.request.queryParameters["ide"] == "true"
 
                             if (isIdeMode) {
-                                // IDEA 插件模式：注入 window.__serverUrl
+                                // IDEA 插件模式：仅标记环境，__serverUrl 由 JCEF 注入
+                                // （routing 块内无法获取实际端口，JCEF 注入更可靠）
                                 val injection = """
                                     <script>
-                                        window.__serverUrl = 'http://localhost:$serverPort';
+                                        window.__IDEA_MODE__ = true;
                                         console.log('✅ Environment: IDEA Plugin Mode');
-                                        console.log('🔗 Server URL:', window.__serverUrl);
+                                        console.log('💡 Server URL will be injected by JCEF');
                                     </script>
                                 """.trimIndent()
                                 html = html.replace("</head>", "$injection\n</head>")

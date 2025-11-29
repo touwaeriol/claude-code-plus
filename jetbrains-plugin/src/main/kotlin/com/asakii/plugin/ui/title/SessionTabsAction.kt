@@ -1,6 +1,7 @@
 package com.asakii.plugin.ui.title
 
 import com.asakii.plugin.bridge.IdeSessionBridge
+import com.asakii.plugin.messages.ClaudeCodePlusBundle
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -41,20 +42,26 @@ class SessionTabsAction(
         cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
     }
 
-    // 当前会话标签
-    private val currentSessionLabel = JBLabel("暂无会话").apply {
+    // 当前会话标签（鼠标事件穿透到父组件）
+    private val currentSessionLabel = object : JBLabel(ClaudeCodePlusBundle.message("session.noSession")) {
+        override fun contains(x: Int, y: Int) = false
+    }.apply {
         foreground = JBColor(Color(0x24292e), Color(0xe6edf3))
     }
 
-    // 生成中指示器
-    private val generatingIndicator = JBLabel("●").apply {
+    // 生成中指示器（鼠标事件穿透到父组件）
+    private val generatingIndicator = object : JBLabel("●") {
+        override fun contains(x: Int, y: Int) = false
+    }.apply {
         foreground = JBColor(Color(0x28a745), Color(0x3fb950))
         isVisible = false
         border = JBUI.Borders.emptyLeft(4)
     }
 
-    // 下拉箭头
-    private val dropdownArrow = JBLabel("▼").apply {
+    // 下拉箭头（鼠标事件穿透到父组件）
+    private val dropdownArrow = object : JBLabel("▼") {
+        override fun contains(x: Int, y: Int) = false
+    }.apply {
         foreground = JBColor(Color(0x6a737d), Color(0x8b949e))
         font = font.deriveFont(8f)
         border = JBUI.Borders.emptyLeft(4)
@@ -70,10 +77,10 @@ class SessionTabsAction(
         selectorPanel.add(generatingIndicator)
         selectorPanel.add(dropdownArrow)
 
-        // 添加点击事件
+        // 添加点击事件（子组件已通过 contains()=false 让事件穿透到父组件）
         selectorPanel.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
-                showSessionPopup(e.component as JComponent)
+                showSessionPopup(selectorPanel)
             }
 
             override fun mouseEntered(e: MouseEvent) {
@@ -109,15 +116,15 @@ class SessionTabsAction(
 
         if (activeSession != null) {
             currentSessionLabel.text = activeSession.title
-            currentSessionLabel.toolTipText = "点击切换会话"
+            currentSessionLabel.toolTipText = ClaudeCodePlusBundle.message("session.switchTo")
             generatingIndicator.isVisible = activeSession.isGenerating
-            generatingIndicator.toolTipText = if (activeSession.isGenerating) "正在生成中..." else null
+            generatingIndicator.toolTipText = if (activeSession.isGenerating) ClaudeCodePlusBundle.message("session.generating") else null
         } else if (sessions.isNotEmpty()) {
             currentSessionLabel.text = sessions.first().title
-            currentSessionLabel.toolTipText = "点击切换会话"
+            currentSessionLabel.toolTipText = ClaudeCodePlusBundle.message("session.switchTo")
             generatingIndicator.isVisible = sessions.first().isGenerating
         } else {
-            currentSessionLabel.text = "暂无会话"
+            currentSessionLabel.text = ClaudeCodePlusBundle.message("session.noSession")
             currentSessionLabel.toolTipText = null
             generatingIndicator.isVisible = false
         }
@@ -127,66 +134,35 @@ class SessionTabsAction(
     }
 
     /**
-     * 会话列表项（包含分隔符）
-     */
-    private sealed class SessionListItem {
-        data class Header(val title: String) : SessionListItem()
-        data class Session(val summary: IdeSessionBridge.SessionSummary) : SessionListItem()
-    }
-
-    /**
-     * 显示会话选择弹出菜单（分组：进行中 / 历史）
+     * 显示会话选择弹出菜单（只显示激活的会话）
      */
     private fun showSessionPopup(component: JComponent) {
         val sessions = currentState?.sessions.orEmpty()
-        if (sessions.isEmpty()) {
+
+        // 只显示激活（已连接）的会话
+        val activeSessions = sessions.filter { it.isConnected }
+
+        if (activeSessions.isEmpty()) {
+            // 没有激活会话时不显示弹窗
             return
         }
 
-        // 分组：进行中（已连接）和历史（未连接）
-        val ingressSessions = sessions.filter { it.isConnected }
-        val historySessions = sessions.filter { !it.isConnected }
-
-        // 构建带分组标题的列表
-        val items = mutableListOf<SessionListItem>()
-
-        if (ingressSessions.isNotEmpty()) {
-            items.add(SessionListItem.Header("进行中"))
-            ingressSessions.forEach { items.add(SessionListItem.Session(it)) }
-        }
-
-        if (historySessions.isNotEmpty()) {
-            items.add(SessionListItem.Header("历史会话"))
-            historySessions.forEach { items.add(SessionListItem.Session(it)) }
-        }
-
-        val popupStep = object : BaseListPopupStep<SessionListItem>("选择会话", items) {
-            override fun getTextFor(value: SessionListItem): String {
-                return when (value) {
-                    is SessionListItem.Header -> "── ${value.title} ──"
-                    is SessionListItem.Session -> {
-                        val summary = value.summary
-                        val prefix = when {
-                            summary.isGenerating -> "🟢 "
-                            summary.isConnected -> "🔵 "
-                            else -> "📝 "
-                        }
-                        val activeMarker = if (summary.id == currentState?.activeSessionId) " ✓" else ""
-                        "$prefix${summary.title}$activeMarker"
-                    }
-                }
+        val popupStep = object : BaseListPopupStep<IdeSessionBridge.SessionSummary>(
+            ClaudeCodePlusBundle.message("session.select"),
+            activeSessions
+        ) {
+            override fun getTextFor(value: IdeSessionBridge.SessionSummary): String {
+                // 当前选中的加 ✓
+                val activeMarker = if (value.id == currentState?.activeSessionId) " ✓" else ""
+                return "${value.title}$activeMarker"
             }
 
-            override fun isSelectable(value: SessionListItem): Boolean {
-                return value is SessionListItem.Session
-            }
-
-            override fun onChosen(selectedValue: SessionListItem, finalChoice: Boolean): PopupStep<*>? {
-                if (finalChoice && selectedValue is SessionListItem.Session) {
-                    val summary = selectedValue.summary
-                    if (summary.id != currentState?.activeSessionId) {
-                        logger.debug("Switching session to ${summary.id}")
-                        sessionBridge.switchSession(summary.id)
+            override fun onChosen(selectedValue: IdeSessionBridge.SessionSummary, finalChoice: Boolean): PopupStep<*>? {
+                if (finalChoice) {
+                    // 切换会话（点击当前激活的会话不做任何操作，和 tab 行为一致）
+                    if (selectedValue.id != currentState?.activeSessionId) {
+                        logger.debug("Switching session to ${selectedValue.id}")
+                        sessionBridge.switchSession(selectedValue.id)
                     }
                 }
                 return FINAL_CHOICE

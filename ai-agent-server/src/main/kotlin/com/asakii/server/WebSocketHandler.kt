@@ -2,7 +2,6 @@ package com.asakii.server
 
 import com.asakii.rpc.api.*
 import com.asakii.server.rpc.AiAgentRpcServiceImpl
-import com.asakii.server.tools.IdeTools
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*

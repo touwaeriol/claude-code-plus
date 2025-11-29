@@ -3,7 +3,8 @@
     :display-info="displayInfo"
     :is-expanded="expanded"
     :has-details="edits.length > 0"
-    @click="handleCardClick"
+    :tool-call="toolCallData"
+    @toggle="expanded = !expanded"
   >
     <template #details>
       <div class="multi-edit-details">
@@ -103,10 +104,12 @@ const edits = computed(() => props.toolCall.input.edits || [])
 // 提取工具显示信息
 const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
 
-// 处理卡片点击：切换展开状态
-function handleCardClick() {
-  expanded.value = !expanded.value
-}
+// 构造拦截器所需的工具调用数据
+const toolCallData = computed(() => ({
+  toolType: 'MultiEdit',
+  input: props.toolCall.input as Record<string, unknown>,
+  result: props.toolCall.result
+}))
 
 function toggleEdit(index: number) {
   const set = new Set(expandedEdits.value)
@@ -135,7 +138,7 @@ async function copyText(text: string) {
 }
 
 .edit-item {
-  border: 1px solid var(--ide-border, #e1e4e8);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   background: #fff;
 }
@@ -145,13 +148,13 @@ async function copyText(text: string) {
   align-items: center;
   justify-content: space-between;
   padding: 6px 10px;
-  background: var(--ide-panel-background, #f6f8fa);
+  background: var(--theme-panel-background, #f6f8fa);
   cursor: pointer;
 }
 
 .edit-number {
   font-weight: 600;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .badge.replace-all {
@@ -164,7 +167,7 @@ async function copyText(text: string) {
 
 .expand-icon {
   font-size: 12px;
-  color: var(--ide-secondary-foreground, #666);
+  color: var(--theme-secondary-foreground, #666);
 }
 
 .edit-content {
@@ -178,7 +181,7 @@ async function copyText(text: string) {
 }
 
 .diff-section {
-  border: 1px solid var(--ide-border, #e1e4e8);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   background: #fdfdfd;
 }
@@ -215,7 +218,7 @@ async function copyText(text: string) {
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  color: var(--ide-secondary-foreground, #666);
+  color: var(--theme-secondary-foreground, #666);
 }
 
 .copy-btn {

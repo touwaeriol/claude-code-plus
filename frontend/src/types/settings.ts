@@ -13,14 +13,14 @@ export enum PermissionMode {
   DONT_ASK = 'dontAsk'           // 不询问模式
 }
 
-import { UiModelOption } from '@/constants/models'
+import { BaseModel, UiModelOption, MODEL_CAPABILITIES } from '@/constants/models'
 
 /**
  * 设置配置
  */
 export interface Settings {
-  // 模型配置
-  model: UiModelOption
+  // 模型配置（新架构：使用 BaseModel）
+  model: BaseModel
 
   // 权限模式
   permissionMode: PermissionMode
@@ -54,23 +54,27 @@ export interface Settings {
 
   // API 配置
   apiKey: string | null
+
+  // 跳过权限确认（dangerouslySkipPermissions）
+  skipPermissions: boolean
 }
 
 /**
  * 默认设置
  */
 export const DEFAULT_SETTINGS: Settings = {
-  model: UiModelOption.OPUS_45_THINKING,
+  model: BaseModel.OPUS_45,
   permissionMode: PermissionMode.DEFAULT,
   systemPrompt: null,  // 默认使用 claude_code 提示词
   maxTurns: 10,
   continueConversation: false,
   maxTokens: null,
-  thinkingEnabled: true,
+  thinkingEnabled: MODEL_CAPABILITIES[BaseModel.OPUS_45].defaultThinkingEnabled,  // 根据模型默认值
   maxThinkingTokens: 8000,
   temperature: null,
   verbose: false,
-  apiKey: null
+  apiKey: null,
+  skipPermissions: true  // 默认跳过权限确认
 }
 
 /**
@@ -85,9 +89,18 @@ export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
 }
 
 /**
- * 模型显示名称
+ * 模型显示名称（新架构：使用 BaseModel）
  */
-export const MODEL_LABELS: Record<UiModelOption, string> = {
+export const MODEL_LABELS: Record<BaseModel, string> = {
+  [BaseModel.OPUS_45]: MODEL_CAPABILITIES[BaseModel.OPUS_45].displayName,
+  [BaseModel.SONNET_45]: MODEL_CAPABILITIES[BaseModel.SONNET_45].displayName,
+  [BaseModel.HAIKU_45]: MODEL_CAPABILITIES[BaseModel.HAIKU_45].displayName,
+}
+
+/**
+ * @deprecated 旧模型显示名称，使用 MODEL_LABELS 代替
+ */
+export const LEGACY_MODEL_LABELS: Record<UiModelOption, string> = {
   [UiModelOption.SONNET_45]: 'Sonnet 4.5',
   [UiModelOption.SONNET_45_THINKING]: 'Sonnet 4.5 (Thinking)',
   [UiModelOption.OPUS_45]: 'Opus 4.5',

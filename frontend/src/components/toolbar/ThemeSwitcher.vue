@@ -13,17 +13,33 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { themeService, type ThemeMode } from '@/services/themeService'
 
-const isDark = ref(false)
 const themeMode = ref<ThemeMode>('system')
 let unsubscribe: (() => void) | null = null
 
+/**
+ * 通过背景色亮度判断当前是否为暗色主题
+ */
+function isCurrentThemeDark(): boolean {
+  const theme = themeService.getCurrentTheme()
+  if (!theme) return false
+
+  const hex = theme.background.replace('#', '')
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+  return luminance < 128
+}
+
+const isDark = ref(false)
+
 onMounted(() => {
-  isDark.value = themeService.isDarkTheme()
+  isDark.value = isCurrentThemeDark()
   themeMode.value = themeService.getThemeMode()
 
   // 监听主题变化
-  unsubscribe = themeService.onThemeChange((theme) => {
-    isDark.value = theme.isDark
+  unsubscribe = themeService.onThemeChange(() => {
+    isDark.value = isCurrentThemeDark()
     themeMode.value = themeService.getThemeMode()
   })
 })
@@ -62,8 +78,8 @@ function handleClick() {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 1px solid var(--ide-border, #e1e4e8);
-  background: var(--ide-card-background, #ffffff);
+  border: 1px solid var(--theme-border, #e1e4e8);
+  background: var(--theme-card-background, #ffffff);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -73,8 +89,8 @@ function handleClick() {
 }
 
 .theme-switcher:hover {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.04));
-  border-color: var(--ide-accent, #0366d6);
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.04));
+  border-color: var(--theme-accent, #0366d6);
   transform: scale(1.05);
 }
 
@@ -85,15 +101,5 @@ function handleClick() {
 .theme-icon {
   font-size: 14px;
   line-height: 1;
-}
-
-:global(.theme-dark) .theme-switcher {
-  background: var(--ide-card-background, #161b22);
-  border-color: var(--ide-border, #30363d);
-}
-
-:global(.theme-dark) .theme-switcher:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--ide-accent, #58a6ff);
 }
 </style>

@@ -126,9 +126,8 @@ open class IdeToolsDefault(
     }
     
     override open fun getTheme(): IdeTheme {
-        // 返回默认暗色主题
+        // 返回默认主题
         return IdeTheme(
-            isDark = true,
             background = "#2b2b2b",
             foreground = "#a9b7c6",
             borderColor = "#3c3f41",

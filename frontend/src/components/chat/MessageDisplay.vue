@@ -30,7 +30,6 @@
       <MarkdownRenderer
         v-if="textContent"
         :content="textContent"
-        :is-dark="isDark"
       />
     </div>
   </div>
@@ -51,13 +50,10 @@ import { resolveToolStatus, toToolCallStatus } from '@/utils/toolStatusResolver'
 interface Props {
   // VirtualList 会把当前项作为 source 传入
   source: Message
-  isDark?: boolean
   index?: number
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  isDark: false
-})
+const props = defineProps<Props>()
 
 // 为了模板可读性,提供一个 message 计算属性
 const message = computed(() => props.source)
@@ -239,8 +235,8 @@ const textContent = computed(() => {
 
 /* 系统消息 - 保留轻微背景提示 */
 .message-system {
-  background: var(--ide-warning-background, rgba(255, 193, 7, 0.1));
-  border-left: 3px solid var(--ide-warning, #ffc107);
+  background: var(--theme-warning-background, rgba(255, 193, 7, 0.1));
+  border-left: 3px solid var(--theme-warning, #ffc107);
   padding: 12px 16px;
   border-radius: 4px;
 }
@@ -267,17 +263,17 @@ const textContent = computed(() => {
 .role-name {
   font-weight: 500;
   font-size: 13px;
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.6));
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.6));
 }
 
 .timestamp {
   margin-left: auto;
   font-size: 11px;
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.5));
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
 }
 
 .message-content {
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
   line-height: 1.6;
 }
 
@@ -305,7 +301,7 @@ const textContent = computed(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--ide-primary, #0366d6);
+  background: var(--theme-primary, #0366d6);
   animation: bounce 1.4s infinite ease-in-out both;
 }
 
@@ -330,15 +326,15 @@ const textContent = computed(() => {
 
 .loading-text {
   font-size: 14px;
-  color: var(--ide-foreground, #586069);
+  color: var(--theme-foreground, #586069);
   opacity: 0.8;
 }
 
 .tool-result-orphan {
   margin-top: 12px;
   padding: 6px 8px;
-  background: var(--ide-warning-background, #fff8dc);
-  border: 1px solid var(--ide-warning, #ffc107);
+  background: var(--theme-warning-background, #fff8dc);
+  border: 1px solid var(--theme-warning, #ffc107);
   border-radius: 6px;
 }
 
@@ -348,7 +344,7 @@ const textContent = computed(() => {
   gap: 6px;
   margin-bottom: 8px;
   font-weight: 600;
-  color: var(--ide-warning, #856404);
+  color: var(--theme-warning, #856404);
 }
 
 .result-icon {
@@ -363,16 +359,11 @@ const textContent = computed(() => {
 .result-content {
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
   font-size: 12px;
-  background: var(--ide-code-background, #ffffff);
+  background: var(--theme-code-background, #ffffff);
   padding: 8px;
   border-radius: 4px;
   overflow-x: auto;
   margin: 0;
-  color: var(--ide-code-foreground, #24292e);
-}
-
-/* 暗色主题适配 */
-.theme-dark .message:hover {
-  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.08);
+  color: var(--theme-code-foreground, #24292e);
 }
 </style>

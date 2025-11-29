@@ -80,13 +80,13 @@ function getStatusText(status: string): string {
   gap: 8px;
   padding: 8px 10px;
   border-radius: 4px;
-  background: var(--ide-background, #ffffff);
-  border: 1px solid var(--ide-border, rgba(0, 0, 0, 0.08));
+  background: var(--theme-background, #ffffff);
+  border: 1px solid var(--theme-border, rgba(0, 0, 0, 0.08));
   transition: background-color 0.15s ease;
 }
 
 .todo-item:hover {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.02));
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.02));
 }
 
 .todo-item.pending .status-dot {
@@ -113,36 +113,17 @@ function getStatusText(status: string): string {
 
 .todo-text {
   flex: 1;
-  color: var(--ide-foreground, #1a1a1a);
+  color: var(--theme-foreground, #1a1a1a);
   font-size: 13px;
   line-height: 1.4;
 }
 
 .todo-status {
   font-size: 11px;
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.5));
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
   font-weight: 500;
   padding: 2px 6px;
   border-radius: 3px;
-  background: var(--ide-panel-background, rgba(0, 0, 0, 0.02));
-}
-
-/* 暗色主题适配 */
-.theme-dark .todo-item {
-  background: var(--ide-background, #1e1e1e);
-  border-color: var(--ide-border, rgba(255, 255, 255, 0.1));
-}
-
-.theme-dark .todo-item:hover {
-  background: var(--ide-hover-background, rgba(255, 255, 255, 0.05));
-}
-
-.theme-dark .todo-text {
-  color: var(--ide-foreground, #e0e0e0);
-}
-
-.theme-dark .todo-status {
-  color: var(--ide-secondary-foreground, rgba(255, 255, 255, 0.5));
-  background: var(--ide-panel-background, rgba(255, 255, 255, 0.05));
+  background: var(--theme-panel-background, rgba(0, 0, 0, 0.02));
 }
 </style>

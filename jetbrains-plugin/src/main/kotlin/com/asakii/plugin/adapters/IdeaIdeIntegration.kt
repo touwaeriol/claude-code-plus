@@ -55,7 +55,7 @@ class IdeaIdeIntegration(
     override fun showDiff(filePath: String, oldContent: String, newContent: String): Boolean {
         return try {
             val ideTools = IdeToolsImpl(project)
-            val diffRequest = com.asakii.server.tools.DiffRequest(
+            val diffRequest = com.asakii.rpc.api.DiffRequest(
                 filePath = filePath,
                 oldContent = oldContent,
                 newContent = newContent
@@ -82,23 +82,27 @@ class IdeaIdeIntegration(
                 NotificationType.WARNING -> com.intellij.notification.NotificationType.WARNING
                 NotificationType.ERROR -> com.intellij.notification.NotificationType.ERROR
             }
-            
+
             val notificationGroup = com.intellij.notification.NotificationGroupManager.getInstance()
                 .getNotificationGroup("Claude Code Plus")
-                ?: com.intellij.notification.NotificationGroup(
+
+            if (notificationGroup != null) {
+                val notification = notificationGroup.createNotification(
                     "Claude Code Plus",
-                    com.intellij.notification.NotificationDisplayType.BALLOON,
-                    true
+                    message,
+                    intellijType
                 )
-            
-            val notification = notificationGroup.createNotification(
-                "Claude Code Plus",
-                message,
-                intellijType,
-                null
-            )
-            
-            com.intellij.notification.Notifications.Bus.notify(notification, project)
+                com.intellij.notification.Notifications.Bus.notify(notification, project)
+            } else {
+                // Fallback: 直接创建通知（无分组）
+                val notification = com.intellij.notification.Notification(
+                    "Claude Code Plus",
+                    "Claude Code Plus",
+                    message,
+                    intellijType
+                )
+                com.intellij.notification.Notifications.Bus.notify(notification, project)
+            }
         } catch (e: Exception) {
             logger.warn("显示通知失败", e)
         }

@@ -86,8 +86,8 @@ function formatPreview(msg: PendingMessage): string {
 
 <style scoped>
 .pending-queue {
-  background: var(--ide-editorWidget-background, #f3f4f6);
-  border: 1px solid var(--ide-editorWidget-border, #e5e7eb);
+  background: var(--theme-editorWidget-background, #f3f4f6);
+  border: 1px solid var(--theme-editorWidget-border, #e5e7eb);
   border-radius: 6px;
   margin: 4px 0;
   padding: 8px 12px;
@@ -99,7 +99,7 @@ function formatPreview(msg: PendingMessage): string {
   gap: 6px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--ide-descriptionForeground, #6b7280);
+  color: var(--theme-descriptionForeground, #6b7280);
   margin-bottom: 6px;
 }
 
@@ -124,16 +124,16 @@ function formatPreview(msg: PendingMessage): string {
   padding: 6px 8px;
   border-radius: 4px;
   font-size: 13px;
-  background: var(--ide-background, #ffffff);
+  background: var(--theme-background, #ffffff);
   transition: background 0.15s;
 }
 
 .queue-item:hover {
-  background: var(--ide-list-hoverBackground, #f9fafb);
+  background: var(--theme-list-hoverBackground, #f9fafb);
 }
 
 .item-index {
-  color: var(--ide-descriptionForeground, #9ca3af);
+  color: var(--theme-descriptionForeground, #9ca3af);
   min-width: 20px;
   font-weight: 500;
 }
@@ -143,7 +143,7 @@ function formatPreview(msg: PendingMessage): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ide-foreground, #374151);
+  color: var(--theme-foreground, #374151);
 }
 
 .item-actions {
@@ -169,24 +169,7 @@ function formatPreview(msg: PendingMessage): string {
 }
 
 .action-btn:hover {
-  background: var(--ide-toolbar-hoverBackground, #e5e7eb);
+  background: var(--theme-toolbar-hoverBackground, #e5e7eb);
 }
 
-/* 暗色主题适配 */
-:global(.theme-dark) .pending-queue {
-  background: var(--ide-editorWidget-background, #1f2937);
-  border-color: var(--ide-editorWidget-border, #374151);
-}
-
-:global(.theme-dark) .queue-item {
-  background: var(--ide-background, #111827);
-}
-
-:global(.theme-dark) .queue-item:hover {
-  background: var(--ide-list-hoverBackground, #1f2937);
-}
-
-:global(.theme-dark) .action-btn:hover {
-  background: var(--ide-toolbar-hoverBackground, #374151);
-}
 </style>

@@ -403,12 +403,12 @@ function closeImagePreview() {
   border-radius: 4px;
 }
 
-.message-wrapper:hover .edit-button {
+.user-message-row:hover .edit-button {
   opacity: 1;
 }
 
 .edit-button:hover {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.06));
+  background: var(--theme-hover-background);
 }
 
 .edit-icon {
@@ -437,12 +437,12 @@ function closeImagePreview() {
 
 .timestamp {
   font-size: 11px;
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.5));
+  color: var(--theme-secondary-foreground);
   padding: 0 8px;
 }
 
 .bubble-content {
-  background: #E3F2FD;
+  background: var(--theme-selection-background);
   border-radius: 12px;
   padding: 10px 14px;
   max-width: 100%;
@@ -463,13 +463,13 @@ function closeImagePreview() {
   left: 0;
   right: 0;
   height: 40px;
-  background: linear-gradient(to bottom, transparent, #E3F2FD);
+  background: linear-gradient(to bottom, transparent, var(--theme-selection-background));
 }
 
 .message-text {
   font-size: 13px;
   line-height: 1.4;
-  color: var(--ide-foreground, #1a1a1a);
+  color: var(--theme-selection-foreground);
   white-space: pre-wrap;
   word-break: break-word;
   margin-bottom: 6px;
@@ -481,7 +481,7 @@ function closeImagePreview() {
 
 /* 链接样式 */
 .message-text :deep(.linkified-link) {
-  color: var(--el-color-primary, var(--ide-link, #409eff));
+  color: var(--theme-link);
   text-decoration: none;
   cursor: pointer;
 }
@@ -492,7 +492,7 @@ function closeImagePreview() {
 
 /* 文件路径链接 */
 .message-text :deep(.file-link) {
-  background: var(--el-fill-color-light, var(--ide-badge-bg, #f5f7fa));
+  background: var(--theme-hover-background);
   padding: 1px 6px;
   border-radius: 3px;
 }
@@ -512,7 +512,7 @@ function closeImagePreview() {
   object-fit: cover;
   border-radius: 6px;
   cursor: pointer;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--theme-border);
   transition: transform 0.2s;
 }
 
@@ -541,69 +541,23 @@ function closeImagePreview() {
   transform: scale(1.02);
 }
 
-/* 暗色主题 - 图片边框 */
-.theme-dark .context-thumb,
-.theme-dark .inline-thumb {
-  border-color: rgba(255, 255, 255, 0.15);
-}
 
 .toggle-button {
   padding: 4px 10px;
   margin-top: 6px;
   background: transparent;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
   font-size: 11px;
-  color: var(--ide-secondary-foreground, rgba(0, 0, 0, 0.6));
+  color: var(--theme-secondary-foreground);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .toggle-button:hover {
-  background: rgba(0, 0, 0, 0.05);
-  border-color: rgba(0, 0, 0, 0.25);
+  background: var(--theme-hover-background);
+  border-color: var(--theme-border);
 }
 
-/* 暗色主题适配 */
-.theme-dark .bubble-content {
-  background: #1E3A5F;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-.theme-dark .bubble-content.collapsed::after {
-  background: linear-gradient(to bottom, transparent, #1E3A5F);
-}
-
-.theme-dark .message-text {
-  color: var(--ide-foreground, #e0e0e0);
-}
-
-.theme-dark .message-text :deep(.linkified-link) {
-  color: var(--el-color-primary, var(--ide-link, #58a6ff));
-}
-
-.theme-dark .message-text :deep(.file-link) {
-  background: var(--el-fill-color-light, var(--ide-badge-bg, #30363d));
-}
-
-.theme-dark .timestamp {
-  color: var(--ide-secondary-foreground, rgba(255, 255, 255, 0.5));
-}
-
-.theme-dark .context-item {
-  color: var(--ide-secondary-foreground, rgba(255, 255, 255, 0.7));
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.theme-dark .toggle-button {
-  border-color: rgba(255, 255, 255, 0.2);
-  color: var(--ide-secondary-foreground, rgba(255, 255, 255, 0.6));
-}
-
-.theme-dark .toggle-button:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.3);
-}
 </style>
 

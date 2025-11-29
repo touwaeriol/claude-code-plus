@@ -19,7 +19,6 @@ import com.asakii.codex.agent.sdk.ThreadOptions
 import com.asakii.rpc.api.*
 import com.asakii.server.config.AiAgentServiceConfig
 import com.asakii.server.settings.ClaudeSettingsLoader
-import com.asakii.server.tools.IdeTools
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

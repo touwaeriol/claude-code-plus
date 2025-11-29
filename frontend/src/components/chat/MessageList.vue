@@ -84,7 +84,6 @@
           <component
             :is="messageComponent"
             :source="item"
-            :is-dark="isDark"
           />
         </DynamicScrollerItem>
       </template>
@@ -141,7 +140,6 @@ interface Props {
   messages?: Message[]  // 保留向后兼容
   displayItems?: DisplayItem[]  // 新的 prop
   isLoading?: boolean
-  isDark?: boolean
   isStreaming?: boolean  // 是否正在流式响应
   streamingStartTime?: number  // 流式响应开始时间
   inputTokens?: number  // 上行 token
@@ -150,7 +148,6 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   isLoading: false,
-  isDark: false,
   isStreaming: false,
   streamingStartTime: 0,
   inputTokens: 0,
@@ -326,7 +323,7 @@ function scrollToBottom() {
   flex-direction: column;
   overflow: hidden;
   min-height: 0; /* 关键：防止 flex 子元素溢出 */
-  background: var(--ide-background, #fafbfc);
+  background: var(--theme-background, #fafbfc);
 }
 
 .message-list {
@@ -353,7 +350,7 @@ function scrollToBottom() {
   align-items: center;
   justify-content: center;
   padding: 12px;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .empty-content {
@@ -390,7 +387,7 @@ function scrollToBottom() {
 .empty-icon {
   width: 80px;
   height: 80px;
-  color: var(--ide-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
   opacity: 0.8;
 }
 
@@ -398,14 +395,14 @@ function scrollToBottom() {
   font-size: 24px;
   font-weight: 600;
   margin: 0 0 6px 0;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .empty-description {
   font-size: 14px;
   line-height: 1.6;
   margin: 0 0 12px 0;
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
 }
 
 .empty-tips {
@@ -422,16 +419,16 @@ function scrollToBottom() {
   align-items: center;
   gap: 4px;
   padding: 8px 12px;
-  background: var(--ide-panel-background, #f6f8fa);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-panel-background, #f6f8fa);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 8px;
   min-width: 120px;
   transition: all 0.2s ease;
 }
 
 .tip-item:hover {
-  background: var(--ide-hover-background, #f6f8fa);
-  border-color: var(--ide-accent, #0366d6);
+  background: var(--theme-hover-background, #f6f8fa);
+  border-color: var(--theme-accent, #0366d6);
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
@@ -442,13 +439,13 @@ function scrollToBottom() {
 
 .tip-text {
   font-size: 13px;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
   font-weight: 500;
 }
 
 .empty-hint {
   font-size: 12px;
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -461,11 +458,11 @@ function scrollToBottom() {
   padding: 3px 6px;
   font-size: 11px;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  background: var(--ide-panel-background, #f6f8fa);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-panel-background, #f6f8fa);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
   font-weight: 600;
 }
 
@@ -479,18 +476,18 @@ function scrollToBottom() {
   gap: 6px;
   padding: 4px 12px;
   margin: 0 8px;
-  background: var(--ide-card-background, #ffffff);
-  border: 1px solid var(--ide-accent, #0366d6);
+  background: var(--theme-card-background, #ffffff);
+  border: 1px solid var(--theme-accent, #0366d6);
   border-radius: 6px 6px 0 0;
   font-size: 12px;
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  color: var(--ide-text-secondary, #586069);
+  color: var(--theme-text-secondary, #586069);
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
   z-index: 10;
 }
 
 .streaming-dot {
-  color: var(--ide-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
   animation: pulse 1s ease-in-out infinite;
 }
 
@@ -500,7 +497,7 @@ function scrollToBottom() {
 }
 
 .streaming-stats {
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .loading-indicator {
@@ -509,17 +506,17 @@ function scrollToBottom() {
   gap: 8px;
   padding: 4px 8px;
   margin: 0 8px 8px 8px;
-  background: var(--ide-card-background, #ffffff);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-card-background, #ffffff);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 6px;
-  color: var(--ide-text-secondary, #586069);
+  color: var(--theme-text-secondary, #586069);
 }
 
 .loading-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid var(--ide-border, #e1e4e8);
-  border-top-color: var(--ide-primary, #0366d6);
+  border: 2px solid var(--theme-border, #e1e4e8);
+  border-top-color: var(--theme-primary, #0366d6);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -540,12 +537,12 @@ function scrollToBottom() {
 }
 
 .message-list::-webkit-scrollbar-thumb {
-  background: var(--ide-scrollbar-thumb, #d1d5da);
+  background: var(--theme-scrollbar-thumb, #d1d5da);
   border-radius: 4px;
 }
 
 .message-list::-webkit-scrollbar-thumb:hover {
-  background: var(--ide-scrollbar-thumb-hover, #959da5);
+  background: var(--theme-scrollbar-thumb-hover, #959da5);
 }
 
 /* 回到底部按钮 */
@@ -555,7 +552,7 @@ function scrollToBottom() {
   right: 24px;
   width: 48px;
   height: 48px;
-  background: var(--ide-accent, #0366d6);
+  background: var(--theme-accent, #0366d6);
   color: white;
   border: none;
   border-radius: 24px;
@@ -571,7 +568,7 @@ function scrollToBottom() {
 .scroll-to-bottom-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
-  background: var(--ide-accent-hover, #0256c2);
+  background: var(--theme-accent-hover, #0256c2);
 }
 
 .scroll-to-bottom-btn:active {
@@ -590,7 +587,7 @@ function scrollToBottom() {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  background: var(--ide-error, #d73a49);
+  background: var(--theme-error, #d73a49);
   color: white;
   border-radius: 10px;
   font-size: 11px;

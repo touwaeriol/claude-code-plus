@@ -1,7 +1,6 @@
 <template>
   <div
     class="chat-header"
-    :class="{ 'theme-dark': isDark }"
   >
     <!-- 左侧：会话 Tab 列表 -->
     <SessionTabs
@@ -11,6 +10,7 @@
       @switch="handleSwitchSession"
       @close="handleCloseSession"
       @reorder="handleReorder"
+      @toggle-list="emit('toggle-history')"
     />
 
     <!-- 右侧：功能按钮 -->
@@ -44,11 +44,7 @@ import SessionTabs, { type SessionTabInfo } from './SessionTabs.vue'
 import ThemeSwitcher from '@/components/toolbar/ThemeSwitcher.vue'
 import LanguageSwitcher from '@/components/toolbar/LanguageSwitcher.vue'
 
-withDefaults(defineProps<{
-  isDark?: boolean
-}>(), {
-  isDark: false
-})
+// No props needed
 
 const emit = defineEmits<{
   (e: 'toggle-history'): void
@@ -110,14 +106,9 @@ function handleReorder(newOrder: string[]) {
   justify-content: space-between;
   padding: 3px 6px;
   height: 32px;
-  border-bottom: 1px solid var(--ide-border, #e1e4e8);
-  background: var(--ide-panel-background, #f6f8fa);
+  border-bottom: 1px solid var(--theme-border, #e1e4e8);
+  background: var(--theme-panel-background, #f6f8fa);
   box-sizing: border-box;
-}
-
-.theme-dark.chat-header {
-  background: var(--ide-panel-background, #1f2428);
-  border-color: var(--ide-border, #30363d);
 }
 
 .header-actions {
@@ -138,13 +129,13 @@ function handleReorder(newOrder: string[]) {
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
 .icon-btn:hover {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.04));
-  border-color: var(--ide-border, #e1e4e8);
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.04));
+  border-color: var(--theme-border, #e1e4e8);
 }
 
 .icon-btn:active {
@@ -152,29 +143,12 @@ function handleReorder(newOrder: string[]) {
 }
 
 .icon-btn.primary {
-  background: var(--ide-accent, #0366d6);
+  background: var(--theme-accent, #0366d6);
   color: #ffffff;
 }
 
 .icon-btn.primary:hover {
-  background: var(--ide-accent-hover, #0256c2);
+  background: var(--theme-accent-hover, #0256c2);
   border-color: transparent;
-}
-
-.theme-dark .icon-btn {
-  color: var(--ide-foreground, #e6edf3);
-}
-
-.theme-dark .icon-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--ide-border, #30363d);
-}
-
-.theme-dark .icon-btn.primary {
-  background: var(--ide-accent, #1f6feb);
-}
-
-.theme-dark .icon-btn.primary:hover {
-  background: var(--ide-accent-hover, #388bfd);
 }
 </style>

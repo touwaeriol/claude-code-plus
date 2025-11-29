@@ -1,12 +1,7 @@
 package standalone
 
-import com.asakii.bridge.IdeTheme
-import com.asakii.rpc.api.RpcConnectOptions
-import com.asakii.rpc.api.RpcTextBlock
+import com.asakii.rpc.api.*
 import com.asakii.server.rpc.AiAgentRpcServiceImpl
-import com.asakii.server.tools.DiffRequest
-import com.asakii.server.tools.FileInfo
-import com.asakii.server.tools.IdeTools
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.runBlocking
 
@@ -62,7 +57,7 @@ private object ConsoleIdeTools : IdeTools {
     override fun getRecentFiles(maxResults: Int): Result<List<FileInfo>> =
         Result.success(emptyList())
 
-    override fun getTheme(): IdeTheme = IdeTheme(isDark = true)
+    override fun getTheme(): IdeTheme = IdeTheme()
 
     override fun getProjectPath(): String = System.getProperty("user.dir")
 
