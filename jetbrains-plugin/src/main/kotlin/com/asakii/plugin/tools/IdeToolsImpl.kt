@@ -1,7 +1,7 @@
 package com.asakii.plugin.tools
 
-import com.asakii.bridge.IdeTheme
-import com.asakii.server.tools.*
+import com.asakii.rpc.api.*
+import com.asakii.server.tools.IdeToolsDefault
 import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffManager
 import com.intellij.diff.requests.SimpleDiffRequest
@@ -24,13 +24,14 @@ import java.util.Locale
 import java.util.logging.Logger
 
 /**
- * IDE工具实现（IDEA插件模式）
- * 
- * 使用IDEA Platform API实现所有IDE操作
+ * IDE 工具 IDEA 实现（继承默认实现，覆盖 IDEA 特有方法）
+ *
+ * - 继承 IdeToolsDefault 的通用实现（文件搜索、内容读取等）
+ * - 覆盖需要 IDEA Platform API 的方法（openFile、showDiff、getTheme 等）
  */
 class IdeToolsImpl(
     private val project: Project
-) : IdeTools {
+) : IdeToolsDefault(project.basePath) {
     
     private val logger = Logger.getLogger(IdeToolsImpl::class.java.name)
     private val PREFERRED_LOCALE_KEY = "com.asakii.locale"
