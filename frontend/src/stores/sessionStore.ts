@@ -1,5 +1,6 @@
 import { ref, computed, reactive } from 'vue'
 import { defineStore } from 'pinia'
+import { i18n } from '@/i18n'
 import { aiAgentService } from '@/services/aiAgentService'
 import type { ConnectOptions } from '@/services/aiAgentService'
 import type { AgentStreamEvent } from '@/services/AiAgentSession'
@@ -17,6 +18,8 @@ import { ideaBridge } from '@/services/ideaBridge'
 import { CLAUDE_TOOL_TYPE } from '@/constants/toolTypes'
 import type { ReadToolCall, WriteToolCall, EditToolCall, MultiEditToolCall } from '@/types/display'
 import { buildUserMessageContent } from '@/utils/userMessageBuilder'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { MODEL_CAPABILITIES, BaseModel } from '@/constants/models'
 
 const log = loggers.session
 
@@ -75,6 +78,14 @@ export const useSessionStore = defineStore('session', () => {
   // 存储每个工具调用块的累积 JSON 字符串（用于 input_json_delta 增量更新）
   const toolInputJsonAccumulator = reactive(new Map<string, string>())
 
+  // 记录上次实际应用到后端的设置（用于延迟同步）
+  const lastAppliedSettings = ref<{
+    modelId: string
+    thinkingEnabled: boolean
+    permissionMode: string
+    skipPermissions: boolean
+  } | null>(null)
+
   // 存储请求统计追踪信息：sessionId -> { lastUserMessageId, requestStartTime, inputTokens, outputTokens, currentStreamingMessageId }
   const requestTracker = reactive(new Map<string, {
     lastUserMessageId: string
@@ -100,7 +111,12 @@ export const useSessionStore = defineStore('session', () => {
   function createSessionState(
     sessionId: string,
     sessionName: string,
-    modelId: string | null
+    settings: {
+      modelId: string | null
+      thinkingEnabled: boolean
+      permissionMode: string
+      skipPermissions: boolean
+    }
   ): SessionState {
     const now = Date.now()
     // 计算新的order：当前最大order + 1，如果没有session则从0开始
@@ -118,14 +134,19 @@ export const useSessionStore = defineStore('session', () => {
       displayItems: [],
       pendingToolCalls: new Map(),
       connectionStatus: ConnectionStatus.CONNECTED,
-      modelId,
-      connection: null,
+      modelId: settings.modelId,
+      thinkingEnabled: settings.thinkingEnabled,
+      permissionMode: settings.permissionMode as any,
+      skipPermissions: settings.skipPermissions,
+      session: null,
+      capabilities: null,
       isGenerating: false,
       uiState: {
         inputText: '',
         contexts: [],
         scrollPosition: 0
-      }
+      },
+      toolInputJsonAccumulator: new Map()
     })
   }
 
@@ -152,6 +173,38 @@ export const useSessionStore = defineStore('session', () => {
     const session = currentSession.value
     return session ? session.connectionStatus : ConnectionStatus.DISCONNECTED
   })
+
+  // 当前会话的设置（响应式 getter）
+  const currentSessionSettings = computed(() => {
+    const session = currentSession.value
+    if (!session) return null
+    return {
+      modelId: session.modelId,
+      thinkingEnabled: session.thinkingEnabled,
+      permissionMode: session.permissionMode,
+      skipPermissions: session.skipPermissions
+    }
+  })
+
+  /**
+   * 更新当前会话的设置（不触发后端同步，延迟到发送消息时）
+   */
+  function updateCurrentSessionSettings(settings: Partial<{
+    modelId: string
+    thinkingEnabled: boolean
+    permissionMode: string
+    skipPermissions: boolean
+  }>) {
+    const session = currentSession.value
+    if (!session) return
+
+    if (settings.modelId !== undefined) session.modelId = settings.modelId
+    if (settings.thinkingEnabled !== undefined) session.thinkingEnabled = settings.thinkingEnabled
+    if (settings.permissionMode !== undefined) session.permissionMode = settings.permissionMode as any
+    if (settings.skipPermissions !== undefined) session.skipPermissions = settings.skipPermissions
+
+    log.debug('[updateCurrentSessionSettings] 更新会话设置:', settings)
+  }
 
   // 活跃的会话（显示在 Tab 上）
   // 显示所有已创建的会话，按order排序（支持手动拖拽调整顺序）
@@ -209,13 +262,35 @@ export const useSessionStore = defineStore('session', () => {
 
   // 会话数据由后端 SDK 管理，前端不需要持久化
 
+  // 默认会话设置常量
+  const DEFAULT_SESSION_SETTINGS = {
+    modelId: MODEL_CAPABILITIES[BaseModel.OPUS_45].modelId,
+    thinkingEnabled: MODEL_CAPABILITIES[BaseModel.OPUS_45].defaultThinkingEnabled,
+    permissionMode: 'default',
+    skipPermissions: true
+  }
+
   /**
    * 创建新会话
    */
   async function createSession(name?: string) {
     try {
       log.info('创建新会话...')
-      const options = buildConnectOptions()
+
+      // 从当前会话复制设置（如果存在），否则使用默认值
+      const currentSettings = currentSessionSettings.value
+      const initialSettings = currentSettings ? {
+        modelId: currentSettings.modelId || DEFAULT_SESSION_SETTINGS.modelId,
+        thinkingEnabled: currentSettings.thinkingEnabled,
+        permissionMode: currentSettings.permissionMode,
+        skipPermissions: currentSettings.skipPermissions
+      } : DEFAULT_SESSION_SETTINGS
+
+      const options = buildConnectOptions({
+        model: initialSettings.modelId,
+        thinkingEnabled: initialSettings.thinkingEnabled,
+        permissionMode: initialSettings.permissionMode
+      })
 
       // 设置连接状态
       connectionStatuses.value.set('pending', ConnectionStatus.CONNECTING)
@@ -229,10 +304,12 @@ export const useSessionStore = defineStore('session', () => {
       })
       const sessionId = connectResult.sessionId
 
+      // 使用短时间格式：HH:mm
+      const shortTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       const newSessionState = createSessionState(
         sessionId,
-        name || `会话 ${new Date().toLocaleString()}`,
-        options.model || null
+        name || i18n.global.t('session.defaultName', { time: shortTime }),
+        initialSettings
       )
 
       // 添加到 sessions Map
@@ -244,10 +321,18 @@ export const useSessionStore = defineStore('session', () => {
 
       // 切换到新会话
       currentSessionId.value = sessionId
-      sessionModelIds.value.set(sessionId, options.model || '')
-      currentModelId.value = options.model || null
+      sessionModelIds.value.set(sessionId, initialSettings.modelId)
+      currentModelId.value = initialSettings.modelId
 
-      log.info(`会话已创建: ${sessionId}`)
+      // 初始化 lastAppliedSettings
+      lastAppliedSettings.value = {
+        modelId: initialSettings.modelId,
+        thinkingEnabled: initialSettings.thinkingEnabled,
+        permissionMode: initialSettings.permissionMode,
+        skipPermissions: initialSettings.skipPermissions
+      }
+
+      log.info(`会话已创建: ${sessionId}, model=${initialSettings.modelId}, thinking=${initialSettings.thinkingEnabled}`)
       return newSessionState
     } catch (error) {
       log.error('创建会话异常:', error)
@@ -271,7 +356,20 @@ export const useSessionStore = defineStore('session', () => {
 
     try {
       log.info(`恢复历史会话: ${externalSessionId}`)
+
+      // 从当前会话复制设置（如果存在），否则使用默认值
+      const currentSettings = currentSessionSettings.value
+      const initialSettings = currentSettings ? {
+        modelId: currentSettings.modelId || DEFAULT_SESSION_SETTINGS.modelId,
+        thinkingEnabled: currentSettings.thinkingEnabled,
+        permissionMode: currentSettings.permissionMode,
+        skipPermissions: currentSettings.skipPermissions
+      } : DEFAULT_SESSION_SETTINGS
+
       const options = buildConnectOptions({
+        model: initialSettings.modelId,
+        thinkingEnabled: initialSettings.thinkingEnabled,
+        permissionMode: initialSettings.permissionMode,
         continueConversation: true,
         resume: externalSessionId
       })
@@ -289,19 +387,27 @@ export const useSessionStore = defineStore('session', () => {
       const resumedSessionState = createSessionState(
         sessionId,
         name || `历史会话 ${resumeLabel}`,
-        options.model || null
+        initialSettings
       )
 
       sessions.set(sessionId, resumedSessionState)
       connectionStatuses.value.delete('pending')
       connectionStatuses.value.set(sessionId, ConnectionStatus.CONNECTED)
 
-      sessionModelIds.value.set(sessionId, options.model || '')
-      currentModelId.value = options.model || null
+      sessionModelIds.value.set(sessionId, initialSettings.modelId)
+      currentModelId.value = initialSettings.modelId
       currentSessionId.value = sessionId
 
+      // 初始化 lastAppliedSettings
+      lastAppliedSettings.value = {
+        modelId: initialSettings.modelId,
+        thinkingEnabled: initialSettings.thinkingEnabled,
+        permissionMode: initialSettings.permissionMode,
+        skipPermissions: initialSettings.skipPermissions
+      }
+
       linkExternalSessionId(externalSessionId, sessionId)
-      log.info(`历史会话已恢复: ${sessionId}`)
+      log.info(`历史会话已恢复: ${sessionId}, model=${initialSettings.modelId}, thinking=${initialSettings.thinkingEnabled}`)
       return resumedSessionState
     } catch (error) {
       log.error('恢复会话异常:', error)
@@ -1374,6 +1480,9 @@ export const useSessionStore = defineStore('session', () => {
       throw new Error('当前没有活跃的会话')
     }
 
+    // 发送前同步设置（延迟同步策略）
+    await syncSettingsIfNeeded()
+
     await aiAgentService.sendMessage(currentSessionId.value, message)
   }
 
@@ -1386,6 +1495,9 @@ export const useSessionStore = defineStore('session', () => {
     if (!currentSessionId.value) {
       throw new Error('当前没有活跃的会话')
     }
+
+    // 发送前同步设置（延迟同步策略）
+    await syncSettingsIfNeeded()
 
     await aiAgentService.sendMessageWithContent(currentSessionId.value, content)
   }
@@ -1473,6 +1585,156 @@ export const useSessionStore = defineStore('session', () => {
     if (session) {
       session.modelId = model
     }
+
+    // 更新 lastAppliedSettings
+    if (lastAppliedSettings.value) {
+      lastAppliedSettings.value = {
+        ...lastAppliedSettings.value,
+        modelId: model
+      }
+    }
+  }
+
+  /**
+   * 设置当前会话的权限模式
+   */
+  async function setPermissionMode(mode: string): Promise<void> {
+    if (!currentSessionId.value) {
+      throw new Error('当前没有活跃的会话')
+    }
+
+    await aiAgentService.setPermissionMode(currentSessionId.value, mode as any)
+    log.info(`权限模式已切换为: ${mode}`)
+
+    // 更新 lastAppliedSettings
+    if (lastAppliedSettings.value) {
+      lastAppliedSettings.value = {
+        ...lastAppliedSettings.value,
+        permissionMode: mode
+      }
+    }
+  }
+
+  /**
+   * 发送 query 之前调用，按需同步设置到后端
+   *
+   * 延迟同步策略：用户切换模型/思考开关时只保存设置到会话状态，
+   * 在发送消息前才比较当前设置和上次应用的设置，按需同步
+   */
+  async function syncSettingsIfNeeded(): Promise<void> {
+    if (!currentSessionId.value) {
+      return
+    }
+
+    // 从当前会话读取设置（而不是 settingsStore）
+    const sessionSettings = currentSessionSettings.value
+    if (!sessionSettings || !sessionSettings.modelId) {
+      log.warn('syncSettingsIfNeeded: 当前会话设置无效')
+      return
+    }
+
+    const current = {
+      modelId: sessionSettings.modelId,
+      thinkingEnabled: sessionSettings.thinkingEnabled,
+      permissionMode: sessionSettings.permissionMode,
+      skipPermissions: sessionSettings.skipPermissions
+    }
+
+    const last = lastAppliedSettings.value
+
+    // 检查是否完全相同
+    if (last &&
+      current.modelId === last.modelId &&
+      current.thinkingEnabled === last.thinkingEnabled &&
+      current.permissionMode === last.permissionMode &&
+      current.skipPermissions === last.skipPermissions
+    ) {
+      return  // 无变化
+    }
+
+    log.info('🔄 syncSettingsIfNeeded: 检测到设置变化', { current, last })
+
+    // 1️⃣ 判断是否需要重连（thinkingEnabled 或 skipPermissions 变了）
+    const needReconnect = last && (
+      current.thinkingEnabled !== last.thinkingEnabled ||
+      current.skipPermissions !== last.skipPermissions
+    )
+
+    if (needReconnect) {
+      await reconnect(current)
+    } else {
+      // 2️⃣ 不需要重连，分别处理 model 和 permissionMode
+      if (!last || current.modelId !== last.modelId) {
+        await setModel(current.modelId)
+      }
+      if (!last || current.permissionMode !== last.permissionMode) {
+        await setPermissionMode(current.permissionMode)
+      }
+    }
+
+    lastAppliedSettings.value = current
+  }
+
+  /**
+   * 重连当前会话（disconnect + connect）
+   * 用于修改 thinkingEnabled 等只能在 connect 时配置的参数
+   */
+  async function reconnect(settings: {
+    modelId: string
+    thinkingEnabled: boolean
+    permissionMode: string
+    skipPermissions: boolean
+  }): Promise<void> {
+    if (!currentSessionId.value) {
+      throw new Error('当前没有活跃的会话')
+    }
+
+    const sessionId = currentSessionId.value
+    const sessionState = getSessionState(sessionId)
+    if (!sessionState) {
+      throw new Error('会话状态不存在')
+    }
+
+    log.info(`🔄 重连会话: ${sessionId}`, settings)
+
+    // 1. 断开当前连接
+    await aiAgentService.disconnect(sessionId)
+
+    // 2. 构建 connect 选项
+    const options = buildConnectOptions({
+      model: settings.modelId,
+      thinkingEnabled: settings.thinkingEnabled,
+      permissionMode: settings.permissionMode,
+      dangerouslySkipPermissions: settings.skipPermissions,
+      continueConversation: true,
+      resume: sessionId
+    })
+
+    // 3. 重新连接
+    const connectResult = await aiAgentService.connect(options, (rawMessage: any) => {
+      const normalized = normalizeRpcMessage(rawMessage)
+      if (normalized) {
+        handleMessage(connectResult.sessionId, normalized)
+      }
+    })
+
+    // 4. 更新前端 session 映射
+    const newSessionId = connectResult.sessionId
+    if (newSessionId !== sessionId) {
+      sessions.set(newSessionId, sessionState)
+      sessions.delete(sessionId)
+      currentSessionId.value = newSessionId
+    }
+
+    // 5. 更新本地状态
+    sessionModelIds.value.set(newSessionId, settings.modelId)
+    currentModelId.value = settings.modelId
+    sessionState.modelId = settings.modelId
+
+    // 6. 更新 lastAppliedSettings
+    lastAppliedSettings.value = settings
+
+    log.info(`✅ 重连完成: ${newSessionId}`)
   }
 
   /**
@@ -1547,11 +1809,14 @@ export const useSessionStore = defineStore('session', () => {
     currentSessionId,
     currentSession,
     currentMessages,
-    currentDisplayItems,  // 新增
+    currentDisplayItems,
     currentModelId,
     currentConnectionStatus,
+    // 会话设置相关
+    currentSessionSettings,
+    updateCurrentSessionSettings,
     loading,
-    messageQueue,  // 消息队列
+    messageQueue,
     createSession,
     startNewSession,
     switchSession,
@@ -1582,7 +1847,7 @@ export const useSessionStore = defineStore('session', () => {
     startRequestTracking,
     addTokenUsage,
     getRequestStats,
-    requestTracker  // 暴露给组件访问实时数据
+    requestTracker
   }
 })
 

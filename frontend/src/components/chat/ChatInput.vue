@@ -2,7 +2,16 @@
   <div
     class="unified-chat-input-container"
     :class="{ focused: isFocused, generating: isGenerating, 'inline-mode': inline }"
+    :style="containerHeight ? { height: containerHeight + 'px' } : {}"
   >
+    <!-- 顶部拖拽条 -->
+    <div
+      class="resize-handle"
+      @mousedown="startResize"
+    >
+      <div class="resize-handle-bar" />
+    </div>
+
     <!-- Pending Task Bar (任务队列显示) -->
     <div
       v-if="visibleTasks.length > 0"
@@ -124,33 +133,9 @@
         @blur="isFocused = false"
         @keydown="handleKeydown"
         @paste-image="handlePasteImage"
+        @preview-image="handleInputImagePreview"
         @submit="handleRichTextSubmit"
       />
-
-      <!-- 内嵌图片预览（在文字下方） -->
-      <div
-        v-if="inlineImages.length > 0"
-        class="inline-images-preview"
-      >
-        <div
-          v-for="(image, index) in inlineImages"
-          :key="index"
-          class="inline-image-item"
-        >
-          <img
-            :src="getInlineImagePreviewUrl(image)"
-            class="inline-image-preview"
-            :alt="image.name"
-          >
-          <button
-            class="inline-image-remove"
-            :title="t('common.remove')"
-            @click="removeInlineImage(index)"
-          >
-            ×
-          </button>
-        </div>
-      </div>
     </div>
 
     <!-- Bottom Toolbar (底部工具栏) -->
@@ -218,7 +203,7 @@
             </el-option>
           </el-select>
 
-          <!-- 模型选择器 - Cursor 风格 -->
+          <!-- 模型选择器 - 新架构（只有 3 个选项） -->
           <el-select
             v-if="showModelSelector"
             v-model="selectedModelValue"
@@ -241,20 +226,27 @@
                 }
               ]
             }"
-            @change="handleUiModelChange"
+            @change="handleBaseModelChange"
           >
             <el-option
-              v-for="option in uiModelOptions"
-              :key="option"
-              :value="option"
-              :label="getUiModelLabel(option)"
+              v-for="model in baseModelOptions"
+              :key="model"
+              :value="model"
+              :label="getBaseModelLabel(model)"
             >
               <span class="model-option-label">
-                {{ getUiModelLabel(option) }}
-                <span v-if="isThinkingOption(option)" class="model-brain-icon">🧠</span>
+                {{ getBaseModelLabel(model) }}
               </span>
             </el-option>
           </el-select>
+
+          <!-- 思考开关 - 独立组件 -->
+          <ThinkingToggle
+            v-if="showModelSelector"
+            :thinking-mode="currentThinkingMode"
+            :enabled="thinkingEnabled"
+            @toggle="handleThinkingToggle"
+          />
 
           <!-- Skip Permissions 复选框 - Cursor 风格 -->
           <label
@@ -446,10 +438,22 @@ import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 import RichTextInput from './RichTextInput.vue'
 import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
-import { isInAtQuery, replaceAtQuery } from '@/utils/atSymbolDetector'
+import { isInAtQuery } from '@/utils/atSymbolDetector'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useSessionStore } from '@/stores/sessionStore'
-import { UiModelOption, UI_MODEL_LABELS, UI_MODEL_SHOW_BRAIN, MODEL_RESOLUTION_MAP } from '@/constants/models'
+import {
+  BaseModel,
+  MODEL_CAPABILITIES,
+  AVAILABLE_MODELS,
+  canToggleThinking,
+  getEffectiveThinkingEnabled,
+  // 保留旧导入用于向后兼容
+  UiModelOption,
+  UI_MODEL_LABELS,
+  UI_MODEL_SHOW_BRAIN,
+  MODEL_RESOLUTION_MAP
+} from '@/constants/models'
+import ThinkingToggle from './ThinkingToggle.vue'
 
 interface PendingTask {
   id: string
@@ -500,7 +504,6 @@ interface Emits {
   (e: 'model-change', model: AiModel): void
   (e: 'permission-change', permission: PermissionMode): void
   (e: 'skip-permissions-change', skip: boolean): void
-  (e: 'inline-images-change', images: File[]): void
   (e: 'cancel'): void  // 取消编辑（仅 inline 模式）
 }
 
@@ -527,26 +530,44 @@ const emit = defineEmits<Emits>()
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
 const sessionStore = useSessionStore()
-const settingsState = settingsStore.settings
 
-// 安全获取当前 UI 模型，避免 settingsState 还未初始化时访问 undefined.model
-function getSafeUiModel(): UiModelOption {
-  try {
-    const allOptions = Object.values(UiModelOption) as UiModelOption[]
-    const raw = settingsState.value?.model as UiModelOption | undefined
-    if (raw && allOptions.includes(raw)) {
-      return raw
-    }
-  } catch (e) {
-    console.warn('⚠️ getSafeUiModel 读取 settingsState 失败，使用默认模型:', e)
+// 当前模型（从会话设置读取，响应式）
+const currentModel = computed(() => {
+  const sessionSettings = sessionStore.currentSessionSettings
+  if (!sessionSettings || !sessionSettings.modelId) {
+    return BaseModel.OPUS_45
   }
-  // 默认使用 Opus 4.5 思考模型，和 DEFAULT_SETTINGS 保持一致
-  return UiModelOption.OPUS_45_THINKING
-}
+  // 从 modelId 反查 BaseModel
+  const entry = Object.entries(MODEL_CAPABILITIES).find(
+    ([, cap]) => cap.modelId === sessionSettings.modelId
+  )
+  return (entry?.[0] as BaseModel) ?? BaseModel.OPUS_45
+})
+
+// 当前思考开关状态（从会话设置读取，响应式）
+const currentThinkingEnabled = computed(() => {
+  const sessionSettings = sessionStore.currentSessionSettings
+  if (!sessionSettings) {
+    return MODEL_CAPABILITIES[BaseModel.OPUS_45].defaultThinkingEnabled
+  }
+  return sessionSettings.thinkingEnabled
+})
+
 const thinkingTogglePending = ref(false)
+
+// 当前模型的思考模式
+const currentThinkingMode = computed(() => {
+  return MODEL_CAPABILITIES[currentModel.value].thinkingMode
+})
+
+// 思考开关是否可操作
+const canToggleThinkingComputed = computed(() => {
+  return canToggleThinking(currentModel.value)
+})
+
+// 当前思考开关状态（用于 UI 显示）
 const thinkingEnabled = computed(() => {
-  const current = getSafeUiModel()
-  return UI_MODEL_SHOW_BRAIN[current] ?? false
+  return getEffectiveThinkingEnabled(currentModel.value, currentThinkingEnabled.value)
 })
 
 // Refs
@@ -572,21 +593,56 @@ const atSymbolSearchResults = ref<IndexedFileInfo[]>([])
 // Drag and Drop State
 const isDragging = ref(false)
 
+// Resize State (拖拽调整高度)
+const containerHeight = ref<number | null>(null)  // null 表示自动高度
+const isResizing = ref(false)
+const minHeight = 110  // 确保底部工具栏始终可见
+const maxHeight = 500
+const containerRef = ref<HTMLElement>()
+
+function startResize(event: MouseEvent) {
+  event.preventDefault()
+  isResizing.value = true
+  const startY = event.clientY
+
+  // 首次拖拽时获取当前实际高度
+  const container = (event.target as HTMLElement).closest('.unified-chat-input-container') as HTMLElement
+  const startHeight = containerHeight.value ?? container?.offsetHeight ?? 120
+
+  const onMouseMove = (e: MouseEvent) => {
+    // 向上拖动增加高度，向下拖动减少高度
+    const deltaY = startY - e.clientY
+    const newHeight = Math.min(maxHeight, Math.max(minHeight, startHeight + deltaY))
+    containerHeight.value = newHeight
+  }
+
+  const onMouseUp = () => {
+    isResizing.value = false
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+  }
+
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+}
+
 // Send Button Context Menu State
 const showSendContextMenu = ref(false)
 const sendContextMenuPosition = ref({ x: 0, y: 0 })
 
-// Inline Images State (内嵌图片，当输入框有文本时粘贴的图片)
-const inlineImages = ref<File[]>([])
-// 缓存内嵌图片的 URL 对象，用于预览和清理
-const inlineImageUrls = new Map<File, string>()
 
 // Image Preview State (图片预览)
 const previewVisible = ref(false)
 const previewImageSrc = ref('')
 
 // Local state for props
-const selectedModelValue = ref<UiModelOption>(getSafeUiModel())
+// selectedModelValue 直接绑定 currentModel（响应会话切换）
+const selectedModelValue = computed({
+  get: () => currentModel.value,
+  set: (val) => {
+    // setter 由 handleBaseModelChange 处理
+  }
+})
 const selectedPermissionValue = ref(props.selectedPermission)
 const skipPermissionsValue = ref(props.skipPermissions)
 
@@ -603,7 +659,9 @@ const hasInput = computed(() => inputText.value.trim().length > 0)
 const canSend = computed(() => {
   // 如果是编辑模式且禁用发送，则不能发送
   if (props.editDisabled) return false
-  return (hasInput.value || inlineImages.value.length > 0) && props.enabled && !props.isGenerating
+  const hasContent = richTextInputRef.value?.getText()?.trim() ||
+                     (richTextInputRef.value?.extractContentBlocks()?.length ?? 0) > 0
+  return hasContent && props.enabled && !props.isGenerating
 })
 
 // 只显示前三个 context
@@ -637,8 +695,9 @@ watch(() => props.skipPermissions, (newValue) => {
   skipPermissionsValue.value = newValue
 })
 
-// Watch input text and cursor position for @ symbol detection
-watch([inputText, () => textareaRef.value?.selectionStart], () => {
+// Watch input text for @ symbol detection
+// 光标位置变化通过 keydown 事件触发检测
+watch(inputText, () => {
   checkAtSymbol()
 })
 
@@ -654,22 +713,21 @@ function adjustHeight() {
 /**
  * 处理 RichTextInput 的图片粘贴事件
  */
-function handlePasteImage(file: File) {
+async function handlePasteImage(file: File) {
   console.log('📋 [handlePasteImage] 接收到粘贴图片:', file.name)
 
-  // 判断是否应该作为上下文还是内嵌图片
-  // 如果没有文本内容，作为上下文；否则作为内嵌图片
-  const text = inputText.value.trim()
+  // 判断光标是否在最前面
+  const isAtStart = richTextInputRef.value?.isCursorAtStart() ?? true
 
-  if (!text) {
-    // 没有文本，作为上下文
-    console.log('📋 [handlePasteImage] 没有文本，将图片作为上下文')
+  if (isAtStart) {
+    // 光标在最前面，作为上下文
+    console.log('📋 [handlePasteImage] 光标在最前面，将图片作为上下文')
     addImageToContext(file)
   } else {
-    // 有文本，作为内嵌图片
-    console.log('📋 [handlePasteImage] 有文本，将图片作为内嵌图片')
-    inlineImages.value.push(file)
-    emit('inline-images-change', inlineImages.value)
+    // 光标不在最前面，插入到编辑器中
+    console.log('📋 [handlePasteImage] 光标不在最前面，将图片插入编辑器')
+    const base64 = await readImageAsBase64(file)
+    richTextInputRef.value?.insertImage(base64, file.type)
   }
 }
 
@@ -679,59 +737,22 @@ function handlePasteImage(file: File) {
 async function handleRichTextSubmit(content: { text: string; images: { id: string; data: string; mimeType: string; name: string }[] }) {
   if (!props.enabled || props.isGenerating) return
 
-  const text = content.text.trim()
-  const hasContent = text || content.images.length > 0 || inlineImages.value.length > 0
+  // 使用新方法提取有序内容块
+  const contents = richTextInputRef.value?.extractContentBlocks() || []
 
-  if (!hasContent) return
-
-  // 构建 ContentBlock[]
-  const contents: ContentBlock[] = []
-
-  // 文本块
-  if (text) {
-    contents.push({ type: 'text', text } as ContentBlock)
-  }
-
-  // RichTextInput 中的图片
-  for (const img of content.images) {
-    contents.push({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: img.mimeType,
-        data: img.data
-      }
-    } as ContentBlock)
-  }
-
-  // 内嵌图片（从 inlineImages 数组）
-  for (const file of inlineImages.value) {
-    const base64 = await readImageAsBase64(file)
-    contents.push({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: file.type,
-        data: base64
-      }
-    } as ContentBlock)
-  }
+  if (contents.length === 0) return
 
   emit('send', contents)
 
   // 清理
   richTextInputRef.value?.clear()
-  clearInlineImages()
   inputText.value = ''
-  emit('inline-images-change', [])
 }
 
 // @ Symbol File Reference Functions
 async function checkAtSymbol() {
-  const textarea = textareaRef.value
-  if (!textarea) return
-
-  const cursorPosition = textarea.selectionStart
+  // 使用 RichTextInput 的光标位置
+  const cursorPosition = richTextInputRef.value?.getCursorPosition() ?? 0
   const atResult = isInAtQuery(inputText.value, cursorPosition)
 
   if (atResult) {
@@ -761,26 +782,15 @@ async function checkAtSymbol() {
 }
 
 function handleAtSymbolFileSelect(file: IndexedFileInfo) {
-  const textarea = textareaRef.value
-  if (!textarea) return
+  // 使用 RichTextInput 的方法删除 @ 查询并插入文件引用节点
+  const cursorPosition = richTextInputRef.value?.getCursorPosition() ?? 0
 
-  const fileReference = `@${file.relativePath}`
-  const cursorPosition = textarea.selectionStart
-
-  const { newText, newCursorPosition } = replaceAtQuery(
-    inputText.value,
+  // 删除从 @ 位置到当前光标位置的文本，然后插入文件引用节点
+  richTextInputRef.value?.replaceRangeWithFileReference(
     atSymbolPosition.value,
     cursorPosition,
-    fileReference
+    file.relativePath
   )
-
-  inputText.value = newText
-
-  // 更新光标位置
-  nextTick(() => {
-    textarea.selectionStart = textarea.selectionEnd = newCursorPosition
-    textarea.focus()
-  })
 
   // 关闭弹窗
   dismissAtSymbolPopup()
@@ -792,6 +802,11 @@ function dismissAtSymbolPopup() {
 }
 
 async function handleKeydown(event: KeyboardEvent) {
+  // 光标移动键 - 重新检测 @ 符号
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
+    nextTick(() => checkAtSymbol())
+  }
+
   // ESC 键 - 取消编辑（仅 inline 模式）
   if (event.key === 'Escape' && props.inline) {
     event.preventDefault()
@@ -799,6 +814,19 @@ async function handleKeydown(event: KeyboardEvent) {
     return
   }
 
+  // Shift + Tab - 轮换切换权限模式
+  if (
+    event.key === 'Tab' &&
+    event.shiftKey &&
+    !event.ctrlKey &&
+    !event.metaKey
+  ) {
+    event.preventDefault()
+    cyclePermissionMode()
+    return
+  }
+
+  // Tab - 切换思考开关
   if (
     event.key === 'Tab' &&
     !event.shiftKey &&
@@ -850,32 +878,42 @@ async function handleKeydown(event: KeyboardEvent) {
     return
   }
 
-  // Enter - 发送消息
-  if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
-    event.preventDefault()
-    handleSend()
-    return
-  }
+  // Enter 键由 RichTextInput 的 @submit 事件处理，这里不再重复处理
 }
 
 async function toggleThinkingEnabled(source: 'click' | 'keyboard' = 'click') {
-  if (thinkingTogglePending.value) return
-  thinkingTogglePending.value = true
-  try {
-    const nextValue = !thinkingEnabled.value
-    console.log(`🧠 [ThinkingToggle] ${source} -> ${nextValue}`)
-    await settingsStore.saveSettings({ thinkingEnabled: nextValue })
-  } catch (error) {
-    console.error('❌ 切换思考开关失败:', error)
-  } finally {
-    thinkingTogglePending.value = false
+  // 检查是否可以切换
+  if (!canToggleThinkingComputed.value) {
+    console.log(`🧠 [ThinkingToggle] ${source} - 当前模型不支持切换思考`)
+    return
   }
+
+  if (thinkingTogglePending.value) return
+
+  // 调用新的处理函数
+  const nextValue = !thinkingEnabled.value
+  console.log(`🧠 [ThinkingToggle] ${source} -> ${nextValue}`)
+  handleThinkingToggle(nextValue)
 }
 
-const uiModelOptions = Object.values(UiModelOption)
+// 权限模式列表
+const permissionModes: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']
 
-function getUiModelLabel(option: UiModelOption): string {
-  return UI_MODEL_LABELS[option] ?? option
+// 轮换切换权限模式
+function cyclePermissionMode() {
+  const currentIndex = permissionModes.indexOf(selectedPermissionValue.value)
+  const nextIndex = (currentIndex + 1) % permissionModes.length
+  const nextMode = permissionModes[nextIndex]
+  selectedPermissionValue.value = nextMode
+  emit('permission-change', nextMode)
+  console.log(`🔄 [PermissionMode] Shift+Tab -> ${nextMode}`)
+}
+
+// 新架构：使用 BaseModel（只有 3 个选项）
+const baseModelOptions = AVAILABLE_MODELS
+
+function getBaseModelLabel(model: BaseModel): string {
+  return MODEL_CAPABILITIES[model]?.displayName ?? model
 }
 
 // 获取模式对应的图标
@@ -890,30 +928,57 @@ function getModeIcon(mode: string): string {
   return icons[mode] ?? '?'
 }
 
-function isThinkingOption(option: UiModelOption): boolean {
-  return UI_MODEL_SHOW_BRAIN[option] ?? false
+/**
+ * 处理模型切换（新架构 - 延迟同步）
+ * 只保存设置到当前会话状态，实际同步在发送消息时进行
+ */
+function handleBaseModelChange(model: BaseModel) {
+  const capability = MODEL_CAPABILITIES[model]
+
+  // 根据模型能力自动设置思考开关
+  let newThinkingEnabled: boolean
+  switch (capability.thinkingMode) {
+    case 'always':
+      newThinkingEnabled = true
+      break
+    case 'never':
+      newThinkingEnabled = false
+      break
+    case 'optional':
+      newThinkingEnabled = capability.defaultThinkingEnabled
+      break
+  }
+
+  // 更新当前会话设置（延迟同步策略）
+  // UI 会自动响应，因为 selectedModelValue 绑定了 currentSessionSettings
+  sessionStore.updateCurrentSessionSettings({
+    modelId: capability.modelId,
+    thinkingEnabled: newThinkingEnabled
+  })
+
+  console.log(`🔄 [handleBaseModelChange] 会话设置已更新: ${capability.displayName}, thinking=${newThinkingEnabled}`)
 }
 
-function handleUiModelChange(option: UiModelOption) {
-  selectedModelValue.value = option
-
-  // 解析模型配置
-  const config = MODEL_RESOLUTION_MAP[option]
-  if (config) {
-    // 更新本地期望配置（Query 前会通过 RPC 同步到后端）
-    sessionStore.setModel({
-      modelId: config.modelId,
-      thinkingEnabled: config.thinkingEnabled
-    })
-    console.log(`🔄 [handleUiModelChange] 模型配置已更新: ${config.modelId}, thinking=${config.thinkingEnabled}`)
+/**
+ * 处理思考开关切换（新架构 - 延迟同步）
+ * 只保存设置到当前会话状态，实际同步在发送消息时进行
+ */
+function handleThinkingToggle(enabled: boolean) {
+  if (!canToggleThinkingComputed.value) {
+    return
   }
+
+  // 更新当前会话设置（延迟同步策略）
+  sessionStore.updateCurrentSessionSettings({ thinkingEnabled: enabled })
+
+  console.log(`🧠 [handleThinkingToggle] 会话设置已更新: thinking=${enabled}`)
 }
 
 /**
  * 处理粘贴事件
  * 检测粘贴内容是否包含图片：
- * - 如果输入框有文本，图片作为内嵌图片（添加到用户消息内容中）
- * - 如果输入框为空，图片作为上下文（添加到 contexts）
+ * - 如果光标在最前面，图片作为上下文（添加到 contexts）
+ * - 否则插入到编辑器中
  */
 async function handlePaste(event: ClipboardEvent) {
   console.log('📋 [handlePaste] 粘贴事件触发')
@@ -946,17 +1011,17 @@ async function handlePaste(event: ClipboardEvent) {
       console.log(`📋 [handlePaste] 获取到文件: name=${file.name}, size=${file.size}, type=${file.type}`)
 
       // 判断光标是否在最前面
-      const cursorAtStart = textareaRef.value?.selectionStart === 0
+      const isAtStart = richTextInputRef.value?.isCursorAtStart() ?? true
 
-      if (cursorAtStart) {
+      if (isAtStart) {
         // 光标在最前面：作为上下文处理
         console.log('📋 [handlePaste] 光标在最前面，将图片作为上下文')
         await addImageToContext(file)
       } else {
-        // 光标不在最前面：作为内嵌图片处理
-        console.log('📋 [handlePaste] 光标不在最前面，将图片作为内嵌图片')
-        inlineImages.value.push(file)
-        emit('inline-images-change', inlineImages.value)
+        // 光标不在最前面：插入到编辑器中
+        console.log('📋 [handlePaste] 光标不在最前面，将图片插入编辑器')
+        const base64 = await readImageAsBase64(file)
+        richTextInputRef.value?.insertImage(base64, file.type)
       }
     }
   }
@@ -965,73 +1030,30 @@ async function handlePaste(event: ClipboardEvent) {
 async function handleSend() {
   if (!canSend.value) return
 
-  const text = inputText.value.trim()
-  if (text || inlineImages.value.length > 0) {
-    // 构建 ContentBlock[]
-    const contents: ContentBlock[] = []
+  // 使用新方法提取有序内容块
+  const contents = richTextInputRef.value?.extractContentBlocks() || []
 
-    // 文本块
-    if (text) {
-      contents.push({ type: 'text', text } as ContentBlock)
-    }
-
-    // 内嵌图片转换为 ImageBlock
-    for (const file of inlineImages.value) {
-      const base64 = await readImageAsBase64(file)
-      contents.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: file.type,
-          data: base64
-        }
-      } as ContentBlock)
-    }
-
+  if (contents.length > 0) {
     emit('send', contents)
 
-    // 清理内嵌图片和 URL
-    clearInlineImages()
+    // 清理
     richTextInputRef.value?.clear()
     inputText.value = ''
-    emit('inline-images-change', [])
     adjustHeight()
   }
 }
 
 async function handleInterruptAndSend() {
-  if ((!hasInput.value && inlineImages.value.length === 0) || !props.isGenerating) return
+  // 使用新方法提取有序内容块
+  const contents = richTextInputRef.value?.extractContentBlocks() || []
 
-  const text = inputText.value.trim()
-
-  // 构建 ContentBlock[]
-  const contents: ContentBlock[] = []
-
-  // 文本块
-  if (text) {
-    contents.push({ type: 'text', text } as ContentBlock)
-  }
-
-  // 内嵌图片转换为 ImageBlock
-  for (const file of inlineImages.value) {
-    const base64 = await readImageAsBase64(file)
-    contents.push({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: file.type,
-        data: base64
-      }
-    } as ContentBlock)
-  }
+  if (contents.length === 0 || !props.isGenerating) return
 
   emit('interrupt-and-send', contents)
 
-  // 清理内嵌图片和 URL
-  clearInlineImages()
+  // 清理
   richTextInputRef.value?.clear()
   inputText.value = ''
-  emit('inline-images-change', [])
   adjustHeight()
 }
 
@@ -1207,6 +1229,14 @@ function closeImagePreview() {
 }
 
 /**
+ * 处理输入框中图片预览
+ */
+function handleInputImagePreview(src: string) {
+  previewImageSrc.value = src
+  previewVisible.value = true
+}
+
+/**
  * 获取上下文图标（使用类型守卫）
  */
 function getContextIcon(context: ContextReference): string {
@@ -1272,30 +1302,27 @@ async function handleDrop(event: DragEvent) {
   if (!files || files.length === 0) return
 
   // 判断光标是否在最前面
-  const cursorAtStart = textareaRef.value?.selectionStart === 0
+  const isAtStart = richTextInputRef.value?.isCursorAtStart() ?? true
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
 
     // 检查是否为图片文件
     if (file.type && file.type.startsWith('image/')) {
-      if (cursorAtStart) {
+      if (isAtStart) {
         // 光标在最前面：作为上下文处理
         console.log('📋 [handleDrop] 光标在最前面，将图片作为上下文')
-      await addImageToContext(file)
+        await addImageToContext(file)
       } else {
-        // 光标不在最前面：作为内嵌图片处理
-        console.log('📋 [handleDrop] 光标不在最前面，将图片作为内嵌图片')
-        inlineImages.value.push(file)
+        // 光标不在最前面：插入到编辑器中
+        console.log('📋 [handleDrop] 光标不在最前面，将图片插入编辑器')
+        const base64 = await readImageAsBase64(file)
+        richTextInputRef.value?.insertImage(base64, file.type)
       }
     } else {
       // 非图片文件：作为上下文处理
       await addFileToContext(file)
     }
-  }
-
-  if (!cursorAtStart) {
-    emit('inline-images-change', inlineImages.value)
   }
 }
 
@@ -1329,20 +1356,17 @@ async function handleImageFileSelect(event: Event) {
   if (!files || files.length === 0) return
 
   // 判断光标是否在最前面
-  const cursorAtStart = textareaRef.value?.selectionStart === 0
+  const isAtStart = richTextInputRef.value?.isCursorAtStart() ?? true
 
   for (let i = 0; i < files.length; i++) {
-    if (cursorAtStart) {
+    if (isAtStart) {
       // 光标在最前面：作为上下文处理
-    await addImageToContext(files[i])
+      await addImageToContext(files[i])
     } else {
-      // 光标不在最前面：作为内嵌图片处理
-      inlineImages.value.push(files[i])
+      // 光标不在最前面：插入到编辑器中
+      const base64 = await readImageAsBase64(files[i])
+      richTextInputRef.value?.insertImage(base64, files[i].type)
     }
-  }
-
-  if (!cursorAtStart) {
-    emit('inline-images-change', inlineImages.value)
   }
 
   // 清空 input，允许重复选择同一文件
@@ -1432,47 +1456,6 @@ function readImageAsBase64(file: File): Promise<string> {
   })
 }
 
-/**
- * 获取内嵌图片预览 URL（用于内嵌图片预览）
- */
-function getInlineImagePreviewUrl(file: File): string {
-  if (!inlineImageUrls.has(file)) {
-    const url = URL.createObjectURL(file)
-    inlineImageUrls.set(file, url)
-  }
-  return inlineImageUrls.get(file)!
-}
-
-/**
- * 移除内嵌图片
- */
-function removeInlineImage(index: number) {
-  const image = inlineImages.value[index]
-  if (image) {
-    // 清理 URL 对象
-    const url = inlineImageUrls.get(image)
-    if (url) {
-      URL.revokeObjectURL(url)
-      inlineImageUrls.delete(image)
-    }
-    inlineImages.value.splice(index, 1)
-    emit('inline-images-change', inlineImages.value)
-  }
-}
-
-/**
- * 清空所有内嵌图片
- */
-function clearInlineImages() {
-  inlineImages.value.forEach(image => {
-    const url = inlineImageUrls.get(image)
-    if (url) {
-      URL.revokeObjectURL(url)
-      inlineImageUrls.delete(image)
-    }
-  })
-  inlineImages.value = []
-}
 
 /**
  * 辅助函数：base64 转 File
@@ -1496,33 +1479,28 @@ defineExpose({
    */
   setContent(contents: ContentBlock[]) {
     // 清空当前状态
+    richTextInputRef.value?.clear()
     inputText.value = ''
-    clearInlineImages()
 
-    // 解析 contents 填充到对应状态
+    // 解析 contents 填充到编辑器
     for (const block of contents) {
       if (block.type === 'text' && 'text' in block) {
-        // 文本块：追加到 inputText（多个文本块用换行连接）
-        if (inputText.value) inputText.value += '\n'
-        inputText.value += (block as any).text
+        // 文本块：设置到编辑器
+        richTextInputRef.value?.setContent((block as any).text)
       } else if (block.type === 'image' && 'source' in block) {
-        // 图片块：转换为 File 对象添加到 inlineImages
+        // 图片块：插入到编辑器
         const imageBlock = block as any
         if (imageBlock.source?.type === 'base64') {
-          const ext = imageBlock.source.media_type.split('/')[1] || 'png'
-          const file = base64ToFile(
+          richTextInputRef.value?.insertImage(
             imageBlock.source.data,
-            `image-${Date.now()}.${ext}`,
             imageBlock.source.media_type
           )
-          inlineImages.value.push(file)
         }
       }
     }
 
-    // 调整高度并通知图片变化
+    // 调整高度
     adjustHeight()
-    emit('inline-images-change', inlineImages.value)
   }
 })
 
@@ -1552,13 +1530,6 @@ onMounted(() => {
 onUnmounted(() => {
   // 移除 Context Selector 键盘事件监听
   document.removeEventListener('keydown', handleContextPopupKeyDown)
-  
-  // 清理内嵌图片的 URL 对象，避免内存泄漏
-  inlineImageUrls.forEach(url => {
-    URL.revokeObjectURL(url)
-  })
-  inlineImageUrls.clear()
-  inlineImages.value = []
 })
 </script>
 
@@ -1567,20 +1538,48 @@ onUnmounted(() => {
   position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--ide-panel-background, #f6f8fa);
-  border: 1.5px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-panel-background, #f6f8fa);
+  border: 1.5px solid var(--theme-border, #e1e4e8);
   border-radius: 12px;
-  overflow: hidden;
-  transition: all 0.2s ease;
+  overflow: visible;  /* 允许拖拽手柄超出 */
+}
+
+/* 顶部拖拽手柄 */
+.resize-handle {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 12px;
+  cursor: ns-resize;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resize-handle:hover .resize-handle-bar,
+.resize-handle:active .resize-handle-bar {
+  opacity: 1;
+  background: var(--theme-accent, #0366d6);
+}
+
+.resize-handle-bar {
+  width: 48px;
+  height: 4px;
+  background: var(--theme-border, #d0d7de);
+  border-radius: 2px;
+  opacity: 0.3;
+  transition: all 0.2s;
 }
 
 .unified-chat-input-container.focused {
-  border-color: var(--ide-accent, #0366d6);
+  border-color: var(--theme-accent, #0366d6);
   box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.1);
 }
 
 .unified-chat-input-container.generating {
-  border-color: var(--ide-accent, #0366d6);
+  border-color: var(--theme-accent, #0366d6);
   box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.15);
   animation: generating-pulse 2s ease-in-out infinite;
 }
@@ -1608,7 +1607,7 @@ onUnmounted(() => {
   right: 0;
   bottom: 0;
   background: rgba(3, 102, 214, 0.1);
-  border: 2px dashed var(--ide-accent, #0366d6);
+  border: 2px dashed var(--theme-accent, #0366d6);
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -1623,7 +1622,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 24px;
-  background: var(--ide-background, #ffffff);
+  background: var(--theme-background, #ffffff);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
@@ -1635,20 +1634,20 @@ onUnmounted(() => {
 .drop-text {
   font-size: 16px;
   font-weight: 600;
-  color: var(--ide-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
 }
 
 /* Pending Task Bar */
 .pending-task-bar {
   padding: 6px 12px;
-  border-bottom: 1px solid var(--ide-border, #e1e4e8);
-  background: var(--ide-info-background, #f0f8ff);
+  border-bottom: 1px solid var(--theme-border, #e1e4e8);
+  background: var(--theme-info-background, #f0f8ff);
 }
 
 .task-header {
   font-size: 12px;
   font-weight: 600;
-  color: var(--ide-text-info, #0366d6);
+  color: var(--theme-text-info, #0366d6);
   margin-bottom: 8px;
 }
 
@@ -1658,14 +1657,14 @@ onUnmounted(() => {
   align-items: center;
   padding: 6px 12px;
   margin-bottom: 4px;
-  background: var(--ide-background, #ffffff);
+  background: var(--theme-background, #ffffff);
   border-radius: 6px;
 }
 
 .task-label {
   flex: 1;
   font-size: 13px;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1679,12 +1678,12 @@ onUnmounted(() => {
 }
 
 .task-status.status-pending {
-  background: var(--ide-warning, #ffc107);
+  background: var(--theme-warning, #ffc107);
   color: #000;
 }
 
 .task-status.status-running {
-  background: var(--ide-accent, #0366d6);
+  background: var(--theme-accent, #0366d6);
   color: #fff;
 }
 
@@ -1694,7 +1693,7 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 6px;
   padding: 6px 12px;
-  border-bottom: 1px solid var(--ide-border, #e1e4e8);
+  border-bottom: 1px solid var(--theme-border, #e1e4e8);
 }
 
 .add-context-btn {
@@ -1703,18 +1702,18 @@ onUnmounted(() => {
   gap: 4px;
   padding: 4px 8px;
   height: 20px;
-  border: 1px solid var(--ide-border, #e1e4e8);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
-  background: var(--ide-background, #ffffff);
-  color: var(--ide-foreground, #24292e);
+  background: var(--theme-background, #ffffff);
+  color: var(--theme-foreground, #24292e);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .add-context-btn:hover:not(:disabled) {
-  background: var(--ide-hover-background, #f6f8fa);
-  border-color: var(--ide-accent, #0366d6);
+  background: var(--theme-hover-background, #f6f8fa);
+  border-color: var(--theme-accent, #0366d6);
 }
 
 .add-context-btn:disabled {
@@ -1728,18 +1727,18 @@ onUnmounted(() => {
   gap: 4px;
   padding: 4px 8px;
   height: 20px;
-  border: 1px solid var(--ide-border, #e1e4e8);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
-  background: var(--ide-background, #ffffff);
-  color: var(--ide-foreground, #24292e);
+  background: var(--theme-background, #ffffff);
+  color: var(--theme-foreground, #24292e);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .add-image-btn:hover:not(:disabled) {
-  background: var(--ide-hover-background, #f6f8fa);
-  border-color: var(--ide-accent, #0366d6);
+  background: var(--theme-hover-background, #f6f8fa);
+  border-color: var(--theme-accent, #0366d6);
 }
 
 .add-image-btn:disabled {
@@ -1752,8 +1751,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  background: var(--ide-background, #ffffff);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-background, #ffffff);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   font-size: 12px;
 }
@@ -1771,7 +1770,7 @@ onUnmounted(() => {
   width: 14px;
   height: 14px;
   font-size: 10px;
-  background: var(--ide-error, #d73a49);
+  background: var(--theme-error, #d73a49);
   color: white;
   border-radius: 50%;
   display: flex;
@@ -1790,7 +1789,7 @@ onUnmounted(() => {
   height: 32px;
   object-fit: cover;
   border-radius: 4px;
-  border: 1px solid var(--ide-border, #e1e4e8);
+  border: 1px solid var(--theme-border, #e1e4e8);
   cursor: pointer;
   transition: transform 0.15s;
 }
@@ -1804,7 +1803,7 @@ onUnmounted(() => {
 }
 
 .tag-text {
-  color: var(--ide-link, #0366d6);
+  color: var(--theme-link, #0366d6);
   font-family: monospace;
 }
 
@@ -1814,25 +1813,25 @@ onUnmounted(() => {
   height: 16px;
   border: none;
   background: transparent;
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
 }
 
 .tag-remove:hover {
-  color: var(--ide-error, #d73a49);
+  color: var(--theme-error, #d73a49);
 }
 
 .context-more-hint {
   display: flex;
   align-items: center;
   padding: 4px 8px;
-  background: var(--ide-background, #ffffff);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-background, #ffffff);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   font-size: 12px;
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
   cursor: default;
 }
 
@@ -1841,8 +1840,14 @@ onUnmounted(() => {
   position: relative;
   padding: 8px 12px;
   cursor: text;
-  min-height: 40px;
-  max-height: 300px;
+  min-height: 24px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* 当容器有固定高度时，input-area 填充剩余空间 */
+.unified-chat-input-container[style*="height"] .input-area {
+  flex: 1;
 }
 
 .input-area.generating-state {
@@ -1863,8 +1868,8 @@ onUnmounted(() => {
 .generating-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid var(--ide-border, #e1e4e8);
-  border-top-color: var(--ide-accent, #0366d6);
+  border: 2px solid var(--theme-border, #e1e4e8);
+  border-top-color: var(--theme-accent, #0366d6);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -1877,14 +1882,14 @@ onUnmounted(() => {
 
 .generating-text {
   font-size: 12px;
-  color: var(--ide-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
   font-weight: 500;
 }
 
 .message-textarea {
   width: 100%;
   min-height: 40px;
-  max-height: 300px;
+  height: 100%;  /* 填充父容器 */
   border: none;
   outline: none;
   resize: none;
@@ -1892,72 +1897,16 @@ onUnmounted(() => {
   line-height: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: transparent;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .message-textarea::placeholder {
-  color: var(--ide-text-disabled, #6a737d);
+  color: var(--theme-text-disabled, #6a737d);
 }
 
 .message-textarea:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-/* 内嵌图片预览 */
-.inline-images-preview {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 0;
-  margin-bottom: 4px;
-}
-
-.inline-image-item {
-  position: relative;
-  display: inline-block;
-}
-
-.inline-image-preview {
-  width: 64px;
-  height: 64px;
-  object-fit: cover;
-  border-radius: 6px;
-  border: 1px solid var(--ide-border, #e1e4e8);
-  cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.inline-image-preview:hover {
-  transform: scale(1.05);
-}
-
-.inline-image-remove {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 50%;
-  background: var(--ide-error, #d73a49);
-  color: white;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  transition: transform 0.2s;
-}
-
-.inline-image-remove:hover {
-  transform: scale(1.1);
-}
-
-:global(.theme-dark) .inline-image-preview {
-  border-color: var(--ide-border, #3c3c3c);
 }
 
 /* Bottom Toolbar */
@@ -1966,8 +1915,10 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 6px 12px;
-  border-top: 1px solid var(--ide-border, #e1e4e8);
-  background: var(--ide-panel-background, #f6f8fa);
+  border-top: 1px solid var(--theme-border, #e1e4e8);
+  background: var(--theme-panel-background, #f6f8fa);
+  position: relative;
+  z-index: 5;  /* 确保工具栏在输入区域之上 */
 }
 
 .toolbar-left {
@@ -2009,7 +1960,7 @@ onUnmounted(() => {
 /* 模式选择器前缀图标 */
 .mode-prefix-icon {
   font-size: 14px;
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
   margin-right: 2px;
 }
 
@@ -2030,26 +1981,26 @@ onUnmounted(() => {
 }
 
 .cursor-selector :deep(.el-select__wrapper):hover {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.05)) !important;
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.05)) !important;
 }
 
 .cursor-selector :deep(.el-select__wrapper.is-focused) {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.05)) !important;
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.05)) !important;
   box-shadow: none !important;
 }
 
 .cursor-selector :deep(.el-select__placeholder) {
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
   font-size: 13px;
 }
 
 .cursor-selector :deep(.el-select__selection) {
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
   font-size: 13px;
 }
 
 .cursor-selector :deep(.el-select__suffix) {
-  color: var(--ide-secondary-foreground, #9ca3af);
+  color: var(--theme-secondary-foreground, #9ca3af);
   margin-left: 0;
 }
 
@@ -2070,18 +2021,18 @@ onUnmounted(() => {
   padding: 4px 6px;
   border-radius: 4px;
   font-size: 13px;
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
   cursor: pointer;
   user-select: none;
   transition: background 0.15s ease;
 }
 
 .cursor-checkbox:hover:not(.disabled) {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.05));
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.05));
 }
 
 .cursor-checkbox.checked {
-  color: var(--ide-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
 }
 
 .cursor-checkbox.disabled {
@@ -2112,37 +2063,37 @@ onUnmounted(() => {
   font-size: 14px;
   width: 16px;
   text-align: center;
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
 }
 
 /* 模式下拉弹层样式 */
 .mode-dropdown .el-select-dropdown__item.is-selected .mode-icon {
-  color: var(--ide-background, #ffffff);
+  color: var(--theme-background, #ffffff);
 }
 
 /* 模型下拉弹层基础样式，使用主题变量 */
 .chat-input-select-dropdown {
-  background-color: var(--ide-background, #ffffff);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background-color: var(--theme-background, #ffffff);
+  border: 1px solid var(--theme-border, #e1e4e8);
 }
 
 .chat-input-select-dropdown .el-select-dropdown__item {
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .chat-input-select-dropdown .el-select-dropdown__item.hover,
 .chat-input-select-dropdown .el-select-dropdown__item:hover {
-  background-color: var(--ide-hover-background, #f6f8fa);
+  background-color: var(--theme-hover-background, #f6f8fa);
 }
 
 /* 选中项高亮：背景用 accent，文字用背景色（形成对比） */
 .chat-input-select-dropdown .el-select-dropdown__item.is-selected {
-  background-color: var(--ide-accent, #0366d6);
-  color: var(--ide-background, #ffffff) !important;
+  background-color: var(--theme-accent, #0366d6);
+  color: var(--theme-background, #ffffff) !important;
 }
 
 .chat-input-select-dropdown .el-select-dropdown__item.is-selected .model-option-label {
-  color: var(--ide-background, #ffffff);
+  color: var(--theme-background, #ffffff);
 }
 
 .chat-input-select-dropdown .model-option-label {
@@ -2155,40 +2106,17 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-/* 暗色主题下的模型下拉弹层适配 */
-::global(.theme-dark) .chat-input-select-dropdown {
-  background-color: var(--ide-background, #2b2b2b);
-  border-color: var(--ide-border, #3c3c3c);
-}
-
-::global(.theme-dark) .chat-input-select-dropdown .el-select-dropdown__item {
-  color: var(--ide-foreground, #e6edf3);
-}
-
-::global(.theme-dark) .chat-input-select-dropdown .el-select-dropdown__item.hover,
-::global(.theme-dark) .chat-input-select-dropdown .el-select-dropdown__item:hover {
-  background-color: var(--ide-hover-background, #30363d);
-}
-
-::global(.theme-dark) .chat-input-select-dropdown .el-select-dropdown__item.is-selected {
-  background-color: var(--ide-accent, #58a6ff);
-  color: var(--ide-background, #0d1117) !important;
-}
-
-::global(.theme-dark) .chat-input-select-dropdown .el-select-dropdown__item.is-selected .model-option-label {
-  color: var(--ide-background, #0d1117);
-}
 
 .model-selector :deep(.el-select__suffix),
 .mode-selector :deep(.el-select__suffix) {
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
 }
 
 .model-selector.is-disabled :deep(.el-select__wrapper),
 .mode-selector.is-disabled :deep(.el-select__wrapper) {
   opacity: 0.5;
   cursor: not-allowed;
-  background: var(--ide-panel-background, #f6f8fa);
+  background: var(--theme-panel-background, #f6f8fa);
 }
 
 
@@ -2197,11 +2125,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border: 1px solid var(--ide-border, #e1e4e8);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 999px;
-  background: var(--ide-background, #ffffff);
+  background: var(--theme-background, #ffffff);
   font-size: 12px;
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -2210,18 +2138,18 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--ide-border, #d0d7de);
+  background: var(--theme-border, #d0d7de);
   transition: background 0.2s ease;
 }
 
 .thinking-toggle.active {
-  border-color: var(--ide-accent, #0366d6);
-  color: var(--ide-accent, #0366d6);
+  border-color: var(--theme-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
   background: rgba(3, 102, 214, 0.08);
 }
 
 .thinking-toggle.active .status-dot {
-  background: var(--ide-accent, #0366d6);
+  background: var(--theme-accent, #0366d6);
 }
 
 .thinking-toggle:disabled {
@@ -2235,10 +2163,10 @@ onUnmounted(() => {
 
 .token-stats {
   font-size: 11px;
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
   padding: 4px 8px;
-  background: var(--ide-background, #ffffff);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-background, #ffffff);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
 }
 
@@ -2253,14 +2181,14 @@ onUnmounted(() => {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .icon-btn:hover:not(:disabled) {
-  background: var(--ide-hover-background, rgba(0, 0, 0, 0.06));
-  color: var(--ide-foreground, #24292e);
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.06));
+  color: var(--theme-foreground, #24292e);
 }
 
 .icon-btn:disabled {
@@ -2270,62 +2198,36 @@ onUnmounted(() => {
 
 /* 附件按钮 */
 .icon-btn.attach-btn {
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
 }
 
 .icon-btn.attach-btn:hover:not(:disabled) {
-  color: var(--ide-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
 }
 
 /* 发送按钮 */
 .icon-btn.send-icon-btn {
-  color: var(--ide-secondary-foreground, #9ca3af);
+  color: var(--theme-secondary-foreground, #9ca3af);
 }
 
 .icon-btn.send-icon-btn.active {
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .icon-btn.send-icon-btn.active:hover {
-  color: var(--ide-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
   background: rgba(3, 102, 214, 0.1);
 }
 
 /* 停止按钮 */
 .icon-btn.stop-icon-btn {
-  color: var(--ide-error, #d73a49);
+  color: var(--theme-error, #d73a49);
 }
 
 .icon-btn.stop-icon-btn:hover {
   background: rgba(215, 58, 73, 0.1);
 }
 
-/* 暗色主题 */
-:global(.theme-dark) .icon-btn {
-  color: var(--ide-secondary-foreground, #8b949e);
-}
-
-:global(.theme-dark) .icon-btn:hover:not(:disabled) {
-  background: var(--ide-hover-background, rgba(255, 255, 255, 0.08));
-  color: var(--ide-foreground, #e6edf3);
-}
-
-:global(.theme-dark) .icon-btn.send-icon-btn.active {
-  color: var(--ide-foreground, #e6edf3);
-}
-
-:global(.theme-dark) .icon-btn.send-icon-btn.active:hover {
-  color: var(--ide-accent, #58a6ff);
-  background: rgba(88, 166, 255, 0.15);
-}
-
-:global(.theme-dark) .icon-btn.stop-icon-btn {
-  color: var(--ide-error, #f85149);
-}
-
-:global(.theme-dark) .icon-btn.stop-icon-btn:hover {
-  background: rgba(248, 81, 73, 0.15);
-}
 
 /* Context Selector Popup */
 .context-selector-popup {
@@ -2334,8 +2236,8 @@ onUnmounted(() => {
   left: 12px;
   right: 12px;
   margin-bottom: 8px;
-  background: var(--ide-background, #ffffff);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-background, #ffffff);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 1000;
@@ -2348,7 +2250,7 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--ide-border, #e1e4e8);
+  border-bottom: 1px solid var(--theme-border, #e1e4e8);
   font-weight: 600;
   font-size: 14px;
 }
@@ -2359,13 +2261,13 @@ onUnmounted(() => {
   height: 24px;
   border: none;
   background: transparent;
-  color: var(--ide-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground, #586069);
   font-size: 20px;
   cursor: pointer;
 }
 
 .close-btn:hover {
-  color: var(--ide-error, #d73a49);
+  color: var(--theme-error, #d73a49);
 }
 
 .popup-content {
@@ -2375,7 +2277,7 @@ onUnmounted(() => {
 .context-search-input {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid var(--ide-border, #e1e4e8);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   font-size: 14px;
   margin-bottom: 12px;
@@ -2398,7 +2300,7 @@ onUnmounted(() => {
 
 .context-result-item:hover,
 .context-result-item.selected {
-  background: var(--ide-hover-background, #f6f8fa);
+  background: var(--theme-hover-background, #f6f8fa);
 }
 
 .result-icon {
@@ -2407,20 +2309,20 @@ onUnmounted(() => {
 
 .result-name {
   font-weight: 600;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .result-path {
   font-size: 12px;
-  color: var(--ide-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground, #6a737d);
   font-family: monospace;
 }
 
 /* Send Button Context Menu (发送按钮右键菜单) */
 .send-context-menu {
   position: fixed;
-  background: var(--ide-background, #ffffff);
-  border: 1px solid var(--ide-border, #e1e4e8);
+  background: var(--theme-background, #ffffff);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 10000;
@@ -2442,7 +2344,7 @@ onUnmounted(() => {
 }
 
 .context-menu-item:hover {
-  background: var(--ide-hover-background, #f6f8fa);
+  background: var(--theme-hover-background, #f6f8fa);
 }
 
 .menu-icon {
@@ -2451,7 +2353,7 @@ onUnmounted(() => {
 
 .menu-text {
   font-weight: 500;
-  color: var(--ide-foreground, #24292e);
+  color: var(--theme-foreground, #24292e);
 }
 
 .context-menu-backdrop {
@@ -2464,71 +2366,4 @@ onUnmounted(() => {
   background: transparent;
 }
 
-/* 暗色主题适配 */
-:global(.theme-dark) .unified-chat-input-container {
-  background: var(--ide-panel-background, #2b2b2b);
-  border-color: var(--ide-border, #3c3c3c);
-}
-
-:global(.theme-dark) .unified-chat-input-container.generating {
-  border-color: var(--ide-accent, #58a6ff);
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
-}
-
-:global(.theme-dark) .generating-spinner {
-  border-color: var(--ide-border, #3c3c3c);
-  border-top-color: var(--ide-accent, #58a6ff);
-}
-
-:global(.theme-dark) .generating-text {
-  color: var(--ide-accent, #58a6ff);
-}
-
-:global(.theme-dark) .top-toolbar,
-:global(.theme-dark) .bottom-toolbar {
-  border-color: var(--ide-border, #3c3c3c);
-}
-
-:global(.theme-dark) .add-context-btn,
-:global(.theme-dark) .context-tag,
-:global(.theme-dark) .token-stats {
-  background: var(--ide-background, #2b2b2b);
-  border-color: var(--ide-border, #3c3c3c);
-}
-
-/* Cursor 风格选择器暗色主题 */
-:global(.theme-dark) .cursor-selector :deep(.el-select__wrapper):hover,
-:global(.theme-dark) .cursor-selector :deep(.el-select__wrapper.is-focused) {
-  background: var(--ide-hover-background, rgba(255, 255, 255, 0.08)) !important;
-}
-
-/* 模式选择器暗色主题 - 灰色背景 */
-:global(.theme-dark) .cursor-selector.mode-selector :deep(.el-select__wrapper) {
-  background: rgba(255, 255, 255, 0.12) !important;
-}
-
-:global(.theme-dark) .cursor-selector :deep(.el-select__selection) {
-  color: var(--ide-secondary-foreground, #9ca3af);
-}
-
-:global(.theme-dark) .mode-option-label .mode-icon {
-  color: var(--ide-secondary-foreground, #9ca3af);
-}
-
-:global(.theme-dark) .cursor-checkbox {
-  color: var(--ide-secondary-foreground, #9ca3af);
-}
-
-:global(.theme-dark) .cursor-checkbox:hover:not(.disabled) {
-  background: var(--ide-hover-background, rgba(255, 255, 255, 0.08));
-}
-
-:global(.theme-dark) .cursor-checkbox.checked {
-  color: var(--ide-accent, #58a6ff);
-}
-
-:global(.theme-dark) .context-selector-popup {
-  background: var(--ide-background, #2b2b2b);
-  border-color: var(--ide-border, #3c3c3c);
-}
 </style>
