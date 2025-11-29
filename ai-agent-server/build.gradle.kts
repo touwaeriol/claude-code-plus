@@ -6,6 +6,7 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("application") // For running as a standalone app
+    `java-library` // For api() dependency configuration
 }
 
 group = "com.asakii"
@@ -16,7 +17,7 @@ version = "1.0.5" // Align with the main plugin version
 dependencies {
     // Project dependencies
     implementation(project(":ai-agent-sdk"))
-    implementation(project(":ai-agent-rpc-api"))
+    api(project(":ai-agent-rpc-api")) // Use api to expose types to downstream
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
