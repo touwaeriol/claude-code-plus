@@ -12,20 +12,13 @@
 
         <div class="overlay-panel">
           <div class="overlay-header">
-            <div class="overlay-title-group">
-              <h3>{{ $t('session.history') }}</h3>
-              <p>{{ sessions.length }} {{ $t('session.sessionCount') }}</p>
-            </div>
-            <div class="overlay-actions">
-              <button
-                class="overlay-btn ghost"
-                type="button"
-                :aria-label="$t('common.close')"
-                @click="handleClose"
-              >
-                ✕
-              </button>
-            </div>
+            <h3 class="overlay-title">{{ $t('session.history') }} <span class="session-count">{{ sessions.length }}</span></h3>
+            <button
+              class="close-btn"
+              type="button"
+              :aria-label="$t('common.close')"
+              @click="handleClose"
+            >✕</button>
           </div>
 
           <div class="overlay-body">
@@ -245,40 +238,39 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--theme-border, rgba(0, 0, 0, 0.08));
 }
 
-.overlay-title-group h3 {
+.overlay-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--theme-foreground, #111);
 }
 
-.overlay-title-group p {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.6));
+.session-count {
+  font-weight: 400;
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
+  margin-left: 4px;
 }
 
-.overlay-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.overlay-btn {
-  border-radius: 999px;
-  border: 1px solid transparent;
-  padding: 6px 14px;
-  font-size: 12px;
+.close-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  font-size: 14px;
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.overlay-btn.primary {
-  background: var(--theme-accent, #0366d6);
-  color: #fff;
+.close-btn:hover {
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.06));
 }
 
 .overlay-btn.primary:hover {

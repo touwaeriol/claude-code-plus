@@ -9,7 +9,7 @@ import type { SessionState } from '@/types/session'
 import { convertToDisplayItems, convertMessageToDisplayItems } from '@/utils/displayItemConverter'
 import { ConnectionStatus, ToolCallStatus } from '@/types/display'
 import type { DisplayItem } from '@/types/display'
-import type { StreamEvent } from '@/types/streamEvent'
+import { isAssistantText, isThinkingContent, isUserMessage as isDisplayUserMessage } from '@/types/display'
 import { isToolUseBlock, isTextBlock } from '@/utils/contentBlockUtils'
 import type { TextBlock } from '@/types/message'
 import { loggers } from '@/utils/logger'
@@ -20,6 +20,14 @@ import type { ReadToolCall, WriteToolCall, EditToolCall, MultiEditToolCall } fro
 import { buildUserMessageContent } from '@/utils/userMessageBuilder'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { MODEL_CAPABILITIES, BaseModel } from '@/constants/models'
+import {
+  isAssistantMessage as isRpcAssistantMessage,
+  isResultMessage as isRpcResultMessage,
+  isStreamEvent as isRpcStreamEvent,
+  isUserMessage as isRpcUserMessage
+} from '@/types/rpc'
+import type { RpcMessage, RpcResultMessage, RpcStreamEvent } from '@/types/rpc'
+import { mapRpcContentBlock, mapRpcMessageToMessage } from '@/utils/rpcMappers'
 
 const log = loggers.session
 
@@ -40,8 +48,8 @@ export interface Session {
  */
 export type NormalizedRpcMessage =
   | { kind: 'message'; data: Message }
-  | { kind: 'stream_event'; data: any }
-  | { kind: 'result'; data: any }
+  | { kind: 'stream_event'; data: RpcStreamEvent }
+  | { kind: 'result'; data: RpcResultMessage }
 
 /**
  * 工具调用状态（向后兼容）
@@ -114,7 +122,7 @@ export const useSessionStore = defineStore('session', () => {
     settings: {
       modelId: string | null
       thinkingEnabled: boolean
-      permissionMode: string
+      permissionMode: RpcPermissionMode
       skipPermissions: boolean
     }
   ): SessionState {
@@ -136,7 +144,7 @@ export const useSessionStore = defineStore('session', () => {
       connectionStatus: ConnectionStatus.CONNECTED,
       modelId: settings.modelId,
       thinkingEnabled: settings.thinkingEnabled,
-      permissionMode: settings.permissionMode as any,
+      permissionMode: settings.permissionMode,
       skipPermissions: settings.skipPermissions,
       session: null,
       capabilities: null,
@@ -192,7 +200,7 @@ export const useSessionStore = defineStore('session', () => {
   function updateCurrentSessionSettings(settings: Partial<{
     modelId: string
     thinkingEnabled: boolean
-    permissionMode: string
+    permissionMode: RpcPermissionMode
     skipPermissions: boolean
   }>) {
     const session = currentSession.value
@@ -200,7 +208,7 @@ export const useSessionStore = defineStore('session', () => {
 
     if (settings.modelId !== undefined) session.modelId = settings.modelId
     if (settings.thinkingEnabled !== undefined) session.thinkingEnabled = settings.thinkingEnabled
-    if (settings.permissionMode !== undefined) session.permissionMode = settings.permissionMode as any
+    if (settings.permissionMode !== undefined) session.permissionMode = settings.permissionMode
     if (settings.skipPermissions !== undefined) session.skipPermissions = settings.skipPermissions
 
     log.debug('[updateCurrentSessionSettings] 更新会话设置:', settings)
@@ -296,7 +304,7 @@ export const useSessionStore = defineStore('session', () => {
       connectionStatuses.value.set('pending', ConnectionStatus.CONNECTING)
 
       // 使用 aiAgentService 创建会话
-      const connectResult = await aiAgentService.connect(options, (rawMessage: any) => {
+      const connectResult = await aiAgentService.connect(options, (rawMessage: RpcMessage) => {
         const normalized = normalizeRpcMessage(rawMessage)
         if (normalized) {
           handleMessage(connectResult.sessionId, normalized)
@@ -375,7 +383,7 @@ export const useSessionStore = defineStore('session', () => {
       })
 
       connectionStatuses.value.set('pending', ConnectionStatus.CONNECTING)
-      const connectResult = await aiAgentService.connect(options, (rawMessage: any) => {
+      const connectResult = await aiAgentService.connect(options, (rawMessage: RpcMessage) => {
         const normalized = normalizeRpcMessage(rawMessage)
         if (normalized) {
           handleMessage(connectResult.sessionId, normalized)
@@ -444,73 +452,34 @@ export const useSessionStore = defineStore('session', () => {
    *
    * @returns NormalizedRpcMessage | null
    */
-  function normalizeRpcMessage(raw: any): NormalizedRpcMessage | null {
-    if (!raw || typeof raw !== 'object') {
-      log.warn('normalizeRpcMessage: 收到无效消息', raw)
-      return null
-    }
-
-    // 🔍 调试：打印原始消息格式
+  function normalizeRpcMessage(raw: RpcMessage): NormalizedRpcMessage | null {
     log.debug('🔍 [normalizeRpcMessage] 收到原始消息:', {
-      hasType: 'type' in raw,
-      hasRole: 'role' in raw,
       type: raw.type,
-      role: raw.role,
-      keys: Object.keys(raw),
+      provider: raw.provider,
+      keys: Object.keys(raw as Record<string, unknown>),
       preview: JSON.stringify(raw).substring(0, 200)
     })
 
-    const type = raw.type || raw.role
-
-    // 处理 stream_event 消息
-    if (type === 'stream_event') {
+    if (isRpcStreamEvent(raw)) {
       log.debug('✅ [normalizeRpcMessage] 识别为 stream_event')
       return { kind: 'stream_event', data: raw }
     }
 
-    // 处理 result 消息（包含 usage 统计信息）
-    if (type === 'result') {
+    if (isRpcResultMessage(raw)) {
       log.debug('✅ [normalizeRpcMessage] 识别为 result')
       return { kind: 'result', data: raw }
     }
 
-    // 处理 assistant 消息
-    if (type === 'assistant') {
-      log.debug('✅ [normalizeRpcMessage] 识别为 assistant')
-      const content: ContentBlock[] = Array.isArray(raw.content) ? raw.content : []
-      const timestamp = typeof raw.timestamp === 'number' ? raw.timestamp : Date.now()
-
-      const normalized: Message = {
-        id: raw.id || '',
-        role: 'assistant',
-        content,
-        timestamp,
-        tokenUsage: raw.token_usage
+    if (isRpcAssistantMessage(raw) || isRpcUserMessage(raw)) {
+      const mapped = mapRpcMessageToMessage(raw)
+      if (!mapped) {
+        log.warn('⚠️ [normalizeRpcMessage] 消息内容为空，跳过', raw.type)
+        return null
       }
-
-      return { kind: 'message', data: normalized }
+      return { kind: 'message', data: mapped }
     }
 
-    // 处理 user 消息（包含 tool_result）
-    if (type === 'user') {
-      log.debug('✅ [normalizeRpcMessage] 识别为 user')
-      const content: ContentBlock[] = Array.isArray(raw.content) ? raw.content : []
-      const hasToolResult = content.some((block: ContentBlock) => block.type === 'tool_result')
-
-      if (hasToolResult) {
-        const timestamp = typeof raw.timestamp === 'number' ? raw.timestamp : Date.now()
-        const normalized: Message = {
-          id: raw.id || '',
-          role: 'user',
-          content,
-          timestamp
-        }
-        return { kind: 'message', data: normalized }
-      }
-    }
-
-    // 其他类型的消息忽略
-    log.warn('⚠️ [normalizeRpcMessage] 未识别的消息类型:', type, raw)
+    log.warn('⚠️ [normalizeRpcMessage] 未识别的消息类型:', raw.type, raw)
     return null
   }
 
@@ -899,8 +868,8 @@ export const useSessionStore = defineStore('session', () => {
       timestamp: newMsg.timestamp
     }
     // 保留 isStreaming 标记（如果存在）
-    if ((newMsg as any).isStreaming !== undefined) {
-      (merged as any).isStreaming = (newMsg as any).isStreaming
+    if (newMsg.isStreaming !== undefined) {
+      merged.isStreaming = newMsg.isStreaming
     }
     return merged
   }
@@ -951,25 +920,15 @@ export const useSessionStore = defineStore('session', () => {
    *
    * 直接解析和处理 stream event 数据，不依赖外部模块
    */
-  function handleStreamEvent(sessionId: string, streamEventData: any) {
+  function handleStreamEvent(sessionId: string, streamEventData: RpcStreamEvent) {
     const sessionState = getSessionState(sessionId)
     if (!sessionState) {
       log.warn(`handleStreamEvent: 会话 ${sessionId} 不存在`)
       return
     }
 
-    // 解析 stream event 数据
-    let event: StreamEvent | null = null
-
-    if (streamEventData && typeof streamEventData === 'object') {
-      if ('event' in streamEventData && streamEventData.event && typeof streamEventData.event === 'object') {
-        event = streamEventData.event as StreamEvent
-      } else if ('type' in streamEventData) {
-        event = streamEventData as StreamEvent
-      }
-    }
-
-    if (!event || !event.type) {
+    const event = streamEventData.event
+    if (!event) {
       log.warn('❌ [handleStreamEvent] 无效的 event 数据:', streamEventData)
       return
     }
@@ -978,20 +937,26 @@ export const useSessionStore = defineStore('session', () => {
     log.debug(`[handleStreamEvent] 处理事件: ${eventType}`)
 
     // 更新 token 使用量
-    if (eventType === 'message_delta' && (event as any).usage) {
-      const usage = (event as any).usage
-      setTokenUsage(sessionId, usage.input_tokens || 0, usage.output_tokens || 0)
+    if (eventType === 'message_delta' && 'usage' in event && event.usage) {
+      const usage = event.usage as { input_tokens?: number; output_tokens?: number; inputTokens?: number; outputTokens?: number }
+      setTokenUsage(
+        sessionId,
+        usage.input_tokens ?? usage.inputTokens ?? 0,
+        usage.output_tokens ?? usage.outputTokens ?? 0
+      )
     }
 
     // 处理不同类型的事件
     switch (eventType) {
       case 'message_start': {
-        const messageData = (event as any).message
+        const contentBlocks = (event.message?.content ?? [])
+          .map(mapRpcContentBlock)
+          .filter((b): b is ContentBlock => !!b)
         const newMessage: Message = {
-          id: messageData?.id || `assistant-${Date.now()}`,
+          id: event.message?.id || `assistant-${Date.now()}`,
           role: 'assistant',
           timestamp: Date.now(),
-          content: messageData?.content || [],
+          content: contentBlocks,
           isStreaming: true
         }
         sessionState.messages.push(newMessage)
@@ -1007,29 +972,18 @@ export const useSessionStore = defineStore('session', () => {
           lastMessage.isStreaming = false
         }
         setSessionGenerating(sessionId, false)
+        touchSession(sessionId)
         break
       }
 
       case 'content_block_start': {
         const lastMessage = getOrCreateLastAssistantMessage(sessionState.messages)
-        const contentBlock = (event as any).content_block
+        const contentBlock = mapRpcContentBlock(event.content_block)
         if (contentBlock) {
-          if (contentBlock.type === 'text') {
-            lastMessage.content.push({ type: 'text', text: contentBlock.text || '' })
-          } else if (contentBlock.type === 'tool_use') {
-            lastMessage.content.push({
-              type: 'tool_use',
-              id: contentBlock.id || '',
-              toolName: contentBlock.name || '',
-              input: contentBlock.input || {},
-              status: 'in_progress'
-            } as any)
-            if (contentBlock.id) {
-              toolInputJsonAccumulator.set(contentBlock.id, '')
-              registerToolCall(contentBlock.id, contentBlock.name || '', contentBlock.input || {})
-            }
-          } else if (contentBlock.type === 'thinking') {
-            lastMessage.content.push({ type: 'thinking', thinking: contentBlock.thinking || '' })
+          lastMessage.content.push(contentBlock)
+          if (contentBlock.type === 'tool_use' && contentBlock.id) {
+            toolInputJsonAccumulator.set(contentBlock.id, '')
+            registerToolCall(contentBlock.id, contentBlock.toolName || '', contentBlock.input || {})
           }
         }
         syncDisplayItemsForMessage(lastMessage, sessionState)
@@ -1040,20 +994,19 @@ export const useSessionStore = defineStore('session', () => {
         const lastMessage = sessionState.messages[sessionState.messages.length - 1]
         if (!lastMessage || lastMessage.role !== 'assistant') break
 
-        const index = (event as any).index as number
-        const delta = (event as any).delta
+        const index = event.index
+        const delta = event.delta
         if (index >= 0 && index < lastMessage.content.length && delta) {
           const contentBlock = lastMessage.content[index]
           if (delta.type === 'text_delta' && contentBlock.type === 'text') {
-            (contentBlock as any).text += delta.text
+            contentBlock.text += delta.text
           } else if (delta.type === 'input_json_delta' && contentBlock.type === 'tool_use') {
-            const toolBlock = contentBlock as any
-            const accumulated = toolInputJsonAccumulator.get(toolBlock.id) || ''
+            const accumulated = toolInputJsonAccumulator.get(contentBlock.id) || ''
             const newAccumulated = accumulated + delta.partial_json
-            toolInputJsonAccumulator.set(toolBlock.id, newAccumulated)
-            try { toolBlock.input = JSON.parse(newAccumulated) } catch { /* ignore */ }
+            toolInputJsonAccumulator.set(contentBlock.id, newAccumulated)
+            try { contentBlock.input = JSON.parse(newAccumulated) } catch { /* ignore */ }
           } else if (delta.type === 'thinking_delta' && contentBlock.type === 'thinking') {
-            (contentBlock as any).thinking += delta.thinking
+            contentBlock.thinking += delta.thinking
           }
         }
         syncDisplayItemsForMessage(lastMessage, sessionState)
@@ -1095,9 +1048,10 @@ export const useSessionStore = defineStore('session', () => {
     
     for (let i = 0; i < sessionState.displayItems.length; i++) {
       const item = sessionState.displayItems[i]
-      const isMessageItem = 
-        (item.type === 'assistantText' && item.id.startsWith(`${message.id}-text-`)) ||
-        (item.type === 'toolCall' && message.content.some(block => 
+      const isMessageItem =
+        (item.displayType === 'assistantText' && item.id.startsWith(`${message.id}-text-`)) ||
+        (item.displayType === 'thinking' && item.id.startsWith(`${message.id}-thinking-`)) ||
+        (item.displayType === 'toolCall' && message.content.some(block =>
           isToolUseBlock(block) && block.id === item.id
         ))
       
@@ -1142,17 +1096,17 @@ export const useSessionStore = defineStore('session', () => {
         const expectedId = `${message.id}-text-${blockIdx}`
         const existingItem = existingItemsMap.get(expectedId)
         
-        if (existingItem && existingItem.type === 'assistantText') {
-          // 更新现有文本块
-          const assistantText = existingItem as any
-          assistantText.content = textBlock.text
-          assistantText.isLastInMessage = blockIdx === lastTextBlockIndex
-          newDisplayItems.push(existingItem)
+        if (existingItem && isAssistantText(existingItem)) {
+          newDisplayItems.push({
+            ...existingItem,
+            content: textBlock.text,
+            isLastInMessage: blockIdx === lastTextBlockIndex
+          })
         } else {
           // 创建新的文本块
           const isLastTextBlock = blockIdx === lastTextBlockIndex
           const assistantText = {
-            type: 'assistantText' as const,
+            displayType: 'assistantText' as const,
             id: expectedId,
             content: textBlock.text,
             timestamp: message.timestamp,
@@ -1161,11 +1115,29 @@ export const useSessionStore = defineStore('session', () => {
           }
           newDisplayItems.push(assistantText)
         }
+      } else if (block.type === 'thinking') {
+        const expectedId = `${message.id}-thinking-${blockIdx}`
+        const existingItem = existingItemsMap.get(expectedId)
+
+        if (existingItem && isThinkingContent(existingItem)) {
+          newDisplayItems.push({
+            ...existingItem,
+            content: block.thinking || ''
+          })
+        } else {
+          newDisplayItems.push({
+            displayType: 'thinking' as const,
+            id: expectedId,
+            content: block.thinking || '',
+            signature: block.signature,
+            timestamp: message.timestamp
+          })
+        }
       } else if (isToolUseBlock(block)) {
         // 工具调用块：复用现有的或创建新的
         const existingItem = existingItemsMap.get(block.id)
         
-        if (existingItem && existingItem.type === 'toolCall') {
+        if (existingItem && existingItem.displayType === 'toolCall') {
           // 复用现有的工具调用（保留状态），但同步更新 input
           const toolUseBlock = block as ToolUseBlock
           // 始终同步 input（即使为空对象，也要更新以确保状态同步）
@@ -1181,7 +1153,7 @@ export const useSessionStore = defineStore('session', () => {
         } else {
           // 创建新的工具调用
           const toolCall = convertMessageToDisplayItems(message, sessionState.pendingToolCalls)
-            .find(item => item.type === 'toolCall' && item.id === block.id)
+            .find(item => item.displayType === 'toolCall' && item.id === block.id)
           if (toolCall) {
             newDisplayItems.push(toolCall)
           }
@@ -1217,7 +1189,7 @@ export const useSessionStore = defineStore('session', () => {
    *   usage?: { input_tokens: number, output_tokens: number }
    * }
    */
-  function handleResultMessage(sessionId: string, resultData: any) {
+  function handleResultMessage(sessionId: string, resultData: RpcResultMessage) {
     log.debug(`handleResultMessage: 收到 result 消息, sessionId=${sessionId}`)
 
     const sessionState = getSessionState(sessionId)
@@ -1233,9 +1205,10 @@ export const useSessionStore = defineStore('session', () => {
     let inputTokens = 0
     let outputTokens = 0
 
-    if (resultData.usage) {
-      inputTokens = resultData.usage.input_tokens || 0
-      outputTokens = resultData.usage.output_tokens || 0
+    const usage = resultData.usage as { input_tokens?: number; output_tokens?: number } | undefined
+    if (usage) {
+      inputTokens = usage.input_tokens || 0
+      outputTokens = usage.output_tokens || 0
     }
 
     // 计算请求时长
@@ -1248,17 +1221,19 @@ export const useSessionStore = defineStore('session', () => {
     if (tracker?.lastUserMessageId) {
       // 在 displayItems 中找到对应的用户消息并更新
       const displayItemIndex = sessionState.displayItems.findIndex(
-        item => item.id === tracker.lastUserMessageId && item.type === 'userMessage'
+        item => isDisplayUserMessage(item) && item.id === tracker.lastUserMessageId
       )
 
       if (displayItemIndex !== -1) {
-        const userMessage = sessionState.displayItems[displayItemIndex] as any
-        userMessage.requestStats = {
-          requestDuration: durationMs,
-          inputTokens,
-          outputTokens
+        const userMessage = sessionState.displayItems[displayItemIndex]
+        if (isDisplayUserMessage(userMessage)) {
+          userMessage.requestStats = {
+            requestDuration: durationMs,
+            inputTokens,
+            outputTokens
+          }
+          userMessage.isStreaming = false
         }
-        userMessage.isStreaming = false
         log.debug(`handleResultMessage: 更新用户消息统计信息`)
 
         // 触发响应式更新
@@ -1292,11 +1267,13 @@ export const useSessionStore = defineStore('session', () => {
     const sessionState = getSessionState(sessionId)
     if (sessionState) {
       const displayItemIndex = sessionState.displayItems.findIndex(
-        item => item.id === userMessageId && item.type === 'userMessage'
+        item => isDisplayUserMessage(item) && item.id === userMessageId
       )
       if (displayItemIndex !== -1) {
-        const userMessage = sessionState.displayItems[displayItemIndex] as any
-        userMessage.isStreaming = true
+        const userMessage = sessionState.displayItems[displayItemIndex]
+        if (isDisplayUserMessage(userMessage)) {
+          userMessage.isStreaming = true
+        }
         // 触发响应式更新
         sessionState.displayItems = [...sessionState.displayItems]
       }
@@ -1442,13 +1419,12 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 加载会话历史消息
    */
-  async function loadSessionHistory(sessionId: string): Promise<Message[]> {
+  async function loadSessionHistory(sessionId: string): Promise<AgentStreamEvent[]> {
     loading.value = true
     try {
       log.debug(`加载历史消息: ${sessionId}`)
-      // getHistory 返回的是简化的 Message 类型，需要转换
-      // TODO: 在新架构中，历史消息应该通过 resume 会话时的 stream event 获取
-      const messages = await aiAgentService.getHistory(sessionId) as any as Message[]
+      // getHistory 返回的是 stream event 记录，后续可在 resume 流中替代
+      const messages = await aiAgentService.getHistory(sessionId)
       log.debug(`加载了 ${messages.length} 条历史消息`)
       return messages
     } catch (error) {
@@ -1491,7 +1467,7 @@ export const useSessionStore = defineStore('session', () => {
    *
    * @param content 内容块数组 [{ type: 'text', text: '...' }, { type: 'image', data: '...', mimeType: '...' }]
    */
-  async function sendMessageWithContent(content: import('../services/ClaudeSession').ContentBlock[]): Promise<void> {
+  async function sendMessageWithContent(content: ContentBlock[]): Promise<void> {
     if (!currentSessionId.value) {
       throw new Error('当前没有活跃的会话')
     }
@@ -1499,7 +1475,10 @@ export const useSessionStore = defineStore('session', () => {
     // 发送前同步设置（延迟同步策略）
     await syncSettingsIfNeeded()
 
-    await aiAgentService.sendMessageWithContent(currentSessionId.value, content)
+    await aiAgentService.sendMessageWithContent(
+      currentSessionId.value,
+      content as unknown as import('../services/ClaudeSession').ContentBlock[]
+    )
   }
 
   /**
@@ -1551,7 +1530,7 @@ export const useSessionStore = defineStore('session', () => {
     console.log('📤 用户消息已添加到显示列表:', userMessage.id)
 
     // 2. 发送到后端（使用合并后的内容）
-    sendMessageWithContent(mergedContent as any).catch(err => {
+    sendMessageWithContent(mergedContent).catch(err => {
       console.error('❌ enqueueMessage 发送失败:', err)
     })
   }
@@ -1598,12 +1577,12 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 设置当前会话的权限模式
    */
-  async function setPermissionMode(mode: string): Promise<void> {
+  async function setPermissionMode(mode: RpcPermissionMode): Promise<void> {
     if (!currentSessionId.value) {
       throw new Error('当前没有活跃的会话')
     }
 
-    await aiAgentService.setPermissionMode(currentSessionId.value, mode as any)
+    await aiAgentService.setPermissionMode(currentSessionId.value, mode)
     log.info(`权限模式已切换为: ${mode}`)
 
     // 更新 lastAppliedSettings
@@ -1711,7 +1690,7 @@ export const useSessionStore = defineStore('session', () => {
     })
 
     // 3. 重新连接
-    const connectResult = await aiAgentService.connect(options, (rawMessage: any) => {
+    const connectResult = await aiAgentService.connect(options, (rawMessage: RpcMessage) => {
       const normalized = normalizeRpcMessage(rawMessage)
       if (normalized) {
         handleMessage(connectResult.sessionId, normalized)
@@ -1850,4 +1829,3 @@ export const useSessionStore = defineStore('session', () => {
     requestTracker
   }
 })
-

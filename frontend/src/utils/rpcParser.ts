@@ -1,118 +1,138 @@
 /**
  * RPC 消息解析器
  *
- * 提供类型守卫和安全解析函数，将 unknown 类型转换为强类型的 RPC 消息
+ * 提供类型守卫和安全解析函数，将 unknown 转成强类型 RPC 结构。
  */
 
 import type {
   RpcMessage,
+  RpcMessageType,
   RpcStreamWrapper,
   RpcResultWrapper,
   RpcErrorWrapper,
   RpcCompleteWrapper,
+  RpcWebSocketMessage,
   RpcStreamEvent,
-  RpcStreamEventType,
-  RpcMessageStart,
-  RpcTextDelta,
-  RpcThinkingDelta,
-  RpcToolStart,
-  RpcToolProgress,
-  RpcToolComplete,
-  RpcMessageComplete,
-  RpcResultMessage,
-  RpcUserMessage,
-  RpcErrorEvent
+  RpcStreamEventData,
+  RpcDelta
 } from '@/types/rpc'
 
 // ===== 常量 =====
 
-/** 所有流式事件类型 */
-export const STREAM_EVENT_TYPES: readonly RpcStreamEventType[] = [
-  'message_start',
-  'text_delta',
-  'thinking_delta',
-  'tool_start',
-  'tool_progress',
-  'tool_complete',
-  'message_complete',
+/** 所有顶层 RPC 消息类型 */
+export const RPC_MESSAGE_TYPES: readonly RpcMessageType[] = [
+  'user',
+  'assistant',
   'result',
-   'user',
-  'error',
-  'assistant'
+  'stream_event',
+  'error'
 ] as const
 
-// ===== 辅助函数 =====
+// ===== 帮助函数 =====
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+const isString = (v: unknown): v is string => typeof v === 'string'
+const isNumber = (v: unknown): v is number => typeof v === 'number'
+const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
+const isArray = Array.isArray
 
 function hasType(value: unknown): value is { type: string } {
-  return typeof value === 'object' && value !== null && 'type' in value
+  return isObject(value) && isString((value as any).type)
 }
 
-/** 检查是否为有效的流式事件类型 */
-export function isStreamEventType(type: unknown): type is RpcStreamEventType {
-  return typeof type === 'string' && STREAM_EVENT_TYPES.includes(type as RpcStreamEventType)
+function isRpcMessageType(type: unknown): type is RpcMessageType {
+  return isString(type) && RPC_MESSAGE_TYPES.includes(type as RpcMessageType)
 }
 
-// ===== 类型守卫：流式事件 =====
+// ===== Delta 守卫 =====
 
-/** 检查是否为 RpcStreamEvent */
-export function isRpcStreamEvent(value: unknown): value is RpcStreamEvent {
-  if (!hasType(value)) return false
-  return isStreamEventType(value.type)
+function isRpcTextDelta(delta: unknown): delta is RpcDelta {
+  return isObject(delta) && delta.type === 'text_delta' && isString((delta as any).text)
 }
 
-/** 检查是否为 RpcMessageStart */
-export function isRpcMessageStart(value: unknown): value is RpcMessageStart {
+function isRpcThinkingDelta(delta: unknown): delta is RpcDelta {
+  return isObject(delta) && delta.type === 'thinking_delta' && isString((delta as any).thinking)
+}
+
+function isRpcInputJsonDelta(delta: unknown): delta is RpcDelta {
+  return isObject(delta) && delta.type === 'input_json_delta' && isString((delta as any).partial_json)
+}
+
+function isRpcDelta(delta: unknown): delta is RpcDelta {
+  return isRpcTextDelta(delta) || isRpcThinkingDelta(delta) || isRpcInputJsonDelta(delta)
+}
+
+// ===== StreamEventData 守卫 =====
+
+function isMessageStartEvent(event: unknown): event is RpcStreamEventData {
+  if (!isObject(event) || event.type !== 'message_start') return false
+  if ('message' in event && (event as any).message !== undefined) {
+    const msg = (event as any).message
+    if (!isObject(msg)) return false
+    if ('content' in msg && msg.content !== undefined && !isArray(msg.content)) return false
+  }
+  return true
+}
+
+function isContentBlockStartEvent(event: unknown): event is RpcStreamEventData {
+  if (!isObject(event) || event.type !== 'content_block_start') return false
+  return isNumber((event as any).index) && isObject((event as any).content_block)
+}
+
+function isContentBlockDeltaEvent(event: unknown): event is RpcStreamEventData {
+  if (!isObject(event) || event.type !== 'content_block_delta') return false
+  return isNumber((event as any).index) && isRpcDelta((event as any).delta)
+}
+
+function isContentBlockStopEvent(event: unknown): event is RpcStreamEventData {
+  return isObject(event) && event.type === 'content_block_stop' && isNumber((event as any).index)
+}
+
+function isMessageDeltaEvent(event: unknown): event is RpcStreamEventData {
+  return isObject(event) && event.type === 'message_delta'
+}
+
+function isMessageStopEvent(event: unknown): event is RpcStreamEventData {
+  return isObject(event) && event.type === 'message_stop'
+}
+
+function isRpcStreamEventData(event: unknown): event is RpcStreamEventData {
   return (
-    hasType(value) &&
-    value.type === 'message_start' &&
-    typeof (value as any).messageId === 'string' &&
-    (value as any).messageId.length > 0
+    isMessageStartEvent(event) ||
+    isContentBlockStartEvent(event) ||
+    isContentBlockDeltaEvent(event) ||
+    isContentBlockStopEvent(event) ||
+    isMessageDeltaEvent(event) ||
+    isMessageStopEvent(event)
   )
 }
 
-/** 检查是否为 RpcTextDelta */
-export function isRpcTextDelta(value: unknown): value is RpcTextDelta {
-  return hasType(value) && value.type === 'text_delta' && 'text' in value
+// ===== 类型守卫：顶层 RPC 消息 =====
+
+/** 检查是否为 RpcMessage（user/assistant/result/stream_event/error） */
+export function isRpcMessage(value: unknown): value is RpcMessage {
+  if (!hasType(value) || !isRpcMessageType((value as any).type)) return false
+
+  const obj = value as any
+  switch (obj.type) {
+    case 'user':
+      return isObject(obj.message) && isArray(obj.message.content)
+    case 'assistant':
+      return isObject(obj.message) && isArray(obj.message.content)
+    case 'result':
+      return isBoolean(obj.is_error) && isString(obj.subtype || '') && ('duration_ms' in obj ? isNumber(obj.duration_ms) || obj.duration_ms === undefined : true)
+    case 'error':
+      return isString(obj.message)
+    case 'stream_event':
+      return isString(obj.uuid) && isString(obj.session_id) && isRpcStreamEventData(obj.event)
+    default:
+      return false
+  }
 }
 
-/** 检查是否为 RpcThinkingDelta */
-export function isRpcThinkingDelta(value: unknown): value is RpcThinkingDelta {
-  return hasType(value) && value.type === 'thinking_delta' && 'thinking' in value
-}
-
-/** 检查是否为 RpcToolStart */
-export function isRpcToolStart(value: unknown): value is RpcToolStart {
-  return hasType(value) && value.type === 'tool_start' && 'toolId' in value && 'toolName' in value
-}
-
-/** 检查是否为 RpcToolProgress */
-export function isRpcToolProgress(value: unknown): value is RpcToolProgress {
-  return hasType(value) && value.type === 'tool_progress' && 'toolId' in value && 'status' in value
-}
-
-/** 检查是否为 RpcToolComplete */
-export function isRpcToolComplete(value: unknown): value is RpcToolComplete {
-  return hasType(value) && value.type === 'tool_complete' && 'toolId' in value && 'result' in value
-}
-
-/** 检查是否为 RpcMessageComplete */
-export function isRpcMessageComplete(value: unknown): value is RpcMessageComplete {
-  return hasType(value) && value.type === 'message_complete'
-}
-
-/** 检查是否为 RpcResultMessage */
-export function isRpcResultMessage(value: unknown): value is RpcResultMessage {
-  return hasType(value) && value.type === 'result'
-}
-
-/** 检查是否为 RpcUserMessage */
-export function isRpcUserMessage(value: unknown): value is RpcUserMessage {
-  return hasType(value) && value.type === 'user'
-}
-
-/** 检查是否为 RpcErrorEvent */
-export function isRpcErrorEvent(value: unknown): value is RpcErrorEvent {
-  return hasType(value) && value.type === 'error' && 'message' in value
+/** 检查是否为 RpcStreamEvent（顶层 type === 'stream_event'） */
+export function isRpcStreamEvent(value: unknown): value is RpcStreamEvent {
+  return isRpcMessage(value) && (value as RpcMessage).type === 'stream_event'
 }
 
 // ===== 类型守卫：WebSocket 消息包装 =====
@@ -121,7 +141,7 @@ export function isRpcErrorEvent(value: unknown): value is RpcErrorEvent {
 export function isRpcStreamWrapper(value: unknown): value is RpcStreamWrapper {
   if (!hasType(value)) return false
   const obj = value as Record<string, unknown>
-  return obj.type === 'stream' && 'id' in obj && 'data' in obj && isRpcStreamEvent(obj.data)
+  return obj.type === 'stream' && typeof obj.id === 'string' && 'data' in obj && isRpcMessage(obj.data)
 }
 
 /** 检查是否为 RpcResultWrapper */
@@ -148,9 +168,9 @@ export function isRpcCompleteWrapper(value: unknown): value is RpcCompleteWrappe
 // ===== 主解析函数 =====
 
 /**
- * 解析 WebSocket 消息为强类型 RpcMessage
+ * 解析 WebSocket 消息为强类型 Rpc 消息/包装
  */
-export function parseRpcMessage(raw: unknown): RpcMessage | null {
+export function parseRpcMessage(raw: unknown): RpcWebSocketMessage | RpcMessage | null {
   if (raw === null || typeof raw !== 'object') {
     return null
   }
@@ -158,23 +178,22 @@ export function parseRpcMessage(raw: unknown): RpcMessage | null {
   if (isRpcCompleteWrapper(raw)) return raw
   if (isRpcResultWrapper(raw)) return raw
   if (isRpcErrorWrapper(raw)) return raw
+  if (isRpcMessage(raw)) return raw
   return null
 }
 
 /**
- * 从 RpcMessage 中提取流式事件
+ * 从 RpcMessage 中提取流式事件（type === 'stream_event'）
  */
 export function extractStreamEvent(message: RpcMessage): RpcStreamEvent | null {
-  if (isRpcStreamWrapper(message)) {
-    return message.data
-  }
+  if (isRpcStreamEvent(message)) return message
   return null
 }
 
 /**
  * 解析 JSON 字符串为 RpcMessage
  */
-export function parseRpcMessageFromString(jsonString: string): RpcMessage | null {
+export function parseRpcMessageFromString(jsonString: string): RpcWebSocketMessage | RpcMessage | null {
   try {
     const parsed = JSON.parse(jsonString)
     return parseRpcMessage(parsed)

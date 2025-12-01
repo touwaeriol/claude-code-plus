@@ -20,9 +20,9 @@ interface AiAgentRpcService {
     /**
      * 发送一条纯文本消息
      * @param message 用户消息
-     * @return 流式响应 (Flow<JsonElement>)
+     * @return 流式响应 (Flow<RpcMessage>)
      */
-    fun query(message: String): Flow<RpcUiEvent>
+    fun query(message: String): Flow<RpcMessage>
 
     /**
      * 发送带富媒体内容的消息（兼容历史 stream-json 格式）
@@ -32,9 +32,9 @@ interface AiAgentRpcService {
      * - 图片: { "type": "image", "data": "base64...", "mimeType": "image/png" }
      *
      * @param content 内容块数组
-     * @return 统一 UI 事件流 (Flow<JsonElement>)
+     * @return 统一 UI 事件流 (Flow<RpcMessage>)
      */
-    fun queryWithContent(content: List<RpcContentBlock>): Flow<RpcUiEvent>
+    fun queryWithContent(content: List<RpcContentBlock>): Flow<RpcMessage>
 
     /**
      * 中断当前操作

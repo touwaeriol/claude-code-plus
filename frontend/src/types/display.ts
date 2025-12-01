@@ -108,6 +108,7 @@ export interface AssistantText extends BaseDisplayItem {
   content: string
   stats?: RequestStats        // 请求统计信息（仅最后一个文本块有）
   isLastInMessage?: boolean   // 是否是该消息的最后一个文本块
+  isStreaming?: boolean       // 是否处于流式输出阶段
 }
 
 /**

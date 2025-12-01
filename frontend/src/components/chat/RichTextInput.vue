@@ -31,6 +31,7 @@ import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Node, mergeAttributes } from '@tiptap/core'
+import { ideService } from '@/services/ideaBridge'
 
 // 文件引用扩展 - 用于在编辑器中显示 @文件路径
 const FileReference = Node.create({
@@ -225,9 +226,7 @@ const editor = useEditor({
         const filePath = target.getAttribute('data-file-ref')
         if (filePath) {
           // 通过 HTTP API 调用，IDEA 插件和 Web 环境都支持
-          import('@/services/ideaBridge').then(({ ideService }) => {
-            ideService.openFile(filePath)
-          })
+          ideService.openFile(filePath)
           return true
         }
       }

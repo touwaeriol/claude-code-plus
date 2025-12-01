@@ -209,12 +209,17 @@ const displayItems = computed(() => sessionStore.currentDisplayItems)
 const toolStats = computed(() => calculateToolStats(displayItems.value))
 
 const historySessions = computed(() => {
+  // 获取当前在 tab 中打开的会话 ID 集合
+  const activeTabIds = new Set(sessionStore.activeTabs?.map(t => t.id) || [])
+
   return sessionStore.allSessions.map(session => ({
     id: session.id,
     name: session.name,
     timestamp: session.lastActiveAt ?? session.updatedAt,
-    messageCount: session.messages.length,
-    isGenerating: session.isGenerating
+    messageCount: session.messages?.length ?? 0,
+    isGenerating: session.isGenerating,
+    // 如果会话在 tab 中打开，则标记为已连接（激活状态）
+    isConnected: activeTabIds.has(session.id)
   }))
 })
 
@@ -331,8 +336,9 @@ watch(() => props.sessionId, async (newSessionId) => {
 })
 
 // 事件处理器
-async function handleSendMessage(contents: ContentBlock[]) {
-  console.log('handleSendMessage:', contents.length, 'content blocks')
+async function handleSendMessage(contents?: ContentBlock[]) {
+  const safeContents = Array.isArray(contents) ? contents : []
+  console.log('handleSendMessage:', safeContents.length, 'content blocks')
 
   try {
     if (!sessionStore.currentSessionId) {
@@ -356,7 +362,7 @@ async function handleSendMessage(contents: ContentBlock[]) {
     console.log('Enqueueing message')
     sessionStore.enqueueMessage({
       contexts: currentContexts,
-      contents
+      contents: safeContents
     })
   } catch (error) {
     console.error('Failed to send message:', error)
@@ -367,10 +373,11 @@ async function handleSendMessage(contents: ContentBlock[]) {
   }
 }
 
-async function handleInterruptAndSend(contents: ContentBlock[]) {
-  console.log('Interrupt and send:', contents.length, 'content blocks')
+async function handleInterruptAndSend(contents?: ContentBlock[]) {
+  const safeContents = Array.isArray(contents) ? contents : []
+  console.log('Interrupt and send:', safeContents.length, 'content blocks')
   await sessionStore.interrupt()
-  await handleSendMessage(contents)
+  await handleSendMessage(safeContents)
 }
 
 function handleEditPendingMessage(id: string) {
