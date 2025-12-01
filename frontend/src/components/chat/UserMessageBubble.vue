@@ -473,6 +473,14 @@ function closeImagePreview() {
   white-space: pre-wrap;
   word-break: break-word;
   margin-bottom: 6px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* 用户消息内的文本选中样式 - 使用对比色 */
+.bubble-content ::selection {
+  background: var(--theme-accent, #0366d6);
+  color: #ffffff;
 }
 
 .message-text:last-child {

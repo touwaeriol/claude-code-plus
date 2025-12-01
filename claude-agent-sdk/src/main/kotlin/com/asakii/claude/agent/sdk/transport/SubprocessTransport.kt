@@ -362,7 +362,7 @@ class SubprocessTransport(
 
         // Continue conversation
         if (options.continueConversation) {
-            command.add("--continue-conversation")
+            command.add("--continue")
         }
         
         // Resume session

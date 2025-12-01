@@ -106,7 +106,7 @@ class WebSocketHandler(
                             }
                             .collect { event ->
                                 messageCount++
-                                val payload = json.encodeToJsonElement(RpcUiEvent.serializer(), event)
+                                val payload = json.encodeToJsonElement(RpcMessage.serializer(), event)
                                 sendStreamData(request.id, payload)
                             }
 
@@ -146,7 +146,7 @@ class WebSocketHandler(
                             }
                             .collect { event ->
                                 messageCount++
-                                val payload = json.encodeToJsonElement(RpcUiEvent.serializer(), event)
+                                val payload = json.encodeToJsonElement(RpcMessage.serializer(), event)
                                 sendStreamData(request.id, payload)
                             }
 

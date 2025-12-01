@@ -742,6 +742,7 @@ async function handleRichTextSubmit(content: { text: string; images: { id: strin
 
   if (contents.length === 0) return
 
+  // 兜底传递数组，避免上游 undefined
   emit('send', contents)
 
   // 清理

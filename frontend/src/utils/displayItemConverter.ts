@@ -144,7 +144,8 @@ export function convertMessageToDisplayItems(
           content: (block as TextContent).text,
           timestamp: message.timestamp,
           isLastInMessage: isLastTextBlock,
-          stats
+          stats,
+          isStreaming: (message as any).isStreaming === true
         }
         displayItems.push(assistantText)
       } else if (block.type === 'thinking') {
@@ -252,14 +253,15 @@ export function convertToDisplayItems(
             }
           }
 
-          const assistantText: AssistantText = {
-            displayType: 'assistantText',
-            id: `${message.id}-text-${displayItems.length}`,
-            content: (block as TextContent).text,
-            timestamp: message.timestamp,
-            isLastInMessage: isLastTextBlock,
-            stats
-          }
+        const assistantText: AssistantText = {
+          displayType: 'assistantText',
+          id: `${message.id}-text-${displayItems.length}`,
+          content: (block as TextContent).text,
+          timestamp: message.timestamp,
+          isLastInMessage: isLastTextBlock,
+          stats,
+          isStreaming: (message as any).isStreaming === true
+        }
           displayItems.push(assistantText)
         } else if (block.type === 'thinking') {
           // 处理 thinking 块（消息格式使用 thinking 字段，显示格式使用 content 字段）

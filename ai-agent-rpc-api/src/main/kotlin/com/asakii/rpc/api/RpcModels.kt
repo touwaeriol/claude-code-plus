@@ -177,76 +177,52 @@ data class RpcSetModelResult(
  */
 @Serializable
 data class RpcHistory(
-    val messages: List<RpcUiEvent>
+    val messages: List<RpcMessage>
 )
 
+// ============================================================================
+// RPC 消息类型 - 完全对齐 Claude Agent SDK
+// ============================================================================
+
 /**
- * 流式 UI 事件
+ * RPC 消息基础接口 - 对应 Claude SDK Message
+ *
+ * type 字段值：user | assistant | result | stream_event | error
  */
 @Serializable
-sealed interface RpcUiEvent {
+sealed interface RpcMessage {
     val provider: RpcProvider?
 }
 
+/**
+ * 用户消息 - 对应 Claude SDK UserMessage
+ */
 @Serializable
-@SerialName("message_start")
-data class RpcMessageStart(
-    val messageId: String,
-    val content: List<RpcContentBlock>? = null,
+@SerialName("user")
+data class RpcUserMessage(
+    val message: RpcMessageContent,
+    @SerialName("parent_tool_use_id")
+    val parentToolUseId: String? = null,
     override val provider: RpcProvider?
-) : RpcUiEvent
+) : RpcMessage
 
+/**
+ * 助手消息 - 对应 Claude SDK AssistantMessage
+ */
 @Serializable
-@SerialName("text_delta")
-data class RpcTextDelta(
-    val text: String,
+@SerialName("assistant")
+data class RpcAssistantMessage(
+    val message: RpcMessageContent,
     override val provider: RpcProvider?
-) : RpcUiEvent
+) : RpcMessage
 
-@Serializable
-@SerialName("thinking_delta")
-data class RpcThinkingDelta(
-    val thinking: String,
-    override val provider: RpcProvider?
-) : RpcUiEvent
-
-@Serializable
-@SerialName("tool_start")
-data class RpcToolStart(
-    val toolId: String,
-    val toolName: String,        // 显示名称: "Read", "Write", "mcp__xxx"
-    val toolType: String,        // 类型标识: "CLAUDE_READ", "CLAUDE_WRITE", "MCP"
-    val inputPreview: String? = null,
-    override val provider: RpcProvider?
-) : RpcUiEvent
-
-@Serializable
-@SerialName("tool_progress")
-data class RpcToolProgress(
-    val toolId: String,
-    val status: RpcContentStatus,
-    val outputPreview: String? = null,
-    override val provider: RpcProvider?
-) : RpcUiEvent
-
-@Serializable
-@SerialName("tool_complete")
-data class RpcToolComplete(
-    val toolId: String,
-    val result: RpcContentBlock,
-    override val provider: RpcProvider?
-) : RpcUiEvent
-
-@Serializable
-@SerialName("message_complete")
-data class RpcMessageComplete(
-    val usage: RpcUsage? = null,
-    override val provider: RpcProvider?
-) : RpcUiEvent
-
+/**
+ * 结果消息 - 对应 Claude SDK ResultMessage
+ */
 @Serializable
 @SerialName("result")
 data class RpcResultMessage(
+    val subtype: String = "success",
     @SerialName("duration_ms")
     val durationMs: Long? = null,
     @SerialName("duration_api_ms")
@@ -262,32 +238,126 @@ data class RpcResultMessage(
     val usage: JsonElement? = null,
     val result: String? = null,
     override val provider: RpcProvider?
-) : RpcUiEvent
-
-@Serializable
-@SerialName("error")
-data class RpcError(
-    val message: String,
-    override val provider: RpcProvider?
-) : RpcUiEvent
+) : RpcMessage
 
 /**
- * 完整的助手消息（用于校验流式响应）
- * 在流式增量响应结束后发送，包含完整的内容块列表
+ * 流式事件 - 对应 Claude SDK StreamEvent
+ * 包含嵌套的 event 字段，内部是 Anthropic API 流事件
  */
 @Serializable
-@SerialName("assistant")
-data class RpcAssistantMessage(
-    val content: List<RpcContentBlock>,
+@SerialName("stream_event")
+data class RpcStreamEvent(
+    val uuid: String,
+    @SerialName("session_id")
+    val sessionId: String,
+    val event: RpcStreamEventData,
+    @SerialName("parent_tool_use_id")
+    val parentToolUseId: String? = null,
     override val provider: RpcProvider?
-) : RpcUiEvent
+) : RpcMessage
+
+/**
+ * 错误消息
+ */
+@Serializable
+@SerialName("error")
+data class RpcErrorMessage(
+    val message: String,
+    override val provider: RpcProvider?
+) : RpcMessage
+
+/**
+ * 消息内容（assistant/user 消息的 message 字段）
+ */
+@Serializable
+data class RpcMessageContent(
+    val content: List<RpcContentBlock>,
+    val model: String? = null
+)
+
+// ============================================================================
+// 流式事件数据 - 对应 Anthropic API 流事件
+// ============================================================================
+
+/**
+ * 流式事件数据 - event 字段的类型
+ */
+@Serializable
+sealed interface RpcStreamEventData
 
 @Serializable
-@SerialName("user")
-data class RpcUserMessage(
-    val content: List<RpcContentBlock>,
-    override val provider: RpcProvider?
-) : RpcUiEvent
+@SerialName("message_start")
+data class RpcMessageStartEvent(
+    val message: RpcMessageStartInfo? = null
+) : RpcStreamEventData
+
+@Serializable
+data class RpcMessageStartInfo(
+    val id: String? = null,
+    val model: String? = null,
+    val content: List<RpcContentBlock>? = null
+)
+
+@Serializable
+@SerialName("content_block_start")
+data class RpcContentBlockStartEvent(
+    val index: Int,
+    @SerialName("content_block")
+    val contentBlock: RpcContentBlock
+) : RpcStreamEventData
+
+@Serializable
+@SerialName("content_block_delta")
+data class RpcContentBlockDeltaEvent(
+    val index: Int,
+    val delta: RpcDelta
+) : RpcStreamEventData
+
+@Serializable
+@SerialName("content_block_stop")
+data class RpcContentBlockStopEvent(
+    val index: Int
+) : RpcStreamEventData
+
+@Serializable
+@SerialName("message_delta")
+data class RpcMessageDeltaEvent(
+    val delta: JsonElement? = null,
+    val usage: RpcUsage? = null
+) : RpcStreamEventData
+
+@Serializable
+@SerialName("message_stop")
+class RpcMessageStopEvent : RpcStreamEventData
+
+// ============================================================================
+// Delta 类型 - 内容块增量更新
+// ============================================================================
+
+/**
+ * Delta 类型 - content_block_delta 中的 delta 字段
+ */
+@Serializable
+sealed interface RpcDelta
+
+@Serializable
+@SerialName("text_delta")
+data class RpcTextDelta(
+    val text: String
+) : RpcDelta
+
+@Serializable
+@SerialName("thinking_delta")
+data class RpcThinkingDelta(
+    val thinking: String
+) : RpcDelta
+
+@Serializable
+@SerialName("input_json_delta")
+data class RpcInputJsonDelta(
+    @SerialName("partial_json")
+    val partialJson: String
+) : RpcDelta
 
 /**
  * 统一 Usage 统计

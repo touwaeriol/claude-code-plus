@@ -14,8 +14,8 @@
   --theme-panel-background: #f6f8fa;
   --theme-border: #e1e4e8;
   --theme-text-field-background: #ffffff;
-  --theme-selection-background: #0366d6;
-  --theme-selection-foreground: #ffffff;
+  --theme-selection-background: #d2e7ff;
+  --theme-selection-foreground: #0b3d91;
   --theme-link: #0366d6;
   --theme-error: #d73a49;
   --theme-warning: #ffc107;
@@ -93,7 +93,7 @@ body {
 
 /* 选中文本样式 */
 ::selection {
-  background: var(--theme-accent);
+  background: var(--theme-selection-background);
   color: var(--theme-selection-foreground);
 }
 

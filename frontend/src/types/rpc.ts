@@ -1,11 +1,13 @@
 /**
- * RPC 类型定义
+ * RPC 类型定义 - 完全对齐 Claude Agent SDK
  *
  * 与后端 ai-agent-rpc-api/RpcModels.kt 完全对应
  * 所有 WebSocket 消息都应通过这些类型进行类型安全处理
  */
 
-// ===== Provider & Enums =====
+// ============================================================================
+// Provider & Enums
+// ============================================================================
 
 export type RpcProvider = 'claude' | 'codex'
 
@@ -16,116 +18,242 @@ export type RpcContentStatus = 'in_progress' | 'completed' | 'failed'
 /** 权限模式枚举 */
 export type RpcPermissionMode = 'default' | 'bypassPermissions' | 'acceptEdits' | 'plan' | 'dontAsk'
 
-// ===== Stream Events (核心流式事件) =====
+// ============================================================================
+// RPC 消息类型 - 对应 Claude SDK Message
+// ============================================================================
 
-export interface RpcMessageStart {
-  type: 'message_start'
-  messageId: string
-  content?: RpcContentBlock[]
+/** 消息类型枚举 */
+export type RpcMessageType = 'user' | 'assistant' | 'result' | 'stream_event' | 'error'
+
+/** 基础消息接口 */
+interface RpcMessageBase {
   provider: RpcProvider
 }
+
+/** 用户消息 - 对应 Claude SDK UserMessage */
+export interface RpcUserMessage extends RpcMessageBase {
+  type: 'user'
+  message: RpcMessageContent
+  parent_tool_use_id?: string
+}
+
+/** 助手消息 - 对应 Claude SDK AssistantMessage */
+export interface RpcAssistantMessage extends RpcMessageBase {
+  type: 'assistant'
+  message: RpcMessageContent
+}
+
+/** 结果消息 - 对应 Claude SDK ResultMessage */
+export interface RpcResultMessage extends RpcMessageBase {
+  type: 'result'
+  subtype: string
+  duration_ms?: number
+  duration_api_ms?: number
+  is_error: boolean
+  num_turns: number
+  session_id?: string
+  total_cost_usd?: number
+  usage?: unknown
+  result?: string | null
+}
+
+/** 流式事件 - 对应 Claude SDK StreamEvent */
+export interface RpcStreamEvent extends RpcMessageBase {
+  type: 'stream_event'
+  uuid: string
+  session_id: string
+  event: RpcStreamEventData
+  parent_tool_use_id?: string
+}
+
+/** 错误消息 */
+export interface RpcErrorMessage extends RpcMessageBase {
+  type: 'error'
+  message: string
+}
+
+/** 所有 RPC 消息联合类型 */
+export type RpcMessage =
+  | RpcUserMessage
+  | RpcAssistantMessage
+  | RpcResultMessage
+  | RpcStreamEvent
+  | RpcErrorMessage
+
+/** 消息内容（assistant/user 消息的 message 字段） */
+export interface RpcMessageContent {
+  content: RpcContentBlock[]
+  model?: string
+}
+
+// ============================================================================
+// 流式事件数据 - 对应 Anthropic API 流事件
+// ============================================================================
+
+/** 流式事件类型枚举 */
+export type RpcStreamEventType =
+  | 'message_start'
+  | 'content_block_start'
+  | 'content_block_delta'
+  | 'content_block_stop'
+  | 'message_delta'
+  | 'message_stop'
+
+/** 流式事件数据基础接口 */
+interface RpcStreamEventDataBase {
+  type: RpcStreamEventType
+}
+
+export interface RpcMessageStartEvent extends RpcStreamEventDataBase {
+  type: 'message_start'
+  message?: RpcMessageStartInfo
+}
+
+export interface RpcMessageStartInfo {
+  id?: string
+  model?: string
+  content?: RpcContentBlock[]
+}
+
+export interface RpcContentBlockStartEvent extends RpcStreamEventDataBase {
+  type: 'content_block_start'
+  index: number
+  content_block: RpcContentBlock
+}
+
+export interface RpcContentBlockDeltaEvent extends RpcStreamEventDataBase {
+  type: 'content_block_delta'
+  index: number
+  delta: RpcDelta
+}
+
+export interface RpcContentBlockStopEvent extends RpcStreamEventDataBase {
+  type: 'content_block_stop'
+  index: number
+}
+
+export interface RpcMessageDeltaEvent extends RpcStreamEventDataBase {
+  type: 'message_delta'
+  delta?: unknown
+  usage?: RpcUsage
+}
+
+export interface RpcMessageStopEvent extends RpcStreamEventDataBase {
+  type: 'message_stop'
+}
+
+/** 流式事件数据联合类型 */
+export type RpcStreamEventData =
+  | RpcMessageStartEvent
+  | RpcContentBlockStartEvent
+  | RpcContentBlockDeltaEvent
+  | RpcContentBlockStopEvent
+  | RpcMessageDeltaEvent
+  | RpcMessageStopEvent
+
+// ============================================================================
+// Delta 类型 - 内容块增量更新
+// ============================================================================
+
+/** Delta 类型枚举 */
+export type RpcDeltaType = 'text_delta' | 'thinking_delta' | 'input_json_delta'
 
 export interface RpcTextDelta {
   type: 'text_delta'
   text: string
-  provider: RpcProvider
 }
 
 export interface RpcThinkingDelta {
   type: 'thinking_delta'
   thinking: string
-  provider: RpcProvider
 }
 
-export interface RpcToolStart {
-  type: 'tool_start'
-  toolId: string
-  toolName: string       // 显示名称: "Read", "Write", "mcp__xxx"
-  toolType: string       // 类型标识: "CLAUDE_READ", "CLAUDE_WRITE", "MCP"
-  inputPreview?: string
-  provider: RpcProvider
+export interface RpcInputJsonDelta {
+  type: 'input_json_delta'
+  partial_json: string
 }
 
-export interface RpcToolProgress {
-  type: 'tool_progress'
-  toolId: string
-  status: RpcContentStatus
-  outputPreview?: string
-  provider: RpcProvider
+/** Delta 联合类型 */
+export type RpcDelta = RpcTextDelta | RpcThinkingDelta | RpcInputJsonDelta
+
+// ============================================================================
+// 类型守卫函数
+// ============================================================================
+
+/** 检查是否为用户消息 */
+export function isUserMessage(msg: RpcMessage): msg is RpcUserMessage {
+  return msg.type === 'user'
 }
 
-export interface RpcToolComplete {
-  type: 'tool_complete'
-  toolId: string
-  result: RpcContentBlock
-  provider: RpcProvider
+/** 检查是否为助手消息 */
+export function isAssistantMessage(msg: RpcMessage): msg is RpcAssistantMessage {
+  return msg.type === 'assistant'
 }
 
-export interface RpcMessageComplete {
-  type: 'message_complete'
-  usage?: RpcUsage
-  provider: RpcProvider
+/** 检查是否为结果消息 */
+export function isResultMessage(msg: RpcMessage): msg is RpcResultMessage {
+  return msg.type === 'result'
 }
 
-export interface RpcResultMessage {
-  type: 'result'
-  duration_ms?: number
-  duration_api_ms?: number
-  is_error?: boolean
-  num_turns?: number
-  session_id?: string
-  total_cost_usd?: number
-  usage?: unknown
-  result?: string | null
-  provider: RpcProvider
+/** 检查是否为流式事件 */
+export function isStreamEvent(msg: RpcMessage): msg is RpcStreamEvent {
+  return msg.type === 'stream_event'
 }
 
-export interface RpcErrorEvent {
-  type: 'error'
-  message: string
-  provider: RpcProvider
+/** 检查是否为错误消息 */
+export function isErrorMessage(msg: RpcMessage): msg is RpcErrorMessage {
+  return msg.type === 'error'
 }
 
-/**
- * 完整的助手消息（用于校验流式响应）
- * 在流式增量响应结束后发送，包含完整的内容块列表
- */
-export interface RpcAssistantMessage {
-  type: 'assistant'
-  content: RpcContentBlock[]
-  provider: RpcProvider
+// ===== 流式事件子类型守卫 =====
+
+export function isMessageStartEvent(event: RpcStreamEventData): event is RpcMessageStartEvent {
+  return event.type === 'message_start'
 }
 
-export interface RpcUserMessage {
-  type: 'user'
-  content: RpcContentBlock[]
-  provider: RpcProvider
+export function isContentBlockStartEvent(event: RpcStreamEventData): event is RpcContentBlockStartEvent {
+  return event.type === 'content_block_start'
 }
 
-/** 流式事件联合类型 */
-export type RpcStreamEvent =
-  | RpcMessageStart
-  | RpcTextDelta
-  | RpcThinkingDelta
-  | RpcToolStart
-  | RpcToolProgress
-  | RpcToolComplete
-  | RpcMessageComplete
-  | RpcResultMessage
-  | RpcUserMessage
-  | RpcErrorEvent
-  | RpcAssistantMessage
+export function isContentBlockDeltaEvent(event: RpcStreamEventData): event is RpcContentBlockDeltaEvent {
+  return event.type === 'content_block_delta'
+}
 
-/** 流式事件类型字符串 */
-export type RpcStreamEventType = RpcStreamEvent['type']
+export function isContentBlockStopEvent(event: RpcStreamEventData): event is RpcContentBlockStopEvent {
+  return event.type === 'content_block_stop'
+}
 
-// ===== WebSocket 消息包装 =====
+export function isMessageDeltaEvent(event: RpcStreamEventData): event is RpcMessageDeltaEvent {
+  return event.type === 'message_delta'
+}
+
+export function isMessageStopEvent(event: RpcStreamEventData): event is RpcMessageStopEvent {
+  return event.type === 'message_stop'
+}
+
+// ===== Delta 子类型守卫 =====
+
+export function isTextDelta(delta: RpcDelta): delta is RpcTextDelta {
+  return delta.type === 'text_delta'
+}
+
+export function isThinkingDelta(delta: RpcDelta): delta is RpcThinkingDelta {
+  return delta.type === 'thinking_delta'
+}
+
+export function isInputJsonDelta(delta: RpcDelta): delta is RpcInputJsonDelta {
+  return delta.type === 'input_json_delta'
+}
+
+// ============================================================================
+// WebSocket 消息包装（JSON-RPC 协议层）
+// ============================================================================
 
 /** 流式数据包装 {"id":"req-1","type":"stream","data":{...}} */
 export interface RpcStreamWrapper {
   id: string
   type: 'stream'
-  data: RpcStreamEvent
+  data: RpcMessage
 }
 
 /** 请求结果包装 {"id":"req-1","result":{...},"error":null} */
@@ -154,14 +282,16 @@ export interface RpcCompleteWrapper {
   type: 'complete'
 }
 
-/** WebSocket 消息联合类型 */
-export type RpcMessage =
+/** WebSocket 消息联合类型（JSON-RPC 协议层） */
+export type RpcWebSocketMessage =
   | RpcStreamWrapper
   | RpcResultWrapper
   | RpcErrorWrapper
   | RpcCompleteWrapper
 
-// ===== Content Blocks (内容块) =====
+// ============================================================================
+// Content Blocks (内容块)
+// ============================================================================
 
 export interface RpcTextBlock {
   type: 'text'
@@ -271,7 +401,9 @@ export type RpcContentBlock =
   | RpcErrorBlock
   | RpcUnknownBlock
 
-// ===== Usage (Token 统计) =====
+// ============================================================================
+// Usage (Token 统计)
+// ============================================================================
 
 export interface RpcUsage {
   inputTokens?: number
@@ -281,7 +413,9 @@ export interface RpcUsage {
   raw?: unknown
 }
 
-// ===== Connect Options & Results =====
+// ============================================================================
+// Connect Options & Results
+// ============================================================================
 
 /**
  * 连接选项（统一扁平结构）

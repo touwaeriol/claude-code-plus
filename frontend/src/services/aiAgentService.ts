@@ -9,11 +9,16 @@ import {
   ContentBlock
 } from './AiAgentSession'
 import type { AgentStreamEvent } from './AiAgentSession'
-import type { RpcStreamEvent, RpcCapabilities, RpcPermissionMode, RpcSetPermissionModeResult } from '@/types/rpc'
+import type {
+  RpcCapabilities,
+  RpcPermissionMode,
+  RpcSetPermissionModeResult,
+  RpcMessage
+} from '@/types/rpc'
 
 export type ConnectOptions = SessionConnectOptions
 
-export type MessageHandler = (message: RpcStreamEvent | Record<string, unknown>) => void
+export type MessageHandler = (message: RpcMessage) => void
 
 /** connect 返回结果 */
 export interface ConnectResult {
@@ -143,6 +148,16 @@ export class AiAgentService {
   isConnected(sessionId: string): boolean {
     const session = this.sessions.get(sessionId)
     return session?.isConnected ?? false
+  }
+
+  /**
+   * 获取会话实例
+   *
+   * @param sessionId 会话ID
+   * @returns AiAgentSession 实例，如果不存在则返回 undefined
+   */
+  getSession(sessionId: string): AiAgentSession | undefined {
+    return this.sessions.get(sessionId)
   }
 
   /**

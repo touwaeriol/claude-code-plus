@@ -8,11 +8,11 @@ import { resolveServerWsUrl } from '@/utils/serverUrl'
 import { loggers } from '@/utils/logger'
 import {
   parseRpcMessage,
-  extractStreamEvent,
   isRpcStreamWrapper,
   isRpcCompleteWrapper,
   isRpcResultWrapper,
-  isRpcErrorWrapper
+  isRpcErrorWrapper,
+  isRpcMessage
 } from '@/utils/rpcParser'
 import type {
   RpcProvider,
@@ -22,7 +22,8 @@ import type {
   RpcCapabilities,
   RpcPermissionMode,
   RpcConnectResult,
-  RpcSetPermissionModeResult
+  RpcSetPermissionModeResult,
+  RpcMessage
 } from '@/types/rpc'
 
 const log = loggers.agent
@@ -39,7 +40,7 @@ export type AgentStreamEvent = RpcStreamEvent
 /** 内容块（向后兼容别名） */
 export type ContentBlock = RpcContentBlock
 
-type MessageHandler = (message: RpcStreamEvent) => void
+type MessageHandler = (message: RpcMessage) => void
 type ErrorHandler = (error: Error) => void
 
 export class AiAgentSession {
@@ -270,87 +271,98 @@ export class AiAgentSession {
   private handleMessage(data: string) {
     try {
       const raw: unknown = JSON.parse(data)
-      const message = parseRpcMessage(raw)
+      const parsed = parseRpcMessage(raw)
 
-      if (!message) {
-        log.warn('⚠️ [AiAgentSession] 无法解析消息:', data.substring(0, 200))
-        log.warn('⚠️ [AiAgentSession] 原始数据:', data)
-        return
+      if (!parsed) {
+        throw new Error('[AiAgentSession] 收到无效的 RPC 消息，未通过类型校验')
       }
 
-      const messageType = 'type' in message ? message.type : ('result' in message ? 'result' : 'error')
-      
-      // 使用 console.log 确保总是可见
-      console.log(`📨 [AiAgentSession] 收到消息: type=${messageType}, id=${message.id}, handlers=${this.messageHandlers.size}`)
-      log.info('📨 [AiAgentSession] 收到消息:', {
-        type: messageType,
-        id: message.id,
-        hasHandlers: this.messageHandlers.size > 0
-      })
+      // ???????payload ? RpcMessage?type: stream_event/assistant/...?
+      if (isRpcStreamWrapper(parsed)) {
+        const payload = parsed.data
+        const messageType = payload && typeof (payload as any).type === 'string' ? (payload as any).type : 'unknown'
 
-      // 处理流式数据
-      if (isRpcStreamWrapper(message)) {
-        const streamEvent = extractStreamEvent(message)
-        if (streamEvent) {
-          console.log(`📤 [AiAgentSession] 转发流式事件: type=${streamEvent.type}, handlers=${this.messageHandlers.size}`)
-          log.info('📤 [AiAgentSession] 转发流式事件:', {
-            id: message.id,
-            eventType: streamEvent.type,
-            handlerCount: this.messageHandlers.size
-          })
-          this.messageHandlers.forEach(handler => {
-            try {
-              handler(streamEvent)
-            } catch (error) {
-              console.error('❌ [AiAgentSession] 消息处理器执行失败:', error, streamEvent)
-              log.error('❌ [AiAgentSession] 消息处理器执行失败:', error, streamEvent)
-            }
-          })
-        } else {
-          console.warn('⚠️ [AiAgentSession] 无法提取流式事件:', message)
-          log.warn('⚠️ [AiAgentSession] 无法提取流式事件:', message)
+        console.log(`[AiAgentSession] ??????: type=${messageType}, handlers=${this.messageHandlers.size}`)
+        log.info('[AiAgentSession] ??????:', {
+          type: messageType,
+          id: parsed.id,
+          hasHandlers: this.messageHandlers.size > 0
+        })
+
+        if (!isRpcMessage(payload)) {
+          throw new Error('[AiAgentSession] stream 包装的 payload 不是合法 RpcMessage')
         }
+
+        this.messageHandlers.forEach(handler => {
+          try {
+            handler(payload)
+          } catch (error) {
+            console.error('[AiAgentSession] ?????????', error, payload)
+            log.error('[AiAgentSession] ?????????', error, payload)
+          }
+        })
         return
       }
 
-      // 处理流完成
-      if (isRpcCompleteWrapper(message)) {
-        log.info(`✅ [AiAgentSession] 流完成, id=${message.id}`)
-        const pending = this.pendingRequests.get(message.id)
+      // ???
+      if (isRpcCompleteWrapper(parsed)) {
+        log.info(`[AiAgentSession] ??? id=${parsed.id}`)
+        const pending = this.pendingRequests.get(parsed.id)
         if (pending) {
-          this.pendingRequests.delete(message.id)
+          this.pendingRequests.delete(parsed.id)
           pending.resolve({ status: 'complete' })
         } else {
-          log.warn(`⚠️ [AiAgentSession] 流完成但找不到对应的请求: id=${message.id}`)
+          log.warn(`[AiAgentSession] ????????????: id=${parsed.id}`)
         }
         return
       }
 
-      // 处理 RPC 结果
-      if (isRpcResultWrapper(message)) {
-        const pending = this.pendingRequests.get(message.id)
+      // RPC ??
+      if (isRpcResultWrapper(parsed)) {
+        const pending = this.pendingRequests.get(parsed.id)
         if (pending) {
-          this.pendingRequests.delete(message.id)
-          pending.resolve(message.result)
+          this.pendingRequests.delete(parsed.id)
+          pending.resolve(parsed.result)
         }
         return
       }
 
-      // 处理 RPC 错误
-      if (isRpcErrorWrapper(message)) {
-        const pending = this.pendingRequests.get(message.id)
+      // RPC ??
+      if (isRpcErrorWrapper(parsed)) {
+        const pending = this.pendingRequests.get(parsed.id)
         if (pending) {
-          this.pendingRequests.delete(message.id)
-          const error = new Error(message.error.message)
+          this.pendingRequests.delete(parsed.id)
+          const error = new Error(parsed.error.message)
           this.handleError(error)
           pending.reject(error)
         }
         return
       }
 
-      log.warn('⚠️ [AiAgentSession] 未处理的消息类型:', message)
+      // ?? RpcMessage?? wrapper?????? handler
+      if (isRpcMessage(parsed)) {
+        const messageType = parsed.type
+        console.log(`[AiAgentSession] ??????: type=${messageType}, handlers=${this.messageHandlers.size}`)
+        log.info('[AiAgentSession] ??????:', {
+          type: messageType,
+          id: (parsed as any).id,
+          hasHandlers: this.messageHandlers.size > 0
+        })
+        this.messageHandlers.forEach(handler => {
+          try {
+            handler(parsed)
+          } catch (error) {
+            console.error('[AiAgentSession] ?????????', error, parsed)
+            log.error('[AiAgentSession] ?????????', error, parsed)
+          }
+        })
+        return
+      }
+
+      log.warn('[AiAgentSession] ????????:', parsed)
     } catch (error) {
-      log.error('❌ [AiAgentSession] 处理消息失败:', error, data)
+      console.error('[AiAgentSession] 消息处理异常:', error, data)
+      log.error('[AiAgentSession] 消息处理异常:', error, data)
       this.handleError(error as Error)
     }
   }
