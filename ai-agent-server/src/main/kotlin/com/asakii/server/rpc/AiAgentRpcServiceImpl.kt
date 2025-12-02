@@ -463,7 +463,7 @@ class AiAgentRpcServiceImpl(
                 wrapAsStreamEvent(
                     RpcContentBlockDeltaEvent(
                         index = index,
-                        delta = RpcTextDelta(text = outputPreview ?: "")
+                        delta = RpcInputJsonDelta(partialJson = outputPreview ?: "")
                     ),
                     rpcProvider
                 )
@@ -489,12 +489,18 @@ class AiAgentRpcServiceImpl(
                 provider = rpcProvider
             )
 
-            is UiAssistantMessage -> RpcAssistantMessage(
-                message = RpcMessageContent(
-                    content = content.map { it.toRpcContentBlock() }
-                ),
-                provider = rpcProvider
-            )
+            is UiAssistantMessage -> {
+                println("🔍 [toRpcMessage] UiAssistantMessage: content.size=${content.size}")
+                content.forEachIndexed { idx, block ->
+                    println("🔍 [toRpcMessage] UiAssistantMessage content[$idx]: type=${block::class.simpleName}, ${if (block is ToolUseContent) "input=${block.input}" else ""}")
+                }
+                RpcAssistantMessage(
+                    message = RpcMessageContent(
+                        content = content.map { it.toRpcContentBlock() }
+                    ),
+                    provider = rpcProvider
+                )
+            }
 
             is UiResultMessage -> RpcResultMessage(
                 subtype = if (isError) "error" else "success",
@@ -532,10 +538,12 @@ class AiAgentRpcServiceImpl(
         is ThinkingContent -> RpcThinkingBlock(thinking = thinking, signature = signature)
         is ToolUseContent -> {
             val toolTypeEnum = ToolType.fromToolName(name)
+            println("🔍 [toRpcContentBlock] ToolUseContent: id=$id, name=$name, input=$input")
             RpcToolUseBlock(
                 id = id,
-                toolName = name,           // 鏄剧ず鍚嶇О
-                toolType = toolTypeEnum.type,  // 绫诲瀷鏍囪瘑: "CLAUDE_READ" 绛?                input = input,
+                toolName = name,
+                toolType = toolTypeEnum.type,
+                input = input,
                 status = status.toRpcStatus()
             )
         }

@@ -31,40 +31,34 @@
               class="edit-content"
             >
               <div class="edit-preview">
-                <div class="diff-section">
-                  <div class="diff-header old">
-                    <span></span>
-                    <button
-                      class="copy-btn"
-                      :title="t('common.copy')"
-                      @click="copyText(edit.old_string)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                      </svg>
-                    </button>
-                  </div>
-                  <pre class="diff-content old">{{ edit.old_string }}</pre>
+                <div class="diff-section old">
+                  <button
+                    class="copy-btn"
+                    :title="t('common.copy')"
+                    @click="copyText(edit.old_string)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  </button>
+                  <pre class="diff-content">{{ edit.old_string }}</pre>
                 </div>
                 <div class="diff-arrow">
                   →
                 </div>
-                <div class="diff-section">
-                  <div class="diff-header new">
-                    <span></span>
-                    <button
-                      class="copy-btn"
-                      :title="t('common.copy')"
-                      @click="copyText(edit.new_string)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                      </svg>
-                    </button>
-                  </div>
-                  <pre class="diff-content new">{{ edit.new_string }}</pre>
+                <div class="diff-section new">
+                  <button
+                    class="copy-btn"
+                    :title="t('common.copy')"
+                    @click="copyText(edit.new_string)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  </button>
+                  <pre class="diff-content">{{ edit.new_string }}</pre>
                 </div>
               </div>
             </div>
@@ -186,23 +180,18 @@ async function copyText(text: string) {
   background: #fdfdfd;
 }
 
-.diff-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 8px;
-  font-size: 12px;
-  font-weight: 600;
+.diff-section {
+  position: relative;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
-.diff-header.old {
+.diff-section.old {
   background: #fff5f5;
-  color: #c53030;
 }
 
-.diff-header.new {
+.diff-section.new {
   background: #f0fff4;
-  color: #2f855a;
 }
 
 .diff-content {
@@ -222,17 +211,24 @@ async function copyText(text: string) {
 }
 
 .copy-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
+  padding: 3px;
   border: none;
-  background: transparent;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  color: inherit;
+  color: var(--theme-foreground, #24292e);
+  opacity: 0.6;
 }
 
 .copy-btn:hover {
-  opacity: 0.8;
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.9);
 }
 </style>

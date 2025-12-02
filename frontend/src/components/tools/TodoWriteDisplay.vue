@@ -48,7 +48,7 @@ const expanded = ref(true)
 // 提取工具显示信息
 const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
 
-const todos = computed(() => (props.toolCall.input.todos || []) as TodoItem[])
+const todos = computed(() => (props.toolCall.input?.todos || []) as TodoItem[])
 
 // 处理卡片点击：切换展开状态
 function handleCardClick() {

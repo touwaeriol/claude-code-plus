@@ -5,7 +5,7 @@ import { aiAgentService } from '@/services/aiAgentService'
 import type { ConnectOptions } from '@/services/aiAgentService'
 import type { AgentStreamEvent } from '@/services/AiAgentSession'
 import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock } from '@/types/message'
-import type { SessionState } from '@/types/session'
+import type { SessionState, PendingMessage } from '@/types/session'
 import { convertToDisplayItems, convertMessageToDisplayItems } from '@/utils/displayItemConverter'
 import { ConnectionStatus, ToolCallStatus } from '@/types/display'
 import type { DisplayItem } from '@/types/display'
@@ -16,7 +16,7 @@ import { loggers } from '@/utils/logger'
 import { ideService } from '@/services/ideaBridge'
 import { ideaBridge } from '@/services/ideaBridge'
 import { CLAUDE_TOOL_TYPE } from '@/constants/toolTypes'
-import type { ReadToolCall, WriteToolCall, EditToolCall, MultiEditToolCall } from '@/types/display'
+import type { ReadToolCall, WriteToolCall, EditToolCall, MultiEditToolCall, ToolCall } from '@/types/display'
 import { buildUserMessageContent } from '@/utils/userMessageBuilder'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { MODEL_CAPABILITIES, BaseModel } from '@/constants/models'
@@ -523,7 +523,8 @@ export const useSessionStore = defineStore('session', () => {
 
     // 确保消息有 id 字段
     if (!message.id) {
-      message.id = generateMessageId(message.role)
+      const streamingId = message.role === 'assistant' ? getCurrentStreamingMessageId(sessionId) : null
+      message.id = streamingId || generateMessageId(message.role)
     }
 
     // 检查是否是 tool_result 消息
@@ -533,6 +534,17 @@ export const useSessionStore = defineStore('session', () => {
     // ✅ 流式模式下，assistant 消息已通过 handleStreamEvent 处理
     // RPC 消息中的 assistant 消息可能是重复的，使用消息 ID 判断
     if (message.role === 'assistant') {
+      const streamingMessage = findStreamingAssistantMessage(sessionState)
+      if (streamingMessage) {
+        // 将最终 assistant 消息合并到当前流式消息，避免重复追加
+        mergeAssistantMessage(streamingMessage, message)
+        streamingMessage.isStreaming = false
+        streamingMessage.metadata = { ...streamingMessage.metadata, ...message.metadata }
+        syncDisplayItemsForMessage(streamingMessage, sessionState)
+        touchSession(sessionId)
+        return
+      }
+
       // 检查最后一条消息的 ID 是否相同
       const lastMsg = sessionState.messages[sessionState.messages.length - 1]
       if (lastMsg && lastMsg.id === message.id) {
@@ -949,27 +961,49 @@ export const useSessionStore = defineStore('session', () => {
     // 处理不同类型的事件
     switch (eventType) {
       case 'message_start': {
-        const contentBlocks = (event.message?.content ?? [])
-          .map(mapRpcContentBlock)
-          .filter((b): b is ContentBlock => !!b)
-        const newMessage: Message = {
-          id: event.message?.id || `assistant-${Date.now()}`,
-          role: 'assistant',
-          timestamp: Date.now(),
-          content: contentBlocks,
-          isStreaming: true
+        const contentBlocks = (event.message?.content ?? []).map(mapRpcContentBlock).filter((b): b is ContentBlock => !!b)
+        const existingStreaming = findStreamingAssistantMessage(sessionState)
+        const previousId = existingStreaming?.id
+        const messageId = event.message?.id || previousId || `assistant-${Date.now()}`
+
+        if (existingStreaming && previousId && previousId !== messageId) {
+          // 结束上一条流式消息，开始新消息（保持旧内容不被覆盖）
+          existingStreaming.isStreaming = false
+          syncDisplayItemsForMessage(existingStreaming, sessionState)
+
+          const newMessage: Message = {
+            id: messageId,
+            role: 'assistant',
+            timestamp: Date.now(),
+            content: [],
+            isStreaming: true
+          }
+          sessionState.messages.push(newMessage)
+          updateStreamingMessageId(sessionId, messageId)
+          mergeInitialAssistantContent(newMessage, contentBlocks)
+          syncDisplayItemsForMessage(newMessage, sessionState)
+        } else {
+          const targetMessage = ensureStreamingAssistantMessage(sessionId, sessionState)
+          // 将占位消息 id 更新为后端真实 id
+          if (targetMessage.id !== messageId) {
+            updateStreamingMessageId(sessionId, messageId)
+            targetMessage.id = messageId
+          }
+          targetMessage.isStreaming = true
+          mergeInitialAssistantContent(targetMessage, contentBlocks)
+          syncDisplayItemsForMessage(targetMessage, sessionState)
         }
-        sessionState.messages.push(newMessage)
-        const newDisplayItems = convertMessageToDisplayItems(newMessage, sessionState.pendingToolCalls)
-        sessionState.displayItems.push(...newDisplayItems)
+
         setSessionGenerating(sessionId, true)
+        touchSession(sessionId)
         break
       }
 
       case 'message_stop': {
-        const lastMessage = sessionState.messages[sessionState.messages.length - 1]
-        if (lastMessage && lastMessage.role === 'assistant') {
-          lastMessage.isStreaming = false
+        const streamingMessage = findStreamingAssistantMessage(sessionState)
+        if (streamingMessage) {
+          streamingMessage.isStreaming = false
+          syncDisplayItemsForMessage(streamingMessage, sessionState)
         }
         setSessionGenerating(sessionId, false)
         touchSession(sessionId)
@@ -977,29 +1011,37 @@ export const useSessionStore = defineStore('session', () => {
       }
 
       case 'content_block_start': {
-        const lastMessage = getOrCreateLastAssistantMessage(sessionState.messages)
+        const message = ensureStreamingAssistantMessage(sessionId, sessionState)
         const contentBlock = mapRpcContentBlock(event.content_block)
         if (contentBlock) {
-          lastMessage.content.push(contentBlock)
+          message.content.push(contentBlock)
           if (contentBlock.type === 'tool_use' && contentBlock.id) {
             toolInputJsonAccumulator.set(contentBlock.id, '')
-            registerToolCall(contentBlock.id, contentBlock.toolName || '', contentBlock.input || {})
+            registerToolCall(contentBlock as ToolUseBlock)
           }
         }
-        syncDisplayItemsForMessage(lastMessage, sessionState)
+        syncDisplayItemsForMessage(message, sessionState)
         break
       }
 
       case 'content_block_delta': {
-        const lastMessage = sessionState.messages[sessionState.messages.length - 1]
-        if (!lastMessage || lastMessage.role !== 'assistant') break
-
+        const message = ensureStreamingAssistantMessage(sessionId, sessionState)
         const index = event.index
         const delta = event.delta
-        if (index >= 0 && index < lastMessage.content.length && delta) {
-          const contentBlock = lastMessage.content[index]
+
+        if (index >= 0 && index < message.content.length && delta) {
+          const contentBlock = message.content[index]
           if (delta.type === 'text_delta' && contentBlock.type === 'text') {
             contentBlock.text += delta.text
+          } else if (delta.type === 'text_delta' && contentBlock.type === 'tool_use') {
+            const accumulated = toolInputJsonAccumulator.get(contentBlock.id) || ''
+            const newAccumulated = accumulated + delta.text
+            toolInputJsonAccumulator.set(contentBlock.id, newAccumulated)
+            try {
+              contentBlock.input = JSON.parse(newAccumulated)
+            } catch {
+              contentBlock.input = newAccumulated
+            }
           } else if (delta.type === 'input_json_delta' && contentBlock.type === 'tool_use') {
             const accumulated = toolInputJsonAccumulator.get(contentBlock.id) || ''
             const newAccumulated = accumulated + delta.partial_json
@@ -1009,29 +1051,196 @@ export const useSessionStore = defineStore('session', () => {
             contentBlock.thinking += delta.thinking
           }
         }
-        syncDisplayItemsForMessage(lastMessage, sessionState)
+
+        syncDisplayItemsForMessage(message, sessionState)
+        break
+      }
+
+      case 'content_block_stop': {
+        const message = findStreamingAssistantMessage(sessionState)
+        if (message && event.index >= 0 && event.index < message.content.length) {
+          const block = message.content[event.index]
+          if (block.type === 'tool_use') {
+            const toolCall = sessionState.pendingToolCalls.get((block as ToolUseBlock).id)
+            if (toolCall) {
+              // 参数已完整解析，刷新输入快照，等待 tool_result 更新最终状态
+              toolCall.input = (block as ToolUseBlock).input || toolCall.input
+            }
+          }
+          // 🔧 修复：工具调用参数完成后，同步更新 displayItems
+          syncDisplayItemsForMessage(message, sessionState)
+        }
         break
       }
     }
   }
 
   /**
-   * 获取或创建最后一个 assistant 消息
+   * 查找当前处于 streaming 状态的 assistant 消息
    */
-  function getOrCreateLastAssistantMessage(messages: Message[]): Message {
-    const lastMessage = messages[messages.length - 1]
-    if (lastMessage && lastMessage.role === 'assistant') {
-      return lastMessage
+  function findStreamingAssistantMessage(sessionState: SessionState): Message | null {
+    const tracker = requestTracker.get(sessionState.id)
+    const streamingId = tracker?.currentStreamingMessageId
+    if (streamingId) {
+      const matched = [...sessionState.messages].reverse().find(msg => msg.id === streamingId && msg.role === 'assistant')
+      if (matched) return matched
     }
+
+    for (let i = sessionState.messages.length - 1; i >= 0; i--) {
+      const msg = sessionState.messages[i]
+      if (msg.role === 'assistant' && msg.isStreaming) {
+        return msg
+      }
+    }
+    return null
+  }
+
+  /**
+   * 确保存在一个用于流式渲染的 assistant 消息，必要时创建占位并同步展示
+   */
+  function ensureStreamingAssistantMessage(sessionId: string, sessionState: SessionState): Message {
+    const existing = findStreamingAssistantMessage(sessionState)
+    if (existing) return existing
+
+    const tracker = requestTracker.get(sessionId)
+    const placeholderId = tracker?.currentStreamingMessageId || `assistant-${Date.now()}`
     const newMessage: Message = {
-      id: `assistant-${Date.now()}`,
+      id: placeholderId,
       role: 'assistant',
       timestamp: Date.now(),
       content: [],
       isStreaming: true
     }
-    messages.push(newMessage)
+    sessionState.messages.push(newMessage)
+    const items = convertMessageToDisplayItems(newMessage, sessionState.pendingToolCalls)
+    sessionState.displayItems.push(...items)
     return newMessage
+  }
+
+  /**
+   * 合并 message_start 内置的初始内容，避免重复创建新消息
+   */
+  function mergeInitialAssistantContent(target: Message, initialBlocks: ContentBlock[]) {
+    if (initialBlocks.length === 0) return
+    if (target.content.length === 0) {
+      target.content = [...initialBlocks]
+      return
+    }
+
+    initialBlocks.forEach((block, idx) => {
+      const existing = target.content[idx]
+      if (!existing) {
+        target.content[idx] = block
+        return
+      }
+
+      if (existing.type === 'text' && block.type === 'text' && existing.text.trim() === '') {
+        existing.text = block.text
+      } else if (existing.type === 'thinking' && block.type === 'thinking' && (existing.thinking || '') === '') {
+        existing.thinking = block.thinking
+        existing.signature = existing.signature ?? block.signature
+      }
+    })
+  }
+
+  /**
+   * 将最终的 assistant 消息内容合并到现有的流式消息中，避免重复新增消息
+   */
+  function mergeAssistantMessage(target: Message, incoming: Message) {
+    const merged: ContentBlock[] = [...target.content]
+
+    incoming.content.forEach(block => {
+      if (block.type === 'tool_use') {
+        const idx = merged.findIndex(
+          item => item.type === 'tool_use' && (item as ToolUseBlock).id === (block as ToolUseBlock).id
+        )
+        if (idx >= 0) {
+          merged[idx] = { ...merged[idx], ...block }
+        } else {
+          merged.push(block)
+        }
+      } else if (block.type === 'thinking') {
+        const idx = merged.findIndex(item => item.type === 'thinking')
+        if (idx >= 0) {
+          const existing = merged[idx] as ThinkingBlock
+          merged[idx] = { ...existing, ...block, thinking: (block as ThinkingBlock).thinking || existing.thinking }
+        } else {
+          merged.push(block)
+        }
+      } else if (block.type === 'text') {
+        const idx = merged.findIndex(item => item.type === 'text')
+        if (idx >= 0) {
+          merged[idx] = block
+        } else {
+          merged.push(block)
+        }
+      } else {
+        merged.push(block)
+      }
+    })
+
+    target.content = merged
+
+    // 保留 tokenUsage 等附加信息
+    if ((incoming as any).tokenUsage) {
+      (target as any).tokenUsage = (incoming as any).tokenUsage
+    }
+  }
+
+  /**
+   * 计算哪些文本块是工具入参回显，需要跳过展示（并尽量补充到 tool_use.input）
+   */
+  function computeToolTextSkip(message: Message): Set<number> {
+    const skip = new Set<number>()
+    if (message.role !== 'assistant') return skip
+
+    const toolUses = (message.content as ContentBlock[]).filter(isToolUseBlock) as ToolUseBlock[]
+    if (toolUses.length === 0) return skip
+
+    ;(message.content as ContentBlock[]).forEach((block, idx) => {
+      if (block.type !== 'text') return
+      const text = (block as any).text as string
+      const trimmed = text.trim()
+      if (!trimmed) return
+
+      const start = text.indexOf('{')
+      const end = text.lastIndexOf('}')
+      let parsed: any = null
+      if (start !== -1 && end !== -1 && end > start) {
+        try { parsed = JSON.parse(text.slice(start, end + 1)) } catch { /* ignore */ }
+      }
+
+      if (parsed && toolUses.some(t => !t.input || Object.keys(t.input as any).length === 0)) {
+        toolUses.forEach(t => {
+          if (!t.input || Object.keys(t.input as any).length === 0) {
+            t.input = parsed
+          }
+        })
+        skip.add(idx)
+        return
+      }
+
+      const structuralChars = (trimmed.match(/[{}\[\]\"“”：:,]/g) || []).length
+      const structuralRatio = structuralChars / trimmed.length
+      const containsField = /todos|status|activeForm|file_path|path|tool_use_id|content/i.test(trimmed)
+      if (structuralRatio > 0.15 && containsField) {
+        skip.add(idx)
+      }
+    })
+
+    return skip
+  }
+
+  /**
+   * 当 messageId 更新时，移除旧 messageId 生成的展示项，避免重复展示
+   */
+  function dropAssistantDisplayItemsById(sessionState: SessionState, messageId: string) {
+    sessionState.displayItems = sessionState.displayItems.filter(item => {
+      if (item.displayType === 'assistantText' || item.displayType === 'thinking') {
+        return !item.id.startsWith(`${messageId}-`)
+      }
+      return true
+    })
   }
 
   /**
@@ -1088,10 +1297,15 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     // 按照 message.content 的顺序构建
+    const skipTextIndices = computeToolTextSkip(message)
+
     for (let blockIdx = 0; blockIdx < message.content.length; blockIdx++) {
       const block = message.content[blockIdx]
 
       if (isTextBlock(block) && block.text.trim()) {
+        if (skipTextIndices.has(blockIdx)) {
+          continue
+        }
         const textBlock = block as TextBlock
         const expectedId = `${message.id}-text-${blockIdx}`
         const existingItem = existingItemsMap.get(expectedId)
@@ -1135,19 +1349,15 @@ export const useSessionStore = defineStore('session', () => {
         }
       } else if (isToolUseBlock(block)) {
         // 工具调用块：复用现有的或创建新的
-        const existingItem = existingItemsMap.get(block.id)
-        
+        const existingItem = existingItemsMap.get(block.id) as ToolCall | undefined
+        const toolUseBlock = block as ToolUseBlock
+
         if (existingItem && existingItem.displayType === 'toolCall') {
-          // 复用现有的工具调用（保留状态），但同步更新 input
-          const toolUseBlock = block as ToolUseBlock
-          // 始终同步 input（即使为空对象，也要更新以确保状态同步）
-          if (toolUseBlock.input !== undefined) {
-            existingItem.input = toolUseBlock.input
-          }
-          // 同时更新 pendingToolCalls 中的对象
-          const pendingToolCall = sessionState.pendingToolCalls.get(block.id)
-          if (pendingToolCall && toolUseBlock.input !== undefined) {
-            pendingToolCall.input = toolUseBlock.input
+          // 🔧 修复：使用 Object.assign 更新属性，保持引用一致性
+          // 这样 pendingToolCalls 和 displayItems 共享同一对象，后续状态更新能正确反映
+          if (toolUseBlock.input !== undefined &&
+              Object.keys(toolUseBlock.input as Record<string, unknown>).length > 0) {
+            Object.assign(existingItem, { input: toolUseBlock.input })
           }
           newDisplayItems.push(existingItem)
         } else {
@@ -1245,6 +1455,9 @@ export const useSessionStore = defineStore('session', () => {
     setSessionGenerating(sessionId, false)
     requestTracker.delete(sessionId)
     log.debug('handleResultMessage: 请求完成, 清除追踪信息')
+
+    // 处理队列中的下一条消息
+    processNextQueuedMessage()
   }
 
   /**
@@ -1483,9 +1696,10 @@ export const useSessionStore = defineStore('session', () => {
 
   /**
    * 将消息加入队列并自动处理发送
+   * - 如果正在生成中，消息会被加入队列等待
+   * - 如果不在生成中，直接发送
    */
   function enqueueMessage(message: { contexts: any[]; contents: ContentBlock[] }) {
-    // 直接发送消息（简化实现，不使用队列）
     if (!currentSessionId.value) {
       console.error('❌ enqueueMessage: 没有活跃会话')
       return
@@ -1495,6 +1709,19 @@ export const useSessionStore = defineStore('session', () => {
     const sessionState = getSessionState(sessionId)
     if (!sessionState) {
       console.error('❌ enqueueMessage: 会话状态不存在')
+      return
+    }
+
+    // 如果正在生成中，将消息加入队列
+    if (sessionState.isGenerating) {
+      const pendingMessage: PendingMessage = {
+        id: `pending-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
+        contexts: message.contexts,
+        contents: message.contents,
+        createdAt: Date.now()
+      }
+      messageQueue.value.push(pendingMessage)
+      log.info(`消息已加入队列，当前队列长度: ${messageQueue.value.length}`)
       return
     }
 
@@ -1529,10 +1756,62 @@ export const useSessionStore = defineStore('session', () => {
 
     console.log('📤 用户消息已添加到显示列表:', userMessage.id)
 
-    // 2. 发送到后端（使用合并后的内容）
+    // 2. 开始请求追踪（设置 isGenerating = true）
+    const streamingMessageId = `assistant-${Date.now()}`
+    startRequestTracking(sessionId, userMessage.id, streamingMessageId)
+
+    // 3. 发送到后端（使用合并后的内容）
     sendMessageWithContent(mergedContent).catch(err => {
       console.error('❌ enqueueMessage 发送失败:', err)
+      // 发送失败时重置状态
+      setSessionGenerating(sessionId, false)
+      requestTracker.delete(sessionId)
     })
+  }
+
+  /**
+   * 处理队列中的下一条消息
+   * 在上一个请求完成后自动调用
+   */
+  function processNextQueuedMessage() {
+    if (messageQueue.value.length === 0) {
+      return
+    }
+
+    const nextMessage = messageQueue.value.shift()
+    if (!nextMessage) {
+      return
+    }
+
+    log.info(`从队列中取出消息: ${nextMessage.id}，剩余队列长度: ${messageQueue.value.length}`)
+
+    // 递归调用 enqueueMessage，此时 isGenerating 应为 false
+    enqueueMessage({
+      contexts: nextMessage.contexts,
+      contents: nextMessage.contents
+    })
+  }
+
+  /**
+   * 编辑队列中的消息（从队列移除并返回内容，用于填充到输入框）
+   */
+  function editQueueMessage(id: string): PendingMessage | null {
+    const index = messageQueue.value.findIndex(m => m.id === id)
+    if (index === -1) return null
+    const [removed] = messageQueue.value.splice(index, 1)
+    log.info(`编辑队列消息: ${id}，剩余队列长度: ${messageQueue.value.length}`)
+    return removed
+  }
+
+  /**
+   * 从队列中删除消息
+   */
+  function removeFromQueue(id: string): boolean {
+    const index = messageQueue.value.findIndex(m => m.id === id)
+    if (index === -1) return false
+    messageQueue.value.splice(index, 1)
+    log.info(`删除队列消息: ${id}，剩余队列长度: ${messageQueue.value.length}`)
+    return true
   }
 
   /**
@@ -1728,11 +2007,11 @@ export const useSessionStore = defineStore('session', () => {
 
     toolCallsMap.value.set(block.id, {
       id: block.id,
-      name: block.name,
+      name: (block as any).toolName || block.name,
       status: 'running',
       startTime: Date.now()
     })
-    log.debug(`注册工具调用: ${block.name} (${block.id})`)
+    log.debug(`注册工具调用: ${(block as any).toolName || block.name} (${block.id})`)
   }
 
   /**
@@ -1810,6 +2089,8 @@ export const useSessionStore = defineStore('session', () => {
     sendMessage,
     sendMessageWithContent,
     enqueueMessage,
+    editQueueMessage,
+    removeFromQueue,
     interrupt,
     setModel,
     resumeSession,

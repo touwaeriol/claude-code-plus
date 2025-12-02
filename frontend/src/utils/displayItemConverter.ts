@@ -31,6 +31,68 @@ import type { ThinkingContent as DisplayThinkingContent } from '@/types/display'
 import { isToolUseBlock, isTextBlock } from '@/utils/contentBlockUtils'
 import { parseUserMessage } from '@/utils/userMessageBuilder'
 
+/**
+ * 粗略判断文本块是否是工具输入参数的“原样 dump”
+ * - 同一消息里包含 tool_use 时才检查
+ * - 以大量花括号/引号/冒号为主，且包含常见字段名（todos/status/file_path 等）
+ */
+function isLikelyToolInputText(text: string, content: ContentBlock[]): boolean {
+  const hasToolUse = content.some(isToolUseBlock)
+  if (!hasToolUse) return false
+
+  const trimmed = text.trim()
+  if (trimmed.length < 10) return false
+
+  const structuralChars = (trimmed.match(/[{}\[\]\"“”：:,]/g) || []).length
+  const structuralRatio = structuralChars / trimmed.length
+  const containsField =
+    /todos|status|activeForm|file_path|path|tool_use_id|content/i.test(trimmed)
+
+  return structuralRatio > 0.15 && containsField
+}
+
+/** 从文本中提取 JSON（用于将模型吐出的参数字符串还原为对象） */
+function extractJsonFromText(text: string): any | null {
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start === -1 || end === -1 || end <= start) return null
+  const slice = text.slice(start, end + 1)
+  try {
+    return JSON.parse(slice)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 计算哪些文本块应视为工具入参回显，并尝试把 JSON 入参填回 tool_use
+ */
+function computeToolTextSkipAndHydrate(message: Message): Set<number> {
+  const skip = new Set<number>()
+  if (message.role !== 'assistant') return skip
+
+  const toolUses = (message.content as ContentBlock[]).filter(isToolUseBlock) as ToolUseContent[]
+  if (toolUses.length === 0) return skip
+
+  ;(message.content as ContentBlock[]).forEach((block, idx) => {
+    if (!isTextBlock(block)) return
+    const text = (block as TextContent).text
+    const jsonObj = extractJsonFromText(text)
+    if (jsonObj && toolUses.some(t => !t.input || Object.keys(t.input as any).length === 0)) {
+      toolUses.forEach(t => {
+        if (!t.input || Object.keys(t.input as any).length === 0) {
+          t.input = jsonObj as any
+        }
+      })
+      skip.add(idx)
+    } else if (isLikelyToolInputText(text, message.content as ContentBlock[])) {
+      skip.add(idx)
+    }
+  })
+
+  return skip
+}
+
 export function createToolCall(
   block: ToolUseContent,
   pendingToolCalls: Map<string, ToolCall>
@@ -43,12 +105,8 @@ export function createToolCall(
     return existing
   }
 
-  // 🔧 调试日志
-  console.log('📦 [createToolCall] block:', { id: block.id, toolName: block.toolName, toolType: block.toolType, type: block.type })
-
   // 优先使用后端传来的 toolType，否则通过 toolName 解析
   const toolType = block.toolType || resolveToolType(block.toolName)
-  console.log('📦 [createToolCall] resolved toolType:', { toolName: block.toolName, blockToolType: block.toolType, resolvedToolType: toolType })
 
   const timestamp = Date.now()
 
@@ -115,6 +173,8 @@ export function convertMessageToDisplayItems(
       }
     }
   } else if (message.role === 'assistant') {
+    const consumedTextIndices = computeToolTextSkipAndHydrate(message)
+
     const textBlockIndices: number[] = []
     ;(message.content as ContentBlock[]).forEach((block, idx) => {
       if (isTextBlock(block) && (block as TextContent).text.trim()) {
@@ -127,6 +187,10 @@ export function convertMessageToDisplayItems(
       const block = message.content[blockIdx]
 
       if (isTextBlock(block) && (block as TextContent).text.trim()) {
+        if (consumedTextIndices.has(blockIdx)) {
+          continue
+        }
+
         const isLastTextBlock = blockIdx === lastTextBlockIndex
         let stats = undefined
         if (isLastTextBlock && (message as any).tokenUsage) {
@@ -221,6 +285,7 @@ export function convertToDisplayItems(
         }
       }
     } else if (message.role === 'assistant') {
+      const consumedTextIndices = computeToolTextSkipAndHydrate(message)
       const textBlockIndices: number[] = []
       ;(message.content as ContentBlock[]).forEach((block, idx) => {
         if (isTextBlock(block) && (block as TextContent).text.trim()) {
@@ -233,6 +298,7 @@ export function convertToDisplayItems(
         const block = message.content[blockIdx]
 
         if (isTextBlock(block) && (block as TextContent).text.trim()) {
+          if (consumedTextIndices.has(blockIdx)) continue
           const isLastTextBlock = blockIdx === lastTextBlockIndex
 
           let stats: RequestStats | undefined
