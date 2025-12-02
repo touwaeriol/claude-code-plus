@@ -24,6 +24,11 @@ export function parseUserMessage(content: ContentBlock[]): ParsedUserMessage {
   let foundFirstUserText = false
 
   for (const block of content) {
+    // tool_result / tool_use 等后端流控块不应该显示为普通用户消息
+    if (block.type === 'tool_result' || block.type === 'tool_use') {
+      continue
+    }
+
     if (block.type === 'text') {
       const textBlock = block as TextBlock
 
@@ -51,8 +56,8 @@ export function parseUserMessage(content: ContentBlock[]): ParsedUserMessage {
         userContent.push(block)
       }
     } else {
-      // 其他类型的块直接加入用户内容
-      userContent.push(block)
+      // 其他类型（例如 todo_list）暂不显示在用户消息中
+      // 只保留文本/图片，避免将工具参数渲染为普通消息
     }
   }
 

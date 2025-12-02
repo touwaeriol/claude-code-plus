@@ -9,15 +9,12 @@
     <template #details>
       <div class="write-tool-details">
         <div class="content-preview">
-          <div class="preview-header">
-            <span></span>
-            <button class="copy-btn" :title="t('common.copy')" @click.stop="copyContent">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-            </button>
-          </div>
+          <button class="copy-btn" :title="t('common.copy')" @click.stop="copyContent">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
           <pre class="preview-content code-with-lines"><code><span v-for="(line, index) in previewLines" :key="index" class="code-line">{{ line }}</span></code></pre>
         </div>
       </div>
@@ -90,6 +87,7 @@ async function copyContent() {
 }
 
 .content-preview {
+  position: relative;
   background: #ffffff;
   border: 1px solid #e1e4e8;
   border-radius: 4px;
@@ -97,25 +95,18 @@ async function copyContent() {
   margin: 12px 0;
 }
 
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 12px;
-  background: #f6f8fa;
-  border-bottom: 1px solid #e1e4e8;
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 4px;
   border: none;
   border-radius: 3px;
-  background: transparent;
+  background: var(--theme-panel-background, #f6f8fa);
   color: var(--theme-foreground, #24292e);
   cursor: pointer;
   opacity: 0.6;
@@ -123,7 +114,7 @@ async function copyContent() {
 
 .copy-btn:hover {
   opacity: 1;
-  background: var(--theme-panel-background, #f6f8fa);
+  background: var(--theme-hover-background, #e1e4e8);
 }
 
 .preview-content {

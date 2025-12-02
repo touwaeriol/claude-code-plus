@@ -68,8 +68,12 @@ function isMessageStartEvent(event: unknown): event is RpcStreamEventData {
   if (!isObject(event) || event.type !== 'message_start') return false
   if ('message' in event && (event as any).message !== undefined) {
     const msg = (event as any).message
+    // message 字段可能为 null，表示暂无初始内容
+    if (msg === null) return true
     if (!isObject(msg)) return false
-    if ('content' in msg && msg.content !== undefined && !isArray(msg.content)) return false
+    const content = (msg as any).content
+    // content 允许为空或 null；有值时必须是数组
+    if (content !== undefined && content !== null && !isArray(content)) return false
   }
   return true
 }
