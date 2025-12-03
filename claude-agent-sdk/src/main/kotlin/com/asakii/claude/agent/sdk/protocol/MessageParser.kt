@@ -195,11 +195,16 @@ class MessageParser {
                 val input = jsonObject["input"]
                     ?: throw MessageParsingException("Missing 'input' in tool_use block")
 
+                // 🔍 调试：打印解析到的 input
+                println("🔍 [MessageParser] parseContentBlock tool_use: id=$id, name=$name, inputType=${input.javaClass.simpleName}, input=${input.toString().take(200)}")
+
                 // 创建基础的ToolUseBlock
                 val basicToolUse = ToolUseBlock(id, name, input)
 
                 // 使用ToolTypeParser将其转换为具体的工具类型
-                ToolTypeParser.parseToolUseBlock(basicToolUse)
+                val result = ToolTypeParser.parseToolUseBlock(basicToolUse)
+                println("🔍 [MessageParser] parseToolUseBlock result: ${result::class.simpleName}, input=${result.input.toString().take(200)}")
+                result
             }
             "tool_result" -> {
                 val toolUseId = jsonObject["tool_use_id"]?.jsonPrimitive?.content 

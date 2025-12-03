@@ -20,6 +20,7 @@ import com.asakii.rpc.api.*
 import com.asakii.server.config.AiAgentServiceConfig
 import com.asakii.server.settings.ClaudeSettingsLoader
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,6 +28,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
 import java.nio.file.Path
 import java.util.UUID
@@ -54,6 +56,9 @@ class AiAgentRpcServiceImpl(
     private var client: UnifiedAgentClient? = null
     private var currentProvider: AiAgentProvider = serviceConfig.defaultProvider
     private var lastConnectOptions: RpcConnectOptions? = null
+
+    // 🔧 追踪当前 query 的完成状态，用于 interrupt 同步等待
+    private var queryCompletion: CompletableDeferred<Unit>? = null
     
     // 鍚屾鎺у埗鐢卞墠绔礋璐ｏ紝鍚庣鐩存帴杞彂缁?SDK
 
@@ -110,8 +115,11 @@ class AiAgentRpcServiceImpl(
         }
 
     override suspend fun interrupt(): RpcStatusResult {
-        logger.info("鈴革笍 [AI-Agent] 涓柇褰撳墠鍥炲悎")
+        logger.info("🔔 [AI-Agent] 中断当前回合")
         client?.interrupt()
+        // 等待 result 消息到达（收到 result 时 queryCompletion 会被 complete）
+        queryCompletion?.await()
+        logger.info("✅ [AI-Agent] 打断完成，result 消息已发送")
         return RpcStatusResult(status = RpcSessionStatus.INTERRUPTED)
     }
 
@@ -148,6 +156,9 @@ class AiAgentRpcServiceImpl(
         val activeClient = client ?: error("AI Agent 尚未连接，请先调用 connect()")
 
         return channelFlow {
+            // 创建完成信号
+            queryCompletion = CompletableDeferred()
+
             streamEventCounter = 0
             nextContentIndex = 0
             toolContentIndex.clear()
@@ -208,11 +219,14 @@ class AiAgentRpcServiceImpl(
                             }
 
                             if (event is UiResultMessage) {
-                                logger.info("[executeTurn] got result event, cancel collector")
+                                logger.info("[executeTurn] got result event, complete query and cancel collector")
+                                // 收到 result 消息后立即标记完成，让 interrupt 的 await 能及时返回
+                                queryCompletion?.complete(Unit)
                                 cancel()
                             }
                             if (event is UiError) {
-                                logger.severe("[executeTurn] got error event, cancel collector")
+                                logger.severe("[executeTurn] got error event, complete query and cancel collector")
+                                queryCompletion?.complete(Unit)
                                 cancel()
                             }
                         } catch (e: Exception) {
@@ -251,6 +265,11 @@ class AiAgentRpcServiceImpl(
             }
 
             logger.info("[executeTurn] done (sessionId=$sessionId)")
+        }.onCompletion {
+            // 🔧 Flow 结束时标记完成，让 interrupt 的 await 返回
+            queryCompletion?.complete(Unit)
+            queryCompletion = null
+            logger.info("[executeTurn] Flow completed, queryCompletion signaled")
         }
     }
 
@@ -397,7 +416,8 @@ class AiAgentRpcServiceImpl(
         }
         return builder.toString().trim()
     }
-    private fun UiStreamEvent.toRpcMessage(provider: AiAgentProvider): RpcMessage {
+
+    private fun UiStreamEvent.toRpcMessage(provider: AiAgentProvider): RpcMessage {
         val rpcProvider = provider.toRpcProvider()
 
         return when (this) {
@@ -503,7 +523,7 @@ class AiAgentRpcServiceImpl(
             }
 
             is UiResultMessage -> RpcResultMessage(
-                subtype = if (isError) "error" else "success",
+                subtype = subtype,  // 保留原始 subtype（如 "error_during_execution"）
                 durationMs = durationMs,
                 durationApiMs = durationApiMs,
                 isError = isError,
@@ -538,7 +558,7 @@ class AiAgentRpcServiceImpl(
         is ThinkingContent -> RpcThinkingBlock(thinking = thinking, signature = signature)
         is ToolUseContent -> {
             val toolTypeEnum = ToolType.fromToolName(name)
-            println("🔍 [toRpcContentBlock] ToolUseContent: id=$id, name=$name, input=$input")
+            logger.info("🔍 [toRpcContentBlock] ToolUseContent: id=$id, name=$name, inputType=${input?.javaClass?.simpleName}, input=${input?.toString()?.take(200)}")
             RpcToolUseBlock(
                 id = id,
                 toolName = name,

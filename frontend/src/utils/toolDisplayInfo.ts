@@ -219,8 +219,13 @@ export function extractToolDisplayInfo(
 
     case 'todo-write':
     case 'TodoWrite': {
-      const todos = toolInput.todos || []
-      primaryInfo = `${todos.length}项任务`
+      const todos = toolInput?.todos
+      // 如果 input 为空或 todos 未定义，显示"加载中"而不是"0项任务"
+      if (!toolInput || todos === undefined) {
+        primaryInfo = '加载中...'
+      } else {
+        primaryInfo = `${todos.length}项任务`
+      }
       secondaryInfo = ''
       break
     }

@@ -50,9 +50,31 @@
             <span class="tip-text">{{ t('chat.welcomeScreen.debug') }}</span>
           </div>
         </div>
-        <div class="empty-hint">
-          <kbd class="keyboard-key">Enter</kbd> {{ t('chat.welcomeScreen.sendHint') }} ·
-          <kbd class="keyboard-key">Shift</kbd> + <kbd class="keyboard-key">Enter</kbd> {{ t('chat.welcomeScreen.newLineHint') }}
+        <div class="shortcut-hints">
+          <div class="shortcut-item">
+            <kbd class="keyboard-key">Enter</kbd>
+            <span class="shortcut-desc">{{ t('chat.welcomeScreen.sendHint') }}</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd class="keyboard-key">Shift</kbd> + <kbd class="keyboard-key">Enter</kbd>
+            <span class="shortcut-desc">{{ t('chat.welcomeScreen.newLineHint') }}</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd class="keyboard-key">Esc</kbd>
+            <span class="shortcut-desc">{{ t('chat.welcomeScreen.stopHint') }}</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd class="keyboard-key">Tab</kbd>
+            <span class="shortcut-desc">{{ t('chat.welcomeScreen.toggleThinkingHint') }}</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd class="keyboard-key">Shift</kbd> + <kbd class="keyboard-key">Tab</kbd>
+            <span class="shortcut-desc">{{ t('chat.welcomeScreen.switchModeHint') }}</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd class="keyboard-key">Ctrl</kbd> + <kbd class="keyboard-key">Enter</kbd>
+            <span class="shortcut-desc">{{ t('chat.welcomeScreen.interruptHint') }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -209,14 +231,37 @@ function stopTimer() {
   }
 }
 
+// 自动滚动定时器
+let autoScrollTimerId: number | null = null
+
+// 启动自动滚动（在流式响应期间，如果用户在底部则定期滚动）
+function startAutoScroll() {
+  if (autoScrollTimerId !== null) return
+  autoScrollTimerId = window.setInterval(() => {
+    if (isNearBottom.value) {
+      scrollToBottom()
+    }
+  }, 200) // 每 200ms 检查并滚动
+}
+
+// 停止自动滚动
+function stopAutoScroll() {
+  if (autoScrollTimerId !== null) {
+    clearInterval(autoScrollTimerId)
+    autoScrollTimerId = null
+  }
+}
+
 // 监听 isStreaming 变化
 watch(
   () => props.isStreaming,
   (streaming) => {
     if (streaming) {
       startTimer()
+      startAutoScroll()  // 开始自动滚动
     } else {
       stopTimer()
+      stopAutoScroll()   // 停止自动滚动
     }
   },
   { immediate: true }
@@ -225,11 +270,13 @@ watch(
 onMounted(() => {
   if (props.isStreaming) {
     startTimer()
+    startAutoScroll()
   }
 })
 
 onUnmounted(() => {
   stopTimer()
+  stopAutoScroll()
 })
 
 // 为虚拟列表准备数据源
@@ -323,7 +370,7 @@ function scrollToBottom() {
   flex-direction: column;
   overflow: hidden;
   min-height: 0; /* 关键：防止 flex 子元素溢出 */
-  background: var(--theme-background, #fafbfc);
+  background: var(--theme-background, #ffffff);
 }
 
 .message-list {
@@ -451,6 +498,27 @@ function scrollToBottom() {
   gap: 8px;
   justify-content: center;
   flex-wrap: wrap;
+}
+
+.shortcut-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--theme-secondary-foreground, #6a737d);
+}
+
+.shortcut-desc {
+  min-width: 80px;
+  text-align: left;
 }
 
 .keyboard-key {
