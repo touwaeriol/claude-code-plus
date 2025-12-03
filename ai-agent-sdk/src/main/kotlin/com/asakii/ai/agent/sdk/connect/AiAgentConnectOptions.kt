@@ -68,6 +68,7 @@ fun AiAgentConnectOptions.normalize(): AiAgentConnectContext = when (provider) {
 private fun AiAgentConnectOptions.normalizeForClaude(): AiAgentConnectContext {
     val base = claude.options ?: ClaudeAgentOptions()
 
+    // 注意：copy() 会保留所有未显式指定的字段（包括 mcpServers、permissionPromptToolName 等）
     val normalized = base.copy(
         model = model ?: base.model,
         systemPrompt = systemPrompt ?: base.systemPrompt,

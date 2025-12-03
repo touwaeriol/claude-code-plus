@@ -21,6 +21,14 @@ data class UserAnswerItem(
 )
 
 /**
+ * 授权响应数据类（前端 RequestPermission 回调的返回格式）
+ */
+@Serializable
+data class PermissionResponse(
+    val approved: Boolean
+)
+
+/**
  * AskUserQuestion 请求参数
  */
 @Serializable
@@ -132,6 +140,7 @@ class UserInteractionMcpServer : McpServerBase() {
             ),
             "required" to listOf("questions")
         )
+
     }
 
     /**
@@ -143,7 +152,7 @@ class UserInteractionMcpServer : McpServerBase() {
     }
 
     override suspend fun onInitialize() {
-        // 使用静态 JSON Schema 注册 AskUserQuestion 工具
+        // 注册 AskUserQuestion 工具
         registerToolWithSchema(
             name = "AskUserQuestion",
             description = "向用户询问问题并获取选择。使用此工具在需要用户输入或确认时与用户交互。",

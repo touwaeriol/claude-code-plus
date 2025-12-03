@@ -12,13 +12,17 @@ import com.asakii.ai.agent.sdk.connect.CodexOverrides
 import com.asakii.ai.agent.sdk.model.*
 import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
 import com.asakii.claude.agent.sdk.types.PermissionMode
+import com.asakii.claude.agent.sdk.types.PermissionResult
+import com.asakii.claude.agent.sdk.types.PermissionResultAllow
+import com.asakii.claude.agent.sdk.types.PermissionResultDeny
+import com.asakii.claude.agent.sdk.types.ToolPermissionContext
 import com.asakii.claude.agent.sdk.types.ToolType
 import com.asakii.codex.agent.sdk.CodexClientOptions
 import com.asakii.codex.agent.sdk.SandboxMode
 import com.asakii.codex.agent.sdk.ThreadOptions
 import com.asakii.rpc.api.*
 import com.asakii.server.config.AiAgentServiceConfig
-import com.asakii.server.mcp.PermissionMcpServer
+import com.asakii.server.mcp.PermissionResponse
 import com.asakii.server.mcp.UserInteractionMcpServer
 import com.asakii.server.settings.ClaudeSettingsLoader
 import kotlinx.coroutines.CancellationException
@@ -63,13 +67,8 @@ class AiAgentRpcServiceImpl(
     // 🔧 追踪当前 query 的完成状态，用于 interrupt 同步等待
     private var queryCompletion: CompletableDeferred<Unit>? = null
 
-    // 用户交互 MCP Server（用于 AskUserQuestion 等工具）
+    // 用户交互 MCP Server（仅包含 AskUserQuestion，权限走 canUseTool 回调）
     private val userInteractionServer = UserInteractionMcpServer().apply {
-        clientCaller?.let { setClientCaller(it) }
-    }
-
-    // 工具授权 MCP Server（用于 RequestPermission 工具）
-    private val permissionServer = PermissionMcpServer().apply {
         clientCaller?.let { setClientCaller(it) }
     }
     
@@ -345,14 +344,35 @@ class AiAgentRpcServiceImpl(
             "output-format" to "stream-json"
         )
 
-        // 注册 MCP Servers（包括用户交互工具和授权工具）
-        val mcpServers = mutableMapOf<String, Any>()
+        // 注册 MCP Server（包含 AskUserQuestion 工具）
+        val mcpServers = mapOf<String, Any>("user_interaction" to userInteractionServer)
 
-        // 添加 UserInteractionMcpServer（用于 AskUserQuestion 等工具）
-        mcpServers["user_interaction"] = userInteractionServer
-
-        // 添加 PermissionMcpServer（用于 RequestPermission 工具）
-        mcpServers["permission"] = permissionServer
+        // 权限回调：通过 RPC 调用前端获取用户授权
+        val canUseToolCallback: suspend (String, Map<String, Any>, ToolPermissionContext) -> PermissionResult = { toolName, input, _ ->
+            logger.info("🔐 [canUseTool] 请求授权: toolName=$toolName")
+            val caller = clientCaller
+            if (caller != null) {
+                try {
+                    val response: PermissionResponse = caller.callTyped(
+                        method = "RequestPermission",
+                        params = mapOf("tool_name" to toolName, "tool_input" to input)
+                    )
+                    if (response.approved) {
+                        logger.info("✅ [canUseTool] 用户已授权: toolName=$toolName")
+                        PermissionResultAllow()
+                    } else {
+                        logger.info("❌ [canUseTool] 用户拒绝授权: toolName=$toolName")
+                        PermissionResultDeny(message = "用户拒绝授权")
+                    }
+                } catch (e: Exception) {
+                    logger.warning("⚠️ [canUseTool] 权限请求失败: toolName=$toolName, error=${e.message}")
+                    PermissionResultDeny(message = "权限请求失败: ${e.message}")
+                }
+            } else {
+                logger.info("⚠️ [canUseTool] 无 clientCaller，默认允许: toolName=$toolName")
+                PermissionResultAllow()
+            }
+        }
 
         val claudeOptions = ClaudeAgentOptions(
             model = model,
@@ -365,10 +385,9 @@ class AiAgentRpcServiceImpl(
             includePartialMessages = options.includePartialMessages
                 ?: defaults.includePartialMessages,
             permissionMode = permissionMode,
-            // 配置授权工具：当 Claude 需要执行敏感操作时，会调用此工具请求用户授权
-            permissionPromptToolName = "mcp__permission__RequestPermission",
+            canUseTool = canUseToolCallback,
             continueConversation = options.continueConversation ?: false,
-            resume = options.resumeSessionId,  // 浣跨敤缁熶竴鐨?resumeSessionId
+            resume = options.resumeSessionId,
             maxThinkingTokens = maxThinkingTokens,
             extraArgs = extraArgs,
             mcpServers = mcpServers
@@ -748,7 +767,6 @@ class AiAgentRpcServiceImpl(
         RpcPermissionMode.DONT_ASK -> SdkPermissionMode.DONT_ASK
     }
 }
-
 
 
 

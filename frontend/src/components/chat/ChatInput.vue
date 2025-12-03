@@ -105,6 +105,17 @@
       </div>
     </div>
 
+    <!-- 错误提示区域 -->
+    <div
+      v-if="currentError"
+      class="error-banner"
+      @click="handleClearError"
+    >
+      <span class="error-icon">⚠️</span>
+      <span class="error-text">{{ currentError }}</span>
+      <button class="error-dismiss" title="关闭">×</button>
+    </div>
+
     <!-- 输入区域 -->
     <div
       class="input-area"
@@ -482,7 +493,7 @@ const props = withDefaults(defineProps<Props>(), {
   enabled: true,
   selectedModel: 'SONNET',
   selectedPermission: 'default',
-  skipPermissions: true,
+  skipPermissions: false,
   showContextControls: true,
   showModelSelector: true,
   showPermissionControls: true,
@@ -536,6 +547,14 @@ const canToggleThinkingComputed = computed(() => {
 const thinkingEnabled = computed(() => {
   return getEffectiveThinkingEnabled(currentModel.value, currentThinkingEnabled.value)
 })
+
+// 当前错误信息（从 sessionStore 读取）
+const currentError = computed(() => sessionStore.currentLastError)
+
+// 清除错误
+function handleClearError() {
+  sessionStore.clearCurrentError()
+}
 
 // Refs
 const richTextInputRef = ref<InstanceType<typeof RichTextInput>>()
@@ -2169,6 +2188,59 @@ onUnmounted(() => {
   bottom: 0;
   z-index: 9999;
   background: transparent;
+}
+
+/* 错误提示区域 */
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--theme-error-background, #fef2f2);
+  border: 1px solid var(--theme-error, #ef4444);
+  border-radius: 6px;
+  margin: 8px 12px 0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.error-banner:hover {
+  background: var(--theme-error-background-hover, #fee2e2);
+}
+
+.error-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.error-text {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-error, #dc2626);
+  word-break: break-word;
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.error-dismiss {
+  flex-shrink: 0;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--theme-error, #dc2626);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.error-dismiss:hover {
+  background: rgba(220, 38, 38, 0.1);
 }
 
 </style>

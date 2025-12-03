@@ -87,8 +87,12 @@ class MessageParser {
         // Try to get token usage from either location
         val tokenUsage = jsonObject["token_usage"]?.let { parseTokenUsage(it) }
             ?: messageObject?.get("usage")?.let { parseTokenUsage(it) }
-        
+
+        // Get message id from nested message object
+        val id = messageObject?.get("id")?.jsonPrimitive?.contentOrNull
+
         return AssistantMessage(
+            id = id,
             content = content,
             model = model,
             tokenUsage = tokenUsage

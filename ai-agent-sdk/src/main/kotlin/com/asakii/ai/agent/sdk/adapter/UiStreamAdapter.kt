@@ -30,7 +30,7 @@ class UiStreamAdapter {
                 )
             )
             is AssistantMessageEvent -> listOf(
-                UiAssistantMessage(event.content)
+                UiAssistantMessage(id = event.id, content = event.content)
             )
             is UserMessageEvent -> listOf(
                 UiUserMessage(event.content)
@@ -44,14 +44,14 @@ class UiStreamAdapter {
             is ThinkingDeltaPayload -> listOf(UiThinkingDelta(delta.thinking, index = event.index))
             is ToolDeltaPayload -> listOf(
                 UiToolProgress(
-                    toolId = event.id,
+                    toolId = event.index.toString(),
                     status = ContentStatus.IN_PROGRESS,
                     outputPreview = delta.partialJson
                 )
             )
             is CommandDeltaPayload -> listOf(
                 UiToolProgress(
-                    toolId = event.id,
+                    toolId = event.index.toString(),
                     status = ContentStatus.IN_PROGRESS,
                     outputPreview = delta.output
                 )
@@ -62,22 +62,22 @@ class UiStreamAdapter {
     private var contentIndexCounter = 0
 
     private fun convertContentStart(event: ContentStartedEvent): List<UiStreamEvent> {
-        val index = contentIndexCounter++
-
         return when {
             event.contentType.contains("tool") || event.contentType.contains("command") -> {
                 val toolName = event.toolName ?: event.contentType
                 val toolTypeEnum = ToolType.fromToolName(toolName)
+                // 对于工具调用，从 content 中获取原生 id（如果有）
+                val toolId = (event.content as? ToolUseContent)?.id ?: event.index.toString()
                 listOf(
                     UiToolStart(
-                        toolId = event.id,
+                        toolId = toolId,
                         toolName = toolName,
                         toolType = toolTypeEnum.type
                     )
                 )
             }
-            event.contentType.contains("text") -> listOf(UiTextStart(index))
-            event.contentType.contains("thinking") -> listOf(UiThinkingStart(index))
+            event.contentType.contains("text") -> listOf(UiTextStart(event.index))
+            event.contentType.contains("thinking") -> listOf(UiThinkingStart(event.index))
             else -> emptyList()
         }
     }
@@ -93,12 +93,17 @@ class UiStreamAdapter {
             // 避免前端重复显示消息
             is TextContent -> emptyList()
             is ThinkingContent -> emptyList()
-            is ToolUseContent,
+            is ToolUseContent -> listOf(
+                UiToolComplete(
+                    toolId = content.id,
+                    result = content
+                )
+            )
             is CommandExecutionContent,
             is ToolResultContent,
             is McpToolCallContent -> listOf(
                 UiToolComplete(
-                    toolId = event.id,
+                    toolId = event.index.toString(),
                     result = content
                 )
             )

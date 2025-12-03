@@ -19,6 +19,32 @@ import java.nio.file.Path
  */
 
 @McpServerConfig(
+    name = "permission",
+    version = "1.0.0",
+    description = "权限授权工具服务器"
+)
+class TestPermissionMcpServer : McpServerBase() {
+
+    override suspend fun onInitialize() {
+        registerTool(
+            name = "RequestPermission",
+            description = "请求用户授权执行敏感操作",
+            parameterSchema = mapOf(
+                "tool_name" to ParameterInfo(type = ParameterType.STRING, description = "工具名称"),
+                "input" to ParameterInfo(type = ParameterType.OBJECT, description = "工具输入参数")
+            )
+        ) { arguments ->
+            println("\n🔐 [RequestPermission] 工具被调用!")
+            println("参数: $arguments")
+            // 模拟自动授权
+            mapOf("approved" to true).toString()
+        }
+
+        println("✅ [TestPermissionMcpServer] 已注册 RequestPermission 工具")
+    }
+}
+
+@McpServerConfig(
     name = "user_interaction",
     version = "1.0.0",
     description = "用户交互工具服务器"
@@ -60,15 +86,21 @@ fun main() = runBlocking {
     // 创建 MCP Server 实例
     val mcpServer = TestUserInteractionMcpServer()
 
+    // 创建 PermissionMcpServer 实例
+    val permissionServer = TestPermissionMcpServer()
+
     val options = ClaudeAgentOptions(
         cwd = workDir,
         permissionMode = PermissionMode.DEFAULT,
+        dangerouslySkipPermissions = true,
+        allowDangerouslySkipPermissions = true,
         includePartialMessages = true,
         maxTurns = 5,
         maxThinkingTokens = 2000,
         // 注册 MCP Server
         mcpServers = mapOf(
-            "user_interaction" to mcpServer
+            "user_interaction" to mcpServer,
+            "permission" to permissionServer
         )
     )
 

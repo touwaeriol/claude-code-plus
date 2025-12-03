@@ -30,6 +30,12 @@
       :message="item"
     />
 
+    <!-- 错误结果 -->
+    <ErrorResultDisplay
+      v-else-if="item.displayType === 'errorResult'"
+      :error-message="item.message"
+    />
+
     <!-- 未知类型 -->
     <div
       v-else
@@ -47,6 +53,7 @@ import AssistantTextDisplay from './AssistantTextDisplay.vue'
 import ThinkingDisplay from './ThinkingDisplay.vue'
 import ToolCallDisplay from './ToolCallDisplay.vue'
 import SystemMessageDisplay from './SystemMessageDisplay.vue'
+import ErrorResultDisplay from './ErrorResultDisplay.vue'
 
 interface Props {
   // VirtualList 会把当前项作为 source 传入
