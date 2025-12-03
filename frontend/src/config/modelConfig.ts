@@ -59,7 +59,7 @@ export function getModelConfig(model: AiModel): ModelConfig {
  * 获取模型的上下文长度
  * @throws {Error} 如果模型不存在
  */
-export function getModelContextLength(model: AiModel): number {
-  return getModelConfig(model).contextLength
+export function getModelContextLength(model: AiModel | string): number {
+  return MODEL_CONFIGS[model as AiModel]?.contextLength ?? 200000
 }
 

@@ -6,7 +6,7 @@
  */
 
 import type {
-  RpcStreamEvent,
+  RpcAppStreamEvent,
   RpcMessageStart,
   RpcTextDelta,
   RpcThinkingDelta,
@@ -536,10 +536,9 @@ function processMessageComplete(
       ...context.messages[messageIndex],
       timestamp: Date.now(),
       tokenUsage: event.usage ? {
-        input_tokens: event.usage.inputTokens || 0,
-        output_tokens: event.usage.outputTokens || 0,
-        cache_creation_input_tokens: event.usage.cachedInputTokens,
-        cache_read_input_tokens: undefined
+        inputTokens: event.usage.inputTokens || 0,
+        outputTokens: event.usage.outputTokens || 0,
+        cachedInputTokens: event.usage.cachedInputTokens
       } : undefined
     }
   }
@@ -587,7 +586,7 @@ function processAssistantMessage(
   // 这里可以添加校验逻辑，比如比较 content 是否一致
   log.debug('processAssistantMessage: 收到完整消息校验', {
     messageId: lastAssistantMessage.id,
-    contentBlocks: event.content.length
+    contentBlocks: event.message?.content?.length ?? 0
   })
 
   return {
@@ -611,7 +610,7 @@ function processUserMessage(
   const newMessage: Message = {
     id: `user-${Date.now()}-${crypto.randomUUID().substring(0, 8)}`,
     role: 'user',
-    content: (event.content || []) as ContentBlock[],
+    content: (event.message?.content || []) as ContentBlock[],
     timestamp: Date.now()
   }
 
@@ -637,7 +636,7 @@ function processUserMessage(
  * 根据事件类型分发到对应的处理函数
  */
 export function processRpcStreamEvent(
-  event: RpcStreamEvent,
+  event: RpcAppStreamEvent,
   context: RpcEventContext
 ): RpcEventProcessResult {
   const eventType = event.type

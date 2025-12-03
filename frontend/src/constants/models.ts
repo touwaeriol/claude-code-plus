@@ -1,4 +1,4 @@
-import type { AiModel } from '@/types/enhancedMessage'
+import { AiModel } from '@/types/enhancedMessage'
 
 // ==================== 新架构：BaseModel + ThinkingMode ====================
 
@@ -187,14 +187,14 @@ export function uiOptionToAiModel(option: UiModelOption): AiModel {
   switch (option) {
     case UiModelOption.OPUS_45:
     case UiModelOption.OPUS_45_THINKING:
-      return 'OPUS'
+      return AiModel.OPUS
     case UiModelOption.HAIKU_45:
     case UiModelOption.HAIKU_45_THINKING:
-      return 'DEFAULT'
+      return AiModel.DEFAULT
     case UiModelOption.SONNET_45:
     case UiModelOption.SONNET_45_THINKING:
     default:
-      return 'SONNET'
+      return AiModel.SONNET
   }
 }
 
@@ -237,3 +237,4 @@ export function migrateModelSettings(oldModel: string | UiModelOption): { model:
     thinkingEnabled: true
   }
 }
+

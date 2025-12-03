@@ -1016,8 +1016,27 @@ export const useSessionStore = defineStore('session', () => {
       case 'content_block_start': {
         const message = ensureStreamingAssistantMessage(sessionId, sessionState)
         const contentBlock = mapRpcContentBlock(event.content_block)
+
+        // 🔍 调试
+        console.log('🔍 [content_block_start]', {
+          eventIndex: event.index,
+          contentBlockType: contentBlock?.type,
+          currentContentLength: message.content.length
+        })
+
         if (contentBlock) {
-          message.content.push(contentBlock)
+          // 🔧 修复：使用 event.index 确保内容块放在正确位置
+          // Claude API 的 index 是绝对索引，需要确保数组长度匹配
+          while (message.content.length < event.index) {
+            // 填充空位（理论上不应该发生，但以防万一）
+            message.content.push({ type: 'text', text: '' } as any)
+          }
+          if (message.content.length === event.index) {
+            message.content.push(contentBlock)
+          } else {
+            message.content[event.index] = contentBlock
+          }
+
           if (contentBlock.type === 'tool_use' && contentBlock.id) {
             toolInputJsonAccumulator.set(contentBlock.id, '')
             registerToolCall(contentBlock as ToolUseBlock)
@@ -1043,8 +1062,21 @@ export const useSessionStore = defineStore('session', () => {
           })
         }
 
+        // 🔍 调试：打印 delta 处理信息
+        console.log('🔍 [content_block_delta]', {
+          index,
+          contentLength: message.content.length,
+          deltaType: delta?.type,
+          indexValid: index >= 0 && index < message.content.length
+        })
+
         if (index >= 0 && index < message.content.length && delta) {
           const contentBlock = message.content[index]
+          console.log('🔍 [content_block_delta] contentBlock:', {
+            blockType: contentBlock.type,
+            deltaType: delta.type,
+            match: delta.type === 'text_delta' && contentBlock.type === 'text'
+          })
           if (delta.type === 'text_delta' && contentBlock.type === 'text') {
             // 累积文本到 message.content
             contentBlock.text += delta.text
@@ -1283,6 +1315,15 @@ export const useSessionStore = defineStore('session', () => {
   ) {
     const expectedId = `${message.id}-text-${blockIndex}`
 
+    // 🔍 调试
+    console.log('🔍 [updateTextDisplayItemIncrementally]', {
+      messageId: message.id,
+      blockIndex,
+      expectedId,
+      displayItemsCount: sessionState.displayItems.length,
+      displayItemIds: sessionState.displayItems.slice(0, 5).map(d => d.id)
+    })
+
     for (let i = 0; i < sessionState.displayItems.length; i++) {
       const item = sessionState.displayItems[i]
       if (item.id === expectedId && item.displayType === 'assistantText') {
@@ -1290,11 +1331,13 @@ export const useSessionStore = defineStore('session', () => {
         // 这样 vue-virtual-scroller 能检测到这个元素变化
         const updated = { ...item, content: newText } as AssistantText
         sessionState.displayItems[i] = updated
+        console.log('🔍 [updateTextDisplayItemIncrementally] ✅ 找到并更新了 displayItem')
         return
       }
     }
 
     // 如果找不到，说明还没创建，需要同步一次
+    console.log('🔍 [updateTextDisplayItemIncrementally] ❌ 未找到 displayItem，调用 syncDisplayItemsForMessage')
     syncDisplayItemsForMessage(message, sessionState)
   }
 

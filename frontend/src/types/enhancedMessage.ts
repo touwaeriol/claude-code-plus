@@ -45,6 +45,7 @@ export enum AiModel {
 }
 
 import type { ContextReference } from './display'
+export type { ContextReference }
 // PermissionMode 统一使用 RpcPermissionMode，从 rpc.ts 导入
 export type { RpcPermissionMode as PermissionMode } from './rpc'
 export type { ContextDisplayType } from './display'
@@ -158,3 +159,6 @@ export function hasToolCalls(message: EnhancedMessage): boolean {
 export function isPlainTextMessage(message: EnhancedMessage): boolean {
   return !hasToolCalls(message)
 }
+
+// 重新导出以便外部使用
+export type { UnifiedMessage as Message } from './message'

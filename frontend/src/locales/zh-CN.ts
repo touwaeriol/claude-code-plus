@@ -28,14 +28,15 @@ export default {
   },
   chat: {
     placeholder: '输入消息...',
-    placeholderWithShortcuts: '输入消息... (Enter 发送, Shift+Enter 换行, Alt+Enter 打断发送)',
-    placeholderWithShortcutsCtrl: '输入消息... (Ctrl+Enter 发送, Shift+Enter 换行)',
+    placeholderWithShortcuts: '输入消息... (Enter 发送, Shift+Enter 换行, Ctrl+Enter 打断发送)',
+    placeholderWithShortcutsCtrl: '输入消息... (Enter 发送, Shift+Enter 换行, Ctrl+Enter 打断发送)',
     newSession: '新会话',
     history: '历史记录',
     thinking: '思考中...',
     retry: '重试',
     stop: '停止',
     stopGenerating: '停止生成',
+    escToInterrupt: 'ESC 打断',
     welcome: '你好！我是 Claude，你的 AI 编程助手。',
     emptyState: '开始一个新的会话，或选择一个历史记录。',
     sendMessage: '发送消息',
@@ -78,7 +79,7 @@ export default {
     actualModel: '实际模型',
     uploadImage: '上传图片',
     interruptAndSend: '打断发送',
-    interruptAndSendShortcut: '打断并发送 (Alt+Enter)',
+    interruptAndSendShortcut: '打断并发送 (Ctrl+Enter)',
     moreContexts: '还有 {count} 个上下文',
     tokenTooltip: '输入: {input}, 输出: {output}, 缓存创建: {cacheCreation}, 缓存读取: {cacheRead}',
     welcomeScreen: {
@@ -88,7 +89,11 @@ export default {
       refactor: '重构现有代码',
       debug: '调试错误',
       sendHint: '发送消息',
-      newLineHint: '换行'
+      newLineHint: '换行',
+      interruptHint: '打断发送',
+      stopHint: '停止生成',
+      toggleThinkingHint: '开关思考',
+      switchModeHint: '切换模式'
     },
     claudeThinking: 'Claude 正在思考...',
     scrollToBottom: '回到底部'

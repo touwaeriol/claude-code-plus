@@ -186,7 +186,8 @@ class ClaudeStreamAdapter(
                 events += ContentDeltaEvent(
                     provider = AiAgentProvider.CLAUDE,
                     id = state.id,
-                    delta = delta
+                    delta = delta,
+                    index = parsed.index  // 传递 Claude API 的原始 index
                 )
             }
 

@@ -326,7 +326,7 @@ export interface RpcImageBlock {
 }
 
 export interface RpcImageSource {
-  type: string
+  type: 'base64' | 'url' | string
   media_type: string
   data?: string
   url?: string
@@ -434,10 +434,11 @@ export interface RpcConnectOptions {
   initialPrompt?: string
   sessionId?: string
   resumeSessionId?: string
+  resume?: string  // 恢复会话 ID（别名）
   metadata?: Record<string, string>
 
   // === Claude 相关配置（根据 provider 能力生效）===
-  permissionMode?: 'default' | 'bypassPermissions' | 'acceptEdits' | 'plan' | 'dontAsk'
+  permissionMode?: RpcPermissionMode
   dangerouslySkipPermissions?: boolean
   allowDangerouslySkipPermissions?: boolean
   includePartialMessages?: boolean
@@ -483,3 +484,68 @@ export interface RpcSetPermissionModeResult {
   mode: RpcPermissionMode
   success: boolean
 }
+
+// ============================================================================
+// 应用层流式事件类型 - 用于 rpcEventProcessor.ts
+// ============================================================================
+
+/** message_start 事件 */
+export interface RpcMessageStart {
+  type: 'message_start'
+  messageId?: string
+  content?: RpcContentBlock[]
+  provider?: RpcProvider
+}
+
+/** tool_start 事件 */
+export interface RpcToolStart {
+  type: 'tool_start'
+  toolId: string
+  toolName: string
+  toolType: string
+  provider?: RpcProvider
+}
+
+/** tool_progress 事件 */
+export interface RpcToolProgress {
+  type: 'tool_progress'
+  toolId: string
+  status?: string
+  outputPreview?: string
+  provider?: RpcProvider
+}
+
+/** tool_complete 事件 */
+export interface RpcToolComplete {
+  type: 'tool_complete'
+  toolId: string
+  result?: RpcContentBlock
+  provider?: RpcProvider
+}
+
+/** message_complete 事件 */
+export interface RpcMessageComplete {
+  type: 'message_complete'
+  usage?: RpcUsage
+  provider?: RpcProvider
+}
+
+/** error 事件 */
+export interface RpcErrorEvent {
+  type: 'error'
+  message: string
+  provider?: RpcProvider
+}
+
+/** 应用层流式事件联合类型 - 用于 processRpcStreamEvent */
+export type RpcAppStreamEvent =
+  | RpcMessageStart
+  | RpcTextDelta
+  | RpcThinkingDelta
+  | RpcToolStart
+  | RpcToolProgress
+  | RpcToolComplete
+  | RpcMessageComplete
+  | RpcErrorEvent
+  | (RpcAssistantMessage & { content: RpcContentBlock[] })
+  | (RpcUserMessage & { content?: RpcContentBlock[] })

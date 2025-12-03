@@ -439,25 +439,48 @@ class AiAgentRpcServiceImpl(
             is UiTextDelta -> {
                 val event = wrapAsStreamEvent(
                     RpcContentBlockDeltaEvent(
-                        index = 0,
+                        index = index,  // 使用传递的 index
                         delta = RpcTextDelta(text = text)
                     ),
                     rpcProvider
                 )
-                if (nextContentIndex == 0) nextContentIndex = 1
+                if (nextContentIndex <= index) nextContentIndex = index + 1
                 event
             }
 
             is UiThinkingDelta -> {
                 val event = wrapAsStreamEvent(
                     RpcContentBlockDeltaEvent(
-                        index = 0,
+                        index = index,  // 使用传递的 index
                         delta = RpcThinkingDelta(thinking = thinking)
                     ),
                     rpcProvider
                 )
-                if (nextContentIndex == 0) nextContentIndex = 1
+                if (nextContentIndex <= index) nextContentIndex = index + 1
                 event
+            }
+
+            is UiTextStart -> {
+                // 确保 nextContentIndex 与 index 同步
+                if (nextContentIndex <= index) nextContentIndex = index + 1
+                wrapAsStreamEvent(
+                    RpcContentBlockStartEvent(
+                        index = index,
+                        contentBlock = RpcTextBlock(text = "")
+                    ),
+                    rpcProvider
+                )
+            }
+
+            is UiThinkingStart -> {
+                if (nextContentIndex <= index) nextContentIndex = index + 1
+                wrapAsStreamEvent(
+                    RpcContentBlockStartEvent(
+                        index = index,
+                        contentBlock = RpcThinkingBlock(thinking = "")
+                    ),
+                    rpcProvider
+                )
             }
 
             is UiToolStart -> {

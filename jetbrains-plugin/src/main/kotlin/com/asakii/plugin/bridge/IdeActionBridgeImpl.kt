@@ -242,8 +242,38 @@ class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
         val result = mutableListOf<String>()
         ApplicationManager.getApplication().runReadAction {
             val projectScope = GlobalSearchScope.projectScope(project)
-            val files = FilenameIndex.getAllFilesByExt(project, "kt", projectScope)
-            result.addAll(files.mapNotNull { it.path })
+
+            if (query.isBlank()) {
+                // 空查询：返回项目根目录的文件
+                val basePath = project.basePath
+                if (basePath != null) {
+                    val projectDir = java.io.File(basePath)
+                    projectDir.listFiles()
+                        ?.filter { it.isFile }
+                        ?.sortedByDescending { it.lastModified() }
+                        ?.take(maxResults)
+                        ?.forEach { result.add(it.absolutePath) }
+                }
+            } else {
+                // 有查询：按文件名模糊搜索
+                val allFileNames = FilenameIndex.getAllFilenames(project)
+                val queryLower = query.lowercase()
+
+                // 过滤匹配的文件名
+                val matchingNames = allFileNames
+                    .filter { it.lowercase().contains(queryLower) }
+                    .take(maxResults * 2)  // 取多一些，因为一个文件名可能有多个文件
+
+                // 获取匹配文件的路径
+                for (fileName in matchingNames) {
+                    if (result.size >= maxResults) break
+                    val files = FilenameIndex.getVirtualFilesByName(fileName, projectScope)
+                    for (file in files) {
+                        if (result.size >= maxResults) break
+                        result.add(file.path)
+                    }
+                }
+            }
         }
         return result.take(maxResults)
     }

@@ -116,7 +116,7 @@
 import { ref, computed } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { ideService } from '@/services/ideaBridge'
-import type { ToolCall, ToolCallStatus } from '@/types/enhancedMessage'
+import type { ToolCall, ToolCallStatus } from '@/types/display'
 
 const { t } = useI18n()
 

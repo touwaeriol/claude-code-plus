@@ -28,14 +28,15 @@ export default {
   },
   chat: {
     placeholder: 'メッセージを入力...',
-    placeholderWithShortcuts: 'メッセージを入力... (Enterで送信、Shift+Enterで改行、Alt+Enterで中断)',
-    placeholderWithShortcutsCtrl: 'メッセージを入力... (Ctrl+Enterで送信、Shift+Enterで改行)',
+    placeholderWithShortcuts: 'メッセージを入力... (Enterで送信、Shift+Enterで改行、Ctrl+Enterで中断)',
+    placeholderWithShortcutsCtrl: 'メッセージを入力... (Enterで送信、Shift+Enterで改行、Ctrl+Enterで中断)',
     newSession: '新しいセッション',
     history: '履歴',
     thinking: '考え中...',
     retry: '再試行',
     stop: '停止',
     stopGenerating: '生成を停止',
+    escToInterrupt: 'ESC で中断',
     welcome: 'こんにちは！私はAIコーディングアシスタントのClaudeです。',
     emptyState: '新しいセッションを開始するか、履歴から選択してください。',
     sendMessage: 'メッセージを送信',
@@ -77,7 +78,7 @@ export default {
     actualModel: '実際のモデル',
     uploadImage: '画像をアップロード',
     interruptAndSend: '中断して送信',
-    interruptAndSendShortcut: '中断して送信 (Alt+Enter)',
+    interruptAndSendShortcut: '中断して送信 (Ctrl+Enter)',
     moreContexts: 'あと{count}個のコンテキスト',
     tokenTooltip: '入力: {input}, 出力: {output}, キャッシュ作成: {cacheCreation}, キャッシュ読取: {cacheRead}',
     welcomeScreen: {
@@ -87,7 +88,11 @@ export default {
       refactor: '既存コードをリファクタリング',
       debug: 'エラーをデバッグ',
       sendHint: 'メッセージを送信',
-      newLineHint: '改行'
+      newLineHint: '改行',
+      interruptHint: '中断して送信',
+      stopHint: '生成停止',
+      toggleThinkingHint: '思考切替',
+      switchModeHint: 'モード切替'
     },
     claudeThinking: 'Claudeが考えています...',
     scrollToBottom: '一番下へ移動'

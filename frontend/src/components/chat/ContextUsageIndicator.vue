@@ -11,7 +11,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { EnhancedMessage, AiModel, TokenUsage } from '@/types/enhancedMessage'
+import type { EnhancedMessage, TokenUsage } from '@/types/enhancedMessage'
 import { MessageRole } from '@/types/enhancedMessage'
 import { getModelContextLength } from '@/config/modelConfig'
 
@@ -24,7 +24,7 @@ const TOKEN_USAGE_THRESHOLDS = {
 } as const
 
 interface Props {
-  currentModel: AiModel
+  currentModel: string
   messageHistory?: EnhancedMessage[]
   sessionTokenUsage?: TokenUsage | null
 }

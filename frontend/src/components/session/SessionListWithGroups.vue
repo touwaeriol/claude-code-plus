@@ -17,7 +17,7 @@
         >
           <div class="session-info">
             <div class="session-name">{{ session.name }}</div>
-            <div class="session-time">{{ formatTime(session.timestamp) }}</div>
+            <div class="session-time">{{ formatTime(session.createdAt) }}</div>
           </div>
           <div class="session-tags">
             <span
@@ -57,7 +57,7 @@
         >
           <div class="session-info">
             <div class="session-name">{{ session.name }}</div>
-            <div class="session-time">{{ formatTime(session.timestamp) }}</div>
+            <div class="session-time">{{ formatTime(session.createdAt) }}</div>
           </div>
           <div class="session-tags">
             <span

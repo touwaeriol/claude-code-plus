@@ -237,6 +237,25 @@ const editor = useEditor({
       // 传递键盘事件给父组件
       emit('keydown', event)
 
+      // ESC 键 - 阻止默认行为，让父组件处理
+      if (event.key === 'Escape') {
+        // 不阻止默认行为，但返回 true 表示已处理
+        // 父组件的 handleKeydown 已经通过 emit 收到事件
+        return true
+      }
+
+      // Tab 键 - 阻止默认行为，让父组件处理（切换思考/模式）
+      if (event.key === 'Tab') {
+        event.preventDefault()
+        return true
+      }
+
+      // Ctrl+Enter - 强制发送，让父组件处理
+      if (event.key === 'Enter' && event.ctrlKey && !event.shiftKey && !event.altKey) {
+        event.preventDefault()
+        return true
+      }
+
       // Enter 发送消息（不是 Shift+Enter 换行）
       if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
         event.preventDefault()
@@ -278,6 +297,15 @@ const editor = useEditor({
     const text = editor.getText()
     emit('update:modelValue', text)
   },
+  onCreate({ editor }) {
+    // 编辑器创建后，确保 placeholder 使用最新的翻译文本
+    if (props.placeholder) {
+      const firstParagraph = editor.view.dom.querySelector('p.is-editor-empty')
+      if (firstParagraph) {
+        firstParagraph.setAttribute('data-placeholder', props.placeholder)
+      }
+    }
+  },
 })
 
 // 监听 props 变化
@@ -294,8 +322,14 @@ watch(() => props.disabled, (newValue) => {
 })
 
 watch(() => props.placeholder, (newValue) => {
-  // Placeholder 扩展不支持动态更新，需要重新配置
-  // 这里暂时不处理，因为 placeholder 通常不会动态变化
+  // Placeholder 扩展不支持直接动态更新，通过 DOM 更新 data-placeholder 属性
+  if (editor.value && newValue) {
+    const editorElement = editor.value.view.dom
+    const firstParagraph = editorElement.querySelector('p.is-editor-empty')
+    if (firstParagraph) {
+      firstParagraph.setAttribute('data-placeholder', newValue)
+    }
+  }
 })
 
 // 提取内容

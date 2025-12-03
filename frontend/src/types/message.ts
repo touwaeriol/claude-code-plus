@@ -43,9 +43,10 @@ export interface TextContent {
 export interface ImageContent {
   type: 'image'
   source: {
-    type: 'base64'
+    type: 'base64' | 'url'
     media_type: string  // 例如 'image/png', 'image/jpeg'
-    data: string        // base64 编码的图片数据
+    data?: string       // base64 编码的图片数据
+    url?: string        // 图片 URL
   }
 }
 
@@ -130,3 +131,5 @@ export type ContentBlock =
 export type ToolUseBlock = ToolUseContent
 export type ToolResultBlock = ToolResultContent
 export type Message = UnifiedMessage
+export type ImageBlock = ImageContent
+export type TextBlock = TextContent

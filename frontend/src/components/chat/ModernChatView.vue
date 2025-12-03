@@ -33,7 +33,7 @@
         ref="chatInputRef"
         :pending-tasks="pendingTasks"
         :contexts="uiState.contexts"
-        :is-generating="uiState.isGenerating"
+        :is-generating="currentSessionIsStreaming"
         :enabled="true"
         :actual-model-id="sessionStore.currentModelId || undefined"
         :selected-permission="uiState.selectedPermissionMode"
@@ -48,7 +48,7 @@
         :show-send-button="true"
         class="input-area"
         @send="handleSendMessage"
-        @interrupt-and-send="handleInterruptAndSend"
+        @force-send="handleForceSend"
         @stop="handleStopGeneration"
         @context-add="handleAddContext"
         @context-remove="handleRemoveContext"
@@ -373,9 +373,10 @@ async function handleSendMessage(contents?: ContentBlock[]) {
   }
 }
 
-async function handleInterruptAndSend(contents?: ContentBlock[]) {
+async function handleForceSend(contents?: ContentBlock[]) {
   const safeContents = Array.isArray(contents) ? contents : []
-  console.log('Interrupt and send:', safeContents.length, 'content blocks')
+  console.log('Force send:', safeContents.length, 'content blocks')
+  // 强制发送：先打断当前生成，再插队发送
   await sessionStore.interrupt()
   await handleSendMessage(safeContents)
 }
@@ -394,8 +395,18 @@ function handleRemovePendingMessage(id: string) {
   sessionStore.removeFromQueue(id)
 }
 
-function handleStopGeneration() {
-  console.log('Stopping generation')
+async function handleStopGeneration() {
+  console.log('🛑 Stopping generation via Esc key')
+  try {
+    // 清空消息队列（丢弃待发送的消息）
+    sessionStore.clearQueue()
+    // 调用后端中断
+    await sessionStore.interrupt()
+    console.log('✅ Interrupt request sent successfully')
+  } catch (error) {
+    console.error('❌ Failed to interrupt:', error)
+  }
+  // UI 状态更新（sessionStore.interrupt 内部也会更新，但这里显式设置以确保 UI 响应）
   uiState.value.isGenerating = false
 }
 

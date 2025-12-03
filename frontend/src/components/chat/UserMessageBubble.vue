@@ -97,7 +97,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import type { ImageBlock, ContentBlock } from '@/types/message'
 import type { ContextReference } from '@/types/display'
@@ -292,7 +292,7 @@ const isLongMessage = computed(() => {
 })
 
 // 是否有上下文引用（包括文件上下文和图片上下文）
-const hasContexts = computed(() => {
+const _hasContexts = computed(() => {
   return contexts.value.length > 0 || contextImagesAsBlocks.value.length > 0
 })
 
@@ -302,7 +302,7 @@ function toggleCollapse() {
 }
 
 // 获取上下文图标
-function getContextIcon(type: string): string {
+function _getContextIcon(type: string): string {
   const icons: Record<string, string> = {
     file: '📄',
     folder: '📁',
@@ -334,7 +334,7 @@ function getImageName(image: ImageBlock, index: number): string {
 }
 
 // 获取图片大小（估算）
-function getImageSize(image: ImageBlock): string {
+function _getImageSize(image: ImageBlock): string {
   if (image.source.type === 'base64' && image.source.data) {
     // Base64 编码后的大小约为原始大小的 4/3
     const bytes = (image.source.data.length * 3) / 4

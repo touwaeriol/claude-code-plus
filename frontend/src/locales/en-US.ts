@@ -28,14 +28,15 @@ export default {
   },
   chat: {
     placeholder: 'Type a message...',
-    placeholderWithShortcuts: 'Type a message... (Enter to send, Shift+Enter for new line, Alt+Enter to interrupt)',
-    placeholderWithShortcutsCtrl: 'Type a message... (Ctrl+Enter to send, Shift+Enter for new line)',
+    placeholderWithShortcuts: 'Type a message... (Enter to send, Shift+Enter for new line, Ctrl+Enter to interrupt)',
+    placeholderWithShortcutsCtrl: 'Type a message... (Enter to send, Shift+Enter for new line, Ctrl+Enter to interrupt)',
     newSession: 'New Session',
     history: 'History',
     thinking: 'Thinking...',
     retry: 'Retry',
     stop: 'Stop',
     stopGenerating: 'Stop Generating',
+    escToInterrupt: 'ESC to interrupt',
     welcome: 'Hello! I am Claude, your AI coding assistant.',
     emptyState: 'Start a new session or select one from history.',
     sendMessage: 'Send Message',
@@ -78,7 +79,7 @@ export default {
     actualModel: 'Actual model',
     uploadImage: 'Upload image',
     interruptAndSend: 'Interrupt & Send',
-    interruptAndSendShortcut: 'Interrupt and send (Alt+Enter)',
+    interruptAndSendShortcut: 'Interrupt and send (Ctrl+Enter)',
     moreContexts: '{count} more contexts',
     tokenTooltip: 'Input: {input}, Output: {output}, Cache creation: {cacheCreation}, Cache read: {cacheRead}',
     welcomeScreen: {
@@ -88,7 +89,11 @@ export default {
       refactor: 'Refactor existing code',
       debug: 'Debug errors',
       sendHint: 'send message',
-      newLineHint: 'new line'
+      newLineHint: 'new line',
+      interruptHint: 'interrupt & send',
+      stopHint: 'stop generation',
+      toggleThinkingHint: 'toggle thinking',
+      switchModeHint: 'switch mode'
     },
     claudeThinking: 'Claude is thinking...',
     scrollToBottom: 'Scroll to bottom'
