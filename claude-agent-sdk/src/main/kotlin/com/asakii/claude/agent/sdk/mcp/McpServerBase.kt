@@ -32,7 +32,7 @@ import kotlin.reflect.full.*
  */
 abstract class McpServerBase : McpServer {
     private val logger = Logger.getLogger(this::class.java.name)
-    private val registeredTools = mutableMapOf<String, ToolHandler>()
+    private val registeredTools = mutableMapOf<String, ToolHandlerBase>()
     private var initialized = false
     
     // 从注解中获取服务器配置
@@ -253,8 +253,55 @@ abstract class McpServerBase : McpServer {
         val parameterSchema = parameterTypes?.mapValues { (_, type) ->
             ParameterInfo(type = type)
         }
-        
+
         registerTool(name, description, parameterSchema, handler)
+    }
+
+    /**
+     * 手动注册工具（支持完整 JSON Schema）
+     *
+     * 使用示例：
+     * ```kotlin
+     * registerToolWithSchema(
+     *     name = "AskUserQuestion",
+     *     description = "向用户询问问题",
+     *     inputSchema = mapOf(
+     *         "type" to "object",
+     *         "properties" to mapOf(
+     *             "questions" to mapOf(
+     *                 "type" to "array",
+     *                 "description" to "问题列表",
+     *                 "items" to mapOf(
+     *                     "type" to "object",
+     *                     "properties" to mapOf(
+     *                         "question" to mapOf("type" to "string"),
+     *                         "header" to mapOf("type" to "string"),
+     *                         "options" to mapOf("type" to "array")
+     *                     ),
+     *                     "required" to listOf("question", "header", "options")
+     *                 )
+     *             )
+     *         ),
+     *         "required" to listOf("questions")
+     *     )
+     * ) { arguments -> ... }
+     * ```
+     */
+    protected fun registerToolWithSchema(
+        name: String,
+        description: String,
+        inputSchema: Map<String, Any>,
+        handler: suspend (Map<String, Any>) -> Any
+    ) {
+        val toolHandler = ToolHandlerWithSchema(
+            name = name,
+            description = description,
+            inputSchema = inputSchema,
+            handler = handler
+        )
+
+        registeredTools[name] = toolHandler
+        logger.info("🔧 手动注册工具(完整Schema): $name - $description")
     }
     
     /**

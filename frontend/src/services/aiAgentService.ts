@@ -20,6 +20,11 @@ export type ConnectOptions = SessionConnectOptions
 
 export type MessageHandler = (message: RpcMessage) => void
 
+/**
+ * 服务器请求处理器类型（双向 RPC）
+ */
+export type ServerRequestHandler = (params: any) => Promise<any>
+
 /** connect 返回结果 */
 export interface ConnectResult {
   sessionId: string
@@ -224,6 +229,59 @@ export class AiAgentService {
       return null
     }
     return session.capabilities
+  }
+
+  /**
+   * 注册服务器请求处理器（双向 RPC）
+   *
+   * 用于处理服务器主动发起的请求，如 AskUserQuestion。
+   *
+   * @param sessionId 会话ID
+   * @param method 方法名（如 'AskUserQuestion'）
+   * @param handler 处理函数
+   * @returns 取消注册的函数，失败时返回空函数
+   *
+   * @example
+   * aiAgentService.register(sessionId, 'AskUserQuestion', async (params) => {
+   *   const answers = await showQuestionDialog(params.questions)
+   *   return { answers }
+   * })
+   */
+  register(
+    sessionId: string,
+    method: string,
+    handler: ServerRequestHandler
+  ): () => void {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      console.warn(`[aiAgentService] 注册处理器失败，会话不存在: ${sessionId}`)
+      return () => {}
+    }
+
+    console.log(`🔧 注册服务器请求处理器: ${sessionId} -> ${method}`)
+    return session.register(method, handler)
+  }
+
+  /**
+   * 批量注册服务器请求处理器
+   *
+   * @param sessionId 会话ID
+   * @param handlers 处理器映射 { method: handler }
+   * @returns 取消所有注册的函数
+   */
+  registerAll(
+    sessionId: string,
+    handlers: Record<string, ServerRequestHandler>
+  ): () => void {
+    const unregisterFns: Array<() => void> = []
+
+    for (const [method, handler] of Object.entries(handlers)) {
+      unregisterFns.push(this.register(sessionId, method, handler))
+    }
+
+    return () => {
+      unregisterFns.forEach(fn => fn())
+    }
   }
 }
 

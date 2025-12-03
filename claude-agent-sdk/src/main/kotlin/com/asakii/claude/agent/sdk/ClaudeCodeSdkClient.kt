@@ -156,13 +156,16 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
             actualTransport!!.connect()
             logger.info("✅ Transport连接成功")
             
+            // 注册 MCP 服务器 - 必须在 startMessageProcessing 之前！
+            // 因为 CLI 启动后会立即发送 mcp_message 请求
+            logger.info("📦 注册 MCP 服务器...")
+            controlProtocol!!.registerMcpServers()
+            logger.info("✅ MCP 服务器注册完成")
+
             // Start message processing
             logger.info("📥 启动消息处理...")
             controlProtocol!!.startMessageProcessing(clientScope!!)
             logger.info("✅ 消息处理已启动")
-
-            // 跳过控制协议初始化 - Claude CLI不需要这个步骤
-            logger.info("✅ 跳过控制协议初始化（Claude CLI直接使用stream-json模式）")
             serverInfo = mapOf("status" to "connected", "mode" to "stream-json")
             logger.info("🎉 Claude SDK客户端连接成功!")
             

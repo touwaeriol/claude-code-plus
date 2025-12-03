@@ -99,30 +99,26 @@ class ControlProtocol(
     }
     
     /**
-     * Initialize control protocol - 仿照Python SDK实现
-     * This must be called after startMessageProcessing() and before using hooks/MCP servers
+     * 注册 MCP 服务器（不发送请求）
+     * 必须在 startMessageProcessing() 之前调用！
+     * 因为 CLI 启动后会立即发送 mcp_message 请求
      */
-    suspend fun initialize(): Map<String, Any> {
-        if (initialized) {
-            return _initializationResult.await()
-        }
-        
-        println("🔄 初始化控制协议...")
-        
-        // 1. 提取SDK MCP servers（仿照Python SDK + 支持新接口）
-        options.mcpServers?.forEach { (name, config) ->
+    fun registerMcpServers() {
+        println("🔄 注册 MCP 服务器...")
+        println("📋 MCP 服务器配置: ${options.mcpServers}")
+        println("📋 MCP 服务器数量: ${options.mcpServers.size}")
+
+        options.mcpServers.forEach { (name, config) ->
             when {
                 config is Map<*, *> && config["type"] == "sdk" -> {
                     val instance = config["instance"]
                     if (instance != null) {
                         when (instance) {
                             is McpServer -> {
-                                // 新接口实例
                                 newMcpServers[name] = instance
                                 println("📦 注册新接口 MCP 服务器: $name (${instance::class.simpleName})")
                             }
                             else -> {
-                                // 旧的任意实例（保持兼容性）
                                 sdkMcpServers[name] = instance
                                 println("📦 注册旧版 SDK MCP 服务器: $name")
                             }
@@ -130,14 +126,26 @@ class ControlProtocol(
                     }
                 }
                 config is McpServer -> {
-                    // 直接提供McpServer实例
                     newMcpServers[name] = config
                     println("📦 注册直接提供的 MCP 服务器: $name (${config::class.simpleName})")
                 }
             }
         }
-        
-        // 2. 构建hooks配置（仿照Python SDK的hooks_config构建）
+        println("✅ MCP 服务器注册完成: ${newMcpServers.keys + sdkMcpServers.keys}")
+    }
+
+    /**
+     * Initialize control protocol - 仿照Python SDK实现
+     * This must be called after startMessageProcessing() and before using hooks
+     */
+    suspend fun initialize(): Map<String, Any> {
+        if (initialized) {
+            return _initializationResult.await()
+        }
+
+        println("🔄 初始化控制协议...")
+
+        // 构建hooks配置（仿照Python SDK的hooks_config构建）
         val hooksConfig = mutableMapOf<String, JsonElement>()
         options.hooks?.let { hooks ->
             hooks.forEach { (event, matchers) ->
@@ -354,10 +362,16 @@ class ControlProtocol(
             val response = when (request) {
                 is HookCallbackRequest -> handleHookCallback(request)
                 is PermissionRequest -> handlePermissionRequest(request)
-                is McpMessageRequest -> handleMcpMessage(request) // 新增MCP消息处理
+                is McpMessageRequest -> {
+                    // MCP 响应需要用 mcp_response 字段包装（参考 Python SDK）
+                    val mcpResponse = handleMcpMessage(request)
+                    buildJsonObject {
+                        put("mcp_response", mcpResponse)
+                    }
+                }
                 else -> throw ControlProtocolException("Unsupported control request: ${request.subtype}")
             }
-            
+
             sendControlResponse(requestId, "success", response)
         } catch (e: Exception) {
             sendControlResponse(requestId, "error", null, e.message ?: "Unknown error")
@@ -646,7 +660,8 @@ class ControlProtocol(
                                 addJsonObject {
                                     put("name", tool.name)
                                     put("description", tool.description)
-                                    put("inputSchema", Json.encodeToJsonElement(tool.inputSchema))
+                                    // 手动将 Map<String, Any> 转换为 JsonElement
+                                    put("inputSchema", mapToJsonElement(tool.inputSchema))
                                 }
                             }
                         }
@@ -744,7 +759,35 @@ class ControlProtocol(
             }
         }
     }
-    
+
+    /**
+     * 将 Map<String, Any> 递归转换为 JsonElement
+     */
+    private fun mapToJsonElement(map: Map<String, Any?>): JsonElement {
+        return buildJsonObject {
+            map.forEach { (key, value) ->
+                put(key, anyToJsonElement(value))
+            }
+        }
+    }
+
+    /**
+     * 将任意值转换为 JsonElement
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun anyToJsonElement(value: Any?): JsonElement {
+        return when (value) {
+            null -> JsonNull
+            is String -> JsonPrimitive(value)
+            is Number -> JsonPrimitive(value)
+            is Boolean -> JsonPrimitive(value)
+            is Map<*, *> -> mapToJsonElement(value as Map<String, Any?>)
+            is List<*> -> JsonArray(value.map { anyToJsonElement(it) })
+            is JsonElement -> value
+            else -> JsonPrimitive(value.toString())
+        }
+    }
+
     /**
      * Handle legacy MCP server methods (for backward compatibility)
      */

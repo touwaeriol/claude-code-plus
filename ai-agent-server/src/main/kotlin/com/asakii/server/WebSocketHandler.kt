@@ -2,13 +2,18 @@ package com.asakii.server
 
 import com.asakii.rpc.api.*
 import com.asakii.server.rpc.AiAgentRpcServiceImpl
+import com.asakii.server.rpc.ClientCaller
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Logger
 
 /**
@@ -39,8 +44,45 @@ class WebSocketHandler(
         webSocket("/ws") {
             logger.info("🔌 WebSocket 连接建立: ${call.request.local.remoteHost}")
 
-            // 为每个连接创建独立的 RPC 服务实例
-            val rpcService: AiAgentRpcService = AiAgentRpcServiceImpl(ideTools)
+            // 双向 RPC 支持：跟踪服务器发起的请求
+            val pendingClientCalls = ConcurrentHashMap<String, CompletableDeferred<JsonElement>>()
+            val callIdCounter = AtomicInteger(0)
+
+            // 创建 ClientCaller 实现，用于服务器调用前端
+            val clientCaller = object : ClientCaller {
+                override suspend fun call(method: String, params: Any): JsonElement {
+                    val id = "srv-${callIdCounter.incrementAndGet()}"
+                    val deferred = CompletableDeferred<JsonElement>()
+                    pendingClientCalls[id] = deferred
+
+                    // 构建请求消息
+                    val request = buildJsonObject {
+                        put("id", id)
+                        put("method", method)
+                        put("params", when (params) {
+                            is JsonElement -> params
+                            else -> Json.encodeToJsonElement(params.toString())
+                        })
+                    }
+
+                    logger.info("📤 [双向RPC] 向客户端发送请求: id=$id, method=$method")
+                    send(Frame.Text(json.encodeToString(request)))
+
+                    // 等待响应（超时 5 分钟）
+                    return try {
+                        withTimeout(300_000) {
+                            deferred.await()
+                        }
+                    } catch (e: Exception) {
+                        pendingClientCalls.remove(id)
+                        logger.severe("❌ [双向RPC] 等待客户端响应超时或失败: id=$id, error=${e.message}")
+                        throw e
+                    }
+                }
+            }
+
+            // 为每个连接创建独立的 RPC 服务实例，传入 ClientCaller
+            val rpcService: AiAgentRpcService = AiAgentRpcServiceImpl(ideTools, clientCaller)
 
             try {
                 // 直接处理收到的消息，不做队列/同步检查
@@ -49,6 +91,37 @@ class WebSocketHandler(
                 for (frame in incoming) {
                     if (frame is Frame.Text) {
                         val text = frame.readText()
+
+                        // 检查是否是客户端对服务器请求的响应
+                        try {
+                            val jsonObj = json.parseToJsonElement(text).jsonObject
+                            val id = jsonObj["id"]?.jsonPrimitive?.contentOrNull
+
+                            if (id != null && id.startsWith("srv-")) {
+                                // 这是客户端对服务器请求的响应
+                                val deferred = pendingClientCalls.remove(id)
+                                if (deferred != null) {
+                                    val result = jsonObj["result"]
+                                    val error = jsonObj["error"]?.jsonPrimitive?.contentOrNull
+
+                                    if (error != null) {
+                                        logger.warning("⚠️ [双向RPC] 客户端返回错误: id=$id, error=$error")
+                                        deferred.completeExceptionally(Exception(error))
+                                    } else if (result != null) {
+                                        logger.info("📥 [双向RPC] 收到客户端响应: id=$id")
+                                        deferred.complete(result)
+                                    } else {
+                                        deferred.complete(JsonNull)
+                                    }
+                                } else {
+                                    logger.warning("⚠️ [双向RPC] 收到未知响应: id=$id")
+                                }
+                                continue
+                            }
+                        } catch (_: Exception) {
+                            // 解析失败，当作普通请求处理
+                        }
+
                         // 启动独立协程处理请求
                         launch {
                             handleRpcRequest(text, rpcService)
@@ -59,6 +132,12 @@ class WebSocketHandler(
                 logger.warning("⚠️ WebSocket 错误: ${e.message}")
                 e.printStackTrace()
             } finally {
+                // 清理未完成的调用
+                pendingClientCalls.values.forEach { deferred ->
+                    deferred.completeExceptionally(Exception("WebSocket 连接已关闭"))
+                }
+                pendingClientCalls.clear()
+
                 // 连接关闭时自动断开 Claude 会话
                 try {
                     rpcService.disconnect()
