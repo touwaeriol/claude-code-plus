@@ -3,8 +3,10 @@
  * 支持导出为 Markdown、JSON、HTML 格式
  */
 
-import type { Session } from '@/types/message'
-import type { Message } from '@/types/enhancedMessage'
+import type { Session } from '@/types/session'
+import type { UnifiedMessage, TextContent } from '@/types/message'
+
+type Message = UnifiedMessage
 
 export interface ExportConfig {
   format: 'markdown' | 'json' | 'html'
@@ -54,7 +56,7 @@ export class SessionExportService {
       lines.push('## 元数据')
       lines.push('')
       lines.push(`- **会话 ID**: ${session.id}`)
-      lines.push(`- **创建时间**: ${this.formatTime(session.timestamp)}`)
+      lines.push(`- **创建时间**: ${this.formatTime(session.createdAt)}`)
       lines.push(`- **消息数量**: ${messages.length}`)
       lines.push('')
       lines.push('---')
@@ -67,8 +69,8 @@ export class SessionExportService {
 
     for (const message of messages) {
       // 角色标识
-      const roleEmoji = message.type === 'user' ? '👤' : '🤖'
-      const roleName = message.type === 'user' ? '用户' : 'AI'
+      const roleEmoji = message.role === 'user' ? '👤' : '🤖'
+      const roleName = message.role === 'user' ? '用户' : 'AI'
 
       lines.push(`### ${roleEmoji} ${roleName}`)
 
@@ -77,16 +79,11 @@ export class SessionExportService {
         lines.push('')
       }
 
-      // 消息内容
-      if (message.type === 'user') {
-        lines.push(message.text || '')
-      } else if (message.type === 'assistant') {
-        // 提取所有文本块
-        const textBlocks = message.content
-          .filter(block => block.type === 'text')
-          .map(block => block.text || '')
-        lines.push(textBlocks.join('\n\n'))
-      }
+      // 消息内容 - 提取所有文本块
+      const textBlocks = message.content
+        .filter((block): block is TextContent => block.type === 'text')
+        .map(block => block.text || '')
+      lines.push(textBlocks.join('\n\n'))
 
       lines.push('')
       lines.push('---')
@@ -104,30 +101,25 @@ export class SessionExportService {
     messages: Message[],
     config: ExportConfig
   ): string {
-    const data: any = {
+    const data: Record<string, unknown> = {
       id: session.id,
       name: session.name,
-      timestamp: session.timestamp
+      createdAt: session.createdAt
     }
 
     if (config.includeMetadata) {
       data.metadata = {
-        createdAt: new Date(session.timestamp).toISOString(),
+        createdAt: new Date(session.createdAt).toISOString(),
         messageCount: messages.length
       }
     }
 
     data.messages = messages.map(message => {
-      const msg: any = {
+      const msg: Record<string, unknown> = {
         id: message.id,
-        type: message.type,
-        timestamp: config.includeTimestamps ? message.timestamp : undefined
-      }
-
-      if (message.type === 'user') {
-        msg.text = message.text
-      } else if (message.type === 'assistant') {
-        msg.content = message.content
+        role: message.role,
+        timestamp: config.includeTimestamps ? message.timestamp : undefined,
+        content: message.content
       }
 
       return msg

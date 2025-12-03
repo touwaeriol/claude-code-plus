@@ -3,7 +3,7 @@
  * 统一的 IDEA JCEF 桥接类型定义和检测
  */
 
-import type { IdeTheme } from './themeService'
+import type { IdeTheme } from '@/types/bridge'
 
 // ====== Payload 类型定义 ======
 

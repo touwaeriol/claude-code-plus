@@ -51,7 +51,8 @@ data class ContentStartedEvent(
 data class ContentDeltaEvent(
     override val provider: AiAgentProvider,
     val id: String,
-    val delta: ContentDeltaPayload
+    val delta: ContentDeltaPayload,
+    val index: Int = 0  // 内容块索引，用于前端增量更新
 ) : NormalizedStreamEvent
 
 data class ContentCompletedEvent(
@@ -72,6 +73,7 @@ data class TurnFailedEvent(
 
 data class ResultSummaryEvent(
     override val provider: AiAgentProvider,
+    val subtype: String,
     val durationMs: Long,
     val durationApiMs: Long,
     val isError: Boolean,
@@ -104,12 +106,22 @@ data class UiMessageStart(
     val content: List<UnifiedContentBlock>? = null
 ) : UiStreamEvent
 
+data class UiTextStart(
+    val index: Int
+) : UiStreamEvent
+
+data class UiThinkingStart(
+    val index: Int
+) : UiStreamEvent
+
 data class UiTextDelta(
-    val text: String
+    val text: String,
+    val index: Int = 0  // 内容块索引，用于前端增量更新
 ) : UiStreamEvent
 
 data class UiThinkingDelta(
-    val thinking: String
+    val thinking: String,
+    val index: Int = 0  // 内容块索引，用于前端增量更新
 ) : UiStreamEvent
 
 data class UiToolStart(
@@ -147,6 +159,7 @@ data class UiAssistantMessage(
 ) : UiStreamEvent
 
 data class UiResultMessage(
+    val subtype: String,
     val durationMs: Long,
     val durationApiMs: Long,
     val isError: Boolean,

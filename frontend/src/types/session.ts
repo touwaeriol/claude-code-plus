@@ -103,3 +103,6 @@ export interface PendingMessage {
   contents: ContentBlock[]          // 输入框内容（文本块、图片块）
   createdAt: number                 // 创建时间
 }
+
+// 兼容别名
+export type Session = SessionState

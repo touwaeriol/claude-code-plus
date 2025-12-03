@@ -49,6 +49,30 @@ import kotlin.time.Duration.Companion.seconds
 
 
 /**
+ * 前端期望的文件信息格式
+ * 用于 /api/files/search 和 /api/files/recent 端点
+ */
+@Serializable
+data class IndexedFileInfo(
+    val name: String,
+    val relativePath: String,
+    val absolutePath: String,
+    val fileType: String,
+    val size: Long,
+    val lastModified: Long
+)
+
+/**
+ * 文件搜索 API 响应
+ */
+@Serializable
+data class FileSearchResponse(
+    val success: Boolean,
+    val data: List<IndexedFileInfo>? = null,
+    val error: String? = null
+)
+
+/**
  * HTTP + SSE 服务器（基于 Ktor）
  * 提供前后端通信 API
  *
@@ -300,73 +324,57 @@ class HttpApiServer(
 
                     // 文件搜索 API
                     route("/files") {
-                        // 搜索文件
+                        // 搜索文件（query 为空时返回项目根目录文件）
                         get("/search") {
                             try {
                                 val query = call.request.queryParameters["query"] ?: ""
                                 val maxResults = call.request.queryParameters["maxResults"]?.toIntOrNull() ?: 10
                                 val projectPath = ideTools.getProjectPath()
 
-                                val result = ideTools.searchFiles(query, maxResults)
-                                val files = result.getOrElse { emptyList() }
-                                // 转换为前端期望的 IndexedFileInfo 格式
-                                val fileInfos = files.map { fileInfo ->
-                                    val file = java.io.File(fileInfo.path)
-                                    val relativePath = if (fileInfo.path.startsWith(projectPath)) {
-                                        fileInfo.path.removePrefix(projectPath).removePrefix("/").removePrefix("\\")
-                                    } else {
-                                        fileInfo.path
+                                val fileInfos = if (query.isEmpty()) {
+                                    // 空查询：返回项目根目录文件
+                                    val projectDir = java.io.File(projectPath)
+                                    projectDir.listFiles()
+                                        ?.filter { it.isFile }
+                                        ?.sortedByDescending { it.lastModified() }
+                                        ?.take(maxResults)
+                                        ?.map { file ->
+                                            IndexedFileInfo(
+                                                name = file.name,
+                                                relativePath = file.name,
+                                                absolutePath = file.absolutePath,
+                                                fileType = file.extension.ifEmpty { "unknown" },
+                                                size = file.length(),
+                                                lastModified = file.lastModified()
+                                            )
+                                        } ?: emptyList()
+                                } else {
+                                    // 有查询：调用 ideTools 搜索
+                                    val result = ideTools.searchFiles(query, maxResults)
+                                    val files = result.getOrElse { emptyList() }
+                                    files.map { fileInfo ->
+                                        val file = java.io.File(fileInfo.path)
+                                        val relativePath = if (fileInfo.path.startsWith(projectPath)) {
+                                            fileInfo.path.removePrefix(projectPath).removePrefix("/").removePrefix("\\")
+                                        } else {
+                                            fileInfo.path
+                                        }
+                                        IndexedFileInfo(
+                                            name = file.name,
+                                            relativePath = relativePath,
+                                            absolutePath = fileInfo.path,
+                                            fileType = file.extension.ifEmpty { "unknown" },
+                                            size = if (file.exists()) file.length() else 0L,
+                                            lastModified = if (file.exists()) file.lastModified() else 0L
+                                        )
                                     }
-                                    mapOf(
-                                        "name" to file.name,
-                                        "relativePath" to relativePath,
-                                        "absolutePath" to fileInfo.path,
-                                        "fileType" to (file.extension.ifEmpty { "unknown" }),
-                                        "size" to (if (file.exists()) file.length() else 0L),
-                                        "lastModified" to (if (file.exists()) file.lastModified() else 0L)
-                                    )
                                 }
-                                call.respond(mapOf("success" to true, "data" to fileInfos))
+                                call.respond(FileSearchResponse(success = true, data = fileInfos))
                             } catch (e: Exception) {
                                 logger.severe("❌ Failed to search files: ${e.message}")
                                 call.respond(
                                     HttpStatusCode.InternalServerError,
-                                    mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
-                                )
-                            }
-                        }
-
-                        // 获取最近打开的文件
-                        get("/recent") {
-                            try {
-                                val maxResults = call.request.queryParameters["maxResults"]?.toIntOrNull() ?: 10
-                                val projectPath = ideTools.getProjectPath()
-
-                                val result = ideTools.getRecentFiles(maxResults)
-                                val files = result.getOrElse { emptyList() }
-                                // 转换为前端期望的 IndexedFileInfo 格式
-                                val fileInfos = files.map { fileInfo ->
-                                    val file = java.io.File(fileInfo.path)
-                                    val relativePath = if (fileInfo.path.startsWith(projectPath)) {
-                                        fileInfo.path.removePrefix(projectPath).removePrefix("/").removePrefix("\\")
-                                    } else {
-                                        fileInfo.path
-                                    }
-                                    mapOf(
-                                        "name" to file.name,
-                                        "relativePath" to relativePath,
-                                        "absolutePath" to fileInfo.path,
-                                        "fileType" to (file.extension.ifEmpty { "unknown" }),
-                                        "size" to (if (file.exists()) file.length() else 0L),
-                                        "lastModified" to (if (file.exists()) file.lastModified() else 0L)
-                                    )
-                                }
-                                call.respond(mapOf("success" to true, "data" to fileInfos))
-                            } catch (e: Exception) {
-                                logger.severe("❌ Failed to get recent files: ${e.message}")
-                                call.respond(
-                                    HttpStatusCode.InternalServerError,
-                                    mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
+                                    FileSearchResponse(success = false, error = e.message ?: "Unknown error")
                                 )
                             }
                         }

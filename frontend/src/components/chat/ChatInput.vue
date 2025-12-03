@@ -114,21 +114,13 @@
       @dragover.prevent="handleDragOver"
       @dragleave="handleDragLeave"
     >
-      <!-- 生成中指示器 -->
-      <div
-        v-if="isGenerating"
-        class="generating-indicator"
-      >
-        <div class="generating-spinner" />
-        <span class="generating-text">{{ t('chat.generating') }}</span>
-      </div>
 
       <RichTextInput
         ref="richTextInputRef"
         v-model="inputText"
         class="message-textarea"
         :placeholder="placeholderText"
-        :disabled="!enabled || isGenerating"
+        :disabled="!enabled"
         @focus="isFocused = true"
         @blur="isFocused = false"
         @keydown="handleKeydown"
@@ -285,10 +277,18 @@
           {{ formatTokenUsage(tokenUsage) }}
         </div>
 
+        <!-- ESC 打断提示 -->
+        <span
+          v-if="isGenerating"
+          class="esc-hint"
+        >
+          {{ t('chat.escToInterrupt') }}
+        </span>
+
         <!-- 图片上传按钮 - 简洁图标 -->
         <button
           class="icon-btn attach-btn"
-          :disabled="!enabled || isGenerating"
+          :disabled="!enabled"
           :title="t('chat.uploadImage')"
           @click="handleImageUploadClick"
         >
@@ -354,7 +354,7 @@
       <div
         v-if="isGenerating && hasInput"
         class="context-menu-item"
-        @click="handleInterruptAndSendFromContextMenu"
+        @click="handleForceSendFromContextMenu"
       >
         <span class="menu-icon">⚡</span>
         <span class="menu-text">{{ t('chat.interruptAndSend') }}</span>
@@ -368,50 +368,23 @@
       @click="closeSendContextMenu"
     />
 
-    <!-- Context Selector Popup (上下文选择器弹窗) -->
-    <div
-      v-if="showContextSelectorPopup"
-      ref="contextPopupRef"
-      class="context-selector-popup"
-    >
-      <div class="popup-header">
-        <span>{{ t('chat.addContext') }}</span>
-        <button
-          class="close-btn"
-          @click="showContextSelectorPopup = false"
-        >
-          ×
-        </button>
-      </div>
-      <div class="popup-content">
-        <input
-          v-model="contextSearchQuery"
-          type="text"
-          class="context-search-input"
-          :placeholder="t('tools.search')"
-          @input="handleContextSearch"
-        >
-        <div class="context-results">
-          <div
-            v-for="(result, index) in contextSearchResults"
-            :key="result.path"
-            :class="['context-result-item', { selected: index === contextSelectedIndex }]"
-            @click="handleContextSelect(result)"
-            @mouseenter="contextSelectedIndex = index"
-          >
-            <span class="result-icon">📄</span>
-            <span class="result-name">{{ result.name }}</span>
-            <span class="result-path">{{ result.relativePath }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- Context Selector Popup (上下文选择器弹窗) - 使用统一组件 -->
+    <FileSelectPopup
+      :visible="showContextSelectorPopup"
+      :files="contextSearchResults"
+      :anchor-element="addContextButtonRef ?? null"
+      :show-search-input="true"
+      :placeholder="t('tools.search')"
+      @select="handleContextSelect"
+      @dismiss="handleContextDismiss"
+      @search="handleContextSearch"
+    />
 
     <!-- @ Symbol File Popup (@ 符号文件选择弹窗) -->
     <AtSymbolFilePopup
       :visible="showAtSymbolPopup"
       :files="atSymbolSearchResults"
-      :anchor-element="textareaRef"
+      :anchor-element="richTextInputElement"
       :at-position="atSymbolPosition"
       @select="handleAtSymbolFileSelect"
       @dismiss="dismissAtSymbolPopup"
@@ -434,24 +407,19 @@ import type { AiModel, PermissionMode, EnhancedMessage, TokenUsage as EnhancedTo
 import type { ContextReference, ContextDisplayType } from '@/types/display'
 import type { ContentBlock } from '@/types/message'
 import AtSymbolFilePopup from '@/components/input/AtSymbolFilePopup.vue'
+import FileSelectPopup from '@/components/input/FileSelectPopup.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 import RichTextInput from './RichTextInput.vue'
 import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
 import { isInAtQuery } from '@/utils/atSymbolDetector'
-import { useSettingsStore } from '@/stores/settingsStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import {
   BaseModel,
   MODEL_CAPABILITIES,
   AVAILABLE_MODELS,
   canToggleThinking,
-  getEffectiveThinkingEnabled,
-  // 保留旧导入用于向后兼容
-  UiModelOption,
-  UI_MODEL_LABELS,
-  UI_MODEL_SHOW_BRAIN,
-  MODEL_RESOLUTION_MAP
+  getEffectiveThinkingEnabled
 } from '@/constants/models'
 import ThinkingToggle from './ThinkingToggle.vue'
 
@@ -497,7 +465,7 @@ interface Props {
 
 interface Emits {
   (e: 'send', contents: ContentBlock[]): void
-  (e: 'interrupt-and-send', contents: ContentBlock[]): void
+  (e: 'force-send', contents: ContentBlock[]): void
   (e: 'stop'): void
   (e: 'context-add', context: ContextReference): void
   (e: 'context-remove', context: ContextReference): void
@@ -526,9 +494,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>()
 
-// i18n & settings & session
+// i18n & session
 const { t } = useI18n()
-const settingsStore = useSettingsStore()
 const sessionStore = useSessionStore()
 
 // 当前模型（从会话设置读取，响应式）
@@ -572,18 +539,18 @@ const thinkingEnabled = computed(() => {
 
 // Refs
 const richTextInputRef = ref<InstanceType<typeof RichTextInput>>()
-const textareaRef = ref<HTMLTextAreaElement>() // 保留用于兼容 @ 符号检测
+// 获取 RichTextInput 的 DOM 元素用于 @ 符号弹窗定位
+const richTextInputElement = computed(() => {
+  return richTextInputRef.value?.$el as HTMLElement | null
+})
 const addContextButtonRef = ref<HTMLButtonElement>()
-const contextPopupRef = ref<HTMLDivElement>()
 const imageInputRef = ref<HTMLInputElement>()
 
 // State
 const inputText = ref('')
 const isFocused = ref(false)
 const showContextSelectorPopup = ref(false)
-const contextSearchQuery = ref('')
-const contextSearchResults = ref<any[]>([])
-const contextSelectedIndex = ref(0)
+const contextSearchResults = ref<IndexedFileInfo[]>([])
 
 // @ Symbol File Popup State
 const showAtSymbolPopup = ref(false)
@@ -598,7 +565,6 @@ const containerHeight = ref<number | null>(null)  // null 表示自动高度
 const isResizing = ref(false)
 const minHeight = 110  // 确保底部工具栏始终可见
 const maxHeight = 500
-const containerRef = ref<HTMLElement>()
 
 function startResize(event: MouseEvent) {
   event.preventDefault()
@@ -661,7 +627,8 @@ const canSend = computed(() => {
   if (props.editDisabled) return false
   const hasContent = richTextInputRef.value?.getText()?.trim() ||
                      (richTextInputRef.value?.extractContentBlocks()?.length ?? 0) > 0
-  return hasContent && props.enabled && !props.isGenerating
+  // 🔧 移除 isGenerating 限制，允许生成期间发送（消息会加入队列）
+  return hasContent && props.enabled
 })
 
 // 只显示前三个 context
@@ -733,16 +700,17 @@ async function handlePasteImage(file: File) {
 
 /**
  * 处理 RichTextInput 的提交事件
+ * 注意：即使正在生成，也允许发送（父组件会自动将消息加入队列）
  */
 async function handleRichTextSubmit(content: { text: string; images: { id: string; data: string; mimeType: string; name: string }[] }) {
-  if (!props.enabled || props.isGenerating) return
+  if (!props.enabled) return
 
   // 使用新方法提取有序内容块
   const contents = richTextInputRef.value?.extractContentBlocks() || []
 
   if (contents.length === 0) return
 
-  // 兜底传递数组，避免上游 undefined
+  // 发送消息（父组件的 enqueueMessage 会自动处理队列逻辑）
   emit('send', contents)
 
   // 清理
@@ -760,15 +728,9 @@ async function checkAtSymbol() {
     // 在 @ 查询中
     atSymbolPosition.value = atResult.atPosition
 
-    // 搜索文件
+    // 搜索文件（空查询时返回项目根目录文件）
     try {
-      if (atResult.query.length === 0) {
-        // 空查询，显示最近文件
-        atSymbolSearchResults.value = await fileSearchService.getRecentFiles(10)
-      } else {
-        // 搜索文件
-        atSymbolSearchResults.value = await fileSearchService.searchFiles(atResult.query, 10)
-      }
+      atSymbolSearchResults.value = await fileSearchService.searchFiles(atResult.query, 10)
       showAtSymbolPopup.value = atSymbolSearchResults.value.length > 0
     } catch (error) {
       console.error('文件搜索失败:', error)
@@ -808,11 +770,20 @@ async function handleKeydown(event: KeyboardEvent) {
     nextTick(() => checkAtSymbol())
   }
 
-  // ESC 键 - 取消编辑（仅 inline 模式）
-  if (event.key === 'Escape' && props.inline) {
+  // ESC 键处理
+  if (event.key === 'Escape') {
     event.preventDefault()
-    emit('cancel')
-    return
+    event.stopPropagation() // 防止全局监听器重复触发
+    // 如果正在生成，打断生成
+    if (props.isGenerating) {
+      emit('stop')
+      return
+    }
+    // 如果是 inline 模式，取消编辑
+    if (props.inline) {
+      emit('cancel')
+      return
+    }
   }
 
   // Shift + Tab - 轮换切换权限模式
@@ -841,10 +812,10 @@ async function handleKeydown(event: KeyboardEvent) {
   // 如果 @ 符号弹窗显示，键盘事件由弹窗组件处理
   // 这里不需要额外处理，因为 AtSymbolFilePopup 组件会监听全局键盘事件
 
-  // Alt+Enter - 打断并发送
-  if (event.key === 'Enter' && event.altKey) {
+  // Ctrl+Enter - 强制发送（打断当前生成并发送）
+  if (event.key === 'Enter' && event.ctrlKey && !event.shiftKey && !event.altKey) {
     event.preventDefault()
-    handleInterruptAndSend()
+    handleForceSend()
     return
   }
 
@@ -857,28 +828,7 @@ async function handleKeydown(event: KeyboardEvent) {
     return
   }
 
-  // Ctrl+U - 清空光标位置到行首
-  if (event.key === 'u' && event.ctrlKey) {
-    event.preventDefault()
-    const textarea = textareaRef.value
-    if (!textarea) return
-
-    const text = textarea.value
-    const cursorPos = textarea.selectionStart
-
-    // 找到当前行的开始位置
-    const lineStart = text.lastIndexOf('\n', cursorPos - 1) + 1
-
-    // 删除从行首到光标位置的文本
-    inputText.value = text.substring(0, lineStart) + text.substring(cursorPos)
-
-    // 更新光标位置
-    nextTick(() => {
-      textarea.selectionStart = textarea.selectionEnd = lineStart
-    })
-    return
-  }
-
+  // Ctrl+U - 清空光标位置到行首（RichTextInput 不支持此功能）
   // Enter 键由 RichTextInput 的 @submit 事件处理，这里不再重复处理
 }
 
@@ -1044,13 +994,13 @@ async function handleSend() {
   }
 }
 
-async function handleInterruptAndSend() {
+async function handleForceSend() {
   // 使用新方法提取有序内容块
   const contents = richTextInputRef.value?.extractContentBlocks() || []
 
   if (contents.length === 0 || !props.isGenerating) return
 
-  emit('interrupt-and-send', contents)
+  emit('force-send', contents)
 
   // 清理
   richTextInputRef.value?.clear()
@@ -1073,9 +1023,9 @@ function handleSendFromContextMenu() {
   handleSend()
 }
 
-function handleInterruptAndSendFromContextMenu() {
+function handleForceSendFromContextMenu() {
   showSendContextMenu.value = false
-  handleInterruptAndSend()
+  handleForceSend()
 }
 
 function closeSendContextMenu() {
@@ -1088,44 +1038,31 @@ function removeContext(context: ContextReference) {
 
 async function handleAddContextClick() {
   showContextSelectorPopup.value = true
-  contextSearchQuery.value = ''
-  contextSelectedIndex.value = 0
 
-  // 显示最近文件
+  // 空查询返回项目根目录文件
   try {
-    const recentFiles = await fileSearchService.getRecentFiles(10)
-    contextSearchResults.value = recentFiles
+    contextSearchResults.value = await fileSearchService.searchFiles('', 10)
   } catch (error) {
-    console.error('获取最近文件失败:', error)
+    console.error('获取文件失败:', error)
     contextSearchResults.value = []
   }
 }
 
-async function handleContextSearch() {
-  const query = contextSearchQuery.value.trim()
+async function handleContextSearch(query: string) {
+  const trimmedQuery = query.trim()
 
-  if (query.length === 0) {
-    // 空查询，显示最近文件
-    try {
-      const recentFiles = await fileSearchService.getRecentFiles(10)
-      contextSearchResults.value = recentFiles
-    } catch (error) {
-      console.error('获取最近文件失败:', error)
-      contextSearchResults.value = []
-    }
-  } else {
-    // 搜索文件
-    try {
-      const results = await fileSearchService.searchFiles(query, 10)
-      contextSearchResults.value = results
-    } catch (error) {
-      console.error('文件搜索失败:', error)
-      contextSearchResults.value = []
-    }
+  // 统一使用 searchFiles（空查询返回项目根目录文件）
+  try {
+    contextSearchResults.value = await fileSearchService.searchFiles(trimmedQuery, 10)
+  } catch (error) {
+    console.error('文件搜索失败:', error)
+    contextSearchResults.value = []
   }
+}
 
-  // 重置选中索引
-  contextSelectedIndex.value = 0
+function handleContextDismiss() {
+  showContextSelectorPopup.value = false
+  contextSearchResults.value = []
 }
 
 function handleContextSelect(result: IndexedFileInfo) {
@@ -1141,49 +1078,9 @@ function handleContextSelect(result: IndexedFileInfo) {
 
   emit('context-add', contextRef)
   showContextSelectorPopup.value = false
-  contextSearchQuery.value = ''
   contextSearchResults.value = []
-  contextSelectedIndex.value = 0
 }
 
-/**
- * 处理 Context Selector 弹窗的键盘事件
- */
-function handleContextPopupKeyDown(event: KeyboardEvent) {
-  if (!showContextSelectorPopup.value || contextSearchResults.value.length === 0) {
-    return
-  }
-
-  switch (event.key) {
-    case 'ArrowDown':
-      event.preventDefault()
-      contextSelectedIndex.value = Math.min(
-        contextSelectedIndex.value + 1,
-        contextSearchResults.value.length - 1
-      )
-      break
-    case 'ArrowUp':
-      event.preventDefault()
-      contextSelectedIndex.value = Math.max(contextSelectedIndex.value - 1, 0)
-      break
-    case 'Enter':
-      event.preventDefault()
-      if (
-        contextSelectedIndex.value >= 0 &&
-        contextSelectedIndex.value < contextSearchResults.value.length
-      ) {
-        handleContextSelect(contextSearchResults.value[contextSelectedIndex.value])
-      }
-      break
-    case 'Escape':
-      event.preventDefault()
-      showContextSelectorPopup.value = false
-      contextSearchQuery.value = ''
-      contextSearchResults.value = []
-      contextSelectedIndex.value = 0
-      break
-  }
-}
 
 /**
  * 获取上下文显示文本（使用类型守卫）
@@ -1457,20 +1354,6 @@ function readImageAsBase64(file: File): Promise<string> {
   })
 }
 
-
-/**
- * 辅助函数：base64 转 File
- */
-function base64ToFile(base64: string, filename: string, mimeType: string): File {
-  const byteString = atob(base64)
-  const ab = new ArrayBuffer(byteString.length)
-  const ia = new Uint8Array(ab)
-  for (let i = 0; i < byteString.length; i++) {
-    ia[i] = byteString.charCodeAt(i)
-  }
-  return new File([ab], filename, { type: mimeType })
-}
-
 /**
  * 暴露方法供父组件调用（用于编辑队列消息时恢复内容）
  */
@@ -1505,16 +1388,16 @@ defineExpose({
   }
 })
 
-// Watch for popup visibility changes
-watch(() => showContextSelectorPopup.value, (newVisible) => {
-  if (newVisible) {
-    contextSelectedIndex.value = 0
+// 全局键盘事件处理（用于在任何焦点状态下响应 ESC 停止生成）
+function handleGlobalKeydown(event: KeyboardEvent) {
+  // ESC 键停止生成（全局监听，确保任何时候都能响应）
+  if (event.key === 'Escape' && props.isGenerating) {
+    event.preventDefault()
+    event.stopPropagation()
+    console.log('🛑 [GlobalKeydown] ESC pressed, stopping generation')
+    emit('stop')
   }
-})
-
-watch(() => contextSearchResults.value, () => {
-  contextSelectedIndex.value = 0
-})
+}
 
 // Lifecycle
 onMounted(() => {
@@ -1524,13 +1407,13 @@ onMounted(() => {
     }, 200)
   })
 
-  // 添加 Context Selector 键盘事件监听
-  document.addEventListener('keydown', handleContextPopupKeyDown)
+  // 添加全局键盘监听
+  document.addEventListener('keydown', handleGlobalKeydown)
 })
 
 onUnmounted(() => {
-  // 移除 Context Selector 键盘事件监听
-  document.removeEventListener('keydown', handleContextPopupKeyDown)
+  // 移除全局键盘监听
+  document.removeEventListener('keydown', handleGlobalKeydown)
 })
 </script>
 
@@ -2171,6 +2054,16 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
+/* ESC 打断提示 */
+.esc-hint {
+  font-size: 11px;
+  color: var(--theme-secondary-foreground, #6a737d);
+  padding: 4px 8px;
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.04));
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
 /* ========== 简洁图标按钮 (Augment Code 风格) ========== */
 .icon-btn {
   display: flex;
@@ -2229,95 +2122,6 @@ onUnmounted(() => {
   background: rgba(215, 58, 73, 0.1);
 }
 
-
-/* Context Selector Popup */
-.context-selector-popup {
-  position: absolute;
-  bottom: 100%;
-  left: 12px;
-  right: 12px;
-  margin-bottom: 8px;
-  background: var(--theme-background, #ffffff);
-  border: 1px solid var(--theme-border, #e1e4e8);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  max-height: 400px;
-  overflow: auto;
-}
-
-.popup-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--theme-border, #e1e4e8);
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.close-btn {
-  padding: 0;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  color: var(--theme-secondary-foreground, #586069);
-  font-size: 20px;
-  cursor: pointer;
-}
-
-.close-btn:hover {
-  color: var(--theme-error, #d73a49);
-}
-
-.popup-content {
-  padding: 6px 8px;
-}
-
-.context-search-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--theme-border, #e1e4e8);
-  border-radius: 4px;
-  font-size: 14px;
-  margin-bottom: 12px;
-}
-
-.context-results {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.context-result-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.context-result-item:hover,
-.context-result-item.selected {
-  background: var(--theme-hover-background, #f6f8fa);
-}
-
-.result-icon {
-  font-size: 16px;
-}
-
-.result-name {
-  font-weight: 600;
-  color: var(--theme-foreground, #24292e);
-}
-
-.result-path {
-  font-size: 12px;
-  color: var(--theme-secondary-foreground, #6a737d);
-  font-family: monospace;
-}
 
 /* Send Button Context Menu (发送按钮右键菜单) */
 .send-context-menu {

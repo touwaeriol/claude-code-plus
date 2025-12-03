@@ -28,14 +28,15 @@ export default {
   },
   chat: {
     placeholder: '메시지 입력...',
-    placeholderWithShortcuts: '메시지 입력... (Enter로 보내기, Shift+Enter로 줄바꿈, Alt+Enter로 중단)',
-    placeholderWithShortcutsCtrl: '메시지 입력... (Ctrl+Enter로 보내기, Shift+Enter로 줄바꿈)',
+    placeholderWithShortcuts: '메시지 입력... (Enter로 보내기, Shift+Enter로 줄바꿈, Ctrl+Enter로 중단)',
+    placeholderWithShortcutsCtrl: '메시지 입력... (Enter로 보내기, Shift+Enter로 줄바꿈, Ctrl+Enter로 중단)',
     newSession: '새 세션',
     history: '기록',
     thinking: '생각 중...',
     retry: '다시 시도',
     stop: '중지',
     stopGenerating: '생성 중지',
+    escToInterrupt: 'ESC로 중단',
     welcome: '안녕하세요! 저는 AI 코딩 어시스턴트 Claude입니다.',
     emptyState: '새 세션을 시작하거나 기록에서 선택하세요.',
     sendMessage: '메시지 보내기',
@@ -77,7 +78,7 @@ export default {
     actualModel: '실제 모델',
     uploadImage: '이미지 업로드',
     interruptAndSend: '중단 후 보내기',
-    interruptAndSendShortcut: '중단 후 보내기 (Alt+Enter)',
+    interruptAndSendShortcut: '중단 후 보내기 (Ctrl+Enter)',
     moreContexts: '{count}개 더 많은 컨텍스트',
     tokenTooltip: '입력: {input}, 출력: {output}, 캐시 생성: {cacheCreation}, 캐시 읽기: {cacheRead}',
     welcomeScreen: {
@@ -87,7 +88,11 @@ export default {
       refactor: '기존 코드 리팩토링',
       debug: '오류 디버깅',
       sendHint: '메시지 보내기',
-      newLineHint: '줄바꿈'
+      newLineHint: '줄바꿈',
+      interruptHint: '중단 후 보내기',
+      stopHint: '생성 중지',
+      toggleThinkingHint: '사고 전환',
+      switchModeHint: '모드 전환'
     },
     claudeThinking: 'Claude가 생각 중입니다...',
     scrollToBottom: '맨 아래로 이동'

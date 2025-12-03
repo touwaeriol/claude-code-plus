@@ -317,12 +317,32 @@ export class AiAgentSession {
         return
       }
 
-      // RPC ??
+      // RPC 结果
       if (isRpcResultWrapper(parsed)) {
         const pending = this.pendingRequests.get(parsed.id)
         if (pending) {
           this.pendingRequests.delete(parsed.id)
           pending.resolve(parsed.result)
+        }
+
+        // 🔧 如果是打断响应，构造消息通知 handlers
+        const result = parsed.result as { status?: string } | null
+        if (result?.status === 'interrupted') {
+          log.info('[AiAgentSession] 收到打断响应，通知 handlers')
+          const interruptMessage = {
+            type: 'result' as const,
+            subtype: 'interrupted',
+            provider: 'claude' as const,
+            is_error: false,
+            num_turns: 0
+          }
+          this.messageHandlers.forEach(handler => {
+            try {
+              handler(interruptMessage as any)
+            } catch (error) {
+              log.error('[AiAgentSession] 打断消息处理异常', error)
+            }
+          })
         }
         return
       }

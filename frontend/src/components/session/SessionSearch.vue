@@ -80,8 +80,8 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
 import { sessionSearchService, type SessionSearchResult } from '@/services/sessionSearchService'
-import type { Session } from '@/types/message'
-import type { Message } from '@/types/enhancedMessage'
+import type { Session } from '@/types/session'
+import type { Message } from '@/types/message'
 
 interface Props {
   sessions: Session[]

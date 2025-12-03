@@ -3,8 +3,10 @@
  * 提供会话搜索、高亮匹配、片段提取等功能
  */
 
-import type { Session } from '@/types/message'
-import type { Message } from '@/types/enhancedMessage'
+import type { Session } from '@/types/session'
+import type { UnifiedMessage, TextContent } from '@/types/message'
+
+type Message = UnifiedMessage
 
 export interface SearchOptions {
   searchInTitles?: boolean
@@ -115,7 +117,7 @@ export class SessionSearchService {
           sessionName: session.name,
           matchedMessages,
           relevanceScore,
-          timestamp: session.timestamp
+          timestamp: session.createdAt
         })
       }
     }
@@ -166,16 +168,11 @@ export class SessionSearchService {
    * 提取文本内容
    */
   private extractTextContent(message: Message): string {
-    if (message.type === 'user') {
-      return message.text || ''
-    } else if (message.type === 'assistant') {
-      // 提取所有文本块的内容
-      return message.content
-        .filter(block => block.type === 'text')
-        .map(block => block.text || '')
-        .join('\n')
-    }
-    return ''
+    // 提取所有文本块的内容
+    return message.content
+      .filter((block): block is TextContent => block.type === 'text')
+      .map(block => block.text || '')
+      .join('\n')
   }
 
   /**

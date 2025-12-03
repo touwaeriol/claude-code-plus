@@ -18,6 +18,7 @@ class UiStreamAdapter {
             is TurnFailedEvent -> listOf(UiError(event.error))
             is ResultSummaryEvent -> listOf(
                 UiResultMessage(
+                    subtype = event.subtype,
                     durationMs = event.durationMs,
                     durationApiMs = event.durationApiMs,
                     isError = event.isError,
@@ -39,8 +40,8 @@ class UiStreamAdapter {
 
     private fun convertDelta(event: ContentDeltaEvent): List<UiStreamEvent> =
         when (val delta = event.delta) {
-            is TextDeltaPayload -> listOf(UiTextDelta(delta.text))
-            is ThinkingDeltaPayload -> listOf(UiThinkingDelta(delta.thinking))
+            is TextDeltaPayload -> listOf(UiTextDelta(delta.text, index = event.index))
+            is ThinkingDeltaPayload -> listOf(UiThinkingDelta(delta.thinking, index = event.index))
             is ToolDeltaPayload -> listOf(
                 UiToolProgress(
                     toolId = event.id,
@@ -57,26 +58,33 @@ class UiStreamAdapter {
             )
         }
 
+    // 追踪内容块索引
+    private var contentIndexCounter = 0
+
     private fun convertContentStart(event: ContentStartedEvent): List<UiStreamEvent> {
-        return if (event.contentType.contains("tool") || event.contentType.contains("command")) {
-            val toolName = event.toolName ?: event.contentType
-            val toolTypeEnum = ToolType.fromToolName(toolName)
+        val index = contentIndexCounter++
 
-            // 🔧 调试日志
-            println("📦 [UiStreamAdapter] convertContentStart: contentType=${event.contentType}, event.toolName=${event.toolName}, resolvedToolName=$toolName, toolType=${toolTypeEnum.type}")
-
-            listOf(
-                UiToolStart(
-                    toolId = event.id,
-                    // 使用实际的工具名称（如 "TodoWrite"），如果没有则回退到 contentType
-                    toolName = toolName,
-                    // 类型标识: "CLAUDE_READ", "CLAUDE_WRITE", "MCP" 等
-                    toolType = toolTypeEnum.type
+        return when {
+            event.contentType.contains("tool") || event.contentType.contains("command") -> {
+                val toolName = event.toolName ?: event.contentType
+                val toolTypeEnum = ToolType.fromToolName(toolName)
+                listOf(
+                    UiToolStart(
+                        toolId = event.id,
+                        toolName = toolName,
+                        toolType = toolTypeEnum.type
+                    )
                 )
-            )
-        } else {
-            emptyList()
+            }
+            event.contentType.contains("text") -> listOf(UiTextStart(index))
+            event.contentType.contains("thinking") -> listOf(UiThinkingStart(index))
+            else -> emptyList()
         }
+    }
+
+    // 重置索引计数器（在 message_start 时调用）
+    fun resetContentIndex() {
+        contentIndexCounter = 0
     }
 
     private fun convertContentComplete(event: ContentCompletedEvent): List<UiStreamEvent> {

@@ -129,6 +129,12 @@ class ClaudeAgentClientImpl(
                         is com.asakii.ai.agent.sdk.model.UiUserMessage -> {
                             logger.info("👤 [ClaudeAgentClientImpl] UiUserMessage: contentBlocks=${event.content.size}")
                         }
+                        is com.asakii.ai.agent.sdk.model.UiTextStart -> {
+                            logger.info("📝 [ClaudeAgentClientImpl] UiTextStart: index=${event.index}")
+                        }
+                        is com.asakii.ai.agent.sdk.model.UiThinkingStart -> {
+                            logger.info("💭 [ClaudeAgentClientImpl] UiThinkingStart: index=${event.index}")
+                        }
                     }
                     
                     try {

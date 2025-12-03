@@ -111,7 +111,7 @@ class WebSocketHandler(
                             }
 
                         logger.info("✅ [WebSocket] query 流正常结束: id=${request.id}, 共收到 $messageCount 条消息")
-                        sendStreamComplete(request.id)
+                        // result 消息已经是流式响应的终止标记，不需要额外发送 complete
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         logger.info("ℹ️ [WebSocket] query 被用户取消: id=${request.id}")
                         throw e
@@ -151,7 +151,7 @@ class WebSocketHandler(
                             }
 
                         logger.info("✅ [WebSocket] queryWithContent 流正常结束: id=${request.id}, 共收到 $messageCount 条消息")
-                        sendStreamComplete(request.id)
+                        // result 消息已经是流式响应的终止标记，不需要额外发送 complete
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         logger.info("ℹ️ [WebSocket] queryWithContent 被用户取消: id=${request.id}")
                         throw e
@@ -163,9 +163,18 @@ class WebSocketHandler(
                 }
 
                 "interrupt" -> {
-                    val result = rpcService.interrupt()
-                    val payload = json.encodeToJsonElement(RpcStatusResult.serializer(), result)
-                    sendResponse(request.id, payload)
+                    logger.info("🔔 [WebSocket] 开始处理 interrupt 请求: id=${request.id}")
+                    try {
+                        val result = rpcService.interrupt()
+                        logger.info("🔔 [WebSocket] interrupt 完成，准备发送响应: id=${request.id}")
+                        val payload = json.encodeToJsonElement(RpcStatusResult.serializer(), result)
+                        sendResponse(request.id, payload)
+                        logger.info("🔔 [WebSocket] interrupt 响应已发送: id=${request.id}")
+                    } catch (e: Exception) {
+                        logger.severe("❌ [WebSocket] interrupt 处理失败: id=${request.id}, error=${e.message}")
+                        e.printStackTrace()
+                        sendError(request.id, e.message ?: "Interrupt failed")
+                    }
                 }
 
                 "disconnect" -> {
@@ -220,7 +229,9 @@ class WebSocketHandler(
         result: JsonElement
     ) {
         val response = RpcResponse(id = id, result = result)
-        send(json.encodeToString(response))
+        val jsonString = json.encodeToString(response)
+        logger.info("📤 [WebSocket] 发送 RPC 响应: id=$id, preview=${jsonString.take(200)}...")
+        send(jsonString)
     }
 
     /**
