@@ -33,7 +33,12 @@ class ClaudeStreamAdapter(
     }
 
     private fun handleAssistantMessage(message: AssistantMessage): List<NormalizedStreamEvent> {
+        println("🔍 [ClaudeStreamAdapter] handleAssistantMessage: content.size=${message.content.size}")
+        message.content.forEachIndexed { idx, block ->
+            println("🔍 [ClaudeStreamAdapter] content[$idx]: type=${block::class.simpleName}, ${if (block is SpecificToolUse) "input=${block.input.toString().take(200)}" else ""}")
+        }
         val contentBlocks = message.content.map { convertContentBlock(it) }
+        println("🔍 [ClaudeStreamAdapter] after convert: ${contentBlocks.map { "${it::class.simpleName}:${if (it is ToolUseContent) "input=${it.input?.toString()?.take(100)}" else ""}" }}")
         val usage = message.tokenUsage?.let {
             UnifiedUsage(
                 inputTokens = it.inputTokens,
@@ -59,6 +64,7 @@ class ClaudeStreamAdapter(
         // 只有在错误情况下才需要发送 TurnFailedEvent
         val summary = ResultSummaryEvent(
             provider = AiAgentProvider.CLAUDE,
+            subtype = message.subtype,  // 保留原始 subtype（如 "error_during_execution"）
             durationMs = message.durationMs,
             durationApiMs = message.durationApiMs,
             isError = message.isError,
@@ -220,11 +226,14 @@ class ClaudeStreamAdapter(
             input = block.input
         )
         // SpecificToolUse 子类型（EditToolUse, ReadToolUse, TodoWriteToolUse 等）
-        is SpecificToolUse -> ToolUseContent(
-            id = block.id,
-            name = block.name,
-            input = block.input
-        )
+        is SpecificToolUse -> {
+            println("🔍 [convertContentBlock] SpecificToolUse: id=${block.id}, name=${block.name}, inputType=${block.input.javaClass.simpleName}, input=${block.input.toString().take(200)}")
+            ToolUseContent(
+                id = block.id,
+                name = block.name,
+                input = block.input
+            )
+        }
         is ToolResultBlock -> ToolResultContent(
             toolUseId = block.toolUseId,
             content = block.content,

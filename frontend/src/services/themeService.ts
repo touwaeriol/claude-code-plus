@@ -45,9 +45,9 @@ const DARK_THEME: ThemeColors = {
 }
 
 const LIGHT_THEME: ThemeColors = {
-  background: '#ffffff',
+  background: '#ffffff',           // 纯白背景
   foreground: '#24292e',
-  panelBackground: '#f6f8fa',
+  panelBackground: '#fafbfc',      // 更白的面板背景（从 #f6f8fa 调整）
   borderColor: '#e1e4e8',
   textFieldBackground: '#ffffff',
   selectionBackground: '#d2e7ff',
@@ -57,10 +57,10 @@ const LIGHT_THEME: ThemeColors = {
   warningColor: '#ffc107',
   successColor: '#28a745',
   separatorColor: '#e1e4e8',
-  hoverBackground: '#f6f8fa',
+  hoverBackground: '#f3f4f6',      // 悬停背景（更淡）
   accentColor: '#0366d6',
-  infoBackground: '#f0f0f0',
-  codeBackground: '#f6f8fa',
+  infoBackground: '#f5f5f5',       // 信息背景（更白，从 #f0f0f0 调整）
+  codeBackground: '#f8f9fa',       // 代码背景（更白，从 #f6f8fa 调整）
   secondaryForeground: '#6a737d'
 }
 

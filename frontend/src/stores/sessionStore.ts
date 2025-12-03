@@ -4,11 +4,11 @@ import { i18n } from '@/i18n'
 import { aiAgentService } from '@/services/aiAgentService'
 import type { ConnectOptions } from '@/services/aiAgentService'
 import type { AgentStreamEvent } from '@/services/AiAgentSession'
-import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock } from '@/types/message'
+import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock } from '@/types/message'
 import type { SessionState, PendingMessage } from '@/types/session'
 import { convertToDisplayItems, convertMessageToDisplayItems } from '@/utils/displayItemConverter'
 import { ConnectionStatus, ToolCallStatus } from '@/types/display'
-import type { DisplayItem } from '@/types/display'
+import type { DisplayItem, AssistantText, ThinkingContent } from '@/types/display'
 import { isAssistantText, isThinkingContent, isUserMessage as isDisplayUserMessage } from '@/types/display'
 import { isToolUseBlock, isTextBlock } from '@/utils/contentBlockUtils'
 import type { TextBlock } from '@/types/message'
@@ -16,10 +16,10 @@ import { loggers } from '@/utils/logger'
 import { ideService } from '@/services/ideaBridge'
 import { ideaBridge } from '@/services/ideaBridge'
 import { CLAUDE_TOOL_TYPE } from '@/constants/toolTypes'
-import type { ReadToolCall, WriteToolCall, EditToolCall, MultiEditToolCall, ToolCall } from '@/types/display'
+import type { ClaudeReadToolCall, ClaudeWriteToolCall, ClaudeEditToolCall, ClaudeMultiEditToolCall, ToolCall } from '@/types/display'
 import { buildUserMessageContent } from '@/utils/userMessageBuilder'
-import { useSettingsStore } from '@/stores/settingsStore'
 import { MODEL_CAPABILITIES, BaseModel } from '@/constants/models'
+import type { RpcPermissionMode } from '@/types/rpc'
 import {
   isAssistantMessage as isRpcAssistantMessage,
   isResultMessage as isRpcResultMessage,
@@ -106,9 +106,6 @@ export const useSessionStore = defineStore('session', () => {
   function buildConnectOptions(overrides: Partial<ConnectOptions> = {}): ConnectOptions {
     // 只传入用户指定的参数，不添加任何默认值
     return {
-      print: true,
-      outputFormat: 'stream-json',
-      verbose: true,
       includePartialMessages: true,
       dangerouslySkipPermissions: true,
       allowDangerouslySkipPermissions: true,
@@ -271,10 +268,15 @@ export const useSessionStore = defineStore('session', () => {
   // 会话数据由后端 SDK 管理，前端不需要持久化
 
   // 默认会话设置常量
-  const DEFAULT_SESSION_SETTINGS = {
+  const DEFAULT_SESSION_SETTINGS: {
+    modelId: string
+    thinkingEnabled: boolean
+    permissionMode: RpcPermissionMode
+    skipPermissions: boolean
+  } = {
     modelId: MODEL_CAPABILITIES[BaseModel.OPUS_45].modelId,
     thinkingEnabled: MODEL_CAPABILITIES[BaseModel.OPUS_45].defaultThinkingEnabled,
-    permissionMode: 'default',
+    permissionMode: 'default' as RpcPermissionMode,
     skipPermissions: true
   }
 
@@ -614,7 +616,7 @@ export const useSessionStore = defineStore('session', () => {
 
       switch (toolType) {
         case CLAUDE_TOOL_TYPE.READ: {
-          const readCall = toolCall as ReadToolCall
+          const readCall = toolCall as ClaudeReadToolCall
           const filePath = readCall.input.file_path || readCall.input.path || ''
           if (!filePath) break
 
@@ -642,7 +644,7 @@ export const useSessionStore = defineStore('session', () => {
         }
 
         case CLAUDE_TOOL_TYPE.WRITE: {
-          const writeCall = toolCall as WriteToolCall
+          const writeCall = toolCall as ClaudeWriteToolCall
           const filePath = writeCall.input.file_path || writeCall.input.path || ''
           if (!filePath) break
 
@@ -652,7 +654,7 @@ export const useSessionStore = defineStore('session', () => {
         }
 
         case CLAUDE_TOOL_TYPE.EDIT: {
-          const editCall = toolCall as EditToolCall
+          const editCall = toolCall as ClaudeEditToolCall
           const filePath = editCall.input.file_path || ''
           if (!filePath) break
 
@@ -672,7 +674,7 @@ export const useSessionStore = defineStore('session', () => {
         }
 
         case CLAUDE_TOOL_TYPE.MULTI_EDIT: {
-          const multiEditCall = toolCall as MultiEditToolCall
+          const multiEditCall = toolCall as ClaudeMultiEditToolCall
           const filePath = multiEditCall.input.file_path || ''
           if (!filePath) break
 
@@ -734,7 +736,7 @@ export const useSessionStore = defineStore('session', () => {
    * @param message 新消息
    * @returns 是否成功替换
    */
-  function replacePlaceholderMessage(sessionId: string, message: Message): boolean {
+  function _replacePlaceholderMessage(sessionId: string, message: Message): boolean {
     const sessionState = getSessionState(sessionId)
     if (!sessionState) {
       return false
@@ -890,7 +892,7 @@ export const useSessionStore = defineStore('session', () => {
    * 合并或添加消息
    * 智能判断是更新现有消息还是添加新消息
    */
-  function mergeOrAddMessage(sessionId: string, newMessage: Message) {
+  function _mergeOrAddMessage(sessionId: string, newMessage: Message) {
     // ✅ 只从 SessionState 读取和更新
     const sessionState = getSessionState(sessionId)
     if (!sessionState) {
@@ -1005,7 +1007,8 @@ export const useSessionStore = defineStore('session', () => {
           streamingMessage.isStreaming = false
           syncDisplayItemsForMessage(streamingMessage, sessionState)
         }
-        setSessionGenerating(sessionId, false)
+        // 注意：不在这里设置 isGenerating = false
+        // isGenerating 只在 handleResultMessage() 中设置为 false（收到 result 消息时）
         touchSession(sessionId)
         break
       }
@@ -1029,10 +1032,24 @@ export const useSessionStore = defineStore('session', () => {
         const index = event.index
         const delta = event.delta
 
+        // 🔍 调试：检查 input_json_delta 是否正确处理
+        if (delta?.type === 'input_json_delta') {
+          console.log('🔍 [content_block_delta] input_json_delta received:', {
+            index,
+            contentLength: message.content.length,
+            deltaType: delta.type,
+            partialJson: delta.partial_json?.substring(0, 100),
+            contentTypes: message.content.map((b: ContentBlock) => b.type)
+          })
+        }
+
         if (index >= 0 && index < message.content.length && delta) {
           const contentBlock = message.content[index]
           if (delta.type === 'text_delta' && contentBlock.type === 'text') {
+            // 累积文本到 message.content
             contentBlock.text += delta.text
+            // 🔧 增量更新：直接更新对应的 displayItem，而不是重建整个数组
+            updateTextDisplayItemIncrementally(message, index, contentBlock.text, sessionState)
           } else if (delta.type === 'text_delta' && contentBlock.type === 'tool_use') {
             const accumulated = toolInputJsonAccumulator.get(contentBlock.id) || ''
             const newAccumulated = accumulated + delta.text
@@ -1049,10 +1066,12 @@ export const useSessionStore = defineStore('session', () => {
             try { contentBlock.input = JSON.parse(newAccumulated) } catch { /* ignore */ }
           } else if (delta.type === 'thinking_delta' && contentBlock.type === 'thinking') {
             contentBlock.thinking += delta.thinking
+            // 🔧 增量更新思考内容
+            updateThinkingDisplayItemIncrementally(message, index, contentBlock.thinking, sessionState)
           }
         }
-
-        syncDisplayItemsForMessage(message, sessionState)
+        // 🔧 不再每次 delta 都调用 syncDisplayItemsForMessage()
+        // syncDisplayItemsForMessage(message, sessionState)
         break
       }
 
@@ -1155,7 +1174,14 @@ export const useSessionStore = defineStore('session', () => {
           item => item.type === 'tool_use' && (item as ToolUseBlock).id === (block as ToolUseBlock).id
         )
         if (idx >= 0) {
-          merged[idx] = { ...merged[idx], ...block }
+          const existingInput = (merged[idx] as ToolUseBlock).input
+          const incomingInput = (block as ToolUseBlock).input
+          // 只有当新的 input 有值时才覆盖（避免 null 覆盖已有值）
+          merged[idx] = {
+            ...merged[idx],
+            ...block,
+            input: incomingInput != null ? incomingInput : existingInput
+          }
         } else {
           merged.push(block)
         }
@@ -1234,7 +1260,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 当 messageId 更新时，移除旧 messageId 生成的展示项，避免重复展示
    */
-  function dropAssistantDisplayItemsById(sessionState: SessionState, messageId: string) {
+  function _dropAssistantDisplayItemsById(sessionState: SessionState, messageId: string) {
     sessionState.displayItems = sessionState.displayItems.filter(item => {
       if (item.displayType === 'assistantText' || item.displayType === 'thinking') {
         return !item.id.startsWith(`${messageId}-`)
@@ -1244,10 +1270,64 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   /**
+   * 🔧 增量更新文本 displayItem
+   *
+   * 直接更新对应的 displayItem 的 content 属性，避免重建整个 displayItems 数组
+   * 这样可以实现真正的流式渲染效果
+   */
+  function updateTextDisplayItemIncrementally(
+    message: Message,
+    blockIndex: number,
+    newText: string,
+    sessionState: SessionState
+  ) {
+    const expectedId = `${message.id}-text-${blockIndex}`
+
+    for (let i = 0; i < sessionState.displayItems.length; i++) {
+      const item = sessionState.displayItems[i]
+      if (item.id === expectedId && item.displayType === 'assistantText') {
+        // 取出来，更新 content，创建新对象放回去
+        // 这样 vue-virtual-scroller 能检测到这个元素变化
+        const updated = { ...item, content: newText } as AssistantText
+        sessionState.displayItems[i] = updated
+        return
+      }
+    }
+
+    // 如果找不到，说明还没创建，需要同步一次
+    syncDisplayItemsForMessage(message, sessionState)
+  }
+
+  /**
+   * 🔧 增量更新思考 displayItem
+   */
+  function updateThinkingDisplayItemIncrementally(
+    message: Message,
+    blockIndex: number,
+    newThinking: string,
+    sessionState: SessionState
+  ) {
+    const expectedId = `${message.id}-thinking-${blockIndex}`
+
+    for (let i = 0; i < sessionState.displayItems.length; i++) {
+      const item = sessionState.displayItems[i]
+      if (item.id === expectedId && item.displayType === 'thinking') {
+        // 取出来，更新 content，创建新对象放回去
+        const updated = { ...item, content: newThinking } as ThinkingContent
+        sessionState.displayItems[i] = updated
+        return
+      }
+    }
+
+    // 如果找不到，同步一次
+    syncDisplayItemsForMessage(message, sessionState)
+  }
+
+  /**
    * 同步 displayItems 以反映消息内容的变化
-   * 
+   *
    * 当流式更新修改了 message.content 时，需要更新 displayItems 中对应的对象
-   * 
+   *
    * 🔧 关键：按照 message.content 的顺序来同步 displayItems，确保顺序正确
    */
   function syncDisplayItemsForMessage(message: Message, sessionState: SessionState) {
@@ -1449,6 +1529,22 @@ export const useSessionStore = defineStore('session', () => {
         // 触发响应式更新
         sessionState.displayItems = [...sessionState.displayItems]
       }
+    }
+
+    // 🔧 修复：结束正在流式的 assistant 消息（打断时不会收到 message_stop 事件）
+    const streamingMessage = findStreamingAssistantMessage(sessionState)
+    if (streamingMessage) {
+      // 如果是打断响应，在消息末尾添加提示
+      if (resultData.subtype === 'interrupted') {
+        streamingMessage.content.push({
+          type: 'text',
+          text: '\n\n[Request interrupted by user]'
+        })
+        log.debug('handleResultMessage: 添加打断提示')
+      }
+      streamingMessage.isStreaming = false
+      syncDisplayItemsForMessage(streamingMessage, sessionState)
+      log.debug('handleResultMessage: 结束流式 assistant 消息')
     }
 
     // 标记生成完成
@@ -1690,7 +1786,7 @@ export const useSessionStore = defineStore('session', () => {
 
     await aiAgentService.sendMessageWithContent(
       currentSessionId.value,
-      content as unknown as import('../services/ClaudeSession').ContentBlock[]
+      content as unknown as import('../services/AiAgentSession').ContentBlock[]
     )
   }
 
@@ -1812,6 +1908,15 @@ export const useSessionStore = defineStore('session', () => {
     messageQueue.value.splice(index, 1)
     log.info(`删除队列消息: ${id}，剩余队列长度: ${messageQueue.value.length}`)
     return true
+  }
+
+  /**
+   * 清空消息队列（取消生成时调用）
+   */
+  function clearQueue(): void {
+    const count = messageQueue.value.length
+    messageQueue.value = []
+    log.info(`清空消息队列，已丢弃 ${count} 条消息`)
   }
 
   /**
@@ -2007,11 +2112,11 @@ export const useSessionStore = defineStore('session', () => {
 
     toolCallsMap.value.set(block.id, {
       id: block.id,
-      name: (block as any).toolName || block.name,
+      name: block.toolName,
       status: 'running',
       startTime: Date.now()
     })
-    log.debug(`注册工具调用: ${(block as any).toolName || block.name} (${block.id})`)
+    log.debug(`注册工具调用: ${block.toolName} (${block.id})`)
   }
 
   /**
@@ -2091,6 +2196,7 @@ export const useSessionStore = defineStore('session', () => {
     enqueueMessage,
     editQueueMessage,
     removeFromQueue,
+    clearQueue,
     interrupt,
     setModel,
     resumeSession,

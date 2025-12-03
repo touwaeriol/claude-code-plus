@@ -31,8 +31,8 @@ const { t } = useI18n()
   width: 100%;
   margin: 0;
   padding: 6px 10px;
-  background: rgba(107, 114, 128, 0.05); /* 淡灰色背景 */
-  border-left: 3px solid rgba(107, 114, 128, 0.3); /* 灰色左边框 */
+  background: rgba(107, 114, 128, 0.08); /* 淡灰色背景 - 增加不透明度以便与白色背景区分 */
+  border-left: 3px solid rgba(107, 114, 128, 0.35); /* 灰色左边框 - 稍微加深 */
   border-radius: 4px;
 }
 
