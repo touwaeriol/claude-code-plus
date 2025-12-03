@@ -5,7 +5,7 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * MCP Server接口 - 所有MCP服务器的基础接口
- * 
+ *
  * 提供了创建自定义MCP工具服务器的标准接口，支持工具列表查询和工具调用执行。
  */
 interface McpServer {
@@ -13,22 +13,30 @@ interface McpServer {
      * 服务器名称，用作标识符
      */
     val name: String
-    
+
     /**
      * 服务器版本
      */
     val version: String
-    
+
     /**
      * 服务器描述
      */
     val description: String
-    
+
+    /**
+     * 工具调用超时时间（毫秒）
+     * - null 或 0: 无限超时（适用于需要用户交互的工具，如 AskUserQuestion）
+     * - 正数: 指定超时时间
+     */
+    val timeout: Long?
+        get() = null  // 默认无限超时
+
     /**
      * 列出所有可用工具
      */
     suspend fun listTools(): List<ToolDefinition>
-    
+
     /**
      * 调用指定的工具
      */
@@ -206,19 +214,47 @@ sealed class ContentItem {
 }
 
 /**
- * 内部工具处理器
+ * 内部工具处理器接口
+ */
+internal interface ToolHandlerBase {
+    val name: String
+    val description: String
+    val handler: suspend (Map<String, Any>) -> Any
+    fun toDefinition(): ToolDefinition
+}
+
+/**
+ * 内部工具处理器（使用 ParameterInfo）
  */
 internal data class ToolHandler(
-    val name: String,
-    val description: String,
+    override val name: String,
+    override val description: String,
     val parameterSchema: Map<String, ParameterInfo>? = null,
-    val handler: suspend (Map<String, Any>) -> Any
-) {
-    fun toDefinition(): ToolDefinition {
+    override val handler: suspend (Map<String, Any>) -> Any
+) : ToolHandlerBase {
+    override fun toDefinition(): ToolDefinition {
         return if (parameterSchema != null) {
             ToolDefinition.withParameterInfo(name, description, parameterSchema)
         } else {
             ToolDefinition.simple(name, description)
         }
+    }
+}
+
+/**
+ * 内部工具处理器（使用完整 JSON Schema）
+ */
+internal data class ToolHandlerWithSchema(
+    override val name: String,
+    override val description: String,
+    val inputSchema: Map<String, Any>,
+    override val handler: suspend (Map<String, Any>) -> Any
+) : ToolHandlerBase {
+    override fun toDefinition(): ToolDefinition {
+        return ToolDefinition(
+            name = name,
+            description = description,
+            inputSchema = inputSchema
+        )
     }
 }

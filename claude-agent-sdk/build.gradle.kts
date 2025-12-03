@@ -36,6 +36,9 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-client:0.10.1") // kRPC over Ktor client
 
+    // 官方 MCP Kotlin SDK
+    implementation("io.modelcontextprotocol:kotlin-sdk:0.8.0")
+
     // 测试依赖
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
@@ -185,6 +188,46 @@ tasks.register<JavaExec>("runJointTestClient") {
     description = "Runs the joint test client to connect to a running server"
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.asakii.claude.agent.sdk.examples.JointTestClientKt")
+}
+
+tasks.register<JavaExec>("runPlanModeTest") {
+    group = "verification"
+    description = "测试 Plan 模式的交互方式"
+    classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].runtimeClasspath
+    mainClass.set("com.asakii.claude.agent.sdk.PlanModeTestKt")
+    standardInput = System.`in`
+}
+
+tasks.register<JavaExec>("runPlanModeInteractiveTest") {
+    group = "verification"
+    description = "测试 Plan 模式的用户交互功能"
+    classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].runtimeClasspath
+    mainClass.set("com.asakii.claude.agent.sdk.PlanModeInteractiveTestKt")
+    standardInput = System.`in`
+}
+
+tasks.register<JavaExec>("runAskUserQuestionTest") {
+    group = "verification"
+    description = "测试 AskUserQuestion 工具调用"
+    classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].runtimeClasspath
+    mainClass.set("com.asakii.claude.agent.sdk.AskUserQuestionTestKt")
+    standardInput = System.`in`
+}
+
+tasks.register<JavaExec>("runMcpAskUserQuestionTest") {
+    group = "verification"
+    description = "测试自定义 MCP AskUserQuestion 工具"
+    classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].runtimeClasspath
+    mainClass.set("com.asakii.claude.agent.sdk.McpAskUserQuestionTestKt")
+    standardInput = System.`in`
+}
+
+tasks.register<JavaExec>("runOfficialMcpSdkTest") {
+    group = "verification"
+    description = "测试官方 MCP Kotlin SDK 工具"
+    classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].runtimeClasspath
+    mainClass.set("com.asakii.claude.agent.sdk.OfficialMcpSdkTestKt")
+    standardInput = System.`in`
 }
 
 

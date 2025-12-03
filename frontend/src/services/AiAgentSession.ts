@@ -43,6 +43,13 @@ export type ContentBlock = RpcContentBlock
 type MessageHandler = (message: RpcMessage) => void
 type ErrorHandler = (error: Error) => void
 
+/**
+ * 服务器请求处理器类型
+ * @param params 服务器发送的参数
+ * @returns Promise<any> 返回给服务器的结果
+ */
+type ServerRequestHandler = (params: any) => Promise<any>
+
 export class AiAgentSession {
   private ws: WebSocket | null = null
   private _isConnected = false
@@ -56,6 +63,13 @@ export class AiAgentSession {
   }>()
   private requestIdCounter = 0
   private wsUrl: string
+
+  /**
+   * 服务器请求处理器注册表（用于双向 RPC）
+   * key: 方法名（如 'AskUserQuestion'）
+   * value: 处理函数
+   */
+  private serverRequestHandlers = new Map<string, ServerRequestHandler>()
 
   constructor(wsUrl?: string) {
     if (wsUrl) {
@@ -244,6 +258,57 @@ export class AiAgentSession {
   }
 
   /**
+   * 注册服务器请求处理器（双向 RPC）
+   *
+   * 服务器可以通过发送 { id: "srv-xxx", method: "...", params: {...} } 来调用客户端方法。
+   * 使用此方法注册处理器来响应这些请求。
+   *
+   * @param method 方法名（如 'AskUserQuestion'）
+   * @param handler 处理函数
+   * @returns 取消注册的函数
+   *
+   * @example
+   * session.register('AskUserQuestion', async (params) => {
+   *   const answers = await showQuestionDialog(params.questions)
+   *   return { answers }
+   * })
+   */
+  register(method: string, handler: ServerRequestHandler): () => void {
+    log.info(`[双向RPC] 注册处理器: ${method}`)
+    this.serverRequestHandlers.set(method, handler)
+    return () => {
+      log.info(`[双向RPC] 取消注册处理器: ${method}`)
+      this.serverRequestHandlers.delete(method)
+    }
+  }
+
+  /**
+   * 发送服务器请求的响应
+   */
+  private sendServerResponse(id: string, result: any): void {
+    if (!this.ws) {
+      log.error('[双向RPC] WebSocket 未初始化，无法发送响应')
+      return
+    }
+    const response = { id, result }
+    log.debug(`[双向RPC] 发送响应: id=${id}`)
+    this.ws.send(JSON.stringify(response))
+  }
+
+  /**
+   * 发送服务器请求的错误响应
+   */
+  private sendServerError(id: string, error: string): void {
+    if (!this.ws) {
+      log.error('[双向RPC] WebSocket 未初始化，无法发送错误响应')
+      return
+    }
+    const response = { id, error }
+    log.warn(`[双向RPC] 发送错误响应: id=${id}, error=${error}`)
+    this.ws.send(JSON.stringify(response))
+  }
+
+  /**
    * 发送 RPC 请求
    */
   private sendRequest(method: string, params?: unknown): Promise<unknown> {
@@ -271,6 +336,39 @@ export class AiAgentSession {
   private handleMessage(data: string) {
     try {
       const raw: unknown = JSON.parse(data)
+
+      // ===== 双向 RPC：检测服务器发起的请求 =====
+      // 服务器请求格式：{ id: "srv-xxx", method: "...", params: {...} }
+      if (
+        typeof raw === 'object' &&
+        raw !== null &&
+        'id' in raw &&
+        typeof (raw as any).id === 'string' &&
+        (raw as any).id.startsWith('srv-') &&
+        'method' in raw
+      ) {
+        const serverRequest = raw as { id: string; method: string; params?: any }
+        log.info(`[双向RPC] 收到服务器请求: id=${serverRequest.id}, method=${serverRequest.method}`)
+
+        const handler = this.serverRequestHandlers.get(serverRequest.method)
+        if (handler) {
+          // 异步处理，不阻塞消息循环
+          handler(serverRequest.params)
+            .then(result => {
+              log.info(`[双向RPC] 处理器执行成功: ${serverRequest.method}`)
+              this.sendServerResponse(serverRequest.id, result)
+            })
+            .catch(error => {
+              log.error(`[双向RPC] 处理器执行失败: ${serverRequest.method}`, error)
+              this.sendServerError(serverRequest.id, error?.message || 'Unknown error')
+            })
+        } else {
+          log.warn(`[双向RPC] 未找到处理器: ${serverRequest.method}`)
+          this.sendServerError(serverRequest.id, `Method not found: ${serverRequest.method}`)
+        }
+        return
+      }
+
       const parsed = parseRpcMessage(raw)
 
       if (!parsed) {

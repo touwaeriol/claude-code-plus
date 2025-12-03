@@ -18,6 +18,8 @@ import com.asakii.codex.agent.sdk.SandboxMode
 import com.asakii.codex.agent.sdk.ThreadOptions
 import com.asakii.rpc.api.*
 import com.asakii.server.config.AiAgentServiceConfig
+import com.asakii.server.mcp.PermissionMcpServer
+import com.asakii.server.mcp.UserInteractionMcpServer
 import com.asakii.server.settings.ClaudeSettingsLoader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -39,6 +41,7 @@ import java.util.logging.Logger
  * 姣忎釜 WebSocket 杩炴帴瀵瑰簲璇ョ被鐨勪竴涓柊瀹炰緥锛屽疄渚嬪唴閮ㄧ淮鎶ょ粺涓€ SDK 瀹㈡埛绔互鍙? * 褰撳墠杩炴帴鐨勯厤缃笌鍘嗗彶浜嬩欢銆? */
 class AiAgentRpcServiceImpl(
     private val ideTools: IdeTools,
+    private val clientCaller: ClientCaller? = null,
     private val serviceConfig: AiAgentServiceConfig = AiAgentServiceConfig(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : AiAgentRpcService {
@@ -59,6 +62,16 @@ class AiAgentRpcServiceImpl(
 
     // 🔧 追踪当前 query 的完成状态，用于 interrupt 同步等待
     private var queryCompletion: CompletableDeferred<Unit>? = null
+
+    // 用户交互 MCP Server（用于 AskUserQuestion 等工具）
+    private val userInteractionServer = UserInteractionMcpServer().apply {
+        clientCaller?.let { setClientCaller(it) }
+    }
+
+    // 工具授权 MCP Server（用于 RequestPermission 工具）
+    private val permissionServer = PermissionMcpServer().apply {
+        clientCaller?.let { setClientCaller(it) }
+    }
     
     // 鍚屾鎺у埗鐢卞墠绔礋璐ｏ紝鍚庣鐩存帴杞彂缁?SDK
 
@@ -332,6 +345,15 @@ class AiAgentRpcServiceImpl(
             "output-format" to "stream-json"
         )
 
+        // 注册 MCP Servers（包括用户交互工具和授权工具）
+        val mcpServers = mutableMapOf<String, Any>()
+
+        // 添加 UserInteractionMcpServer（用于 AskUserQuestion 等工具）
+        mcpServers["user_interaction"] = userInteractionServer
+
+        // 添加 PermissionMcpServer（用于 RequestPermission 工具）
+        mcpServers["permission"] = permissionServer
+
         val claudeOptions = ClaudeAgentOptions(
             model = model,
             cwd = cwd,
@@ -343,10 +365,13 @@ class AiAgentRpcServiceImpl(
             includePartialMessages = options.includePartialMessages
                 ?: defaults.includePartialMessages,
             permissionMode = permissionMode,
+            // 配置授权工具：当 Claude 需要执行敏感操作时，会调用此工具请求用户授权
+            permissionPromptToolName = "mcp__permission__RequestPermission",
             continueConversation = options.continueConversation ?: false,
             resume = options.resumeSessionId,  // 浣跨敤缁熶竴鐨?resumeSessionId
             maxThinkingTokens = maxThinkingTokens,
-            extraArgs = extraArgs
+            extraArgs = extraArgs,
+            mcpServers = mcpServers
         )
 
         return ClaudeOverrides(options = claudeOptions)

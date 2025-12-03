@@ -57,6 +57,12 @@
         @update:skip-permissions="handleSkipPermissionsChange"
         @auto-cleanup-change="handleAutoCleanupChange"
       />
+
+      <!-- AskUserQuestion 交互式问答组件 -->
+      <AskUserQuestionInteractive />
+
+      <!-- RequestPermission 工具授权组件 -->
+      <ToolPermissionInteractive />
     </div>
 
     <!-- 错误对话框 -->
@@ -146,6 +152,8 @@ import ChatHeader from './ChatHeader.vue'
 import SessionListOverlay from './SessionListOverlay.vue'
 import SessionStatsBar from './SessionStatsBar.vue'
 import PendingMessageQueue from './PendingMessageQueue.vue'
+import AskUserQuestionInteractive from '@/components/tools/AskUserQuestionInteractive.vue'
+import ToolPermissionInteractive from '@/components/tools/ToolPermissionInteractive.vue'
 import { calculateToolStats } from '@/utils/toolStatistics'
 import type { ContentBlock } from '@/types/message'
 import type { ContextReference, AiModel, PermissionMode, TokenUsage as EnhancedTokenUsage } from '@/types/enhancedMessage'

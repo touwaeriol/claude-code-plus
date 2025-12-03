@@ -10,8 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.*
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.InputStreamReader
@@ -72,26 +71,9 @@ class SubprocessTransport(
             
             logger.info("⚡ 启动Claude CLI进程...")
 
-            // Windows下需要通过cmd来执行，否则ProcessBuilder无法识别.cmd文件
-            val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-            process = if (isWindows) {
-                logger.info("🪟 Windows系统，通过cmd /c执行命令")
-                val cmdCommand = mutableListOf("cmd", "/c")
-                cmdCommand.addAll(command)
-                ProcessBuilder(cmdCommand).apply {
-                    // 复制原有配置
-                    options.cwd?.let { directory(it.toFile()) }
-                    if (options.env.isNotEmpty()) {
-                        environment().putAll(options.env)
-                    }
-                    environment()["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kt-client"
-                    // Disable Ink UI to prevent "Raw mode is not supported" error
-                    environment()["CI"] = "true"
-                    environment()["FORCE_COLOR"] = "0"
-                }.start()
-            } else {
-                processBuilder.start()
-            }
+            // 直接执行命令（不使用 cmd /c，避免 JSON 参数被 shell 解析）
+            // Java ProcessBuilder 可以直接执行 .cmd 文件（如果使用完整路径）
+            process = processBuilder.start()
 
             logger.info("✅ Claude CLI进程启动成功, PID: ${process?.pid()}")
 
@@ -360,6 +342,13 @@ class SubprocessTransport(
             command.add("--allow-dangerously-skip-permissions")
         }
 
+        // Permission prompt tool - 配置授权请求使用的 MCP 工具
+        // 当 Claude 需要执行敏感操作时，会调用此工具请求用户授权
+        options.permissionPromptToolName?.let { tool ->
+            command.addAll(listOf("--permission-prompt-tool", tool))
+            logger.info("🔐 配置授权工具: $tool")
+        }
+
         // Continue conversation
         if (options.continueConversation) {
             command.add("--continue")
@@ -388,10 +377,86 @@ class SubprocessTransport(
         // Extended thinking tokens (0 表示显式禁用思考)
         command.addAll(listOf("--max-thinking-tokens", options.maxThinkingTokens.coerceAtLeast(0).toString()))
         
-        // MCP servers configuration
+        // MCP servers configuration - 参考 Python SDK 实现
         if (options.mcpServers.isNotEmpty()) {
-            // For now, skip MCP config serialization to avoid serialization issues
-            // TODO: Implement proper MCP configuration if needed
+            val serversForCli = mutableMapOf<String, Map<String, Any?>>()
+
+            options.mcpServers.forEach { (name, config) ->
+                when (config) {
+                    is Map<*, *> -> {
+                        @Suppress("UNCHECKED_CAST")
+                        val configMap = config as Map<String, Any?>
+                        if (configMap["type"] == "sdk") {
+                            // SDK 服务器：去掉 instance 字段，保留其他
+                            val sdkConfig = configMap.filterKeys { it != "instance" }
+                            serversForCli[name] = sdkConfig
+                            logger.info("📦 添加 SDK MCP 服务器配置: $name -> $sdkConfig")
+                        } else {
+                            // 外部服务器：直接传递
+                            serversForCli[name] = configMap
+                            logger.info("📦 添加外部 MCP 服务器配置: $name")
+                        }
+                    }
+                    else -> {
+                        // 其他类型（如 McpServer 实例），转换为 SDK 配置
+                        if (config is com.asakii.claude.agent.sdk.mcp.McpServer) {
+                            val serverConfig = mutableMapOf<String, Any?>(
+                                "type" to "sdk",
+                                "name" to config.name
+                            )
+                            // 添加超时配置（null 或 0 表示无限超时）
+                            config.timeout?.let { timeout ->
+                                if (timeout > 0) {
+                                    serverConfig["timeout"] = timeout
+                                }
+                                // timeout 为 null 或 0 时不传递，CLI 默认无限等待
+                            }
+                            serversForCli[name] = serverConfig
+                            logger.info("📦 添加 MCP 服务器实例配置: $name -> type=sdk, timeout=${config.timeout ?: "infinite"}")
+                        } else {
+                            serversForCli[name] = mapOf(
+                                "type" to "sdk",
+                                "name" to name
+                            )
+                            logger.info("📦 添加 MCP 服务器实例配置: $name -> type=sdk")
+                        }
+                    }
+                }
+            }
+
+            if (serversForCli.isNotEmpty()) {
+                val mcpConfigJson = buildJsonObject {
+                    putJsonObject("mcpServers") {
+                        serversForCli.forEach { (serverName, serverConfig) ->
+                            putJsonObject(serverName) {
+                                serverConfig.forEach { (key, value) ->
+                                    when (value) {
+                                        is String -> put(key, value)
+                                        is Number -> put(key, value)
+                                        is Boolean -> put(key, value)
+                                        null -> put(key, JsonNull)
+                                        else -> put(key, value.toString())
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }.toString()
+
+                // Windows 下需要转义 JSON 中的双引号（参考 Python subprocess.list2cmdline）
+                // 规则：" -> \"，然后用双引号包围整个参数
+                val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+                if (isWindows) {
+                    // Windows: 转义双引号并用双引号包围
+                    val escapedJson = "\"" + mcpConfigJson.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+                    command.addAll(listOf("--mcp-config", escapedJson))
+                    logger.info("🔧 MCP 配置（Windows 转义）: $escapedJson")
+                } else {
+                    // Unix: 直接传递
+                    command.addAll(listOf("--mcp-config", mcpConfigJson))
+                    logger.info("🔧 MCP 配置: $mcpConfigJson")
+                }
+            }
         }
         
         // Extra arguments (排除已经显式处理的参数，避免重复)
@@ -416,39 +481,53 @@ class SubprocessTransport(
     
     /**
      * Find the Claude executable in the system.
+     * 参考 Python SDK: Windows 上优先使用 claude.exe（不是 .cmd）
+     * 因为 .cmd 是批处理文件，会经过 cmd.exe 解析，破坏 JSON 参数
      */
     private fun findClaudeExecutable(): String {
-        // 直接使用 "claude" 命令，让操作系统自动处理平台差异
-        // Windows会自动查找claude.cmd，Mac/Linux会执行claude脚本
-        val executable = "claude"
+        val isWindows = System.getProperty("os.name").lowercase().contains("windows")
 
-        // First try to find claude via which/where command
-        try {
-            val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-            val whichCommand = if (isWindows) "where" else "which"
-            val process = ProcessBuilder(whichCommand, executable).start()
-            val result = process.inputStream.bufferedReader().readText().trim()
-            if (process.waitFor() == 0 && result.isNotEmpty()) {
-                // 在Windows下，where命令可能返回多个结果（.cmd, .ps1等）
-                // 优先选择.cmd文件
-                if (isWindows) {
+        // Windows 上优先查找 .exe（参考 Python SDK）
+        // .exe 直接执行，不经过 cmd.exe 解析，参数不会被破坏
+        if (isWindows) {
+            try {
+                val process = ProcessBuilder("where", "claude").start()
+                val result = process.inputStream.bufferedReader().readText().trim()
+                if (process.waitFor() == 0 && result.isNotEmpty()) {
                     val lines = result.lines()
+                    // 优先选择 .exe 文件（不会经过 shell 解析）
+                    val exeFile = lines.find { it.endsWith(".exe") }
+                    if (exeFile != null) {
+                        logger.info("✅ 找到 claude.exe: $exeFile")
+                        return exeFile
+                    }
+                    // 其次选择 .cmd（但会有参数问题）
                     val cmdFile = lines.find { it.endsWith(".cmd") }
                     if (cmdFile != null) {
+                        logger.warning("⚠️ 只找到 claude.cmd，JSON 参数可能被破坏: $cmdFile")
                         return cmdFile
                     }
+                    return lines.first()
                 }
-                return result.lines().first() // Return first match
+            } catch (e: Exception) {
+                logger.info("where 命令失败: ${e.message}")
             }
-        } catch (e: Exception) {
-            logger.info("使用which/where查找失败，尝试直接使用'claude'命令")
+        } else {
+            // Unix 系统
+            try {
+                val process = ProcessBuilder("which", "claude").start()
+                val result = process.inputStream.bufferedReader().readText().trim()
+                if (process.waitFor() == 0 && result.isNotEmpty()) {
+                    return result.lines().first()
+                }
+            } catch (e: Exception) {
+                logger.info("which 命令失败: ${e.message}")
+            }
         }
 
-        // 如果which/where失败，直接返回"claude"
-        // 让ProcessBuilder尝试在PATH中查找
-        // 这模拟了用户在命令行中直接输入claude的行为
-        logger.info("直接使用'claude'命令，依赖系统PATH环境变量")
-        return executable
+        // 回退到直接使用 "claude"
+        logger.info("直接使用 'claude' 命令")
+        return "claude"
     }
     
     /**

@@ -128,6 +128,31 @@ data class ImageInput(
 }
 
 /**
+ * Tool result input - used to respond to tool calls.
+ *
+ * 序列化为:
+ * ```json
+ * {
+ *   "type": "tool_result",
+ *   "tool_use_id": "toolu_xxx",
+ *   "content": "用户选择的结果",
+ *   "is_error": false
+ * }
+ * ```
+ *
+ * 用于响应 AskUserQuestion、ExitPlanMode 等需要用户交互的工具调用。
+ */
+@Serializable
+@SerialName("tool_result")
+data class ToolResultInput(
+    @SerialName("tool_use_id")
+    val toolUseId: String,
+    val content: String,
+    @SerialName("is_error")
+    val isError: Boolean = false
+) : UserInputContent()
+
+/**
  * Stream-JSON user message format.
  *
  * Example:

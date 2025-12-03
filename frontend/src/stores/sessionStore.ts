@@ -20,6 +20,7 @@ import type { ClaudeReadToolCall, ClaudeWriteToolCall, ClaudeEditToolCall, Claud
 import { buildUserMessageContent } from '@/utils/userMessageBuilder'
 import { MODEL_CAPABILITIES, BaseModel } from '@/constants/models'
 import type { RpcPermissionMode } from '@/types/rpc'
+import type { PendingPermissionRequest, PendingUserQuestion, PermissionToolInput } from '@/types/permission'
 import {
   isAssistantMessage as isRpcAssistantMessage,
   isResultMessage as isRpcResultMessage,
@@ -102,6 +103,12 @@ export const useSessionStore = defineStore('session', () => {
     outputTokens: number
     currentStreamingMessageId: string | null  // 当前正在流式输出的消息 ID
   }>())
+
+  // AskUserQuestion 待回答问题状态
+  const pendingQuestions = reactive(new Map<string, PendingUserQuestion>())
+
+  // RequestPermission 待授权请求状态
+  const pendingPermissions = reactive(new Map<string, PendingPermissionRequest>())
 
   function buildConnectOptions(overrides: Partial<ConnectOptions> = {}): ConnectOptions {
     // 只传入用户指定的参数，不添加任何默认值
@@ -342,6 +349,10 @@ export const useSessionStore = defineStore('session', () => {
         skipPermissions: initialSettings.skipPermissions
       }
 
+      // 注册双向 RPC 处理器
+      registerAskUserQuestionHandler(sessionId)
+      registerPermissionHandler(sessionId)
+
       log.info(`会话已创建: ${sessionId}, model=${initialSettings.modelId}, thinking=${initialSettings.thinkingEnabled}`)
       return newSessionState
     } catch (error) {
@@ -415,6 +426,10 @@ export const useSessionStore = defineStore('session', () => {
         permissionMode: initialSettings.permissionMode,
         skipPermissions: initialSettings.skipPermissions
       }
+
+      // 注册双向 RPC 处理器
+      registerAskUserQuestionHandler(sessionId)
+      registerPermissionHandler(sessionId)
 
       linkExternalSessionId(externalSessionId, sessionId)
       log.info(`历史会话已恢复: ${sessionId}, model=${initialSettings.modelId}, thinking=${initialSettings.thinkingEnabled}`)
@@ -2207,6 +2222,241 @@ export const useSessionStore = defineStore('session', () => {
     })
   }
 
+  /**
+   * 为会话注册 askUserQuestion 处理器
+   * 在会话创建或恢复后调用
+   */
+  /**
+   * 验证 AskUserQuestion 参数
+   * @param params 原始参数
+   * @returns 验证后的 questions 数组
+   * @throws Error 如果验证失败，抛出详细错误信息
+   */
+  function validateAskUserQuestionParams(params: any): Array<{
+    question: string
+    header: string
+    options: Array<{ label: string; description?: string }>
+    multiSelect?: boolean
+  }> {
+    const questions = params?.questions
+    if (!questions) {
+      throw new Error('缺少必需参数: questions')
+    }
+    if (!Array.isArray(questions)) {
+      throw new Error(`questions 必须是数组，实际类型: ${typeof questions}`)
+    }
+    if (questions.length === 0) {
+      throw new Error('questions 数组不能为空')
+    }
+
+    const errors: string[] = []
+    questions.forEach((q, index) => {
+      if (!q.question) {
+        errors.push(`questions[${index}]: 缺少必需字段 'question'`)
+      }
+      if (!q.header) {
+        errors.push(`questions[${index}]: 缺少必需字段 'header'`)
+      }
+      if (!q.options) {
+        errors.push(`questions[${index}]: 缺少必需字段 'options'`)
+      } else if (!Array.isArray(q.options)) {
+        errors.push(`questions[${index}].options 必须是数组`)
+      } else if (q.options.length === 0) {
+        errors.push(`questions[${index}].options 不能为空`)
+      } else {
+        // 验证并规范化每个选项
+        q.options.forEach((opt: any, optIndex: number) => {
+          if (typeof opt === 'string') {
+            // 兼容 Claude 格式：字符串自动转换为对象
+            q.options[optIndex] = { label: opt, description: '' }
+          } else if (!opt.label) {
+            errors.push(`questions[${index}].options[${optIndex}]: 缺少必需字段 'label'`)
+          }
+        })
+      }
+    })
+
+    if (errors.length > 0) {
+      throw new Error(`参数验证失败:\n${errors.join('\n')}`)
+    }
+
+    return questions
+  }
+
+  function registerAskUserQuestionHandler(sessionId: string): () => void {
+    log.info(`[AskUserQuestion] 为会话 ${sessionId} 注册处理器`)
+
+    return aiAgentService.register(sessionId, 'AskUserQuestion', async (params) => {
+      log.info(`[AskUserQuestion] 收到问题请求:`, params)
+
+      // 验证参数
+      const questions = validateAskUserQuestionParams(params)
+
+      // 生成唯一ID
+      const questionId = `ask-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+
+      // 返回一个 Promise，当用户回答后 resolve
+      // 返回数组格式：[{ question, header, answer }, ...]
+      return new Promise<Array<{ question: string; header: string; answer: string }>>((resolve, reject) => {
+        // 存储到 pendingQuestions
+        pendingQuestions.set(questionId, {
+          id: questionId,
+          sessionId,
+          questions,
+          createdAt: Date.now(),
+          resolve: (answersMap) => {
+            pendingQuestions.delete(questionId)
+            // 转换为数组格式
+            const result = questions.map(q => ({
+              question: q.question,
+              header: q.header,
+              answer: answersMap[q.question] || ''
+            }))
+            resolve(result)
+          },
+          reject: (error) => {
+            pendingQuestions.delete(questionId)
+            reject(error)
+          }
+        })
+
+        log.info(`[AskUserQuestion] 问题已加入待回答队列: ${questionId}`)
+      })
+    })
+  }
+
+  /**
+   * 获取当前会话的待回答问题
+   */
+  function getCurrentPendingQuestions(): PendingUserQuestion[] {
+    if (!currentSessionId.value) return []
+    return Array.from(pendingQuestions.values())
+      .filter(q => q.sessionId === currentSessionId.value)
+      .sort((a, b) => a.createdAt - b.createdAt)
+  }
+
+  /**
+   * 回答问题
+   * @param questionId 问题ID
+   * @param answers 用户的回答 { [header]: selectedOption }
+   */
+  function answerQuestion(questionId: string, answers: Record<string, string>): boolean {
+    const pending = pendingQuestions.get(questionId)
+    if (!pending) {
+      log.warn(`[AskUserQuestion] 问题不存在或已回答: ${questionId}`)
+      return false
+    }
+
+    log.info(`[AskUserQuestion] 用户回答问题: ${questionId}`, answers)
+    pending.resolve(answers)
+    return true
+  }
+
+  /**
+   * 取消问题（用户关闭对话框等情况）
+   * @param questionId 问题ID
+   */
+  function cancelQuestion(questionId: string): boolean {
+    const pending = pendingQuestions.get(questionId)
+    if (!pending) {
+      log.warn(`[AskUserQuestion] 问题不存在或已回答: ${questionId}`)
+      return false
+    }
+
+    log.info(`[AskUserQuestion] 用户取消问题: ${questionId}`)
+    pending.reject(new Error('User cancelled'))
+    return true
+  }
+
+  // ==================== RequestPermission 授权相关函数 ====================
+
+  /**
+   * 注册授权请求处理器
+   * @param sessionId 会话ID
+   */
+  function registerPermissionHandler(sessionId: string): () => void {
+    log.info(`[RequestPermission] 为会话 ${sessionId} 注册处理器`)
+
+    return aiAgentService.register(sessionId, 'RequestPermission', async (params) => {
+      log.info(`[RequestPermission] 收到授权请求:`, params)
+
+      const { tool_name, tool_input } = params
+
+      if (!tool_name) {
+        throw new Error('缺少 tool_name 参数')
+      }
+      if (!tool_input) {
+        throw new Error('缺少 tool_input 参数')
+      }
+
+      // 生成唯一ID
+      const permissionId = `perm-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+
+      // 返回一个 Promise，当用户响应后 resolve
+      return new Promise<{ approved: boolean }>((resolve, reject) => {
+        pendingPermissions.set(permissionId, {
+          id: permissionId,
+          sessionId,
+          toolName: tool_name,
+          toolInput: tool_input,
+          createdAt: Date.now(),
+          resolve: (response) => {
+            pendingPermissions.delete(permissionId)
+            resolve(response)
+          },
+          reject: (error) => {
+            pendingPermissions.delete(permissionId)
+            reject(error)
+          }
+        })
+
+        log.info(`[RequestPermission] 授权请求已加入待处理队列: ${permissionId}, 工具: ${tool_name}`)
+      })
+    })
+  }
+
+  /**
+   * 获取当前会话的待处理授权请求
+   */
+  function getCurrentPendingPermissions(): PendingPermissionRequest[] {
+    if (!currentSessionId.value) return []
+    return Array.from(pendingPermissions.values())
+      .filter(p => p.sessionId === currentSessionId.value)
+      .sort((a, b) => a.createdAt - b.createdAt)
+  }
+
+  /**
+   * 响应授权请求
+   * @param permissionId 授权请求ID
+   * @param approved 是否批准
+   */
+  function respondPermission(permissionId: string, approved: boolean): boolean {
+    const pending = pendingPermissions.get(permissionId)
+    if (!pending) {
+      log.warn(`[RequestPermission] 授权请求不存在或已响应: ${permissionId}`)
+      return false
+    }
+
+    log.info(`[RequestPermission] 用户响应授权请求: ${permissionId}, approved=${approved}`)
+    pending.resolve({ approved })
+    return true
+  }
+
+  /**
+   * 取消授权请求（用户关闭对话框等情况）
+   * @param permissionId 授权请求ID
+   */
+  function cancelPermission(permissionId: string): boolean {
+    const pending = pendingPermissions.get(permissionId)
+    if (!pending) {
+      log.warn(`[RequestPermission] 授权请求不存在或已响应: ${permissionId}`)
+      return false
+    }
+
+    log.info(`[RequestPermission] 用户取消授权请求: ${permissionId}`)
+    pending.reject(new Error('User cancelled'))
+    return true
+  }
 
   return {
     sessions,
@@ -2256,6 +2506,16 @@ export const useSessionStore = defineStore('session', () => {
     startRequestTracking,
     addTokenUsage,
     getRequestStats,
-    requestTracker
+    requestTracker,
+    // AskUserQuestion 相关
+    pendingQuestions,
+    getCurrentPendingQuestions,
+    answerQuestion,
+    cancelQuestion,
+    // RequestPermission 授权相关
+    pendingPermissions,
+    getCurrentPendingPermissions,
+    respondPermission,
+    cancelPermission
   }
 })
