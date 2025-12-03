@@ -14,7 +14,8 @@ import java.util.UUID
 class CodexStreamAdapter(
     private val idGenerator: () -> String = { UUID.randomUUID().toString() }
 ) {
-    private val itemsBuffer = mutableMapOf<String, ThreadItem>()
+    private val itemsBuffer = mutableMapOf<Int, ThreadItem>()
+    private var indexCounter = 0
 
     fun convert(event: ThreadEvent): List<NormalizedStreamEvent> {
         val result = mutableListOf<NormalizedStreamEvent>()
@@ -34,37 +35,37 @@ class CodexStreamAdapter(
 
             "item.started" -> {
                 val item = event.item ?: return result
-                val id = item.id ?: idGenerator()
-                itemsBuffer[id] = item
+                val index = indexCounter++
+                itemsBuffer[index] = item
                 result += ContentStartedEvent(
                     provider = AiAgentProvider.CODEX,
-                id = id,
+                    index = index,
                     contentType = item.type
                 )
             }
 
             "item.updated" -> {
                 val item = event.item ?: return result
-                val id = item.id ?: return result
-                itemsBuffer[id] = item
+                // 找到对应的 index
+                val index = itemsBuffer.entries.find { it.value.id == item.id }?.key ?: return result
+                itemsBuffer[index] = item
                 extractItemDelta(item)?.let { delta ->
                     result += ContentDeltaEvent(
                         provider = AiAgentProvider.CODEX,
-                        id = id,
+                        index = index,
                         delta = delta
                     )
                 }
             }
 
             "item.completed" -> {
-                val id = event.item?.id
-                val buffered = id?.let { itemsBuffer.remove(it) }
-                val item = event.item ?: buffered
-                if (item != null) {
-                    val finalId = item.id ?: idGenerator()
+                val item = event.item ?: return result
+                val index = itemsBuffer.entries.find { it.value.id == item.id }?.key
+                if (index != null) {
+                    itemsBuffer.remove(index)
                     result += ContentCompletedEvent(
                         provider = AiAgentProvider.CODEX,
-                        id = finalId,
+                        index = index,
                         content = convertThreadItem(item)
                     )
                 }

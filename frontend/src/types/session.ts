@@ -76,6 +76,9 @@ export interface SessionState {
 
   // 工具输入 JSON 累积器（每个会话独立）
   toolInputJsonAccumulator: Map<string, string>
+
+  // 最后一次错误信息（用于在输入框中显示）
+  lastError: string | null
 }
 
 /**

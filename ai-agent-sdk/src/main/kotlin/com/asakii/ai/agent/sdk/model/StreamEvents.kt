@@ -42,22 +42,23 @@ data class TurnStartedEvent(
 
 data class ContentStartedEvent(
     override val provider: AiAgentProvider,
-    val id: String,
+    val index: Int,
     val contentType: String,
     /** 工具名称（仅当 contentType 为 tool_use 类型时有值） */
-    val toolName: String? = null
+    val toolName: String? = null,
+    /** 初始内容块 */
+    val content: UnifiedContentBlock? = null
 ) : NormalizedStreamEvent
 
 data class ContentDeltaEvent(
     override val provider: AiAgentProvider,
-    val id: String,
-    val delta: ContentDeltaPayload,
-    val index: Int = 0  // 内容块索引，用于前端增量更新
+    val index: Int,
+    val delta: ContentDeltaPayload
 ) : NormalizedStreamEvent
 
 data class ContentCompletedEvent(
     override val provider: AiAgentProvider,
-    val id: String,
+    val index: Int,
     val content: UnifiedContentBlock
 ) : NormalizedStreamEvent
 
@@ -86,6 +87,7 @@ data class ResultSummaryEvent(
 
 data class AssistantMessageEvent(
     override val provider: AiAgentProvider,
+    val id: String? = null,
     val content: List<UnifiedContentBlock>,
     val model: String? = null,
     val tokenUsage: UnifiedUsage? = null
@@ -155,6 +157,7 @@ data class UiError(
  * 在流式响应结束后发送，包含完整的内容块列表
  */
 data class UiAssistantMessage(
+    val id: String? = null,
     val content: List<UnifiedContentBlock>
 ) : UiStreamEvent
 

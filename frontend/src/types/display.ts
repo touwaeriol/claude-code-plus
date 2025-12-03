@@ -121,6 +121,14 @@ export interface SystemMessage extends BaseDisplayItem {
 }
 
 /**
+ * 错误结果（当 result.is_error 为 true 时显示）
+ */
+export interface ErrorResult extends BaseDisplayItem {
+  displayType: 'errorResult'
+  message: string
+}
+
+/**
  * 思考内容
  */
 export interface ThinkingContent extends BaseDisplayItem {
@@ -469,6 +477,7 @@ export type DisplayItem =
   | ThinkingContent
   | ToolCall
   | SystemMessage
+  | ErrorResult
 
 // ============ 类型守卫 ============
 

@@ -76,31 +76,31 @@ data class ToolPermissionContext(
 )
 
 /**
+ * Union type for permission results.
+ */
+sealed interface PermissionResult {
+    val behavior: String
+}
+
+/**
  * Allow permission result.
  */
 @Serializable
 data class PermissionResultAllow(
-    val behavior: String = "allow",
+    override val behavior: String = "allow",
     val updatedInput: Map<String, @kotlinx.serialization.Contextual Any>? = null,
     val updatedPermissions: List<PermissionUpdate>? = null
-)
+) : PermissionResult
 
 /**
  * Deny permission result.
  */
 @Serializable
 data class PermissionResultDeny(
-    val behavior: String = "deny",
+    override val behavior: String = "deny",
     val message: String = "",
     val interrupt: Boolean = false
-)
-
-/**
- * Union type for permission results.
- */
-sealed interface PermissionResult {
-    val behavior: String
-}
+) : PermissionResult
 
 /**
  * Tool permission callback function type.

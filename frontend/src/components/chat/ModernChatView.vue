@@ -206,7 +206,7 @@ const uiState = ref<ChatUiState>({
   actualModelId: undefined,
   selectedModel: 'DEFAULT' as AiModel,
   selectedPermissionMode: 'default' as PermissionMode,
-  skipPermissions: true,
+  skipPermissions: false,  // 初始值，会在 onMounted 中从 settingsStore 同步
   autoCleanupContexts: false
 })
 
@@ -265,6 +265,9 @@ const chatInputRef = ref<InstanceType<typeof ChatInput>>()
 // 生命周期钩子
 onMounted(async () => {
   console.log('ModernChatView mounted')
+
+  // 从 settingsStore 同步 skipPermissions 初始值
+  uiState.value.skipPermissions = settingsStore.settings.skipPermissions
 
   await detectEnvironment()
   if (isIdeMode.value) {

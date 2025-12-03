@@ -29,6 +29,7 @@ data class UserMessage(
 @Serializable
 @SerialName("assistant")
 data class AssistantMessage(
+    val id: String? = null,
     val content: List<ContentBlock>,
     val model: String,
     @SerialName("token_usage")

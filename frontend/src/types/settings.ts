@@ -74,7 +74,7 @@ export const DEFAULT_SETTINGS: Settings = {
   temperature: null,
   verbose: false,
   apiKey: null,
-  skipPermissions: true  // 默认跳过权限确认
+  skipPermissions: false  // 默认不跳过权限检查，需要用户授权
 }
 
 /**

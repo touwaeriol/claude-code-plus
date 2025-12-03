@@ -111,10 +111,9 @@ export const useSessionStore = defineStore('session', () => {
   const pendingPermissions = reactive(new Map<string, PendingPermissionRequest>())
 
   function buildConnectOptions(overrides: Partial<ConnectOptions> = {}): ConnectOptions {
-    // 只传入用户指定的参数，不添加任何默认值
+    // dangerouslySkipPermissions 由调用方通过 overrides 传入，不再硬编码
     return {
       includePartialMessages: true,
-      dangerouslySkipPermissions: true,
       allowDangerouslySkipPermissions: true,
       ...overrides
     }
@@ -158,7 +157,8 @@ export const useSessionStore = defineStore('session', () => {
         contexts: [],
         scrollPosition: 0
       },
-      toolInputJsonAccumulator: new Map()
+      toolInputJsonAccumulator: new Map(),
+      lastError: null
     })
   }
 
@@ -284,7 +284,7 @@ export const useSessionStore = defineStore('session', () => {
     modelId: MODEL_CAPABILITIES[BaseModel.OPUS_45].modelId,
     thinkingEnabled: MODEL_CAPABILITIES[BaseModel.OPUS_45].defaultThinkingEnabled,
     permissionMode: 'default' as RpcPermissionMode,
-    skipPermissions: true
+    skipPermissions: false  // 默认不跳过权限检查，需要用户授权
   }
 
   /**
@@ -306,7 +306,8 @@ export const useSessionStore = defineStore('session', () => {
       const options = buildConnectOptions({
         model: initialSettings.modelId,
         thinkingEnabled: initialSettings.thinkingEnabled,
-        permissionMode: initialSettings.permissionMode
+        permissionMode: initialSettings.permissionMode,
+        dangerouslySkipPermissions: initialSettings.skipPermissions
       })
 
       // 设置连接状态
@@ -391,6 +392,7 @@ export const useSessionStore = defineStore('session', () => {
         model: initialSettings.modelId,
         thinkingEnabled: initialSettings.thinkingEnabled,
         permissionMode: initialSettings.permissionMode,
+        dangerouslySkipPermissions: initialSettings.skipPermissions,
         continueConversation: true,
         resume: externalSessionId
       })
@@ -553,22 +555,24 @@ export const useSessionStore = defineStore('session', () => {
     if (message.role === 'assistant') {
       const streamingMessage = findStreamingAssistantMessage(sessionState)
       if (streamingMessage) {
-        // 将最终 assistant 消息合并到当前流式消息，避免重复追加
-        mergeAssistantMessage(streamingMessage, message)
+        // 流式消息已经通过 delta 事件构建了完整内容
+        // 只需要用完整消息的内容替换（确保最终一致性），不重新同步 displayItems
+        streamingMessage.content = message.content
         streamingMessage.isStreaming = false
         streamingMessage.metadata = { ...streamingMessage.metadata, ...message.metadata }
-        syncDisplayItemsForMessage(streamingMessage, sessionState)
+        // 不调用 syncDisplayItemsForMessage，避免重复创建 displayItems
         touchSession(sessionId)
         return
       }
 
-      // 检查最后一条消息的 ID 是否相同
-      const lastMsg = sessionState.messages[sessionState.messages.length - 1]
-      if (lastMsg && lastMsg.id === message.id) {
-        log.debug(`跳过重复的 assistant 消息: ${message.id}`)
+      // 检查是否有相同 ID 的消息，有则覆盖
+      const existingIndex = sessionState.messages.findIndex(m => m.id === message.id)
+      if (existingIndex !== -1) {
+        sessionState.messages[existingIndex].content = message.content
+        sessionState.messages[existingIndex].isStreaming = false
+        touchSession(sessionId)
         return
       }
-      // ID 不同，继续处理（可能是 StreamEvent 丢失的情况）
     }
 
     // 只处理非 assistant 消息
@@ -1605,6 +1609,21 @@ export const useSessionStore = defineStore('session', () => {
       log.debug('handleResultMessage: 结束流式 assistant 消息')
     }
 
+    // 处理错误：如果 is_error 为 true，添加错误 DisplayItem
+    if (resultData.is_error && resultData.result) {
+      sessionState.lastError = resultData.result
+      log.warn(`handleResultMessage: 后端返回错误: ${resultData.result}`)
+
+      // 添加错误结果到 displayItems
+      const errorItem: DisplayItem = {
+        id: `error-${Date.now()}`,
+        displayType: 'errorResult',
+        timestamp: Date.now(),
+        message: resultData.result
+      }
+      sessionState.displayItems.push(errorItem)
+    }
+
     // 标记生成完成
     setSessionGenerating(sessionId, false)
     requestTracker.delete(sessionId)
@@ -2458,6 +2477,27 @@ export const useSessionStore = defineStore('session', () => {
     return true
   }
 
+  // ============================================================================
+  // 错误状态管理
+  // ============================================================================
+
+  /**
+   * 当前会话的最后一次错误
+   */
+  const currentLastError = computed(() => {
+    return currentSession.value?.lastError ?? null
+  })
+
+  /**
+   * 清除当前会话的错误
+   */
+  function clearCurrentError() {
+    const session = currentSession.value
+    if (session) {
+      session.lastError = null
+    }
+  }
+
   return {
     sessions,
     activeTabs,
@@ -2516,6 +2556,9 @@ export const useSessionStore = defineStore('session', () => {
     pendingPermissions,
     getCurrentPendingPermissions,
     respondPermission,
-    cancelPermission
+    cancelPermission,
+    // 错误状态管理
+    currentLastError,
+    clearCurrentError
   }
 })
