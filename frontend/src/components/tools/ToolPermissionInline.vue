@@ -170,8 +170,8 @@ onMounted(() => {
 
 .permission-options {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .btn-option {
@@ -180,7 +180,7 @@ onMounted(() => {
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s ease;
-  white-space: nowrap;
+  text-align: left;
 }
 
 .btn-allow {

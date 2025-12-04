@@ -91,7 +91,7 @@ function handleAllowWithUpdate(update: PermissionUpdate) {
   if (pendingPermission.value) {
     sessionStore.respondPermission(pendingPermission.value.id, {
       approved: true,
-      permissionUpdate: update
+      permissionUpdates: [update]  // 包装为数组，与官方 SDK 保持一致
     })
   }
 }

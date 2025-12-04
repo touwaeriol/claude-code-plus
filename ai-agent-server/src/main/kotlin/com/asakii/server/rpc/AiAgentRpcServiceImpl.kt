@@ -16,6 +16,9 @@ import com.asakii.claude.agent.sdk.types.PermissionResultAllow
 import com.asakii.claude.agent.sdk.types.PermissionResultDeny
 import com.asakii.claude.agent.sdk.types.PermissionUpdate as SdkPermissionUpdate
 import com.asakii.claude.agent.sdk.types.PermissionUpdateDestination as SdkPermissionUpdateDestination
+import com.asakii.claude.agent.sdk.types.PermissionUpdateType as SdkPermissionUpdateType
+import com.asakii.claude.agent.sdk.types.PermissionBehavior as SdkPermissionBehavior
+import com.asakii.claude.agent.sdk.types.PermissionRuleValue as SdkPermissionRuleValue
 import com.asakii.claude.agent.sdk.types.CanUseTool
 import com.asakii.claude.agent.sdk.types.ToolType
 import com.asakii.codex.agent.sdk.CodexClientOptions
@@ -24,7 +27,12 @@ import com.asakii.codex.agent.sdk.ThreadOptions
 import com.asakii.rpc.api.*
 import com.asakii.server.config.AiAgentServiceConfig
 import com.asakii.server.mcp.PermissionResponse
+import com.asakii.server.mcp.PermissionUpdate as McpPermissionUpdate
 import com.asakii.server.mcp.PermissionUpdateDestination
+import com.asakii.server.mcp.PermissionUpdateType as McpPermissionUpdateType
+import com.asakii.server.mcp.PermissionBehavior as McpPermissionBehavior
+import com.asakii.server.mcp.PermissionMode as McpPermissionMode
+import com.asakii.server.mcp.PermissionRuleValue as McpPermissionRuleValue
 import com.asakii.server.mcp.UserInteractionMcpServer
 import com.asakii.server.settings.ClaudeSettingsLoader
 import kotlinx.coroutines.CancellationException
@@ -78,6 +86,53 @@ class AiAgentRpcServiceImpl(
     private val userInteractionServer = UserInteractionMcpServer().apply {
         clientCaller?.let { setClientCaller(it) }
     }
+
+    /**
+     * 将 MCP 权限更新转换为 SDK 权限更新
+     */
+    private fun McpPermissionUpdate.toSdkPermissionUpdate(): SdkPermissionUpdate {
+        return SdkPermissionUpdate(
+            type = when (this.type) {
+                McpPermissionUpdateType.ADD_RULES -> SdkPermissionUpdateType.ADD_RULES
+                McpPermissionUpdateType.REPLACE_RULES -> SdkPermissionUpdateType.REPLACE_RULES
+                McpPermissionUpdateType.REMOVE_RULES -> SdkPermissionUpdateType.REMOVE_RULES
+                McpPermissionUpdateType.SET_MODE -> SdkPermissionUpdateType.SET_MODE
+                McpPermissionUpdateType.ADD_DIRECTORIES -> SdkPermissionUpdateType.ADD_DIRECTORIES
+                McpPermissionUpdateType.REMOVE_DIRECTORIES -> SdkPermissionUpdateType.REMOVE_DIRECTORIES
+            },
+            rules = this.rules?.map { rule ->
+                SdkPermissionRuleValue(
+                    toolName = rule.toolName,
+                    ruleContent = rule.ruleContent
+                )
+            },
+            behavior = this.behavior?.let { b ->
+                when (b) {
+                    McpPermissionBehavior.ALLOW -> SdkPermissionBehavior.ALLOW
+                    McpPermissionBehavior.DENY -> SdkPermissionBehavior.DENY
+                    McpPermissionBehavior.ASK -> SdkPermissionBehavior.ASK
+                }
+            },
+            mode = this.mode?.let { m ->
+                when (m) {
+                    McpPermissionMode.DEFAULT -> PermissionMode.DEFAULT
+                    McpPermissionMode.ACCEPT_EDITS -> PermissionMode.ACCEPT_EDITS
+                    McpPermissionMode.PLAN -> PermissionMode.PLAN
+                    McpPermissionMode.BYPASS_PERMISSIONS -> PermissionMode.BYPASS_PERMISSIONS
+                    McpPermissionMode.DONT_ASK -> PermissionMode.DONT_ASK
+                }
+            },
+            directories = this.directories,
+            destination = this.destination?.let { d ->
+                when (d) {
+                    PermissionUpdateDestination.USER_SETTINGS -> SdkPermissionUpdateDestination.USER_SETTINGS
+                    PermissionUpdateDestination.PROJECT_SETTINGS -> SdkPermissionUpdateDestination.PROJECT_SETTINGS
+                    PermissionUpdateDestination.LOCAL_SETTINGS -> SdkPermissionUpdateDestination.LOCAL_SETTINGS
+                    PermissionUpdateDestination.SESSION -> SdkPermissionUpdateDestination.SESSION
+                }
+            }
+        )
+    }
     
     // 鍚屾鎺у埗鐢卞墠绔礋璐ｏ紝鍚庣鐩存帴杞彂缁?SDK
 
@@ -109,12 +164,15 @@ class AiAgentRpcServiceImpl(
 
                 val capabilities = newClient.getCapabilities().toRpcCapabilities()
 
+        val projectCwd = ideTools.getProjectPath().takeIf { it.isNotBlank() }
+
         return RpcConnectResult(
             sessionId = sessionId,
             provider = rpcProvider,
             model = connectOptions.model,
             status = RpcSessionStatus.CONNECTED,
-            capabilities = capabilities
+            capabilities = capabilities,
+            cwd = projectCwd
         )
     }
 
@@ -375,16 +433,20 @@ class AiAgentRpcServiceImpl(
                         }
                     )
                     if (response.approved) {
-                        // 记录权限更新（如果有）
-                        response.permissionUpdate?.let { update ->
+                        // 转换权限更新为 SDK 格式
+                        val sdkPermissionUpdates = response.permissionUpdates?.map { update ->
                             logger.info("📝 [canUseTool] 权限更新: type=${update.type}, destination=${update.destination}")
                             // 非会话级权限更新需要持久化（TODO: 实现持久化服务）
                             if (update.destination != PermissionUpdateDestination.SESSION) {
                                 logger.info("⚠️ [canUseTool] 非会话级权限更新暂未实现持久化: ${update.destination}")
                             }
+                            update.toSdkPermissionUpdate()
                         }
-                        logger.info("✅ [canUseTool] 用户已授权: toolName=$toolName, toolUseId=$toolUseId")
-                        PermissionResultAllow(updatedInput = input)
+                        logger.info("✅ [canUseTool] 用户已授权: toolName=$toolName, toolUseId=$toolUseId, permissionUpdates=${sdkPermissionUpdates?.size ?: 0}")
+                        PermissionResultAllow(
+                            updatedInput = input,
+                            updatedPermissions = sdkPermissionUpdates
+                        )
                     } else {
                         val reason = response.denyReason ?: "用户拒绝授权"
                         logger.info("❌ [canUseTool] 用户拒绝授权: toolName=$toolName, toolUseId=$toolUseId, reason=$reason")

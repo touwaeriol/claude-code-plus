@@ -951,7 +951,9 @@ export const useSessionStore = defineStore('session', () => {
       const newMessages = [...sessionState.messages]
       newMessages[lastIndex] = mergedMessage
       sessionState.messages = newMessages
-      sessionState.displayItems = convertToDisplayItems(newMessages, sessionState.pendingToolCalls)
+      // 🔧 修复：不要完全重建 displayItems，而是增量更新该消息的 displayItems
+      // 这样不会覆盖之前流式创建的 thinking/text displayItems
+      syncDisplayItemsForMessage(mergedMessage, sessionState)
       log.debug(`合并 assistant 消息, tool数量: ${newMessage.content.length}`)
     } else {
       // 添加新消息
@@ -1372,9 +1374,21 @@ export const useSessionStore = defineStore('session', () => {
       }
     }
 
-    // 如果找不到，说明还没创建，需要同步一次
-    console.log('🔍 [updateTextDisplayItemIncrementally] ❌ 未找到 displayItem，调用 syncDisplayItemsForMessage')
-    syncDisplayItemsForMessage(message, sessionState)
+    // 🔧 修复：如果找不到 text DisplayItem，创建一个新的
+    // 这解决了 content_block_start 时 text 为空导致未创建 DisplayItem 的问题
+    {
+      const newTextItem: AssistantText = {
+        displayType: 'assistantText',
+        id: expectedId,
+        content: newText,
+        timestamp: message.timestamp,
+        isLastInMessage: false,
+        stats: undefined,
+        isStreaming: true
+      }
+      sessionState.displayItems.push(newTextItem)
+      console.log(`🔧 [updateTextDisplayItemIncrementally] 创建新的 text DisplayItem: ${expectedId}`)
+    }
   }
 
   /**
@@ -1398,8 +1412,19 @@ export const useSessionStore = defineStore('session', () => {
       }
     }
 
-    // 如果找不到，同步一次
-    syncDisplayItemsForMessage(message, sessionState)
+    // 🔧 修复：如果找不到 thinking DisplayItem，创建一个新的
+    // 这解决了 content_block_start 时 thinking 为空导致未创建 DisplayItem 的问题
+    // 流式事件是按顺序来的，直接追加到末尾即可
+    {
+      const newThinkingItem: ThinkingContent = {
+        displayType: 'thinking',
+        id: expectedId,
+        content: newThinking,
+        timestamp: message.timestamp
+      }
+      sessionState.displayItems.push(newThinkingItem)
+      console.log(`🔧 [updateThinkingDisplayItemIncrementally] 创建新的 thinking DisplayItem: ${expectedId}`)
+    }
   }
 
   /**
@@ -1409,74 +1434,51 @@ export const useSessionStore = defineStore('session', () => {
    *
    * 🔧 关键：按照 message.content 的顺序来同步 displayItems，确保顺序正确
    */
+  /**
+   * 同步消息到 displayItems
+   *
+   * 核心原则：displayItems 只增不减
+   * 1. 流式片段 → 创建 DisplayItem 对象，追加到 displayItems
+   * 2. 后续片段 → 更新该对象的 content（原地更新）
+   * 3. 完整消息 → 替换该对象的 content，不删除对象
+   * 4. 新消息 → 追加新对象到 displayItems 末尾
+   */
   function syncDisplayItemsForMessage(message: Message, sessionState: SessionState) {
-    // 1. 找到该消息对应的所有 displayItems 的索引范围
-    let messageStartIndex = -1
-    let messageEndIndex = -1
-    
-    for (let i = 0; i < sessionState.displayItems.length; i++) {
-      const item = sessionState.displayItems[i]
-      const isMessageItem =
-        (item.displayType === 'assistantText' && item.id.startsWith(`${message.id}-text-`)) ||
-        (item.displayType === 'thinking' && item.id.startsWith(`${message.id}-thinking-`)) ||
-        (item.displayType === 'toolCall' && message.content.some(block =>
-          isToolUseBlock(block) && block.id === item.id
-        ))
-      
-      if (isMessageItem) {
-        if (messageStartIndex === -1) {
-          messageStartIndex = i
-        }
-        messageEndIndex = i
-      } else if (messageStartIndex !== -1) {
-        // 已经找到了消息的结束位置
-        break
-      }
+    // 1. 构建现有 displayItems 的索引（按 id 查找）
+    const existingItemsMap = new Map<string, DisplayItem>()
+    for (const item of sessionState.displayItems) {
+      existingItemsMap.set(item.id, item)
     }
 
     // 2. 收集所有文本块的索引（用于标记最后一个文本块）
     const textBlockIndices: number[] = []
     message.content.forEach((block, idx) => {
-      if (isTextBlock(block) && block.text.trim()) {
+      if (isTextBlock(block)) {
         textBlockIndices.push(idx)
       }
     })
     const lastTextBlockIndex = textBlockIndices.length > 0 ? textBlockIndices[textBlockIndices.length - 1] : -1
 
-    // 3. 按照 message.content 的顺序，构建新的 displayItems
-    const newDisplayItems: DisplayItem[] = []
-    const existingItemsMap = new Map<string, DisplayItem>()
-    
-    // 收集现有的 displayItems（用于复用）
-    if (messageStartIndex !== -1 && messageEndIndex !== -1) {
-      for (let i = messageStartIndex; i <= messageEndIndex; i++) {
-        const item = sessionState.displayItems[i]
-        existingItemsMap.set(item.id, item)
-      }
-    }
-
-    // 按照 message.content 的顺序构建
+    // 3. 遍历 message.content，更新现有或追加新的 DisplayItem
     const skipTextIndices = computeToolTextSkip(message)
 
     for (let blockIdx = 0; blockIdx < message.content.length; blockIdx++) {
       const block = message.content[blockIdx]
 
-      if (isTextBlock(block) && block.text.trim()) {
+      if (isTextBlock(block)) {
         if (skipTextIndices.has(blockIdx)) {
           continue
         }
         const textBlock = block as TextBlock
         const expectedId = `${message.id}-text-${blockIdx}`
         const existingItem = existingItemsMap.get(expectedId)
-        
+
         if (existingItem && isAssistantText(existingItem)) {
-          newDisplayItems.push({
-            ...existingItem,
-            content: textBlock.text,
-            isLastInMessage: blockIdx === lastTextBlockIndex
-          })
+          // ✅ 原地更新 content，不删除对象
+          existingItem.content = textBlock.text
+          existingItem.isLastInMessage = blockIdx === lastTextBlockIndex
         } else {
-          // 创建新的文本块
+          // ✅ 新的文本块，追加到末尾
           const isLastTextBlock = blockIdx === lastTextBlockIndex
           const assistantText = {
             displayType: 'assistantText' as const,
@@ -1486,19 +1488,21 @@ export const useSessionStore = defineStore('session', () => {
             isLastInMessage: isLastTextBlock,
             stats: undefined
           }
-          newDisplayItems.push(assistantText)
+          sessionState.displayItems.push(assistantText)
         }
       } else if (block.type === 'thinking') {
         const expectedId = `${message.id}-thinking-${blockIdx}`
         const existingItem = existingItemsMap.get(expectedId)
 
         if (existingItem && isThinkingContent(existingItem)) {
-          newDisplayItems.push({
-            ...existingItem,
-            content: block.thinking || ''
-          })
+          // ✅ 原地更新 content，不删除对象
+          existingItem.content = block.thinking || ''
+          if (block.signature) {
+            existingItem.signature = block.signature
+          }
         } else {
-          newDisplayItems.push({
+          // ✅ 新的 thinking 块，追加到末尾
+          sessionState.displayItems.push({
             displayType: 'thinking' as const,
             id: expectedId,
             content: block.thinking || '',
@@ -1507,40 +1511,25 @@ export const useSessionStore = defineStore('session', () => {
           })
         }
       } else if (isToolUseBlock(block)) {
-        // 工具调用块：复用现有的或创建新的
         const existingItem = existingItemsMap.get(block.id) as ToolCall | undefined
         const toolUseBlock = block as ToolUseBlock
 
         if (existingItem && existingItem.displayType === 'toolCall') {
-          // 🔧 修复：使用 Object.assign 更新属性，保持引用一致性
-          // 这样 pendingToolCalls 和 displayItems 共享同一对象，后续状态更新能正确反映
+          // ✅ 原地更新 input，不删除对象
           if (toolUseBlock.input !== undefined &&
               Object.keys(toolUseBlock.input as Record<string, unknown>).length > 0) {
             Object.assign(existingItem, { input: toolUseBlock.input })
           }
-          newDisplayItems.push(existingItem)
         } else {
-          // 创建新的工具调用
-          const toolCall = convertMessageToDisplayItems(message, sessionState.pendingToolCalls)
-            .find(item => item.displayType === 'toolCall' && item.id === block.id)
-          if (toolCall) {
-            newDisplayItems.push(toolCall)
-          }
+          // ✅ 新的工具调用，追加到末尾
+          const toolCall = createToolCall(toolUseBlock as ToolUseContent, sessionState.pendingToolCalls)
+          sessionState.displayItems.push(toolCall)
         }
       }
     }
 
-    // 4. 替换旧的 displayItems
-    if (messageStartIndex !== -1 && messageEndIndex !== -1) {
-      // 删除旧的 displayItems，插入新的
-      sessionState.displayItems.splice(messageStartIndex, messageEndIndex - messageStartIndex + 1, ...newDisplayItems)
-    } else {
-      // 如果找不到旧的位置，直接追加到末尾
-      sessionState.displayItems.push(...newDisplayItems)
-    }
-
-    // 5. 触发响应式更新
-    sessionState.displayItems = [...sessionState.displayItems]
+    // 4. 触发响应式更新（不改变数组引用，Vue 会自动检测到属性变化）
+    // 如果需要强制更新，可以用 sessionState.displayItems = [...sessionState.displayItems]
   }
 
   /**
@@ -2507,9 +2496,13 @@ export const useSessionStore = defineStore('session', () => {
 
     log.info(`[RequestPermission] 用户响应授权请求: ${permissionId}, approved=${response.approved}`)
 
-    // 如果选择了会话级权限更新，记录到本地
-    if (response.approved && response.permissionUpdate?.destination === 'session') {
-      addSessionPermissionRule(pending.sessionId, response.permissionUpdate)
+    // 如果选择了会话级权限更新，记录到本地（支持多个权限更新）
+    if (response.approved && response.permissionUpdates?.length) {
+      for (const update of response.permissionUpdates) {
+        if (update.destination === 'session') {
+          addSessionPermissionRule(pending.sessionId, update)
+        }
+      }
     }
 
     pending.resolve(response)

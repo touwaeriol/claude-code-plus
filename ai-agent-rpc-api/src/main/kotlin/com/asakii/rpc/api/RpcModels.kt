@@ -143,7 +143,8 @@ data class RpcConnectResult(
     val provider: RpcProvider,
     val status: RpcSessionStatus = RpcSessionStatus.CONNECTED,
     val model: String? = null,
-    val capabilities: RpcCapabilities? = null
+    val capabilities: RpcCapabilities? = null,
+    val cwd: String? = null
 )
 
 /**

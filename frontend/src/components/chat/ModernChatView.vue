@@ -60,9 +60,6 @@
 
       <!-- AskUserQuestion 交互式问答组件 -->
       <AskUserQuestionInteractive />
-
-      <!-- 权限授权弹窗（作为内联 UI 的备用） -->
-      <ToolPermissionInteractive />
     </div>
 
     <!-- 错误对话框 -->
@@ -153,7 +150,6 @@ import SessionListOverlay from './SessionListOverlay.vue'
 import SessionStatsBar from './SessionStatsBar.vue'
 import PendingMessageQueue from './PendingMessageQueue.vue'
 import AskUserQuestionInteractive from '@/components/tools/AskUserQuestionInteractive.vue'
-import ToolPermissionInteractive from '@/components/tools/ToolPermissionInteractive.vue'
 import { calculateToolStats } from '@/utils/toolStatistics'
 import type { ContentBlock } from '@/types/message'
 import type { ContextReference, AiModel, PermissionMode, TokenUsage as EnhancedTokenUsage } from '@/types/enhancedMessage'

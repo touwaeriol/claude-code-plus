@@ -32,8 +32,8 @@ export interface PendingPermissionRequest {
 export interface PermissionResponse {
   /** 是否批准 */
   approved: boolean
-  /** 用户选择的权限更新（如果选择了建议） */
-  permissionUpdate?: PermissionUpdate
+  /** 用户选择的权限更新列表（如果选择了建议，与官方 SDK 保持一致） */
+  permissionUpdates?: PermissionUpdate[]
   /** 拒绝原因（如果拒绝） */
   denyReason?: string
 }
