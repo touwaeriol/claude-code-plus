@@ -23,16 +23,8 @@ export enum MessageStatus {
   FAILED = 'FAILED'
 }
 
-/**
- * 工具调用状态
- */
-export enum ToolCallStatus {
-  PENDING = 'PENDING',
-  RUNNING = 'RUNNING',
-  SUCCESS = 'SUCCESS',
-  FAILED = 'FAILED',
-  CANCELLED = 'CANCELLED'
-}
+// ToolCallStatus 从 display.ts 导入
+export { ToolCallStatus } from './display'
 
 /**
  * AI 模型枚举
@@ -44,8 +36,8 @@ export enum AiModel {
   OPUS_PLAN = 'OPUS_PLAN'
 }
 
-import type { ContextReference } from './display'
-export type { ContextReference }
+import type { ContextReference, ToolCall } from './display'
+export type { ContextReference, ToolCall }
 // PermissionMode 统一使用 RpcPermissionMode，从 rpc.ts 导入
 export type { RpcPermissionMode as PermissionMode } from './rpc'
 export type { ContextDisplayType } from './display'
@@ -63,30 +55,7 @@ export interface ImageReference {
   size?: number
 }
 
-/**
- * 工具调用结果
- */
-export type ToolResult =
-  | { type: 'success'; output: string; summary?: string; details?: string; affectedFiles?: string[] }
-  | { type: 'failure'; error: string; details?: string }
-  | { type: 'fileSearch'; files: any[]; totalCount: number }
-  | { type: 'fileRead'; content: string; lineCount: number; language?: string }
-  | { type: 'fileEdit'; oldContent: string; newContent: string; changedLines: [number, number] }
-  | { type: 'command'; output: string; exitCode: number; duration: number }
-
-/**
- * 工具调用信息
- */
-export interface ToolCall {
-  id: string
-  name: string
-  displayName?: string
-  status: ToolCallStatus
-  result?: ToolResult
-  startTime: number
-  endTime?: number
-  viewModel?: any  // 对应 Kotlin 的 ToolCallViewModel
-}
+// ToolCall 和 ToolResult 已从 display.ts 导入
 
 /**
  * 消息时间线元素

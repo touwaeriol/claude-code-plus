@@ -3,7 +3,7 @@
  * 保持现有代码兼容
  */
 
-import { i18n, setLocale as i18nSetLocale, getLocale as i18nGetLocale, type SupportedLocale } from '@/i18n'
+import { setLocale as i18nSetLocale, getLocale as i18nGetLocale, type SupportedLocale } from '@/i18n'
 
 export type { SupportedLocale }
 

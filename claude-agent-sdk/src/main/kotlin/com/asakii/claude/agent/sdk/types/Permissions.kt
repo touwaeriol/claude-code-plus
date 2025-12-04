@@ -1,35 +1,40 @@
 package com.asakii.claude.agent.sdk.types
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /**
  * Permission modes for tool usage.
  */
+@Serializable
 enum class PermissionMode {
-    DEFAULT,
-    ACCEPT_EDITS,
-    PLAN,
-    BYPASS_PERMISSIONS,
-    DONT_ASK
+    @SerialName("default") DEFAULT,
+    @SerialName("acceptEdits") ACCEPT_EDITS,
+    @SerialName("plan") PLAN,
+    @SerialName("bypassPermissions") BYPASS_PERMISSIONS,
+    @SerialName("dontAsk") DONT_ASK
 }
 
 /**
  * Permission behavior types.
  */
-enum class PermissionBehavior {
-    ALLOW,
-    DENY,
-    ASK
+@Serializable
+enum class PermissionBehavior(val value: String) {
+    @SerialName("allow") ALLOW("allow"),
+    @SerialName("deny") DENY("deny"),
+    @SerialName("ask") ASK("ask")
 }
 
 /**
  * Permission update destination.
  */
+@Serializable
 enum class PermissionUpdateDestination {
-    USER_SETTINGS,
-    PROJECT_SETTINGS,
-    LOCAL_SETTINGS,
-    SESSION
+    @SerialName("userSettings") USER_SETTINGS,
+    @SerialName("projectSettings") PROJECT_SETTINGS,
+    @SerialName("localSettings") LOCAL_SETTINGS,
+    @SerialName("session") SESSION
 }
 
 /**
@@ -57,13 +62,14 @@ data class PermissionUpdate(
 /**
  * Permission update types.
  */
+@Serializable
 enum class PermissionUpdateType {
-    ADD_RULES,
-    REPLACE_RULES,
-    REMOVE_RULES,
-    SET_MODE,
-    ADD_DIRECTORIES,
-    REMOVE_DIRECTORIES
+    @SerialName("addRules") ADD_RULES,
+    @SerialName("replaceRules") REPLACE_RULES,
+    @SerialName("removeRules") REMOVE_RULES,
+    @SerialName("setMode") SET_MODE,
+    @SerialName("addDirectories") ADD_DIRECTORIES,
+    @SerialName("removeDirectories") REMOVE_DIRECTORIES
 }
 
 /**
@@ -79,7 +85,7 @@ data class ToolPermissionContext(
  * Union type for permission results.
  */
 sealed interface PermissionResult {
-    val behavior: String
+    val behavior: PermissionBehavior
 }
 
 /**
@@ -87,8 +93,8 @@ sealed interface PermissionResult {
  */
 @Serializable
 data class PermissionResultAllow(
-    override val behavior: String = "allow",
-    val updatedInput: Map<String, @kotlinx.serialization.Contextual Any>? = null,
+    override val behavior: PermissionBehavior = PermissionBehavior.ALLOW,
+    val updatedInput: Map<String, JsonElement>? = null,
     val updatedPermissions: List<PermissionUpdate>? = null
 ) : PermissionResult
 
@@ -97,12 +103,16 @@ data class PermissionResultAllow(
  */
 @Serializable
 data class PermissionResultDeny(
-    override val behavior: String = "deny",
+    override val behavior: PermissionBehavior = PermissionBehavior.DENY,
     val message: String = "",
     val interrupt: Boolean = false
 ) : PermissionResult
 
 /**
  * Tool permission callback function type.
+ * @param toolName 工具名称
+ * @param input 工具输入参数（JSON 对象）
+ * @param toolUseId 工具调用 ID（用于精确关联 UI）
+ * @param context 权限上下文
  */
-typealias CanUseTool = suspend (toolName: String, input: Map<String, Any>, context: ToolPermissionContext) -> PermissionResult
+typealias CanUseTool = suspend (toolName: String, input: Map<String, JsonElement>, toolUseId: String?, context: ToolPermissionContext) -> PermissionResult

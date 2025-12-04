@@ -406,40 +406,53 @@ class ControlProtocol(
      * Handle tool permission requests.
      */
     private suspend fun handlePermissionRequest(request: PermissionRequest): JsonElement {
-        val canUseTool = options.canUseTool 
+        val canUseTool = options.canUseTool
             ?: throw ControlProtocolException("No permission callback configured")
-        
-        // Convert input JsonElement to Map
-        val inputMap = when (val input = request.input) {
-            is JsonObject -> input.toMap().mapValues { (_, value) ->
-                when (value) {
-                    is JsonPrimitive -> value.contentOrNull ?: value.toString()
-                    else -> value.toString()
-                }
-            }
+
+        // 直接使用 JsonObject 的 Map<String, JsonElement>
+        val inputMap: Map<String, JsonElement> = when (val input = request.input) {
+            is JsonObject -> input.toMap()
             else -> throw ControlProtocolException("Permission input must be an object")
         }
-        
+
+        // 解析 permissionSuggestions
+        val suggestions: List<PermissionUpdate> = request.permissionSuggestions?.mapNotNull { element ->
+            try {
+                Json.decodeFromJsonElement<PermissionUpdate>(element)
+            } catch (e: Exception) {
+                null // 忽略解析失败的建议
+            }
+        } ?: emptyList()
+
         val context = ToolPermissionContext(
-            suggestions = emptyList() // TODO: Parse permission suggestions
+            suggestions = suggestions
         )
-        
-        val result = canUseTool(request.toolName, inputMap, context)
-        
+
+        val result = canUseTool(request.toolName, inputMap, request.toolUseId, context)
+
         return when (result) {
-            is PermissionResultAllow -> Json.encodeToJsonElement(
-                mapOf(
-                    "allow" to true,
-                    "input" to (result.updatedInput ?: inputMap)
-                )
-            )
-            is PermissionResultDeny -> Json.encodeToJsonElement(
-                mapOf(
-                    "allow" to false,
-                    "message" to result.message,
-                    "interrupt" to result.interrupt
-                )
-            )
+            is PermissionResultAllow -> {
+                buildJsonObject {
+                    put("behavior", result.behavior.value)
+                    put("updatedInput", JsonObject(result.updatedInput ?: inputMap))
+                    result.updatedPermissions?.let { permissions ->
+                        putJsonArray("updatedPermissions") {
+                            permissions.forEach { perm ->
+                                add(Json.encodeToJsonElement(perm))
+                            }
+                        }
+                    }
+                }
+            }
+            is PermissionResultDeny -> {
+                buildJsonObject {
+                    put("behavior", result.behavior.value)
+                    put("message", result.message)
+                    if (result.interrupt) {
+                        put("interrupt", result.interrupt)
+                    }
+                }
+            }
             else -> throw ControlProtocolException("Unknown permission result type")
         }
     }

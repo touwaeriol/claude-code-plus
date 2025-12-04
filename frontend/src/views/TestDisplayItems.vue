@@ -94,9 +94,8 @@ const mockDisplayItems: DisplayItem[] = [
       file_path: 'package.json'
     },
     result: {
-      type: 'success',
-      output: '{\n  "name": "claude-code-plus",\n  "version": "1.0.0",\n  "description": "Claude Code Plus"\n}',
-      summary: '读取成功'
+      type: 'tool_result',
+      content: '{\n  "name": "claude-code-plus",\n  "version": "1.0.0",\n  "description": "Claude Code Plus"\n}'
     }
   }),
 

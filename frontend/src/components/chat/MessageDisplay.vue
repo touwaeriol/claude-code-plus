@@ -2,7 +2,7 @@
   <!-- 用户消息 - 使用新的气泡组件 -->
   <UserMessageBubble
     v-if="message.role === 'user'"
-    :message="message"
+    :message="message as any"
   />
 
   <!-- AI 助手消息 - 使用新的 AssistantMessageDisplay 组件 -->
@@ -39,7 +39,8 @@
 import { computed, ref } from 'vue'
 import type { Message } from '@/types/message'
 import type { EnhancedMessage } from '@/types/enhancedMessage'
-import { MessageRole, MessageStatus, ToolCallStatus } from '@/types/enhancedMessage'
+import { MessageRole, MessageStatus } from '@/types/enhancedMessage'
+import { ToolCallStatus } from '@/types/display'
 import UserMessageBubble from './UserMessageBubble.vue'
 import AssistantMessageDisplay from './AssistantMessageDisplay.vue'
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
@@ -114,7 +115,7 @@ const enhancedMessage = computed((): EnhancedMessage => {
 
       // 🎯 构建 ViewModel
       const viewModel = buildToolViewModel(block)
-      console.log(`    ✅ 构建 viewModel: toolType=${viewModel.toolDetail.toolType}, summary="${viewModel.compactSummary}"`)
+      console.log(`    ✅ 构建 viewModel: toolType=${viewModel.toolDetail?.toolType}, summary="${viewModel.compactSummary}"`)
 
       // 🔧 使用 resolveToolStatus 从消息列表实时计算工具状态
       const statusInfo = resolveToolStatus(block.id, messages)
@@ -124,7 +125,7 @@ const enhancedMessage = computed((): EnhancedMessage => {
       const status = toToolCallStatus(statusInfo.status)
 
       orderedElements.push({
-        type: 'toolCall',
+        displayType: 'toolCall',
         toolCall: {
           id: block.id,
           toolName: block.toolName,
@@ -132,9 +133,9 @@ const enhancedMessage = computed((): EnhancedMessage => {
           displayName: block.toolName,
           status: status, // ✅ 使用 store 中的实时状态
           result: toolResult ? {
-            type: status === 'FAILED' ? 'failure' : 'success', // ✅ 添加 type 字段以符合 ToolResult 类型定义
+            type: status === ToolCallStatus.FAILED ? 'failure' : 'success', // ✅ 添加 type 字段以符合 ToolResult 类型定义
             output: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
-            error: status === 'FAILED' ? (typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult)) : undefined
+            error: status === ToolCallStatus.FAILED ? (typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult)) : undefined
           } : undefined,
           startTime: msg.timestamp,
           endTime: toolResult ? msg.timestamp : undefined

@@ -111,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, reactive } from 'vue'
+import { computed, watch, reactive } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 
 const sessionStore = useSessionStore()

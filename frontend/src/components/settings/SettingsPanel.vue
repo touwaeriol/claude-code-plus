@@ -282,7 +282,7 @@ interface Emits {
   (e: 'save', settings: Settings): void
 }
 
-const _props = defineProps<Props>()
+defineProps<Props>()
 
 const emit = defineEmits<Emits>()
 const settingsStore = useSettingsStore()

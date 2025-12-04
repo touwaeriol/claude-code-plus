@@ -230,5 +230,37 @@ export default {
   keyboard: {
     sendMessage: 'メッセージを送信',
     closeDialog: 'ダイアログを閉じる'
+  },
+  permission: {
+    needsAuth: '承認が必要',
+    allow: '許可',
+    deny: '拒否',
+    denyReasonPlaceholder: '拒否理由（任意）',
+    confirm: '確認',
+    escToDeny: 'ESCで拒否',
+    destination: {
+      session: 'このセッション',
+      projectSettings: 'プロジェクト設定',
+      userSettings: 'ユーザー設定',
+      localSettings: 'ローカル設定'
+    },
+    suggestion: {
+      rememberTo: '{tool}を{dest}に記憶',
+      rememberWithRuleTo: '{tool}({rule})を{dest}に記憶',
+      replaceTo: '{dest}にルールを置換',
+      removeFrom: '{dest}から{tool}を削除',
+      removeRulesFrom: '{dest}からルールを削除',
+      switchTo: '{mode}に切替',
+      applyTo: '{dest}に適用',
+      addDirTo: '{dest}にディレクトリ{dir}を追加',
+      removeDirFrom: '{dest}からディレクトリ{dir}を削除'
+    },
+    mode: {
+      default: 'デフォルトモード',
+      acceptEdits: '編集を自動承認',
+      plan: 'プランモード',
+      bypassPermissions: '権限をバイパス',
+      dontAsk: '再度確認しない'
+    }
   }
 }

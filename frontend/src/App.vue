@@ -135,7 +135,7 @@ onMounted(async () => {
 
       console.log('DOM 元素高度检查:')
       console.log('  #app:', app?.offsetHeight || 0, 'px')
-      console.log('  .message-list-wrapper:', messageList?.offsetHeight || 0, 'px')
+      console.log('  .message-list-wrapper:', (messageList as HTMLElement)?.offsetHeight || 0, 'px')
 
       if (!app || app.offsetHeight === 0) {
         console.error('#app 高度为 0 - 可能导致界面空白!')

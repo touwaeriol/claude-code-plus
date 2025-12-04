@@ -230,5 +230,37 @@ export default {
   keyboard: {
     sendMessage: '메시지 보내기',
     closeDialog: '대화상자 닫기'
+  },
+  permission: {
+    needsAuth: '승인 필요',
+    allow: '허용',
+    deny: '거부',
+    denyReasonPlaceholder: '거부 사유 (선택)',
+    confirm: '확인',
+    escToDeny: 'ESC를 눌러 거부',
+    destination: {
+      session: '이 세션',
+      projectSettings: '프로젝트 설정',
+      userSettings: '사용자 설정',
+      localSettings: '로컬 설정'
+    },
+    suggestion: {
+      rememberTo: '{tool}을(를) {dest}에 기억',
+      rememberWithRuleTo: '{tool}({rule})을(를) {dest}에 기억',
+      replaceTo: '{dest}에 규칙 교체',
+      removeFrom: '{dest}에서 {tool} 제거',
+      removeRulesFrom: '{dest}에서 규칙 제거',
+      switchTo: '{mode}(으)로 전환',
+      applyTo: '{dest}에 적용',
+      addDirTo: '{dest}에 디렉토리 {dir} 추가',
+      removeDirFrom: '{dest}에서 디렉토리 {dir} 제거'
+    },
+    mode: {
+      default: '기본 모드',
+      acceptEdits: '편집 자동 수락',
+      plan: '계획 모드',
+      bypassPermissions: '권한 우회',
+      dontAsk: '다시 묻지 않음'
+    }
   }
 }

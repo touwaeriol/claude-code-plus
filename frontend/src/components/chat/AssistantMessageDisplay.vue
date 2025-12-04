@@ -119,30 +119,16 @@ function getModelDisplayName(model: AiModel): string {
  * 获取元素唯一key (对应 "${message.id}-${element.timestamp}-$index-${element::class.simpleName}")
  */
 function getElementKey(element: MessageTimelineItem, index: number): string {
-  return `${props.message.id}-${element.timestamp}-${index}-${element.type}`
+  return `${props.message.id}-${element.timestamp}-${index}-${element.displayType}`
 }
 
 /**
  * 检查内容是否非空白 (对应 content.isNotBlank())
  */
 function isContentNotBlank(content: string): boolean {
-  return content && content.trim().length > 0
+  return !!content && content.trim().length > 0
 }
 
-/**
- * 日志调试:文本片段渲染 (对应 logD)
- */
-function _logContentRender(content: string, index: number, total: number) {
-  const preview = content.length > 80 ? content.substring(0, 80) + '...' : content
-  console.log(`[AssistantMessageDisplay] 渲染文本片段(${index + 1}/${total}): ${preview}`)
-}
-
-/**
- * 日志调试:工具调用渲染 (对应 logD)
- */
-function _logToolCallRender(toolCall: any) {
-  console.log(`[AssistantMessageDisplay] 渲染工具调用: ${toolCall.toolName} (${toolCall.id})`)
-}
 
 // ============================================
 // 事件处理器
@@ -158,7 +144,7 @@ function handleLinkClick(url: string) {
 /**
  * 处理代码操作 (对应 onCodeAction)
  */
-function handleCodeAction(code: string, language: string) {
+function handleCodeAction(_code: string, language: string) {
   console.log('[AssistantMessageDisplay] 代码操作: 语言=', language)
 }
 

@@ -139,7 +139,7 @@ interface Emits {
   (e: 'rename-session', sessionId: string, newName: string): void
 }
 
-const _props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   loading: false
 })
 

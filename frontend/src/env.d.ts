@@ -2,7 +2,13 @@
 
 // Vue Virtual Scroller
 declare module 'vue-virtual-scroller' {
-  import { DefineComponent } from 'vue'
+  import type { DefineComponent, ComponentPublicInstance } from 'vue'
+
+  interface DynamicScrollerInstance extends ComponentPublicInstance {
+    scrollToBottom(): void
+    forceUpdate(): void
+    $el: HTMLElement
+  }
 
   export const DynamicScroller: DefineComponent<{
     items: unknown[]
@@ -12,7 +18,7 @@ declare module 'vue-virtual-scroller' {
     itemClass?: string
     minItemSize?: number
     buffer?: number
-  }>
+  }, DynamicScrollerInstance>
 
   export const DynamicScrollerItem: DefineComponent<{
     item: unknown
@@ -41,12 +47,8 @@ declare module 'vue-virtual-scroller' {
 }
 
 // Window extensions
-declare global {
-  interface Window {
-    __serverUrl?: string
-    __pageUrl?: string
-    __projectPath?: string
-  }
+interface Window {
+  __serverUrl?: string
+  __pageUrl?: string
+  __projectPath?: string
 }
-
-export {}

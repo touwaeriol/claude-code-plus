@@ -414,7 +414,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from '@/composables/useI18n'
-import type { AiModel, PermissionMode, EnhancedMessage, TokenUsage as EnhancedTokenUsage, ImageReference } from '@/types/enhancedMessage'
+import { AiModel, type PermissionMode, type EnhancedMessage, type TokenUsage as EnhancedTokenUsage, type ImageReference } from '@/types/enhancedMessage'
 import type { ContextReference, ContextDisplayType } from '@/types/display'
 import type { ContentBlock } from '@/types/message'
 import AtSymbolFilePopup from '@/components/input/AtSymbolFilePopup.vue'
@@ -491,7 +491,7 @@ const props = withDefaults(defineProps<Props>(), {
   contexts: () => [],
   isGenerating: false,
   enabled: true,
-  selectedModel: 'SONNET',
+  selectedModel: AiModel.SONNET,
   selectedPermission: 'default',
   skipPermissions: false,
   showContextControls: true,
@@ -624,7 +624,7 @@ const previewImageSrc = ref('')
 // selectedModelValue 直接绑定 currentModel（响应会话切换）
 const selectedModelValue = computed({
   get: () => currentModel.value,
-  set: (val) => {
+  set: (_val) => {
     // setter 由 handleBaseModelChange 处理
   }
 })
@@ -721,7 +721,7 @@ async function handlePasteImage(file: File) {
  * 处理 RichTextInput 的提交事件
  * 注意：即使正在生成，也允许发送（父组件会自动将消息加入队列）
  */
-async function handleRichTextSubmit(content: { text: string; images: { id: string; data: string; mimeType: string; name: string }[] }) {
+async function handleRichTextSubmit(_content: { text: string; images: { id: string; data: string; mimeType: string; name: string }[] }) {
   if (!props.enabled) return
 
   // 使用新方法提取有序内容块
@@ -944,59 +944,6 @@ function handleThinkingToggle(enabled: boolean) {
   console.log(`🧠 [handleThinkingToggle] 会话设置已更新: thinking=${enabled}`)
 }
 
-/**
- * 处理粘贴事件
- * 检测粘贴内容是否包含图片：
- * - 如果光标在最前面，图片作为上下文（添加到 contexts）
- * - 否则插入到编辑器中
- */
-async function handlePaste(event: ClipboardEvent) {
-  console.log('📋 [handlePaste] 粘贴事件触发')
-
-  const items = event.clipboardData?.items
-  if (!items) {
-    console.log('📋 [handlePaste] 没有 clipboardData.items')
-    return
-  }
-
-  console.log(`📋 [handlePaste] 检测到 ${items.length} 个粘贴项`)
-
-  // 检查是否包含图片
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i]
-    console.log(`📋 [handlePaste] 项 ${i}: kind=${item.kind}, type=${item.type}`)
-
-    if (item.type && item.type.startsWith('image/')) {
-      console.log(`📋 [handlePaste] 检测到图片: ${item.type}`)
-
-      // 阻止默认粘贴行为
-      event.preventDefault()
-
-      const file = item.getAsFile()
-      if (!file) {
-        console.log('📋 [handlePaste] getAsFile() 返回 null')
-        continue
-      }
-
-      console.log(`📋 [handlePaste] 获取到文件: name=${file.name}, size=${file.size}, type=${file.type}`)
-
-      // 判断光标是否在最前面
-      const isAtStart = richTextInputRef.value?.isCursorAtStart() ?? true
-
-      if (isAtStart) {
-        // 光标在最前面：作为上下文处理
-        console.log('📋 [handlePaste] 光标在最前面，将图片作为上下文')
-        await addImageToContext(file)
-      } else {
-        // 光标不在最前面：插入到编辑器中
-        console.log('📋 [handlePaste] 光标不在最前面，将图片插入编辑器')
-        const base64 = await readImageAsBase64(file)
-        richTextInputRef.value?.insertImage(base64, file.type)
-      }
-    }
-  }
-}
-
 async function handleSend() {
   if (!canSend.value) return
 
@@ -1109,12 +1056,12 @@ function getContextDisplay(context: ContextReference): string {
     return '图片'  // 简化显示，不显示无意义的文件名
   }
   if (isFileReference(context)) {
-    return context.path.split(/[\\/]/).pop() || context.path
+    return context.path?.split(/[\\/]/).pop() || context.path || ''
   }
   if (isUrlReference(context)) {
-    return context.title || context.url
+    return context.title || context.url || ''
   }
-  return context.uri
+  return context.uri || ''
 }
 
 /**

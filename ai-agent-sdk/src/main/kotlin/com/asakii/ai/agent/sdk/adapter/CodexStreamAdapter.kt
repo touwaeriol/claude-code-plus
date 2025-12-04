@@ -1,4 +1,4 @@
-package com.asakii.ai.agent.sdk.adapter
+ package com.asakii.ai.agent.sdk.adapter
 
 import com.asakii.ai.agent.sdk.AiAgentProvider
 import com.asakii.ai.agent.sdk.model.*

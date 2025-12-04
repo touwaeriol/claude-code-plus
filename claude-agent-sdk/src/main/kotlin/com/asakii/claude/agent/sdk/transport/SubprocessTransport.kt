@@ -344,7 +344,10 @@ class SubprocessTransport(
 
         // Permission prompt tool - 配置授权请求使用的 MCP 工具
         // 当 Claude 需要执行敏感操作时，会调用此工具请求用户授权
-        options.permissionPromptToolName?.let { tool ->
+        // 如果提供了 canUseTool 回调，自动设置为 "stdio"（与 Python SDK 一致）
+        val effectivePermissionPromptTool = options.permissionPromptToolName
+            ?: if (options.canUseTool != null) "stdio" else null
+        effectivePermissionPromptTool?.let { tool ->
             command.addAll(listOf("--permission-prompt-tool", tool))
             logger.info("🔐 配置授权工具: $tool")
         }

@@ -190,7 +190,9 @@ data class PermissionRequest(
     val toolName: String,
     val input: JsonElement,
     val permissionSuggestions: List<JsonElement>? = null,
-    val blockedPath: String? = null
+    val blockedPath: String? = null,
+    val toolUseId: String? = null,
+    val agentId: String? = null
 ) : ControlRequest
 
 @Serializable

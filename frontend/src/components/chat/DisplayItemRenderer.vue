@@ -3,7 +3,7 @@
     <!-- 用户消息 -->
     <UserMessageBubble
       v-if="item.displayType === 'userMessage'"
-      :message="item"
+      :message="item as any"
     />
 
     <!-- AI 文本回复 -->
@@ -19,10 +19,17 @@
     />
 
     <!-- 工具调用 -->
-    <ToolCallDisplay
-      v-else-if="item.displayType === 'toolCall'"
-      :tool-call="item"
-    />
+    <template v-else-if="item.displayType === 'toolCall'">
+      <ToolCallDisplay :tool-call="item" />
+      <!-- 内联权限授权 UI -->
+      <ToolPermissionInline
+        v-if="pendingPermission"
+        :permission="pendingPermission"
+        @allow="handleAllow"
+        @allowWithUpdate="handleAllowWithUpdate"
+        @deny="handleDeny"
+      />
+    </template>
 
     <!-- 系统消息 -->
     <SystemMessageDisplay
@@ -41,33 +48,62 @@
       v-else
       class="unknown-item"
     >
-      <span>Unknown item displayType: {{ 'displayType' in item ? item.displayType : 'undefined' }}</span>
+      <span>Unknown item displayType: {{ (item as any).displayType ?? 'undefined' }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { DisplayItem } from '@/types/display'
+import type { PermissionUpdate } from '@/types/permission'
+import { useSessionStore } from '@/stores/sessionStore'
 import UserMessageBubble from './UserMessageBubble.vue'
 import AssistantTextDisplay from './AssistantTextDisplay.vue'
 import ThinkingDisplay from './ThinkingDisplay.vue'
 import ToolCallDisplay from './ToolCallDisplay.vue'
 import SystemMessageDisplay from './SystemMessageDisplay.vue'
 import ErrorResultDisplay from './ErrorResultDisplay.vue'
+import ToolPermissionInline from '@/components/tools/ToolPermissionInline.vue'
 
 interface Props {
-  // VirtualList 会把当前项作为 source 传入
   source: DisplayItem
 }
 
 const props = defineProps<Props>()
+const sessionStore = useSessionStore()
 
-// 为了模板可读性，提供一个 item 计算属性
 const item = computed(() => props.source)
-</script>
 
-<script lang="ts">
-import { computed } from 'vue'
+// 获取当前工具调用对应的权限请求
+const pendingPermission = computed(() => {
+  if (item.value.displayType !== 'toolCall') return null
+  return sessionStore.getPermissionForToolCall(item.value.id)
+})
+
+function handleAllow() {
+  if (pendingPermission.value) {
+    sessionStore.respondPermission(pendingPermission.value.id, { approved: true })
+  }
+}
+
+function handleAllowWithUpdate(update: PermissionUpdate) {
+  if (pendingPermission.value) {
+    sessionStore.respondPermission(pendingPermission.value.id, {
+      approved: true,
+      permissionUpdate: update
+    })
+  }
+}
+
+function handleDeny(reason: string) {
+  if (pendingPermission.value) {
+    sessionStore.respondPermission(pendingPermission.value.id, {
+      approved: false,
+      denyReason: reason || undefined
+    })
+  }
+}
 </script>
 
 <style scoped>

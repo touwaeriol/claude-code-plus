@@ -129,7 +129,7 @@ const expanded = ref(false)
 
 // 从 viewModel 中获取参数
 const parameters = computed(() => {
-  return props.toolCall.viewModel?.toolDetail?.parameters || {}
+  return (props.toolCall as any).viewModel?.toolDetail?.parameters || {}
 })
 
 const filePath = computed(() => parameters.value.file_path || '')
@@ -160,12 +160,10 @@ function toggleExpanded() {
 }
 
 function getStatusText(status: ToolCallStatus): string {
-  const statusMap: Record<ToolCallStatus, string> = {
-    PENDING: t('tools.status.pending'),
+  const statusMap: Record<string, string> = {
     RUNNING: t('tools.status.running'),
     SUCCESS: t('tools.status.success'),
-    FAILED: t('tools.status.failed'),
-    CANCELLED: t('tools.status.cancelled')
+    FAILED: t('tools.status.failed')
   }
   return statusMap[status] || status
 }

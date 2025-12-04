@@ -20,7 +20,14 @@ import type { ClaudeReadToolCall, ClaudeWriteToolCall, ClaudeEditToolCall, Claud
 import { buildUserMessageContent } from '@/utils/userMessageBuilder'
 import { MODEL_CAPABILITIES, BaseModel } from '@/constants/models'
 import type { RpcPermissionMode } from '@/types/rpc'
-import type { PendingPermissionRequest, PendingUserQuestion, PermissionToolInput } from '@/types/permission'
+import type {
+  PendingPermissionRequest,
+  PendingUserQuestion,
+  PermissionUpdate,
+  PermissionResponse,
+  SessionPermissionRule,
+  PermissionBehavior
+} from '@/types/permission'
 import {
   isAssistantMessage as isRpcAssistantMessage,
   isResultMessage as isRpcResultMessage,
@@ -109,6 +116,12 @@ export const useSessionStore = defineStore('session', () => {
 
   // RequestPermission 待授权请求状态
   const pendingPermissions = reactive(new Map<string, PendingPermissionRequest>())
+
+  // 会话级权限规则（与 Tab 生命周期绑定，不持久化）
+  const sessionPermissionRules = reactive(new Map<string, SessionPermissionRule[]>())
+
+  // 会话级权限目录（与 Tab 生命周期绑定，不持久化）
+  const sessionPermissionDirectories = reactive(new Map<string, string[]>())
 
   function buildConnectOptions(overrides: Partial<ConnectOptions> = {}): ConnectOptions {
     // dangerouslySkipPermissions 由调用方通过 overrides 传入，不再硬编码
@@ -233,7 +246,7 @@ export const useSessionStore = defineStore('session', () => {
 
   function getSessionState(sessionId: string | null | undefined): SessionState | null {
     if (!sessionId) return null
-    return sessions.get(sessionId) || null
+    return (sessions.get(sessionId) as SessionState | undefined) || null
   }
 
   function resolveSessionIdentifier(externalId: string | null | undefined): string | null {
@@ -475,7 +488,7 @@ export const useSessionStore = defineStore('session', () => {
     log.debug('🔍 [normalizeRpcMessage] 收到原始消息:', {
       type: raw.type,
       provider: raw.provider,
-      keys: Object.keys(raw as Record<string, unknown>),
+      keys: Object.keys(raw as unknown as Record<string, unknown>),
       preview: JSON.stringify(raw).substring(0, 200)
     })
 
@@ -755,6 +768,7 @@ export const useSessionStore = defineStore('session', () => {
    * @param message 新消息
    * @returns 是否成功替换
    */
+  // @ts-expect-error 保留供将来使用
   function _replacePlaceholderMessage(sessionId: string, message: Message): boolean {
     const sessionState = getSessionState(sessionId)
     if (!sessionState) {
@@ -911,6 +925,7 @@ export const useSessionStore = defineStore('session', () => {
    * 合并或添加消息
    * 智能判断是更新现有消息还是添加新消息
    */
+  // @ts-expect-error 保留供将来使用
   function _mergeOrAddMessage(sessionId: string, newMessage: Message) {
     // ✅ 只从 SessionState 读取和更新
     const sessionState = getSessionState(sessionId)
@@ -1216,6 +1231,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 将最终的 assistant 消息内容合并到现有的流式消息中，避免重复新增消息
    */
+  // @ts-expect-error 保留供将来使用
   function mergeAssistantMessage(target: Message, incoming: Message) {
     const merged: ContentBlock[] = [...target.content]
 
@@ -1239,8 +1255,8 @@ export const useSessionStore = defineStore('session', () => {
       } else if (block.type === 'thinking') {
         const idx = merged.findIndex(item => item.type === 'thinking')
         if (idx >= 0) {
-          const existing = merged[idx] as ThinkingBlock
-          merged[idx] = { ...existing, ...block, thinking: (block as ThinkingBlock).thinking || existing.thinking }
+          const existing = merged[idx] as ContentBlock & { thinking?: string }
+          merged[idx] = { ...existing, ...block, thinking: (block as ContentBlock & { thinking?: string }).thinking || existing.thinking || '' }
         } else {
           merged.push(block)
         }
@@ -1311,6 +1327,7 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 当 messageId 更新时，移除旧 messageId 生成的展示项，避免重复展示
    */
+  // @ts-expect-error 保留供将来使用
   function _dropAssistantDisplayItemsById(sessionState: SessionState, messageId: string) {
     sessionState.displayItems = sessionState.displayItems.filter(item => {
       if (item.displayType === 'assistantText' || item.displayType === 'thinking') {
@@ -2144,7 +2161,7 @@ export const useSessionStore = defineStore('session', () => {
     const options = buildConnectOptions({
       model: settings.modelId,
       thinkingEnabled: settings.thinkingEnabled,
-      permissionMode: settings.permissionMode,
+      permissionMode: settings.permissionMode as RpcPermissionMode,
       dangerouslySkipPermissions: settings.skipPermissions,
       continueConversation: true,
       resume: sessionId
@@ -2321,7 +2338,7 @@ export const useSessionStore = defineStore('session', () => {
         pendingQuestions.set(questionId, {
           id: questionId,
           sessionId,
-          questions,
+          questions: questions.map(q => ({ ...q, multiSelect: q.multiSelect ?? false })),
           createdAt: Date.now(),
           resolve: (answersMap) => {
             pendingQuestions.delete(questionId)
@@ -2390,6 +2407,31 @@ export const useSessionStore = defineStore('session', () => {
   // ==================== RequestPermission 授权相关函数 ====================
 
   /**
+   * 查找匹配的 running 状态的工具调用
+   * 通过 toolName 匹配，返回最近的一个
+   */
+  function findMatchingToolCall(toolName: string): string | undefined {
+    const items = currentDisplayItems.value
+    // 从后往前找，找最近的 running 状态的匹配工具
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i]
+      if (item.displayType === 'toolCall' &&
+          (item as ToolCall).toolName === toolName &&
+          (item as ToolCall).status === ToolCallStatus.RUNNING) {
+        return item.id
+      }
+    }
+    return undefined
+  }
+
+  /**
+   * 根据 toolCallId 获取对应的权限请求
+   */
+  function getPermissionForToolCall(toolCallId: string): PendingPermissionRequest | undefined {
+    return Array.from(pendingPermissions.values()).find(p => p.matchedToolCallId === toolCallId)
+  }
+
+  /**
    * 注册授权请求处理器
    * @param sessionId 会话ID
    */
@@ -2399,26 +2441,33 @@ export const useSessionStore = defineStore('session', () => {
     return aiAgentService.register(sessionId, 'RequestPermission', async (params) => {
       log.info(`[RequestPermission] 收到授权请求:`, params)
 
-      const { tool_name, tool_input } = params
+      const { toolName, input, toolUseId, permissionSuggestions } = params
 
-      if (!tool_name) {
-        throw new Error('缺少 tool_name 参数')
+      if (!toolName) {
+        throw new Error('缺少 toolName 参数')
       }
-      if (!tool_input) {
-        throw new Error('缺少 tool_input 参数')
+      if (!input) {
+        throw new Error('缺少 input 参数')
       }
 
       // 生成唯一ID
       const permissionId = `perm-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+
+      // 使用后端传来的 toolUseId（来自 canUseTool 回调），精确关联工具块
+      // 如果没有 toolUseId，则回退到按 toolName 匹配
+      const matchedToolCallId = toolUseId || findMatchingToolCall(toolName)
+      log.info(`[RequestPermission] 匹配工具调用: ${matchedToolCallId || '未找到'}, toolUseId=${toolUseId}`)
 
       // 返回一个 Promise，当用户响应后 resolve
       return new Promise<{ approved: boolean }>((resolve, reject) => {
         pendingPermissions.set(permissionId, {
           id: permissionId,
           sessionId,
-          toolName: tool_name,
-          toolInput: tool_input,
+          toolName,
+          input,
           createdAt: Date.now(),
+          matchedToolCallId,
+          permissionSuggestions,
           resolve: (response) => {
             pendingPermissions.delete(permissionId)
             resolve(response)
@@ -2429,7 +2478,7 @@ export const useSessionStore = defineStore('session', () => {
           }
         })
 
-        log.info(`[RequestPermission] 授权请求已加入待处理队列: ${permissionId}, 工具: ${tool_name}`)
+        log.info(`[RequestPermission] 授权请求已加入待处理队列: ${permissionId}, 工具: ${toolName}, matchedToolCallId: ${matchedToolCallId}`)
       })
     })
   }
@@ -2447,18 +2496,146 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 响应授权请求
    * @param permissionId 授权请求ID
-   * @param approved 是否批准
+   * @param response 权限响应（包含是否批准、权限更新、拒绝原因）
    */
-  function respondPermission(permissionId: string, approved: boolean): boolean {
+  function respondPermission(permissionId: string, response: PermissionResponse): boolean {
     const pending = pendingPermissions.get(permissionId)
     if (!pending) {
       log.warn(`[RequestPermission] 授权请求不存在或已响应: ${permissionId}`)
       return false
     }
 
-    log.info(`[RequestPermission] 用户响应授权请求: ${permissionId}, approved=${approved}`)
-    pending.resolve({ approved })
+    log.info(`[RequestPermission] 用户响应授权请求: ${permissionId}, approved=${response.approved}`)
+
+    // 如果选择了会话级权限更新，记录到本地
+    if (response.approved && response.permissionUpdate?.destination === 'session') {
+      addSessionPermissionRule(pending.sessionId, response.permissionUpdate)
+    }
+
+    pending.resolve(response)
     return true
+  }
+
+  /**
+   * 应用会话级权限更新（支持所有权限类型）
+   */
+  function applySessionPermissionUpdate(sessionId: string, update: PermissionUpdate) {
+    if (update.destination !== 'session') return
+
+    const rules = sessionPermissionRules.get(sessionId) || []
+    const directories = sessionPermissionDirectories.get(sessionId) || []
+
+    switch (update.type) {
+      case 'addRules':
+        if (update.rules) {
+          for (const r of update.rules) {
+            rules.push({
+              toolName: r.toolName,
+              ruleContent: r.ruleContent,
+              behavior: update.behavior || 'allow'
+            })
+          }
+        }
+        sessionPermissionRules.set(sessionId, rules)
+        break
+
+      case 'replaceRules':
+        rules.length = 0
+        if (update.rules) {
+          for (const r of update.rules) {
+            rules.push({
+              toolName: r.toolName,
+              ruleContent: r.ruleContent,
+              behavior: update.behavior || 'allow'
+            })
+          }
+        }
+        sessionPermissionRules.set(sessionId, rules)
+        break
+
+      case 'removeRules':
+        if (update.rules) {
+          for (const r of update.rules) {
+            const idx = rules.findIndex(
+              rule => rule.toolName === r.toolName && rule.ruleContent === r.ruleContent
+            )
+            if (idx !== -1) rules.splice(idx, 1)
+          }
+        }
+        sessionPermissionRules.set(sessionId, rules)
+        break
+
+      case 'setMode':
+        log.info(`[SessionPermission] setMode: ${update.mode}`)
+        break
+
+      case 'addDirectories':
+        if (update.directories) {
+          for (const dir of update.directories) {
+            if (!directories.includes(dir)) {
+              directories.push(dir)
+            }
+          }
+        }
+        sessionPermissionDirectories.set(sessionId, directories)
+        log.info(`[SessionPermission] 添加目录权限: ${sessionId}`, { directories })
+        break
+
+      case 'removeDirectories':
+        if (update.directories) {
+          for (const dir of update.directories) {
+            const idx = directories.indexOf(dir)
+            if (idx !== -1) directories.splice(idx, 1)
+          }
+        }
+        sessionPermissionDirectories.set(sessionId, directories)
+        log.info(`[SessionPermission] 移除目录权限: ${sessionId}`, { directories })
+        break
+
+      default:
+        log.warn(`[SessionPermission] 未知的更新类型: ${update.type}`)
+    }
+
+    log.info(`[SessionPermission] 应用权限更新: ${sessionId}`, { type: update.type })
+  }
+
+  // 保留别名以兼容旧代码
+  const addSessionPermissionRule = applySessionPermissionUpdate
+
+  /**
+   * 检查会话级权限
+   */
+  function checkSessionPermission(sessionId: string, toolName: string): PermissionBehavior | null {
+    const rules = sessionPermissionRules.get(sessionId) || []
+    for (const rule of rules) {
+      if (rule.toolName === toolName) {
+        return rule.behavior
+      }
+    }
+    return null
+  }
+
+  /**
+   * 获取会话的权限规则
+   */
+  function getSessionPermissionRules(sessionId: string): SessionPermissionRule[] {
+    return sessionPermissionRules.get(sessionId) || []
+  }
+
+  /**
+   * 获取会话的目录权限
+   */
+  function getSessionPermissionDirectories(sessionId: string): string[] {
+    return sessionPermissionDirectories.get(sessionId) || []
+  }
+
+  /**
+   * 清理会话权限（规则和目录）
+   */
+  function clearSessionPermissionRules(sessionId: string) {
+    sessionPermissionRules.delete(sessionId)
+    sessionPermissionDirectories.delete(sessionId)
+    log.info(`[SessionPermission] 清理会话级权限: ${sessionId}`)
   }
 
   /**
@@ -2555,8 +2732,17 @@ export const useSessionStore = defineStore('session', () => {
     // RequestPermission 授权相关
     pendingPermissions,
     getCurrentPendingPermissions,
+    getPermissionForToolCall,
     respondPermission,
     cancelPermission,
+    // 会话级权限规则
+    sessionPermissionRules,
+    sessionPermissionDirectories,
+    addSessionPermissionRule,
+    checkSessionPermission,
+    getSessionPermissionRules,
+    getSessionPermissionDirectories,
+    clearSessionPermissionRules,
     // 错误状态管理
     currentLastError,
     clearCurrentError

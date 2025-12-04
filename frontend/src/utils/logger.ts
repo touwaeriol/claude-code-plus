@@ -18,7 +18,6 @@ interface LoggerConfig {
   timestamp: boolean
 }
 
-// @ts-expect-error - Vite 环境变量
 const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV
 
 const config: LoggerConfig = {

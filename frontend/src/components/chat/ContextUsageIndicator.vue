@@ -170,8 +170,8 @@ function isValidAssistantMessage(message: EnhancedMessage): boolean {
 
   // 检查是否包含 synthetic 标记（合成消息）
   const hasSyntheticContent = message.orderedElements.some(item => {
-    if (item.type === 'content') {
-      const contentItem = item as { type: 'content'; content: string }
+    if (item.displayType === 'content') {
+      const contentItem = item as { displayType: 'content'; content: string; timestamp: number }
       return contentItem.content?.includes('<synthetic>')
     }
     return false

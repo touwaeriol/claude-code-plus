@@ -48,7 +48,7 @@ const hasResult = computed(() => {
   return r && !r.is_error && resultText.value
 })
 
-const hasDetails = computed(() => !!plan.value || hasResult.value)
+const hasDetails = computed(() => !!plan.value || !!hasResult.value)
 </script>
 
 <style scoped>

@@ -71,7 +71,7 @@ const outputModeText = computed(() => {
     'files_with_matches': '仅文件名',
     'count': '匹配计数'
   }
-  return map[outputMode.value] || outputMode.value
+  return map[outputMode.value as string] || outputMode.value
 })
 
 const options = computed(() => {

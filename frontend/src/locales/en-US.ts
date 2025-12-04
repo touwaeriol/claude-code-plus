@@ -232,6 +232,38 @@ export default {
   keyboard: {
     sendMessage: 'Send Message',
     closeDialog: 'Close Dialog'
+  },
+  permission: {
+    needsAuth: 'Needs Authorization',
+    allow: 'Allow',
+    deny: 'Deny',
+    denyReasonPlaceholder: 'Reason for denial (optional)',
+    confirm: 'Confirm',
+    escToDeny: 'Press ESC to deny',
+    destination: {
+      session: 'this session',
+      projectSettings: 'project settings',
+      userSettings: 'user settings',
+      localSettings: 'local settings'
+    },
+    suggestion: {
+      rememberTo: 'Remember {tool} to {dest}',
+      rememberWithRuleTo: 'Remember {tool}({rule}) to {dest}',
+      replaceTo: 'Replace rules to {dest}',
+      removeFrom: 'Remove {tool} from {dest}',
+      removeRulesFrom: 'Remove rules from {dest}',
+      switchTo: 'Switch to {mode}',
+      applyTo: 'Apply to {dest}',
+      addDirTo: 'Add directory {dir} to {dest}',
+      removeDirFrom: 'Remove directory {dir} from {dest}'
+    },
+    mode: {
+      default: 'default mode',
+      acceptEdits: 'auto-accept edits',
+      plan: 'plan mode',
+      bypassPermissions: 'bypass permissions',
+      dontAsk: "don't ask"
+    }
   }
 }
 

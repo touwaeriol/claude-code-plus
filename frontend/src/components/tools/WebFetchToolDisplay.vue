@@ -44,7 +44,7 @@ const expanded = ref(false)
 
 const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
 
-const url = computed(() => props.toolCall.input?.url || '')
+const url = computed(() => (props.toolCall.input?.url as string) || '')
 const prompt = computed(() => props.toolCall.input?.prompt || '')
 
 // 结果文本
