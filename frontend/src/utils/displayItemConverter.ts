@@ -215,7 +215,7 @@ export function convertMessageToDisplayItems(
       } else if (block.type === 'thinking') {
         // 处理 thinking 块（消息格式使用 thinking 字段，显示格式使用 content 字段）
         const thinkingBlock = block as MessageThinkingContent
-        if (thinkingBlock.thinking && thinkingBlock.thinking.trim()) {
+        if (thinkingBlock.thinking !== undefined) {
           const thinkingContent: DisplayThinkingContent = {
             displayType: 'thinking',
             id: `${message.id}-thinking-${blockIdx}`,
@@ -332,7 +332,7 @@ export function convertToDisplayItems(
         } else if (block.type === 'thinking') {
           // 处理 thinking 块（消息格式使用 thinking 字段，显示格式使用 content 字段）
           const thinkingBlock = block as MessageThinkingContent
-          if (thinkingBlock.thinking && thinkingBlock.thinking.trim()) {
+          if (thinkingBlock.thinking !== undefined) {
             const thinkingContent: DisplayThinkingContent = {
               displayType: 'thinking',
               id: `${message.id}-thinking-${blockIdx}`,

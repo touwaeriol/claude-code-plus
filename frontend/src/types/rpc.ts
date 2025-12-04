@@ -469,6 +469,7 @@ export interface RpcConnectResult {
   status: RpcSessionStatus
   model?: string
   capabilities?: RpcCapabilities
+  cwd?: string
 }
 
 export interface RpcStatusResult {

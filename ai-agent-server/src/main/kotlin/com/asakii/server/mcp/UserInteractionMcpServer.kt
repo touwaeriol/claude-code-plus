@@ -107,12 +107,12 @@ data class PermissionUpdate(
 )
 
 /**
- * 授权响应数据类（前端 RequestPermission 回调的返回格式）
+ * 授权响应数据类（前端 RequestPermission 回调的返回格式，与官方 SDK 保持一致）
  */
 @Serializable
 data class PermissionResponse(
     val approved: Boolean,
-    val permissionUpdate: PermissionUpdate? = null,
+    val permissionUpdates: List<PermissionUpdate>? = null,  // 改为数组，与官方 SDK 保持一致
     val denyReason: String? = null
 )
 
