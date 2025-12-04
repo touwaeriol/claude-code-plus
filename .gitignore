@@ -133,6 +133,8 @@ claude-sdk-wrapper/node_modules/
 claude-sdk-wrapper/dist/
 src/main/resources/claude-node/node_modules/
 
+settings.local.json
+
 # Logs
 logs/
 *.log
@@ -166,6 +168,8 @@ frontend/components.d.ts
 /add_*.ps1
 /add_*.sh
 /fix_*.sh
+
+
 
 # runIde log
 runide.log
