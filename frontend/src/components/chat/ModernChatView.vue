@@ -61,7 +61,7 @@
       <!-- AskUserQuestion 交互式问答组件 -->
       <AskUserQuestionInteractive />
 
-      <!-- RequestPermission 工具授权组件 -->
+      <!-- 权限授权弹窗（作为内联 UI 的备用） -->
       <ToolPermissionInteractive />
     </div>
 
@@ -470,14 +470,6 @@ function toggleHistoryOverlay() {
 
 async function handleHistorySelect(sessionId: string) {
   await sessionStore.switchSession(sessionId)
-  isHistoryOverlayVisible.value = false
-}
-
-async function handleCreateNewSession() {
-  const session = await sessionStore.startNewSession?.()
-  if (session?.id) {
-    await sessionStore.switchSession(session.id)
-  }
   isHistoryOverlayVisible.value = false
 }
 </script>
