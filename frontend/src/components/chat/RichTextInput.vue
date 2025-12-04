@@ -179,10 +179,8 @@ const editor = useEditor({
       blockquote: false,
       codeBlock: false,
       horizontalRule: false,
-      // 保留基本功能
-      paragraph: true,
-      text: true,
-      hardBreak: true,
+      // 保留基本功能 - 使用 false 禁用或省略以使用默认配置
+      // paragraph, text, hardBreak 使用默认配置
     }),
     Link.configure({
       autolink: true,
@@ -209,7 +207,7 @@ const editor = useEditor({
     attributes: {
       class: 'prose-editor',
     },
-    handleClick(view, pos, event) {
+    handleClick(_view, _pos, event) {
       const target = event.target as HTMLElement
 
       // 检查点击的是否是图片 - 打开预览
@@ -233,7 +231,7 @@ const editor = useEditor({
 
       return false
     },
-    handleKeyDown(view, event) {
+    handleKeyDown(_view, event) {
       // 传递键盘事件给父组件
       emit('keydown', event)
 
@@ -265,7 +263,7 @@ const editor = useEditor({
 
       return false
     },
-    handlePaste(view, event) {
+    handlePaste(_view, event) {
       const items = event.clipboardData?.items
       if (!items) return false
 

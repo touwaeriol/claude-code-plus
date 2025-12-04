@@ -21,11 +21,99 @@ data class UserAnswerItem(
 )
 
 /**
+ * 权限行为类型
+ */
+@Serializable
+enum class PermissionBehavior {
+    @kotlinx.serialization.SerialName("allow")
+    ALLOW,
+    @kotlinx.serialization.SerialName("deny")
+    DENY,
+    @kotlinx.serialization.SerialName("ask")
+    ASK
+}
+
+/**
+ * 权限模式
+ */
+@Serializable
+enum class PermissionMode {
+    @kotlinx.serialization.SerialName("default")
+    DEFAULT,
+    @kotlinx.serialization.SerialName("acceptEdits")
+    ACCEPT_EDITS,
+    @kotlinx.serialization.SerialName("plan")
+    PLAN,
+    @kotlinx.serialization.SerialName("bypassPermissions")
+    BYPASS_PERMISSIONS,
+    @kotlinx.serialization.SerialName("dontAsk")
+    DONT_ASK
+}
+
+/**
+ * 权限更新目标
+ */
+@Serializable
+enum class PermissionUpdateDestination {
+    @kotlinx.serialization.SerialName("userSettings")
+    USER_SETTINGS,
+    @kotlinx.serialization.SerialName("projectSettings")
+    PROJECT_SETTINGS,
+    @kotlinx.serialization.SerialName("localSettings")
+    LOCAL_SETTINGS,
+    @kotlinx.serialization.SerialName("session")
+    SESSION
+}
+
+/**
+ * 权限更新类型
+ */
+@Serializable
+enum class PermissionUpdateType {
+    @kotlinx.serialization.SerialName("addRules")
+    ADD_RULES,
+    @kotlinx.serialization.SerialName("replaceRules")
+    REPLACE_RULES,
+    @kotlinx.serialization.SerialName("removeRules")
+    REMOVE_RULES,
+    @kotlinx.serialization.SerialName("setMode")
+    SET_MODE,
+    @kotlinx.serialization.SerialName("addDirectories")
+    ADD_DIRECTORIES,
+    @kotlinx.serialization.SerialName("removeDirectories")
+    REMOVE_DIRECTORIES
+}
+
+/**
+ * 权限规则值
+ */
+@Serializable
+data class PermissionRuleValue(
+    val toolName: String,
+    val ruleContent: String? = null
+)
+
+/**
+ * 权限更新配置
+ */
+@Serializable
+data class PermissionUpdate(
+    val type: PermissionUpdateType,
+    val rules: List<PermissionRuleValue>? = null,
+    val behavior: PermissionBehavior? = null,
+    val mode: PermissionMode? = null,
+    val directories: List<String>? = null,
+    val destination: PermissionUpdateDestination? = null
+)
+
+/**
  * 授权响应数据类（前端 RequestPermission 回调的返回格式）
  */
 @Serializable
 data class PermissionResponse(
-    val approved: Boolean
+    val approved: Boolean,
+    val permissionUpdate: PermissionUpdate? = null,
+    val denyReason: String? = null
 )
 
 /**

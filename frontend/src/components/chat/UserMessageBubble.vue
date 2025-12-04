@@ -40,8 +40,8 @@
             <div
               v-if="messageText"
               class="message-text"
-              v-html="renderedText"
               @click="handleMessageClick"
+              v-html="renderedText"
             ></div>
 
             <!-- 内嵌图片（用户输入的图片） -->
@@ -256,60 +256,14 @@ const imageBlocks = computed(() => {
   return content.filter(block => block.type === 'image') as ImageBlock[]
 })
 
-// 提取上下文引用（用于显示标签）
-const contexts = computed(() => {
-  const ctxs = props.message.contexts
-  if (!ctxs || !Array.isArray(ctxs)) return []
-
-  const result: Array<{ type: string; label: string; path?: string }> = []
-
-  // 添加文件上下文
-  ctxs.forEach(ctx => {
-    if (ctx.type === 'file' && ctx.path) {
-      result.push({
-        type: 'file',
-        label: ctx.path,
-        path: ctx.path
-      })
-    }
-  })
-
-  // 添加图片上下文计数
-  const imageCount = contextImageRefs.value.length
-  if (imageCount > 0) {
-    result.push({
-      type: 'image',
-      label: `图片 (${imageCount})`
-    })
-  }
-
-  return result
-})
-
 // 判断是否为长消息（超过 200 字符或有多张图片）
 const isLongMessage = computed(() => {
   return messageText.value.length > 200 || imageBlocks.value.length > 2
 })
 
-// 是否有上下文引用（包括文件上下文和图片上下文）
-const _hasContexts = computed(() => {
-  return contexts.value.length > 0 || contextImagesAsBlocks.value.length > 0
-})
-
 // 切换折叠状态
 function toggleCollapse() {
   isCollapsed.value = !isCollapsed.value
-}
-
-// 获取上下文图标
-function _getContextIcon(type: string): string {
-  const icons: Record<string, string> = {
-    file: '📄',
-    folder: '📁',
-    url: '🔗',
-    code: '💻'
-  }
-  return icons[type] || '📎'
 }
 
 // 获取图片源地址
@@ -333,17 +287,6 @@ function getImageName(image: ImageBlock, index: number): string {
   return `image.${ext}`
 }
 
-// 获取图片大小（估算）
-function _getImageSize(image: ImageBlock): string {
-  if (image.source.type === 'base64' && image.source.data) {
-    // Base64 编码后的大小约为原始大小的 4/3
-    const bytes = (image.source.data.length * 3) / 4
-    if (bytes < 1024) return `${bytes.toFixed(0)} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-  return ''
-}
 
 // 图片预览状态
 const previewVisible = ref(false)

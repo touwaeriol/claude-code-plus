@@ -162,7 +162,7 @@ function processMessageStart(
     if (messageIndex !== -1) {
       // 保留已有的 content（可能包含通过 delta 事件添加的 thinking/text）
       // 如果 event 也带有 content，需要合并
-      let mergedContent = lastMessage.content || []
+      const mergedContent = lastMessage.content || []
       if (event.content && event.content.length > 0) {
         // 将 event.content 中不存在的块添加到现有内容
         const existingTypes = new Set(mergedContent.map(b => b.type))

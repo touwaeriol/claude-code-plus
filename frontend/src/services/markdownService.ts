@@ -31,8 +31,6 @@ class MarkdownService {
    */
   private setupCustomRules() {
     // 自定义代码块渲染
-    const _defaultFence = this.md.renderer.rules.fence!
-
     this.md.renderer.rules.fence = (tokens, idx, _options, _env, _slf) => {
       const token = tokens[idx]
       const lang = token.info.trim() || 'text'
@@ -50,9 +48,9 @@ class MarkdownService {
 
     // 自定义链接渲染 (支持文件路径)
     const defaultLinkOpen = this.md.renderer.rules.link_open ||
-      ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options))
+      ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
 
-    this.md.renderer.rules.link_open = (tokens, idx, _options, _env, _slf) => {
+    this.md.renderer.rules.link_open = (tokens, idx, _options, env, _slf) => {
       const token = tokens[idx]
       const hrefIndex = token.attrIndex('href')
 
@@ -65,7 +63,7 @@ class MarkdownService {
         }
       }
 
-      return defaultLinkOpen(tokens, idx, _options, _env, _slf)
+      return defaultLinkOpen(tokens, idx, _options, env, _slf)
     }
   }
 

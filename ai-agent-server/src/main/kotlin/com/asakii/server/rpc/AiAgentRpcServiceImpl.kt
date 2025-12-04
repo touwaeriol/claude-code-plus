@@ -12,10 +12,11 @@ import com.asakii.ai.agent.sdk.connect.CodexOverrides
 import com.asakii.ai.agent.sdk.model.*
 import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
 import com.asakii.claude.agent.sdk.types.PermissionMode
-import com.asakii.claude.agent.sdk.types.PermissionResult
 import com.asakii.claude.agent.sdk.types.PermissionResultAllow
 import com.asakii.claude.agent.sdk.types.PermissionResultDeny
-import com.asakii.claude.agent.sdk.types.ToolPermissionContext
+import com.asakii.claude.agent.sdk.types.PermissionUpdate as SdkPermissionUpdate
+import com.asakii.claude.agent.sdk.types.PermissionUpdateDestination as SdkPermissionUpdateDestination
+import com.asakii.claude.agent.sdk.types.CanUseTool
 import com.asakii.claude.agent.sdk.types.ToolType
 import com.asakii.codex.agent.sdk.CodexClientOptions
 import com.asakii.codex.agent.sdk.SandboxMode
@@ -23,6 +24,7 @@ import com.asakii.codex.agent.sdk.ThreadOptions
 import com.asakii.rpc.api.*
 import com.asakii.server.config.AiAgentServiceConfig
 import com.asakii.server.mcp.PermissionResponse
+import com.asakii.server.mcp.PermissionUpdateDestination
 import com.asakii.server.mcp.UserInteractionMcpServer
 import com.asakii.server.settings.ClaudeSettingsLoader
 import kotlinx.coroutines.CancellationException
@@ -36,6 +38,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.nio.file.Path
 import java.util.UUID
 import java.util.logging.Logger
@@ -347,22 +354,41 @@ class AiAgentRpcServiceImpl(
         // 注册 MCP Server（包含 AskUserQuestion 工具）
         val mcpServers = mapOf<String, Any>("user_interaction" to userInteractionServer)
 
-        // 权限回调：通过 RPC 调用前端获取用户授权
-        val canUseToolCallback: suspend (String, Map<String, Any>, ToolPermissionContext) -> PermissionResult = { toolName, input, _ ->
-            logger.info("🔐 [canUseTool] 请求授权: toolName=$toolName")
+        // canUseTool 回调：通过 RPC 调用前端获取用户授权（带 tool_use_id 和 permissionSuggestions）
+        val canUseToolCallback: CanUseTool = { toolName, input, toolUseId, context ->
+            logger.info("🔐 [canUseTool] 请求授权: toolName=$toolName, toolUseId=$toolUseId, suggestions=${context.suggestions.size}")
             val caller = clientCaller
             if (caller != null) {
                 try {
                     val response: PermissionResponse = caller.callTyped(
                         method = "RequestPermission",
-                        params = mapOf("tool_name" to toolName, "tool_input" to input)
+                        params = buildJsonObject {
+                            put("toolName", toolName)
+                            put("input", JsonObject(input))
+                            toolUseId?.let { put("toolUseId", it) }
+                            if (context.suggestions.isNotEmpty()) {
+                                put("permissionSuggestions", Json.encodeToJsonElement(
+                                    ListSerializer(SdkPermissionUpdate.serializer()),
+                                    context.suggestions
+                                ))
+                            }
+                        }
                     )
                     if (response.approved) {
-                        logger.info("✅ [canUseTool] 用户已授权: toolName=$toolName")
-                        PermissionResultAllow()
+                        // 记录权限更新（如果有）
+                        response.permissionUpdate?.let { update ->
+                            logger.info("📝 [canUseTool] 权限更新: type=${update.type}, destination=${update.destination}")
+                            // 非会话级权限更新需要持久化（TODO: 实现持久化服务）
+                            if (update.destination != PermissionUpdateDestination.SESSION) {
+                                logger.info("⚠️ [canUseTool] 非会话级权限更新暂未实现持久化: ${update.destination}")
+                            }
+                        }
+                        logger.info("✅ [canUseTool] 用户已授权: toolName=$toolName, toolUseId=$toolUseId")
+                        PermissionResultAllow(updatedInput = input)
                     } else {
-                        logger.info("❌ [canUseTool] 用户拒绝授权: toolName=$toolName")
-                        PermissionResultDeny(message = "用户拒绝授权")
+                        val reason = response.denyReason ?: "用户拒绝授权"
+                        logger.info("❌ [canUseTool] 用户拒绝授权: toolName=$toolName, toolUseId=$toolUseId, reason=$reason")
+                        PermissionResultDeny(message = reason)
                     }
                 } catch (e: Exception) {
                     logger.warning("⚠️ [canUseTool] 权限请求失败: toolName=$toolName, error=${e.message}")
@@ -370,7 +396,7 @@ class AiAgentRpcServiceImpl(
                 }
             } else {
                 logger.info("⚠️ [canUseTool] 无 clientCaller，默认允许: toolName=$toolName")
-                PermissionResultAllow()
+                PermissionResultAllow(updatedInput = input)
             }
         }
 

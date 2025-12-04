@@ -13,9 +13,13 @@ export interface PendingPermissionRequest {
   /** 需要授权的工具名称 */
   toolName: string
   /** 工具输入参数 */
-  toolInput: PermissionToolInput
+  input: PermissionToolInput
   /** 创建时间戳 */
   createdAt: number
+  /** 匹配到的 tool_use_id（用于在对应的工具块位置显示授权 UI） */
+  matchedToolCallId?: string
+  /** CLI 提供的权限建议 */
+  permissionSuggestions?: PermissionUpdate[]
   /** 用户响应后调用 */
   resolve: (response: PermissionResponse) => void
   /** 用户取消或出错时调用 */
@@ -28,6 +32,10 @@ export interface PendingPermissionRequest {
 export interface PermissionResponse {
   /** 是否批准 */
   approved: boolean
+  /** 用户选择的权限更新（如果选择了建议） */
+  permissionUpdate?: PermissionUpdate
+  /** 拒绝原因（如果拒绝） */
+  denyReason?: string
 }
 
 /**
@@ -58,11 +66,64 @@ export interface PermissionToolInput {
 }
 
 /**
+ * 权限行为类型
+ */
+export type PermissionBehavior = 'allow' | 'deny' | 'ask'
+
+/**
+ * 权限模式
+ */
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk'
+
+/**
+ * 权限更新目标
+ */
+export type PermissionUpdateDestination = 'userSettings' | 'projectSettings' | 'localSettings' | 'session'
+
+/**
+ * 权限更新类型
+ */
+export type PermissionUpdateType = 'addRules' | 'replaceRules' | 'removeRules' | 'setMode' | 'addDirectories' | 'removeDirectories'
+
+/**
+ * 权限规则值
+ */
+export interface PermissionRuleValue {
+  toolName: string
+  ruleContent?: string
+}
+
+/**
+ * 权限更新配置（CLI 建议）
+ */
+export interface PermissionUpdate {
+  type: PermissionUpdateType
+  rules?: PermissionRuleValue[]
+  behavior?: PermissionBehavior
+  mode?: PermissionMode
+  directories?: string[]
+  destination?: PermissionUpdateDestination
+}
+
+/**
  * 后端发送的授权请求参数
  */
 export interface PermissionRequestParams {
-  tool_name: string
-  tool_input: PermissionToolInput
+  toolName: string
+  input: PermissionToolInput
+  /** 工具调用 ID（来自 canUseTool 回调，用于精确关联前端工具块） */
+  toolUseId?: string
+  /** CLI 提供的权限建议 */
+  permissionSuggestions?: PermissionUpdate[]
+}
+
+/**
+ * 会话级权限规则
+ */
+export interface SessionPermissionRule {
+  toolName: string
+  ruleContent?: string
+  behavior: PermissionBehavior
 }
 
 /**

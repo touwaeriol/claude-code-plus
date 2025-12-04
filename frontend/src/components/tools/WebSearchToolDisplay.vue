@@ -57,8 +57,8 @@ const expanded = ref(false)
 const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
 
 const query = computed(() => props.toolCall.input?.query || '')
-const allowedDomains = computed(() => props.toolCall.input?.allowed_domains || [])
-const blockedDomains = computed(() => props.toolCall.input?.blocked_domains || [])
+const allowedDomains = computed(() => (props.toolCall.input?.allowed_domains as string[]) || [])
+const blockedDomains = computed(() => (props.toolCall.input?.blocked_domains as string[]) || [])
 
 // 结果文本
 const resultText = computed(() => {

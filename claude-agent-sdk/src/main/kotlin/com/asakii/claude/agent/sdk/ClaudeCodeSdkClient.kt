@@ -166,6 +166,12 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
             logger.info("📥 启动消息处理...")
             controlProtocol!!.startMessageProcessing(clientScope!!)
             logger.info("✅ 消息处理已启动")
+
+            // Initialize control protocol (registers hooks)
+            logger.info("🔧 初始化控制协议...")
+            controlProtocol!!.initialize()
+            logger.info("✅ 控制协议初始化完成")
+
             serverInfo = mapOf("status" to "connected", "mode" to "stream-json")
             logger.info("🎉 Claude SDK客户端连接成功!")
             

@@ -55,11 +55,6 @@ export interface IdeaJcefBridge {
 declare global {
   interface Window {
     __IDEA_JCEF__?: IdeaJcefBridge
-    // 兼容旧接口
-    __CLAUDE_IDE_BRIDGE__?: IdeaJcefBridge
-    __CLAUDE_IDE_HOST__?: {
-      postSessionState(payload: string): void
-    }
     __themeBridge?: IdeaJcefBridge['theme']
     __IDEA_TOOLS__?: IdeaJcefBridge['toolShow']
   }

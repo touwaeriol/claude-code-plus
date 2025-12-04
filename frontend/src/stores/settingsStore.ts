@@ -78,8 +78,8 @@ export const useSettingsStore = defineStore('settings', () => {
   /**
    * 更新权限模式
    */
-  async function updatePermissionMode(mode: PermissionMode) {
-    return await saveSettings({ permissionMode: mode })
+  async function updatePermissionMode(mode: PermissionMode | string) {
+    return await saveSettings({ permissionMode: mode as PermissionMode })
   }
 
   /**

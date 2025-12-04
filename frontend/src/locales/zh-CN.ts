@@ -232,6 +232,38 @@ export default {
   keyboard: {
     sendMessage: '发送消息',
     closeDialog: '关闭对话框'
+  },
+  permission: {
+    needsAuth: '需要授权',
+    allow: '允许',
+    deny: '不允许',
+    denyReasonPlaceholder: '拒绝原因（可选）',
+    confirm: '确认',
+    escToDeny: '按 ESC 直接拒绝',
+    destination: {
+      session: '本次会话',
+      projectSettings: '项目设置',
+      userSettings: '用户设置',
+      localSettings: '本地设置'
+    },
+    suggestion: {
+      rememberTo: '记住 {tool} 到{dest}',
+      rememberWithRuleTo: '记住 {tool}({rule}) 到{dest}',
+      replaceTo: '替换规则到{dest}',
+      removeFrom: '移除 {tool} 从{dest}',
+      removeRulesFrom: '移除规则从{dest}',
+      switchTo: '切换到{mode}',
+      applyTo: '应用到{dest}',
+      addDirTo: '添加目录 {dir} 到{dest}',
+      removeDirFrom: '移除目录 {dir} 从{dest}'
+    },
+    mode: {
+      default: '默认模式',
+      acceptEdits: '自动接受编辑',
+      plan: '计划模式',
+      bypassPermissions: '跳过权限',
+      dontAsk: '不再询问'
+    }
   }
 }
 

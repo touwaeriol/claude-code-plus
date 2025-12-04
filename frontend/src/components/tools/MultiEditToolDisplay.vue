@@ -87,12 +87,6 @@ const props = defineProps<Props>()
 const expanded = ref(false)
 const expandedEdits = ref<Set<number>>(new Set())
 
-const filePath = computed(() => props.toolCall.input.file_path || props.toolCall.input.path || '')
-const fileName = computed(() => {
-  const path = filePath.value
-  return path.split(/[\\/]/).pop() || path
-})
-
 const edits = computed(() => props.toolCall.input.edits || [])
 
 // 提取工具显示信息

@@ -269,13 +269,22 @@ class MessageParser {
         val controlRequest = when (subtype) {
             "interrupt" -> InterruptRequest()
             "can_use_tool" -> {
-                val toolName = request["tool_name"]?.jsonPrimitive?.content 
+                val toolName = request["tool_name"]?.jsonPrimitive?.content
                     ?: throw MessageParsingException("Missing 'tool_name' in permission request")
-                val input = request["input"] 
+                val input = request["input"]
                     ?: throw MessageParsingException("Missing 'input' in permission request")
                 val suggestions = request["permission_suggestions"]?.jsonArray?.toList()
                 val blockedPath = request["blocked_path"]?.jsonPrimitive?.contentOrNull
-                PermissionRequest(toolName = toolName, input = input, permissionSuggestions = suggestions, blockedPath = blockedPath)
+                val toolUseId = request["tool_use_id"]?.jsonPrimitive?.contentOrNull
+                val agentId = request["agent_id"]?.jsonPrimitive?.contentOrNull
+                PermissionRequest(
+                    toolName = toolName,
+                    input = input,
+                    permissionSuggestions = suggestions,
+                    blockedPath = blockedPath,
+                    toolUseId = toolUseId,
+                    agentId = agentId
+                )
             }
             "hook_callback" -> {
                 val callbackId = request["callback_id"]?.jsonPrimitive?.content 

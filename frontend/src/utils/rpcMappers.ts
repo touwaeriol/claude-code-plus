@@ -41,7 +41,7 @@ export function mapRpcContentBlock(block: RpcContentBlock): ContentBlock | null 
         is_error: block.is_error
       }
     case 'image':
-      return { type: 'image', source: block.source }
+      return { type: 'image', source: { ...block.source, type: block.source.type as 'base64' | 'url' } }
     case 'command_execution':
       return {
         type: 'command_execution',
@@ -86,7 +86,7 @@ export function mapRpcMessageToMessage(msg: RpcAssistantMessage | RpcUserMessage
   if (contentBlocks.length === 0) return null
 
   return {
-    id: 'id' in msg && msg.id ? msg.id : '',
+    id: ('id' in msg && msg.id ? msg.id : '') as string,
     role: msg.type,
     timestamp: Date.now(),
     content: contentBlocks,

@@ -46,7 +46,16 @@ const expanded = ref(true)
 
 const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
 
-const questions = computed(() => props.toolCall.input?.questions || [])
+interface AskUserQuestionInput {
+  questions?: Array<{
+    question: string
+    header?: string
+    options?: Array<{ label: string; description?: string }>
+    multiSelect?: boolean
+  }>
+}
+
+const questions = computed(() => (props.toolCall.input as AskUserQuestionInput)?.questions || [])
 
 // 结果文本
 const resultText = computed(() => {

@@ -354,7 +354,6 @@ function updateSuggestionPosition() {
   if (!textareaRef.value) return
 
   // 简化版本：在光标下方显示
-  const _rect = textareaRef.value.getBoundingClientRect()
   suggestionPosition.value = {
     top: '100%',
     left: '0px'
