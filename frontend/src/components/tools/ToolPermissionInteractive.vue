@@ -10,35 +10,35 @@
       <!-- 工具参数预览 -->
       <div class="permission-content">
         <template v-if="pendingPermission.toolName === 'Bash'">
-          <pre class="command-preview">{{ pendingPermission.toolInput.command }}</pre>
+          <pre class="command-preview">{{ pendingPermission.input.command }}</pre>
         </template>
         <template v-else-if="pendingPermission.toolName === 'Write'">
           <div class="file-info">
             <span class="file-icon">📄</span>
-            <span class="file-path">{{ pendingPermission.toolInput.file_path }}</span>
+            <span class="file-path">{{ pendingPermission.input.file_path }}</span>
           </div>
-          <div v-if="pendingPermission.toolInput.content" class="content-preview">
-            <pre class="content-text">{{ truncateContent(pendingPermission.toolInput.content) }}</pre>
+          <div v-if="pendingPermission.input.content" class="content-preview">
+            <pre class="content-text">{{ truncateContent(pendingPermission.input.content) }}</pre>
           </div>
         </template>
         <template v-else-if="pendingPermission.toolName === 'Edit'">
           <div class="file-info">
             <span class="file-icon">✏️</span>
-            <span class="file-path">{{ pendingPermission.toolInput.file_path }}</span>
+            <span class="file-path">{{ pendingPermission.input.file_path }}</span>
           </div>
-          <div v-if="pendingPermission.toolInput.old_string" class="edit-preview">
+          <div v-if="pendingPermission.input.old_string" class="edit-preview">
             <div class="edit-section">
               <span class="edit-label">替换:</span>
-              <pre class="edit-text old">{{ truncateContent(pendingPermission.toolInput.old_string) }}</pre>
+              <pre class="edit-text old">{{ truncateContent(pendingPermission.input.old_string) }}</pre>
             </div>
             <div class="edit-section">
               <span class="edit-label">为:</span>
-              <pre class="edit-text new">{{ truncateContent(pendingPermission.toolInput.new_string) }}</pre>
+              <pre class="edit-text new">{{ truncateContent(pendingPermission.input.new_string || '') }}</pre>
             </div>
           </div>
         </template>
         <template v-else>
-          <pre class="params-preview">{{ formatParams(pendingPermission.toolInput) }}</pre>
+          <pre class="params-preview">{{ formatParams(pendingPermission.input) }}</pre>
         </template>
       </div>
 
@@ -65,11 +65,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
-import type { PermissionToolInput } from '@/types/permission'
 
 const sessionStore = useSessionStore()
 
 // 获取当前会话的第一个待处理授权请求
+// 备注：此组件作为备用弹窗，显示所有待处理请求（包括有 matchedToolCallId 的）
+// 与 ToolPermissionInline 可能同时显示，用户点击任一个都会响应并隐藏两个 UI
 const pendingPermission = computed(() => {
   const permissions = sessionStore.getCurrentPendingPermissions()
   return permissions.length > 0 ? permissions[0] : null
@@ -77,13 +78,13 @@ const pendingPermission = computed(() => {
 
 function handleSkip() {
   if (pendingPermission.value) {
-    sessionStore.respondPermission(pendingPermission.value.id, false)
+    sessionStore.respondPermission(pendingPermission.value.id, { approved: false })
   }
 }
 
 function handleApprove() {
   if (pendingPermission.value) {
-    sessionStore.respondPermission(pendingPermission.value.id, true)
+    sessionStore.respondPermission(pendingPermission.value.id, { approved: true })
   }
 }
 
@@ -119,7 +120,7 @@ function truncateContent(content: string, maxLength: number = 200): string {
   return content.substring(0, maxLength) + '...'
 }
 
-function formatParams(params: PermissionToolInput): string {
+function formatParams(params: Record<string, unknown>): string {
   try {
     return JSON.stringify(params, null, 2)
   } catch {
