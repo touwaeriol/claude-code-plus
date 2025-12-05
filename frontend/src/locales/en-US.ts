@@ -265,5 +265,8 @@ export default {
       dontAsk: "don't ask"
     }
   }
+  ,
+  system: {
+    interrupted: '[Request interrupted by user]'
+  }
 }
-

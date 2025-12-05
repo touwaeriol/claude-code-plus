@@ -4,12 +4,12 @@ import { i18n } from '@/i18n'
 import { aiAgentService } from '@/services/aiAgentService'
 import type { ConnectOptions } from '@/services/aiAgentService'
 import type { AgentStreamEvent } from '@/services/AiAgentSession'
-import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock } from '@/types/message'
+import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock, ToolUseContent } from '@/types/message'
 import type { SessionState, PendingMessage } from '@/types/session'
-import { convertToDisplayItems, convertMessageToDisplayItems } from '@/utils/displayItemConverter'
+import { convertToDisplayItems, convertMessageToDisplayItems, createToolCall } from '@/utils/displayItemConverter'
 import { ConnectionStatus, ToolCallStatus } from '@/types/display'
 import type { DisplayItem, AssistantText, ThinkingContent } from '@/types/display'
-import { isAssistantText, isThinkingContent, isUserMessage as isDisplayUserMessage } from '@/types/display'
+import { isUserMessage as isDisplayUserMessage } from '@/types/display'
 import { isToolUseBlock, isTextBlock } from '@/utils/contentBlockUtils'
 import type { TextBlock } from '@/types/message'
 import { loggers } from '@/utils/logger'
@@ -524,6 +524,19 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
 
+    // 生成状态门控：仅当 isGenerating=true 时才处理 query 的响应
+    // 例外：允许打断响应（result.subtype === 'interrupted'）穿透以便关闭生成状态并渲染系统提示
+    if (!sessionState.isGenerating) {
+      const isInterruptResult =
+        normalized.kind === 'result' &&
+        (normalized.data as any)?.subtype === 'interrupted'
+
+      if (!isInterruptResult) {
+        log.debug(`[handleMessage] isGenerating=false，忽略消息: kind=${normalized.kind}`)
+        return
+      }
+    }
+
     // 根据消息类型分发处理
     switch (normalized.kind) {
       case 'stream_event':
@@ -542,15 +555,21 @@ export const useSessionStore = defineStore('session', () => {
 
   /**
    * 处理普通消息（assistant/user 消息）
+   *
+   * 简化后的处理策略：
+   * - stream_event 负责增量组装消息
+   * - 完整消息与最新流式消息 ID 相同 → 忽略（流式已组装完成）
+   * - 完整消息 ID 不同 → 添加新消息
+   * - user 消息（包含 tool_result）：更新对应的 tool_use 状态
    */
   function handleNormalMessage(sessionId: string, sessionState: SessionState, message: Message) {
     // 🔍 打印完整消息内容用于调试
-    console.log('🔍 [RPC Message]', {
+    log.debug('🔍 [handleNormalMessage]', {
       role: message.role,
       id: message.id,
       contentLength: message.content.length,
       contentTypes: message.content.map(b => b.type),
-      fullContent: JSON.stringify(message.content, null, 2)
+      isGenerating: sessionState.isGenerating
     })
 
     // 确保消息有 id 字段
@@ -559,48 +578,72 @@ export const useSessionStore = defineStore('session', () => {
       message.id = streamingId || generateMessageId(message.role)
     }
 
-    // 检查是否是 tool_result 消息
-    const isToolResultMessage = message.role === 'user' &&
-      message.content.some((block: ContentBlock) => block.type === 'tool_result')
-
-    // ✅ 流式模式下，assistant 消息已通过 handleStreamEvent 处理
-    // RPC 消息中的 assistant 消息可能是重复的，使用消息 ID 判断
+    // ✅ 简化后的 assistant 消息处理逻辑
     if (message.role === 'assistant') {
-      const streamingMessage = findStreamingAssistantMessage(sessionState)
-      if (streamingMessage) {
-        // 流式消息已经通过 delta 事件构建了完整内容
-        // 只需要用完整消息的内容替换（确保最终一致性），不重新同步 displayItems
-        streamingMessage.content = message.content
-        streamingMessage.isStreaming = false
-        streamingMessage.metadata = { ...streamingMessage.metadata, ...message.metadata }
-        // 不调用 syncDisplayItemsForMessage，避免重复创建 displayItems
-        touchSession(sessionId)
+      // 获取最新的流式消息
+      const latestStreamingMessage = findStreamingAssistantMessage(sessionState)
+
+      // 情况 1：存在流式消息且 ID 相同 → 忽略（流式已组装完成）
+      if (latestStreamingMessage && latestStreamingMessage.id === message.id) {
+        log.debug('⏭️ 忽略同 ID 的完整消息（流式已组装）', {
+          messageId: message.id
+        })
         return
       }
 
-      // 检查是否有相同 ID 的消息，有则覆盖
-      const existingIndex = sessionState.messages.findIndex(m => m.id === message.id)
-      if (existingIndex !== -1) {
-        sessionState.messages[existingIndex].content = message.content
-        sessionState.messages[existingIndex].isStreaming = false
-        touchSession(sessionId)
-        return
-      }
-    }
-
-    // 只处理非 assistant 消息
-    if (!isToolResultMessage) {
+      // 情况 2：ID 不同或无流式消息 → 添加新消息
+      log.debug('➕ 添加新 assistant 消息', {
+        messageId: message.id,
+        contentLength: message.content.length
+      })
       addMessage(sessionId, message)
-      // ✅ addMessage 已经增量更新了 displayItems，不需要再次重建
-    } else {
-      // tool_result 消息：只更新工具状态，不添加新消息
-      // displayItems 中的工具调用对象是响应式的，状态更新会自动反映
       touchSession(sessionId)
+      return
     }
 
-    // 处理 tool_result
-    if (isToolResultMessage) {
-      processToolResults(sessionState, message.content)
+    // 处理 user 消息
+    if (message.role === 'user') {
+      // 检查消息内容类型
+      const hasToolResult = message.content.some((block: ContentBlock) => block.type === 'tool_result')
+      const hasToolUse = message.content.some((block: ContentBlock) => block.type === 'tool_use')
+      const hasText = message.content.some((block: ContentBlock) => block.type === 'text')
+
+      // 1. tool_result 消息：只更新工具状态，不添加新的 displayItem
+      if (hasToolResult) {
+        log.debug('📥 处理 tool_result 消息')
+        processToolResults(sessionState, message.content)
+        touchSession(sessionId)
+        return
+      }
+
+      // 2. 纯 tool_use 的 user 消息：忽略
+      // （tool_use 已经通过 stream_event 的 content_block_start 处理了）
+      if (hasToolUse && !hasText) {
+        log.debug('⏭️ 忽略纯 tool_use 的 user 消息')
+        return
+      }
+
+      // 3. 文本类型的 user 消息（如中断提示）
+      if (hasText) {
+        // 检查是否是中断消息
+        const textBlock = message.content.find((block: ContentBlock) => block.type === 'text') as { text?: string } | undefined
+        const text = textBlock?.text || ''
+        if (text.includes('[Request interrupted') || text.includes('interrupted')) {
+          log.debug('⏭️ 忽略中断相关的 user 消息，由 result 消息处理')
+          return
+        }
+      }
+
+      // 4. 普通 user 消息：检查是否已存在（避免重复）
+      const existingUserMsg = sessionState.messages.find(m => m.id === message.id)
+      if (existingUserMsg) {
+        log.debug('⏭️ 忽略重复的 user 消息:', message.id)
+        return
+      }
+
+      // 添加新的 user 消息
+      addMessage(sessionId, message)
+      touchSession(sessionId)
     }
   }
 
@@ -617,6 +660,7 @@ export const useSessionStore = defineStore('session', () => {
   function processToolResults(sessionState: SessionState, content: ContentBlock[]) {
     const toolResults = content.filter((block): block is ToolResultBlock => block.type === 'tool_result')
 
+    let hasUpdates = false
     for (const result of toolResults) {
       const toolCall = sessionState.pendingToolCalls.get(result.tool_use_id)
       if (toolCall) {
@@ -630,12 +674,27 @@ export const useSessionStore = defineStore('session', () => {
           content: result.content as string | unknown[],
           is_error: result.is_error
         }
+        hasUpdates = true
+
+        log.debug('📥 更新工具结果:', {
+          toolUseId: result.tool_use_id,
+          status: toolCall.status,
+          hasResult: !!toolCall.result
+        })
 
         // 在 IDEA 环境下，工具调用成功后自动执行 IDEA 操作
         if (wasSuccess && ideaBridge.isInIde()) {
           executeIdeActionForTool(toolCall)
         }
+      } else {
+        log.warn('⚠️ 找不到对应的工具调用:', result.tool_use_id)
       }
+    }
+
+    // 🔑 强制触发 Vue 响应式更新
+    // displayItems 中的 toolCall 对象是响应式的，但需要触发数组变化检测
+    if (hasUpdates) {
+      sessionState.displayItems = [...sessionState.displayItems]
     }
   }
 
@@ -977,6 +1036,19 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
 
+    // 生成状态门控：仅当 isGenerating=true 时处理流事件
+    if (!sessionState.isGenerating) {
+      log.debug(`handleStreamEvent: 会话 ${sessionId} isGenerating=false，忽略流式事件`)
+      return
+    }
+
+    // 🔧 修复：如果请求已完成（比如被打断），忽略延迟到达的流式事件
+    const tracker = requestTracker.get(sessionId)
+    if (!tracker) {
+      log.debug(`handleStreamEvent: 会话 ${sessionId} 无活动请求，忽略延迟的流式事件`)
+      return
+    }
+
     const event = streamEventData.event
     if (!event) {
       log.warn('❌ [handleStreamEvent] 无效的 event 数据:', streamEventData)
@@ -999,15 +1071,24 @@ export const useSessionStore = defineStore('session', () => {
     // 处理不同类型的事件
     switch (eventType) {
       case 'message_start': {
+        // message_start 只负责初始化 Message 对象
+        // displayItems 由后续的 content_block_start/delta/stop 事件创建和更新
         const contentBlocks = (event.message?.content ?? []).map(mapRpcContentBlock).filter((b): b is ContentBlock => !!b)
         const existingStreaming = findStreamingAssistantMessage(sessionState)
         const previousId = existingStreaming?.id
         const messageId = event.message?.id || previousId || `assistant-${Date.now()}`
 
+        log.debug('📩 [message_start]', {
+          messageId,
+          previousId,
+          hasExistingStreaming: !!existingStreaming,
+          initialContentLength: contentBlocks.length
+        })
+
         if (existingStreaming && previousId && previousId !== messageId) {
-          // 结束上一条流式消息，开始新消息（保持旧内容不被覆盖）
+          // 结束上一条流式消息，开始新消息
           existingStreaming.isStreaming = false
-          syncDisplayItemsForMessage(existingStreaming, sessionState)
+          // ❌ 不调用 syncDisplayItemsForMessage，避免重复创建 displayItems
 
           const newMessage: Message = {
             id: messageId,
@@ -1018,8 +1099,11 @@ export const useSessionStore = defineStore('session', () => {
           }
           sessionState.messages.push(newMessage)
           updateStreamingMessageId(sessionId, messageId)
-          mergeInitialAssistantContent(newMessage, contentBlocks)
-          syncDisplayItemsForMessage(newMessage, sessionState)
+          // 合并初始内容（如果有的话）
+          if (contentBlocks.length > 0) {
+            mergeInitialAssistantContent(newMessage, contentBlocks)
+          }
+          // ❌ 不调用 syncDisplayItemsForMessage，让 content_block_start 来创建 displayItems
         } else {
           const targetMessage = ensureStreamingAssistantMessage(sessionId, sessionState)
           // 将占位消息 id 更新为后端真实 id
@@ -1028,8 +1112,11 @@ export const useSessionStore = defineStore('session', () => {
             targetMessage.id = messageId
           }
           targetMessage.isStreaming = true
-          mergeInitialAssistantContent(targetMessage, contentBlocks)
-          syncDisplayItemsForMessage(targetMessage, sessionState)
+          // 合并初始内容（如果有的话）
+          if (contentBlocks.length > 0) {
+            mergeInitialAssistantContent(targetMessage, contentBlocks)
+          }
+          // ❌ 不调用 syncDisplayItemsForMessage，让 content_block_start 来创建 displayItems
         }
 
         setSessionGenerating(sessionId, true)
@@ -1041,7 +1128,9 @@ export const useSessionStore = defineStore('session', () => {
         const streamingMessage = findStreamingAssistantMessage(sessionState)
         if (streamingMessage) {
           streamingMessage.isStreaming = false
-          syncDisplayItemsForMessage(streamingMessage, sessionState)
+          // ❌ 不调用 syncDisplayItemsForMessage
+          // displayItems 已经通过 content_block_start/delta/stop 事件创建和更新
+          // 这里只需要标记消息流式状态结束
         }
         // 注意：不在这里设置 isGenerating = false
         // isGenerating 只在 handleResultMessage() 中设置为 false（收到 result 消息时）
@@ -1052,33 +1141,60 @@ export const useSessionStore = defineStore('session', () => {
       case 'content_block_start': {
         const message = ensureStreamingAssistantMessage(sessionId, sessionState)
         const contentBlock = mapRpcContentBlock(event.content_block)
-
-        // 🔍 调试
-        console.log('🔍 [content_block_start]', {
-          eventIndex: event.index,
-          contentBlockType: contentBlock?.type,
-          currentContentLength: message.content.length
-        })
+        const blockIndex = event.index
 
         if (contentBlock) {
-          // 🔧 修复：使用 event.index 确保内容块放在正确位置
-          // Claude API 的 index 是绝对索引，需要确保数组长度匹配
-          while (message.content.length < event.index) {
-            // 填充空位（理论上不应该发生，但以防万一）
+          // 1. 添加到 message.content
+          while (message.content.length < blockIndex) {
             message.content.push({ type: 'text', text: '' } as any)
           }
-          if (message.content.length === event.index) {
+          if (message.content.length === blockIndex) {
             message.content.push(contentBlock)
           } else {
-            message.content[event.index] = contentBlock
+            message.content[blockIndex] = contentBlock
           }
 
-          if (contentBlock.type === 'tool_use' && contentBlock.id) {
+          // 2. 直接创建 DisplayItem 并 push（内容为空）
+          if (contentBlock.type === 'text') {
+            const displayId = `${message.id}-text-${blockIndex}`
+            // 检查是否已存在
+            if (!sessionState.displayItems.find(item => item.id === displayId)) {
+              sessionState.displayItems.push({
+                displayType: 'assistantText' as const,
+                id: displayId,
+                content: '', // 初始为空
+                timestamp: message.timestamp,
+                isLastInMessage: false,
+                stats: undefined
+              })
+            }
+          } else if (contentBlock.type === 'thinking') {
+            const displayId = `${message.id}-thinking-${blockIndex}`
+            if (!sessionState.displayItems.find(item => item.id === displayId)) {
+              sessionState.displayItems.push({
+                displayType: 'thinking' as const,
+                id: displayId,
+                content: '', // 初始为空
+                signature: contentBlock.signature,
+                timestamp: message.timestamp
+              })
+            }
+          } else if (contentBlock.type === 'tool_use' && contentBlock.id) {
+            // ⚠️ tool_use 的 input 是 JSON，必须等累加完成后才能使用
+            // 这里只初始化累加器，不创建 DisplayItem
+            // 等 content_block_stop 时 JSON 解析完成后再创建
             toolInputJsonAccumulator.set(contentBlock.id, '')
             registerToolCall(contentBlock as ToolUseBlock)
+            // åŒæ—¶åˆ›å»ºå·¥å…·è°ƒç”¨çš„å±•ç¤ºå¯¹è±¡ï¼Œä¾¿äºŽç«‹å³æ˜¾ç¤ºå·¥å…·å¡ç‰‡å’Œæƒé™ UI
+            const __existingToolItem = sessionState.displayItems.find(
+              item => item.displayType === 'toolCall' && item.id === contentBlock.id
+            )
+            if (!__existingToolItem) {
+              const __toolCall = createToolCall(contentBlock as unknown as ToolUseContent, sessionState.pendingToolCalls)
+              sessionState.displayItems.push(__toolCall)
+            }
           }
         }
-        syncDisplayItemsForMessage(message, sessionState)
         break
       }
 
@@ -1087,59 +1203,61 @@ export const useSessionStore = defineStore('session', () => {
         const index = event.index
         const delta = event.delta
 
-        // 🔍 调试：检查 input_json_delta 是否正确处理
-        if (delta?.type === 'input_json_delta') {
-          console.log('🔍 [content_block_delta] input_json_delta received:', {
-            index,
-            contentLength: message.content.length,
-            deltaType: delta.type,
-            partialJson: delta.partial_json?.substring(0, 100),
-            contentTypes: message.content.map((b: ContentBlock) => b.type)
-          })
-        }
-
-        // 🔍 调试：打印 delta 处理信息
-        console.log('🔍 [content_block_delta]', {
-          index,
-          contentLength: message.content.length,
-          deltaType: delta?.type,
-          indexValid: index >= 0 && index < message.content.length
-        })
-
         if (index >= 0 && index < message.content.length && delta) {
           const contentBlock = message.content[index]
-          console.log('🔍 [content_block_delta] contentBlock:', {
-            blockType: contentBlock.type,
-            deltaType: delta.type,
-            match: delta.type === 'text_delta' && contentBlock.type === 'text'
-          })
-          if (delta.type === 'text_delta' && contentBlock.type === 'text') {
-            // 累积文本到 message.content
-            contentBlock.text += delta.text
-            // 🔧 增量更新：直接更新对应的 displayItem，而不是重建整个数组
-            updateTextDisplayItemIncrementally(message, index, contentBlock.text, sessionState)
-          } else if (delta.type === 'text_delta' && contentBlock.type === 'tool_use') {
-            const accumulated = toolInputJsonAccumulator.get(contentBlock.id) || ''
-            const newAccumulated = accumulated + delta.text
-            toolInputJsonAccumulator.set(contentBlock.id, newAccumulated)
-            try {
-              contentBlock.input = JSON.parse(newAccumulated)
-            } catch {
-              contentBlock.input = newAccumulated
-            }
-          } else if (delta.type === 'input_json_delta' && contentBlock.type === 'tool_use') {
-            const accumulated = toolInputJsonAccumulator.get(contentBlock.id) || ''
-            const newAccumulated = accumulated + delta.partial_json
-            toolInputJsonAccumulator.set(contentBlock.id, newAccumulated)
-            try { contentBlock.input = JSON.parse(newAccumulated) } catch { /* ignore */ }
-          } else if (delta.type === 'thinking_delta' && contentBlock.type === 'thinking') {
-            contentBlock.thinking += delta.thinking
-            // 🔧 增量更新思考内容
-            updateThinkingDisplayItemIncrementally(message, index, contentBlock.thinking, sessionState)
+
+          // 根据 delta.type 判断处理方式
+          switch (delta.type) {
+            case 'text_delta':
+              // ✅ 实时渲染：累加并立即更新 DisplayItem
+              if (contentBlock.type === 'text') {
+                contentBlock.text += delta.text
+                updateTextDisplayItemIncrementally(message, index, contentBlock.text, sessionState)
+              }
+              break
+
+            case 'thinking_delta':
+              // ✅ 实时渲染：累加并立即更新 DisplayItem
+              if (contentBlock.type === 'thinking') {
+                contentBlock.thinking += delta.thinking
+                updateThinkingDisplayItemIncrementally(message, index, contentBlock.thinking, sessionState)
+              }
+              break
+
+            case 'input_json_delta':
+              // ⚠️ 只累加 JSON 片段，不更新 displayItems
+              // 等 content_block_stop 时 JSON 解析完成后再创建 DisplayItem
+              if (contentBlock.type === 'tool_use') {
+                const accumulated = toolInputJsonAccumulator.get(contentBlock.id) || ''
+                const newAccumulated = accumulated + delta.partial_json
+                toolInputJsonAccumulator.set(contentBlock.id, newAccumulated)
+                // 尝试解析到 message.content，但不更新 displayItems
+                try {
+                  contentBlock.input = JSON.parse(newAccumulated)
+                } catch {
+                  // JSON 不完整，继续累加
+                }
+              }
+              break
+
+            default:
+              // 处理 signature_delta（类型定义可能未包含）
+              if ((delta as any).type === 'signature_delta' && contentBlock.type === 'thinking') {
+                const sigDelta = delta as any
+                if (sigDelta.signature) {
+                  contentBlock.signature = sigDelta.signature
+                  // 更新对应 displayItem 的 signature
+                  const displayItem = sessionState.displayItems.find(
+                    item => item.id === `${message.id}-thinking-${index}` && item.displayType === 'thinking'
+                  ) as ThinkingContent | undefined
+                  if (displayItem) {
+                    displayItem.signature = sigDelta.signature
+                  }
+                }
+              }
+              break
           }
         }
-        // 🔧 不再每次 delta 都调用 syncDisplayItemsForMessage()
-        // syncDisplayItemsForMessage(message, sessionState)
         break
       }
 
@@ -1147,15 +1265,40 @@ export const useSessionStore = defineStore('session', () => {
         const message = findStreamingAssistantMessage(sessionState)
         if (message && event.index >= 0 && event.index < message.content.length) {
           const block = message.content[event.index]
+
           if (block.type === 'tool_use') {
-            const toolCall = sessionState.pendingToolCalls.get((block as ToolUseBlock).id)
-            if (toolCall) {
-              // 参数已完整解析，刷新输入快照，等待 tool_result 更新最终状态
-              toolCall.input = (block as ToolUseBlock).input || toolCall.input
+            const toolUseBlock = block as ToolUseBlock
+
+            log.debug('📦 content_block_stop (tool_use):', {
+              id: toolUseBlock.id,
+              toolName: toolUseBlock.toolName,
+              hasInput: !!toolUseBlock.input,
+              inputKeys: toolUseBlock.input ? Object.keys(toolUseBlock.input) : []
+            })
+
+            // ✅ JSON 解析完成，现在更新 DisplayItem
+            const existingDisplayItem = sessionState.displayItems.find(
+              item => item.id === toolUseBlock.id && item.displayType === 'toolCall'
+            ) as ToolCall | undefined
+
+            if (!existingDisplayItem) {
+              // 创建新的 DisplayItem
+              const toolCall = createToolCall(toolUseBlock as ToolUseContent, sessionState.pendingToolCalls)
+              sessionState.displayItems.push(toolCall)
+            } else {
+              // 更新已存在的 DisplayItem 的 input
+              existingDisplayItem.input = toolUseBlock.input as Record<string, unknown> || existingDisplayItem.input
             }
+
+            // 同时更新 pendingToolCalls
+            const pendingToolCall = sessionState.pendingToolCalls.get(toolUseBlock.id)
+            if (pendingToolCall) {
+              pendingToolCall.input = toolUseBlock.input || pendingToolCall.input
+            }
+
+            // 🔑 强制触发 Vue 响应式更新
+            sessionState.displayItems = [...sessionState.displayItems]
           }
-          // 🔧 修复：工具调用参数完成后，同步更新 displayItems
-          syncDisplayItemsForMessage(message, sessionState)
         }
         break
       }
@@ -1428,80 +1571,53 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   /**
-   * 同步 displayItems 以反映消息内容的变化
-   *
-   * 当流式更新修改了 message.content 时，需要更新 displayItems 中对应的对象
-   *
-   * 🔧 关键：按照 message.content 的顺序来同步 displayItems，确保顺序正确
-   */
-  /**
    * 同步消息到 displayItems
    *
    * 核心原则：displayItems 只增不减
-   * 1. 流式片段 → 创建 DisplayItem 对象，追加到 displayItems
-   * 2. 后续片段 → 更新该对象的 content（原地更新）
-   * 3. 完整消息 → 替换该对象的 content，不删除对象
-   * 4. 新消息 → 追加新对象到 displayItems 末尾
+   * - 存在 → 更新属性
+   * - 不存在 → 追加到末尾
+   * - 永不删除
    */
   function syncDisplayItemsForMessage(message: Message, sessionState: SessionState) {
-    // 1. 构建现有 displayItems 的索引（按 id 查找）
-    const existingItemsMap = new Map<string, DisplayItem>()
-    for (const item of sessionState.displayItems) {
-      existingItemsMap.set(item.id, item)
-    }
-
-    // 2. 收集所有文本块的索引（用于标记最后一个文本块）
-    const textBlockIndices: number[] = []
-    message.content.forEach((block, idx) => {
-      if (isTextBlock(block)) {
-        textBlockIndices.push(idx)
-      }
-    })
-    const lastTextBlockIndex = textBlockIndices.length > 0 ? textBlockIndices[textBlockIndices.length - 1] : -1
-
-    // 3. 遍历 message.content，更新现有或追加新的 DisplayItem
     const skipTextIndices = computeToolTextSkip(message)
 
+    // 遍历 message.content，查找或创建对应的 DisplayItem
     for (let blockIdx = 0; blockIdx < message.content.length; blockIdx++) {
       const block = message.content[blockIdx]
 
       if (isTextBlock(block)) {
-        if (skipTextIndices.has(blockIdx)) {
-          continue
-        }
-        const textBlock = block as TextBlock
-        const expectedId = `${message.id}-text-${blockIdx}`
-        const existingItem = existingItemsMap.get(expectedId)
+        if (skipTextIndices.has(blockIdx)) continue
 
-        if (existingItem && isAssistantText(existingItem)) {
-          // ✅ 原地更新 content，不删除对象
-          existingItem.content = textBlock.text
-          existingItem.isLastInMessage = blockIdx === lastTextBlockIndex
+        const expectedId = `${message.id}-text-${blockIdx}`
+        // 直接在数组中查找
+        let existingItem = sessionState.displayItems.find(
+          item => item.id === expectedId && item.displayType === 'assistantText'
+        ) as AssistantText | undefined
+
+        if (existingItem) {
+          // 更新属性
+          existingItem.content = (block as TextBlock).text
         } else {
-          // ✅ 新的文本块，追加到末尾
-          const isLastTextBlock = blockIdx === lastTextBlockIndex
-          const assistantText = {
+          // 追加新项
+          sessionState.displayItems.push({
             displayType: 'assistantText' as const,
             id: expectedId,
-            content: textBlock.text,
+            content: (block as TextBlock).text,
             timestamp: message.timestamp,
-            isLastInMessage: isLastTextBlock,
+            isLastInMessage: false,
             stats: undefined
-          }
-          sessionState.displayItems.push(assistantText)
+          })
         }
       } else if (block.type === 'thinking') {
         const expectedId = `${message.id}-thinking-${blockIdx}`
-        const existingItem = existingItemsMap.get(expectedId)
+        let existingItem = sessionState.displayItems.find(
+          item => item.id === expectedId && item.displayType === 'thinking'
+        ) as ThinkingContent | undefined
 
-        if (existingItem && isThinkingContent(existingItem)) {
-          // ✅ 原地更新 content，不删除对象
+        if (existingItem) {
           existingItem.content = block.thinking || ''
-          if (block.signature) {
-            existingItem.signature = block.signature
-          }
+          if (block.signature) existingItem.signature = block.signature
         } else {
-          // ✅ 新的 thinking 块，追加到末尾
           sessionState.displayItems.push({
             displayType: 'thinking' as const,
             id: expectedId,
@@ -1511,25 +1627,24 @@ export const useSessionStore = defineStore('session', () => {
           })
         }
       } else if (isToolUseBlock(block)) {
-        const existingItem = existingItemsMap.get(block.id) as ToolCall | undefined
         const toolUseBlock = block as ToolUseBlock
+        let existingItem = sessionState.displayItems.find(
+          item => item.id === block.id && item.displayType === 'toolCall'
+        ) as ToolCall | undefined
 
-        if (existingItem && existingItem.displayType === 'toolCall') {
-          // ✅ 原地更新 input，不删除对象
+        if (existingItem) {
+          // 更新 input
           if (toolUseBlock.input !== undefined &&
               Object.keys(toolUseBlock.input as Record<string, unknown>).length > 0) {
-            Object.assign(existingItem, { input: toolUseBlock.input })
+            existingItem.input = toolUseBlock.input as Record<string, unknown>
           }
         } else {
-          // ✅ 新的工具调用，追加到末尾
+          // 创建并追加
           const toolCall = createToolCall(toolUseBlock as ToolUseContent, sessionState.pendingToolCalls)
           sessionState.displayItems.push(toolCall)
         }
       }
     }
-
-    // 4. 触发响应式更新（不改变数组引用，Vue 会自动检测到属性变化）
-    // 如果需要强制更新，可以用 sessionState.displayItems = [...sessionState.displayItems]
   }
 
   /**
@@ -1599,20 +1714,28 @@ export const useSessionStore = defineStore('session', () => {
       }
     }
 
-    // 🔧 修复：结束正在流式的 assistant 消息（打断时不会收到 message_stop 事件）
+    // 🔧 结束正在流式的 assistant 消息（打断时可能不会收到 message_stop 事件）
     const streamingMessage = findStreamingAssistantMessage(sessionState)
     if (streamingMessage) {
-      // 如果是打断响应，在消息末尾添加提示
-      if (resultData.subtype === 'interrupted') {
-        streamingMessage.content.push({
-          type: 'text',
-          text: '\n\n[Request interrupted by user]'
-        })
-        log.debug('handleResultMessage: 添加打断提示')
-      }
       streamingMessage.isStreaming = false
-      syncDisplayItemsForMessage(streamingMessage, sessionState)
+      // ❌ 不调用 syncDisplayItemsForMessage
+      // displayItems 已经通过 content_block_start/delta/stop 事件创建和更新
       log.debug('handleResultMessage: 结束流式 assistant 消息')
+    }
+
+    // 打断响应：先结束生成，再渲染红色打断提示（i18n）
+    if (resultData.subtype === 'interrupted') {
+      // 1) 先结束生成，清理追踪，确保后续流事件不再影响 UI
+      setSessionGenerating(sessionId, false)
+      requestTracker.delete(sessionId)
+      // 2) 再渲染红色打断提示（专用组件）
+      sessionState.displayItems.push({
+        id: `interrupt-${Date.now()}`,
+        displayType: 'interruptedHint',
+        timestamp: Date.now(),
+        message: i18n.global.t('system.interrupted')
+      } as any)
+      log.info('handleResultMessage: 渲染打断提示')
     }
 
     // 处理错误：如果 is_error 为 true，添加错误 DisplayItem
@@ -1630,10 +1753,12 @@ export const useSessionStore = defineStore('session', () => {
       sessionState.displayItems.push(errorItem)
     }
 
-    // 标记生成完成
-    setSessionGenerating(sessionId, false)
-    requestTracker.delete(sessionId)
-    log.debug('handleResultMessage: 请求完成, 清除追踪信息')
+    // 标记生成完成（非打断场景）
+    if (resultData.subtype !== 'interrupted') {
+      setSessionGenerating(sessionId, false)
+      requestTracker.delete(sessionId)
+      log.debug('handleResultMessage: 请求完成, 清除追踪信息')
+    }
 
     // 处理队列中的下一条消息
     processNextQueuedMessage()

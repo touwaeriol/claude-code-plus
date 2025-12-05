@@ -265,5 +265,8 @@ export default {
       dontAsk: '不再询问'
     }
   }
+  ,
+  system: {
+    interrupted: '[用户已打断请求]'
+  }
 }
-

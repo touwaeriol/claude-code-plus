@@ -8,6 +8,9 @@ import com.asakii.claude.agent.sdk.types.ToolType
  */
 class UiStreamAdapter {
 
+    // 维护 index → toolId 的映射，用于在 delta 事件中获取正确的 toolId
+    private val indexToToolIdMap = mutableMapOf<Int, String>()
+
     fun convert(event: NormalizedStreamEvent): List<UiStreamEvent> =
         when (event) {
             is MessageStartedEvent -> listOf(UiMessageStart(event.messageId, event.initialContent))
@@ -42,20 +45,27 @@ class UiStreamAdapter {
         when (val delta = event.delta) {
             is TextDeltaPayload -> listOf(UiTextDelta(delta.text, index = event.index))
             is ThinkingDeltaPayload -> listOf(UiThinkingDelta(delta.thinking, index = event.index))
-            is ToolDeltaPayload -> listOf(
-                UiToolProgress(
-                    toolId = event.index.toString(),
-                    status = ContentStatus.IN_PROGRESS,
-                    outputPreview = delta.partialJson
+            is ToolDeltaPayload -> {
+                // 使用映射查找真正的 toolId，如果找不到则 fallback 到 index
+                val toolId = indexToToolIdMap[event.index] ?: event.index.toString()
+                listOf(
+                    UiToolProgress(
+                        toolId = toolId,
+                        status = ContentStatus.IN_PROGRESS,
+                        outputPreview = delta.partialJson
+                    )
                 )
-            )
-            is CommandDeltaPayload -> listOf(
-                UiToolProgress(
-                    toolId = event.index.toString(),
-                    status = ContentStatus.IN_PROGRESS,
-                    outputPreview = delta.output
+            }
+            is CommandDeltaPayload -> {
+                val toolId = indexToToolIdMap[event.index] ?: event.index.toString()
+                listOf(
+                    UiToolProgress(
+                        toolId = toolId,
+                        status = ContentStatus.IN_PROGRESS,
+                        outputPreview = delta.output
+                    )
                 )
-            )
+            }
         }
 
     // 追踪内容块索引
@@ -68,6 +78,8 @@ class UiStreamAdapter {
                 val toolTypeEnum = ToolType.fromToolName(toolName)
                 // 对于工具调用，从 content 中获取原生 id（如果有）
                 val toolId = (event.content as? ToolUseContent)?.id ?: event.index.toString()
+                // 记录 index → toolId 映射，供后续 delta 事件使用
+                indexToToolIdMap[event.index] = toolId
                 listOf(
                     UiToolStart(
                         toolId = toolId,
@@ -82,9 +94,10 @@ class UiStreamAdapter {
         }
     }
 
-    // 重置索引计数器（在 message_start 时调用）
+    // 重置索引计数器和映射（在 message_start 时调用）
     fun resetContentIndex() {
         contentIndexCounter = 0
+        indexToToolIdMap.clear()
     }
 
     private fun convertContentComplete(event: ContentCompletedEvent): List<UiStreamEvent> {

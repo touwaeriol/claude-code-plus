@@ -43,6 +43,12 @@
       :error-message="item.message"
     />
 
+    <!-- 打断提示 -->
+    <InterruptedHintDisplay
+      v-else-if="item.displayType === 'interruptedHint'"
+      :message="item.message"
+    />
+
     <!-- 未知类型 -->
     <div
       v-else
@@ -64,6 +70,7 @@ import ThinkingDisplay from './ThinkingDisplay.vue'
 import ToolCallDisplay from './ToolCallDisplay.vue'
 import SystemMessageDisplay from './SystemMessageDisplay.vue'
 import ErrorResultDisplay from './ErrorResultDisplay.vue'
+import InterruptedHintDisplay from './InterruptedHintDisplay.vue'
 import ToolPermissionInline from '@/components/tools/ToolPermissionInline.vue'
 
 interface Props {

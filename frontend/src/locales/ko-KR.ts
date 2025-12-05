@@ -263,4 +263,8 @@ export default {
       dontAsk: '다시 묻지 않음'
     }
   }
+  ,
+  system: {
+    interrupted: '[사용자에 의해 요청이 중단되었습니다]'
+  }
 }
