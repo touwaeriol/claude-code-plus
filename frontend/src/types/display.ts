@@ -129,6 +129,14 @@ export interface ErrorResult extends BaseDisplayItem {
 }
 
 /**
+ * 打断提示（用户中断请求时显示）
+ */
+export interface InterruptedHint extends BaseDisplayItem {
+  displayType: 'interruptedHint'
+  message: string
+}
+
+/**
  * 思考内容
  */
 export interface ThinkingContent extends BaseDisplayItem {
@@ -478,6 +486,7 @@ export type DisplayItem =
   | ToolCall
   | SystemMessage
   | ErrorResult
+  | InterruptedHint
 
 // ============ 类型守卫 ============
 

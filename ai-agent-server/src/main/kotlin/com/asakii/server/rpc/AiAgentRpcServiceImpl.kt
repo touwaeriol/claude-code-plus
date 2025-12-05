@@ -192,11 +192,10 @@ class AiAgentRpcServiceImpl(
         }
 
     override suspend fun interrupt(): RpcStatusResult {
-        logger.info("🔔 [AI-Agent] 中断当前回合")
+        logger.info("🔔 [AI-Agent] 中断当前回合（立即返回模式）")
+        // 直接调用 SDK 的 interrupt，不再等待 query 流的完成信号
         client?.interrupt()
-        // 等待 result 消息到达（收到 result 时 queryCompletion 会被 complete）
-        queryCompletion?.await()
-        logger.info("✅ [AI-Agent] 打断完成，result 消息已发送")
+        logger.info("✅ [AI-Agent] interrupt 请求已提交，立即返回给前端")
         return RpcStatusResult(status = RpcSessionStatus.INTERRUPTED)
     }
 
@@ -855,7 +854,6 @@ class AiAgentRpcServiceImpl(
         RpcPermissionMode.DONT_ASK -> SdkPermissionMode.DONT_ASK
     }
 }
-
 
 
 

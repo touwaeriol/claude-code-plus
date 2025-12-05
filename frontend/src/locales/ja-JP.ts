@@ -263,4 +263,8 @@ export default {
       dontAsk: '再度確認しない'
     }
   }
+  ,
+  system: {
+    interrupted: '[ユーザーによりリクエストが中断されました]'
+  }
 }
