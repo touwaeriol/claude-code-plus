@@ -33,6 +33,14 @@ class SubprocessTransport(
     private var reader: BufferedReader? = null
     private var errorReader: BufferedReader? = null
     private var isConnectedFlag = false
+
+    // 临时文件跟踪，用于存储过长的 agents JSON（参考 Python SDK）
+    private val tempFiles = mutableListOf<Path>()
+
+    companion object {
+        // Windows 命令行长度限制（参考 Python SDK）
+        private const val CMD_LENGTH_LIMIT = 8000
+    }
     
     private val json = Json {
         ignoreUnknownKeys = true
@@ -217,14 +225,25 @@ class SubprocessTransport(
             writer?.close()
             reader?.close()
             errorReader?.close()
-            
+
             process?.let { p ->
                 // Give the process a chance to terminate gracefully
                 if (!p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
                     p.destroyForcibly()
                 }
             }
-            
+
+            // 清理临时文件（agents JSON 等）
+            tempFiles.forEach { tempFile ->
+                try {
+                    Files.deleteIfExists(tempFile)
+                    logger.info("🗑️ 清理临时文件: $tempFile")
+                } catch (e: Exception) {
+                    logger.warning("⚠️ 清理临时文件失败: $tempFile - ${e.message}")
+                }
+            }
+            tempFiles.clear()
+
             isConnectedFlag = false
         } catch (e: Exception) {
             throw TransportException("Failed to close transport", e)
@@ -319,7 +338,30 @@ class SubprocessTransport(
         if (options.disallowedTools.isNotEmpty()) {
             command.addAll(listOf("--disallowed-tools", options.disallowedTools.joinToString(",")))
         }
-        
+
+        // Agents (programmatic subagents) - 参考 Python SDK 实现
+        options.agents?.let { agents ->
+            if (agents.isNotEmpty()) {
+                val agentsJson = buildJsonObject {
+                    agents.forEach { (name, agentDef) ->
+                        putJsonObject(name) {
+                            put("description", agentDef.description)
+                            put("prompt", agentDef.prompt)
+                            agentDef.tools?.let { tools ->
+                                putJsonArray("tools") {
+                                    tools.forEach { add(it) }
+                                }
+                            }
+                            agentDef.model?.let { put("model", it) }
+                        }
+                    }
+                }.toString()
+
+                command.addAll(listOf("--agents", agentsJson))
+                logger.info("🤖 配置自定义代理: ${agents.keys.joinToString(", ")}")
+            }
+        }
+
         // Permission mode
         options.permissionMode?.let { mode ->
             val permissionModeValue = when (mode) {
@@ -478,6 +520,30 @@ class SubprocessTransport(
             command.add("--print")
         }
         
+        // 检查命令行长度（Windows 限制约 8000 字符）
+        // 如果过长且有 agents 参数，使用临时文件存储 agents JSON
+        val cmdStr = command.joinToString(" ")
+        if (cmdStr.length > CMD_LENGTH_LIMIT && options.agents != null) {
+            try {
+                val agentsIdx = command.indexOf("--agents")
+                if (agentsIdx >= 0 && agentsIdx + 1 < command.size) {
+                    val agentsJsonValue = command[agentsIdx + 1]
+
+                    // 创建临时文件
+                    val tempFile = Files.createTempFile("claude_agents_", ".json")
+                    Files.writeString(tempFile, agentsJsonValue)
+                    tempFiles.add(tempFile)
+
+                    // 替换为 @filepath 引用
+                    command[agentsIdx + 1] = "@${tempFile.toAbsolutePath()}"
+
+                    logger.info("📄 命令行长度 (${cmdStr.length}) 超过限制 ($CMD_LENGTH_LIMIT)，使用临时文件: $tempFile")
+                }
+            } catch (e: Exception) {
+                logger.warning("⚠️ 优化命令行长度失败: ${e.message}")
+            }
+        }
+
         logger.info("🔧 完整构建的Claude CLI命令: ${command.joinToString(" ")}")
         return command
     }

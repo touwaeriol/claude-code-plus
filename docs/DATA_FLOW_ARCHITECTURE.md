@@ -160,10 +160,32 @@ claude.cmd --verbose \
   --model claude-opus-4-5-20251101 \
   --permission-mode default \
   --permission-prompt-tool stdio \
-  --mcp-config "{\"mcpServers\":{\"user_interaction\":{\"type\":\"sdk\"}}}"
+  --mcp-config "{\"mcpServers\":{\"user_interaction\":{\"type\":\"sdk\"}}}" \
+  --agents '{"code-reviewer":{"description":"...","prompt":"...","tools":["Read","Grep"]}}'
 ```
 
 **关键文件**: `claude-agent-sdk/src/main/kotlin/com/asakii/claude/agent/sdk/transport/SubprocessTransport.kt`
+
+**子代理参数传递**
+
+SDK 支持通过 `--agents` 参数传递自定义子代理配置：
+
+```kotlin
+val options = ClaudeAgentOptions(
+    agents = mapOf(
+        "code-reviewer" to AgentDefinition(
+            description = "Reviews code for quality",
+            prompt = "You are a code reviewer...",
+            tools = listOf("Read", "Grep"),
+            model = "sonnet"
+        )
+    )
+)
+```
+
+SDK 将 agents 序列化为 JSON 并传递给 CLI：
+- 正常情况：`--agents <JSON>`
+- 命令行过长（> 8000 字符）：使用临时文件 `--agents @<filepath>`
 
 #### 1.2 消息协议 (ControlProtocol)
 
