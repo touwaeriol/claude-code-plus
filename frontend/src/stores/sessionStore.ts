@@ -2661,10 +2661,11 @@ export const useSessionStore = defineStore('session', () => {
 
     log.info(`[RequestPermission] 用户响应授权请求: ${permissionId}, approved=${response.approved}`)
 
-    // 如果选择了会话级权限更新，记录到本地（支持多个权限更新）
+    // 如果选择了权限更新，应用到本地（支持多个权限更新）
     if (response.approved && response.permissionUpdates?.length) {
       for (const update of response.permissionUpdates) {
-        if (update.destination === 'session') {
+        // setMode 类型总是处理（更新前端 UI），其他类型只处理 session destination
+        if (update.type === 'setMode' || update.destination === 'session') {
           addSessionPermissionRule(pending.sessionId, update)
         }
       }
@@ -2678,7 +2679,8 @@ export const useSessionStore = defineStore('session', () => {
    * 应用会话级权限更新（支持所有权限类型）
    */
   function applySessionPermissionUpdate(sessionId: string, update: PermissionUpdate) {
-    if (update.destination !== 'session') return
+    // setMode 类型不受 destination 限制（仅更新前端 UI 状态）
+    if (update.type !== 'setMode' && update.destination !== 'session') return
 
     const sessionState = getSessionState(sessionId)
     if (!sessionState) {
