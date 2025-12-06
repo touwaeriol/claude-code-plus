@@ -1886,6 +1886,12 @@ export const useSessionStore = defineStore('session', () => {
       // 清除连接状态
       connectionStatuses.value.delete(sessionId)
 
+      // 清理会话相关状态
+      requestTracker.delete(sessionId)
+      clearSessionPermissionRules(sessionId)
+      clearPendingQuestions(sessionId)
+      clearPendingPermissions(sessionId)
+
       // 从列表中移除（SessionState 会自动删除）
       sessions.delete(sessionId)
       unlinkExternalSessionId(sessionId)
@@ -2388,8 +2394,24 @@ export const useSessionStore = defineStore('session', () => {
     options: Array<{ label: string; description?: string }>
     multiSelect?: boolean
   }> {
-    const questions = params?.questions
+    // 调试日志：打印实际收到的参数结构
+    log.debug(`[AskUserQuestion] 验证参数 - params类型: ${typeof params}, keys: ${params ? Object.keys(params) : 'null'}`)
+
+    let questions = params?.questions
+
+    // 如果 questions 是 JSON 字符串，尝试解析
+    if (typeof questions === 'string') {
+      try {
+        questions = JSON.parse(questions)
+        log.debug(`[AskUserQuestion] questions 是字符串，已解析为: ${typeof questions}`)
+      } catch (e) {
+        throw new Error(`questions 是无效的 JSON 字符串: ${questions}`)
+      }
+    }
+
     if (!questions) {
+      // 打印更多调试信息
+      log.error(`[AskUserQuestion] 缺少 questions 参数, params: ${JSON.stringify(params)}`)
       throw new Error('缺少必需参数: questions')
     }
     if (!Array.isArray(questions)) {
@@ -2684,7 +2706,10 @@ export const useSessionStore = defineStore('session', () => {
         break
 
       case 'setMode':
-        log.info(`[SessionPermission] setMode: ${update.mode}`)
+        if (update.mode) {
+          // 仅更新前端 UI，不同步到后端（后端已通过权限响应自动切换）
+          updateSessionPermissionMode(sessionId, update.mode as RpcPermissionMode, false)
+        }
         break
 
       case 'addDirectories':
@@ -2754,6 +2779,69 @@ export const useSessionStore = defineStore('session', () => {
     sessionPermissionRules.delete(sessionId)
     sessionPermissionDirectories.delete(sessionId)
     log.info(`[SessionPermission] 清理会话级权限: ${sessionId}`)
+  }
+
+  /**
+   * 清理指定会话的待处理问题
+   */
+  function clearPendingQuestions(sessionId: string) {
+    const keysToDelete: string[] = []
+    pendingQuestions.forEach((value, key) => {
+      if (value.sessionId === sessionId) {
+        keysToDelete.push(key)
+      }
+    })
+    keysToDelete.forEach(key => {
+      const pending = pendingQuestions.get(key)
+      if (pending) {
+        pending.reject(new Error('Session closed'))
+      }
+    })
+    log.info(`[Session] 清理待处理问题: ${sessionId}, 数量: ${keysToDelete.length}`)
+  }
+
+  /**
+   * 清理指定会话的待处理权限请求
+   */
+  function clearPendingPermissions(sessionId: string) {
+    const keysToDelete: string[] = []
+    pendingPermissions.forEach((value, key) => {
+      if (value.sessionId === sessionId) {
+        keysToDelete.push(key)
+      }
+    })
+    keysToDelete.forEach(key => {
+      const pending = pendingPermissions.get(key)
+      if (pending) {
+        pending.reject(new Error('Session closed'))
+      }
+    })
+    log.info(`[Session] 清理待处理权限: ${sessionId}, 数量: ${keysToDelete.length}`)
+  }
+
+  /**
+   * 更新会话权限模式
+   * @param sessionId 会话 ID
+   * @param mode 权限模式
+   * @param syncToBackend 是否同步到后端（权限对话框选择时为 false，手动切换时为 true）
+   */
+  function updateSessionPermissionMode(
+    sessionId: string,
+    mode: RpcPermissionMode,
+    syncToBackend: boolean = false
+  ) {
+    const session = sessions.get(sessionId)
+    if (!session) {
+      log.warn(`[Session] 更新权限模式失败，会话不存在: ${sessionId}`)
+      return
+    }
+
+    session.permissionMode = mode
+    log.info(`[Session] 更新权限模式 (syncToBackend=${syncToBackend}): ${sessionId} -> ${mode}`)
+
+    if (syncToBackend) {
+      setPermissionMode(mode)
+    }
   }
 
   /**
