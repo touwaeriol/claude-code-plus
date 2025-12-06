@@ -10,3 +10,6 @@
 [submodule "external/openai-codex"]
 	path = external/openai-codex
 	url = org-14957082@github.com:openai/codex.git
+[submodule "external/opcode"]
+	path = external/opcode
+	url = https://github.com/winfunc/opcode.git
