@@ -42,7 +42,7 @@
         :is-generating="currentSessionIsStreaming"
         :enabled="true"
         :actual-model-id="sessionStore.currentModelId || undefined"
-        :selected-permission="uiState.selectedPermissionMode"
+        :selected-permission="sessionStore.currentSession?.permissionMode || 'default'"
         :skip-permissions="uiState.skipPermissions"
         :selected-model="uiState.selectedModel"
         :auto-cleanup-contexts="uiState.autoCleanupContexts"
@@ -441,8 +441,12 @@ function handleModelChange(model: AiModel) {
 
 function handlePermissionModeChange(mode: PermissionMode) {
   console.log('Changing permission mode:', mode)
-  uiState.value.selectedPermissionMode = mode
-  // 延迟同步：只保存设置，发送消息时才同步到后端
+  // 直接更新 session.permissionMode（UI 绑定到此状态）
+  const session = sessionStore.currentSession
+  if (session) {
+    session.permissionMode = mode
+  }
+  // 保存到设置
   settingsStore.updatePermissionMode(mode)
 }
 
