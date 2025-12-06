@@ -1,10 +1,17 @@
 <template>
-  <div v-if="pendingPermission" class="permission-request">
+  <div
+    v-if="pendingPermission"
+    ref="containerRef"
+    class="permission-request"
+    tabindex="0"
+    @keydown.esc="handleDeny"
+  >
     <div class="permission-card">
       <!-- 工具信息头部 -->
       <div class="permission-header">
         <span class="tool-icon">{{ getToolIcon(pendingPermission.toolName) }}</span>
         <span class="tool-name">{{ getToolDisplayName(pendingPermission.toolName) }}</span>
+        <span class="permission-label">{{ t('permission.needsAuth') }}</span>
       </div>
 
       <!-- 工具参数预览 -->
@@ -28,11 +35,11 @@
           </div>
           <div v-if="pendingPermission.input.old_string" class="edit-preview">
             <div class="edit-section">
-              <span class="edit-label">替换:</span>
+              <span class="edit-label">{{ t('permission.replace') }}:</span>
               <pre class="edit-text old">{{ truncateContent(pendingPermission.input.old_string) }}</pre>
             </div>
             <div class="edit-section">
-              <span class="edit-label">为:</span>
+              <span class="edit-label">{{ t('permission.with') }}:</span>
               <pre class="edit-text new">{{ truncateContent(pendingPermission.input.new_string || '') }}</pre>
             </div>
           </div>
@@ -42,50 +49,145 @@
         </template>
       </div>
 
-      <!-- 等待提示 -->
-      <div class="waiting-hint">
-        <span class="waiting-icon">⏳</span>
-        <span>{{ $t('permission.waitingForInput', 'Waiting for user input...') }}</span>
+      <!-- 操作选项 -->
+      <div class="permission-options">
+        <!-- 允许（仅本次） -->
+        <button class="btn-option btn-allow" @click="handleApprove">
+          {{ t('permission.allow') }}
+        </button>
+
+        <!-- 动态渲染 permissionSuggestions -->
+        <button
+          v-for="(suggestion, index) in pendingPermission.permissionSuggestions"
+          :key="index"
+          class="btn-option btn-allow-rule"
+          @click="handleAllowWithUpdate(suggestion)"
+        >
+          {{ t('permission.allow') }}，{{ formatSuggestion(suggestion) }}
+        </button>
+
+        <!-- 不允许（带输入框） -->
+        <div class="deny-inline">
+          <input
+            v-model="denyReason"
+            class="deny-input"
+            :placeholder="t('permission.denyReasonPlaceholder')"
+            @keydown.enter="handleDeny"
+          />
+          <button class="btn-option btn-deny" @click="handleDeny">
+            {{ t('permission.deny') }}
+          </button>
+        </div>
       </div>
 
-      <!-- 操作按钮 -->
-      <div class="permission-actions">
-        <button class="btn-skip" @click="handleSkip">
-          {{ $t('permission.skip', 'Skip') }}
-        </button>
-        <button class="btn-approve" @click="handleApprove">
-          <span class="approve-icon">⊙</span>
-          {{ $t('permission.approve', 'Approve') }}
-        </button>
-      </div>
+      <!-- 快捷键提示 -->
+      <div class="shortcut-hint">{{ t('permission.escToDeny') }}</div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useI18n } from '@/composables/useI18n'
+import type { PermissionUpdate } from '@/types/permission'
 
+const { t } = useI18n()
 const sessionStore = useSessionStore()
 
+const containerRef = ref<HTMLElement | null>(null)
+const denyReason = ref('')
+
 // 获取当前会话的第一个待处理授权请求
-// 备注：此组件作为备用弹窗，显示所有待处理请求（包括有 matchedToolCallId 的）
-// 与 ToolPermissionInline 可能同时显示，用户点击任一个都会响应并隐藏两个 UI
 const pendingPermission = computed(() => {
   const permissions = sessionStore.getCurrentPendingPermissions()
   return permissions.length > 0 ? permissions[0] : null
 })
 
-function handleSkip() {
-  if (pendingPermission.value) {
-    sessionStore.respondPermission(pendingPermission.value.id, { approved: false })
+// 当有新的权限请求时，自动聚焦并清空拒绝原因
+watch(pendingPermission, (newVal) => {
+  if (newVal) {
+    denyReason.value = ''
+    nextTick(() => {
+      containerRef.value?.focus()
+    })
   }
-}
+})
 
 function handleApprove() {
   if (pendingPermission.value) {
     sessionStore.respondPermission(pendingPermission.value.id, { approved: true })
   }
+}
+
+function handleAllowWithUpdate(update: PermissionUpdate) {
+  if (pendingPermission.value) {
+    // 如果是 setMode 类型，同步更新前端 UI
+    if (update.type === 'setMode' && update.mode) {
+      sessionStore.setPermissionMode(update.mode)
+    }
+
+    sessionStore.respondPermission(pendingPermission.value.id, {
+      approved: true,
+      permissionUpdates: [update]
+    })
+  }
+}
+
+function handleDeny() {
+  if (pendingPermission.value) {
+    sessionStore.respondPermission(pendingPermission.value.id, {
+      approved: false,
+      denyReason: denyReason.value || undefined
+    })
+  }
+}
+
+function formatSuggestion(suggestion: PermissionUpdate): string {
+  const dest = t(`permission.destination.${suggestion.destination || 'session'}`)
+
+  switch (suggestion.type) {
+    case 'addRules':
+      if (suggestion.rules?.length) {
+        const rule = suggestion.rules[0]
+        if (rule.ruleContent) {
+          return t('permission.suggestion.rememberWithRuleTo', {
+            tool: rule.toolName,
+            rule: rule.ruleContent,
+            dest
+          })
+        }
+        return t('permission.suggestion.rememberTo', { tool: rule.toolName, dest })
+      }
+      break
+
+    case 'replaceRules':
+      return t('permission.suggestion.replaceTo', { dest })
+
+    case 'removeRules':
+      if (suggestion.rules?.length) {
+        return t('permission.suggestion.removeFrom', { tool: suggestion.rules[0].toolName, dest })
+      }
+      return t('permission.suggestion.removeRulesFrom', { dest })
+
+    case 'setMode':
+      const mode = t(`permission.mode.${suggestion.mode || 'default'}`)
+      return t('permission.suggestion.switchTo', { mode })
+
+    case 'addDirectories':
+      if (suggestion.directories?.length) {
+        return t('permission.suggestion.addDirTo', { dir: suggestion.directories[0], dest })
+      }
+      break
+
+    case 'removeDirectories':
+      if (suggestion.directories?.length) {
+        return t('permission.suggestion.removeDirFrom', { dir: suggestion.directories[0], dest })
+      }
+      break
+  }
+
+  return t('permission.suggestion.applyTo', { dest })
 }
 
 function getToolDisplayName(name: string): string {
@@ -131,13 +233,12 @@ function formatParams(params: Record<string, unknown>): string {
 
 <style scoped>
 .permission-request {
-  position: fixed;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  max-width: 600px;
-  width: calc(100% - 32px);
+  margin: 4px 0;
+  outline: none;
+}
+
+.permission-request:focus .permission-card {
+  box-shadow: 0 0 0 2px var(--theme-accent, #0366d6), 0 8px 32px rgba(0, 0, 0, 0.15);
 }
 
 .permission-card {
@@ -166,9 +267,17 @@ function formatParams(params: Record<string, unknown>): string {
   font-weight: 600;
 }
 
+.permission-label {
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
 .permission-content {
   padding: 16px;
-  max-height: 300px;
+  max-height: 200px;
   overflow-y: auto;
 }
 
@@ -219,7 +328,7 @@ function formatParams(params: Record<string, unknown>): string {
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
-  max-height: 100px;
+  max-height: 80px;
   overflow-y: auto;
 }
 
@@ -243,7 +352,7 @@ function formatParams(params: Record<string, unknown>): string {
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
-  max-height: 60px;
+  max-height: 50px;
   overflow-y: auto;
 }
 
@@ -266,75 +375,87 @@ function formatParams(params: Record<string, unknown>): string {
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
-  max-height: 150px;
+  max-height: 100px;
   overflow-y: auto;
 }
 
-.waiting-hint {
+.permission-options {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   padding: 12px 16px;
-  color: var(--theme-secondary-foreground, #586069);
-  font-size: 13px;
   border-top: 1px solid var(--theme-border, #e1e4e8);
 }
 
-.waiting-icon {
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.permission-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--theme-panel-background, #f6f8fa);
-  border-top: 1px solid var(--theme-border, #e1e4e8);
-}
-
-.btn-skip,
-.btn-approve {
-  padding: 8px 20px;
+.btn-option {
+  padding: 8px 16px;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  text-align: left;
 }
 
-.btn-skip {
-  background: transparent;
-  border: 1px solid var(--theme-border, #e1e4e8);
-  color: var(--theme-foreground, #24292e);
+.btn-allow {
+  background: var(--theme-success, #28a745);
+  border: 1px solid var(--theme-success, #28a745);
+  color: white;
 }
 
-.btn-skip:hover {
-  background: var(--theme-hover-background, #f0f0f0);
-  border-color: var(--theme-secondary-foreground, #586069);
+.btn-allow:hover {
+  background: var(--theme-success-hover, #218838);
 }
 
-.btn-approve {
+.btn-allow-rule {
   background: var(--theme-accent, #0366d6);
   border: 1px solid var(--theme-accent, #0366d6);
   color: white;
 }
 
-.btn-approve:hover {
+.btn-allow-rule:hover {
   background: var(--theme-accent-hover, #0256b9);
-  border-color: var(--theme-accent-hover, #0256b9);
 }
 
-.approve-icon {
-  font-size: 14px;
+.deny-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deny-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--theme-border, #e1e4e8);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--theme-background, #fff);
+  color: var(--theme-foreground, #24292e);
+}
+
+.deny-input:focus {
+  outline: none;
+  border-color: var(--theme-error, #dc3545);
+}
+
+.btn-deny {
+  background: transparent;
+  border: 1px solid var(--theme-error, #dc3545);
+  color: var(--theme-error, #dc3545);
+  flex-shrink: 0;
+}
+
+.btn-deny:hover {
+  background: var(--theme-error, #dc3545);
+  color: white;
+}
+
+.shortcut-hint {
+  font-size: 11px;
+  color: var(--theme-muted, #6a737d);
+  text-align: right;
+  padding: 8px 16px;
+  background: var(--theme-panel-background, #f6f8fa);
+  border-top: 1px solid var(--theme-border, #e1e4e8);
 }
 </style>

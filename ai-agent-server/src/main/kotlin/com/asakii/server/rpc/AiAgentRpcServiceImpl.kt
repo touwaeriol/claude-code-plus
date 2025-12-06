@@ -477,6 +477,8 @@ class AiAgentRpcServiceImpl(
             resume = options.resumeSessionId,
             maxThinkingTokens = maxThinkingTokens,
             extraArgs = extraArgs,
+            // 允许 user_interaction MCP 的工具默认通过权限检查，避免向用户提问还需要授权
+            allowedTools = listOf("mcp__user_interaction__AskUserQuestion"),
             mcpServers = mcpServers
         )
 

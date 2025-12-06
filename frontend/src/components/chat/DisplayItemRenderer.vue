@@ -19,17 +19,10 @@
     />
 
     <!-- 工具调用 -->
-    <template v-else-if="item.displayType === 'toolCall'">
-      <ToolCallDisplay :tool-call="item" />
-      <!-- 内联权限授权 UI -->
-      <ToolPermissionInline
-        v-if="pendingPermission"
-        :permission="pendingPermission"
-        @allow="handleAllow"
-        @allowWithUpdate="handleAllowWithUpdate"
-        @deny="handleDeny"
-      />
-    </template>
+    <ToolCallDisplay
+      v-else-if="item.displayType === 'toolCall'"
+      :tool-call="item"
+    />
 
     <!-- 系统消息 -->
     <SystemMessageDisplay
@@ -62,8 +55,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { DisplayItem } from '@/types/display'
-import type { PermissionUpdate } from '@/types/permission'
-import { useSessionStore } from '@/stores/sessionStore'
 import UserMessageBubble from './UserMessageBubble.vue'
 import AssistantTextDisplay from './AssistantTextDisplay.vue'
 import ThinkingDisplay from './ThinkingDisplay.vue'
@@ -71,46 +62,14 @@ import ToolCallDisplay from './ToolCallDisplay.vue'
 import SystemMessageDisplay from './SystemMessageDisplay.vue'
 import ErrorResultDisplay from './ErrorResultDisplay.vue'
 import InterruptedHintDisplay from './InterruptedHintDisplay.vue'
-import ToolPermissionInline from '@/components/tools/ToolPermissionInline.vue'
 
 interface Props {
   source: DisplayItem
 }
 
 const props = defineProps<Props>()
-const sessionStore = useSessionStore()
 
 const item = computed(() => props.source)
-
-// 获取当前工具调用对应的权限请求
-const pendingPermission = computed(() => {
-  if (item.value.displayType !== 'toolCall') return null
-  return sessionStore.getPermissionForToolCall(item.value.id)
-})
-
-function handleAllow() {
-  if (pendingPermission.value) {
-    sessionStore.respondPermission(pendingPermission.value.id, { approved: true })
-  }
-}
-
-function handleAllowWithUpdate(update: PermissionUpdate) {
-  if (pendingPermission.value) {
-    sessionStore.respondPermission(pendingPermission.value.id, {
-      approved: true,
-      permissionUpdates: [update]  // 包装为数组，与官方 SDK 保持一致
-    })
-  }
-}
-
-function handleDeny(reason: string) {
-  if (pendingPermission.value) {
-    sessionStore.respondPermission(pendingPermission.value.id, {
-      approved: false,
-      denyReason: reason || undefined
-    })
-  }
-}
 </script>
 
 <style scoped>

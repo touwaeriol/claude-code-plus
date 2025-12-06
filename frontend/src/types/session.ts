@@ -45,7 +45,9 @@ export interface UIState {
  */
 export interface SessionState {
   // 基本信息
-  id: string
+  tabId: string              // 前端 Tab 标识（主键，立即生成）
+  id: string                 // 兼容别名，等同于 tabId
+  sessionId: string | null   // 后端会话 ID（连接成功后填充）
   name: string
   createdAt: number
   updatedAt: number

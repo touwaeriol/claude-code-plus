@@ -59,7 +59,7 @@ const sessionStore = useSessionStore()
 
 const currentSessionId = computed(() => sessionStore.currentSessionId)
 const displayItems = computed(() => sessionStore.currentDisplayItems)
-const sessionCount = computed(() => sessionStore.sessions.size)
+const sessionCount = computed(() => sessionStore.tabCount)
 const messageCount = computed(() => sessionStore.currentMessages.length)
 
 // Mock 数据用于测试

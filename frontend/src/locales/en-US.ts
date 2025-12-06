@@ -30,6 +30,10 @@ export default {
     placeholder: 'Type a message...',
     placeholderWithShortcuts: 'Type a message... (Enter to send, Shift+Enter for new line, Ctrl+Enter to interrupt)',
     placeholderWithShortcutsCtrl: 'Type a message... (Enter to send, Shift+Enter for new line, Ctrl+Enter to interrupt)',
+    input: {
+      connecting: 'Initializing connection...',
+      disconnected: 'Disconnected, please refresh the page'
+    },
     newSession: 'New Session',
     history: 'History',
     thinking: 'Thinking...',
@@ -59,7 +63,9 @@ export default {
       unknown: 'Unknown error',
       initSessionFailed: 'Failed to initialize session: {message}',
       switchSessionFailed: 'Failed to switch session: {message}',
-      sendMessageFailed: 'Failed to send message: {message}'
+      sendMessageFailed: 'Failed to send message: {message}',
+      connecting: 'Initializing connection, please wait...',
+      disconnected: 'Disconnected, reconnecting...'
     },
     debug: {
       title: 'Debug Info',

@@ -5,10 +5,10 @@
     <!-- 左侧：会话 Tab 列表 -->
     <SessionTabs
       :sessions="sessionTabList"
-      :current-session-id="currentSessionId"
+      :current-session-id="currentTabId"
       :can-close="activeTabs.length > 1"
-      @switch="handleSwitchSession"
-      @close="handleCloseSession"
+      @switch="handleSwitchTab"
+      @close="handleCloseTab"
       @reorder="handleReorder"
       @toggle-list="emit('toggle-history')"
     />
@@ -40,6 +40,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
+import { ConnectionStatus } from '@/types/display'
 import SessionTabs, { type SessionTabInfo } from './SessionTabs.vue'
 import ThemeSwitcher from '@/components/toolbar/ThemeSwitcher.vue'
 import LanguageSwitcher from '@/components/toolbar/LanguageSwitcher.vue'
@@ -52,46 +53,44 @@ const emit = defineEmits<{
 
 const sessionStore = useSessionStore()
 
-const activeTabs = computed(() => sessionStore.activeTabs || [])
-const currentSessionId = computed(() => sessionStore.currentSessionId)
+const activeTabs = computed(() => sessionStore.activeTabs)
+const currentTabId = computed(() => sessionStore.currentTabId)
 
 // 转换为 SessionTabInfo 格式
 const sessionTabList = computed<SessionTabInfo[]>(() => {
   return activeTabs.value.map(tab => ({
-    id: tab.id,
-    name: tab.name,
-    isGenerating: tab.isGenerating,
-    isConnected: tab.connectionStatus === 'CONNECTED'
+    id: tab.tabId,
+    name: tab.name.value,
+    isGenerating: tab.isGenerating.value,
+    isConnected: tab.connectionState.status === ConnectionStatus.CONNECTED,
+    connectionStatus: tab.connectionState.status,
+    error: tab.connectionState.lastError
   }))
 })
 
-async function handleSwitchSession(sessionId: string) {
-  if (sessionId === currentSessionId.value) return
-  await sessionStore.switchSession(sessionId)
+async function handleSwitchTab(tabId: string) {
+  if (tabId === currentTabId.value) return
+  await sessionStore.switchTab(tabId)
 }
 
-async function handleCloseSession(sessionId: string) {
+async function handleCloseTab(tabId: string) {
   // 如果只有一个会话，不允许关闭
   if (activeTabs.value.length <= 1) return
 
   // 如果关闭的是当前会话，先切换到其他会话
-  if (sessionId === currentSessionId.value) {
-    const otherSession = activeTabs.value.find(tab => tab.id !== sessionId)
-    if (otherSession) {
-      await sessionStore.switchSession(otherSession.id)
+  if (tabId === currentTabId.value) {
+    const otherTab = activeTabs.value.find(tab => tab.tabId !== tabId)
+    if (otherTab) {
+      await sessionStore.switchTab(otherTab.tabId)
     }
   }
 
-  // 删除会话
-  await sessionStore.deleteSession(sessionId)
+  // 关闭 Tab
+  await sessionStore.closeTab(tabId)
 }
 
 async function handleNewSession() {
-  if (typeof sessionStore.startNewSession === 'function') {
-    await sessionStore.startNewSession()
-  } else {
-    await sessionStore.createSession()
-  }
+  await sessionStore.createTab()
 }
 
 function handleReorder(newOrder: string[]) {

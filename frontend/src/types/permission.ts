@@ -71,9 +71,9 @@ export interface PermissionToolInput {
 export type PermissionBehavior = 'allow' | 'deny' | 'ask'
 
 /**
- * 权限模式
+ * 权限模式（复用 RPC 类型定义）
  */
-export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk'
+export type { RpcPermissionMode as PermissionMode } from './rpc'
 
 /**
  * 权限更新目标

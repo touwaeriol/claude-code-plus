@@ -13,10 +13,29 @@
         <template #item="{ element: tab }">
           <div
             class="session-tab"
-            :class="{ active: tab.id === currentSessionId, generating: tab.isGenerating }"
+            :class="{
+              active: tab.id === currentSessionId,
+              generating: tab.isGenerating,
+              connecting: tab.connectionStatus === 'CONNECTING',
+              error: tab.connectionStatus === 'ERROR'
+            }"
             @click="handleTabClick(tab.id)"
             @click.middle.prevent="handleCloseTab(tab.id)"
           >
+            <!-- 连接中状态指示器 -->
+            <span
+              v-if="tab.connectionStatus === 'CONNECTING'"
+              class="status-indicator connecting"
+              title="正在连接..."
+            >
+              <span class="dot-pulse" />
+            </span>
+            <!-- 错误状态指示器 -->
+            <span
+              v-else-if="tab.connectionStatus === 'ERROR'"
+              class="status-indicator error"
+              :title="tab.error || '连接失败'"
+            >⚠</span>
             <span class="tab-name">{{ tab.name || '未命名会话' }}</span>
             <span
               v-if="tab.isGenerating"
@@ -48,10 +67,12 @@ import { ref, watch } from 'vue'
 import draggable from 'vuedraggable'
 
 export interface SessionTabInfo {
-  id: string
+  id: string  // tabId
   name: string
   isGenerating?: boolean
   isConnected?: boolean
+  connectionStatus?: 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'ERROR'
+  error?: string | null
 }
 
 const props = withDefaults(defineProps<{
@@ -157,6 +178,53 @@ function handleDragEnd() {
 
 .session-tab.generating {
   /* 生成中的会话边框带动画 */
+}
+
+.session-tab.connecting {
+  opacity: 0.7;
+  border-style: dashed;
+}
+
+.session-tab.error {
+  border-color: var(--theme-error, #d73a49);
+}
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 4px;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.status-indicator.connecting {
+  width: 12px;
+  height: 12px;
+}
+
+.status-indicator.error {
+  color: var(--theme-error, #d73a49);
+  font-size: 12px;
+}
+
+.dot-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--theme-accent, #0366d6);
+  animation: dot-pulse 1s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 
