@@ -30,6 +30,10 @@ export default {
     placeholder: '输入消息...',
     placeholderWithShortcuts: '输入消息... (Enter 发送, Shift+Enter 换行, Ctrl+Enter 打断发送)',
     placeholderWithShortcutsCtrl: '输入消息... (Enter 发送, Shift+Enter 换行, Ctrl+Enter 打断发送)',
+    input: {
+      connecting: '正在初始化连接...',
+      disconnected: '连接已断开，请刷新页面'
+    },
     newSession: '新会话',
     history: '历史记录',
     thinking: '思考中...',
@@ -59,7 +63,9 @@ export default {
       unknown: '未知错误',
       initSessionFailed: '初始化会话失败: {message}',
       switchSessionFailed: '切换会话失败: {message}',
-      sendMessageFailed: '发送消息失败: {message}'
+      sendMessageFailed: '发送消息失败: {message}',
+      connecting: '正在初始化连接，请稍候...',
+      disconnected: '连接已断开，正在尝试重新连接...'
     },
     debug: {
       title: '调试信息',

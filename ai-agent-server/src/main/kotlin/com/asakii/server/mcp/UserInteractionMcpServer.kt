@@ -262,16 +262,21 @@ class UserInteractionMcpServer : McpServerBase() {
         logger.info("📩 [AskUserQuestion] 收到工具调用，参数: $arguments")
 
         try {
-            // 获取 questions 参数
-            val questions = arguments["questions"]
-                ?: return ToolResult.error("缺少 questions 参数")
+            // 将 Map<String, Any> 转换为 JsonElement，再解析为类型化对象
+            val paramsJson = anyToJsonElement(arguments)
+            val params: AskUserQuestionParams = Json.decodeFromJsonElement(paramsJson)
 
-            logger.info("📤 [AskUserQuestion] 调用前端 AskUserQuestion 方法")
+            logger.info("📤 [AskUserQuestion] 解析后的参数: ${params.questions.size} 个问题")
+
+            // 构建发送给前端的 JSON（使用类型化序列化）
+            val requestJson = buildJsonObject {
+                put("questions", Json.encodeToJsonElement(params.questions))
+            }
 
             // 调用前端方法，获取类型化响应
             val answerItems: List<UserAnswerItem> = caller.callTyped(
                 method = "AskUserQuestion",
-                params = mapOf("questions" to questions)
+                params = requestJson
             )
 
             logger.info("📥 [AskUserQuestion] 收到前端响应: $answerItems")
@@ -289,6 +294,32 @@ class UserInteractionMcpServer : McpServerBase() {
             logger.severe("❌ [AskUserQuestion] 处理失败: ${e.message}")
             e.printStackTrace()
             return ToolResult.error("处理用户问题失败: ${e.message}")
+        }
+    }
+
+    /**
+     * 将 Any 类型递归转换为 JsonElement
+     * 用于将 MCP 框架传入的 Map<String, Any> 转换为可序列化的 JsonElement
+     */
+    private fun anyToJsonElement(value: Any?): JsonElement {
+        return when (value) {
+            null -> JsonNull
+            is JsonElement -> value
+            is String -> JsonPrimitive(value)
+            is Number -> JsonPrimitive(value)
+            is Boolean -> JsonPrimitive(value)
+            is Map<*, *> -> buildJsonObject {
+                value.forEach { (k, v) ->
+                    put(k.toString(), anyToJsonElement(v))
+                }
+            }
+            is List<*> -> buildJsonArray {
+                value.forEach { add(anyToJsonElement(it)) }
+            }
+            is Array<*> -> buildJsonArray {
+                value.forEach { add(anyToJsonElement(it)) }
+            }
+            else -> JsonPrimitive(value.toString())
         }
     }
 }

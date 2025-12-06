@@ -2,6 +2,7 @@ import { watch, type WatchStopHandle } from 'vue'
 import { ideaBridge } from '@/services/ideaBridge'
 import localeService from '@/services/localeService'
 import type { useSessionStore } from '@/stores/sessionStore'
+import { ConnectionStatus } from '@/types/display'
 
 export interface HostCommand {
   type: string
@@ -109,41 +110,37 @@ function registerDefaultHandler(store: SessionStore) {
     try {
       switch (command.type) {
         case 'switchSession': {
-          const sessionId = command.payload?.sessionId
-          if (sessionId) {
-            await store.switchSession(sessionId)
+          const tabId = command.payload?.sessionId
+          if (tabId) {
+            await store.switchTab(tabId)
           }
           break
         }
         case 'createSession': {
-          const createFn = store.startNewSession ?? store.createSession
-          const session = await createFn?.()
-          if (session?.id) {
-            await store.switchSession(session.id)
-          }
+          const tab = await store.createTab()
+          // createTab 会自动切换到新 Tab，无需额外调用
+          console.log('[IDE Bridge] Created new tab:', tab.tabId)
           break
         }
         case 'closeSession': {
-          const sessionId = command.payload?.sessionId
-          if (sessionId) {
-            const sessions = resolveSessionList(store)
+          const tabId = command.payload?.sessionId
+          if (tabId) {
+            const tabs = resolveSessionList(store)
             // 如果只有一个会话，不允许关闭
-            if (sessions.length <= 1) {
-              console.warn('[IDE Bridge] Cannot close the last session')
+            if (tabs.length <= 1) {
+              console.warn('[IDE Bridge] Cannot close the last tab')
               break
             }
             // 如果关闭的是当前会话，先切换到其他会话
-            const currentId = (store.currentSessionId as any)?.value ?? store.currentSessionId
-            if (sessionId === currentId) {
-              const otherSession = sessions.find((s: any) => s.id !== sessionId)
-              if (otherSession) {
-                await store.switchSession(otherSession.id)
+            const currentId = store.currentTabId
+            if (tabId === currentId) {
+              const otherTab = tabs.find((t: any) => t.tabId !== tabId)
+              if (otherTab) {
+                await store.switchTab(otherTab.tabId)
               }
             }
-            // 删除会话
-            if (typeof store.deleteSession === 'function') {
-              await store.deleteSession(sessionId)
-            }
+            // 关闭 Tab
+            await store.closeTab(tabId)
           }
           break
         }
@@ -184,16 +181,17 @@ function resolveSessionList(store: SessionStore) {
 
 function startWatching(store: SessionStore) {
   const source = () => {
-    const sessions = resolveSessionList(store).map((session: any) => ({
-      id: session.id,
-      title: session.name || `会话 ${session.id.slice(-6)}`,
-      isGenerating: Boolean(session.isGenerating),
-      isConnected: session.connectionStatus === 'CONNECTED' || session.connectionStatus === 'CONNECTING'
+    const tabs = resolveSessionList(store).map((tab: any) => ({
+      id: tab.tabId,
+      title: tab.name?.value ?? tab.name ?? `会话 ${tab.tabId.slice(-6)}`,
+      isGenerating: Boolean(tab.isGenerating?.value ?? tab.isGenerating),
+      isConnected: (tab.connectionStatus?.value ?? tab.connectionStatus) === ConnectionStatus.CONNECTED ||
+                   (tab.connectionStatus?.value ?? tab.connectionStatus) === ConnectionStatus.CONNECTING
     }))
-    const activeSessionId = (store.currentSessionId as any)?.value ?? store.currentSessionId ?? null
+    const activeTabId = store.currentTabId ?? null
     return {
-      sessions,
-      activeSessionId
+      sessions: tabs,
+      activeSessionId: activeTabId
     }
   }
 

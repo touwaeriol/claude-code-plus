@@ -40,9 +40,8 @@
         :pending-tasks="pendingTasks"
         :contexts="uiState.contexts"
         :is-generating="currentSessionIsStreaming"
-        :enabled="true"
-        :actual-model-id="sessionStore.currentModelId || undefined"
-        :selected-permission="sessionStore.currentSession?.permissionMode || 'default'"
+        :actual-model-id="sessionStore.currentTab?.modelId.value || undefined"
+        :selected-permission="sessionStore.currentTab?.permissionMode.value || 'default'"
         :skip-permissions="uiState.skipPermissions"
         :selected-model="uiState.selectedModel"
         :auto-cleanup-contexts="uiState.autoCleanupContexts"
@@ -131,7 +130,7 @@
     <SessionListOverlay
       :visible="isHistoryOverlayVisible"
       :sessions="historySessions"
-      :current-session-id="sessionStore.currentSessionId"
+      :current-session-id="sessionStore.currentTabId"
       :loading="sessionStore.loading"
       @close="isHistoryOverlayVisible = false"
       @select-session="handleHistorySelect"
@@ -217,17 +216,14 @@ const displayItems = computed(() => sessionStore.currentDisplayItems)
 const toolStats = computed(() => calculateToolStats(displayItems.value))
 
 const historySessions = computed(() => {
-  // 获取当前在 tab 中打开的会话 ID 集合
-  const activeTabIds = new Set(sessionStore.activeTabs?.map(t => t.id) || [])
-
-  return sessionStore.allSessions.map(session => ({
-    id: session.id,
-    name: session.name,
-    timestamp: session.lastActiveAt ?? session.updatedAt,
-    messageCount: session.messages?.length ?? 0,
-    isGenerating: session.isGenerating,
-    // 如果会话在 tab 中打开，则标记为已连接（激活状态）
-    isConnected: activeTabIds.has(session.id)
+  // 新架构：Tab 即会话，直接使用 activeTabs
+  return sessionStore.activeTabs.map(tab => ({
+    id: tab.tabId,
+    name: tab.name.value,
+    timestamp: tab.lastActiveAt.value,
+    messageCount: tab.displayItems.length,
+    isGenerating: tab.isGenerating.value,
+    isConnected: tab.isConnected.value
   }))
 })
 
@@ -235,15 +231,17 @@ const sessionTokenUsage = computed<EnhancedTokenUsage | null>(() => {
   return null
 })
 
+// 连接状态 - 直接从 Tab 的 connectionState 获取
+const isConnected = computed(() => sessionStore.currentTab?.connectionState.status === 'CONNECTED')
+const isConnecting = computed(() => sessionStore.currentTab?.connectionState.status === 'CONNECTING')
+
 // Streaming 状态相关的计算属性
 const currentSessionIsStreaming = computed(() => {
-  return sessionStore.currentSession?.isGenerating ?? false
+  return sessionStore.currentIsGenerating
 })
 
 const currentRequestTracker = computed(() => {
-  const session = sessionStore.currentSession
-  if (!session) return null
-  return session.requestTracker ?? null
+  return sessionStore.currentTab?.stats.getCurrentTracker() ?? null
 })
 
 const streamingStartTime = computed(() => {
@@ -271,7 +269,7 @@ onMounted(async () => {
 
   await detectEnvironment()
   if (isIdeMode.value) {
-    disposeIdeBridge = setupIdeSessionBridge(sessionStore)
+    disposeIdeBridge = setupIdeSessionBridge(sessionStore as any) // TODO: 更新 ideSessionBridge 类型
     disposeHostCommand = onIdeHostCommand((command) => {
       if (command.type === 'toggleHistory') {
         toggleHistoryOverlay()
@@ -284,10 +282,14 @@ onMounted(async () => {
   try {
     if (props.sessionId) {
       console.log('External session detected:', props.sessionId)
-      const resolvedId = sessionStore.resolveSessionIdentifier(props.sessionId)
-      if (resolvedId) {
-        await sessionStore.switchSession(resolvedId)
+      // 尝试找到已有的 Tab
+      const existingTab = sessionStore.tabs.find(
+        t => t.tabId === props.sessionId || t.sessionId.value === props.sessionId
+      )
+      if (existingTab) {
+        await sessionStore.switchTab(existingTab.tabId)
       } else {
+        // 尝试恢复会话
         const resumed = await sessionStore.resumeSession(props.sessionId)
         if (!resumed) {
           throw new Error('无法恢复指定会话')
@@ -296,15 +298,11 @@ onMounted(async () => {
       return
     }
 
-    const hasSessions = sessionStore.allSessions.length > 0
-    if (!sessionStore.currentSessionId && !hasSessions) {
-      console.log('No existing sessions, creating default...')
-      const createFn = sessionStore.startNewSession ?? sessionStore.createSession
-      const session = await createFn?.()
-      if (!session) {
-        throw new Error('自动创建会话失败')
-      }
-      console.log('Default session created:', session.id)
+    // 没有 Tab 时创建默认会话
+    if (!sessionStore.hasTabs) {
+      console.log('No existing tabs, creating default...')
+      const tab = await sessionStore.createTab()
+      console.log('Default tab created:', tab.tabId)
     }
   } catch (error) {
     console.error('Failed to initialize session:', error)
@@ -328,11 +326,15 @@ watch(() => props.sessionId, async (newSessionId) => {
   if (!newSessionId) return
   console.log('Session ID changed:', newSessionId)
   try {
-    const resolvedId = sessionStore.resolveSessionIdentifier(newSessionId)
-    if (resolvedId) {
-      await sessionStore.switchSession(resolvedId)
+    // 尝试找到已有的 Tab
+    const existingTab = sessionStore.tabs.find(
+      t => t.tabId === newSessionId || t.sessionId.value === newSessionId
+    )
+    if (existingTab) {
+      await sessionStore.switchTab(existingTab.tabId)
       return
     }
+    // 尝试恢复会话
     const resumed = await sessionStore.resumeSession(newSessionId)
     if (!resumed) {
       throw new Error('无法恢复指定会话')
@@ -352,26 +354,43 @@ async function handleSendMessage(contents?: ContentBlock[]) {
   console.log('handleSendMessage:', safeContents.length, 'content blocks')
 
   try {
-    if (!sessionStore.currentSessionId) {
-      console.log('No active session, creating new...')
-      const newSession = await sessionStore.createSession()
-      if (!newSession) {
+    // 没有当前 Tab 时创建新的
+    if (!sessionStore.currentTab) {
+      console.log('No active tab, creating new...')
+      const newTab = await sessionStore.createTab()
+      if (!newTab) {
         throw new Error('无法创建会话')
       }
     }
 
-    if (!sessionStore.currentSessionId) {
-      console.error('No active session')
+    if (!sessionStore.currentTab) {
+      console.error('No active tab')
       uiState.value.hasError = true
       uiState.value.errorMessage = '当前没有激活的会话'
+      return
+    }
+
+    // 检查连接状态
+    if (isConnecting.value) {
+      uiState.value.hasError = true
+      uiState.value.errorMessage = t('chat.error.connecting')
+      return
+    }
+
+    if (!isConnected.value) {
+      // 连接断开，尝试自动重连
+      uiState.value.hasError = true
+      uiState.value.errorMessage = t('chat.error.disconnected')
+      // 触发自动重连
+      sessionStore.currentTab.reconnect()
       return
     }
 
     const currentContexts = [...uiState.value.contexts]
     uiState.value.contexts = []
 
-    console.log('Enqueueing message')
-    sessionStore.enqueueMessage({
+    console.log('Sending message via currentTab')
+    sessionStore.currentTab.sendMessage({
       contexts: currentContexts,
       contents: safeContents
     })
@@ -388,13 +407,13 @@ async function handleForceSend(contents?: ContentBlock[]) {
   const safeContents = Array.isArray(contents) ? contents : []
   console.log('Force send:', safeContents.length, 'content blocks')
   // 强制发送：先打断当前生成，再插队发送
-  await sessionStore.interrupt()
+  await sessionStore.currentTab?.interrupt()
   await handleSendMessage(safeContents)
 }
 
 function handleEditPendingMessage(id: string) {
   console.log('Edit pending message:', id)
-  const msg = sessionStore.editQueueMessage(id)
+  const msg = sessionStore.currentTab?.editQueueMessage(id)
   if (msg) {
     uiState.value.contexts = [...msg.contexts]
     chatInputRef.value?.setContent(msg.contents)
@@ -403,21 +422,21 @@ function handleEditPendingMessage(id: string) {
 
 function handleRemovePendingMessage(id: string) {
   console.log('Remove pending message:', id)
-  sessionStore.removeFromQueue(id)
+  sessionStore.currentTab?.removeFromQueue(id)
 }
 
 async function handleStopGeneration() {
   console.log('🛑 Stopping generation via Esc key')
   try {
     // 清空消息队列（丢弃待发送的消息）
-    sessionStore.clearQueue()
+    sessionStore.currentTab?.clearQueue()
     // 调用后端中断
-    await sessionStore.interrupt()
+    await sessionStore.currentTab?.interrupt()
     console.log('✅ Interrupt request sent successfully')
   } catch (error) {
     console.error('❌ Failed to interrupt:', error)
   }
-  // UI 状态更新（sessionStore.interrupt 内部也会更新，但这里显式设置以确保 UI 响应）
+  // UI 状态更新
   uiState.value.isGenerating = false
 }
 
@@ -441,10 +460,10 @@ function handleModelChange(model: AiModel) {
 
 function handlePermissionModeChange(mode: PermissionMode) {
   console.log('Changing permission mode:', mode)
-  // 直接更新 session.permissionMode（UI 绑定到此状态）
-  const session = sessionStore.currentSession
-  if (session) {
-    session.permissionMode = mode
+  // 直接更新 Tab 的 permissionMode
+  const tab = sessionStore.currentTab
+  if (tab) {
+    tab.permissionMode.value = mode as any
   }
   // 保存到设置
   settingsStore.updatePermissionMode(mode)
@@ -472,8 +491,8 @@ function toggleHistoryOverlay() {
   isHistoryOverlayVisible.value = !isHistoryOverlayVisible.value
 }
 
-async function handleHistorySelect(sessionId: string) {
-  await sessionStore.switchSession(sessionId)
+async function handleHistorySelect(tabId: string) {
+  await sessionStore.switchTab(tabId)
   isHistoryOverlayVisible.value = false
 }
 </script>

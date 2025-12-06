@@ -268,13 +268,7 @@ function handleCancel() {
 
 <style scoped>
 .ask-user-container {
-  position: fixed;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  max-width: 600px;
-  width: calc(100% - 32px);
+  margin: 4px 0;
 }
 
 .ask-user-card {
