@@ -213,7 +213,8 @@ export default {
     noActive: '无激活会话',
     historySection: '历史',
     unnamed: '未命名会话',
-    messages: '条消息'
+    messages: '条消息',
+    loadHistoryFailed: '加载历史会话失败'
   },
   time: {
     justNow: '刚刚',

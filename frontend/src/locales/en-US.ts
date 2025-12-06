@@ -213,7 +213,8 @@ export default {
     noActive: 'No active sessions',
     historySection: 'History',
     unnamed: 'Unnamed session',
-    messages: 'messages'
+    messages: 'messages',
+    loadHistoryFailed: 'Failed to load history sessions'
   },
   time: {
     justNow: 'Just now',

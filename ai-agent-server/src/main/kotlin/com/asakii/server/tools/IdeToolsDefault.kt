@@ -1,6 +1,7 @@
 package com.asakii.server.tools
 
 import com.asakii.rpc.api.*
+import kotlinx.serialization.json.*
 import java.io.File
 import java.util.Locale
 import java.util.logging.Logger
@@ -164,6 +165,182 @@ open class IdeToolsDefault(
         defaultLocale = locale
         logger.info("[Default] Locale set to: $locale")
         return Result.success(Unit)
+    }
+
+    override open fun getHistorySessions(maxResults: Int): Result<List<HistorySession>> {
+        logger.info("[Default] Getting history sessions (maxResults=$maxResults)")
+        return try {
+            val projectPath = getProjectPath()
+            val sessions = scanHistorySessions(projectPath, maxResults)
+            Result.success(sessions)
+        } catch (e: Exception) {
+            logger.warning("[Default] Failed to get history sessions: ${e.message}")
+            Result.success(emptyList())
+        }
+    }
+
+    /**
+     * 扫描历史会话文件
+     */
+    protected fun scanHistorySessions(projectPath: String, maxResults: Int): List<HistorySession> {
+        val claudeDir = getClaudeDir()
+        val projectId = encodeProjectPath(projectPath)
+        val projectDir = File(claudeDir, "projects/$projectId")
+
+        if (!projectDir.exists() || !projectDir.isDirectory) {
+            logger.info("[Default] Project history directory not found: ${projectDir.absolutePath}")
+            return emptyList()
+        }
+
+        val jsonlFiles = projectDir.listFiles { file -> file.extension == "jsonl" } ?: emptyArray()
+        logger.info("[Default] Found ${jsonlFiles.size} session files in ${projectDir.absolutePath}")
+
+        val sessions = jsonlFiles.mapNotNull { file ->
+            try {
+                extractSessionMetadata(file, projectPath)
+            } catch (e: Exception) {
+                logger.warning("[Default] Failed to parse session file ${file.name}: ${e.message}")
+                null
+            }
+        }
+
+        // 按时间戳降序排序，取前 maxResults 条
+        return sessions
+            .sortedByDescending { it.timestamp }
+            .take(maxResults)
+    }
+
+    /**
+     * 获取 Claude 配置目录
+     */
+    private fun getClaudeDir(): File {
+        val homeDir = System.getProperty("user.home") ?: System.getenv("USERPROFILE") ?: "."
+        return File(homeDir, ".claude")
+    }
+
+    /**
+     * 编码项目路径为项目 ID
+     * 例如：C:\Users\16790\IdeaProjects\claude-code-plus -> C--Users-16790-IdeaProjects-claude-code-plus
+     */
+    protected fun encodeProjectPath(path: String): String {
+        return path
+            .replace("\\", "-")
+            .replace("/", "-")
+            .replace(":", "-")
+            .replace("--", "-")
+            .trimStart('-')
+    }
+
+    private val jsonParser = Json { ignoreUnknownKeys = true }
+
+    /**
+     * 从 JSONL 文件提取会话元数据
+     */
+    private fun extractSessionMetadata(file: File, projectPath: String): HistorySession? {
+        var firstUserMessage: String? = null
+        var lastTimestamp = 0L
+        var messageCount = 0
+        var isSubagent = false
+
+        file.forEachLine { line ->
+            if (line.isBlank()) return@forEachLine
+
+            try {
+                val json = jsonParser.parseToJsonElement(line).jsonObject
+
+                // 检查是否为子代理会话
+                if (json["isSidechain"]?.jsonPrimitive?.booleanOrNull == true) {
+                    isSubagent = true
+                    return@forEachLine
+                }
+                if (json["userType"]?.jsonPrimitive?.contentOrNull == "internal") {
+                    isSubagent = true
+                    return@forEachLine
+                }
+
+                val type = json["type"]?.jsonPrimitive?.contentOrNull ?: return@forEachLine
+
+                // 统计消息数量
+                if (type == "user" || type == "assistant") {
+                    messageCount++
+                }
+
+                // 提取第一条用户消息
+                if (firstUserMessage == null && type == "user") {
+                    val content = extractMessageContent(json)
+                    if (content != null && !content.contains("Caveat:") && !content.contains("<command-")) {
+                        firstUserMessage = content.take(100)
+                    }
+                }
+
+                // 更新时间戳
+                val timestamp = json["timestamp"]?.jsonPrimitive?.contentOrNull
+                if (timestamp != null) {
+                    val ts = parseTimestamp(timestamp)
+                    if (ts > lastTimestamp) {
+                        lastTimestamp = ts
+                    }
+                }
+            } catch (e: Exception) {
+                // 跳过无效行
+            }
+        }
+
+        // 过滤子代理会话和无效会话
+        if (isSubagent || firstUserMessage == null || messageCount == 0) {
+            return null
+        }
+
+        // 如果没有解析到时间戳，使用文件修改时间
+        if (lastTimestamp == 0L) {
+            lastTimestamp = file.lastModified()
+        }
+
+        return HistorySession(
+            sessionId = file.nameWithoutExtension,
+            firstUserMessage = firstUserMessage,
+            timestamp = lastTimestamp,
+            messageCount = messageCount,
+            projectPath = projectPath
+        )
+    }
+
+    /**
+     * 从 JSON 对象中提取消息内容
+     * 支持两种格式：
+     * 1. message.content = "string"
+     * 2. message.content = [{"type": "text", "text": "..."}]
+     */
+    private fun extractMessageContent(json: JsonObject): String? {
+        val message = json["message"]?.jsonObject ?: return null
+        val content = message["content"] ?: return null
+
+        return when {
+            // 格式 1：content 是字符串
+            content is JsonPrimitive && content.isString -> content.content
+
+            // 格式 2：content 是数组
+            content is JsonArray -> {
+                content.firstOrNull()?.let { item ->
+                    if (item is JsonObject) {
+                        item["text"]?.jsonPrimitive?.contentOrNull
+                    } else null
+                }
+            }
+
+            else -> null
+        }
+    }
+
+    /**
+     * 解析 ISO 8601 时间戳
+     */
+    private fun parseTimestamp(timestamp: String): Long {
+        return try {
+            java.time.Instant.parse(timestamp).toEpochMilli()
+        } catch (e: Exception) {
+            0L
+        }
     }
 }
 
