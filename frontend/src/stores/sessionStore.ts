@@ -102,26 +102,12 @@ export const useSessionStore = defineStore('session', () => {
     skipPermissions: boolean
   } | null>(null)
 
-  // 存储请求统计追踪信息：sessionId -> { lastUserMessageId, requestStartTime, inputTokens, outputTokens, currentStreamingMessageId }
-  const requestTracker = reactive(new Map<string, {
-    lastUserMessageId: string
-    requestStartTime: number
-    inputTokens: number
-    outputTokens: number
-    currentStreamingMessageId: string | null  // 当前正在流式输出的消息 ID
-  }>())
-
-  // AskUserQuestion 待回答问题状态
-  const pendingQuestions = reactive(new Map<string, PendingUserQuestion>())
-
-  // RequestPermission 待授权请求状态
-  const pendingPermissions = reactive(new Map<string, PendingPermissionRequest>())
-
-  // 会话级权限规则（与 Tab 生命周期绑定，不持久化）
-  const sessionPermissionRules = reactive(new Map<string, SessionPermissionRule[]>())
-
-  // 会话级权限目录（与 Tab 生命周期绑定，不持久化）
-  const sessionPermissionDirectories = reactive(new Map<string, string[]>())
+  // 全局 Map 已迁移到 SessionState 对象中
+  // - requestTracker -> session.requestTracker
+  // - pendingQuestions -> session.pendingQuestions
+  // - pendingPermissions -> session.pendingPermissions
+  // - sessionPermissionRules -> session.permissionRules
+  // - sessionPermissionDirectories -> session.permissionDirectories
 
   function buildConnectOptions(overrides: Partial<ConnectOptions> = {}): ConnectOptions {
     // dangerouslySkipPermissions 由调用方通过 overrides 传入，不再硬编码
@@ -171,7 +157,13 @@ export const useSessionStore = defineStore('session', () => {
         scrollPosition: 0
       },
       toolInputJsonAccumulator: new Map(),
-      lastError: null
+      lastError: null,
+      // 会话级状态（原来是全局 Map）
+      pendingQuestions: new Map(),
+      pendingPermissions: new Map(),
+      permissionRules: [],
+      permissionDirectories: [],
+      requestTracker: null
     })
   }
 
@@ -1043,8 +1035,7 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     // 🔧 修复：如果请求已完成（比如被打断），忽略延迟到达的流式事件
-    const tracker = requestTracker.get(sessionId)
-    if (!tracker) {
+    if (!sessionState.requestTracker) {
       log.debug(`handleStreamEvent: 会话 ${sessionId} 无活动请求，忽略延迟的流式事件`)
       return
     }
@@ -1309,8 +1300,7 @@ export const useSessionStore = defineStore('session', () => {
    * 查找当前处于 streaming 状态的 assistant 消息
    */
   function findStreamingAssistantMessage(sessionState: SessionState): Message | null {
-    const tracker = requestTracker.get(sessionState.id)
-    const streamingId = tracker?.currentStreamingMessageId
+    const streamingId = sessionState.requestTracker?.currentStreamingMessageId
     if (streamingId) {
       const matched = [...sessionState.messages].reverse().find(msg => msg.id === streamingId && msg.role === 'assistant')
       if (matched) return matched
@@ -1332,8 +1322,7 @@ export const useSessionStore = defineStore('session', () => {
     const existing = findStreamingAssistantMessage(sessionState)
     if (existing) return existing
 
-    const tracker = requestTracker.get(sessionId)
-    const placeholderId = tracker?.currentStreamingMessageId || `assistant-${Date.now()}`
+    const placeholderId = sessionState.requestTracker?.currentStreamingMessageId || `assistant-${Date.now()}`
     const newMessage: Message = {
       id: placeholderId,
       role: 'assistant',
@@ -1672,7 +1661,7 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     // 获取追踪信息
-    const tracker = requestTracker.get(sessionId)
+    const tracker = sessionState.requestTracker
 
     // 解析 usage 信息
     let inputTokens = 0
@@ -1727,7 +1716,7 @@ export const useSessionStore = defineStore('session', () => {
     if (resultData.subtype === 'interrupted') {
       // 1) 先结束生成，清理追踪，确保后续流事件不再影响 UI
       setSessionGenerating(sessionId, false)
-      requestTracker.delete(sessionId)
+      sessionState.requestTracker = null
       // 2) 再渲染红色打断提示（专用组件）
       sessionState.displayItems.push({
         id: `interrupt-${Date.now()}`,
@@ -1756,7 +1745,7 @@ export const useSessionStore = defineStore('session', () => {
     // 标记生成完成（非打断场景）
     if (resultData.subtype !== 'interrupted') {
       setSessionGenerating(sessionId, false)
-      requestTracker.delete(sessionId)
+      sessionState.requestTracker = null
       log.debug('handleResultMessage: 请求完成, 清除追踪信息')
     }
 
@@ -1769,31 +1758,34 @@ export const useSessionStore = defineStore('session', () => {
    */
   function startRequestTracking(sessionId: string, userMessageId: string, streamingMessageId: string) {
     log.debug(`startRequestTracking: sessionId=${sessionId}, userMessageId=${userMessageId}`)
-    requestTracker.set(sessionId, {
+    const sessionState = getSessionState(sessionId)
+    if (!sessionState) {
+      log.warn(`startRequestTracking: 会话 ${sessionId} 不存在`)
+      return
+    }
+
+    sessionState.requestTracker = {
       lastUserMessageId: userMessageId,
       requestStartTime: Date.now(),
       inputTokens: 0,
       outputTokens: 0,
       currentStreamingMessageId: streamingMessageId
-    })
+    }
 
     // 设置 isGenerating = true（开始生成）
     setSessionGenerating(sessionId, true)
 
     // 更新 displayItem 的 isStreaming 状态
-    const sessionState = getSessionState(sessionId)
-    if (sessionState) {
-      const displayItemIndex = sessionState.displayItems.findIndex(
-        item => isDisplayUserMessage(item) && item.id === userMessageId
-      )
-      if (displayItemIndex !== -1) {
-        const userMessage = sessionState.displayItems[displayItemIndex]
-        if (isDisplayUserMessage(userMessage)) {
-          userMessage.isStreaming = true
-        }
-        // 触发响应式更新
-        sessionState.displayItems = [...sessionState.displayItems]
+    const displayItemIndex = sessionState.displayItems.findIndex(
+      item => isDisplayUserMessage(item) && item.id === userMessageId
+    )
+    if (displayItemIndex !== -1) {
+      const userMessage = sessionState.displayItems[displayItemIndex]
+      if (isDisplayUserMessage(userMessage)) {
+        userMessage.isStreaming = true
       }
+      // 触发响应式更新
+      sessionState.displayItems = [...sessionState.displayItems]
     }
   }
 
@@ -1801,10 +1793,10 @@ export const useSessionStore = defineStore('session', () => {
    * 累加 token 使用量（用于增量更新）
    */
   function addTokenUsage(sessionId: string, inputTokens: number, outputTokens: number) {
-    const tracker = requestTracker.get(sessionId)
-    if (tracker) {
-      tracker.inputTokens += inputTokens
-      tracker.outputTokens += outputTokens
+    const sessionState = getSessionState(sessionId)
+    if (sessionState?.requestTracker) {
+      sessionState.requestTracker.inputTokens += inputTokens
+      sessionState.requestTracker.outputTokens += outputTokens
     }
   }
 
@@ -1812,10 +1804,10 @@ export const useSessionStore = defineStore('session', () => {
    * 设置 token 使用量（用于累计值更新，如 message_delta.usage）
    */
   function setTokenUsage(sessionId: string, inputTokens: number, outputTokens: number) {
-    const tracker = requestTracker.get(sessionId)
-    if (tracker) {
-      tracker.inputTokens = inputTokens
-      tracker.outputTokens = outputTokens
+    const sessionState = getSessionState(sessionId)
+    if (sessionState?.requestTracker) {
+      sessionState.requestTracker.inputTokens = inputTokens
+      sessionState.requestTracker.outputTokens = outputTokens
     }
   }
 
@@ -1823,7 +1815,8 @@ export const useSessionStore = defineStore('session', () => {
    * 获取当前请求的统计信息（供组件使用）
    */
   function getRequestStats(sessionId: string) {
-    const tracker = requestTracker.get(sessionId)
+    const sessionState = getSessionState(sessionId)
+    const tracker = sessionState?.requestTracker
     if (!tracker) return null
     return {
       startTime: tracker.requestStartTime,
@@ -1836,18 +1829,18 @@ export const useSessionStore = defineStore('session', () => {
    * 获取当前正在流式输出的消息 ID
    */
   function getCurrentStreamingMessageId(sessionId: string): string | null {
-    const tracker = requestTracker.get(sessionId)
-    return tracker?.currentStreamingMessageId ?? null
+    const sessionState = getSessionState(sessionId)
+    return sessionState?.requestTracker?.currentStreamingMessageId ?? null
   }
 
   /**
    * 更新当前流式消息的 ID（当后端返回真实 ID 时调用）
    */
   function updateStreamingMessageId(sessionId: string, newMessageId: string) {
-    const tracker = requestTracker.get(sessionId)
-    if (tracker) {
-      log.debug(`updateStreamingMessageId: ${tracker.currentStreamingMessageId} -> ${newMessageId}`)
-      tracker.currentStreamingMessageId = newMessageId
+    const sessionState = getSessionState(sessionId)
+    if (sessionState?.requestTracker) {
+      log.debug(`updateStreamingMessageId: ${sessionState.requestTracker.currentStreamingMessageId} -> ${newMessageId}`)
+      sessionState.requestTracker.currentStreamingMessageId = newMessageId
     }
   }
 
@@ -1886,13 +1879,7 @@ export const useSessionStore = defineStore('session', () => {
       // 清除连接状态
       connectionStatuses.value.delete(sessionId)
 
-      // 清理会话相关状态
-      requestTracker.delete(sessionId)
-      clearSessionPermissionRules(sessionId)
-      clearPendingQuestions(sessionId)
-      clearPendingPermissions(sessionId)
-
-      // 从列表中移除（SessionState 会自动删除）
+      // 从列表中移除（SessionState 会自动删除，包括其中的所有状态）
       sessions.delete(sessionId)
       unlinkExternalSessionId(sessionId)
 
@@ -2075,7 +2062,10 @@ export const useSessionStore = defineStore('session', () => {
       console.error('❌ enqueueMessage 发送失败:', err)
       // 发送失败时重置状态
       setSessionGenerating(sessionId, false)
-      requestTracker.delete(sessionId)
+      const sessionState = getSessionState(sessionId)
+      if (sessionState) {
+        sessionState.requestTracker = null
+      }
     })
   }
 
@@ -2461,6 +2451,11 @@ export const useSessionStore = defineStore('session', () => {
     return aiAgentService.register(sessionId, 'AskUserQuestion', async (params) => {
       log.info(`[AskUserQuestion] 收到问题请求:`, params)
 
+      const sessionState = getSessionState(sessionId)
+      if (!sessionState) {
+        throw new Error(`会话 ${sessionId} 不存在`)
+      }
+
       // 验证参数
       const questions = validateAskUserQuestionParams(params)
 
@@ -2470,14 +2465,14 @@ export const useSessionStore = defineStore('session', () => {
       // 返回一个 Promise，当用户回答后 resolve
       // 返回数组格式：[{ question, header, answer }, ...]
       return new Promise<Array<{ question: string; header: string; answer: string }>>((resolve, reject) => {
-        // 存储到 pendingQuestions
-        pendingQuestions.set(questionId, {
+        // 存储到 session.pendingQuestions
+        sessionState.pendingQuestions.set(questionId, {
           id: questionId,
           sessionId,
           questions: questions.map(q => ({ ...q, multiSelect: q.multiSelect ?? false })),
           createdAt: Date.now(),
           resolve: (answersMap) => {
-            pendingQuestions.delete(questionId)
+            sessionState.pendingQuestions.delete(questionId)
             // 转换为数组格式
             const result = questions.map(q => ({
               question: q.question,
@@ -2487,7 +2482,7 @@ export const useSessionStore = defineStore('session', () => {
             resolve(result)
           },
           reject: (error) => {
-            pendingQuestions.delete(questionId)
+            sessionState.pendingQuestions.delete(questionId)
             reject(error)
           }
         })
@@ -2501,9 +2496,9 @@ export const useSessionStore = defineStore('session', () => {
    * 获取当前会话的待回答问题
    */
   function getCurrentPendingQuestions(): PendingUserQuestion[] {
-    if (!currentSessionId.value) return []
-    return Array.from(pendingQuestions.values())
-      .filter(q => q.sessionId === currentSessionId.value)
+    const session = currentSession.value
+    if (!session) return []
+    return Array.from(session.pendingQuestions.values())
       .sort((a, b) => a.createdAt - b.createdAt)
   }
 
@@ -2513,7 +2508,13 @@ export const useSessionStore = defineStore('session', () => {
    * @param answers 用户的回答 { [header]: selectedOption }
    */
   function answerQuestion(questionId: string, answers: Record<string, string>): boolean {
-    const pending = pendingQuestions.get(questionId)
+    const session = currentSession.value
+    if (!session) {
+      log.warn(`[AskUserQuestion] 当前没有激活的会话`)
+      return false
+    }
+
+    const pending = session.pendingQuestions.get(questionId)
     if (!pending) {
       log.warn(`[AskUserQuestion] 问题不存在或已回答: ${questionId}`)
       return false
@@ -2529,7 +2530,13 @@ export const useSessionStore = defineStore('session', () => {
    * @param questionId 问题ID
    */
   function cancelQuestion(questionId: string): boolean {
-    const pending = pendingQuestions.get(questionId)
+    const session = currentSession.value
+    if (!session) {
+      log.warn(`[AskUserQuestion] 当前没有激活的会话`)
+      return false
+    }
+
+    const pending = session.pendingQuestions.get(questionId)
     if (!pending) {
       log.warn(`[AskUserQuestion] 问题不存在或已回答: ${questionId}`)
       return false
@@ -2577,6 +2584,11 @@ export const useSessionStore = defineStore('session', () => {
     return aiAgentService.register(sessionId, 'RequestPermission', async (params) => {
       log.info(`[RequestPermission] 收到授权请求:`, params)
 
+      const sessionState = getSessionState(sessionId)
+      if (!sessionState) {
+        throw new Error(`会话 ${sessionId} 不存在`)
+      }
+
       const { toolName, input, toolUseId, permissionSuggestions } = params
 
       if (!toolName) {
@@ -2596,7 +2608,7 @@ export const useSessionStore = defineStore('session', () => {
 
       // 返回一个 Promise，当用户响应后 resolve
       return new Promise<{ approved: boolean }>((resolve, reject) => {
-        pendingPermissions.set(permissionId, {
+        sessionState.pendingPermissions.set(permissionId, {
           id: permissionId,
           sessionId,
           toolName,
@@ -2605,11 +2617,11 @@ export const useSessionStore = defineStore('session', () => {
           matchedToolCallId,
           permissionSuggestions,
           resolve: (response) => {
-            pendingPermissions.delete(permissionId)
+            sessionState.pendingPermissions.delete(permissionId)
             resolve(response)
           },
           reject: (error) => {
-            pendingPermissions.delete(permissionId)
+            sessionState.pendingPermissions.delete(permissionId)
             reject(error)
           }
         })
@@ -2623,9 +2635,9 @@ export const useSessionStore = defineStore('session', () => {
    * 获取当前会话的待处理授权请求
    */
   function getCurrentPendingPermissions(): PendingPermissionRequest[] {
-    if (!currentSessionId.value) return []
-    return Array.from(pendingPermissions.values())
-      .filter(p => p.sessionId === currentSessionId.value)
+    const session = currentSession.value
+    if (!session) return []
+    return Array.from(session.pendingPermissions.values())
       .sort((a, b) => a.createdAt - b.createdAt)
   }
 
@@ -2635,7 +2647,13 @@ export const useSessionStore = defineStore('session', () => {
    * @param response 权限响应（包含是否批准、权限更新、拒绝原因）
    */
   function respondPermission(permissionId: string, response: PermissionResponse): boolean {
-    const pending = pendingPermissions.get(permissionId)
+    const session = currentSession.value
+    if (!session) {
+      log.warn(`[RequestPermission] 当前没有激活的会话`)
+      return false
+    }
+
+    const pending = session.pendingPermissions.get(permissionId)
     if (!pending) {
       log.warn(`[RequestPermission] 授权请求不存在或已响应: ${permissionId}`)
       return false
@@ -2662,8 +2680,14 @@ export const useSessionStore = defineStore('session', () => {
   function applySessionPermissionUpdate(sessionId: string, update: PermissionUpdate) {
     if (update.destination !== 'session') return
 
-    const rules = sessionPermissionRules.get(sessionId) || []
-    const directories = sessionPermissionDirectories.get(sessionId) || []
+    const sessionState = getSessionState(sessionId)
+    if (!sessionState) {
+      log.warn(`[SessionPermission] 应用权限更新失败: 会话 ${sessionId} 不存在`)
+      return
+    }
+
+    const rules = sessionState.permissionRules
+    const directories = sessionState.permissionDirectories
 
     switch (update.type) {
       case 'addRules':
@@ -2676,7 +2700,6 @@ export const useSessionStore = defineStore('session', () => {
             })
           }
         }
-        sessionPermissionRules.set(sessionId, rules)
         break
 
       case 'replaceRules':
@@ -2690,7 +2713,6 @@ export const useSessionStore = defineStore('session', () => {
             })
           }
         }
-        sessionPermissionRules.set(sessionId, rules)
         break
 
       case 'removeRules':
@@ -2702,7 +2724,6 @@ export const useSessionStore = defineStore('session', () => {
             if (idx !== -1) rules.splice(idx, 1)
           }
         }
-        sessionPermissionRules.set(sessionId, rules)
         break
 
       case 'setMode':
@@ -2720,7 +2741,6 @@ export const useSessionStore = defineStore('session', () => {
             }
           }
         }
-        sessionPermissionDirectories.set(sessionId, directories)
         log.info(`[SessionPermission] 添加目录权限: ${sessionId}`, { directories })
         break
 
@@ -2731,7 +2751,6 @@ export const useSessionStore = defineStore('session', () => {
             if (idx !== -1) directories.splice(idx, 1)
           }
         }
-        sessionPermissionDirectories.set(sessionId, directories)
         log.info(`[SessionPermission] 移除目录权限: ${sessionId}`, { directories })
         break
 
@@ -2749,8 +2768,10 @@ export const useSessionStore = defineStore('session', () => {
    * 检查会话级权限
    */
   function checkSessionPermission(sessionId: string, toolName: string): PermissionBehavior | null {
-    const rules = sessionPermissionRules.get(sessionId) || []
-    for (const rule of rules) {
+    const sessionState = getSessionState(sessionId)
+    if (!sessionState) return null
+
+    for (const rule of sessionState.permissionRules) {
       if (rule.toolName === toolName) {
         return rule.behavior
       }
@@ -2762,22 +2783,30 @@ export const useSessionStore = defineStore('session', () => {
    * 获取会话的权限规则
    */
   function getSessionPermissionRules(sessionId: string): SessionPermissionRule[] {
-    return sessionPermissionRules.get(sessionId) || []
+    const sessionState = getSessionState(sessionId)
+    return sessionState?.permissionRules || []
   }
 
   /**
    * 获取会话的目录权限
    */
   function getSessionPermissionDirectories(sessionId: string): string[] {
-    return sessionPermissionDirectories.get(sessionId) || []
+    const sessionState = getSessionState(sessionId)
+    return sessionState?.permissionDirectories || []
   }
 
   /**
    * 清理会话权限（规则和目录）
    */
   function clearSessionPermissionRules(sessionId: string) {
-    sessionPermissionRules.delete(sessionId)
-    sessionPermissionDirectories.delete(sessionId)
+    const sessionState = getSessionState(sessionId)
+    if (!sessionState) {
+      log.warn(`[SessionPermission] 清理会话级权限失败: 会话 ${sessionId} 不存在`)
+      return
+    }
+
+    sessionState.permissionRules = []
+    sessionState.permissionDirectories = []
     log.info(`[SessionPermission] 清理会话级权限: ${sessionId}`)
   }
 
@@ -2785,38 +2814,36 @@ export const useSessionStore = defineStore('session', () => {
    * 清理指定会话的待处理问题
    */
   function clearPendingQuestions(sessionId: string) {
-    const keysToDelete: string[] = []
-    pendingQuestions.forEach((value, key) => {
-      if (value.sessionId === sessionId) {
-        keysToDelete.push(key)
-      }
+    const sessionState = getSessionState(sessionId)
+    if (!sessionState) {
+      log.warn(`[Session] 清理待处理问题失败: 会话 ${sessionId} 不存在`)
+      return
+    }
+
+    const count = sessionState.pendingQuestions.size
+    sessionState.pendingQuestions.forEach(pending => {
+      pending.reject(new Error('Session closed'))
     })
-    keysToDelete.forEach(key => {
-      const pending = pendingQuestions.get(key)
-      if (pending) {
-        pending.reject(new Error('Session closed'))
-      }
-    })
-    log.info(`[Session] 清理待处理问题: ${sessionId}, 数量: ${keysToDelete.length}`)
+    sessionState.pendingQuestions.clear()
+    log.info(`[Session] 清理待处理问题: ${sessionId}, 数量: ${count}`)
   }
 
   /**
    * 清理指定会话的待处理权限请求
    */
   function clearPendingPermissions(sessionId: string) {
-    const keysToDelete: string[] = []
-    pendingPermissions.forEach((value, key) => {
-      if (value.sessionId === sessionId) {
-        keysToDelete.push(key)
-      }
+    const sessionState = getSessionState(sessionId)
+    if (!sessionState) {
+      log.warn(`[Session] 清理待处理权限请求失败: 会话 ${sessionId} 不存在`)
+      return
+    }
+
+    const count = sessionState.pendingPermissions.size
+    sessionState.pendingPermissions.forEach(pending => {
+      pending.reject(new Error('Session closed'))
     })
-    keysToDelete.forEach(key => {
-      const pending = pendingPermissions.get(key)
-      if (pending) {
-        pending.reject(new Error('Session closed'))
-      }
-    })
-    log.info(`[Session] 清理待处理权限: ${sessionId}, 数量: ${keysToDelete.length}`)
+    sessionState.pendingPermissions.clear()
+    log.info(`[Session] 清理待处理权限: ${sessionId}, 数量: ${count}`)
   }
 
   /**
@@ -2849,7 +2876,13 @@ export const useSessionStore = defineStore('session', () => {
    * @param permissionId 授权请求ID
    */
   function cancelPermission(permissionId: string): boolean {
-    const pending = pendingPermissions.get(permissionId)
+    const session = currentSession.value
+    if (!session) {
+      log.warn(`[RequestPermission] 当前没有激活的会话`)
+      return false
+    }
+
+    const pending = session.pendingPermissions.get(permissionId)
     if (!pending) {
       log.warn(`[RequestPermission] 授权请求不存在或已响应: ${permissionId}`)
       return false
@@ -2929,21 +2962,16 @@ export const useSessionStore = defineStore('session', () => {
     startRequestTracking,
     addTokenUsage,
     getRequestStats,
-    requestTracker,
     // AskUserQuestion 相关
-    pendingQuestions,
     getCurrentPendingQuestions,
     answerQuestion,
     cancelQuestion,
     // RequestPermission 授权相关
-    pendingPermissions,
     getCurrentPendingPermissions,
     getPermissionForToolCall,
     respondPermission,
     cancelPermission,
     // 会话级权限规则
-    sessionPermissionRules,
-    sessionPermissionDirectories,
     addSessionPermissionRule,
     checkSessionPermission,
     getSessionPermissionRules,

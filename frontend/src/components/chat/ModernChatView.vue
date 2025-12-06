@@ -28,6 +28,12 @@
         @remove="handleRemovePendingMessage"
       />
 
+      <!-- 工具权限确认（输入框上方） -->
+      <ToolPermissionInteractive />
+
+      <!-- 用户问题（输入框上方） -->
+      <AskUserQuestionInteractive />
+
       <!-- 输入区域 -->
       <ChatInput
         ref="chatInputRef"
@@ -57,9 +63,6 @@
         @update:skip-permissions="handleSkipPermissionsChange"
         @auto-cleanup-change="handleAutoCleanupChange"
       />
-
-      <!-- AskUserQuestion 交互式问答组件 -->
-      <AskUserQuestionInteractive />
     </div>
 
     <!-- 错误对话框 -->
@@ -149,6 +152,7 @@ import ChatHeader from './ChatHeader.vue'
 import SessionListOverlay from './SessionListOverlay.vue'
 import SessionStatsBar from './SessionStatsBar.vue'
 import PendingMessageQueue from './PendingMessageQueue.vue'
+import ToolPermissionInteractive from '@/components/tools/ToolPermissionInteractive.vue'
 import AskUserQuestionInteractive from '@/components/tools/AskUserQuestionInteractive.vue'
 import { calculateToolStats } from '@/utils/toolStatistics'
 import type { ContentBlock } from '@/types/message'
@@ -237,9 +241,9 @@ const currentSessionIsStreaming = computed(() => {
 })
 
 const currentRequestTracker = computed(() => {
-  const sessionId = sessionStore.currentSessionId
-  if (!sessionId) return null
-  return sessionStore.requestTracker.get(sessionId) ?? null
+  const session = sessionStore.currentSession
+  if (!session) return null
+  return session.requestTracker ?? null
 })
 
 const streamingStartTime = computed(() => {
