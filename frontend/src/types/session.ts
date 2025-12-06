@@ -130,3 +130,14 @@ export interface PendingMessage {
 
 // 兼容别名
 export type Session = SessionState
+
+/**
+ * 历史会话元数据（从后端加载）
+ */
+export interface HistorySessionMetadata {
+  sessionId: string           // 会话 ID（用于 --resume）
+  firstUserMessage: string    // 首条用户消息预览
+  timestamp: number           // 最后更新时间（毫秒时间戳）
+  messageCount: number        // 消息数量
+  projectPath: string         // 项目路径
+}

@@ -297,14 +297,19 @@ export async function setLocale(locale: string) {
   return getIdeaBridge().query('ide.setLocale', locale)
 }
 
-// Ϊ�������ݣ�Ҳ����������ʽ
+export async function getHistorySessions(maxResults: number = 50) {
+  return getIdeaBridge().query('ide.getHistorySessions', { maxResults })
+}
+
+// 为兼容性保留，也导出命名方式
 export const ideService = {
   openFile,
   showDiff,
   searchFiles,
   getFileContent,
   getLocale,
-  setLocale
+  setLocale,
+  getHistorySessions
 }
 
 export const aiAgentBridgeService = {

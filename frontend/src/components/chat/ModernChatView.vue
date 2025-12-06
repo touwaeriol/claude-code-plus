@@ -131,7 +131,7 @@
       :visible="isHistoryOverlayVisible"
       :sessions="historySessions"
       :current-session-id="sessionStore.currentTabId"
-      :loading="sessionStore.loading"
+      :loading="historyLoading"
       @close="isHistoryOverlayVisible = false"
       @select-session="handleHistorySelect"
     />
@@ -145,6 +145,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useI18n } from '@/composables/useI18n'
 import { useEnvironment } from '@/composables/useEnvironment'
 import { setupIdeSessionBridge, onIdeHostCommand } from '@/bridges/ideSessionBridge'
+import { ideService } from '@/services/ideaBridge'
 import MessageList from './MessageList.vue'
 import ChatInput from './ChatInput.vue'
 import ChatHeader from './ChatHeader.vue'
@@ -157,6 +158,7 @@ import { calculateToolStats } from '@/utils/toolStatistics'
 import type { ContentBlock } from '@/types/message'
 import type { ContextReference, AiModel, PermissionMode, TokenUsage as EnhancedTokenUsage } from '@/types/enhancedMessage'
 import type { PendingTask } from '@/types/pendingTask'
+import type { HistorySessionMetadata } from '@/types/session'
 
 // Props 定义
 interface Props {
@@ -180,6 +182,10 @@ const isIdeMode = isInIde
 let disposeIdeBridge: (() => void) | null = null
 let disposeHostCommand: (() => void) | null = null
 const isHistoryOverlayVisible = ref(false)
+
+// 历史会话列表状态
+const historySessionList = ref<HistorySessionMetadata[]>([])
+const historyLoading = ref(false)
 
 // UI State 接口定义
 interface ChatUiState {
@@ -216,8 +222,8 @@ const displayItems = computed(() => sessionStore.currentDisplayItems)
 const toolStats = computed(() => calculateToolStats(displayItems.value))
 
 const historySessions = computed(() => {
-  // 新架构：Tab 即会话，直接使用 activeTabs
-  return sessionStore.activeTabs.map(tab => ({
+  // 活跃 Tab 列表
+  const activeTabs = sessionStore.activeTabs.map(tab => ({
     id: tab.tabId,
     name: tab.name.value,
     timestamp: tab.lastActiveAt.value,
@@ -225,6 +231,28 @@ const historySessions = computed(() => {
     isGenerating: tab.isGenerating.value,
     isConnected: tab.isConnected.value
   }))
+
+  // 历史会话列表（排除已激活的）
+  const activeTabIds = new Set(activeTabs.map(t => t.id))
+  const activeSessionIds = new Set(
+    sessionStore.activeTabs
+      .map(t => t.sessionId.value)
+      .filter((id): id is string => id !== null)
+  )
+
+  const historyItems = historySessionList.value
+    .filter(h => !activeTabIds.has(h.sessionId) && !activeSessionIds.has(h.sessionId))
+    .map(h => ({
+      id: h.sessionId,
+      name: h.firstUserMessage || t('session.unnamed'),
+      timestamp: h.timestamp,
+      messageCount: h.messageCount,
+      isGenerating: false,
+      isConnected: false
+    }))
+
+  // 合并并按时间降序排序
+  return [...activeTabs, ...historyItems].sort((a, b) => b.timestamp - a.timestamp)
 })
 
 const sessionTokenUsage = computed<EnhancedTokenUsage | null>(() => {
@@ -487,12 +515,48 @@ function handleClearError() {
   uiState.value.errorMessage = undefined
 }
 
+/**
+ * 加载历史会话列表
+ */
+async function loadHistorySessions() {
+  historyLoading.value = true
+  try {
+    const response = await ideService.getHistorySessions(50)
+    if (response.success && response.data?.sessions) {
+      historySessionList.value = response.data.sessions as HistorySessionMetadata[]
+      console.log('📋 Loaded', historySessionList.value.length, 'history sessions')
+    } else {
+      console.warn('⚠️ Failed to load history sessions:', response.error)
+    }
+  } catch (error) {
+    console.error('❌ Error loading history sessions:', error)
+  } finally {
+    historyLoading.value = false
+  }
+}
+
 function toggleHistoryOverlay() {
+  if (!isHistoryOverlayVisible.value) {
+    // 打开时加载历史会话
+    loadHistorySessions()
+  }
   isHistoryOverlayVisible.value = !isHistoryOverlayVisible.value
 }
 
-async function handleHistorySelect(tabId: string) {
-  await sessionStore.switchTab(tabId)
+async function handleHistorySelect(sessionId: string) {
+  // 检查是否是活跃 Tab
+  const activeTab = sessionStore.tabs.find(t => t.tabId === sessionId || t.sessionId.value === sessionId)
+  if (activeTab) {
+    // 切换到已有 Tab
+    await sessionStore.switchTab(activeTab.tabId)
+  } else {
+    // 恢复历史会话
+    const historySession = historySessionList.value.find(h => h.sessionId === sessionId)
+    if (historySession) {
+      console.log('🔄 Resuming history session:', sessionId)
+      await sessionStore.resumeSession(sessionId, historySession.firstUserMessage)
+    }
+  }
   isHistoryOverlayVisible.value = false
 }
 </script>
