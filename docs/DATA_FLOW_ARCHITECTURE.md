@@ -122,6 +122,31 @@ class UiStreamAdapter {
 | `content_block_delta` | 只有 `index` | 需要通过映射查找 toolId |
 | `content_block_stop` | `index` | 需要通过映射查找 toolId |
 
+**Delta 类型转换链路**
+
+SDK 中定义了 4 种 `ContentDeltaPayload` 类型，经过 UiStreamAdapter 和 RPC Server 转换后发送给前端：
+
+```
+SDK (ContentDeltaPayload)      UiStreamAdapter       RPC Server              前端收到
+─────────────────────────────────────────────────────────────────────────────────────────
+TextDeltaPayload          →  UiTextDelta      →  RpcTextDelta         →  text_delta
+ThinkingDeltaPayload      →  UiThinkingDelta  →  RpcThinkingDelta     →  thinking_delta
+ToolDeltaPayload          →  UiToolProgress   →  RpcInputJsonDelta    →  input_json_delta
+CommandDeltaPayload       →  UiToolProgress   →  RpcInputJsonDelta    →  input_json_delta
+```
+
+**渲染策略分类**
+
+从渲染角度，Delta 类型分为两类：
+
+| 分类 | Delta 类型 | 渲染策略 | 原因 |
+|------|-----------|----------|------|
+| **文本类** | `text_delta`, `thinking_delta` | ✅ 实时渲染 | 字符串可逐字显示 |
+| **JSON 类** | `input_json_delta` | ⏳ 累加后渲染 | JSON 片段不完整无法解析 |
+
+- **文本类 delta**：每次收到 delta 立即更新 DisplayItem，用户看到逐字显示效果
+- **JSON 类 delta**：累加到 `toolInputJsonAccumulator`，等 `content_block_stop` 时解析完整 JSON 后才更新 DisplayItem
+
 #### 1.1 进程通信 (SubprocessTransport)
 
 SDK 通过子进程方式启动 Claude CLI，使用 stdin/stdout 进行 JSON 通信。
