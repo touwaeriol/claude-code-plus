@@ -8,6 +8,18 @@ import type { UnifiedMessage, ContentBlock } from './message'
 import type { DisplayItem, ToolCall, ConnectionStatus, ContextReference } from './display'
 import type { AiAgentSession } from '@/services/AiAgentSession'
 import type { RpcCapabilities, RpcPermissionMode } from '@/types/rpc'
+import type { PendingUserQuestion, PendingPermissionRequest, SessionPermissionRule } from './permission'
+
+/**
+ * 请求追踪信息
+ */
+export interface RequestTrackerInfo {
+  lastUserMessageId: string
+  requestStartTime: number
+  inputTokens: number
+  outputTokens: number
+  currentStreamingMessageId: string | null
+}
 
 /**
  * UI 状态（用于切换会话时保存/恢复）
@@ -79,6 +91,13 @@ export interface SessionState {
 
   // 最后一次错误信息（用于在输入框中显示）
   lastError: string | null
+
+  // 会话级状态（原来是全局 Map）
+  pendingQuestions: Map<string, PendingUserQuestion>
+  pendingPermissions: Map<string, PendingPermissionRequest>
+  permissionRules: SessionPermissionRule[]
+  permissionDirectories: string[]
+  requestTracker: RequestTrackerInfo | null
 }
 
 /**
