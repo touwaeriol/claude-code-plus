@@ -21,6 +21,17 @@ export interface UnifiedMessage {
   metadata?: MessageMetadata
   isStreaming?: boolean
   tokenUsage?: UnifiedUsage
+  /**
+   * 是否是回放消息（用于区分压缩相关消息）
+   * - isReplay = false: 压缩摘要（新生成的上下文）
+   * - isReplay = true: 确认消息（如 "Compacted"）
+   */
+  isReplay?: boolean
+  /**
+   * 是否是压缩摘要消息
+   * 当 isReplay = false 且内容以 "This session is being continued" 开头时为 true
+   */
+  isCompactSummary?: boolean
 }
 
 export interface UnifiedUsage {

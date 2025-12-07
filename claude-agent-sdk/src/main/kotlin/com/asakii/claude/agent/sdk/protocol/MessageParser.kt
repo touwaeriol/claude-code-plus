@@ -3,6 +3,7 @@ package com.asakii.claude.agent.sdk.protocol
 import com.asakii.claude.agent.sdk.exceptions.MessageParsingException
 import com.asakii.claude.agent.sdk.types.*
 import kotlinx.serialization.json.*
+import kotlinx.serialization.decodeFromString
 
 /**
  * Parser for converting raw JSON messages to typed objects.
@@ -38,6 +39,10 @@ class MessageParser {
     
     /**
      * Parse user message.
+     *
+     * 支持解析 isReplay 字段用于区分压缩摘要消息：
+     * - isReplay = false: 压缩摘要（新生成的上下文）
+     * - isReplay = true: 确认消息（如 "Compacted"）
      */
     private fun parseUserMessage(jsonObject: JsonObject): UserMessage {
         // 检查是否有嵌套的message结构（Claude CLI stream-json格式）
@@ -56,11 +61,14 @@ class MessageParser {
 
         val parentToolUseId = jsonObject["parent_tool_use_id"]?.jsonPrimitive?.contentOrNull
         val sessionId = jsonObject["session_id"]?.jsonPrimitive?.content ?: "default"
+        // 解析 isReplay 字段（用于区分压缩摘要消息）
+        val isReplay = jsonObject["isReplay"]?.jsonPrimitive?.booleanOrNull
 
         return UserMessage(
             content = content,
             parentToolUseId = parentToolUseId,
-            sessionId = sessionId
+            sessionId = sessionId,
+            isReplay = isReplay
         )
     }
     
@@ -101,17 +109,57 @@ class MessageParser {
     
     /**
      * Parse system message.
+     *
+     * 支持多种系统消息类型：
+     * - 通用系统消息（有 data 字段）
+     * - 状态消息（subtype=status，有 status 字段）
+     * - 压缩边界消息（subtype=compact_boundary，有 compact_metadata 字段）
      */
-    private fun parseSystemMessage(jsonObject: JsonObject): SystemMessage {
-        val subtype = jsonObject["subtype"]?.jsonPrimitive?.content 
+    private fun parseSystemMessage(jsonObject: JsonObject): Message {
+        val subtype = jsonObject["subtype"]?.jsonPrimitive?.content
             ?: throw MessageParsingException("Missing 'subtype' in system message")
-        val data = jsonObject["data"] 
-            ?: throw MessageParsingException("Missing 'data' in system message")
-        
-        return SystemMessage(
-            subtype = subtype,
-            data = data
-        )
+
+        return when (subtype) {
+            "status" -> {
+                // 状态消息：{"type":"system","subtype":"status","status":"compacting","session_id":"..."}
+                val status = jsonObject["status"]?.jsonPrimitive?.contentOrNull
+                val sessionId = jsonObject["session_id"]?.jsonPrimitive?.content ?: "default"
+                val uuid = jsonObject["uuid"]?.jsonPrimitive?.contentOrNull
+                StatusSystemMessage(
+                    subtype = subtype,
+                    status = status,
+                    sessionId = sessionId,
+                    uuid = uuid
+                )
+            }
+            "compact_boundary" -> {
+                // 压缩边界消息：{"type":"system","subtype":"compact_boundary","session_id":"...","compact_metadata":{...}}
+                val sessionId = jsonObject["session_id"]?.jsonPrimitive?.content ?: "default"
+                val uuid = jsonObject["uuid"]?.jsonPrimitive?.contentOrNull
+                val compactMetadata = jsonObject["compact_metadata"]?.let { metadata ->
+                    try {
+                        json.decodeFromJsonElement<CompactMetadata>(metadata)
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                CompactBoundaryMessage(
+                    subtype = subtype,
+                    sessionId = sessionId,
+                    uuid = uuid,
+                    compactMetadata = compactMetadata
+                )
+            }
+            else -> {
+                // 通用系统消息（需要有 data 字段）
+                val data = jsonObject["data"]
+                    ?: throw MessageParsingException("Missing 'data' in system message (subtype=$subtype)")
+                SystemMessage(
+                    subtype = subtype,
+                    data = data
+                )
+            }
+        }
     }
     
     /**

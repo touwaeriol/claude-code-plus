@@ -261,7 +261,7 @@
               v-model="skipPermissionsValue"
               type="checkbox"
               :disabled="!enabled"
-              @change="$emit('skip-permissions-change', skipPermissionsValue)"
+              @change="handleSkipPermissionsChange(skipPermissionsValue)"
             >
             <span class="checkbox-icon">{{ skipPermissionsValue ? '☑' : '☐' }}</span>
             <span class="checkbox-text">Skip</span>
@@ -425,6 +425,8 @@ import RichTextInput from './RichTextInput.vue'
 import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
 import { isInAtQuery } from '@/utils/atSymbolDetector'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { SETTING_KEYS } from '@/composables/useSessionTab'
 import {
   BaseModel,
   MODEL_CAPABILITIES,
@@ -472,6 +474,8 @@ interface Props {
   // 内嵌编辑模式相关
   inline?: boolean           // 是否为内嵌模式（用于编辑消息）
   editDisabled?: boolean     // 是否禁用发送（当前阶段用于编辑模式）
+  // Toast 函数
+  showToast?: (message: string, duration?: number) => void
 }
 
 interface Emits {
@@ -505,30 +509,31 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>()
 
-// i18n & session
+// i18n & stores
 const { t } = useI18n()
 const sessionStore = useSessionStore()
+const settingsStore = useSettingsStore()
 
-// 当前模型（从会话设置读取，响应式）
+// 当前模型（直接绑定到 Tab 状态）
 const currentModel = computed(() => {
-  const sessionSettings = sessionStore.currentSessionSettings
-  if (!sessionSettings || !sessionSettings.modelId) {
+  const modelId = sessionStore.currentTab?.modelId.value
+  if (!modelId) {
     return BaseModel.OPUS_45
   }
   // 从 modelId 反查 BaseModel
   const entry = Object.entries(MODEL_CAPABILITIES).find(
-    ([, cap]) => cap.modelId === sessionSettings.modelId
+    ([, cap]) => cap.modelId === modelId
   )
   return (entry?.[0] as BaseModel) ?? BaseModel.OPUS_45
 })
 
-// 当前思考开关状态（从会话设置读取，响应式）
+// 当前思考开关状态（直接绑定到 Tab 状态）
 const currentThinkingEnabled = computed(() => {
-  const sessionSettings = sessionStore.currentSessionSettings
-  if (!sessionSettings) {
+  const tab = sessionStore.currentTab
+  if (!tab) {
     return MODEL_CAPABILITIES[BaseModel.OPUS_45].defaultThinkingEnabled
   }
-  return sessionSettings.thinkingEnabled
+  return tab.thinkingEnabled.value
 })
 
 const thinkingTogglePending = ref(false)
@@ -899,8 +904,8 @@ function getModeIcon(mode: string): string {
 }
 
 /**
- * 处理模型切换（新架构 - 延迟同步）
- * 只保存设置到当前会话状态，实际同步在发送消息时进行
+ * 处理模型切换
+ * 保存到 pending，下次 query 时才应用
  */
 function handleBaseModelChange(model: BaseModel) {
   const capability = MODEL_CAPABILITIES[model]
@@ -919,29 +924,52 @@ function handleBaseModelChange(model: BaseModel) {
       break
   }
 
-  // 更新当前会话设置（延迟同步策略）
-  // UI 会自动响应，因为 selectedModelValue 绑定了 currentSessionSettings
-  sessionStore.updateCurrentSessionSettings({
-    modelId: capability.modelId,
-    thinkingEnabled: newThinkingEnabled
-  })
+  console.log(`🔄 [handleBaseModelChange] 切换模型: ${capability.displayName}, thinking=${newThinkingEnabled}`)
 
-  console.log(`🔄 [handleBaseModelChange] 会话设置已更新: ${capability.displayName}, thinking=${newThinkingEnabled}`)
+  // 保存到 pending（下次 query 时应用）
+  const tab = sessionStore.currentTab
+  if (tab) {
+    tab.setPendingSetting(SETTING_KEYS.MODEL, capability.modelId)
+    tab.setPendingSetting(SETTING_KEYS.THINKING_ENABLED, newThinkingEnabled)
+    console.log(`📝 [handleBaseModelChange] 已保存到 pending，下次 query 时应用`)
+  }
 }
 
 /**
- * 处理思考开关切换（新架构 - 延迟同步）
- * 只保存设置到当前会话状态，实际同步在发送消息时进行
+ * 处理思考开关切换
+ * 只保存到 pending，下次 query 时才应用
  */
 function handleThinkingToggle(enabled: boolean) {
   if (!canToggleThinkingComputed.value) {
     return
   }
 
-  // 更新当前会话设置（延迟同步策略）
-  sessionStore.updateCurrentSessionSettings({ thinkingEnabled: enabled })
+  console.log(`🧠 [handleThinkingToggle] 切换思考: ${enabled}`)
 
-  console.log(`🧠 [handleThinkingToggle] 会话设置已更新: thinking=${enabled}`)
+  // 保存到 pending（下次 query 时应用）
+  const tab = sessionStore.currentTab
+  if (tab) {
+    tab.setPendingSetting(SETTING_KEYS.THINKING_ENABLED, enabled)
+    console.log(`📝 [handleThinkingToggle] 已保存到 pending，下次 query 时应用`)
+  }
+}
+
+/**
+ * 处理跳过权限开关切换
+ * 只保存到 pending，下次 query 时才应用
+ */
+function handleSkipPermissionsChange(enabled: boolean) {
+  console.log(`🔓 [handleSkipPermissionsChange] 切换跳过权限: ${enabled}`)
+
+  // 保存到 pending（下次 query 时应用）
+  const tab = sessionStore.currentTab
+  if (tab) {
+    tab.setPendingSetting(SETTING_KEYS.SKIP_PERMISSIONS, enabled)
+    console.log(`📝 [handleSkipPermissionsChange] 已保存到 pending，下次 query 时应用`)
+  }
+
+  // 保存到全局设置（供新 Tab 继承）
+  settingsStore.saveSettings({ skipPermissions: enabled })
 }
 
 async function handleSend() {
@@ -951,9 +979,10 @@ async function handleSend() {
   const contents = richTextInputRef.value?.extractContentBlocks() || []
 
   if (contents.length > 0) {
+    // 先展示到 UI，连接状态由 Tab 层处理
     emit('send', contents)
 
-    // 清理
+    // 清理输入框
     richTextInputRef.value?.clear()
     inputText.value = ''
     adjustHeight()
@@ -1700,9 +1729,10 @@ onUnmounted(() => {
   flex: 1;
 }
 
-.input-area.generating-state {
+/* 移除生成状态的额外 padding，保持输入框高度一致 */
+/* .input-area.generating-state {
   padding-top: 32px;
-}
+} */
 
 /* 生成中指示器 */
 .generating-indicator {

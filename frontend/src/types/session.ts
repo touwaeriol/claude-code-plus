@@ -125,6 +125,7 @@ export interface PendingMessage {
   id: string                        // 唯一标识（用于删除/编辑）
   contexts: ContextReference[]      // 上下文栏引用（文件、图片）
   contents: ContentBlock[]          // 输入框内容（文本块、图片块）
+  mergedContent?: ContentBlock[]    // 合并后的内容（避免重复计算）
   createdAt: number                 // 创建时间
 }
 

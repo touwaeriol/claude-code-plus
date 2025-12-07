@@ -8,6 +8,25 @@
       class="empty-state"
     >
       <div class="empty-content">
+        <!-- 连接状态指示器 -->
+        <div class="connection-status-wrapper">
+          <div
+            class="connection-status"
+            :class="{
+              'status-connected': connectionStatus === 'CONNECTED',
+              'status-connecting': connectionStatus === 'CONNECTING',
+              'status-disconnected': connectionStatus === 'DISCONNECTED'
+            }"
+          >
+            <span class="status-dot" />
+            <span class="status-text">
+              {{ connectionStatus === 'CONNECTED' ? t('chat.connectionStatus.connected') :
+                 connectionStatus === 'CONNECTING' ? t('chat.connectionStatus.connecting') :
+                 t('chat.connectionStatus.disconnected') }}
+            </span>
+          </div>
+        </div>
+
         <div class="empty-icon-wrapper">
           <svg
             class="empty-icon"
@@ -166,6 +185,7 @@ interface Props {
   streamingStartTime?: number  // 流式响应开始时间
   inputTokens?: number  // 上行 token
   outputTokens?: number  // 下行 token
+  connectionStatus?: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED'  // 连接状态
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -173,7 +193,8 @@ const props = withDefaults(defineProps<Props>(), {
   isStreaming: false,
   streamingStartTime: 0,
   inputTokens: 0,
-  outputTokens: 0
+  outputTokens: 0,
+  connectionStatus: 'DISCONNECTED'
 })
 
 const wrapperRef = ref<HTMLElement>()
@@ -398,6 +419,72 @@ function scrollToBottom() {
   justify-content: center;
   padding: 12px;
   color: var(--theme-foreground, #24292e);
+}
+
+/* 连接状态指示器 */
+.connection-status-wrapper {
+  margin-bottom: 16px;
+}
+
+.connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.status-connected {
+  background: rgba(40, 167, 69, 0.1);
+  color: #28a745;
+  border: 1px solid rgba(40, 167, 69, 0.3);
+}
+
+.status-connected .status-dot {
+  background: #28a745;
+  box-shadow: 0 0 8px rgba(40, 167, 69, 0.6);
+}
+
+.status-connecting {
+  background: rgba(255, 193, 7, 0.1);
+  color: #d39e00;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+.status-connecting .status-dot {
+  background: #ffc107;
+  animation: pulse-connecting 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-connecting {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+
+.status-disconnected {
+  background: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
+  border: 1px solid rgba(220, 53, 69, 0.3);
+}
+
+.status-disconnected .status-dot {
+  background: #dc3545;
 }
 
 .empty-content {

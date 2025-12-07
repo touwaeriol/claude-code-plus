@@ -267,6 +267,7 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
 
         var messageCount = 0
 
+        // 使用 transformWhile 在 ResultMessage 后结束 Flow（和官方 Python SDK 一致）
         return controlProtocol!!.sdkMessages
             .onEach { message ->
                 messageCount++
@@ -278,31 +279,13 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
                         val content = message.content.filterIsInstance<TextBlock>()
                             .joinToString("") { it.text }
                         logger.info("🤖 [receiveResponse] Claude回复: ${content.take(100)}${if (content.length > 100) "..." else ""}")
-                        logger.info("📊 [receiveResponse] AssistantMessage 详情: model=${message.model}, contentBlocks=${message.content.size}")
-                    }
-                    is SystemMessage -> {
-                        logger.info("🔧 [receiveResponse] 系统消息: subtype=${message.subtype}, data=${message.data}")
                     }
                     is ResultMessage -> {
-                        logger.info("🎯 [receiveResponse] 结果消息: subtype=${message.subtype}, isError=${message.isError}, sessionId=${message.sessionId}")
-                        logger.info("📊 [receiveResponse] ResultMessage 详情: durationMs=${message.durationMs}, numTurns=${message.numTurns}, totalCostUsd=${message.totalCostUsd}")
-                        if (message.usage != null) {
-                            logger.info("💾 [receiveResponse] ResultMessage usage: ${message.usage}")
-                        }
-                        logger.info("🏁 [receiveResponse] 收到ResultMessage，Flow 将自然结束")
+                        logger.info("🎯 [receiveResponse] 结果消息: subtype=${message.subtype}, isError=${message.isError}")
                         logger.info("📊 [receiveResponse] 统计: 共收到 $messageCount 条消息")
                     }
                     is UserMessage -> {
-                        logger.info("👤 [receiveResponse] 用户消息: sessionId=${message.sessionId}, parentToolUseId=${message.parentToolUseId}")
-                    }
-                    is StreamEvent -> {
-                        val eventType = try {
-                            val eventJson = message.event.jsonObject
-                            eventJson["type"]?.jsonPrimitive?.contentOrNull ?: "unknown"
-                        } catch (e: Exception) {
-                            "parse_error"
-                        }
-                        logger.info("🌊 [receiveResponse] StreamEvent: type=$eventType, sessionId=${message.sessionId}, uuid=${message.uuid}")
+                        logger.info("👤 [receiveResponse] 用户消息: isReplay=${message.isReplay}")
                     }
                     else -> {
                         logger.info("📄 [receiveResponse] 其他消息: $messageType")
@@ -311,15 +294,16 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
             }
             .transformWhile { message ->
                 emit(message)
-                // 返回 true 继续，返回 false 结束 Flow
-                // ResultMessage 发送后返回 false，Flow 自然完成
+                // 只有 ResultMessage 才结束 Flow（和官方 Python SDK receive_response() 一致）
                 message !is ResultMessage
             }
             .onCompletion { cause ->
                 if (cause == null) {
                     logger.info("✅ [receiveResponse] Flow 正常完成，共收到 $messageCount 条消息")
+                } else if (cause is kotlinx.coroutines.CancellationException) {
+                    logger.info("ℹ️ [receiveResponse] Flow 被取消，共收到 $messageCount 条消息")
                 } else {
-                    logger.info("⚠️ [receiveResponse] Flow 异常结束: ${cause.message}")
+                    logger.warning("⚠️ [receiveResponse] Flow 异常结束: ${cause.message}")
                 }
             }
     }

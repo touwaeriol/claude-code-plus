@@ -75,13 +75,6 @@ interface IdeTools {
      * @return Result<Unit> 成功或失败
      */
     fun setLocale(locale: String): Result<Unit>
-
-    /**
-     * 获取历史会话列表
-     * @param maxResults 最大结果数（默认 50）
-     * @return Result<List<HistorySession>> 历史会话列表
-     */
-    fun getHistorySessions(maxResults: Int = 50): Result<List<HistorySession>>
 }
 
 /**
@@ -140,16 +133,4 @@ data class IdeTheme(
     val infoBackground: String = "#3c3f41",
     val codeBackground: String = "#2b2b2b",
     val secondaryForeground: String = "#808080"
-)
-
-/**
- * 历史会话元数据
- */
-@Serializable
-data class HistorySession(
-    val sessionId: String,           // 会话 ID（用于 --resume）
-    val firstUserMessage: String,    // 首条用户消息预览
-    val timestamp: Long,             // 最后更新时间（毫秒时间戳）
-    val messageCount: Int,           // 消息数量
-    val projectPath: String          // 项目路径
 )

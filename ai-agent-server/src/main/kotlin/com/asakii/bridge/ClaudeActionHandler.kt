@@ -256,6 +256,27 @@ class ClaudeActionHandler(
                     put("event", message.event)
                 }
             }
+
+            is StatusSystemMessage -> buildJsonObject {
+                put("type", "system")
+                put("subtype", "status")
+                put("status", message.status)
+                put("session_id", message.sessionId)
+                message.uuid?.let { put("uuid", it) }
+            }
+
+            is CompactBoundaryMessage -> buildJsonObject {
+                put("type", "system")
+                put("subtype", "compact_boundary")
+                put("session_id", message.sessionId)
+                message.uuid?.let { put("uuid", it) }
+                message.compactMetadata?.let { metadata ->
+                    put("compact_metadata", buildJsonObject {
+                        metadata.trigger?.let { put("trigger", it) }
+                        metadata.preTokens?.let { put("pre_tokens", it) }
+                    })
+                }
+            }
         }
     }
 

@@ -23,7 +23,7 @@ export type RpcPermissionMode = 'default' | 'bypassPermissions' | 'acceptEdits' 
 // ============================================================================
 
 /** 消息类型枚举 */
-export type RpcMessageType = 'user' | 'assistant' | 'result' | 'stream_event' | 'error'
+export type RpcMessageType = 'user' | 'assistant' | 'result' | 'stream_event' | 'error' | 'status_system' | 'compact_boundary'
 
 /** 基础消息接口 */
 interface RpcMessageBase {
@@ -35,6 +35,12 @@ export interface RpcUserMessage extends RpcMessageBase {
   type: 'user'
   message: RpcMessageContent
   parent_tool_use_id?: string
+  /**
+   * 是否是回放消息（用于区分压缩摘要和确认消息）
+   * - isReplay = false: 压缩摘要（新生成的上下文）
+   * - isReplay = true: 确认消息（如 "Compacted"）
+   */
+  isReplay?: boolean
 }
 
 /** 助手消息 - 对应 Claude SDK AssistantMessage */
@@ -72,6 +78,34 @@ export interface RpcErrorMessage extends RpcMessageBase {
   message: string
 }
 
+// ============================================================================
+// 压缩相关系统消息
+// ============================================================================
+
+/** 压缩元数据 */
+export interface RpcCompactMetadata {
+  trigger?: 'manual' | 'auto'  // 触发方式
+  pre_tokens?: number          // 压缩前的 token 数
+}
+
+/** 状态系统消息 - 用于通知客户端状态变化（如 compacting） */
+export interface RpcStatusSystemMessage extends RpcMessageBase {
+  type: 'status_system'
+  subtype: 'status'
+  status: string | null  // 如 "compacting" 或 null
+  session_id: string
+  uuid?: string
+}
+
+/** 压缩边界消息 - 标记会话压缩的边界 */
+export interface RpcCompactBoundaryMessage extends RpcMessageBase {
+  type: 'compact_boundary'
+  subtype: 'compact_boundary'
+  session_id: string
+  uuid?: string
+  compact_metadata?: RpcCompactMetadata
+}
+
 /** 所有 RPC 消息联合类型 */
 export type RpcMessage =
   | RpcUserMessage
@@ -79,6 +113,8 @@ export type RpcMessage =
   | RpcResultMessage
   | RpcStreamEvent
   | RpcErrorMessage
+  | RpcStatusSystemMessage
+  | RpcCompactBoundaryMessage
 
 /** 消息内容（assistant/user 消息的 message 字段） */
 export interface RpcMessageContent {

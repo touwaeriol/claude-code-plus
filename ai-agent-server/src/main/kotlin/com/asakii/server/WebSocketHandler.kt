@@ -284,6 +284,13 @@ class WebSocketHandler(
                     sendResponse(request.id, payload)
                 }
 
+                "getHistorySessions" -> {
+                    val maxResults = request.params?.jsonObject?.get("maxResults")?.jsonPrimitive?.intOrNull ?: 50
+                    val result = rpcService.getHistorySessions(maxResults)
+                    val payload = json.encodeToJsonElement(RpcHistorySessionsResult.serializer(), result)
+                    sendResponse(request.id, payload)
+                }
+
                 else -> {
                     sendError(request.id, "Unknown method: ${request.method}")
                 }

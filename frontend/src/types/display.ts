@@ -137,6 +137,43 @@ export interface InterruptedHint extends BaseDisplayItem {
 }
 
 /**
+ * 压缩摘要（会话压缩后的上下文恢复）
+ */
+export interface CompactSummary extends BaseDisplayItem {
+  displayType: 'compactSummary'
+  /** 摘要内容 */
+  content: ContentBlock[]
+  /** 是否是回放消息 */
+  isReplay?: boolean
+  /** 压缩前 token 数 */
+  preTokens?: number
+  /** 触发方式 */
+  trigger?: 'manual' | 'auto'
+}
+
+/**
+ * 压缩进行中状态
+ */
+export interface CompactingStatus extends BaseDisplayItem {
+  displayType: 'compactingStatus'
+  /** 是否正在压缩 */
+  isCompacting: boolean
+  /** 会话 ID */
+  sessionId: string
+}
+
+/**
+ * 本地命令输出（如 /compact 命令的确认输出）
+ */
+export interface LocalCommandOutput extends BaseDisplayItem {
+  displayType: 'localCommandOutput'
+  /** 命令输出内容（如 "Compacted"） */
+  command: string
+  /** 输出类型 */
+  outputType: 'stdout' | 'stderr'
+}
+
+/**
  * 思考内容
  */
 export interface ThinkingContent extends BaseDisplayItem {
@@ -487,6 +524,9 @@ export type DisplayItem =
   | SystemMessage
   | ErrorResult
   | InterruptedHint
+  | CompactSummary
+  | CompactingStatus
+  | LocalCommandOutput
 
 // ============ 类型守卫 ============
 

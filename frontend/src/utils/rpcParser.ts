@@ -25,7 +25,9 @@ export const RPC_MESSAGE_TYPES: readonly RpcMessageType[] = [
   'assistant',
   'result',
   'stream_event',
-  'error'
+  'error',
+  'status_system',
+  'compact_boundary'
 ] as const
 
 // ===== 帮助函数 =====
@@ -129,6 +131,12 @@ export function isRpcMessage(value: unknown): value is RpcMessage {
       return isString(obj.message)
     case 'stream_event':
       return isString(obj.uuid) && isString(obj.session_id) && isRpcStreamEventData(obj.event)
+    case 'status_system':
+      // status_system: { type, status, session_id, provider, ... }
+      return true
+    case 'compact_boundary':
+      // compact_boundary: { type, compact_metadata: { trigger, pre_tokens } }
+      return true
     default:
       return false
   }

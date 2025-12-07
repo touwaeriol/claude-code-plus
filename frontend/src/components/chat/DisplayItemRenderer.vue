@@ -42,6 +42,21 @@
       :message="item.message"
     />
 
+    <!-- 压缩摘要 -->
+    <CompactSummaryCard
+      v-else-if="item.displayType === 'compactSummary'"
+      :content="item.content"
+      :pre-tokens="item.preTokens"
+      :trigger="item.trigger"
+    />
+
+    <!-- 本地命令输出 -->
+    <LocalCommandOutput
+      v-else-if="item.displayType === 'localCommandOutput'"
+      :command="item.command"
+      :output-type="item.outputType"
+    />
+
     <!-- 未知类型 -->
     <div
       v-else
@@ -62,6 +77,8 @@ import ToolCallDisplay from './ToolCallDisplay.vue'
 import SystemMessageDisplay from './SystemMessageDisplay.vue'
 import ErrorResultDisplay from './ErrorResultDisplay.vue'
 import InterruptedHintDisplay from './InterruptedHintDisplay.vue'
+import CompactSummaryCard from './CompactSummaryCard.vue'
+import LocalCommandOutput from './LocalCommandOutput.vue'
 
 interface Props {
   source: DisplayItem

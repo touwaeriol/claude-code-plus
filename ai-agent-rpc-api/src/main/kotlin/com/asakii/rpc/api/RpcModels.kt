@@ -204,7 +204,13 @@ data class RpcUserMessage(
     val message: RpcMessageContent,
     @SerialName("parent_tool_use_id")
     val parentToolUseId: String? = null,
-    override val provider: RpcProvider?
+    override val provider: RpcProvider?,
+    /**
+     * 是否是回放消息（用于区分压缩摘要和确认消息）
+     * - isReplay = false: 压缩摘要（新生成的上下文）
+     * - isReplay = true: 确认消息（如 "Compacted"）
+     */
+    val isReplay: Boolean? = null
 ) : RpcMessage
 
 /**
@@ -266,6 +272,43 @@ data class RpcErrorMessage(
     val message: String,
     override val provider: RpcProvider?
 ) : RpcMessage
+
+/**
+ * 状态系统消息 - 用于通知客户端状态变化（如 compacting）
+ */
+@Serializable
+@SerialName("status_system")
+data class RpcStatusSystemMessage(
+    val subtype: String = "status",
+    val status: String?,  // 如 "compacting" 或 null
+    @SerialName("session_id")
+    val sessionId: String,
+    override val provider: RpcProvider?
+) : RpcMessage
+
+/**
+ * 压缩边界消息 - 标记会话压缩的边界
+ */
+@Serializable
+@SerialName("compact_boundary")
+data class RpcCompactBoundaryMessage(
+    val subtype: String = "compact_boundary",
+    @SerialName("session_id")
+    val sessionId: String,
+    @SerialName("compact_metadata")
+    val compactMetadata: RpcCompactMetadata? = null,
+    override val provider: RpcProvider?
+) : RpcMessage
+
+/**
+ * 压缩元数据
+ */
+@Serializable
+data class RpcCompactMetadata(
+    val trigger: String? = null,    // "manual" 或 "auto"
+    @SerialName("pre_tokens")
+    val preTokens: Int? = null      // 压缩前的 token 数
+)
 
 /**
  * 消息内容（assistant/user 消息的 message 字段）
@@ -491,3 +534,27 @@ data class RpcUnknownBlock(
     val type: String,
     val data: String
 ) : RpcContentBlock
+
+// ============================================================================
+// 历史会话相关
+// ============================================================================
+
+/**
+ * 历史会话元数据（RPC 传输）
+ */
+@Serializable
+data class RpcHistorySession(
+    val sessionId: String,           // 会话 ID（用于 --resume）
+    val firstUserMessage: String,    // 首条用户消息预览
+    val timestamp: Long,             // 最后更新时间（毫秒时间戳）
+    val messageCount: Int,           // 消息数量
+    val projectPath: String          // 项目路径
+)
+
+/**
+ * 获取历史会话列表的结果
+ */
+@Serializable
+data class RpcHistorySessionsResult(
+    val sessions: List<RpcHistorySession>
+)

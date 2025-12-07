@@ -165,6 +165,9 @@ export const useSessionStore = defineStore('session', () => {
    * @param options 连接选项
    */
   async function createTab(name?: string, options?: TabConnectOptions): Promise<SessionTabInstance> {
+    // 先保存当前 Tab 的设置（在切换之前！）
+    const previousSettings = currentSessionSettings.value
+
     // 计算新的 order
     const maxOrder = tabs.value.length > 0
       ? Math.max(...tabs.value.map(t => t.order.value))
@@ -187,13 +190,15 @@ export const useSessionStore = defineStore('session', () => {
 
     log.info(`[SessionStore] 创建 Tab: ${tab.tabId}`)
 
-    // 获取连接设置（从当前 Tab 继承或使用默认值）
+    // 获取连接设置（从之前保存的设置继承或使用默认值）
     const connectOptions: TabConnectOptions = options || {
-      model: currentSessionSettings.value?.modelId || DEFAULT_SESSION_SETTINGS.modelId,
-      thinkingEnabled: currentSessionSettings.value?.thinkingEnabled ?? DEFAULT_SESSION_SETTINGS.thinkingEnabled,
-      permissionMode: currentSessionSettings.value?.permissionMode || DEFAULT_SESSION_SETTINGS.permissionMode,
-      skipPermissions: currentSessionSettings.value?.skipPermissions ?? DEFAULT_SESSION_SETTINGS.skipPermissions
+      model: previousSettings?.modelId || DEFAULT_SESSION_SETTINGS.modelId,
+      thinkingEnabled: previousSettings?.thinkingEnabled ?? DEFAULT_SESSION_SETTINGS.thinkingEnabled,
+      permissionMode: previousSettings?.permissionMode || DEFAULT_SESSION_SETTINGS.permissionMode,
+      skipPermissions: previousSettings?.skipPermissions ?? DEFAULT_SESSION_SETTINGS.skipPermissions
     }
+
+    log.info(`[SessionStore] 新 Tab 继承设置:`, connectOptions)
 
     // 后台连接
     await tab.connect(connectOptions)
@@ -390,6 +395,18 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   /**
+   * 仅更新本地 UI 的权限模式状态，不调用后端 RPC
+   * 用于当 SDK 会自行处理模式切换的场景（如权限建议中的 setMode）
+   */
+  function setLocalPermissionMode(mode: RpcPermissionMode): void {
+    if (!currentTab.value) {
+      console.warn('当前没有活跃的会话，无法设置本地权限模式')
+      return
+    }
+    currentTab.value.setLocalPermissionMode(mode)
+  }
+
+  /**
    * 更新当前会话设置
    */
   function updateCurrentSessionSettings(settings: Partial<{
@@ -563,6 +580,7 @@ export const useSessionStore = defineStore('session', () => {
     interrupt,
     setModel,
     setPermissionMode,
+    setLocalPermissionMode,
     updateCurrentSessionSettings,
 
     // 权限相关

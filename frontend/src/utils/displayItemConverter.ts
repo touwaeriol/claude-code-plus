@@ -15,7 +15,9 @@ import type {
   ToolCall,
   ToolResult,
   RequestStats,
-  ContextReference
+  ContextReference,
+  CompactSummary,
+  LocalCommandOutput
 } from '@/types/display'
 import { ToolCallStatus } from '@/types/display'
 import { resolveToolType } from '@/constants/toolTypes'
@@ -25,11 +27,29 @@ import type {
   TextContent,
   ThinkingContent as MessageThinkingContent,
   ToolUseContent,
-  ToolResultContent
+  ToolResultContent,
+  UnifiedMessage
 } from '@/types/message'
+
+/**
+ * 压缩摘要消息类型守卫
+ * 当 isCompactSummary = true 时，表示这是压缩后的上下文摘要
+ */
+function isCompactSummaryMessage(message: Message): message is UnifiedMessage & { isCompactSummary: true } {
+  return message.role === 'user' && (message as UnifiedMessage).isCompactSummary === true
+}
+
+/**
+ * 压缩确认消息类型守卫
+ * 当 isReplay = true 时，表示这是压缩确认消息（如 "Compacted"）
+ */
+function isReplayMessage(message: Message): message is UnifiedMessage & { isReplay: true } {
+  return message.role === 'user' && (message as UnifiedMessage).isReplay === true
+}
 import type { ThinkingContent as DisplayThinkingContent } from '@/types/display'
 import { isToolUseBlock, isTextBlock } from '@/utils/contentBlockUtils'
 import { parseUserMessage } from '@/utils/userMessageBuilder'
+import { parseLocalCommandTags } from '@/utils/xmlTagParser'
 
 /**
  * 粗略判断文本块是否是工具输入参数的“原样 dump”
@@ -141,6 +161,42 @@ export function convertMessageToDisplayItems(
   const displayItems: DisplayItem[] = []
 
   if (message.role === 'user') {
+    // 检查是否是压缩摘要消息（使用类型守卫）
+    if (isCompactSummaryMessage(message)) {
+      const compactSummary: CompactSummary = {
+        displayType: 'compactSummary',
+        id: message.id,
+        content: message.content,
+        isReplay: message.isReplay,
+        preTokens: (message as any).compactMetadata?.preTokens,
+        trigger: (message as any).compactMetadata?.trigger,
+        timestamp: message.timestamp
+      }
+      displayItems.push(compactSummary)
+      return displayItems
+    }
+
+    // 处理压缩确认消息（isReplay = true），解析 XML 标签
+    if (isReplayMessage(message)) {
+      const textBlock = message.content.find(b => b.type === 'text') as { type: 'text', text: string } | undefined
+      if (textBlock?.text) {
+        const parsed = parseLocalCommandTags(textBlock.text)
+        if (parsed) {
+          const localCommandOutput: LocalCommandOutput = {
+            displayType: 'localCommandOutput',
+            id: message.id,
+            command: parsed.content,
+            outputType: parsed.type,
+            timestamp: message.timestamp
+          }
+          displayItems.push(localCommandOutput)
+          return displayItems
+        }
+      }
+      // 如果没有解析到本地命令标签，跳过
+      return displayItems
+    }
+
     const parsed = parseUserMessage(message.content as any)
     const contexts: ContextReference[] = [...parsed.contexts]
     for (const imgBlock of parsed.contextImages) {
@@ -255,6 +311,40 @@ export function convertToDisplayItems(
 
   for (const message of messages) {
     if (message.role === 'user') {
+      // 检查是否是压缩摘要消息（使用类型守卫）
+      if (isCompactSummaryMessage(message)) {
+        const compactSummary: CompactSummary = {
+          displayType: 'compactSummary',
+          id: message.id,
+          content: message.content,
+          isReplay: message.isReplay,
+          preTokens: (message as any).compactMetadata?.preTokens,
+          trigger: (message as any).compactMetadata?.trigger,
+          timestamp: message.timestamp
+        }
+        displayItems.push(compactSummary)
+        continue
+      }
+
+      // 处理压缩确认消息（isReplay = true），解析 XML 标签
+      if (isReplayMessage(message)) {
+        const textBlock = message.content.find(b => b.type === 'text') as { type: 'text', text: string } | undefined
+        if (textBlock?.text) {
+          const parsed = parseLocalCommandTags(textBlock.text)
+          if (parsed) {
+            const localCommandOutput: LocalCommandOutput = {
+              displayType: 'localCommandOutput',
+              id: message.id,
+              command: parsed.content,
+              outputType: parsed.type,
+              timestamp: message.timestamp
+            }
+            displayItems.push(localCommandOutput)
+          }
+        }
+        continue
+      }
+
       const parsed = parseUserMessage(message.content as any)
       const contexts: ContextReference[] = [
         ...parsed.contexts,

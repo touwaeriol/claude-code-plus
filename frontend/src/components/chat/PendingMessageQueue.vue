@@ -44,6 +44,11 @@ import type { PendingMessage } from '@/types/session'
 
 const { t } = useI18n()
 const sessionStore = useSessionStore()
+
+/**
+ * 待发送消息队列
+ * 只在生成中用户发送新消息时才有内容
+ */
 const messageQueue = computed(() => sessionStore.messageQueue)
 
 const emit = defineEmits<{

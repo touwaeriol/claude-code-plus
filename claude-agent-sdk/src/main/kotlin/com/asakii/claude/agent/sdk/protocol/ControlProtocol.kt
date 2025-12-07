@@ -221,18 +221,44 @@ class ControlProtocol(
             "system" -> {
                 val subtype = jsonObject["subtype"]?.jsonPrimitive?.content
                 logger.info("🔧 [ControlProtocol] 系统消息: subtype=$subtype")
-                if (subtype == "init") {
-                    handleSystemInit(jsonElement)
-                } else {
-                    // Other system messages
-                    try {
-                        val message = messageParser.parseMessage(jsonElement)
-                        logger.info("📤 [ControlProtocol] 发送系统消息到 sdkMessages: ${message::class.simpleName}")
-                        _sdkMessages.send(message)
-                        logger.info("✅ [ControlProtocol] 系统消息已发送")
-                    } catch (e: Exception) {
-                        logger.severe("❌ [ControlProtocol] 解析系统消息失败: ${e.message}")
-                        e.printStackTrace()
+                when (subtype) {
+                    "init" -> {
+                        handleSystemInit(jsonElement)
+                    }
+                    "status" -> {
+                        // 状态消息（如 compacting）- 解析并发送到 sdkMessages
+                        try {
+                            val message = messageParser.parseMessage(jsonElement)
+                            logger.info("📊 [ControlProtocol] 状态消息: ${(message as? StatusSystemMessage)?.status}")
+                            _sdkMessages.send(message)
+                            logger.info("✅ [ControlProtocol] 状态消息已发送")
+                        } catch (e: Exception) {
+                            logger.warning("⚠️ [ControlProtocol] 解析状态消息失败: ${e.message}")
+                        }
+                    }
+                    "compact_boundary" -> {
+                        // 压缩边界消息 - 解析并发送到 sdkMessages
+                        try {
+                            val message = messageParser.parseMessage(jsonElement)
+                            val compactMsg = message as? CompactBoundaryMessage
+                            logger.info("📦 [ControlProtocol] 压缩边界消息: preTokens=${compactMsg?.compactMetadata?.preTokens}, trigger=${compactMsg?.compactMetadata?.trigger}")
+                            _sdkMessages.send(message)
+                            logger.info("✅ [ControlProtocol] 压缩边界消息已发送")
+                        } catch (e: Exception) {
+                            logger.warning("⚠️ [ControlProtocol] 解析压缩边界消息失败: ${e.message}")
+                        }
+                    }
+                    else -> {
+                        // 其他系统消息（需要有 data 字段）
+                        try {
+                            val message = messageParser.parseMessage(jsonElement)
+                            logger.info("📤 [ControlProtocol] 发送系统消息到 sdkMessages: ${message::class.simpleName}")
+                            _sdkMessages.send(message)
+                            logger.info("✅ [ControlProtocol] 系统消息已发送")
+                        } catch (e: Exception) {
+                            logger.severe("❌ [ControlProtocol] 解析系统消息失败: ${e.message}")
+                            e.printStackTrace()
+                        }
                     }
                 }
             }
@@ -275,7 +301,13 @@ class ControlProtocol(
                             logger.info("🔧 [ControlProtocol] SystemMessage 详情: subtype=${message.subtype}")
                         }
                         is UserMessage -> {
-                            logger.info("👤 [ControlProtocol] UserMessage 详情: sessionId=${message.sessionId}, parentToolUseId=${message.parentToolUseId}")
+                            logger.info("👤 [ControlProtocol] UserMessage 详情: sessionId=${message.sessionId}, parentToolUseId=${message.parentToolUseId}, isReplay=${message.isReplay}")
+                        }
+                        is StatusSystemMessage -> {
+                            logger.info("📊 [ControlProtocol] StatusSystemMessage 详情: status=${message.status}, sessionId=${message.sessionId}")
+                        }
+                        is CompactBoundaryMessage -> {
+                            logger.info("📦 [ControlProtocol] CompactBoundaryMessage 详情: preTokens=${message.compactMetadata?.preTokens}, trigger=${message.compactMetadata?.trigger}")
                         }
                         else -> {
                             logger.info("📄 [ControlProtocol] 其他消息类型: $messageType")
