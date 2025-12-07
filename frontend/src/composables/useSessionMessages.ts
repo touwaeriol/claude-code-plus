@@ -71,7 +71,7 @@ export function useSessionMessages(
    */
   const lastError = ref<string | null>(null)
 
-  // ========== 发送函数注入 ==========
+  // ========== 函数注入 ==========
 
   /**
    * 发送消息函数（由 Tab 连接建立后注入）
@@ -79,11 +79,24 @@ export function useSessionMessages(
   let sendMessageFn: ((content: ContentBlock[]) => Promise<void>) | null = null
 
   /**
+   * 处理队列前的回调（由 Tab 注入，用于应用 pending settings）
+   */
+  let beforeProcessQueueFn: (() => Promise<void>) | null = null
+
+  /**
    * 设置发送消息函数
    */
   function setSendMessageFn(fn: (content: ContentBlock[]) => Promise<void>): void {
     sendMessageFn = fn
   }
+
+  /**
+   * 设置处理队列前的回调
+   */
+  function setBeforeProcessQueueFn(fn: () => Promise<void>): void {
+    beforeProcessQueueFn = fn
+  }
+
 
   // ========== 计算属性 ==========
 
@@ -478,7 +491,29 @@ export function useSessionMessages(
       log.debug('[useSessionMessages] 请求完成')
     }
 
-    // 处理队列中的下一条消息
+    // 处理队列中的下一条消息（先调用回调，让 Tab 层应用 pending settings）
+    handleQueueAfterResult()
+  }
+
+  /**
+   * 生成完成后处理队列
+   * 先调用 beforeProcessQueueFn（应用 pending settings），再处理队列
+   */
+  async function handleQueueAfterResult(): Promise<void> {
+    if (messageQueue.value.length === 0) {
+      return
+    }
+
+    // 先调用回调（让 Tab 层应用 pending settings、处理重连等）
+    if (beforeProcessQueueFn) {
+      try {
+        await beforeProcessQueueFn()
+      } catch (err) {
+        console.error('[useSessionMessages] beforeProcessQueueFn 执行失败:', err)
+      }
+    }
+
+    // 再处理队列
     processNextQueuedMessage()
   }
 
@@ -562,27 +597,15 @@ export function useSessionMessages(
   // ========== 消息发送方法 ==========
 
   /**
-   * 将消息加入队列并自动处理发送
+   * 添加消息到 UI（不发送）
+   *
+   * @param message 消息内容
+   * @returns userMessage 和 mergedContent，用于后续发送
    */
-  function enqueueMessage(message: { contexts: any[]; contents: ContentBlock[] }): void {
-    if (!sendMessageFn) {
-      console.error('[useSessionMessages] enqueueMessage: 发送函数未设置')
-      return
-    }
-
-    // 如果正在生成中，将消息加入队列
-    if (isGenerating.value) {
-      const pendingMessage: PendingMessage = {
-        id: `pending-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
-        contexts: message.contexts,
-        contents: message.contents,
-        createdAt: Date.now()
-      }
-      messageQueue.value.push(pendingMessage)
-      log.info(`[useSessionMessages] 消息已加入队列，当前队列长度: ${messageQueue.value.length}`)
-      return
-    }
-
+  function addMessageToUI(message: { contexts: any[]; contents: ContentBlock[] }): {
+    userMessage: Message
+    mergedContent: ContentBlock[]
+  } {
     // 将 contexts 转换为 ContentBlock 格式
     const contextBlocks = message.contexts.length > 0
       ? buildUserMessageContent({
@@ -594,7 +617,7 @@ export function useSessionMessages(
     // 合并: contexts 内容块 + 用户输入内容块
     const mergedContent = [...contextBlocks, ...message.contents]
 
-    log.debug('[useSessionMessages] enqueueMessage:', {
+    log.debug('[useSessionMessages] addMessageToUI:', {
       contexts: message.contexts.length,
       contents: message.contents.length,
       merged: mergedContent.length
@@ -608,14 +631,61 @@ export function useSessionMessages(
       content: mergedContent
     }
 
-    // 添加到 messages
+    // 添加到 UI（用户立即可见）
     messages.push(userMessage)
-
-    // 添加到 displayItems
     const newDisplayItems = convertMessageToDisplayItems(userMessage, tools.pendingToolCalls)
     displayItems.push(...newDisplayItems)
-
     log.debug('[useSessionMessages] 用户消息已添加:', userMessage.id)
+
+    return { userMessage, mergedContent }
+  }
+
+  /**
+   * 只将消息加入队列（不添加到 UI）
+   * 用于生成中发送的消息
+   */
+  function addToQueue(message: { contexts: any[]; contents: ContentBlock[] }): void {
+    // 将 contexts 转换为 ContentBlock 格式
+    const contextBlocks = message.contexts.length > 0
+      ? buildUserMessageContent({
+          text: '',
+          contexts: message.contexts
+        })
+      : []
+
+    // 合并: contexts 内容块 + 用户输入内容块
+    const mergedContent = [...contextBlocks, ...message.contents]
+
+    const id = `user-${Date.now()}`
+    log.info(`[useSessionMessages] 消息加入队列（不添加到 UI）: ${id}`)
+
+    messageQueue.value.push({
+      id,
+      contexts: message.contexts,
+      contents: message.contents,
+      mergedContent,
+      createdAt: Date.now()
+    })
+  }
+
+  /**
+   * 直接发送消息（不判断 isGenerating）
+   * 调用方应确保连接已建立且不在生成中
+   *
+   * @param userMessage 已添加到 UI 的用户消息
+   * @param mergedContent 合并后的消息内容
+   * @param originalMessage 原始消息（用于发送失败时加入队列）
+   */
+  function sendDirectly(
+    userMessage: Message,
+    mergedContent: ContentBlock[],
+    originalMessage?: { contexts: any[]; contents: ContentBlock[] }
+  ): void {
+    // 连接未建立
+    if (!sendMessageFn) {
+      log.error('[useSessionMessages] sendMessageFn 未设置，请确保连接已建立后再发送')
+      return
+    }
 
     // 开始请求追踪
     const streamingMessageId = `assistant-${Date.now()}`
@@ -635,14 +705,29 @@ export function useSessionMessages(
 
     // 发送到后端
     sendMessageFn(mergedContent).catch(err => {
-      console.error('[useSessionMessages] 发送失败:', err)
+      console.error('[useSessionMessages] 发送失败，加入重试队列:', err)
+
+      // 加入队列等待重连后重试（消息已在 UI 中，保留 mergedContent）
+      messageQueue.value.push({
+        id: userMessage.id,
+        contexts: originalMessage?.contexts || [],
+        contents: originalMessage?.contents || [],
+        mergedContent,
+        createdAt: Date.now()
+      })
+
       isGenerating.value = false
       stats.cancelRequestTracking()
     })
   }
 
+
   /**
    * 处理队列中的下一条消息
+   *
+   * 队列中的消息有 mergedContent：
+   * - 生成中排队的消息：需要先添加到 UI，再发送
+   * - 发送失败重试的消息：已在 UI 中，直接发送
    */
   function processNextQueuedMessage(): void {
     if (messageQueue.value.length === 0) {
@@ -656,10 +741,31 @@ export function useSessionMessages(
 
     log.info(`[useSessionMessages] 从队列中取出消息: ${nextMessage.id}`)
 
-    enqueueMessage({
-      contexts: nextMessage.contexts,
-      contents: nextMessage.contents
-    })
+    if (!sendMessageFn) {
+      console.error('[useSessionMessages] processNextQueuedMessage: 发送函数未设置')
+      return
+    }
+
+    // 检查消息是否已在 UI 中（发送失败重试的情况）
+    const existingItem = displayItems.find(
+      item => isDisplayUserMessage(item) && item.id === nextMessage.id
+    )
+
+    if (existingItem) {
+      // 消息已在 UI 中（发送失败重试），直接发送
+      sendDirectly(
+        { id: nextMessage.id, role: 'user', timestamp: nextMessage.createdAt, content: nextMessage.mergedContent! } as Message,
+        nextMessage.mergedContent!,
+        { contexts: nextMessage.contexts, contents: nextMessage.contents }
+      )
+    } else {
+      // 消息不在 UI 中（生成中排队的），先添加到 UI 再发送
+      const { userMessage, mergedContent } = addMessageToUI({
+        contexts: nextMessage.contexts,
+        contents: nextMessage.contents
+      })
+      sendDirectly(userMessage, mergedContent, { contexts: nextMessage.contexts, contents: nextMessage.contents })
+    }
   }
 
   // ========== 辅助方法 ==========
@@ -999,6 +1105,19 @@ export function useSessionMessages(
     log.debug('[useSessionMessages] 状态已重置')
   }
 
+  /**
+   * 添加错误消息到 UI
+   */
+  function addErrorMessage(message: string): void {
+    displayItems.push({
+      id: `error-${Date.now()}`,
+      displayType: 'errorResult',
+      timestamp: Date.now(),
+      message
+    } as any)
+    triggerDisplayItemsUpdate()
+  }
+
   // ========== 导出 ==========
 
   return {
@@ -1017,6 +1136,7 @@ export function useSessionMessages(
 
     // 设置方法
     setSendMessageFn,
+    setBeforeProcessQueueFn,
 
     // 消息处理方法
     handleStreamEvent,
@@ -1024,7 +1144,9 @@ export function useSessionMessages(
     handleNormalMessage,
 
     // 消息发送方法
-    enqueueMessage,
+    addMessageToUI,
+    addToQueue,
+    sendDirectly,
     processNextQueuedMessage,
 
     // 队列管理
@@ -1037,7 +1159,8 @@ export function useSessionMessages(
 
     // 管理方法
     clearMessages,
-    reset
+    reset,
+    addErrorMessage
   }
 }
 

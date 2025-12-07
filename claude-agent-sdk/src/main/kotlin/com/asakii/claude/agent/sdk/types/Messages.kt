@@ -20,7 +20,13 @@ data class UserMessage(
     @SerialName("parent_tool_use_id")
     val parentToolUseId: String? = null,
     @SerialName("session_id")
-    val sessionId: String = "default"
+    val sessionId: String = "default",
+    /**
+     * 是否是回放消息（用于区分压缩摘要和确认消息）
+     * - isReplay = false: 压缩摘要（新生成的上下文）
+     * - isReplay = true: 确认消息（如 "Compacted"）
+     */
+    val isReplay: Boolean? = null
 ) : Message
 
 /**
@@ -38,6 +44,9 @@ data class AssistantMessage(
 
 /**
  * System message with metadata.
+ *
+ * 注意：这是通用的系统消息类型，需要有 data 字段。
+ * 对于特殊的系统消息（如 status, compact_boundary），使用专门的类型。
  */
 @Serializable
 @SerialName("system")
@@ -45,6 +54,45 @@ data class SystemMessage(
     val subtype: String,
     val data: JsonElement
 ) : Message
+
+/**
+ * 状态系统消息 - 用于通知客户端状态变化
+ *
+ * 示例：{"type":"system","subtype":"status","status":"compacting","session_id":"..."}
+ */
+@Serializable
+data class StatusSystemMessage(
+    val subtype: String = "status",
+    val status: String?,  // 如 "compacting" 或 null
+    @SerialName("session_id")
+    val sessionId: String,
+    val uuid: String? = null
+) : Message
+
+/**
+ * 压缩边界消息 - 标记会话压缩的边界
+ *
+ * 示例：{"type":"system","subtype":"compact_boundary","session_id":"...","compact_metadata":{"trigger":"manual","pre_tokens":33767}}
+ */
+@Serializable
+data class CompactBoundaryMessage(
+    val subtype: String = "compact_boundary",
+    @SerialName("session_id")
+    val sessionId: String,
+    val uuid: String? = null,
+    @SerialName("compact_metadata")
+    val compactMetadata: CompactMetadata? = null
+) : Message
+
+/**
+ * 压缩元数据
+ */
+@Serializable
+data class CompactMetadata(
+    val trigger: String? = null,  // "manual" 或 "auto"
+    @SerialName("pre_tokens")
+    val preTokens: Int? = null    // 压缩前的 token 数
+)
 
 /**
  * Result message with cost and usage information.

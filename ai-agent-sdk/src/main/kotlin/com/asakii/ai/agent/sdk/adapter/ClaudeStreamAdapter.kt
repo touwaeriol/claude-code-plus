@@ -27,7 +27,30 @@ class ClaudeStreamAdapter(
         is AssistantMessage -> handleAssistantMessage(message)
         is ResultMessage -> handleResultMessage(message)
         is UserMessage -> handleUserMessage(message)
+        is StatusSystemMessage -> handleStatusSystemMessage(message)
+        is CompactBoundaryMessage -> handleCompactBoundaryMessage(message)
         else -> emptyList()
+    }
+
+    private fun handleStatusSystemMessage(message: StatusSystemMessage): List<NormalizedStreamEvent> {
+        return listOf(
+            StatusSystemEvent(
+                provider = AiAgentProvider.CLAUDE,
+                status = message.status,
+                sessionId = message.sessionId
+            )
+        )
+    }
+
+    private fun handleCompactBoundaryMessage(message: CompactBoundaryMessage): List<NormalizedStreamEvent> {
+        return listOf(
+            CompactBoundaryEvent(
+                provider = AiAgentProvider.CLAUDE,
+                sessionId = message.sessionId,
+                trigger = message.compactMetadata?.trigger,
+                preTokens = message.compactMetadata?.preTokens
+            )
+        )
     }
 
     private fun handleAssistantMessage(message: AssistantMessage): List<NormalizedStreamEvent> {
@@ -96,7 +119,8 @@ class ClaudeStreamAdapter(
         return listOf(
             UserMessageEvent(
                 provider = AiAgentProvider.CLAUDE,
-                content = contentBlocks
+                content = contentBlocks,
+                isReplay = message.isReplay
             )
         )
     }

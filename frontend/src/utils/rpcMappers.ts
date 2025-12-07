@@ -85,11 +85,15 @@ export function mapRpcMessageToMessage(msg: RpcAssistantMessage | RpcUserMessage
 
   if (contentBlocks.length === 0) return null
 
+  // 传递 isReplay 字段，用于判断压缩相关消息
+  const isReplay = msg.type === 'user' ? (msg as RpcUserMessage).isReplay : undefined
+
   return {
     id: ('id' in msg && msg.id ? msg.id : '') as string,
     role: msg.type,
     timestamp: Date.now(),
     content: contentBlocks,
+    isReplay,
     metadata: {
       model: msg.message?.model,
       provider: msg.provider,

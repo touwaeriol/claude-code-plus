@@ -21,6 +21,7 @@ import com.asakii.claude.agent.sdk.types.PermissionBehavior as SdkPermissionBeha
 import com.asakii.claude.agent.sdk.types.PermissionRuleValue as SdkPermissionRuleValue
 import com.asakii.claude.agent.sdk.types.CanUseTool
 import com.asakii.claude.agent.sdk.types.ToolType
+import com.asakii.claude.agent.sdk.utils.ClaudeSessionScanner
 import com.asakii.codex.agent.sdk.CodexClientOptions
 import com.asakii.codex.agent.sdk.SandboxMode
 import com.asakii.codex.agent.sdk.ThreadOptions
@@ -227,6 +228,24 @@ class AiAgentRpcServiceImpl(
 
     override suspend fun getHistory(): RpcHistory =
         RpcHistory(messages = messageHistory.toList())
+
+    override suspend fun getHistorySessions(maxResults: Int): RpcHistorySessionsResult {
+        logger.info("📋 [AI-Agent] 获取历史会话列表 (maxResults=$maxResults)")
+        val projectPath = ideTools.getProjectPath()
+        val sessions = ClaudeSessionScanner.scanHistorySessions(projectPath, maxResults)
+        logger.info("📋 [AI-Agent] 找到 ${sessions.size} 个历史会话")
+        return RpcHistorySessionsResult(
+            sessions = sessions.map { meta ->
+                RpcHistorySession(
+                    sessionId = meta.sessionId,
+                    firstUserMessage = meta.firstUserMessage,
+                    timestamp = meta.timestamp,
+                    messageCount = meta.messageCount,
+                    projectPath = meta.projectPath
+                )
+            }
+        )
+    }
 
         private fun executeTurn(block: suspend (UnifiedAgentClient) -> Unit): Flow<RpcMessage> {
         val activeClient = client ?: error("AI Agent 尚未连接，请先调用 connect()")
@@ -662,7 +681,8 @@ class AiAgentRpcServiceImpl(
                 message = RpcMessageContent(
                     content = content.map { it.toRpcContentBlock() }
                 ),
-                provider = rpcProvider
+                provider = rpcProvider,
+                isReplay = isReplay
             )
 
             is UiAssistantMessage -> {
@@ -693,6 +713,21 @@ class AiAgentRpcServiceImpl(
 
             is UiError -> RpcErrorMessage(
                 message = message,
+                provider = rpcProvider
+            )
+
+            is UiStatusSystem -> RpcStatusSystemMessage(
+                status = status,
+                sessionId = sessionId,
+                provider = rpcProvider
+            )
+
+            is UiCompactBoundary -> RpcCompactBoundaryMessage(
+                sessionId = sessionId,
+                compactMetadata = RpcCompactMetadata(
+                    trigger = trigger,
+                    preTokens = preTokens
+                ),
                 provider = rpcProvider
             )
         }

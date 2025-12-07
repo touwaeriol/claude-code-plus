@@ -135,6 +135,12 @@ class ClaudeAgentClientImpl(
                         is com.asakii.ai.agent.sdk.model.UiThinkingStart -> {
                             logger.info("💭 [ClaudeAgentClientImpl] UiThinkingStart: index=${event.index}")
                         }
+                        is com.asakii.ai.agent.sdk.model.UiStatusSystem -> {
+                            logger.info("📊 [ClaudeAgentClientImpl] UiStatusSystem: status=${event.status}, sessionId=${event.sessionId}")
+                        }
+                        is com.asakii.ai.agent.sdk.model.UiCompactBoundary -> {
+                            logger.info("📦 [ClaudeAgentClientImpl] UiCompactBoundary: trigger=${event.trigger}, preTokens=${event.preTokens}")
+                        }
                     }
                     
                     try {
@@ -147,7 +153,12 @@ class ClaudeAgentClientImpl(
                 }
                 logger.info("✅ [ClaudeAgentClientImpl] 响应接收完成，共 $eventCount 个事件，最后事件类型: $lastEventType")
             } catch (t: Throwable) {
-                logger.severe("❌ [ClaudeAgentClientImpl] 发送消息失败: ${t.message}")
+                // 区分 CancellationException 和其他异常
+                if (t is kotlinx.coroutines.CancellationException) {
+                    logger.warning("⚠️ [ClaudeAgentClientImpl] 消息处理被取消: ${t.message}")
+                    throw t  // 重新抛出 CancellationException，不记录为错误
+                }
+                logger.severe("❌ [ClaudeAgentClientImpl] 发送消息失败: ${t::class.simpleName}: ${t.message}")
                 t.printStackTrace()
                 eventFlow.emit(UiError("Claude 会话失败: ${t.message}"))
                 throw t

@@ -303,24 +303,6 @@ class HttpApiServer(
                                     )
                                     call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
-                                "ide.getHistorySessions" -> {
-                                    // 解析请求数据
-                                    val request = json.decodeFromString<FrontendRequest>(requestBody)
-                                    val maxResults = request.data?.jsonObject?.get("maxResults")
-                                        ?.jsonPrimitive?.intOrNull ?: 50
-
-                                    val result = ideTools.getHistorySessions(maxResults)
-                                    val response = result.fold(
-                                        onSuccess = { sessions ->
-                                            FrontendResponse(
-                                                success = true,
-                                                data = mapOf("sessions" to json.encodeToJsonElement(sessions))
-                                            )
-                                        },
-                                        onFailure = { FrontendResponse(success = false, error = it.message) }
-                                    )
-                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
-                                }
                                 else -> {
                                     call.respondText(
                                         """{"success":false,"error":"Unknown action: $action"}""",

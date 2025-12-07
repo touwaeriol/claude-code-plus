@@ -101,6 +101,11 @@ export default {
       toggleThinkingHint: 'toggle thinking',
       switchModeHint: 'switch mode'
     },
+    connectionStatus: {
+      connected: 'Connected',
+      connecting: 'Connecting...',
+      disconnected: 'Disconnected'
+    },
     claudeThinking: 'Claude is thinking...',
     scrollToBottom: 'Scroll to bottom'
   },
@@ -275,5 +280,8 @@ export default {
   ,
   system: {
     interrupted: '[Request interrupted by user]'
+  },
+  compact: {
+    compacting: 'Compacting conversation context...'
   }
 }

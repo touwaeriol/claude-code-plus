@@ -597,27 +597,64 @@ function processAssistantMessage(
 }
 
 /**
+ * 检测是否是压缩摘要消息
+ * 压缩摘要消息的特征：isReplay = false 且内容以 "This session is being continued" 开头
+ */
+function isCompactSummaryMessage(event: RpcUserMessage, content: ContentBlock[]): boolean {
+  // isReplay = false 表示这是压缩摘要（新生成的上下文）
+  if (event.isReplay !== false) {
+    return false
+  }
+
+  // 检查第一个文本块是否以压缩摘要标识开头
+  const firstTextBlock = content.find(block => block.type === 'text') as { type: 'text', text: string } | undefined
+  if (firstTextBlock?.text?.startsWith('This session is being continued')) {
+    return true
+  }
+
+  return false
+}
+
+/**
  * 处理 user 事件
  *
  * user 消息通常包含 tool_result 块，用于标记工具调用完成
  * 这些消息需要添加到消息列表中，以便 resolveToolStatus 能够找到结果
+ *
+ * 特殊处理：
+ * - 压缩摘要消息（isReplay = false）：标记为 isCompactSummary = true
+ * - 压缩确认消息（isReplay = true）：标记为 isReplay = true
  */
 function processUserMessage(
   event: RpcUserMessage,
   context: RpcEventContext
 ): RpcEventProcessResult {
+  const contentBlocks = (event.message?.content || []) as ContentBlock[]
+
+  // 检测是否是压缩摘要消息
+  const isCompactSummary = isCompactSummaryMessage(event, contentBlocks)
+
   // 创建新的 user 消息
   const newMessage: Message = {
     id: `user-${Date.now()}-${crypto.randomUUID().substring(0, 8)}`,
     role: 'user',
-    content: (event.message?.content || []) as ContentBlock[],
-    timestamp: Date.now()
+    content: contentBlocks,
+    timestamp: Date.now(),
+    isReplay: event.isReplay,
+    isCompactSummary: isCompactSummary
   }
 
   // 检查是否包含 tool_result
   const toolResults = newMessage.content.filter(block => block.type === 'tool_result')
   if (toolResults.length > 0) {
     console.log(`👤 [processUserMessage] 添加包含 ${toolResults.length} 个 tool_result 的 user 消息`)
+  }
+
+  // 打印压缩相关消息的调试信息
+  if (isCompactSummary) {
+    console.log(`📦 [processUserMessage] 检测到压缩摘要消息`)
+  } else if (event.isReplay === true) {
+    console.log(`🔄 [processUserMessage] 检测到压缩确认消息 (isReplay=true)`)
   }
 
   context.messages.push(newMessage)

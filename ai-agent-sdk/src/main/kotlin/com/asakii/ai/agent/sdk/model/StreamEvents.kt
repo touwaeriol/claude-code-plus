@@ -95,7 +95,28 @@ data class AssistantMessageEvent(
 
 data class UserMessageEvent(
     override val provider: AiAgentProvider,
-    val content: List<UnifiedContentBlock>
+    val content: List<UnifiedContentBlock>,
+    /** 是否是回放消息（用于区分压缩摘要） */
+    val isReplay: Boolean? = null
+) : NormalizedStreamEvent
+
+/**
+ * 状态系统事件（如 compacting）
+ */
+data class StatusSystemEvent(
+    override val provider: AiAgentProvider,
+    val status: String?,  // "compacting" 或 null
+    val sessionId: String
+) : NormalizedStreamEvent
+
+/**
+ * 压缩边界事件
+ */
+data class CompactBoundaryEvent(
+    override val provider: AiAgentProvider,
+    val sessionId: String,
+    val trigger: String?,    // "manual" 或 "auto"
+    val preTokens: Int?      // 压缩前的 token 数
 ) : NormalizedStreamEvent
 
 /**
@@ -174,7 +195,26 @@ data class UiResultMessage(
 ) : UiStreamEvent
 
 data class UiUserMessage(
-    val content: List<UnifiedContentBlock>
+    val content: List<UnifiedContentBlock>,
+    /** 是否是回放消息（用于区分压缩摘要） */
+    val isReplay: Boolean? = null
+) : UiStreamEvent
+
+/**
+ * 状态系统消息（如 compacting）
+ */
+data class UiStatusSystem(
+    val status: String?,  // "compacting" 或 null
+    val sessionId: String
+) : UiStreamEvent
+
+/**
+ * 压缩边界消息
+ */
+data class UiCompactBoundary(
+    val sessionId: String,
+    val trigger: String?,    // "manual" 或 "auto"
+    val preTokens: Int?      // 压缩前的 token 数
 ) : UiStreamEvent
 
 /**

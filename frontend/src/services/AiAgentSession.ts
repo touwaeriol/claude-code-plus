@@ -25,6 +25,7 @@ import type {
   RpcSetPermissionModeResult,
   RpcMessage
 } from '@/types/rpc'
+import type { HistorySessionMetadata } from '@/types/session'
 
 const log = loggers.agent
 
@@ -201,6 +202,31 @@ export class AiAgentSession {
   }
 
   /**
+   * 重连会话（复用 WebSocket）
+   * 只发送 disconnect + connect RPC，不关闭 WebSocket
+   */
+  async reconnectSession(options?: ConnectOptions): Promise<string> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error('WebSocket 未连接，无法重连会话')
+    }
+
+    log.info('reconnectSession: 重连会话（复用 WebSocket）')
+
+    // 发送 disconnect RPC（不关闭 WebSocket）
+    await this.sendRequest('disconnect')
+    this.sessionId = null
+
+    // 发送 connect RPC
+    const result = await this.sendRequest('connect', options) as RpcConnectResult
+    this.sessionId = result.sessionId
+    this._capabilities = result.capabilities || null
+    this._isConnected = true
+
+    log.info(`会话已重连: ${this.sessionId}`)
+    return this.sessionId!
+  }
+
+  /**
    * 设置模型
    */
   async setModel(model: string): Promise<void> {
@@ -239,6 +265,15 @@ export class AiAgentSession {
   async getHistory(): Promise<AgentStreamEvent[]> {
     const result = await this.sendRequest('getHistory') as { messages?: AgentStreamEvent[] }
     return result.messages || []
+  }
+
+  /**
+   * 获取项目的历史会话列表
+   * @param maxResults 最大结果数（默认 50）
+   */
+  async getHistorySessions(maxResults: number = 50): Promise<HistorySessionMetadata[]> {
+    const result = await this.sendRequest('getHistorySessions', { maxResults }) as { sessions?: HistorySessionMetadata[] }
+    return result.sessions || []
   }
 
   /**

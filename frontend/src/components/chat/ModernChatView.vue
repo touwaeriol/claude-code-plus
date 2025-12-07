@@ -16,8 +16,12 @@
         :streaming-start-time="streamingStartTime"
         :input-tokens="streamingInputTokens"
         :output-tokens="streamingOutputTokens"
+        :connection-status="connectionStatusForDisplay"
         class="message-list-area"
       />
+
+      <!-- 压缩进行中状态 -->
+      <CompactingCard v-if="isCompacting" />
 
       <!-- 会话统计栏 -->
       <SessionStatsBar :stats="toolStats" />
@@ -40,9 +44,11 @@
         :pending-tasks="pendingTasks"
         :contexts="uiState.contexts"
         :is-generating="currentSessionIsStreaming"
+        :enabled="true"
+        :show-toast="showToast"
         :actual-model-id="sessionStore.currentTab?.modelId.value || undefined"
         :selected-permission="sessionStore.currentTab?.permissionMode.value || 'default'"
-        :skip-permissions="uiState.skipPermissions"
+        :skip-permissions="sessionStore.currentTab?.skipPermissions.value ?? false"
         :selected-model="uiState.selectedModel"
         :auto-cleanup-contexts="uiState.autoCleanupContexts"
         :message-history="[]"
@@ -59,7 +65,6 @@
         @context-remove="handleRemoveContext"
         @update:selected-model="handleModelChange"
         @update:selected-permission="handlePermissionModeChange"
-        @update:skip-permissions="handleSkipPermissionsChange"
         @auto-cleanup-change="handleAutoCleanupChange"
       />
     </div>
@@ -135,6 +140,13 @@
       @close="isHistoryOverlayVisible = false"
       @select-session="handleHistorySelect"
     />
+
+    <!-- Toast 提示 -->
+    <Transition name="toast">
+      <div v-if="toastVisible" class="toast-container">
+        <div class="toast-message">{{ toastMessage }}</div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -142,16 +154,19 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { SETTING_KEYS } from '@/composables/useSessionTab'
 import { useI18n } from '@/composables/useI18n'
 import { useEnvironment } from '@/composables/useEnvironment'
 import { setupIdeSessionBridge, onIdeHostCommand } from '@/bridges/ideSessionBridge'
 import { ideService } from '@/services/ideaBridge'
+import { aiAgentService } from '@/services/aiAgentService'
 import MessageList from './MessageList.vue'
 import ChatInput from './ChatInput.vue'
 import ChatHeader from './ChatHeader.vue'
 import SessionListOverlay from './SessionListOverlay.vue'
 import SessionStatsBar from './SessionStatsBar.vue'
 import PendingMessageQueue from './PendingMessageQueue.vue'
+import CompactingCard from './CompactingCard.vue'
 import ToolPermissionInteractive from '@/components/tools/ToolPermissionInteractive.vue'
 import AskUserQuestionInteractive from '@/components/tools/AskUserQuestionInteractive.vue'
 import { calculateToolStats } from '@/utils/toolStatistics'
@@ -187,6 +202,20 @@ const isHistoryOverlayVisible = ref(false)
 const historySessionList = ref<HistorySessionMetadata[]>([])
 const historyLoading = ref(false)
 
+// Toast 提示状态
+const toastMessage = ref('')
+const toastVisible = ref(false)
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showToast(message: string, duration = 2000) {
+  toastMessage.value = message
+  toastVisible.value = true
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toastVisible.value = false
+  }, duration)
+}
+
 // UI State 接口定义
 interface ChatUiState {
   contexts: ContextReference[]
@@ -197,7 +226,6 @@ interface ChatUiState {
   actualModelId?: string
   selectedModel: AiModel
   selectedPermissionMode: PermissionMode
-  skipPermissions: boolean
   autoCleanupContexts: boolean
 }
 
@@ -211,12 +239,14 @@ const uiState = ref<ChatUiState>({
   actualModelId: undefined,
   selectedModel: 'DEFAULT' as AiModel,
   selectedPermissionMode: 'default' as PermissionMode,
-  skipPermissions: false,  // 初始值，会在 onMounted 中从 settingsStore 同步
   autoCleanupContexts: false
 })
 
 // 从 sessionStore 获取 displayItems
 const displayItems = computed(() => sessionStore.currentDisplayItems)
+
+// 是否正在压缩会话
+const isCompacting = computed(() => sessionStore.currentTab?.isCompacting.value ?? false)
 
 // 计算工具使用统计
 const toolStats = computed(() => calculateToolStats(displayItems.value))
@@ -263,6 +293,14 @@ const sessionTokenUsage = computed<EnhancedTokenUsage | null>(() => {
 const isConnected = computed(() => sessionStore.currentTab?.connectionState.status === 'CONNECTED')
 const isConnecting = computed(() => sessionStore.currentTab?.connectionState.status === 'CONNECTING')
 
+// 连接状态（用于显示）
+const connectionStatusForDisplay = computed(() => {
+  const status = sessionStore.currentTab?.connectionState.status
+  if (status === 'CONNECTED') return 'CONNECTED'
+  if (status === 'CONNECTING') return 'CONNECTING'
+  return 'DISCONNECTED'
+})
+
 // Streaming 状态相关的计算属性
 const currentSessionIsStreaming = computed(() => {
   return sessionStore.currentIsGenerating
@@ -291,9 +329,6 @@ const chatInputRef = ref<InstanceType<typeof ChatInput>>()
 // 生命周期钩子
 onMounted(async () => {
   console.log('ModernChatView mounted')
-
-  // 从 settingsStore 同步 skipPermissions 初始值
-  uiState.value.skipPermissions = settingsStore.settings.skipPermissions
 
   await detectEnvironment()
   if (isIdeMode.value) {
@@ -398,21 +433,7 @@ async function handleSendMessage(contents?: ContentBlock[]) {
       return
     }
 
-    // 检查连接状态
-    if (isConnecting.value) {
-      uiState.value.hasError = true
-      uiState.value.errorMessage = t('chat.error.connecting')
-      return
-    }
-
-    if (!isConnected.value) {
-      // 连接断开，尝试自动重连
-      uiState.value.hasError = true
-      uiState.value.errorMessage = t('chat.error.disconnected')
-      // 触发自动重连
-      sessionStore.currentTab.reconnect()
-      return
-    }
+    // 连接状态检查已移至 ChatInput.handleSend，此处不再重复检查
 
     const currentContexts = [...uiState.value.contexts]
     uiState.value.contexts = []
@@ -481,27 +502,34 @@ function handleRemoveContext(context: ContextReference) {
   }
 }
 
-function handleModelChange(model: AiModel) {
+async function handleModelChange(model: AiModel) {
   console.log('Changing model:', model)
   uiState.value.selectedModel = model
+
+  // 使用智能设置更新
+  const tab = sessionStore.currentTab
+  if (tab) {
+    try {
+      await tab.updateSettings({ model: model.id })
+      console.log('✅ Model updated:', model.id)
+    } catch (error) {
+      console.error('❌ Failed to update model:', error)
+    }
+  }
 }
 
 function handlePermissionModeChange(mode: PermissionMode) {
-  console.log('Changing permission mode:', mode)
-  // 直接更新 Tab 的 permissionMode
+  console.log('🔒 [handlePermissionModeChange] 切换权限模式:', mode)
+
+  // 保存到 pending（下次 query 时应用）
   const tab = sessionStore.currentTab
   if (tab) {
-    tab.permissionMode.value = mode as any
+    tab.setPendingSetting(SETTING_KEYS.PERMISSION_MODE, mode as any)
+    console.log('📝 [handlePermissionModeChange] 已保存到 pending，下次 query 时应用')
   }
-  // 保存到设置
-  settingsStore.updatePermissionMode(mode)
-}
 
-function handleSkipPermissionsChange(skip: boolean) {
-  console.log('Toggle skip permissions:', skip)
-  uiState.value.skipPermissions = skip
-  // 延迟同步：只保存设置，发送消息时才同步到后端
-  settingsStore.saveSettings({ skipPermissions: skip })
+  // 保存到全局设置（供新 Tab 继承）
+  settingsStore.updatePermissionMode(mode)
 }
 
 function handleAutoCleanupChange(cleanup: boolean) {
@@ -516,18 +544,14 @@ function handleClearError() {
 }
 
 /**
- * 加载历史会话列表
+ * 加载历史会话列表（通过 WebSocket RPC）
  */
 async function loadHistorySessions() {
   historyLoading.value = true
   try {
-    const response = await ideService.getHistorySessions(50)
-    if (response.success && response.data?.sessions) {
-      historySessionList.value = response.data.sessions as HistorySessionMetadata[]
-      console.log('📋 Loaded', historySessionList.value.length, 'history sessions')
-    } else {
-      console.warn('⚠️ Failed to load history sessions:', response.error)
-    }
+    const sessions = await aiAgentService.getHistorySessions(50)
+    historySessionList.value = sessions
+    console.log('📋 Loaded', historySessionList.value.length, 'history sessions')
   } catch (error) {
     console.error('❌ Error loading history sessions:', error)
   } finally {
@@ -741,5 +765,37 @@ async function handleHistorySelect(sessionId: string) {
 .debug-item {
   margin-bottom: 6px;
   color: var(--theme-secondary-foreground);
+}
+
+/* Toast 提示样式 */
+.toast-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10000;
+  pointer-events: none;
+}
+
+.toast-message {
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Toast 动画 */
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.9);
 }
 </style>

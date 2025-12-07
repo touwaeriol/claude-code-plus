@@ -9,6 +9,7 @@ import {
   ContentBlock
 } from './AiAgentSession'
 import type { AgentStreamEvent } from './AiAgentSession'
+import type { HistorySessionMetadata } from '@/types/session'
 import type {
   RpcCapabilities,
   RpcPermissionMode,
@@ -143,6 +144,39 @@ export class AiAgentService {
 
     await Promise.all(disconnectPromises)
     this.sessions.clear()
+  }
+
+  /**
+   * 重连会话（复用 WebSocket）
+   * 只发送 disconnect + connect RPC，不关闭 WebSocket
+   *
+   * @param sessionId 当前会话ID
+   * @param options 连接选项
+   * @returns 新的会话ID
+   */
+  async reconnectSession(
+    sessionId: string,
+    options?: ConnectOptions
+  ): Promise<{ sessionId: string; capabilities: RpcCapabilities | null }> {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      throw new Error(`会话不存在: ${sessionId}`)
+    }
+
+    console.log(`🔄 重连会话: ${sessionId}`)
+
+    const newSessionId = await session.reconnectSession(options)
+
+    // 更新 sessions map（如果 sessionId 变化）
+    if (newSessionId !== sessionId) {
+      this.sessions.delete(sessionId)
+      this.sessions.set(newSessionId, session)
+    }
+
+    return {
+      sessionId: newSessionId,
+      capabilities: session.capabilities
+    }
   }
 
   /**
@@ -282,6 +316,24 @@ export class AiAgentService {
     return () => {
       unregisterFns.forEach(fn => fn())
     }
+  }
+
+  /**
+   * 获取项目的历史会话列表
+   *
+   * @param maxResults 最大结果数（默认 50）
+   * @returns 历史会话列表
+   */
+  async getHistorySessions(maxResults: number = 50): Promise<HistorySessionMetadata[]> {
+    // 使用任意一个已连接的会话来发送请求
+    const session = this.sessions.values().next().value as AiAgentSession | undefined
+    if (!session) {
+      console.warn('[aiAgentService] 没有活跃会话，无法获取历史会话列表')
+      return []
+    }
+
+    console.log(`📋 获取历史会话列表 (maxResults=${maxResults})`)
+    return await session.getHistorySessions(maxResults)
   }
 }
 

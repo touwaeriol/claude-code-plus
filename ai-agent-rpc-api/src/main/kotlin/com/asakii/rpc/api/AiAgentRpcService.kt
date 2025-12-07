@@ -64,5 +64,12 @@ interface AiAgentRpcService {
      * @return 消息列表
      */
     suspend fun getHistory(): RpcHistory
+
+    /**
+     * 获取项目的历史会话列表
+     * @param maxResults 最大结果数（默认 50）
+     * @return 历史会话列表
+     */
+    suspend fun getHistorySessions(maxResults: Int = 50): RpcHistorySessionsResult
 }
 

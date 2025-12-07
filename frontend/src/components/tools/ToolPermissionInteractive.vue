@@ -122,9 +122,10 @@ function handleApprove() {
 
 function handleAllowWithUpdate(update: PermissionUpdate) {
   if (pendingPermission.value) {
-    // 如果是 setMode 类型，同步更新前端 UI
+    // 如果是 setMode 类型，只更新本地 UI 状态
+    // 不需要调用 setPermissionMode RPC，SDK 收到响应后会自行切换
     if (update.type === 'setMode' && update.mode) {
-      sessionStore.setPermissionMode(update.mode)
+      sessionStore.setLocalPermissionMode(update.mode)
     }
 
     sessionStore.respondPermission(pendingPermission.value.id, {

@@ -101,6 +101,11 @@ export default {
       toggleThinkingHint: '开关思考',
       switchModeHint: '切换模式'
     },
+    connectionStatus: {
+      connected: '已连接',
+      connecting: '正在连接...',
+      disconnected: '未连接'
+    },
     claudeThinking: 'Claude 正在思考...',
     scrollToBottom: '回到底部'
   },
@@ -275,5 +280,8 @@ export default {
   ,
   system: {
     interrupted: '[用户已打断请求]'
+  },
+  compact: {
+    compacting: '正在压缩会话上下文...'
   }
 }

@@ -36,7 +36,17 @@ class UiStreamAdapter {
                 UiAssistantMessage(id = event.id, content = event.content)
             )
             is UserMessageEvent -> listOf(
-                UiUserMessage(event.content)
+                UiUserMessage(event.content, event.isReplay)
+            )
+            is StatusSystemEvent -> listOf(
+                UiStatusSystem(status = event.status, sessionId = event.sessionId)
+            )
+            is CompactBoundaryEvent -> listOf(
+                UiCompactBoundary(
+                    sessionId = event.sessionId,
+                    trigger = event.trigger,
+                    preTokens = event.preTokens
+                )
             )
             is TurnStartedEvent -> emptyList()
         }
