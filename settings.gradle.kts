@@ -39,6 +39,7 @@ include(
     "codex-agent-sdk",
     "ai-agent-sdk",
     "ai-agent-rpc-api",
+    "ai-agent-proto",  // RSocket + Protobuf 通信模块
     "standalone-test",
     "ai-agent-server"
 )

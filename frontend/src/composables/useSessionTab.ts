@@ -234,8 +234,9 @@ export function useSessionTab(initialOrder: number = 0) {
    * 规范化 RPC 消息
    */
   function normalizeRpcMessage(raw: RpcMessage): NormalizedRpcMessage | null {
-    // 1. 先尝试识别 stream 类型消息（type: "stream" 或 "stream_event"）
-    if (raw.type === 'stream' || isRpcStreamEvent(raw)) {
+    // 1. 先尝试识别 stream 类型消息（type: "stream_event"）
+    // 注意：旧 JSON-RPC 使用 'stream'，RSocket 使用 'stream_event'
+    if (isRpcStreamEvent(raw) || (raw as any).type === 'stream') {
       // 检查 stream 事件内部的 data.type 是否是特殊类型
       const innerData = (raw as any).data
       if (innerData) {
@@ -258,7 +259,7 @@ export function useSessionTab(initialOrder: number = 0) {
         }
       }
       // 普通 stream 事件
-      return { kind: 'stream_event', data: raw }
+      return { kind: 'stream_event', data: raw as RpcStreamEvent }
     }
 
     // 2. 尝试识别 result
@@ -389,6 +390,17 @@ export function useSessionTab(initialOrder: number = 0) {
     if (connectionState.status === ConnectionStatus.CONNECTING) {
       log.warn(`[Tab ${tabId}] 正在连接中，请勿重复连接`)
       return
+    }
+
+    // 如果已有连接，先断开旧连接
+    if (sessionId.value) {
+      log.info(`[Tab ${tabId}] 断开旧连接: ${sessionId.value}`)
+      try {
+        await aiAgentService.disconnect(sessionId.value)
+      } catch (e) {
+        log.warn(`[Tab ${tabId}] 断开旧连接失败:`, e)
+      }
+      sessionId.value = null
     }
 
     connectionState.status = ConnectionStatus.CONNECTING

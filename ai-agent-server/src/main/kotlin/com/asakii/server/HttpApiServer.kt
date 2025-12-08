@@ -26,6 +26,9 @@ import kotlinx.serialization.json.*
 import io.ktor.server.sse.*
 import io.ktor.server.websocket.*
 // import org.jetbrains.kotlinx.rpc.krpc.ktor.server.Krpc // Temporarily removed
+import io.rsocket.kotlin.ktor.server.RSocketSupport
+import io.rsocket.kotlin.ktor.server.rSocket
+import com.asakii.server.rsocket.RSocketHandler
 import io.ktor.utils.io.*
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.CoroutineScope
@@ -42,8 +45,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.coroutines.runBlocking
 import java.awt.Color
 import java.io.IOException
+import mu.KotlinLogging
 import java.nio.file.Path
-import java.util.logging.Logger
 import kotlin.time.Duration.Companion.seconds
 
 
@@ -80,12 +83,13 @@ data class FileSearchResponse(
  * - HTTP: 静态资源 + REST API
  * - SSE: 实时事件推送（主题变化、Claude 消息等）
  */
+private val logger = KotlinLogging.logger {}
+
 class HttpApiServer(
     private val ideTools: IdeTools,
     private val scope: CoroutineScope,
     private val frontendDir: Path? = null  // 开发模式下可以为 null
 ) : com.asakii.bridge.EventBridge {
-    private val logger = Logger.getLogger(javaClass.name)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -94,7 +98,7 @@ class HttpApiServer(
         classDiscriminator = "type"  // ✅ 显式设置 type 作为多态判别器
     }
 
-    private var server: EmbeddedServer<*, *>? = null
+    private var server: io.ktor.server.engine.EmbeddedServer<*, *>? = null
     private var baseUrl: String? = null
 
     // SSE 事件流
@@ -147,16 +151,22 @@ class HttpApiServer(
                 masking = false
             }
 
+            // RSocket 支持（基于 WebSocket）
+            install(RSocketSupport)
+
             // install(Krpc) // Temporarily disabled due to version incompatibility
 
             // 路由配置
             routing {
                 val serverPort = configuredPort
 
-                // WebSocket RPC 路由 (新架构)
-                val wsHandler = WebSocketHandler(ideTools)
-                with(wsHandler) {
-                    configureWebSocket()
+                // RSocket RPC 路由 (Protobuf over RSocket)
+                // 注意：每个连接都会创建新的 handler 实例
+                rSocket("rsocket") {
+                    // ConnectionAcceptorContext.requester 是可以向客户端发送请求的 RSocket
+                    val rsocketHandler = RSocketHandler(ideTools)
+                    rsocketHandler.setClientRequester(requester)
+                    rsocketHandler.createHandler()
                 }
 
                 // RESTful API 路由
@@ -165,7 +175,7 @@ class HttpApiServer(
                     post("/") {
                         try {
                             val requestBody = call.receiveText()
-                            logger.info("📥 Received request: $requestBody")
+                            logger.info { "📥 Received request: $requestBody" }
 
                             // 简单解析 JSON (避免序列化问题)
                             val actionMatch = """"action"\s*:\s*"([^"]+)"""".toRegex().find(requestBody)
@@ -312,7 +322,7 @@ class HttpApiServer(
                                 }
                             }
                         } catch (e: Exception) {
-                            logger.severe("❌ RPC call failed: ${e.message}")
+                            logger.error { "❌ RPC call failed: ${e.message}" }
                             e.printStackTrace()
                             call.respondText(
                                 """{"success":false,"error":"${e.message?.replace("\"", "\\\"") ?: "Unknown error"}"}""",
@@ -371,7 +381,7 @@ class HttpApiServer(
                                 }
                                 call.respond(FileSearchResponse(success = true, data = fileInfos))
                             } catch (e: Exception) {
-                                logger.severe("❌ Failed to search files: ${e.message}")
+                                logger.error { "❌ Failed to search files: ${e.message}" }
                                 call.respond(
                                     HttpStatusCode.InternalServerError,
                                     FileSearchResponse(success = false, error = e.message ?: "Unknown error")
@@ -453,7 +463,7 @@ class HttpApiServer(
                                     "filename" to java.io.File(absolutePath).name
                                 ))
                             } catch (e: Exception) {
-                                logger.severe("❌ Failed to upload image: ${e.message}")
+                                logger.error { "❌ Failed to upload image: ${e.message}" }
                                 call.respond(
                                     HttpStatusCode.InternalServerError,
                                     mapOf("error" to (e.message ?: "Unknown error"))
@@ -493,7 +503,7 @@ class HttpApiServer(
                                 call.respondFile(imageFile)
                                 call.response.headers.append(HttpHeaders.ContentType, mimeType)
                             } catch (e: Exception) {
-                                logger.severe("❌ Failed to read image: ${e.message}")
+                                logger.error { "❌ Failed to read image: ${e.message}" }
                                 call.respond(
                                     HttpStatusCode.InternalServerError,
                                     mapOf("error" to (e.message ?: "Unknown error"))
@@ -507,7 +517,7 @@ class HttpApiServer(
 
                 // SSE 事件流
                 sse("/events") {
-                    logger.info("🔌 SSE client connected: ${call.request.local.remoteHost}")
+                    logger.info { "🔌 SSE client connected: ${call.request.local.remoteHost}" }
 
                     try {
                         // 发送初始主题
@@ -530,9 +540,9 @@ class HttpApiServer(
                             ))
                         }
                     } catch (e: Exception) {
-                        logger.warning("⚠️ SSE connection closed: ${e.message}")
+                        logger.warn { "⚠️ SSE connection closed: ${e.message}" }
                     } finally {
-                        logger.info("🔌 SSE client disconnected")
+                        logger.info { "🔌 SSE client disconnected" }
                     }
                 }
 
@@ -609,14 +619,13 @@ class HttpApiServer(
         }.start(wait = false)
 
         // 获取实际分配的端口
-        // 在 Ktor 3.0 中，embeddedServer() 返回 EmbeddedServer，需要通过 engine 属性访问 ApplicationEngine
         val actualPort = runBlocking {
             server!!.engine.resolvedConnectors().first().port
         }
 
         val url = "http://$DEFAULT_HOST:$actualPort"
         baseUrl = url
-        logger.info("🚀 Ktor server started at: $url (configured: $configuredPort, actual: $actualPort)")
+        logger.info { "🚀 Ktor server started at: $url (configured: $configuredPort, actual: $actualPort)" }
         return url
     }
 
@@ -626,9 +635,9 @@ class HttpApiServer(
     fun stop() {
         try {
             server?.stop(1000, 2000)
-            logger.info("🛑 Server stopped")
+            logger.info { "🛑 Server stopped" }
         } catch (e: Exception) {
-            logger.severe("❌ Failed to stop server: ${e.message}")
+            logger.error { "❌ Failed to stop server: ${e.message}" }
         }
     }
 
@@ -638,7 +647,7 @@ class HttpApiServer(
      */
     override fun pushEvent(event: IdeEvent) {
         _eventFlow.tryEmit(event)
-        logger.info("📤 Pushed event: ${event.type}")
+        logger.info { "📤 Pushed event: ${event.type}" }
     }
 }
 

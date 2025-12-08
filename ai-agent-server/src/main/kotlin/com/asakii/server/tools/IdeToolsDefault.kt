@@ -1,9 +1,9 @@
 package com.asakii.server.tools
 
 import com.asakii.rpc.api.*
+import mu.KotlinLogging
 import java.io.File
 import java.util.Locale
-import java.util.logging.Logger
 
 /**
  * IDE 工具默认实现（用于独立运行模式和浏览器环境）
@@ -12,25 +12,25 @@ import java.util.logging.Logger
  * - IDEA 特有功能（openFile、showDiff）返回 UnsupportedOperationException
  * - jetbrains-plugin 模块中的 IdeToolsImpl 继承此类，覆盖 IDEA 特有方法
  */
+private val logger = KotlinLogging.logger {}
+
 open class IdeToolsDefault(
     private val _projectPath: String? = null
 ) : IdeTools {
-
-    private val logger = Logger.getLogger(IdeToolsDefault::class.java.name)
     private var defaultLocale: String? = null
 
     override open fun openFile(path: String, line: Int, column: Int): Result<Unit> {
-        logger.info("[Default] Opening file: $path (line=$line, column=$column)")
+        logger.info { "[Default] Opening file: $path (line=$line, column=$column)" }
         return Result.failure(UnsupportedOperationException("openFile is not supported in browser mode. Please use IDEA plugin."))
     }
     
     override open fun showDiff(request: DiffRequest): Result<Unit> {
-        logger.info("[Default] Showing diff for: ${request.filePath}")
+        logger.info { "[Default] Showing diff for: ${request.filePath}" }
         return Result.failure(UnsupportedOperationException("showDiff is not supported in browser mode. Please use IDEA plugin."))
     }
     
     override open fun searchFiles(query: String, maxResults: Int): Result<List<FileInfo>> {
-        logger.info("[Default] Searching files for: '$query' (maxResults=$maxResults)")
+        logger.info { "[Default] Searching files for: '$query' (maxResults=$maxResults)" }
         // 在浏览器模式下，可以尝试搜索项目目录
         val basePath = getProjectPath()
         val results = mutableListOf<FileInfo>()
@@ -41,7 +41,7 @@ open class IdeToolsDefault(
                 searchFilesRecursive(baseDir, query, results, maxResults)
             }
         } catch (e: Exception) {
-            logger.warning("Failed to search files: ${e.message}")
+            logger.warn { "Failed to search files: ${e.message}" }
         }
         
         return Result.success(results.take(maxResults))
@@ -81,7 +81,7 @@ open class IdeToolsDefault(
     }
     
     override open fun getFileContent(path: String, lineStart: Int?, lineEnd: Int?): Result<String> {
-        logger.info("[Default] Getting file content: $path (lines=${lineStart?.let { "$it-$lineEnd" } ?: "all"})")
+        logger.info { "[Default] Getting file content: $path (lines=${lineStart?.let { "$it-$lineEnd" } ?: "all"})" }
         
         return try {
             val file = File(path)
@@ -106,7 +106,7 @@ open class IdeToolsDefault(
     }
     
     override open fun getRecentFiles(maxResults: Int): Result<List<FileInfo>> {
-        logger.info("[Default] Getting recent files (maxResults=$maxResults)")
+        logger.info { "[Default] Getting recent files (maxResults=$maxResults)" }
         return try {
             // 简单实现：返回项目目录下最近修改的文件
             val projectDir = java.io.File(_projectPath ?: System.getProperty("user.dir") ?: ".")
@@ -120,7 +120,7 @@ open class IdeToolsDefault(
                 .toList()
             Result.success(files)
         } catch (e: Exception) {
-            logger.warning("[Default] Failed to get recent files: ${e.message}")
+            logger.warn { "[Default] Failed to get recent files: ${e.message}" }
             Result.success(emptyList())
         }
     }
@@ -162,7 +162,7 @@ open class IdeToolsDefault(
 
     override open fun setLocale(locale: String): Result<Unit> {
         defaultLocale = locale
-        logger.info("[Default] Locale set to: $locale")
+        logger.info { "[Default] Locale set to: $locale" }
         return Result.success(Unit)
     }
 }

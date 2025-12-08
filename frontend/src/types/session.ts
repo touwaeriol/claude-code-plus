@@ -6,7 +6,7 @@
 
 import type { UnifiedMessage, ContentBlock } from './message'
 import type { DisplayItem, ToolCall, ConnectionStatus, ContextReference } from './display'
-import type { AiAgentSession } from '@/services/AiAgentSession'
+import type { RSocketSession } from '@/services/rsocket'
 import type { RpcCapabilities, RpcPermissionMode } from '@/types/rpc'
 import type { PendingUserQuestion, PendingPermissionRequest, SessionPermissionRule } from './permission'
 
@@ -38,7 +38,7 @@ export interface UIState {
  * - 原始数据（messages - 来自后端，用于持久化）
  * - ViewModel（displayItems - 用于 UI 展示）
  * - 运行时状态（pendingToolCalls - 用于响应式更新）
- * - 连接实例（session - 直接持有 AiAgentSession）
+ * - 连接实例（session - 直接持有 RSocketSession）
  * - 连接状态（connectionStatus, modelId）
  * - 执行状态（isGenerating - 决定是否显示在 Tab 上）
  * - UI 状态（uiState - 用于切换会话时保存/恢复）
@@ -63,8 +63,8 @@ export interface SessionState {
   // 运行中的工具调用（用于响应式更新）
   pendingToolCalls: Map<string, ToolCall>
 
-  // WebSocket 连接实例（每个会话持有自己的连接）
-  session: AiAgentSession | null
+  // RSocket 连接实例（每个会话持有自己的连接）
+  session: RSocketSession | null
 
   // 连接状态
   connectionStatus: ConnectionStatus

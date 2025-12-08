@@ -1,14 +1,16 @@
 /**
  * AI Agent 服务
- * 封装 WebSocket 会话生命周期管理。
+ * 封装 RSocket + Protobuf 会话生命周期管理。
+ *
+ * 迁移说明：已从 WebSocket JSON-RPC 迁移到 RSocket + Protobuf
  */
 
 import {
-  AiAgentSession,
+  RSocketSession,
   ConnectOptions as SessionConnectOptions,
   ContentBlock
-} from './AiAgentSession'
-import type { AgentStreamEvent } from './AiAgentSession'
+} from './rsocket'
+import type { AgentStreamEvent } from './rsocket'
 import type { HistorySessionMetadata } from '@/types/session'
 import type {
   RpcCapabilities,
@@ -33,8 +35,8 @@ export interface ConnectResult {
 }
 
 export class AiAgentService {
-  // 会话管理 - sessionId -> AiAgentSession
-  private sessions = new Map<string, AiAgentSession>()
+  // 会话管理 - sessionId -> RSocketSession
+  private sessions = new Map<string, RSocketSession>()
 
   /**
    * 创建并连接到新会话
@@ -47,7 +49,7 @@ export class AiAgentService {
     options: ConnectOptions = {},
     onMessage: MessageHandler
   ): Promise<ConnectResult> {
-    const session = new AiAgentSession()
+    const session = new RSocketSession()
 
     // 订阅消息
     session.onMessage(onMessage)
@@ -193,9 +195,9 @@ export class AiAgentService {
    * 获取会话实例
    *
    * @param sessionId 会话ID
-   * @returns AiAgentSession 实例，如果不存在则返回 undefined
+   * @returns RSocketSession 实例，如果不存在则返回 undefined
    */
-  getSession(sessionId: string): AiAgentSession | undefined {
+  getSession(sessionId: string): RSocketSession | undefined {
     return this.sessions.get(sessionId)
   }
 
@@ -326,7 +328,7 @@ export class AiAgentService {
    */
   async getHistorySessions(maxResults: number = 50): Promise<HistorySessionMetadata[]> {
     // 使用任意一个已连接的会话来发送请求
-    const session = this.sessions.values().next().value as AiAgentSession | undefined
+    const session = this.sessions.values().next().value as RSocketSession | undefined
     if (!session) {
       console.warn('[aiAgentService] 没有活跃会话，无法获取历史会话列表')
       return []

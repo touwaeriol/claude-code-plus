@@ -725,18 +725,12 @@ class ControlProtocol(
                         }
                     }
                 
-                val arguments = params["arguments"]?.jsonObject?.toMap()?.mapValues { (_, value) ->
-                    when (value) {
-                        is JsonPrimitive -> value.contentOrNull ?: value.toString()
-                        is JsonObject -> value.toMap()
-                        is JsonArray -> value.toList()
-                        else -> value.toString()
-                    }
-                } ?: emptyMap()
-                
-                println("🛠️ 调用新接口工具: $toolName, args: $arguments")
-                
-                val result = server.callTool(toolName, arguments)
+                // 直接传递 JsonObject，让工具自己反序列化为强类型
+                val argumentsJson = params["arguments"]?.jsonObject ?: buildJsonObject {}
+
+                println("🛠️ 调用新接口工具: $toolName, args: $argumentsJson")
+
+                val result = server.callToolJson(toolName, argumentsJson)
                 
                 when (result) {
                     is ToolResult.Success -> {
@@ -915,6 +909,6 @@ class ControlProtocol(
     /**
      * Convert JsonObject to Map for easier handling.
      */
-    private fun JsonObject.toMap(): Map<String, JsonElement> = 
+    private fun JsonObject.toMap(): Map<String, JsonElement> =
         this.entries.associate { it.key to it.value }
 }

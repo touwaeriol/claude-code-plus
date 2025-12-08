@@ -7,18 +7,19 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
-import java.util.logging.Logger
+import mu.KotlinLogging
 
 /**
  * Claude 操作处理器
  * 负责处理与 Claude SDK 相关的所有操作
  */
+private val logger = KotlinLogging.logger {}
+
 class ClaudeActionHandler(
     private val ideActionBridge: com.asakii.server.IdeActionBridge,
     private val bridge: EventBridge,
     private val scope: CoroutineScope
 ) {
-    private val logger = Logger.getLogger(javaClass.name)
     private var claudeClient: ClaudeCodeSdkClient? = null
     private val json = Json { ignoreUnknownKeys = true }
     private var pendingAssistantMessageId: String? = null
@@ -34,7 +35,7 @@ class ClaudeActionHandler(
      */
     fun setCurrentSessionId(sessionId: String?) {
         currentSessionId = sessionId
-        logger.info("🔄 Current session ID updated: $sessionId")
+        logger.info { "🔄 Current session ID updated: $sessionId" }
     }
 
     /**
@@ -71,7 +72,7 @@ class ClaudeActionHandler(
             scope.launch {
                 try {
                     claudeClient?.connect()
-                    logger.info("✅ Claude connected successfully")
+                    logger.info { "✅ Claude connected successfully" }
 
                     bridge.pushEvent(IdeEvent(
                         type = "claude.connected",
@@ -80,7 +81,7 @@ class ClaudeActionHandler(
                         )
                     ))
                 } catch (e: Exception) {
-                    logger.severe("❌ Failed to connect to Claude: ${e.message}")
+                    logger.error { "❌ Failed to connect to Claude: ${e.message}" }
                     e.printStackTrace()
 
                     bridge.pushEvent(IdeEvent(
@@ -94,7 +95,7 @@ class ClaudeActionHandler(
 
             return FrontendResponse(success = true)
         } catch (e: Exception) {
-            logger.severe("❌ Failed to create Claude client: ${e.message}")
+            logger.error { "❌ Failed to create Claude client: ${e.message}" }
             return FrontendResponse(false, error = e.message)
         }
     }
@@ -118,13 +119,13 @@ class ClaudeActionHandler(
         // 异步发送并接收响应
         scope.launch {
             try {
-                logger.info("📤 Sending message to Claude: $message")
+                logger.info { "📤 Sending message to Claude: $message" }
                 client.query(message)
 
                 // 接收响应流
                 client.receiveResponse()
                     .catch { e ->
-                        logger.severe("❌ Error receiving response: ${e.message}")
+                        logger.error { "❌ Error receiving response: ${e.message}" }
                         e.printStackTrace()
 
                         bridge.pushEvent(IdeEvent(
@@ -135,7 +136,7 @@ class ClaudeActionHandler(
                         ))
                     }
                     .collect { sdkMessage ->
-                        logger.info("📨 Received message from Claude: ${sdkMessage::class.simpleName}")
+                        logger.info { "📨 Received message from Claude: ${sdkMessage::class.simpleName}" }
 
                         // 转换消息并推送给前端
                         val messageJson = convertMessage(sdkMessage)
@@ -148,7 +149,7 @@ class ClaudeActionHandler(
                         // 保存所有消息到当前会话历史（除了 StreamEvent，它们是中间状态）
                         if (currentSessionId != null && sdkMessage !is StreamEvent && messageJson is JsonObject) {
                             sessionHandler?.saveMessage(currentSessionId!!, messageJson)
-                            logger.info("💾 Auto-saved message to session: $currentSessionId")
+                            logger.info { "💾 Auto-saved message to session: $currentSessionId" }
                         }
 
                         bridge.pushEvent(IdeEvent(
@@ -157,7 +158,7 @@ class ClaudeActionHandler(
                         ))
                     }
             } catch (e: Exception) {
-                logger.severe("❌ Failed to send message: ${e.message}")
+                logger.error { "❌ Failed to send message: ${e.message}" }
                 e.printStackTrace()
 
                 bridge.pushEvent(IdeEvent(
@@ -179,9 +180,9 @@ class ClaudeActionHandler(
         scope.launch {
             try {
                 claudeClient?.interrupt()
-                logger.info("⏸️ Claude interrupted")
+                logger.info { "⏸️ Claude interrupted" }
             } catch (e: Exception) {
-                logger.severe("❌ Failed to interrupt: ${e.message}")
+                logger.error { "❌ Failed to interrupt: ${e.message}" }
             }
         }
         return FrontendResponse(success = true)
@@ -195,14 +196,14 @@ class ClaudeActionHandler(
             try {
                 claudeClient?.disconnect()
                 claudeClient = null
-                logger.info("🔌 Claude disconnected")
+                logger.info { "🔌 Claude disconnected" }
 
                 bridge.pushEvent(IdeEvent(
                     type = "claude.disconnected",
                     data = null
                 ))
             } catch (e: Exception) {
-                logger.severe("❌ Failed to disconnect: ${e.message}")
+                logger.error { "❌ Failed to disconnect: ${e.message}" }
             }
         }
         return FrontendResponse(success = true)

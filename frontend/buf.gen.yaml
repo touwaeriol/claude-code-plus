@@ -1,0 +1,9 @@
+# buf.gen.yaml - Protobuf 代码生成配置
+version: v2
+plugins:
+  # 生成 TypeScript 代码（使用 @bufbuild/protobuf）
+  - local: protoc-gen-es
+    out: src/proto
+    opt:
+      - target=ts
+      - import_extension=none

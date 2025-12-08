@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <!-- 设置编码为 UTF-8，解决 Windows 控制台乱码问题 -->
+    <!-- 控制台输出，文件输出由 StandaloneLogging 动态配置 -->
     <property name="CONSOLE_LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
-    
+
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>${CONSOLE_LOG_PATTERN}</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>
-    
+
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
     </root>

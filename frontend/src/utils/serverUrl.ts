@@ -6,7 +6,7 @@
  */
 
 const DEFAULT_HTTP_URL = 'http://localhost:8765'
-const DEFAULT_WS_URL = 'ws://localhost:8765/ws'
+const DEFAULT_WS_URL = 'ws://localhost:8765'
 
 /**
  * 获取 HTTP 基础 URL（用于 API 调用）
@@ -46,7 +46,7 @@ export function resolveServerWsUrl(): string {
   if (anyWindow.__serverUrl) {
     const url = new URL(anyWindow.__serverUrl as string)
     const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${wsProtocol}//${url.host}/ws`
+    return `${wsProtocol}//${url.host}`
   }
 
   // Vite 开发模式：直接连 8765
@@ -57,7 +57,7 @@ export function resolveServerWsUrl(): string {
   // 生产同源
   const { protocol, host } = window.location
   const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${wsProtocol}//${host}/ws`
+  return `${wsProtocol}//${host}`
 }
 
 

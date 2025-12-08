@@ -8,9 +8,11 @@
     "preview": "vite preview",
     "lint": "eslint src --ext .ts,.vue",
     "lint:fix": "eslint src --ext .ts,.vue --fix",
-    "type-check": "vue-tsc --noEmit"
+    "type-check": "vue-tsc --noEmit",
+    "proto:generate": "npx buf generate ../ai-agent-proto/src/main/proto"
   },
   "dependencies": {
+    "@bufbuild/protobuf": "^2.2.3",
     "@element-plus/icons-vue": "^2.3.2",
     "@tiptap/extension-image": "^3.11.1",
     "@tiptap/extension-link": "^3.11.1",
@@ -19,12 +21,15 @@
     "@tiptap/starter-kit": "^3.11.1",
     "@tiptap/vue-3": "^3.11.1",
     "@types/diff": "^7.0.2",
+    "buffer": "^6.0.3",
     "diff": "^8.0.2",
     "element-plus": "^2.11.7",
     "github-markdown-css": "^5.8.1",
     "highlight.js": "^11.11.1",
     "markdown-it": "^14.1.0",
     "pinia": "^2.1.7",
+    "rsocket-core": "^1.0.0-alpha.3",
+    "rsocket-websocket-client": "^1.0.0-alpha.3",
     "shiki": "^3.14.0",
     "vue": "^3.4.0",
     "vue-i18n": "^11.2.2",
@@ -32,6 +37,8 @@
     "vuedraggable": "^4.1.0"
   },
   "devDependencies": {
+    "@bufbuild/buf": "^1.48.0",
+    "@bufbuild/protoc-gen-es": "^2.2.3",
     "@eslint/js": "^9.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",

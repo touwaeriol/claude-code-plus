@@ -18,6 +18,7 @@ dependencies {
     // Project dependencies
     implementation(project(":ai-agent-sdk"))
     api(project(":ai-agent-rpc-api")) // Use api to expose types to downstream
+    implementation(project(":ai-agent-proto")) // Protobuf 生成的类型
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
@@ -37,7 +38,13 @@ dependencies {
     implementation("io.ktor:ktor-server-double-receive:$ktorVersion")
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
 
+    // RSocket (over WebSocket) - 0.20.0 for Ktor 3.x compatibility
+    val rsocketVersion = "0.20.0"
+    implementation("io.rsocket.kotlin:rsocket-core:$rsocketVersion")
+    implementation("io.rsocket.kotlin:ktor-server-rsocket:$rsocketVersion")
+
     // Logging
+    implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")
     implementation("ch.qos.logback:logback-classic:1.4.14")
 
     // Testing
@@ -59,6 +66,11 @@ application {
 
 kotlin {
     jvmToolchain(17)
+}
+
+// 确保编译前先生成 proto
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
+    dependsOn(":ai-agent-proto:generateProto")
 }
 
 

@@ -2,16 +2,17 @@ package com.asakii.bridge
 
 
 import kotlinx.serialization.json.*
+import mu.KotlinLogging
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.logging.Logger
 
 /**
  * 会话操作处理器
  * 负责处理前端的会话管理操作
  */
+private val logger = KotlinLogging.logger {}
+
 class SessionActionHandler() {
-    private val logger = Logger.getLogger(javaClass.name)
     private val json = Json { ignoreUnknownKeys = true }
 
     // 简化的会话存储 - 项目级别的会话列表
@@ -50,7 +51,7 @@ class SessionActionHandler() {
      */
     private fun handleListSessions(): FrontendResponse {
         val sessionList = listSessions()
-        logger.info("📋 Listing ${sessionList.size} sessions")
+        logger.info { "📋 Listing ${sessionList.size} sessions" }
         return FrontendResponse(
             success = true,
             data = mapOf("sessions" to JsonArray(sessionList))
@@ -110,8 +111,8 @@ class SessionActionHandler() {
         // 同步到 ClaudeActionHandler
         claudeHandler?.setCurrentSessionId(newSession.id)
 
-        logger.info("✅ Created new session: ${newSession.id} - $sessionName")
-        logger.info("📋 Session options: $options")
+        logger.info { "✅ Created new session: ${newSession.id} - $sessionName" }
+        logger.info { "📋 Session options: $options" }
 
         return buildJsonObject {
             put("id", newSession.id)
@@ -142,7 +143,7 @@ class SessionActionHandler() {
         // 同步到 ClaudeActionHandler
         claudeHandler?.setCurrentSessionId(sessionId)
 
-        logger.info("🔄 Switched to session: $sessionId")
+        logger.info { "🔄 Switched to session: $sessionId" }
 
         return FrontendResponse(success = true)
     }
@@ -181,7 +182,7 @@ class SessionActionHandler() {
             currentSessionId = sessions.keys.firstOrNull()
         }
 
-        logger.info("🗑️ Deleted session: $sessionId")
+        logger.info { "🗑️ Deleted session: $sessionId" }
     }
 
     /**
@@ -216,7 +217,7 @@ class SessionActionHandler() {
             updatedAt = System.currentTimeMillis()
         )
 
-        logger.info("✏️ Renamed session $sessionId to: $newName")
+        logger.info { "✏️ Renamed session $sessionId to: $newName" }
     }
 
     /**
@@ -231,7 +232,7 @@ class SessionActionHandler() {
             updatedAt = System.currentTimeMillis()
         )
 
-        logger.info("🔄 Updated model for session $sessionId to: $model")
+        logger.info { "🔄 Updated model for session $sessionId to: $model" }
     }
 
     /**
@@ -259,7 +260,7 @@ class SessionActionHandler() {
         // 检查缓存
         val cachedHistory = historyCache[sessionId]
         if (cachedHistory != null) {
-            logger.info("📋 Returning cached history for session: $sessionId (${cachedHistory.size} messages)")
+            logger.info { "📋 Returning cached history for session: $sessionId (${cachedHistory.size} messages)" }
             return cachedHistory
         }
 
@@ -270,7 +271,7 @@ class SessionActionHandler() {
         // 缓存历史
         historyCache[sessionId] = messages
 
-        logger.info("📋 Loaded history for session: $sessionId (${messages.size} messages)")
+        logger.info { "📋 Loaded history for session: $sessionId (${messages.size} messages)" }
 
         return messages
     }
@@ -291,7 +292,7 @@ class SessionActionHandler() {
         // 保存消息
         saveMessage(sessionId, message)
 
-        logger.info("💾 Saved message to session: $sessionId")
+        logger.info { "💾 Saved message to session: $sessionId" }
         return FrontendResponse(success = true)
     }
 

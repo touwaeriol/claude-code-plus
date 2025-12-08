@@ -1,7 +1,6 @@
 package com.asakii.claude.agent.sdk.mcp
 
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.*
 
 /**
  * MCP Server接口 - 所有MCP服务器的基础接口
@@ -38,9 +37,52 @@ interface McpServer {
     suspend fun listTools(): List<ToolDefinition>
 
     /**
-     * 调用指定的工具
+     * 调用指定的工具（Map 参数版本，兼容旧代码）
      */
     suspend fun callTool(toolName: String, arguments: Map<String, Any>): ToolResult
+
+    /**
+     * 调用指定的工具（JsonObject 参数版本，推荐使用）
+     * 直接传递原始 JSON，避免类型转换问题
+     */
+    suspend fun callToolJson(toolName: String, arguments: JsonObject): ToolResult {
+        // 默认实现：递归转换 JsonObject 为 Map，调用旧方法
+        val map = JsonConverter.jsonObjectToMap(arguments)
+        return callTool(toolName, map)
+    }
+}
+
+/**
+ * JSON 转换工具
+ */
+object JsonConverter {
+    /**
+     * 递归将 JsonElement 转换为普通类型
+     */
+    fun jsonElementToAny(element: JsonElement): Any? {
+        return when (element) {
+            is JsonNull -> null
+            is JsonPrimitive -> when {
+                element.isString -> element.content
+                element.booleanOrNull != null -> element.boolean
+                element.intOrNull != null -> element.int
+                element.longOrNull != null -> element.long
+                element.doubleOrNull != null -> element.double
+                else -> element.content
+            }
+            is JsonObject -> jsonObjectToMap(element)
+            is JsonArray -> element.map { jsonElementToAny(it) }
+        }
+    }
+
+    /**
+     * 将 JsonObject 转换为 Map<String, Any>
+     */
+    fun jsonObjectToMap(obj: JsonObject): Map<String, Any> {
+        return obj.entries
+            .mapNotNull { (k, v) -> jsonElementToAny(v)?.let { k to it } }
+            .toMap()
+    }
 }
 
 /**
