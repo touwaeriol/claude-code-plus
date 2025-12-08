@@ -6,9 +6,9 @@ import com.asakii.server.settings.ClaudeSettingsLoader
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
+import mu.KotlinLogging
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
-import java.util.logging.Logger
 
 /**
  * Claude 会话管理器
@@ -23,8 +23,9 @@ import java.util.logging.Logger
  *
  * 设计参考：ClaudeCodeSdkAdapter（toolwindow 模块）
  */
+private val logger = KotlinLogging.logger {}
+
 object ClaudeSessionManager {
-    private val logger = Logger.getLogger(ClaudeSessionManager::class.java.name)
 
     /**
      * 会话ID到SDK客户端的映射
@@ -53,7 +54,7 @@ object ClaudeSessionManager {
         sessionOptions: kotlinx.serialization.json.JsonObject? = null
     ): ClaudeCodeSdkClient {
         return sessionClients.getOrPut(sessionId) {
-            logger.info("📱 创建会话 $sessionId 的 SDK 客户端")
+            logger.info { "📱 创建会话 $sessionId 的 SDK 客户端" }
 
             // 构建配置选项（优先使用前端传递的配置）
             val options = buildClaudeOptions(ideActionBridge, sessionOptions)
@@ -65,7 +66,7 @@ object ClaudeSessionManager {
             val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
             sessionScopes[sessionId] = scope
 
-            logger.info("✅ 会话 $sessionId 的 SDK 客户端已创建")
+            logger.info { "✅ 会话 $sessionId 的 SDK 客户端已创建" }
             client
         }
     }
@@ -84,7 +85,7 @@ object ClaudeSessionManager {
         ideActionBridge: com.asakii.server.IdeActionBridge,
         sessionOptions: kotlinx.serialization.json.JsonObject? = null
     ) {
-        logger.info("🎬 初始化会话 $sessionId")
+        logger.info { "🎬 初始化会话 $sessionId" }
 
         try {
             // 获取或创建客户端
@@ -92,14 +93,14 @@ object ClaudeSessionManager {
 
             // 立即连接
             if (!client.isConnected()) {
-                logger.info("🔌 连接会话 $sessionId 的 SDK 客户端")
+                logger.info { "🔌 连接会话 $sessionId 的 SDK 客户端" }
                 client.connect()
-                logger.info("✅ 会话 $sessionId 的 SDK 客户端已连接")
+                logger.info { "✅ 会话 $sessionId 的 SDK 客户端已连接" }
             } else {
-                logger.info("ℹ️ 会话 $sessionId 的 SDK 客户端已经连接")
+                logger.info { "ℹ️ 会话 $sessionId 的 SDK 客户端已经连接" }
             }
         } catch (e: Exception) {
-            logger.severe("❌ 初始化会话 $sessionId 失败: ${e.message}")
+            logger.error { "❌ 初始化会话 $sessionId 失败: ${e.message}" }
             e.printStackTrace()
             throw e
         }
@@ -118,19 +119,19 @@ object ClaudeSessionManager {
         val client = sessionClients[sessionId]
             ?: throw IllegalStateException("会话 $sessionId 未初始化")
 
-        logger.info("👀 开始观察会话 $sessionId 的消息流")
+        logger.info { "👀 开始观察会话 $sessionId 的消息流" }
 
         // 直接返回 SDK 的底层消息流（从 ControlProtocol）
         // 这个流不会在 ResultMessage 后结束，会持续推送所有消息
         return client.getAllMessages()
             .onStart {
-                logger.info("🎬 会话 $sessionId 的消息流已启动")
+                logger.info { "🎬 会话 $sessionId 的消息流已启动" }
             }
             .onEach { message ->
-                logger.info("📨 会话 $sessionId 消息: ${message::class.simpleName}")
+                logger.info { "📨 会话 $sessionId 消息: ${message::class.simpleName}" }
             }
             .catch { error ->
-                logger.severe("❌ 会话 $sessionId 消息流错误: ${error.message}")
+                logger.error { "❌ 会话 $sessionId 消息流错误: ${error.message}" }
                 throw error
             }
     }
@@ -149,13 +150,13 @@ object ClaudeSessionManager {
         message: String,
         ideActionBridge: com.asakii.server.IdeActionBridge
     ) {
-        logger.info("📤 发送消息到会话 $sessionId: ${message.take(50)}...")
+        logger.info { "📤 发送消息到会话 $sessionId: ${message.take(50)}..." }
 
         try {
             // 获取客户端（如果未初始化则创建并连接）
             val client = sessionClients[sessionId]
                 ?: run {
-                    logger.info("⚠️ 会话 $sessionId 未初始化，执行懒加载")
+                    logger.info { "⚠️ 会话 $sessionId 未初始化，执行懒加载" }
                     // 从 SessionActionHandler 获取会话配置
                     initializeSession(sessionId, ideActionBridge, null)
                     sessionClients[sessionId]!!
@@ -163,9 +164,9 @@ object ClaudeSessionManager {
 
             // 确保客户端已连接
             if (!client.isConnected()) {
-                logger.warning("⚠️ 客户端未连接，尝试重新连接: $sessionId")
+                logger.warn { "⚠️ 客户端未连接，尝试重新连接: $sessionId" }
                 client.connect()
-                logger.info("✅ 客户端重新连接成功: $sessionId")
+                logger.info { "✅ 客户端重新连接成功: $sessionId" }
             }
 
             // TODO: 解析消息中的 @ 引用（图片等）
@@ -173,10 +174,10 @@ object ClaudeSessionManager {
             // val contentBlocks = MessageContentParser.parseMessageContent(message)
             // logger.info[object Object]消息
             client.query(message, sessionId)
-            logger.info("✅ 消息已发送到会话 $sessionId")
+            logger.info { "✅ 消息已发送到会话 $sessionId" }
 
         } catch (e: Exception) {
-            logger.severe("❌ 发送消息失败: sessionId=$sessionId, error=${e.message}")
+            logger.error { "❌ 发送消息失败: sessionId=$sessionId, error=${e.message}" }
             e.printStackTrace()
             throw e
         }
@@ -195,7 +196,7 @@ object ClaudeSessionManager {
         message: String,
         ideActionBridge: com.asakii.server.IdeActionBridge
     ): Flow<Message> {
-        logger.info("🚀 发送消息到会话 $sessionId: ${message.take(50)}...")
+        logger.info { "🚀 发送消息到会话 $sessionId: ${message.take(50)}..." }
 
         try {
             // 获取或创建客户端
@@ -203,7 +204,7 @@ object ClaudeSessionManager {
 
             // 确保客户端已连接
             if (!client.isConnected()) {
-                logger.info("🔌 连接会话 $sessionId 的 SDK 客户端")
+                logger.info { "🔌 连接会话 $sessionId 的 SDK 客户端" }
                 client.connect()
             }
 
@@ -213,28 +214,28 @@ object ClaudeSessionManager {
             // 返回响应流
             return client.receiveResponse()
                 .onStart {
-                    logger.info("🎬 会话 $sessionId 响应流开始")
+                    logger.info { "🎬 会话 $sessionId 响应流开始" }
                 }
                 .onEach { sdkMessage ->
-                    logger.info("📨 会话 $sessionId 收到消息: ${sdkMessage::class.simpleName}")
+                    logger.info { "📨 会话 $sessionId 收到消息: ${sdkMessage::class.simpleName}" }
                 }
                 .catch { error ->
                     when (error) {
                         is CancellationException -> {
-                            logger.info("⚠️ 会话 $sessionId 操作被取消: ${error.message}")
+                            logger.info { "⚠️ 会话 $sessionId 操作被取消: ${error.message}" }
                             throw error
                         }
                         else -> {
-                            logger.severe("❌ 会话 $sessionId 消息处理错误: ${error.message}")
+                            logger.error { "❌ 会话 $sessionId 消息处理错误: ${error.message}" }
                             throw error
                         }
                     }
                 }
         } catch (e: CancellationException) {
-            logger.info("⚠️ 会话 $sessionId 发送操作被取消")
+            logger.info { "⚠️ 会话 $sessionId 发送操作被取消" }
             throw e
         } catch (e: Exception) {
-            logger.severe("❌ 会话 $sessionId 发送消息失败: ${e.message}")
+            logger.error { "❌ 会话 $sessionId 发送消息失败: ${e.message}" }
             e.printStackTrace()
             throw e
         }
@@ -247,10 +248,10 @@ object ClaudeSessionManager {
     suspend fun interruptSession(sessionId: String) {
         val client = sessionClients[sessionId]
         if (client != null) {
-            logger.info("⏹️ 中断会话 $sessionId")
+            logger.info { "⏹️ 中断会话 $sessionId" }
             client.interrupt()
         } else {
-            logger.warning("⚠️ 尝试中断不存在的会话: $sessionId")
+            logger.warn { "⚠️ 尝试中断不存在的会话: $sessionId" }
         }
     }
 
@@ -265,26 +266,26 @@ object ClaudeSessionManager {
      * @param sessionId 会话ID
      */
     suspend fun closeSession(sessionId: String) {
-        logger.info("🚪 关闭会话 $sessionId")
+        logger.info { "🚪 关闭会话 $sessionId" }
 
         try {
             // 1. 断开并移除客户端
             val client = sessionClients.remove(sessionId)
             if (client != null) {
                 client.disconnect()
-                logger.info("✅ 会话 $sessionId 的 SDK 客户端已断开")
+                logger.info { "✅ 会话 $sessionId 的 SDK 客户端已断开" }
             }
 
             // 2. 取消并移除协程作用域
             val scope = sessionScopes.remove(sessionId)
             if (scope != null) {
                 scope.cancel()
-                logger.info("✅ 会话 $sessionId 的协程作用域已取消")
+                logger.info { "✅ 会话 $sessionId 的协程作用域已取消" }
             }
 
-            logger.info("✅ 会话 $sessionId 已完全关闭")
+            logger.info { "✅ 会话 $sessionId 已完全关闭" }
         } catch (e: Exception) {
-            logger.severe("❌ 关闭会话 $sessionId 时出错: ${e.message}")
+            logger.error { "❌ 关闭会话 $sessionId 时出错: ${e.message}" }
             e.printStackTrace()
         }
     }
@@ -322,14 +323,14 @@ object ClaudeSessionManager {
      * 关闭所有会话（应用关闭时调用）
      */
     suspend fun closeAllSessions() {
-        logger.info("🚪 关闭所有会话")
+        logger.info { "🚪 关闭所有会话" }
 
         val sessionIds = sessionClients.keys.toList()
         sessionIds.forEach { sessionId ->
             closeSession(sessionId)
         }
 
-        logger.info("✅ 所有会话已关闭，共 ${sessionIds.size} 个")
+        logger.info { "✅ 所有会话已关闭，共 ${sessionIds.size} 个" }
     }
 
     /**
@@ -383,13 +384,13 @@ object ClaudeSessionManager {
         val claudeSettings = ClaudeSettingsLoader.loadMergedSettings(projectPath)
         val maxThinkingTokens = ClaudeSettingsLoader.resolveMaxThinkingTokens(claudeSettings, thinkingEnabled)
 
-        logger.info(
+        logger.info {
             "🔧 构建 Claude 配置: model=$model, maxTurns=$maxTurns, " +
                 "permissionMode=$permissionModeStr, dangerouslySkipPermissions=$dangerouslySkipPermissions, " +
                 "allowDangerouslySkipPermissions=$allowDangerouslySkipPermissions, includePartialMessages=$includePartialMessages, " +
                 "systemPrompt=${if (systemPrompt != null) "自定义" else "null"}, " +
                 "thinkingEnabled=$thinkingEnabled, maxThinkingTokens=$maxThinkingTokens"
-        )
+        }
 
         // cwd 由服务端指定（从项目路径获取）
         // 设置 output-format 为 stream-json（必需）

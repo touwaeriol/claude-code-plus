@@ -1,78 +1,170 @@
 package com.asakii.server.logging
 
+import ch.qos.logback.classic.AsyncAppender
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.LoggerContext
+import ch.qos.logback.classic.encoder.PatternLayoutEncoder
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.Appender
+import ch.qos.logback.core.rolling.RollingFileAppender
+import ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy
+import ch.qos.logback.core.util.FileSize
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.logging.ConsoleHandler
-import java.util.logging.FileHandler
-import java.util.logging.Filter
-import java.util.logging.Handler
-import java.util.logging.Level
-import java.util.logging.LogManager
-import java.util.logging.Logger
-import java.util.logging.SimpleFormatter
-import java.util.logging.LogRecord
 
 /**
  * 仅供 StandaloneServer 使用的日志配置。
  *
- * - 所有日志输出到 <project>/.log/server.log
- * - WebSocket 相关日志额外输出到 <project>/.log/ws.log，便于排查 SDK <-> WebSocket 交互
- * - Claude Agent SDK 的日志写入 <project>/.log/claude-agent-sdk.log
+ * 日志文件：
+ * - <project>/.log/server.log：所有日志的完整记录（汇总）
+ * - <project>/.log/sdk.log：Claude Agent SDK 相关日志（输入、CLI 原始输出）
+ * - <project>/.log/ws.log：RSocket/WebSocket RPC 交互日志（请求、响应）
  */
 object StandaloneLogging {
-  private class LoggerPrefixFilter(
-    private val prefix: String
-  ) : Filter {
-    override fun isLoggable(record: LogRecord?): Boolean {
-      val loggerName = record?.loggerName ?: return false
-      return loggerName.startsWith(prefix)
-    }
-  }
+
+  // 专用 logger 名称
+  const val SDK_LOGGER = "com.asakii.sdk"
+  const val WS_LOGGER = "com.asakii.ws"
+
+  private var logDir: Path? = null
 
   fun configure(projectRoot: File) {
-    val logDir = projectRoot.toPath().resolve(".log")
-    Files.createDirectories(logDir)
+    println("📝 [StandaloneLogging] projectRoot: ${projectRoot.absolutePath}")
 
-    val logManager = LogManager.getLogManager()
-    logManager.reset()
+    logDir = projectRoot.toPath().resolve(".log")
+    Files.createDirectories(logDir!!)
+    println("📝 [StandaloneLogging] logDir created: ${logDir!!.toAbsolutePath()}")
 
-    val formatter = SimpleFormatter()
+    val loggerContext = LoggerFactory.getILoggerFactory() as LoggerContext
 
-    fun Handler.configure(level: Level = Level.INFO): Handler = apply {
-      this.level = level
-      this.formatter = formatter
-      this.encoding = "UTF-8"
-    }
+    // 0. 配置 server.log（所有日志的汇总）- 使用异步 Appender
+    val serverLogFile = logDir!!.resolve("server.log").toAbsolutePath().toString()
+    val serverFileAppender = createRollingFileAppender(
+      loggerContext,
+      "SERVER_FILE",
+      serverLogFile,
+      "${logDir!!.toAbsolutePath()}/server.%d{yyyy-MM-dd}.%i.log"
+    )
+    val serverAppender = createAsyncAppender(loggerContext, "SERVER_ASYNC", serverFileAppender)
+    println("📝 [StandaloneLogging] Server log (all): $serverLogFile (async)")
 
-    fun createFileHandler(path: Path, level: Level = Level.INFO): FileHandler =
-      FileHandler(path.toAbsolutePath().toString(), true).configure(level) as FileHandler
+    // 1. 配置 sdk.log（SDK 日志）- 使用异步 Appender
+    val sdkLogFile = logDir!!.resolve("sdk.log").toAbsolutePath().toString()
+    val sdkFileAppender = createRollingFileAppender(
+      loggerContext,
+      "SDK_FILE",
+      sdkLogFile,
+      "${logDir!!.toAbsolutePath()}/sdk.%d{yyyy-MM-dd}.%i.log"
+    )
+    val sdkAppender = createAsyncAppender(loggerContext, "SDK_ASYNC", sdkFileAppender)
+    println("📝 [StandaloneLogging] SDK log: $sdkLogFile (async)")
 
-    val consoleHandler = ConsoleHandler().configure(Level.INFO)
-    val fileHandler = createFileHandler(logDir.resolve("server.log"))
+    // 2. 配置 ws.log（RSocket/WebSocket 日志）- 使用异步 Appender
+    val wsLogFile = logDir!!.resolve("ws.log").toAbsolutePath().toString()
+    val wsFileAppender = createRollingFileAppender(
+      loggerContext,
+      "WS_FILE",
+      wsLogFile,
+      "${logDir!!.toAbsolutePath()}/ws.%d{yyyy-MM-dd}.%i.log"
+    )
+    val wsAppender = createAsyncAppender(loggerContext, "WS_ASYNC", wsFileAppender)
+    println("📝 [StandaloneLogging] WebSocket log: $wsLogFile (async)")
 
-    val rootLogger = Logger.getLogger("")
+    // 3. 配置 SDK Logger（写入 sdk.log + server.log）
+    val sdkLogger = loggerContext.getLogger(SDK_LOGGER)
+    sdkLogger.addAppender(sdkAppender)
+    sdkLogger.addAppender(serverAppender)  // 同时写入 server.log
+    sdkLogger.level = Level.DEBUG
+    sdkLogger.isAdditive = false  // 不传播到 root logger
+
+    // 4. 配置 WebSocket Logger（写入 ws.log + server.log）
+    val wsLogger = loggerContext.getLogger(WS_LOGGER)
+    wsLogger.addAppender(wsAppender)
+    wsLogger.addAppender(serverAppender)  // 同时写入 server.log
+    wsLogger.level = Level.DEBUG
+    wsLogger.isAdditive = false  // 不传播到 root logger
+
+    // 5. Root logger 写入 server.log（其他所有日志）
+    val rootLogger = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME)
+    rootLogger.addAppender(serverAppender)
     rootLogger.level = Level.INFO
-    rootLogger.addHandler(consoleHandler)
-    rootLogger.addHandler(fileHandler)
 
-    // 专用于 WebSocket 流日志
-    val wsFileHandler = createFileHandler(logDir.resolve("ws.log")).apply {
-      filter = LoggerPrefixFilter("com.asakii.server.WebSocketHandler")
-    }
-    rootLogger.addHandler(wsFileHandler)
-    rootLogger.info("WebSocket logging redirected to ${logDir.resolve("ws.log")}")
+    println("📝 Logging configured.")
+    println("   - Server logs (all): $serverLogFile")
+    println("   - SDK logs: $sdkLogFile")
+    println("   - WebSocket logs: $wsLogFile")
+  }
 
-    // Claude Agent SDK 日志
-    val sdkFileHandler = createFileHandler(logDir.resolve("claude-agent-sdk.log")).apply {
-      filter = LoggerPrefixFilter("com.asakii.claude.agent")
-    }
-    rootLogger.addHandler(sdkFileHandler)
-    rootLogger.info("Claude Agent SDK logging redirected to ${logDir.resolve("claude-agent-sdk.log")}")
+  /**
+   * 创建滚动文件 appender
+   */
+  private fun createRollingFileAppender(
+    context: LoggerContext,
+    name: String,
+    logFile: String,
+    rollingPattern: String
+  ): RollingFileAppender<ILoggingEvent> {
+    val appender = RollingFileAppender<ILoggingEvent>()
+    appender.context = context
+    appender.name = name
+    appender.file = logFile
 
-    println("📝 Logging configured. Server log: ${logDir.resolve("server.log")}")
-    println("📝 WebSocket log: ${logDir.resolve("ws.log")}")
-    println("📝 Claude Agent SDK log: ${logDir.resolve("claude-agent-sdk.log")}")
+    // 配置编码器
+    val encoder = PatternLayoutEncoder()
+    encoder.context = context
+    encoder.pattern = "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    encoder.charset = Charsets.UTF_8
+    encoder.start()
+    appender.encoder = encoder
+
+    // 配置滚动策略
+    val rollingPolicy = SizeAndTimeBasedRollingPolicy<ILoggingEvent>()
+    rollingPolicy.context = context
+    rollingPolicy.setParent(appender)
+    rollingPolicy.fileNamePattern = rollingPattern
+    rollingPolicy.setMaxFileSize(FileSize.valueOf("10MB"))
+    rollingPolicy.maxHistory = 7
+    rollingPolicy.setTotalSizeCap(FileSize.valueOf("100MB"))
+    rollingPolicy.start()
+
+    appender.rollingPolicy = rollingPolicy
+    appender.start()
+
+    return appender
+  }
+
+  /**
+   * 创建异步 appender
+   *
+   * AsyncAppender 将日志写入（包括 toString() 调用）延迟到异步线程执行。
+   * 这允许使用 LazyLogMessage 包装消息，在日志线程中进行格式化，而不是阻塞工作线程。
+   */
+  private fun createAsyncAppender(
+    context: LoggerContext,
+    name: String,
+    delegate: Appender<ILoggingEvent>
+  ): AsyncAppender {
+    val asyncAppender = AsyncAppender()
+    asyncAppender.context = context
+    asyncAppender.name = name
+
+    // 配置队列大小（默认 256，增大以支持高吞吐量）
+    asyncAppender.queueSize = 1024
+
+    // 配置丢弃策略：队列满时丢弃 TRACE/DEBUG/INFO 级别的日志（保留 WARN/ERROR）
+    asyncAppender.discardingThreshold = 0  // 0 表示不丢弃任何日志
+
+    // 不包含调用者信息（提高性能）
+    asyncAppender.isIncludeCallerData = false
+
+    // 设置被包装的 appender
+    asyncAppender.addAppender(delegate)
+
+    asyncAppender.start()
+    return asyncAppender
   }
 }
 

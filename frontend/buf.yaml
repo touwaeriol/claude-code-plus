@@ -1,0 +1,10 @@
+# buf.yaml - Buf 模块配置
+version: v2
+modules:
+  - path: ../ai-agent-proto/src/main/proto
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE

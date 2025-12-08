@@ -1,0 +1,495 @@
+// ai_agent_rpc.proto
+// 与 ai-agent-rpc-api/src/main/kotlin/com/asakii/rpc/api/RpcModels.kt 完全对应
+
+syntax = "proto3";
+package aiagent.rpc;
+
+option java_package = "com.asakii.rpc.proto";
+option java_multiple_files = true;
+option java_outer_classname = "AiAgentRpcProto";
+
+// ============================================================================
+// 枚举定义 - 对应 RpcModels.kt 中的枚举
+// ============================================================================
+
+// 对应 RpcProvider
+enum Provider {
+  PROVIDER_UNSPECIFIED = 0;
+  PROVIDER_CLAUDE = 1;      // claude
+  PROVIDER_CODEX = 2;       // codex
+}
+
+// 对应 RpcSessionStatus
+enum SessionStatus {
+  SESSION_STATUS_UNSPECIFIED = 0;
+  SESSION_STATUS_CONNECTED = 1;      // connected
+  SESSION_STATUS_DISCONNECTED = 2;   // disconnected
+  SESSION_STATUS_INTERRUPTED = 3;    // interrupted
+  SESSION_STATUS_MODEL_CHANGED = 4;  // model_changed
+}
+
+// 对应 RpcContentStatus
+enum ContentStatus {
+  CONTENT_STATUS_UNSPECIFIED = 0;
+  CONTENT_STATUS_IN_PROGRESS = 1;  // in_progress
+  CONTENT_STATUS_COMPLETED = 2;    // completed
+  CONTENT_STATUS_FAILED = 3;       // failed
+}
+
+// 对应 RpcPermissionMode
+enum PermissionMode {
+  PERMISSION_MODE_UNSPECIFIED = 0;
+  PERMISSION_MODE_DEFAULT = 1;              // default
+  PERMISSION_MODE_BYPASS_PERMISSIONS = 2;   // bypassPermissions
+  PERMISSION_MODE_ACCEPT_EDITS = 3;         // acceptEdits
+  PERMISSION_MODE_PLAN = 4;                 // plan
+  PERMISSION_MODE_DONT_ASK = 5;             // dontAsk
+}
+
+// 对应 RpcSandboxMode
+enum SandboxMode {
+  SANDBOX_MODE_UNSPECIFIED = 0;
+  SANDBOX_MODE_READ_ONLY = 1;           // read-only
+  SANDBOX_MODE_WORKSPACE_WRITE = 2;     // workspace-write
+  SANDBOX_MODE_DANGER_FULL_ACCESS = 3;  // danger-full-access
+}
+
+// ============================================================================
+// Connect 相关 - 对应 RpcConnectOptions, RpcConnectResult, RpcCapabilities
+// ============================================================================
+
+// 对应 RpcConnectOptions
+message ConnectOptions {
+  // 通用配置
+  optional Provider provider = 1;
+  optional string model = 2;
+  optional string system_prompt = 3;
+  optional string initial_prompt = 4;
+  optional string session_id = 5;
+  optional string resume_session_id = 6;
+  map<string, string> metadata = 7;
+
+  // Claude 相关配置
+  optional PermissionMode permission_mode = 10;
+  optional bool dangerously_skip_permissions = 11;
+  optional bool allow_dangerously_skip_permissions = 12;
+  optional bool include_partial_messages = 13;
+  optional bool continue_conversation = 14;
+  optional bool thinking_enabled = 15;
+
+  // Codex 相关配置
+  optional string base_url = 20;
+  optional string api_key = 21;
+  optional SandboxMode sandbox_mode = 22;
+}
+
+// 对应 RpcCapabilities
+message Capabilities {
+  bool can_interrupt = 1;
+  bool can_switch_model = 2;
+  bool can_switch_permission_mode = 3;
+  repeated PermissionMode supported_permission_modes = 4;
+  bool can_skip_permissions = 5;
+  bool can_send_rich_content = 6;
+  bool can_think = 7;
+  bool can_resume_session = 8;
+}
+
+// 对应 RpcConnectResult
+message ConnectResult {
+  string session_id = 1;
+  Provider provider = 2;
+  SessionStatus status = 3;
+  optional string model = 4;
+  optional Capabilities capabilities = 5;
+  optional string cwd = 6;
+}
+
+// 对应 RpcSetPermissionModeResult
+message SetPermissionModeResult {
+  PermissionMode mode = 1;
+  bool success = 2;
+}
+
+// 对应 RpcStatusResult
+message StatusResult {
+  SessionStatus status = 1;
+}
+
+// 对应 RpcSetModelResult
+message SetModelResult {
+  SessionStatus status = 1;
+  string model = 2;
+}
+
+// ============================================================================
+// 内容块 - 对应 RpcContentBlock 及其子类型
+// ============================================================================
+
+// 对应 RpcContentBlock (sealed interface)
+message ContentBlock {
+  oneof block {
+    TextBlock text = 1;
+    ThinkingBlock thinking = 2;
+    ToolUseBlock tool_use = 3;
+    ToolResultBlock tool_result = 4;
+    ImageBlock image = 5;
+    CommandExecutionBlock command_execution = 6;
+    FileChangeBlock file_change = 7;
+    McpToolCallBlock mcp_tool_call = 8;
+    WebSearchBlock web_search = 9;
+    TodoListBlock todo_list = 10;
+    ErrorBlock error = 11;
+    UnknownBlock unknown = 12;
+  }
+}
+
+// 对应 RpcTextBlock
+message TextBlock {
+  string text = 1;
+}
+
+// 对应 RpcThinkingBlock
+message ThinkingBlock {
+  string thinking = 1;
+  optional string signature = 2;
+}
+
+// 对应 RpcToolUseBlock
+message ToolUseBlock {
+  string id = 1;
+  string tool_name = 2;
+  string tool_type = 3;
+  optional bytes input_json = 4;  // JsonElement 序列化为 JSON bytes
+  ContentStatus status = 5;
+}
+
+// 对应 RpcToolResultBlock
+message ToolResultBlock {
+  string tool_use_id = 1;
+  optional bytes content_json = 2;  // JsonElement 序列化为 JSON bytes
+  bool is_error = 3;
+}
+
+// 对应 RpcImageBlock
+message ImageBlock {
+  ImageSource source = 1;
+}
+
+// 对应 RpcImageSource
+message ImageSource {
+  string type = 1;
+  string media_type = 2;
+  optional string data = 3;
+  optional string url = 4;
+}
+
+// 对应 RpcCommandExecutionBlock
+message CommandExecutionBlock {
+  string command = 1;
+  optional string output = 2;
+  optional int32 exit_code = 3;
+  ContentStatus status = 4;
+}
+
+// 对应 RpcFileChangeBlock
+message FileChangeBlock {
+  ContentStatus status = 1;
+  repeated FileChange changes = 2;
+}
+
+// 对应 RpcFileChange
+message FileChange {
+  string path = 1;
+  string kind = 2;
+}
+
+// 对应 RpcMcpToolCallBlock
+message McpToolCallBlock {
+  optional string server = 1;
+  optional string tool = 2;
+  optional bytes arguments_json = 3;  // JsonElement
+  optional bytes result_json = 4;      // JsonElement
+  ContentStatus status = 5;
+}
+
+// 对应 RpcWebSearchBlock
+message WebSearchBlock {
+  string query = 1;
+}
+
+// 对应 RpcTodoListBlock
+message TodoListBlock {
+  repeated TodoItem items = 1;
+}
+
+// 对应 RpcTodoItem
+message TodoItem {
+  string text = 1;
+  bool completed = 2;
+}
+
+// 对应 RpcErrorBlock
+message ErrorBlock {
+  string message = 1;
+}
+
+// 对应 RpcUnknownBlock
+message UnknownBlock {
+  string type = 1;
+  string data = 2;
+}
+
+// ============================================================================
+// 消息内容 - 对应 RpcMessageContent
+// ============================================================================
+
+// 对应 RpcMessageContent
+message MessageContent {
+  repeated ContentBlock content = 1;
+  optional string model = 2;
+}
+
+// ============================================================================
+// RPC 消息 - 对应 RpcMessage (sealed interface)
+// ============================================================================
+
+// 对应 RpcMessage
+message RpcMessage {
+  Provider provider = 1;
+
+  oneof message {
+    UserMessage user = 2;
+    AssistantMessage assistant = 3;
+    ResultMessage result = 4;
+    StreamEvent stream_event = 5;
+    ErrorMessage error = 6;
+    StatusSystemMessage status_system = 7;
+    CompactBoundaryMessage compact_boundary = 8;
+  }
+}
+
+// 对应 RpcUserMessage
+message UserMessage {
+  MessageContent message = 1;
+  optional string parent_tool_use_id = 2;
+  optional bool is_replay = 3;
+}
+
+// 对应 RpcAssistantMessage
+message AssistantMessage {
+  MessageContent message = 1;
+}
+
+// 对应 RpcResultMessage
+message ResultMessage {
+  string subtype = 1;
+  optional int64 duration_ms = 2;
+  optional int64 duration_api_ms = 3;
+  bool is_error = 4;
+  int32 num_turns = 5;
+  optional string session_id = 6;
+  optional double total_cost_usd = 7;
+  optional bytes usage_json = 8;  // JsonElement
+  optional string result = 9;
+}
+
+// 对应 RpcErrorMessage
+message ErrorMessage {
+  string error_message = 1;
+}
+
+// 对应 RpcStatusSystemMessage
+message StatusSystemMessage {
+  string subtype = 1;
+  optional string status = 2;
+  string session_id = 3;
+}
+
+// 对应 RpcCompactBoundaryMessage
+message CompactBoundaryMessage {
+  string subtype = 1;
+  string session_id = 2;
+  optional CompactMetadata compact_metadata = 3;
+}
+
+// 对应 RpcCompactMetadata
+message CompactMetadata {
+  optional string trigger = 1;
+  optional int32 pre_tokens = 2;
+}
+
+// ============================================================================
+// 流式事件 - 对应 RpcStreamEvent 及相关类型
+// ============================================================================
+
+// 对应 RpcStreamEvent
+message StreamEvent {
+  string uuid = 1;
+  string session_id = 2;
+  StreamEventData event = 3;
+  optional string parent_tool_use_id = 4;
+}
+
+// 对应 RpcStreamEventData (sealed interface)
+message StreamEventData {
+  oneof event {
+    MessageStartEvent message_start = 1;
+    ContentBlockStartEvent content_block_start = 2;
+    ContentBlockDeltaEvent content_block_delta = 3;
+    ContentBlockStopEvent content_block_stop = 4;
+    MessageDeltaEvent message_delta = 5;
+    MessageStopEvent message_stop = 6;
+  }
+}
+
+// 对应 RpcMessageStartEvent
+message MessageStartEvent {
+  optional MessageStartInfo message_info = 1;
+}
+
+// 对应 RpcMessageStartInfo
+message MessageStartInfo {
+  optional string id = 1;
+  optional string model = 2;
+  repeated ContentBlock content = 3;
+}
+
+// 对应 RpcContentBlockStartEvent
+message ContentBlockStartEvent {
+  int32 index = 1;
+  ContentBlock content_block = 2;
+}
+
+// 对应 RpcContentBlockDeltaEvent
+message ContentBlockDeltaEvent {
+  int32 index = 1;
+  Delta delta = 2;
+}
+
+// 对应 RpcContentBlockStopEvent
+message ContentBlockStopEvent {
+  int32 index = 1;
+}
+
+// 对应 RpcMessageDeltaEvent
+message MessageDeltaEvent {
+  optional bytes delta_json = 1;  // JsonElement
+  optional Usage usage = 2;
+}
+
+// 对应 RpcMessageStopEvent
+message MessageStopEvent {}
+
+// ============================================================================
+// Delta 类型 - 对应 RpcDelta
+// ============================================================================
+
+// 对应 RpcDelta (sealed interface)
+message Delta {
+  oneof delta {
+    TextDelta text_delta = 1;
+    ThinkingDelta thinking_delta = 2;
+    InputJsonDelta input_json_delta = 3;
+  }
+}
+
+// 对应 RpcTextDelta
+message TextDelta {
+  string text = 1;
+}
+
+// 对应 RpcThinkingDelta
+message ThinkingDelta {
+  string thinking = 1;
+}
+
+// 对应 RpcInputJsonDelta
+message InputJsonDelta {
+  string partial_json = 1;
+}
+
+// ============================================================================
+// Usage 统计 - 对应 RpcUsage
+// ============================================================================
+
+// 对应 RpcUsage
+message Usage {
+  optional int32 input_tokens = 1;
+  optional int32 output_tokens = 2;
+  optional int32 cached_input_tokens = 3;
+  optional Provider provider = 4;
+  optional bytes raw_json = 5;  // JsonElement
+}
+
+// ============================================================================
+// 历史会话 - 对应 RpcHistory, RpcHistorySession
+// ============================================================================
+
+// 对应 RpcHistory
+message History {
+  repeated RpcMessage messages = 1;
+}
+
+// 对应 RpcHistorySession
+message HistorySession {
+  string session_id = 1;
+  string first_user_message = 2;
+  int64 timestamp = 3;
+  int32 message_count = 4;
+  string project_path = 5;
+}
+
+// 对应 RpcHistorySessionsResult
+message HistorySessionsResult {
+  repeated HistorySession sessions = 1;
+}
+
+// ============================================================================
+// RPC 请求/响应（RSocket 路由用）
+// ============================================================================
+
+message QueryRequest {
+  string message = 1;
+}
+
+message QueryWithContentRequest {
+  repeated ContentBlock content = 1;
+}
+
+message SetModelRequest {
+  string model = 1;
+}
+
+message SetPermissionModeRequest {
+  PermissionMode mode = 1;
+}
+
+message GetHistorySessionsRequest {
+  int32 max_results = 1;
+}
+
+// 空请求
+message EmptyRequest {}
+
+// 空响应
+message EmptyResponse {}
+
+// ============================================================================
+// 反向调用（服务端 -> 客户端）
+// ============================================================================
+
+// 服务端调用客户端的通用请求
+message ServerCallRequest {
+  string call_id = 1;       // 调用 ID，用于匹配响应
+  string method = 2;        // 方法名（如 'AskUserQuestion'）
+  bytes params_json = 3;    // 参数（JSON 序列化）
+}
+
+// 客户端响应服务端的调用
+message ServerCallResponse {
+  string call_id = 1;       // 对应的调用 ID
+  bool success = 2;         // 是否成功
+  bytes result_json = 3;    // 结果（JSON 序列化）
+  optional string error = 4; // 错误信息（如果失败）
+}

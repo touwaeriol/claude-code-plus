@@ -166,6 +166,10 @@ class SubprocessTransport(
                             val jsonElement = json.parseToJsonElement(jsonBuffer.toString())
                             logger.info("📨 从CLI读取到完整JSON: ${jsonBuffer.toString()}")
                             emit(jsonElement)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            // 协程被取消（正常的断开连接），直接重新抛出
+                            logger.info("ℹ️ 消息处理被取消（连接断开）")
+                            throw e
                         } catch (e: Exception) {
                             logger.warning("⚠️ JSON解析失败: ${jsonBuffer.toString()}, error: ${e.message}")
                             throw JSONDecodeException(
@@ -178,6 +182,10 @@ class SubprocessTransport(
                     }
                 }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 协程被取消，正常断开连接，不报错
+            logger.info("ℹ️ Transport 读取被取消（连接断开）")
+            throw e
         } catch (e: Exception) {
             if (isConnected()) {
                 throw TransportException("Failed to read from CLI stdout", e)
@@ -273,8 +281,10 @@ class SubprocessTransport(
         // Output format (从 extraArgs 或默认使用 stream-json)
         command.addAll(listOf("--output-format", outputFormat))
 
-        // Print flag (根据选项决定) - 必须在 --verbose 之后
-        if (options.print) {
+        // Print flag - 非交互式模式必须添加 --print
+        // 注意：Claude CLI 默认启动交互式 TUI，在非 TTY 环境会报 "Raw mode is not supported" 错误
+        // 使用 stream-json 模式时必须强制添加 --print，否则 CLI 无法在后台进程中运行
+        if (options.print || outputFormat == "stream-json" || streamingMode) {
             command.add("--print")
         }
 

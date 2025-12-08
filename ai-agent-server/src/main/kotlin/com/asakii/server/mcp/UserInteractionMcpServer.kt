@@ -8,7 +8,7 @@ import com.asakii.server.rpc.callTyped
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
-import java.util.logging.Logger
+import mu.KotlinLogging
 
 /**
  * 用户回答项（前端返回的数组元素）
@@ -170,14 +170,14 @@ data class ClaudeOptionItem(
  * 提供需要用户交互的工具，如 AskUserQuestion。
  * 通过 ClientCaller 与前端通信，获取用户输入。
  */
+private val mcpLogger = KotlinLogging.logger {}
+
 @McpServerConfig(
     name = "user_interaction",
     version = "1.0.0",
     description = "用户交互工具服务器，提供向用户提问等功能"
 )
 class UserInteractionMcpServer : McpServerBase() {
-
-    private val logger = Logger.getLogger(javaClass.name)
     private var clientCaller: ClientCaller? = null
 
     companion object {
@@ -236,7 +236,59 @@ class UserInteractionMcpServer : McpServerBase() {
      */
     fun setClientCaller(caller: ClientCaller) {
         this.clientCaller = caller
-        logger.info("✅ [UserInteractionMcpServer] ClientCaller 已设置")
+        mcpLogger.info { "✅ [UserInteractionMcpServer] ClientCaller 已设置" }
+    }
+
+    /**
+     * 重写 callToolJson，直接从 JsonObject 反序列化为强类型
+     */
+    override suspend fun callToolJson(toolName: String, arguments: JsonObject): ToolResult {
+        return when (toolName) {
+            "AskUserQuestion" -> handleAskUserQuestionJson(arguments)
+            else -> super.callToolJson(toolName, arguments)
+        }
+    }
+
+    /**
+     * 处理 AskUserQuestion（直接从 JsonObject 反序列化）
+     */
+    private suspend fun handleAskUserQuestionJson(arguments: JsonObject): ToolResult {
+        val caller = clientCaller
+            ?: return ToolResult.error("ClientCaller 未设置，无法与前端通信")
+
+        mcpLogger.info { "📩 [AskUserQuestion] 收到工具调用，参数: $arguments" }
+
+        return try {
+            // 直接从 JsonObject 反序列化为强类型
+            val params: AskUserQuestionParams = Json.decodeFromJsonElement(arguments)
+
+            mcpLogger.info { "📤 [AskUserQuestion] 解析后的参数: ${params.questions.size} 个问题" }
+
+            // 构建发送给前端的 JSON
+            val requestJson = buildJsonObject {
+                put("questions", Json.encodeToJsonElement(params.questions))
+            }
+
+            // 调用前端方法
+            val answerItems: List<UserAnswerItem> = caller.callTyped(
+                method = "AskUserQuestion",
+                params = requestJson
+            )
+
+            mcpLogger.info { "📥 [AskUserQuestion] 收到前端响应: $answerItems" }
+
+            // 转换为 Map<问题, 回答>
+            val answersMap: Map<String, String> = answerItems.associate { it.question to it.answer }
+            val content = Json.encodeToString(answersMap)
+
+            mcpLogger.info { "✅ [AskUserQuestion] 完成，返回: $content" }
+            ToolResult.success(content)
+
+        } catch (e: Exception) {
+            mcpLogger.error { "❌ [AskUserQuestion] 处理失败: ${e.message}" }
+            e.printStackTrace()
+            ToolResult.error("处理用户问题失败: ${e.message}")
+        }
     }
 
     override suspend fun onInitialize() {
@@ -249,7 +301,7 @@ class UserInteractionMcpServer : McpServerBase() {
             handleAskUserQuestion(arguments)
         }
 
-        logger.info("✅ [UserInteractionMcpServer] 初始化完成，已注册 AskUserQuestion 工具")
+        mcpLogger.info { "✅ [UserInteractionMcpServer] 初始化完成，已注册 AskUserQuestion 工具" }
     }
 
     /**
@@ -259,14 +311,20 @@ class UserInteractionMcpServer : McpServerBase() {
         val caller = clientCaller
             ?: return ToolResult.error("ClientCaller 未设置，无法与前端通信")
 
-        logger.info("📩 [AskUserQuestion] 收到工具调用，参数: $arguments")
+        mcpLogger.info { "📩 [AskUserQuestion] 收到工具调用，参数: $arguments" }
+
+        // 调试：打印参数类型
+        arguments.forEach { (key, value) ->
+            mcpLogger.debug { "📦 参数 '$key' 类型: ${value?.let { it::class.qualifiedName } ?: "null"}, 值: $value" }
+        }
 
         try {
             // 将 Map<String, Any> 转换为 JsonElement，再解析为类型化对象
             val paramsJson = anyToJsonElement(arguments)
+            mcpLogger.debug { "📦 转换后的 JSON: $paramsJson" }
             val params: AskUserQuestionParams = Json.decodeFromJsonElement(paramsJson)
 
-            logger.info("📤 [AskUserQuestion] 解析后的参数: ${params.questions.size} 个问题")
+            mcpLogger.info { "📤 [AskUserQuestion] 解析后的参数: ${params.questions.size} 个问题" }
 
             // 构建发送给前端的 JSON（使用类型化序列化）
             val requestJson = buildJsonObject {
@@ -279,7 +337,7 @@ class UserInteractionMcpServer : McpServerBase() {
                 params = requestJson
             )
 
-            logger.info("📥 [AskUserQuestion] 收到前端响应: $answerItems")
+            mcpLogger.info { "📥 [AskUserQuestion] 收到前端响应: $answerItems" }
 
             // 转换为 Map<问题, 回答>
             val answersMap: Map<String, String> = answerItems.associate { it.question to it.answer }
@@ -287,11 +345,11 @@ class UserInteractionMcpServer : McpServerBase() {
             // 序列化返回给 Claude
             val content = Json.encodeToString(answersMap)
 
-            logger.info("✅ [AskUserQuestion] 完成，返回: $content")
+            mcpLogger.info { "✅ [AskUserQuestion] 完成，返回: $content" }
             return content
 
         } catch (e: Exception) {
-            logger.severe("❌ [AskUserQuestion] 处理失败: ${e.message}")
+            mcpLogger.error { "❌ [AskUserQuestion] 处理失败: ${e.message}" }
             e.printStackTrace()
             return ToolResult.error("处理用户问题失败: ${e.message}")
         }
@@ -319,7 +377,28 @@ class UserInteractionMcpServer : McpServerBase() {
             is Array<*> -> buildJsonArray {
                 value.forEach { add(anyToJsonElement(it)) }
             }
-            else -> JsonPrimitive(value.toString())
+            is Iterable<*> -> buildJsonArray {
+                value.forEach { add(anyToJsonElement(it)) }
+            }
+            is Sequence<*> -> buildJsonArray {
+                value.forEach { add(anyToJsonElement(it)) }
+            }
+            else -> {
+                // 尝试处理其他可迭代类型或 JSON 字符串
+                val str = value.toString()
+                // 如果看起来像 JSON 数组或对象，尝试解析
+                if (str.startsWith("[") || str.startsWith("{")) {
+                    try {
+                        Json.parseToJsonElement(str)
+                    } catch (e: Exception) {
+                        mcpLogger.warn { "⚠️ 无法解析为 JSON: $str, 类型: ${value::class.qualifiedName}" }
+                        JsonPrimitive(str)
+                    }
+                } else {
+                    mcpLogger.debug { "📦 未知类型转为字符串: ${value::class.qualifiedName}" }
+                    JsonPrimitive(str)
+                }
+            }
         }
     }
 }

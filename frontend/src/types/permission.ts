@@ -2,6 +2,8 @@
  * 工具授权相关类型定义
  */
 
+import type { RpcPermissionMode } from './rpc'
+
 /**
  * 待处理的授权请求
  */
@@ -73,7 +75,7 @@ export type PermissionBehavior = 'allow' | 'deny' | 'ask'
 /**
  * 权限模式（复用 RPC 类型定义）
  */
-export type { RpcPermissionMode as PermissionMode } from './rpc'
+export type PermissionMode = RpcPermissionMode
 
 /**
  * 权限更新目标

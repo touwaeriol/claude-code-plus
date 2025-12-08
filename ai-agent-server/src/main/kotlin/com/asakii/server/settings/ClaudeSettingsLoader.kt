@@ -1,17 +1,17 @@
 package com.asakii.server.settings
 
 import kotlinx.serialization.json.Json
+import mu.KotlinLogging
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
-import java.util.logging.Logger
 
 /**
  * Claude settings 加载与合并工具。
  */
-object ClaudeSettingsLoader {
+private val logger = KotlinLogging.logger {}
 
-    private val logger = Logger.getLogger(ClaudeSettingsLoader::class.java.name)
+object ClaudeSettingsLoader {
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -58,7 +58,7 @@ object ClaudeSettingsLoader {
             val text = Files.readString(path)
             json.decodeFromString(ClaudeSettings.serializer(), text)
         } catch (e: Exception) {
-            logger.warning("Failed to load Claude settings from $path: ${e.message}")
+            logger.warn { "Failed to load Claude settings from $path: ${e.message}" }
             null
         }
     }
@@ -172,7 +172,7 @@ object ClaudeSettingsLoader {
         val raw = settings.env["MAX_THINKING_TOKENS"] ?: return 1024
 
         return raw.toIntOrNull() ?: run {
-            logger.warning("Invalid MAX_THINKING_TOKENS value: '$raw', fallback to default 1024")
+            logger.warn { "Invalid MAX_THINKING_TOKENS value: '$raw', fallback to default 1024" }
             1024
         }
     }
