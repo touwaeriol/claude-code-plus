@@ -128,7 +128,8 @@ export class RSocketClient {
         url: this.options.url,
         wsCreator: (url) => new WebSocket(url) as any
       }),
-      responder: () => responder
+      // 直接传递 responder 对象，确保服务端的反向调用能被处理
+      responder
     })
 
     try {

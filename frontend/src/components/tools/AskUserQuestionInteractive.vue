@@ -24,14 +24,14 @@
                 v-for="(opt, optIndex) in q.options"
                 :key="optIndex"
                 class="option-item option-checkbox"
-                :class="{ selected: isMultiSelected(q.header, opt.label) }"
+                :class="{ selected: isMultiSelected(getQuestionKey(q), opt.label) }"
               >
-                <span class="checkbox-indicator">{{ isMultiSelected(q.header, opt.label) ? '[√]' : '[ ]' }}</span>
+                <span class="checkbox-indicator">{{ isMultiSelected(getQuestionKey(q), opt.label) ? '[√]' : '[ ]' }}</span>
                 <input
                   type="checkbox"
-                  :checked="isMultiSelected(q.header, opt.label)"
+                  :checked="isMultiSelected(getQuestionKey(q), opt.label)"
                   class="hidden-input"
-                  @change="toggleMultiOption(q.header, opt.label)"
+                  @change="toggleMultiOption(getQuestionKey(q), opt.label)"
                 />
                 <span class="option-content">
                   <span class="option-label">{{ opt.label }}</span>
@@ -41,13 +41,13 @@
 
               <!-- 多选模式的自定义输入 -->
               <div class="option-item option-other-multi">
-                <span class="checkbox-indicator">{{ multiOtherInputs[q.header] ? '[√]' : '[ ]' }}</span>
+                <span class="checkbox-indicator">{{ multiOtherInputs[getQuestionKey(q)] ? '[√]' : '[ ]' }}</span>
                 <input
-                  v-model="multiOtherInputs[q.header]"
+                  v-model="multiOtherInputs[getQuestionKey(q)]"
                   type="text"
                   class="other-input-inline"
                   :placeholder="$t('askUser.typeSomething', 'Type something')"
-                  @input="updateMultiOtherAnswer(q.header)"
+                  @input="updateMultiOtherAnswer(getQuestionKey(q))"
                 />
               </div>
             </template>
@@ -58,10 +58,10 @@
                 v-for="(opt, optIndex) in q.options"
                 :key="optIndex"
                 class="option-item option-radio clickable"
-                :class="{ selected: selectedAnswers[q.header] === opt.label }"
-                @click="selectAndSubmitSingle(q.header, opt.label)"
+                :class="{ selected: selectedAnswers[getQuestionKey(q)] === opt.label }"
+                @click="selectAndSubmitSingle(getQuestionKey(q), opt.label)"
               >
-                <span class="radio-indicator">{{ selectedAnswers[q.header] === opt.label ? '(●)' : '( )' }}</span>
+                <span class="radio-indicator">{{ selectedAnswers[getQuestionKey(q)] === opt.label ? '(●)' : '( )' }}</span>
                 <span class="option-content">
                   <span class="option-label">{{ opt.label }}</span>
                   <span v-if="opt.description" class="option-description">{{ opt.description }}</span>
@@ -70,19 +70,19 @@
 
               <!-- 单选模式的自定义输入 -->
               <div class="option-item option-other-single">
-                <span class="radio-indicator">{{ showOtherInput[q.header] ? '(●)' : '( )' }}</span>
+                <span class="radio-indicator">{{ showOtherInput[getQuestionKey(q)] ? '(●)' : '( )' }}</span>
                 <input
-                  v-model="otherInputs[q.header]"
+                  v-model="otherInputs[getQuestionKey(q)]"
                   type="text"
                   class="other-input-inline"
                   :placeholder="$t('askUser.typeSomething', 'Type something')"
-                  @focus="enableOtherInput(q.header)"
-                  @keydown.enter="submitSingleOther(q.header)"
+                  @focus="enableOtherInput(getQuestionKey(q))"
+                  @keydown.enter="submitSingleOther(getQuestionKey(q))"
                 />
                 <button
-                  v-if="showOtherInput[q.header] && otherInputs[q.header]"
+                  v-if="showOtherInput[getQuestionKey(q)] && otherInputs[getQuestionKey(q)]"
                   class="btn-submit-inline"
-                  @click="submitSingleOther(q.header)"
+                  @click="submitSingleOther(getQuestionKey(q))"
                 >
                   ↵
                 </button>
@@ -115,6 +115,8 @@ import { computed, watch, reactive } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 
 const sessionStore = useSessionStore()
+
+const getQuestionKey = (q: { header?: string; question: string }) => q.header || q.question
 
 // 获取当前待回答的问题（只取第一个）
 const pendingQuestion = computed(() => {
@@ -153,7 +155,7 @@ watch(pendingQuestion, (newQuestion) => {
     // 初始化多选数组
     newQuestion.questions.forEach(q => {
       if (q.multiSelect) {
-        multiSelectedAnswers[q.header] = []
+        multiSelectedAnswers[getQuestionKey(q)] = []
       }
     })
   }
@@ -167,7 +169,7 @@ function selectAndSubmitSingle(header: string, label: string) {
   // 检查是否所有单选问题都已回答
   const allSingleAnswered = pendingQuestion.value?.questions
     .filter(q => !q.multiSelect)
-    .every(q => selectedAnswers[q.header]) ?? false
+    .every(q => selectedAnswers[getQuestionKey(q)]) ?? false
 
   // 如果没有多选问题，且所有单选都已回答，立即提交
   if (!hasMultiSelectQuestion.value && allSingleAnswered) {
@@ -233,7 +235,8 @@ const canSubmit = computed(() => {
   if (!pendingQuestion.value) return false
   // 检查所有问题是否都有答案
   return pendingQuestion.value.questions.every(q => {
-    const answer = selectedAnswers[q.header]
+    const key = getQuestionKey(q)
+    const answer = selectedAnswers[key]
     return answer && answer.trim().length > 0
   })
 })
@@ -249,7 +252,8 @@ function handleSubmit() {
   // 将 answers 的 key 从 header 转换为 question
   const answersWithQuestionKey: Record<string, string> = {}
   for (const q of pendingQuestion.value.questions) {
-    const answer = selectedAnswers[q.header]
+    const key = getQuestionKey(q)
+    const answer = selectedAnswers[key]
     if (answer) {
       answersWithQuestionKey[q.question] = answer
     }

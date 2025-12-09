@@ -1,43 +1,43 @@
-# Claude 历史会话分析文档
+﻿# Claude 鍘嗗彶浼氳瘽鍒嗘瀽鏂囨。
 
-## 概述
+## 姒傝堪
 
-本文档详细说明如何找到、加载和过滤 Claude CLI 的历史会话数据。
+鏈枃妗ｈ缁嗚鏄庡浣曟壘鍒般€佸姞杞藉拰杩囨护 Claude CLI 鐨勫巻鍙蹭細璇濇暟鎹€?
 
-## 1. 历史会话存储位置
+## 1. 鍘嗗彶浼氳瘽瀛樺偍浣嶇疆
 
-### 1.1 目录结构
+### 1.1 鐩綍缁撴瀯
 
 ```
 ~/.claude/
-├── projects/                              # 项目存储根目录
-│   └── {project_id}/                      # 项目ID（编码后的项目路径）
-│       ├── {session_id}.jsonl             # 会话历史文件
-│       ├── {session_id}.jsonl             # 更多会话...
-│       └── .timelines/                    # 检查点目录（可选）
-│           └── {session_id}/
-│               ├── timeline.json
-│               └── checkpoints/
-├── todos/                                 # Todo 数据目录
-│   └── {session_id}.json                  # 会话关联的 todo
-└── settings.json                          # 全局设置
+鈹溾攢鈹€ projects/                              # 椤圭洰瀛樺偍鏍圭洰褰?
+鈹?  鈹斺攢鈹€ {project_id}/                      # 椤圭洰ID锛堢紪鐮佸悗鐨勯」鐩矾寰勶級
+鈹?      鈹溾攢鈹€ {session_id}.jsonl             # 浼氳瘽鍘嗗彶鏂囦欢
+鈹?      鈹溾攢鈹€ {session_id}.jsonl             # 鏇村浼氳瘽...
+鈹?      鈹斺攢鈹€ .timelines/                    # 妫€鏌ョ偣鐩綍锛堝彲閫夛級
+鈹?          鈹斺攢鈹€ {session_id}/
+鈹?              鈹溾攢鈹€ timeline.json
+鈹?              鈹斺攢鈹€ checkpoints/
+鈹溾攢鈹€ todos/                                 # Todo 鏁版嵁鐩綍
+鈹?  鈹斺攢鈹€ {session_id}.json                  # 浼氳瘽鍏宠仈鐨?todo
+鈹斺攢鈹€ settings.json                          # 鍏ㄥ眬璁剧疆
 ```
 
-### 1.2 项目 ID 编码规则
+### 1.2 椤圭洰 ID 缂栫爜瑙勫垯
 
-项目路径通过以下方式编码为项目 ID：
+椤圭洰璺緞閫氳繃浠ヤ笅鏂瑰紡缂栫爜涓洪」鐩?ID锛?
 
 ```typescript
-// 示例：
-// 原路径: C:\Users\16790\IdeaProjects\claude-code-plus
-// 编码后: C--Users-16790-IdeaProjects-claude-code-plus
+// 绀轰緥锛?
+// 鍘熻矾寰? C:\Users\16790\IdeaProjects\claude-code-plus
+// 缂栫爜鍚? C--Users-16790-IdeaProjects-claude-code-plus
 
 function encodeProjectPath(path: string): string {
   return path.replace(/[\\/:]/g, '-').replace(/^-+/, '')
 }
 ```
 
-### 1.3 本项目的历史会话位置
+### 1.3 鏈」鐩殑鍘嗗彶浼氳瘽浣嶇疆
 
 ```
 C:\Users\16790\.claude\projects\C--Users-16790-IdeaProjects-claude-code-plus\
@@ -45,22 +45,22 @@ C:\Users\16790\.claude\projects\C--Users-16790-IdeaProjects-claude-code-plus\
 
 ---
 
-## 2. JSONL 文件格式
+## 2. JSONL 鏂囦欢鏍煎紡
 
-### 2.1 基本结构
+### 2.1 鍩烘湰缁撴瀯
 
-每个 `.jsonl` 文件包含一个会话的完整消息历史，每行是一个 JSON 对象。
+姣忎釜 `.jsonl` 鏂囦欢鍖呭惈涓€涓細璇濈殑瀹屾暣娑堟伅鍘嗗彶锛屾瘡琛屾槸涓€涓?JSON 瀵硅薄銆?
 
-### 2.2 消息类型
+### 2.2 娑堟伅绫诲瀷
 
-#### 2.2.1 用户消息
+#### 2.2.1 鐢ㄦ埛娑堟伅
 
 ```json
 {
   "type": "user",
   "message": {
     "role": "user",
-    "content": "用户输入的内容"
+    "content": "鐢ㄦ埛杈撳叆鐨勫唴瀹?
   },
   "uuid": "65931c59-9bbf-4855-9dfd-55dac7c54d33",
   "parentUuid": "c99558d6-790f-4adb-8b10-0a08da749da7",
@@ -74,14 +74,14 @@ C:\Users\16790\.claude\projects\C--Users-16790-IdeaProjects-claude-code-plus\
 }
 ```
 
-#### 2.2.2 助手消息
+#### 2.2.2 鍔╂墜娑堟伅
 
 ```json
 {
   "type": "assistant",
   "message": {
     "role": "assistant",
-    "content": "Claude 的回复内容..."
+    "content": "Claude 鐨勫洖澶嶅唴瀹?.."
   },
   "uuid": "...",
   "parentUuid": "...",
@@ -93,7 +93,7 @@ C:\Users\16790\.claude\projects\C--Users-16790-IdeaProjects-claude-code-plus\
 }
 ```
 
-#### 2.2.3 文件快照
+#### 2.2.3 鏂囦欢蹇収
 
 ```json
 {
@@ -108,74 +108,74 @@ C:\Users\16790\.claude\projects\C--Users-16790-IdeaProjects-claude-code-plus\
 }
 ```
 
-#### 2.2.4 摘要消息
+#### 2.2.4 鎽樿娑堟伅
 
 ```json
 {
   "type": "summary",
-  "summary": "会话摘要内容...",
+  "summary": "浼氳瘽鎽樿鍐呭...",
   "leafUuid": "...",
   "timestamp": "..."
 }
 ```
 
-### 2.3 关键字段说明
+### 2.3 鍏抽敭瀛楁璇存槑
 
-| 字段 | 类型 | 说明 |
+| 瀛楁 | 绫诲瀷 | 璇存槑 |
 |------|------|------|
-| `type` | string | 消息类型：`user`, `assistant`, `file-history-snapshot`, `summary` |
-| `message.role` | string | 角色：`user` 或 `assistant` |
-| `message.content` | string | 消息内容 |
-| `uuid` | string | 消息唯一标识 |
-| `parentUuid` | string \| null | 父消息 UUID（用于消息树结构） |
-| `sessionId` | string | 会话 ID |
-| `timestamp` | string | ISO 8601 时间戳 |
-| `cwd` | string | 工作目录 |
-| `version` | string | Claude CLI 版本 |
-| `gitBranch` | string | 当前 Git 分支 |
-| `userType` | string | 用户类型：`external`, `internal` |
-| `isSidechain` | boolean | **是否为侧链（子代理标识）** |
-| `isMeta` | boolean | 是否为元数据消息 |
-| `costUSD` | number | 消息成本（美元） |
-| `durationMs` | number | 处理时长（毫秒） |
-| `model` | string | 使用的模型 |
+| `type` | string | 娑堟伅绫诲瀷锛歚user`, `assistant`, `file-history-snapshot`, `summary` |
+| `message.role` | string | 瑙掕壊锛歚user` 鎴?`assistant` |
+| `message.content` | string | 娑堟伅鍐呭 |
+| `uuid` | string | 娑堟伅鍞竴鏍囪瘑 |
+| `parentUuid` | string \| null | 鐖舵秷鎭?UUID锛堢敤浜庢秷鎭爲缁撴瀯锛?|
+| `sessionId` | string | 浼氳瘽 ID |
+| `timestamp` | string | ISO 8601 鏃堕棿鎴?|
+| `cwd` | string | 宸ヤ綔鐩綍 |
+| `version` | string | Claude CLI 鐗堟湰 |
+| `gitBranch` | string | 褰撳墠 Git 鍒嗘敮 |
+| `userType` | string | 鐢ㄦ埛绫诲瀷锛歚external`, `internal` |
+| `isSidechain` | boolean | **鏄惁涓轰晶閾撅紙瀛愪唬鐞嗘爣璇嗭級** |
+| `isMeta` | boolean | 鏄惁涓哄厓鏁版嵁娑堟伅 |
+| `costUSD` | number | 娑堟伅鎴愭湰锛堢編鍏冿級 |
+| `durationMs` | number | 澶勭悊鏃堕暱锛堟绉掞級 |
+| `model` | string | 浣跨敤鐨勬ā鍨?|
 
 ---
 
-## 3. 子代理会话识别
+## 3. 瀛愪唬鐞嗕細璇濊瘑鍒?
 
-### 3.1 识别方法
+### 3.1 璇嗗埆鏂规硶
 
-子代理会话可以通过以下方式识别：
+瀛愪唬鐞嗕細璇濆彲浠ラ€氳繃浠ヤ笅鏂瑰紡璇嗗埆锛?
 
-#### 方法 1：`isSidechain` 字段
+#### 鏂规硶 1锛歚isSidechain` 瀛楁
 
 ```typescript
 interface JsonlEntry {
-  isSidechain?: boolean  // true = 子代理会话
+  isSidechain?: boolean  // true = 瀛愪唬鐞嗕細璇?
 }
 ```
 
-#### 方法 2：`parentUuid` 链路分析
+#### 鏂规硶 2锛歚parentUuid` 閾捐矾鍒嗘瀽
 
-主会话的第一条消息 `parentUuid` 为 `null`，子代理会话的消息链路会指向父会话。
+涓讳細璇濈殑绗竴鏉℃秷鎭?`parentUuid` 涓?`null`锛屽瓙浠ｇ悊浼氳瘽鐨勬秷鎭摼璺細鎸囧悜鐖朵細璇濄€?
 
-#### 方法 3：`userType` 字段
+#### 鏂规硶 3锛歚userType` 瀛楁
 
 ```typescript
-// external = 用户直接交互的主会话
-// internal = 系统内部（可能是子代理）
+// external = 鐢ㄦ埛鐩存帴浜や簰鐨勪富浼氳瘽
+// internal = 绯荤粺鍐呴儴锛堝彲鑳芥槸瀛愪唬鐞嗭級
 userType: 'external' | 'internal'
 ```
 
-#### 方法 4：会话内容分析
+#### 鏂规硶 4锛氫細璇濆唴瀹瑰垎鏋?
 
-子代理会话通常：
-- 消息数量较少
-- 包含特定的任务指令格式
-- 没有用户交互历史
+瀛愪唬鐞嗕細璇濋€氬父锛?
+- 娑堟伅鏁伴噺杈冨皯
+- 鍖呭惈鐗瑰畾鐨勪换鍔℃寚浠ゆ牸寮?
+- 娌℃湁鐢ㄦ埛浜や簰鍘嗗彶
 
-### 3.2 过滤子代理会话的代码示例
+### 3.2 杩囨护瀛愪唬鐞嗕細璇濈殑浠ｇ爜绀轰緥
 
 ```typescript
 interface SessionEntry {
@@ -191,26 +191,26 @@ interface SessionEntry {
 }
 
 /**
- * 判断会话是否为子代理会话
+ * 鍒ゆ柇浼氳瘽鏄惁涓哄瓙浠ｇ悊浼氳瘽
  */
 function isSubagentSession(entries: SessionEntry[]): boolean {
-  // 检查是否有 isSidechain = true 的条目
+  // 妫€鏌ユ槸鍚︽湁 isSidechain = true 鐨勬潯鐩?
   const hasSidechain = entries.some(e => e.isSidechain === true)
   if (hasSidechain) return true
 
-  // 检查是否所有用户消息都是内部类型
+  // 妫€鏌ユ槸鍚︽墍鏈夌敤鎴锋秷鎭兘鏄唴閮ㄧ被鍨?
   const userEntries = entries.filter(e => e.type === 'user')
   const allInternal = userEntries.length > 0 &&
     userEntries.every(e => e.userType === 'internal')
   if (allInternal) return true
 
-  // 检查首条消息的特征
+  // 妫€鏌ラ鏉℃秷鎭殑鐗瑰緛
   const firstUserMessage = entries.find(
     e => e.type === 'user' && e.message?.role === 'user'
   )
   if (firstUserMessage?.message?.content) {
     const content = firstUserMessage.message.content
-    // 子代理通常有特定的提示格式
+    // 瀛愪唬鐞嗛€氬父鏈夌壒瀹氱殑鎻愮ず鏍煎紡
     if (content.includes('Task tool') ||
         content.includes('subagent') ||
         content.startsWith('You are a')) {
@@ -222,7 +222,7 @@ function isSubagentSession(entries: SessionEntry[]): boolean {
 }
 
 /**
- * 过滤出主会话列表
+ * 杩囨护鍑轰富浼氳瘽鍒楄〃
  */
 async function filterMainSessions(
   sessionFiles: string[]
@@ -242,48 +242,48 @@ async function filterMainSessions(
 
 ---
 
-## 4. 加载历史会话
+## 4. 鍔犺浇鍘嗗彶浼氳瘽
 
-### 4.1 加载流程
+### 4.1 鍔犺浇娴佺▼
 
 ```
-1. 获取项目 ID
-   ↓
-2. 扫描 ~/.claude/projects/{project_id}/ 目录
-   ↓
-3. 列出所有 .jsonl 文件
-   ↓
-4. 过滤子代理会话
-   ↓
-5. 提取会话元数据（首条消息、时间戳等）
-   ↓
-6. 按时间排序
-   ↓
-7. 返回会话列表
+1. 鑾峰彇椤圭洰 ID
+   鈫?
+2. 鎵弿 ~/.claude/projects/{project_id}/ 鐩綍
+   鈫?
+3. 鍒楀嚭鎵€鏈?.jsonl 鏂囦欢
+   鈫?
+4. 杩囨护瀛愪唬鐞嗕細璇?
+   鈫?
+5. 鎻愬彇浼氳瘽鍏冩暟鎹紙棣栨潯娑堟伅銆佹椂闂存埑绛夛級
+   鈫?
+6. 鎸夋椂闂存帓搴?
+   鈫?
+7. 杩斿洖浼氳瘽鍒楄〃
 ```
 
-### 4.2 完整实现代码
+### 4.2 瀹屾暣瀹炵幇浠ｇ爜
 
 ```typescript
 import * as fs from 'fs'
 import * as path from 'path'
 import * as readline from 'readline'
 
-// ============ 类型定义 ============
+// ============ 绫诲瀷瀹氫箟 ============
 
 interface SessionMetadata {
-  id: string                    // 会话 ID
-  projectId: string             // 项目 ID
-  firstMessage?: string         // 首条用户消息（摘要）
-  firstMessageTimestamp?: string // 首条消息时间
-  createdAt: number             // 创建时间（Unix 时间戳）
-  modifiedAt: number            // 修改时间
-  messageCount: number          // 消息数量
-  isSubagent: boolean           // 是否为子代理会话
-  filePath: string              // 文件路径
-  fileSize: number              // 文件大小
-  version?: string              // Claude 版本
-  gitBranch?: string            // Git 分支
+  id: string                    // 浼氳瘽 ID
+  projectId: string             // 椤圭洰 ID
+  firstMessage?: string         // 棣栨潯鐢ㄦ埛娑堟伅锛堟憳瑕侊級
+  firstMessageTimestamp?: string // 棣栨潯娑堟伅鏃堕棿
+  createdAt: number             // 鍒涘缓鏃堕棿锛圲nix 鏃堕棿鎴筹級
+  modifiedAt: number            // 淇敼鏃堕棿
+  messageCount: number          // 娑堟伅鏁伴噺
+  isSubagent: boolean           // 鏄惁涓哄瓙浠ｇ悊浼氳瘽
+  filePath: string              // 鏂囦欢璺緞
+  fileSize: number              // 鏂囦欢澶у皬
+  version?: string              // Claude 鐗堟湰
+  gitBranch?: string            // Git 鍒嗘敮
 }
 
 interface JsonlEntry {
@@ -304,10 +304,10 @@ interface JsonlEntry {
   isMeta?: boolean
 }
 
-// ============ 工具函数 ============
+// ============ 宸ュ叿鍑芥暟 ============
 
 /**
- * 获取 Claude 配置目录
+ * 鑾峰彇 Claude 閰嶇疆鐩綍
  */
 function getClaudeDir(): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || ''
@@ -315,7 +315,7 @@ function getClaudeDir(): string {
 }
 
 /**
- * 编码项目路径为项目 ID
+ * 缂栫爜椤圭洰璺緞涓洪」鐩?ID
  */
 function encodeProjectPath(projectPath: string): string {
   return projectPath
@@ -326,7 +326,7 @@ function encodeProjectPath(projectPath: string): string {
 }
 
 /**
- * 解析 JSONL 文件
+ * 瑙ｆ瀽 JSONL 鏂囦欢
  */
 async function parseJsonlFile(filePath: string): Promise<JsonlEntry[]> {
   const entries: JsonlEntry[] = []
@@ -343,7 +343,7 @@ async function parseJsonlFile(filePath: string): Promise<JsonlEntry[]> {
         const entry = JSON.parse(line) as JsonlEntry
         entries.push(entry)
       } catch (e) {
-        // 跳过无效行
+        // 璺宠繃鏃犳晥琛?
       }
     }
   }
@@ -352,21 +352,21 @@ async function parseJsonlFile(filePath: string): Promise<JsonlEntry[]> {
 }
 
 /**
- * 判断是否为子代理会话
+ * 鍒ゆ柇鏄惁涓哄瓙浠ｇ悊浼氳瘽
  */
 function isSubagentSession(entries: JsonlEntry[]): boolean {
-  // 1. 检查 isSidechain 字段
+  // 1. 妫€鏌?isSidechain 瀛楁
   if (entries.some(e => e.isSidechain === true)) {
     return true
   }
 
-  // 2. 检查用户类型
+  // 2. 妫€鏌ョ敤鎴风被鍨?
   const userEntries = entries.filter(e => e.type === 'user' && !e.isMeta)
   if (userEntries.length > 0 && userEntries.every(e => e.userType === 'internal')) {
     return true
   }
 
-  // 3. 检查首条消息内容
+  // 3. 妫€鏌ラ鏉℃秷鎭唴瀹?
   const firstUserMessage = entries.find(
     e => e.type === 'user' &&
          e.message?.role === 'user' &&
@@ -376,7 +376,7 @@ function isSubagentSession(entries: JsonlEntry[]): boolean {
 
   if (firstUserMessage?.message?.content) {
     const content = firstUserMessage.message.content
-    // 子代理任务的典型开头
+    // 瀛愪唬鐞嗕换鍔＄殑鍏稿瀷寮€澶?
     const subagentPatterns = [
       /^You are a specialized agent/i,
       /^Task:/i,
@@ -392,7 +392,7 @@ function isSubagentSession(entries: JsonlEntry[]): boolean {
 }
 
 /**
- * 提取会话元数据
+ * 鎻愬彇浼氳瘽鍏冩暟鎹?
  */
 async function extractSessionMetadata(
   filePath: string,
@@ -401,14 +401,14 @@ async function extractSessionMetadata(
   const stat = fs.statSync(filePath)
   const sessionId = path.basename(filePath, '.jsonl')
 
-  // 空文件跳过
+  // 绌烘枃浠惰烦杩?
   if (stat.size === 0) {
     return null
   }
 
   const entries = await parseJsonlFile(filePath)
 
-  // 提取首条用户消息（排除系统消息）
+  // 鎻愬彇棣栨潯鐢ㄦ埛娑堟伅锛堟帓闄ょ郴缁熸秷鎭級
   const firstUserEntry = entries.find(
     e => e.type === 'user' &&
          e.message?.role === 'user' &&
@@ -417,12 +417,12 @@ async function extractSessionMetadata(
          !e.message.content.includes('<command-')
   )
 
-  // 计算消息数量（只计算实际的用户和助手消息）
+  // 璁＄畻娑堟伅鏁伴噺锛堝彧璁＄畻瀹為檯鐨勭敤鎴峰拰鍔╂墜娑堟伅锛?
   const messageCount = entries.filter(
     e => (e.type === 'user' || e.type === 'assistant') && !e.isMeta
   ).length
 
-  // 获取版本和分支信息
+  // 鑾峰彇鐗堟湰鍜屽垎鏀俊鎭?
   const firstEntry = entries.find(e => e.version)
 
   return {
@@ -441,14 +441,14 @@ async function extractSessionMetadata(
   }
 }
 
-// ============ 主要 API ============
+// ============ 涓昏 API ============
 
 /**
- * 获取项目的所有历史会话
+ * 鑾峰彇椤圭洰鐨勬墍鏈夊巻鍙蹭細璇?
  *
- * @param projectPath 项目路径
- * @param includeSubagents 是否包含子代理会话（默认 false）
- * @returns 会话元数据列表（按修改时间降序）
+ * @param projectPath 椤圭洰璺緞
+ * @param includeSubagents 鏄惁鍖呭惈瀛愪唬鐞嗕細璇濓紙榛樿 false锛?
+ * @returns 浼氳瘽鍏冩暟鎹垪琛紙鎸変慨鏀规椂闂撮檷搴忥級
  */
 export async function getProjectSessions(
   projectPath: string,
@@ -458,40 +458,40 @@ export async function getProjectSessions(
   const projectId = encodeProjectPath(projectPath)
   const projectDir = path.join(claudeDir, 'projects', projectId)
 
-  // 检查目录是否存在
+  // 妫€鏌ョ洰褰曟槸鍚﹀瓨鍦?
   if (!fs.existsSync(projectDir)) {
     return []
   }
 
-  // 扫描 .jsonl 文件
+  // 鎵弿 .jsonl 鏂囦欢
   const files = fs.readdirSync(projectDir)
     .filter(f => f.endsWith('.jsonl'))
     .map(f => path.join(projectDir, f))
 
-  // 提取元数据
+  // 鎻愬彇鍏冩暟鎹?
   const sessions: SessionMetadata[] = []
   for (const file of files) {
     const metadata = await extractSessionMetadata(file, projectId)
     if (metadata) {
-      // 过滤子代理会话
+      // 杩囨护瀛愪唬鐞嗕細璇?
       if (includeSubagents || !metadata.isSubagent) {
         sessions.push(metadata)
       }
     }
   }
 
-  // 按修改时间降序排序
+  // 鎸変慨鏀规椂闂撮檷搴忔帓搴?
   sessions.sort((a, b) => b.modifiedAt - a.modifiedAt)
 
   return sessions
 }
 
 /**
- * 加载会话的完整消息历史
+ * 鍔犺浇浼氳瘽鐨勫畬鏁存秷鎭巻鍙?
  *
- * @param sessionId 会话 ID
- * @param projectPath 项目路径
- * @returns 消息列表
+ * @param sessionId 浼氳瘽 ID
+ * @param projectPath 椤圭洰璺緞
+ * @returns 娑堟伅鍒楄〃
  */
 export async function loadSessionHistory(
   sessionId: string,
@@ -511,11 +511,11 @@ export async function loadSessionHistory(
 }
 
 /**
- * 恢复会话（获取可用于 resume 的消息格式）
+ * 鎭㈠浼氳瘽锛堣幏鍙栧彲鐢ㄤ簬 resume 鐨勬秷鎭牸寮忥級
  *
- * @param sessionId 会话 ID
- * @param projectPath 项目路径
- * @returns 可用于恢复的消息数组
+ * @param sessionId 浼氳瘽 ID
+ * @param projectPath 椤圭洰璺緞
+ * @returns 鍙敤浜庢仮澶嶇殑娑堟伅鏁扮粍
  */
 export async function getResumableMessages(
   sessionId: string,
@@ -523,7 +523,7 @@ export async function getResumableMessages(
 ): Promise<Array<{ role: string; content: string }>> {
   const entries = await loadSessionHistory(sessionId, projectPath)
 
-  // 只提取用户和助手的实际消息
+  // 鍙彁鍙栫敤鎴峰拰鍔╂墜鐨勫疄闄呮秷鎭?
   return entries
     .filter(e =>
       (e.type === 'user' || e.type === 'assistant') &&
@@ -540,25 +540,25 @@ export async function getResumableMessages(
 
 ---
 
-## 5. 前端集成建议
+## 5. 鍓嶇闆嗘垚寤鸿
 
-### 5.1 会话列表组件
+### 5.1 浼氳瘽鍒楄〃缁勪欢
 
 ```typescript
-// 在 Vue 组件中使用
+// 鍦?Vue 缁勪欢涓娇鐢?
 interface HistorySession {
   id: string
-  name: string              // 从 firstMessage 截取
+  name: string              // 浠?firstMessage 鎴彇
   timestamp: number
   messageCount: number
   isSubagent: boolean
 }
 
-// 转换函数
+// 杞崲鍑芥暟
 function toHistorySession(meta: SessionMetadata): HistorySession {
   return {
     id: meta.id,
-    name: meta.firstMessage?.slice(0, 50) || `会话 ${meta.id.slice(-8)}`,
+    name: meta.firstMessage?.slice(0, 50) || `浼氳瘽 ${meta.id.slice(-8)}`,
     timestamp: meta.modifiedAt,
     messageCount: meta.messageCount,
     isSubagent: meta.isSubagent
@@ -566,52 +566,39 @@ function toHistorySession(meta: SessionMetadata): HistorySession {
 }
 ```
 
-### 5.2 后端 API 端点
+### 5.2 后端 RPC 端点（RSocket）
 
-```kotlin
-// 在 Kotlin 后端添加
-@Serializable
-data class HistorySessionResponse(
-    val sessions: List<SessionMetadata>,
-    val total: Int,
-    val hasMore: Boolean
-)
+- 路由：`agent.getHistorySessions`（Request-Response）
+- 请求：`GetHistorySessionsRequest { int32 maxResults }`
+- 响应：`GetHistorySessionsResponse { repeated HistorySession sessions }`
+- 实现链路：`AiAgentRpcServiceImpl.getHistorySessions` -> `ClaudeSessionScanner.scanHistorySessions` -> `RSocketHandler.handleGetHistorySessions`
+- 说明：已从 HTTP `/api/history/sessions` 迁移到 RSocket/Protobuf，前端通过 `aiAgentService.getHistorySessions` 调用，无需再保留 REST 端点。
 
-// GET /api/history/sessions?projectPath=...&page=1&pageSize=20
-suspend fun getHistorySessions(
-    projectPath: String,
-    page: Int = 1,
-    pageSize: Int = 20,
-    includeSubagents: Boolean = false
-): HistorySessionResponse
-```
+## 6. 娉ㄦ剰浜嬮」
 
----
+### 6.1 鎬ц兘浼樺寲
 
-## 6. 注意事项
+- **寤惰繜鍔犺浇**锛氫細璇濆垪琛ㄥ彧鍔犺浇鍏冩暟鎹紝瀹屾暣娑堟伅鎸夐渶鍔犺浇
+- **鍒嗛〉**锛氬ぇ閲忎細璇濇椂浣跨敤鍒嗛〉
+- **缂撳瓨**锛氱紦瀛樺凡瑙ｆ瀽鐨勫厓鏁版嵁
 
-### 6.1 性能优化
+### 6.2 鏂囦欢澶у皬
 
-- **延迟加载**：会话列表只加载元数据，完整消息按需加载
-- **分页**：大量会话时使用分页
-- **缓存**：缓存已解析的元数据
+- 閮ㄥ垎浼氳瘽鏂囦欢鍙兘闈炲父澶э紙10MB+锛?
+- 寤鸿娴佸紡瑙ｆ瀽锛屼笉瑕佷竴娆℃€у姞杞藉埌鍐呭瓨
 
-### 6.2 文件大小
+### 6.3 瀛愪唬鐞嗚繃婊?
 
-- 部分会话文件可能非常大（10MB+）
-- 建议流式解析，不要一次性加载到内存
-
-### 6.3 子代理过滤
-
-- 子代理会话通常是临时的、任务导向的
-- 用户一般只关心主会话
-- 默认应过滤子代理会话，但提供选项显示
+- 瀛愪唬鐞嗕細璇濋€氬父鏄复鏃剁殑銆佷换鍔″鍚戠殑
+- 鐢ㄦ埛涓€鑸彧鍏冲績涓讳細璇?
+- 榛樿搴旇繃婊ゅ瓙浠ｇ悊浼氳瘽锛屼絾鎻愪緵閫夐」鏄剧ず
 
 ---
 
-## 7. 参考资源
+## 7. 鍙傝€冭祫婧?
 
-- opcode 项目：`external/opcode/`
-  - 会话加载：`src-tauri/src/commands/claude.rs`
-  - 状态管理：`src/stores/sessionStore.ts`
-  - API 定义：`src/lib/api.ts`
+- opcode 椤圭洰锛歚external/opcode/`
+  - 浼氳瘽鍔犺浇锛歚src-tauri/src/commands/claude.rs`
+  - 鐘舵€佺鐞嗭細`src/stores/sessionStore.ts`
+  - API 瀹氫箟锛歚src/lib/api.ts`
+

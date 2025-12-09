@@ -246,7 +246,7 @@ function formatParams(params: Record<string, unknown>): string {
   background: var(--theme-background, #ffffff);
   border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
 
@@ -255,8 +255,8 @@ function formatParams(params: Record<string, unknown>): string {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: var(--theme-accent, #0366d6);
-  color: white;
+  background: var(--theme-panel-background, #f6f8fa);
+  color: var(--theme-foreground, #24292e);
 }
 
 .tool-icon {
@@ -270,16 +270,19 @@ function formatParams(params: Record<string, unknown>): string {
 
 .permission-label {
   font-size: 12px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--theme-accent-subtle, #e8f1fb);
+  color: var(--theme-accent, #0366d6);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 999px;
   margin-left: auto;
+  border: 1px solid var(--theme-accent, #0366d6);
 }
 
 .permission-content {
   padding: 16px;
-  max-height: 200px;
+  max-height: 220px;
   overflow-y: auto;
+  background: var(--theme-background, #fff);
 }
 
 .command-preview {
@@ -383,39 +386,51 @@ function formatParams(params: Record<string, unknown>): string {
 .permission-options {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--theme-border, #e1e4e8);
+  background: var(--theme-background, #fff);
 }
 
 .btn-option {
-  padding: 8px 16px;
-  border-radius: 6px;
+  padding: 9px 12px;
+  border-radius: 8px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
   text-align: left;
+  border: 1px solid var(--theme-border, #e1e4e8);
+  background: var(--theme-panel-background, #f6f8fa);
+  color: var(--theme-foreground, #24292e);
+}
+
+.btn-option:hover {
+  border-color: var(--theme-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
+  background: var(--theme-accent-subtle, #e8f1fb);
 }
 
 .btn-allow {
-  background: var(--theme-success, #28a745);
-  border: 1px solid var(--theme-success, #28a745);
-  color: white;
+  background: var(--theme-accent-subtle, #e8f1fb);
+  border-color: var(--theme-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
 }
 
 .btn-allow:hover {
-  background: var(--theme-success-hover, #218838);
+  background: var(--theme-accent, #0366d6);
+  color: #fff;
 }
 
 .btn-allow-rule {
-  background: var(--theme-accent, #0366d6);
-  border: 1px solid var(--theme-accent, #0366d6);
-  color: white;
+  background: var(--theme-panel-background, #f6f8fa);
+  border-color: var(--theme-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
 }
 
 .btn-allow-rule:hover {
-  background: var(--theme-accent-hover, #0256b9);
+  background: var(--theme-accent, #0366d6);
+  color: #fff;
 }
 
 .deny-inline {
@@ -440,7 +455,7 @@ function formatParams(params: Record<string, unknown>): string {
 }
 
 .btn-deny {
-  background: transparent;
+  background: #fff;
   border: 1px solid var(--theme-error, #dc3545);
   color: var(--theme-error, #dc3545);
   flex-shrink: 0;

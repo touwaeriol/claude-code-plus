@@ -260,7 +260,8 @@ class UserInteractionMcpServer : McpServerBase() {
 
         return try {
             // 直接从 JsonObject 反序列化为强类型
-            val params: AskUserQuestionParams = Json.decodeFromJsonElement(arguments)
+            val normalized = normalizeQuestions(arguments)
+            val params: AskUserQuestionParams = Json.decodeFromJsonElement(normalized)
 
             mcpLogger.info { "📤 [AskUserQuestion] 解析后的参数: ${params.questions.size} 个问题" }
 
@@ -289,6 +290,32 @@ class UserInteractionMcpServer : McpServerBase() {
             e.printStackTrace()
             ToolResult.error("处理用户问题失败: ${e.message}")
         }
+    }
+
+
+    /**
+     * 对字符串化的 questions 进行修正，确保为 JsonArray
+     */
+    private fun normalizeQuestions(arguments: JsonObject): JsonObject {
+        val rawQuestions = arguments["questions"]
+        if (rawQuestions is JsonPrimitive && rawQuestions.isString) {
+            val content = rawQuestions.content
+            if (content.startsWith("[") || content.startsWith("{")) {
+                try {
+                    val parsed = Json.parseToJsonElement(content)
+                    if (parsed is JsonArray) {
+                        return buildJsonObject {
+                            arguments.forEach { (k, v) ->
+                                if (k == "questions") put(k, parsed) else put(k, v)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    mcpLogger.warn { "⚠️ [AskUserQuestion] 无法从字符串解析 questions: " }
+                }
+            }
+        }
+        return arguments
     }
 
     override suspend fun onInitialize() {
@@ -322,7 +349,8 @@ class UserInteractionMcpServer : McpServerBase() {
             // 将 Map<String, Any> 转换为 JsonElement，再解析为类型化对象
             val paramsJson = anyToJsonElement(arguments)
             mcpLogger.debug { "📦 转换后的 JSON: $paramsJson" }
-            val params: AskUserQuestionParams = Json.decodeFromJsonElement(paramsJson)
+            val paramsJsonNormalized = normalizeQuestions(paramsJson.jsonObject)
+            val params: AskUserQuestionParams = Json.decodeFromJsonElement(paramsJsonNormalized)
 
             mcpLogger.info { "📤 [AskUserQuestion] 解析后的参数: ${params.questions.size} 个问题" }
 

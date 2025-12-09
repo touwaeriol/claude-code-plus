@@ -11,6 +11,7 @@ import ch.qos.logback.core.rolling.RollingFileAppender
 import ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy
 import ch.qos.logback.core.util.FileSize
 import org.slf4j.LoggerFactory
+import org.slf4j.bridge.SLF4JBridgeHandler
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -39,6 +40,17 @@ object StandaloneLogging {
     println("📝 [StandaloneLogging] logDir created: ${logDir!!.toAbsolutePath()}")
 
     val loggerContext = LoggerFactory.getILoggerFactory() as LoggerContext
+
+    // Bridge java.util.logging → SLF4J/logback so SDK CLI 输出也会写入 server.log
+    try {
+      if (!SLF4JBridgeHandler.isInstalled()) {
+        SLF4JBridgeHandler.removeHandlersForRootLogger()
+        SLF4JBridgeHandler.install()
+        println("📝 [StandaloneLogging] JUL bridged to SLF4J")
+      }
+    } catch (e: Exception) {
+      println("⚠️ [StandaloneLogging] Failed to bridge JUL: ${e.message}")
+    }
 
     // 0. 配置 server.log（所有日志的汇总）- 使用异步 Appender
     val serverLogFile = logDir!!.resolve("server.log").toAbsolutePath().toString()
@@ -167,4 +179,3 @@ object StandaloneLogging {
     return asyncAppender
   }
 }
-

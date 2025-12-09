@@ -58,8 +58,11 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.io.File
 import java.nio.file.Path
 import java.util.UUID
+import kotlinx.coroutines.flow.flow
+import com.asakii.server.history.HistoryJsonlLoader
 
 /**
  * AI Agent 缁熶竴 RPC 鏈嶅姟瀹炵幇銆? *
@@ -398,6 +401,17 @@ class AiAgentRpcServiceImpl(
             queryCompletion = null
             sdkLog.info("[executeTurn] Flow completed, queryCompletion signaled")
         }
+    }
+
+    override fun loadHistory(
+        sessionId: String?,
+        projectPath: String?,
+        offset: Int,
+        limit: Int
+    ): Flow<RpcMessage> {
+        val targetSession = sessionId ?: lastConnectOptions?.sessionId ?: this.sessionId
+        val project = projectPath?.takeIf { it.isNotBlank() } ?: ideTools.getProjectPath()
+        return HistoryJsonlLoader.loadHistoryMessages(targetSession, project, offset, limit)
     }
 
     private suspend fun disconnectInternal() {
@@ -967,7 +981,6 @@ class AiAgentRpcServiceImpl(
         }
     }
 }
-
 
 
 

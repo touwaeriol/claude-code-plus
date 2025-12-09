@@ -352,6 +352,34 @@ export function useSessionTab(initialOrder: number = 0) {
   }
 
   /**
+   * 处理历史回放消息（不受 isGenerating 门控）
+   */
+  function handleHistoryMessage(rawMessage: RpcMessage): void {
+    const normalized = normalizeRpcMessage(rawMessage)
+    if (!normalized) return
+
+    switch (normalized.kind) {
+      case 'status_system':
+        handleStatusSystemMessage(normalized.data)
+        break
+      case 'compact_boundary':
+        handleCompactBoundaryMessage(normalized.data)
+        break
+      case 'stream_event':
+        messagesHandler.handleStreamEvent(normalized.data)
+        break
+      case 'result':
+        messagesHandler.handleResultMessage(normalized.data)
+        break
+      case 'message':
+        messagesHandler.handleNormalMessage(normalized.data)
+        break
+    }
+
+    touch()
+  }
+
+  /**
    * 处理 status_system 消息（压缩状态变化）
    */
   function handleStatusSystemMessage(message: RpcStatusSystemMessage): void {
@@ -534,6 +562,31 @@ export function useSessionTab(initialOrder: number = 0) {
   }
 
   /**
+   * 流式加载历史记录（用于回放）
+   */
+  async function loadHistory(params: { sessionId?: string; projectPath?: string; offset?: number; limit?: number }): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        let cancel: (() => void) | null = null
+        cancel = aiAgentService.streamHistory(params, {
+          onMessage: handleHistoryMessage,
+          onError: (error) => {
+            log.error(`[Tab ${tabId}] 历史加载失败:`, error)
+            cancel?.()
+            reject(error)
+          },
+          onComplete: () => {
+            log.info(`[Tab ${tabId}] 历史加载完成`)
+            resolve()
+          }
+        }, sessionId.value ?? undefined)
+      } catch (error) {
+        reject(error)
+      }
+    })
+  }
+
+  /**
    * 重新连接（复用 WebSocket）
    * 只发送 disconnect + connect RPC，不关闭 WebSocket
    */
@@ -615,8 +668,8 @@ export function useSessionTab(initialOrder: number = 0) {
           id: questionId,
           sessionId: sessionId.value!,
           questions: params.questions || [],
-          resolve: (answers: Record<string, string>) => {
-            resolve({ answers })
+          resolve: (answers) => {
+            resolve(answers)
           },
           reject
         }
@@ -1082,7 +1135,10 @@ export function useSessionTab(initialOrder: number = 0) {
     rename,
     setOrder,
     saveUiState,
-    reset
+    reset,
+
+    // 历史回放
+    loadHistory
   }
 }
 

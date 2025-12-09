@@ -129,6 +129,15 @@ export interface SessionPermissionRule {
 }
 
 /**
+ * 前端返回的用户问题回答项
+ */
+export interface UserAnswerItem {
+  question: string
+  header?: string
+  answer: string
+}
+
+/**
  * 待回答的用户问题
  */
 export interface PendingUserQuestion {
@@ -136,11 +145,11 @@ export interface PendingUserQuestion {
   sessionId: string
   questions: Array<{
     question: string
-    header: string
+    header?: string
     options: Array<{ label: string; description?: string }>
     multiSelect: boolean
   }>
   createdAt: number
-  resolve: (answers: Record<string, string>) => void
+  resolve: (answers: UserAnswerItem[]) => void
   reject: (error: Error) => void
 }

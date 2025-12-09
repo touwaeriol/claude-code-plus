@@ -229,7 +229,14 @@ export const useSessionStore = defineStore('session', () => {
    * @param externalSessionId 后端会话 ID
    * @param name 会话名称
    */
-  async function resumeSession(externalSessionId: string, name?: string): Promise<SessionTabInstance | null> {
+  const HISTORY_TAIL_LIMIT = 200
+
+  async function resumeSession(
+    externalSessionId: string,
+    name?: string,
+    projectPath?: string,
+    messageCount?: number
+  ): Promise<SessionTabInstance | null> {
     if (!externalSessionId) return null
 
     // 检查是否已有此会话的 Tab
@@ -245,6 +252,24 @@ export const useSessionStore = defineStore('session', () => {
       continueConversation: true,
       resume: externalSessionId
     })
+
+    // 异步后台加载历史，避免阻塞 UI，默认取尾部 TAIL_LIMIT
+    const offset = messageCount !== undefined && messageCount > HISTORY_TAIL_LIMIT
+      ? messageCount - HISTORY_TAIL_LIMIT
+      : 0
+    const limit = messageCount !== undefined
+      ? Math.min(messageCount, HISTORY_TAIL_LIMIT)
+      : HISTORY_TAIL_LIMIT
+
+    const historyPromise = tab.loadHistory({
+      sessionId: externalSessionId,
+      projectPath,
+      offset,
+      limit
+    }).catch(error => {
+      log.warn(`[SessionStore] 加载历史失败: ${externalSessionId}`, error)
+    })
+    ;(tab as any).__historyPromise = historyPromise
 
     return tab
   }
