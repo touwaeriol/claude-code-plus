@@ -568,8 +568,10 @@ function toggleHistoryOverlay() {
 }
 
 async function handleHistorySelect(sessionId: string) {
-  // 检查是否是活跃 Tab
-  const activeTab = sessionStore.tabs.find(t => t.tabId === sessionId || t.sessionId.value === sessionId)
+  uiState.value.isLoadingHistory = true
+  try {
+    // 检查是否是活跃 Tab
+    const activeTab = sessionStore.tabs.find(t => t.tabId === sessionId || t.sessionId.value === sessionId)
   if (activeTab) {
     // 切换到已有 Tab
     await sessionStore.switchTab(activeTab.tabId)
@@ -578,10 +580,22 @@ async function handleHistorySelect(sessionId: string) {
     const historySession = historySessionList.value.find(h => h.sessionId === sessionId)
     if (historySession) {
       console.log('🔄 Resuming history session:', sessionId)
-      await sessionStore.resumeSession(sessionId, historySession.firstUserMessage)
+      await sessionStore.resumeSession(
+        sessionId,
+        historySession.firstUserMessage,
+        historySession.projectPath,
+        historySession.messageCount
+      )
     }
   }
   isHistoryOverlayVisible.value = false
+  const historyPromise = (sessionStore.currentTab as any)?.__historyPromise as Promise<void> | undefined
+  if (historyPromise) {
+    await historyPromise
+    }
+  } finally {
+    uiState.value.isLoadingHistory = false
+  }
 }
 </script>
 

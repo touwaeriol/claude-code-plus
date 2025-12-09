@@ -2,7 +2,7 @@ package com.asakii.claude.agent.sdk.mcp
 
 import com.asakii.claude.agent.sdk.mcp.annotations.*
 import kotlinx.serialization.json.*
-import java.util.logging.Logger
+import mu.KotlinLogging
 import kotlin.reflect.*
 import kotlin.reflect.full.*
 
@@ -31,7 +31,7 @@ import kotlin.reflect.full.*
  * ```
  */
 abstract class McpServerBase : McpServer {
-    private val logger = Logger.getLogger(this::class.java.name)
+    private val logger = KotlinLogging.logger {}
     private val registeredTools = mutableMapOf<String, ToolHandlerBase>()
     private var initialized = false
     
@@ -174,7 +174,7 @@ abstract class McpServerBase : McpServer {
                 function.call(*args.toTypedArray())
             } ?: Unit
         } catch (e: Exception) {
-            logger.severe("❌ 工具调用失败: ${function.name}, 错误: ${e.message}")
+            logger.error("❌ 工具调用失败: ${function.name}, 错误: ${e.message}")
             throw e
         }
     }
@@ -334,7 +334,7 @@ abstract class McpServerBase : McpServer {
                 else -> ToolResult.success(result)
             }
         } catch (e: Exception) {
-            logger.severe("❌ 工具 '$toolName' 执行失败: ${e.message}")
+            logger.error("❌ 工具 '$toolName' 执行失败: ${e.message}")
             ToolResult.error("工具执行失败: ${e.message}")
         }
     }

@@ -15,7 +15,7 @@ import kotlinx.serialization.json.*
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
-import java.util.logging.Logger
+import mu.KotlinLogging
 import kotlin.jvm.JvmOverloads
 
 /**
@@ -96,7 +96,7 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
         encodeDefaults = true
     }
     
-    private val logger = Logger.getLogger(ClaudeCodeSdkClient::class.java.name)
+    private val logger = KotlinLogging.logger {}
     
     /**
      * Format systemPrompt for logging (handles String, SystemPromptPreset, or null).
@@ -182,7 +182,7 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
             }
             
         } catch (e: Exception) {
-            logger.severe("❌ 连接失败: ${e.message}")
+            logger.error("❌ 连接失败: ${e.message}")
             // Cleanup on failure
             disconnect()
             throw e
@@ -303,7 +303,7 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
                 } else if (cause is kotlinx.coroutines.CancellationException) {
                     logger.info("ℹ️ [receiveResponse] Flow 被取消，共收到 $messageCount 条消息")
                 } else {
-                    logger.warning("⚠️ [receiveResponse] Flow 异常结束: ${cause.message}")
+                    logger.warn("⚠️ [receiveResponse] Flow 异常结束: ${cause.message}")
                 }
             }
     }
@@ -426,7 +426,7 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
         val result = try {
             withTimeout(5_000) { deferred.await() }
         } catch (e: TimeoutCancellationException) {
-            logger.warning("等待模型切换确认超时，使用请求模型作为回退: ${model ?: "default"}")
+            logger.warn("等待模型切换确认超时，使用请求模型作为回退: ${model ?: "default"}")
             model
         } finally {
             pendingModelUpdate = null
@@ -449,11 +449,11 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
         val transportConnected = actualTransport?.isConnected() == true
         val hasBasicConnection = serverInfo != null
 
-        logger.severe("🔍 [isConnected] transport=${transportConnected}, hasBasicConnection=${hasBasicConnection}, serverInfo=$serverInfo")
+        logger.error("🔍 [isConnected] transport=${transportConnected}, hasBasicConnection=${hasBasicConnection}, serverInfo=$serverInfo")
 
         // 如果transport连接且有基本连接信息（包括fallback模式），则认为已连接
         val result = transportConnected && hasBasicConnection
-        logger.severe("🔍 [isConnected] 最终结果: $result")
+        logger.error("🔍 [isConnected] 最终结果: $result")
         return result
     }
     

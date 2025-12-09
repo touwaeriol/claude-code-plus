@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
-import java.util.logging.Logger
+import mu.KotlinLogging
 
 /**
  * Control protocol handler for managing bidirectional communication with Claude CLI.
@@ -52,7 +52,7 @@ class ControlProtocol(
     private val _initializationResult = CompletableDeferred<Map<String, Any>>()
     
     // Logger
-    private val logger = Logger.getLogger(ControlProtocol::class.java.name)
+    private val logger = KotlinLogging.logger {}
     
     /**
      * Start processing messages from transport.
@@ -68,7 +68,7 @@ class ControlProtocol(
                         logger.info("📥 [ControlProtocol] 从 Transport 收到原始消息 #$messageCount")
                         routeMessage(jsonElement)
                     } catch (e: Exception) {
-                        logger.severe("❌ [ControlProtocol] 处理消息失败: ${e.message}")
+                        logger.error("❌ [ControlProtocol] 处理消息失败: ${e.message}")
                         e.printStackTrace()
                     }
                 }
@@ -77,8 +77,8 @@ class ControlProtocol(
                 throw e
             } catch (e: Exception) {
                 val errorMessage = e.message ?: e::class.simpleName ?: "Unknown transport error"
-                logger.severe("❌ [ControlProtocol] 从 Transport 读取消息失败: $errorMessage")
-                logger.severe("📊 [ControlProtocol] 统计: 共处理 $messageCount 条消息")
+                logger.error("❌ [ControlProtocol] 从 Transport 读取消息失败: $errorMessage")
+                logger.error("📊 [ControlProtocol] 统计: 共处理 $messageCount 条消息")
                 e.printStackTrace()
                 // Push an error result so上层能够收到错误事件而不是卡死
                 _sdkMessages.trySend(
@@ -233,7 +233,7 @@ class ControlProtocol(
                             _sdkMessages.send(message)
                             logger.info("✅ [ControlProtocol] 状态消息已发送")
                         } catch (e: Exception) {
-                            logger.warning("⚠️ [ControlProtocol] 解析状态消息失败: ${e.message}")
+                            logger.warn("⚠️ [ControlProtocol] 解析状态消息失败: ${e.message}")
                         }
                     }
                     "compact_boundary" -> {
@@ -245,7 +245,7 @@ class ControlProtocol(
                             _sdkMessages.send(message)
                             logger.info("✅ [ControlProtocol] 压缩边界消息已发送")
                         } catch (e: Exception) {
-                            logger.warning("⚠️ [ControlProtocol] 解析压缩边界消息失败: ${e.message}")
+                            logger.warn("⚠️ [ControlProtocol] 解析压缩边界消息失败: ${e.message}")
                         }
                     }
                     else -> {
@@ -256,7 +256,7 @@ class ControlProtocol(
                             _sdkMessages.send(message)
                             logger.info("✅ [ControlProtocol] 系统消息已发送")
                         } catch (e: Exception) {
-                            logger.severe("❌ [ControlProtocol] 解析系统消息失败: ${e.message}")
+                            logger.error("❌ [ControlProtocol] 解析系统消息失败: ${e.message}")
                             e.printStackTrace()
                         }
                     }
@@ -317,12 +317,12 @@ class ControlProtocol(
                     _sdkMessages.send(message)
                     logger.info("✅ [ControlProtocol] SDK 消息 ($messageType) 已发送到 sdkMessages channel")
                 } catch (e: Exception) {
-                    logger.severe("❌ [ControlProtocol] 解析 SDK 消息失败: type=$type, error=${e.message}")
+                    logger.error("❌ [ControlProtocol] 解析 SDK 消息失败: type=$type, error=${e.message}")
                     e.printStackTrace()
                 }
             }
             else -> {
-                logger.warning("⚠️ [ControlProtocol] 未知消息类型: $type")
+                logger.warn("⚠️ [ControlProtocol] 未知消息类型: $type")
             }
         }
     }

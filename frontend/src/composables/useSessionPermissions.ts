@@ -12,7 +12,8 @@ import type {
   PermissionResponse,
   SessionPermissionRule,
   PermissionBehavior,
-  PermissionUpdate
+  PermissionUpdate,
+  UserAnswerItem
 } from '@/types/permission'
 import { loggers } from '@/utils/logger'
 
@@ -191,8 +192,27 @@ export function useSessionPermissions() {
       return false
     }
 
+    // 将前端的答案映射转换为强类型列表，便于后端解析
+    const answerItems: UserAnswerItem[] = []
+    for (const q of question.questions) {
+      const key = q.header || q.question
+      const answer = answers[key] ?? answers[q.question] ?? (q.header ? answers[q.header] : undefined)
+      if (answer && answer.trim()) {
+        answerItems.push({
+          question: q.question,
+          header: q.header,
+          answer: answer.trim()
+        })
+      }
+    }
+
+    if (answerItems.length === 0) {
+      log.warn(`[useSessionPermissions] 问题 ${questionId} 没有有效答案，忽略提交`)
+      return false
+    }
+
     // 调用 resolve 回调
-    question.resolve(answers)
+    question.resolve(answerItems)
 
     // 从 pending 中移除
     pendingQuestions.delete(questionId)

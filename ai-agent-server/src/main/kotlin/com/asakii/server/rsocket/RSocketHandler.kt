@@ -30,11 +30,14 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import com.asakii.server.logging.StandaloneLogging
 import com.asakii.server.logging.asyncInfo
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.serialization.decodeFromString
 
 /**
  * RSocket 路由处理器
@@ -52,6 +55,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * - agent.setPermissionMode: Request-Response
  * - agent.getHistory: Request-Response
  * - agent.getHistorySessions: Request-Response
+ * - agent.loadHistory: Request-Stream
  *
  * 反向调用路由（服务端 -> 客户端）：
  * - client.call: Request-Response (通用调用)
@@ -122,6 +126,7 @@ class RSocketHandler(
                 when (route) {
                     "agent.query" -> handleQuery(dataBytes, rpcService)
                     "agent.queryWithContent" -> handleQueryWithContent(dataBytes, rpcService)
+                    "agent.loadHistory" -> handleLoadHistory(dataBytes, rpcService)
                     else -> throw IllegalArgumentException("Unknown route: $route")
                 }
             }
@@ -246,6 +251,28 @@ class RSocketHandler(
             .mapToPayloadWithLogging("queryWithContent")
             .catch { e ->
                 wsLog.error("❌ [RSocket] queryWithContent 错误: ${e.message}")
+                throw e
+            }
+    }
+
+    private fun handleLoadHistory(dataBytes: ByteArray, rpcService: AiAgentRpcService): Flow<Payload> {
+        val req = if (dataBytes.isNotEmpty()) {
+            json.decodeFromString<LoadHistoryRequest>(dataBytes.decodeToString())
+        } else {
+            LoadHistoryRequest()
+        }
+
+        wsLog.info("📩 [RSocket] loadHistory request: sessionId=${req.sessionId ?: "(null)"} projectPath=${req.projectPath ?: "(default)"} offset=${req.offset} limit=${req.limit}")
+        streamMessageCounter = 0
+
+        return rpcService.loadHistory(
+            sessionId = req.sessionId,
+            projectPath = req.projectPath,
+            offset = req.offset,
+            limit = req.limit
+        ).mapToPayloadWithLogging("loadHistory")
+            .catch { e ->
+                wsLog.error("❌ [RSocket] loadHistory 错误: ${e.message}")
                 throw e
             }
     }

@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.logging.Logger
+import mu.KotlinLogging
 import kotlin.io.path.exists
 
 /**
@@ -47,7 +47,7 @@ class SubprocessTransport(
         isLenient = true
     }
     
-    private val logger = Logger.getLogger(SubprocessTransport::class.java.name)
+    private val logger = KotlinLogging.logger {}
     
     override suspend fun connect() = withContext(Dispatchers.IO) {
         try {
@@ -94,8 +94,8 @@ class SubprocessTransport(
                 } catch (e: Exception) {
                     "无法读取stderr: ${e.message}"
                 }
-                logger.severe("❌ Claude CLI进程立即退出，退出代码: $exitCode")
-                logger.severe("❌ stderr内容: $stderrContent")
+                logger.error("❌ Claude CLI进程立即退出，退出代码: $exitCode")
+                logger.error("❌ stderr内容: $stderrContent")
                 throw CLIConnectionException("Claude CLI process exited immediately with code $exitCode. stderr: $stderrContent")
             }
 
@@ -108,7 +108,7 @@ class SubprocessTransport(
             isConnectedFlag = true
             logger.info("🎉 SubprocessTransport连接成功!")
         } catch (e: java.io.IOException) {
-            logger.severe("❌ Claude CLI进程启动失败: ${e.message}")
+            logger.error("❌ Claude CLI进程启动失败: ${e.message}")
             // Check if it's a file not found error (CLI not installed)
             if (e.message?.contains("No such file") == true || 
                 e.message?.contains("not found") == true) {
@@ -116,7 +116,7 @@ class SubprocessTransport(
             }
             throw CLIConnectionException("Failed to start Claude CLI process", e)
         } catch (e: Exception) {
-            logger.severe("❌ Claude CLI进程启动失败: ${e.message}")
+            logger.error("❌ Claude CLI进程启动失败: ${e.message}")
             throw CLIConnectionException("Failed to start Claude CLI process", e)
         }
     }
@@ -131,7 +131,7 @@ class SubprocessTransport(
                 logger.info("✅ 数据写入CLI成功")
             } ?: throw TransportException("Transport not connected")
         } catch (e: Exception) {
-            logger.severe("❌ 向CLI写入数据失败: ${e.message}")
+            logger.error("❌ 向CLI写入数据失败: ${e.message}")
             throw TransportException("Failed to write to CLI stdin", e)
         }
     }
@@ -171,7 +171,7 @@ class SubprocessTransport(
                             logger.info("ℹ️ 消息处理被取消（连接断开）")
                             throw e
                         } catch (e: Exception) {
-                            logger.warning("⚠️ JSON解析失败: ${jsonBuffer.toString()}, error: ${e.message}")
+                            logger.warn("⚠️ JSON解析失败: ${jsonBuffer.toString()}, error: ${e.message}")
                             throw JSONDecodeException(
                                 "Failed to decode JSON from CLI output",
                                 originalLine = jsonBuffer.toString(),
@@ -203,7 +203,7 @@ class SubprocessTransport(
                             } catch (e: Exception) {
                                 "Failed to read stderr: ${e.message}"
                             }
-                            logger.severe("❌ Claude CLI进程失败，退出代码: $exitCode, stderr: $stderrContent")
+                            logger.error("❌ Claude CLI进程失败，退出代码: $exitCode, stderr: $stderrContent")
                             throw ProcessException(
                                 "Command failed with exit code $exitCode",
                                 exitCode = exitCode,
@@ -247,7 +247,7 @@ class SubprocessTransport(
                     Files.deleteIfExists(tempFile)
                     logger.info("🗑️ 清理临时文件: $tempFile")
                 } catch (e: Exception) {
-                    logger.warning("⚠️ 清理临时文件失败: $tempFile - ${e.message}")
+                    logger.warn("⚠️ 清理临时文件失败: $tempFile - ${e.message}")
                 }
             }
             tempFiles.clear()
@@ -550,7 +550,7 @@ class SubprocessTransport(
                     logger.info("📄 命令行长度 (${cmdStr.length}) 超过限制 ($CMD_LENGTH_LIMIT)，使用临时文件: $tempFile")
                 }
             } catch (e: Exception) {
-                logger.warning("⚠️ 优化命令行长度失败: ${e.message}")
+                logger.warn("⚠️ 优化命令行长度失败: ${e.message}")
             }
         }
 
@@ -583,7 +583,7 @@ class SubprocessTransport(
                     // 其次选择 .cmd（但会有参数问题）
                     val cmdFile = lines.find { it.endsWith(".cmd") }
                     if (cmdFile != null) {
-                        logger.warning("⚠️ 只找到 claude.cmd，JSON 参数可能被破坏: $cmdFile")
+                        logger.warn("⚠️ 只找到 claude.cmd，JSON 参数可能被破坏: $cmdFile")
                         return cmdFile
                     }
                     return lines.first()

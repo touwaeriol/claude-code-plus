@@ -1,7 +1,7 @@
 package com.asakii.claude.agent.sdk.callback
 
 import java.util.concurrent.ConcurrentHashMap
-import java.util.logging.Logger
+import mu.KotlinLogging
 
 /**
  * 工具回调注册表 - 管理所有自定义工具回调
@@ -23,7 +23,7 @@ import java.util.logging.Logger
  * ```
  */
 class ToolCallbackRegistry {
-    private val logger = Logger.getLogger(ToolCallbackRegistry::class.java.name)
+    private val logger = KotlinLogging.logger {}
     private val callbacks = ConcurrentHashMap<String, ToolCallback>()
 
     /**
@@ -35,7 +35,7 @@ class ToolCallbackRegistry {
     fun register(callback: ToolCallback) {
         val existing = callbacks.putIfAbsent(callback.toolName, callback)
         if (existing != null) {
-            logger.warning("⚠️ [ToolCallbackRegistry] 工具 '${callback.toolName}' 已注册，覆盖旧回调")
+            logger.warn("⚠️ [ToolCallbackRegistry] 工具 '${callback.toolName}' 已注册，覆盖旧回调")
             callbacks[callback.toolName] = callback
         } else {
             logger.info("✅ [ToolCallbackRegistry] 注册工具回调: ${callback.toolName}")

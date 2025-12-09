@@ -317,6 +317,43 @@ export class RSocketSession {
   }
 
   /**
+   * 流式加载历史消息（从本地存储的 jsonl）
+   */
+  loadHistory(
+    params: { sessionId?: string; projectPath?: string; offset?: number; limit?: number },
+    handlers: {
+      onMessage: (message: RpcMessage) => void
+      onError?: (error: Error) => void
+      onComplete?: () => void
+    }
+  ): () => void {
+    if (!this._isConnected || !this.client) {
+      throw new Error('Session not connected')
+    }
+
+    const payload = new TextEncoder().encode(JSON.stringify(params))
+    return this.client.requestStream('agent.loadHistory', payload, {
+      onNext: (responseData) => {
+        try {
+          const rpcMessage = ProtoCodec.decodeRpcMessage(responseData)
+          handlers.onMessage(rpcMessage)
+        } catch (error) {
+          log.error('[RSocketSession] 解析历史消息失败:', error)
+          handlers.onError?.(error as Error)
+        }
+      },
+      onError: (error) => {
+        log.error('[RSocketSession] 历史流错误:', error)
+        handlers.onError?.(error)
+      },
+      onComplete: () => {
+        log.debug('[RSocketSession] 历史流完成')
+        handlers.onComplete?.()
+      }
+    })
+  }
+
+  /**
    * 获取项目的历史会话列表
    */
   async getHistorySessions(maxResults: number = 50): Promise<HistorySessionMetadata[]> {

@@ -10,7 +10,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.*
-import java.util.logging.Logger
+import mu.KotlinLogging
 
 /**
  * 适配器：将官方 MCP Kotlin SDK 的 Server 转换为我们的 McpServer 接口
@@ -34,7 +34,7 @@ class McpServerAdapter(
     override val version: String
 ) : McpServer {
 
-    private val logger = Logger.getLogger(McpServerAdapter::class.java.name)
+    private val logger = KotlinLogging.logger {}
 
     override val description: String = ""
 
@@ -49,7 +49,7 @@ class McpServerAdapter(
                 )
             }
         } catch (e: Exception) {
-            logger.warning("获取工具列表失败: ${e.message}")
+            logger.warn("获取工具列表失败: ${e.message}")
             emptyList()
         }
     }
@@ -98,7 +98,7 @@ class McpServerAdapter(
                 ToolResult.Success(content = content)
             }
         } catch (e: Exception) {
-            logger.severe("❌ 工具调用失败: ${e.message}")
+            logger.error("❌ 工具调用失败: ${e.message}")
             ToolResult.error(e.message ?: "Unknown error")
         }
     }

@@ -37,6 +37,21 @@ export interface ConnectResult {
 export class AiAgentService {
   // 会话管理 - sessionId -> RSocketSession
   private sessions = new Map<string, RSocketSession>()
+  // 用于历史查询的后台会话（无 UI 绑定）
+  private historySession: RSocketSession | null = null
+
+  private async ensureHistoryTransport(): Promise<RSocketSession> {
+    const active = this.sessions.values().next().value as RSocketSession | undefined
+    if (active) return active
+
+    if (!this.historySession) {
+      this.historySession = new RSocketSession()
+      await this.historySession.connect({})
+    } else if (!this.historySession.isConnected) {
+      await this.historySession.connect({})
+    }
+    return this.historySession
+  }
 
   /**
    * 创建并连接到新会话
@@ -327,15 +342,41 @@ export class AiAgentService {
    * @returns 历史会话列表
    */
   async getHistorySessions(maxResults: number = 50): Promise<HistorySessionMetadata[]> {
-    // 使用任意一个已连接的会话来发送请求
-    const session = this.sessions.values().next().value as RSocketSession | undefined
-    if (!session) {
-      console.warn('[aiAgentService] 没有活跃会话，无法获取历史会话列表')
+    try {
+      const session = await this.ensureHistoryTransport()
+      console.log(`📋 获取历史会话列表 (maxResults=${maxResults})`)
+      return await session.getHistorySessions(maxResults)
+    } catch (error) {
+      console.warn('[aiAgentService] 获取历史会话列表失败:', error)
       return []
     }
+  }
 
-    console.log(`📋 获取历史会话列表 (maxResults=${maxResults})`)
-    return await session.getHistorySessions(maxResults)
+  /**
+   * 流式拉取历史消息（用于历史会话回放）
+   */
+  streamHistory(
+    params: { sessionId?: string; projectPath?: string; offset?: number; limit?: number },
+    handlers: {
+      onMessage: (message: RpcMessage) => void
+      onError?: (error: Error) => void
+      onComplete?: () => void
+    },
+    transportSessionId?: string
+  ): () => void {
+    const session = transportSessionId ? this.sessions.get(transportSessionId) : undefined
+    if (session) {
+      return session.loadHistory(params, handlers)
+    }
+
+    // 无显式会话时，使用后台会话（异步创建）
+    let cancel: (() => void) | null = null
+    this.ensureHistoryTransport()
+      .then(s => {
+        cancel = s.loadHistory(params, handlers)
+      })
+      .catch(err => handlers.onError?.(err as Error))
+    return () => cancel?.()
   }
 }
 

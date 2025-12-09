@@ -11,6 +11,13 @@ export interface MessageMetadata {
   threadId?: string
   provider?: 'claude' | 'codex'
   raw?: unknown
+  history?: {
+    replaySeq?: number
+    start?: number
+    total?: number
+    messageId?: string
+    isDisplayable?: boolean
+  }
 }
 
 export interface UnifiedMessage {

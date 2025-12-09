@@ -87,6 +87,9 @@ export function mapRpcMessageToMessage(msg: RpcAssistantMessage | RpcUserMessage
 
   // 传递 isReplay 字段，用于判断压缩相关消息
   const isReplay = msg.type === 'user' ? (msg as RpcUserMessage).isReplay : undefined
+  if (msg.metadata?.isDisplayable === false) {
+    return null
+  }
 
   return {
     id: ('id' in msg && msg.id ? msg.id : '') as string,
@@ -97,7 +100,16 @@ export function mapRpcMessageToMessage(msg: RpcAssistantMessage | RpcUserMessage
     metadata: {
       model: msg.message?.model,
       provider: msg.provider,
-      raw: msg
+      raw: msg,
+      history: msg.metadata
+        ? {
+            replaySeq: msg.metadata.replaySeq,
+            start: msg.metadata.historyStart,
+            total: msg.metadata.historyTotal,
+            messageId: msg.metadata.messageId,
+            isDisplayable: msg.metadata.isDisplayable
+          }
+        : undefined
     }
   }
 }
