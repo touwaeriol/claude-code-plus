@@ -162,9 +162,11 @@ const activeSessions = computed(() =>
   props.sessions.filter(s => s.isConnected)
 )
 
+const activeIds = computed(() => new Set(activeSessions.value.map(s => s.id)))
+
 // 历史会话（未连接）
 const historySessions = computed(() =>
-  props.sessions.filter(s => !s.isConnected)
+  props.sessions.filter(s => !activeIds.value.has(s.id) && s.id !== props.currentSessionId)
 )
 
 function handleClose() {

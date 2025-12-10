@@ -16,6 +16,12 @@ export interface ToolDisplayInfo {
   secondaryInfo: string
   /** 行数变化（如 "+2 -3"，仅 edit 工具） */
   lineChanges?: string
+  /** 增加的行数（折叠状态展示绿色 +N） */
+  addedLines?: number
+  /** 删除的行数（折叠状态展示红色 -N） */
+  removedLines?: number
+  /** 读取的行数（折叠状态提示读了多少行） */
+  readLines?: number
   /** 状态（success/error/pending） */
   status: 'success' | 'error' | 'pending'
   /** 输入参数是否还在加载中（stream event 增量更新时为 true） */
@@ -147,6 +153,9 @@ export function extractToolDisplayInfo(
   let primaryInfo = ''
   let secondaryInfo = ''
   let lineChanges: string | undefined
+  let addedLines: number | undefined
+  let removedLines: number | undefined
+  let readLines: number | undefined
 
   // 如果 input 还在加载中，显示 loading 提示；否则根据工具类型解析
   if (!isInputLoading) {
@@ -160,17 +169,31 @@ export function extractToolDisplayInfo(
 
     case 'write':
     case 'Write':
-      // 折叠状态：显示文件名 (行数)
+      // ?????????? (??)
       primaryInfo = formatWritePrimaryInfo(toolInput)
       secondaryInfo = toolInput.path || toolInput.file_path || ''
+      if (toolInput?.content || toolInput?.file_content) {
+        const contentText = toolInput.content || toolInput.file_content || ''
+        const lineCount = contentText ? contentText.toString().split('
+').length : 0
+        addedLines = lineCount || undefined
+      }
       break
 
     case 'edit':
     case 'Edit':
-      // 折叠状态：显示文件名:修改位置
+      // ??????????:????
       primaryInfo = formatEditPrimaryInfo(toolInput)
       secondaryInfo = toolInput.file_path || toolInput.path || ''
       lineChanges = calculateLineChanges(toolInput)
+      if (toolInput) {
+        const oldLines = (toolInput.old_string || toolInput.old_str || '').toString().split('
+').length
+        const newLines = (toolInput.new_string || toolInput.new_str || '').toString().split('
+').length
+        removedLines = oldLines || undefined
+        addedLines = newLines || undefined
+      }
       break
 
     case 'multi-edit':
@@ -338,6 +361,9 @@ export function extractToolDisplayInfo(
     primaryInfo,
     secondaryInfo,
     lineChanges,
+    addedLines,
+    removedLines,
+    readLines,
     status,
     isInputLoading,
     errorMessage,
