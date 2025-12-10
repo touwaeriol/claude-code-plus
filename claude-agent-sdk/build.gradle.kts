@@ -2,6 +2,15 @@ import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.tasks.bundling.Jar
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.jetbrains.dokka.gradle.DokkaTask
+import java.net.URL
+import java.net.URI
+import java.net.Proxy
+import java.net.InetSocketAddress
+import java.net.URLConnection
+import java.security.MessageDigest
+import java.util.Properties
+import java.io.InputStream
+import java.io.OutputStream
 
 plugins {
     kotlin("jvm")
@@ -231,5 +240,217 @@ tasks.register<JavaExec>("runOfficialMcpSdkTest") {
     classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].runtimeClasspath
     mainClass.set("com.asakii.claude.agent.sdk.OfficialMcpSdkTestKt")
     standardInput = System.`in`
+}
+
+// ========== CLI 绑定任务 ==========
+
+// 读取 CLI 版本
+val cliVersionProps = Properties().apply {
+    file("cli-version.properties").inputStream().use { load(it) }
+}
+val cliVersion = cliVersionProps.getProperty("cli.version")
+
+// 定义资源目录
+val bundledDir = file("src/main/resources/bundled")
+
+// MD5 校验值 (版本 2.0.64)
+val expectedMd5 = mapOf(
+    "darwin-arm64/claude" to "ff64ec989a57986f59a15ac355b2d4c6",
+    "darwin-x64/claude" to "416d5ae1b5791b6aa797657e94ad74a5",
+    "linux-arm64/claude" to "9339451eaf853511dd0441f5435cf232",
+    "linux-x64/claude" to "abef4f5edcb8145e4dd4ce83a9fcb067",
+    "linux-arm64-musl/claude" to "a2e3537d874f96d4f3039bcc6ff01965",
+    "linux-x64-musl/claude" to "9ee897597c2cbea74d1a47d16442470a",
+    "win32-x64/claude.exe" to "f94b0c266adf75479a849fbafef7ac98"
+)
+
+// MD5 校验辅助函数
+fun calculateMd5(file: File): String {
+    val md = MessageDigest.getInstance("MD5")
+    file.inputStream().use { input ->
+        val buffer = ByteArray(8192)
+        var read: Int
+        while (input.read(buffer).also { read = it } > 0) {
+            md.update(buffer, 0, read)
+        }
+    }
+    return md.digest().joinToString("") { String.format("%02x", it) }
+}
+
+fun verifyMd5(file: File, expectedMd5: String): Boolean {
+    val actualMd5 = calculateMd5(file)
+    return actualMd5.equals(expectedMd5, ignoreCase = true)
+}
+
+// 下载 CLI 任务 - 从 npm 包下载 cli.js（跨平台方案）
+val downloadCli = tasks.register("downloadCli") {
+    group = "build"
+    description = "从 npm 包下载 Claude CLI (cli.js, 版本: $cliVersion)"
+
+    // 在配置阶段检查文件是否已存在，避免配置缓存问题
+    val cliJsPath = layout.projectDirectory.file("src/main/resources/bundled/claude-cli-$cliVersion.js").asFile
+    onlyIf {
+        !cliJsPath.exists().also { shouldRun ->
+            if (!shouldRun) {
+                println("⏭️  claude-cli-$cliVersion.js 已存在，跳过下载")
+            }
+        }
+    }
+
+    doLast {
+        // 在 doLast 内定义变量（使用 layout API 支持配置缓存）
+        val bundledDirPath = layout.projectDirectory.dir("src/main/resources/bundled").asFile
+        val cliJsFile = bundledDirPath.resolve("claude-cli-$cliVersion.js")
+
+        bundledDirPath.mkdirs()
+
+        println("========================================")
+        println("下载 Claude CLI (cli.js) 版本: $cliVersion")
+        println("========================================")
+
+        try {
+            // npm 包 URL（匹配 SDK 版本，而非 CLI 版本）
+            // SDK 版本映射：CLI 2.0.64 对应 SDK 0.1.62
+            val npmPackageVersion = "0.1.62"  // 从 package.json 查询得到
+            val npmTarballUrl = "https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-$npmPackageVersion.tgz"
+
+            println("📦 npm 包版本: $npmPackageVersion")
+            println("📥 下载中...")
+            println("   URL: $npmTarballUrl")
+
+            // 下载 tarball
+            val buildDir = layout.buildDirectory.get().asFile
+            val tarballFile = File(buildDir, "tmp/claude-cli/claude-agent-sdk.tgz")
+            tarballFile.parentFile.mkdirs()
+
+            val connection: URLConnection = URI(npmTarballUrl).toURL().openConnection()
+            connection.connectTimeout = 30000
+            connection.readTimeout = 300000
+            connection.getInputStream().use { input: InputStream ->
+                tarballFile.outputStream().use { output: OutputStream ->
+                    input.copyTo(output)
+                }
+            }
+
+            println("   ✅ tarball 下载完成")
+
+            // 解压 tarball 并提取 cli.js
+            val extractDir = File(buildDir, "tmp/claude-cli/extract")
+            extractDir.mkdirs()
+
+            println("📂 解压 tarball...")
+            val process = ProcessBuilder("tar", "-xzf", tarballFile.absolutePath)
+                .directory(extractDir)
+                .redirectErrorStream(true)
+                .start()
+            val exitCode = process.waitFor()
+            if (exitCode != 0) {
+                throw GradleException("解压失败，退出码: $exitCode")
+            }
+
+            // cli.js 位于 package/cli.js
+            val sourceCliJs = extractDir.resolve("package/cli.js")
+            if (!sourceCliJs.exists()) {
+                throw GradleException("未找到 cli.js 在解压的包中")
+            }
+
+            // 复制并重命名
+            sourceCliJs.copyTo(cliJsFile, overwrite = true)
+
+            val sizeMB = cliJsFile.length() / (1024.0 * 1024.0)
+            println("   大小: ${String.format("%.2f", sizeMB)} MB")
+            println("   ✅ cli.js 提取成功: ${cliJsFile.name}")
+
+            // 清理临时文件
+            tarballFile.delete()
+            extractDir.deleteRecursively()
+
+            println("\n========================================")
+            println("✅ 下载完成！")
+            println("   文件: ${cliJsFile.name}")
+            println("========================================")
+
+        } catch (e: Exception) {
+            println("❌ 下载失败: ${e.message}")
+            e.printStackTrace()
+            throw GradleException("CLI 下载失败", e)
+        }
+    }
+}
+
+
+// 清理 bundled CLI
+val cleanCli = tasks.register("cleanCli") {
+    group = "build"
+    description = "清理绑定的 CLI 二进制文件"
+
+    doLast {
+        bundledDir.listFiles()?.forEach { it.delete() }
+        println("✅ 已清理 bundled CLI")
+    }
+}
+
+// 校验 CLI MD5
+val verifyCli = tasks.register("verifyCli") {
+    group = "verification"
+    description = "校验已下载的 CLI 文件 MD5"
+
+    doLast {
+        println("========================================")
+        println("校验 CLI MD5 (版本: $cliVersion)")
+        println("========================================")
+
+        var passCount = 0
+        var failCount = 0
+        var missingCount = 0
+
+        expectedMd5.forEach { (fileKey, expectedHash) ->
+            val filePath = bundledDir.resolve(fileKey)
+
+            if (!filePath.exists()) {
+                println("⏭️  跳过 $fileKey (文件不存在)")
+                missingCount++
+                return@forEach
+            }
+
+            print("🔐 校验 $fileKey... ")
+            if (verifyMd5(filePath, expectedHash)) {
+                println("✅ 通过")
+                passCount++
+            } else {
+                println("❌ 失败")
+                val actualMd5 = calculateMd5(filePath)
+                println("   期望: $expectedHash")
+                println("   实际: $actualMd5")
+                failCount++
+            }
+        }
+
+        println("\n========================================")
+        println("校验汇总:")
+        println("  ✅ 通过: $passCount")
+        println("  ❌ 失败: $failCount")
+        println("  ⏭️  缺失: $missingCount")
+        println("========================================")
+
+        if (failCount > 0) {
+            throw GradleException("MD5 校验失败，有 $failCount 个文件不匹配")
+        }
+    }
+}
+
+// 将 downloadCli 添加到 processResources 依赖
+tasks.named("processResources") {
+    dependsOn(downloadCli)
+}
+
+// sourcesJar 任务也需要依赖 downloadCli（避免任务顺序问题）
+tasks.named("sourcesJar") {
+    dependsOn(downloadCli)
+}
+
+// clean 任务依赖 cleanCli
+tasks.named("clean") {
+    dependsOn(cleanCli)
 }
 

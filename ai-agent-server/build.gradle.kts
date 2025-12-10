@@ -17,6 +17,7 @@ version = "1.0.5" // Align with the main plugin version
 dependencies {
     // Project dependencies
     implementation(project(":ai-agent-sdk"))
+    implementation(project(":claude-agent-sdk"))  // 添加 claude-agent-sdk 依赖以访问 ClaudeSessionScanner
     api(project(":ai-agent-rpc-api")) // Use api to expose types to downstream
     implementation(project(":ai-agent-proto")) // Protobuf 生成的类型
 

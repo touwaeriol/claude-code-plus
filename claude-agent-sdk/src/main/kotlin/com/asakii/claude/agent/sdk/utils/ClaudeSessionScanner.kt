@@ -42,7 +42,7 @@ object ClaudeSessionScanner {
      * @param maxResults 最大结果数
      * @return 会话元数据列表，按时间戳降序排列
      */
-    fun scanHistorySessions(projectPath: String, maxResults: Int): List<SessionMetadata> {
+    fun scanHistorySessions(projectPath: String, maxResults: Int, offset: Int = 0): List<SessionMetadata> {
         val claudeDir = getClaudeDir()
         val projectId = ProjectPathUtils.projectPathToDirectoryName(projectPath)
         val projectDir = File(claudeDir, "projects/$projectId")
@@ -58,61 +58,100 @@ object ClaudeSessionScanner {
 
         logger.info("[SessionScanner] 找到 ${jsonlFiles.size} 个会话文件")
 
-        return jsonlFiles
+        val sorted = jsonlFiles
             .mapNotNull { file -> extractSessionMetadata(file, projectPath) }
             .sortedByDescending { it.timestamp }
+        return sorted
+            .drop(offset.coerceAtLeast(0))
             .take(maxResults)
     }
 
     /**
-     * 从 JSONL 文件提取会话元数据
+     * 从 JSONL 文件提取会话元数据（优化版本）
+     *
+     * 优化策略：
+     * - messageCount: 直接统计文件总行数（不解析内容）
+     * - firstUserMessage: 只读前 20 行
+     * - timestamp: 只读最后一行
      */
     private fun extractSessionMetadata(file: File, projectPath: String): SessionMetadata? {
         var firstUserMessage: String? = null
         var lastTimestamp = 0L
-        var messageCount = 0
         var isSubagent = false
 
-        file.forEachLine { line ->
-            if (line.isBlank()) return@forEachLine
+        // 1. 快速统计总行数（messageCount = 文件行数）
+        val messageCount = file.useLines { it.count { line -> line.isNotBlank() } }
 
-            try {
-                val json = jsonParser.parseToJsonElement(line).jsonObject
+        if (messageCount == 0) {
+            return null
+        }
 
-                // 检查是否为子代理会话（需要过滤）
-                if (json["isSidechain"]?.jsonPrimitive?.booleanOrNull == true ||
-                    json["userType"]?.jsonPrimitive?.contentOrNull == "internal") {
-                    isSubagent = true
-                    return@forEachLine
+        // 2. 分批读取行，提取首条用户消息（先读5行，没找到再继续读）
+        file.bufferedReader().use { reader ->
+            var linesRead = 0
+            val batchSize = 5
+            val maxLines = 100  // 最多读取100行
+
+            while (linesRead < maxLines && firstUserMessage == null && !isSubagent) {
+                // 读取一批行
+                val batch = (0 until batchSize).mapNotNull {
+                    reader.readLine()?.takeIf { it.isNotBlank() }
                 }
 
-                val type = json["type"]?.jsonPrimitive?.contentOrNull ?: return@forEachLine
-
-                // 统计消息数量
-                if (type == "user" || type == "assistant") {
-                    messageCount++
+                if (batch.isEmpty()) {
+                    break  // 文件结束
                 }
 
-                // 提取第一条用户消息
-                if (firstUserMessage == null && type == "user") {
-                    val content = extractMessageContent(json)
-                    if (content != null && !content.contains("Caveat:") && !content.contains("<command-")) {
-                        firstUserMessage = content.take(100)
+                // 处理这批行
+                for (line in batch) {
+                    linesRead++
+
+                    try {
+                        val json = jsonParser.parseToJsonElement(line).jsonObject
+
+                        // 检查是否为子代理会话（需要过滤）
+                        if (json["isSidechain"]?.jsonPrimitive?.booleanOrNull == true ||
+                            json["userType"]?.jsonPrimitive?.contentOrNull == "internal") {
+                            isSubagent = true
+                            break
+                        }
+
+                        // 提取第一条用户消息
+                        val type = json["type"]?.jsonPrimitive?.contentOrNull
+                        if (type == "user") {
+                            val content = extractMessageContent(json)
+                            if (content != null && !content.contains("Caveat:") && !content.contains("<command-")) {
+                                firstUserMessage = content.take(100)
+                                break  // 找到后立即停止
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // 跳过无效行
                     }
                 }
-
-                // 更新时间戳
-                json["timestamp"]?.jsonPrimitive?.contentOrNull?.let { ts ->
-                    parseTimestamp(ts).takeIf { it > lastTimestamp }?.let { lastTimestamp = it }
-                }
-            } catch (e: Exception) {
-                // 跳过无效行
             }
         }
 
         // 过滤子代理会话和无效会话
-        if (isSubagent || firstUserMessage == null || messageCount == 0) {
+        if (isSubagent || firstUserMessage == null) {
             return null
+        }
+
+        // 3. 从文件末尾读取最后一行，提取时间戳（使用 RandomAccessFile 优化）
+        try {
+            val lastLine = readLastLine(file)
+            if (lastLine != null && lastLine.isNotBlank()) {
+                try {
+                    val json = jsonParser.parseToJsonElement(lastLine).jsonObject
+                    json["timestamp"]?.jsonPrimitive?.contentOrNull?.let { ts ->
+                        lastTimestamp = parseTimestamp(ts)
+                    }
+                } catch (e: Exception) {
+                    // 忽略解析错误
+                }
+            }
+        } catch (e: Exception) {
+            // 如果读取失败，使用文件修改时间
         }
 
         // 如果没有时间戳，使用文件修改时间
@@ -164,6 +203,47 @@ object ClaudeSessionScanner {
             java.time.Instant.parse(timestamp).toEpochMilli()
         } catch (e: Exception) {
             0L
+        }
+    }
+
+    /**
+     * 从文件末尾高效读取最后一行（不读取整个文件）
+     * 使用 RandomAccessFile 从文件末尾向前查找最后一个换行符
+     */
+    private fun readLastLine(file: File): String? {
+        if (!file.exists() || file.length() == 0L) {
+            return null
+        }
+
+        java.io.RandomAccessFile(file, "r").use { raf ->
+            var pos = file.length() - 1
+            val sb = StringBuilder()
+
+            // 从文件末尾向前读取，直到找到换行符
+            while (pos >= 0) {
+                raf.seek(pos)
+                val c = raf.read().toChar()
+
+                if (c == '\n' || c == '\r') {
+                    if (sb.isNotEmpty()) {
+                        // 找到完整的一行
+                        return sb.reverse().toString()
+                    }
+                    // 跳过末尾的空行
+                } else {
+                    sb.append(c)
+                }
+
+                pos--
+
+                // 限制最大回溯长度（防止超长行）
+                if (sb.length > 10000) {
+                    return sb.reverse().toString()
+                }
+            }
+
+            // 文件只有一行
+            return if (sb.isNotEmpty()) sb.reverse().toString() else null
         }
     }
 }
