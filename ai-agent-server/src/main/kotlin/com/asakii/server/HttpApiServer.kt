@@ -403,6 +403,28 @@ class HttpApiServer(
                         }
                     }
 
+                    // 历史会话列表 API (HTTP 接口，避免 RSocket 连接)
+                    get("/history/sessions") {
+                        try {
+                            val offset = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
+                            val maxResults = call.request.queryParameters["maxResults"]?.toIntOrNull() ?: 30
+
+                            logger.info { "📋 [HTTP] 获取历史会话列表 (offset=$offset, maxResults=$maxResults)" }
+
+                            // 直接调用 RPC 服务实现（复用逻辑）
+                            val rpcService = com.asakii.server.rpc.AiAgentRpcServiceImpl(ideTools, null)
+                            val result = rpcService.getHistorySessions(maxResults, offset)
+
+                            call.respond(HttpStatusCode.OK, result)
+                        } catch (e: Exception) {
+                            logger.error(e) { "❌ [HTTP] 获取历史会话失败" }
+                            call.respond(
+                                HttpStatusCode.InternalServerError,
+                                mapOf("error" to (e.message ?: "Unknown error"))
+                            )
+                        }
+                    }
+
                     // 主题 API
                     get("/theme") {
                         val theme = ideTools.getTheme()

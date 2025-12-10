@@ -11,13 +11,15 @@
       <!-- 消息列表 -->
       <MessageList
         :display-items="displayItems"
-        :is-loading="uiState.isLoadingHistory"
+        :is-loading="isHistoryLoading"
+        :has-more-history="hasMoreHistory"
         :is-streaming="currentSessionIsStreaming"
         :streaming-start-time="streamingStartTime"
         :input-tokens="streamingInputTokens"
         :output-tokens="streamingOutputTokens"
         :connection-status="connectionStatusForDisplay"
         class="message-list-area"
+        @load-more-history="handleLoadMoreHistory"
       />
 
       <!-- 压缩进行中状态 -->
@@ -137,8 +139,11 @@
       :sessions="historySessions"
       :current-session-id="sessionStore.currentTabId"
       :loading="historyLoading"
+      :loading-more="historyLoadingMore"
+      :has-more="historyHasMore"
       @close="isHistoryOverlayVisible = false"
       @select-session="handleHistorySelect"
+      @load-more="handleLoadMoreHistorySessions"
     />
 
     <!-- Toast 提示 -->
@@ -158,7 +163,6 @@ import { SETTING_KEYS } from '@/composables/useSessionTab'
 import { useI18n } from '@/composables/useI18n'
 import { useEnvironment } from '@/composables/useEnvironment'
 import { setupIdeSessionBridge, onIdeHostCommand } from '@/bridges/ideSessionBridge'
-import { ideService } from '@/services/ideaBridge'
 import { aiAgentService } from '@/services/aiAgentService'
 import MessageList from './MessageList.vue'
 import ChatInput from './ChatInput.vue'
@@ -201,6 +205,10 @@ const isHistoryOverlayVisible = ref(false)
 // 历史会话列表状态
 const historySessionList = ref<HistorySessionMetadata[]>([])
 const historyLoading = ref(false)
+const historyLoadingMore = ref(false)
+const historyHasMore = ref(true)
+const historyOffset = ref(0)
+const HISTORY_PAGE_SIZE = 30
 
 // Toast 提示状态
 const toastMessage = ref('')
@@ -244,6 +252,10 @@ const uiState = ref<ChatUiState>({
 
 // 从 sessionStore 获取 displayItems
 const displayItems = computed(() => sessionStore.currentDisplayItems)
+const isHistoryLoading = computed(() =>
+  uiState.value.isLoadingHistory || sessionStore.currentIsLoadingHistory
+)
+const hasMoreHistory = computed(() => sessionStore.currentHasMoreHistory)
 
 // 是否正在压缩会话
 const isCompacting = computed(() => sessionStore.currentTab?.isCompacting.value ?? false)
@@ -288,10 +300,6 @@ const historySessions = computed(() => {
 const sessionTokenUsage = computed<EnhancedTokenUsage | null>(() => {
   return null
 })
-
-// 连接状态 - 直接从 Tab 的 connectionState 获取
-const isConnected = computed(() => sessionStore.currentTab?.connectionState.status === 'CONNECTED')
-const isConnecting = computed(() => sessionStore.currentTab?.connectionState.status === 'CONNECTING')
 
 // 连接状态（用于显示）
 const connectionStatusForDisplay = computed(() => {
@@ -364,7 +372,13 @@ onMounted(async () => {
     // 没有 Tab 时创建默认会话
     if (!sessionStore.hasTabs) {
       console.log('No existing tabs, creating default...')
-      const tab = await sessionStore.createTab()
+
+      // 并行执行：创建 Tab（RSocket 连接）+ 加载历史会话列表（HTTP）
+      const [tab] = await Promise.all([
+        sessionStore.createTab(),
+        loadHistorySessions(true)  // 提前加载历史会话列表
+      ])
+
       console.log('Default tab created:', tab.tabId)
     }
   } catch (error) {
@@ -510,8 +524,8 @@ async function handleModelChange(model: AiModel) {
   const tab = sessionStore.currentTab
   if (tab) {
     try {
-      await tab.updateSettings({ model: model.id })
-      console.log('✅ Model updated:', model.id)
+      await tab.updateSettings({ model })
+      console.log('✅ Model updated:', model)
     } catch (error) {
       console.error('❌ Failed to update model:', error)
     }
@@ -546,25 +560,57 @@ function handleClearError() {
 /**
  * 加载历史会话列表（通过 WebSocket RPC）
  */
-async function loadHistorySessions() {
-  historyLoading.value = true
+async function loadHistorySessions(reset = false) {
+  if (historyLoading.value || historyLoadingMore.value) return
+  if (reset) {
+    historySessionList.value = []
+    historyOffset.value = 0
+    historyHasMore.value = true
+  }
+  if (!historyHasMore.value) return
+
+  const isFirstPage = historyOffset.value === 0
+  if (isFirstPage) historyLoading.value = true
+  else historyLoadingMore.value = true
+
   try {
-    const sessions = await aiAgentService.getHistorySessions(50)
-    historySessionList.value = sessions
-    console.log('📋 Loaded', historySessionList.value.length, 'history sessions')
+    const sessions = await aiAgentService.getHistorySessions(HISTORY_PAGE_SIZE, historyOffset.value)
+    const merged = [...historySessionList.value, ...sessions]
+    const dedup = Array.from(new Map(merged.map(s => [s.sessionId, s])).values())
+    historySessionList.value = dedup.sort((a, b) => b.timestamp - a.timestamp)
+    historyOffset.value += sessions.length
+    historyHasMore.value = sessions.length === HISTORY_PAGE_SIZE
+    console.log('📋 Loaded', sessions.length, 'history sessions (total', historySessionList.value.length, ')')
   } catch (error) {
-    console.error('❌ Error loading history sessions:', error)
+    console.error('❗Error loading history sessions:', error)
   } finally {
     historyLoading.value = false
+    historyLoadingMore.value = false
   }
 }
 
 function toggleHistoryOverlay() {
   if (!isHistoryOverlayVisible.value) {
-    // 打开时加载历史会话
-    loadHistorySessions()
+    // 打开时加载历史会话（如果还没加载）
+    if (historySessionList.value.length === 0 && !historyLoading.value) {
+      loadHistorySessions(true)
+    }
   }
   isHistoryOverlayVisible.value = !isHistoryOverlayVisible.value
+}
+
+async function handleLoadMoreHistory() {
+  if (isHistoryLoading.value) return
+  uiState.value.isLoadingHistory = true
+  try {
+    await sessionStore.loadMoreHistory()
+  } finally {
+    uiState.value.isLoadingHistory = false
+  }
+}
+
+async function handleLoadMoreHistorySessions() {
+  await loadHistorySessions(false)
 }
 
 async function handleHistorySelect(sessionId: string) {
