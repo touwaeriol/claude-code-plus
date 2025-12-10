@@ -4,28 +4,11 @@
 
 export type MessageRole = 'user' | 'assistant' | 'system' | 'result'
 
-export interface MessageMetadata {
-  model?: string
-  usage?: UnifiedUsage
-  sessionId?: string
-  threadId?: string
-  provider?: 'claude' | 'codex'
-  raw?: unknown
-  history?: {
-    replaySeq?: number
-    start?: number
-    total?: number
-    messageId?: string
-    isDisplayable?: boolean
-  }
-}
-
 export interface UnifiedMessage {
   id: string
   role: MessageRole
   timestamp: number
   content: ContentBlock[]
-  metadata?: MessageMetadata
   isStreaming?: boolean
   tokenUsage?: UnifiedUsage
   /**
@@ -46,7 +29,6 @@ export interface UnifiedUsage {
   outputTokens?: number
   cachedInputTokens?: number
   provider?: 'claude' | 'codex'
-  raw?: unknown
 }
 
 export type ContentStatus = 'in_progress' | 'completed' | 'failed'
