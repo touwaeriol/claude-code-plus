@@ -1,6 +1,6 @@
 <template>
   <CompactToolCard
-    :display-info="displayInfo"
+    :display-info="cardDisplayInfo"
     :is-expanded="expanded"
     :has-details="true"
     :tool-call="toolCallData"
@@ -50,6 +50,11 @@ const toolCallData = computed(() => ({
 }))
 
 const content = computed(() => props.toolCall.input.content || '')
+const lineCount = computed(() => content.value ? content.value.split('\n').length : 0)
+const cardDisplayInfo = computed(() => ({
+  ...displayInfo.value,
+  addedLines: lineCount.value || displayInfo.value.addedLines
+}))
 
 const previewText = computed(() => {
   const text = content.value

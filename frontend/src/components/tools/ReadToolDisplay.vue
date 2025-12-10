@@ -1,6 +1,6 @@
 <template>
   <CompactToolCard
-    :display-info="displayInfo"
+    :display-info="cardDisplayInfo"
     :is-expanded="expanded"
     :has-details="hasContent"
     :tool-call="toolCallData"
@@ -127,6 +127,17 @@ const resultText = computed(() => {
   }
   return lines.join('\n')
 })
+
+const readLineCount = computed(() => {
+  if (!hasContent.value) return 0
+  if (!resultText.value) return 0
+  return resultText.value.split('\n').length
+})
+
+const cardDisplayInfo = computed(() => ({
+  ...displayInfo.value,
+  readLines: readLineCount.value || undefined
+}))
 
 // 提取起始行号
 const startLineNumber = computed(() => {
