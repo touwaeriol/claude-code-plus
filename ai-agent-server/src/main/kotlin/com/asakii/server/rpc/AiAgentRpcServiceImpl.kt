@@ -49,6 +49,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -263,10 +265,10 @@ class AiAgentRpcServiceImpl(
     override suspend fun getHistory(): RpcHistory =
         RpcHistory(messages = messageHistory.toList())
 
-    override suspend fun getHistorySessions(maxResults: Int): RpcHistorySessionsResult {
-        sdkLog.info("📋 [AI-Agent] 获取历史会话列表 (maxResults=$maxResults)")
+    override suspend fun getHistorySessions(maxResults: Int, offset: Int): RpcHistorySessionsResult {
+        sdkLog.info("📋 [AI-Agent] 获取历史会话列表 (offset=$offset, maxResults=$maxResults)")
         val projectPath = ideTools.getProjectPath()
-        val sessions = ClaudeSessionScanner.scanHistorySessions(projectPath, maxResults)
+        val sessions = ClaudeSessionScanner.scanHistorySessions(projectPath, maxResults, offset)
         sdkLog.info("📋 [AI-Agent] 找到 ${sessions.size} 个历史会话")
         return RpcHistorySessionsResult(
             sessions = sessions.map { meta ->
@@ -408,10 +410,43 @@ class AiAgentRpcServiceImpl(
         projectPath: String?,
         offset: Int,
         limit: Int
-    ): Flow<RpcMessage> {
+    ): RpcHistoryResult {
+        val targetSession = sessionId ?: lastConnectOptions?.sessionId ?: this@AiAgentRpcServiceImpl.sessionId
+        val project = projectPath?.takeIf { it.isNotBlank() } ?: ideTools.getProjectPath()
+
+        // 获取可用的总消息数（快照）
+        val availableCount = HistoryJsonlLoader.countLines(targetSession, project)
+
+        // 加载历史消息（List<UiStreamEvent>）
+        val historyEvents = HistoryJsonlLoader.loadHistoryMessages(targetSession, project, offset, limit)
+
+        // 复用 toRpcMessage() 转换成 RpcMessage
+        val rpcMessages = historyEvents.map { uiEvent ->
+            uiEvent.toRpcMessage(currentProvider)
+        }
+
+        // 返回包装结果
+        return RpcHistoryResult(
+            messages = rpcMessages,
+            offset = offset,
+            count = rpcMessages.size,
+            availableCount = availableCount
+        )
+    }
+
+    override suspend fun getHistoryMetadata(
+        sessionId: String?,
+        projectPath: String?
+    ): RpcHistoryMetadata {
         val targetSession = sessionId ?: lastConnectOptions?.sessionId ?: this.sessionId
         val project = projectPath?.takeIf { it.isNotBlank() } ?: ideTools.getProjectPath()
-        return HistoryJsonlLoader.loadHistoryMessages(targetSession, project, offset, limit)
+        val totalLines = HistoryJsonlLoader.countLines(targetSession, project)
+
+        return RpcHistoryMetadata(
+            totalLines = totalLines,
+            sessionId = targetSession,
+            projectPath = project
+        )
     }
 
     private suspend fun disconnectInternal() {
@@ -737,6 +772,7 @@ class AiAgentRpcServiceImpl(
                     println("🔍 [toRpcMessage] UiAssistantMessage content[$idx]: type=${block::class.simpleName}, ${if (block is ToolUseContent) "input=${block.input}" else ""}")
                 }
                 RpcAssistantMessage(
+                    id = id,
                     message = RpcMessageContent(
                         content = content.map { it.toRpcContentBlock() }
                     ),
@@ -981,7 +1017,6 @@ class AiAgentRpcServiceImpl(
         }
     }
 }
-
 
 
 

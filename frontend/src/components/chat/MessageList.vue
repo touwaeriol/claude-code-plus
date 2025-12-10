@@ -186,6 +186,7 @@ interface Props {
   inputTokens?: number  // 上行 token
   outputTokens?: number  // 下行 token
   connectionStatus?: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED'  // 连接状态
+  hasMoreHistory?: boolean  // 顶部分页可用
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -194,8 +195,13 @@ const props = withDefaults(defineProps<Props>(), {
   streamingStartTime: 0,
   inputTokens: 0,
   outputTokens: 0,
-  connectionStatus: 'DISCONNECTED'
+  connectionStatus: 'DISCONNECTED',
+  hasMoreHistory: false
 })
+
+const emit = defineEmits<{
+  (e: 'load-more-history'): void
+}>()
 
 const wrapperRef = ref<HTMLElement>()
 const scrollerRef = ref<InstanceType<typeof DynamicScroller>>()
@@ -203,6 +209,12 @@ const showScrollToBottom = ref(false)
 const newMessageCount = ref(0)
 const isNearBottom = ref(true)
 const lastMessageCount = ref(0)
+const lastTailId = ref<string | null>(null)
+const historyLoadInProgress = ref(false)
+const historyLoadRequested = ref(false)
+const historyScrollHeightBefore = ref(0)
+const historyScrollTopBefore = ref(0)
+const HISTORY_TRIGGER_THRESHOLD = 120
 
 // Streaming 计时器
 const elapsedTime = ref(0)
@@ -309,9 +321,32 @@ const messageComponent = computed(() => props.displayItems ? DisplayItemRenderer
 
 // 监听消息变化
 watch(() => displayMessages.value.length, async (newCount, oldCount) => {
+  const added = newCount - oldCount
+  const tailId = newCount > 0 ? displayMessages.value[newCount - 1]?.id ?? null : null
+  const tailChanged = tailId !== lastTailId.value
+
+  // 首次批量加载（如历史回放尾页）默认跳到底部
+  if (oldCount === 0 && newCount > 0) {
+    lastMessageCount.value = newCount
+    lastTailId.value = tailId
+    await nextTick()
+    scrollToBottom()
+    forceUpdateScroller()
+    return
+  }
+
+  // 历史分页期间不计未读
+  if ((historyLoadInProgress.value || props.isLoading) && added > 0) {
+    lastMessageCount.value = newCount
+    lastTailId.value = tailId
+    await nextTick()
+    forceUpdateScroller()
+    return
+  }
+
   // 如果不在底部，计数新消息
-  if (!isNearBottom.value && newCount > oldCount) {
-    newMessageCount.value += (newCount - oldCount)
+  if (!isNearBottom.value && (added > 0 || tailChanged)) {
+    newMessageCount.value += added > 0 ? added : 1
   }
 
   // 如果在底部，自动滚动
@@ -322,6 +357,7 @@ watch(() => displayMessages.value.length, async (newCount, oldCount) => {
   }
 
   lastMessageCount.value = newCount
+  lastTailId.value = tailId
 
   // 强制 DynamicScroller 重新计算尺寸
   await nextTick()
@@ -335,17 +371,27 @@ watch(() => displayMessages.value, async () => {
 }, { deep: true })
 
 // 强制 DynamicScroller 重新计算所有项目尺寸
-function forceUpdateScroller() {
-  if (scrollerRef.value) {
-    // @ts-ignore - forceUpdate 是 DynamicScroller 的方法
-    scrollerRef.value.forceUpdate?.()
+  function forceUpdateScroller() {
+    if (scrollerRef.value) {
+      // @ts-expect-error - forceUpdate 是 DynamicScroller 暴露的实例方法
+      scrollerRef.value.forceUpdate?.()
+    }
   }
-}
 
 watch(() => props.isLoading, async (newValue) => {
   if (newValue && isNearBottom.value) {
     await nextTick()
     scrollToBottom()
+  }
+
+  if (!newValue && historyLoadInProgress.value) {
+    await nextTick()
+    const el = scrollerRef.value?.$el as HTMLElement | undefined
+    if (el) {
+      const delta = el.scrollHeight - historyScrollHeightBefore.value
+      el.scrollTop = historyScrollTopBefore.value + delta
+    }
+    historyLoadInProgress.value = false
   }
 })
 
@@ -359,6 +405,23 @@ function handleScroll() {
   const scrollTop = el.scrollTop
   const scrollHeight = el.scrollHeight
   const clientHeight = el.clientHeight
+
+  // 顶部分页
+  if (
+    scrollTop < HISTORY_TRIGGER_THRESHOLD &&
+    props.hasMoreHistory &&
+    !props.isLoading &&
+    !historyLoadInProgress.value &&
+    !historyLoadRequested.value
+  ) {
+    historyLoadRequested.value = true
+    historyLoadInProgress.value = true
+    historyScrollHeightBefore.value = scrollHeight
+    historyScrollTopBefore.value = scrollTop
+    emit('load-more-history')
+  } else if (scrollTop > HISTORY_TRIGGER_THRESHOLD * 2) {
+    historyLoadRequested.value = false
+  }
 
   // 判断是否在底部（允许 100px 的误差）
   const distanceFromBottom = scrollHeight - scrollTop - clientHeight

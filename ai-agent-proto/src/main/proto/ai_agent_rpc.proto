@@ -279,6 +279,7 @@ message UserMessage {
 // 对应 RpcAssistantMessage
 message AssistantMessage {
   MessageContent message = 1;
+  optional string id = 2;
 }
 
 // 对应 RpcResultMessage
@@ -467,6 +468,36 @@ message SetPermissionModeRequest {
 
 message GetHistorySessionsRequest {
   int32 max_results = 1;
+  optional int32 offset = 2;
+}
+
+// 加载历史消息请求
+message LoadHistoryRequest {
+  optional string session_id = 1;
+  optional string project_path = 2;
+  int32 offset = 3;            // 起始行号（默认 0）
+  int32 limit = 4;             // 返回行数（默认 0 表示全部）
+}
+
+// 获取历史会话元数据请求
+message GetHistoryMetadataRequest {
+  optional string session_id = 1;
+  optional string project_path = 2;
+}
+
+// 历史会话元数据响应
+message HistoryMetadata {
+  int32 total_lines = 1;      // JSONL 文件总行数
+  string session_id = 2;       // 会话 ID
+  string project_path = 3;     // 项目路径
+}
+
+// 历史加载结果（分页查询响应）
+message HistoryResult {
+  repeated RpcMessage messages = 1;       // 消息列表
+  int32 offset = 2;                       // 当前请求的起始位置
+  int32 count = 3;                        // 实际返回的消息数
+  int32 available_count = 4;              // 当前文件中可用的总消息数（快照）
 }
 
 // 空请求

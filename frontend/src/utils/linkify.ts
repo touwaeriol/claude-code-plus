@@ -38,7 +38,7 @@ function findLinks(text: string): LinkMatch[] {
   const matches: LinkMatch[] = []
 
   // HTTP/HTTPS URL
-  const urlPattern = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/g
+  const urlPattern = /https?:\/\/[^\s<>"{}|\\^`]+/g
   let match
   while ((match = urlPattern.exec(text)) !== null) {
     matches.push({
@@ -51,7 +51,7 @@ function findLinks(text: string): LinkMatch[] {
   }
 
   // @文件路径: @src/App.vue, @./relative/path.ts
-  const atFilePattern = /@([.\w\-\/\\]+\.\w+)/g
+  const atFilePattern = /@([.\w-/\\]+\.\w+)/g
   while ((match = atFilePattern.exec(text)) !== null) {
     // 检查是否与已有匹配重叠
     const start = match.index

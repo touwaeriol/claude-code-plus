@@ -17,6 +17,7 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Properties
 import mu.KotlinLogging
 import kotlin.io.path.exists
 
@@ -265,9 +266,9 @@ class SubprocessTransport(
      */
     private fun buildCommand(): List<String> {
         val command = mutableListOf<String>()
-        
-        // Base command - try to find claude executable
-        command.add(findClaudeExecutable())
+
+        // Base command - try to find claude executable (may return [node, cli.js] or [claude])
+        command.addAll(findClaudeExecutable())
         
         // Verbose output - 必须在 --print 之前设置
         // 注意：当使用 --output-format=stream-json 时，必须同时使用 --verbose
@@ -560,14 +561,35 @@ class SubprocessTransport(
     
     /**
      * Find the Claude executable in the system.
-     * 参考 Python SDK: Windows 上优先使用 claude.exe（不是 .cmd）
-     * 因为 .cmd 是批处理文件，会经过 cmd.exe 解析，破坏 JSON 参数
+     * 优先级：
+     * 1. 用户指定路径 (options.cliPath)
+     * 2. SDK 绑定的 CLI (resources/bundled/claude-cli-<version>.js, 通过 Node.js 运行)
+     * 3. 系统全局安装的 CLI
      */
-    private fun findClaudeExecutable(): String {
+    private fun findClaudeExecutable(): List<String> {
+        // 1. 用户指定路径（最高优先级）
+        options.cliPath?.let { customPath ->
+            logger.info("✅ 使用用户指定的 CLI: $customPath")
+            return listOf(customPath.toString())
+        }
+
+        // 2. SDK 绑定的 CLI（次优先级，使用 Node.js 运行）
+        val bundledCliJs = findBundledCliJs()
+        if (bundledCliJs != null) {
+            val nodeCommand = findNodeExecutable()
+            if (nodeCommand != null) {
+                logger.info("✅ 使用 SDK 绑定的 CLI: node $bundledCliJs")
+                return listOf(nodeCommand, bundledCliJs)
+            } else {
+                logger.warn("⚠️ 找到绑定的 cli.js，但未找到 Node.js")
+            }
+        }
+
         val isWindows = System.getProperty("os.name").lowercase().contains("windows")
 
-        // Windows 上优先查找 .exe（参考 Python SDK）
-        // .exe 直接执行，不经过 cmd.exe 解析，参数不会被破坏
+        // 3. 系统全局安装的 CLI（参考 Python SDK）
+        // Windows 上优先查找 .exe（不是 .cmd）
+        // 因为 .cmd 是批处理文件，会经过 cmd.exe 解析，破坏 JSON 参数
         if (isWindows) {
             try {
                 val process = ProcessBuilder("where", "claude").start()
@@ -577,16 +599,16 @@ class SubprocessTransport(
                     // 优先选择 .exe 文件（不会经过 shell 解析）
                     val exeFile = lines.find { it.endsWith(".exe") }
                     if (exeFile != null) {
-                        logger.info("✅ 找到 claude.exe: $exeFile")
-                        return exeFile
+                        logger.info("✅ 找到系统全局 claude.exe: $exeFile")
+                        return listOf(exeFile)
                     }
                     // 其次选择 .cmd（但会有参数问题）
                     val cmdFile = lines.find { it.endsWith(".cmd") }
                     if (cmdFile != null) {
                         logger.warn("⚠️ 只找到 claude.cmd，JSON 参数可能被破坏: $cmdFile")
-                        return cmdFile
+                        return listOf(cmdFile)
                     }
-                    return lines.first()
+                    return listOf(lines.first())
                 }
             } catch (e: Exception) {
                 logger.info("where 命令失败: ${e.message}")
@@ -597,16 +619,211 @@ class SubprocessTransport(
                 val process = ProcessBuilder("which", "claude").start()
                 val result = process.inputStream.bufferedReader().readText().trim()
                 if (process.waitFor() == 0 && result.isNotEmpty()) {
-                    return result.lines().first()
+                    logger.info("✅ 找到系统全局 claude: $result")
+                    return listOf(result.lines().first())
                 }
             } catch (e: Exception) {
                 logger.info("which 命令失败: ${e.message}")
             }
         }
 
-        // 回退到直接使用 "claude"
-        logger.info("直接使用 'claude' 命令")
-        return "claude"
+        // 回退到直接使用 "claude" 命令
+        logger.warn("⚠️ 未找到 CLI，回退到 'claude' 命令")
+        return listOf("claude")
+    }
+
+    /**
+     * 查找 Node.js 可执行文件
+     */
+    private fun findNodeExecutable(): String? {
+        return try {
+            val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+            val command = if (isWindows) "where" else "which"
+
+            val process = ProcessBuilder(command, "node").start()
+            val result = process.inputStream.bufferedReader().readText().trim()
+
+            if (process.waitFor() == 0 && result.isNotEmpty()) {
+                val nodePath = result.lines().first()
+                logger.debug("找到 Node.js: $nodePath")
+                nodePath
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            logger.debug("查找 Node.js 失败: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * 查找 SDK 绑定的 CLI (cli.js, 从 resources/bundled/ 目录)
+     */
+    private fun findBundledCliJs(): String? {
+        return try {
+            // 读取 CLI 版本
+            val versionProps = Properties()
+            this::class.java.classLoader.getResourceAsStream("bundled/../cli-version.properties")?.use {
+                versionProps.load(it)
+            }
+            val cliVersion = versionProps.getProperty("cli.version") ?: return null
+
+            // cli.js 文件名：claude-cli-<version>.js
+            val cliJsName = "claude-cli-$cliVersion.js"
+            val resourcePath = "bundled/$cliJsName"
+
+            logger.info("🔍 查找绑定的 CLI: $resourcePath")
+            val resource = this::class.java.classLoader.getResource(resourcePath)
+            logger.info("🔍 ClassLoader.getResource() 结果: $resource")
+
+            if (resource != null) {
+                // 如果资源在 JAR 内，提取到临时文件
+                if (resource.protocol == "jar") {
+                    val tempFile = kotlin.io.path.createTempFile("claude-cli-", ".js").toFile()
+                    tempFile.deleteOnExit()
+
+                    resource.openStream().use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+
+                    logger.info("📦 从 JAR 提取 CLI: ${tempFile.absolutePath}")
+                    return tempFile.absolutePath
+                } else {
+                    // 资源在文件系统中（开发模式）
+                    val file = java.io.File(resource.toURI())
+                    if (file.exists()) {
+                        logger.info("📦 找到本地绑定的 CLI: ${file.absolutePath}")
+                        return file.absolutePath
+                    }
+                }
+            }
+
+            null
+        } catch (e: Exception) {
+            logger.debug("查找绑定 CLI 失败: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * 查找 SDK 绑定的 CLI（从 resources/bundled/{platform}/ 目录）
+     * 仿照 Python SDK 的 _find_bundled_cli() 实现
+     * @deprecated 已废弃，使用 findBundledCliJs() 替代
+     */
+    @Deprecated("使用 findBundledCliJs() 替代")
+    private fun findBundledCli(): String? {
+        return try {
+            // 检测当前平台
+            val osName = System.getProperty("os.name").lowercase()
+            val osArch = System.getProperty("os.arch").lowercase()
+
+            val isWindows = osName.contains("windows")
+            val isMac = osName.contains("mac") || osName.contains("darwin")
+            val isLinux = osName.contains("linux")
+
+            val arch = when {
+                osArch.contains("amd64") || osArch.contains("x86_64") -> "x64"
+                osArch.contains("aarch64") || osArch.contains("arm64") -> "arm64"
+                else -> {
+                    logger.debug("不支持的架构: $osArch")
+                    return null
+                }
+            }
+
+            // 组合平台标识（与下载任务一致）
+            val platformId = when {
+                isWindows -> "win32-$arch"
+                isMac -> "darwin-$arch"
+                isLinux -> "linux-$arch"  // 优先尝试 glibc 版本
+                else -> {
+                    logger.debug("不支持的操作系统: $osName")
+                    return null
+                }
+            }
+
+            val cliName = if (isWindows) "claude.exe" else "claude"
+
+            // 从 ClassLoader 获取资源
+            val resourcePath = "bundled/$platformId/$cliName"
+            logger.info("🔍 查找绑定 CLI: $resourcePath (平台: $platformId)")
+            val resource = this::class.java.classLoader.getResource(resourcePath)
+            logger.info("🔍 ClassLoader.getResource() 结果: $resource")
+
+            if (resource != null) {
+                // 如果资源在 JAR 内，需要提取到临时文件
+                if (resource.protocol == "jar") {
+                    val tempFile = kotlin.io.path.createTempFile("claude-", if (isWindows) ".exe" else "").toFile()
+                    tempFile.deleteOnExit()
+
+                    resource.openStream().use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+
+                    // Unix 系统设置可执行权限
+                    if (!isWindows) {
+                        tempFile.setExecutable(true)
+                    }
+
+                    logger.info("📦 从 JAR 提取 CLI ($platformId) 到: ${tempFile.absolutePath}")
+                    return tempFile.absolutePath
+                } else {
+                    // 资源在文件系统中（开发模式）
+                    val file = java.io.File(resource.toURI())
+                    if (file.exists()) {
+                        // 确保有可执行权限
+                        if (!isWindows && !file.canExecute()) {
+                            file.setExecutable(true)
+                        }
+                        logger.info("📦 找到本地绑定的 CLI ($platformId): ${file.absolutePath}")
+                        return file.absolutePath
+                    }
+                }
+            }
+
+            // Linux 系统回退尝试 musl 版本
+            if (isLinux) {
+                val muslPlatformId = "linux-$arch-musl"
+                val muslResourcePath = "bundled/$muslPlatformId/$cliName"
+                val muslResource = this::class.java.classLoader.getResource(muslResourcePath)
+
+                if (muslResource != null) {
+                    logger.info("📦 回退到 musl 版本: $muslPlatformId")
+                    // 同样的提取逻辑...
+                    if (muslResource.protocol == "jar") {
+                        val tempFile = kotlin.io.path.createTempFile("claude-", "").toFile()
+                        tempFile.deleteOnExit()
+
+                        muslResource.openStream().use { input ->
+                            tempFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+
+                        tempFile.setExecutable(true)
+                        logger.info("📦 从 JAR 提取 CLI ($muslPlatformId) 到: ${tempFile.absolutePath}")
+                        return tempFile.absolutePath
+                    } else {
+                        val file = java.io.File(muslResource.toURI())
+                        if (file.exists()) {
+                            if (!file.canExecute()) {
+                                file.setExecutable(true)
+                            }
+                            logger.info("📦 找到本地绑定的 CLI ($muslPlatformId): ${file.absolutePath}")
+                            return file.absolutePath
+                        }
+                    }
+                }
+            }
+
+            null
+        } catch (e: Exception) {
+            logger.debug("查找绑定 CLI 失败: ${e.message}")
+            null
+        }
     }
     
     /**

@@ -68,7 +68,7 @@ const isVisible = computed(() => props.isGenerating)
 const statusText = computed(() => {
   if (!props.isGenerating) return ''
   if (props.currentPrefix) return `正在生成 ${props.currentPrefix}...`
-  return 'Claude 正在思考...'
+  return ''
 })
 
 /**

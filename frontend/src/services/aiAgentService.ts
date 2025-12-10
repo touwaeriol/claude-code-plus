@@ -371,32 +371,23 @@ export class AiAgentService {
   }
 
   /**
-   * 流式拉取历史消息（用于历史会话回放）
+   * 加载历史消息（非流式，一次性返回结果）
    */
-  streamHistory(
+  async loadHistory(
     params: { sessionId?: string; projectPath?: string; offset?: number; limit?: number },
-    handlers: {
-      onMessage: (message: RpcMessage) => void
-      onError?: (error: Error) => void
-      onComplete?: () => void
-    },
     transportSessionId?: string
-  ): () => void {
-    console.log('📜 [AiAgentService] 开始流式加载历史:', params)
+  ): Promise<{ messages: RpcMessage[]; offset: number; count: number; availableCount: number }> {
+    console.log('📜 [AiAgentService] 加载历史:', params)
 
-    const session = transportSessionId ? this.sessions.get(transportSessionId) : undefined
-    if (session) {
-      return session.loadHistory(params, handlers)
+    const session = transportSessionId
+      ? this.sessions.get(transportSessionId)
+      : await this.ensureHistoryTransport()
+
+    if (!session) {
+      throw new Error('无可用会话')
     }
 
-    // 无显式会话时，使用后台会话（异步创建）
-    let cancel: (() => void) | null = null
-    this.ensureHistoryTransport()
-      .then(s => {
-        cancel = s.loadHistory(params, handlers)
-      })
-      .catch(err => handlers.onError?.(err as Error))
-    return () => cancel?.()
+    return await session.loadHistory(params)
   }
 
   /**

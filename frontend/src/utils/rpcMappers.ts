@@ -87,9 +87,15 @@ export function mapRpcMessageToMessage(msg: RpcAssistantMessage | RpcUserMessage
 
   // 传递 isReplay 字段，用于判断压缩相关消息
   const isReplay = msg.type === 'user' ? (msg as RpcUserMessage).isReplay : undefined
+  const messageId =
+    // 优先使用后端下发的消息 id（历史会话里带有）
+    (msg as any).id ??
+    // 其次回退到历史记录的 uuid（JSONL 顶层字段）
+    (msg as any).uuid ??
+    ''
 
   return {
-    id: ('id' in msg && msg.id ? msg.id : '') as string,
+    id: messageId,
     role: msg.type,
     timestamp: Date.now(),
     content: contentBlocks,

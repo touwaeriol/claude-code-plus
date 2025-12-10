@@ -182,25 +182,18 @@ data class RpcHistory(
 )
 
 /**
- * 消息元数据（用于历史回放、排序等）
+ * 历史加载结果（分页查询）
  */
 @Serializable
-data class RpcMessageMetadata(
-    /** 历史文件中的顺序序号（从 0 开始） */
-    @SerialName("replay_seq")
-    val replaySeq: Long? = null,
-    /** 历史加载的起始 offset（用于客户端追踪） */
-    @SerialName("history_start")
-    val historyStart: Int? = null,
-    /** 历史总条数 */
-    @SerialName("history_total")
-    val historyTotal: Int? = null,
-    /** 是否需要在 UI 中展示（例如压缩/状态类消息不展示） */
-    @SerialName("is_displayable")
-    val isDisplayable: Boolean? = null,
-    /** 历史消息的唯一标识（可用于去重） */
-    @SerialName("message_id")
-    val messageId: String? = null
+data class RpcHistoryResult(
+    /** 消息列表 */
+    val messages: List<RpcMessage>,
+    /** 当前请求的起始位置 */
+    val offset: Int,
+    /** 实际返回的消息数 */
+    val count: Int,
+    /** 当前文件中可用的总消息数（快照） */
+    val availableCount: Int
 )
 
 // ============================================================================
@@ -215,7 +208,6 @@ data class RpcMessageMetadata(
 @Serializable
 sealed interface RpcMessage {
     val provider: RpcProvider?
-    val metadata: RpcMessageMetadata?
 }
 
 /**
@@ -233,8 +225,7 @@ data class RpcUserMessage(
      * - isReplay = false: 压缩摘要（新生成的上下文）
      * - isReplay = true: 确认消息（如 "Compacted"）
      */
-    val isReplay: Boolean? = null,
-    override val metadata: RpcMessageMetadata? = null
+    val isReplay: Boolean? = null
 ) : RpcMessage
 
 /**
@@ -244,8 +235,8 @@ data class RpcUserMessage(
 @SerialName("assistant")
 data class RpcAssistantMessage(
     val message: RpcMessageContent,
-    override val provider: RpcProvider?,
-    override val metadata: RpcMessageMetadata? = null
+    val id: String? = null,
+    override val provider: RpcProvider?
 ) : RpcMessage
 
 /**
@@ -269,8 +260,7 @@ data class RpcResultMessage(
     val totalCostUsd: Double? = null,
     val usage: JsonElement? = null,
     val result: String? = null,
-    override val provider: RpcProvider?,
-    override val metadata: RpcMessageMetadata? = null
+    override val provider: RpcProvider?
 ) : RpcMessage
 
 /**
@@ -286,8 +276,7 @@ data class RpcStreamEvent(
     val event: RpcStreamEventData,
     @SerialName("parent_tool_use_id")
     val parentToolUseId: String? = null,
-    override val provider: RpcProvider?,
-    override val metadata: RpcMessageMetadata? = null
+    override val provider: RpcProvider?
 ) : RpcMessage
 
 /**
@@ -297,8 +286,7 @@ data class RpcStreamEvent(
 @SerialName("error")
 data class RpcErrorMessage(
     val message: String,
-    override val provider: RpcProvider?,
-    override val metadata: RpcMessageMetadata? = null
+    override val provider: RpcProvider?
 ) : RpcMessage
 
 /**
@@ -311,8 +299,7 @@ data class RpcStatusSystemMessage(
     val status: String?,  // 如 "compacting" 或 null
     @SerialName("session_id")
     val sessionId: String,
-    override val provider: RpcProvider?,
-    override val metadata: RpcMessageMetadata? = null
+    override val provider: RpcProvider?
 ) : RpcMessage
 
 /**
@@ -326,8 +313,7 @@ data class RpcCompactBoundaryMessage(
     val sessionId: String,
     @SerialName("compact_metadata")
     val compactMetadata: RpcCompactMetadata? = null,
-    override val provider: RpcProvider?,
-    override val metadata: RpcMessageMetadata? = null
+    override val provider: RpcProvider?
 ) : RpcMessage
 
 /**
@@ -587,4 +573,14 @@ data class RpcHistorySession(
 @Serializable
 data class RpcHistorySessionsResult(
     val sessions: List<RpcHistorySession>
+)
+
+/**
+ * 历史会话元数据（文件信息）
+ */
+@Serializable
+data class RpcHistoryMetadata(
+    val totalLines: Int,       // JSONL 文件总行数
+    val sessionId: String,      // 会话 ID
+    val projectPath: String     // 项目路径
 )

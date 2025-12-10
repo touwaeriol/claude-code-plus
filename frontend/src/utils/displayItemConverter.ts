@@ -63,7 +63,7 @@ function isLikelyToolInputText(text: string, content: ContentBlock[]): boolean {
   const trimmed = text.trim()
   if (trimmed.length < 10) return false
 
-  const structuralChars = (trimmed.match(/[{}\[\]\"“”：:,]/g) || []).length
+  const structuralChars = (trimmed.match(new RegExp('[{}\\[\\]"“”:,]', 'g')) || []).length
   const structuralRatio = structuralChars / trimmed.length
   const containsField =
     /todos|status|activeForm|file_path|path|tool_use_id|content/i.test(trimmed)
@@ -98,6 +98,7 @@ function computeToolTextSkipAndHydrate(message: Message): Set<number> {
     if (!isTextBlock(block)) return
     const text = (block as TextContent).text
     const jsonObj = extractJsonFromText(text)
+    // 只跳过纯 JSON dump（能成功解析且 tool_use 没有 input 的情况）
     if (jsonObj && toolUses.some(t => !t.input || Object.keys(t.input as any).length === 0)) {
       toolUses.forEach(t => {
         if (!t.input || Object.keys(t.input as any).length === 0) {
@@ -105,9 +106,8 @@ function computeToolTextSkipAndHydrate(message: Message): Set<number> {
         }
       })
       skip.add(idx)
-    } else if (isLikelyToolInputText(text, message.content as ContentBlock[])) {
-      skip.add(idx)
     }
+    // 移除 isLikelyToolInputText 检查：太宽泛，会误伤正常的助手文本
   })
 
   return skip

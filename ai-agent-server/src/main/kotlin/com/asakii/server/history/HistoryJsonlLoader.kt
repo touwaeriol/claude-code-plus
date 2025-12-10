@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import com.asakii.claude.agent.sdk.utils.ClaudeSessionScanner
 import com.asakii.claude.agent.sdk.utils.ProjectPathUtils
+import com.asakii.ai.agent.sdk.model.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -26,6 +27,26 @@ object HistoryJsonlLoader {
     private val parser = Json { ignoreUnknownKeys = true }
 
     /**
+     * 统计历史文件的总行数（物理行数，包含所有类型消息）
+     * @return 文件总行数，文件不存在返回 0
+     */
+    fun countLines(sessionId: String?, projectPath: String?): Int {
+        if (sessionId.isNullOrBlank() || projectPath.isNullOrBlank()) {
+            return 0
+        }
+
+        val claudeDir = ClaudeSessionScanner.getClaudeDir()
+        val projectId = ProjectPathUtils.projectPathToDirectoryName(projectPath)
+        val historyFile = File(claudeDir, "projects/$projectId/$sessionId.jsonl")
+
+        return if (historyFile.exists()) {
+            historyFile.toPath().useLines { seq -> seq.count { it.isNotBlank() } }
+        } else {
+            0
+        }
+    }
+
+    /**
      * @param sessionId 目标会话 ID（必填）
      * @param projectPath 项目路径（必填）
      * @param offset 跳过条数
@@ -36,10 +57,10 @@ object HistoryJsonlLoader {
         projectPath: String?,
         offset: Int = 0,
         limit: Int = 0
-    ): Flow<RpcMessage> {
+    ): List<UiStreamEvent> {
         if (sessionId.isNullOrBlank() || projectPath.isNullOrBlank()) {
             log.warn("[History] sessionId/projectPath 缺失，跳过加载")
-            return flow { }
+            return emptyList()
         }
 
         val claudeDir = ClaudeSessionScanner.getClaudeDir()
@@ -47,170 +68,146 @@ object HistoryJsonlLoader {
         val historyFile = File(claudeDir, "projects/$projectId/$sessionId.jsonl")
         if (!historyFile.exists()) {
             log.warn("[History] 文件不存在: ${historyFile.absolutePath}")
-            return flow { }
+            return emptyList()
         }
 
-        val totalLines = historyFile.toPath().useLines { seq -> seq.count { it.isNotBlank() } }
         log.info("[History] 加载 JSONL: session=$sessionId file=${historyFile.absolutePath} offset=$offset limit=$limit")
 
-        return flow {
-            var emitted = 0
-            var skipped = 0
-            var lineIndex = 0
+        val result = mutableListOf<UiStreamEvent>()
+        var skipped = 0
 
-            historyFile.bufferedReader().use { reader ->
-                while (true) {
-                    if (limit > 0 && emitted >= limit) break
-                    val line = reader.readLine() ?: break
-                    if (line.isBlank()) continue
-                    val currentSeq = lineIndex.toLong()
-                    lineIndex++
+        historyFile.bufferedReader().use { reader ->
+            while (true) {
+                if (limit > 0 && result.size >= limit) break
+                val line = reader.readLine() ?: break
+                if (line.isBlank()) continue
 
-                    try {
-                        val obj = parser.parseToJsonElement(line).jsonObject
-                        val messageType = obj["type"]?.jsonPrimitive?.contentOrNull
-                        val metadata = RpcMessageMetadata(
-                            replaySeq = currentSeq,
-                            historyStart = offset,
-                            historyTotal = totalLines,
-                            isDisplayable = isDisplayable(messageType),
-                            messageId = obj["id"]?.jsonPrimitive?.contentOrNull ?: "history-$currentSeq"
-                        )
-                        val rpcMessage = toRpcMessage(obj, metadata) ?: continue
-                        if (skipped < offset) {
-                            skipped++
-                            continue
-                        }
-                        emit(rpcMessage)
-                        emitted++
-                    } catch (e: Exception) {
-                        log.warn("[History] 解析行失败: ${e.message}")
+                try {
+                    val obj = parser.parseToJsonElement(line).jsonObject
+                    val messageType = obj["type"]?.jsonPrimitive?.contentOrNull
+
+                    // 直接过滤掉不需要显示的消息类型
+                    if (!shouldDisplay(messageType)) {
+                        continue
                     }
+
+                    val uiEvent = toUiStreamEvent(obj) ?: continue
+                    if (skipped < offset) {
+                        skipped++
+                        continue
+                    }
+                    result.add(uiEvent)
+                } catch (e: Exception) {
+                    log.warn("[History] 解析行失败: ${e.message}")
                 }
             }
-
-            log.info("[History] 完成: emitted=$emitted skipped=$skipped")
         }
+
+        log.info("[History] 完成: loaded=${result.size} skipped=$skipped")
+        return result
     }
 
-    private fun isDisplayable(type: String?): Boolean {
+    /**
+     * 判断消息类型是否应该显示给前端
+     * 过滤掉系统消息、压缩边界等不需要显示的类型
+     */
+    private fun shouldDisplay(type: String?): Boolean {
         return when (type) {
             "user", "assistant", "summary" -> true
-            "tool_use", "tool_result" -> true
-            else -> false
+            "compact_boundary", "status", "file-history-snapshot" -> false
+            else -> false  // 未知类型默认不显示
         }
     }
 
-    private fun toRpcMessage(json: JsonObject, metadata: RpcMessageMetadata): RpcMessage? {
+    private fun toUiStreamEvent(json: JsonObject): UiStreamEvent? {
         val type = json["type"]?.jsonPrimitive?.contentOrNull ?: return null
-        val provider = RpcProvider.CLAUDE
 
         return when (type) {
-            "user" -> buildUserMessage(json, provider, metadata)
-            "assistant" -> buildAssistantMessage(json, provider, metadata)
-            "summary" -> buildResultMessage(json, provider, metadata)
-            "compact_boundary", "status" -> buildStatusMessage(json, provider, metadata)
-            "file-history-snapshot" -> buildUnknownSnapshot(json, provider, metadata)
-            else -> buildUnknownSnapshot(json, provider, metadata) // 保底不丢数据
+            "user" -> buildUserMessage(json)
+            "assistant" -> buildAssistantMessage(json)
+            "summary" -> buildResultMessage(json)
+            else -> null  // 其他类型已经被 shouldDisplay() 过滤，不应该到这里
         }
     }
 
-    private fun buildUserMessage(json: JsonObject, provider: RpcProvider, metadata: RpcMessageMetadata): RpcMessage? {
+    private fun buildUserMessage(json: JsonObject): UiStreamEvent? {
         val contentBlocks = extractContentBlocks(json) ?: return null
-        val model = json["message"]?.jsonObject?.get("model")?.jsonPrimitive?.contentOrNull
-        return RpcUserMessage(
-            message = RpcMessageContent(content = contentBlocks, model = model),
-            parentToolUseId = null,
-            provider = provider,
-            isReplay = null,
-            metadata = metadata
+        return UiUserMessage(
+            content = contentBlocks,
+            isReplay = null
         )
     }
 
-    private fun buildAssistantMessage(json: JsonObject, provider: RpcProvider, metadata: RpcMessageMetadata): RpcMessage? {
+    private fun buildAssistantMessage(json: JsonObject): UiStreamEvent? {
         val contentBlocks = extractContentBlocks(json) ?: return null
-        val model = json["message"]?.jsonObject?.get("model")?.jsonPrimitive?.contentOrNull
-        return RpcAssistantMessage(
-            message = RpcMessageContent(content = contentBlocks, model = model),
-            provider = provider,
-            metadata = metadata
+        val messageObj = json["message"]?.jsonObject
+        val id = messageObj?.get("id")?.jsonPrimitive?.contentOrNull
+        return UiAssistantMessage(
+            id = id,
+            content = contentBlocks
         )
     }
 
-    private fun buildResultMessage(json: JsonObject, provider: RpcProvider, metadata: RpcMessageMetadata): RpcMessage? {
+    private fun buildResultMessage(json: JsonObject): UiStreamEvent? {
         val summary = json["summary"]?.jsonPrimitive?.contentOrNull ?: return null
-        return RpcResultMessage(
-            subtype = "summary",
-            result = summary,
-            isError = false,
-            numTurns = 0,
-            provider = provider,
-            metadata = metadata.copy(isDisplayable = true)
-        )
+        // summary 消息暂时不转换，历史加载不需要显示
+        return null
     }
 
-    private fun buildStatusMessage(json: JsonObject, provider: RpcProvider, metadata: RpcMessageMetadata): RpcMessage? {
-        val subtype = json["type"]?.jsonPrimitive?.contentOrNull ?: "status"
-        return RpcStatusSystemMessage(
-            subtype = subtype,
-            status = json["status"]?.jsonPrimitive?.contentOrNull,
-            sessionId = json["sessionId"]?.jsonPrimitive?.contentOrNull ?: "",
-            provider = provider,
-            metadata = metadata.copy(isDisplayable = false)
-        )
-    }
-
-    private fun buildUnknownSnapshot(json: JsonObject, provider: RpcProvider, metadata: RpcMessageMetadata): RpcMessage {
-        val data = parser.encodeToString(JsonObject.serializer(), json)
-        val content = RpcMessageContent(content = listOf(RpcUnknownBlock(type = json["type"]?.jsonPrimitive?.contentOrNull ?: "unknown", data = data)))
-        return RpcAssistantMessage(message = content, provider = provider, metadata = metadata.copy(isDisplayable = false))
-    }
-
-    private fun extractContentBlocks(json: JsonObject): List<RpcContentBlock>? {
+    private fun extractContentBlocks(json: JsonObject): List<UnifiedContentBlock>? {
         val messageObj = json["message"]?.jsonObject ?: return null
         val contentElement = messageObj["content"] ?: return null
 
         return when (contentElement) {
             is kotlinx.serialization.json.JsonPrimitive -> if (contentElement.isString) {
-                listOf(RpcTextBlock(contentElement.content))
+                listOf(TextContent(contentElement.content))
             } else emptyList()
-            is JsonArray -> contentElement.mapNotNull { item -> parseContentBlock(item) }.takeIf { it.isNotEmpty() }
+            is JsonArray -> {
+                // 即使部分 block 解析失败，也保留成功解析的 blocks
+                val parsed = contentElement.mapNotNull { item -> parseContentBlock(item) }
+                if (parsed.isEmpty()) {
+                    // 如果所有 blocks 都解析失败，记录警告但仍返回空列表而不是 null
+                    log.warn("[History] 所有 content blocks 解析失败，返回空列表: ${contentElement.toString().take(100)}")
+                }
+                parsed
+            }
             else -> emptyList()
         }
     }
 
-    private fun parseContentBlock(item: JsonElement): RpcContentBlock? {
+    private fun parseContentBlock(item: JsonElement): UnifiedContentBlock? {
         if (item !is JsonObject) return null
         return when (item["type"]?.jsonPrimitive?.contentOrNull) {
-            "text" -> item["text"]?.jsonPrimitive?.contentOrNull?.let { RpcTextBlock(it) }
-            "thinking" -> item["thinking"]?.jsonPrimitive?.contentOrNull?.let { RpcThinkingBlock(it, null) }
+            "text" -> item["text"]?.jsonPrimitive?.contentOrNull?.let { TextContent(it) }
+
+            "thinking" -> item["thinking"]?.jsonPrimitive?.contentOrNull?.let {
+                ThinkingContent(it, signature = null)
+            }
+
             "tool_use" -> {
                 val id = item["id"]?.jsonPrimitive?.contentOrNull ?: ""
                 val name = item["name"]?.jsonPrimitive?.contentOrNull ?: ""
-                val toolType = item["type"]?.jsonPrimitive?.contentOrNull ?: ""
-                val inputJson = item["input"]?.let { parser.encodeToJsonElement(it) }
-                RpcToolUseBlock(
+                val inputJson = item["input"]  // 保持原始 JsonElement
+                ToolUseContent(
                     id = id,
-                    toolName = name,
-                    toolType = toolType,
+                    name = name,
                     input = inputJson,
-                    status = RpcContentStatus.IN_PROGRESS
+                    status = ContentStatus.IN_PROGRESS
                 )
             }
+
             "tool_result" -> {
                 val toolUseId = item["tool_use_id"]?.jsonPrimitive?.contentOrNull ?: ""
                 val isError = item["is_error"]?.jsonPrimitive?.booleanOrNull ?: false
-                val contentJson = item["content"]?.let { parser.encodeToJsonElement(it) }
-                RpcToolResultBlock(
+                val contentJson = item["content"]
+                ToolResultContent(
                     toolUseId = toolUseId,
                     content = contentJson,
                     isError = isError
                 )
             }
-            else -> RpcUnknownBlock(
-                type = item["type"]?.jsonPrimitive?.contentOrNull ?: "unknown",
-                data = item.toString()
-            )
+
+            else -> null  // 忽略未知类型
         }
     }
 }

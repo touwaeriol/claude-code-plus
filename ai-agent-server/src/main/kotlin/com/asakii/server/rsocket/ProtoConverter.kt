@@ -18,6 +18,8 @@ import com.asakii.rpc.api.RpcErrorMessage as RpcErrorMessageApi
 import com.asakii.rpc.api.RpcFileChange as RpcFileChangeApi
 import com.asakii.rpc.api.RpcFileChangeBlock
 import com.asakii.rpc.api.RpcHistory as RpcHistoryApi
+import com.asakii.rpc.api.RpcHistoryMetadata as RpcHistoryMetadataApi
+import com.asakii.rpc.api.RpcHistoryResult as RpcHistoryResultApi
 import com.asakii.rpc.api.RpcHistorySession as RpcHistorySessionApi
 import com.asakii.rpc.api.RpcHistorySessionsResult as RpcHistorySessionsResultApi
 import com.asakii.rpc.api.RpcImageBlock
@@ -235,6 +237,19 @@ object ProtoConverter {
         projectPath = this@toProto.projectPath
     }
 
+    fun RpcHistoryMetadataApi.toProto(): com.asakii.rpc.proto.HistoryMetadata = com.asakii.rpc.proto.historyMetadata {
+        totalLines = this@toProto.totalLines
+        sessionId = this@toProto.sessionId
+        projectPath = this@toProto.projectPath
+    }
+
+    fun RpcHistoryResultApi.toProto(): com.asakii.rpc.proto.HistoryResult = com.asakii.rpc.proto.historyResult {
+        messages.addAll(this@toProto.messages.map { it.toProto() })
+        offset = this@toProto.offset
+        count = this@toProto.count
+        availableCount = this@toProto.availableCount
+    }
+
     // ==================== RpcMessage -> Proto ====================
 
     fun RpcMessageApi.toProto(): RpcMessage = rpcMessage {
@@ -267,6 +282,7 @@ object ProtoConverter {
 
     private fun RpcAssistantMessage.toProtoAssistantMessage(): AssistantMessage = assistantMessage {
         message = this@toProtoAssistantMessage.message.toProto()
+        this@toProtoAssistantMessage.id?.let { id = it }
     }
 
     private fun RpcResultMessageApi.toProtoResultMessage(): ResultMessage = resultMessage {

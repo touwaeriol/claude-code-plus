@@ -68,21 +68,34 @@ interface AiAgentRpcService {
     /**
      * 获取项目的历史会话列表
      * @param maxResults 最大结果数（默认 50）
+     * @param offset     起始偏移（默认 0）
      * @return 历史会话列表
      */
-    suspend fun getHistorySessions(maxResults: Int = 50): RpcHistorySessionsResult
+    suspend fun getHistorySessions(maxResults: Int = 50, offset: Int = 0): RpcHistorySessionsResult
 
     /**
-     * 流式加载指定会话历史（从本地存储 jsonl）
+     * 加载指定会话历史（从本地存储 jsonl）
      * @param sessionId 会话 ID（可空则使用当前 sessionId）
      * @param projectPath 项目路径（空则使用 ideTools.getProjectPath）
      * @param offset 跳过前 offset 条消息
      * @param limit 限制最多返回条数（<=0 表示全部）
+     * @return 历史加载结果（包含消息列表和分页信息）
      */
     fun loadHistory(
         sessionId: String? = null,
         projectPath: String? = null,
         offset: Int = 0,
         limit: Int = 0
-    ): Flow<RpcMessage>
+    ): RpcHistoryResult
+
+    /**
+     * 获取历史会话文件的元数据（总行数等）
+     * @param sessionId 会话 ID（可空则使用当前 sessionId）
+     * @param projectPath 项目路径（空则使用 ideTools.getProjectPath）
+     * @return 历史文件元数据
+     */
+    suspend fun getHistoryMetadata(
+        sessionId: String? = null,
+        projectPath: String? = null
+    ): RpcHistoryMetadata
 }

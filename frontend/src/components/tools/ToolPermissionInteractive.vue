@@ -171,9 +171,10 @@ function formatSuggestion(suggestion: PermissionUpdate): string {
       }
       return t('permission.suggestion.removeRulesFrom', { dest })
 
-    case 'setMode':
+    case 'setMode': {
       const mode = t(`permission.mode.${suggestion.mode || 'default'}`)
       return t('permission.suggestion.switchTo', { mode })
+    }
 
     case 'addDirectories':
       if (suggestion.directories?.length) {

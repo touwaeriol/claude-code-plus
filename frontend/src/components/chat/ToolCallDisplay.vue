@@ -94,43 +94,17 @@
       :tool-call="toolCall"
     />
 
-    <!-- MCP 工具（通用组件） -->
+    <!-- MCP/未知/未识别的工具统一使用紧凑卡片 -->
     <GenericMcpToolDisplay
-      v-else-if="toolCall.toolType === OTHER_TOOL_TYPE.MCP"
+      v-else
       :tool-call="toolCall"
     />
-
-    <!-- 未知工具（兜底） -->
-    <div v-else class="generic-tool">
-      <div class="tool-header">
-        <span class="tool-icon">🛠</span>
-        <span class="tool-name">{{ toolCall.toolName }}</span>
-        <span class="tool-type-badge">{{ toolCall.toolType }}</span>
-        <span
-          class="tool-status"
-          :class="`status-${toolCall.status.toLowerCase()}`"
-        >
-          {{ statusText }}
-        </span>
-      </div>
-
-      <div v-if="toolCall.input" class="tool-section">
-        <div class="section-title">Input</div>
-        <pre>{{ formatJson(toolCall.input) }}</pre>
-      </div>
-
-      <div v-if="toolCall.result" class="tool-section">
-        <pre>{{ formatResult(toolCall.result) }}</pre>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { ToolCall } from '@/types/display'
-import { ToolCallStatus } from '@/types/display'
-import { CLAUDE_TOOL_TYPE, OTHER_TOOL_TYPE } from '@/constants/toolTypes'
+import { CLAUDE_TOOL_TYPE } from '@/constants/toolTypes'
 
 // 文件操作工具
 import ReadToolDisplay from '@/components/tools/ReadToolDisplay.vue'
@@ -171,131 +145,12 @@ interface Props {
   toolCall: ToolCall
 }
 
-const props = defineProps<Props>()
+defineProps<Props>()
 
-const statusText = computed(() => {
-  switch (props.toolCall.status) {
-    case ToolCallStatus.RUNNING:
-      return 'Running...'
-    case ToolCallStatus.SUCCESS:
-      return 'Success'
-    case ToolCallStatus.FAILED:
-      return 'Failed'
-    default:
-      return 'Unknown'
-  }
-})
-
-function formatResult(result: any): string {
-  if (!result) return ''
-  // 使用后端格式：直接读取 content
-  if (typeof result.content === 'string') {
-    return result.content
-  }
-  if (Array.isArray(result.content)) {
-    return (result.content as any[])
-      .filter((item: any) => item.type === 'text')
-      .map((item: any) => item.text)
-      .join('\n')
-  }
-  if (typeof result === 'string') return result
-  return JSON.stringify(result, null, 2)
-}
-
-function formatJson(value: any): string {
-  if (typeof value === 'string') {
-    return value
-  }
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value ?? '')
-  }
-}
 </script>
 
 <style scoped>
 .tool-call-display {
   margin: 2px 0;
-}
-
-.generic-tool {
-  padding: 8px 12px;
-  background: var(--tool-bg, #f8f9fa);
-  border: 1px solid var(--tool-border, #e9ecef);
-  border-radius: 6px;
-}
-
-.tool-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  font-size: 13px;
-}
-
-.tool-icon {
-  font-size: 16px;
-}
-
-.tool-name {
-  font-weight: 600;
-  color: var(--text-primary, #333);
-}
-
-.tool-type-badge {
-  padding: 2px 6px;
-  background: var(--badge-bg, #e9ecef);
-  border-radius: 4px;
-  font-size: 11px;
-  color: var(--text-secondary, #666);
-}
-
-.tool-status {
-  margin-left: auto;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.tool-status.status-running {
-  background: #fff3cd;
-  color: #856404;
-}
-
-.tool-status.status-success {
-  background: #d4edda;
-  color: #155724;
-}
-
-.tool-status.status-failed {
-  background: #f8d7da;
-  color: #721c24;
-}
-
-.tool-section {
-  margin-top: 8px;
-}
-
-.section-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary, #666);
-  margin-bottom: 4px;
-}
-
-.tool-section pre {
-  margin: 0;
-  padding: 8px;
-  background: var(--code-bg, #fff);
-  border: 1px solid var(--code-border, #e0e0e0);
-  border-radius: 4px;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: 'Consolas', 'Monaco', monospace;
-  max-height: 200px;
-  overflow: auto;
 }
 </style>

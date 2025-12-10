@@ -2,6 +2,7 @@ package com.asakii.server.rsocket
 
 import com.asakii.rpc.api.AiAgentRpcService
 import com.asakii.rpc.api.IdeTools
+import com.asakii.rpc.api.RpcHistoryMetadata
 import com.asakii.rpc.api.RpcMessage as RpcMessageApi
 import com.asakii.rpc.proto.*
 import com.asakii.server.rpc.AiAgentRpcServiceImpl
@@ -55,7 +56,7 @@ import kotlinx.serialization.decodeFromString
  * - agent.setPermissionMode: Request-Response
  * - agent.getHistory: Request-Response
  * - agent.getHistorySessions: Request-Response
- * - agent.loadHistory: Request-Stream
+ * - agent.loadHistory: Request-Response
  *
  * 反向调用路由（服务端 -> 客户端）：
  * - client.call: Request-Response (通用调用)
@@ -107,6 +108,8 @@ class RSocketHandler(
                     "agent.setPermissionMode" -> handleSetPermissionMode(dataBytes, rpcService)
                     "agent.getHistory" -> handleGetHistory(rpcService)
                     "agent.getHistorySessions" -> handleGetHistorySessions(dataBytes, rpcService)
+                    "agent.getHistoryMetadata" -> handleGetHistoryMetadata(dataBytes, rpcService)
+                    "agent.loadHistory" -> handleLoadHistory(dataBytes, rpcService)
                     else -> throw IllegalArgumentException("Unknown route: $route")
                 }
 
@@ -126,7 +129,6 @@ class RSocketHandler(
                 when (route) {
                     "agent.query" -> handleQuery(dataBytes, rpcService)
                     "agent.queryWithContent" -> handleQueryWithContent(dataBytes, rpcService)
-                    "agent.loadHistory" -> handleLoadHistory(dataBytes, rpcService)
                     else -> throw IllegalArgumentException("Unknown route: $route")
                 }
             }
@@ -213,14 +215,28 @@ class RSocketHandler(
     }
 
     private suspend fun handleGetHistorySessions(dataBytes: ByteArray, rpcService: AiAgentRpcService): Payload {
-        val maxResults = if (dataBytes.isNotEmpty()) {
-            GetHistorySessionsRequest.parseFrom(dataBytes).maxResults
+        val (maxResults, offset) = if (dataBytes.isNotEmpty()) {
+            GetHistorySessionsRequest.parseFrom(dataBytes).let { it.maxResults to it.offset }
         } else {
-            50
+            50 to 0
         }
-        wsLog.info("📥 [RSocket] getHistorySessions request: maxResults=$maxResults")
-        val result = rpcService.getHistorySessions(maxResults)
+        wsLog.info("📥 [RSocket] getHistorySessions request: offset=$offset, maxResults=$maxResults")
+        val result = rpcService.getHistorySessions(maxResults, offset)
         wsLog.info("📤 [RSocket] getHistorySessions result: sessions=${result.sessions.size}")
+        return buildPayload { data(result.toProto().toByteArray()) }
+    }
+
+    private suspend fun handleGetHistoryMetadata(dataBytes: ByteArray, rpcService: AiAgentRpcService): Payload {
+        val req = if (dataBytes.isNotEmpty()) {
+            GetHistoryMetadataRequest.parseFrom(dataBytes)
+        } else {
+            GetHistoryMetadataRequest.getDefaultInstance()
+        }
+        wsLog.info("📥 [RSocket] getHistoryMetadata request: sessionId=${req.sessionId ?: "(null)"} projectPath=${req.projectPath ?: "(default)"}")
+        val result = rpcService.getHistoryMetadata(req.sessionId, req.projectPath)
+        wsLog.info("📤 [RSocket] getHistoryMetadata result: totalLines=${result.totalLines}")
+
+        // 使用 Protobuf 序列化返回
         return buildPayload { data(result.toProto().toByteArray()) }
     }
 
@@ -255,26 +271,24 @@ class RSocketHandler(
             }
     }
 
-    private fun handleLoadHistory(dataBytes: ByteArray, rpcService: AiAgentRpcService): Flow<Payload> {
+    private fun handleLoadHistory(dataBytes: ByteArray, rpcService: AiAgentRpcService): Payload {
         val req = if (dataBytes.isNotEmpty()) {
-            json.decodeFromString<LoadHistoryRequest>(dataBytes.decodeToString())
+            com.asakii.rpc.proto.LoadHistoryRequest.parseFrom(dataBytes)
         } else {
-            LoadHistoryRequest()
+            com.asakii.rpc.proto.LoadHistoryRequest.getDefaultInstance()
         }
 
-        wsLog.info("📩 [RSocket] loadHistory request: sessionId=${req.sessionId ?: "(null)"} projectPath=${req.projectPath ?: "(default)"} offset=${req.offset} limit=${req.limit}")
-        streamMessageCounter = 0
+        wsLog.info("📥 [RSocket] loadHistory request: sessionId=${req.sessionId ?: "(null)"} projectPath=${req.projectPath ?: "(default)"} offset=${req.offset} limit=${req.limit}")
 
-        return rpcService.loadHistory(
-            sessionId = req.sessionId,
-            projectPath = req.projectPath,
+        val result = rpcService.loadHistory(
+            sessionId = req.sessionId.takeIf { it.isNotBlank() },
+            projectPath = req.projectPath.takeIf { it.isNotBlank() },
             offset = req.offset,
             limit = req.limit
-        ).mapToPayloadWithLogging("loadHistory")
-            .catch { e ->
-                wsLog.error("❌ [RSocket] loadHistory 错误: ${e.message}")
-                throw e
-            }
+        )
+
+        wsLog.info("📤 [RSocket] loadHistory result: messages=${result.messages.size}, offset=${result.offset}, count=${result.count}, availableCount=${result.availableCount}")
+        return buildPayload { data(result.toProto().toByteArray()) }
     }
 
     // ==================== Helper Methods ====================

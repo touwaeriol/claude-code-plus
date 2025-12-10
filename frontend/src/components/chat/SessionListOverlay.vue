@@ -40,6 +40,7 @@
 
             <div
               v-else
+              ref="sessionListRef"
               class="session-list"
             >
               <!-- 激活会话分组 -->
@@ -107,6 +108,10 @@
                   </div>
                 </button>
               </div>
+              <div class="session-list-footer">
+                <span v-if="loadingMore">{{ $t('common.loading') }}</span>
+                <span v-else-if="!hasMore">{{ $t('common.noMore') }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -116,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { watch, onBeforeUnmount, computed } from 'vue'
+import { watch, onBeforeUnmount, computed, ref, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -135,16 +140,21 @@ interface Props {
   sessions: SessionListItem[]
   currentSessionId?: string | null
   loading?: boolean
+  loadingMore?: boolean
+  hasMore?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
+  loadingMore: false,
+  hasMore: true,
   currentSessionId: null
 })
 
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'select-session', sessionId: string): void
+  (e: 'load-more'): void
 }>()
 
 // 激活的会话（已连接）
@@ -188,13 +198,28 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
+const sessionListRef = ref<HTMLElement | null>(null)
+function handleScroll() {
+  if (!props.hasMore || props.loading || props.loadingMore) return
+  const el = sessionListRef.value
+  if (!el) return
+  const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+  if (distanceToBottom < 160) {
+    emit('load-more')
+  }
+}
+
 watch(
   () => props.visible,
   visible => {
     if (visible) {
       window.addEventListener('keydown', handleKeydown)
+      nextTick(() => {
+        sessionListRef.value?.addEventListener('scroll', handleScroll, { passive: true })
+      })
     } else {
       window.removeEventListener('keydown', handleKeydown)
+      sessionListRef.value?.removeEventListener('scroll', handleScroll)
     }
   },
   { immediate: true }
@@ -202,6 +227,7 @@ watch(
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
+  sessionListRef.value?.removeEventListener('scroll', handleScroll)
 })
 </script>
 
@@ -291,6 +317,9 @@ onBeforeUnmount(() => {
   padding: 12px 0 12px 12px;
   overflow: hidden;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* 允许子元素正确滚动 */
 }
 
 .state-block {
@@ -321,8 +350,16 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 16px;
   padding-right: 12px;
-  max-height: calc(100% - 12px);
+  flex: 1;
+  min-height: 0; /* 保证 flex 子元素滚动 */
   overflow-y: auto;
+}
+
+.session-list-footer {
+  padding: 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
 }
 
 .session-group {
@@ -430,5 +467,3 @@ onBeforeUnmount(() => {
   }
 }
 </style>
-
-

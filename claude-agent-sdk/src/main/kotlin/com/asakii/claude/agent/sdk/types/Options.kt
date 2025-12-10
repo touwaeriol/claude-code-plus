@@ -133,6 +133,9 @@ data class ClaudeAgentOptions(
     val env: Map<String, String> = emptyMap(),
     val user: String? = null,
 
+    // CLI path - NEW: Specify custom Claude CLI binary path
+    val cliPath: Path? = null,
+
     // Hook configurations
     val hooks: Map<HookEvent, List<HookMatcher>>? = null,
 
