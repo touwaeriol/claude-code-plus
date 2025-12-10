@@ -192,6 +192,14 @@ fun main() = runBlocking {
                         println("  Content: ${contentStr.take(200)}...")
                     }
                 }
+
+                is CompactBoundaryMessage -> {
+                    println("\n[CompactBoundaryMessage]")
+                }
+
+                is StatusSystemMessage -> {
+                    println("\n[StatusSystemMessage]")
+                }
             }
         }
 

@@ -22,6 +22,7 @@ import { MODEL_CAPABILITIES, BaseModel } from '@/constants/models'
 import type { RpcPermissionMode } from '@/types/rpc'
 import { ConnectionStatus } from '@/types/display'
 import { loggers } from '@/utils/logger'
+import { HISTORY_PAGE_SIZE } from '@/constants/messageWindow'
 
 const log = loggers.session
 
@@ -32,7 +33,7 @@ export type { SessionTabInstance } from '@/composables/useSessionTab'
 /**
  * 默认会话设置
  */
-const DEFAULT_SESSION_SETTINGS = {
+  const DEFAULT_SESSION_SETTINGS = {
   modelId: MODEL_CAPABILITIES[BaseModel.OPUS_45].modelId,
   thinkingEnabled: MODEL_CAPABILITIES[BaseModel.OPUS_45].defaultThinkingEnabled,
   permissionMode: 'default' as RpcPermissionMode,
@@ -111,6 +112,27 @@ export const useSessionStore = defineStore('session', () => {
    */
   const currentIsGenerating = computed(() =>
     currentTab.value?.isGenerating.value ?? false
+  )
+
+  /**
+   * 当前历史分页加载中
+   */
+  const currentIsLoadingHistory = computed(() =>
+    currentTab.value?.historyState.loading ?? false
+  )
+
+  /**
+   * 历史是否还有更多
+   */
+  const currentHasMoreHistory = computed(() =>
+    currentTab.value?.historyState.hasMore ?? false
+  )
+
+  /**
+   * 当前历史状态
+   */
+  const currentHistoryState = computed(() =>
+    currentTab.value?.historyState ?? null
   )
 
   /**
@@ -229,7 +251,7 @@ export const useSessionStore = defineStore('session', () => {
    * @param externalSessionId 后端会话 ID
    * @param name 会话名称
    */
-  const HISTORY_TAIL_LIMIT = 200
+  const HISTORY_TAIL_LIMIT = HISTORY_PAGE_SIZE
 
   async function resumeSession(
     externalSessionId: string,
@@ -565,6 +587,14 @@ export const useSessionStore = defineStore('session', () => {
     currentTab.value?.clearQueue()
   }
 
+  /**
+   * 顶部滚动加载更多历史
+   */
+  async function loadMoreHistory(): Promise<void> {
+    if (!currentTab.value) return
+    await currentTab.value.loadMoreHistory()
+  }
+
   // ========== 导出 ==========
 
   return {
@@ -581,6 +611,9 @@ export const useSessionStore = defineStore('session', () => {
     // 当前 Tab 状态
     currentConnectionStatus,
     currentIsGenerating,
+    currentIsLoadingHistory,
+    currentHasMoreHistory,
+    currentHistoryState,
     currentDisplayItems,
     currentMessages,
     currentSessionSettings,
@@ -626,6 +659,9 @@ export const useSessionStore = defineStore('session', () => {
     messageQueue,
     editQueueMessage,
     removeFromQueue,
-    clearQueue
+    clearQueue,
+
+    // 历史分页
+    loadMoreHistory
   }
 })

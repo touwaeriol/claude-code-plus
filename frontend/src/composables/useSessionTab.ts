@@ -16,7 +16,7 @@
 import { ref, reactive, computed } from 'vue'
 import { aiAgentService } from '@/services/aiAgentService'
 import type { ConnectOptions } from '@/services/aiAgentService'
-import type { ContentBlock } from '@/types/message'
+import type { ContentBlock, Message } from '@/types/message'
 import { ConnectionStatus } from '@/types/display'
 import type { RpcCapabilities, RpcPermissionMode, RpcMessage, RpcStreamEvent, RpcResultMessage } from '@/types/rpc'
 import {
@@ -35,6 +35,7 @@ import { useSessionPermissions, type SessionPermissionsInstance } from './useSes
 import { useSessionMessages, type SessionMessagesInstance } from './useSessionMessages'
 import { loggers } from '@/utils/logger'
 import type { PendingPermissionRequest, PendingUserQuestion, PermissionResponse } from '@/types/permission'
+import { HISTORY_PAGE_SIZE } from '@/constants/messageWindow'
 
 const log = loggers.session
 
@@ -193,6 +194,60 @@ export function useSessionTab(initialOrder: number = 0) {
    */
   const pendingCompactMetadata = ref<RpcCompactMetadata | null>(null)
 
+  // ========== 历史加载状态 ==========
+  const historyState = reactive({
+    loading: false,
+    total: 0,
+    loadedStart: 0,
+    loadedCount: 0,
+    hasMore: false,
+    lastOffset: 0,
+    lastLimit: HISTORY_PAGE_SIZE
+  })
+
+  function resetHistoryState(): void {
+    historyState.loading = false
+    historyState.total = 0
+    historyState.loadedStart = 0
+    historyState.loadedCount = 0
+    historyState.hasMore = false
+    historyState.lastOffset = 0
+    historyState.lastLimit = HISTORY_PAGE_SIZE
+  }
+
+  function syncHistoryLoadedCount(totalHint: number | null = null): void {
+    // 初始化 loadedStart
+    if (historyState.loadedCount === 0 && messagesHandler.messageCount.value > 0) {
+      historyState.loadedStart = 0
+    }
+    historyState.loadedCount = messagesHandler.messageCount.value
+    const rangeEnd = historyState.loadedStart + historyState.loadedCount
+    if (totalHint !== null) {
+      historyState.total = totalHint
+    } else {
+      historyState.total = Math.max(historyState.total, rangeEnd)
+    }
+    historyState.hasMore = historyState.loadedStart > 0 && historyState.total > 0
+  }
+
+  function markHistoryRange(offset: number, count: number, totalHint: number | null = null): void {
+    const effectiveCount = count ?? 0
+    if (historyState.loadedCount === 0 && messagesHandler.messageCount.value === 0) {
+      historyState.loadedStart = offset
+    } else {
+      historyState.loadedStart = historyState.loadedCount === 0
+        ? offset
+        : Math.min(historyState.loadedStart, offset)
+    }
+    historyState.lastOffset = offset
+    historyState.lastLimit = count || historyState.lastLimit
+    // 加载完成后同步总数/区间
+    syncHistoryLoadedCount(totalHint)
+    if (effectiveCount === 0 && historyState.total === 0 && totalHint !== null) {
+      historyState.total = totalHint
+    }
+  }
+
   // ========== 计算属性 ==========
 
   /**
@@ -347,35 +402,11 @@ export function useSessionTab(initialOrder: number = 0) {
         break
     }
 
-    // 更新活跃时间
-    touch()
-  }
-
-  /**
-   * 处理历史回放消息（不受 isGenerating 门控）
-   */
-  function handleHistoryMessage(rawMessage: RpcMessage): void {
-    const normalized = normalizeRpcMessage(rawMessage)
-    if (!normalized) return
-
-    switch (normalized.kind) {
-      case 'status_system':
-        handleStatusSystemMessage(normalized.data)
-        break
-      case 'compact_boundary':
-        handleCompactBoundaryMessage(normalized.data)
-        break
-      case 'stream_event':
-        messagesHandler.handleStreamEvent(normalized.data)
-        break
-      case 'result':
-        messagesHandler.handleResultMessage(normalized.data)
-        break
-      case 'message':
-        messagesHandler.handleNormalMessage(normalized.data)
-        break
+    if (normalized.kind === 'message') {
+      syncHistoryLoadedCount()
     }
 
+    // 更新活跃时间
     touch()
   }
 
@@ -564,26 +595,112 @@ export function useSessionTab(initialOrder: number = 0) {
   /**
    * 流式加载历史记录（用于回放）
    */
-  async function loadHistory(params: { sessionId?: string; projectPath?: string; offset?: number; limit?: number }): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      try {
-        let cancel: (() => void) | null = null
-        cancel = aiAgentService.streamHistory(params, {
-          onMessage: handleHistoryMessage,
-          onError: (error) => {
-            log.error(`[Tab ${tabId}] 历史加载失败:`, error)
-            cancel?.()
-            reject(error)
-          },
-          onComplete: () => {
-            log.info(`[Tab ${tabId}] 历史加载完成`)
-            resolve()
-          }
-        }, sessionId.value ?? undefined)
-      } catch (error) {
-        reject(error)
+  async function loadHistory(
+    params: { sessionId?: string; projectPath?: string; offset?: number; limit?: number },
+    options?: { mode?: 'append' | 'prepend'; __skipProbe?: boolean }
+  ): Promise<void> {
+    if (historyState.loading) return
+
+    // 首次加载且未指定 offset/limit 时，先探测总数，优先拉取尾部一页
+    if (
+      !options?.__skipProbe &&
+      historyState.loadedCount === 0 &&
+      params.offset === undefined &&
+      params.limit === undefined &&
+      options?.mode === undefined
+    ) {
+      const total = await probeHistoryTotal(params)
+      const tailOffset = total !== null && total > HISTORY_PAGE_SIZE
+        ? total - HISTORY_PAGE_SIZE
+        : 0
+      return loadHistory(
+        { ...params, offset: tailOffset, limit: HISTORY_PAGE_SIZE },
+        { mode: 'append', __skipProbe: true }
+      )
+    }
+
+    const offset = params.offset ?? historyState.lastOffset ?? 0
+    const limit = params.limit ?? HISTORY_PAGE_SIZE
+    const insertMode = options?.mode ?? 'append'
+
+    historyState.loading = true
+
+    try {
+      // 调用非流式 API，一次性获取结果
+      const result = await aiAgentService.loadHistory(
+        { ...params, offset, limit },
+        sessionId.value ?? undefined
+      )
+
+      log.info(`[Tab ${tabId}] 📜 历史加载完成: offset=${offset}, count=${result.count}, availableCount=${result.availableCount}, mode=${insertMode}`)
+
+      // 将 RpcMessage 转换为 Message
+      const buffer: Message[] = []
+      for (const rawMsg of result.messages) {
+        const normalized = normalizeRpcMessage(rawMsg)
+        if (normalized && normalized.kind === 'message') {
+          buffer.push(normalized.data)
+        } else if (normalized && normalized.kind === 'stream_event') {
+          // 流式事件也需要处理（如有必要）
+          // 暂时跳过
+        }
       }
-    })
+
+      if (buffer.length > 0) {
+        log.info(`[Tab ${tabId}] 📜 准备插入 ${buffer.length} 条消息到 UI (${insertMode})`)
+
+        if (insertMode === 'prepend') {
+          messagesHandler.prependMessagesBatch(buffer)
+        } else {
+          messagesHandler.appendMessagesBatch(buffer)
+        }
+
+        log.info(`[Tab ${tabId}] 📜 ✅ ${buffer.length} 条消息已成功添加到 displayItems`)
+      } else {
+        log.warn(`[Tab ${tabId}] 📜 ⚠️ 缓冲区为空，没有消息可加载`)
+      }
+
+      // 更新历史状态
+      markHistoryRange(offset, buffer.length, result.availableCount)
+    } catch (error) {
+      log.error(`[Tab ${tabId}] 历史加载失败:`, error)
+      throw error
+    } finally {
+      historyState.loading = false
+    }
+  }
+
+  /**
+   * 探测历史总数（通过 getHistoryMetadata API）
+   */
+  async function probeHistoryTotal(params: { sessionId?: string; projectPath?: string }): Promise<number | null> {
+    try {
+      const metadata = await aiAgentService.getHistoryMetadata(params, sessionId.value ?? undefined)
+      return metadata.totalLines
+    } catch (error) {
+      log.warn(`[Tab ${tabId}] 获取历史元数据失败:`, error)
+      return null
+    }
+  }
+
+  /**
+   * 顶部分页加载更早的历史
+   */
+  async function loadMoreHistory(): Promise<void> {
+    if (historyState.loading) return
+    if (!historyState.hasMore) return
+
+    const nextOffset = Math.max(0, historyState.loadedStart - HISTORY_PAGE_SIZE)
+    const nextLimit = historyState.loadedStart - nextOffset || HISTORY_PAGE_SIZE
+
+    await loadHistory(
+      {
+        sessionId: sessionId.value ?? undefined,
+        offset: nextOffset,
+        limit: nextLimit
+      },
+      { mode: 'prepend' }
+    )
   }
 
   /**
@@ -1040,6 +1157,7 @@ export function useSessionTab(initialOrder: number = 0) {
     stats.reset()
     permissions.reset()
     messagesHandler.reset()
+    resetHistoryState()
 
     // 重置 UI 状态
     uiState.inputText = ''
@@ -1130,6 +1248,9 @@ export function useSessionTab(initialOrder: number = 0) {
     pendingSettings,
     lastAppliedSettings,
 
+    // 历史状态
+    historyState,
+
     // 辅助方法
     touch,
     rename,
@@ -1138,7 +1259,8 @@ export function useSessionTab(initialOrder: number = 0) {
     reset,
 
     // 历史回放
-    loadHistory
+    loadHistory,
+    loadMoreHistory
   }
 }
 

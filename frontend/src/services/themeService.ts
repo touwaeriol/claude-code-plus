@@ -241,12 +241,13 @@ export class ThemeService {
       }
     }
     window.addEventListener('idea:jcefReady', this.bridgeReadyHandler)
+    type ThemeEventListener = (e: Event) => void
     window.addEventListener('idea:themeChange', ((e: CustomEvent<ThemeColors>) => {
       if (e.detail) {
         this.hasIdeBridge = true
         this.setTheme(e.detail)
       }
-    }) as EventListener)
+    }) as ThemeEventListener)
   }
 
   private clearBridgeReadyHandler() {

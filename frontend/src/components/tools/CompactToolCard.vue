@@ -28,13 +28,33 @@
       </span>
 
       <!-- 行数变化徽章 -->
-      <span
-        v-if="displayInfo?.lineChanges"
-        class="line-changes-badge"
-        :class="getBadgeClass(displayInfo.lineChanges)"
-      >
-        {{ displayInfo.lineChanges }}
-      </span>
+      <template v-if="displayInfo">
+        <span
+          v-if="displayInfo.removedLines"
+          class="line-changes-badge badge-remove"
+        >
+          -{{ displayInfo.removedLines }}
+        </span>
+        <span
+          v-if="displayInfo.addedLines"
+          class="line-changes-badge badge-add"
+        >
+          +{{ displayInfo.addedLines }}
+        </span>
+        <span
+          v-if="displayInfo.readLines && !displayInfo.addedLines && !displayInfo.removedLines"
+          class="line-changes-badge badge-read"
+        >
+          读 {{ displayInfo.readLines }} 行
+        </span>
+        <span
+          v-else-if="displayInfo.lineChanges"
+          class="line-changes-badge"
+          :class="getBadgeClass(displayInfo.lineChanges)"
+        >
+          {{ displayInfo.lineChanges }}
+        </span>
+      </template>
 
       <!-- 状态指示器 -->
       <span class="status-indicator" :class="`status-${displayInfo?.status || 'pending'}`">
@@ -226,6 +246,11 @@ function getBadgeClass(changes: string): string {
   color: #dc3545;
 }
 
+.badge-read {
+  background: rgba(0, 102, 214, 0.08);
+  color: #0366d6;
+}
+
 .status-indicator {
   margin-left: auto;
   flex-shrink: 0;
@@ -360,4 +385,3 @@ function getBadgeClass(changes: string): string {
   line-height: 1.5;
 }
 </style>
-

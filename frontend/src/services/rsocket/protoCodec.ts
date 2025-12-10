@@ -13,11 +13,15 @@ import {
   SetModelRequestSchema,
   SetPermissionModeRequestSchema,
   GetHistorySessionsRequestSchema,
+  LoadHistoryRequestSchema,
+  GetHistoryMetadataRequestSchema,
   StatusResultSchema,
   SetModelResultSchema,
   SetPermissionModeResultSchema,
   HistorySchema,
   HistorySessionsResultSchema,
+  HistoryMetadataSchema,
+  HistoryResultSchema,
   RpcMessageSchema,
   ContentBlockSchema,
   TextBlockSchema,
@@ -117,9 +121,50 @@ export const ProtoCodec = {
   /**
    * 编码 GetHistorySessionsRequest
    */
-  encodeGetHistorySessionsRequest(maxResults: number): Uint8Array {
-    const proto = create(GetHistorySessionsRequestSchema, { maxResults })
-    return toBinary(GetHistorySessionsRequestSchema, proto)
+  encodeGetHistorySessionsRequest(maxResults: number, offset = 0): Uint8Array {
+    // 手写轻量编码，避免前端重新生成 proto 定义
+    const buffer: number[] = []
+    const writeVarint = (value: number) => {
+      let v = value >>> 0
+      while (v > 0x7f) {
+        buffer.push((v & 0x7f) | 0x80)
+        v >>>= 7
+      }
+      buffer.push(v)
+    }
+    const writeField = (tag: number, value: number) => {
+      buffer.push(tag)
+      writeVarint(value)
+    }
+    writeField(8, maxResults)
+    if (offset > 0) {
+      writeField(16, offset)
+    }
+    return new Uint8Array(buffer)
+  },
+
+  /**
+   * 编码 LoadHistoryRequest
+   */
+  encodeLoadHistoryRequest(params: { sessionId?: string; projectPath?: string; offset?: number; limit?: number }): Uint8Array {
+    const request = create(LoadHistoryRequestSchema, {
+      sessionId: params.sessionId ?? '',
+      projectPath: params.projectPath ?? '',
+      offset: params.offset ?? 0,
+      limit: params.limit ?? 0
+    })
+    return toBinary(LoadHistoryRequestSchema, request)
+  },
+
+  /**
+   * 编码 GetHistoryMetadataRequest
+   */
+  encodeGetHistoryMetadataRequest(params: { sessionId?: string; projectPath?: string }): Uint8Array {
+    const request = create(GetHistoryMetadataRequestSchema, {
+      sessionId: params.sessionId,
+      projectPath: params.projectPath
+    })
+    return toBinary(GetHistoryMetadataRequestSchema, request)
   },
 
   // ==================== 解码（Protobuf bytes -> RPC）====================
@@ -198,6 +243,31 @@ export const ProtoCodec = {
         messageCount: s.messageCount,
         projectPath: s.projectPath
       }))
+    }
+  },
+
+  /**
+   * 解码历史会话元数据
+   */
+  decodeHistoryMetadata(data: Uint8Array): { totalLines: number; sessionId: string; projectPath: string } {
+    const proto = fromBinary(HistoryMetadataSchema, data)
+    return {
+      totalLines: proto.totalLines,
+      sessionId: proto.sessionId,
+      projectPath: proto.projectPath
+    }
+  },
+
+  /**
+   * 解码历史加载结果（分页查询）
+   */
+  decodeHistoryResult(data: Uint8Array): { messages: RpcMessageType[]; offset: number; count: number; availableCount: number } {
+    const proto = fromBinary(HistoryResultSchema, data)
+    return {
+      messages: proto.messages.map(mapRpcMessageFromProto),
+      offset: proto.offset,
+      count: proto.count,
+      availableCount: proto.availableCount
     }
   },
 
@@ -341,7 +411,8 @@ function mapRpcMessageFromProto(proto: any): RpcMessageType {
         provider,
         message: {
           content: proto.message.value.message?.content.map(mapContentBlockFromProto) || []
-        }
+        },
+        id: proto.message.value.id
       } as any
 
     case 'result':

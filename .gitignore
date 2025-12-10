@@ -152,6 +152,9 @@ logs/
 # Claude SDK specific
 .claude/
 
+# Bundled Claude CLI binaries (auto-downloaded during build, all platforms)
+claude-agent-sdk/src/main/resources/bundled/
+
 # Test files
 test-*.js
 test-*.sh

@@ -1,6 +1,12 @@
 ## 历史会话加载与窗口化改造 - 进度记录
 
-更新时间：<!--AUTO_UPDATE-->
+更新时间：2025-12-10 09:10
+
+### 背景与现状
+- 历史会话加载目前直接累加到前端数组，长会话会导致内存和渲染压力；滚动条高度随加载增长，无总数占位。
+- 后端已支持 offset/limit 流式读取 JSONL，并返回 replaySeq/historyTotal/isDisplayable 等元数据，不改文件格式。
+- 前端使用 `vue-virtual-scroller` 的 `DynamicScroller`，高度取决于 `items.length`，未知总数时滚动条随加载增长。
+- 目标是保留全量历史在存储层，但渲染只用尾部窗口，头/尾批量插入，未读提示/回底按钮正常工作。
 
 ### 目标
 - 使用双端队列（denque）封装存储，支持头/尾批量插入，尾部窗口导出，减少大数组拷贝。
@@ -9,9 +15,9 @@
 - 继续使用 vue-virtual-scroller，滚动条随已加载数量增长（未知总数时）。
 
 ### 待办与状态
-- [ ] 引入 `denque@latest` 依赖并封装存储类（pushBatch/prependBatch/getWindow，去重可选）。
-- [ ] 将 sessionStore/useSessionTab 消息管线切到新存储，displayItems 改为窗口导出。
-- [ ] 历史分页：顶部触发 offset/limit 加载，前插到存储后刷新窗口。
+- [x] 引入 `denque@latest` 依赖并封装存储类（pushBatch/prependBatch/getWindow，去重可选）。
+- [x] 将 sessionStore/useSessionTab 消息管线切到新存储，displayItems 改为窗口导出。（进展：useSessionMessages 批量插入统一走窗口存储，loadHistory 使用批量前/尾插）
+- [ ] 历史分页：顶部触发 offset/limit 加载，前插到存储后刷新窗口。（进展：首次加载探测 total，自动拉取尾页；MessageList 首屏默认滚动到底部）
 - [ ] 新消息：尾插；在底部则自动滚底，否则未读计数增加。
 - [ ] UI：回到底部按钮在非生成时也可用；有新消息时显示计数。
 - [ ] 性能验证：窗口长度稳定，滚动流畅；必要的单测/手测通过。
@@ -19,6 +25,7 @@
 ### 备注
 - 窗口策略：核心 600 + 上下各 200 预留，总约 1000 条；可配置。单块大小由 denque 内部循环缓冲处理。
 - 已有后端 offset/limit + replaySeq/total 元数据保持不变。
+- 当前运行：后端 `StandaloneServerKt` 启动在 8765（PID 24260），前端 `dev` 在 5174（PID 9544）。
 
 ### 自主测试步骤
 - 后端：在 IDE 启动 `com.asakii.server.StandaloneServerKt`（端口 8765），观察 `.log/server.log`、`.log/sdk.log`、`.log/ws.log`。
@@ -47,7 +54,7 @@
 
 ### 具体落地点（前端）
 - 依赖：在 `frontend/package.json` 增加 `denque`（最新稳定版）。
-- 存储封装：新增 `frontend/src/utils/ChunkedMessageStore.ts`（命名可调整），API：`pushBatch`, `prependBatch`, `getWindow(windowSize)`，去重可选。
+- 存储封装：新增 `frontend/src/utils/ChunkedMessageStore.ts`（命名可调整），API：`pushBatch`, `prependBatch`, `getWindow(windowSize)`，去重可选。（已完成）
 - 集成：
   - `useSessionTab.ts`：历史回放/新消息接收写入存储，再通过 `getWindow` 导出窗口（默认 800，可配置常量）。
   - `sessionStore.ts`：resume/历史分页触发 loadHistory 后前插到存储再刷新窗口；新消息尾插。

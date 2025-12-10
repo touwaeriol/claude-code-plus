@@ -28,6 +28,8 @@ import { ideService, ideaBridge } from '@/services/ideaBridge'
 import { loggers } from '@/utils/logger'
 import type { SessionToolsInstance } from './useSessionTools'
 import type { SessionStatsInstance } from './useSessionStats'
+import { ChunkedMessageStore } from '@/utils/ChunkedMessageStore'
+import { MESSAGE_WINDOW_TOTAL } from '@/constants/messageWindow'
 
 const log = loggers.session
 
@@ -51,10 +53,39 @@ export function useSessionMessages(
    */
   const messages = reactive<Message[]>([])
 
-  /**
+  /** 
    * 显示项列表（用于 UI 展示）
    */
   const displayItems = reactive<DisplayItem[]>([])
+  const DISPLAY_WINDOW_TOTAL = MESSAGE_WINDOW_TOTAL
+  const STORE_RETENTION = Number.MAX_SAFE_INTEGER // 保留全量，窗口单独控制
+  const displayStore = new ChunkedMessageStore<DisplayItem>({
+    windowSize: STORE_RETENTION,
+    dedupe: true,
+    keySelector: (item) => (item as any)?.id
+  })
+
+  function refreshDisplayWindow(): void {
+    const windowItems = displayStore.getWindow(DISPLAY_WINDOW_TOTAL)
+    displayItems.splice(0, displayItems.length, ...windowItems)
+  }
+
+  function pushDisplayItems(items: DisplayItem[]): void {
+    if (items.length === 0) return
+    displayStore.pushBatch(items)
+    refreshDisplayWindow()
+  }
+
+  function prependDisplayItems(items: DisplayItem[]): void {
+    if (items.length === 0) return
+    displayStore.prependBatch(items)
+    refreshDisplayWindow()
+  }
+
+  function clearDisplayItems(): void {
+    displayStore.clear()
+    displayItems.splice(0, displayItems.length)
+  }
 
   /**
    * 消息队列（待发送消息）
@@ -274,25 +305,25 @@ export function useSessionMessages(
       if (contentBlock.type === 'text') {
         const displayId = `${message.id}-text-${blockIndex}`
         if (!displayItems.find(item => item.id === displayId)) {
-          displayItems.push({
+          pushDisplayItems([{
             displayType: 'assistantText' as const,
             id: displayId,
             content: '', // 初始为空
             timestamp: message.timestamp,
             isLastInMessage: false,
             stats: undefined
-          } as AssistantText)
+          } as AssistantText])
         }
       } else if (contentBlock.type === 'thinking') {
         const displayId = `${message.id}-thinking-${blockIndex}`
         if (!displayItems.find(item => item.id === displayId)) {
-          displayItems.push({
+          pushDisplayItems([{
             displayType: 'thinking' as const,
             id: displayId,
             content: '', // 初始为空
             signature: contentBlock.signature,
             timestamp: message.timestamp
-          } as ThinkingContent)
+          } as ThinkingContent])
         }
       } else if (contentBlock.type === 'tool_use' && contentBlock.id) {
         // 注册工具调用
@@ -304,7 +335,7 @@ export function useSessionMessages(
         )
         if (!existingToolItem) {
           const toolCall = createToolCall(contentBlock as unknown as ToolUseContent, tools.pendingToolCalls)
-          displayItems.push(toolCall)
+          pushDisplayItems([toolCall])
         }
       }
     }
@@ -392,7 +423,7 @@ export function useSessionMessages(
 
         if (!existingDisplayItem) {
           const toolCall = createToolCall(toolUseBlock as unknown as ToolUseContent, tools.pendingToolCalls)
-          displayItems.push(toolCall)
+          pushDisplayItems([toolCall])
         } else {
           existingDisplayItem.input = toolUseBlock.input as Record<string, unknown> || existingDisplayItem.input
         }
@@ -462,12 +493,12 @@ export function useSessionMessages(
       stats.cancelRequestTracking()
 
       // 渲染打断提示
-      displayItems.push({
+      pushDisplayItems([{
         id: `interrupt-${Date.now()}`,
         displayType: 'interruptedHint',
         timestamp: Date.now(),
         message: i18n.global.t('system.interrupted')
-      } as any)
+      } as any])
       log.info('[useSessionMessages] 渲染打断提示')
     }
 
@@ -476,12 +507,12 @@ export function useSessionMessages(
       lastError.value = resultData.result
       log.warn(`[useSessionMessages] 后端返回错误: ${resultData.result}`)
 
-      displayItems.push({
+      pushDisplayItems([{
         id: `error-${Date.now()}`,
         displayType: 'errorResult',
         timestamp: Date.now(),
         message: resultData.result
-      } as any)
+      } as any])
     }
 
     // 标记生成完成（非打断场景）
@@ -634,7 +665,7 @@ export function useSessionMessages(
     // 添加到 UI（用户立即可见）
     messages.push(userMessage)
     const newDisplayItems = convertMessageToDisplayItems(userMessage, tools.pendingToolCalls)
-    displayItems.push(...newDisplayItems)
+    pushDisplayItems(newDisplayItems)
     log.debug('[useSessionMessages] 用户消息已添加:', userMessage.id)
 
     return { userMessage, mergedContent }
@@ -808,7 +839,7 @@ export function useSessionMessages(
     }
     messages.push(newMessage)
     const items = convertMessageToDisplayItems(newMessage, tools.pendingToolCalls)
-    displayItems.push(...items)
+    pushDisplayItems(items)
     return newMessage
   }
 
@@ -848,13 +879,13 @@ export function useSessionMessages(
   ): void {
     const expectedId = `${message.id}-text-${blockIndex}`
 
-    for (let i = 0; i < displayItems.length; i++) {
-      const item = displayItems[i]
-      if (item.id === expectedId && item.displayType === 'assistantText') {
-        const updated = { ...item, content: newText } as AssistantText
-        displayItems[i] = updated
-        return
-      }
+    const existing = displayItems.find(
+      item => item.id === expectedId && item.displayType === 'assistantText'
+    ) as AssistantText | undefined
+
+    if (existing) {
+      existing.content = newText
+      return
     }
 
     // 如果找不到，创建新的
@@ -867,7 +898,7 @@ export function useSessionMessages(
       stats: undefined,
       isStreaming: true
     }
-    displayItems.push(newTextItem)
+    pushDisplayItems([newTextItem])
   }
 
   /**
@@ -880,13 +911,13 @@ export function useSessionMessages(
   ): void {
     const expectedId = `${message.id}-thinking-${blockIndex}`
 
-    for (let i = 0; i < displayItems.length; i++) {
-      const item = displayItems[i]
-      if (item.id === expectedId && item.displayType === 'thinking') {
-        const updated = { ...item, content: newThinking } as ThinkingContent
-        displayItems[i] = updated
-        return
-      }
+    const existing = displayItems.find(
+      item => item.id === expectedId && item.displayType === 'thinking'
+    ) as ThinkingContent | undefined
+
+    if (existing) {
+      existing.content = newThinking
+      return
     }
 
     // 如果找不到，创建新的
@@ -896,7 +927,7 @@ export function useSessionMessages(
       content: newThinking,
       timestamp: message.timestamp
     }
-    displayItems.push(newThinkingItem)
+    pushDisplayItems([newThinkingItem])
   }
 
   /**
@@ -1023,10 +1054,7 @@ export function useSessionMessages(
    * 添加消息
    */
   function addMessage(message: Message): void {
-    messages.push(message)
-    const newDisplayItems = convertMessageToDisplayItems(message, tools.pendingToolCalls)
-    displayItems.push(...newDisplayItems)
-    log.debug(`[useSessionMessages] 添加消息, 共 ${messages.length} 条`)
+    appendMessagesBatch([message])
   }
 
   /**
@@ -1040,8 +1068,7 @@ export function useSessionMessages(
    * 触发 displayItems 更新
    */
   function triggerDisplayItemsUpdate(): void {
-    // 由于 displayItems 是 reactive 数组，需要触发变化检测
-    displayItems.splice(displayItems.length)
+    refreshDisplayWindow()
   }
 
   /**
@@ -1089,8 +1116,32 @@ export function useSessionMessages(
    */
   function clearMessages(): void {
     messages.splice(0, messages.length)
-    displayItems.splice(0, displayItems.length)
+    clearDisplayItems()
     log.debug('[useSessionMessages] 消息已清空')
+  }
+
+  /**
+   * 批量前插消息（用于历史回放）
+   */
+  function prependMessagesBatch(msgs: Message[]): void {
+    if (msgs.length === 0) return
+    // 先按顺序生成 displayItems，再前插
+    const displayBatch = msgs.flatMap(m => convertMessageToDisplayItems(m, tools.pendingToolCalls))
+    prependDisplayItems(displayBatch)
+    // 再更新 messages 状态（保持原顺序）
+    for (let i = msgs.length - 1; i >= 0; i -= 1) {
+      messages.unshift(msgs[i])
+    }
+  }
+
+  /**
+   * 批量尾插消息
+   */
+  function appendMessagesBatch(msgs: Message[]): void {
+    if (msgs.length === 0) return
+    const displayBatch = msgs.flatMap(m => convertMessageToDisplayItems(m, tools.pendingToolCalls))
+    pushDisplayItems(displayBatch)
+    messages.push(...msgs)
   }
 
   /**
@@ -1109,12 +1160,12 @@ export function useSessionMessages(
    * 添加错误消息到 UI
    */
   function addErrorMessage(message: string): void {
-    displayItems.push({
+    pushDisplayItems([{
       id: `error-${Date.now()}`,
       displayType: 'errorResult',
       timestamp: Date.now(),
       message
-    } as any)
+    } as any])
     triggerDisplayItemsUpdate()
   }
 
@@ -1137,6 +1188,8 @@ export function useSessionMessages(
     // 设置方法
     setSendMessageFn,
     setBeforeProcessQueueFn,
+    appendMessagesBatch,
+    prependMessagesBatch,
 
     // 消息处理方法
     handleStreamEvent,
@@ -1160,7 +1213,12 @@ export function useSessionMessages(
     // 管理方法
     clearMessages,
     reset,
-    addErrorMessage
+    addErrorMessage,
+
+    // 窗口化辅助（供历史前插调用）
+    pushDisplayItems,
+    prependDisplayItems,
+    refreshDisplayWindow
   }
 }
 

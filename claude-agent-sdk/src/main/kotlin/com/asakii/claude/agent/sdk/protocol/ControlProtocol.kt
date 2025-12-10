@@ -187,13 +187,21 @@ class ControlProtocol(
                 put("hooks", JsonObject(hooksConfig))
             }
         }
+
+        // 计算超时时间（仿照 Python SDK，支持环境变量）
+        // CLAUDE_CODE_STREAM_CLOSE_TIMEOUT 单位是毫秒，转换为秒
+        val timeoutMs = System.getenv("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT")?.toLongOrNull() ?: 60000L
+        val initializeTimeout = maxOf(timeoutMs, 60000L) // 至少 60 秒
         
-        val response = sendControlRequestInternal(initRequest)
+        logger.info("⏱️ [ControlProtocol] Initialize 超时设置: ${initializeTimeout}ms")
+
+        // 发送初始化请求（与 Python SDK 一致，如果超时会抛出异常）
+        val response = sendControlRequestInternal(initRequest, initializeTimeout)
         initialized = true
-        
+
         val result = response.response?.jsonObject?.toMap() ?: mapOf("status" to "initialized")
         _initializationResult.complete(result)
-        
+
         println("✅ 控制协议初始化完成")
         return result
     }
@@ -580,8 +588,13 @@ class ControlProtocol(
     
     /**
      * Internal method for sending control request with JsonObject.
+     * @param request The control request to send
+     * @param timeoutMs Timeout in milliseconds (default: 60000ms = 60 seconds, matching Python SDK)
      */
-    private suspend fun sendControlRequestInternal(request: JsonObject): ControlResponse {
+    private suspend fun sendControlRequestInternal(
+        request: JsonObject, 
+        timeoutMs: Long = 60000L
+    ): ControlResponse {
         val requestId = "req_${requestCounter.incrementAndGet()}_${System.currentTimeMillis()}"
         val deferred = CompletableDeferred<ControlResponse>()
         pendingRequests[requestId] = deferred
@@ -594,12 +607,12 @@ class ControlProtocol(
         
         try {
             transport.write(requestMessage.toString())
-            return withTimeout(30000) { // 30 seconds timeout
+            return withTimeout(timeoutMs) {
                 deferred.await()
             }
         } catch (e: TimeoutCancellationException) {
             pendingRequests.remove(requestId)
-            throw ControlProtocolException("Control request timeout for $requestId")
+            throw ControlProtocolException("Control request timeout for $requestId after ${timeoutMs}ms")
         } catch (e: Exception) {
             pendingRequests.remove(requestId)
             throw ControlProtocolException("Failed to send control request", e)

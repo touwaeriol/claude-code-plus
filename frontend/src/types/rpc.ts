@@ -25,24 +25,9 @@ export type RpcPermissionMode = 'default' | 'bypassPermissions' | 'acceptEdits' 
 /** 消息类型枚举 */
 export type RpcMessageType = 'user' | 'assistant' | 'result' | 'stream_event' | 'error' | 'status_system' | 'compact_boundary'
 
-/** 消息元数据（历史回放、排序用） */
-export interface RpcMessageMetadata {
-  /** 历史文件中的顺序序号（从 0 开始） */
-  replaySeq?: number
-  /** 历史加载的起始 offset */
-  historyStart?: number
-  /** 历史总条数 */
-  historyTotal?: number
-  /** 是否需要在 UI 中展示 */
-  isDisplayable?: boolean
-  /** 历史消息唯一标识（用于去重/排序） */
-  messageId?: string
-}
-
 /** 基础消息接口 */
 interface RpcMessageBase {
   provider: RpcProvider
-  metadata?: RpcMessageMetadata
 }
 
 /** 用户消息 - 对应 Claude SDK UserMessage */
@@ -62,6 +47,7 @@ export interface RpcUserMessage extends RpcMessageBase {
 export interface RpcAssistantMessage extends RpcMessageBase {
   type: 'assistant'
   message: RpcMessageContent
+  id?: string
 }
 
 /** 结果消息 - 对应 Claude SDK ResultMessage */
@@ -535,6 +521,18 @@ export interface RpcSetModelResult {
 export interface RpcSetPermissionModeResult {
   mode: RpcPermissionMode
   success: boolean
+}
+
+/** 历史加载结果（分页查询） */
+export interface RpcHistoryResult {
+  /** 消息列表 */
+  messages: RpcMessage[]
+  /** 当前请求的起始位置 */
+  offset: number
+  /** 实际返回的消息数 */
+  count: number
+  /** 当前文件中可用的总消息数（快照） */
+  availableCount: number
 }
 
 // ============================================================================

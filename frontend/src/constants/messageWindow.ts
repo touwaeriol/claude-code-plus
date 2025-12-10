@@ -1,0 +1,6 @@
+// 消息窗口配置
+export const MESSAGE_WINDOW_CORE = 600
+export const MESSAGE_WINDOW_RESERVE = 200 // 上下各预留
+export const MESSAGE_WINDOW_TOTAL = MESSAGE_WINDOW_CORE + MESSAGE_WINDOW_RESERVE * 2
+// 历史分页默认尾部/每页大小，使用窗口总长
+export const HISTORY_PAGE_SIZE = MESSAGE_WINDOW_TOTAL
