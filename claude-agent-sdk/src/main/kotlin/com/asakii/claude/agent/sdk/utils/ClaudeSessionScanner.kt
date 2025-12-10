@@ -3,6 +3,7 @@ package com.asakii.claude.agent.sdk.utils
 import kotlinx.serialization.json.*
 import java.io.File
 import mu.KotlinLogging
+import kotlinx.coroutines.*
 
 /**
  * 历史会话元数据
@@ -56,11 +57,20 @@ object ClaudeSessionScanner {
             file.extension == "jsonl"
         } ?: emptyArray()
 
-        logger.info("[SessionScanner] 找到 ${jsonlFiles.size} 个会话文件")
+        logger.info("[SessionScanner] 找到 ${jsonlFiles.size} 个会话文件，开始并行扫描...")
 
-        val sorted = jsonlFiles
-            .mapNotNull { file -> extractSessionMetadata(file, projectPath) }
-            .sortedByDescending { it.timestamp }
+        // 并行扫描所有文件（充分利用多核 CPU）
+        val metadata = runBlocking {
+            jsonlFiles.map { file ->
+                async(Dispatchers.IO) {
+                    extractSessionMetadata(file, projectPath)
+                }
+            }.awaitAll().filterNotNull()
+        }
+
+        logger.info("[SessionScanner] 并行扫描完成，有效会话数: ${metadata.size}")
+
+        val sorted = metadata.sortedByDescending { it.timestamp }
         return sorted
             .drop(offset.coerceAtLeast(0))
             .take(maxResults)
