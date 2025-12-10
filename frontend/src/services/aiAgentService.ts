@@ -34,6 +34,13 @@ export interface ConnectResult {
   capabilities: RpcCapabilities | null
 }
 
+/** 历史文件元数据 */
+export interface HistoryMetadata {
+  totalLines: number    // JSONL 文件总行数
+  sessionId: string     // 会话 ID
+  projectPath: string   // 项目路径
+}
+
 export class AiAgentService {
   // 会话管理 - sessionId -> RSocketSession
   private sessions = new Map<string, RSocketSession>()
@@ -336,16 +343,27 @@ export class AiAgentService {
   }
 
   /**
-   * 获取项目的历史会话列表
+   * 获取项目的历史会话列表（通过 HTTP，避免 RSocket 连接）
    *
    * @param maxResults 最大结果数（默认 50）
    * @returns 历史会话列表
    */
-  async getHistorySessions(maxResults: number = 50): Promise<HistorySessionMetadata[]> {
+  async getHistorySessions(maxResults: number = 50, offset: number = 0): Promise<HistorySessionMetadata[]> {
     try {
-      const session = await this.ensureHistoryTransport()
-      console.log(`📋 获取历史会话列表 (maxResults=${maxResults})`)
-      return await session.getHistorySessions(maxResults)
+      console.log(`📋 [HTTP] 获取历史会话列表 (offset=${offset}, maxResults=${maxResults})`)
+
+      // 使用 HTTP 调用（不依赖 RSocket 连接）
+      const { resolveServerHttpUrl } = await import('@/utils/serverUrl')
+      const baseUrl = resolveServerHttpUrl()
+      const url = `${baseUrl}/api/history/sessions?offset=${offset}&maxResults=${maxResults}`
+
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      return result.sessions || []
     } catch (error) {
       console.warn('[aiAgentService] 获取历史会话列表失败:', error)
       return []
@@ -364,6 +382,8 @@ export class AiAgentService {
     },
     transportSessionId?: string
   ): () => void {
+    console.log('📜 [AiAgentService] 开始流式加载历史:', params)
+
     const session = transportSessionId ? this.sessions.get(transportSessionId) : undefined
     if (session) {
       return session.loadHistory(params, handlers)
@@ -377,6 +397,30 @@ export class AiAgentService {
       })
       .catch(err => handlers.onError?.(err as Error))
     return () => cancel?.()
+  }
+
+  /**
+   * 获取历史文件元数据（文件总行数等）
+   *
+   * @param params 查询参数
+   * @param transportSessionId 可选的传输会话 ID
+   * @returns 历史文件元数据
+   */
+  async getHistoryMetadata(
+    params: { sessionId?: string; projectPath?: string },
+    transportSessionId?: string
+  ): Promise<HistoryMetadata> {
+    console.log('📊 [AiAgentService] 获取历史元数据:', params)
+
+    const session = transportSessionId
+      ? this.sessions.get(transportSessionId)
+      : await this.ensureHistoryTransport()
+
+    if (!session) {
+      throw new Error('无可用会话')
+    }
+
+    return await session.getHistoryMetadata(params)
   }
 }
 
