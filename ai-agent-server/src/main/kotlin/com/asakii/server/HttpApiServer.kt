@@ -27,14 +27,14 @@ import io.ktor.server.sse.*
 import io.ktor.server.websocket.*
 // import org.jetbrains.kotlinx.rpc.krpc.ktor.server.Krpc // Temporarily removed
 import com.asakii.rpc.proto.GetHistoryMetadataRequest
-import com.asakii.rpc.proto.HistoryMetadata
 import com.asakii.rpc.proto.LoadHistoryRequest
-import com.asakii.rpc.proto.HistoryResult
 import com.asakii.server.history.HistoryJsonlLoader
 import com.asakii.server.rpc.AiAgentRpcServiceImpl
+import com.asakii.server.rsocket.ProtoConverter.toProto
 import io.rsocket.kotlin.ktor.server.RSocketSupport
 import io.rsocket.kotlin.ktor.server.rSocket
 import io.ktor.utils.io.*
+import io.ktor.utils.io.core.*
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
@@ -429,13 +429,13 @@ class HttpApiServer(
                     // 历史元数据（protobuf，HTTP 直读 JSONL）
                     post("/history/metadata.pb") {
                         try {
-                            val body = call.receiveStream().readBytes()
+                            val body = call.receiveChannel().readRemaining().readBytes()
                             val req = GetHistoryMetadataRequest.parseFrom(body)
                             val sessionId = req.sessionId
                             val projectPath = req.projectPath
 
                             val rpcService = AiAgentRpcServiceImpl(ideTools, null)
-                            val meta = rpcService.getHistoryMetadata(sessionId, projectPath)
+                            val meta = rpcService.getHistoryMetadata(sessionId, projectPath).toProto()
 
                             call.respondBytes(
                                 bytes = meta.toByteArray(),
@@ -453,7 +453,7 @@ class HttpApiServer(
                     // 历史内容加载（protobuf，HTTP 直读 JSONL）
                     post("/history/load.pb") {
                         try {
-                            val body = call.receiveStream().readBytes()
+                            val body = call.receiveChannel().readRemaining().readBytes()
                             val req = LoadHistoryRequest.parseFrom(body)
                             val rpcService = AiAgentRpcServiceImpl(ideTools, null)
                             val result = rpcService.loadHistory(
@@ -461,7 +461,7 @@ class HttpApiServer(
                                 req.projectPath,
                                 req.offset,
                                 req.limit
-                            )
+                            ).toProto()
 
                             call.respondBytes(
                                 bytes = result.toByteArray(),

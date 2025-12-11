@@ -239,18 +239,6 @@ class RSocketHandler(
             }
     }
 
-        wsLog.info("📥 [RSocket] loadHistory request: sessionId=${req.sessionId ?: "(null)"} projectPath=${req.projectPath ?: "(default)"} offset=${req.offset} limit=${req.limit}")
-
-        val result = rpcService.loadHistory(
-            sessionId = req.sessionId.takeIf { it.isNotBlank() },
-            projectPath = req.projectPath.takeIf { it.isNotBlank() },
-            offset = req.offset,
-            limit = req.limit
-        )
-
-        wsLog.info("📤 [RSocket] loadHistory result: messages=${result.messages.size}, offset=${result.offset}, count=${result.count}, availableCount=${result.availableCount}")
-        return buildPayload { data(result.toProto().toByteArray()) }
-    }
 
     // ==================== Helper Methods ====================
 
