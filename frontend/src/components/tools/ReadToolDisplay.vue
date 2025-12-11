@@ -9,7 +9,7 @@
     <template #details>
       <div
         v-if="hasContent"
-        class="tool-result"
+        class="content-preview"
       >
         <button
           class="copy-btn"
@@ -21,7 +21,9 @@
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
           </svg>
         </button>
-        <CodeSnippet :code="resultText" :language="language" :start-line="startLineNumber" />
+        <div class="code-wrapper">
+          <CodeSnippet :code="resultText" :language="language" :start-line="startLineNumber" />
+        </div>
       </div>
     </template>
   </CompactToolCard>
@@ -120,8 +122,11 @@ const resultText = computed(() => {
 
   const { content: cleanContent } = extractLineNumbersAndContent(rawText)
 
+  // 移除 <system-reminder> 标签及其内容（SDK 注入的系统提示）
+  const withoutReminder = cleanContent.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '')
+
   // 去除尾部空行
-  const lines = cleanContent.split('\n')
+  const lines = withoutReminder.split('\n')
   while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
     lines.pop()
   }
@@ -141,6 +146,13 @@ const cardDisplayInfo = computed(() => ({
 
 // 提取起始行号
 const startLineNumber = computed(() => {
+  // 优先使用 input 中的 offset 参数（如果存在）
+  const offset = props.toolCall.input.offset
+  if (typeof offset === 'number' && offset > 0) {
+    // SDK 使用 offset 时，返回的行号从 1 开始，需要加上 offset
+    return offset
+  }
+
   const result = props.toolCall.result
   // 使用后端格式：检查 is_error
   if (!result || result.is_error) return 1
@@ -253,23 +265,16 @@ async function copyContent() {
   color: var(--theme-foreground, #24292e);
 }
 
-.clickable {
-  cursor: pointer;
-  color: var(--theme-link, #0366d6);
-  text-decoration: underline;
-}
-
-.clickable:hover {
-  color: var(--theme-link, #0256c0);
-  opacity: 0.8;
-}
-
-.tool-result {
+.content-preview {
   position: relative;
-  background: var(--theme-background, #ffffff);
-  border: 1px solid var(--theme-border, #e1e4e8);
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
   border-radius: 4px;
+  /* 外部容器不滚动，滚动由内部 CodeSnippet 处理 */
   overflow: hidden;
+  width: 100%;
+  margin: 12px 0;
+  padding: 0;
 }
 
 .copy-btn {
@@ -294,30 +299,17 @@ async function copyContent() {
   background: var(--theme-hover-background, #e1e4e8);
 }
 
-.result-content {
+.code-wrapper {
   margin: 0;
   padding: 12px;
-  font-size: 12px;
-  font-family: 'Consolas', 'Monaco', monospace;
-  color: var(--theme-code-foreground, #24292e);
-  overflow-x: auto;
-  max-height: 400px;
-  overflow-y: auto;
+  /* 设置 CodeSnippet 内部滚动高度 */
+  --code-max-height: 450px;
+  overflow: visible;
+  /* 彻底屏蔽外部下划线影响，保留代码自身样式 */
+  text-decoration: none !important;
 }
 
-.expand-btn {
-  width: 100%;
-  padding: 6px;
-  border: none;
-  border-top: 1px solid var(--theme-border, #e1e4e8);
-  background: var(--theme-panel-background, #fafbfc);
-  color: var(--theme-foreground, #586069);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.expand-btn:hover {
-  background: var(--theme-panel-background, #f6f8fa);
-  opacity: 0.9;
+.code-wrapper :deep(*) {
+  text-decoration: none !important;
 }
 </style>

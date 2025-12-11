@@ -1,54 +1,59 @@
 <template>
-  <div class="code-snippet-wrapper">
-    <div class="code-container">
-      <!-- 行号列 -->
-      <div class="line-numbers" aria-hidden="true">
-        <div v-for="(lineNum, index) in lineNumbers" :key="`line-${index}`" class="line-number">
-          {{ lineNum }}
-        </div>
-      </div>
-      <!-- 代码内容 -->
-      <pre class="code-content"><code><div v-for="(line, index) in codeLines" :key="`code-${index}`" class="code-line">{{ line }}</div></code></pre>
+  <div
+    class="code-snippet-wrapper"
+    :class="{ 'with-line-numbers': showLineNumbers }"
+    :style="{ '--start-line': startLine }"
+  >
+    <div class="code-container" ref="codeContainer">
+      <div class="code-content" v-html="highlightedCode"></div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { highlightService } from '@/services/highlightService'
 
 interface Props {
   code: string
   language: string
-  startLine?: number  // 起始行号，默认为 1
+  startLine?: number
+  showLineNumbers?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  startLine: 1
+  startLine: 1,
+  showLineNumbers: true
 })
 
-const codeLines = computed(() => {
-  if (!props.code) return []
+const highlightedCode = ref('')
+const codeContainer = ref<HTMLDivElement>()
 
-  const lines = props.code.split('\n')
-
-  // 去除尾部的空行（包括只有空格的行）
-  while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
-    lines.pop()
+// 高亮代码
+async function highlight() {
+  if (!props.code) {
+    highlightedCode.value = ''
+    return
   }
 
-  // 如果所有行都是空的，返回空数组
-  if (lines.length === 0 || lines.every(line => line.trim() === '')) {
-    return []
+  try {
+    const html = await highlightService.highlight(props.code, props.language)
+    highlightedCode.value = html
+  } catch (error) {
+    console.warn('Failed to highlight code:', error)
+    highlightedCode.value = `<pre><code>${escapeHtml(props.code)}</code></pre>`
   }
+}
 
-  return lines
-})
+function escapeHtml(text: string): string {
+  const div = document.createElement('div')
+  div.textContent = text
+  return div.innerHTML
+}
 
-// 生成行号数组
-const lineNumbers = computed(() => {
-  const start = props.startLine
-  return codeLines.value.map((_, index) => start + index)
-})
+onMounted(highlight)
+
+watch(() => [props.code, props.language], highlight)
 </script>
 
 <style scoped>
@@ -57,53 +62,82 @@ const lineNumbers = computed(() => {
   border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   overflow: hidden;
+  width: 100%;
+  text-decoration: none !important;
 }
 
 .code-container {
-  display: flex;
-  max-height: 400px;
+  width: 100%;
+  max-height: var(--code-max-height, none);
   overflow: auto;
-}
-
-/* 行号列 */
-.line-numbers {
-  flex-shrink: 0;
-  padding: 12px 0;
-  background: var(--theme-panel-background, #f6f8fa);
-  border-right: 1px solid var(--theme-border, #e1e4e8);
-  user-select: none; /* 整个行号列不可选中 */
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-}
-
-.line-number {
-  padding: 0 1em;
-  text-align: right;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: 'Consolas', 'Monaco', 'Menlo', 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--theme-secondary-foreground, #999);
-  min-width: 3em;
 }
 
-/* 代码内容 */
 .code-content {
-  flex: 1;
+  min-width: 0;
+  overflow-x: visible;
+  padding: 8px 12px;
+}
+
+/* Shiki 生成的 pre/code 样式 */
+.code-content :deep(pre) {
   margin: 0;
-  padding: 12px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  padding: 0;
+  background: transparent !important;
+  overflow: visible;
+  width: 100%;
+  min-width: 100%;
+}
+
+.code-content :deep(code) {
+  display: flex;
+  flex-direction: column;
+  font-family: inherit;
   font-size: 12px;
-  overflow-x: auto;
-}
-
-.code-content code {
-  display: block;
-}
-
-.code-line {
   line-height: 1.5;
-  white-space: pre;
+  padding: 0 !important;
+  margin: 0;
+  width: 100%;
+  min-width: 100%;
+  /* CSS Counter：从 --start-line 开始计数 */
+  counter-reset: line-number calc(var(--start-line, 1) - 1);
+}
+
+.code-content :deep(.line) {
+  display: block;
+  min-height: 18px; /* line-height 1.5 * font-size 12px = 18px */
+}
+
+/* 行号样式：使用 CSS Counter 自动生成 */
+.with-line-numbers .code-content :deep(.line)::before {
+  counter-increment: line-number;
+  content: counter(line-number);
+  display: inline-block;
+  width: 3em;
+  margin-right: 12px;
+  padding-right: 8px;
+  text-align: right;
+  color: var(--theme-secondary-foreground, #999);
+  border-right: 1px solid var(--theme-border, #e1e4e8);
+  user-select: none;
+  /* 防止行号影响代码缩进 */
+  margin-left: -3em;
+  padding-left: 0;
+}
+
+/* 有行号时，代码内容需要左边距给行号留空间 */
+.with-line-numbers .code-content :deep(.line) {
+  padding-left: calc(3em + 20px);
+}
+
+/* 去除下划线 */
+.code-content :deep(*) {
+  text-decoration: none !important;
+}
+
+.code-snippet-wrapper :deep(*) {
+  text-decoration: none !important;
 }
 </style>
-
