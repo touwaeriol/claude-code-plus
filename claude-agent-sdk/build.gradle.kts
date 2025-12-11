@@ -242,6 +242,14 @@ tasks.register<JavaExec>("runOfficialMcpSdkTest") {
     standardInput = System.`in`
 }
 
+tasks.register<JavaExec>("runQuickConnectionTest") {
+    group = "verification"
+    description = "快速测试 SDK 连接"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.asakii.claude.agent.sdk.examples.QuickConnectionTestKt")
+    standardInput = System.`in`
+}
+
 // ========== CLI 绑定任务 ==========
 
 // 读取 CLI 版本
@@ -249,19 +257,14 @@ val cliVersionProps = Properties().apply {
     file("cli-version.properties").inputStream().use { load(it) }
 }
 val cliVersion = cliVersionProps.getProperty("cli.version")
+    ?: error("cli.version is missing in cli-version.properties")
 
 // 定义资源目录
 val bundledDir = file("src/main/resources/bundled")
 
-// MD5 校验值 (版本 2.0.64)
-val expectedMd5 = mapOf(
-    "darwin-arm64/claude" to "ff64ec989a57986f59a15ac355b2d4c6",
-    "darwin-x64/claude" to "416d5ae1b5791b6aa797657e94ad74a5",
-    "linux-arm64/claude" to "9339451eaf853511dd0441f5435cf232",
-    "linux-x64/claude" to "abef4f5edcb8145e4dd4ce83a9fcb067",
-    "linux-arm64-musl/claude" to "a2e3537d874f96d4f3039bcc6ff01965",
-    "linux-x64-musl/claude" to "9ee897597c2cbea74d1a47d16442470a",
-    "win32-x64/claude.exe" to "f94b0c266adf75479a849fbafef7ac98"
+// MD5 校验值 (版本 2.0.65)
+val expectedMd5: Map<String, String> = mapOf(
+    // 暂未发布原生二进制校验值，后续发布后补充
 )
 
 // MD5 校验辅助函数
@@ -304,14 +307,21 @@ val downloadCli = tasks.register("downloadCli") {
 
         bundledDirPath.mkdirs()
 
+        // 清理旧版本 cli.js，确保版本切换时自动重新下载
+        bundledDirPath.listFiles { file -> file.name.startsWith("claude-cli-") && file.name != cliJsFile.name }
+            ?.forEach { old ->
+                println("🧹 检测到旧版本 CLI: ${old.name}，已删除以触发重新下载")
+                old.delete()
+            }
+
         println("========================================")
         println("下载 Claude CLI (cli.js) 版本: $cliVersion")
         println("========================================")
 
         try {
             // npm 包 URL（匹配 SDK 版本，而非 CLI 版本）
-            // SDK 版本映射：CLI 2.0.64 对应 SDK 0.1.62
-            val npmPackageVersion = "0.1.62"  // 从 package.json 查询得到
+            // SDK 版本映射：CLI 2.0.65 对应 SDK 0.1.65
+            val npmPackageVersion = "0.1.65"  // 从 package.json 查询得到
             val npmTarballUrl = "https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-$npmPackageVersion.tgz"
 
             println("📦 npm 包版本: $npmPackageVersion")
@@ -453,4 +463,3 @@ tasks.named("sourcesJar") {
 tasks.named("clean") {
     dependsOn(cleanCli)
 }
-
