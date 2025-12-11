@@ -19,6 +19,7 @@ import type {
   RpcSetPermissionModeResult,
   RpcMessage
 } from '@/types/rpc'
+import { resolveServerHttpUrl } from '@/utils/serverUrl'
 
 export type ConnectOptions = SessionConnectOptions
 
@@ -339,7 +340,6 @@ export class AiAgentService {
       console.log(`📋 [HTTP] 获取历史会话列表 (offset=${offset}, maxResults=${maxResults})`)
 
       // 使用 HTTP 调用（不依赖 RSocket 连接）
-      const { resolveServerHttpUrl } = await import('@/utils/serverUrl')
       const baseUrl = resolveServerHttpUrl()
       const url = `${baseUrl}/api/history/sessions?offset=${offset}&maxResults=${maxResults}`
 
@@ -364,7 +364,6 @@ export class AiAgentService {
   ): Promise<{ messages: RpcMessage[]; offset: number; count: number; availableCount: number }> {
     console.log('📜 [AiAgentService] 加载历史 (HTTP protobuf):', params)
 
-    const { resolveServerHttpUrl } = await import('@/utils/serverUrl')
     const baseUrl = resolveServerHttpUrl()
     const url = `${baseUrl}/api/history/load.pb`
 
@@ -403,7 +402,6 @@ export class AiAgentService {
   ): Promise<HistoryMetadata> {
     console.log('📊 [AiAgentService] 获取历史元数据 (HTTP protobuf):', params)
 
-    const { resolveServerHttpUrl } = await import('@/utils/serverUrl')
     const baseUrl = resolveServerHttpUrl()
     const url = `${baseUrl}/api/history/metadata.pb`
 

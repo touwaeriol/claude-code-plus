@@ -78,10 +78,40 @@ export default defineConfig({
         entryFileNames: 'assets/[name].js',
         chunkFileNames: 'assets/[name].js',
         assetFileNames: 'assets/[name].[ext]',
-        manualChunks: {
-          'vue-vendor': ['vue', 'pinia'],
-          'element-plus': ['element-plus'],
-          shiki: ['shiki']
+        manualChunks(id) {
+          // Vue 核心
+          if (id.includes('node_modules/vue') || id.includes('node_modules/pinia') || id.includes('node_modules/@vue')) {
+            return 'vue-vendor'
+          }
+          // Element Plus UI 组件库
+          if (id.includes('node_modules/element-plus') || id.includes('node_modules/@element-plus')) {
+            return 'element-plus'
+          }
+          // Shiki 语法高亮
+          if (id.includes('node_modules/shiki')) {
+            return 'shiki'
+          }
+          // RSocket 通信
+          if (id.includes('node_modules/rsocket') || id.includes('node_modules/@rsocket')) {
+            return 'rsocket'
+          }
+          // Protobuf
+          if (id.includes('node_modules/protobufjs') || id.includes('node_modules/@protobufjs')) {
+            return 'protobuf'
+          }
+          // Markdown 相关
+          if (id.includes('node_modules/markdown-it') || id.includes('node_modules/@mdit')) {
+            return 'markdown'
+          }
+          // Shiki 语言定义（让 Vite 自动按需分包，不合并到 vendor）
+          if (id.includes('node_modules/@shikijs') || id.includes('shiki/dist/langs')) {
+            return // 返回 undefined，让 Vite 自动处理
+          }
+          // 其他小型依赖
+          if (id.includes('node_modules')) {
+            // 不合并，让 Vite 自动处理，避免 vendor 过大
+            return
+          }
         }
       }
     },

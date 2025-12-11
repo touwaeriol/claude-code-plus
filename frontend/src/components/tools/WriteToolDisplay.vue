@@ -15,7 +15,13 @@
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
           </button>
-          <pre class="preview-content code-with-lines"><code><span v-for="(line, index) in previewLines" :key="index" class="code-line">{{ line }}</span></code></pre>
+          <div class="code-wrapper">
+            <CodeSnippet
+              :code="previewText"
+              :language="language"
+              :start-line="startLineNumber"
+            />
+          </div>
         </div>
       </div>
     </template>
@@ -28,6 +34,7 @@ import { useI18n } from '@/composables/useI18n'
 import type { ClaudeWriteToolCall } from '@/types/display'
 import CompactToolCard from './CompactToolCard.vue'
 import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
+import CodeSnippet from './CodeSnippet.vue'
 
 const { t } = useI18n()
 
@@ -56,15 +63,52 @@ const cardDisplayInfo = computed(() => ({
   addedLines: lineCount.value || displayInfo.value.addedLines
 }))
 
+// 计算被跳过的前置空行数量（支持 \n 和 \r\n）
+const skippedLines = computed(() => {
+  // 统计开头连续空行的数量（按 \n 分割）
+  const lines = content.value.split('\n')
+  let count = 0
+  for (const line of lines) {
+    // 空行或只有 \r 的行
+    if (line === '' || line === '\r') {
+      count++
+    } else {
+      break
+    }
+  }
+  return count
+})
+
 const previewText = computed(() => {
-  const text = content.value
+  // 展示时去掉前置空行，避免行号和正文顶端间距过大（支持 \r\n 和 \n）
+  const text = content.value.replace(/^[\r\n]+/, '')
   const maxLength = 500
   if (text.length <= maxLength) return text
   return text.substring(0, maxLength) + '\n\n... (' + t('tools.contentTruncated') + ')'
 })
 
-const previewLines = computed(() => {
-  return previewText.value.split('\n')
+// 行号从跳过的行数 + 1 开始
+const startLineNumber = computed(() => skippedLines.value + 1)
+
+const language = computed(() => {
+  const path = (props.toolCall.input as any).path || (props.toolCall.input as any).file_path || ''
+  const extension = path.split('.').pop()?.toLowerCase() || ''
+  const langMap: Record<string, string> = {
+    'js': 'javascript',
+    'ts': 'typescript',
+    'kt': 'kotlin',
+    'java': 'java',
+    'py': 'python',
+    'sh': 'shell',
+    'bash': 'shell',
+    'md': 'markdown',
+    'json': 'json',
+    'css': 'css',
+    'html': 'html',
+    'xml': 'xml',
+    'txt': 'plaintext'
+  }
+  return langMap[extension] || 'plaintext'
 })
 
 async function copyContent() {
@@ -98,6 +142,7 @@ async function copyContent() {
   border-radius: 4px;
   overflow: hidden;
   margin: 12px 0;
+  padding: 0;
 }
 
 .copy-btn {
@@ -124,39 +169,24 @@ async function copyContent() {
 
 .preview-content {
   margin: 0;
-  padding: 12px 12px 12px 0;
+  padding: 0;
   font-size: 12px;
   font-family: 'Consolas', 'Monaco', monospace;
   max-height: 300px;
   overflow: auto;
 }
 
-/* 带行号的代码块 */
-.code-with-lines {
-  counter-reset: line;
+.code-wrapper {
+  margin: 0;
+  padding: 12px;
+  /* 滚动交给 CodeSnippet 内部处理，避免双滚动条 */
+  max-height: none;
+  overflow: visible;
+  /* 彻底屏蔽外部下划线影响，保留代码自身样式 */
+  text-decoration: none !important;
 }
 
-.code-with-lines code {
-  display: block;
-}
-
-/* 每一行代码 */
-.code-line {
-  display: block;
-  counter-increment: line;
-  white-space: pre;
-}
-
-/* 为每一行添加行号 */
-.code-line::before {
-  content: counter(line);
-  display: inline-block;
-  width: 3em;
-  padding-right: 1em;
-  margin-right: 0.5em;
-  text-align: right;
-  color: var(--theme-secondary-foreground, #999);
-  user-select: none; /* 行号不可选中复制 */
-  border-right: 1px solid #e1e4e8;
+.code-wrapper :deep(*) {
+  text-decoration: none !important;
 }
 </style>

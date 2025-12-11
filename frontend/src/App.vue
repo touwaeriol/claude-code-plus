@@ -1,5 +1,8 @@
 <template>
   <div class="app">
+    <!-- Toast 通知容器 -->
+    <ToastContainer />
+
     <!-- 测试模式：显示 TestDisplayItems -->
     <TestDisplayItems v-if="showTest" />
 
@@ -69,6 +72,7 @@
 import { ref, onMounted } from 'vue'
 import ModernChatView from '@/components/chat/ModernChatView.vue'
 import TestDisplayItems from '@/views/TestDisplayItems.vue'
+import ToastContainer from '@/components/toast/ToastContainer.vue'
 import { ideaBridge } from '@/services/ideaBridge'
 import { themeService } from '@/services/themeService'
 import { useEnvironment } from '@/composables/useEnvironment'

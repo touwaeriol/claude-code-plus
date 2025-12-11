@@ -202,6 +202,8 @@ export default {
     close: '关闭会话',
     sessionId: '会话 ID',
     copyHint: '再次单击或双击复制',
+    copySuccess: '会话 ID 已复制',
+    copyFailed: '复制失败',
     group: {
       today: '今天',
       yesterday: '昨天',
