@@ -179,6 +179,8 @@ const editor = useEditor({
       blockquote: false,
       codeBlock: false,
       horizontalRule: false,
+      // 避免重复注册 Link，改由单独的 Link 扩展提供
+      link: false,
       // 保留基本功能 - 使用 false 禁用或省略以使用默认配置
       // paragraph, text, hardBreak 使用默认配置
     }),

@@ -24,7 +24,8 @@ export default {
     cancelled: '已取消',
     copyFailed: '复制失败',
     copied: '已复制',
-    renderFailed: '渲染失败'
+    renderFailed: '渲染失败',
+    noMore: '没有更多了'
   },
   chat: {
     placeholder: '输入消息...',
@@ -104,9 +105,11 @@ export default {
     connectionStatus: {
       connected: '已连接',
       connecting: '正在连接...',
-      disconnected: '未连接'
+      disconnected: '未连接',
+      generating: '生成中...'
     },
     claudeThinking: 'Claude 正在思考...',
+    loadingHistory: '正在加载历史会话...',
     scrollToBottom: '回到底部'
   },
   tools: {
@@ -196,6 +199,9 @@ export default {
   },
   session: {
     defaultName: '会话 {time}',
+    close: '关闭会话',
+    sessionId: '会话 ID',
+    copyHint: '再次单击或双击复制',
     group: {
       today: '今天',
       yesterday: '昨天',
@@ -218,6 +224,7 @@ export default {
     noActive: '无激活会话',
     historySection: '历史',
     unnamed: '未命名会话',
+    empty: '暂无活动会话',
     messages: '条消息',
     loadHistoryFailed: '加载历史会话失败'
   },

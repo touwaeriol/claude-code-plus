@@ -22,7 +22,6 @@ import type {
   RpcSetPermissionModeResult,
   RpcMessage
 } from '@/types/rpc'
-import type { HistorySessionMetadata } from '@/types/session'
 
 const log = loggers.agent
 
@@ -314,65 +313,6 @@ export class RSocketSession {
     const result = ProtoCodec.decodeHistory(responseData)
     console.log('[RSocket] → agent.getHistory 结果:', JSON.stringify(result, null, 2))
     return result.messages as AgentStreamEvent[]
-  }
-
-  /**
-   * 加载历史消息（从本地存储的 jsonl）
-   * 改为 Request-Response 模式，一次性返回结果
-   */
-  async loadHistory(params: {
-    sessionId?: string
-    projectPath?: string
-    offset?: number
-    limit?: number
-  }): Promise<{ messages: RpcMessage[]; offset: number; count: number; availableCount: number }> {
-    if (!this._isConnected || !this.client) {
-      throw new Error('Session not connected')
-    }
-
-    console.log('[RSocket] 📜 ← agent.loadHistory 发送:', params)
-
-    const payload = ProtoCodec.encodeLoadHistoryRequest(params)
-    const responseData = await this.client.requestResponse('agent.loadHistory', payload)
-    const result = ProtoCodec.decodeHistoryResult(responseData)
-
-    console.log(
-      `[RSocket] 📜 → agent.loadHistory 结果: count=${result.count}, offset=${result.offset}, availableCount=${result.availableCount}`
-    )
-
-    return result
-  }
-
-  /**
-   * 获取项目的历史会话列表
-   */
-  async getHistorySessions(maxResults: number = 50, offset: number = 0): Promise<HistorySessionMetadata[]> {
-    if (!this._isConnected || !this.client) {
-      throw new Error('Session not connected')
-    }
-
-    console.log('[RSocket] ← agent.getHistorySessions 发送:', JSON.stringify({ offset, maxResults }, null, 2))
-    const data = ProtoCodec.encodeGetHistorySessionsRequest(maxResults, offset)
-    const responseData = await this.client.requestResponse('agent.getHistorySessions', data)
-    const result = ProtoCodec.decodeHistorySessionsResult(responseData)
-    console.log('[RSocket] → agent.getHistorySessions 结果:', JSON.stringify(result, null, 2))
-    return result.sessions
-  }
-
-  /**
-   * 获取历史文件元数据（文件总行数等）
-   */
-  async getHistoryMetadata(params: { sessionId?: string; projectPath?: string }): Promise<{ totalLines: number; sessionId: string; projectPath: string }> {
-    if (!this._isConnected || !this.client) {
-      throw new Error('Session not connected')
-    }
-
-    console.log('[RSocket] ← agent.getHistoryMetadata 发送:', JSON.stringify(params, null, 2))
-    const payload = ProtoCodec.encodeGetHistoryMetadataRequest(params)
-    const responseData = await this.client.requestResponse('agent.getHistoryMetadata', payload)
-    const result = ProtoCodec.decodeHistoryMetadata(responseData)
-    console.log('[RSocket] → agent.getHistoryMetadata 结果:', JSON.stringify(result, null, 2))
-    return result
   }
 
   /**

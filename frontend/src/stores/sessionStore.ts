@@ -22,7 +22,7 @@ import { MODEL_CAPABILITIES, BaseModel } from '@/constants/models'
 import type { RpcPermissionMode } from '@/types/rpc'
 import { ConnectionStatus } from '@/types/display'
 import { loggers } from '@/utils/logger'
-import { HISTORY_PAGE_SIZE } from '@/constants/messageWindow'
+import { HISTORY_INITIAL_LOAD, HISTORY_LAZY_LOAD_SIZE } from '@/constants/messageWindow'
 
 const log = loggers.session
 
@@ -207,8 +207,7 @@ export const useSessionStore = defineStore('session', () => {
 
     // 切换到新 Tab
     currentTab.value = tab
-    // 设置连接中状态
-    currentConnectionState.value = ConnectionStatus.CONNECTING
+    currentConnectionState.value = ConnectionStatus.DISCONNECTED
 
     log.info(`[SessionStore] 创建 Tab: ${tab.tabId}`)
 
@@ -222,10 +221,8 @@ export const useSessionStore = defineStore('session', () => {
 
     log.info(`[SessionStore] 新 Tab 继承设置:`, connectOptions)
 
-    // 后台连接
-    await tab.connect(connectOptions)
-
-    // 更新连接状态
+    // 延迟连接：保存初始连接配置，等首次发送时再 connect
+    tab.setInitialConnectOptions(connectOptions)
     currentConnectionState.value = tab.connectionState.status
 
     return tab
@@ -251,7 +248,7 @@ export const useSessionStore = defineStore('session', () => {
    * @param externalSessionId 后端会话 ID
    * @param name 会话名称
    */
-  const HISTORY_TAIL_LIMIT = HISTORY_PAGE_SIZE
+  const HISTORY_TAIL_LIMIT = HISTORY_INITIAL_LOAD
 
   async function resumeSession(
     externalSessionId: string,
@@ -260,6 +257,21 @@ export const useSessionStore = defineStore('session', () => {
     messageCount?: number
   ): Promise<SessionTabInstance | null> {
     if (!externalSessionId) return null
+
+    // 如果只有一个初始占位 Tab 且尚未连接，直接移除以避免多余标签
+    if (tabs.value.length === 1) {
+      const onlyTab = tabs.value[0]
+      const isUnconnectedPlaceholder =
+        onlyTab.sessionId.value === null &&
+        onlyTab.connectionState.status !== ConnectionStatus.CONNECTED &&
+        onlyTab.connectionState.status !== ConnectionStatus.CONNECTING &&
+        onlyTab.messages.length === 0 &&
+        onlyTab.displayItems.length === 0
+      if (isUnconnectedPlaceholder) {
+        tabs.value = []
+        currentTab.value = null
+      }
+    }
 
     // 检查是否已有此会话的 Tab
     const existingTab = tabs.value.find(t => t.sessionId.value === externalSessionId)
@@ -274,20 +286,16 @@ export const useSessionStore = defineStore('session', () => {
       continueConversation: true,
       resume: externalSessionId
     })
+    // 先把 sessionId 显示为历史 ID，方便悬停/复制（连接成功后会覆盖成新的 sessionId）
+    tab.sessionId.value = externalSessionId
 
     // 异步后台加载历史，避免阻塞 UI，默认取尾部 TAIL_LIMIT
-    const offset = messageCount !== undefined && messageCount > HISTORY_TAIL_LIMIT
-      ? messageCount - HISTORY_TAIL_LIMIT
-      : 0
-    const limit = messageCount !== undefined
-      ? Math.min(messageCount, HISTORY_TAIL_LIMIT)
-      : HISTORY_TAIL_LIMIT
-
+    // 使用 offset=-1 表示从尾部加载（避免 messageCount 统计不准确导致越界）
     const historyPromise = tab.loadHistory({
       sessionId: externalSessionId,
       projectPath,
-      offset,
-      limit
+      offset: -1,  // offset < 0 表示从尾部加载
+      limit: HISTORY_TAIL_LIMIT
     }).catch(error => {
       log.warn(`[SessionStore] 加载历史失败: ${externalSessionId}`, error)
     })
