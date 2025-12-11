@@ -1,312 +1,426 @@
-# Claude Code Plus
+特别提醒：请使用简体中文
+可使用的jetbrains mcp（如果可用）工具(没有提到的mcp工具不建议使用，但是可以使用) 操作idea：
+-- execute_run_configuration、get_run_configurations：
+当我让你重启时，是希望你在idea中重启，而不是通过命令行重启
+当前项目中运行特定的运行配置，并等待其在指定超时时间内完成。该工具会等待执行结束，有些运行配置都不会结束，这些运行配置超时时间请设置10s@since 2025/12/10 19:05
+-- get_file_problems：编写代码时，没修改文件完成，务必使用改工具检查静态编译错误。如果文件出现编译错误，可以使用改工具定位
+-- find_files_by_glob
+-- find_files_by_name_keyword
+-- list_directory_tree
+-- reformat_file：需要格式化文件时使用
+-- search_in_files_by_regex
+-- search_in_files_by_text
+-- rename_refactoring：重构代码时使用改工具正确批量重构
+-- execute_terminal_command：使用该工具执行命令，该工具是使用操作系统的自带默认终端
 
-一个现代化的 IntelliJ IDEA 插件，基于 Kotlin + Swing + IntelliJ JB UI 组件构建，通过集成 Claude Agent SDK 为开发者提供强大的 AI 智能编码助手功能。
+# Claude Code Plus - 架构说明
 
-## 快速开始
 
-### 运行插件
 
-1. 确保已安装 Python 🐍 3
-2. 设置 Java 环境（推荐使用 GraalVM）：
-   ```bash
-   export JAVA_HOME=/path/to/your/jdk
-   # 例如：export JAVA_HOME=$HOME/Library/Java/JavaVirtualMachines/graalvm-ce-17.0.9/Contents/Home
-   ```
-3. 运行插件：
-   ```bash
-   ./gradlew runIde
-   ```
-4. 在 IDEA 中打开右侧的 "ClaudeCode" 工具窗口
-5. 开始与 Claude 对话
+## 📋 项目概述
 
-### 安装 Claude Code SDK
+Claude Code Plus 是一个 IntelliJ IDEA 插件，集成了 Claude AI 助手，提供智能代码编辑、文件操作、终端执行等功能。
 
-要使用真正的 Claude 功能，请安装 Claude Code SDK：
+## 🏗️ 整体架构
 
-```bash
-# 1. 安装 Claude Code CLI
-npm install -g @anthropic-ai/claude-code
-# 注意：安装后命令是 claude，而不是 claude-code
+## 🔌 三种通信方式
 
-# 2. 登录 Claude
-claude login
 
-# 3. 安装 Python 🐍 SDK
-pip install claude-agent-sdk
+### 2️⃣ IDEA 集成通信 (纯 HTTP)
+
+**用途**: 打开文件、显示 Diff、搜索文件等 IDEA 原生功能
+
+**前端**:
+```typescript
+// frontend/src/services/ideaBridge.ts
+import { ideService } from '@/services/ideaBridge'
+
+// 打开文件
+await ideService.openFile('/path/to/file.ts', { line: 10 })
+
+// 显示 Diff
+await ideService.showDiff({
+    filePath: '/path/to/file.ts',
+    oldContent: '...',
+    newContent: '...'
+})
 ```
 
-安装完成后，运行插件即可自动使用 Claude Code SDK。如果未安装，插件会使用 Mock 模式进行测试。
-
-详见 [Claude SDK 安装指南](CLAUDE_SDK_INSTALLATION.md)
-
-## 项目概述
-
-Claude Code Plus 是一个基于 Kotlin 开发的 IDEA 插件，它通过外部 Python 🐍 进程集成 Claude Code SDK，在 IDE 中提供类似 JetBrains AI Assistant 的对话界面。插件以会话形式与用户交互，后台通过 Claude Code SDK 进行代理，提供智能编码辅助功能。
-
-## 主要功能 ✨
-
-### 1. 现代化对话界面 💬
-- 🎨 基于 Swing + IntelliJ JB UI 组件的原生界面
-- 📝 完整的 Markdown 渲染支持（GFM 语法）
-- ⚡ 实时流式响应显示
-- 🎯 智能代码块高亮（使用 IDE 原生高亮器）
-
-### 2. 智能上下文引用系统 🔗
-- **@文件引用**：输入 `@` 时自动触发文件搜索和补全
-- **智能搜索**：基于文件名、路径和内容的模糊搜索
-- **多种引用类型**：
-  - 📄 文件引用（支持行号范围）
-  - 📁 文件夹引用
-  - 🌐 URL 引用
-  - 📋 代码片段引用
-- **智能路径处理**：相对路径自动解析 + 路径验证
-- **拖放支持**：直接拖拽文件到输入框
-
-### 3. Claude Agent SDK 核心集成 🤖
-- **Kotlin 原生实现**：无需外部 Python 🐍 进程，纯 Kotlin SDK
-- **双向通信协议**：完整实现 Claude CLI 通信协议
-- **MCP 服务器支持**：Model Context Protocol 集成
-- **高级特性**：
-  - 🔄 会话管理与状态持久化
-  - 🎣 Hooks 事件系统
-  - 🛠️ 自定义工具集成
-  - ⚡ 流式响应处理
-  - 🔒 权限管理系统
-
-### 4. 增强功能
-- 代码高亮显示
-- 多会话管理
-- 历史记录保存
-- 快捷键支持
-
-## 技术栈 🛠️
-
-### 核心技术
-- **开发语言**：Kotlin 1.9+
-- **UI 框架**：Swing + IntelliJ JB UI 组件库（官方推荐）
-  - 标准 Swing 组件：`JPanel`, `JButton`, `JLabel` 等
-  - IntelliJ JB UI 组件：`JBTextArea`, `JBScrollPane`, `JBList` 等
-  - IntelliJ UI 工具类：`JBUI`, `UIUtil` 等
-  - 可选增强：Kotlin UI DSL（`com.intellij.ui.dsl.builder.*`）- 平台内置，无需额外依赖
-- **IDE 平台**：IntelliJ Platform SDK 2024.3+
-- **AI 集成**：Claude Agent SDK (Kotlin 原生实现)
-- **构建工具**：Gradle 8.0+
-
-### 架构特点
-- ✅ 纯 Kotlin 实现，类型安全
-- ✅ 响应式编程（StateFlow + Kotlin Flow）
-- ✅ 协程并发，异步非阻塞
-- ✅ 模块化设计，清晰分层
-- ✅ 与 IntelliJ IDE 深度集成，原生用户体验
-
-## 架构设计
-
-### UI 框架选择
-
-本项目使用 **Swing + IntelliJ JB UI 组件**（IntelliJ 插件开发官方推荐方案）：
-
-- **为什么选择 Swing？**
-  - IntelliJ Platform SDK 原生基于 Swing
-  - 与 IDE 深度集成，提供一致的用户体验
-  - 成熟稳定，有丰富的 IntelliJ UI 组件库支持
-  - 官方推荐并广泛使用的插件 UI 方案
-
-- **为什么不使用 Compose Multiplatform？**
-  - 不在 IntelliJ 插件开发推荐方案中
-  - 与 IntelliJ Platform 的集成尚未成熟
-  - 可能导致兼容性问题和额外的复杂度
-
-### 组件结构
-```
-jetbrains-plugin/src/main/kotlin/com/claudecodeplus/plugin/
-├── ui/                              # UI 组件层（Swing）
-│   ├── chat/                        # 主聊天界面
-│   │   ├── ModernChatView.kt        # 主聊天面板
-│   │   ├── ChatHeader.kt            # 聊天头部栏
-│   │   ├── MessageListPanel.kt      # 消息列表面板
-│   │   ├── ChatInputPanel.kt        # 输入组件面板
-│   │   ├── SessionListOverlay.kt    # 会话列表覆盖层
-│   │   └── components/              # 子组件
-│   │       ├── UserMessageBubble.kt
-│   │       ├── AssistantTextDisplay.kt
-│   │       ├── ToolCallDisplay.kt
-│   │       ├── ContextUsageIndicator.kt
-│   │       └── StreamingStatusIndicator.kt
-│   ├── tools/                       # 工具显示组件
-│   │   ├── ReadToolDisplay.kt
-│   │   ├── EditToolDisplay.kt
-│   │   └── ... (20+ 工具组件)
-│   ├── session/                     # 会话管理 UI
-│   │   ├── SessionList.kt
-│   │   ├── SessionListWithGroups.kt
-│   │   └── SessionSearch.kt
-│   ├── markdown/                    # Markdown 渲染
-│   │   └── MarkdownRenderer.kt
-│   ├── toast/                       # Toast 通知
-│   │   └── ToastContainer.kt
-│   └── settings/                    # 设置面板
-│       └── SettingsPanel.kt
-├── viewmodel/                       # 视图模型层
-│   └── ChatViewModel.kt             # 聊天视图模型
-├── service/                         # 服务层
-│   ├── ClaudeService.kt             # Claude API 服务
-│   ├── FileSearchService.kt         # 文件搜索服务
-│   └── ThemeService.kt              # 主题服务
-├── model/                           # 数据模型层
-│   ├── SessionModels.kt
-│   ├── MessageModels.kt
-│   └── ToolModels.kt
-└── tools/                           # IDE 工具抽象层
-    ├── IdeTools.kt                  # IDE 工具接口
-    └── IdeToolsImpl.kt              # IDE 工具实现
-```
-
-### 核心模块
-
-1. **ModernChatView（主聊天界面）**
-   - 基于 Swing + IntelliJ JB UI 组件的聊天界面
-   - 使用 `JPanel` + `BorderLayout` 布局管理
-   - 集成消息列表、输入框、头部栏等组件
-   - 支持会话切换和错误处理
-
-2. **ChatViewModel（视图模型）**
-   - 管理聊天状态（会话、消息、工具调用）
-   - 使用 `StateFlow` 实现响应式 UI 更新
-   - 处理流式事件和工具调用状态
-   - 协调服务层和 UI 层的交互
-
-3. **ClaudeService（Claude API 服务）**
-   - 管理 Claude Agent SDK 集成
-   - 处理消息发送和流式响应接收
-   - 实现 MCP（Model Context Protocol）支持
-   - 管理会话生命周期和状态持久化
-
-4. **IdeTools（IDE 工具抽象层）**
-   - 统一的 IDE 工具接口
-   - 封装文件操作、编辑器操作、Diff 显示等
-   - 提供类型安全的 API
-   - 支持测试和生产环境的不同实现
-
-5. **消息显示组件**
-   - UserMessageBubble：用户消息气泡
-   - AssistantTextDisplay：助手文本显示（Markdown 渲染）
-   - ToolCallDisplay：工具调用显示（20+ 种工具）
-   - SystemMessageDisplay：系统消息显示
-
-## 实现方式
-
-### Python 🐍 SDK 集成
-1. **claude_code_sdk_wrapper.py**：Python 🐍 脚本，封装 Claude Code SDK 的调用
-2. **外部进程通信**：通过 JSON 协议在 Java 和 Python 🐍 进程间通信
-3. **流式响应**：支持实时流式输出，提供更好的用户体验
-
-### 会话管理
-- 支持多会话并发处理
-- 会话状态持久化
-- 自动恢复中断的会话
-
-### UI 交互
-- 响应式状态管理：使用 StateFlow + SwingUtilities.invokeLater 确保线程安全
-- Markdown 渲染：完整支持 GFM 语法，使用 CommonMark 库
-- 主题适配：自动适配 IDE 的暗色/亮色主题
-- 高 DPI 支持：使用 JBUI.scale() 适配高分辨率屏幕
-
-## 使用说明
-
-### 安装要求
-- IntelliJ IDEA 2023.1 或更高版本
-- JDK 17 或更高版本
-- Python 🐍 3.10+
-- Node.js 14.0+
-- Claude Code CLI 和 SDK（见快速开始部分）
-
-### 快捷键
-- `Ctrl+Shift+C` (Windows/Linux) 或 `Cmd+Shift+C` (macOS)：打开对话窗口
-- `@` + 文件名：触发文件补全
-- `Esc`：关闭对话窗口
-
-## 贡献指南
-
-欢迎提交 Issue 和 Pull Request。开发前请确保：
-1. 遵循 Kotlin 编码规范
-2. 添加必要的测试
-3. 更新相关文档
-
-## 许可证
-
-MIT License
-
-## 致谢
-
-- Claude Code 团队提供的优秀命令行工具
-- JetBrains 提供的 IntelliJ Platform SDK 和完善的 UI 组件库
-
-## 相关链接
-
-- [Claude Code SDK Python 🐍](https://github.com/anthropics/claude-agent-sdk-python) - 官方 Python 🐍 SDK
-- [Claude Code CLI](https://github.com/anthropics/claude-code) - 官方命令行工具
-
-## 架构设计原则
-
-### 业务逻辑分离
-
-**重要：**`toolwindow-test` 模块不应该包含任何业务逻辑，所有业务逻辑都应该在 `toolwindow` 模块中实现。
-
-#### 模块职责划分
-
-- **`toolwindow` 模块**：
-  - 包含所有 UI 组件的完整实现
-  - 包含与 Claude API 交互的业务逻辑
-  - 包含消息处理、会话管理、错误处理等核心功能
-  - 提供可复用的聊天应用组件 (`JewelChatApp`)
-
-- **`toolwindow-test` 模块**：
-  - **仅负责**：创建测试窗口和基本的测试环境
-  - **仅使用**：`toolwindow` 模块提供的现成组件
-  - **不包含**：任何业务逻辑、API 调用、消息处理等功能
-  - **目的**：提供独立的测试环境，验证 UI 组件的功能
-
-#### 示例对比
-
-❌ **错误做法**（在测试应用中包含业务逻辑）：
+**后端**:
 ```kotlin
-// toolwindow-test 中不应该有这样的代码
-fun sendMessage(...) {
-    val response = cliWrapper.sendMessage(...)
-    // 处理响应逻辑...
+// claude-code-server/src/main/kotlin/com/claudecodeplus/server/HttpApiServer.kt
+post("/api/") {
+    when (action) {
+        "ide.openFile" -> ideActionBridge.openFile(request)
+        "ide.showDiff" -> ideActionBridge.showDiff(request)
+        "ide.searchFiles" -> ideActionBridge.searchFiles(query, maxResults)
+        "ide.getFileContent" -> // 读取文件内容
+    }
 }
 ```
 
-✅ **正确做法**（测试应用只使用现成组件）：
+**协议**: HTTP POST
+- 请求-响应模式
+- 同步调用
+- 简单可靠
+
+---
+
+### 3️⃣ 通用 Web 功能 (纯 HTTP)
+
+**用途**: 其他不需要流式响应的功能
+
+**协议**: HTTP GET/POST
+- RESTful API
+- 标准 HTTP 请求
+
+---
+
+## 🔧 关键技术细节
+
+### 随机端口机制
+
+**问题**: 多个 IDEA 项目同时打开时，端口冲突
+
+**解决方案**:
 ```kotlin
-// toolwindow-test 中应该这样使用
-JewelChatApp(
-    cliWrapper = cliWrapper,
-    workingDirectory = workingDirectory,
-    themeProvider = themeProvider,
-    showToolbar = true,
-    onThemeChange = { newTheme -> /* 简单的主题切换 */ }
-)
+// claude-code-server/src/main/kotlin/com/claudecodeplus/server/HttpApiServer.kt
+fun start(port: Int = 8765): String {
+    val actualPort = try {
+        embeddedServer(Netty, port = port) { ... }.start()
+        port
+    } catch (e: BindException) {
+        val availablePort = findAvailablePort()
+        embeddedServer(Netty, port = availablePort) { ... }.start()
+        availablePort
+    }
+    return "http://localhost:$actualPort"
+}
 ```
 
-#### 好处
+### 前端获取后端地址 & 环境检测
 
-1. **代码复用**：业务逻辑只需要在一个地方实现
-2. **测试简化**：测试应用专注于 UI 测试，不需要维护复杂的业务逻辑
-3. **维护性**：修改业务逻辑时只需要修改 `toolwindow` 模块
-4. **插件集成**：插件可以直接使用 `toolwindow` 模块的组件，无需重复实现
+**IDEA 插件模式**: 通过 URL 参数 `?ide=true` 触发后端注入
 
-#### 主题配置
+```kotlin
+// jetbrains-plugin/.../VueToolWindowFactory.kt
+val ideUrl = "$serverUrl?ide=true"  // 带上 ide=true 参数
+browser.loadURL(ideUrl)
+```
 
-应用自动适配 IntelliJ IDE 的主题系统：
+```kotlin
+// claude-code-server/.../HttpApiServer.kt
+get("/") {
+    val isIdeMode = call.request.queryParameters["ide"] == "true"
 
-- **主题获取**：通过 `IdeTools.getTheme()` 获取当前 IDE 主题信息
-- **颜色系统**：使用 `UIUtil.getPanelBackground()` 等工具方法获取主题颜色
-- **自动适配**：UI 组件自动跟随 IDE 主题变化（暗色/亮色）
-- **高 DPI 支持**：使用 `JBUI.scale()` 适配高分辨率屏幕
+    if (isIdeMode) {
+        // IDEA 插件模式：注入 window.__serverUrl
+        val injection = """
+            <script>
+                window.__serverUrl = 'http://localhost:$serverPort';
+                console.log('✅ Environment: IDEA Plugin Mode');
+            </script>
+        """.trimIndent()
+        html = html.replace("</head>", "$injection\n</head>")
+    }
+}
+```
 
-## 相关文档
+**浏览器模式**: 通过统一解析器获取地址
+```typescript
+// frontend/src/services/ideaBridge.ts
+import { resolveServerHttpUrl } from '@/utils/serverUrl'
 
-- [架构迁移指南](docs/ARCHITECTURE_MIGRATION.md) - 从 Vue 到 Swing 的迁移详细说明
-- [UI 框架选型说明](docs/UI_FRAMEWORK_DECISION.md) - 技术选型依据和对比
-- [IDEA 原生 UI 与浏览器方案](docs/IDEA_NATIVE_UI_AND_BROWSER_PLAN.md) - 两种方案的对比和实施计划
+private getBaseUrl(): string {
+    return resolveServerHttpUrl()
+}
+
+// 环境检测
+getMode(): 'ide' | 'browser' {
+    return (window as any).__serverUrl ? 'ide' : 'browser'
+}
+```
+
+`resolveServerHttpUrl()` 的优先级：
+1. `window.__serverUrl`（IDEA 注入或提前设置）
+2. `VITE_SERVER_URL`
+3. `VITE_BACKEND_PORT`（默认 `http://localhost:<port>`）
+4. 回退到 `http://localhost:8765`
+
+**优势**:
+- ✅ **时序可靠**: HTML 加载时就已注入，Vue 初始化前就能读取
+- ✅ **无需额外请求**: 不需要前端主动检测
+- ✅ **简单明确**: 通过 `window.__serverUrl` 的存在判断环境
+
+---
+
+## 📁 核心文件说明
+
+### 前端核心文件
+
+#### `frontend/src/services/ideaBridge.ts`
+**职责**: 前端与后端的 HTTP 通信桥接
+
+**导出**:
+- `ideaBridge`: 单例服务，提供 `query()` 方法
+- `ideService`: 便捷 API，封装常用 IDEA 集成功能
+    - `openFile()`: 打开文件
+    - `showDiff()`: 显示 Diff
+    - `searchFiles()`: 搜索文件
+    - `getFileContent()`: 获取文件内容
+    - `getTheme()`: 获取主题
+- `claudeService`: Claude 会话相关 API（通过 HTTP，非 WebSocket）
+
+**示例**:
+```typescript
+import { ideService } from '@/services/ideaBridge'
+
+// 打开文件并跳转到指定行
+await ideService.openFile('/src/App.vue', { line: 42, column: 10 })
+
+// 显示 Diff（支持多处修改）
+await ideService.showDiff({
+    filePath: '/src/utils/helper.ts',
+    oldContent: 'old code',
+    newContent: 'new code',
+    rebuildFromFile: true,  // 从文件重建完整 Diff
+    edits: [
+        { oldString: 'foo', newString: 'bar', replaceAll: false }
+    ]
+})
+```
+
+#### `frontend/src/services/ClaudeSession.ts`
+**职责**: Claude 会话管理（WebSocket RPC）
+
+**功能**:
+- 建立 WebSocket 连接
+- 发送消息并接收流式响应
+- 中断正在进行的会话
+- 管理会话状态
+
+#### `frontend/src/components/tools/`
+**职责**: 工具调用显示组件
+
+**组件列表**:
+- `ReadToolDisplay.vue`: 读取文件工具
+- `WriteToolDisplay.vue`: 写入文件工具
+- `EditToolDisplay.vue`: 编辑文件工具
+- `BashToolDisplay.vue`: 终端命令工具
+- `MultiEditToolDisplay.vue`: 多处编辑工具
+- `CompactToolCard.vue`: 可复用的工具卡片组件
+
+**设计原则**:
+- 折叠模式：显示关键参数（文件名、路径、命令）
+- 展开模式：显示完整细节
+- 状态指示：彩色圆点（绿色=成功，红色=失败，灰色=进行中）
+- IDEA 集成：点击文件路径打开文件，点击卡片显示 Diff
+
+---
+
+### 后端核心文件
+
+#### `claude-code-server/src/main/kotlin/com/claudecodeplus/server/HttpApiServer.kt`
+**职责**: HTTP 服务器主入口
+
+**功能**:
+- 启动 Ktor 服务器（随机端口）
+- 配置 WebSocket 端点 (`/ws`)
+- 配置 HTTP API 端点 (`/api/`)
+- 提供静态文件服务（前端资源）
+
+**关键代码**:
+```kotlin
+// WebSocket RPC 端点
+webSocket("/ws") {
+    val rpcHandler = WebSocketRpcHandler(this, claudeRpcService)
+    rpcHandler.handle()
+}
+
+// HTTP API 端点
+post("/api/") {
+    val requestBody = call.receiveText()
+    val json = Json { ignoreUnknownKeys = true }
+    val request = json.decodeFromString<FrontendRequest>(requestBody)
+    val action = request.action
+
+    when (action) {
+        "ide.openFile" -> {
+            val response = ideActionBridge.openFile(request)
+            call.respondText(json.encodeToString(response), ContentType.Application.Json)
+        }
+        "ide.showDiff" -> {
+            val response = ideActionBridge.showDiff(request)
+            call.respondText(json.encodeToString(response), ContentType.Application.Json)
+        }
+        // ... 其他 API
+    }
+}
+```
+
+#### `jetbrains-plugin/src/main/kotlin/com/claudecodeplus/plugin/bridge/IdeActionBridgeImpl.kt`
+**职责**: IDEA 平台 API 调用实现
+
+**功能**:
+- `openFile()`: 使用 `FileEditorManager` 打开文件
+- `showDiff()`: 使用 `DiffManager` 显示 Diff
+- `searchFiles()`: 使用 `FilenameIndex` 搜索文件
+- `getFileContent()`: 读取文件内容
+
+**关键代码**:
+```kotlin
+override fun openFile(request: FrontendRequest): FrontendResponse {
+    val filePath = request.data?.jsonObject?.get("filePath")?.jsonPrimitive?.contentOrNull
+    val line = request.data?.jsonObject?.get("line")?.jsonPrimitive?.intOrNull
+
+    ApplicationManager.getApplication().invokeLater {
+        val file = LocalFileSystem.getInstance().findFileByIoFile(File(filePath))
+        if (file != null) {
+            val descriptor = OpenFileDescriptor(project, file, line - 1, column - 1)
+            FileEditorManager.getInstance(project).openTextEditor(descriptor, true)
+        }
+    }
+
+    return FrontendResponse(success = true)
+}
+```
+
+---
+
+## 🎨 设计决策
+
+### 为什么后端使用随机端口？
+
+**原因**:
+1. **多项目支持**: 用户可能同时打开多个 IDEA 项目
+2. **避免冲突**: 固定端口可能被其他应用占用
+3. **灵活性**: 自动选择可用端口，无需用户配置
+
+---
+
+## 🚀 启动流程
+
+### IDEA 插件模式
+
+1. **用户打开 IDEA 项目**
+2. **插件初始化** (`HttpServerProjectService`)
+    - 启动后端 HTTP 服务器（随机端口）
+    - 记录服务器 URL
+3. **打开聊天工具窗口** (`ChatToolWindowFactory`)
+    - 加载前端资源（Vue 应用）
+    - 注入 `window.__serverUrl`
+4. **前端初始化**
+    - `ideaBridge` 读取 `window.__serverUrl`
+    - 建立 HTTP 连接
+5. **用户开始对话**
+    - 前端通过 WebSocket RPC 发送消息
+    - 后端调用 Claude SDK
+    - 流式返回响应
+
+### 浏览器模式
+
+1. **启动后端服务器** (手动或脚本)
+2. **启动前端开发服务器** (`npm run dev`)
+3. **打开浏览器** (`http://localhost:5173`)
+4. **前端通过解析器解析 URL**（若无注入，则回退 `http://localhost:8765`）
+5. **功能受限**: IDEA 集成功能不可用（打开文件、显示 Diff）
+
+**很重要**
+开发时如果需要调试界面：
+通过启动 com.asakii.server.StandaloneServerKt 来得到一个 运行在 8765 端口的后端
+运行 前端的 dev 任务，可以得到一个运行在端口 5174 的前端
+使用mcp 访问 5174 即可测试相关功能
+如果 相关端口被占用，停止占用端口的进程，而不是使用新端口
+
+可以在项目根路径的 .log 下查看日志：
+[sdk.log](.log/sdk.log) 是后端使用sdk的日志
+[server.log](.log/server.log) 是整个后端发的日志
+[server.log](.log/server.log) 是后端写入 websocket 的日志
+前端日志通过 mcp 操作浏览器，查看控制台日志来
+
+---
+
+## 📝 开发指南
+
+### 添加新的 IDEA 集成功能
+
+1. **定义接口** (`IdeActionBridge.kt`)
+```kotlin
+interface IdeActionBridge {
+    fun myNewFeature(request: FrontendRequest): FrontendResponse
+}
+```
+
+2. **实现接口** (`IdeActionBridgeImpl.kt`)
+```kotlin
+override fun myNewFeature(request: FrontendRequest): FrontendResponse {
+    // 调用 IDEA Platform API
+    return FrontendResponse(success = true)
+}
+```
+
+3. **添加 HTTP 端点** (`HttpApiServer.kt`)
+```kotlin
+when (action) {
+    "ide.myNewFeature" -> {
+        val response = ideActionBridge.myNewFeature(request)
+        call.respondText(json.encodeToString(response), ContentType.Application.Json)
+    }
+}
+```
+
+4. **添加前端 API** (`ideaBridge.ts`)
+```typescript
+export const ideService = {
+    async myNewFeature(params: any) {
+        return ideaBridge.query('ide.myNewFeature', params)
+    }
+}
+```
+
+5. **在组件中使用**
+```typescript
+import { ideService } from '@/services/ideaBridge'
+
+await ideService.myNewFeature({ foo: 'bar' })
+```
+
+---
+
+## 🔍 调试技巧
+
+### 查看 HTTP 请求
+
+### 常见问题
+
+**问题**: 前端无法连接后端
+- 检查 `window.__serverUrl` 是否正确注入
+- 检查后端服务器是否启动
+- 检查端口是否被占用
+
+**问题**: IDEA 集成功能不工作
+- 确认在 IDEA 插件模式下运行（不是浏览器）
+- 检查 `IdeActionBridgeImpl` 是否正确注入
+- 查看 IDEA 日志中的错误信息
+
+
+
+
+---
+
+## 📚 相关文档
+
+- [HTTP API 架构](docs/HTTP_API_ARCHITECTURE.md)
+- [前端重构设计](docs/frontend-refactoring-design.md)
+- [工具显示规范](docs/tool-display-specification.md)
+- [主题系统](docs/THEME_SYSTEM.md)
+
+---
+
+## 📦 外部子模块
+
+- `external/openai-codex`
+    - 来源仓库：`org-14957082@github.com:openai/codex.git`
+    - 管理方式：作为 git submodule 引入，位于 `external/` 目录，后续可通过 `git submodule update --init --recursive` 同步。
+
+
