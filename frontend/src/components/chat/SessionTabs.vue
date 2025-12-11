@@ -72,6 +72,7 @@
 import { ref, watch } from 'vue'
 import draggable from 'vuedraggable'
 import { useI18n } from '@/composables/useI18n'
+import { useToastStore } from '@/stores/toastStore'
 
 export interface SessionTabInfo {
   id: string  // tabId
@@ -100,6 +101,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const toast = useToastStore()
 
 const localTabs = ref<SessionTabInfo[]>([...props.sessions])
 
@@ -148,8 +150,12 @@ function statusTitle(tab: SessionTabInfo): string {
 async function copySessionId(id: string) {
   try {
     await navigator.clipboard.writeText(id)
+    const displayId = id.length > 18 ? `${id.slice(0, 8)}...${id.slice(-4)}` : id
+    const prefix = t('session.copySuccess') || '会话 ID 已复制'
+    toast.success(`${prefix}：${displayId}`)
   } catch (error) {
     console.error('复制会话 ID 失败:', error)
+    toast.error(t('session.copyFailed') || '复制失败')
   }
 }
 

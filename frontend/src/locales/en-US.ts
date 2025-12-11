@@ -202,6 +202,8 @@ export default {
     close: 'Close session',
     sessionId: 'Session ID',
     copyHint: 'Click again or double-click to copy',
+    copySuccess: 'Session ID copied',
+    copyFailed: 'Copy failed',
     group: {
       today: 'Today',
       yesterday: 'Yesterday',
