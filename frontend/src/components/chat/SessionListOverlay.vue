@@ -57,6 +57,7 @@
                   :key="session.id"
                   type="button"
                   class="session-item"
+                  :title="session.id"
                   :class="{ active: session.id === currentSessionId }"
                   @click="handleSelect(session.id)"
                 >
@@ -92,6 +93,7 @@
                   :key="session.id"
                   type="button"
                   class="session-item"
+                  :title="session.id"
                   :class="{ active: session.id === currentSessionId }"
                   @click="handleSelect(session.id)"
                 >
@@ -99,6 +101,12 @@
                   <div class="session-item-main">
                     <div class="session-name">
                       <span>{{ session.name || $t('session.unnamed') }}</span>
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        :aria-label="`Copy ${session.id}`"
+                        @click.stop="copySessionId(session.id)"
+                      />
                     </div>
                     <div class="session-meta">
                       <span>{{ formatRelativeTime(session.timestamp) }}</span>
@@ -133,6 +141,7 @@ interface SessionListItem {
   messageCount: number
   isGenerating?: boolean
   isConnected?: boolean
+   isActive?: boolean
 }
 
 interface Props {
@@ -159,7 +168,7 @@ const emit = defineEmits<{
 
 // 激活的会话（已连接）
 const activeSessions = computed(() =>
-  props.sessions.filter(s => s.isConnected)
+  props.sessions.filter(s => s.isActive || s.isConnected)
 )
 
 const activeIds = computed(() => new Set(activeSessions.value.map(s => s.id)))
@@ -231,6 +240,14 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
   sessionListRef.value?.removeEventListener('scroll', handleScroll)
 })
+
+async function copySessionId(id: string) {
+  try {
+    await navigator.clipboard.writeText(id)
+  } catch (error) {
+    console.error('Failed to copy sessionId:', error)
+  }
+}
 </script>
 
 <style scoped>
@@ -252,7 +269,7 @@ onBeforeUnmount(() => {
   top: 60px;
   right: 32px;
   width: 360px;
-  max-height: calc(100vh - 120px);
+  max-height: calc(100vh - 100px);
   border-radius: 16px;
   background: var(--theme-panel-background, #ffffff);
   border: 1px solid var(--theme-border, rgba(0, 0, 0, 0.08));
@@ -350,7 +367,7 @@ onBeforeUnmount(() => {
 .session-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   padding-right: 12px;
   flex: 1;
   min-height: 0; /* 保证 flex 子元素滚动 */
@@ -367,16 +384,16 @@ onBeforeUnmount(() => {
 .session-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .session-group-header {
   font-size: 12px;
   font-weight: 600;
   color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
-  padding: 0 8px 4px;
+  padding: 0 8px 2px;
   border-bottom: 1px solid var(--theme-border, rgba(0, 0, 0, 0.08));
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .session-group-empty {
@@ -427,7 +444,7 @@ onBeforeUnmount(() => {
 .session-name {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   font-size: 14px;
   font-weight: 500;
   color: var(--theme-foreground, #111);
@@ -451,6 +468,38 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.copy-btn {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--theme-border, rgba(0, 0, 0, 0.3));
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.copy-btn:hover {
+  border-color: var(--theme-foreground, #111);
+}
+
+.copy-btn::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--theme-border, rgba(0, 0, 0, 0.35));
+  border-radius: 3px;
+  top: -3px;
+  left: -3px;
+  background: transparent;
+}
+
+.copy-btn:hover::after {
+  border-color: var(--theme-foreground, #111);
 }
 
 .session-overlay-enter-active,

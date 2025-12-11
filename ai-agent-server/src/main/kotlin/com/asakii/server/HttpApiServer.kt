@@ -26,9 +26,14 @@ import kotlinx.serialization.json.*
 import io.ktor.server.sse.*
 import io.ktor.server.websocket.*
 // import org.jetbrains.kotlinx.rpc.krpc.ktor.server.Krpc // Temporarily removed
+import com.asakii.rpc.proto.GetHistoryMetadataRequest
+import com.asakii.rpc.proto.HistoryMetadata
+import com.asakii.rpc.proto.LoadHistoryRequest
+import com.asakii.rpc.proto.HistoryResult
+import com.asakii.server.history.HistoryJsonlLoader
+import com.asakii.server.rpc.AiAgentRpcServiceImpl
 import io.rsocket.kotlin.ktor.server.RSocketSupport
 import io.rsocket.kotlin.ktor.server.rSocket
-import com.asakii.server.rsocket.RSocketHandler
 import io.ktor.utils.io.*
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.CoroutineScope
@@ -151,20 +156,16 @@ class HttpApiServer(
                 masking = false
             }
 
-            // RSocket 支持（基于 WebSocket）
+            // RSocket 支持
             install(RSocketSupport)
-
-            // install(Krpc) // Temporarily disabled due to version incompatibility
 
             // 路由配置
             routing {
                 val serverPort = configuredPort
 
                 // RSocket RPC 路由 (Protobuf over RSocket)
-                // 注意：每个连接都会创建新的 handler 实例
                 rSocket("rsocket") {
-                    // ConnectionAcceptorContext.requester 是可以向客户端发送请求的 RSocket
-                    val rsocketHandler = RSocketHandler(ideTools)
+                    val rsocketHandler = com.asakii.server.rsocket.RSocketHandler(ideTools)
                     rsocketHandler.setClientRequester(requester)
                     rsocketHandler.createHandler()
                 }
@@ -425,6 +426,56 @@ class HttpApiServer(
                         }
                     }
 
+                    // 历史元数据（protobuf，HTTP 直读 JSONL）
+                    post("/history/metadata.pb") {
+                        try {
+                            val body = call.receiveStream().readBytes()
+                            val req = GetHistoryMetadataRequest.parseFrom(body)
+                            val sessionId = req.sessionId
+                            val projectPath = req.projectPath
+
+                            val rpcService = AiAgentRpcServiceImpl(ideTools, null)
+                            val meta = rpcService.getHistoryMetadata(sessionId, projectPath)
+
+                            call.respondBytes(
+                                bytes = meta.toByteArray(),
+                                contentType = ContentType.Application.OctetStream
+                            )
+                        } catch (e: Exception) {
+                            logger.error(e) { "❌ [HTTP] 获取历史元数据失败" }
+                            call.respond(
+                                HttpStatusCode.InternalServerError,
+                                mapOf("error" to (e.message ?: "Unknown error"))
+                            )
+                        }
+                    }
+
+                    // 历史内容加载（protobuf，HTTP 直读 JSONL）
+                    post("/history/load.pb") {
+                        try {
+                            val body = call.receiveStream().readBytes()
+                            val req = LoadHistoryRequest.parseFrom(body)
+                            val rpcService = AiAgentRpcServiceImpl(ideTools, null)
+                            val result = rpcService.loadHistory(
+                                req.sessionId,
+                                req.projectPath,
+                                req.offset,
+                                req.limit
+                            )
+
+                            call.respondBytes(
+                                bytes = result.toByteArray(),
+                                contentType = ContentType.Application.OctetStream
+                            )
+                        } catch (e: Exception) {
+                            logger.error(e) { "❌ [HTTP] 加载历史失败" }
+                            call.respond(
+                                HttpStatusCode.InternalServerError,
+                                mapOf("error" to (e.message ?: "Unknown error"))
+                            )
+                        }
+                    }
+
                     // 主题 API
                     get("/theme") {
                         val theme = ideTools.getTheme()
@@ -672,4 +723,3 @@ class HttpApiServer(
         logger.info { "📤 Pushed event: ${event.type}" }
     }
 }
-

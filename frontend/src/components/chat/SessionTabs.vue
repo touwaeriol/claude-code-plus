@@ -19,34 +19,40 @@
               connecting: tab.connectionStatus === 'CONNECTING',
               error: tab.connectionStatus === 'ERROR'
             }"
-            @click="handleTabClick(tab.id)"
+            :title="displaySessionId(tab)
+              ? `${displaySessionId(tab)} · ${t('session.copyHint') || '再次单击或双击复制'}`
+              : t('chat.connectionStatus.disconnected')"
+            @click="handleTabClick(tab)"
+            @dblclick.stop="handleTabDblClick(tab)"
             @click.middle.prevent="handleCloseTab(tab.id)"
           >
-            <!-- 连接中状态指示器 -->
             <span
-              v-if="tab.connectionStatus === 'CONNECTING'"
-              class="status-indicator connecting"
-              title="正在连接..."
+              class="status-indicator"
+              :class="{
+                connecting: tab.connectionStatus === 'CONNECTING',
+                connected: tab.connectionStatus === 'CONNECTED',
+                disconnected: tab.connectionStatus === 'DISCONNECTED',
+                error: tab.connectionStatus === 'ERROR'
+              }"
+              :title="statusTitle(tab)"
             >
-              <span class="dot-pulse" />
+              <span v-if="tab.connectionStatus === 'CONNECTING'" class="dot-pulse" />
+              <span v-else class="dot-solid" />
             </span>
-            <!-- 错误状态指示器 -->
-            <span
-              v-else-if="tab.connectionStatus === 'ERROR'"
-              class="status-indicator error"
-              :title="tab.error || '连接失败'"
-            >⚠</span>
-            <span class="tab-name">{{ tab.name || '未命名会话' }}</span>
+
+            <span class="tab-name">{{ tab.name || t('session.unnamed') }}</span>
+
             <span
               v-if="tab.isGenerating"
               class="generating-dot"
-              title="正在生成中"
+              :title="t('chat.connectionStatus.generating') || 'Generating'"
             />
+
             <button
               v-if="canClose"
               class="close-btn"
               type="button"
-              title="关闭会话"
+              :title="t('session.close') || '关闭会话'"
               @click.stop="handleCloseTab(tab.id)"
             >
               ×
@@ -56,7 +62,7 @@
       </draggable>
 
       <span v-if="sessions.length === 0" class="tab-placeholder">
-        暂无活动会话
+        {{ t('session.empty') || '暂无活动会话' }}
       </span>
     </div>
   </div>
@@ -65,10 +71,13 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import draggable from 'vuedraggable'
+import { useI18n } from '@/composables/useI18n'
 
 export interface SessionTabInfo {
   id: string  // tabId
   name: string
+  sessionId?: string | null
+  resumeFromSessionId?: string | null
   isGenerating?: boolean
   isConnected?: boolean
   connectionStatus?: 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'ERROR'
@@ -90,21 +99,33 @@ const emit = defineEmits<{
   (e: 'toggle-list'): void
 }>()
 
-// 本地 tabs 列表，用于拖拽
+const { t } = useI18n()
+
 const localTabs = ref<SessionTabInfo[]>([...props.sessions])
 
-// 监听外部 sessions 变化，同步到本地
 watch(() => props.sessions, (newSessions) => {
   localTabs.value = [...newSessions]
 }, { deep: true })
 
-function handleTabClick(sessionId: string) {
-  if (sessionId === props.currentSessionId) {
-    // 点击当前会话时，展开会话列表
+function handleTabClick(tab: SessionTabInfo) {
+  // 当前激活且有 sessionId 时，单击直接复制
+  const copyId = displaySessionId(tab)
+  if (tab.id === props.currentSessionId && copyId) {
+    copySessionId(copyId)
+    return
+  }
+  if (tab.id === props.currentSessionId) {
     emit('toggle-list')
     return
   }
-  emit('switch', sessionId)
+  emit('switch', tab.id)
+}
+
+function handleTabDblClick(tab: SessionTabInfo) {
+  const copyId = displaySessionId(tab)
+  if (copyId) {
+    copySessionId(copyId)
+  }
 }
 
 function handleCloseTab(sessionId: string) {
@@ -114,6 +135,26 @@ function handleCloseTab(sessionId: string) {
 function handleDragEnd() {
   const newOrder = localTabs.value.map(tab => tab.id)
   emit('reorder', newOrder)
+}
+
+function statusTitle(tab: SessionTabInfo): string {
+  if (tab.connectionStatus === 'CONNECTED') return t('chat.connectionStatus.connected')
+  if (tab.connectionStatus === 'CONNECTING') return t('chat.connectionStatus.connecting')
+  if (tab.connectionStatus === 'DISCONNECTED') return t('chat.connectionStatus.disconnected')
+  if (tab.connectionStatus === 'ERROR') return tab.error || (t('chat.connectionStatus.error') || '连接错误')
+  return t('chat.connectionStatus.disconnected')
+}
+
+async function copySessionId(id: string) {
+  try {
+    await navigator.clipboard.writeText(id)
+  } catch (error) {
+    console.error('复制会话 ID 失败:', error)
+  }
+}
+
+function displaySessionId(tab: SessionTabInfo): string | null {
+  return tab.sessionId || tab.resumeFromSessionId || null
 }
 </script>
 
@@ -143,7 +184,7 @@ function handleDragEnd() {
   position: relative;
   display: inline-flex;
   align-items: center;
-  max-width: 180px;
+  max-width: 200px;
   padding: 3px 8px;
   border-radius: 999px;
   border: 1px solid transparent;
@@ -176,13 +217,8 @@ function handleDragEnd() {
   color: var(--theme-accent, #0366d6);
 }
 
-.session-tab.generating {
-  /* 生成中的会话边框带动画 */
-}
-
 .session-tab.connecting {
-  opacity: 0.7;
-  border-style: dashed;
+  opacity: 0.75;
 }
 
 .session-tab.error {
@@ -194,21 +230,33 @@ function handleDragEnd() {
   align-items: center;
   justify-content: center;
   margin-right: 4px;
-  font-size: 10px;
   flex-shrink: 0;
-}
-
-.status-indicator.connecting {
   width: 12px;
   height: 12px;
 }
 
-.status-indicator.error {
-  color: var(--theme-error, #d73a49);
-  font-size: 12px;
+.status-indicator .dot-solid {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
-.dot-pulse {
+.status-indicator.connected .dot-solid {
+  background: var(--theme-success, #28a745);
+  box-shadow: 0 0 6px rgba(40, 167, 69, 0.6);
+}
+
+.status-indicator.disconnected .dot-solid {
+  background: var(--theme-error, #d73a49);
+  box-shadow: 0 0 4px rgba(215, 58, 73, 0.5);
+}
+
+.status-indicator.error .dot-solid {
+  background: var(--theme-error, #d73a49);
+  box-shadow: 0 0 6px rgba(215, 58, 73, 0.8);
+}
+
+.status-indicator.connecting .dot-pulse {
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -226,7 +274,6 @@ function handleDragEnd() {
     transform: scale(1);
   }
 }
-
 
 .tab-name {
   max-width: 120px;

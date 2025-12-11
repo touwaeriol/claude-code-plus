@@ -61,6 +61,8 @@ const sessionTabList = computed<SessionTabInfo[]>(() => {
   return activeTabs.value.map(tab => ({
     id: tab.tabId,
     name: tab.name.value,
+    sessionId: tab.sessionId.value,
+    resumeFromSessionId: (tab as any).resumeFromSessionId?.value ?? null,
     isGenerating: tab.isGenerating.value,
     isConnected: tab.connectionState.status === ConnectionStatus.CONNECTED,
     connectionStatus: tab.connectionState.status,
@@ -115,6 +117,45 @@ function handleReorder(newOrder: string[]) {
   align-items: center;
   gap: 4px;
   margin-left: 8px;
+}
+
+.connection-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--theme-foreground, #24292e);
+}
+
+.pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.status-connected {
+  background: rgba(40, 167, 69, 0.12);
+  border-color: rgba(40, 167, 69, 0.3);
+  color: #28a745;
+}
+
+.status-connecting {
+  background: rgba(255, 193, 7, 0.14);
+  border-color: rgba(255, 193, 7, 0.35);
+  color: #d39e00;
+}
+
+.status-disconnected {
+  background: rgba(220, 53, 69, 0.12);
+  border-color: rgba(220, 53, 69, 0.3);
+  color: #dc3545;
 }
 
 .icon-btn {

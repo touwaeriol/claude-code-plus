@@ -3,30 +3,8 @@
     ref="wrapperRef"
     class="message-list-wrapper"
   >
-    <div
-      v-if="displayMessages.length === 0"
-      class="empty-state"
-    >
+    <div v-if="displayMessages.length === 0" class="empty-state">
       <div class="empty-content">
-        <!-- 连接状态指示器 -->
-        <div class="connection-status-wrapper">
-          <div
-            class="connection-status"
-            :class="{
-              'status-connected': connectionStatus === 'CONNECTED',
-              'status-connecting': connectionStatus === 'CONNECTING',
-              'status-disconnected': connectionStatus === 'DISCONNECTED'
-            }"
-          >
-            <span class="status-dot" />
-            <span class="status-text">
-              {{ connectionStatus === 'CONNECTED' ? t('chat.connectionStatus.connected') :
-                 connectionStatus === 'CONNECTING' ? t('chat.connectionStatus.connecting') :
-                 t('chat.connectionStatus.disconnected') }}
-            </span>
-          </div>
-        </div>
-
         <div class="empty-icon-wrapper">
           <svg
             class="empty-icon"
@@ -144,7 +122,7 @@
       class="loading-indicator"
     >
       <div class="loading-spinner" />
-      <span>{{ t('chat.claudeThinking') }}</span>
+      <span>{{ t('chat.loadingHistory') }}</span>
     </div>
 
     <!-- 回到底部按钮 -->
@@ -174,6 +152,11 @@ import type { Message } from '@/types/message'
 import type { DisplayItem } from '@/types/display'
 import MessageDisplay from './MessageDisplay.vue'
 import DisplayItemRenderer from './DisplayItemRenderer.vue'
+import {
+  HISTORY_TRIGGER_THRESHOLD,
+  HISTORY_RESET_THRESHOLD,
+  HISTORY_AUTO_LOAD_MAX
+} from '@/constants/messageWindow'
 
 const { t } = useI18n()
 
@@ -214,7 +197,7 @@ const historyLoadInProgress = ref(false)
 const historyLoadRequested = ref(false)
 const historyScrollHeightBefore = ref(0)
 const historyScrollTopBefore = ref(0)
-const HISTORY_TRIGGER_THRESHOLD = 120
+const hasLoadedHistory = ref(false)  // 标记是否已完成首次历史加载
 
 // Streaming 计时器
 const elapsedTime = ref(0)
@@ -335,11 +318,24 @@ watch(() => displayMessages.value.length, async (newCount, oldCount) => {
     return
   }
 
-  // 历史分页期间不计未读
-  if ((historyLoadInProgress.value || props.isLoading) && added > 0) {
+  // 历史分页期间不计未读，但需要更新滚动位置保持
+  if (historyLoadInProgress.value && added > 0) {
     lastMessageCount.value = newCount
     lastTailId.value = tailId
     await nextTick()
+    forceUpdateScroller()
+    // 不滚动，由 isLoading watch 处理滚动位置保持
+    return
+  }
+
+  // 如果是加载历史会话完成（从 loading 变为 false，且消息数量大于 0）
+  // 此时应该滚动到底部
+  if (props.isLoading === false && added > 0 && !historyLoadInProgress.value) {
+    lastMessageCount.value = newCount
+    lastTailId.value = tailId
+    await nextTick()
+    scrollToBottom()
+    newMessageCount.value = 0
     forceUpdateScroller()
     return
   }
@@ -378,20 +374,46 @@ watch(() => displayMessages.value, async () => {
     }
   }
 
-watch(() => props.isLoading, async (newValue) => {
+watch(() => props.isLoading, async (newValue, oldValue) => {
+  // 加载开始时，如果在底部则保持在底部
   if (newValue && isNearBottom.value) {
     await nextTick()
     scrollToBottom()
   }
 
-  if (!newValue && historyLoadInProgress.value) {
-    await nextTick()
-    const el = scrollerRef.value?.$el as HTMLElement | undefined
-    if (el) {
-      const delta = el.scrollHeight - historyScrollHeightBefore.value
-      el.scrollTop = historyScrollTopBefore.value + delta
+  // 加载完成
+  if (!newValue && oldValue) {
+    if (historyLoadInProgress.value) {
+      // 历史分页加载完成：保持滚动位置
+      await nextTick()
+      const el = scrollerRef.value?.$el as HTMLElement | undefined
+      if (el) {
+        const delta = el.scrollHeight - historyScrollHeightBefore.value
+        el.scrollTop = historyScrollTopBefore.value + delta
+      }
+      historyLoadInProgress.value = false
+      // 重置懒加载请求标志，允许下次加载
+      historyLoadRequested.value = false
+    } else if (!hasLoadedHistory.value) {
+      // 首次加载历史会话完成：自动填满视口并可靠滚动到底部
+      hasLoadedHistory.value = true
+
+      await nextTick()
+      forceUpdateScroller()
+
+      // 1. 先填满视口
+      await ensureScrollable()
+
+      // 2. 再可靠滚动
+      await scrollToBottomReliably()
+
+      // 3. 重置懒加载标志，允许后续手动触发
+      historyLoadRequested.value = false
+      historyLoadInProgress.value = false
+
+      newMessageCount.value = 0
+      isNearBottom.value = true
     }
-    historyLoadInProgress.value = false
   }
 })
 
@@ -406,21 +428,37 @@ function handleScroll() {
   const scrollHeight = el.scrollHeight
   const clientHeight = el.clientHeight
 
-  // 顶部分页
-  if (
-    scrollTop < HISTORY_TRIGGER_THRESHOLD &&
+  // 顶部分页 - 添加调试日志
+  const shouldTrigger = scrollTop < HISTORY_TRIGGER_THRESHOLD &&
     props.hasMoreHistory &&
     !props.isLoading &&
     !historyLoadInProgress.value &&
     !historyLoadRequested.value
-  ) {
+
+  if (scrollTop < HISTORY_TRIGGER_THRESHOLD && scrollTop < 100) {
+    console.log('🔍 [懒加载检查]', {
+      scrollTop,
+      threshold: HISTORY_TRIGGER_THRESHOLD,
+      hasMoreHistory: props.hasMoreHistory,
+      isLoading: props.isLoading,
+      historyLoadInProgress: historyLoadInProgress.value,
+      historyLoadRequested: historyLoadRequested.value,
+      shouldTrigger
+    })
+  }
+
+  if (shouldTrigger) {
+    console.log('✅ [懒加载] 触发加载更多历史')
     historyLoadRequested.value = true
     historyLoadInProgress.value = true
     historyScrollHeightBefore.value = scrollHeight
     historyScrollTopBefore.value = scrollTop
     emit('load-more-history')
-  } else if (scrollTop > HISTORY_TRIGGER_THRESHOLD * 2) {
-    historyLoadRequested.value = false
+  } else if (scrollTop > HISTORY_RESET_THRESHOLD) {
+    // 只在加载完成后才重置，避免加载中重置
+    if (!historyLoadInProgress.value) {
+      historyLoadRequested.value = false
+    }
   }
 
   // 判断是否在底部（允许 100px 的误差）
@@ -444,6 +482,108 @@ function scrollToBottom() {
   showScrollToBottom.value = false
   newMessageCount.value = 0
   isNearBottom.value = true
+}
+
+/**
+ * 检查是否有滚动条（视口是否被填满）
+ */
+function hasScrollbar(): boolean {
+  if (!scrollerRef.value) return false
+  const el = scrollerRef.value.$el as HTMLElement
+  return el.scrollHeight > el.clientHeight
+}
+
+/**
+ * 可靠地滚动到底部
+ * 策略: 轮询检查滚动位置，直到真正到达底部或超时
+ */
+async function scrollToBottomReliably(maxRetries = 10, interval = 100): Promise<void> {
+  let retries = 0
+
+  const tryScroll = async () => {
+    if (!scrollerRef.value) return false
+
+    // 执行滚动
+    scrollerRef.value.scrollToBottom()
+    await nextTick()
+
+    // 验证是否到达底部
+    const el = scrollerRef.value.$el as HTMLElement
+    if (!el) return false
+
+    const scrollTop = el.scrollTop
+    const scrollHeight = el.scrollHeight
+    const clientHeight = el.clientHeight
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+
+    // 允许10px的误差
+    return distanceFromBottom < 10
+  }
+
+  // 第一次尝试
+  const firstTry = await tryScroll()
+  if (firstTry) return
+
+  // 轮询重试
+  return new Promise((resolve) => {
+    const timer = setInterval(async () => {
+      retries++
+      const success = await tryScroll()
+
+      if (success || retries >= maxRetries) {
+        clearInterval(timer)
+        if (!success && retries >= maxRetries) {
+          console.warn('⚠️ 滚动到底部失败，已重试', maxRetries, '次')
+        }
+        resolve()
+      }
+    }, interval)
+  })
+}
+
+/**
+ * 自动加载直到填满视口或达到上限
+ */
+async function ensureScrollable(): Promise<void> {
+  // 等待虚拟滚动器渲染
+  await nextTick()
+  await nextTick()
+
+  let attempts = 0
+  const MAX_ATTEMPTS = 10  // 防御性限制
+  let totalLoaded = 0  // 记录自动加载的总消息数
+
+  while (attempts < MAX_ATTEMPTS) {
+    // 1️⃣ 先检查：视口是否已填满
+    if (hasScrollbar()) {
+      console.log('✅ 视口已填满，停止自动加载')
+      break
+    }
+
+    // 2️⃣ 再判断：是否还有更多历史消息
+    if (!props.hasMoreHistory) {
+      console.log('📭 没有更多历史消息，停止加载（消息数量不足以填满视口）')
+      break
+    }
+
+    // 3️⃣ 检查：是否超过自动加载上限
+    if (totalLoaded >= HISTORY_AUTO_LOAD_MAX) {
+      console.log(`📊 已自动加载 ${totalLoaded} 条消息，达到上限 ${HISTORY_AUTO_LOAD_MAX}，停止加载`)
+      break
+    }
+
+    // 4️⃣ 继续加载
+    console.log(`📏 视口未填满且有更多历史，自动加载第 ${attempts + 1} 批...`)
+    emit('load-more-history')
+    await nextTick()
+    await new Promise(resolve => setTimeout(resolve, 300))  // 等待加载完成
+    totalLoaded += 50  // 假设每次加载50条
+    attempts++
+  }
+
+  if (attempts >= MAX_ATTEMPTS) {
+    console.warn('⚠️ 达到最大尝试次数，停止自动加载')
+  }
 }
 </script>
 
@@ -482,72 +622,6 @@ function scrollToBottom() {
   justify-content: center;
   padding: 12px;
   color: var(--theme-foreground, #24292e);
-}
-
-/* 连接状态指示器 */
-.connection-status-wrapper {
-  margin-bottom: 16px;
-}
-
-.connection-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.3s ease;
-}
-
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  transition: all 0.3s ease;
-}
-
-.status-connected {
-  background: rgba(40, 167, 69, 0.1);
-  color: #28a745;
-  border: 1px solid rgba(40, 167, 69, 0.3);
-}
-
-.status-connected .status-dot {
-  background: #28a745;
-  box-shadow: 0 0 8px rgba(40, 167, 69, 0.6);
-}
-
-.status-connecting {
-  background: rgba(255, 193, 7, 0.1);
-  color: #d39e00;
-  border: 1px solid rgba(255, 193, 7, 0.3);
-}
-
-.status-connecting .status-dot {
-  background: #ffc107;
-  animation: pulse-connecting 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse-connecting {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(0.8);
-  }
-}
-
-.status-disconnected {
-  background: rgba(220, 53, 69, 0.1);
-  color: #dc3545;
-  border: 1px solid rgba(220, 53, 69, 0.3);
-}
-
-.status-disconnected .status-dot {
-  background: #dc3545;
 }
 
 .empty-content {

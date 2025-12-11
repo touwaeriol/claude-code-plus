@@ -10,6 +10,7 @@ import {
   ConnectOptions as SessionConnectOptions,
   ContentBlock
 } from './rsocket'
+import { ProtoCodec } from './rsocket/protoCodec'
 import type { AgentStreamEvent } from './rsocket'
 import type { HistorySessionMetadata } from '@/types/session'
 import type {
@@ -44,21 +45,6 @@ export interface HistoryMetadata {
 export class AiAgentService {
   // 会话管理 - sessionId -> RSocketSession
   private sessions = new Map<string, RSocketSession>()
-  // 用于历史查询的后台会话（无 UI 绑定）
-  private historySession: RSocketSession | null = null
-
-  private async ensureHistoryTransport(): Promise<RSocketSession> {
-    const active = this.sessions.values().next().value as RSocketSession | undefined
-    if (active) return active
-
-    if (!this.historySession) {
-      this.historySession = new RSocketSession()
-      await this.historySession.connect({})
-    } else if (!this.historySession.isConnected) {
-      await this.historySession.connect({})
-    }
-    return this.historySession
-  }
 
   /**
    * 创建并连接到新会话
@@ -374,20 +360,35 @@ export class AiAgentService {
    * 加载历史消息（非流式，一次性返回结果）
    */
   async loadHistory(
-    params: { sessionId?: string; projectPath?: string; offset?: number; limit?: number },
-    transportSessionId?: string
+    params: { sessionId?: string; projectPath?: string; offset?: number; limit?: number }
   ): Promise<{ messages: RpcMessage[]; offset: number; count: number; availableCount: number }> {
-    console.log('📜 [AiAgentService] 加载历史:', params)
+    console.log('📜 [AiAgentService] 加载历史 (HTTP protobuf):', params)
 
-    const session = transportSessionId
-      ? this.sessions.get(transportSessionId)
-      : await this.ensureHistoryTransport()
+    const { resolveServerHttpUrl } = await import('@/utils/serverUrl')
+    const baseUrl = resolveServerHttpUrl()
+    const url = `${baseUrl}/api/history/load.pb`
 
-    if (!session) {
-      throw new Error('无可用会话')
+    const body = ProtoCodec.encodeLoadHistoryRequest({
+      sessionId: params.sessionId,
+      projectPath: params.projectPath,
+      offset: params.offset,
+      limit: params.limit
+    })
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream'
+      },
+      body
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
-    return await session.loadHistory(params)
+    const buffer = new Uint8Array(await response.arrayBuffer())
+    return ProtoCodec.decodeHistoryResult(buffer)
   }
 
   /**
@@ -398,20 +399,38 @@ export class AiAgentService {
    * @returns 历史文件元数据
    */
   async getHistoryMetadata(
-    params: { sessionId?: string; projectPath?: string },
-    transportSessionId?: string
+    params: { sessionId?: string; projectPath?: string }
   ): Promise<HistoryMetadata> {
-    console.log('📊 [AiAgentService] 获取历史元数据:', params)
+    console.log('📊 [AiAgentService] 获取历史元数据 (HTTP protobuf):', params)
 
-    const session = transportSessionId
-      ? this.sessions.get(transportSessionId)
-      : await this.ensureHistoryTransport()
+    const { resolveServerHttpUrl } = await import('@/utils/serverUrl')
+    const baseUrl = resolveServerHttpUrl()
+    const url = `${baseUrl}/api/history/metadata.pb`
 
-    if (!session) {
-      throw new Error('无可用会话')
+    const body = ProtoCodec.encodeGetHistoryMetadataRequest({
+      sessionId: params.sessionId,
+      projectPath: params.projectPath
+    })
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream'
+      },
+      body
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
-    return await session.getHistoryMetadata(params)
+    const buffer = new Uint8Array(await response.arrayBuffer())
+    const meta = ProtoCodec.decodeHistoryMetadata(buffer)
+    return {
+      totalLines: meta.totalLines,
+      sessionId: meta.sessionId,
+      projectPath: meta.projectPath
+    }
   }
 }
 

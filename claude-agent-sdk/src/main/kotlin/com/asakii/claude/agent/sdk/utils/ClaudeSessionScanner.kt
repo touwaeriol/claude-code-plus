@@ -165,9 +165,9 @@ object ClaudeSessionScanner {
         }
 
         // 如果没有时间戳，使用文件修改时间
-        if (lastTimestamp == 0L) {
-            lastTimestamp = file.lastModified()
-        }
+        val fileMtime = file.lastModified()
+        // 以文件修改时间为准，保证与文件浏览器排序一致
+        lastTimestamp = maxOf(lastTimestamp, fileMtime)
 
         return SessionMetadata(
             sessionId = file.nameWithoutExtension,

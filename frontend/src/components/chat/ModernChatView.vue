@@ -271,7 +271,8 @@ const historySessions = computed(() => {
     timestamp: tab.lastActiveAt.value,
     messageCount: tab.displayItems.length,
     isGenerating: tab.isGenerating.value,
-    isConnected: tab.isConnected.value
+    isConnected: tab.isConnected.value,
+    isActive: true
   }))
 
   // 历史会话列表（排除已激活的）
@@ -281,16 +282,22 @@ const historySessions = computed(() => {
       .map(t => t.sessionId.value)
       .filter((id): id is string => id !== null)
   )
+  const activeResumeIds = new Set(
+    sessionStore.activeTabs
+      .map((t: any) => t.resumeFromSessionId?.value ?? t.resumeFromSessionId ?? null)
+      .filter((id): id is string => !!id)
+  )
 
   const historyItems = historySessionList.value
-    .filter(h => !activeTabIds.has(h.sessionId) && !activeSessionIds.has(h.sessionId))
+    .filter(h => !activeTabIds.has(h.sessionId) && !activeSessionIds.has(h.sessionId) && !activeResumeIds.has(h.sessionId))
     .map(h => ({
       id: h.sessionId,
       name: h.firstUserMessage || t('session.unnamed'),
       timestamp: h.timestamp,
       messageCount: h.messageCount,
       isGenerating: false,
-      isConnected: false
+      isConnected: false,
+      isActive: false
     }))
 
   // 合并并按时间降序排序
@@ -590,13 +597,11 @@ async function loadHistorySessions(reset = false) {
 }
 
 function toggleHistoryOverlay() {
-  if (!isHistoryOverlayVisible.value) {
-    // 打开时加载历史会话（如果还没加载）
-    if (historySessionList.value.length === 0 && !historyLoading.value) {
-      loadHistorySessions(true)
-    }
-  }
+  const willOpen = !isHistoryOverlayVisible.value
   isHistoryOverlayVisible.value = !isHistoryOverlayVisible.value
+  if (willOpen && !historyLoading.value) {
+    loadHistorySessions(true)
+  }
 }
 
 async function handleLoadMoreHistory() {
@@ -618,26 +623,27 @@ async function handleHistorySelect(sessionId: string) {
   try {
     // 检查是否是活跃 Tab
     const activeTab = sessionStore.tabs.find(t => t.tabId === sessionId || t.sessionId.value === sessionId)
-  if (activeTab) {
-    // 切换到已有 Tab
-    await sessionStore.switchTab(activeTab.tabId)
-  } else {
-    // 恢复历史会话
-    const historySession = historySessionList.value.find(h => h.sessionId === sessionId)
-    if (historySession) {
-      console.log('🔄 Resuming history session:', sessionId)
-      await sessionStore.resumeSession(
-        sessionId,
-        historySession.firstUserMessage,
-        historySession.projectPath,
-        historySession.messageCount
-      )
+    if (activeTab) {
+      // 切换到已有 Tab
+      await sessionStore.switchTab(activeTab.tabId)
+    } else {
+      // 恢复历史会话
+      const historySession = historySessionList.value.find(h => h.sessionId === sessionId)
+      if (historySession) {
+        console.log('🔄 Resuming history session:', sessionId)
+        await sessionStore.resumeSession(
+          sessionId,
+          historySession.firstUserMessage,
+          historySession.projectPath,
+          historySession.messageCount
+        )
+      }
     }
-  }
-  isHistoryOverlayVisible.value = false
-  const historyPromise = (sessionStore.currentTab as any)?.__historyPromise as Promise<void> | undefined
-  if (historyPromise) {
-    await historyPromise
+
+    isHistoryOverlayVisible.value = false
+    const historyPromise = (sessionStore.currentTab as any)?.__historyPromise as Promise<void> | undefined
+    if (historyPromise) {
+      await historyPromise
     }
   } finally {
     uiState.value.isLoadingHistory = false

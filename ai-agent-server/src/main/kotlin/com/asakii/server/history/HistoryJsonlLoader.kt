@@ -49,7 +49,7 @@ object HistoryJsonlLoader {
     /**
      * @param sessionId 目标会话 ID（必填）
      * @param projectPath 项目路径（必填）
-     * @param offset 跳过条数
+     * @param offset 跳过条数（< 0 表示从尾部加载，例如 -1 表示加载最后的消息）
      * @param limit 限制条数（<=0 表示全部）
      */
     fun loadHistoryMessages(
@@ -73,6 +73,42 @@ object HistoryJsonlLoader {
 
         log.info("[History] 加载 JSONL: session=$sessionId file=${historyFile.absolutePath} offset=$offset limit=$limit")
 
+        // 如果 offset < 0，表示从尾部加载，需要先加载所有消息再取尾部
+        if (offset < 0 && limit > 0) {
+            val allMessages = mutableListOf<UiStreamEvent>()
+            historyFile.bufferedReader().use { reader ->
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.isBlank()) continue
+
+                    try {
+                        val obj = parser.parseToJsonElement(line).jsonObject
+                        val messageType = obj["type"]?.jsonPrimitive?.contentOrNull
+
+                        if (!shouldDisplay(messageType)) {
+                            continue
+                        }
+
+                        val uiEvent = toUiStreamEvent(obj) ?: continue
+                        allMessages.add(uiEvent)
+                    } catch (e: Exception) {
+                        log.warn("[History] 解析行失败: ${e.message}")
+                    }
+                }
+            }
+
+            // 从尾部取 limit 条
+            val result = if (allMessages.size > limit) {
+                allMessages.takeLast(limit)
+            } else {
+                allMessages
+            }
+
+            log.info("[History] 完成（从尾部）: loaded=${result.size} total=${allMessages.size}")
+            return result
+        }
+
+        // 原有逻辑：从头部开始加载
         val result = mutableListOf<UiStreamEvent>()
         var skipped = 0
 

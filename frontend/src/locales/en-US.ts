@@ -24,7 +24,8 @@ export default {
     cancelled: 'Cancelled',
     copyFailed: 'Copy failed',
     copied: 'Copied',
-    renderFailed: 'Render failed'
+    renderFailed: 'Render failed',
+    noMore: 'No more'
   },
   chat: {
     placeholder: 'Type a message...',
@@ -104,9 +105,11 @@ export default {
     connectionStatus: {
       connected: 'Connected',
       connecting: 'Connecting...',
-      disconnected: 'Disconnected'
+      disconnected: 'Disconnected',
+      generating: 'Generating...'
     },
     claudeThinking: 'Claude is thinking...',
+    loadingHistory: 'Loading history...',
     scrollToBottom: 'Scroll to bottom'
   },
   tools: {
@@ -196,6 +199,9 @@ export default {
   },
   session: {
     defaultName: 'Session {time}',
+    close: 'Close session',
+    sessionId: 'Session ID',
+    copyHint: 'Click again or double-click to copy',
     group: {
       today: 'Today',
       yesterday: 'Yesterday',
@@ -218,6 +224,7 @@ export default {
     noActive: 'No active sessions',
     historySection: 'History',
     unnamed: 'Unnamed session',
+    empty: 'No active sessions',
     messages: 'messages',
     loadHistoryFailed: 'Failed to load history sessions'
   },

@@ -35,7 +35,7 @@ import { useSessionPermissions, type SessionPermissionsInstance } from './useSes
 import { useSessionMessages, type SessionMessagesInstance } from './useSessionMessages'
 import { loggers } from '@/utils/logger'
 import type { PendingPermissionRequest, PendingUserQuestion, PermissionResponse } from '@/types/permission'
-import { HISTORY_PAGE_SIZE } from '@/constants/messageWindow'
+import { HISTORY_LAZY_LOAD_SIZE, HISTORY_PAGE_SIZE } from '@/constants/messageWindow'
 
 const log = loggers.session
 
@@ -148,6 +148,7 @@ export function useSessionTab(initialOrder: number = 0) {
   const thinkingEnabled = ref(true)
   const permissionMode = ref<RpcPermissionMode>('default')
   const skipPermissions = ref(false)
+  const initialConnectOptions = ref<TabConnectOptions | null>(null)
 
   // ========== 设置延迟应用机制 ==========
   // 上次 query 时实际应用的设置
@@ -170,6 +171,14 @@ export function useSessionTab(initialOrder: number = 0) {
     thinkingEnabled?: boolean
     skipPermissions?: boolean
   }>({})
+
+  function setInitialConnectOptions(options: TabConnectOptions) {
+    initialConnectOptions.value = { ...options }
+    if (options.model) modelId.value = options.model
+    if (options.thinkingEnabled !== undefined) thinkingEnabled.value = options.thinkingEnabled
+    if (options.permissionMode) permissionMode.value = options.permissionMode
+    if (options.skipPermissions !== undefined) skipPermissions.value = options.skipPermissions
+  }
 
   // ========== UI 状态 ==========
   const uiState = reactive<UIState>({
@@ -194,6 +203,11 @@ export function useSessionTab(initialOrder: number = 0) {
    */
   const pendingCompactMetadata = ref<RpcCompactMetadata | null>(null)
 
+  /**
+   * 恢复来源的会话 ID（如果是从历史 resume 而来）
+   */
+  const resumeFromSessionId = computed(() => initialConnectOptions.value?.resume ?? null)
+
   // ========== 历史加载状态 ==========
   const historyState = reactive({
     loading: false,
@@ -216,10 +230,12 @@ export function useSessionTab(initialOrder: number = 0) {
   }
 
   function syncHistoryLoadedCount(totalHint: number | null = null): void {
-    // 初始化 loadedStart
-    if (historyState.loadedCount === 0 && messagesHandler.messageCount.value > 0) {
-      historyState.loadedStart = 0
-    }
+    // ❌ 删除：这个逻辑会错误地重置 loadedStart
+    // 当从尾部加载时，loadedStart 已经被 markHistoryRange 正确设置了
+    // if (historyState.loadedCount === 0 && messagesHandler.messageCount.value > 0) {
+    //   historyState.loadedStart = 0
+    // }
+
     historyState.loadedCount = messagesHandler.messageCount.value
     const rangeEnd = historyState.loadedStart + historyState.loadedCount
     if (totalHint !== null) {
@@ -232,12 +248,20 @@ export function useSessionTab(initialOrder: number = 0) {
 
   function markHistoryRange(offset: number, count: number, totalHint: number | null = null): void {
     const effectiveCount = count ?? 0
+
+    // 处理尾部加载 (offset < 0)
+    let actualOffset = offset
+    if (offset < 0 && totalHint !== null && effectiveCount > 0) {
+      // 从尾部加载时，计算实际的起始位置
+      actualOffset = Math.max(0, totalHint - effectiveCount)
+    }
+
     if (historyState.loadedCount === 0 && messagesHandler.messageCount.value === 0) {
-      historyState.loadedStart = offset
+      historyState.loadedStart = actualOffset
     } else {
       historyState.loadedStart = historyState.loadedCount === 0
-        ? offset
-        : Math.min(historyState.loadedStart, offset)
+        ? actualOffset
+        : Math.min(historyState.loadedStart, actualOffset)
     }
     historyState.lastOffset = offset
     historyState.lastLimit = count || historyState.lastLimit
@@ -446,6 +470,7 @@ export function useSessionTab(initialOrder: number = 0) {
    * 连接到后端
    */
   async function connect(options: TabConnectOptions = {}): Promise<void> {
+    const resolvedOptions: TabConnectOptions = { ...(initialConnectOptions.value || {}), ...options }
     if (connectionState.status === ConnectionStatus.CONNECTING) {
       log.warn(`[Tab ${tabId}] 正在连接中，请勿重复连接`)
       return
@@ -466,10 +491,10 @@ export function useSessionTab(initialOrder: number = 0) {
     connectionState.lastError = null
 
     // 保存设置
-    if (options.model) modelId.value = options.model
-    if (options.thinkingEnabled !== undefined) thinkingEnabled.value = options.thinkingEnabled
-    if (options.permissionMode) permissionMode.value = options.permissionMode
-    if (options.skipPermissions !== undefined) skipPermissions.value = options.skipPermissions
+    if (resolvedOptions.model) modelId.value = resolvedOptions.model
+    if (resolvedOptions.thinkingEnabled !== undefined) thinkingEnabled.value = resolvedOptions.thinkingEnabled
+    if (resolvedOptions.permissionMode) permissionMode.value = resolvedOptions.permissionMode
+    if (resolvedOptions.skipPermissions !== undefined) skipPermissions.value = resolvedOptions.skipPermissions
 
     try {
       const connectOptions: ConnectOptions = {
@@ -479,8 +504,8 @@ export function useSessionTab(initialOrder: number = 0) {
         thinkingEnabled: thinkingEnabled.value,
         permissionMode: permissionMode.value,
         dangerouslySkipPermissions: skipPermissions.value,
-        continueConversation: options.continueConversation,
-        resume: options.resume
+        continueConversation: resolvedOptions.continueConversation,
+        resume: resolvedOptions.resume
       }
 
       const result = await aiAgentService.connect(connectOptions, handleMessage)
@@ -628,8 +653,7 @@ export function useSessionTab(initialOrder: number = 0) {
     try {
       // 调用非流式 API，一次性获取结果
       const result = await aiAgentService.loadHistory(
-        { ...params, offset, limit },
-        sessionId.value ?? undefined
+        { ...params, offset, limit }
       )
 
       log.info(`[Tab ${tabId}] 📜 历史加载完成: offset=${offset}, count=${result.count}, availableCount=${result.availableCount}, mode=${insertMode}`)
@@ -675,7 +699,7 @@ export function useSessionTab(initialOrder: number = 0) {
    */
   async function probeHistoryTotal(params: { sessionId?: string; projectPath?: string }): Promise<number | null> {
     try {
-      const metadata = await aiAgentService.getHistoryMetadata(params, sessionId.value ?? undefined)
+      const metadata = await aiAgentService.getHistoryMetadata(params)
       return metadata.totalLines
     } catch (error) {
       log.warn(`[Tab ${tabId}] 获取历史元数据失败:`, error)
@@ -690,8 +714,8 @@ export function useSessionTab(initialOrder: number = 0) {
     if (historyState.loading) return
     if (!historyState.hasMore) return
 
-    const nextOffset = Math.max(0, historyState.loadedStart - HISTORY_PAGE_SIZE)
-    const nextLimit = historyState.loadedStart - nextOffset || HISTORY_PAGE_SIZE
+    const nextOffset = Math.max(0, historyState.loadedStart - HISTORY_LAZY_LOAD_SIZE)
+    const nextLimit = historyState.loadedStart - nextOffset || HISTORY_LAZY_LOAD_SIZE
 
     await loadHistory(
       {
@@ -859,9 +883,8 @@ export function useSessionTab(initialOrder: number = 0) {
       return
     }
 
-    // 断开状态，触发重连
-    log.info(`[Tab ${tabId}] 连接断开，触发重连...`)
-    await reconnect()
+    log.info(`[Tab ${tabId}] 连接未建立，开始连接...`)
+    await connect(initialConnectOptions.value || {})
   }
 
   /**
@@ -870,6 +893,17 @@ export function useSessionTab(initialOrder: number = 0) {
    * - 非生成中：显示到 UI → 应用设置 → 确保连接 → 发送
    */
   async function sendMessage(message: { contexts: any[]; contents: ContentBlock[] }): Promise<void> {
+    // 连接未就绪：先入队，等待连接后处理
+    if (connectionState.status !== ConnectionStatus.CONNECTED) {
+      log.info(`[Tab ${tabId}] 连接未就绪（${connectionState.status}），消息入待办队列`)
+      messagesHandler.addToQueue(message)
+      // 若当前不在连接中，则主动触发连接；连接成功后会在 connect/reconnect 的回调里处理队列
+      if (connectionState.status !== ConnectionStatus.CONNECTING) {
+        await ensureConnected()
+      }
+      return
+    }
+
     // ★ 如果正在生成中，只加入队列（不添加到 UI）
     if (messagesHandler.isGenerating.value) {
       log.info(`[Tab ${tabId}] 正在生成中，消息只加入队列`)
@@ -1195,6 +1229,7 @@ export function useSessionTab(initialOrder: number = 0) {
     thinkingEnabled,
     permissionMode,
     skipPermissions,
+    resumeFromSessionId,
 
     // UI 状态
     uiState,
@@ -1221,6 +1256,7 @@ export function useSessionTab(initialOrder: number = 0) {
     messageQueue: messagesHandler.messageQueue,
 
     // 连接管理
+    setInitialConnectOptions,
     connect,
     disconnect,
     reconnect,
