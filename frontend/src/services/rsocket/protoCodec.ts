@@ -401,8 +401,8 @@ function mapRpcMessageFromProto(proto: any): RpcMessageType {
         message: {
           content: proto.message.value.message?.content.map(mapContentBlockFromProto) || []
         },
-        parent_tool_use_id: proto.message.value.parentToolUseId,
-        is_replay: proto.message.value.isReplay
+        parentToolUseId: proto.message.value.parentToolUseId,
+        isReplay: proto.message.value.isReplay
       } as any
 
     case 'assistant':
@@ -412,7 +412,8 @@ function mapRpcMessageFromProto(proto: any): RpcMessageType {
         message: {
           content: proto.message.value.message?.content.map(mapContentBlockFromProto) || []
         },
-        id: proto.message.value.id
+        id: proto.message.value.id,
+        parentToolUseId: proto.message.value.parentToolUseId
       } as any
 
     case 'result':
@@ -471,7 +472,7 @@ function mapStreamEventFromProto(proto: any, provider: 'claude' | 'codex'): RpcM
     provider,
     uuid: proto.uuid,
     session_id: proto.sessionId,
-    parent_tool_use_id: proto.parentToolUseId
+    parentToolUseId: proto.parentToolUseId
   }
 
   // proto.event 是 StreamEventData，其中的 oneof event 字段包含 case 和 value
@@ -586,7 +587,8 @@ function mapContentBlockFromProto(proto: ContentBlock): RpcContentBlock {
         type: 'tool_result',
         tool_use_id: proto.block.value.toolUseId,
         content: proto.block.value.contentJson ? JSON.parse(new TextDecoder().decode(proto.block.value.contentJson)) : undefined,
-        is_error: proto.block.value.isError
+        is_error: proto.block.value.isError,
+        agent_id: proto.block.value.agentId
       }
 
     case 'image':

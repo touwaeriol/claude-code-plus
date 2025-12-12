@@ -47,19 +47,25 @@ data class ContentStartedEvent(
     /** 工具名称（仅当 contentType 为 tool_use 类型时有值） */
     val toolName: String? = null,
     /** 初始内容块 */
-    val content: UnifiedContentBlock? = null
+    val content: UnifiedContentBlock? = null,
+    /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
+    val parentToolUseId: String? = null
 ) : NormalizedStreamEvent
 
 data class ContentDeltaEvent(
     override val provider: AiAgentProvider,
     val index: Int,
-    val delta: ContentDeltaPayload
+    val delta: ContentDeltaPayload,
+    /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
+    val parentToolUseId: String? = null
 ) : NormalizedStreamEvent
 
 data class ContentCompletedEvent(
     override val provider: AiAgentProvider,
     val index: Int,
-    val content: UnifiedContentBlock
+    val content: UnifiedContentBlock,
+    /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
+    val parentToolUseId: String? = null
 ) : NormalizedStreamEvent
 
 data class TurnCompletedEvent(
@@ -90,14 +96,18 @@ data class AssistantMessageEvent(
     val id: String? = null,
     val content: List<UnifiedContentBlock>,
     val model: String? = null,
-    val tokenUsage: UnifiedUsage? = null
+    val tokenUsage: UnifiedUsage? = null,
+    /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
+    val parentToolUseId: String? = null
 ) : NormalizedStreamEvent
 
 data class UserMessageEvent(
     override val provider: AiAgentProvider,
     val content: List<UnifiedContentBlock>,
     /** 是否是回放消息（用于区分压缩摘要） */
-    val isReplay: Boolean? = null
+    val isReplay: Boolean? = null,
+    /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
+    val parentToolUseId: String? = null
 ) : NormalizedStreamEvent
 
 /**
@@ -151,18 +161,24 @@ data class UiToolStart(
     val toolId: String,
     val toolName: String,      // 显示名称: "Read", "Write", "mcp__xxx"
     val toolType: String,      // 类型标识: "CLAUDE_READ", "CLAUDE_WRITE", "MCP"
-    val inputPreview: String? = null
+    val inputPreview: String? = null,
+    /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
+    val parentToolUseId: String? = null
 ) : UiStreamEvent
 
 data class UiToolProgress(
     val toolId: String,
     val status: ContentStatus,
-    val outputPreview: String? = null
+    val outputPreview: String? = null,
+    /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
+    val parentToolUseId: String? = null
 ) : UiStreamEvent
 
 data class UiToolComplete(
     val toolId: String,
-    val result: UnifiedContentBlock
+    val result: UnifiedContentBlock,
+    /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
+    val parentToolUseId: String? = null
 ) : UiStreamEvent
 
 data class UiMessageComplete(
@@ -179,7 +195,9 @@ data class UiError(
  */
 data class UiAssistantMessage(
     val id: String? = null,
-    val content: List<UnifiedContentBlock>
+    val content: List<UnifiedContentBlock>,
+    /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
+    val parentToolUseId: String? = null
 ) : UiStreamEvent
 
 data class UiResultMessage(
@@ -197,7 +215,9 @@ data class UiResultMessage(
 data class UiUserMessage(
     val content: List<UnifiedContentBlock>,
     /** 是否是回放消息（用于区分压缩摘要） */
-    val isReplay: Boolean? = null
+    val isReplay: Boolean? = null,
+    /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
+    val parentToolUseId: String? = null
 ) : UiStreamEvent
 
 /**

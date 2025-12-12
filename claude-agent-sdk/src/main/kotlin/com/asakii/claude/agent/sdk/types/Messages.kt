@@ -39,7 +39,14 @@ data class AssistantMessage(
     val content: List<ContentBlock>,
     val model: String,
     @SerialName("token_usage")
-    val tokenUsage: TokenUsage? = null
+    val tokenUsage: TokenUsage? = null,
+    /**
+     * 父工具调用 ID（用于子代理消息路由）
+     * - null: 主会话消息
+     * - 非 null: 子代理消息，值为触发该子代理的 Task 工具调用 ID
+     */
+    @SerialName("parent_tool_use_id")
+    val parentToolUseId: String? = null
 ) : Message
 
 /**

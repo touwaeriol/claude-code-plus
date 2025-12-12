@@ -34,7 +34,12 @@ interface RpcMessageBase {
 export interface RpcUserMessage extends RpcMessageBase {
   type: 'user'
   message: RpcMessageContent
-  parent_tool_use_id?: string
+  /** 消息 ID（历史记录中使用） */
+  id?: string
+  /** UUID（历史记录 JSONL 顶层字段） */
+  uuid?: string
+  /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
+  parentToolUseId?: string
   /**
    * 是否是回放消息（用于区分压缩摘要和确认消息）
    * - isReplay = false: 压缩摘要（新生成的上下文）
@@ -47,7 +52,12 @@ export interface RpcUserMessage extends RpcMessageBase {
 export interface RpcAssistantMessage extends RpcMessageBase {
   type: 'assistant'
   message: RpcMessageContent
+  /** 消息 ID */
   id?: string
+  /** UUID（历史记录 JSONL 顶层字段） */
+  uuid?: string
+  /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
+  parentToolUseId?: string
 }
 
 /** 结果消息 - 对应 Claude SDK ResultMessage */
@@ -70,7 +80,7 @@ export interface RpcStreamEvent extends RpcMessageBase {
   uuid: string
   session_id: string
   event: RpcStreamEventData
-  parent_tool_use_id?: string
+  parentToolUseId?: string
 }
 
 /** 错误消息 */
@@ -355,6 +365,8 @@ export interface RpcToolResultBlock {
   tool_use_id: string
   content?: unknown
   is_error?: boolean
+  /** Task 工具结果中的 agentId（用于加载子代理历史） */
+  agent_id?: string
 }
 
 export interface RpcImageBlock {

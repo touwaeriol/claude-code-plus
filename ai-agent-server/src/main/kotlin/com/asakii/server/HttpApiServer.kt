@@ -212,10 +212,10 @@ class HttpApiServer(
                                     }
                                 }
                                 "ide.getProjectPath" -> {
-                                    // 返回项目路径
+                                    // 返回项目路径（格式: {"success":true,"data":{"projectPath":"..."}}）
                                     val projectPath = ideTools.getProjectPath()
                                     call.respondText(
-                                        """{"success":true,"data":"${projectPath.replace("\\", "\\\\")}"}""",
+                                        """{"success":true,"data":{"projectPath":"${projectPath.replace("\\", "\\\\")}"}}""",
                                         ContentType.Application.Json
                                     )
                                 }

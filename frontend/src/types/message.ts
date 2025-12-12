@@ -22,6 +22,11 @@ export interface UnifiedMessage {
    * 当 isReplay = false 且内容以 "This session is being continued" 开头时为 true
    */
   isCompactSummary?: boolean
+  /**
+   * 父工具调用 ID（用于标识子代理消息所属的父 Task）
+   * 当消息来自子代理时，此字段包含父 Task 的 toolUseId
+   */
+  parentToolUseId?: string
 }
 
 export interface UnifiedUsage {
@@ -73,6 +78,8 @@ export interface ToolResultContent {
   tool_use_id: string
   content?: unknown
   is_error?: boolean
+  /** Task 工具结果中的 agentId（用于加载子代理历史） */
+  agent_id?: string
 }
 
 export interface CommandExecutionContent {

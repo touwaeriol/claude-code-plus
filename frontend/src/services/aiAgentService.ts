@@ -391,6 +391,28 @@ export class AiAgentService {
   }
 
   /**
+   * 加载子代理历史消息
+   *
+   * @param agentId 子代理 ID（如 "afd66ee"）
+   * @param projectPath 项目路径（用于定位历史文件目录）
+   * @returns 子代理的历史消息列表
+   */
+  async loadSubagentHistory(
+    agentId: string,
+    projectPath: string
+  ): Promise<RpcMessage[]> {
+    console.log('🔄 [AiAgentService] 加载子代理历史:', { agentId, projectPath })
+
+    // 子代理的 sessionId 格式为 agent-{agentId}
+    const result = await this.loadHistory({
+      sessionId: `agent-${agentId}`,
+      projectPath
+    })
+
+    return result.messages
+  }
+
+  /**
    * 获取历史文件元数据（文件总行数等）
    *
    * @param params 查询参数

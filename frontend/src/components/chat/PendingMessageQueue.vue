@@ -154,12 +154,7 @@ function formatPreview(msg: PendingMessage): string {
 .item-actions {
   display: flex;
   gap: 4px;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.queue-item:hover .item-actions {
-  opacity: 1;
+  opacity: 1; /* 常驻可见 */
 }
 
 .action-btn {

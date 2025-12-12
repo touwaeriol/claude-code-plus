@@ -178,9 +178,12 @@ object HistoryJsonlLoader {
         val contentBlocks = extractContentBlocks(json) ?: return null
         val messageObj = json["message"]?.jsonObject
         val id = messageObj?.get("id")?.jsonPrimitive?.contentOrNull
+        // 解析 parent_tool_use_id（用于子代理消息路由）
+        val parentToolUseId = json["parent_tool_use_id"]?.jsonPrimitive?.contentOrNull
         return UiAssistantMessage(
             id = id,
-            content = contentBlocks
+            content = contentBlocks,
+            parentToolUseId = parentToolUseId
         )
     }
 
@@ -236,14 +239,48 @@ object HistoryJsonlLoader {
                 val toolUseId = item["tool_use_id"]?.jsonPrimitive?.contentOrNull ?: ""
                 val isError = item["is_error"]?.jsonPrimitive?.booleanOrNull ?: false
                 val contentJson = item["content"]
+                val agentId = extractAgentIdFromContent(contentJson)
+                log.info("[History] tool_result: toolUseId=$toolUseId, agentId=$agentId, contentPreview=${contentJson?.toString()?.take(200)}")
                 ToolResultContent(
                     toolUseId = toolUseId,
                     content = contentJson,
-                    isError = isError
+                    isError = isError,
+                    agentId = agentId
                 )
             }
 
             else -> null  // 忽略未知类型
         }
+    }
+
+    /**
+     * 从 tool_result 的 content 中提取 agentId（仅 Task 工具有）
+     * 匹配模式: "agentId: xxx" 或 "agentId: xxx (..."
+     */
+    private fun extractAgentIdFromContent(content: JsonElement?): String? {
+        if (content == null) return null
+
+        // 如果是字符串，直接解析
+        if (content is kotlinx.serialization.json.JsonPrimitive && content.isString) {
+            return parseAgentIdFromText(content.content)
+        }
+
+        // 如果是数组，查找 text 块
+        if (content is JsonArray) {
+            for (item in content) {
+                if (item !is JsonObject) continue
+                if (item["type"]?.jsonPrimitive?.contentOrNull == "text") {
+                    val text = item["text"]?.jsonPrimitive?.contentOrNull ?: continue
+                    parseAgentIdFromText(text)?.let { return it }
+                }
+            }
+        }
+
+        return null
+    }
+
+    private fun parseAgentIdFromText(text: String): String? {
+        val regex = Regex("""agentId:\s*([a-f0-9]+)""", RegexOption.IGNORE_CASE)
+        return regex.find(text)?.groupValues?.get(1)
     }
 }

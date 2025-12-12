@@ -79,19 +79,19 @@ class MessageParser {
         // Check if content and model are directly in the object (old format)
         val directContent = jsonObject["content"]?.jsonArray
         val directModel = jsonObject["model"]?.jsonPrimitive?.content
-        
+
         // Or check if they're nested in a "message" object (new format)
         val messageObject = jsonObject["message"]?.jsonObject
         val nestedContent = messageObject?.get("content")?.jsonArray
         val nestedModel = messageObject?.get("model")?.jsonPrimitive?.content
-        
-        val contentArray = directContent ?: nestedContent 
+
+        val contentArray = directContent ?: nestedContent
             ?: throw MessageParsingException("Missing 'content' array in assistant message")
-        val model = directModel ?: nestedModel 
+        val model = directModel ?: nestedModel
             ?: throw MessageParsingException("Missing 'model' in assistant message")
-        
+
         val content = contentArray.map { parseContentBlock(it) }
-        
+
         // Try to get token usage from either location
         val tokenUsage = jsonObject["token_usage"]?.let { parseTokenUsage(it) }
             ?: messageObject?.get("usage")?.let { parseTokenUsage(it) }
@@ -99,11 +99,15 @@ class MessageParser {
         // Get message id from nested message object
         val id = messageObject?.get("id")?.jsonPrimitive?.contentOrNull
 
+        // 解析 parent_tool_use_id（用于子代理消息路由）
+        val parentToolUseId = jsonObject["parent_tool_use_id"]?.jsonPrimitive?.contentOrNull
+
         return AssistantMessage(
             id = id,
             content = content,
             model = model,
-            tokenUsage = tokenUsage
+            tokenUsage = tokenUsage,
+            parentToolUseId = parentToolUseId
         )
     }
     

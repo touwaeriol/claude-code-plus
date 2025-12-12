@@ -288,7 +288,7 @@ class RSocketHandler(
             "event=${formatStreamEventData(message.event)}"
         }
         is com.asakii.rpc.api.RpcAssistantMessage -> {
-            "content=${formatRpcContentBlocks(message.message.content)}"
+            "content=${formatRpcContentBlocks(message.message.content)}, parentToolUseId=${message.parentToolUseId}"
         }
         is com.asakii.rpc.api.RpcUserMessage -> {
             "content=${formatRpcContentBlocks(message.message.content)}, parentToolUseId=${message.parentToolUseId}"
