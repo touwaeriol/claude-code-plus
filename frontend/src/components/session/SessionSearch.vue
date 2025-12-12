@@ -7,7 +7,7 @@
         v-model="searchQuery"
         type="text"
         class="search-input"
-        placeholder="搜索会话..."
+        placeholder="Search sessions..."
         @input="handleSearch"
         @keydown.escape="handleClose"
       >
@@ -19,7 +19,7 @@
     <!-- 搜索结果 -->
     <div v-if="searchResults.length > 0" class="search-results">
       <div class="results-header">
-        找到 {{ searchResults.length }} 个结果
+        Found {{ searchResults.length }} results
       </div>
       <div class="results-list">
         <div
@@ -56,7 +56,7 @@
 
           <!-- 相关性分数（调试用） -->
           <div class="result-meta">
-            相关性: {{ result.relevanceScore.toFixed(1) }} |
+            Score: {{ result.relevanceScore.toFixed(1) }} |
             {{ new Date(result.timestamp).toLocaleString() }}
           </div>
         </div>
@@ -66,13 +66,13 @@
     <!-- 空状态 -->
     <div v-else-if="searchQuery && !isSearching" class="empty-state">
       <div class="empty-icon">🔍</div>
-      <div class="empty-text">未找到匹配的会话</div>
+      <div class="empty-text">No matching sessions</div>
     </div>
 
     <!-- 加载状态 -->
     <div v-if="isSearching" class="loading-state">
       <div class="loading-spinner"></div>
-      <div class="loading-text">搜索中...</div>
+      <div class="loading-text">Searching...</div>
     </div>
   </div>
 </template>

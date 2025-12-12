@@ -14,7 +14,7 @@
             <span class="value query">"{{ query }}"</span>
           </div>
           <div v-if="allowedDomains.length > 0" class="info-row">
-            <span class="label">允许域名:</span>
+            <span class="label">Allowed:</span>
             <div class="domain-list">
               <span v-for="(domain, index) in allowedDomains" :key="index" class="domain-tag allowed">
                 {{ domain }}
@@ -22,7 +22,7 @@
             </div>
           </div>
           <div v-if="blockedDomains.length > 0" class="info-row">
-            <span class="label">排除域名:</span>
+            <span class="label">Blocked:</span>
             <div class="domain-list">
               <span v-for="(domain, index) in blockedDomains" :key="index" class="domain-tag blocked">
                 {{ domain }}
@@ -32,7 +32,7 @@
         </div>
         <!-- 结果区域 -->
         <div v-if="hasResult" class="result-section">
-          <div class="section-title">搜索结果</div>
+          <div class="section-title">Search Results</div>
           <pre class="result-content">{{ resultText }}</pre>
         </div>
       </div>

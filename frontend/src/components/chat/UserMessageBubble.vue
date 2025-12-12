@@ -10,11 +10,11 @@
       <!-- 左侧占位元素，填充空白区域使整行可交互 -->
       <div class="row-spacer"></div>
       <div class="message-wrapper">
-        <!-- 编辑按钮（悬浮显示，紧贴气泡左侧） -->
+        <!-- Edit button (shown on hover, adjacent to bubble) -->
         <button
           v-show="showEditButton"
           class="edit-button"
-          title="编辑消息"
+          title="Edit message"
           @click="enterEditMode"
         >
           <span class="edit-icon">✏️</span>
@@ -63,7 +63,7 @@
             class="toggle-button"
             @click="toggleCollapse"
           >
-            {{ isCollapsed ? '展开 ▾' : '收起 ▴' }}
+            {{ isCollapsed ? 'Expand ▾' : 'Collapse ▴' }}
           </button>
         </div>
       </div>

@@ -10,7 +10,7 @@
         <!-- 1. 参数区域（提示词） -->
         <div class="params-section">
           <div v-if="description" class="info-row">
-            <span class="label">描述:</span>
+            <span class="label">Desc:</span>
             <span class="value">{{ description }}</span>
           </div>
           <div v-if="model" class="info-row">
@@ -27,11 +27,11 @@
         <div v-if="subagentMessages.length > 0 || subagentHistoryLoading" class="subagent-section">
           <div class="section-header" @click.stop="processExpanded = !processExpanded">
             <span class="expand-icon">{{ processExpanded ? '▼' : '▶' }}</span>
-            <span class="section-title">调用过程</span>
-            <span class="item-count">({{ subagentMessages.length }} 项)</span>
+            <span class="section-title">Process</span>
+            <span class="item-count">({{ subagentMessages.length }} items)</span>
           </div>
           <div v-if="processExpanded" class="subagent-container">
-            <div v-if="subagentHistoryLoading" class="loading-hint">加载中...</div>
+            <div v-if="subagentHistoryLoading" class="loading-hint">Loading...</div>
             <div v-else class="subagent-list">
               <DisplayItemRenderer
                 v-for="item in subagentMessages"
@@ -44,7 +44,7 @@
 
         <!-- 3. 结果区域 -->
         <div v-if="hasResult" class="result-section">
-          <div class="section-title">执行结果</div>
+          <div class="section-title">Result</div>
           <pre class="result-content">{{ resultText }}</pre>
         </div>
       </div>

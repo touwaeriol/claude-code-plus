@@ -20,7 +20,7 @@
         </div>
         <!-- 结果区域 -->
         <div v-if="hasResult" class="result-section">
-          <div class="section-title">抓取结果</div>
+          <div class="section-title">Fetch Result</div>
           <pre class="result-content">{{ resultText }}</pre>
         </div>
       </div>

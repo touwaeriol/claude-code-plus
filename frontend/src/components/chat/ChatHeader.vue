@@ -19,7 +19,7 @@
       <button
         class="icon-btn"
         type="button"
-        title="历史会话"
+        title="History"
         @click="emit('toggle-history')"
       >
         📋
@@ -27,7 +27,7 @@
       <button
         class="icon-btn primary"
         type="button"
-        title="新建会话"
+        title="New Session"
         @click="handleNewSession"
       >
         ➕
