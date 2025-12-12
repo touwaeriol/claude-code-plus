@@ -348,9 +348,13 @@ watch(() => displayMessages.value.length, async (newCount, oldCount) => {
     return
   }
 
-  // 如果不在底部，计数新消息
+  // 如果不在底部，计数新消息并显示滚动按钮
   if (!isNearBottom.value && (added > 0 || tailChanged)) {
     newMessageCount.value += added > 0 ? added : 1
+    // 确保在 streaming 期间显示滚动到底部按钮
+    if (props.isStreaming && newCount > 0) {
+      showScrollToBottom.value = true
+    }
   }
 
   // 如果在底部，自动滚动
@@ -372,6 +376,11 @@ watch(() => displayMessages.value.length, async (newCount, oldCount) => {
 watch(() => displayMessages.value, async () => {
   await nextTick()
   forceUpdateScroller()
+
+  // 在 streaming 期间，如果用户不在底部，确保按钮可见
+  if (props.isStreaming && !isNearBottom.value && displayMessages.value.length > 0) {
+    showScrollToBottom.value = true
+  }
 }, { deep: true })
 
 // 强制 DynamicScroller 重新计算所有项目尺寸
