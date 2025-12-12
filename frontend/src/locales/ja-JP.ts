@@ -94,7 +94,8 @@ export default {
       interruptHint: '中断して送信',
       stopHint: '生成停止',
       toggleThinkingHint: '思考切替',
-      switchModeHint: 'モード切替'
+      switchModeHint: 'モード切替',
+      clearToLineStartHint: '行頭まで削除'
     },
     claudeThinking: 'Claudeが考えています...',
     scrollToBottom: '一番下へ移動'

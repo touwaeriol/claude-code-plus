@@ -508,6 +508,28 @@ function setContent(text: string) {
   editor.value?.commands.setContent(text)
 }
 
+// 删除从光标位置到行首的内容
+function deleteToLineStart() {
+  if (!editor.value) return
+
+  const { state } = editor.value
+  const { selection } = state
+  const { $from } = selection
+
+  // 获取当前行的开始位置
+  // $from.start() 返回当前块（段落）的起始位置
+  const lineStart = $from.start()
+  const currentPos = $from.pos
+
+  // 如果光标已经在行首，不做任何操作
+  if (currentPos === lineStart) return
+
+  // 删除从行首到当前位置的内容
+  editor.value.chain()
+    .focus()
+    .deleteRange({ from: lineStart, to: currentPos })
+    .run()
+}
 
 // 清理
 onBeforeUnmount(() => {
@@ -527,6 +549,7 @@ defineExpose({
   setContent,
   extractContent,
   extractContentBlocks,
+  deleteToLineStart,
 })
 </script>
 

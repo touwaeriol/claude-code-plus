@@ -72,6 +72,14 @@
             <kbd class="keyboard-key">Ctrl</kbd> + <kbd class="keyboard-key">Enter</kbd>
             <span class="shortcut-desc">{{ t('chat.welcomeScreen.interruptHint') }}</span>
           </div>
+          <div class="shortcut-item">
+            <kbd class="keyboard-key">Ctrl</kbd> + <kbd class="keyboard-key">J</kbd>
+            <span class="shortcut-desc">{{ t('chat.welcomeScreen.newLineHint') }}</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd class="keyboard-key">Ctrl</kbd> + <kbd class="keyboard-key">U</kbd>
+            <span class="shortcut-desc">{{ t('chat.welcomeScreen.clearToLineStartHint') }}</span>
+          </div>
         </div>
       </div>
     </div>

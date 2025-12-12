@@ -17,8 +17,8 @@
         @click="selectCommand(cmd)"
         @mouseenter="selectedIndex = index"
       >
-        <div class="command-name">{{ cmd.name }}</div>
-        <div class="command-desc">{{ cmd.description }}</div>
+        <span class="command-name">{{ cmd.name }}</span>
+        <span class="command-desc">{{ cmd.description }}</span>
       </div>
     </div>
     <div v-if="filteredCommands.length === 0" class="no-results">
@@ -184,7 +184,10 @@ onUnmounted(() => {
 }
 
 .command-item {
-  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -204,16 +207,19 @@ onUnmounted(() => {
 }
 
 .command-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--theme-accent, #0366d6);
   font-family: monospace;
-  margin-bottom: 2px;
+  flex-shrink: 0;
 }
 
 .command-desc {
   font-size: 12px;
   color: var(--theme-secondary-foreground, #6a737d);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .no-results {

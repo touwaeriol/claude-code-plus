@@ -102,7 +102,8 @@ export default {
       interruptHint: '打断发送',
       stopHint: '停止生成',
       toggleThinkingHint: '开关思考',
-      switchModeHint: '切换模式'
+      switchModeHint: '切换模式',
+      clearToLineStartHint: '清空到行首'
     },
     connectionStatus: {
       connected: '已连接',

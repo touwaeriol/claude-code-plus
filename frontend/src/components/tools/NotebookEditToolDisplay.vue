@@ -22,13 +22,13 @@
             <span class="value badge">{{ editMode }}</span>
           </div>
           <div v-if="newSource" class="source-section">
-            <div class="section-title">新内容</div>
+            <div class="section-title">New Content</div>
             <pre class="source-content">{{ newSource }}</pre>
           </div>
         </div>
         <!-- 结果区域 -->
         <div v-if="hasResult" class="result-section">
-          <div class="section-title">结果</div>
+          <div class="section-title">Result</div>
           <pre class="result-content">{{ resultText }}</pre>
         </div>
       </div>

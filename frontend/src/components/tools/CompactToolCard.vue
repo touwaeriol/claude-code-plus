@@ -45,7 +45,7 @@
           v-if="displayInfo.readLines && !displayInfo.addedLines && !displayInfo.removedLines"
           class="line-changes-badge badge-read"
         >
-          读 {{ displayInfo.readLines }} 行
+          {{ displayInfo.readLines }} lines
         </span>
         <span
           v-else-if="displayInfo.lineChanges"

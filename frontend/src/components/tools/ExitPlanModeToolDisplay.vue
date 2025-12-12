@@ -12,7 +12,7 @@
           <pre class="plan-content">{{ plan }}</pre>
         </div>
         <div v-if="hasResult" class="result-section">
-          <div class="section-title">结果</div>
+          <div class="section-title">Result</div>
           <pre class="result-content">{{ resultText }}</pre>
         </div>
       </div>

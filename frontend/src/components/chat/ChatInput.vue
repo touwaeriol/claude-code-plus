@@ -899,7 +899,13 @@ async function handleKeydown(event: KeyboardEvent) {
     return
   }
 
-  // Ctrl+U - 清空光标位置到行首（RichTextInput 不支持此功能）
+  // Ctrl+U - 清空光标位置到行首
+  if (event.key === 'u' && event.ctrlKey && !event.shiftKey && !event.altKey) {
+    event.preventDefault()
+    richTextInputRef.value?.deleteToLineStart()
+    return
+  }
+
   // Enter 键由 RichTextInput 的 @submit 事件处理，这里不再重复处理
 }
 
