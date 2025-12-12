@@ -52,8 +52,8 @@ Claude Code Plus 是一个 IntelliJ IDEA 插件，将 Claude AI 直接集成到�
 ### 权限请求
 ![权限请求](docs/screenshots/permission-request.png)
 
-### IDE 集成
-![IDE 集成](docs/screenshots/idea-integration.png)
+### 主界面
+![主界面](docs/screenshots/idea-integration.png)
 
 ## 📦 安装
 

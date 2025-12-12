@@ -52,8 +52,8 @@ Claude Code Plus is an IntelliJ IDEA plugin that integrates Claude AI directly i
 ### Permission Request
 ![Permission Request](docs/screenshots/permission-request.png)
 
-### IDE Integration
-![IDE Integration](docs/screenshots/idea-integration.png)
+### Main Interface
+![Main Interface](docs/screenshots/idea-integration.png)
 
 ## 📦 Installation
 
