@@ -178,3 +178,4 @@ frontend/components.d.ts
 runide.log
 
 
+.playwright-mcp/
