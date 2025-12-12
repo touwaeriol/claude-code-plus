@@ -52,8 +52,8 @@ Claude Code Plus 是一个 IntelliJ IDEA 插件，将 Claude AI 直接集成到�
 ### 权限请求
 ![权限请求](docs/screenshots/permission-request.png)
 
-### IDE 集成
-![IDE 集成](docs/screenshots/idea-integration.png)
+### 主界面
+![主界面](docs/screenshots/idea-integration.png)
 
 ## 📦 安装
 
@@ -71,9 +71,13 @@ Claude Code Plus 是一个 IntelliJ IDEA 插件，将 Claude AI 直接集成到�
 ## 🔧 系统要求
 
 - **JetBrains IDE**：IntelliJ IDEA 2024.2 - 2025.3.x（Build 242-253）
-- **Claude CLI**：必须安装并配置
-  - 安装：`npm install -g @anthropic-ai/claude-code`
-  - 登录：`claude login`
+- **Node.js**：v18 或更高版本（[下载](https://nodejs.org/)）
+- **Claude 认证**：需要一次性配置
+  - 打开终端运行：`npx @anthropic-ai/claude-code`
+  - 按提示完成认证
+  - 详细配置指南请参阅[官方文档](https://docs.anthropic.com/en/docs/claude-code/getting-started)
+
+> **提示**：插件内置了 Claude CLI，无需单独安装！
 
 ## 🚀 快速开始
 

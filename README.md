@@ -52,8 +52,8 @@ Claude Code Plus is an IntelliJ IDEA plugin that integrates Claude AI directly i
 ### Permission Request
 ![Permission Request](docs/screenshots/permission-request.png)
 
-### IDE Integration
-![IDE Integration](docs/screenshots/idea-integration.png)
+### Main Interface
+![Main Interface](docs/screenshots/idea-integration.png)
 
 ## 📦 Installation
 
@@ -71,9 +71,13 @@ Claude Code Plus is an IntelliJ IDEA plugin that integrates Claude AI directly i
 ## 🔧 Requirements
 
 - **JetBrains IDE**: IntelliJ IDEA 2024.2 - 2025.3.x (Build 242-253)
-- **Claude CLI**: Must be installed and configured
-  - Install: `npm install -g @anthropic-ai/claude-code`
-  - Login: `claude login`
+- **Node.js**: v18 or higher ([Download](https://nodejs.org/))
+- **Claude Authentication**: One-time setup required
+  - Open terminal and run: `npx @anthropic-ai/claude-code`
+  - Follow the prompts to authenticate
+  - See [Official Documentation](https://docs.anthropic.com/en/docs/claude-code/getting-started) for detailed setup guide
+
+> **Note**: The plugin includes a bundled Claude CLI - no separate CLI installation required!
 
 ## 🚀 Quick Start
 
