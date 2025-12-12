@@ -441,7 +441,9 @@ export function useSessionTab(initialOrder: number = 0) {
     if (message.status === 'compacting') {
       log.info(`[Tab ${tabId}] 压缩开始`)
       isCompacting.value = true
-    } else if (message.status === null) {
+    } else if (!message.status) {
+      // status 为 null/undefined/空字符串 时表示压缩结束
+      // 注意：protobuf 的 optional string 解码后，null 可能变成 undefined 或 ""
       log.info(`[Tab ${tabId}] 压缩结束`)
       isCompacting.value = false
     }

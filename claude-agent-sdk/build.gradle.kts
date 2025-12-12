@@ -252,12 +252,14 @@ tasks.register<JavaExec>("runQuickConnectionTest") {
 
 // ========== CLI 绑定任务 ==========
 
-// 读取 CLI 版本
+// 读取 CLI 版本配置（统一在 cli-version.properties 中配置）
 val cliVersionProps = Properties().apply {
     file("cli-version.properties").inputStream().use { load(it) }
 }
 val cliVersion = cliVersionProps.getProperty("cli.version")
     ?: error("cli.version is missing in cli-version.properties")
+val npmVersion = cliVersionProps.getProperty("npm.version")
+    ?: error("npm.version is missing in cli-version.properties")
 
 // 定义资源目录
 val bundledDir = file("src/main/resources/bundled")
@@ -319,9 +321,8 @@ val downloadCli = tasks.register("downloadCli") {
         println("========================================")
 
         try {
-            // npm 包 URL（匹配 SDK 版本，而非 CLI 版本）
-            // SDK 版本映射：CLI 2.0.65 对应 SDK 0.1.65
-            val npmPackageVersion = "0.1.65"  // 从 package.json 查询得到
+            // npm 包版本从 cli-version.properties 读取
+            val npmPackageVersion = npmVersion
             val npmTarballUrl = "https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-$npmPackageVersion.tgz"
 
             println("📦 npm 包版本: $npmPackageVersion")
