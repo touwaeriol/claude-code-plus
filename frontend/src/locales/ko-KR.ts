@@ -268,5 +268,13 @@ export default {
   ,
   system: {
     interrupted: '[사용자에 의해 요청이 중단되었습니다]'
+  },
+  compact: {
+    compacting: '대화 컨텍스트 압축 중...'
+  },
+  slashCommand: {
+    compact: '현재 세션 컨텍스트 압축',
+    context: '현재 세션 컨텍스트 정보 표시',
+    rename: '현재 세션 이름 변경'
   }
 }

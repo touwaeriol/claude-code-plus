@@ -1729,45 +1729,7 @@ onUnmounted(() => {
   color: var(--theme-secondary-foreground, #6a737d);
 }
 
-/* 模式下拉弹层样式 */
-.mode-dropdown .el-select-dropdown__item.is-selected .mode-icon {
-  color: var(--theme-background, #ffffff);
-}
-
-/* 模型下拉弹层基础样式，使用主题变量 */
-.chat-input-select-dropdown {
-  background-color: var(--theme-background, #ffffff);
-  border: 1px solid var(--theme-border, #e1e4e8);
-}
-
-.chat-input-select-dropdown .el-select-dropdown__item {
-  color: var(--theme-foreground, #24292e);
-}
-
-.chat-input-select-dropdown .el-select-dropdown__item.hover,
-.chat-input-select-dropdown .el-select-dropdown__item:hover {
-  background-color: var(--theme-hover-background, #f6f8fa);
-}
-
-/* 选中项高亮：背景用 accent，文字用背景色（形成对比） */
-.chat-input-select-dropdown .el-select-dropdown__item.is-selected {
-  background-color: var(--theme-accent, #0366d6);
-  color: var(--theme-background, #ffffff) !important;
-}
-
-.chat-input-select-dropdown .el-select-dropdown__item.is-selected .model-option-label {
-  color: var(--theme-background, #ffffff);
-}
-
-.chat-input-select-dropdown .model-option-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.chat-input-select-dropdown .model-brain-icon {
-  font-size: 14px;
-}
+/* 模式下拉弹层样式 - 移动到全局样式块 */
 
 
 .model-selector :deep(.el-select__suffix),
@@ -2002,5 +1964,56 @@ onUnmounted(() => {
 .error-dismiss:hover {
   background: rgba(220, 38, 38, 0.1);
 }
+</style>
 
+<!-- 非 scoped 样式：用于 teleported 的下拉菜单 -->
+<style>
+/* 模式下拉弹层样式 */
+.mode-dropdown .el-select-dropdown__item.is-selected .mode-icon {
+  color: var(--theme-background, #ffffff);
+}
+
+/* 模型下拉弹层基础样式，使用主题变量 */
+.chat-input-select-dropdown {
+  background-color: var(--theme-background, #ffffff) !important;
+  border: 1px solid var(--theme-border, #e1e4e8) !important;
+}
+
+.chat-input-select-dropdown .el-select-dropdown__item {
+  color: var(--theme-foreground, #24292e) !important;
+}
+
+.chat-input-select-dropdown .el-select-dropdown__item.hover,
+.chat-input-select-dropdown .el-select-dropdown__item:hover {
+  background-color: var(--theme-hover-background, #f6f8fa) !important;
+}
+
+/* 选中项高亮：背景用 accent，文字用背景色（形成对比） */
+.chat-input-select-dropdown .el-select-dropdown__item.is-selected {
+  background-color: var(--theme-accent, #0366d6) !important;
+  color: var(--theme-background, #ffffff) !important;
+}
+
+.chat-input-select-dropdown .el-select-dropdown__item.is-selected .model-option-label,
+.chat-input-select-dropdown .el-select-dropdown__item.is-selected .mode-option-label {
+  color: var(--theme-background, #ffffff) !important;
+}
+
+.chat-input-select-dropdown .model-option-label,
+.chat-input-select-dropdown .mode-option-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--theme-foreground, #24292e);
+}
+
+.chat-input-select-dropdown .model-brain-icon {
+  font-size: 14px;
+}
+
+/* 模式选项图标 */
+.chat-input-select-dropdown .mode-icon {
+  font-size: 14px;
+  margin-right: 4px;
+}
 </style>

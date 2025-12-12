@@ -56,17 +56,17 @@ const popupRef = ref<HTMLElement>()
 const selectedIndex = ref(0)
 
 // 可用的斜杠命令
-const commands: SlashCommand[] = [
-  { name: '/compact', description: '压缩当前会话的上下文' },
-  { name: '/context', description: '显示当前会话的上下文信息' },
-  { name: '/rename', description: '重命名当前会话' },
-]
+const commands = computed<SlashCommand[]>(() => [
+  { name: '/compact', description: t('slashCommand.compact') },
+  { name: '/context', description: t('slashCommand.context') },
+  { name: '/rename', description: t('slashCommand.rename') },
+])
 
 // 根据查询过滤命令
 const filteredCommands = computed(() => {
   const q = props.query.toLowerCase()
-  if (!q) return commands
-  return commands.filter(cmd =>
+  if (!q) return commands.value
+  return commands.value.filter(cmd =>
     cmd.name.toLowerCase().includes(q) ||
     cmd.description.toLowerCase().includes(q)
   )

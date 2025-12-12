@@ -294,5 +294,10 @@ export default {
   },
   compact: {
     compacting: 'Compacting conversation context...'
+  },
+  slashCommand: {
+    compact: 'Compact current session context',
+    context: 'Show current session context info',
+    rename: 'Rename current session'
   }
 }
