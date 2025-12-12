@@ -22,9 +22,6 @@ import { convertMessageToDisplayItems, createToolCall } from '@/utils/displayIte
 import { buildUserMessageContent } from '@/utils/userMessageBuilder'
 import { mapRpcContentBlock } from '@/utils/rpcMappers'
 import type { RpcStreamEvent, RpcResultMessage } from '@/types/rpc'
-import { CLAUDE_TOOL_TYPE } from '@/constants/toolTypes'
-import type { ClaudeReadToolCall, ClaudeWriteToolCall, ClaudeEditToolCall, ClaudeMultiEditToolCall } from '@/types/display'
-import { ideService, ideaBridge } from '@/services/ideaBridge'
 import { loggers } from '@/utils/logger'
 import type { SessionToolsInstance } from './useSessionTools'
 import type { SessionStatsInstance } from './useSessionStats'
@@ -1174,112 +1171,14 @@ export function useSessionMessages(
       const success = tools.updateToolResult(result.tool_use_id, result)
       if (success) {
         hasUpdates = true
-
-        // 在 IDEA 环境下，工具调用成功后自动执行 IDEA 操作
-        const wasSuccess = !result.is_error
-        if (wasSuccess && ideaBridge.isInIde()) {
-          const toolCall = tools.getToolCall(result.tool_use_id)
-          if (toolCall) {
-            executeIdeActionForTool(toolCall)
-          }
-        }
+        // 不再自动执行 IDEA 操作
+        // 改为用户点击工具卡片时通过 toolShowInterceptor 触发
       }
     }
 
     // 强制触发 Vue 响应式更新
     if (hasUpdates) {
       triggerDisplayItemsUpdate()
-    }
-  }
-
-  /**
-   * 为工具调用执行对应的 IDEA 操作
-   */
-  async function executeIdeActionForTool(toolCall: ToolCall): Promise<void> {
-    try {
-      const toolType = toolCall.toolType
-
-      switch (toolType) {
-        case CLAUDE_TOOL_TYPE.READ: {
-          const readCall = toolCall as ClaudeReadToolCall
-          const filePath = readCall.input.file_path || readCall.input.path || ''
-          if (!filePath) break
-
-          const viewRange = readCall.input.view_range
-          let startLine: number | undefined
-          let endLine: number | undefined
-
-          if (Array.isArray(viewRange) && viewRange.length >= 2) {
-            startLine = viewRange[0]
-            endLine = viewRange[1]
-          } else if (readCall.input.offset !== undefined) {
-            startLine = readCall.input.offset
-            if (readCall.input.limit !== undefined) {
-              endLine = startLine + readCall.input.limit - 1
-            }
-          }
-
-          await ideService.openFile(filePath, {
-            line: startLine,
-            endLine: endLine,
-            selectContent: true
-          })
-          break
-        }
-
-        case CLAUDE_TOOL_TYPE.WRITE: {
-          const writeCall = toolCall as ClaudeWriteToolCall
-          const filePath = writeCall.input.file_path || writeCall.input.path || ''
-          if (!filePath) break
-
-          await ideService.openFile(filePath)
-          break
-        }
-
-        case CLAUDE_TOOL_TYPE.EDIT: {
-          const editCall = toolCall as ClaudeEditToolCall
-          const filePath = editCall.input.file_path || ''
-          if (!filePath) break
-
-          await ideService.showDiff({
-            filePath,
-            oldContent: editCall.input.old_string || '',
-            newContent: editCall.input.new_string || '',
-            rebuildFromFile: true,
-            edits: [{
-              oldString: editCall.input.old_string || '',
-              newString: editCall.input.new_string || '',
-              replaceAll: editCall.input.replace_all || false
-            }]
-          })
-          break
-        }
-
-        case CLAUDE_TOOL_TYPE.MULTI_EDIT: {
-          const multiEditCall = toolCall as ClaudeMultiEditToolCall
-          const filePath = multiEditCall.input.file_path || ''
-          if (!filePath) break
-
-          const edits = multiEditCall.input.edits || []
-          if (edits.length === 0) break
-
-          await ideService.showDiff({
-            filePath,
-            oldContent: edits[0]?.old_string || '',
-            newContent: edits[0]?.new_string || '',
-            rebuildFromFile: true,
-            title: `文件变更: ${filePath} (${edits.length} 处修改)`,
-            edits: edits.map(edit => ({
-              oldString: edit.old_string || '',
-              newString: edit.new_string || '',
-              replaceAll: edit.replace_all || false
-            }))
-          })
-          break
-        }
-      }
-    } catch (error) {
-      log.warn(`[useSessionMessages] 执行 IDEA 操作失败: ${error}`)
     }
   }
 

@@ -4,9 +4,13 @@
 
 import com.intellij.diff.DiffContentFactory
 
+import com.intellij.diff.DiffDialogHints
+
 import com.intellij.diff.DiffManager
 
 import com.intellij.diff.requests.SimpleDiffRequest
+
+import com.intellij.openapi.wm.IdeFocusManager
 
 import com.intellij.notification.NotificationGroupManager
 
@@ -96,6 +100,10 @@ class IdeaPlatformService(private val project: Project) {
 
      * @param content 要选择的内容（可选）
 
+     * @param selectionRange 选择范围（偏移量）
+
+     * @param focusEditor 是否聚焦编辑器（默认 false，不抢占焦点）
+
      * @return true 表示成功打开
 
      */
@@ -112,7 +120,9 @@ class IdeaPlatformService(private val project: Project) {
 
         content: String? = null,
 
-        selectionRange: SelectionRange? = null
+        selectionRange: SelectionRange? = null,
+
+        focusEditor: Boolean = false
 
     ): Boolean {
 
@@ -140,7 +150,9 @@ class IdeaPlatformService(private val project: Project) {
 
                     val descriptor = OpenFileDescriptor(project, virtualFile)
 
-                    val editor = fileEditorManager.openTextEditor(descriptor, true)
+                    // focusEditor = false: 打开文件但不聚焦到 IDEA 窗口
+
+                    val editor = fileEditorManager.openTextEditor(descriptor, focusEditor)
 
 
 
