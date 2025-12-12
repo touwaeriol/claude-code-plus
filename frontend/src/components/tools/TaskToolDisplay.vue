@@ -68,8 +68,8 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-// Task 默认展开（用户关注任务进度）
-const expanded = ref(true)
+// Task 默认折叠
+const expanded = ref(false)
 // 子代理调用过程默认展开
 const processExpanded = ref(true)
 
@@ -236,18 +236,18 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
 }
 
 .label {
-  color: var(--theme-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground);
   min-width: 60px;
   flex-shrink: 0;
 }
 
 .value {
-  color: var(--theme-foreground, #24292e);
+  color: var(--theme-foreground);
 }
 
 .value.badge {
-  background: var(--theme-badge-background, #eef2ff);
-  color: var(--theme-badge-foreground, #4338ca);
+  background: color-mix(in srgb, var(--theme-accent) 15%, transparent);
+  color: var(--theme-accent);
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 11px;
@@ -260,7 +260,7 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
 .section-title {
   font-size: 11px;
   font-weight: 600;
-  color: var(--theme-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground);
   text-transform: uppercase;
   margin: 0;
 }
@@ -269,10 +269,12 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
   margin: 0;
   margin-top: 6px;
   padding: 8px;
-  background: var(--theme-code-background, #f6f8fa);
-  border: 1px solid var(--theme-border, #e1e4e8);
+  background: var(--theme-code-background);
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
-  font-size: 12px;
+  font-size: var(--theme-editor-font-size, 12px);
+  font-family: var(--theme-editor-font-family);
+  color: var(--theme-foreground);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 150px;
@@ -281,7 +283,7 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
 
 /* 子代理调用过程区域 */
 .subagent-section {
-  border-top: 1px solid var(--theme-border, #e1e4e8);
+  border-top: 1px solid var(--theme-border);
   padding-top: 8px;
   display: flex;
   flex-direction: column;
@@ -302,21 +304,22 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
 
 .expand-icon {
   font-size: 10px;
-  color: var(--theme-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground);
   width: 12px;
 }
 
 .item-count {
   font-size: 11px;
-  color: var(--theme-tertiary-foreground, #8b949e);
+  color: var(--theme-secondary-foreground);
   font-weight: normal;
+  opacity: 0.7;
 }
 
 .subagent-container {
   margin-top: 8px;
-  border: 1px solid var(--theme-border, #e1e4e8);
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
-  background: var(--theme-background-secondary, #f6f8fa);
+  background: var(--theme-background);
   overflow: hidden;
 }
 
@@ -324,7 +327,7 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
   padding: 12px;
   text-align: center;
   font-size: 12px;
-  color: var(--theme-secondary-foreground, #586069);
+  color: var(--theme-secondary-foreground);
 }
 
 .subagent-list {
@@ -413,7 +416,7 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
 
 /* 结果区域 */
 .result-section {
-  border-top: 1px solid var(--theme-border, #e1e4e8);
+  border-top: 1px solid var(--theme-border);
   padding-top: 8px;
 }
 
@@ -421,11 +424,12 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
   margin: 0;
   margin-top: 6px;
   padding: 8px;
-  background: var(--theme-code-background, #f6f8fa);
-  border: 1px solid var(--theme-border, #e1e4e8);
+  background: var(--theme-code-background);
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
-  font-size: 12px;
-  font-family: monospace;
+  font-size: var(--theme-editor-font-size, 12px);
+  font-family: var(--theme-editor-font-family);
+  color: var(--theme-foreground);
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 200px;

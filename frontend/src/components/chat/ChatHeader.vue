@@ -11,6 +11,7 @@
       @close="handleCloseTab"
       @reorder="handleReorder"
       @toggle-list="emit('toggle-history')"
+      @rename="handleRename"
     />
 
     <!-- 右侧：功能按钮 -->
@@ -40,7 +41,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useToastStore } from '@/stores/toastStore'
 import { ConnectionStatus } from '@/types/display'
+import { aiAgentService } from '@/services/aiAgentService'
 import SessionTabs, { type SessionTabInfo } from './SessionTabs.vue'
 import ThemeSwitcher from '@/components/toolbar/ThemeSwitcher.vue'
 import LanguageSwitcher from '@/components/toolbar/LanguageSwitcher.vue'
@@ -52,6 +55,7 @@ const emit = defineEmits<{
 }>()
 
 const sessionStore = useSessionStore()
+const toastStore = useToastStore()
 
 const activeTabs = computed(() => sessionStore.activeTabs)
 const currentTabId = computed(() => sessionStore.currentTabId)
@@ -97,6 +101,29 @@ async function handleNewSession() {
 
 function handleReorder(newOrder: string[]) {
   sessionStore.updateTabOrder(newOrder)
+}
+
+function handleRename(tabId: string, newName: string) {
+  const tab = activeTabs.value.find(t => t.tabId === tabId)
+  if (tab) {
+    // 1. 立即更新 UI
+    tab.rename(newName)
+    // 2. 直接发送 /rename 命令到后端（绕过队列，即使正在生成也发送）
+    const sessionId = tab.sessionId.value
+    if (sessionId && tab.connectionState.status === ConnectionStatus.CONNECTED) {
+      aiAgentService.sendMessage(sessionId, `/rename ${newName}`)
+        .then(() => {
+          toastStore.success(`Rename success: "${newName}"`)
+        })
+        .catch(err => {
+          console.error('[ChatHeader] 发送 /rename 命令失败:', err)
+          toastStore.error('Rename failed')
+        })
+    } else {
+      // 未连接时，UI 已更新，显示成功提示
+      toastStore.success(`Rename success: "${newName}"`)
+    }
+  }
 }
 </script>
 

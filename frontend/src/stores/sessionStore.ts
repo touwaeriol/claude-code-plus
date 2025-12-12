@@ -23,6 +23,7 @@ import type { RpcPermissionMode } from '@/types/rpc'
 import { ConnectionStatus } from '@/types/display'
 import { loggers } from '@/utils/logger'
 import { HISTORY_INITIAL_LOAD, HISTORY_LAZY_LOAD_SIZE } from '@/constants/messageWindow'
+import { aiAgentService } from '@/services/aiAgentService'
 
 const log = loggers.session
 
@@ -300,6 +301,21 @@ export const useSessionStore = defineStore('session', () => {
       log.warn(`[SessionStore] 加载历史失败: ${externalSessionId}`, error)
     })
     ;(tab as any).__historyPromise = historyPromise
+
+    // 如果没有传入 name，异步获取 customTitle 并更新 tab 名称
+    if (!name && projectPath) {
+      aiAgentService.getHistoryMetadata({
+        sessionId: externalSessionId,
+        projectPath
+      }).then(metadata => {
+        if (metadata.customTitle) {
+          tab.rename(metadata.customTitle)
+          log.info(`[SessionStore] 使用 customTitle 作为 tab 名称: ${metadata.customTitle}`)
+        }
+      }).catch(error => {
+        log.warn(`[SessionStore] 获取 customTitle 失败: ${externalSessionId}`, error)
+      })
+    }
 
     return tab
   }

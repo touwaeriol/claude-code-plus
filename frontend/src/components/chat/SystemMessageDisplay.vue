@@ -65,21 +65,21 @@ const levelName = computed(() => {
 }
 
 .system-message.level-info {
-  background: #e3f2fd;
-  border: 1px solid #90caf9;
-  color: #1565c0;
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 40%, transparent);
+  color: var(--theme-accent);
 }
 
 .system-message.level-warning {
-  background: #fff3e0;
-  border: 1px solid #ffb74d;
-  color: #e65100;
+  background: color-mix(in srgb, var(--theme-warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-warning) 40%, transparent);
+  color: var(--theme-warning);
 }
 
 .system-message.level-error {
-  background: #ffebee;
-  border: 1px solid #ef5350;
-  color: #c62828;
+  background: color-mix(in srgb, var(--theme-error) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-error) 40%, transparent);
+  color: var(--theme-error);
 }
 
 .message-header {

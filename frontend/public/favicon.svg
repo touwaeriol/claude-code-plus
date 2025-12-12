@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Claude Code Plus - Favicon Version -->
+
+  <!-- C_ 标识 (Claude Code) -->
+  <g transform="translate(8, 8)">
+    <!-- C 形状 -->
+    <path d="M-2.5 -4 Q-5 -4 -5 0 Q-5 4 -2.5 4"
+          stroke="#4A5FCC"
+          stroke-width="2"
+          stroke-linecap="round"
+          fill="none"/>
+
+    <!-- _ 下划线 -->
+    <rect x="0" y="2.5" width="4" height="1.5" rx="0.75"
+          fill="#4A5FCC"/>
+  </g>
+
+  <!-- Plus 标识 - 右上角 -->
+  <g transform="translate(12.5, 3.5)">
+    <!-- 十字线条 -->
+    <g stroke="#2B2B2B" stroke-width="1.5" stroke-linecap="round">
+      <path d="M-1 0 L1 0"/>
+      <path d="M0 -1 L0 1"/>
+    </g>
+  </g>
+</svg>

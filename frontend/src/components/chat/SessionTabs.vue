@@ -1,6 +1,19 @@
 <template>
-  <div class="session-tabs">
-    <div class="tabs-scroll">
+  <div class="session-tabs" :class="{ 'has-overflow': hasOverflow }">
+    <!-- 左侧滚动指示器 -->
+    <button
+      v-if="hasOverflow && canScrollLeft"
+      class="scroll-indicator scroll-left"
+      @click="scrollLeft"
+    >
+      ‹
+    </button>
+
+    <div
+      ref="scrollContainer"
+      class="tabs-scroll"
+      @scroll="updateScrollState"
+    >
       <draggable
         v-model="localTabs"
         :animation="200"
@@ -40,7 +53,18 @@
               <span v-else class="dot-solid" />
             </span>
 
-            <span class="tab-name">{{ tab.name || t('session.unnamed') }}</span>
+            <!-- 编辑模式 -->
+            <input
+              v-if="editingTabId === tab.id"
+              v-model="editingName"
+              class="tab-name-input"
+              @blur="confirmRename(tab)"
+              @keyup.enter="confirmRename(tab)"
+              @keyup.escape="cancelEditing"
+              @click.stop
+            />
+            <!-- 显示模式 -->
+            <span v-else class="tab-name">{{ tab.name || t('session.unnamed') }}</span>
 
             <span
               v-if="tab.isGenerating"
@@ -65,11 +89,20 @@
         {{ t('session.empty') || '暂无活动会话' }}
       </span>
     </div>
+
+    <!-- 右侧滚动指示器 -->
+    <button
+      v-if="hasOverflow && canScrollRight"
+      class="scroll-indicator scroll-right"
+      @click="scrollRight"
+    >
+      ›
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import draggable from 'vuedraggable'
 import { useI18n } from '@/composables/useI18n'
 import { useToastStore } from '@/stores/toastStore'
@@ -98,6 +131,7 @@ const emit = defineEmits<{
   (e: 'close', sessionId: string): void
   (e: 'reorder', order: string[]): void
   (e: 'toggle-list'): void
+  (e: 'rename', tabId: string, newName: string): void
 }>()
 
 const { t } = useI18n()
@@ -105,8 +139,57 @@ const toast = useToastStore()
 
 const localTabs = ref<SessionTabInfo[]>([...props.sessions])
 
+// 编辑状态
+const editingTabId = ref<string | null>(null)
+const editingName = ref('')
+
+// 滚动状态
+const scrollContainer = ref<HTMLElement | null>(null)
+const hasOverflow = ref(false)
+const canScrollLeft = ref(false)
+const canScrollRight = ref(false)
+
+let resizeObserver: ResizeObserver | null = null
+
+function updateScrollState() {
+  const el = scrollContainer.value
+  if (!el) return
+
+  hasOverflow.value = el.scrollWidth > el.clientWidth
+  canScrollLeft.value = el.scrollLeft > 0
+  canScrollRight.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+}
+
+function scrollLeft() {
+  const el = scrollContainer.value
+  if (!el) return
+  el.scrollBy({ left: -120, behavior: 'smooth' })
+}
+
+function scrollRight() {
+  const el = scrollContainer.value
+  if (!el) return
+  el.scrollBy({ left: 120, behavior: 'smooth' })
+}
+
+onMounted(() => {
+  nextTick(() => {
+    updateScrollState()
+    // 监听容器大小变化
+    if (scrollContainer.value) {
+      resizeObserver = new ResizeObserver(updateScrollState)
+      resizeObserver.observe(scrollContainer.value)
+    }
+  })
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+})
+
 watch(() => props.sessions, (newSessions) => {
   localTabs.value = [...newSessions]
+  nextTick(updateScrollState)
 }, { deep: true })
 
 function handleTabClick(tab: SessionTabInfo) {
@@ -124,10 +207,27 @@ function handleTabClick(tab: SessionTabInfo) {
 }
 
 function handleTabDblClick(tab: SessionTabInfo) {
-  const copyId = displaySessionId(tab)
-  if (copyId) {
-    copySessionId(copyId)
+  // 进入编辑模式
+  editingTabId.value = tab.id
+  editingName.value = tab.name || ''
+  nextTick(() => {
+    const input = document.querySelector('.tab-name-input') as HTMLInputElement
+    input?.focus()
+    input?.select()
+  })
+}
+
+function confirmRename(tab: SessionTabInfo) {
+  const newName = editingName.value.trim()
+  if (newName && newName !== tab.name) {
+    emit('rename', tab.id, newName)
   }
+  cancelEditing()
+}
+
+function cancelEditing() {
+  editingTabId.value = null
+  editingName.value = ''
 }
 
 function handleCloseTab(sessionId: string) {
@@ -169,6 +269,9 @@ function displaySessionId(tab: SessionTabInfo): string | null {
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  position: relative;
 }
 
 .tabs-scroll {
@@ -176,7 +279,15 @@ function displaySessionId(tab: SessionTabInfo): string | null {
   align-items: center;
   gap: 4px;
   overflow-x: auto;
-  scrollbar-width: thin;
+  flex: 1;
+  min-width: 0;
+  /* 隐藏滚动条但保持滚动功能 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tabs-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .draggable-tabs {
@@ -184,6 +295,38 @@ function displaySessionId(tab: SessionTabInfo): string | null {
   align-items: center;
   gap: 4px;
   min-width: 0;
+}
+
+/* 滚动指示器 */
+.scroll-indicator {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.06));
+  color: var(--theme-secondary-foreground, #6a737d);
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+  z-index: 1;
+}
+
+.scroll-indicator:hover {
+  background: var(--theme-accent, #0366d6);
+  color: #fff;
+}
+
+.scroll-left {
+  margin-right: 2px;
+}
+
+.scroll-right {
+  margin-left: 2px;
 }
 
 .session-tab {
@@ -285,6 +428,17 @@ function displaySessionId(tab: SessionTabInfo): string | null {
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tab-name-input {
+  max-width: 120px;
+  padding: 0 2px;
+  border: 1px solid var(--theme-accent, #0366d6);
+  border-radius: 2px;
+  background: var(--theme-background, #fff);
+  color: inherit;
+  font-size: inherit;
+  outline: none;
 }
 
 .generating-dot {

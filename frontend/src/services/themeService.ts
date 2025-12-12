@@ -19,6 +19,11 @@ export interface ThemeColors {
   infoBackground: string
   codeBackground: string
   secondaryForeground: string
+  // 字体设置
+  fontFamily?: string
+  fontSize?: number
+  editorFontFamily?: string
+  editorFontSize?: number
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system'
@@ -282,11 +287,25 @@ export class ThemeService {
       '--theme-card-background': theme.panelBackground
     }
 
+    // 字体变量（如果存在）
+    if (theme.fontFamily) {
+      vars['--theme-font-family'] = theme.fontFamily
+    }
+    if (theme.fontSize) {
+      vars['--theme-font-size'] = `${theme.fontSize}px`
+    }
+    if (theme.editorFontFamily) {
+      vars['--theme-editor-font-family'] = theme.editorFontFamily
+    }
+    if (theme.editorFontSize) {
+      vars['--theme-editor-font-size'] = `${theme.editorFontSize}px`
+    }
+
     Object.entries(vars).forEach(([key, value]) => {
       root.style.setProperty(key, value)
     })
 
-    console.log('✅ Theme CSS variables injected')
+    console.log('✅ Theme CSS variables injected', theme.fontFamily ? `(font: ${theme.fontFamily})` : '')
   }
 }
 

@@ -2,6 +2,7 @@ import { watch, type WatchStopHandle } from 'vue'
 import { ideaBridge } from '@/services/ideaBridge'
 import localeService from '@/services/localeService'
 import type { useSessionStore } from '@/stores/sessionStore'
+import { useToastStore } from '@/stores/toastStore'
 import { ConnectionStatus } from '@/types/display'
 
 export interface HostCommand {
@@ -12,8 +13,10 @@ export interface HostCommand {
 interface SessionSummaryPayload {
   id: string
   title: string
+  sessionId?: string | null  // 真实的会话 ID
   isGenerating: boolean
-  isConnected: boolean  // 是否已连接（进行中会话）
+  isConnected: boolean   // 是否已连接
+  isConnecting: boolean  // 是否正在连接中
 }
 
 interface SessionStatePayload {
@@ -64,14 +67,37 @@ function notifyHostCommand(command: HostCommand) {
 function postSessionState(payload: SessionStatePayload): boolean {
   if (typeof window === 'undefined') return false
   // 使用统一的 __IDEA_JCEF__ 桥接
-  const jcef = window.__IDEA_JCEF__
+  const jcef = (window as any).__IDEA_JCEF__
+  // 调试：检查 JCEF bridge 状态
+  console.log('[IDE Bridge] 🔍 Checking JCEF bridge:', {
+    hasJcef: !!jcef,
+    hasSession: !!jcef?.session,
+    hasPostState: !!jcef?.session?.postState,
+    jcefKeys: jcef ? Object.keys(jcef) : []
+  })
   if (jcef?.session?.postState) {
     try {
-      jcef.session.postState(JSON.stringify(payload))
+      // 确保序列化的是纯数据，避免循环引用
+      const cleanPayload = {
+        type: payload.type,
+        sessions: payload.sessions.map(s => ({
+          id: s.id,
+          title: s.title,
+          sessionId: s.sessionId ?? null,
+          isGenerating: s.isGenerating,
+          isConnected: s.isConnected,
+          isConnecting: s.isConnecting
+        })),
+        activeSessionId: payload.activeSessionId
+      }
+      console.log('[IDE Bridge] 📤 Posting session state:', cleanPayload.sessions.length, 'sessions, active:', cleanPayload.activeSessionId)
+      jcef.session.postState(JSON.stringify(cleanPayload))
       return true
     } catch (error) {
       console.warn('[IDE Bridge] Failed to post session state:', error)
     }
+  } else {
+    console.warn('[IDE Bridge] ⚠️ JCEF session bridge not ready yet')
   }
   return false
 }
@@ -94,8 +120,37 @@ function scheduleFlush() {
   }, 400)
 }
 
+// 监听 JCEF 准备好的事件，立即发送 pending 状态
+let jcefReadyListenerAdded = false
+let cachedSessionStore: SessionStore | null = null
+
+function ensureJcefReadyListener() {
+  if (jcefReadyListenerAdded || typeof window === 'undefined') return
+  jcefReadyListenerAdded = true
+  window.addEventListener('idea:jcefReady', () => {
+    console.log('[IDE Bridge] 🎉 idea:jcefReady event received')
+    // 立即发送 pending 状态
+    if (pendingState) {
+      if (postSessionState(pendingState)) {
+        pendingState = null
+        clearFlushTimer()
+      }
+    }
+    // 如果有缓存的 store，重新触发一次状态同步
+    if (cachedSessionStore) {
+      const snapshot = buildSessionSnapshot(cachedSessionStore)
+      emitSessionState({
+        type: 'session:update',
+        sessions: snapshot.sessions,
+        activeSessionId: snapshot.activeSessionId
+      })
+    }
+  })
+}
+
 function emitSessionState(payload: SessionStatePayload) {
   pendingState = payload
+  ensureJcefReadyListener()  // 确保监听 JCEF 准备好事件
   if (!postSessionState(payload)) {
     scheduleFlush()
   } else {
@@ -144,6 +199,45 @@ function registerDefaultHandler(store: SessionStore) {
           }
           break
         }
+        case 'renameSession': {
+          // IDEA 发送的重命名命令
+          const tabId = command.payload?.sessionId
+          const newName = command.payload?.newName
+          if (tabId && newName) {
+            const tabs = resolveSessionList(store)
+            const tab = tabs.find((t: any) => t.tabId === tabId)
+            if (tab) {
+              // 1. 立即更新 UI
+              if (typeof tab.rename === 'function') {
+                tab.rename(newName)
+              } else if (tab.name) {
+                // 兼容不同的 Tab 结构
+                if (typeof tab.name === 'object' && 'value' in tab.name) {
+                  tab.name.value = newName
+                }
+              }
+              // 2. 发送 /rename 命令到后端
+              const sessionId = tab.sessionId?.value ?? tab.sessionId
+              const toastStore = useToastStore()
+              if (sessionId) {
+                const { aiAgentService } = await import('@/services/aiAgentService')
+                aiAgentService.sendMessage(sessionId, `/rename ${newName}`)
+                  .then(() => {
+                    toastStore.success(`Rename success: "${newName}"`)
+                  })
+                  .catch(err => {
+                    console.error('[IDE Bridge] 发送 /rename 命令失败:', err)
+                    toastStore.error('Rename failed')
+                  })
+              } else {
+                // 未连接时，UI 已更新，显示成功提示
+                toastStore.success(`Rename success: "${newName}"`)
+              }
+              console.log(`[IDE Bridge] Renamed session ${tabId} to "${newName}"`)
+            }
+          }
+          break
+        }
         case 'setLocale': {
           // IDEA 推送语言设置，前端应用并刷新页面
           const locale = command.payload?.locale
@@ -179,23 +273,43 @@ function resolveSessionList(store: SessionStore) {
   return []
 }
 
-function startWatching(store: SessionStore) {
-  const source = () => {
-    const tabs = resolveSessionList(store).map((tab: any) => ({
-      id: tab.tabId,
-      title: tab.name?.value ?? tab.name ?? `会话 ${tab.tabId.slice(-6)}`,
-      isGenerating: Boolean(tab.isGenerating?.value ?? tab.isGenerating),
-      isConnected: (tab.connectionStatus?.value ?? tab.connectionStatus) === ConnectionStatus.CONNECTED ||
-                   (tab.connectionStatus?.value ?? tab.connectionStatus) === ConnectionStatus.CONNECTING
-    }))
-    const activeTabId = store.currentTabId ?? null
+function buildSessionSnapshot(store: SessionStore) {
+  const rawTabs = resolveSessionList(store)
+  // 确保提取纯数据，避免 Vue 响应式对象的循环引用
+  const tabs = rawTabs.map((tab: any) => {
+    // 解包所有可能的响应式引用
+    const tabId = typeof tab.tabId === 'object' ? tab.tabId?.value : tab.tabId
+    const name = typeof tab.name === 'object' ? tab.name?.value : tab.name
+    const sessionId = typeof tab.sessionId === 'object' ? tab.sessionId?.value : tab.sessionId
+    const isGenerating = typeof tab.isGenerating === 'object' ? tab.isGenerating?.value : tab.isGenerating
+    const connectionStatus = typeof tab.connectionState?.status === 'object'
+      ? tab.connectionState?.status?.value
+      : tab.connectionState?.status
+
     return {
-      sessions: tabs,
-      activeSessionId: activeTabId
+      id: String(tabId || ''),
+      title: String(name || `会话 ${String(tabId || '').slice(-6)}`),
+      sessionId: sessionId ? String(sessionId) : null,
+      isGenerating: Boolean(isGenerating),
+      isConnected: connectionStatus === ConnectionStatus.CONNECTED,
+      isConnecting: connectionStatus === ConnectionStatus.CONNECTING
     }
+  })
+  const activeTabId = store.currentTabId ?? null
+  return {
+    sessions: tabs,
+    activeSessionId: activeTabId ? String(activeTabId) : null
   }
+}
+
+function startWatching(store: SessionStore) {
+  // 缓存 store 引用，用于 JCEF 准备好时重新同步
+  cachedSessionStore = store
+
+  const source = () => buildSessionSnapshot(store)
 
   stopWatchHandle = watch(source, (snapshot) => {
+    console.log('[IDE Bridge] 🔄 Session state changed:', snapshot.sessions.length, 'sessions')
     emitSessionState({
       type: 'session:update',
       sessions: snapshot.sessions,
@@ -209,9 +323,6 @@ function startWatching(store: SessionStore) {
  * 返回取消函数，在组件卸载时调用。
  */
 export function setupIdeSessionBridge(sessionStore: SessionStore) {
-  if (!ideaBridge.isInIde()) {
-    return () => {}
-  }
   activeConsumers += 1
   ensureGlobalBridge()
 
@@ -242,4 +353,3 @@ export function onIdeHostCommand(handler: HostCommandHandler) {
   hostCommandHandlers.add(handler)
   return () => hostCommandHandlers.delete(handler)
 }
-

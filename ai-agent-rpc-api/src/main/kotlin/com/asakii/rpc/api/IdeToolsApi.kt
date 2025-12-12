@@ -132,5 +132,10 @@ data class IdeTheme(
     val accentColor: String = "#4e9a06",
     val infoBackground: String = "#3c3f41",
     val codeBackground: String = "#2b2b2b",
-    val secondaryForeground: String = "#808080"
+    val secondaryForeground: String = "#808080",
+    // 字体设置
+    val fontFamily: String = "JetBrains Mono, Consolas, monospace",
+    val fontSize: Int = 13,
+    val editorFontFamily: String = "JetBrains Mono, Consolas, monospace",
+    val editorFontSize: Int = 13
 )

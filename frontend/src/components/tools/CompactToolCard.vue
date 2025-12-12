@@ -162,10 +162,9 @@ function getBadgeClass(changes: string): string {
   padding: 6px 10px;
   margin-bottom: 2px;
   border-radius: 6px;
-  background: var(--theme-background, #ffffff);
-  border: 1px solid var(--theme-border, rgba(0, 0, 0, 0.08));
+  background: var(--theme-panel-background);
+  border: 1px solid var(--theme-border);
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .compact-tool-card.clickable {
@@ -173,17 +172,15 @@ function getBadgeClass(changes: string): string {
 }
 
 .compact-tool-card.clickable:hover {
-  background: var(--theme-hover-background, rgba(0, 0, 0, 0.02));
-  border-color: var(--theme-accent, rgba(0, 102, 214, 0.4));
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
-  transform: translateX(2px);
+  background: var(--theme-hover-background);
+  border-color: var(--theme-accent);
 }
 
 .card-content {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--theme-font-size, 13px);
   line-height: 1.4;
   min-height: 20px;
 }
@@ -196,12 +193,11 @@ function getBadgeClass(changes: string): string {
   justify-content: center;
   width: 20px;
   height: 20px;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.1));
 }
 
 .action-type {
   font-weight: 600;
-  color: var(--theme-foreground, #1a1a1a);
+  color: var(--theme-foreground);
   flex-shrink: 0;
   font-size: 12px;
   letter-spacing: 0.02em;
@@ -209,18 +205,18 @@ function getBadgeClass(changes: string): string {
 
 .primary-info {
   font-weight: 400;
-  color: var(--theme-foreground, #1a1a1a);
+  color: var(--theme-foreground);
   flex-shrink: 0;
 }
 
 .primary-info.loading {
-  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
+  color: var(--theme-secondary-foreground);
   font-style: italic;
 }
 
 .secondary-info {
   font-size: 12px;
-  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
+  color: var(--theme-secondary-foreground);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -237,18 +233,18 @@ function getBadgeClass(changes: string): string {
 }
 
 .badge-add {
-  background: rgba(40, 167, 69, 0.1);
-  color: #28a745;
+  background: color-mix(in srgb, var(--theme-success) 15%, transparent);
+  color: var(--theme-success);
 }
 
 .badge-remove {
-  background: rgba(220, 53, 69, 0.1);
-  color: #dc3545;
+  background: color-mix(in srgb, var(--theme-error) 15%, transparent);
+  color: var(--theme-error);
 }
 
 .badge-read {
-  background: rgba(0, 102, 214, 0.08);
-  color: #0366d6;
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  color: var(--theme-accent);
 }
 
 .status-indicator {
@@ -270,41 +266,26 @@ function getBadgeClass(changes: string): string {
 }
 
 .status-success .dot {
-  background-color: #28a745;
-  box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.15),
-              0 0 6px rgba(40, 167, 69, 0.3);
-  animation: pulse-success 2s ease-in-out infinite;
+  background-color: var(--theme-success);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--theme-success) 50%, transparent);
 }
 
 .status-error .dot {
-  background-color: #dc3545;
-  box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.15),
-              0 0 6px rgba(220, 53, 69, 0.3);
+  background-color: var(--theme-error);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--theme-error) 50%, transparent);
 }
 
 .status-pending .dot {
-  background-color: rgba(0, 0, 0, 0.25);
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08);
-}
-
-/* 成功状态脉冲动画 */
-@keyframes pulse-success {
-  0%, 100% {
-    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.15),
-                0 0 6px rgba(40, 167, 69, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.2),
-                0 0 8px rgba(40, 167, 69, 0.4);
-  }
+  background-color: var(--theme-secondary-foreground);
+  opacity: 0.5;
 }
 
 /* 加载动画 - 旋转的圆圈 */
 .status-indicator .spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(0, 0, 0, 0.08);
-  border-top-color: var(--theme-accent, #0366d6);
+  border: 2px solid var(--theme-border);
+  border-top-color: var(--theme-accent);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -319,7 +300,7 @@ function getBadgeClass(changes: string): string {
 .expanded-content {
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid var(--theme-border, rgba(0, 0, 0, 0.1));
+  border-top: 1px solid var(--theme-border);
   animation: slideDown 0.2s ease;
 }
 
@@ -338,8 +319,8 @@ function getBadgeClass(changes: string): string {
 .error-message-box {
   margin-top: 10px;
   padding: 10px 12px;
-  background: rgba(220, 53, 69, 0.08);
-  border: 1px solid rgba(220, 53, 69, 0.3);
+  background: color-mix(in srgb, var(--theme-error) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-error) 30%, transparent);
   border-radius: 6px;
   animation: fadeIn 0.2s ease;
 }
@@ -367,17 +348,17 @@ function getBadgeClass(changes: string): string {
 .error-title {
   font-size: 12px;
   font-weight: 600;
-  color: #dc3545;
+  color: var(--theme-error);
 }
 
 .error-content {
   margin: 0;
   padding: 8px 10px;
-  background: rgba(220, 53, 69, 0.05);
+  background: color-mix(in srgb, var(--theme-error) 5%, transparent);
   border-radius: 4px;
-  font-size: 12px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  color: #c53030;
+  font-size: var(--theme-editor-font-size, 12px);
+  font-family: var(--theme-editor-font-family);
+  color: var(--theme-error);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 200px;

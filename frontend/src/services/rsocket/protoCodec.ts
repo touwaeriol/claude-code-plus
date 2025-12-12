@@ -241,7 +241,8 @@ export const ProtoCodec = {
         firstUserMessage: s.firstUserMessage,
         timestamp: Number(s.timestamp),
         messageCount: s.messageCount,
-        projectPath: s.projectPath
+        projectPath: s.projectPath,
+        customTitle: s.customTitle || undefined
       }))
     }
   },
@@ -249,12 +250,13 @@ export const ProtoCodec = {
   /**
    * 解码历史会话元数据
    */
-  decodeHistoryMetadata(data: Uint8Array): { totalLines: number; sessionId: string; projectPath: string } {
+  decodeHistoryMetadata(data: Uint8Array): { totalLines: number; sessionId: string; projectPath: string; customTitle?: string } {
     const proto = fromBinary(HistoryMetadataSchema, data)
     return {
       totalLines: proto.totalLines,
       sessionId: proto.sessionId,
-      projectPath: proto.projectPath
+      projectPath: proto.projectPath,
+      customTitle: proto.customTitle || undefined
     }
   },
 

@@ -38,9 +38,10 @@ export interface ConnectResult {
 
 /** 历史文件元数据 */
 export interface HistoryMetadata {
-  totalLines: number    // JSONL 文件总行数
-  sessionId: string     // 会话 ID
-  projectPath: string   // 项目路径
+  totalLines: number      // JSONL 文件总行数
+  sessionId: string       // 会话 ID
+  projectPath: string     // 项目路径
+  customTitle?: string    // 自定义标题（从 /rename 命令设置）
 }
 
 export class AiAgentService {
@@ -449,7 +450,8 @@ export class AiAgentService {
     return {
       totalLines: meta.totalLines,
       sessionId: meta.sessionId,
-      projectPath: meta.projectPath
+      projectPath: meta.projectPath,
+      customTitle: meta.customTitle
     }
   }
 }

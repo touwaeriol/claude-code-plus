@@ -1,4 +1,4 @@
-特别提醒：请使用简体中文
+荣特别提醒：请使用简体中文
 可使用的jetbrains mcp（如果可用）工具(没有提到的mcp工具不建议使用，但是可以使用) 操作idea：
 -- execute_run_configuration、get_run_configurations：
     当我让你重启时，是希望你在idea中重启，而不是通过命令行重启

@@ -27,12 +27,24 @@ import com.intellij.openapi.project.Project
 import com.intellij.l10n.LocalizationUtil
 import java.util.Locale
 import com.intellij.ide.util.PropertiesComponent
+import com.intellij.openapi.editor.colors.EditorColorsManager
+import com.intellij.util.ui.JBUI
 
 class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
 
     private val PREFERRED_LOCALE_KEY = "com.asakii.locale"
 
     override fun getTheme(): IdeTheme {
+        // 获取编辑器配色方案以获取字体设置
+        val editorScheme = EditorColorsManager.getInstance().globalScheme
+        val editorFontName = editorScheme.editorFontName
+        val editorFontSize = editorScheme.editorFontSize
+
+        // UI 字体使用 JBUI 获取
+        val uiFont = JBUI.Fonts.label()
+        val uiFontFamily = uiFont.family
+        val uiFontSize = uiFont.size
+
         return IdeTheme(
             background = colorToHex(UIUtil.getPanelBackground()),
             foreground = colorToHex(UIUtil.getLabelForeground()),
@@ -50,7 +62,12 @@ class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
             accentColor = colorToHex(JBColor.namedColor("Accent.focusColor", JBColor.BLUE)),
             infoBackground = colorToHex(JBColor.namedColor("Component.infoForeground", JBColor.GRAY)),
             codeBackground = colorToHex(UIUtil.getTextFieldBackground()),
-            secondaryForeground = colorToHex(JBColor.GRAY)
+            secondaryForeground = colorToHex(JBColor.GRAY),
+            // 字体设置
+            fontFamily = "$uiFontFamily, -apple-system, BlinkMacSystemFont, sans-serif",
+            fontSize = uiFontSize,
+            editorFontFamily = "$editorFontName, JetBrains Mono, Consolas, monospace",
+            editorFontSize = editorFontSize
         )
     }
 

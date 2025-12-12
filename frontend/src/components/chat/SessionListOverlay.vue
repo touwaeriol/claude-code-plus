@@ -104,9 +104,15 @@
                       <button
                         type="button"
                         class="copy-btn"
+                        :title="$t('common.copySessionId')"
                         :aria-label="`Copy ${session.id}`"
                         @click.stop="copySessionId(session.id)"
-                      />
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                      </button>
                     </div>
                     <div class="session-meta">
                       <span>{{ formatRelativeTime(session.timestamp) }}</span>
@@ -471,35 +477,33 @@ async function copySessionId(id: string) {
 }
 
 .copy-btn {
-  position: relative;
-  width: 16px;
-  height: 16px;
-  border: 1px solid var(--theme-border, rgba(0, 0, 0, 0.3));
-  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
   background: transparent;
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
+  color: var(--theme-foreground-muted, rgba(0, 0, 0, 0.5));
+  opacity: 0;
+  transition: opacity 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.session-item:hover .copy-btn {
+  opacity: 1;
 }
 
 .copy-btn:hover {
-  border-color: var(--theme-foreground, #111);
+  background: var(--theme-background-hover, rgba(0, 0, 0, 0.08));
+  color: var(--theme-foreground, #111);
 }
 
-.copy-btn::after {
-  content: '';
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  border: 1px solid var(--theme-border, rgba(0, 0, 0, 0.35));
-  border-radius: 3px;
-  top: -3px;
-  left: -3px;
-  background: transparent;
-}
-
-.copy-btn:hover::after {
-  border-color: var(--theme-foreground, #111);
+.copy-btn svg {
+  flex-shrink: 0;
 }
 
 .session-overlay-enter-active,

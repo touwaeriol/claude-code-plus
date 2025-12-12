@@ -272,12 +272,15 @@ class AiAgentRpcServiceImpl(
         sdkLog.info("📋 [AI-Agent] 找到 ${sessions.size} 个历史会话")
         return RpcHistorySessionsResult(
             sessions = sessions.map { meta ->
+                // 为每个会话加载 customTitle（从 JSONL 文件尾部高效查找）
+                val customTitle = HistoryJsonlLoader.findCustomTitle(meta.sessionId, meta.projectPath)
                 RpcHistorySession(
                     sessionId = meta.sessionId,
                     firstUserMessage = meta.firstUserMessage,
                     timestamp = meta.timestamp,
                     messageCount = meta.messageCount,
-                    projectPath = meta.projectPath
+                    projectPath = meta.projectPath,
+                    customTitle = customTitle
                 )
             }
         )
@@ -441,11 +444,14 @@ class AiAgentRpcServiceImpl(
         val targetSession = sessionId ?: lastConnectOptions?.sessionId ?: this.sessionId
         val project = projectPath?.takeIf { it.isNotBlank() } ?: ideTools.getProjectPath()
         val totalLines = HistoryJsonlLoader.countLines(targetSession, project)
+        // 从文件尾部高效查找 custom-title（/rename 命令设置的自定义标题）
+        val customTitle = HistoryJsonlLoader.findCustomTitle(targetSession, project)
 
         return RpcHistoryMetadata(
             totalLines = totalLines,
             sessionId = targetSession,
-            projectPath = project
+            projectPath = project,
+            customTitle = customTitle
         )
     }
 

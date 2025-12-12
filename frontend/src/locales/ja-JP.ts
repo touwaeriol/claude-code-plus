@@ -37,6 +37,8 @@ export default {
     stop: '停止',
     stopGenerating: '生成を停止',
     escToInterrupt: 'ESC で中断',
+    slashCommands: 'スラッシュコマンド',
+    noMatchingCommands: '一致するコマンドがありません',
     welcome: 'こんにちは！私はAIコーディングアシスタントのClaudeです。',
     emptyState: '新しいセッションを開始するか、履歴から選択してください。',
     sendMessage: 'メッセージを送信',

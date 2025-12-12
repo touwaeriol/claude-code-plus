@@ -444,6 +444,7 @@ message HistorySession {
   int64 timestamp = 3;
   int32 message_count = 4;
   string project_path = 5;
+  optional string custom_title = 6;  // 自定义标题（从 /rename 命令设置）
 }
 
 // 对应 RpcHistorySessionsResult
@@ -495,6 +496,7 @@ message HistoryMetadata {
   int32 total_lines = 1;      // JSONL 文件总行数
   string session_id = 2;       // 会话 ID
   string project_path = 3;     // 项目路径
+  optional string custom_title = 4;  // 自定义标题（从 /rename 命令设置）
 }
 
 // 历史加载结果（分页查询响应）

@@ -37,6 +37,8 @@ export default {
     stop: '중지',
     stopGenerating: '생성 중지',
     escToInterrupt: 'ESC로 중단',
+    slashCommands: '슬래시 명령어',
+    noMatchingCommands: '일치하는 명령어 없음',
     welcome: '안녕하세요! 저는 AI 코딩 어시스턴트 Claude입니다.',
     emptyState: '새 세션을 시작하거나 기록에서 선택하세요.',
     sendMessage: '메시지 보내기',
