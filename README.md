@@ -20,6 +20,13 @@
   </a>
 </p>
 
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README_zh-CN.md">简体中文</a> |
+  <a href="README_ja.md">日本語</a> |
+  <a href="README_ko.md">한국어</a>
+</p>
+
 ---
 
 Claude Code Plus is an IntelliJ IDEA plugin that integrates Claude AI directly into your development environment, providing intelligent code assistance through natural language interaction.
