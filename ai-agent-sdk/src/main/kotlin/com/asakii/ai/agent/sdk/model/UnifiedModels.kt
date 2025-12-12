@@ -68,7 +68,9 @@ data class ToolUseContent(
 data class ToolResultContent(
     val toolUseId: String,
     val content: JsonElement?,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    /** 子代理 ID（仅 Task 工具使用，用于加载子代理历史） */
+    val agentId: String? = null
 ) : UnifiedContentBlock {
     override val type: String = "tool_result"
 }

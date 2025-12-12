@@ -38,7 +38,8 @@ export function mapRpcContentBlock(block: RpcContentBlock): ContentBlock | null 
         type: 'tool_result',
         tool_use_id: block.tool_use_id,
         content: block.content,
-        is_error: block.is_error
+        is_error: block.is_error,
+        agent_id: block.agent_id
       }
     case 'image':
       return { type: 'image', source: { ...block.source, type: block.source.type as 'base64' | 'url' } }
@@ -86,20 +87,21 @@ export function mapRpcMessageToMessage(msg: RpcAssistantMessage | RpcUserMessage
   if (contentBlocks.length === 0) return null
 
   // 传递 isReplay 字段，用于判断压缩相关消息
-  const isReplay = msg.type === 'user' ? (msg as RpcUserMessage).isReplay : undefined
-  const messageId =
-    // 优先使用后端下发的消息 id（历史会话里带有）
-    (msg as any).id ??
-    // 其次回退到历史记录的 uuid（JSONL 顶层字段）
-    (msg as any).uuid ??
-    ''
+  const isReplay = msg.type === 'user' ? msg.isReplay : undefined
+
+  // 优先使用后端下发的消息 id，其次回退到历史记录的 uuid
+  const messageId = msg.id ?? msg.uuid ?? ''
+
+  // 提取 parentToolUseId，用于标识子代理消息所属的父 Task
+  const parentToolUseId = msg.parentToolUseId
 
   return {
     id: messageId,
     role: msg.type,
     timestamp: Date.now(),
     content: contentBlocks,
-    isReplay
+    isReplay,
+    parentToolUseId
   }
 }
 

@@ -67,6 +67,8 @@ export interface BaseDisplayItem {
   id: string
   displayType: string    // 原 type，改为 displayType
   timestamp: number
+  /** 归属的父工具调用（子代理消息用） */
+  parentToolUseId?: string
 }
 
 // ============ 消息类型 ============
@@ -198,6 +200,10 @@ export interface BaseToolCall extends BaseDisplayItem {
   endTime?: number
   input: Record<string, any>
   result?: ToolResult
+  /** 子代理会话消息（仅 Task 子代理使用） */
+  subagentMessages?: DisplayItem[]
+  /** 子代理名称/类型（如 general-purpose） */
+  agentName?: string
 }
 
 /**
@@ -374,6 +380,8 @@ export interface ClaudeTaskToolCall extends BaseToolCall {
     prompt: string
     subagent_type: string
   }
+  /** 子代理 ID，用于加载子代理历史会话 */
+  agentId?: string
 }
 
 /**

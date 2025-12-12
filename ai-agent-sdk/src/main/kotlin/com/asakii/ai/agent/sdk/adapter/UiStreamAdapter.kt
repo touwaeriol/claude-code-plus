@@ -10,6 +10,8 @@ class UiStreamAdapter {
 
     // 维护 index → toolId 的映射，用于在 delta 事件中获取正确的 toolId
     private val indexToToolIdMap = mutableMapOf<Int, String>()
+    // 维护 index → parentToolUseId 的映射，用于在 delta/complete 事件中获取正确的 parentToolUseId
+    private val indexToParentToolUseIdMap = mutableMapOf<Int, String>()
 
     fun convert(event: NormalizedStreamEvent): List<UiStreamEvent> =
         when (event) {
@@ -33,10 +35,10 @@ class UiStreamAdapter {
                 )
             )
             is AssistantMessageEvent -> listOf(
-                UiAssistantMessage(id = event.id, content = event.content)
+                UiAssistantMessage(id = event.id, content = event.content, parentToolUseId = event.parentToolUseId)
             )
             is UserMessageEvent -> listOf(
-                UiUserMessage(event.content, event.isReplay)
+                UiUserMessage(event.content, event.isReplay, event.parentToolUseId)
             )
             is StatusSystemEvent -> listOf(
                 UiStatusSystem(status = event.status, sessionId = event.sessionId)
@@ -58,21 +60,26 @@ class UiStreamAdapter {
             is ToolDeltaPayload -> {
                 // 使用映射查找真正的 toolId，如果找不到则 fallback 到 index
                 val toolId = indexToToolIdMap[event.index] ?: event.index.toString()
+                // 优先使用事件中的 parentToolUseId，其次使用映射中的
+                val parentToolUseId = event.parentToolUseId ?: indexToParentToolUseIdMap[event.index]
                 listOf(
                     UiToolProgress(
                         toolId = toolId,
                         status = ContentStatus.IN_PROGRESS,
-                        outputPreview = delta.partialJson
+                        outputPreview = delta.partialJson,
+                        parentToolUseId = parentToolUseId
                     )
                 )
             }
             is CommandDeltaPayload -> {
                 val toolId = indexToToolIdMap[event.index] ?: event.index.toString()
+                val parentToolUseId = event.parentToolUseId ?: indexToParentToolUseIdMap[event.index]
                 listOf(
                     UiToolProgress(
                         toolId = toolId,
                         status = ContentStatus.IN_PROGRESS,
-                        outputPreview = delta.output
+                        outputPreview = delta.output,
+                        parentToolUseId = parentToolUseId
                     )
                 )
             }
@@ -90,11 +97,14 @@ class UiStreamAdapter {
                 val toolId = (event.content as? ToolUseContent)?.id ?: event.index.toString()
                 // 记录 index → toolId 映射，供后续 delta 事件使用
                 indexToToolIdMap[event.index] = toolId
+                // 记录 index → parentToolUseId 映射
+                event.parentToolUseId?.let { indexToParentToolUseIdMap[event.index] = it }
                 listOf(
                     UiToolStart(
                         toolId = toolId,
                         toolName = toolName,
-                        toolType = toolTypeEnum.type
+                        toolType = toolTypeEnum.type,
+                        parentToolUseId = event.parentToolUseId
                     )
                 )
             }
@@ -108,9 +118,12 @@ class UiStreamAdapter {
     fun resetContentIndex() {
         contentIndexCounter = 0
         indexToToolIdMap.clear()
+        indexToParentToolUseIdMap.clear()
     }
 
     private fun convertContentComplete(event: ContentCompletedEvent): List<UiStreamEvent> {
+        // 优先使用事件中的 parentToolUseId，其次使用映射中的
+        val parentToolUseId = event.parentToolUseId ?: indexToParentToolUseIdMap[event.index]
         return when (val content = event.content) {
             // TextContent 和 ThinkingContent：不再单独发送，因为 AssistantMessageEvent 已包含完整内容
             // 避免前端重复显示消息
@@ -119,7 +132,8 @@ class UiStreamAdapter {
             is ToolUseContent -> listOf(
                 UiToolComplete(
                     toolId = content.id,
-                    result = content
+                    result = content,
+                    parentToolUseId = parentToolUseId
                 )
             )
             is CommandExecutionContent,
@@ -127,7 +141,8 @@ class UiStreamAdapter {
             is McpToolCallContent -> listOf(
                 UiToolComplete(
                     toolId = event.index.toString(),
-                    result = content
+                    result = content,
+                    parentToolUseId = parentToolUseId
                 )
             )
             else -> emptyList()

@@ -156,7 +156,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, provide } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { SETTING_KEYS } from '@/composables/useSessionTab'
@@ -191,6 +191,10 @@ const props = withDefaults(defineProps<Props>(), {
   projectPath: () => process.cwd?.() || '/default/project',
   showDebug: false
 })
+
+// 提供上下文给子组件（如 TaskToolDisplay）
+provide('projectPath', computed(() => props.projectPath))
+provide('aiAgentService', aiAgentService)
 
 // 使用 stores
 const sessionStore = useSessionStore()

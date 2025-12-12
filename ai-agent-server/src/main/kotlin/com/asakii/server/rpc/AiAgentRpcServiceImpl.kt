@@ -730,7 +730,8 @@ class AiAgentRpcServiceImpl(
                             status = RpcContentStatus.IN_PROGRESS
                         )
                     ),
-                    rpcProvider
+                    rpcProvider,
+                    parentToolUseId = parentToolUseId
                 )
             }
 
@@ -741,7 +742,8 @@ class AiAgentRpcServiceImpl(
                         index = index,
                         delta = RpcInputJsonDelta(partialJson = outputPreview ?: "")
                     ),
-                    rpcProvider
+                    rpcProvider,
+                    parentToolUseId = parentToolUseId
                 )
             }
 
@@ -749,7 +751,8 @@ class AiAgentRpcServiceImpl(
                 val index = toolContentIndex[toolId] ?: 0
                 wrapAsStreamEvent(
                     RpcContentBlockStopEvent(index = index),
-                    rpcProvider
+                    rpcProvider,
+                    parentToolUseId = parentToolUseId
                 )
             }
 
@@ -763,11 +766,12 @@ class AiAgentRpcServiceImpl(
                     content = content.map { it.toRpcContentBlock() }
                 ),
                 provider = rpcProvider,
-                isReplay = isReplay
+                isReplay = isReplay,
+                parentToolUseId = parentToolUseId
             )
 
             is UiAssistantMessage -> {
-                println("🔍 [toRpcMessage] UiAssistantMessage: content.size=${content.size}")
+                println("🔍 [toRpcMessage] UiAssistantMessage: content.size=${content.size}, parentToolUseId=$parentToolUseId")
                 content.forEachIndexed { idx, block ->
                     println("🔍 [toRpcMessage] UiAssistantMessage content[$idx]: type=${block::class.simpleName}, ${if (block is ToolUseContent) "input=${block.input}" else ""}")
                 }
@@ -776,7 +780,8 @@ class AiAgentRpcServiceImpl(
                     message = RpcMessageContent(
                         content = content.map { it.toRpcContentBlock() }
                     ),
-                    provider = rpcProvider
+                    provider = rpcProvider,
+                    parentToolUseId = parentToolUseId
                 )
             }
 
@@ -815,12 +820,17 @@ class AiAgentRpcServiceImpl(
         }
     }
 
-    private fun wrapAsStreamEvent(event: RpcStreamEventData, provider: RpcProvider): RpcStreamEvent {
+    private fun wrapAsStreamEvent(
+        event: RpcStreamEventData,
+        provider: RpcProvider,
+        parentToolUseId: String? = null
+    ): RpcStreamEvent {
         streamEventCounter++
         return RpcStreamEvent(
             uuid = "evt-${sessionId.take(8)}-$streamEventCounter",
             sessionId = sessionId,
             event = event,
+            parentToolUseId = parentToolUseId,
             provider = provider
         )
     }
@@ -843,7 +853,8 @@ class AiAgentRpcServiceImpl(
         is ToolResultContent -> RpcToolResultBlock(
             toolUseId = toolUseId,
             content = content,
-            isError = isError
+            isError = isError,
+            agentId = agentId
         )
         is CommandExecutionContent -> RpcCommandExecutionBlock(
             command = command,
@@ -983,9 +994,9 @@ class AiAgentRpcServiceImpl(
         is UiThinkingDelta -> "thinking=\"${event.thinking}\""
         is UiAssistantMessage -> "content=${formatContentBlocks(event.content)}"
         is UiUserMessage -> "content=${formatContentBlocks(event.content)}, isReplay=${event.isReplay}"
-        is UiToolStart -> "toolId=${event.toolId}, toolName=${event.toolName}, toolType=${event.toolType}, inputPreview=${event.inputPreview}"
-        is UiToolProgress -> "toolId=${event.toolId}, status=${event.status}, outputPreview=${event.outputPreview}"
-        is UiToolComplete -> "toolId=${event.toolId}, result=${event.result}"
+        is UiToolStart -> "toolId=${event.toolId}, toolName=${event.toolName}, toolType=${event.toolType}, inputPreview=${event.inputPreview}, parentToolUseId=${event.parentToolUseId}"
+        is UiToolProgress -> "toolId=${event.toolId}, status=${event.status}, outputPreview=${event.outputPreview}, parentToolUseId=${event.parentToolUseId}"
+        is UiToolComplete -> "toolId=${event.toolId}, result=${event.result}, parentToolUseId=${event.parentToolUseId}"
         is UiMessageStart -> "messageId=${event.messageId}, content=${event.content?.let { formatContentBlocks(it) }}"
         is UiMessageComplete -> "usage=${event.usage}"
         is UiResultMessage -> "subtype=${event.subtype}, isError=${event.isError}, numTurns=${event.numTurns}, result=${event.result}"

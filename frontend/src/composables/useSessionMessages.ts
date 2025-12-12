@@ -64,6 +64,10 @@ export function useSessionMessages(
     dedupe: true,
     keySelector: (item) => (item as any)?.id
   })
+  // 子代理挂起消息缓存：Task toolUseId -> DisplayItem[]
+  const pendingSubagentMessages = new Map<string, DisplayItem[]>()
+  // 子代理流式状态：Task toolUseId -> { messageId, content: ContentBlock[], timestamp }
+  const subagentStreamingState = new Map<string, { messageId: string; content: ContentBlock[]; timestamp: number }>()
 
   function refreshDisplayWindow(): void {
     const windowItems = displayStore.getWindow(DISPLAY_WINDOW_TOTAL)
@@ -85,6 +89,90 @@ export function useSessionMessages(
   function clearDisplayItems(): void {
     displayStore.clear()
     displayItems.splice(0, displayItems.length)
+  }
+
+  /**
+   * 将子代理 DisplayItem 附加到对应 Task
+   *
+   * 注意：过滤掉 userMessage 类型，因为子代理的用户提示已经在 Task 工具的 prompt 参数中显示
+   */
+  function appendSubagentDisplayItems(taskToolUseId: string, items: DisplayItem[]): void {
+    if (!items || items.length === 0) return
+    // 过滤掉 userMessage（子代理的 prompt 已在 Task 参数中显示）
+    const filteredItems = items.filter(item => item.displayType !== 'userMessage')
+    if (filteredItems.length === 0) return
+
+    const taskCall = tools.pendingToolCalls.get(taskToolUseId) as ToolCall | undefined
+    if (!taskCall) {
+      const pending = pendingSubagentMessages.get(taskToolUseId) ?? []
+      pending.push(...filteredItems)
+      pendingSubagentMessages.set(taskToolUseId, pending)
+      return
+    }
+    if (!taskCall.subagentMessages) {
+      taskCall.subagentMessages = []
+    }
+    taskCall.subagentMessages.push(...filteredItems)
+  }
+
+  /**
+   * Task 刚创建时回填挂起的子代理消息
+   */
+  function flushPendingSubagentMessages(taskToolUseId: string, taskCall: ToolCall) {
+    const pending = pendingSubagentMessages.get(taskToolUseId)
+    if (pending && pending.length > 0) {
+      taskCall.subagentMessages = (taskCall.subagentMessages || []).concat(pending)
+      pendingSubagentMessages.delete(taskToolUseId)
+    }
+  }
+
+  /**
+   * 查找子代理显示项
+   */
+  function findSubagentDisplayItem(taskToolUseId: string, displayId: string): DisplayItem | undefined {
+    const taskCall = tools.pendingToolCalls.get(taskToolUseId) as ToolCall | undefined
+    if (!taskCall || !taskCall.subagentMessages) return undefined
+    return taskCall.subagentMessages.find(item => (item as any).id === displayId)
+  }
+
+  /**
+   * 更新子代理文本显示项
+   */
+  function updateSubagentTextDisplay(taskToolUseId: string, displayId: string, text: string) {
+    const item = findSubagentDisplayItem(taskToolUseId, displayId) as AssistantText | undefined
+    if (item && item.displayType === 'assistantText') {
+      item.content = text
+      return
+    }
+    // 如果不存在，创建一个新的文本显示项
+    const newItem: AssistantText = {
+      displayType: 'assistantText',
+      id: displayId,
+      content: text,
+      timestamp: Date.now(),
+      isStreaming: true
+    }
+    appendSubagentDisplayItems(taskToolUseId, [newItem])
+  }
+
+  /**
+   * 更新子代理思考显示项
+   */
+  function updateSubagentThinkingDisplay(taskToolUseId: string, displayId: string, content: string, signature?: string) {
+    const item = findSubagentDisplayItem(taskToolUseId, displayId) as ThinkingContent | undefined
+    if (item && item.displayType === 'thinking') {
+      item.content = content
+      if (signature) item.signature = signature
+      return
+    }
+    const newItem: ThinkingContent = {
+      displayType: 'thinking',
+      id: displayId,
+      content,
+      signature,
+      timestamp: Date.now()
+    }
+    appendSubagentDisplayItems(taskToolUseId, [newItem])
   }
 
   /**
@@ -168,6 +256,12 @@ export function useSessionMessages(
     // 如果请求已完成（无活动请求），忽略延迟到达的流式事件
     if (!stats.hasActiveRequest.value) {
       log.debug('[useSessionMessages] 无活动请求，忽略延迟的流式事件')
+      return
+    }
+
+    // 子代理流式事件：路由到对应 Task 卡片
+    if (streamEventData.parentToolUseId) {
+      handleSubagentStreamEvent(streamEventData)
       return
     }
 
@@ -270,6 +364,132 @@ export function useSessionMessages(
   }
 
   /**
+   * 子代理流式事件处理
+   */
+  function handleSubagentStreamEvent(streamEventData: RpcStreamEvent): void {
+    const taskId = streamEventData.parentToolUseId as string
+    const event = streamEventData.event
+    if (!event) return
+
+    switch (event.type) {
+      case 'message_start': {
+        const messageId = (event as any).message?.id || `subagent-${Date.now()}`
+        const timestamp = Date.now()
+        subagentStreamingState.set(taskId, { messageId, content: [], timestamp })
+        // 初始化已有内容块
+        const contentBlocks = ((event as any).message?.content ?? [])
+          .map(mapRpcContentBlock)
+          .filter((b: ContentBlock | null): b is ContentBlock => !!b)
+        contentBlocks.forEach((block, idx) => {
+          if (block.type === 'text') {
+            const displayId = `${messageId}-text-${idx}`
+            appendSubagentDisplayItems(taskId, [{
+              displayType: 'assistantText',
+              id: displayId,
+              content: (block as any).text || '',
+              timestamp,
+              isStreaming: true
+            } as AssistantText])
+          } else if (block.type === 'thinking') {
+            const displayId = `${messageId}-thinking-${idx}`
+            appendSubagentDisplayItems(taskId, [{
+              displayType: 'thinking',
+              id: displayId,
+              content: (block as any).thinking || '',
+              signature: (block as any).signature,
+              timestamp
+            } as ThinkingContent])
+          } else if (block.type === 'tool_use' && (block as any).id) {
+            const toolCall = createToolCall(block as unknown as ToolUseContent, tools.pendingToolCalls)
+            appendSubagentDisplayItems(taskId, [toolCall])
+          }
+        })
+        break
+      }
+      case 'content_block_start': {
+        const state = subagentStreamingState.get(taskId)
+        if (!state) break
+        const blockIndex = (event as any).index
+        const contentBlock = mapRpcContentBlock((event as any).content_block)
+        if (!contentBlock) break
+        while (state.content.length < blockIndex) {
+          state.content.push({ type: 'text', text: '' } as any)
+        }
+        state.content[blockIndex] = contentBlock
+        if (contentBlock.type === 'text') {
+          const displayId = `${state.messageId}-text-${blockIndex}`
+          appendSubagentDisplayItems(taskId, [{
+            displayType: 'assistantText',
+            id: displayId,
+            content: '',
+            timestamp: state.timestamp,
+            isStreaming: true
+          } as AssistantText])
+        } else if (contentBlock.type === 'thinking') {
+          const displayId = `${state.messageId}-thinking-${blockIndex}`
+          appendSubagentDisplayItems(taskId, [{
+            displayType: 'thinking',
+            id: displayId,
+            content: '',
+            signature: (contentBlock as any).signature,
+            timestamp: state.timestamp
+          } as ThinkingContent])
+        } else if (contentBlock.type === 'tool_use' && (contentBlock as any).id) {
+          const toolCall = createToolCall(contentBlock as unknown as ToolUseContent, tools.pendingToolCalls)
+          appendSubagentDisplayItems(taskId, [toolCall])
+        }
+        break
+      }
+      case 'content_block_delta': {
+        const state = subagentStreamingState.get(taskId)
+        if (!state) break
+        const index = (event as any).index
+        const delta = (event as any).delta
+        const block = state.content[index]
+        if (!block) break
+        if (delta.type === 'text_delta' && block.type === 'text') {
+          block.text = (block as any).text + (delta.text || '')
+          const displayId = `${state.messageId}-text-${index}`
+          updateSubagentTextDisplay(taskId, displayId, block.text || '')
+        } else if (delta.type === 'thinking_delta' && block.type === 'thinking') {
+          block.thinking = (block as any).thinking + (delta.thinking || '')
+          const displayId = `${state.messageId}-thinking-${index}`
+          updateSubagentThinkingDisplay(taskId, displayId, block.thinking || '', (block as any).signature)
+        } else if ((delta as any).type === 'signature_delta' && block.type === 'thinking') {
+          block.signature = (delta as any).signature || (block as any).signature
+          const displayId = `${state.messageId}-thinking-${index}`
+          updateSubagentThinkingDisplay(taskId, displayId, (block as any).thinking || '', block.signature)
+        } else if (delta.type === 'input_json_delta' && block.type === 'tool_use') {
+          // 仅更新累积 JSON
+          const accumulated = tools.appendJsonDelta((block as any).id, delta.partial_json || '')
+          try {
+            block.input = JSON.parse(accumulated)
+          } catch {
+            /* ignore */
+          }
+        }
+        break
+      }
+      case 'content_block_stop':
+        // 结束时尝试解析累积 JSON
+        subagentStreamingState.get(taskId)?.content.forEach((block) => {
+          if (block.type === 'tool_use') {
+            const input = tools.parseAndApplyAccumulatedJson((block as any).id)
+            if (input) {
+              block.input = input
+            }
+          }
+        })
+        break
+      case 'message_stop':
+        subagentStreamingState.delete(taskId)
+        break
+      default:
+        break
+    }
+  }
+
+  /**
    * 处理 message_stop 事件
    */
   function handleMessageStop(): void {
@@ -335,6 +555,10 @@ export function useSessionMessages(
         )
         if (!existingToolItem) {
           const toolCall = createToolCall(contentBlock as unknown as ToolUseContent, tools.pendingToolCalls)
+          if (contentBlock.name === 'Task' || (contentBlock as any).toolName === 'Task') {
+            (toolCall as any).agentName = (contentBlock as any).input?.subagent_type || (contentBlock as any).input?.model
+            flushPendingSubagentMessages(contentBlock.id, toolCall)
+          }
           pushDisplayItems([toolCall])
         }
       }
@@ -555,7 +779,8 @@ export function useSessionMessages(
     log.debug('[useSessionMessages] handleNormalMessage:', {
       role: message.role,
       id: message.id,
-      contentLength: message.content.length
+      contentLength: message.content.length,
+      parentToolUseId: message.parentToolUseId
     })
 
     // 确保消息有 id 字段
@@ -564,6 +789,14 @@ export function useSessionMessages(
         ? stats.getCurrentTracker()?.currentStreamingMessageId
         : null
       message.id = streamingId || generateMessageId(message.role)
+    }
+
+    // 子代理消息：归档到对应 Task 卡片
+    const parentToolUseId = message.parentToolUseId
+    if (parentToolUseId) {
+      const displayBatch = convertMessageToDisplayItems(message, tools.pendingToolCalls)
+      appendSubagentDisplayItems(parentToolUseId, displayBatch)
+      return
     }
 
     // assistant 消息处理

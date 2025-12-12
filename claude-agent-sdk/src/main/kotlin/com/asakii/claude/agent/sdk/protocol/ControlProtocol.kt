@@ -303,7 +303,7 @@ class ControlProtocol(
                             logger.info("🌊 [ControlProtocol] StreamEvent 详情: eventType=$eventType, sessionId=${message.sessionId}, uuid=${message.uuid}")
                         }
                         is AssistantMessage -> {
-                            logger.info("🤖 [ControlProtocol] AssistantMessage 详情: model=${message.model}, contentBlocks=${message.content.size}")
+                            logger.info("🤖 [ControlProtocol] AssistantMessage 详情: model=${message.model}, contentBlocks=${message.content.size}, parentToolUseId=${message.parentToolUseId}")
                         }
                         is SystemMessage -> {
                             logger.info("🔧 [ControlProtocol] SystemMessage 详情: subtype=${message.subtype}")

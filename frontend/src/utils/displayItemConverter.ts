@@ -143,6 +143,9 @@ export function createToolCall(
   }
 
   const toolCall = reactive({ ...baseToolCall }) as ToolCall
+  if (block.toolName === 'Task') {
+    (toolCall as any).agentName = (block as any).input?.subagent_type || (block as any).input?.model
+  }
   pendingToolCalls.set(block.id, toolCall)
   return toolCall
 }
@@ -152,6 +155,11 @@ export function updateToolCallResult(toolCall: ToolCall, resultBlock: ToolResult
   toolCall.endTime = Date.now()
   // 直接存储后端数据，不做格式转换，保留 is_error 字段
   toolCall.result = resultBlock as ToolResult
+
+  // 从结构化字段读取 agentId（仅 Task 工具有）
+  if (toolCall.toolName === 'Task' && (resultBlock as any).agent_id) {
+    (toolCall as any).agentId = (resultBlock as any).agent_id
+  }
 }
 
 export function convertMessageToDisplayItems(

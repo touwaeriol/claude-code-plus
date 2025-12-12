@@ -236,7 +236,14 @@ data class RpcUserMessage(
 data class RpcAssistantMessage(
     val message: RpcMessageContent,
     val id: String? = null,
-    override val provider: RpcProvider?
+    override val provider: RpcProvider?,
+    /**
+     * 父工具调用 ID（用于子代理消息路由）
+     * - null: 主会话消息
+     * - 非 null: 子代理消息，值为触发该子代理的 Task 工具调用 ID
+     */
+    @SerialName("parent_tool_use_id")
+    val parentToolUseId: String? = null
 ) : RpcMessage
 
 /**
@@ -467,7 +474,10 @@ data class RpcToolResultBlock(
     val toolUseId: String,
     val content: JsonElement? = null,
     @SerialName("is_error")
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    /** 子代理 ID（仅 Task 工具使用，用于加载子代理历史） */
+    @SerialName("agent_id")
+    val agentId: String? = null
 ) : RpcContentBlock
 
 @Serializable

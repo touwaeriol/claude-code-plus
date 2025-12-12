@@ -75,7 +75,8 @@ class ClaudeStreamAdapter(
                 id = message.id,
                 content = contentBlocks,
                 model = message.model,
-                tokenUsage = usage
+                tokenUsage = usage,
+                parentToolUseId = message.parentToolUseId
             )
         )
     }
@@ -120,7 +121,8 @@ class ClaudeStreamAdapter(
             UserMessageEvent(
                 provider = AiAgentProvider.CLAUDE,
                 content = contentBlocks,
-                isReplay = message.isReplay
+                isReplay = message.isReplay,
+                parentToolUseId = message.parentToolUseId
             )
         )
     }
@@ -167,7 +169,8 @@ class ClaudeStreamAdapter(
                     index = parsed.index,
                     contentType = block::class.simpleName?.lowercase() ?: "unknown",
                     toolName = toolName,
-                    content = convertContentBlock(block)
+                    content = convertContentBlock(block),
+                    parentToolUseId = message.parentToolUseId
                 )
             }
 
@@ -183,7 +186,8 @@ class ClaudeStreamAdapter(
                 events += ContentDeltaEvent(
                     provider = AiAgentProvider.CLAUDE,
                     index = parsed.index,
-                    delta = delta
+                    delta = delta,
+                    parentToolUseId = message.parentToolUseId
                 )
             }
 
@@ -192,7 +196,8 @@ class ClaudeStreamAdapter(
                 events += ContentCompletedEvent(
                     provider = AiAgentProvider.CLAUDE,
                     index = parsed.index,
-                    content = buildContentBlock(state)
+                    content = buildContentBlock(state),
+                    parentToolUseId = message.parentToolUseId
                 )
             }
 

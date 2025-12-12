@@ -283,6 +283,7 @@ object ProtoConverter {
     private fun RpcAssistantMessage.toProtoAssistantMessage(): AssistantMessage = assistantMessage {
         message = this@toProtoAssistantMessage.message.toProto()
         this@toProtoAssistantMessage.id?.let { id = it }
+        this@toProtoAssistantMessage.parentToolUseId?.let { parentToolUseId = it }
     }
 
     private fun RpcResultMessageApi.toProtoResultMessage(): ResultMessage = resultMessage {
@@ -352,6 +353,7 @@ object ProtoConverter {
                 toolUseId = block.toolUseId
                 block.content?.let { contentJson = ByteString.copyFromUtf8(json.encodeToString(it)) }
                 isError = block.isError
+                block.agentId?.let { agentId = it }
             }
             is RpcImageBlock -> image = imageBlock {
                 source = imageSource {
@@ -403,7 +405,8 @@ object ProtoConverter {
         hasToolResult() -> RpcToolResultBlock(
             toolUseId = toolResult.toolUseId,
             content = if (toolResult.hasContentJson()) parseJsonElement(toolResult.contentJson) else null,
-            isError = toolResult.isError
+            isError = toolResult.isError,
+            agentId = if (toolResult.hasAgentId()) toolResult.agentId else null
         )
         hasImage() -> RpcImageBlock(
             source = RpcImageSourceApi(
