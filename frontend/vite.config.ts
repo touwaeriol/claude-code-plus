@@ -79,13 +79,10 @@ export default defineConfig({
         chunkFileNames: 'assets/[name].js',
         assetFileNames: 'assets/[name].[ext]',
         manualChunks(id) {
-          // Vue 核心
-          if (id.includes('node_modules/vue') || id.includes('node_modules/pinia') || id.includes('node_modules/@vue')) {
+          // Vue 核心 + Element Plus（合并避免循环依赖导致 TDZ 错误）
+          if (id.includes('node_modules/vue') || id.includes('node_modules/pinia') || id.includes('node_modules/@vue') ||
+              id.includes('node_modules/element-plus') || id.includes('node_modules/@element-plus')) {
             return 'vue-vendor'
-          }
-          // Element Plus UI 组件库
-          if (id.includes('node_modules/element-plus') || id.includes('node_modules/@element-plus')) {
-            return 'element-plus'
           }
           // Shiki 语法高亮
           if (id.includes('node_modules/shiki')) {

@@ -183,18 +183,22 @@ val copyFrontendFiles by tasks.registering(Copy::class) {
 
     dependsOn(buildFrontendWithVite)
 
-    from("../frontend/dist")
-    into("src/main/resources/frontend")
+    // 🔧 使用 layout API 来避免配置缓存问题
+    val frontendDistDir = layout.projectDirectory.dir("../frontend/dist")
+    val targetDir = layout.projectDirectory.dir("src/main/resources/frontend")
+
+    from(frontendDistDir)
+    into(targetDir)
 
     // 🔧 修复 Windows 文件被占用问题
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 
     // 🔧 在复制前删除目标目录，避免文件占用冲突
     doFirst {
-        val targetDir = file("src/main/resources/frontend")
-        if (targetDir.exists()) {
+        val targetFile = targetDir.asFile
+        if (targetFile.exists()) {
             println("🗑️  Deleting existing frontend resources...")
-            targetDir.deleteRecursively()
+            targetFile.deleteRecursively()
         }
     }
 

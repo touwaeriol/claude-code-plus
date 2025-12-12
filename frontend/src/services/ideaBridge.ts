@@ -80,6 +80,11 @@ class IdeaBridgeService {
     return (anyWindow.__IDEA_JCEF__ || anyWindow.__IDEA_MODE__) ? 'ide' : 'browser'
   }
 
+  private refreshMode(): 'ide' | 'browser' {
+    this.mode = this.detectMode()
+    return this.mode
+  }
+
   constructor() {
     // 正常初始化，方法内部会做安全检查
     this.setupEventListener()
@@ -94,7 +99,7 @@ class IdeaBridgeService {
     if (typeof window === 'undefined') {
       return // 构建时跳过初始化
     }
-    this.mode = this.detectMode()
+    this.refreshMode()
     // 简单标记为就绪
     this.isReady = true
     console.log('🌐 Bridge Mode: HTTP')
@@ -194,21 +199,21 @@ class IdeaBridgeService {
    * 获取运行模式
    */
   getMode(): 'ide' | 'browser' {
-    return this.mode
+    return this.refreshMode()
   }
 
   /**
    * 是否运行在 IDE 模式
    */
   isInIde(): boolean {
-    return this.mode === 'ide'
+    return this.refreshMode() === 'ide'
   }
 
   /**
    * 是否运行在浏览器模式
    */
   isInBrowser(): boolean {
-    return this.mode === 'browser'
+    return this.refreshMode() === 'browser'
   }
 
   /**

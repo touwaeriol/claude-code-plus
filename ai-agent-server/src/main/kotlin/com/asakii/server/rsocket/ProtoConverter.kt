@@ -235,12 +235,14 @@ object ProtoConverter {
         timestamp = this@toProto.timestamp
         messageCount = this@toProto.messageCount
         projectPath = this@toProto.projectPath
+        this@toProto.customTitle?.let { customTitle = it }
     }
 
     fun RpcHistoryMetadataApi.toProto(): com.asakii.rpc.proto.HistoryMetadata = com.asakii.rpc.proto.historyMetadata {
         totalLines = this@toProto.totalLines
         sessionId = this@toProto.sessionId
         projectPath = this@toProto.projectPath
+        this@toProto.customTitle?.let { customTitle = it }
     }
 
     fun RpcHistoryResultApi.toProto(): com.asakii.rpc.proto.HistoryResult = com.asakii.rpc.proto.historyResult {

@@ -204,6 +204,12 @@ export function useSessionTab(initialOrder: number = 0) {
   const pendingCompactMetadata = ref<RpcCompactMetadata | null>(null)
 
   /**
+   * 待确认的 /rename 命令目标名称
+   * 当发送 /rename xxx 命令时保存 xxx，收到成功响应后应用
+   */
+  const pendingRenameCommand = ref<string | null>(null)
+
+  /**
    * 恢复来源的会话 ID（如果是从历史 resume 而来）
    */
   const resumeFromSessionId = computed(() => initialConnectOptions.value?.resume ?? null)
@@ -406,6 +412,18 @@ export function useSessionTab(initialOrder: number = 0) {
         break
 
       case 'result':
+        // 检查是否需要应用 /rename
+        if (pendingRenameCommand.value) {
+          const resultData = normalized.data as RpcResultMessage
+          if (resultData.subtype === 'success') {
+            rename(pendingRenameCommand.value)
+            log.info(`[Tab ${tabId}] ✅ /rename 成功，已更新标题: ${pendingRenameCommand.value}`)
+            pendingRenameCommand.value = null
+          } else if (resultData.is_error || resultData.subtype === 'interrupted') {
+            // 失败或中断时清空
+            pendingRenameCommand.value = null
+          }
+        }
         messagesHandler.handleResultMessage(normalized.data)
         break
 
@@ -893,8 +911,43 @@ export function useSessionTab(initialOrder: number = 0) {
    * 发送消息
    * - 生成中：只加入队列（不显示到 UI）
    * - 非生成中：显示到 UI → 应用设置 → 确保连接 → 发送
+   *
+   * @param message - 消息内容
+   * @param options - 发送选项
+   * @param options.isSlashCommand - 是否是斜杠命令（斜杠命令不发送 contexts）
    */
-  async function sendMessage(message: { contexts: any[]; contents: ContentBlock[] }): Promise<void> {
+  async function sendMessage(
+    message: { contexts: any[]; contents: ContentBlock[] },
+    options?: { isSlashCommand?: boolean }
+  ): Promise<void> {
+    // 如果是斜杠命令，清空 contexts
+    if (options?.isSlashCommand) {
+      log.info(`[Tab ${tabId}] 检测到斜杠命令，忽略 contexts`)
+      message = { ...message, contexts: [] }
+    }
+    // 检测 /rename 命令
+    const textContent = message.contents.find(c => c.type === 'text') as { text?: string } | undefined
+    if (textContent?.text) {
+      const renameMatch = textContent.text.match(/^\/rename\s+(.+)$/)
+      if (renameMatch) {
+        pendingRenameCommand.value = renameMatch[1].trim()
+        log.info(`[Tab ${tabId}] 检测到 /rename 命令，待确认名称: ${pendingRenameCommand.value}`)
+      }
+    }
+
+    // 自动更新 Tab 名称：第一条消息时，用消息内容作为标题
+    if (messagesHandler.messages.length === 0 && textContent?.text) {
+      const text = textContent.text.trim()
+      // 跳过命令（以 / 开头）
+      if (!text.startsWith('/')) {
+        // 截取前 30 个字符，超出部分用 ... 表示
+        const maxLen = 30
+        const newTitle = text.length > maxLen ? text.slice(0, maxLen) + '...' : text
+        rename(newTitle)
+        log.info(`[Tab ${tabId}] 自动设置标题: ${newTitle}`)
+      }
+    }
+
     // 连接未就绪：先入队，等待连接后处理
     if (connectionState.status !== ConnectionStatus.CONNECTED) {
       log.info(`[Tab ${tabId}] 连接未就绪（${connectionState.status}），消息入待办队列`)

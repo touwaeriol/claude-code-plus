@@ -61,10 +61,10 @@
         <!-- 图片：只显示缩略图，点击可预览 -->
         <template v-if="isImageContext(context)">
           <img
-            :src="getImagePreviewUrl(context)"
+            :src="getContextImagePreviewUrl(context)"
             class="tag-image-preview"
             alt="图片"
-            @click="openImagePreview(context)"
+            @click="openContextImagePreview(context)"
           >
         </template>
         <!-- 非图片：显示图标和文字 -->
@@ -401,6 +401,15 @@
       @dismiss="dismissAtSymbolPopup"
     />
 
+    <!-- Slash Command Popup (斜杠命令弹窗) -->
+    <SlashCommandPopup
+      :visible="showSlashCommandPopup"
+      :query="slashCommandQuery"
+      :anchor-element="richTextInputElement"
+      @select="handleSlashCommandSelect"
+      @dismiss="dismissSlashCommandPopup"
+    />
+
     <!-- 图片预览模态框 -->
     <ImagePreviewModal
       :visible="previewVisible"
@@ -419,22 +428,20 @@ import type { ContextReference, ContextDisplayType } from '@/types/display'
 import type { ContentBlock } from '@/types/message'
 import AtSymbolFilePopup from '@/components/input/AtSymbolFilePopup.vue'
 import FileSelectPopup from '@/components/input/FileSelectPopup.vue'
+import SlashCommandPopup from '@/components/input/SlashCommandPopup.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 import RichTextInput from './RichTextInput.vue'
+import ThinkingToggle from './ThinkingToggle.vue'
 import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
 import { isInAtQuery } from '@/utils/atSymbolDetector'
 import { useSessionStore } from '@/stores/sessionStore'
-import { useSettingsStore } from '@/stores/settingsStore'
-import { SETTING_KEYS } from '@/composables/useSessionTab'
-import {
-  BaseModel,
-  MODEL_CAPABILITIES,
-  AVAILABLE_MODELS,
-  canToggleThinking,
-  getEffectiveThinkingEnabled
-} from '@/constants/models'
-import ThinkingToggle from './ThinkingToggle.vue'
+// Composables
+import { useImageHandling } from '@/composables/useImageHandling'
+import { useDragAndDrop } from '@/composables/useDragAndDrop'
+import { useInputResize } from '@/composables/useInputResize'
+import { useModelSelection } from '@/composables/useModelSelection'
+import { useContextMenu } from '@/composables/useContextMenu'
 
 interface PendingTask {
   id: string
@@ -478,9 +485,14 @@ interface Props {
   showToast?: (message: string, duration?: number) => void
 }
 
+interface SendOptions {
+  /** 是否是斜杠命令（斜杠命令不发送 contexts） */
+  isSlashCommand?: boolean
+}
+
 interface Emits {
-  (e: 'send', contents: ContentBlock[]): void
-  (e: 'force-send', contents: ContentBlock[]): void
+  (e: 'send', contents: ContentBlock[], options?: SendOptions): void
+  (e: 'force-send', contents: ContentBlock[], options?: SendOptions): void
   (e: 'stop'): void
   (e: 'context-add', context: ContextReference): void
   (e: 'context-remove', context: ContextReference): void
@@ -512,45 +524,32 @@ const emit = defineEmits<Emits>()
 // i18n & stores
 const { t } = useI18n()
 const sessionStore = useSessionStore()
-const settingsStore = useSettingsStore()
 
-// 当前模型（直接绑定到 Tab 状态）
-const currentModel = computed(() => {
-  const modelId = sessionStore.currentTab?.modelId.value
-  if (!modelId) {
-    return BaseModel.OPUS_45
-  }
-  // 从 modelId 反查 BaseModel
-  const entry = Object.entries(MODEL_CAPABILITIES).find(
-    ([, cap]) => cap.modelId === modelId
-  )
-  return (entry?.[0] as BaseModel) ?? BaseModel.OPUS_45
-})
+// ========== 初始化 Composables ==========
 
-// 当前思考开关状态（直接绑定到 Tab 状态）
-const currentThinkingEnabled = computed(() => {
-  const tab = sessionStore.currentTab
-  if (!tab) {
-    return MODEL_CAPABILITIES[BaseModel.OPUS_45].defaultThinkingEnabled
-  }
-  return tab.thinkingEnabled.value
-})
-
-const thinkingTogglePending = ref(false)
-
-// 当前模型的思考模式
-const currentThinkingMode = computed(() => {
-  return MODEL_CAPABILITIES[currentModel.value].thinkingMode
-})
-
-// 思考开关是否可操作
-const canToggleThinkingComputed = computed(() => {
-  return canToggleThinking(currentModel.value)
-})
-
-// 当前思考开关状态（用于 UI 显示）
-const thinkingEnabled = computed(() => {
-  return getEffectiveThinkingEnabled(currentModel.value, currentThinkingEnabled.value)
+// 模型选择 composable
+const {
+  currentModel,
+  currentThinkingMode,
+  canToggleThinkingComputed,
+  thinkingEnabled,
+  selectedPermissionValue,
+  skipPermissionsValue,
+  baseModelOptions,
+  getBaseModelLabel,
+  getModeIcon,
+  handleBaseModelChange,
+  handleThinkingToggle,
+  toggleThinkingEnabled,
+  handleSkipPermissionsChange,
+  cyclePermissionMode,
+  updatePermission,
+  updateSkipPermissions
+} = useModelSelection({
+  initialPermission: props.selectedPermission,
+  initialSkipPermissions: props.skipPermissions,
+  onPermissionChange: (mode) => emit('permission-change', mode),
+  onSkipPermissionsChange: (skip) => emit('skip-permissions-change', skip)
 })
 
 // 当前错误信息（从 sessionStore 读取）
@@ -581,49 +580,57 @@ const showAtSymbolPopup = ref(false)
 const atSymbolPosition = ref(0)
 const atSymbolSearchResults = ref<IndexedFileInfo[]>([])
 
-// Drag and Drop State
-const isDragging = ref(false)
+// Slash Command Popup State
+const showSlashCommandPopup = ref(false)
+const slashCommandQuery = ref('')
 
-// Resize State (拖拽调整高度)
-const containerHeight = ref<number | null>(null)  // null 表示自动高度
-const isResizing = ref(false)
-const minHeight = 110  // 确保底部工具栏始终可见
-const maxHeight = 500
+// 输入框大小调整 composable
+const { containerHeight, startResize } = useInputResize()
 
-function startResize(event: MouseEvent) {
-  event.preventDefault()
-  isResizing.value = true
-  const startY = event.clientY
+// 右键菜单 composable
+const {
+  showSendContextMenu,
+  sendContextMenuPosition,
+  handleSendButtonContextMenu,
+  handleSendFromContextMenu: _handleSendFromContextMenu,
+  handleForceSendFromContextMenu: _handleForceSendFromContextMenu,
+  closeSendContextMenu
+} = useContextMenu({
+  onSend: () => handleSend(),
+  onForceSend: () => handleForceSend()
+})
 
-  // 首次拖拽时获取当前实际高度
-  const container = (event.target as HTMLElement).closest('.unified-chat-input-container') as HTMLElement
-  const startHeight = containerHeight.value ?? container?.offsetHeight ?? 120
+// 图片处理 composable
+const {
+  previewVisible,
+  previewImageSrc,
+  readImageAsBase64,
+  addImageToContext,
+  handlePasteImage: _handlePasteImage,
+  handleImageFileSelect: _handleImageFileSelect,
+  openImagePreview,
+  closeImagePreview,
+  getImagePreviewUrl
+} = useImageHandling({
+  onContextAdd: (ctx) => emit('context-add', ctx),
+  onInsertToEditor: (base64, mimeType) => richTextInputRef.value?.insertImage(base64, mimeType),
+  isCursorAtStart: () => richTextInputRef.value?.isCursorAtStart() ?? true,
+  showToast: props.showToast
+})
 
-  const onMouseMove = (e: MouseEvent) => {
-    // 向上拖动增加高度，向下拖动减少高度
-    const deltaY = startY - e.clientY
-    const newHeight = Math.min(maxHeight, Math.max(minHeight, startHeight + deltaY))
-    containerHeight.value = newHeight
-  }
-
-  const onMouseUp = () => {
-    isResizing.value = false
-    document.removeEventListener('mousemove', onMouseMove)
-    document.removeEventListener('mouseup', onMouseUp)
-  }
-
-  document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('mouseup', onMouseUp)
-}
-
-// Send Button Context Menu State
-const showSendContextMenu = ref(false)
-const sendContextMenuPosition = ref({ x: 0, y: 0 })
-
-
-// Image Preview State (图片预览)
-const previewVisible = ref(false)
-const previewImageSrc = ref('')
+// 拖放 composable
+const {
+  isDragging,
+  handleDragOver,
+  handleDragLeave,
+  handleDrop: _handleDrop
+} = useDragAndDrop({
+  onContextAdd: (ctx) => emit('context-add', ctx),
+  onImageAdd: addImageToContext,
+  onInsertImageToEditor: (base64, mimeType) => richTextInputRef.value?.insertImage(base64, mimeType),
+  isCursorAtStart: () => richTextInputRef.value?.isCursorAtStart() ?? true,
+  readImageAsBase64
+})
 
 // Local state for props
 // selectedModelValue 直接绑定 currentModel（响应会话切换）
@@ -633,8 +640,6 @@ const selectedModelValue = computed({
     // setter 由 handleBaseModelChange 处理
   }
 })
-const selectedPermissionValue = ref(props.selectedPermission)
-const skipPermissionsValue = ref(props.skipPermissions)
 
 
 // Computed
@@ -679,17 +684,18 @@ const placeholderText = computed(() => {
 // Watch props changes
 // Model selection is now driven by settingsStore (UiModelOption)，不再直接依赖 props.selectedModel
 watch(() => props.selectedPermission, (newValue) => {
-  selectedPermissionValue.value = newValue
+  updatePermission(newValue)
 })
 
 watch(() => props.skipPermissions, (newValue) => {
-  skipPermissionsValue.value = newValue
+  updateSkipPermissions(newValue)
 })
 
-// Watch input text for @ symbol detection
+// Watch input text for @ symbol and slash command detection
 // 光标位置变化通过 keydown 事件触发检测
 watch(inputText, () => {
   checkAtSymbol()
+  checkSlashCommand()
 })
 
 // Methods
@@ -705,21 +711,15 @@ function adjustHeight() {
  * 处理 RichTextInput 的图片粘贴事件
  */
 async function handlePasteImage(file: File) {
-  console.log('📋 [handlePasteImage] 接收到粘贴图片:', file.name)
+  await _handlePasteImage(file)
+}
 
-  // 判断光标是否在最前面
-  const isAtStart = richTextInputRef.value?.isCursorAtStart() ?? true
-
-  if (isAtStart) {
-    // 光标在最前面，作为上下文
-    console.log('📋 [handlePasteImage] 光标在最前面，将图片作为上下文')
-    addImageToContext(file)
-  } else {
-    // 光标不在最前面，插入到编辑器中
-    console.log('📋 [handlePasteImage] 光标不在最前面，将图片插入编辑器')
-    const base64 = await readImageAsBase64(file)
-    richTextInputRef.value?.insertImage(base64, file.type)
-  }
+/**
+ * 检测文本是否以斜杠命令开头
+ */
+function isSlashCommandText(text: string): boolean {
+  const trimmed = text.trim()
+  return trimmed.startsWith('/') && /^\/\w+/.test(trimmed)
 }
 
 /**
@@ -734,8 +734,15 @@ async function handleRichTextSubmit(_content: { text: string; images: { id: stri
 
   if (contents.length === 0) return
 
+  // 检测是否是斜杠命令
+  const text = richTextInputRef.value?.getText() || ''
+  const isSlashCommand = isSlashCommandText(text)
+
+  // 关闭斜杠命令弹窗
+  dismissSlashCommandPopup()
+
   // 发送消息（父组件的 enqueueMessage 会自动处理队列逻辑）
-  emit('send', contents)
+  emit('send', contents, { isSlashCommand })
 
   // 清理
   richTextInputRef.value?.clear()
@@ -786,6 +793,46 @@ function handleAtSymbolFileSelect(file: IndexedFileInfo) {
 function dismissAtSymbolPopup() {
   showAtSymbolPopup.value = false
   atSymbolSearchResults.value = []
+}
+
+// Slash Command Functions
+function checkSlashCommand() {
+  const text = inputText.value.trim()
+
+  // 只有当输入以 / 开头时才显示斜杠命令弹窗
+  if (text.startsWith('/')) {
+    // 提取 / 后面的查询内容（第一个空格之前）
+    const spaceIndex = text.indexOf(' ')
+    const query = spaceIndex > 0 ? text.slice(1, spaceIndex) : text.slice(1)
+    slashCommandQuery.value = query
+    showSlashCommandPopup.value = true
+  } else {
+    showSlashCommandPopup.value = false
+    slashCommandQuery.value = ''
+  }
+}
+
+interface SlashCommand {
+  name: string
+  description: string
+}
+
+function handleSlashCommandSelect(cmd: SlashCommand) {
+  // 替换输入框内容为选中的命令
+  richTextInputRef.value?.setContent(cmd.name + ' ')
+  inputText.value = cmd.name + ' '
+  showSlashCommandPopup.value = false
+  slashCommandQuery.value = ''
+
+  // 聚焦输入框
+  nextTick(() => {
+    richTextInputRef.value?.focus()
+  })
+}
+
+function dismissSlashCommandPopup() {
+  showSlashCommandPopup.value = false
+  slashCommandQuery.value = ''
 }
 
 async function handleKeydown(event: KeyboardEvent) {
@@ -856,121 +903,9 @@ async function handleKeydown(event: KeyboardEvent) {
   // Enter 键由 RichTextInput 的 @submit 事件处理，这里不再重复处理
 }
 
-async function toggleThinkingEnabled(source: 'click' | 'keyboard' = 'click') {
-  // 检查是否可以切换
-  if (!canToggleThinkingComputed.value) {
-    console.log(`🧠 [ThinkingToggle] ${source} - 当前模型不支持切换思考`)
-    return
-  }
-
-  if (thinkingTogglePending.value) return
-
-  // 调用新的处理函数
-  const nextValue = !thinkingEnabled.value
-  console.log(`🧠 [ThinkingToggle] ${source} -> ${nextValue}`)
-  handleThinkingToggle(nextValue)
-}
-
-// 权限模式列表
-const permissionModes: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']
-
-// 轮换切换权限模式
-function cyclePermissionMode() {
-  const currentIndex = permissionModes.indexOf(selectedPermissionValue.value)
-  const nextIndex = (currentIndex + 1) % permissionModes.length
-  const nextMode = permissionModes[nextIndex]
-  selectedPermissionValue.value = nextMode
-  emit('permission-change', nextMode)
-  console.log(`🔄 [PermissionMode] Shift+Tab -> ${nextMode}`)
-}
-
-// 新架构：使用 BaseModel（只有 3 个选项）
-const baseModelOptions = AVAILABLE_MODELS
-
-function getBaseModelLabel(model: BaseModel): string {
-  return MODEL_CAPABILITIES[model]?.displayName ?? model
-}
-
-// 获取模式对应的图标
-function getModeIcon(mode: string): string {
-  const icons: Record<string, string> = {
-    'default': '?',
-    'acceptEdits': '✎',
-    'bypassPermissions': '∞',
-    'plan': '☰',
-    'dontAsk': '🔇'
-  }
-  return icons[mode] ?? '?'
-}
-
-/**
- * 处理模型切换
- * 保存到 pending，下次 query 时才应用
- */
-function handleBaseModelChange(model: BaseModel) {
-  const capability = MODEL_CAPABILITIES[model]
-
-  // 根据模型能力自动设置思考开关
-  let newThinkingEnabled: boolean
-  switch (capability.thinkingMode) {
-    case 'always':
-      newThinkingEnabled = true
-      break
-    case 'never':
-      newThinkingEnabled = false
-      break
-    case 'optional':
-      newThinkingEnabled = capability.defaultThinkingEnabled
-      break
-  }
-
-  console.log(`🔄 [handleBaseModelChange] 切换模型: ${capability.displayName}, thinking=${newThinkingEnabled}`)
-
-  // 保存到 pending（下次 query 时应用）
-  const tab = sessionStore.currentTab
-  if (tab) {
-    tab.setPendingSetting(SETTING_KEYS.MODEL, capability.modelId)
-    tab.setPendingSetting(SETTING_KEYS.THINKING_ENABLED, newThinkingEnabled)
-    console.log(`📝 [handleBaseModelChange] 已保存到 pending，下次 query 时应用`)
-  }
-}
-
-/**
- * 处理思考开关切换
- * 只保存到 pending，下次 query 时才应用
- */
-function handleThinkingToggle(enabled: boolean) {
-  if (!canToggleThinkingComputed.value) {
-    return
-  }
-
-  console.log(`🧠 [handleThinkingToggle] 切换思考: ${enabled}`)
-
-  // 保存到 pending（下次 query 时应用）
-  const tab = sessionStore.currentTab
-  if (tab) {
-    tab.setPendingSetting(SETTING_KEYS.THINKING_ENABLED, enabled)
-    console.log(`📝 [handleThinkingToggle] 已保存到 pending，下次 query 时应用`)
-  }
-}
-
-/**
- * 处理跳过权限开关切换
- * 只保存到 pending，下次 query 时才应用
- */
-function handleSkipPermissionsChange(enabled: boolean) {
-  console.log(`🔓 [handleSkipPermissionsChange] 切换跳过权限: ${enabled}`)
-
-  // 保存到 pending（下次 query 时应用）
-  const tab = sessionStore.currentTab
-  if (tab) {
-    tab.setPendingSetting(SETTING_KEYS.SKIP_PERMISSIONS, enabled)
-    console.log(`📝 [handleSkipPermissionsChange] 已保存到 pending，下次 query 时应用`)
-  }
-
-  // 保存到全局设置（供新 Tab 继承）
-  settingsStore.saveSettings({ skipPermissions: enabled })
-}
+// toggleThinkingEnabled, cyclePermissionMode, getBaseModelLabel, getModeIcon,
+// handleBaseModelChange, handleThinkingToggle, handleSkipPermissionsChange
+// 这些函数现在由 useModelSelection composable 提供
 
 async function handleSend() {
   if (!canSend.value) return
@@ -979,8 +914,15 @@ async function handleSend() {
   const contents = richTextInputRef.value?.extractContentBlocks() || []
 
   if (contents.length > 0) {
+    // 检测是否是斜杠命令
+    const text = richTextInputRef.value?.getText() || ''
+    const isSlashCommand = isSlashCommandText(text)
+
+    // 关闭斜杠命令弹窗
+    dismissSlashCommandPopup()
+
     // 先展示到 UI，连接状态由 Tab 层处理
-    emit('send', contents)
+    emit('send', contents, { isSlashCommand })
 
     // 清理输入框
     richTextInputRef.value?.clear()
@@ -1003,29 +945,8 @@ async function handleForceSend() {
   adjustHeight()
 }
 
-// 发送按钮右键菜单处理
-function handleSendButtonContextMenu(event: MouseEvent) {
-  event.preventDefault()
-  showSendContextMenu.value = true
-  sendContextMenuPosition.value = {
-    x: event.clientX,
-    y: event.clientY
-  }
-}
-
-function handleSendFromContextMenu() {
-  showSendContextMenu.value = false
-  handleSend()
-}
-
-function handleForceSendFromContextMenu() {
-  showSendContextMenu.value = false
-  handleForceSend()
-}
-
-function closeSendContextMenu() {
-  showSendContextMenu.value = false
-}
+// handleSendButtonContextMenu, handleSendFromContextMenu, handleForceSendFromContextMenu, closeSendContextMenu
+// 这些函数现在由 useContextMenu composable 提供
 
 function removeContext(context: ContextReference) {
   emit('context-remove', context)
@@ -1096,37 +1017,29 @@ function getContextDisplay(context: ContextReference): string {
 /**
  * 获取图片预览 URL（使用类型守卫）
  */
-function getImagePreviewUrl(context: ContextReference): string {
+function getContextImagePreviewUrl(context: ContextReference): string {
   if (isImageReference(context)) {
-    return `data:${context.mimeType};base64,${context.base64Data}`
+    return getImagePreviewUrl(context as ImageReference)
   }
   return ''
 }
 
 /**
- * 打开图片预览
+ * 打开上下文中的图片预览
  */
-function openImagePreview(context: ContextReference) {
+function openContextImagePreview(context: ContextReference) {
   if (isImageReference(context)) {
-    previewImageSrc.value = getImagePreviewUrl(context)
-    previewVisible.value = true
+    openImagePreview(getContextImagePreviewUrl(context))
   }
 }
 
-/**
- * 关闭图片预览
- */
-function closeImagePreview() {
-  previewVisible.value = false
-  previewImageSrc.value = ''
-}
+// closeImagePreview 现在由 useImageHandling composable 提供
 
 /**
  * 处理输入框中图片预览
  */
 function handleInputImagePreview(src: string) {
-  previewImageSrc.value = src
-  previewVisible.value = true
+  openImagePreview(src)
 }
 
 /**
@@ -1173,69 +1086,12 @@ function getTokenTooltip(): string {
   })
 }
 
-// Drag and Drop Functions
-function handleDragOver(event: DragEvent) {
-  event.preventDefault()
-  isDragging.value = true
-}
+// handleDragOver, handleDragLeave, handleDrop, addFileToContext
+// 这些函数现在由 useDragAndDrop composable 提供
 
-function handleDragLeave(event: DragEvent) {
-  event.preventDefault()
-  // 只有当离开整个拖放区域时才设置为 false
-  if (event.target === event.currentTarget) {
-    isDragging.value = false
-  }
-}
-
+// 包装 _handleDrop 用于模板
 async function handleDrop(event: DragEvent) {
-  event.preventDefault()
-  isDragging.value = false
-
-  const files = event.dataTransfer?.files
-  if (!files || files.length === 0) return
-
-  // 判断光标是否在最前面
-  const isAtStart = richTextInputRef.value?.isCursorAtStart() ?? true
-
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i]
-
-    // 检查是否为图片文件
-    if (file.type && file.type.startsWith('image/')) {
-      if (isAtStart) {
-        // 光标在最前面：作为上下文处理
-        console.log('📋 [handleDrop] 光标在最前面，将图片作为上下文')
-        await addImageToContext(file)
-      } else {
-        // 光标不在最前面：插入到编辑器中
-        console.log('📋 [handleDrop] 光标不在最前面，将图片插入编辑器')
-        const base64 = await readImageAsBase64(file)
-        richTextInputRef.value?.insertImage(base64, file.type)
-      }
-    } else {
-      // 非图片文件：作为上下文处理
-      await addFileToContext(file)
-    }
-  }
-}
-
-async function addFileToContext(file: File) {
-  try {
-    // 创建上下文引用
-    const contextRef: ContextReference = {
-      type: 'file',
-      uri: file.name,
-      displayType: 'TAG',
-      path: file.name, // 在实际项目中应该获取相对路径
-      fullPath: file.name
-    }
-
-    // 添加到上下文列表
-    emit('context-add', contextRef)
-  } catch (error) {
-    console.error('Failed to read file:', error)
-    // 可以添加错误提示
-  }
+  await _handleDrop(event)
 }
 
 // 图片上传功能
@@ -1245,29 +1101,10 @@ function handleImageUploadClick() {
 
 async function handleImageFileSelect(event: Event) {
   const input = event.target as HTMLInputElement
-  const files = input.files
-  if (!files || files.length === 0) return
-
-  // 判断光标是否在最前面
-  const isAtStart = richTextInputRef.value?.isCursorAtStart() ?? true
-
-  for (let i = 0; i < files.length; i++) {
-    if (isAtStart) {
-      // 光标在最前面：作为上下文处理
-      await addImageToContext(files[i])
-    } else {
-      // 光标不在最前面：插入到编辑器中
-      const base64 = await readImageAsBase64(files[i])
-      richTextInputRef.value?.insertImage(base64, files[i].type)
-    }
-  }
-
+  await _handleImageFileSelect(input.files)
   // 清空 input，允许重复选择同一文件
   input.value = ''
 }
-
-// 支持的图片 MIME 类型常量
-const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/webp'] as const
 
 /**
  * 类型守卫：检查是否为图片上下文
@@ -1293,61 +1130,7 @@ function isUrlReference(context: ContextReference): boolean {
   return 'url' in context || context.type === 'web'
 }
 
-async function addImageToContext(file: File) {
-  console.log(`🖼️ [addImageToContext] 开始处理图片: ${file.name}`)
-
-  try {
-    // 验证文件类型
-    if (!VALID_IMAGE_TYPES.includes(file.type as typeof VALID_IMAGE_TYPES[number])) {
-      console.error(`🖼️ [addImageToContext] 不支持的图片格式: ${file.type}`)
-      return
-    }
-
-    // 读取图片为 base64
-    console.log('🖼️ [addImageToContext] 读取图片为 base64...')
-    const base64Data = await readImageAsBase64(file)
-    console.log(`🖼️ [addImageToContext] base64 长度: ${base64Data.length}`)
-
-    // 创建图片引用
-    const imageRef: ImageReference = {
-      type: 'image',
-      displayType: 'TAG' as ContextDisplayType,
-      uri: `image://${file.name}`,
-      name: file.name,
-      mimeType: file.type,
-      base64Data: base64Data,
-      size: file.size
-    }
-
-    console.log('🖼️ [addImageToContext] 创建图片引用:', {
-      type: imageRef.type,
-      name: imageRef.name,
-      mimeType: imageRef.mimeType,
-      size: imageRef.size,
-      base64Length: base64Data.length
-    })
-
-    // 添加到上下文列表
-    emit('context-add', imageRef)
-    console.log('🖼️ [addImageToContext] 已发送 context-add 事件')
-  } catch (error) {
-    console.error('🖼️ [addImageToContext] 读取图片失败:', error)
-  }
-}
-
-function readImageAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const result = e.target?.result as string
-      // 移除 data:image/xxx;base64, 前缀
-      const base64 = result.split(',')[1]
-      resolve(base64)
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
+// addImageToContext 和 readImageAsBase64 现在由 useImageHandling composable 提供
 
 /**
  * 暴露方法供父组件调用（用于编辑队列消息时恢复内容）

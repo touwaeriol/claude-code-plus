@@ -1,5 +1,6 @@
 <template>
   <div class="modern-chat-view">
+    <!-- 会话标签栏（仅 Web 模式显示，IDE 模式在标题栏） -->
     <ChatHeader
       v-if="!isIdeMode"
       class="chat-header-bar"
@@ -212,7 +213,7 @@ const historyLoading = ref(false)
 const historyLoadingMore = ref(false)
 const historyHasMore = ref(true)
 const historyOffset = ref(0)
-const HISTORY_PAGE_SIZE = 30
+const HISTORY_PAGE_SIZE = 10
 
 // Toast 提示状态
 const toastMessage = ref('')
@@ -296,7 +297,7 @@ const historySessions = computed(() => {
     .filter(h => !activeTabIds.has(h.sessionId) && !activeSessionIds.has(h.sessionId) && !activeResumeIds.has(h.sessionId))
     .map(h => ({
       id: h.sessionId,
-      name: h.firstUserMessage || t('session.unnamed'),
+      name: h.customTitle || h.firstUserMessage || t('session.unnamed'),
       timestamp: h.timestamp,
       messageCount: h.messageCount,
       isGenerating: false,
@@ -436,10 +437,15 @@ watch(() => props.sessionId, async (newSessionId) => {
   }
 })
 
+// 发送选项接口
+interface SendOptions {
+  isSlashCommand?: boolean
+}
+
 // 事件处理器
-async function handleSendMessage(contents?: ContentBlock[]) {
+async function handleSendMessage(contents?: ContentBlock[], options?: SendOptions) {
   const safeContents = Array.isArray(contents) ? contents : []
-  console.log('handleSendMessage:', safeContents.length, 'content blocks')
+  console.log('handleSendMessage:', safeContents.length, 'content blocks', options?.isSlashCommand ? '(slash command)' : '')
 
   try {
     // 没有当前 Tab 时创建新的
@@ -460,14 +466,15 @@ async function handleSendMessage(contents?: ContentBlock[]) {
 
     // 连接状态检查已移至 ChatInput.handleSend，此处不再重复检查
 
-    const currentContexts = [...uiState.value.contexts]
+    // 如果是斜杠命令，不发送 contexts
+    const currentContexts = options?.isSlashCommand ? [] : [...uiState.value.contexts]
     uiState.value.contexts = []
 
-    console.log('Sending message via currentTab')
+    console.log('Sending message via currentTab', options?.isSlashCommand ? '(no contexts for slash command)' : `(${currentContexts.length} contexts)`)
     sessionStore.currentTab.sendMessage({
       contexts: currentContexts,
       contents: safeContents
-    })
+    }, { isSlashCommand: options?.isSlashCommand })
   } catch (error) {
     console.error('Failed to send message:', error)
     uiState.value.hasError = true
@@ -477,12 +484,12 @@ async function handleSendMessage(contents?: ContentBlock[]) {
   }
 }
 
-async function handleForceSend(contents?: ContentBlock[]) {
+async function handleForceSend(contents?: ContentBlock[], options?: SendOptions) {
   const safeContents = Array.isArray(contents) ? contents : []
-  console.log('Force send:', safeContents.length, 'content blocks')
+  console.log('Force send:', safeContents.length, 'content blocks', options?.isSlashCommand ? '(slash command)' : '')
   // 强制发送：先打断当前生成，再插队发送
   await sessionStore.currentTab?.interrupt()
-  await handleSendMessage(safeContents)
+  await handleSendMessage(safeContents, options)
 }
 
 function handleEditPendingMessage(id: string) {
@@ -635,9 +642,11 @@ async function handleHistorySelect(sessionId: string) {
       const historySession = historySessionList.value.find(h => h.sessionId === sessionId)
       if (historySession) {
         console.log('🔄 Resuming history session:', sessionId)
+        // 优先使用 customTitle（重命名后的标题），否则使用 firstUserMessage
+        const sessionTitle = historySession.customTitle || historySession.firstUserMessage
         await sessionStore.resumeSession(
           sessionId,
-          historySession.firstUserMessage,
+          sessionTitle,
           historySession.projectPath,
           historySession.messageCount
         )

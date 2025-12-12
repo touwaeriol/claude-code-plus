@@ -925,3 +925,4 @@ class ControlProtocol(
     private fun JsonObject.toMap(): Map<String, JsonElement> =
         this.entries.associate { it.key to it.value }
 }
+

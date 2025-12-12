@@ -42,6 +42,8 @@ export default {
     stop: '停止',
     stopGenerating: '停止生成',
     escToInterrupt: 'ESC 打断',
+    slashCommands: '斜杠命令',
+    noMatchingCommands: '没有匹配的命令',
     welcome: '你好！我是 Claude，你的 AI 编程助手。',
     emptyState: '开始一个新的会话，或选择一个历史记录。',
     sendMessage: '发送消息',

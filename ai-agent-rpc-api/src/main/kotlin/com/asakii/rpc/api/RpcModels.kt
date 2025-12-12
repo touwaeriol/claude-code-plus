@@ -574,7 +574,8 @@ data class RpcHistorySession(
     val firstUserMessage: String,    // 首条用户消息预览
     val timestamp: Long,             // 最后更新时间（毫秒时间戳）
     val messageCount: Int,           // 消息数量
-    val projectPath: String          // 项目路径
+    val projectPath: String,         // 项目路径
+    val customTitle: String? = null  // 自定义标题（从 /rename 命令设置）
 )
 
 /**
@@ -592,5 +593,6 @@ data class RpcHistorySessionsResult(
 data class RpcHistoryMetadata(
     val totalLines: Int,       // JSONL 文件总行数
     val sessionId: String,      // 会话 ID
-    val projectPath: String     // 项目路径
+    val projectPath: String,    // 项目路径
+    val customTitle: String? = null  // 自定义标题（从 /rename 命令设置）
 )

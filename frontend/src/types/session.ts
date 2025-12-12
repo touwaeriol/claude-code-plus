@@ -141,4 +141,5 @@ export interface HistorySessionMetadata {
   timestamp: number           // 最后更新时间（毫秒时间戳）
   messageCount: number        // 消息数量
   projectPath: string         // 项目路径
+  customTitle?: string        // 自定义标题（从 /rename 命令设置）
 }

@@ -47,6 +47,7 @@ class IdeSessionBridge(
 
     private val sessionStateQuery = JBCefJSQuery.create(browser as JBCefBrowserBase).apply {
         addHandler { payload ->
+            logger.info("📥 [JCEF Query] Received session state payload, length=${payload.length}")
             handleSessionState(payload)
             null
         }
@@ -91,6 +92,11 @@ class IdeSessionBridge(
                 if (frame?.isMain == true) {
                     injectIdeaJcefBridge(frame)  // 统一注入，包含初始主题
                     setupThemeListener()  // 监听后续主题变化
+                    // 注入完成后立即设置 frontendReady，允许命令发送
+                    // 不再等待前端的 session:update 消息
+                    frontendReady = true
+                    flushPendingCommands()
+                    logger.info("✅ JCEF bridge ready, frontendReady=true")
                 }
             }
         }, browser.cefBrowser)
@@ -156,7 +162,13 @@ class IdeSessionBridge(
                     // ====== 会话 API ======
                     session: {
                         postState: function(payload) {
-                            ${sessionStateQuery.inject("payload")}
+                            console.log('🔗 [JCEF] session.postState called, payload length:', payload ? payload.length : 0);
+                            try {
+                                ${sessionStateQuery.inject("payload")}
+                                console.log('🔗 [JCEF] session.postState inject executed');
+                            } catch (e) {
+                                console.error('🔗 [JCEF] session.postState error:', e);
+                            }
                         }
                     }
                 };
@@ -341,14 +353,20 @@ class IdeSessionBridge(
                 return
             }
 
+            logger.info(
+                "[IDE Session] session:update received: sessions=${message.sessions?.size ?: 0}, active=${message.activeSessionId}"
+            )
+
             val summaries = message.sessions.orEmpty().map { summary ->
                 SessionSummary(
                     id = summary.id,
                     title = summary.title?.takeIf { it.isNotBlank() }
                         ?: summary.name?.takeIf { it.isNotBlank() }
                         ?: summary.id.takeLast(8),
+                    sessionId = summary.sessionId,  // 真实的会话 ID
                     isGenerating = summary.isGenerating,
-                    isConnected = summary.isConnected
+                    isConnected = summary.isConnected,
+                    isConnecting = summary.isConnecting
                 )
             }
 
@@ -358,7 +376,11 @@ class IdeSessionBridge(
             )
             lastState = state
             frontendReady = true
-            listeners.forEach { listener -> listener.invoke(state) }
+            logger.info("📢 [IDE Session] Notifying ${listeners.size} listeners with ${summaries.size} sessions")
+            listeners.forEach { listener ->
+                logger.info("📢 [IDE Session] Calling listener: $listener")
+                listener.invoke(state)
+            }
             flushPendingCommands()
         }
     }
@@ -420,6 +442,18 @@ class IdeSessionBridge(
     }
 
     /**
+     * 重命名会话
+     * 发送 renameSession 命令到前端，前端会调用 /rename 命令
+     */
+    fun renameSession(sessionId: String, newName: String) {
+        val payload = buildJsonObject {
+            put("sessionId", sessionId)
+            put("newName", newName)
+        }
+        sendCommand("renameSession", payload)
+    }
+
+    /**
      * 推送当前 IDEA 语言设置到前端
      * 前端收到后会刷新页面应用新语言
      */
@@ -458,10 +492,12 @@ class IdeSessionBridge(
     )
 
     data class SessionSummary(
-        val id: String,
+        val id: String,            // Tab ID
         val title: String,
+        val sessionId: String?,    // 真实的会话 ID（连接后才有）
         val isGenerating: Boolean,
-        val isConnected: Boolean  // 是否已连接（进行中会话）
+        val isConnected: Boolean,  // 是否已连接
+        val isConnecting: Boolean  // 是否正在连接中
     )
 
     @Serializable
@@ -476,8 +512,10 @@ class IdeSessionBridge(
         val id: String,
         val title: String? = null,
         val name: String? = null,
+        val sessionId: String? = null,  // 真实的会话 ID
         val isGenerating: Boolean = false,
-        val isConnected: Boolean = false
+        val isConnected: Boolean = false,
+        val isConnecting: Boolean = false
     )
 
     @Serializable
@@ -486,4 +524,3 @@ class IdeSessionBridge(
         val payload: JsonObject? = null
     )
 }
-

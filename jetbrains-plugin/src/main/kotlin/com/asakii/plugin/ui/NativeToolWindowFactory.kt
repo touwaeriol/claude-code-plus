@@ -52,9 +52,6 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         val serverUrl = httpService.serverUrl
         val serverIndicatorAction = ComponentAction(createServerPortIndicator(project))
 
-        // 将 HTTP URL 指示器放在标题最左侧（紧挨 ToolWindow 标题）
-        toolWindowEx?.setTabActions(serverIndicatorAction)
-
         // 标题栏动作（会话控件按顺序置于右侧）
         val titleActions = mutableListOf<AnAction>()
 
@@ -76,19 +73,24 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         }
         browser.loadURL(targetUrl)
 
-        val content = contentFactory.createContent(browser.component, "", false)
+        // 将浏览器组件包装在 JBPanel 中，确保正确填充空间
+        val browserPanel = JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            add(browser.component, BorderLayout.CENTER)
+        }
+
+        val content = contentFactory.createContent(browserPanel, "", false)
         content.isCloseable = false
         toolWindow.contentManager.addContent(content)
         Disposer.register(content, browser)
         Disposer.register(content, sessionBridge)
 
-        // 会话标签动作（下拉选择器）
-        titleActions.add(SessionTabsAction(sessionBridge))
+        // 左侧 Tab Actions：HTTP 指示器 + 会话标签
+        val sessionTabsAction = SessionTabsAction(sessionBridge)
+        Disposer.register(content, sessionTabsAction)
+        toolWindowEx?.setTabActions(serverIndicatorAction, sessionTabsAction)
 
-        // 历史会话入口
+        // 右侧 Title Actions：历史会话 + 新建会话
         titleActions.add(HistorySessionAction(sessionBridge))
-
-        // 新建会话入口
         titleActions.add(NewSessionAction(sessionBridge))
 
         toolWindowEx?.setTitleActions(titleActions)
