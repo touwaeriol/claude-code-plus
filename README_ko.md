@@ -52,8 +52,8 @@ Claude Code Plus는 Claude AI를 개발 환경에 직접 통합하는 IntelliJ I
 ### 권한 요청
 ![권한 요청](docs/screenshots/permission-request.png)
 
-### IDE 통합
-![IDE 통합](docs/screenshots/idea-integration.png)
+### 메인 인터페이스
+![메인 인터페이스](docs/screenshots/idea-integration.png)
 
 ## 📦 설치
 
