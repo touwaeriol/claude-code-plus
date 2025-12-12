@@ -10,7 +10,7 @@
         <!-- 1. 参数区域（提示词） -->
         <div class="params-section">
           <div v-if="description" class="info-row">
-            <span class="label">Description:</span>
+<span class="label">Desc:</span>
             <span class="value">{{ description }}</span>
           </div>
           <div v-if="model" class="info-row">
@@ -30,7 +30,7 @@
           <div class="section-header" @click.stop="processExpanded = !processExpanded">
             <span class="expand-icon">{{ processExpanded ? '▼' : '▶' }}</span>
             <span class="section-title">Process</span>
-            <span class="item-count">({{ subagentMessages.length }})</span>
+<span class="item-count">({{ subagentMessages.length }})</span>
           </div>
           <div v-if="processExpanded" class="subagent-container">
             <div v-if="subagentHistoryLoading" class="loading-hint">Loading...</div>
@@ -47,7 +47,7 @@
         <!-- 3. 结果区域 -->
         <div v-if="hasResult" class="result-section">
           <div class="section-title">Result</div>
-          <div class="result-content">
+<div class="result-content">
             <MarkdownRenderer :content="resultText" />
           </div>
         </div>

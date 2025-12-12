@@ -4,11 +4,11 @@
   >
     <div class="session-header">
       <h3 class="header-title">
-        会话历史
+        History
       </h3>
       <el-button
         class="btn-icon"
-        title="新建会话"
+        title="New Session"
         text
         circle
         @click="$emit('new-session')"
@@ -22,7 +22,7 @@
       class="session-loading"
     >
       <div class="loading-spinner" />
-      <span>加载中...</span>
+      <span>Loading...</span>
     </div>
 
     <div
@@ -30,7 +30,7 @@
       class="session-empty"
     >
       <span class="empty-icon">📭</span>
-      <span class="empty-text">暂无会话</span>
+      <span class="empty-text">No sessions</span>
     </div>
 
     <div
@@ -46,11 +46,11 @@
       >
         <div class="session-main">
           <div class="session-name">
-            {{ session.name || '未命名会话' }}
+            {{ session.name || 'Untitled' }}
           </div>
           <div class="session-meta">
             <span class="session-time">{{ formatTime(session.timestamp) }}</span>
-            <span class="session-count">{{ session.messageCount || 0 }} 条消息</span>
+            <span class="session-count">{{ session.messageCount || 0 }} messages</span>
           </div>
         </div>
 
@@ -60,7 +60,7 @@
         >
           <el-button
             class="btn-icon-small"
-            title="重命名"
+            title="Rename"
             text
             size="small"
             @click="startRename(session)"
@@ -69,7 +69,7 @@
           </el-button>
           <el-button
             class="btn-icon-small"
-            title="删除"
+            title="Delete"
             text
             size="small"
             @click="$emit('delete-session', session)"
@@ -87,12 +87,12 @@
       @click.self="cancelRename"
     >
       <div class="dialog-content">
-        <h4>重命名会话</h4>
+        <h4>Rename Session</h4>
         <el-input
           ref="renameInputRef"
           v-model="newName"
           class="rename-input"
-          placeholder="输入新名称"
+          placeholder="Enter new name"
           @keydown.enter="confirmRename"
           @keydown.esc="cancelRename"
         />
@@ -101,14 +101,14 @@
             class="btn-secondary"
             @click="cancelRename"
           >
-            取消
+            Cancel
           </el-button>
           <el-button
             class="btn-primary"
             type="primary"
             @click="confirmRename"
           >
-            确定
+            OK
           </el-button>
         </div>
       </div>
@@ -158,12 +158,12 @@ function formatTime(timestamp: number): string {
   const hours = Math.floor(diff / 3600000)
   const days = Math.floor(diff / 86400000)
 
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes} 分钟前`
-  if (hours < 24) return `${hours} 小时前`
-  if (days < 7) return `${days} 天前`
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  if (hours < 24) return `${hours}h ago`
+  if (days < 7) return `${days}d ago`
 
-  return date.toLocaleDateString('zh-CN', {
+  return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric'
   })

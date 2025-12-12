@@ -36,7 +36,7 @@
         </div>
         <!-- 无结果提示 -->
         <div v-if="files.length === 0 && showSearchInput" class="no-results">
-          No results
+No results
         </div>
       </div>
     </div>

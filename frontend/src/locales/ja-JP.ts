@@ -269,5 +269,13 @@ export default {
   ,
   system: {
     interrupted: '[ユーザーによりリクエストが中断されました]'
+  },
+  compact: {
+    compacting: '会話コンテキストを圧縮中...'
+  },
+  slashCommand: {
+    compact: '現在のセッションのコンテキストを圧縮',
+    context: '現在のセッションのコンテキスト情報を表示',
+    rename: '現在のセッションの名前を変更'
   }
 }

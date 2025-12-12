@@ -9,7 +9,7 @@
       <div class="generic-details">
         <!-- 参数区域 -->
         <div class="params-section">
-          <div class="section-title">Parameters</div>
+<div class="section-title">Params</div>
           <pre class="params-content">{{ paramsFormatted }}</pre>
         </div>
         <!-- 结果区域 -->

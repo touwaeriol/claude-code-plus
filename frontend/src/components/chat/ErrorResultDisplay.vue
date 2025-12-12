@@ -2,7 +2,7 @@
   <div class="error-result">
     <div class="error-header">
       <span class="error-icon">❌</span>
-      <span class="error-title">执行出错</span>
+      <span class="error-title">{{ t('tools.error') }}</span>
     </div>
     <div class="error-content">
       <pre class="error-message">{{ errorMessage }}</pre>
@@ -11,9 +11,13 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from '@/composables/useI18n'
+
 defineProps<{
   errorMessage: string
 }>()
+
+const { t } = useI18n()
 </script>
 
 <style scoped>

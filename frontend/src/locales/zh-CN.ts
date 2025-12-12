@@ -295,5 +295,10 @@ export default {
   },
   compact: {
     compacting: '正在压缩会话上下文...'
+  },
+  slashCommand: {
+    compact: '压缩当前会话的上下文',
+    context: '显示当前会话的上下文信息',
+    rename: '重命名当前会话'
   }
 }

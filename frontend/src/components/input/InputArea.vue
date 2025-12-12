@@ -9,7 +9,7 @@
     >
       <div class="references-header">
         <span class="header-icon">📎</span>
-        <span class="header-text">上下文引用 ({{ contextReferences.length }})</span>
+        <span class="header-text">Context ({{ contextReferences.length }})</span>
       </div>
       <div class="references-list">
         <div
@@ -40,7 +40,7 @@
     >
       <div class="drop-zone-content">
         <span class="drop-icon">📁</span>
-        <span class="drop-text">释放文件以添加到上下文</span>
+        <span class="drop-text">Drop files to add context</span>
       </div>
     </div>
 
@@ -92,11 +92,11 @@
       <button
         class="btn btn-secondary"
         :disabled="disabled"
-        title="添加文件引用"
+        title="Add file reference"
         @click="triggerFileSelect"
       >
         <span class="btn-icon">📎</span>
-        <span>添加文件</span>
+        <span>Add File</span>
       </button>
 
       <div class="actions-spacer" />
@@ -104,7 +104,7 @@
       <span
         v-if="charCount > 0"
         class="char-count"
-      >{{ charCount }} 字符</span>
+      >{{ charCount }} chars</span>
 
       <button
         class="btn btn-primary"
@@ -161,8 +161,8 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   disabled: false,
-  placeholder: '输入消息... (Ctrl+Enter 发送, Shift+Enter 换行)',
-  sendButtonText: '发送',
+  placeholder: 'Type message... (Ctrl+Enter to send)',
+  sendButtonText: 'Send',
   references: () => []
 })
 

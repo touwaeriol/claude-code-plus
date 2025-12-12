@@ -9,7 +9,7 @@
         <button
           class="close-button"
           type="button"
-          title="关闭"
+          title="Close"
           @click="handleClose"
         >
           ✕
@@ -17,7 +17,7 @@
         <div class="image-wrapper">
           <img
             :src="imageSrc"
-            :alt="imageAlt || '预览图片'"
+            :alt="imageAlt || 'Preview image'"
             class="preview-image"
           />
         </div>
