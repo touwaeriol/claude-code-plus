@@ -102,7 +102,8 @@ export default {
       interruptHint: 'interrupt & send',
       stopHint: 'stop generation',
       toggleThinkingHint: 'toggle thinking',
-      switchModeHint: 'switch mode'
+      switchModeHint: 'switch mode',
+      clearToLineStartHint: 'clear to line start'
     },
     connectionStatus: {
       connected: 'Connected',

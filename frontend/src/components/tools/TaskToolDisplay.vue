@@ -10,7 +10,7 @@
         <!-- 1. 参数区域（提示词） -->
         <div class="params-section">
           <div v-if="description" class="info-row">
-            <span class="label">描述:</span>
+            <span class="label">Description:</span>
             <span class="value">{{ description }}</span>
           </div>
           <div v-if="model" class="info-row">
@@ -19,7 +19,9 @@
           </div>
           <div v-if="prompt" class="prompt-section">
             <div class="section-title">Prompt</div>
-            <pre class="prompt-content">{{ prompt }}</pre>
+            <div class="prompt-content">
+              <MarkdownRenderer :content="prompt" />
+            </div>
           </div>
         </div>
 
@@ -27,11 +29,11 @@
         <div v-if="subagentMessages.length > 0 || subagentHistoryLoading" class="subagent-section">
           <div class="section-header" @click.stop="processExpanded = !processExpanded">
             <span class="expand-icon">{{ processExpanded ? '▼' : '▶' }}</span>
-            <span class="section-title">调用过程</span>
-            <span class="item-count">({{ subagentMessages.length }} 项)</span>
+            <span class="section-title">Process</span>
+            <span class="item-count">({{ subagentMessages.length }})</span>
           </div>
           <div v-if="processExpanded" class="subagent-container">
-            <div v-if="subagentHistoryLoading" class="loading-hint">加载中...</div>
+            <div v-if="subagentHistoryLoading" class="loading-hint">Loading...</div>
             <div v-else class="subagent-list">
               <DisplayItemRenderer
                 v-for="item in subagentMessages"
@@ -44,8 +46,10 @@
 
         <!-- 3. 结果区域 -->
         <div v-if="hasResult" class="result-section">
-          <div class="section-title">执行结果</div>
-          <pre class="result-content">{{ resultText }}</pre>
+          <div class="section-title">Result</div>
+          <div class="result-content">
+            <MarkdownRenderer :content="resultText" />
+          </div>
         </div>
       </div>
     </template>
@@ -62,6 +66,7 @@ import { convertMessageToDisplayItems } from '@/utils/displayItemConverter'
 import CompactToolCard from './CompactToolCard.vue'
 import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
 import DisplayItemRenderer from '@/components/chat/DisplayItemRenderer.vue'
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 
 interface Props {
   toolCall: GenericToolCall
@@ -273,12 +278,14 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
   border: 1px solid var(--theme-border);
   border-radius: 4px;
   font-size: var(--theme-editor-font-size, 12px);
-  font-family: var(--theme-editor-font-family);
   color: var(--theme-foreground);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 150px;
+  max-height: 200px;
   overflow-y: auto;
+}
+
+.prompt-content :deep(.markdown-body) {
+  font-size: 12px;
+  background: transparent;
 }
 
 /* 子代理调用过程区域 */
@@ -428,11 +435,13 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
   border: 1px solid var(--theme-border);
   border-radius: 4px;
   font-size: var(--theme-editor-font-size, 12px);
-  font-family: var(--theme-editor-font-family);
   color: var(--theme-foreground);
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 200px;
+  max-height: 300px;
   overflow-y: auto;
+}
+
+.result-content :deep(.markdown-body) {
+  font-size: 12px;
+  background: transparent;
 }
 </style>

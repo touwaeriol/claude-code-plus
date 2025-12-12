@@ -9,12 +9,12 @@
       <div class="generic-details">
         <!-- 参数区域 -->
         <div class="params-section">
-          <div class="section-title">参数</div>
+          <div class="section-title">Parameters</div>
           <pre class="params-content">{{ paramsFormatted }}</pre>
         </div>
         <!-- 结果区域 -->
         <div v-if="hasResult" class="result-section">
-          <div class="section-title">结果</div>
+          <div class="section-title">Result</div>
           <pre class="result-content">{{ resultText }}</pre>
         </div>
       </div>

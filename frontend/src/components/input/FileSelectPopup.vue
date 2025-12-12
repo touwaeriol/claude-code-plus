@@ -24,21 +24,19 @@
       <div class="file-list">
         <div
           v-for="(file, index) in files"
-          :key="file.absolutePath"
+          :key="file.absolutePath || file.relativePath"
           :class="['file-item', { selected: index === selectedIndex }]"
-          :title="file.relativePath"
+          :title="file.absolutePath || file.relativePath"
           @click="selectFile(file)"
           @mouseenter="selectedIndex = index"
         >
-          <div class="file-icon">📄</div>
-          <div class="file-info">
-            <div class="file-name">{{ file.name }}</div>
-            <div class="file-path">{{ file.relativePath }}</div>
-          </div>
+          <span class="file-icon">{{ file.isDirectory ? '📁' : getFileIcon(file.fileType) }}</span>
+          <span class="file-name">{{ file.name }}</span>
+          <span class="file-path">{{ file.relativePath }}</span>
         </div>
         <!-- 无结果提示 -->
         <div v-if="files.length === 0 && showSearchInput" class="no-results">
-          无匹配文件
+          No results
         </div>
       </div>
     </div>
@@ -101,6 +99,30 @@ function selectFile(file: IndexedFileInfo) {
   emit('select', file)
   selectedIndex.value = 0
   searchQuery.value = ''
+}
+
+// 根据文件类型获取图标
+function getFileIcon(fileType: string): string {
+  const iconMap: Record<string, string> = {
+    ts: '📘',
+    js: '📒',
+    vue: '💚',
+    kt: '🟣',
+    java: '☕',
+    py: '🐍',
+    md: '📝',
+    json: '📋',
+    yaml: '📋',
+    yml: '📋',
+    xml: '📋',
+    html: '🌐',
+    css: '🎨',
+    scss: '🎨',
+    less: '🎨',
+    gradle: '🐘',
+    kts: '🐘',
+  }
+  return iconMap[fileType?.toLowerCase()] || '📄'
 }
 
 // 处理搜索输入
@@ -246,11 +268,13 @@ onUnmounted(() => {
 .file-item {
   display: flex;
   align-items: center;
-  padding: 6px 8px;
+  padding: 4px 8px;
   cursor: pointer;
   border-radius: 4px;
   transition: background-color 0.1s;
-  gap: 8px;
+  gap: 6px;
+  height: 28px;
+  line-height: 28px;
 }
 
 .file-item:hover,
@@ -261,16 +285,8 @@ onUnmounted(() => {
 .file-icon {
   font-size: 14px;
   flex-shrink: 0;
-  width: 20px;
+  width: 18px;
   text-align: center;
-}
-
-.file-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .file-name {
@@ -278,17 +294,21 @@ onUnmounted(() => {
   color: var(--theme-foreground, #24292e);
   font-weight: 500;
   white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .file-path {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--theme-text-secondary, #6a737d);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: monospace;
+  flex: 1;
+  min-width: 0;
+  opacity: 0.7;
 }
 
 .no-results {

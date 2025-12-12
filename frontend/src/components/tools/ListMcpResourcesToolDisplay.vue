@@ -14,7 +14,7 @@
           </div>
         </div>
         <div v-if="hasResult" class="result-section">
-          <div class="section-title">资源列表</div>
+          <div class="section-title">Resources</div>
           <pre class="result-content">{{ resultText }}</pre>
         </div>
       </div>

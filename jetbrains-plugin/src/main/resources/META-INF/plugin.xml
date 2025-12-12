@@ -7,9 +7,9 @@
     
     <description><![CDATA[
     <h2>Claude Code Plus - Advanced AI Programming Assistant</h2>
-    
+
     <p>Claude Code Plus is an enhanced IntelliJ IDEA plugin that integrates Claude AI directly into your development environment, providing intelligent code assistance and natural language interaction.</p>
-    
+
     <h3>Key Features:</h3>
     <ul>
         <li><b>AI-Powered Conversations:</b> Chat with Claude AI directly in your IDE</li>
@@ -21,10 +21,10 @@
         <li><b>Tool Integration:</b> View and interact with Claude's tool usage</li>
         <li><b>Dark Theme Support:</b> Fully compatible with IntelliJ's dark themes</li>
     </ul>
-    
+
     <h3>Requirements:</h3>
     <ul>
-        <li>IntelliJ IDEA 2024.3 - 2025.2.x (Build 243-252)</li>
+        <li>IntelliJ IDEA 2024.2 - 2025.3.x (Build 242-253)</li>
         <li>Claude CLI installed and configured</li>
     </ul>
     
@@ -92,7 +92,7 @@
     
     <depends>com.intellij.modules.platform</depends>
 
-    <idea-version since-build="242.0" until-build="252.*"/>
+    <idea-version since-build="242.0" until-build="253.*"/>
     
     
     

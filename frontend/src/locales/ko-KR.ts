@@ -94,7 +94,8 @@ export default {
       interruptHint: '중단 후 보내기',
       stopHint: '생성 중지',
       toggleThinkingHint: '사고 전환',
-      switchModeHint: '모드 전환'
+      switchModeHint: '모드 전환',
+      clearToLineStartHint: '줄 시작까지 지우기'
     },
     claudeThinking: 'Claude가 생각 중입니다...',
     scrollToBottom: '맨 아래로 이동'

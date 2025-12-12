@@ -35,7 +35,7 @@
         </div>
         <!-- 结果区域 -->
         <div v-if="hasResult" class="result-section">
-          <div class="section-title">搜索结果</div>
+          <div class="section-title">Results</div>
           <pre class="result-content">{{ resultText }}</pre>
         </div>
       </div>
@@ -67,9 +67,9 @@ const outputMode = computed(() => props.toolCall.input?.output_mode || '')
 
 const outputModeText = computed(() => {
   const map: Record<string, string> = {
-    'content': '显示内容',
-    'files_with_matches': '仅文件名',
-    'count': '匹配计数'
+    'content': 'content',
+    'files_with_matches': 'files only',
+    'count': 'count'
   }
   return map[outputMode.value as string] || outputMode.value
 })
@@ -77,9 +77,9 @@ const outputModeText = computed(() => {
 const options = computed(() => {
   const opts: string[] = []
   const input = props.toolCall.input as any
-  if (input?.['-i']) opts.push('忽略大小写')
-  if (input?.['-n']) opts.push('显示行号')
-  if (input?.multiline) opts.push('多行匹配')
+  if (input?.['-i']) opts.push('case insensitive')
+  if (input?.['-n']) opts.push('line numbers')
+  if (input?.multiline) opts.push('multiline')
   return opts
 })
 

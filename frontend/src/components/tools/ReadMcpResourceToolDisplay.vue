@@ -18,7 +18,7 @@
           </div>
         </div>
         <div v-if="hasResult" class="result-section">
-          <div class="section-title">资源内容</div>
+          <div class="section-title">Content</div>
           <pre class="result-content">{{ resultText }}</pre>
         </div>
       </div>
