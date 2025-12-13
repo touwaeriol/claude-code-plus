@@ -761,6 +761,34 @@ export function useSessionMessages(
   }
 
   /**
+   * 同步完整消息中的 thinking signature 到 displayItem
+   * 收到完整消息后，思考块会自动折叠（因为 ThinkingDisplay 根据 signature 判断是否完成）
+   */
+  function syncThinkingSignatures(message: Message): void {
+    if (message.role !== 'assistant') return
+
+    let hasUpdate = false
+    message.content.forEach((block, blockIdx) => {
+      if (block.type === 'thinking' && (block as any).signature) {
+        const displayId = `${message.id}-thinking-${blockIdx}`
+        const displayItem = displayItems.find(
+          item => item.id === displayId && item.displayType === 'thinking'
+        ) as ThinkingContent | undefined
+
+        if (displayItem && !displayItem.signature) {
+          displayItem.signature = (block as any).signature
+          hasUpdate = true
+          log.debug(`[useSessionMessages] 同步 signature 到 thinking displayItem: ${displayId}`)
+        }
+      }
+    })
+
+    if (hasUpdate) {
+      triggerDisplayItemsUpdate()
+    }
+  }
+
+  /**
    * 处理普通消息（assistant/user 消息）
    */
   function handleNormalMessage(message: Message): void {
@@ -791,9 +819,12 @@ export function useSessionMessages(
     if (message.role === 'assistant') {
       const latestStreamingMessage = findStreamingAssistantMessage()
 
-      // 存在流式消息且 ID 相同 → 忽略（流式已组装完成）
+      // 存在流式消息且 ID 相同 → 同步 signature 后忽略（流式已组装完成）
       if (latestStreamingMessage && latestStreamingMessage.id === message.id) {
-        log.debug('[useSessionMessages] 忽略同 ID 的完整消息（流式已组装）')
+        log.debug('[useSessionMessages] 同步完整消息中的 signature 到 displayItem')
+        // 从完整消息中提取 thinking 块的 signature，更新到 displayItem
+        // （因为流式传输不发送 signature，只有完整消息中才有）
+        syncThinkingSignatures(message)
         return
       }
 

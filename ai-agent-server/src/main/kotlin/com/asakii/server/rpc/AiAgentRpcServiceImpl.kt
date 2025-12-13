@@ -26,6 +26,13 @@ import com.asakii.codex.agent.sdk.CodexClientOptions
 import com.asakii.codex.agent.sdk.SandboxMode
 import com.asakii.codex.agent.sdk.ThreadOptions
 import com.asakii.rpc.api.*
+import com.asakii.rpc.proto.RequestPermissionRequest
+import com.asakii.rpc.proto.PermissionUpdate as ProtoPermissionUpdate
+import com.asakii.rpc.proto.PermissionRuleValue as ProtoPermissionRuleValue
+import com.asakii.rpc.proto.PermissionBehavior as ProtoPermissionBehavior
+import com.asakii.rpc.proto.PermissionUpdateType as ProtoPermissionUpdateType
+import com.asakii.rpc.proto.PermissionUpdateDestination as ProtoPermissionUpdateDestination
+import com.asakii.rpc.proto.PermissionMode as ProtoPermissionMode
 import com.asakii.server.config.AiAgentServiceConfig
 import com.asakii.server.mcp.PermissionResponse
 import com.asakii.server.mcp.PermissionUpdate as McpPermissionUpdate
@@ -537,19 +544,26 @@ class AiAgentRpcServiceImpl(
             val caller = clientCaller
             if (caller != null) {
                 try {
-                    val response: PermissionResponse = caller.callTyped(
-                        method = "RequestPermission",
-                        params = buildJsonObject {
-                            put("toolName", toolName)
-                            put("input", JsonObject(input))
-                            toolUseId?.let { put("toolUseId", it) }
-                            if (context.suggestions.isNotEmpty()) {
-                                put("permissionSuggestions", Json.encodeToJsonElement(
-                                    ListSerializer(SdkPermissionUpdate.serializer()),
-                                    context.suggestions
-                                ))
-                            }
+                    // 构建 Protobuf 请求
+                    val protoRequest = RequestPermissionRequest.newBuilder().apply {
+                        this.toolName = toolName
+                        this.inputJson = com.google.protobuf.ByteString.copyFrom(
+                            Json.encodeToString(JsonObject.serializer(), JsonObject(input)).toByteArray(Charsets.UTF_8)
+                        )
+                        toolUseId?.let { this.toolUseId = it }
+                        context.suggestions.forEach { suggestion ->
+                            addPermissionSuggestions(suggestion.toProtoPermissionUpdate())
                         }
+                    }.build()
+
+                    // 调用前端并解析 Protobuf 响应
+                    val protoResponse = caller.callRequestPermission(protoRequest)
+
+                    // 转换 Protobuf 响应为本地类型
+                    val response = PermissionResponse(
+                        approved = protoResponse.approved,
+                        permissionUpdates = protoResponse.permissionUpdatesList.map { it.toMcpPermissionUpdate() },
+                        denyReason = if (protoResponse.hasDenyReason()) protoResponse.denyReason else null
                     )
                     if (response.approved) {
                         // 转换权限更新为 SDK 格式
@@ -1065,6 +1079,100 @@ class AiAgentRpcServiceImpl(
             }
         }
     }
+}
+
+// ==================== Protobuf 转换扩展函数 ====================
+
+/**
+ * 将 SDK PermissionUpdate 转换为 Protobuf PermissionUpdate
+ */
+private fun SdkPermissionUpdate.toProtoPermissionUpdate(): ProtoPermissionUpdate {
+    return ProtoPermissionUpdate.newBuilder().apply {
+        type = when (this@toProtoPermissionUpdate.type) {
+            SdkPermissionUpdateType.ADD_RULES -> ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_ADD_RULES
+            SdkPermissionUpdateType.REPLACE_RULES -> ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_REPLACE_RULES
+            SdkPermissionUpdateType.REMOVE_RULES -> ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_REMOVE_RULES
+            SdkPermissionUpdateType.SET_MODE -> ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_SET_MODE
+            SdkPermissionUpdateType.ADD_DIRECTORIES -> ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_ADD_DIRECTORIES
+            SdkPermissionUpdateType.REMOVE_DIRECTORIES -> ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_REMOVE_DIRECTORIES
+        }
+        this@toProtoPermissionUpdate.rules?.forEach { rule ->
+            addRules(ProtoPermissionRuleValue.newBuilder().apply {
+                toolName = rule.toolName
+                rule.ruleContent?.let { ruleContent = it }
+            }.build())
+        }
+        this@toProtoPermissionUpdate.behavior?.let {
+            behavior = when (it) {
+                SdkPermissionBehavior.ALLOW -> ProtoPermissionBehavior.PERMISSION_BEHAVIOR_ALLOW
+                SdkPermissionBehavior.DENY -> ProtoPermissionBehavior.PERMISSION_BEHAVIOR_DENY
+                SdkPermissionBehavior.ASK -> ProtoPermissionBehavior.PERMISSION_BEHAVIOR_ASK
+            }
+        }
+        this@toProtoPermissionUpdate.mode?.let {
+            mode = when (it) {
+                com.asakii.claude.agent.sdk.types.PermissionMode.DEFAULT -> ProtoPermissionMode.PERMISSION_MODE_DEFAULT
+                com.asakii.claude.agent.sdk.types.PermissionMode.ACCEPT_EDITS -> ProtoPermissionMode.PERMISSION_MODE_ACCEPT_EDITS
+                com.asakii.claude.agent.sdk.types.PermissionMode.PLAN -> ProtoPermissionMode.PERMISSION_MODE_PLAN
+                com.asakii.claude.agent.sdk.types.PermissionMode.BYPASS_PERMISSIONS -> ProtoPermissionMode.PERMISSION_MODE_BYPASS_PERMISSIONS
+                com.asakii.claude.agent.sdk.types.PermissionMode.DONT_ASK -> ProtoPermissionMode.PERMISSION_MODE_DONT_ASK
+            }
+        }
+        this@toProtoPermissionUpdate.directories?.forEach { addDirectories(it) }
+        this@toProtoPermissionUpdate.destination?.let {
+            destination = when (it) {
+                SdkPermissionUpdateDestination.USER_SETTINGS -> ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_USER_SETTINGS
+                SdkPermissionUpdateDestination.PROJECT_SETTINGS -> ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_PROJECT_SETTINGS
+                SdkPermissionUpdateDestination.LOCAL_SETTINGS -> ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_LOCAL_SETTINGS
+                SdkPermissionUpdateDestination.SESSION -> ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_SESSION
+            }
+        }
+    }.build()
+}
+
+/**
+ * 将 Protobuf PermissionUpdate 转换为 MCP PermissionUpdate
+ */
+private fun ProtoPermissionUpdate.toMcpPermissionUpdate(): McpPermissionUpdate {
+    return McpPermissionUpdate(
+        type = when (type) {
+            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_ADD_RULES -> McpPermissionUpdateType.ADD_RULES
+            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_REPLACE_RULES -> McpPermissionUpdateType.REPLACE_RULES
+            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_REMOVE_RULES -> McpPermissionUpdateType.REMOVE_RULES
+            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_SET_MODE -> McpPermissionUpdateType.SET_MODE
+            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_ADD_DIRECTORIES -> McpPermissionUpdateType.ADD_DIRECTORIES
+            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_REMOVE_DIRECTORIES -> McpPermissionUpdateType.REMOVE_DIRECTORIES
+            else -> McpPermissionUpdateType.ADD_RULES
+        },
+        rules = rulesList.map { rule ->
+            McpPermissionRuleValue(
+                toolName = rule.toolName,
+                ruleContent = if (rule.hasRuleContent()) rule.ruleContent else null
+            )
+        }.takeIf { it.isNotEmpty() },
+        behavior = when (behavior) {
+            ProtoPermissionBehavior.PERMISSION_BEHAVIOR_ALLOW -> McpPermissionBehavior.ALLOW
+            ProtoPermissionBehavior.PERMISSION_BEHAVIOR_DENY -> McpPermissionBehavior.DENY
+            ProtoPermissionBehavior.PERMISSION_BEHAVIOR_ASK -> McpPermissionBehavior.ASK
+            else -> null
+        },
+        mode = when (mode) {
+            ProtoPermissionMode.PERMISSION_MODE_DEFAULT -> McpPermissionMode.DEFAULT
+            ProtoPermissionMode.PERMISSION_MODE_ACCEPT_EDITS -> McpPermissionMode.ACCEPT_EDITS
+            ProtoPermissionMode.PERMISSION_MODE_PLAN -> McpPermissionMode.PLAN
+            ProtoPermissionMode.PERMISSION_MODE_BYPASS_PERMISSIONS -> McpPermissionMode.BYPASS_PERMISSIONS
+            ProtoPermissionMode.PERMISSION_MODE_DONT_ASK -> McpPermissionMode.DONT_ASK
+            else -> null
+        },
+        directories = directoriesList.takeIf { it.isNotEmpty() },
+        destination = when (destination) {
+            ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_USER_SETTINGS -> PermissionUpdateDestination.USER_SETTINGS
+            ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_PROJECT_SETTINGS -> PermissionUpdateDestination.PROJECT_SETTINGS
+            ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_LOCAL_SETTINGS -> PermissionUpdateDestination.LOCAL_SETTINGS
+            ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_SESSION -> PermissionUpdateDestination.SESSION
+            else -> null
+        }
+    )
 }
 
 

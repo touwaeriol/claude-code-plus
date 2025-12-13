@@ -8,15 +8,8 @@
     <template #details>
       <div class="task-details">
         <!-- 1. 参数区域（提示词） -->
+        <!-- 注意：Desc 和 Model 已在折叠状态的标题行显示，展开后不再重复显示 -->
         <div class="params-section">
-          <div v-if="description" class="info-row">
-<span class="label">Desc:</span>
-            <span class="value">{{ description }}</span>
-          </div>
-          <div v-if="model" class="info-row">
-            <span class="label">Model:</span>
-            <span class="value">{{ model }}</span>
-          </div>
           <div v-if="prompt" class="prompt-section">
             <div class="section-title">Prompt</div>
             <div class="prompt-content">
@@ -184,6 +177,18 @@ const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any,
 const agentName = computed(() => (props.toolCall as any).agentName || props.toolCall.input?.subagent_type || '')
 const displayInfoWithAgent = computed(() => {
   const info = displayInfo.value
+  // 折叠时显示 Desc 和 Model 信息
+  if (!expanded.value) {
+    const parts: string[] = []
+    if (description.value) parts.push(description.value)
+    if (model.value) parts.push(`[${model.value}]`)
+    if (agentName.value) parts.push(`Agent: ${agentName.value}`)
+    return {
+      ...info,
+      secondaryInfo: parts.join(' · ')
+    }
+  }
+  // 展开时只显示 Agent 名称（Desc 和 Model 在详情里显示）
   if (!agentName.value) return info
   return {
     ...info,
@@ -233,33 +238,8 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
   gap: 6px;
 }
 
-.info-row {
-  display: flex;
-  gap: 8px;
-  font-size: 12px;
-  align-items: baseline;
-}
-
-.label {
-  color: var(--theme-secondary-foreground);
-  min-width: 60px;
-  flex-shrink: 0;
-}
-
-.value {
-  color: var(--theme-foreground);
-}
-
-.value.badge {
-  background: color-mix(in srgb, var(--theme-accent) 15%, transparent);
-  color: var(--theme-accent);
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-}
-
 .prompt-section {
-  margin-top: 8px;
+  /* Desc 和 Model 移到折叠状态标题行显示，此处只有 Prompt */
 }
 
 .section-title {

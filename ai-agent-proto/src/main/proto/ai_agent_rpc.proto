@@ -517,17 +517,121 @@ message EmptyResponse {}
 // 反向调用（服务端 -> 客户端）
 // ============================================================================
 
-// 服务端调用客户端的通用请求
+// ========== AskUserQuestion ==========
+
+// 问题选项
+message QuestionOption {
+  string label = 1;
+  optional string description = 2;
+}
+
+// 问题项
+message QuestionItem {
+  string question = 1;
+  optional string header = 2;
+  repeated QuestionOption options = 3;
+  bool multi_select = 4;
+}
+
+// AskUserQuestion 请求
+message AskUserQuestionRequest {
+  repeated QuestionItem questions = 1;
+}
+
+// 用户回答项
+message UserAnswerItem {
+  string question = 1;
+  optional string header = 2;
+  string answer = 3;
+}
+
+// AskUserQuestion 响应
+message AskUserQuestionResponse {
+  repeated UserAnswerItem answers = 1;
+}
+
+// ========== RequestPermission ==========
+
+// 权限行为
+enum PermissionBehavior {
+  PERMISSION_BEHAVIOR_UNSPECIFIED = 0;
+  PERMISSION_BEHAVIOR_ALLOW = 1;    // allow
+  PERMISSION_BEHAVIOR_DENY = 2;     // deny
+  PERMISSION_BEHAVIOR_ASK = 3;      // ask
+}
+
+// 权限更新类型
+enum PermissionUpdateType {
+  PERMISSION_UPDATE_TYPE_UNSPECIFIED = 0;
+  PERMISSION_UPDATE_TYPE_ADD_RULES = 1;           // addRules
+  PERMISSION_UPDATE_TYPE_REPLACE_RULES = 2;       // replaceRules
+  PERMISSION_UPDATE_TYPE_REMOVE_RULES = 3;        // removeRules
+  PERMISSION_UPDATE_TYPE_SET_MODE = 4;            // setMode
+  PERMISSION_UPDATE_TYPE_ADD_DIRECTORIES = 5;     // addDirectories
+  PERMISSION_UPDATE_TYPE_REMOVE_DIRECTORIES = 6;  // removeDirectories
+}
+
+// 权限更新目标
+enum PermissionUpdateDestination {
+  PERMISSION_UPDATE_DESTINATION_UNSPECIFIED = 0;
+  PERMISSION_UPDATE_DESTINATION_USER_SETTINGS = 1;      // userSettings
+  PERMISSION_UPDATE_DESTINATION_PROJECT_SETTINGS = 2;   // projectSettings
+  PERMISSION_UPDATE_DESTINATION_LOCAL_SETTINGS = 3;     // localSettings
+  PERMISSION_UPDATE_DESTINATION_SESSION = 4;            // session
+}
+
+// 权限规则值
+message PermissionRuleValue {
+  string tool_name = 1;
+  optional string rule_content = 2;
+}
+
+// 权限更新配置
+message PermissionUpdate {
+  PermissionUpdateType type = 1;
+  repeated PermissionRuleValue rules = 2;
+  optional PermissionBehavior behavior = 3;
+  optional PermissionMode mode = 4;
+  repeated string directories = 5;
+  optional PermissionUpdateDestination destination = 6;
+}
+
+// RequestPermission 请求
+message RequestPermissionRequest {
+  string tool_name = 1;
+  bytes input_json = 2;  // 工具输入参数（保持 JSON 以兼容动态结构）
+  optional string tool_use_id = 3;
+  repeated PermissionUpdate permission_suggestions = 4;
+}
+
+// RequestPermission 响应
+message RequestPermissionResponse {
+  bool approved = 1;
+  repeated PermissionUpdate permission_updates = 2;
+  optional string deny_reason = 3;
+}
+
+// ========== 服务端调用客户端 ==========
+
+// 服务端调用客户端的通用请求（支持类型化参数）
 message ServerCallRequest {
   string call_id = 1;       // 调用 ID，用于匹配响应
   string method = 2;        // 方法名（如 'AskUserQuestion'）
-  bytes params_json = 3;    // 参数（JSON 序列化）
+  oneof params {
+    bytes params_json = 3;                          // 旧版兼容：JSON 序列化
+    AskUserQuestionRequest ask_user_question = 10;  // AskUserQuestion 请求
+    RequestPermissionRequest request_permission = 11; // RequestPermission 请求
+  }
 }
 
-// 客户端响应服务端的调用
+// 客户端响应服务端的调用（支持类型化响应）
 message ServerCallResponse {
   string call_id = 1;       // 对应的调用 ID
   bool success = 2;         // 是否成功
-  bytes result_json = 3;    // 结果（JSON 序列化）
+  oneof result {
+    bytes result_json = 3;                          // 旧版兼容：JSON 序列化
+    AskUserQuestionResponse ask_user_question = 10; // AskUserQuestion 响应
+    RequestPermissionResponse request_permission = 11; // RequestPermission 响应
+  }
   optional string error = 4; // 错误信息（如果失败）
 }

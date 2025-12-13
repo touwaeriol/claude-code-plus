@@ -12,7 +12,6 @@ import {
   QueryWithContentRequestSchema,
   SetModelRequestSchema,
   SetPermissionModeRequestSchema,
-  GetHistorySessionsRequestSchema,
   LoadHistoryRequestSchema,
   GetHistoryMetadataRequestSchema,
   StatusResultSchema,
@@ -28,12 +27,25 @@ import {
   ThinkingBlockSchema,
   ImageBlockSchema,
   ImageSourceSchema,
+  // ServerCall 相关
+  ServerCallRequestSchema,
+  ServerCallResponseSchema,
+  AskUserQuestionResponseSchema,
+  RequestPermissionResponseSchema,
+  UserAnswerItemSchema,
+  PermissionUpdateSchema,
+  PermissionRuleValueSchema,
   type ContentBlock,
+  type AskUserQuestionRequest,
+  type RequestPermissionRequest,
   Provider,
   PermissionMode,
   SandboxMode,
   SessionStatus,
-  ContentStatus
+  ContentStatus,
+  PermissionBehavior,
+  PermissionUpdateType,
+  PermissionUpdateDestination
 } from '@/proto/ai_agent_rpc_pb'
 import type {
   RpcConnectOptions,
@@ -638,5 +650,301 @@ function mapDeltaFromProto(proto: any): any {
       return { type: 'input_json_delta', partial_json: proto.delta.value.partialJson }
     default:
       return { type: 'unknown' }
+  }
+}
+
+// ==================== ServerCall 编解码（反向调用）====================
+
+/**
+ * 解码后的 ServerCall 请求类型
+ */
+export interface DecodedServerCallRequest {
+  callId: string
+  method: string
+  params: AskUserQuestionParams | RequestPermissionParams | unknown
+  paramsCase: 'askUserQuestion' | 'requestPermission' | 'paramsJson' | undefined
+}
+
+/**
+ * AskUserQuestion 参数类型
+ */
+export interface AskUserQuestionParams {
+  questions: Array<{
+    question: string
+    header?: string
+    options: Array<{ label: string; description?: string }>
+    multiSelect: boolean
+  }>
+}
+
+/**
+ * RequestPermission 参数类型
+ */
+export interface RequestPermissionParams {
+  toolName: string
+  input: unknown
+  toolUseId?: string
+  permissionSuggestions?: PermissionUpdateParams[]
+}
+
+/**
+ * PermissionUpdate 参数类型
+ */
+export interface PermissionUpdateParams {
+  type: 'addRules' | 'replaceRules' | 'removeRules' | 'setMode' | 'addDirectories' | 'removeDirectories'
+  rules?: Array<{ toolName: string; ruleContent?: string }>
+  behavior?: 'allow' | 'deny' | 'ask'
+  mode?: RpcPermissionMode
+  directories?: string[]
+  destination?: 'userSettings' | 'projectSettings' | 'localSettings' | 'session'
+}
+
+/**
+ * UserAnswerItem 类型
+ */
+export interface UserAnswerItemType {
+  question: string
+  header?: string
+  answer: string
+}
+
+/**
+ * PermissionResponse 类型
+ */
+export interface PermissionResponseType {
+  approved: boolean
+  permissionUpdates?: PermissionUpdateParams[]
+  denyReason?: string
+}
+
+/**
+ * 解码 ServerCallRequest
+ */
+export function decodeServerCallRequest(data: Uint8Array): DecodedServerCallRequest {
+  const proto = fromBinary(ServerCallRequestSchema, data)
+
+  let params: unknown
+  let paramsCase: DecodedServerCallRequest['paramsCase']
+
+  if (proto.params.case === 'askUserQuestion') {
+    paramsCase = 'askUserQuestion'
+    params = mapAskUserQuestionRequestFromProto(proto.params.value)
+  } else if (proto.params.case === 'requestPermission') {
+    paramsCase = 'requestPermission'
+    params = mapRequestPermissionRequestFromProto(proto.params.value)
+  } else if (proto.params.case === 'paramsJson') {
+    paramsCase = 'paramsJson'
+    try {
+      params = JSON.parse(new TextDecoder().decode(proto.params.value))
+    } catch {
+      params = {}
+    }
+  } else {
+    paramsCase = undefined
+    params = {}
+  }
+
+  return {
+    callId: proto.callId,
+    method: proto.method,
+    params,
+    paramsCase
+  }
+}
+
+/**
+ * 编码 ServerCallResponse
+ */
+export function encodeServerCallResponse(
+  callId: string,
+  method: string,
+  success: boolean,
+  result?: UserAnswerItemType[] | PermissionResponseType | unknown,
+  error?: string
+): Uint8Array {
+  const response = create(ServerCallResponseSchema, {
+    callId,
+    success,
+    error
+  })
+
+  if (success && result !== undefined) {
+    if (method === 'AskUserQuestion') {
+      response.result = {
+        case: 'askUserQuestion',
+        value: create(AskUserQuestionResponseSchema, {
+          answers: (result as UserAnswerItemType[]).map(item =>
+            create(UserAnswerItemSchema, {
+              question: item.question,
+              header: item.header,
+              answer: item.answer
+            })
+          )
+        })
+      }
+    } else if (method === 'RequestPermission') {
+      const permResult = result as PermissionResponseType
+      response.result = {
+        case: 'requestPermission',
+        value: create(RequestPermissionResponseSchema, {
+          approved: permResult.approved,
+          permissionUpdates: permResult.permissionUpdates?.map(mapPermissionUpdateToProto) || [],
+          denyReason: permResult.denyReason
+        })
+      }
+    } else {
+      // fallback to JSON
+      response.result = {
+        case: 'resultJson',
+        value: new TextEncoder().encode(JSON.stringify(result))
+      }
+    }
+  }
+
+  return toBinary(ServerCallResponseSchema, response)
+}
+
+/**
+ * 从 Proto 映射 AskUserQuestionRequest
+ */
+function mapAskUserQuestionRequestFromProto(proto: AskUserQuestionRequest): AskUserQuestionParams {
+  return {
+    questions: proto.questions.map(q => ({
+      question: q.question,
+      header: q.header,
+      options: q.options.map(opt => ({
+        label: opt.label,
+        description: opt.description
+      })),
+      multiSelect: q.multiSelect
+    }))
+  }
+}
+
+/**
+ * 从 Proto 映射 RequestPermissionRequest
+ */
+function mapRequestPermissionRequestFromProto(proto: RequestPermissionRequest): RequestPermissionParams {
+  let input: unknown = {}
+  if (proto.inputJson.length > 0) {
+    try {
+      input = JSON.parse(new TextDecoder().decode(proto.inputJson))
+    } catch {
+      input = {}
+    }
+  }
+
+  return {
+    toolName: proto.toolName,
+    input,
+    toolUseId: proto.toolUseId,
+    permissionSuggestions: proto.permissionSuggestions.map(mapPermissionUpdateFromProto)
+  }
+}
+
+/**
+ * 从 Proto 映射 PermissionUpdate
+ */
+function mapPermissionUpdateFromProto(proto: any): PermissionUpdateParams {
+  return {
+    type: mapPermissionUpdateTypeFromProto(proto.type),
+    rules: proto.rules?.map((r: any) => ({
+      toolName: r.toolName,
+      ruleContent: r.ruleContent
+    })),
+    behavior: proto.behavior ? mapPermissionBehaviorFromProto(proto.behavior) : undefined,
+    mode: proto.mode ? mapPermissionModeFromProto(proto.mode) : undefined,
+    directories: proto.directories,
+    destination: proto.destination ? mapPermissionDestinationFromProto(proto.destination) : undefined
+  }
+}
+
+/**
+ * 映射 PermissionUpdate 到 Proto
+ */
+function mapPermissionUpdateToProto(update: PermissionUpdateParams) {
+  return create(PermissionUpdateSchema, {
+    type: mapPermissionUpdateTypeToProto(update.type),
+    rules: update.rules?.map(r =>
+      create(PermissionRuleValueSchema, {
+        toolName: r.toolName,
+        ruleContent: r.ruleContent
+      })
+    ) || [],
+    behavior: update.behavior ? mapPermissionBehaviorToProto(update.behavior) : undefined,
+    mode: update.mode ? mapPermissionModeToProto(update.mode) : undefined,
+    directories: update.directories || [],
+    destination: update.destination ? mapPermissionDestinationToProto(update.destination) : undefined
+  })
+}
+
+/**
+ * PermissionUpdateType 映射
+ */
+function mapPermissionUpdateTypeFromProto(type: PermissionUpdateType): PermissionUpdateParams['type'] {
+  switch (type) {
+    case PermissionUpdateType.ADD_RULES: return 'addRules'
+    case PermissionUpdateType.REPLACE_RULES: return 'replaceRules'
+    case PermissionUpdateType.REMOVE_RULES: return 'removeRules'
+    case PermissionUpdateType.SET_MODE: return 'setMode'
+    case PermissionUpdateType.ADD_DIRECTORIES: return 'addDirectories'
+    case PermissionUpdateType.REMOVE_DIRECTORIES: return 'removeDirectories'
+    default: return 'addRules'
+  }
+}
+
+function mapPermissionUpdateTypeToProto(type: PermissionUpdateParams['type']): PermissionUpdateType {
+  switch (type) {
+    case 'addRules': return PermissionUpdateType.ADD_RULES
+    case 'replaceRules': return PermissionUpdateType.REPLACE_RULES
+    case 'removeRules': return PermissionUpdateType.REMOVE_RULES
+    case 'setMode': return PermissionUpdateType.SET_MODE
+    case 'addDirectories': return PermissionUpdateType.ADD_DIRECTORIES
+    case 'removeDirectories': return PermissionUpdateType.REMOVE_DIRECTORIES
+    default: return PermissionUpdateType.UNSPECIFIED
+  }
+}
+
+/**
+ * PermissionBehavior 映射
+ */
+function mapPermissionBehaviorFromProto(behavior: PermissionBehavior): 'allow' | 'deny' | 'ask' {
+  switch (behavior) {
+    case PermissionBehavior.ALLOW: return 'allow'
+    case PermissionBehavior.DENY: return 'deny'
+    case PermissionBehavior.ASK: return 'ask'
+    default: return 'ask'
+  }
+}
+
+function mapPermissionBehaviorToProto(behavior: 'allow' | 'deny' | 'ask'): PermissionBehavior {
+  switch (behavior) {
+    case 'allow': return PermissionBehavior.ALLOW
+    case 'deny': return PermissionBehavior.DENY
+    case 'ask': return PermissionBehavior.ASK
+    default: return PermissionBehavior.UNSPECIFIED
+  }
+}
+
+/**
+ * PermissionUpdateDestination 映射
+ */
+function mapPermissionDestinationFromProto(dest: PermissionUpdateDestination): PermissionUpdateParams['destination'] {
+  switch (dest) {
+    case PermissionUpdateDestination.USER_SETTINGS: return 'userSettings'
+    case PermissionUpdateDestination.PROJECT_SETTINGS: return 'projectSettings'
+    case PermissionUpdateDestination.LOCAL_SETTINGS: return 'localSettings'
+    case PermissionUpdateDestination.SESSION: return 'session'
+    default: return 'session'
+  }
+}
+
+function mapPermissionDestinationToProto(dest: NonNullable<PermissionUpdateParams['destination']>): PermissionUpdateDestination {
+  switch (dest) {
+    case 'userSettings': return PermissionUpdateDestination.USER_SETTINGS
+    case 'projectSettings': return PermissionUpdateDestination.PROJECT_SETTINGS
+    case 'localSettings': return PermissionUpdateDestination.LOCAL_SETTINGS
+    case 'session': return PermissionUpdateDestination.SESSION
+    default: return PermissionUpdateDestination.UNSPECIFIED
   }
 }

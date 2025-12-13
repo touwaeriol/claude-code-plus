@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
 import type { ThinkingContent } from '@/types/display'
 import { useI18n } from '@/composables/useI18n'
@@ -47,14 +47,6 @@ const isCollapsed = computed(() => {
     return false // 思考进行中，保持展开
   }
   return !isExpanded.value // 思考完成后，根据用户操作决定
-})
-
-// 思考完成时，自动折叠
-watch(() => props.thinking.signature, (newSignature, oldSignature) => {
-  if (newSignature && !oldSignature) {
-    // 从无到有，表示刚完成，自动折叠
-    isExpanded.value = false
-  }
 })
 
 // 点击切换展开/折叠（仅在思考完成后有效）

@@ -3,8 +3,10 @@ package com.asakii.server.mcp
 import com.asakii.claude.agent.sdk.mcp.McpServerBase
 import com.asakii.claude.agent.sdk.mcp.ToolResult
 import com.asakii.claude.agent.sdk.mcp.annotations.McpServerConfig
+import com.asakii.rpc.proto.AskUserQuestionRequest
+import com.asakii.rpc.proto.QuestionItem as ProtoQuestionItem
+import com.asakii.rpc.proto.QuestionOption as ProtoQuestionOption
 import com.asakii.server.rpc.ClientCaller
-import com.asakii.server.rpc.callTyped
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
@@ -260,6 +262,8 @@ class UserInteractionMcpServer : McpServerBase() {
 
     /**
      * 处理 AskUserQuestion（直接从 JsonObject 反序列化）
+     *
+     * 使用 Protobuf 序列化与前端通信
      */
     private suspend fun handleAskUserQuestionJson(arguments: JsonObject): ToolResult {
         val caller = clientCaller
@@ -274,21 +278,34 @@ class UserInteractionMcpServer : McpServerBase() {
 
             mcpLogger.info { "📤 [AskUserQuestion] 解析后的参数: ${params.questions.size} 个问题" }
 
-            // 构建发送给前端的 JSON
-            val requestJson = buildJsonObject {
-                put("questions", Json.encodeToJsonElement(params.questions))
-            }
+            // 构建 Protobuf 请求
+            val protoRequest = AskUserQuestionRequest.newBuilder().apply {
+                params.questions.forEach { q ->
+                    addQuestions(ProtoQuestionItem.newBuilder().apply {
+                        question = q.question
+                        q.header?.let { header = it }
+                        q.options?.forEach { opt ->
+                            addOptions(ProtoQuestionOption.newBuilder().apply {
+                                label = opt.label
+                                if (opt.description.isNotEmpty()) {
+                                    description = opt.description
+                                }
+                            }.build())
+                        }
+                        multiSelect = q.multiSelect
+                    }.build())
+                }
+            }.build()
 
-            // 调用前端方法
-            val answerItems: List<UserAnswerItem> = caller.callTyped(
-                method = "AskUserQuestion",
-                params = requestJson
-            )
+            // 使用 Protobuf 类型化调用
+            val protoResponse = caller.callAskUserQuestion(protoRequest)
 
-            mcpLogger.info { "📥 [AskUserQuestion] 收到前端响应: $answerItems" }
+            mcpLogger.info { "📥 [AskUserQuestion] 收到前端响应: ${protoResponse.answersCount} 个回答" }
 
             // 转换为 Map<问题, 回答>
-            val answersMap: Map<String, String> = answerItems.associate { it.question to it.answer }
+            val answersMap: Map<String, String> = protoResponse.answersList.associate {
+                it.question to it.answer
+            }
             val content = Json.encodeToString(answersMap)
 
             mcpLogger.info { "✅ [AskUserQuestion] 完成，返回: $content" }
@@ -342,6 +359,8 @@ class UserInteractionMcpServer : McpServerBase() {
 
     /**
      * 处理 AskUserQuestion 工具调用
+     *
+     * 使用 Protobuf 序列化与前端通信
      */
     private suspend fun handleAskUserQuestion(arguments: Map<String, Any>): Any {
         val caller = clientCaller
@@ -363,21 +382,34 @@ class UserInteractionMcpServer : McpServerBase() {
 
             mcpLogger.info { "📤 [AskUserQuestion] 解析后的参数: ${params.questions.size} 个问题" }
 
-            // 构建发送给前端的 JSON（使用类型化序列化）
-            val requestJson = buildJsonObject {
-                put("questions", Json.encodeToJsonElement(params.questions))
-            }
+            // 构建 Protobuf 请求
+            val protoRequest = AskUserQuestionRequest.newBuilder().apply {
+                params.questions.forEach { q ->
+                    addQuestions(ProtoQuestionItem.newBuilder().apply {
+                        question = q.question
+                        q.header?.let { header = it }
+                        q.options?.forEach { opt ->
+                            addOptions(ProtoQuestionOption.newBuilder().apply {
+                                label = opt.label
+                                if (opt.description.isNotEmpty()) {
+                                    description = opt.description
+                                }
+                            }.build())
+                        }
+                        multiSelect = q.multiSelect
+                    }.build())
+                }
+            }.build()
 
-            // 调用前端方法，获取类型化响应
-            val answerItems: List<UserAnswerItem> = caller.callTyped(
-                method = "AskUserQuestion",
-                params = requestJson
-            )
+            // 使用 Protobuf 类型化调用
+            val protoResponse = caller.callAskUserQuestion(protoRequest)
 
-            mcpLogger.info { "📥 [AskUserQuestion] 收到前端响应: $answerItems" }
+            mcpLogger.info { "📥 [AskUserQuestion] 收到前端响应: ${protoResponse.answersCount} 个回答" }
 
             // 转换为 Map<问题, 回答>
-            val answersMap: Map<String, String> = answerItems.associate { it.question to it.answer }
+            val answersMap: Map<String, String> = protoResponse.answersList.associate {
+                it.question to it.answer
+            }
 
             // 序列化返回给 Claude
             val content = Json.encodeToString(answersMap)

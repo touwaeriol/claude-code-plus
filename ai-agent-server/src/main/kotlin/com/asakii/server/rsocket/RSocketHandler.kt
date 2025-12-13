@@ -17,7 +17,6 @@ import io.rsocket.kotlin.RSocketRequestHandler
 import io.rsocket.kotlin.payload.Payload
 import io.rsocket.kotlin.payload.buildPayload
 import io.rsocket.kotlin.payload.data
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
@@ -26,18 +25,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withTimeout
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.encodeToJsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import com.asakii.server.logging.StandaloneLogging
 import com.asakii.server.logging.asyncInfo
 import mu.KotlinLogging
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
-import kotlinx.serialization.decodeFromString
 
 /**
  * RSocket 路由处理器
@@ -63,7 +54,6 @@ class RSocketHandler(
 ) {
     // 使用 ws.log 专用 logger
     private val wsLog = KotlinLogging.logger(StandaloneLogging.WS_LOGGER)
-    private val json = Json { ignoreUnknownKeys = true }
 
     // 存储客户端 requester 的引用（用于反向调用）
     private var clientRequester: RSocket? = null
@@ -79,11 +69,10 @@ class RSocketHandler(
         wsLog.info("🔌 [RSocket] 创建请求处理器")
 
         // 反向调用支持
-        val pendingClientCalls = ConcurrentHashMap<String, CompletableDeferred<JsonElement>>()
         val callIdCounter = AtomicInteger(0)
 
         // 创建 ClientCaller（初始时 requester 可能为空）
-        val clientCaller = createClientCaller(pendingClientCalls, callIdCounter)
+        val clientCaller = createClientCaller(callIdCounter)
 
         // 为每个连接创建独立的 RPC 服务
         val rpcService: AiAgentRpcService = AiAgentRpcServiceImpl(ideTools, clientCaller)
@@ -374,60 +363,115 @@ class RSocketHandler(
     /**
      * 创建 ClientCaller（用于服务器向客户端发起请求）
      *
-     * 直接使用方法名作为 RSocket 路由，params 作为 JSON 数据
+     * 使用 Protobuf 序列化，通过 client.call 路由发送类型化请求。
      */
     private fun createClientCaller(
-        pendingClientCalls: ConcurrentHashMap<String, CompletableDeferred<JsonElement>>,
         callIdCounter: AtomicInteger
     ): ClientCaller {
         return object : ClientCaller {
-            override suspend fun call(method: String, params: Any): JsonElement {
+            override suspend fun callAskUserQuestion(request: AskUserQuestionRequest): AskUserQuestionResponse {
                 val requester = clientRequester
                     ?: throw RuntimeException("Client requester not available")
 
                 val callId = "srv-${callIdCounter.incrementAndGet()}"
-                wsLog.info("📤 [RSocket] → 反向调用: route=$method, callId=$callId")
-
-                // 将 params 转换为 JSON bytes
-                val paramsJson = when (params) {
-                    is JsonElement -> json.encodeToString(params)
-                    else -> json.encodeToString(json.encodeToJsonElement(params))
-                }
-                val paramsBytes = paramsJson.toByteArray(Charsets.UTF_8)
-                wsLog.debug("📤 [RSocket] → 反向调用 params: $paramsJson")
-
-                // 创建等待响应的 Deferred
-                val deferred = CompletableDeferred<JsonElement>()
-                pendingClientCalls[callId] = deferred
+                wsLog.info("📤 [RSocket] → AskUserQuestion(Proto): callId=$callId, questions=${request.questionsCount}")
 
                 try {
-                    // 直接用方法名作为路由
-                    val routeMetadata = createRouteMetadata(method)
+                    // 构建 ServerCallRequest
+                    val serverRequest = ServerCallRequest.newBuilder()
+                        .setCallId(callId)
+                        .setMethod("AskUserQuestion")
+                        .setAskUserQuestion(request)
+                        .build()
+
+                    val routeMetadata = createRouteMetadata("client.call")
                     val metadataBuffer = Buffer().apply { write(routeMetadata) }
-                    val dataBuffer = Buffer().apply { write(paramsBytes) }
+                    val dataBuffer = Buffer().apply { write(serverRequest.toByteArray()) }
                     val payload = buildPayload {
                         data(dataBuffer)
                         metadata(metadataBuffer)
                     }
 
-                    val responsePayload = withTimeout(60_000) {
+                    val responsePayload = withTimeout(120_000) { // 用户交互可能需要更长时间
                         requester.requestResponse(payload)
                     }
 
-                    // 响应直接是 JSON
-                    val resultJson = responsePayload.data.readByteArray().toString(Charsets.UTF_8)
-                    wsLog.info("📥 [RSocket] ← 反向调用成功: route=$method, callId=$callId")
-                    wsLog.debug("📥 [RSocket] ← 反向调用 result: $resultJson")
-                    return json.parseToJsonElement(resultJson)
+                    // 解析 ServerCallResponse
+                    val responseBytes = responsePayload.data.readByteArray()
+                    val serverResponse = ServerCallResponse.parseFrom(responseBytes)
+
+                    if (!serverResponse.success) {
+                        val errorMsg = serverResponse.error.ifEmpty { "Unknown error" }
+                        wsLog.warn("📥 [RSocket] ← AskUserQuestion 失败: callId=$callId, error=$errorMsg")
+                        throw RuntimeException("AskUserQuestion failed: $errorMsg")
+                    }
+
+                    if (!serverResponse.hasAskUserQuestion()) {
+                        throw RuntimeException("AskUserQuestion response missing askUserQuestion field")
+                    }
+
+                    wsLog.info("📥 [RSocket] ← AskUserQuestion 成功: callId=$callId, answers=${serverResponse.askUserQuestion.answersCount}")
+                    return serverResponse.askUserQuestion
 
                 } catch (e: TimeoutCancellationException) {
-                    wsLog.warn("📥 [RSocket] ← 反向调用超时: route=$method, callId=$callId")
-                    throw RuntimeException("Client call timeout: $method")
+                    wsLog.warn("📥 [RSocket] ← AskUserQuestion 超时: callId=$callId")
+                    throw RuntimeException("AskUserQuestion timeout")
                 } catch (e: Exception) {
-                    wsLog.warn("📥 [RSocket] ← 反向调用失败: route=$method, error=${e.message}")
-                    throw RuntimeException("Client call failed: ${e.message}")
-                } finally {
-                    pendingClientCalls.remove(callId)
+                    wsLog.warn("📥 [RSocket] ← AskUserQuestion 失败: callId=$callId, error=${e.message}")
+                    throw RuntimeException("AskUserQuestion failed: ${e.message}")
+                }
+            }
+
+            override suspend fun callRequestPermission(request: RequestPermissionRequest): RequestPermissionResponse {
+                val requester = clientRequester
+                    ?: throw RuntimeException("Client requester not available")
+
+                val callId = "srv-${callIdCounter.incrementAndGet()}"
+                wsLog.info("📤 [RSocket] → RequestPermission(Proto): callId=$callId, toolName=${request.toolName}")
+
+                try {
+                    // 构建 ServerCallRequest
+                    val serverRequest = ServerCallRequest.newBuilder()
+                        .setCallId(callId)
+                        .setMethod("RequestPermission")
+                        .setRequestPermission(request)
+                        .build()
+
+                    val routeMetadata = createRouteMetadata("client.call")
+                    val metadataBuffer = Buffer().apply { write(routeMetadata) }
+                    val dataBuffer = Buffer().apply { write(serverRequest.toByteArray()) }
+                    val payload = buildPayload {
+                        data(dataBuffer)
+                        metadata(metadataBuffer)
+                    }
+
+                    val responsePayload = withTimeout(120_000) { // 用户交互可能需要更长时间
+                        requester.requestResponse(payload)
+                    }
+
+                    // 解析 ServerCallResponse
+                    val responseBytes = responsePayload.data.readByteArray()
+                    val serverResponse = ServerCallResponse.parseFrom(responseBytes)
+
+                    if (!serverResponse.success) {
+                        val errorMsg = serverResponse.error.ifEmpty { "Unknown error" }
+                        wsLog.warn("📥 [RSocket] ← RequestPermission 失败: callId=$callId, error=$errorMsg")
+                        throw RuntimeException("RequestPermission failed: $errorMsg")
+                    }
+
+                    if (!serverResponse.hasRequestPermission()) {
+                        throw RuntimeException("RequestPermission response missing requestPermission field")
+                    }
+
+                    wsLog.info("📥 [RSocket] ← RequestPermission 成功: callId=$callId, approved=${serverResponse.requestPermission.approved}")
+                    return serverResponse.requestPermission
+
+                } catch (e: TimeoutCancellationException) {
+                    wsLog.warn("📥 [RSocket] ← RequestPermission 超时: callId=$callId")
+                    throw RuntimeException("RequestPermission timeout")
+                } catch (e: Exception) {
+                    wsLog.warn("📥 [RSocket] ← RequestPermission 失败: callId=$callId, error=${e.message}")
+                    throw RuntimeException("RequestPermission failed: ${e.message}")
                 }
             }
         }

@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ai_agent_rpc.proto.
  */
 export const file_ai_agent_rpc: GenFile = /*@__PURE__*/
-  fileDesc("ChJhaV9hZ2VudF9ycGMucHJvdG8SC2FpYWdlbnQucnBjIsgHCg5Db25uZWN0T3B0aW9ucxIsCghwcm92aWRlchgBIAEoDjIVLmFpYWdlbnQucnBjLlByb3ZpZGVySACIAQESEgoFbW9kZWwYAiABKAlIAYgBARIaCg1zeXN0ZW1fcHJvbXB0GAMgASgJSAKIAQESGwoOaW5pdGlhbF9wcm9tcHQYBCABKAlIA4gBARIXCgpzZXNzaW9uX2lkGAUgASgJSASIAQESHgoRcmVzdW1lX3Nlc3Npb25faWQYBiABKAlIBYgBARI7CghtZXRhZGF0YRgHIAMoCzIpLmFpYWdlbnQucnBjLkNvbm5lY3RPcHRpb25zLk1ldGFkYXRhRW50cnkSOQoPcGVybWlzc2lvbl9tb2RlGAogASgOMhsuYWlhZ2VudC5ycGMuUGVybWlzc2lvbk1vZGVIBogBARIpChxkYW5nZXJvdXNseV9za2lwX3Blcm1pc3Npb25zGAsgASgISAeIAQESLwoiYWxsb3dfZGFuZ2Vyb3VzbHlfc2tpcF9wZXJtaXNzaW9ucxgMIAEoCEgIiAEBEiUKGGluY2x1ZGVfcGFydGlhbF9tZXNzYWdlcxgNIAEoCEgJiAEBEiIKFWNvbnRpbnVlX2NvbnZlcnNhdGlvbhgOIAEoCEgKiAEBEh0KEHRoaW5raW5nX2VuYWJsZWQYDyABKAhIC4gBARIVCghiYXNlX3VybBgUIAEoCUgMiAEBEhQKB2FwaV9rZXkYFSABKAlIDYgBARIzCgxzYW5kYm94X21vZGUYFiABKA4yGC5haWFnZW50LnJwYy5TYW5kYm94TW9kZUgOiAEBGi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUILCglfcHJvdmlkZXJCCAoGX21vZGVsQhAKDl9zeXN0ZW1fcHJvbXB0QhEKD19pbml0aWFsX3Byb21wdEINCgtfc2Vzc2lvbl9pZEIUChJfcmVzdW1lX3Nlc3Npb25faWRCEgoQX3Blcm1pc3Npb25fbW9kZUIfCh1fZGFuZ2Vyb3VzbHlfc2tpcF9wZXJtaXNzaW9uc0IlCiNfYWxsb3dfZGFuZ2Vyb3VzbHlfc2tpcF9wZXJtaXNzaW9uc0IbChlfaW5jbHVkZV9wYXJ0aWFsX21lc3NhZ2VzQhgKFl9jb250aW51ZV9jb252ZXJzYXRpb25CEwoRX3RoaW5raW5nX2VuYWJsZWRCCwoJX2Jhc2VfdXJsQgoKCF9hcGlfa2V5Qg8KDV9zYW5kYm94X21vZGUikAIKDENhcGFiaWxpdGllcxIVCg1jYW5faW50ZXJydXB0GAEgASgIEhgKEGNhbl9zd2l0Y2hfbW9kZWwYAiABKAgSIgoaY2FuX3N3aXRjaF9wZXJtaXNzaW9uX21vZGUYAyABKAgSPwoac3VwcG9ydGVkX3Blcm1pc3Npb25fbW9kZXMYBCADKA4yGy5haWFnZW50LnJwYy5QZXJtaXNzaW9uTW9kZRIcChRjYW5fc2tpcF9wZXJtaXNzaW9ucxgFIAEoCBIdChVjYW5fc2VuZF9yaWNoX2NvbnRlbnQYBiABKAgSEQoJY2FuX3RoaW5rGAcgASgIEhoKEmNhbl9yZXN1bWVfc2Vzc2lvbhgIIAEoCCL3AQoNQ29ubmVjdFJlc3VsdBISCgpzZXNzaW9uX2lkGAEgASgJEicKCHByb3ZpZGVyGAIgASgOMhUuYWlhZ2VudC5ycGMuUHJvdmlkZXISKgoGc3RhdHVzGAMgASgOMhouYWlhZ2VudC5ycGMuU2Vzc2lvblN0YXR1cxISCgVtb2RlbBgEIAEoCUgAiAEBEjQKDGNhcGFiaWxpdGllcxgFIAEoCzIZLmFpYWdlbnQucnBjLkNhcGFiaWxpdGllc0gBiAEBEhAKA2N3ZBgGIAEoCUgCiAEBQggKBl9tb2RlbEIPCg1fY2FwYWJpbGl0aWVzQgYKBF9jd2QiVQoXU2V0UGVybWlzc2lvbk1vZGVSZXN1bHQSKQoEbW9kZRgBIAEoDjIbLmFpYWdlbnQucnBjLlBlcm1pc3Npb25Nb2RlEg8KB3N1Y2Nlc3MYAiABKAgiOgoMU3RhdHVzUmVzdWx0EioKBnN0YXR1cxgBIAEoDjIaLmFpYWdlbnQucnBjLlNlc3Npb25TdGF0dXMiSwoOU2V0TW9kZWxSZXN1bHQSKgoGc3RhdHVzGAEgASgOMhouYWlhZ2VudC5ycGMuU2Vzc2lvblN0YXR1cxINCgVtb2RlbBgCIAEoCSLnBAoMQ29udGVudEJsb2NrEiYKBHRleHQYASABKAsyFi5haWFnZW50LnJwYy5UZXh0QmxvY2tIABIuCgh0aGlua2luZxgCIAEoCzIaLmFpYWdlbnQucnBjLlRoaW5raW5nQmxvY2tIABItCgh0b29sX3VzZRgDIAEoCzIZLmFpYWdlbnQucnBjLlRvb2xVc2VCbG9ja0gAEjMKC3Rvb2xfcmVzdWx0GAQgASgLMhwuYWlhZ2VudC5ycGMuVG9vbFJlc3VsdEJsb2NrSAASKAoFaW1hZ2UYBSABKAsyFy5haWFnZW50LnJwYy5JbWFnZUJsb2NrSAASPwoRY29tbWFuZF9leGVjdXRpb24YBiABKAsyIi5haWFnZW50LnJwYy5Db21tYW5kRXhlY3V0aW9uQmxvY2tIABIzCgtmaWxlX2NoYW5nZRgHIAEoCzIcLmFpYWdlbnQucnBjLkZpbGVDaGFuZ2VCbG9ja0gAEjYKDW1jcF90b29sX2NhbGwYCCABKAsyHS5haWFnZW50LnJwYy5NY3BUb29sQ2FsbEJsb2NrSAASMQoKd2ViX3NlYXJjaBgJIAEoCzIbLmFpYWdlbnQucnBjLldlYlNlYXJjaEJsb2NrSAASLwoJdG9kb19saXN0GAogASgLMhouYWlhZ2VudC5ycGMuVG9kb0xpc3RCbG9ja0gAEigKBWVycm9yGAsgASgLMhcuYWlhZ2VudC5ycGMuRXJyb3JCbG9ja0gAEiwKB3Vua25vd24YDCABKAsyGS5haWFnZW50LnJwYy5Vbmtub3duQmxvY2tIAEIHCgVibG9jayIZCglUZXh0QmxvY2sSDAoEdGV4dBgBIAEoCSJHCg1UaGlua2luZ0Jsb2NrEhAKCHRoaW5raW5nGAEgASgJEhYKCXNpZ25hdHVyZRgCIAEoCUgAiAEBQgwKCl9zaWduYXR1cmUilAEKDFRvb2xVc2VCbG9jaxIKCgJpZBgBIAEoCRIRCgl0b29sX25hbWUYAiABKAkSEQoJdG9vbF90eXBlGAMgASgJEhcKCmlucHV0X2pzb24YBCABKAxIAIgBARIqCgZzdGF0dXMYBSABKA4yGi5haWFnZW50LnJwYy5Db250ZW50U3RhdHVzQg0KC19pbnB1dF9qc29uIogBCg9Ub29sUmVzdWx0QmxvY2sSEwoLdG9vbF91c2VfaWQYASABKAkSGQoMY29udGVudF9qc29uGAIgASgMSACIAQESEAoIaXNfZXJyb3IYAyABKAgSFQoIYWdlbnRfaWQYBCABKAlIAYgBAUIPCg1fY29udGVudF9qc29uQgsKCV9hZ2VudF9pZCI2CgpJbWFnZUJsb2NrEigKBnNvdXJjZRgBIAEoCzIYLmFpYWdlbnQucnBjLkltYWdlU291cmNlImUKC0ltYWdlU291cmNlEgwKBHR5cGUYASABKAkSEgoKbWVkaWFfdHlwZRgCIAEoCRIRCgRkYXRhGAMgASgJSACIAQESEAoDdXJsGAQgASgJSAGIAQFCBwoFX2RhdGFCBgoEX3VybCKaAQoVQ29tbWFuZEV4ZWN1dGlvbkJsb2NrEg8KB2NvbW1hbmQYASABKAkSEwoGb3V0cHV0GAIgASgJSACIAQESFgoJZXhpdF9jb2RlGAMgASgFSAGIAQESKgoGc3RhdHVzGAQgASgOMhouYWlhZ2VudC5ycGMuQ29udGVudFN0YXR1c0IJCgdfb3V0cHV0QgwKCl9leGl0X2NvZGUiZwoPRmlsZUNoYW5nZUJsb2NrEioKBnN0YXR1cxgBIAEoDjIaLmFpYWdlbnQucnBjLkNvbnRlbnRTdGF0dXMSKAoHY2hhbmdlcxgCIAMoCzIXLmFpYWdlbnQucnBjLkZpbGVDaGFuZ2UiKAoKRmlsZUNoYW5nZRIMCgRwYXRoGAEgASgJEgwKBGtpbmQYAiABKAki1AEKEE1jcFRvb2xDYWxsQmxvY2sSEwoGc2VydmVyGAEgASgJSACIAQESEQoEdG9vbBgCIAEoCUgBiAEBEhsKDmFyZ3VtZW50c19qc29uGAMgASgMSAKIAQESGAoLcmVzdWx0X2pzb24YBCABKAxIA4gBARIqCgZzdGF0dXMYBSABKA4yGi5haWFnZW50LnJwYy5Db250ZW50U3RhdHVzQgkKB19zZXJ2ZXJCBwoFX3Rvb2xCEQoPX2FyZ3VtZW50c19qc29uQg4KDF9yZXN1bHRfanNvbiIfCg5XZWJTZWFyY2hCbG9jaxINCgVxdWVyeRgBIAEoCSI1Cg1Ub2RvTGlzdEJsb2NrEiQKBWl0ZW1zGAEgAygLMhUuYWlhZ2VudC5ycGMuVG9kb0l0ZW0iKwoIVG9kb0l0ZW0SDAoEdGV4dBgBIAEoCRIRCgljb21wbGV0ZWQYAiABKAgiHQoKRXJyb3JCbG9jaxIPCgdtZXNzYWdlGAEgASgJIioKDFVua25vd25CbG9jaxIMCgR0eXBlGAEgASgJEgwKBGRhdGEYAiABKAkiWgoOTWVzc2FnZUNvbnRlbnQSKgoHY29udGVudBgBIAMoCzIZLmFpYWdlbnQucnBjLkNvbnRlbnRCbG9jaxISCgVtb2RlbBgCIAEoCUgAiAEBQggKBl9tb2RlbCKmAwoKUnBjTWVzc2FnZRInCghwcm92aWRlchgBIAEoDjIVLmFpYWdlbnQucnBjLlByb3ZpZGVyEigKBHVzZXIYAiABKAsyGC5haWFnZW50LnJwYy5Vc2VyTWVzc2FnZUgAEjIKCWFzc2lzdGFudBgDIAEoCzIdLmFpYWdlbnQucnBjLkFzc2lzdGFudE1lc3NhZ2VIABIsCgZyZXN1bHQYBCABKAsyGi5haWFnZW50LnJwYy5SZXN1bHRNZXNzYWdlSAASMAoMc3RyZWFtX2V2ZW50GAUgASgLMhguYWlhZ2VudC5ycGMuU3RyZWFtRXZlbnRIABIqCgVlcnJvchgGIAEoCzIZLmFpYWdlbnQucnBjLkVycm9yTWVzc2FnZUgAEjkKDXN0YXR1c19zeXN0ZW0YByABKAsyIC5haWFnZW50LnJwYy5TdGF0dXNTeXN0ZW1NZXNzYWdlSAASPwoQY29tcGFjdF9ib3VuZGFyeRgIIAEoCzIjLmFpYWdlbnQucnBjLkNvbXBhY3RCb3VuZGFyeU1lc3NhZ2VIAEIJCgdtZXNzYWdlIpkBCgtVc2VyTWVzc2FnZRIsCgdtZXNzYWdlGAEgASgLMhsuYWlhZ2VudC5ycGMuTWVzc2FnZUNvbnRlbnQSHwoScGFyZW50X3Rvb2xfdXNlX2lkGAIgASgJSACIAQESFgoJaXNfcmVwbGF5GAMgASgISAGIAQFCFQoTX3BhcmVudF90b29sX3VzZV9pZEIMCgpfaXNfcmVwbGF5IpABChBBc3Npc3RhbnRNZXNzYWdlEiwKB21lc3NhZ2UYASABKAsyGy5haWFnZW50LnJwYy5NZXNzYWdlQ29udGVudBIPCgJpZBgCIAEoCUgAiAEBEh8KEnBhcmVudF90b29sX3VzZV9pZBgDIAEoCUgBiAEBQgUKA19pZEIVChNfcGFyZW50X3Rvb2xfdXNlX2lkIsECCg1SZXN1bHRNZXNzYWdlEg8KB3N1YnR5cGUYASABKAkSGAoLZHVyYXRpb25fbXMYAiABKANIAIgBARIcCg9kdXJhdGlvbl9hcGlfbXMYAyABKANIAYgBARIQCghpc19lcnJvchgEIAEoCBIRCgludW1fdHVybnMYBSABKAUSFwoKc2Vzc2lvbl9pZBgGIAEoCUgCiAEBEhsKDnRvdGFsX2Nvc3RfdXNkGAcgASgBSAOIAQESFwoKdXNhZ2VfanNvbhgIIAEoDEgEiAEBEhMKBnJlc3VsdBgJIAEoCUgFiAEBQg4KDF9kdXJhdGlvbl9tc0ISChBfZHVyYXRpb25fYXBpX21zQg0KC19zZXNzaW9uX2lkQhEKD190b3RhbF9jb3N0X3VzZEINCgtfdXNhZ2VfanNvbkIJCgdfcmVzdWx0IiUKDEVycm9yTWVzc2FnZRIVCg1lcnJvcl9tZXNzYWdlGAEgASgJIloKE1N0YXR1c1N5c3RlbU1lc3NhZ2USDwoHc3VidHlwZRgBIAEoCRITCgZzdGF0dXMYAiABKAlIAIgBARISCgpzZXNzaW9uX2lkGAMgASgJQgkKB19zdGF0dXMijwEKFkNvbXBhY3RCb3VuZGFyeU1lc3NhZ2USDwoHc3VidHlwZRgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEjsKEGNvbXBhY3RfbWV0YWRhdGEYAyABKAsyHC5haWFnZW50LnJwYy5Db21wYWN0TWV0YWRhdGFIAIgBAUITChFfY29tcGFjdF9tZXRhZGF0YSJbCg9Db21wYWN0TWV0YWRhdGESFAoHdHJpZ2dlchgBIAEoCUgAiAEBEhcKCnByZV90b2tlbnMYAiABKAVIAYgBAUIKCghfdHJpZ2dlckINCgtfcHJlX3Rva2VucyKUAQoLU3RyZWFtRXZlbnQSDAoEdXVpZBgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEisKBWV2ZW50GAMgASgLMhwuYWlhZ2VudC5ycGMuU3RyZWFtRXZlbnREYXRhEh8KEnBhcmVudF90b29sX3VzZV9pZBgEIAEoCUgAiAEBQhUKE19wYXJlbnRfdG9vbF91c2VfaWQijQMKD1N0cmVhbUV2ZW50RGF0YRI3Cg1tZXNzYWdlX3N0YXJ0GAEgASgLMh4uYWlhZ2VudC5ycGMuTWVzc2FnZVN0YXJ0RXZlbnRIABJCChNjb250ZW50X2Jsb2NrX3N0YXJ0GAIgASgLMiMuYWlhZ2VudC5ycGMuQ29udGVudEJsb2NrU3RhcnRFdmVudEgAEkIKE2NvbnRlbnRfYmxvY2tfZGVsdGEYAyABKAsyIy5haWFnZW50LnJwYy5Db250ZW50QmxvY2tEZWx0YUV2ZW50SAASQAoSY29udGVudF9ibG9ja19zdG9wGAQgASgLMiIuYWlhZ2VudC5ycGMuQ29udGVudEJsb2NrU3RvcEV2ZW50SAASNwoNbWVzc2FnZV9kZWx0YRgFIAEoCzIeLmFpYWdlbnQucnBjLk1lc3NhZ2VEZWx0YUV2ZW50SAASNQoMbWVzc2FnZV9zdG9wGAYgASgLMh0uYWlhZ2VudC5ycGMuTWVzc2FnZVN0b3BFdmVudEgAQgcKBWV2ZW50Il4KEU1lc3NhZ2VTdGFydEV2ZW50EjgKDG1lc3NhZ2VfaW5mbxgBIAEoCzIdLmFpYWdlbnQucnBjLk1lc3NhZ2VTdGFydEluZm9IAIgBAUIPCg1fbWVzc2FnZV9pbmZvInQKEE1lc3NhZ2VTdGFydEluZm8SDwoCaWQYASABKAlIAIgBARISCgVtb2RlbBgCIAEoCUgBiAEBEioKB2NvbnRlbnQYAyADKAsyGS5haWFnZW50LnJwYy5Db250ZW50QmxvY2tCBQoDX2lkQggKBl9tb2RlbCJZChZDb250ZW50QmxvY2tTdGFydEV2ZW50Eg0KBWluZGV4GAEgASgFEjAKDWNvbnRlbnRfYmxvY2sYAiABKAsyGS5haWFnZW50LnJwYy5Db250ZW50QmxvY2siSgoWQ29udGVudEJsb2NrRGVsdGFFdmVudBINCgVpbmRleBgBIAEoBRIhCgVkZWx0YRgCIAEoCzISLmFpYWdlbnQucnBjLkRlbHRhIiYKFUNvbnRlbnRCbG9ja1N0b3BFdmVudBINCgVpbmRleBgBIAEoBSJtChFNZXNzYWdlRGVsdGFFdmVudBIXCgpkZWx0YV9qc29uGAEgASgMSACIAQESJgoFdXNhZ2UYAiABKAsyEi5haWFnZW50LnJwYy5Vc2FnZUgBiAEBQg0KC19kZWx0YV9qc29uQggKBl91c2FnZSISChBNZXNzYWdlU3RvcEV2ZW50Iq0BCgVEZWx0YRIsCgp0ZXh0X2RlbHRhGAEgASgLMhYuYWlhZ2VudC5ycGMuVGV4dERlbHRhSAASNAoOdGhpbmtpbmdfZGVsdGEYAiABKAsyGi5haWFnZW50LnJwYy5UaGlua2luZ0RlbHRhSAASNwoQaW5wdXRfanNvbl9kZWx0YRgDIAEoCzIbLmFpYWdlbnQucnBjLklucHV0SnNvbkRlbHRhSABCBwoFZGVsdGEiGQoJVGV4dERlbHRhEgwKBHRleHQYASABKAkiIQoNVGhpbmtpbmdEZWx0YRIQCgh0aGlua2luZxgBIAEoCSImCg5JbnB1dEpzb25EZWx0YRIUCgxwYXJ0aWFsX2pzb24YASABKAki+gEKBVVzYWdlEhkKDGlucHV0X3Rva2VucxgBIAEoBUgAiAEBEhoKDW91dHB1dF90b2tlbnMYAiABKAVIAYgBARIgChNjYWNoZWRfaW5wdXRfdG9rZW5zGAMgASgFSAKIAQESLAoIcHJvdmlkZXIYBCABKA4yFS5haWFnZW50LnJwYy5Qcm92aWRlckgDiAEBEhUKCHJhd19qc29uGAUgASgMSASIAQFCDwoNX2lucHV0X3Rva2Vuc0IQCg5fb3V0cHV0X3Rva2Vuc0IWChRfY2FjaGVkX2lucHV0X3Rva2Vuc0ILCglfcHJvdmlkZXJCCwoJX3Jhd19qc29uIjQKB0hpc3RvcnkSKQoIbWVzc2FnZXMYASADKAsyFy5haWFnZW50LnJwYy5ScGNNZXNzYWdlIoABCg5IaXN0b3J5U2Vzc2lvbhISCgpzZXNzaW9uX2lkGAEgASgJEhoKEmZpcnN0X3VzZXJfbWVzc2FnZRgCIAEoCRIRCgl0aW1lc3RhbXAYAyABKAMSFQoNbWVzc2FnZV9jb3VudBgEIAEoBRIUCgxwcm9qZWN0X3BhdGgYBSABKAkiRgoVSGlzdG9yeVNlc3Npb25zUmVzdWx0Ei0KCHNlc3Npb25zGAEgAygLMhsuYWlhZ2VudC5ycGMuSGlzdG9yeVNlc3Npb24iHwoMUXVlcnlSZXF1ZXN0Eg8KB21lc3NhZ2UYASABKAkiRQoXUXVlcnlXaXRoQ29udGVudFJlcXVlc3QSKgoHY29udGVudBgBIAMoCzIZLmFpYWdlbnQucnBjLkNvbnRlbnRCbG9jayIgCg9TZXRNb2RlbFJlcXVlc3QSDQoFbW9kZWwYASABKAkiRQoYU2V0UGVybWlzc2lvbk1vZGVSZXF1ZXN0EikKBG1vZGUYASABKA4yGy5haWFnZW50LnJwYy5QZXJtaXNzaW9uTW9kZSJQChlHZXRIaXN0b3J5U2Vzc2lvbnNSZXF1ZXN0EhMKC21heF9yZXN1bHRzGAEgASgFEhMKBm9mZnNldBgCIAEoBUgAiAEBQgkKB19vZmZzZXQihwEKEkxvYWRIaXN0b3J5UmVxdWVzdBIXCgpzZXNzaW9uX2lkGAEgASgJSACIAQESGQoMcHJvamVjdF9wYXRoGAIgASgJSAGIAQESDgoGb2Zmc2V0GAMgASgFEg0KBWxpbWl0GAQgASgFQg0KC19zZXNzaW9uX2lkQg8KDV9wcm9qZWN0X3BhdGgibwoZR2V0SGlzdG9yeU1ldGFkYXRhUmVxdWVzdBIXCgpzZXNzaW9uX2lkGAEgASgJSACIAQESGQoMcHJvamVjdF9wYXRoGAIgASgJSAGIAQFCDQoLX3Nlc3Npb25faWRCDwoNX3Byb2plY3RfcGF0aCJ8Cg9IaXN0b3J5TWV0YWRhdGESEwoLdG90YWxfbGluZXMYASABKAUSEgoKc2Vzc2lvbl9pZBgCIAEoCRIUCgxwcm9qZWN0X3BhdGgYAyABKAkSGQoMY3VzdG9tX3RpdGxlGAQgASgJSACIAQFCDwoNX2N1c3RvbV90aXRsZSJyCg1IaXN0b3J5UmVzdWx0EikKCG1lc3NhZ2VzGAEgAygLMhcuYWlhZ2VudC5ycGMuUnBjTWVzc2FnZRIOCgZvZmZzZXQYAiABKAUSDQoFY291bnQYAyABKAUSFwoPYXZhaWxhYmxlX2NvdW50GAQgASgFIg4KDEVtcHR5UmVxdWVzdCIPCg1FbXB0eVJlc3BvbnNlIkkKEVNlcnZlckNhbGxSZXF1ZXN0Eg8KB2NhbGxfaWQYASABKAkSDgoGbWV0aG9kGAIgASgJEhMKC3BhcmFtc19qc29uGAMgASgMImkKElNlcnZlckNhbGxSZXNwb25zZRIPCgdjYWxsX2lkGAEgASgJEg8KB3N1Y2Nlc3MYAiABKAgSEwoLcmVzdWx0X2pzb24YAyABKAwSEgoFZXJyb3IYBCABKAlIAIgBAUIICgZfZXJyb3IqTQoIUHJvdmlkZXISGAoUUFJPVklERVJfVU5TUEVDSUZJRUQQABITCg9QUk9WSURFUl9DTEFVREUQARISCg5QUk9WSURFUl9DT0RFWBACKrABCg1TZXNzaW9uU3RhdHVzEh4KGlNFU1NJT05fU1RBVFVTX1VOU1BFQ0lGSUVEEAASHAoYU0VTU0lPTl9TVEFUVVNfQ09OTkVDVEVEEAESHwobU0VTU0lPTl9TVEFUVVNfRElTQ09OTkVDVEVEEAISHgoaU0VTU0lPTl9TVEFUVVNfSU5URVJSVVBURUQQAxIgChxTRVNTSU9OX1NUQVRVU19NT0RFTF9DSEFOR0VEEAQqiAEKDUNvbnRlbnRTdGF0dXMSHgoaQ09OVEVOVF9TVEFUVVNfVU5TUEVDSUZJRUQQABIeChpDT05URU5UX1NUQVRVU19JTl9QUk9HUkVTUxABEhwKGENPTlRFTlRfU1RBVFVTX0NPTVBMRVRFRBACEhkKFUNPTlRFTlRfU1RBVFVTX0ZBSUxFRBADKtABCg5QZXJtaXNzaW9uTW9kZRIfChtQRVJNSVNTSU9OX01PREVfVU5TUEVDSUZJRUQQABIbChdQRVJNSVNTSU9OX01PREVfREVGQVVMVBABEiYKIlBFUk1JU1NJT05fTU9ERV9CWVBBU1NfUEVSTUlTU0lPTlMQAhIgChxQRVJNSVNTSU9OX01PREVfQUNDRVBUX0VESVRTEAMSGAoUUEVSTUlTU0lPTl9NT0RFX1BMQU4QBBIcChhQRVJNSVNTSU9OX01PREVfRE9OVF9BU0sQBSqOAQoLU2FuZGJveE1vZGUSHAoYU0FOREJPWF9NT0RFX1VOU1BFQ0lGSUVEEAASGgoWU0FOREJPWF9NT0RFX1JFQURfT05MWRABEiAKHFNBTkRCT1hfTU9ERV9XT1JLU1BBQ0VfV1JJVEUQAhIjCh9TQU5EQk9YX01PREVfREFOR0VSX0ZVTExfQUNDRVNTEANCKQoUY29tLmFzYWtpaS5ycGMucHJvdG9CD0FpQWdlbnRScGNQcm90b1ABYgZwcm90bzM");
+  fileDesc("ChJhaV9hZ2VudF9ycGMucHJvdG8SC2FpYWdlbnQucnBjIsgHCg5Db25uZWN0T3B0aW9ucxIsCghwcm92aWRlchgBIAEoDjIVLmFpYWdlbnQucnBjLlByb3ZpZGVySACIAQESEgoFbW9kZWwYAiABKAlIAYgBARIaCg1zeXN0ZW1fcHJvbXB0GAMgASgJSAKIAQESGwoOaW5pdGlhbF9wcm9tcHQYBCABKAlIA4gBARIXCgpzZXNzaW9uX2lkGAUgASgJSASIAQESHgoRcmVzdW1lX3Nlc3Npb25faWQYBiABKAlIBYgBARI7CghtZXRhZGF0YRgHIAMoCzIpLmFpYWdlbnQucnBjLkNvbm5lY3RPcHRpb25zLk1ldGFkYXRhRW50cnkSOQoPcGVybWlzc2lvbl9tb2RlGAogASgOMhsuYWlhZ2VudC5ycGMuUGVybWlzc2lvbk1vZGVIBogBARIpChxkYW5nZXJvdXNseV9za2lwX3Blcm1pc3Npb25zGAsgASgISAeIAQESLwoiYWxsb3dfZGFuZ2Vyb3VzbHlfc2tpcF9wZXJtaXNzaW9ucxgMIAEoCEgIiAEBEiUKGGluY2x1ZGVfcGFydGlhbF9tZXNzYWdlcxgNIAEoCEgJiAEBEiIKFWNvbnRpbnVlX2NvbnZlcnNhdGlvbhgOIAEoCEgKiAEBEh0KEHRoaW5raW5nX2VuYWJsZWQYDyABKAhIC4gBARIVCghiYXNlX3VybBgUIAEoCUgMiAEBEhQKB2FwaV9rZXkYFSABKAlIDYgBARIzCgxzYW5kYm94X21vZGUYFiABKA4yGC5haWFnZW50LnJwYy5TYW5kYm94TW9kZUgOiAEBGi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUILCglfcHJvdmlkZXJCCAoGX21vZGVsQhAKDl9zeXN0ZW1fcHJvbXB0QhEKD19pbml0aWFsX3Byb21wdEINCgtfc2Vzc2lvbl9pZEIUChJfcmVzdW1lX3Nlc3Npb25faWRCEgoQX3Blcm1pc3Npb25fbW9kZUIfCh1fZGFuZ2Vyb3VzbHlfc2tpcF9wZXJtaXNzaW9uc0IlCiNfYWxsb3dfZGFuZ2Vyb3VzbHlfc2tpcF9wZXJtaXNzaW9uc0IbChlfaW5jbHVkZV9wYXJ0aWFsX21lc3NhZ2VzQhgKFl9jb250aW51ZV9jb252ZXJzYXRpb25CEwoRX3RoaW5raW5nX2VuYWJsZWRCCwoJX2Jhc2VfdXJsQgoKCF9hcGlfa2V5Qg8KDV9zYW5kYm94X21vZGUikAIKDENhcGFiaWxpdGllcxIVCg1jYW5faW50ZXJydXB0GAEgASgIEhgKEGNhbl9zd2l0Y2hfbW9kZWwYAiABKAgSIgoaY2FuX3N3aXRjaF9wZXJtaXNzaW9uX21vZGUYAyABKAgSPwoac3VwcG9ydGVkX3Blcm1pc3Npb25fbW9kZXMYBCADKA4yGy5haWFnZW50LnJwYy5QZXJtaXNzaW9uTW9kZRIcChRjYW5fc2tpcF9wZXJtaXNzaW9ucxgFIAEoCBIdChVjYW5fc2VuZF9yaWNoX2NvbnRlbnQYBiABKAgSEQoJY2FuX3RoaW5rGAcgASgIEhoKEmNhbl9yZXN1bWVfc2Vzc2lvbhgIIAEoCCL3AQoNQ29ubmVjdFJlc3VsdBISCgpzZXNzaW9uX2lkGAEgASgJEicKCHByb3ZpZGVyGAIgASgOMhUuYWlhZ2VudC5ycGMuUHJvdmlkZXISKgoGc3RhdHVzGAMgASgOMhouYWlhZ2VudC5ycGMuU2Vzc2lvblN0YXR1cxISCgVtb2RlbBgEIAEoCUgAiAEBEjQKDGNhcGFiaWxpdGllcxgFIAEoCzIZLmFpYWdlbnQucnBjLkNhcGFiaWxpdGllc0gBiAEBEhAKA2N3ZBgGIAEoCUgCiAEBQggKBl9tb2RlbEIPCg1fY2FwYWJpbGl0aWVzQgYKBF9jd2QiVQoXU2V0UGVybWlzc2lvbk1vZGVSZXN1bHQSKQoEbW9kZRgBIAEoDjIbLmFpYWdlbnQucnBjLlBlcm1pc3Npb25Nb2RlEg8KB3N1Y2Nlc3MYAiABKAgiOgoMU3RhdHVzUmVzdWx0EioKBnN0YXR1cxgBIAEoDjIaLmFpYWdlbnQucnBjLlNlc3Npb25TdGF0dXMiSwoOU2V0TW9kZWxSZXN1bHQSKgoGc3RhdHVzGAEgASgOMhouYWlhZ2VudC5ycGMuU2Vzc2lvblN0YXR1cxINCgVtb2RlbBgCIAEoCSLnBAoMQ29udGVudEJsb2NrEiYKBHRleHQYASABKAsyFi5haWFnZW50LnJwYy5UZXh0QmxvY2tIABIuCgh0aGlua2luZxgCIAEoCzIaLmFpYWdlbnQucnBjLlRoaW5raW5nQmxvY2tIABItCgh0b29sX3VzZRgDIAEoCzIZLmFpYWdlbnQucnBjLlRvb2xVc2VCbG9ja0gAEjMKC3Rvb2xfcmVzdWx0GAQgASgLMhwuYWlhZ2VudC5ycGMuVG9vbFJlc3VsdEJsb2NrSAASKAoFaW1hZ2UYBSABKAsyFy5haWFnZW50LnJwYy5JbWFnZUJsb2NrSAASPwoRY29tbWFuZF9leGVjdXRpb24YBiABKAsyIi5haWFnZW50LnJwYy5Db21tYW5kRXhlY3V0aW9uQmxvY2tIABIzCgtmaWxlX2NoYW5nZRgHIAEoCzIcLmFpYWdlbnQucnBjLkZpbGVDaGFuZ2VCbG9ja0gAEjYKDW1jcF90b29sX2NhbGwYCCABKAsyHS5haWFnZW50LnJwYy5NY3BUb29sQ2FsbEJsb2NrSAASMQoKd2ViX3NlYXJjaBgJIAEoCzIbLmFpYWdlbnQucnBjLldlYlNlYXJjaEJsb2NrSAASLwoJdG9kb19saXN0GAogASgLMhouYWlhZ2VudC5ycGMuVG9kb0xpc3RCbG9ja0gAEigKBWVycm9yGAsgASgLMhcuYWlhZ2VudC5ycGMuRXJyb3JCbG9ja0gAEiwKB3Vua25vd24YDCABKAsyGS5haWFnZW50LnJwYy5Vbmtub3duQmxvY2tIAEIHCgVibG9jayIZCglUZXh0QmxvY2sSDAoEdGV4dBgBIAEoCSJHCg1UaGlua2luZ0Jsb2NrEhAKCHRoaW5raW5nGAEgASgJEhYKCXNpZ25hdHVyZRgCIAEoCUgAiAEBQgwKCl9zaWduYXR1cmUilAEKDFRvb2xVc2VCbG9jaxIKCgJpZBgBIAEoCRIRCgl0b29sX25hbWUYAiABKAkSEQoJdG9vbF90eXBlGAMgASgJEhcKCmlucHV0X2pzb24YBCABKAxIAIgBARIqCgZzdGF0dXMYBSABKA4yGi5haWFnZW50LnJwYy5Db250ZW50U3RhdHVzQg0KC19pbnB1dF9qc29uIogBCg9Ub29sUmVzdWx0QmxvY2sSEwoLdG9vbF91c2VfaWQYASABKAkSGQoMY29udGVudF9qc29uGAIgASgMSACIAQESEAoIaXNfZXJyb3IYAyABKAgSFQoIYWdlbnRfaWQYBCABKAlIAYgBAUIPCg1fY29udGVudF9qc29uQgsKCV9hZ2VudF9pZCI2CgpJbWFnZUJsb2NrEigKBnNvdXJjZRgBIAEoCzIYLmFpYWdlbnQucnBjLkltYWdlU291cmNlImUKC0ltYWdlU291cmNlEgwKBHR5cGUYASABKAkSEgoKbWVkaWFfdHlwZRgCIAEoCRIRCgRkYXRhGAMgASgJSACIAQESEAoDdXJsGAQgASgJSAGIAQFCBwoFX2RhdGFCBgoEX3VybCKaAQoVQ29tbWFuZEV4ZWN1dGlvbkJsb2NrEg8KB2NvbW1hbmQYASABKAkSEwoGb3V0cHV0GAIgASgJSACIAQESFgoJZXhpdF9jb2RlGAMgASgFSAGIAQESKgoGc3RhdHVzGAQgASgOMhouYWlhZ2VudC5ycGMuQ29udGVudFN0YXR1c0IJCgdfb3V0cHV0QgwKCl9leGl0X2NvZGUiZwoPRmlsZUNoYW5nZUJsb2NrEioKBnN0YXR1cxgBIAEoDjIaLmFpYWdlbnQucnBjLkNvbnRlbnRTdGF0dXMSKAoHY2hhbmdlcxgCIAMoCzIXLmFpYWdlbnQucnBjLkZpbGVDaGFuZ2UiKAoKRmlsZUNoYW5nZRIMCgRwYXRoGAEgASgJEgwKBGtpbmQYAiABKAki1AEKEE1jcFRvb2xDYWxsQmxvY2sSEwoGc2VydmVyGAEgASgJSACIAQESEQoEdG9vbBgCIAEoCUgBiAEBEhsKDmFyZ3VtZW50c19qc29uGAMgASgMSAKIAQESGAoLcmVzdWx0X2pzb24YBCABKAxIA4gBARIqCgZzdGF0dXMYBSABKA4yGi5haWFnZW50LnJwYy5Db250ZW50U3RhdHVzQgkKB19zZXJ2ZXJCBwoFX3Rvb2xCEQoPX2FyZ3VtZW50c19qc29uQg4KDF9yZXN1bHRfanNvbiIfCg5XZWJTZWFyY2hCbG9jaxINCgVxdWVyeRgBIAEoCSI1Cg1Ub2RvTGlzdEJsb2NrEiQKBWl0ZW1zGAEgAygLMhUuYWlhZ2VudC5ycGMuVG9kb0l0ZW0iKwoIVG9kb0l0ZW0SDAoEdGV4dBgBIAEoCRIRCgljb21wbGV0ZWQYAiABKAgiHQoKRXJyb3JCbG9jaxIPCgdtZXNzYWdlGAEgASgJIioKDFVua25vd25CbG9jaxIMCgR0eXBlGAEgASgJEgwKBGRhdGEYAiABKAkiWgoOTWVzc2FnZUNvbnRlbnQSKgoHY29udGVudBgBIAMoCzIZLmFpYWdlbnQucnBjLkNvbnRlbnRCbG9jaxISCgVtb2RlbBgCIAEoCUgAiAEBQggKBl9tb2RlbCKmAwoKUnBjTWVzc2FnZRInCghwcm92aWRlchgBIAEoDjIVLmFpYWdlbnQucnBjLlByb3ZpZGVyEigKBHVzZXIYAiABKAsyGC5haWFnZW50LnJwYy5Vc2VyTWVzc2FnZUgAEjIKCWFzc2lzdGFudBgDIAEoCzIdLmFpYWdlbnQucnBjLkFzc2lzdGFudE1lc3NhZ2VIABIsCgZyZXN1bHQYBCABKAsyGi5haWFnZW50LnJwYy5SZXN1bHRNZXNzYWdlSAASMAoMc3RyZWFtX2V2ZW50GAUgASgLMhguYWlhZ2VudC5ycGMuU3RyZWFtRXZlbnRIABIqCgVlcnJvchgGIAEoCzIZLmFpYWdlbnQucnBjLkVycm9yTWVzc2FnZUgAEjkKDXN0YXR1c19zeXN0ZW0YByABKAsyIC5haWFnZW50LnJwYy5TdGF0dXNTeXN0ZW1NZXNzYWdlSAASPwoQY29tcGFjdF9ib3VuZGFyeRgIIAEoCzIjLmFpYWdlbnQucnBjLkNvbXBhY3RCb3VuZGFyeU1lc3NhZ2VIAEIJCgdtZXNzYWdlIpkBCgtVc2VyTWVzc2FnZRIsCgdtZXNzYWdlGAEgASgLMhsuYWlhZ2VudC5ycGMuTWVzc2FnZUNvbnRlbnQSHwoScGFyZW50X3Rvb2xfdXNlX2lkGAIgASgJSACIAQESFgoJaXNfcmVwbGF5GAMgASgISAGIAQFCFQoTX3BhcmVudF90b29sX3VzZV9pZEIMCgpfaXNfcmVwbGF5IpABChBBc3Npc3RhbnRNZXNzYWdlEiwKB21lc3NhZ2UYASABKAsyGy5haWFnZW50LnJwYy5NZXNzYWdlQ29udGVudBIPCgJpZBgCIAEoCUgAiAEBEh8KEnBhcmVudF90b29sX3VzZV9pZBgDIAEoCUgBiAEBQgUKA19pZEIVChNfcGFyZW50X3Rvb2xfdXNlX2lkIsECCg1SZXN1bHRNZXNzYWdlEg8KB3N1YnR5cGUYASABKAkSGAoLZHVyYXRpb25fbXMYAiABKANIAIgBARIcCg9kdXJhdGlvbl9hcGlfbXMYAyABKANIAYgBARIQCghpc19lcnJvchgEIAEoCBIRCgludW1fdHVybnMYBSABKAUSFwoKc2Vzc2lvbl9pZBgGIAEoCUgCiAEBEhsKDnRvdGFsX2Nvc3RfdXNkGAcgASgBSAOIAQESFwoKdXNhZ2VfanNvbhgIIAEoDEgEiAEBEhMKBnJlc3VsdBgJIAEoCUgFiAEBQg4KDF9kdXJhdGlvbl9tc0ISChBfZHVyYXRpb25fYXBpX21zQg0KC19zZXNzaW9uX2lkQhEKD190b3RhbF9jb3N0X3VzZEINCgtfdXNhZ2VfanNvbkIJCgdfcmVzdWx0IiUKDEVycm9yTWVzc2FnZRIVCg1lcnJvcl9tZXNzYWdlGAEgASgJIloKE1N0YXR1c1N5c3RlbU1lc3NhZ2USDwoHc3VidHlwZRgBIAEoCRITCgZzdGF0dXMYAiABKAlIAIgBARISCgpzZXNzaW9uX2lkGAMgASgJQgkKB19zdGF0dXMijwEKFkNvbXBhY3RCb3VuZGFyeU1lc3NhZ2USDwoHc3VidHlwZRgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEjsKEGNvbXBhY3RfbWV0YWRhdGEYAyABKAsyHC5haWFnZW50LnJwYy5Db21wYWN0TWV0YWRhdGFIAIgBAUITChFfY29tcGFjdF9tZXRhZGF0YSJbCg9Db21wYWN0TWV0YWRhdGESFAoHdHJpZ2dlchgBIAEoCUgAiAEBEhcKCnByZV90b2tlbnMYAiABKAVIAYgBAUIKCghfdHJpZ2dlckINCgtfcHJlX3Rva2VucyKUAQoLU3RyZWFtRXZlbnQSDAoEdXVpZBgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEisKBWV2ZW50GAMgASgLMhwuYWlhZ2VudC5ycGMuU3RyZWFtRXZlbnREYXRhEh8KEnBhcmVudF90b29sX3VzZV9pZBgEIAEoCUgAiAEBQhUKE19wYXJlbnRfdG9vbF91c2VfaWQijQMKD1N0cmVhbUV2ZW50RGF0YRI3Cg1tZXNzYWdlX3N0YXJ0GAEgASgLMh4uYWlhZ2VudC5ycGMuTWVzc2FnZVN0YXJ0RXZlbnRIABJCChNjb250ZW50X2Jsb2NrX3N0YXJ0GAIgASgLMiMuYWlhZ2VudC5ycGMuQ29udGVudEJsb2NrU3RhcnRFdmVudEgAEkIKE2NvbnRlbnRfYmxvY2tfZGVsdGEYAyABKAsyIy5haWFnZW50LnJwYy5Db250ZW50QmxvY2tEZWx0YUV2ZW50SAASQAoSY29udGVudF9ibG9ja19zdG9wGAQgASgLMiIuYWlhZ2VudC5ycGMuQ29udGVudEJsb2NrU3RvcEV2ZW50SAASNwoNbWVzc2FnZV9kZWx0YRgFIAEoCzIeLmFpYWdlbnQucnBjLk1lc3NhZ2VEZWx0YUV2ZW50SAASNQoMbWVzc2FnZV9zdG9wGAYgASgLMh0uYWlhZ2VudC5ycGMuTWVzc2FnZVN0b3BFdmVudEgAQgcKBWV2ZW50Il4KEU1lc3NhZ2VTdGFydEV2ZW50EjgKDG1lc3NhZ2VfaW5mbxgBIAEoCzIdLmFpYWdlbnQucnBjLk1lc3NhZ2VTdGFydEluZm9IAIgBAUIPCg1fbWVzc2FnZV9pbmZvInQKEE1lc3NhZ2VTdGFydEluZm8SDwoCaWQYASABKAlIAIgBARISCgVtb2RlbBgCIAEoCUgBiAEBEioKB2NvbnRlbnQYAyADKAsyGS5haWFnZW50LnJwYy5Db250ZW50QmxvY2tCBQoDX2lkQggKBl9tb2RlbCJZChZDb250ZW50QmxvY2tTdGFydEV2ZW50Eg0KBWluZGV4GAEgASgFEjAKDWNvbnRlbnRfYmxvY2sYAiABKAsyGS5haWFnZW50LnJwYy5Db250ZW50QmxvY2siSgoWQ29udGVudEJsb2NrRGVsdGFFdmVudBINCgVpbmRleBgBIAEoBRIhCgVkZWx0YRgCIAEoCzISLmFpYWdlbnQucnBjLkRlbHRhIiYKFUNvbnRlbnRCbG9ja1N0b3BFdmVudBINCgVpbmRleBgBIAEoBSJtChFNZXNzYWdlRGVsdGFFdmVudBIXCgpkZWx0YV9qc29uGAEgASgMSACIAQESJgoFdXNhZ2UYAiABKAsyEi5haWFnZW50LnJwYy5Vc2FnZUgBiAEBQg0KC19kZWx0YV9qc29uQggKBl91c2FnZSISChBNZXNzYWdlU3RvcEV2ZW50Iq0BCgVEZWx0YRIsCgp0ZXh0X2RlbHRhGAEgASgLMhYuYWlhZ2VudC5ycGMuVGV4dERlbHRhSAASNAoOdGhpbmtpbmdfZGVsdGEYAiABKAsyGi5haWFnZW50LnJwYy5UaGlua2luZ0RlbHRhSAASNwoQaW5wdXRfanNvbl9kZWx0YRgDIAEoCzIbLmFpYWdlbnQucnBjLklucHV0SnNvbkRlbHRhSABCBwoFZGVsdGEiGQoJVGV4dERlbHRhEgwKBHRleHQYASABKAkiIQoNVGhpbmtpbmdEZWx0YRIQCgh0aGlua2luZxgBIAEoCSImCg5JbnB1dEpzb25EZWx0YRIUCgxwYXJ0aWFsX2pzb24YASABKAki+gEKBVVzYWdlEhkKDGlucHV0X3Rva2VucxgBIAEoBUgAiAEBEhoKDW91dHB1dF90b2tlbnMYAiABKAVIAYgBARIgChNjYWNoZWRfaW5wdXRfdG9rZW5zGAMgASgFSAKIAQESLAoIcHJvdmlkZXIYBCABKA4yFS5haWFnZW50LnJwYy5Qcm92aWRlckgDiAEBEhUKCHJhd19qc29uGAUgASgMSASIAQFCDwoNX2lucHV0X3Rva2Vuc0IQCg5fb3V0cHV0X3Rva2Vuc0IWChRfY2FjaGVkX2lucHV0X3Rva2Vuc0ILCglfcHJvdmlkZXJCCwoJX3Jhd19qc29uIjQKB0hpc3RvcnkSKQoIbWVzc2FnZXMYASADKAsyFy5haWFnZW50LnJwYy5ScGNNZXNzYWdlIqwBCg5IaXN0b3J5U2Vzc2lvbhISCgpzZXNzaW9uX2lkGAEgASgJEhoKEmZpcnN0X3VzZXJfbWVzc2FnZRgCIAEoCRIRCgl0aW1lc3RhbXAYAyABKAMSFQoNbWVzc2FnZV9jb3VudBgEIAEoBRIUCgxwcm9qZWN0X3BhdGgYBSABKAkSGQoMY3VzdG9tX3RpdGxlGAYgASgJSACIAQFCDwoNX2N1c3RvbV90aXRsZSJGChVIaXN0b3J5U2Vzc2lvbnNSZXN1bHQSLQoIc2Vzc2lvbnMYASADKAsyGy5haWFnZW50LnJwYy5IaXN0b3J5U2Vzc2lvbiIfCgxRdWVyeVJlcXVlc3QSDwoHbWVzc2FnZRgBIAEoCSJFChdRdWVyeVdpdGhDb250ZW50UmVxdWVzdBIqCgdjb250ZW50GAEgAygLMhkuYWlhZ2VudC5ycGMuQ29udGVudEJsb2NrIiAKD1NldE1vZGVsUmVxdWVzdBINCgVtb2RlbBgBIAEoCSJFChhTZXRQZXJtaXNzaW9uTW9kZVJlcXVlc3QSKQoEbW9kZRgBIAEoDjIbLmFpYWdlbnQucnBjLlBlcm1pc3Npb25Nb2RlIlAKGUdldEhpc3RvcnlTZXNzaW9uc1JlcXVlc3QSEwoLbWF4X3Jlc3VsdHMYASABKAUSEwoGb2Zmc2V0GAIgASgFSACIAQFCCQoHX29mZnNldCKHAQoSTG9hZEhpc3RvcnlSZXF1ZXN0EhcKCnNlc3Npb25faWQYASABKAlIAIgBARIZCgxwcm9qZWN0X3BhdGgYAiABKAlIAYgBARIOCgZvZmZzZXQYAyABKAUSDQoFbGltaXQYBCABKAVCDQoLX3Nlc3Npb25faWRCDwoNX3Byb2plY3RfcGF0aCJvChlHZXRIaXN0b3J5TWV0YWRhdGFSZXF1ZXN0EhcKCnNlc3Npb25faWQYASABKAlIAIgBARIZCgxwcm9qZWN0X3BhdGgYAiABKAlIAYgBAUINCgtfc2Vzc2lvbl9pZEIPCg1fcHJvamVjdF9wYXRoInwKD0hpc3RvcnlNZXRhZGF0YRITCgt0b3RhbF9saW5lcxgBIAEoBRISCgpzZXNzaW9uX2lkGAIgASgJEhQKDHByb2plY3RfcGF0aBgDIAEoCRIZCgxjdXN0b21fdGl0bGUYBCABKAlIAIgBAUIPCg1fY3VzdG9tX3RpdGxlInIKDUhpc3RvcnlSZXN1bHQSKQoIbWVzc2FnZXMYASADKAsyFy5haWFnZW50LnJwYy5ScGNNZXNzYWdlEg4KBm9mZnNldBgCIAEoBRINCgVjb3VudBgDIAEoBRIXCg9hdmFpbGFibGVfY291bnQYBCABKAUiDgoMRW1wdHlSZXF1ZXN0Ig8KDUVtcHR5UmVzcG9uc2UiSQoOUXVlc3Rpb25PcHRpb24SDQoFbGFiZWwYASABKAkSGAoLZGVzY3JpcHRpb24YAiABKAlIAIgBAUIOCgxfZGVzY3JpcHRpb24ihAEKDFF1ZXN0aW9uSXRlbRIQCghxdWVzdGlvbhgBIAEoCRITCgZoZWFkZXIYAiABKAlIAIgBARIsCgdvcHRpb25zGAMgAygLMhsuYWlhZ2VudC5ycGMuUXVlc3Rpb25PcHRpb24SFAoMbXVsdGlfc2VsZWN0GAQgASgIQgkKB19oZWFkZXIiRgoWQXNrVXNlclF1ZXN0aW9uUmVxdWVzdBIsCglxdWVzdGlvbnMYASADKAsyGS5haWFnZW50LnJwYy5RdWVzdGlvbkl0ZW0iUgoOVXNlckFuc3dlckl0ZW0SEAoIcXVlc3Rpb24YASABKAkSEwoGaGVhZGVyGAIgASgJSACIAQESDgoGYW5zd2VyGAMgASgJQgkKB19oZWFkZXIiRwoXQXNrVXNlclF1ZXN0aW9uUmVzcG9uc2USLAoHYW5zd2VycxgBIAMoCzIbLmFpYWdlbnQucnBjLlVzZXJBbnN3ZXJJdGVtIlQKE1Blcm1pc3Npb25SdWxlVmFsdWUSEQoJdG9vbF9uYW1lGAEgASgJEhkKDHJ1bGVfY29udGVudBgCIAEoCUgAiAEBQg8KDV9ydWxlX2NvbnRlbnQi2wIKEFBlcm1pc3Npb25VcGRhdGUSLwoEdHlwZRgBIAEoDjIhLmFpYWdlbnQucnBjLlBlcm1pc3Npb25VcGRhdGVUeXBlEi8KBXJ1bGVzGAIgAygLMiAuYWlhZ2VudC5ycGMuUGVybWlzc2lvblJ1bGVWYWx1ZRI2CghiZWhhdmlvchgDIAEoDjIfLmFpYWdlbnQucnBjLlBlcm1pc3Npb25CZWhhdmlvckgAiAEBEi4KBG1vZGUYBCABKA4yGy5haWFnZW50LnJwYy5QZXJtaXNzaW9uTW9kZUgBiAEBEhMKC2RpcmVjdG9yaWVzGAUgAygJEkIKC2Rlc3RpbmF0aW9uGAYgASgOMiguYWlhZ2VudC5ycGMuUGVybWlzc2lvblVwZGF0ZURlc3RpbmF0aW9uSAKIAQFCCwoJX2JlaGF2aW9yQgcKBV9tb2RlQg4KDF9kZXN0aW5hdGlvbiKqAQoYUmVxdWVzdFBlcm1pc3Npb25SZXF1ZXN0EhEKCXRvb2xfbmFtZRgBIAEoCRISCgppbnB1dF9qc29uGAIgASgMEhgKC3Rvb2xfdXNlX2lkGAMgASgJSACIAQESPQoWcGVybWlzc2lvbl9zdWdnZXN0aW9ucxgEIAMoCzIdLmFpYWdlbnQucnBjLlBlcm1pc3Npb25VcGRhdGVCDgoMX3Rvb2xfdXNlX2lkIpIBChlSZXF1ZXN0UGVybWlzc2lvblJlc3BvbnNlEhAKCGFwcHJvdmVkGAEgASgIEjkKEnBlcm1pc3Npb25fdXBkYXRlcxgCIAMoCzIdLmFpYWdlbnQucnBjLlBlcm1pc3Npb25VcGRhdGUSGAoLZGVueV9yZWFzb24YAyABKAlIAIgBAUIOCgxfZGVueV9yZWFzb24i3AEKEVNlcnZlckNhbGxSZXF1ZXN0Eg8KB2NhbGxfaWQYASABKAkSDgoGbWV0aG9kGAIgASgJEhUKC3BhcmFtc19qc29uGAMgASgMSAASQAoRYXNrX3VzZXJfcXVlc3Rpb24YCiABKAsyIy5haWFnZW50LnJwYy5Bc2tVc2VyUXVlc3Rpb25SZXF1ZXN0SAASQwoScmVxdWVzdF9wZXJtaXNzaW9uGAsgASgLMiUuYWlhZ2VudC5ycGMuUmVxdWVzdFBlcm1pc3Npb25SZXF1ZXN0SABCCAoGcGFyYW1zIv4BChJTZXJ2ZXJDYWxsUmVzcG9uc2USDwoHY2FsbF9pZBgBIAEoCRIPCgdzdWNjZXNzGAIgASgIEhUKC3Jlc3VsdF9qc29uGAMgASgMSAASQQoRYXNrX3VzZXJfcXVlc3Rpb24YCiABKAsyJC5haWFnZW50LnJwYy5Bc2tVc2VyUXVlc3Rpb25SZXNwb25zZUgAEkQKEnJlcXVlc3RfcGVybWlzc2lvbhgLIAEoCzImLmFpYWdlbnQucnBjLlJlcXVlc3RQZXJtaXNzaW9uUmVzcG9uc2VIABISCgVlcnJvchgEIAEoCUgBiAEBQggKBnJlc3VsdEIICgZfZXJyb3IqTQoIUHJvdmlkZXISGAoUUFJPVklERVJfVU5TUEVDSUZJRUQQABITCg9QUk9WSURFUl9DTEFVREUQARISCg5QUk9WSURFUl9DT0RFWBACKrABCg1TZXNzaW9uU3RhdHVzEh4KGlNFU1NJT05fU1RBVFVTX1VOU1BFQ0lGSUVEEAASHAoYU0VTU0lPTl9TVEFUVVNfQ09OTkVDVEVEEAESHwobU0VTU0lPTl9TVEFUVVNfRElTQ09OTkVDVEVEEAISHgoaU0VTU0lPTl9TVEFUVVNfSU5URVJSVVBURUQQAxIgChxTRVNTSU9OX1NUQVRVU19NT0RFTF9DSEFOR0VEEAQqiAEKDUNvbnRlbnRTdGF0dXMSHgoaQ09OVEVOVF9TVEFUVVNfVU5TUEVDSUZJRUQQABIeChpDT05URU5UX1NUQVRVU19JTl9QUk9HUkVTUxABEhwKGENPTlRFTlRfU1RBVFVTX0NPTVBMRVRFRBACEhkKFUNPTlRFTlRfU1RBVFVTX0ZBSUxFRBADKtABCg5QZXJtaXNzaW9uTW9kZRIfChtQRVJNSVNTSU9OX01PREVfVU5TUEVDSUZJRUQQABIbChdQRVJNSVNTSU9OX01PREVfREVGQVVMVBABEiYKIlBFUk1JU1NJT05fTU9ERV9CWVBBU1NfUEVSTUlTU0lPTlMQAhIgChxQRVJNSVNTSU9OX01PREVfQUNDRVBUX0VESVRTEAMSGAoUUEVSTUlTU0lPTl9NT0RFX1BMQU4QBBIcChhQRVJNSVNTSU9OX01PREVfRE9OVF9BU0sQBSqOAQoLU2FuZGJveE1vZGUSHAoYU0FOREJPWF9NT0RFX1VOU1BFQ0lGSUVEEAASGgoWU0FOREJPWF9NT0RFX1JFQURfT05MWRABEiAKHFNBTkRCT1hfTU9ERV9XT1JLU1BBQ0VfV1JJVEUQAhIjCh9TQU5EQk9YX01PREVfREFOR0VSX0ZVTExfQUNDRVNTEAMqkwEKElBlcm1pc3Npb25CZWhhdmlvchIjCh9QRVJNSVNTSU9OX0JFSEFWSU9SX1VOU1BFQ0lGSUVEEAASHQoZUEVSTUlTU0lPTl9CRUhBVklPUl9BTExPVxABEhwKGFBFUk1JU1NJT05fQkVIQVZJT1JfREVOWRACEhsKF1BFUk1JU1NJT05fQkVIQVZJT1JfQVNLEAMqtwIKFFBlcm1pc3Npb25VcGRhdGVUeXBlEiYKIlBFUk1JU1NJT05fVVBEQVRFX1RZUEVfVU5TUEVDSUZJRUQQABIkCiBQRVJNSVNTSU9OX1VQREFURV9UWVBFX0FERF9SVUxFUxABEigKJFBFUk1JU1NJT05fVVBEQVRFX1RZUEVfUkVQTEFDRV9SVUxFUxACEicKI1BFUk1JU1NJT05fVVBEQVRFX1RZUEVfUkVNT1ZFX1JVTEVTEAMSIwofUEVSTUlTU0lPTl9VUERBVEVfVFlQRV9TRVRfTU9ERRAEEioKJlBFUk1JU1NJT05fVVBEQVRFX1RZUEVfQUREX0RJUkVDVE9SSUVTEAUSLQopUEVSTUlTU0lPTl9VUERBVEVfVFlQRV9SRU1PVkVfRElSRUNUT1JJRVMQBiqOAgobUGVybWlzc2lvblVwZGF0ZURlc3RpbmF0aW9uEi0KKVBFUk1JU1NJT05fVVBEQVRFX0RFU1RJTkFUSU9OX1VOU1BFQ0lGSUVEEAASLworUEVSTUlTU0lPTl9VUERBVEVfREVTVElOQVRJT05fVVNFUl9TRVRUSU5HUxABEjIKLlBFUk1JU1NJT05fVVBEQVRFX0RFU1RJTkFUSU9OX1BST0pFQ1RfU0VUVElOR1MQAhIwCixQRVJNSVNTSU9OX1VQREFURV9ERVNUSU5BVElPTl9MT0NBTF9TRVRUSU5HUxADEikKJVBFUk1JU1NJT05fVVBEQVRFX0RFU1RJTkFUSU9OX1NFU1NJT04QBEIpChRjb20uYXNha2lpLnJwYy5wcm90b0IPQWlBZ2VudFJwY1Byb3RvUAFiBnByb3RvMw");
 
 /**
  * 对应 RpcConnectOptions
@@ -1519,6 +1519,13 @@ export type HistorySession = Message<"aiagent.rpc.HistorySession"> & {
    * @generated from field: string project_path = 5;
    */
   projectPath: string;
+
+  /**
+   * 自定义标题（从 /rename 命令设置）
+   *
+   * @generated from field: optional string custom_title = 6;
+   */
+  customTitle?: string;
 };
 
 /**
@@ -1814,7 +1821,265 @@ export const EmptyResponseSchema: GenMessage<EmptyResponse> = /*@__PURE__*/
   messageDesc(file_ai_agent_rpc, 58);
 
 /**
- * 服务端调用客户端的通用请求
+ * 问题选项
+ *
+ * @generated from message aiagent.rpc.QuestionOption
+ */
+export type QuestionOption = Message<"aiagent.rpc.QuestionOption"> & {
+  /**
+   * @generated from field: string label = 1;
+   */
+  label: string;
+
+  /**
+   * @generated from field: optional string description = 2;
+   */
+  description?: string;
+};
+
+/**
+ * Describes the message aiagent.rpc.QuestionOption.
+ * Use `create(QuestionOptionSchema)` to create a new message.
+ */
+export const QuestionOptionSchema: GenMessage<QuestionOption> = /*@__PURE__*/
+  messageDesc(file_ai_agent_rpc, 59);
+
+/**
+ * 问题项
+ *
+ * @generated from message aiagent.rpc.QuestionItem
+ */
+export type QuestionItem = Message<"aiagent.rpc.QuestionItem"> & {
+  /**
+   * @generated from field: string question = 1;
+   */
+  question: string;
+
+  /**
+   * @generated from field: optional string header = 2;
+   */
+  header?: string;
+
+  /**
+   * @generated from field: repeated aiagent.rpc.QuestionOption options = 3;
+   */
+  options: QuestionOption[];
+
+  /**
+   * @generated from field: bool multi_select = 4;
+   */
+  multiSelect: boolean;
+};
+
+/**
+ * Describes the message aiagent.rpc.QuestionItem.
+ * Use `create(QuestionItemSchema)` to create a new message.
+ */
+export const QuestionItemSchema: GenMessage<QuestionItem> = /*@__PURE__*/
+  messageDesc(file_ai_agent_rpc, 60);
+
+/**
+ * AskUserQuestion 请求
+ *
+ * @generated from message aiagent.rpc.AskUserQuestionRequest
+ */
+export type AskUserQuestionRequest = Message<"aiagent.rpc.AskUserQuestionRequest"> & {
+  /**
+   * @generated from field: repeated aiagent.rpc.QuestionItem questions = 1;
+   */
+  questions: QuestionItem[];
+};
+
+/**
+ * Describes the message aiagent.rpc.AskUserQuestionRequest.
+ * Use `create(AskUserQuestionRequestSchema)` to create a new message.
+ */
+export const AskUserQuestionRequestSchema: GenMessage<AskUserQuestionRequest> = /*@__PURE__*/
+  messageDesc(file_ai_agent_rpc, 61);
+
+/**
+ * 用户回答项
+ *
+ * @generated from message aiagent.rpc.UserAnswerItem
+ */
+export type UserAnswerItem = Message<"aiagent.rpc.UserAnswerItem"> & {
+  /**
+   * @generated from field: string question = 1;
+   */
+  question: string;
+
+  /**
+   * @generated from field: optional string header = 2;
+   */
+  header?: string;
+
+  /**
+   * @generated from field: string answer = 3;
+   */
+  answer: string;
+};
+
+/**
+ * Describes the message aiagent.rpc.UserAnswerItem.
+ * Use `create(UserAnswerItemSchema)` to create a new message.
+ */
+export const UserAnswerItemSchema: GenMessage<UserAnswerItem> = /*@__PURE__*/
+  messageDesc(file_ai_agent_rpc, 62);
+
+/**
+ * AskUserQuestion 响应
+ *
+ * @generated from message aiagent.rpc.AskUserQuestionResponse
+ */
+export type AskUserQuestionResponse = Message<"aiagent.rpc.AskUserQuestionResponse"> & {
+  /**
+   * @generated from field: repeated aiagent.rpc.UserAnswerItem answers = 1;
+   */
+  answers: UserAnswerItem[];
+};
+
+/**
+ * Describes the message aiagent.rpc.AskUserQuestionResponse.
+ * Use `create(AskUserQuestionResponseSchema)` to create a new message.
+ */
+export const AskUserQuestionResponseSchema: GenMessage<AskUserQuestionResponse> = /*@__PURE__*/
+  messageDesc(file_ai_agent_rpc, 63);
+
+/**
+ * 权限规则值
+ *
+ * @generated from message aiagent.rpc.PermissionRuleValue
+ */
+export type PermissionRuleValue = Message<"aiagent.rpc.PermissionRuleValue"> & {
+  /**
+   * @generated from field: string tool_name = 1;
+   */
+  toolName: string;
+
+  /**
+   * @generated from field: optional string rule_content = 2;
+   */
+  ruleContent?: string;
+};
+
+/**
+ * Describes the message aiagent.rpc.PermissionRuleValue.
+ * Use `create(PermissionRuleValueSchema)` to create a new message.
+ */
+export const PermissionRuleValueSchema: GenMessage<PermissionRuleValue> = /*@__PURE__*/
+  messageDesc(file_ai_agent_rpc, 64);
+
+/**
+ * 权限更新配置
+ *
+ * @generated from message aiagent.rpc.PermissionUpdate
+ */
+export type PermissionUpdate = Message<"aiagent.rpc.PermissionUpdate"> & {
+  /**
+   * @generated from field: aiagent.rpc.PermissionUpdateType type = 1;
+   */
+  type: PermissionUpdateType;
+
+  /**
+   * @generated from field: repeated aiagent.rpc.PermissionRuleValue rules = 2;
+   */
+  rules: PermissionRuleValue[];
+
+  /**
+   * @generated from field: optional aiagent.rpc.PermissionBehavior behavior = 3;
+   */
+  behavior?: PermissionBehavior;
+
+  /**
+   * @generated from field: optional aiagent.rpc.PermissionMode mode = 4;
+   */
+  mode?: PermissionMode;
+
+  /**
+   * @generated from field: repeated string directories = 5;
+   */
+  directories: string[];
+
+  /**
+   * @generated from field: optional aiagent.rpc.PermissionUpdateDestination destination = 6;
+   */
+  destination?: PermissionUpdateDestination;
+};
+
+/**
+ * Describes the message aiagent.rpc.PermissionUpdate.
+ * Use `create(PermissionUpdateSchema)` to create a new message.
+ */
+export const PermissionUpdateSchema: GenMessage<PermissionUpdate> = /*@__PURE__*/
+  messageDesc(file_ai_agent_rpc, 65);
+
+/**
+ * RequestPermission 请求
+ *
+ * @generated from message aiagent.rpc.RequestPermissionRequest
+ */
+export type RequestPermissionRequest = Message<"aiagent.rpc.RequestPermissionRequest"> & {
+  /**
+   * @generated from field: string tool_name = 1;
+   */
+  toolName: string;
+
+  /**
+   * 工具输入参数（保持 JSON 以兼容动态结构）
+   *
+   * @generated from field: bytes input_json = 2;
+   */
+  inputJson: Uint8Array;
+
+  /**
+   * @generated from field: optional string tool_use_id = 3;
+   */
+  toolUseId?: string;
+
+  /**
+   * @generated from field: repeated aiagent.rpc.PermissionUpdate permission_suggestions = 4;
+   */
+  permissionSuggestions: PermissionUpdate[];
+};
+
+/**
+ * Describes the message aiagent.rpc.RequestPermissionRequest.
+ * Use `create(RequestPermissionRequestSchema)` to create a new message.
+ */
+export const RequestPermissionRequestSchema: GenMessage<RequestPermissionRequest> = /*@__PURE__*/
+  messageDesc(file_ai_agent_rpc, 66);
+
+/**
+ * RequestPermission 响应
+ *
+ * @generated from message aiagent.rpc.RequestPermissionResponse
+ */
+export type RequestPermissionResponse = Message<"aiagent.rpc.RequestPermissionResponse"> & {
+  /**
+   * @generated from field: bool approved = 1;
+   */
+  approved: boolean;
+
+  /**
+   * @generated from field: repeated aiagent.rpc.PermissionUpdate permission_updates = 2;
+   */
+  permissionUpdates: PermissionUpdate[];
+
+  /**
+   * @generated from field: optional string deny_reason = 3;
+   */
+  denyReason?: string;
+};
+
+/**
+ * Describes the message aiagent.rpc.RequestPermissionResponse.
+ * Use `create(RequestPermissionResponseSchema)` to create a new message.
+ */
+export const RequestPermissionResponseSchema: GenMessage<RequestPermissionResponse> = /*@__PURE__*/
+  messageDesc(file_ai_agent_rpc, 67);
+
+/**
+ * 服务端调用客户端的通用请求（支持类型化参数）
  *
  * @generated from message aiagent.rpc.ServerCallRequest
  */
@@ -1834,11 +2099,33 @@ export type ServerCallRequest = Message<"aiagent.rpc.ServerCallRequest"> & {
   method: string;
 
   /**
-   * 参数（JSON 序列化）
-   *
-   * @generated from field: bytes params_json = 3;
+   * @generated from oneof aiagent.rpc.ServerCallRequest.params
    */
-  paramsJson: Uint8Array;
+  params: {
+    /**
+     * 旧版兼容：JSON 序列化
+     *
+     * @generated from field: bytes params_json = 3;
+     */
+    value: Uint8Array;
+    case: "paramsJson";
+  } | {
+    /**
+     * AskUserQuestion 请求
+     *
+     * @generated from field: aiagent.rpc.AskUserQuestionRequest ask_user_question = 10;
+     */
+    value: AskUserQuestionRequest;
+    case: "askUserQuestion";
+  } | {
+    /**
+     * RequestPermission 请求
+     *
+     * @generated from field: aiagent.rpc.RequestPermissionRequest request_permission = 11;
+     */
+    value: RequestPermissionRequest;
+    case: "requestPermission";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
@@ -1846,10 +2133,10 @@ export type ServerCallRequest = Message<"aiagent.rpc.ServerCallRequest"> & {
  * Use `create(ServerCallRequestSchema)` to create a new message.
  */
 export const ServerCallRequestSchema: GenMessage<ServerCallRequest> = /*@__PURE__*/
-  messageDesc(file_ai_agent_rpc, 59);
+  messageDesc(file_ai_agent_rpc, 68);
 
 /**
- * 客户端响应服务端的调用
+ * 客户端响应服务端的调用（支持类型化响应）
  *
  * @generated from message aiagent.rpc.ServerCallResponse
  */
@@ -1869,11 +2156,33 @@ export type ServerCallResponse = Message<"aiagent.rpc.ServerCallResponse"> & {
   success: boolean;
 
   /**
-   * 结果（JSON 序列化）
-   *
-   * @generated from field: bytes result_json = 3;
+   * @generated from oneof aiagent.rpc.ServerCallResponse.result
    */
-  resultJson: Uint8Array;
+  result: {
+    /**
+     * 旧版兼容：JSON 序列化
+     *
+     * @generated from field: bytes result_json = 3;
+     */
+    value: Uint8Array;
+    case: "resultJson";
+  } | {
+    /**
+     * AskUserQuestion 响应
+     *
+     * @generated from field: aiagent.rpc.AskUserQuestionResponse ask_user_question = 10;
+     */
+    value: AskUserQuestionResponse;
+    case: "askUserQuestion";
+  } | {
+    /**
+     * RequestPermission 响应
+     *
+     * @generated from field: aiagent.rpc.RequestPermissionResponse request_permission = 11;
+     */
+    value: RequestPermissionResponse;
+    case: "requestPermission";
+  } | { case: undefined; value?: undefined };
 
   /**
    * 错误信息（如果失败）
@@ -1888,7 +2197,7 @@ export type ServerCallResponse = Message<"aiagent.rpc.ServerCallResponse"> & {
  * Use `create(ServerCallResponseSchema)` to create a new message.
  */
 export const ServerCallResponseSchema: GenMessage<ServerCallResponse> = /*@__PURE__*/
-  messageDesc(file_ai_agent_rpc, 60);
+  messageDesc(file_ai_agent_rpc, 69);
 
 /**
  * 对应 RpcProvider
@@ -2098,4 +2407,149 @@ export enum SandboxMode {
  */
 export const SandboxModeSchema: GenEnum<SandboxMode> = /*@__PURE__*/
   enumDesc(file_ai_agent_rpc, 4);
+
+/**
+ * 权限行为
+ *
+ * @generated from enum aiagent.rpc.PermissionBehavior
+ */
+export enum PermissionBehavior {
+  /**
+   * @generated from enum value: PERMISSION_BEHAVIOR_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * allow
+   *
+   * @generated from enum value: PERMISSION_BEHAVIOR_ALLOW = 1;
+   */
+  ALLOW = 1,
+
+  /**
+   * deny
+   *
+   * @generated from enum value: PERMISSION_BEHAVIOR_DENY = 2;
+   */
+  DENY = 2,
+
+  /**
+   * ask
+   *
+   * @generated from enum value: PERMISSION_BEHAVIOR_ASK = 3;
+   */
+  ASK = 3,
+}
+
+/**
+ * Describes the enum aiagent.rpc.PermissionBehavior.
+ */
+export const PermissionBehaviorSchema: GenEnum<PermissionBehavior> = /*@__PURE__*/
+  enumDesc(file_ai_agent_rpc, 5);
+
+/**
+ * 权限更新类型
+ *
+ * @generated from enum aiagent.rpc.PermissionUpdateType
+ */
+export enum PermissionUpdateType {
+  /**
+   * @generated from enum value: PERMISSION_UPDATE_TYPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * addRules
+   *
+   * @generated from enum value: PERMISSION_UPDATE_TYPE_ADD_RULES = 1;
+   */
+  ADD_RULES = 1,
+
+  /**
+   * replaceRules
+   *
+   * @generated from enum value: PERMISSION_UPDATE_TYPE_REPLACE_RULES = 2;
+   */
+  REPLACE_RULES = 2,
+
+  /**
+   * removeRules
+   *
+   * @generated from enum value: PERMISSION_UPDATE_TYPE_REMOVE_RULES = 3;
+   */
+  REMOVE_RULES = 3,
+
+  /**
+   * setMode
+   *
+   * @generated from enum value: PERMISSION_UPDATE_TYPE_SET_MODE = 4;
+   */
+  SET_MODE = 4,
+
+  /**
+   * addDirectories
+   *
+   * @generated from enum value: PERMISSION_UPDATE_TYPE_ADD_DIRECTORIES = 5;
+   */
+  ADD_DIRECTORIES = 5,
+
+  /**
+   * removeDirectories
+   *
+   * @generated from enum value: PERMISSION_UPDATE_TYPE_REMOVE_DIRECTORIES = 6;
+   */
+  REMOVE_DIRECTORIES = 6,
+}
+
+/**
+ * Describes the enum aiagent.rpc.PermissionUpdateType.
+ */
+export const PermissionUpdateTypeSchema: GenEnum<PermissionUpdateType> = /*@__PURE__*/
+  enumDesc(file_ai_agent_rpc, 6);
+
+/**
+ * 权限更新目标
+ *
+ * @generated from enum aiagent.rpc.PermissionUpdateDestination
+ */
+export enum PermissionUpdateDestination {
+  /**
+   * @generated from enum value: PERMISSION_UPDATE_DESTINATION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * userSettings
+   *
+   * @generated from enum value: PERMISSION_UPDATE_DESTINATION_USER_SETTINGS = 1;
+   */
+  USER_SETTINGS = 1,
+
+  /**
+   * projectSettings
+   *
+   * @generated from enum value: PERMISSION_UPDATE_DESTINATION_PROJECT_SETTINGS = 2;
+   */
+  PROJECT_SETTINGS = 2,
+
+  /**
+   * localSettings
+   *
+   * @generated from enum value: PERMISSION_UPDATE_DESTINATION_LOCAL_SETTINGS = 3;
+   */
+  LOCAL_SETTINGS = 3,
+
+  /**
+   * session
+   *
+   * @generated from enum value: PERMISSION_UPDATE_DESTINATION_SESSION = 4;
+   */
+  SESSION = 4,
+}
+
+/**
+ * Describes the enum aiagent.rpc.PermissionUpdateDestination.
+ */
+export const PermissionUpdateDestinationSchema: GenEnum<PermissionUpdateDestination> = /*@__PURE__*/
+  enumDesc(file_ai_agent_rpc, 7);
 

@@ -10,11 +10,19 @@ import { RSocketConnector } from 'rsocket-core'
 import { WebsocketClientTransport } from 'rsocket-websocket-client'
 import type { RSocket, Payload, OnExtensionSubscriber, OnNextSubscriber, OnTerminalSubscriber } from 'rsocket-core'
 import { loggers } from '@/utils/logger'
+import {
+  decodeServerCallRequest,
+  encodeServerCallResponse,
+  type DecodedServerCallRequest
+} from './protoCodec'
 
 const log = loggers.agent
 
 /** 服务端调用客户端的 handler 类型 */
 export type ServerCallHandler = (params: any) => Promise<any>
+
+/** 连接断开事件处理器类型 */
+export type DisconnectHandler = (error?: Error) => void
 
 /**
  * RSocket 路由元数据编码
@@ -82,6 +90,8 @@ export class RSocketClient {
   private options: Required<RSocketClientOptions>
   /** 注册的服务端调用处理器 */
   private serverCallHandlers = new Map<string, ServerCallHandler>()
+  /** 连接断开事件处理器 */
+  private disconnectHandlers = new Set<DisconnectHandler>()
 
   constructor(options: RSocketClientOptions) {
     this.options = {
@@ -106,6 +116,38 @@ export class RSocketClient {
       this.serverCallHandlers.delete(method)
       log.info(`[RSocketClient] 取消注册 handler: ${method}`)
     }
+  }
+
+  /**
+   * 订阅连接断开事件
+   * @param handler 断开事件处理器
+   * @returns 取消订阅函数
+   */
+  onDisconnect(handler: DisconnectHandler): () => void {
+    this.disconnectHandlers.add(handler)
+    return () => {
+      this.disconnectHandlers.delete(handler)
+    }
+  }
+
+  /**
+   * 处理连接关闭（被动或主动）
+   * @param error 关闭原因（可选）
+   */
+  private handleConnectionClosed(error?: Error): void {
+    log.info('[RSocketClient] 连接已关闭', error ? `原因: ${error.message}` : '(正常关闭)')
+
+    // 清理内部状态
+    this.rsocket = null
+
+    // 通知所有订阅者
+    this.disconnectHandlers.forEach(handler => {
+      try {
+        handler(error)
+      } catch (e) {
+        log.error('[RSocketClient] 断开回调执行失败:', e)
+      }
+    })
   }
 
   /**
@@ -135,6 +177,11 @@ export class RSocketClient {
     try {
       this.rsocket = await connector.connect()
       log.info('[RSocketClient] 连接成功')
+
+      // 关键：注册连接关闭监听
+      this.rsocket.onClose((error?: Error) => {
+        this.handleConnectionClosed(error)
+      })
     } catch (error) {
       log.error('[RSocketClient] 连接失败:', error)
       throw error
@@ -193,49 +240,78 @@ export class RSocketClient {
   }
 
   /**
-   * 处理服务端调用（按路由分发）
+   * 处理服务端调用（Protobuf 模式）
    *
-   * 路由即方法名（如 'AskUserQuestion'），数据可以是 JSON 或 Protobuf
+   * 只支持 client.call 路由，使用 Protobuf ServerCallRequest/Response 格式。
    */
   private async handleServerCall(payload: Payload): Promise<Payload> {
     const route = extractRoute(payload)
     log.info(`[RSocketClient] 收到服务端请求: route=${route}`)
 
-    // 路由即方法名
-    const handler = this.serverCallHandlers.get(route)
+    const data = payload.data ? new Uint8Array(payload.data) : new Uint8Array()
+
+    // 只支持 Protobuf ServerCall 路由
+    if (route === 'client.call') {
+      return this.handleProtobufServerCall(data)
+    }
+
+    // 不支持其他路由
+    throw new Error(`Unsupported route: ${route}. Only 'client.call' is supported.`)
+  }
+
+  /**
+   * 处理 Protobuf ServerCall（新版）
+   */
+  private async handleProtobufServerCall(data: Uint8Array): Promise<Payload> {
+    let callRequest: DecodedServerCallRequest
+
+    try {
+      callRequest = decodeServerCallRequest(data)
+      log.info(`[RSocketClient] Protobuf ServerCall: method=${callRequest.method}, callId=${callRequest.callId}`)
+    } catch (error) {
+      log.error('[RSocketClient] 解码 ServerCallRequest 失败:', error)
+      throw new Error('Failed to decode ServerCallRequest')
+    }
+
+    const { callId, method, params } = callRequest
+
+    // 查找 handler
+    const handler = this.serverCallHandlers.get(method)
     if (!handler) {
-      const errorMsg = `Handler not found: ${route}`
-      log.warn(`[RSocketClient] ${errorMsg}`)
-      throw new Error(errorMsg)
+      log.warn(`[RSocketClient] Handler not found: ${method}`)
+      // 返回错误响应
+      const errorResponse = encodeServerCallResponse(callId, method, false, undefined, `Handler not found: ${method}`)
+      return { data: Buffer.from(errorResponse) }
     }
 
     try {
-      // 直接传递原始字节，让 handler 自行解析（支持 JSON 和 Protobuf）
-      const data = payload.data ? new Uint8Array(payload.data) : new Uint8Array()
+      // 执行 handler（传递已解码的参数）
+      const result = await handler(params)
 
-      // 执行 handler
-      const result = await handler(data)
+      log.info(`[RSocketClient] Protobuf ServerCall 成功: method=${method}, callId=${callId}`)
 
-      // 返回 JSON 响应
-      const resultJson = JSON.stringify(result)
-      log.info(`[RSocketClient] 服务端调用成功: route=${route}`)
-
-      return { data: Buffer.from(resultJson) }
+      // 编码 Protobuf 响应
+      const responseBytes = encodeServerCallResponse(callId, method, true, result)
+      return { data: Buffer.from(responseBytes) }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
-      log.error(`[RSocketClient] 服务端调用失败: route=${route}, error=${errorMsg}`)
-      throw error
+      log.error(`[RSocketClient] Protobuf ServerCall 失败: method=${method}, error=${errorMsg}`)
+
+      // 返回错误响应
+      const errorResponse = encodeServerCallResponse(callId, method, false, undefined, errorMsg)
+      return { data: Buffer.from(errorResponse) }
     }
   }
 
   /**
-   * 断开连接
+   * 主动断开连接
+   * 注意：close() 会触发 onClose 回调，由 handleConnectionClosed 统一处理状态清理
    */
   disconnect(): void {
     if (this.rsocket) {
+      log.info('[RSocketClient] 主动断开连接')
       this.rsocket.close()
-      this.rsocket = null
-      log.info('[RSocketClient] 已断开连接')
+      // 不在这里设置 rsocket = null，让 onClose 回调统一处理
     }
   }
 
