@@ -40,12 +40,71 @@ import { HISTORY_LAZY_LOAD_SIZE, HISTORY_PAGE_SIZE } from '@/constants/messageWi
 const log = loggers.session
 
 /**
+ * 解析 RPC 参数为 JSON 对象
+ *
+ * 后端通过 RSocket 发送 JSON 字符串的字节数组，前端收到的可能是：
+ * 1. Uint8Array - 直接解码
+ * 2. ArrayBuffer - 转换后解码
+ * 3. { "0": 123, "1": 34, ... } - 被序列化的字节数组格式
+ * 4. 正常的 JSON 对象 - 直接返回
+ */
+function parseRpcParams(input: unknown): Record<string, any> {
+  if (!input) return {}
+
+  // 1. Uint8Array - 直接解码为 JSON 字符串
+  if (input instanceof Uint8Array) {
+    try {
+      const str = new TextDecoder().decode(input)
+      return JSON.parse(str)
+    } catch {
+      return {}
+    }
+  }
+
+  // 2. ArrayBuffer - 转换后解码
+  if (input instanceof ArrayBuffer) {
+    try {
+      const str = new TextDecoder().decode(new Uint8Array(input))
+      return JSON.parse(str)
+    } catch {
+      return {}
+    }
+  }
+
+  // 3. 对象形式
+  if (typeof input === 'object' && !Array.isArray(input)) {
+    const obj = input as Record<string, any>
+    const keys = Object.keys(obj)
+
+    // 检查是否是字节数组格式：键是连续数字索引，值是数字
+    if (keys.length > 0 && keys.every(k => /^\d+$/.test(k)) && typeof obj['0'] === 'number') {
+      const bytes = new Uint8Array(keys.length)
+      for (let i = 0; i < keys.length; i++) {
+        bytes[i] = obj[i.toString()]
+      }
+      try {
+        const str = new TextDecoder().decode(bytes)
+        return JSON.parse(str)
+      } catch {
+        return {}
+      }
+    }
+
+    // 正常的 JSON 对象，直接返回
+    return obj
+  }
+
+  return {}
+}
+
+/**
  * UI 状态（用于切换会话时保存/恢复）
  */
 export interface UIState {
   inputText: string
   contexts: any[]
   scrollPosition: number
+  newMessageCount: number  // 滚动按钮上的新消息计数
 }
 
 /**
@@ -184,7 +243,8 @@ export function useSessionTab(initialOrder: number = 0) {
   const uiState = reactive<UIState>({
     inputText: '',
     contexts: [],
-    scrollPosition: 0
+    scrollPosition: 0,
+    newMessageCount: 0
   })
 
   // ========== 压缩状态 ==========
@@ -393,18 +453,7 @@ export function useSessionTab(initialOrder: number = 0) {
       return
     }
 
-    // 生成状态门控
-    if (!messagesHandler.isGenerating.value) {
-      const isInterruptResult =
-        normalized.kind === 'result' &&
-        (normalized.data as any)?.subtype === 'interrupted'
-
-      if (!isInterruptResult) {
-        log.debug('[handleMessage] isGenerating=false，忽略消息:', normalized.kind)
-        return
-      }
-    }
-
+    // Note: 不再根据 isGenerating 状态拦截，收到消息就展示
     // 根据消息类型分发处理
     switch (normalized.kind) {
       case 'stream_event':
@@ -538,17 +587,6 @@ export function useSessionTab(initialOrder: number = 0) {
       // 连接成功，重置重连计数
       reconnectAttempts = 0
 
-      // 设置发送消息函数
-      messagesHandler.setSendMessageFn(async (content: ContentBlock[]) => {
-        if (!sessionId.value) {
-          throw new Error('会话未连接')
-        }
-        await aiAgentService.sendMessageWithContent(
-          sessionId.value,
-          content as any
-        )
-      })
-
       // 设置处理队列前的回调（用于应用 pending settings）
       messagesHandler.setBeforeProcessQueueFn(async () => {
         log.debug(`[Tab ${tabId}] 处理队列前，应用 pending settings`)
@@ -565,7 +603,7 @@ export function useSessionTab(initialOrder: number = 0) {
       log.info(`[Tab ${tabId}] 连接成功: sessionId=${result.sessionId}`)
 
       // 连接成功后，处理队列中的消息
-      messagesHandler.processNextQueuedMessage()
+      processNextQueuedMessage()
     } catch (error) {
       connectionState.status = ConnectionStatus.ERROR
       connectionState.lastError = error instanceof Error ? error.message : String(error)
@@ -799,7 +837,7 @@ export function useSessionTab(initialOrder: number = 0) {
       log.info(`[Tab ${tabId}] 重连成功: sessionId=${result.sessionId}`)
 
       // 重连成功后，处理队列中的消息
-      messagesHandler.processNextQueuedMessage()
+      processNextQueuedMessage()
     } catch (error) {
       connectionState.status = ConnectionStatus.ERROR
       connectionState.lastError = error instanceof Error ? error.message : String(error)
@@ -821,6 +859,8 @@ export function useSessionTab(initialOrder: number = 0) {
     // 注册 AskUserQuestion 处理器
     aiAgentService.register(sessionId.value, 'AskUserQuestion', async (params) => {
       log.info(`[Tab ${tabId}] 收到 AskUserQuestion 请求:`, params)
+      // 调试日志：打印 RPC 原始参数
+      console.log('❓ [RPC AskUserQuestion] 原始参数:', JSON.stringify(params, null, 2))
 
       return new Promise((resolve, reject) => {
         const questionId = `question-${Date.now()}`
@@ -840,25 +880,26 @@ export function useSessionTab(initialOrder: number = 0) {
     })
 
     // 注册 RequestPermission 处理器
-    aiAgentService.register(sessionId.value, 'RequestPermission', async (params) => {
-      log.info(`[Tab ${tabId}] 收到 RequestPermission 请求:`, params)
+    aiAgentService.register(sessionId.value, 'RequestPermission', async (rawParams) => {
+      // 解析 RPC 参数（可能是 Uint8Array 或字节数组对象格式）
+      const params = parseRpcParams(rawParams)
+      const toolName = params.toolName || 'Unknown'
+      const toolUseId = params.toolUseId
+      const input = params.input || {}
+      const permissionSuggestions = params.permissionSuggestions
+
+      log.info(`[Tab ${tabId}] 收到权限请求: ${toolName}`)
 
       return new Promise((resolve, reject) => {
         const permissionId = `permission-${Date.now()}`
 
-        // 查找匹配的工具调用 ID
-        let matchedToolCallId: string | undefined
-        if (params.toolUseId) {
-          matchedToolCallId = params.toolUseId
-        }
-
         const request: Omit<PendingPermissionRequest, 'createdAt'> = {
           id: permissionId,
           sessionId: sessionId.value!,
-          toolName: params.toolName,
-          input: params.input || {},
-          matchedToolCallId,
-          permissionSuggestions: params.permissionSuggestions,
+          toolName,
+          input,
+          matchedToolCallId: toolUseId,
+          permissionSuggestions,
           resolve: (response: PermissionResponse) => {
             resolve(response)
           },
@@ -967,17 +1008,62 @@ export function useSessionTab(initialOrder: number = 0) {
     }
 
     // ★ 没有生成中：添加到 UI → 应用设置 → 确保连接 → 发送
+    log.info(`[Tab ${tabId}] 消息不在队列中，直接处理`)
     const { userMessage, mergedContent } = messagesHandler.addMessageToUI(message)
     touch()
 
-    // 应用待定设置（可能触发重连）
-    await applyPendingSettingsIfNeeded()
+    // 发送消息到后端
+    await sendMessageToBackend(userMessage, mergedContent, message)
+  }
 
-    // 确保连接就绪
-    await ensureConnected()
+  /**
+   * 发送消息到后端（内部方法）
+   */
+  async function sendMessageToBackend(
+    userMessage: Message,
+    mergedContent: ContentBlock[],
+    originalMessage: { contexts: any[]; contents: ContentBlock[] }
+  ): Promise<void> {
+    try {
+      // 应用待定设置（可能触发重连）
+      log.info(`[Tab ${tabId}] 应用待定设置...`)
+      await applyPendingSettingsIfNeeded()
 
-    // 发送消息
-    messagesHandler.sendDirectly(userMessage, mergedContent, message)
+      // 确保连接就绪
+      log.info(`[Tab ${tabId}] 确保连接就绪...`)
+      await ensureConnected()
+
+      if (!sessionId.value) {
+        throw new Error('会话未连接')
+      }
+
+      // 设置生成状态
+      messagesHandler.startGenerating(userMessage.id)
+      log.info(`[Tab ${tabId}] 开始发送消息到后端...`)
+
+      // 直接调用 aiAgentService 发送
+      await aiAgentService.sendMessageWithContent(sessionId.value, mergedContent as any)
+      log.info(`[Tab ${tabId}] 消息发送完成`)
+    } catch (err) {
+      log.error(`[Tab ${tabId}] ❌ 发送消息失败:`, err)
+      // 停止生成状态
+      messagesHandler.stopGenerating()
+      // 消息已在 UI 中，加入队列等待重试
+      messagesHandler.addToQueue(originalMessage)
+    }
+  }
+
+  /**
+   * 处理队列中的下一条消息
+   */
+  async function processNextQueuedMessage(): Promise<void> {
+    const next = messagesHandler.popNextQueuedMessage()
+    if (!next) {
+      return
+    }
+
+    log.info(`[Tab ${tabId}] 处理队列消息: ${next.userMessage.id}`)
+    await sendMessageToBackend(next.userMessage, next.mergedContent, next.originalMessage)
   }
 
   /**
@@ -992,6 +1078,9 @@ export function useSessionTab(initialOrder: number = 0) {
 
   /**
    * 中断当前操作
+   *
+   * 注意：此方法只发送中断请求，不会清空消息队列
+   * 如需清空队列，请在调用前显式调用 clearQueue()
    */
   async function interrupt(): Promise<void> {
     if (!sessionId.value) {
@@ -999,7 +1088,6 @@ export function useSessionTab(initialOrder: number = 0) {
     }
 
     await aiAgentService.interrupt(sessionId.value)
-    messagesHandler.clearQueue()
     log.info(`[Tab ${tabId}] 中断请求已发送`)
   }
 
@@ -1235,6 +1323,7 @@ export function useSessionTab(initialOrder: number = 0) {
     if (state.inputText !== undefined) uiState.inputText = state.inputText
     if (state.contexts !== undefined) uiState.contexts = state.contexts
     if (state.scrollPosition !== undefined) uiState.scrollPosition = state.scrollPosition
+    if (state.newMessageCount !== undefined) uiState.newMessageCount = state.newMessageCount
   }
 
   /**
@@ -1252,6 +1341,7 @@ export function useSessionTab(initialOrder: number = 0) {
     uiState.inputText = ''
     uiState.contexts = []
     uiState.scrollPosition = 0
+    uiState.newMessageCount = 0
 
     // 重置错误状态
     connectionState.lastError = null

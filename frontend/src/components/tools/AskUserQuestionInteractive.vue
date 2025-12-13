@@ -272,15 +272,21 @@ function handleCancel() {
 
 <style scoped>
 .ask-user-container {
-  margin: 4px 0;
+  max-height: 60vh; /* 限制最大高度，避免遮挡过多 */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .ask-user-card {
   background: var(--theme-background, #ffffff);
   border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
 }
 
 .ask-user-header {
@@ -303,7 +309,8 @@ function handleCancel() {
 
 .questions-container {
   padding: 16px;
-  max-height: 400px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;

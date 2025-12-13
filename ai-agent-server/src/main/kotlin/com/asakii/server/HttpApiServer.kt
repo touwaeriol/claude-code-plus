@@ -7,6 +7,11 @@ import com.asakii.rpc.api.IdeTools
 import com.asakii.rpc.api.IdeTheme
 import com.asakii.rpc.api.DiffRequest
 import com.asakii.rpc.api.EditOperation
+import com.asakii.rpc.api.JetBrainsApi
+import com.asakii.rpc.api.JetBrainsCapabilities
+import com.asakii.rpc.api.DefaultJetBrainsApi
+import com.asakii.rpc.api.JetBrainsSessionState
+import com.asakii.rpc.api.JetBrainsSessionCommand
 
 import io.ktor.http.*
 import io.ktor.http.content.*
@@ -90,10 +95,33 @@ data class FileSearchResponse(
  */
 private val logger = KotlinLogging.logger {}
 
+/**
+ * JetBrains RSocket Handler 接口
+ * 由插件模块实现，用于处理 JetBrains IDE 集成的 RSocket 调用
+ */
+interface JetBrainsRSocketHandlerProvider {
+    /**
+     * 创建 RSocket 请求处理器
+     */
+    fun createHandler(): io.rsocket.kotlin.RSocket
+
+    /**
+     * 设置客户端 requester（用于反向调用）
+     */
+    fun setClientRequester(clientId: String, requester: io.rsocket.kotlin.RSocket)
+
+    /**
+     * 移除客户端
+     */
+    fun removeClient(clientId: String)
+}
+
 class HttpApiServer(
     private val ideTools: IdeTools,
     private val scope: CoroutineScope,
-    private val frontendDir: Path? = null  // 开发模式下可以为 null
+    private val frontendDir: Path? = null,  // 开发模式下可以为 null
+    private val jetbrainsApi: JetBrainsApi = DefaultJetBrainsApi,  // 默认不支持 JetBrains 集成
+    private val jetbrainsRSocketHandler: JetBrainsRSocketHandlerProvider? = null  // JetBrains RSocket 处理器
 ) : com.asakii.bridge.EventBridge {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -170,6 +198,23 @@ class HttpApiServer(
                     rsocketHandler.createHandler()
                 }
 
+                // JetBrains IDE 集成 RSocket 端点
+                if (jetbrainsRSocketHandler != null) {
+                    rSocket("jetbrains-rsocket") {
+                        val clientId = java.util.UUID.randomUUID().toString()
+                        logger.info { "🔌 [JetBrains RSocket] 客户端连接: $clientId" }
+                        jetbrainsRSocketHandler.setClientRequester(clientId, requester)
+
+                        // 连接关闭时清理
+                        requester.coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion {
+                            logger.info { "🔌 [JetBrains RSocket] 客户端断开: $clientId" }
+                            jetbrainsRSocketHandler.removeClient(clientId)
+                        }
+
+                        jetbrainsRSocketHandler.createHandler()
+                    }
+                }
+
                 // RESTful API 路由
                 route("/api") {
                     // 通用 RPC 端点（用于前端测试连接和通用调用）
@@ -186,94 +231,16 @@ class HttpApiServer(
                                 "test.ping" -> {
                                     call.respondText("""{"success":true,"message":"pong"}""", ContentType.Application.Json)
                                 }
-                                "ide.getLocale" -> {
-                                    val locale = ideTools.getLocale()
-                                    call.respondText(
-                                        """{"success":true,"data":"$locale"}""",
-                                        ContentType.Application.Json
-                                    )
-                                }
-                                "ide.setLocale" -> {
-                                    val request = json.decodeFromString<FrontendRequest>(requestBody)
-                                    val locale = request.data?.jsonPrimitive?.contentOrNull
-                                    
-                                    if (!locale.isNullOrBlank()) {
-                                        val result = ideTools.setLocale(locale)
-                                        val success = result.isSuccess
-                                        call.respondText(
-                                            """{"success":$success}""",
-                                            ContentType.Application.Json
-                                        )
-                                    } else {
-                                        call.respondText(
-                                            """{"success":false,"error":"Missing locale"}""",
-                                            ContentType.Application.Json
-                                        )
-                                    }
-                                }
                                 "ide.getProjectPath" -> {
-                                    // 返回项目路径（格式: {"success":true,"data":{"projectPath":"..."}}）
                                     val projectPath = ideTools.getProjectPath()
-                                    call.respondText(
-                                        """{"success":true,"data":{"projectPath":"${projectPath.replace("\\", "\\\\")}"}}""",
-                                        ContentType.Application.Json
-                                    )
-                                }
-                                "ide.openFile" -> {
-                                    // 解析请求数据
-                                    val request = json.decodeFromString<FrontendRequest>(requestBody)
-                                    val data = request.data?.jsonObject
-                                    val filePath = data?.get("filePath")?.jsonPrimitive?.contentOrNull ?: ""
-                                    val line = data?.get("line")?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
-                                    val column = data?.get("column")?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
-                                    
-                                    val result = ideTools.openFile(filePath, line, column)
-                                    val response = result.fold(
-                                        onSuccess = { FrontendResponse(success = true) },
-                                        onFailure = { FrontendResponse(success = false, error = it.message) }
+                                    val response = FrontendResponse(
+                                        success = true,
+                                        data = mapOf("projectPath" to JsonPrimitive(projectPath))
                                     )
                                     call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
-                                "ide.showDiff" -> {
-                                    // 解析请求数据
-                                    val request = json.decodeFromString<FrontendRequest>(requestBody)
-                                    val data = request.data?.jsonObject
-                                    val filePath = data?.get("filePath")?.jsonPrimitive?.contentOrNull ?: ""
-                                    val oldContent = data?.get("oldContent")?.jsonPrimitive?.contentOrNull ?: ""
-                                    val newContent = data?.get("newContent")?.jsonPrimitive?.contentOrNull ?: ""
-                                    val title = data?.get("title")?.jsonPrimitive?.contentOrNull
-                                    val rebuildFromFile = data?.get("rebuildFromFile")?.jsonPrimitive?.contentOrNull?.toBoolean() ?: false
-                                    
-                                    val editsJson = data?.get("edits")
-                                    val edits = if (editsJson != null && editsJson is JsonArray) {
-                                        editsJson.mapNotNull { editElement ->
-                                            val editObj = editElement as? JsonObject
-                                            if (editObj != null) {
-                                                EditOperation(
-                                                    oldString = editObj["oldString"]?.jsonPrimitive?.content ?: "",
-                                                    newString = editObj["newString"]?.jsonPrimitive?.content ?: "",
-                                                    replaceAll = editObj["replaceAll"]?.jsonPrimitive?.content?.toBoolean() ?: false
-                                                )
-                                            } else null
-                                        }
-                                    } else null
-                                    
-                                    val diffRequest = DiffRequest(
-                                        filePath = filePath,
-                                        oldContent = oldContent,
-                                        newContent = newContent,
-                                        title = title,
-                                        rebuildFromFile = rebuildFromFile,
-                                        edits = edits
-                                    )
-                                    
-                                    val result = ideTools.showDiff(diffRequest)
-                                    val response = result.fold(
-                                        onSuccess = { FrontendResponse(success = true) },
-                                        onFailure = { FrontendResponse(success = false, error = it.message) }
-                                    )
-                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
-                                }
+                                // 注：ide.openFile, ide.showDiff, ide.getLocale, ide.setLocale
+                                // 已迁移到 RSocket (/jetbrains-rsocket)
                                 "ide.searchFiles" -> {
                                     // 解析请求数据
                                     val dataMatch = """"data"\s*:\s*\{([^}]+)\}""".toRegex().find(requestBody)
@@ -329,6 +296,18 @@ class HttpApiServer(
                                 """{"success":false,"error":"${e.message?.replace("\"", "\\\"") ?: "Unknown error"}"}""",
                                 ContentType.Application.Json,
                                 HttpStatusCode.InternalServerError
+                            )
+                        }
+                    }
+
+                    // JetBrains IDE 集成 API
+                    route("/jetbrains") {
+                        // 能力检测端点
+                        get("/capabilities") {
+                            val capabilities = jetbrainsApi.capabilities.get()
+                            call.respondText(
+                                """{"supported":${capabilities.supported},"version":"${capabilities.version}"}""",
+                                ContentType.Application.Json
                             )
                         }
                     }
@@ -429,7 +408,7 @@ class HttpApiServer(
                     // 历史元数据（protobuf，HTTP 直读 JSONL）
                     post("/history/metadata.pb") {
                         try {
-                            val body = call.receiveChannel().readRemaining().readBytes()
+                            val body = call.receive<ByteArray>()
                             val req = GetHistoryMetadataRequest.parseFrom(body)
                             val sessionId = req.sessionId
                             val projectPath = req.projectPath
@@ -453,7 +432,7 @@ class HttpApiServer(
                     // 历史内容加载（protobuf，HTTP 直读 JSONL）
                     post("/history/load.pb") {
                         try {
-                            val body = call.receiveChannel().readRemaining().readBytes()
+                            val body = call.receive<ByteArray>()
                             val req = LoadHistoryRequest.parseFrom(body)
                             val rpcService = AiAgentRpcServiceImpl(ideTools, null)
                             val result = rpcService.loadHistory(
@@ -635,13 +614,12 @@ class HttpApiServer(
                             val isIdeMode = call.request.queryParameters["ide"] == "true"
 
                             if (isIdeMode) {
-                                // IDEA 插件模式：仅标记环境，__serverUrl 由 JCEF 注入
-                                // （routing 块内无法获取实际端口，JCEF 注入更可靠）
+                                // IDEA 插件模式：标记环境 __IDEA_MODE__ = true
+                                // 前端会检测此标记并通过 RSocket 与后端通信
                                 val injection = """
                                     <script>
                                         window.__IDEA_MODE__ = true;
                                         console.log('✅ Environment: IDEA Plugin Mode');
-                                        console.log('💡 Server URL will be injected by JCEF');
                                     </script>
                                 """.trimIndent()
                                 html = html.replace("</head>", "$injection\n</head>")

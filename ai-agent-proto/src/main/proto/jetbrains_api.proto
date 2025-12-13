@@ -1,0 +1,148 @@
+syntax = "proto3";
+
+package com.asakii.rpc.proto;
+
+option java_package = "com.asakii.rpc.proto";
+option java_multiple_files = true;
+option java_outer_classname = "JetBrainsApiProto";
+
+// ============================================================================
+// JetBrains IDE Integration API
+// 用于前端与IDEA插件的双向RSocket通信（替代JCEF）
+// ============================================================================
+
+// ========== 能力检测 ==========
+
+message JetBrainsCapabilities {
+  bool supported = 1;
+  string version = 2;
+}
+
+// ========== 主题 ==========
+
+message IdeThemeProto {
+  string background = 1;
+  string foreground = 2;
+  string border_color = 3;
+  string panel_background = 4;
+  string text_field_background = 5;
+  string selection_background = 6;
+  string selection_foreground = 7;
+  string link_color = 8;
+  string error_color = 9;
+  string warning_color = 10;
+  string success_color = 11;
+  string separator_color = 12;
+  string hover_background = 13;
+  string accent_color = 14;
+  string info_background = 15;
+  string code_background = 16;
+  string secondary_foreground = 17;
+  string font_family = 18;
+  int32 font_size = 19;
+  string editor_font_family = 20;
+  int32 editor_font_size = 21;
+}
+
+// ========== 打开文件 ==========
+
+message JetBrainsOpenFileRequest {
+  string file_path = 1;
+  optional int32 line = 2;
+  optional int32 column = 3;
+  optional int32 start_offset = 4;
+  optional int32 end_offset = 5;
+}
+
+// ========== 显示Diff ==========
+
+message JetBrainsShowDiffRequest {
+  string file_path = 1;
+  string old_content = 2;
+  string new_content = 3;
+  optional string title = 4;
+}
+
+// ========== 多编辑Diff ==========
+
+message JetBrainsEditOperation {
+  string old_string = 1;
+  string new_string = 2;
+  bool replace_all = 3;
+}
+
+message JetBrainsShowMultiEditDiffRequest {
+  string file_path = 1;
+  repeated JetBrainsEditOperation edits = 2;
+  optional string current_content = 3;
+}
+
+// ========== 会话状态（前端→后端）==========
+
+message JetBrainsSessionSummary {
+  string id = 1;                      // Tab ID
+  string title = 2;
+  optional string session_id = 3;     // 真实会话ID（连接后才有）
+  bool is_generating = 4;
+  bool is_connected = 5;
+  bool is_connecting = 6;
+}
+
+message JetBrainsSessionState {
+  repeated JetBrainsSessionSummary sessions = 1;
+  optional string active_session_id = 2;
+}
+
+// ========== 会话命令（后端→前端）==========
+
+enum JetBrainsSessionCommandType {
+  SESSION_COMMAND_UNSPECIFIED = 0;
+  SESSION_COMMAND_SWITCH = 1;         // switchSession
+  SESSION_COMMAND_CREATE = 2;         // createSession
+  SESSION_COMMAND_CLOSE = 3;          // closeSession
+  SESSION_COMMAND_RENAME = 4;         // renameSession
+  SESSION_COMMAND_TOGGLE_HISTORY = 5; // toggleHistory
+  SESSION_COMMAND_SET_LOCALE = 6;     // setLocale
+}
+
+message JetBrainsSessionCommand {
+  JetBrainsSessionCommandType type = 1;
+  optional string session_id = 2;
+  optional string new_name = 3;
+  optional string locale = 4;
+}
+
+// ========== 通用响应 ==========
+
+message JetBrainsOperationResponse {
+  bool success = 1;
+  optional string error = 2;
+}
+
+// ========== 获取主题 ==========
+
+message JetBrainsGetThemeRequest {}
+
+message JetBrainsGetThemeResponse {
+  IdeThemeProto theme = 1;
+}
+
+// ========== 获取项目路径 ==========
+
+message JetBrainsGetProjectPathRequest {}
+
+message JetBrainsGetProjectPathResponse {
+  string project_path = 1;
+}
+
+// ========== 获取/设置语言 ==========
+
+message JetBrainsGetLocaleRequest {}
+
+message JetBrainsGetLocaleResponse {
+  string locale = 1;
+}
+
+message JetBrainsSetLocaleRequest {
+  string locale = 1;
+}

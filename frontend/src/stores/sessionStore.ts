@@ -14,7 +14,7 @@
  * ```
  */
 
-import { ref, computed, shallowRef } from 'vue'
+import { ref, computed, shallowRef, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { i18n } from '@/i18n'
 import { useSessionTab, type SessionTabInstance, type TabConnectOptions } from '@/composables/useSessionTab'
@@ -67,6 +67,11 @@ export const useSessionStore = defineStore('session', () => {
    * 当前连接状态（独立 ref，解决 shallowRef 内部状态追踪问题）
    */
   const currentConnectionState = ref<ConnectionStatus>(ConnectionStatus.DISCONNECTED)
+
+  /**
+   * displayItems 版本号（解决 shallowRef 内部 reactive 数组变化追踪问题）
+   */
+  const displayItemsVersion = ref(0)
 
   /**
    * 加载状态
@@ -138,9 +143,21 @@ export const useSessionStore = defineStore('session', () => {
 
   /**
    * 当前 displayItems
+   * 依赖 displayItemsVersion 确保在数组内容变化时重新计算
    */
-  const currentDisplayItems = computed(() =>
-    currentTab.value?.displayItems ?? []
+  const currentDisplayItems = computed(() => {
+    // 依赖版本号，强制在 displayItems 变化时重新计算
+    void displayItemsVersion.value
+    return currentTab.value?.displayItems ?? []
+  })
+
+  // 监听 displayItems 变化，递增版本号触发 computed 更新
+  watch(
+    () => currentTab.value?.displayItems.length,
+    () => {
+      displayItemsVersion.value++
+    },
+    { immediate: true }
   )
 
   /**
@@ -177,6 +194,14 @@ export const useSessionStore = defineStore('session', () => {
     if (currentTab.value) {
       currentTab.value.connectionState.lastError = null
     }
+  }
+
+  /**
+   * 通知 displayItems 已更新
+   * 递增版本号，触发 computed 重新计算
+   */
+  function notifyDisplayItemsChanged(): void {
+    displayItemsVersion.value++
   }
 
   // ========== Tab 创建 ==========
@@ -643,6 +668,7 @@ export const useSessionStore = defineStore('session', () => {
     currentSessionSettings,
     currentLastError,
     clearCurrentError,
+    notifyDisplayItemsChanged,
 
     // Tab 操作
     createTab,

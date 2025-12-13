@@ -1,5 +1,12 @@
 <template>
+  <!-- 回放消息（isReplay=true）：左对齐，使用 markdown 渲染 -->
+  <div v-if="props.message.isReplay" class="replay-user-message" :class="props.message.style">
+    <MarkdownRenderer :content="messageText" />
+  </div>
+
+  <!-- 用户发送的消息（isReplay=false/undefined）：右对齐，带气泡、可编辑 -->
   <div
+    v-else
     class="user-message-row"
     :class="{ 'is-editing': isEditing }"
     @mouseenter="showEditButton = true"
@@ -105,6 +112,7 @@ import { isFileReference } from '@/utils/userMessageBuilder'
 import { linkifyText, getLinkFromEvent, handleLinkClick } from '@/utils/linkify'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 import ChatInput from './ChatInput.vue'
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 import { ideaBridge } from '@/services/ideaBridge'
 
 // 兼容 Message 和 UserMessage (DisplayItem) 类型
@@ -113,6 +121,8 @@ interface Props {
     id?: string
     content?: ContentBlock[]
     contexts?: ContextReference[]  // DisplayItem 中的 contexts 已经包含图片
+    style?: 'hint' | 'error'  // 消息样式：hint=md渲染，error=错误颜色
+    isReplay?: boolean  // 是否是回放消息：true=左对齐，false/undefined=右对齐
     [key: string]: unknown
   }
 }
@@ -508,6 +518,22 @@ function closeImagePreview() {
 .toggle-button:hover {
   background: var(--theme-hover-background);
   border-color: var(--theme-border);
+}
+
+/* 回放消息（isReplay=true）：靠左，无气泡，md 渲染 */
+.replay-user-message {
+  padding: 4px 12px;
+  text-align: left;
+}
+
+/* hint 样式：使用次要文本颜色 */
+.replay-user-message.hint {
+  color: var(--theme-secondary-foreground);
+}
+
+/* error 样式：使用错误颜色 */
+.replay-user-message.error {
+  color: var(--theme-error);
 }
 
 </style>

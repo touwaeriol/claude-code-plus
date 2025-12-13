@@ -37,10 +37,12 @@ class MarkdownService {
       const code = token.content
 
       // 返回自定义结构,供 Vue 组件接管渲染
+      // 复制按钮使用 SVG 图标，不使用文字（避免国际化问题）
+      const copyIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`
       return `<div class="code-block-wrapper" data-lang="${lang}">
         <div class="code-block-header">
           <span class="language">${lang}</span>
-          <button class="copy-btn" data-code="${encodeURIComponent(code)}">复制</button>
+          <button class="copy-btn" data-code="${encodeURIComponent(code)}">${copyIcon}</button>
         </div>
         <div class="code-content"><code class="language-${lang}">${this.escapeHtml(code)}</code></div>
       </div>`

@@ -1,6 +1,5 @@
 package com.asakii.plugin.ui
 
-import com.asakii.plugin.bridge.IdeSessionBridge
 import com.asakii.plugin.ui.title.HistorySessionAction
 import com.asakii.plugin.ui.title.NewSessionAction
 import com.asakii.plugin.ui.title.SessionTabsAction
@@ -26,6 +25,9 @@ import com.intellij.ui.components.JBPanel
 import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Cursor
@@ -33,10 +35,13 @@ import java.awt.datatransfer.StringSelection
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.io.IOException
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import javax.swing.JComponent
 
 /**
- * ToolWindow 工厂：IDE 模式下加载 Vue (JCEF)，并将会话管理迁移到标题栏。
+ * ToolWindow 工厂：IDE 模式下使用 JBCefBrowser 加载 Vue 前端，
+ * 通过 RSocket 与后端通信，并将会话管理迁移到标题栏。
  */
 class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
 
@@ -45,7 +50,7 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
     }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        logger.info("🚀 Creating Claude ToolWindow (JCEF)")
+        logger.info("🚀 Creating Claude ToolWindow")
         val toolWindowEx = toolWindow as? ToolWindowEx
         val contentFactory = ContentFactory.getInstance()
         val httpService = HttpServerProjectService.getInstance(project)
@@ -65,12 +70,27 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         }
 
         val browser = JBCefBrowser()
-        val sessionBridge = IdeSessionBridge(browser, project)
-        val targetUrl = if (serverUrl.contains("?")) {
-            "$serverUrl&ide=true"
-        } else {
-            "$serverUrl?ide=true"
+
+        // 构建 URL 参数：ide=true + 初始主题
+        val jetbrainsApi = httpService.jetbrainsApi
+        val themeParam = try {
+            val theme = jetbrainsApi?.theme?.get()
+            if (theme != null) {
+                val themeJson = Json.encodeToString(theme)
+                val encoded = URLEncoder.encode(themeJson, StandardCharsets.UTF_8.toString())
+                "&initialTheme=$encoded"
+            } else ""
+        } catch (e: Exception) {
+            logger.warn("⚠️ Failed to encode initial theme: ${e.message}")
+            ""
         }
+
+        val targetUrl = if (serverUrl.contains("?")) {
+            "$serverUrl&ide=true$themeParam"
+        } else {
+            "$serverUrl?ide=true$themeParam"
+        }
+        logger.info("🔗 Loading URL with initial theme: ${targetUrl.take(100)}...")
         browser.loadURL(targetUrl)
 
         // 将浏览器组件包装在 JBPanel 中，确保正确填充空间
@@ -82,22 +102,33 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         content.isCloseable = false
         toolWindow.contentManager.addContent(content)
         Disposer.register(content, browser)
-        Disposer.register(content, sessionBridge)
+
+        // 获取 JetBrainsApi 的 session 接口（用于 title actions）
+        val sessionApi = httpService.jetbrainsApi?.session
+        if (sessionApi == null) {
+            logger.warn("⚠️ JetBrainsApi not available, title actions will be disabled")
+            toolWindowEx?.setTitleActions(titleActions)
+            return
+        }
 
         // 左侧 Tab Actions：HTTP 指示器 + 会话标签
-        val sessionTabsAction = SessionTabsAction(sessionBridge)
+        val sessionTabsAction = SessionTabsAction(sessionApi)
         Disposer.register(content, sessionTabsAction)
         toolWindowEx?.setTabActions(serverIndicatorAction, sessionTabsAction)
 
         // 右侧 Title Actions：历史会话 + 新建会话
-        titleActions.add(HistorySessionAction(sessionBridge))
-        titleActions.add(NewSessionAction(sessionBridge))
+        titleActions.add(HistorySessionAction(sessionApi, project))
+        titleActions.add(NewSessionAction(sessionApi))
 
         toolWindowEx?.setTitleActions(titleActions)
 
         // 三个点菜单中添加 DevTools
         val gearActions = com.intellij.openapi.actionSystem.DefaultActionGroup().apply {
-            add(object : AnAction("Open DevTools", "打开浏览器开发者工具 (调试 JCEF)", com.intellij.icons.AllIcons.Toolwindows.ToolWindowDebugger) {
+            add(object : AnAction(
+                "Open DevTools",
+                "打开浏览器开发者工具 (调试 JCEF)",
+                com.intellij.icons.AllIcons.Toolwindows.ToolWindowDebugger
+            ) {
                 override fun actionPerformed(e: AnActionEvent) {
                     browser.openDevtools()
                 }
@@ -137,9 +168,13 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         val httpService = HttpServerProjectService.getInstance(project)
         val serverUrl = httpService.serverUrl ?: "未启动"
 
+        // 使用 IDEA 主题的链接颜色
+        val linkColor = JBUI.CurrentTheme.Link.Foreground.ENABLED
+        val linkHoverColor = JBUI.CurrentTheme.Link.Foreground.HOVERED
+
         val label = JBLabel("🌐 $serverUrl")
         label.font = JBUI.Fonts.smallFont()
-        label.foreground = JBColor(Color(0x2196F3), Color(0x42A5F5))
+        label.foreground = linkColor
         label.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
         label.toolTipText = "<html>HTTP 服务地址<br>单击：复制地址<br>双击：在浏览器中打开</html>"
 
@@ -158,11 +193,11 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
             }
 
             override fun mouseEntered(e: MouseEvent) {
-                label.foreground = JBColor(Color(0x1976D2), Color(0x64B5F6))
+                label.foreground = linkHoverColor
             }
 
             override fun mouseExited(e: MouseEvent) {
-                label.foreground = JBColor(Color(0x2196F3), Color(0x42A5F5))
+                label.foreground = linkColor
             }
         })
 

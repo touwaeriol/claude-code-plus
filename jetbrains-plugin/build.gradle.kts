@@ -11,9 +11,7 @@ version = providers.gradleProperty("pluginVersion").get()
 
 dependencies {
     implementation(project(":ai-agent-server"))
-
-
-
+    implementation(project(":ai-agent-proto")) // Protobuf 生成的类型
 
 
 
@@ -48,6 +46,13 @@ dependencies {
     implementation("org.commonmark:commonmark:0.21.0")
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.21.0")
     implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.21.0")
+
+    // RSocket (over WebSocket) - 用于 JetBrains 双向通信
+    val rsocketVersion = "0.20.0"
+    implementation("io.rsocket.kotlin:rsocket-core:$rsocketVersion")
+
+    // Logging (用于 JetBrainsRSocketHandler)
+    implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")
 
     // Ktor 服务器依赖 - 使用 3.0.3 版本（支持 SSE 和 WebSocket）
     val ktorVersion = "3.0.3"
@@ -144,10 +149,10 @@ val installFrontendDeps by tasks.registering(Exec::class) {
     }
 }
 
-// ✅ Vue 前端构建任务 - 使用 Vite 构建
+// ✅ Vue 前端构建任务 - 生产模式（terser 压缩 + gzip/brotli）
 val buildFrontendWithVite by tasks.registering(Exec::class) {
     group = "frontend"
-    description = "Build Vue frontend with Vite"
+    description = "Build Vue frontend with Vite (production mode with full optimization)"
 
     dependsOn(installFrontendDeps)
 
@@ -164,22 +169,52 @@ val buildFrontendWithVite by tasks.registering(Exec::class) {
     outputs.dir("../frontend/dist")
 
     // 🔧 禁用增量构建缓存 - 确保前端修改总是生效
-    // 前端构建很快（~6秒），不需要缓存优化
     outputs.upToDateWhen { false }
 
     doFirst {
-        println("🔨 Building Vue frontend with Vite...")
+        println("🔨 Building Vue frontend with Vite (production mode)...")
     }
 
     doLast {
-        println("✅ Vue frontend built successfully")
+        println("✅ Vue frontend built successfully (optimized)")
     }
 }
 
-// 主构建任务 - 依赖 Vite 构建
+// ✅ Vue 前端构建任务 - 开发模式（无压缩，构建更快）
+val buildFrontendWithViteDev by tasks.registering(Exec::class) {
+    group = "frontend"
+    description = "Build Vue frontend with Vite (development mode, no optimization)"
+
+    dependsOn(installFrontendDeps)
+
+    workingDir = file("../frontend")
+    commandLine(npmCommand, "run", "build:dev")
+
+    // 输入：所有源文件
+    inputs.dir("../frontend/src")
+    inputs.file("../frontend/vite.config.ts")
+    inputs.file("../frontend/tsconfig.json")
+    inputs.file("../frontend/index.html")
+
+    // 输出：前端 dist 目录
+    outputs.dir("../frontend/dist")
+
+    // 🔧 禁用增量构建缓存 - 确保前端修改总是生效
+    outputs.upToDateWhen { false }
+
+    doFirst {
+        println("🔨 Building Vue frontend with Vite (development mode)...")
+    }
+
+    doLast {
+        println("✅ Vue frontend built successfully (dev mode)")
+    }
+}
+
+// 主构建任务 - 依赖 Vite 构建（生产模式）
 val copyFrontendFiles by tasks.registering(Copy::class) {
     group = "frontend"
-    description = "Copy frontend build artifacts to resources"
+    description = "Copy frontend build artifacts to resources (production)"
 
     dependsOn(buildFrontendWithVite)
 
@@ -203,16 +238,52 @@ val copyFrontendFiles by tasks.registering(Copy::class) {
     }
 
     doLast {
-        println("📦 Frontend resources copied to resources/frontend")
+        println("📦 Frontend resources copied to resources/frontend (production)")
     }
 }
 
-// 主构建任务 - 依赖复制任务
+// 开发模式复制任务
+val copyFrontendFilesDev by tasks.registering(Copy::class) {
+    group = "frontend"
+    description = "Copy frontend build artifacts to resources (development)"
+
+    dependsOn(buildFrontendWithViteDev)
+
+    val frontendDistDir = layout.projectDirectory.dir("../frontend/dist")
+    val targetDir = layout.projectDirectory.dir("src/main/resources/frontend")
+
+    from(frontendDistDir)
+    into(targetDir)
+
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
+    doFirst {
+        val targetFile = targetDir.asFile
+        if (targetFile.exists()) {
+            println("🗑️  Deleting existing frontend resources...")
+            targetFile.deleteRecursively()
+        }
+    }
+
+    doLast {
+        println("📦 Frontend resources copied to resources/frontend (dev mode)")
+    }
+}
+
+// 主构建任务 - 生产模式（用于发布）
 val buildFrontend by tasks.registering {
     group = "frontend"
-    description = "Build frontend and copy files"
+    description = "Build frontend and copy files (production)"
 
     dependsOn(copyFrontendFiles)
+}
+
+// 开发构建任务（用于 runIde）
+val buildFrontendDev by tasks.registering {
+    group = "frontend"
+    description = "Build frontend and copy files (development, faster)"
+
+    dependsOn(copyFrontendFilesDev)
 }
 
 // 清理前端构建产物
@@ -228,9 +299,9 @@ val cleanFrontend by tasks.registering(Delete::class) {
 // ===== 集成到主构建流程 =====
 
 tasks {
-    // 在处理资源之前先复制前端文件
+    // 在处理资源之前先复制前端文件（开发模式）
     processResources {
-        dependsOn(copyFrontendFiles)
+        dependsOn(copyFrontendFilesDev)
     }
 
     // 清理时也清理前端
@@ -239,8 +310,8 @@ tasks {
     }
 
     runIde {
-        // 确保运行前构建了前端
-        dependsOn(buildFrontend)
+        // 确保运行前构建了前端（开发模式，无压缩，更快）
+        dependsOn(buildFrontendDev)
 
         // 🔧 增加内存配置以避免 OOM
         jvmArgs(

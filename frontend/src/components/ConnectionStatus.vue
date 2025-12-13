@@ -18,24 +18,24 @@ const serverPort = ref<string>('8765')
 
 const statusClass = computed(() => {
   if (!isReady.value) return 'status-connecting'
-  return mode.value === 'jcef' ? 'status-jcef' : 'status-http'
+  return mode.value === 'ide' ? 'status-ide' : 'status-http'
 })
 
 const statusIcon = computed(() => {
   if (!isReady.value) return '🔄'
-  return mode.value === 'jcef' ? '🔌' : '🌐'
+  return mode.value === 'ide' ? '🔌' : '🌐'
 })
 
 const modeText = computed(() => {
   if (!isReady.value) return 'Connecting...'
-  return mode.value === 'jcef' ? 'Plugin Mode' : 'Browser Mode'
+  return mode.value === 'ide' ? 'Plugin Mode' : 'Browser Mode'
 })
 
 const statusDetail = computed(() => {
   if (!isReady.value) return 'Initializing bridge...'
-  return mode.value === 'jcef'
-    ? `Using JCEF Bridge (Port: ${serverPort.value})`
-    : `Using HTTP API (Port: ${serverPort.value})`
+  return mode.value === 'ide'
+    ? `IDE Mode (Port: ${serverPort.value})`
+    : `Browser Mode (Port: ${serverPort.value})`
 })
 
 onMounted(async () => {
@@ -62,7 +62,7 @@ onMounted(async () => {
   border: 1px solid rgba(255, 193, 7, 0.3);
 }
 
-.status-jcef {
+.status-ide {
   background-color: rgba(76, 175, 80, 0.1);
   border: 1px solid rgba(76, 175, 80, 0.3);
 }

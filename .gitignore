@@ -167,6 +167,9 @@ test-*.log
 frontend/auto-imports.d.ts
 frontend/components.d.ts
 
+# Frontend build output (copied to plugin resources)
+jetbrains-plugin/src/main/resources/frontend/
+
 # Temporary scripts (root directory only)
 /add_*.ps1
 /add_*.sh

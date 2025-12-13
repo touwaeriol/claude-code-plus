@@ -1,28 +1,14 @@
 import { watch, type WatchStopHandle } from 'vue'
-import { ideaBridge } from '@/services/ideaBridge'
 import localeService from '@/services/localeService'
 import type { useSessionStore } from '@/stores/sessionStore'
 import { useToastStore } from '@/stores/toastStore'
 import { ConnectionStatus } from '@/types/display'
+import { aiAgentService } from '@/services/aiAgentService'
+import { jetbrainsRSocket, type SessionCommand, type SessionState } from '@/services/jetbrainsRSocket'
 
 export interface HostCommand {
   type: string
   payload?: Record<string, any> | null
-}
-
-interface SessionSummaryPayload {
-  id: string
-  title: string
-  sessionId?: string | null  // 真实的会话 ID
-  isGenerating: boolean
-  isConnected: boolean   // 是否已连接
-  isConnecting: boolean  // 是否正在连接中
-}
-
-interface SessionStatePayload {
-  type: 'session:update'
-  sessions: SessionSummaryPayload[]
-  activeSessionId: string | null
 }
 
 type SessionStore = ReturnType<typeof useSessionStore>
@@ -30,9 +16,6 @@ export type HostCommandHandler = (command: HostCommand) => void
 
 declare global {
   interface Window {
-    __CLAUDE_IDE_HOST__?: {
-      postSessionState?: (payload: string) => void
-    }
     __CLAUDE_IDE_BRIDGE__?: {
       onHostCommand?: (command: HostCommand) => void
     }
@@ -43,8 +26,8 @@ const hostCommandHandlers = new Set<HostCommandHandler>()
 let activeConsumers = 0
 let stopWatchHandle: WatchStopHandle | null = null
 let defaultHandler: HostCommandHandler | null = null
-let pendingState: SessionStatePayload | null = null
-let flushTimer: number | null = null
+let cachedSessionStore: SessionStore | null = null
+let removeSessionCommandListener: (() => void) | null = null
 
 function ensureGlobalBridge() {
   if (typeof window === 'undefined') return
@@ -64,99 +47,50 @@ function notifyHostCommand(command: HostCommand) {
   })
 }
 
-function postSessionState(payload: SessionStatePayload): boolean {
-  if (typeof window === 'undefined') return false
-  // 使用统一的 __IDEA_JCEF__ 桥接
-  const jcef = (window as any).__IDEA_JCEF__
-  // 调试：检查 JCEF bridge 状态
-  console.log('[IDE Bridge] 🔍 Checking JCEF bridge:', {
-    hasJcef: !!jcef,
-    hasSession: !!jcef?.session,
-    hasPostState: !!jcef?.session?.postState,
-    jcefKeys: jcef ? Object.keys(jcef) : []
-  })
-  if (jcef?.session?.postState) {
-    try {
-      // 确保序列化的是纯数据，避免循环引用
-      const cleanPayload = {
-        type: payload.type,
-        sessions: payload.sessions.map(s => ({
-          id: s.id,
-          title: s.title,
-          sessionId: s.sessionId ?? null,
-          isGenerating: s.isGenerating,
-          isConnected: s.isConnected,
-          isConnecting: s.isConnecting
-        })),
-        activeSessionId: payload.activeSessionId
-      }
-      console.log('[IDE Bridge] 📤 Posting session state:', cleanPayload.sessions.length, 'sessions, active:', cleanPayload.activeSessionId)
-      jcef.session.postState(JSON.stringify(cleanPayload))
-      return true
-    } catch (error) {
-      console.warn('[IDE Bridge] Failed to post session state:', error)
-    }
-  } else {
-    console.warn('[IDE Bridge] ⚠️ JCEF session bridge not ready yet')
+/**
+ * 通过 RSocket 上报会话状态
+ */
+async function postSessionState(state: SessionState): Promise<boolean> {
+  if (!jetbrainsRSocket.isConnected()) {
+    console.log('[IDE Bridge] RSocket not connected, skipping state report')
+    return false
   }
-  return false
-}
 
-function clearFlushTimer() {
-  if (flushTimer !== null && typeof window !== 'undefined') {
-    window.clearInterval(flushTimer)
-    flushTimer = null
+  try {
+    return await jetbrainsRSocket.reportSessionState(state)
+  } catch (error) {
+    console.warn('[IDE Bridge] Failed to report session state:', error)
+    return false
   }
 }
 
-function scheduleFlush() {
-  if (typeof window === 'undefined') return
-  if (flushTimer !== null) return
-  flushTimer = window.setInterval(() => {
-    if (pendingState && postSessionState(pendingState)) {
-      pendingState = null
-      clearFlushTimer()
+/**
+ * 处理后端推送的会话命令
+ */
+function handleSessionCommand(command: SessionCommand) {
+  // 转换为 HostCommand 格式，保持兼容性
+  const hostCommand: HostCommand = {
+    type: command.type === 'switch' ? 'switchSession' :
+          command.type === 'create' ? 'createSession' :
+          command.type === 'close' ? 'closeSession' :
+          command.type === 'rename' ? 'renameSession' :
+          command.type === 'toggleHistory' ? 'toggleHistory' :
+          command.type === 'setLocale' ? 'setLocale' : command.type,
+    payload: {
+      sessionId: command.sessionId,
+      newName: command.newName,
+      locale: command.locale
     }
-  }, 400)
-}
-
-// 监听 JCEF 准备好的事件，立即发送 pending 状态
-let jcefReadyListenerAdded = false
-let cachedSessionStore: SessionStore | null = null
-
-function ensureJcefReadyListener() {
-  if (jcefReadyListenerAdded || typeof window === 'undefined') return
-  jcefReadyListenerAdded = true
-  window.addEventListener('idea:jcefReady', () => {
-    console.log('[IDE Bridge] 🎉 idea:jcefReady event received')
-    // 立即发送 pending 状态
-    if (pendingState) {
-      if (postSessionState(pendingState)) {
-        pendingState = null
-        clearFlushTimer()
-      }
-    }
-    // 如果有缓存的 store，重新触发一次状态同步
-    if (cachedSessionStore) {
-      const snapshot = buildSessionSnapshot(cachedSessionStore)
-      emitSessionState({
-        type: 'session:update',
-        sessions: snapshot.sessions,
-        activeSessionId: snapshot.activeSessionId
-      })
-    }
-  })
-}
-
-function emitSessionState(payload: SessionStatePayload) {
-  pendingState = payload
-  ensureJcefReadyListener()  // 确保监听 JCEF 准备好事件
-  if (!postSessionState(payload)) {
-    scheduleFlush()
-  } else {
-    pendingState = null
-    clearFlushTimer()
   }
+  console.log('[IDE Bridge] Received session command:', hostCommand)
+  notifyHostCommand(hostCommand)
+}
+
+/**
+ * 发送会话状态到后端
+ */
+function emitSessionState(state: SessionState) {
+  postSessionState(state)
 }
 
 function registerDefaultHandler(store: SessionStore) {
@@ -165,9 +99,25 @@ function registerDefaultHandler(store: SessionStore) {
     try {
       switch (command.type) {
         case 'switchSession': {
-          const tabId = command.payload?.sessionId
-          if (tabId) {
-            await store.switchTab(tabId)
+          const sessionId = command.payload?.sessionId
+          if (sessionId) {
+            // 先检查是否已有该会话的 Tab
+            const tabs = resolveSessionList(store)
+            const existingTab = tabs.find((t: any) =>
+              t.tabId === sessionId || t.sessionId?.value === sessionId || t.sessionId === sessionId
+            )
+            if (existingTab) {
+              // 已有 Tab，直接切换
+              console.log('[IDE Bridge] Switching to existing tab:', existingTab.tabId)
+              await store.switchTab(existingTab.tabId)
+            } else {
+              // 没有 Tab，加载历史会话
+              console.log('[IDE Bridge] Resuming history session:', sessionId)
+              const resumed = await store.resumeSession(sessionId)
+              if (!resumed) {
+                console.warn('[IDE Bridge] Failed to resume session:', sessionId)
+              }
+            }
           }
           break
         }
@@ -220,7 +170,6 @@ function registerDefaultHandler(store: SessionStore) {
               const sessionId = tab.sessionId?.value ?? tab.sessionId
               const toastStore = useToastStore()
               if (sessionId) {
-                const { aiAgentService } = await import('@/services/aiAgentService')
                 aiAgentService.sendMessage(sessionId, `/rename ${newName}`)
                   .then(() => {
                     toastStore.success(`Rename success: "${newName}"`)
@@ -255,6 +204,7 @@ function registerDefaultHandler(store: SessionStore) {
           }
           break
         }
+        // toggleHistory 由 ModernChatView.vue 中的 onIdeHostCommand 监听器处理
         default:
           // 其他命令交给组件层处理
           break
@@ -303,18 +253,17 @@ function buildSessionSnapshot(store: SessionStore) {
 }
 
 function startWatching(store: SessionStore) {
-  // 缓存 store 引用，用于 JCEF 准备好时重新同步
+  // 缓存 store 引用
   cachedSessionStore = store
+
+  // 注册 RSocket 会话命令监听器
+  removeSessionCommandListener = jetbrainsRSocket.onSessionCommand(handleSessionCommand)
 
   const source = () => buildSessionSnapshot(store)
 
   stopWatchHandle = watch(source, (snapshot) => {
     console.log('[IDE Bridge] 🔄 Session state changed:', snapshot.sessions.length, 'sessions')
-    emitSessionState({
-      type: 'session:update',
-      sessions: snapshot.sessions,
-      activeSessionId: snapshot.activeSessionId
-    })
+    emitSessionState(snapshot)
   }, { deep: true, immediate: true })
 }
 
@@ -340,8 +289,9 @@ export function setupIdeSessionBridge(sessionStore: SessionStore) {
         hostCommandHandlers.delete(defaultHandler)
         defaultHandler = null
       }
-      clearFlushTimer()
-      pendingState = null
+      removeSessionCommandListener?.()
+      removeSessionCommandListener = null
+      cachedSessionStore = null
     }
   }
 }

@@ -88,6 +88,8 @@ class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
 
         return try {
             val locale = LocalizationUtil.getLocale(true) // true for restarting (though we just need the value)
+
+
             "${locale.language}-${locale.country}"
         } catch (e: Exception) {
             val locale = Locale.getDefault()
@@ -113,6 +115,7 @@ class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
         val filePath = data?.get("filePath")?.jsonPrimitive?.contentOrNull
         val line = data?.get("line")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
         val column = data?.get("column")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+
         val content = data?.get("content")?.jsonPrimitive?.contentOrNull
         val selectContent = data?.get("selectContent")?.jsonPrimitive?.contentOrNull?.toBoolean() ?: false
 

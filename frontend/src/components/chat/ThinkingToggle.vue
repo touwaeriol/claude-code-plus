@@ -9,7 +9,7 @@
     @click="handleClick"
   >
     <span v-if="thinkingMode !== 'never'" class="thinking-icon">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
         <path v-if="isEnabled" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
         <path v-else d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
       </svg>
@@ -77,13 +77,14 @@ function handleClick() {
 </script>
 
 <style scoped>
+/* 紧凑样式 */
 .thinking-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 12px;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
   cursor: pointer;
   transition: all 0.2s ease;
   user-select: none;
@@ -108,13 +109,13 @@ function handleClick() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 .thinking-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 .thinking-label {
@@ -128,8 +129,8 @@ function handleClick() {
 }
 
 .dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   transition: background-color 0.2s ease;
 }

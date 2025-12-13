@@ -5,48 +5,6 @@
   >
     <div v-if="displayMessages.length === 0" class="empty-state">
       <div class="empty-content">
-        <div class="empty-icon-wrapper">
-          <svg
-            class="empty-icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z"
-              fill="currentColor"
-              opacity="0.3"
-            />
-            <path
-              d="M13 7H11V13H13V7Z"
-              fill="currentColor"
-            />
-            <path
-              d="M13 15H11V17H13V15Z"
-              fill="currentColor"
-            />
-          </svg>
-        </div>
-        <h2 class="empty-title">
-          {{ t('chat.welcomeScreen.title') }}
-        </h2>
-        <p class="empty-description">
-          {{ t('chat.welcomeScreen.description') }}
-        </p>
-        <div class="empty-tips">
-          <div class="tip-item">
-            <span class="tip-icon">💡</span>
-            <span class="tip-text">{{ t('chat.welcomeScreen.askCode') }}</span>
-          </div>
-          <div class="tip-item">
-            <span class="tip-icon">🔧</span>
-            <span class="tip-text">{{ t('chat.welcomeScreen.refactor') }}</span>
-          </div>
-          <div class="tip-item">
-            <span class="tip-icon">🐛</span>
-            <span class="tip-text">{{ t('chat.welcomeScreen.debug') }}</span>
-          </div>
-        </div>
         <div class="shortcut-hints">
           <div class="shortcut-item">
             <kbd class="keyboard-key">Enter</kbd>
@@ -154,6 +112,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from '@/composables/useI18n'
+import { useSessionStore } from '@/stores/sessionStore'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import type { Message } from '@/types/message'
@@ -167,6 +126,7 @@ import {
 } from '@/constants/messageWindow'
 
 const { t } = useI18n()
+const sessionStore = useSessionStore()
 
 interface Props {
   messages?: Message[]  // 保留向后兼容
@@ -197,7 +157,11 @@ const emit = defineEmits<{
 const wrapperRef = ref<HTMLElement>()
 const scrollerRef = ref<InstanceType<typeof DynamicScroller>>()
 const showScrollToBottom = ref(false)
-const newMessageCount = ref(0)
+// newMessageCount 绑定到 sessionStore，随会话切换自动保存/恢复
+const newMessageCount = computed({
+  get: () => sessionStore.currentTab?.uiState.value.newMessageCount ?? 0,
+  set: (val: number) => sessionStore.currentTab?.saveUiState({ newMessageCount: val })
+})
 const isNearBottom = ref(true)
 const lastMessageCount = ref(0)
 const lastTailId = ref<string | null>(null)
@@ -348,16 +312,19 @@ watch(() => displayMessages.value.length, async (newCount, oldCount) => {
     return
   }
 
-  // 如果不在底部，计数新消息并显示滚动按钮
+  // 如果不在底部，计数新消息并显示滚动按钮（不自动滚动）
   if (!isNearBottom.value && (added > 0 || tailChanged)) {
-    newMessageCount.value += added > 0 ? added : 1
-    // 确保在 streaming 期间显示滚动到底部按钮
-    if (props.isStreaming && newCount > 0) {
-      showScrollToBottom.value = true
-    }
+    newMessageCount.value = newMessageCount.value + (added > 0 ? added : 1)
+    showScrollToBottom.value = true
+    // 不自动滚动，让用户决定是否点击按钮
+    lastMessageCount.value = newCount
+    lastTailId.value = tailId
+    await nextTick()
+    forceUpdateScroller()
+    return
   }
 
-  // 如果在底部，自动滚动
+  // 只有在底部时才自动滚动
   if (isNearBottom.value) {
     await nextTick()
     scrollToBottom()
@@ -373,12 +340,24 @@ watch(() => displayMessages.value.length, async (newCount, oldCount) => {
 })
 
 // 监听消息内容变化（深度监听），强制重新计算尺寸
+// 注意：虚拟滚动列表无法使用 CSS overflow-anchor，需手动保持滚动位置
 watch(() => displayMessages.value, async () => {
+  const el = scrollerRef.value?.$el as HTMLElement | undefined
+  const scrollTopBefore = el?.scrollTop ?? 0
+  const wasNearBottom = isNearBottom.value
+
   await nextTick()
   forceUpdateScroller()
 
-  // 在 streaming 期间，如果用户不在底部，确保按钮可见
-  if (props.isStreaming && !isNearBottom.value && displayMessages.value.length > 0) {
+  // 用户不在底部时，保持滚动位置防止跳动（虚拟滚动的标准做法）
+  if (!wasNearBottom && el) {
+    requestAnimationFrame(() => {
+      el.scrollTop = scrollTopBefore
+    })
+  }
+
+  // 如果用户不在底部，确保按钮可见
+  if (!isNearBottom.value && displayMessages.value.length > 0) {
     showScrollToBottom.value = true
   }
 }, { deep: true })
@@ -644,101 +623,6 @@ async function ensureScrollable(): Promise<void> {
 .empty-content {
   max-width: 520px;
   text-align: center;
-  animation: fadeIn 0.5s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.empty-icon-wrapper {
-  margin-bottom: 24px;
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-.empty-icon {
-  width: 80px;
-  height: 80px;
-  color: var(--theme-accent, #0366d6);
-  opacity: 0.8;
-}
-
-.empty-title {
-  font-size: 24px;
-  font-weight: 600;
-  margin: 0 0 6px 0;
-  color: var(--theme-foreground, #24292e);
-}
-
-.empty-description {
-  font-size: 14px;
-  line-height: 1.6;
-  margin: 0 0 12px 0;
-  color: var(--theme-secondary-foreground, #6a737d);
-}
-
-.empty-tips {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.tip-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 12px;
-  background: var(--theme-panel-background, #f6f8fa);
-  border: 1px solid var(--theme-border, #e1e4e8);
-  border-radius: 8px;
-  min-width: 120px;
-  transition: all 0.2s ease;
-}
-
-.tip-item:hover {
-  background: var(--theme-hover-background, #f6f8fa);
-  border-color: var(--theme-accent, #0366d6);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.tip-icon {
-  font-size: 24px;
-}
-
-.tip-text {
-  font-size: 13px;
-  color: var(--theme-foreground, #24292e);
-  font-weight: 500;
-}
-
-.empty-hint {
-  font-size: 12px;
-  color: var(--theme-secondary-foreground, #6a737d);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: center;
-  flex-wrap: wrap;
 }
 
 .shortcut-hints {

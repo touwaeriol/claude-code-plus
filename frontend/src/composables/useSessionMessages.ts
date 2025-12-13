@@ -13,7 +13,6 @@
  */
 
 import { ref, reactive, computed } from 'vue'
-import { i18n } from '@/i18n'
 import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock, ToolUseContent } from '@/types/message'
 import type { PendingMessage } from '@/types/session'
 import type { DisplayItem, AssistantText, ThinkingContent, UserMessage, ToolCall } from '@/types/display'
@@ -37,7 +36,7 @@ const log = loggers.session
  * - tools: 工具调用管理实例
  * - stats: 统计管理实例
  *
- * 注意：sendMessageFn 需要在连接建立后通过 setSendMessageFn 设置
+ * 注意：发送逻辑由 useSessionTab 负责，本 Composable 只管消息状态
  */
 export function useSessionMessages(
   tools: SessionToolsInstance,
@@ -190,21 +189,14 @@ export function useSessionMessages(
   // ========== 函数注入 ==========
 
   /**
-   * 发送消息函数（由 Tab 连接建立后注入）
-   */
-  let sendMessageFn: ((content: ContentBlock[]) => Promise<void>) | null = null
-
-  /**
    * 处理队列前的回调（由 Tab 注入，用于应用 pending settings）
    */
   let beforeProcessQueueFn: (() => Promise<void>) | null = null
 
   /**
-   * 设置发送消息函数
+   * 处理队列消息的回调（由 Tab 注入）
    */
-  function setSendMessageFn(fn: (content: ContentBlock[]) => Promise<void>): void {
-    sendMessageFn = fn
-  }
+  let processQueueFn: (() => Promise<void>) | null = null
 
   /**
    * 设置处理队列前的回调
@@ -242,19 +234,9 @@ export function useSessionMessages(
    * 处理流式事件
    *
    * 直接解析和处理 stream event 数据，不依赖外部模块
+   * 注意：不再根据 isGenerating 状态拦截，收到消息就展示
    */
   function handleStreamEvent(streamEventData: RpcStreamEvent): void {
-    // 生成状态门控：仅当 isGenerating=true 时处理流事件
-    if (!isGenerating.value) {
-      log.debug('[useSessionMessages] isGenerating=false，忽略流式事件')
-      return
-    }
-
-    // 如果请求已完成（无活动请求），忽略延迟到达的流式事件
-    if (!stats.hasActiveRequest.value) {
-      log.debug('[useSessionMessages] 无活动请求，忽略延迟的流式事件')
-      return
-    }
 
     // 子代理流式事件：路由到对应 Task 卡片
     if (streamEventData.parentToolUseId) {
@@ -374,10 +356,10 @@ export function useSessionMessages(
         const timestamp = Date.now()
         subagentStreamingState.set(taskId, { messageId, content: [], timestamp })
         // 初始化已有内容块
-        const contentBlocks = ((event as any).message?.content ?? [])
+        const contentBlocks: ContentBlock[] = ((event as any).message?.content ?? [])
           .map(mapRpcContentBlock)
           .filter((b: ContentBlock | null): b is ContentBlock => !!b)
-        contentBlocks.forEach((block, idx) => {
+        contentBlocks.forEach((block: ContentBlock, idx: number) => {
           if (block.type === 'text') {
             const displayId = `${messageId}-text-${idx}`
             appendSubagentDisplayItems(taskId, [{
@@ -552,7 +534,7 @@ export function useSessionMessages(
         )
         if (!existingToolItem) {
           const toolCall = createToolCall(contentBlock as unknown as ToolUseContent, tools.pendingToolCalls)
-          if (contentBlock.name === 'Task' || (contentBlock as any).toolName === 'Task') {
+          if ((contentBlock as any).toolName === 'Task' || (contentBlock as any).name === 'Task') {
             (toolCall as any).agentName = (contentBlock as any).input?.subagent_type || (contentBlock as any).input?.model
             flushPendingSubagentMessages(contentBlock.id, toolCall)
           }
@@ -708,23 +690,28 @@ export function useSessionMessages(
       log.debug('[useSessionMessages] 结束流式 assistant 消息')
     }
 
-    // 打断响应处理
-    if (resultData.subtype === 'interrupted') {
+    // 打断响应处理（interrupted 或 error_during_execution 都视为打断）
+    const isInterrupted = resultData.subtype === 'interrupted' || resultData.subtype === 'error_during_execution'
+    if (isInterrupted) {
+      log.info('[useSessionMessages] 🛑 收到打断信号，subtype:', resultData.subtype, '队列长度:', messageQueue.value.length)
       isGenerating.value = false
+      log.info('[useSessionMessages] 🛑 isGenerating 已设为 false')
       stats.cancelRequestTracking()
 
-      // 渲染打断提示
-      pushDisplayItems([{
-        id: `interrupt-${Date.now()}`,
-        displayType: 'interruptedHint',
-        timestamp: Date.now(),
-        message: i18n.global.t('system.interrupted')
-      } as any])
-      log.info('[useSessionMessages] 渲染打断提示')
+      // 找到最近一条 parentToolUseId 为空的用户消息，设置 style: 'error'
+      for (let i = displayItems.length - 1; i >= 0; i--) {
+        const item = displayItems[i]
+        if (isDisplayUserMessage(item) && !(item as any).parentToolUseId) {
+          (item as any).style = 'error'
+          log.info('[useSessionMessages] 🛑 标记用户消息 style: error', item.id)
+          break
+        }
+      }
+      touchMessages()
     }
 
-    // 处理错误
-    if (resultData.is_error && resultData.result) {
+    // 处理错误（排除打断场景）
+    if (!isInterrupted && resultData.is_error && resultData.result) {
       lastError.value = resultData.result
       log.warn(`[useSessionMessages] 后端返回错误: ${resultData.result}`)
 
@@ -737,7 +724,7 @@ export function useSessionMessages(
     }
 
     // 标记生成完成（非打断场景）
-    if (resultData.subtype !== 'interrupted') {
+    if (!isInterrupted) {
       isGenerating.value = false
       stats.finishRequestTracking(!resultData.is_error)
       log.debug('[useSessionMessages] 请求完成')
@@ -752,7 +739,9 @@ export function useSessionMessages(
    * 先调用 beforeProcessQueueFn（应用 pending settings），再处理队列
    */
   async function handleQueueAfterResult(): Promise<void> {
+    log.info('[useSessionMessages] 📋 handleQueueAfterResult 调用，队列长度:', messageQueue.value.length)
     if (messageQueue.value.length === 0) {
+      log.info('[useSessionMessages] 📋 队列为空，跳过')
       return
     }
 
@@ -766,7 +755,9 @@ export function useSessionMessages(
     }
 
     // 再处理队列
-    processNextQueuedMessage()
+    if (processQueueFn) {
+      await processQueueFn()
+    }
   }
 
   /**
@@ -832,16 +823,6 @@ export function useSessionMessages(
         return
       }
 
-      // 文本类型的 user 消息
-      if (hasText) {
-        const textBlock = message.content.find((block: ContentBlock) => block.type === 'text') as { text?: string } | undefined
-        const text = textBlock?.text || ''
-        if (text.includes('[Request interrupted') || text.includes('interrupted')) {
-          log.debug('[useSessionMessages] 忽略中断相关的 user 消息')
-          return
-        }
-      }
-
       // 检查是否已存在（避免重复）
       const existingUserMsg = messages.find(m => m.id === message.id)
       if (existingUserMsg) {
@@ -849,8 +830,13 @@ export function useSessionMessages(
         return
       }
 
-      // 添加新的 user 消息
+      // 添加新的 user 消息（实时会话收到的后端用户消息，标记为 hint 样式）
       addMessage(message)
+      // 设置 style: 'hint'（禁止编辑，md 渲染）
+      const addedItem = displayItems.find(item => isDisplayUserMessage(item) && item.id === message.id)
+      if (addedItem) {
+        (addedItem as any).style = 'hint'
+      }
       touchMessages()
     }
   }
@@ -930,33 +916,23 @@ export function useSessionMessages(
   }
 
   /**
-   * 直接发送消息（不判断 isGenerating）
-   * 调用方应确保连接已建立且不在生成中
+   * 开始生成状态（由 useSessionTab 调用）
    *
-   * @param userMessage 已添加到 UI 的用户消息
-   * @param mergedContent 合并后的消息内容
-   * @param originalMessage 原始消息（用于发送失败时加入队列）
+   * @param userMessageId 用户消息 ID
+   * @returns streamingMessageId 用于追踪的 assistant 消息 ID
    */
-  function sendDirectly(
-    userMessage: Message,
-    mergedContent: ContentBlock[],
-    originalMessage?: { contexts: any[]; contents: ContentBlock[] }
-  ): void {
-    // 连接未建立
-    if (!sendMessageFn) {
-      log.error('[useSessionMessages] sendMessageFn 未设置，请确保连接已建立后再发送')
-      return
-    }
-
-    // 开始请求追踪
+  function startGenerating(userMessageId: string): string {
     const streamingMessageId = `assistant-${Date.now()}`
-    stats.startRequestTracking(userMessage.id)
+    stats.startRequestTracking(userMessageId)
     stats.setStreamingMessageId(streamingMessageId)
+
+    log.info('[useSessionMessages] 📤 startGenerating，用户消息 ID:', userMessageId)
     isGenerating.value = true
+    log.info('[useSessionMessages] ✅ isGenerating 已设置为 true')
 
     // 更新 displayItem 的 isStreaming 状态
     const displayItemIndex = displayItems.findIndex(
-      item => isDisplayUserMessage(item) && item.id === userMessage.id
+      item => isDisplayUserMessage(item) && item.id === userMessageId
     )
     if (displayItemIndex !== -1) {
       const userDisplayItem = displayItems[displayItemIndex] as UserMessage
@@ -964,48 +940,39 @@ export function useSessionMessages(
       triggerDisplayItemsUpdate()
     }
 
-    // 发送到后端
-    sendMessageFn(mergedContent).catch(err => {
-      console.error('[useSessionMessages] 发送失败，加入重试队列:', err)
+    return streamingMessageId
+  }
 
-      // 加入队列等待重连后重试（消息已在 UI 中，保留 mergedContent）
-      messageQueue.value.push({
-        id: userMessage.id,
-        contexts: originalMessage?.contexts || [],
-        contents: originalMessage?.contents || [],
-        mergedContent,
-        createdAt: Date.now()
-      })
-
-      isGenerating.value = false
-      stats.cancelRequestTracking()
-    })
+  /**
+   * 停止生成状态（发送失败时调用）
+   */
+  function stopGenerating(): void {
+    isGenerating.value = false
+    stats.cancelRequestTracking()
+    log.info('[useSessionMessages] isGenerating 已设置为 false')
   }
 
 
   /**
-   * 处理队列中的下一条消息
+   * 取出队列中的下一条消息并准备发送
    *
-   * 队列中的消息有 mergedContent：
-   * - 生成中排队的消息：需要先添加到 UI，再发送
-   * - 发送失败重试的消息：已在 UI 中，直接发送
+   * @returns 准备好的消息信息，如果队列为空则返回 null
    */
-  function processNextQueuedMessage(): void {
+  function popNextQueuedMessage(): {
+    userMessage: Message
+    mergedContent: ContentBlock[]
+    originalMessage: { contexts: any[]; contents: ContentBlock[] }
+  } | null {
     if (messageQueue.value.length === 0) {
-      return
+      return null
     }
 
     const nextMessage = messageQueue.value.shift()
     if (!nextMessage) {
-      return
+      return null
     }
 
     log.info(`[useSessionMessages] 从队列中取出消息: ${nextMessage.id}`)
-
-    if (!sendMessageFn) {
-      console.error('[useSessionMessages] processNextQueuedMessage: 发送函数未设置')
-      return
-    }
 
     // 检查消息是否已在 UI 中（发送失败重试的情况）
     const existingItem = displayItems.find(
@@ -1013,19 +980,28 @@ export function useSessionMessages(
     )
 
     if (existingItem) {
-      // 消息已在 UI 中（发送失败重试），直接发送
-      sendDirectly(
-        { id: nextMessage.id, role: 'user', timestamp: nextMessage.createdAt, content: nextMessage.mergedContent! } as Message,
-        nextMessage.mergedContent!,
-        { contexts: nextMessage.contexts, contents: nextMessage.contents }
-      )
+      // 消息已在 UI 中（发送失败重试）
+      return {
+        userMessage: {
+          id: nextMessage.id,
+          role: 'user',
+          timestamp: nextMessage.createdAt,
+          content: nextMessage.mergedContent!
+        } as Message,
+        mergedContent: nextMessage.mergedContent!,
+        originalMessage: { contexts: nextMessage.contexts, contents: nextMessage.contents }
+      }
     } else {
-      // 消息不在 UI 中（生成中排队的），先添加到 UI 再发送
+      // 消息不在 UI 中（生成中排队的），先添加到 UI
       const { userMessage, mergedContent } = addMessageToUI({
         contexts: nextMessage.contexts,
         contents: nextMessage.contents
       })
-      sendDirectly(userMessage, mergedContent, { contexts: nextMessage.contexts, contents: nextMessage.contents })
+      return {
+        userMessage,
+        mergedContent,
+        originalMessage: { contexts: nextMessage.contexts, contents: nextMessage.contents }
+      }
     }
   }
 
@@ -1257,8 +1233,13 @@ export function useSessionMessages(
    */
   function prependMessagesBatch(msgs: Message[]): void {
     if (msgs.length === 0) return
-    // 先按顺序生成 displayItems，再前插
     const displayBatch = msgs.flatMap(m => convertMessageToDisplayItems(m, tools.pendingToolCalls))
+    // 历史消息中的用户消息设置 hint 样式（禁止编辑，md 渲染）
+    displayBatch.forEach(item => {
+      if (isDisplayUserMessage(item)) {
+        (item as UserMessage).style = 'hint'
+      }
+    })
     prependDisplayItems(displayBatch)
     // 再更新 messages 状态（保持原顺序）
     for (let i = msgs.length - 1; i >= 0; i -= 1) {
@@ -1272,6 +1253,12 @@ export function useSessionMessages(
   function appendMessagesBatch(msgs: Message[]): void {
     if (msgs.length === 0) return
     const displayBatch = msgs.flatMap(m => convertMessageToDisplayItems(m, tools.pendingToolCalls))
+    // 历史/后端消息中的用户消息设置 hint 样式（禁止编辑，md 渲染）
+    displayBatch.forEach(item => {
+      if (isDisplayUserMessage(item)) {
+        (item as UserMessage).style = 'hint'
+      }
+    })
     pushDisplayItems(displayBatch)
     messages.push(...msgs)
   }
@@ -1284,7 +1271,6 @@ export function useSessionMessages(
     clearQueue()
     isGenerating.value = false
     lastError.value = null
-    sendMessageFn = null
     log.debug('[useSessionMessages] 状态已重置')
   }
 
@@ -1318,7 +1304,6 @@ export function useSessionMessages(
     hasMessages,
 
     // 设置方法
-    setSendMessageFn,
     setBeforeProcessQueueFn,
     appendMessagesBatch,
     prependMessagesBatch,
@@ -1328,11 +1313,14 @@ export function useSessionMessages(
     handleResultMessage,
     handleNormalMessage,
 
-    // 消息发送方法
+    // 消息 UI 方法
     addMessageToUI,
     addToQueue,
-    sendDirectly,
-    processNextQueuedMessage,
+    popNextQueuedMessage,
+
+    // 生成状态控制（由 useSessionTab 调用）
+    startGenerating,
+    stopGenerating,
 
     // 队列管理
     editQueueMessage,

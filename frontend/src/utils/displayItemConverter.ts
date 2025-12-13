@@ -184,10 +184,11 @@ export function convertMessageToDisplayItems(
       return displayItems
     }
 
-    // 处理压缩确认消息（isReplay = true），解析 XML 标签
+    // 处理回放消息（isReplay = true）
     if (isReplayMessage(message)) {
       const textBlock = message.content.find(b => b.type === 'text') as { type: 'text', text: string } | undefined
       if (textBlock?.text) {
+        // 尝试解析 XML 标签（本地命令输出）
         const parsed = parseLocalCommandTags(textBlock.text)
         if (parsed) {
           const localCommandOutput: LocalCommandOutput = {
@@ -200,8 +201,18 @@ export function convertMessageToDisplayItems(
           displayItems.push(localCommandOutput)
           return displayItems
         }
+        // 没有本地命令标签，作为普通回放消息显示（左对齐，markdown 渲染，次要颜色）
+        const userMessage: UserMessage = {
+          displayType: 'userMessage',
+          id: message.id,
+          content: [{ type: 'text', text: textBlock.text }] as any,
+          timestamp: message.timestamp,
+          isReplay: true,
+          style: 'hint'
+        }
+        displayItems.push(userMessage)
+        return displayItems
       }
-      // 如果没有解析到本地命令标签，跳过
       return displayItems
     }
 
@@ -334,10 +345,11 @@ export function convertToDisplayItems(
         continue
       }
 
-      // 处理压缩确认消息（isReplay = true），解析 XML 标签
+      // 处理回放消息（isReplay = true）
       if (isReplayMessage(message)) {
         const textBlock = message.content.find(b => b.type === 'text') as { type: 'text', text: string } | undefined
         if (textBlock?.text) {
+          // 尝试解析 XML 标签（本地命令输出）
           const parsed = parseLocalCommandTags(textBlock.text)
           if (parsed) {
             const localCommandOutput: LocalCommandOutput = {
@@ -348,7 +360,18 @@ export function convertToDisplayItems(
               timestamp: message.timestamp
             }
             displayItems.push(localCommandOutput)
+            continue
           }
+          // 没有本地命令标签，作为普通回放消息显示（左对齐，markdown 渲染，次要颜色）
+          const userMessage: UserMessage = {
+            displayType: 'userMessage',
+            id: message.id,
+            content: [{ type: 'text', text: textBlock.text }] as any,
+            timestamp: message.timestamp,
+            isReplay: true,
+            style: 'hint'
+          }
+          displayItems.push(userMessage)
         }
         continue
       }

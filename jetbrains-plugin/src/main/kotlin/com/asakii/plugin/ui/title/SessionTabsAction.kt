@@ -1,7 +1,7 @@
 package com.asakii.plugin.ui.title
 
-import com.asakii.plugin.bridge.IdeSessionBridge
 import com.asakii.plugin.messages.ClaudeCodePlusBundle
+import com.asakii.rpc.api.*
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -16,6 +16,7 @@ import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBPanel
 import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil
 import java.awt.*
 import java.awt.datatransfer.StringSelection
 import java.awt.event.*
@@ -35,24 +36,19 @@ import javax.swing.*
  * - 拖拽排序（暂未实现，Swing 标题栏拖拽较复杂）
  */
 class SessionTabsAction(
-    private val sessionBridge: IdeSessionBridge
+    private val sessionApi: JetBrainsSessionApi
 ) : AnAction("Claude 会话", "管理 Claude 会话", null), CustomComponentAction, Disposable {
 
     private val logger = Logger.getInstance(SessionTabsAction::class.java)
 
-    // 颜色定义
-    private val colorConnected = JBColor(Color(0x28a745), Color(0x3fb950))
-    private val colorDisconnected = JBColor(Color(0xd73a49), Color(0xf85149))
-    private val colorAccent = JBColor(Color(0x0366d6), Color(0x58a6ff))
-    private val colorText = JBColor(Color(0x24292e), Color(0xe6edf3))
-    private val colorSecondary = JBColor(Color(0x6a737d), Color(0x8b949e))
-    private val colorHoverBg = JBColor(Color(0, 0, 0, 8), Color(255, 255, 255, 16))
-    private val colorActiveBg = JBColor(Color(0xffffff), Color(0x30363d))
-    private val colorActiveBorder = JBColor(Color(0x0366d6), Color(0x58a6ff))
-    private val colorCloseHover = JBColor(Color(0xd73a49), Color(0xf85149))
+    // 颜色定义 - 使用 IDEA 主题颜色
+    private val colorConnected = JBColor(Color(0x59A869), Color(0x499C54))  // 绿色
+    private val colorDisconnected = JBColor(Color(0xDB5860), Color(0xDB5860))  // 红色
+    private val colorConnecting = JBColor(Color(0x3592C4), Color(0x3592C4))  // 蓝色（连接中）
+    private val colorCloseHover = JBColor(Color(0xDB5860), Color(0xDB5860))
 
     // 当前状态
-    private var currentState: IdeSessionBridge.SessionState? = null
+    private var currentState: JetBrainsSessionState? = null
     private var removeListener: (() -> Unit)? = null
 
     // 脉冲动画
@@ -69,18 +65,21 @@ class SessionTabsAction(
     }
 
     // 会话列表
-    private var sessions: List<IdeSessionBridge.SessionSummary> = emptyList()
+    private var sessions: List<JetBrainsSessionSummary> = emptyList()
     private var activeSessionId: String? = null
 
-    // 滚动相关
-    private val maxVisibleWidth = JBUI.scale(280) // 最大可见宽度
+    // Tab 固定宽度
+    private val tabFixedWidth = JBUI.scale(100)
+    // 最大可见宽度（超过此宽度显示滚动箭头）- 约3个Tab
+    private val maxVisibleWidth = JBUI.scale(320)
 
-    // 内部标签容器（实际存放标签）
-    private val innerTabsPanel = JBPanel<JBPanel<*>>(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)).apply {
+    // 内部标签容器（实际存放标签）- 使用 BoxLayout 水平排列
+    private val innerTabsPanel = JBPanel<JBPanel<*>>().apply {
+        layout = BoxLayout(this, BoxLayout.X_AXIS)
         isOpaque = false
     }
 
-    // 滚动面板
+    // 滚动面板 - 限制最大宽度
     private val scrollPane = object : JScrollPane(innerTabsPanel) {
         init {
             isOpaque = false
@@ -91,10 +90,10 @@ class SessionTabsAction(
         }
 
         override fun getPreferredSize(): Dimension {
-            // 宽度取内容宽度和最大可见宽度的较小值
             val contentWidth = innerTabsPanel.preferredSize.width
-            val width = minOf(contentWidth, maxVisibleWidth)
-            return Dimension(width, JBUI.scale(26))
+            // 限制最大宽度，超过时需��滚动
+            val visibleWidth = minOf(contentWidth, maxVisibleWidth)
+            return Dimension(visibleWidth, JBUI.scale(26))
         }
     }
 
@@ -105,11 +104,11 @@ class SessionTabsAction(
         }
 
         override fun getPreferredSize(): Dimension {
-            // 动态计算宽度：内容宽度 + 箭头宽度（如果可见）
             val contentWidth = innerTabsPanel.preferredSize.width
-            val arrowWidth = if (leftArrow.isVisible || rightArrow.isVisible) JBUI.scale(36) else 0
-            val width = minOf(contentWidth + arrowWidth, maxVisibleWidth + JBUI.scale(40))
-            return Dimension(maxOf(width, JBUI.scale(80)), JBUI.scale(26))
+            val needsScroll = contentWidth > maxVisibleWidth
+            val arrowWidth = if (needsScroll) JBUI.scale(36) else 0
+            val visibleWidth = minOf(contentWidth, maxVisibleWidth)
+            return Dimension(visibleWidth + arrowWidth, JBUI.scale(26))
         }
     }
 
@@ -124,11 +123,11 @@ class SessionTabsAction(
         tabsPanel.add(rightArrow, BorderLayout.EAST)
 
         logger.info("🏷️ [SessionTabsAction] Registering session state listener")
-        removeListener = sessionBridge.addSessionStateListener { state ->
+        removeListener = sessionApi.addStateListener { state ->
             logger.info("🏷️ [SessionTabsAction] Received state update: ${state.sessions.size} sessions, active=${state.activeSessionId}")
             SwingUtilities.invokeLater { render(state) }
         }
-        val latestState = sessionBridge.latestState()
+        val latestState = sessionApi.getState()
         logger.info("🏷️ [SessionTabsAction] Initial state: ${latestState?.sessions?.size ?: 0} sessions")
         render(latestState)
     }
@@ -142,16 +141,17 @@ class SessionTabsAction(
             isFocusPainted = false
             isBorderPainted = false
             isContentAreaFilled = false
-            foreground = colorSecondary
+            foreground = UIUtil.getLabelDisabledForeground()
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             isVisible = false  // 默认隐藏
 
             addMouseListener(object : MouseAdapter() {
                 override fun mouseEntered(e: MouseEvent) {
-                    foreground = colorAccent
+                    foreground = UIUtil.getLabelForeground()
                 }
+
                 override fun mouseExited(e: MouseEvent) {
-                    foreground = colorSecondary
+                    foreground = UIUtil.getLabelDisabledForeground()
                 }
             })
 
@@ -165,7 +165,8 @@ class SessionTabsAction(
         val step = JBUI.scale(80)
         val viewport = scrollPane.viewport
         val currentPos = viewport.viewPosition
-        val newX = (currentPos.x + direction * step).coerceIn(0, maxOf(0, innerTabsPanel.preferredSize.width - viewport.width))
+        val newX =
+            (currentPos.x + direction * step).coerceIn(0, maxOf(0, innerTabsPanel.preferredSize.width - viewport.width))
         viewport.viewPosition = Point(newX, 0)
         updateArrowVisibility()
     }
@@ -174,15 +175,16 @@ class SessionTabsAction(
         val totalWidth = innerTabsPanel.preferredSize.width
         val viewportWidth = scrollPane.viewport.width
 
-        // 如果视口宽度为 0（未布局完成），不显示箭头
+        // 如果视口宽度为 0（未布局完成），检查是否需要滚动
+        val needsScroll = totalWidth > maxVisibleWidth
+
         if (viewportWidth <= 0) {
+            // 布局未完成时，根据内容宽度预判
             leftArrow.isVisible = false
-            rightArrow.isVisible = false
+            rightArrow.isVisible = needsScroll
             return
         }
 
-        // 只有当内容宽度真正超过可见区域时才需要滚动
-        val needsScroll = totalWidth > viewportWidth
         val currentX = scrollPane.viewport.viewPosition.x
         val maxScrollX = maxOf(0, totalWidth - viewportWidth)
 
@@ -199,7 +201,7 @@ class SessionTabsAction(
         place: String
     ): JComponent = tabsPanel
 
-    private fun render(state: IdeSessionBridge.SessionState?) {
+    private fun render(state: JetBrainsSessionState?) {
         currentState = state
         sessions = state?.sessions.orEmpty()
         activeSessionId = state?.activeSessionId
@@ -256,7 +258,7 @@ class SessionTabsAction(
     }
 
     private fun createTabComponent(
-        session: IdeSessionBridge.SessionSummary?,
+        session: JetBrainsSessionSummary?,
         title: String,
         isActive: Boolean,
         isConnected: Boolean,
@@ -273,7 +275,7 @@ class SessionTabsAction(
             init {
                 isOpaque = false
                 cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-                border = JBUI.Borders.empty(3, 8)
+                border = JBUI.Borders.empty(2, 4)  // 内边距
 
                 // 设置 tooltip，显示 sessionId（如果有）
                 toolTipText = if (session?.sessionId != null) {
@@ -306,7 +308,12 @@ class SessionTabsAction(
 
                         // 单击切换
                         if (session.id != activeSessionId) {
-                            sessionBridge.switchSession(session.id)
+                            sessionApi.sendCommand(
+                                JetBrainsSessionCommand(
+                                    type = JetBrainsSessionCommandType.SWITCH,
+                                    sessionId = session.id
+                                )
+                            )
                         }
                     }
 
@@ -339,23 +346,16 @@ class SessionTabsAction(
                 val closeX = width - closeButtonSize - closeButtonPadding
                 val closeY = (height - closeButtonSize) / 2
                 return point.x >= closeX && point.x <= closeX + closeButtonSize &&
-                       point.y >= closeY && point.y <= closeY + closeButtonSize
+                        point.y >= closeY && point.y <= closeY + closeButtonSize
             }
-
-            // 限制最大宽度
-            private val maxTabWidth = JBUI.scale(120)
 
             override fun getPreferredSize(): Dimension {
-                val fm = getFontMetrics(font)
-                val textWidth = fm.stringWidth(title)
-                // 状态点(8) + 间距(6) + 文字 + 关闭按钮区域(如果 hover)
-                val closeWidth = if (canClose) closeButtonSize + closeButtonPadding else 0
-                val baseWidth = JBUI.scale(8) + JBUI.scale(6) + textWidth + JBUI.scale(16) + closeWidth
-                // 限制最大宽度
-                val width = minOf(baseWidth, maxTabWidth)
-                val height = JBUI.scale(22)
-                return Dimension(width, height)
+                // 使用固定宽度
+                return Dimension(tabFixedWidth, JBUI.scale(22))
             }
+
+            override fun getMinimumSize(): Dimension = preferredSize
+            override fun getMaximumSize(): Dimension = preferredSize
 
             // 根据可用宽度截断标题
             private fun getTruncatedTitle(availableWidth: Int, fm: FontMetrics): String {
@@ -375,20 +375,37 @@ class SessionTabsAction(
 
                 val w = width.toFloat()
                 val h = height.toFloat()
-                val arc = h
+                val arc = JBUI.scale(6).toFloat()  // IDEA 风格：更方正的圆角
 
-                // 背景
+                // 边框颜色 - 使用主题颜色
+                val borderColor = JBUI.CurrentTheme.DefaultTabs.borderColor()
+                val activeBorderColor = JBUI.CurrentTheme.Focus.focusColor()
+
+                // 背景 - 所有 Tab 都有边框，类似浏览器标签页
                 when {
                     isActive -> {
-                        g2.color = colorActiveBg
+                        // 激活状态：填充背景 + 高亮边框
+                        g2.color = UIUtil.getListSelectionBackground(true)
                         g2.fill(RoundRectangle2D.Float(0f, 0f, w, h, arc, arc))
-                        g2.color = colorActiveBorder
+                        g2.color = activeBorderColor
                         g2.stroke = BasicStroke(1f)
                         g2.draw(RoundRectangle2D.Float(0.5f, 0.5f, w - 1, h - 1, arc, arc))
                     }
+
                     hovered -> {
-                        g2.color = colorHoverBg
+                        // 悬停状态：浅背景 + 普通边框
+                        g2.color = UIUtil.getListSelectionBackground(false)
                         g2.fill(RoundRectangle2D.Float(0f, 0f, w, h, arc, arc))
+                        g2.color = borderColor
+                        g2.stroke = BasicStroke(1f)
+                        g2.draw(RoundRectangle2D.Float(0.5f, 0.5f, w - 1, h - 1, arc, arc))
+                    }
+
+                    else -> {
+                        // 普通状态：只有边框
+                        g2.color = borderColor
+                        g2.stroke = BasicStroke(1f)
+                        g2.draw(RoundRectangle2D.Float(0.5f, 0.5f, w - 1, h - 1, arc, arc))
                     }
                 }
 
@@ -405,20 +422,32 @@ class SessionTabsAction(
                         val pulseSize = dotSize * pulseScale
                         val pulseX = x + (dotSize - pulseSize) / 2
                         val pulseY = centerY - pulseSize / 2
-                        g2.color = Color(colorAccent.red, colorAccent.green, colorAccent.blue, (pulseOpacity * 100).toInt())
+                        g2.color = Color(
+                            colorConnecting.red,
+                            colorConnecting.green,
+                            colorConnecting.blue,
+                            (pulseOpacity * 100).toInt()
+                        )
                         g2.fill(Ellipse2D.Float(pulseX, pulseY, pulseSize, pulseSize))
-                        g2.color = colorAccent
+                        g2.color = colorConnecting
                         g2.fill(Ellipse2D.Float(x, dotY, dotSize, dotSize))
                     }
+
                     isGenerating -> {
                         val pulseSize = dotSize * pulseScale
                         val pulseX = x + (dotSize - pulseSize) / 2
                         val pulseY = centerY - pulseSize / 2
-                        g2.color = Color(colorConnected.red, colorConnected.green, colorConnected.blue, (pulseOpacity * 100).toInt())
+                        g2.color = Color(
+                            colorConnected.red,
+                            colorConnected.green,
+                            colorConnected.blue,
+                            (pulseOpacity * 100).toInt()
+                        )
                         g2.fill(Ellipse2D.Float(pulseX, pulseY, pulseSize, pulseSize))
                         g2.color = colorConnected
                         g2.fill(Ellipse2D.Float(x, dotY, dotSize, dotSize))
                     }
+
                     else -> {
                         g2.color = if (isConnected) colorConnected else colorDisconnected
                         g2.fill(Ellipse2D.Float(x, dotY, dotSize, dotSize))
@@ -426,11 +455,11 @@ class SessionTabsAction(
                 }
                 x += dotSize + JBUI.scale(6)
 
-                // 会话名称（可能需要截断）
+                // 会话名称 - 使用 IDEA 主题文字颜色
                 g2.color = when {
-                    isActive -> colorAccent
-                    hovered -> colorAccent
-                    else -> colorText
+                    isActive -> UIUtil.getListSelectionForeground(true)
+                    hovered -> UIUtil.getLabelForeground()
+                    else -> UIUtil.getLabelForeground()
                 }
                 g2.font = font
                 val textY = centerY + fm.ascent / 2 - fm.descent / 2 + 1
@@ -448,20 +477,44 @@ class SessionTabsAction(
                     if (closeHovered) {
                         // 悬停在关闭按钮上：红色背景
                         g2.color = colorCloseHover
-                        g2.fill(Ellipse2D.Float(closeX.toFloat(), closeY.toFloat(), closeButtonSize.toFloat(), closeButtonSize.toFloat()))
+                        g2.fill(
+                            Ellipse2D.Float(
+                                closeX.toFloat(),
+                                closeY.toFloat(),
+                                closeButtonSize.toFloat(),
+                                closeButtonSize.toFloat()
+                            )
+                        )
                         g2.color = Color.WHITE
                     } else {
                         // 普通状态：半透明背景
                         g2.color = Color(128, 128, 128, 80)
-                        g2.fill(Ellipse2D.Float(closeX.toFloat(), closeY.toFloat(), closeButtonSize.toFloat(), closeButtonSize.toFloat()))
-                        g2.color = colorSecondary
+                        g2.fill(
+                            Ellipse2D.Float(
+                                closeX.toFloat(),
+                                closeY.toFloat(),
+                                closeButtonSize.toFloat(),
+                                closeButtonSize.toFloat()
+                            )
+                        )
+                        g2.color = UIUtil.getLabelDisabledForeground()
                     }
 
                     // 绘制 X
                     g2.stroke = BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
                     val padding = JBUI.scale(4)
-                    g2.drawLine(closeX + padding, closeY + padding, closeX + closeButtonSize - padding, closeY + closeButtonSize - padding)
-                    g2.drawLine(closeX + closeButtonSize - padding, closeY + padding, closeX + padding, closeY + closeButtonSize - padding)
+                    g2.drawLine(
+                        closeX + padding,
+                        closeY + padding,
+                        closeX + closeButtonSize - padding,
+                        closeY + closeButtonSize - padding
+                    )
+                    g2.drawLine(
+                        closeX + closeButtonSize - padding,
+                        closeY + padding,
+                        closeX + padding,
+                        closeY + closeButtonSize - padding
+                    )
                 }
 
                 g2.dispose()
@@ -471,10 +524,15 @@ class SessionTabsAction(
 
     private fun handleClose(sessionId: String) {
         if (sessions.size <= 1) return
-        sessionBridge.closeSession(sessionId)
+        sessionApi.sendCommand(
+            JetBrainsSessionCommand(
+                type = JetBrainsSessionCommandType.CLOSE,
+                sessionId = sessionId
+            )
+        )
     }
 
-    private fun handleRename(session: IdeSessionBridge.SessionSummary) {
+    private fun handleRename(session: JetBrainsSessionSummary) {
         val newName = Messages.showInputDialog(
             tabsPanel,
             "Enter new session name:",
@@ -484,12 +542,18 @@ class SessionTabsAction(
             null
         )
         if (!newName.isNullOrBlank() && newName != session.title) {
-            // 发送 /rename 命令到后端
-            sessionBridge.renameSession(session.id, newName)
+            // 发送重命名命令到前端
+            sessionApi.sendCommand(
+                JetBrainsSessionCommand(
+                    type = JetBrainsSessionCommandType.RENAME,
+                    sessionId = session.id,
+                    newName = newName
+                )
+            )
         }
     }
 
-    private fun showContextMenu(e: MouseEvent, session: IdeSessionBridge.SessionSummary) {
+    private fun showContextMenu(e: MouseEvent, session: JetBrainsSessionSummary) {
         val menuItems = mutableListOf<Pair<String, () -> Unit>>(
             "Rename Session" to { handleRename(session) }
         )
@@ -515,7 +579,7 @@ class SessionTabsAction(
         popup.show(com.intellij.ui.awt.RelativePoint(e))
     }
 
-    private fun copySessionId(session: IdeSessionBridge.SessionSummary, component: JComponent) {
+    private fun copySessionId(session: JetBrainsSessionSummary, component: JComponent) {
         val sessionId = session.sessionId ?: return
         CopyPasteManager.getInstance().setContents(StringSelection(sessionId))
         logger.info("Copied session ID: $sessionId")
@@ -529,7 +593,10 @@ class SessionTabsAction(
             )
             .setFadeoutTime(2500)
             .createBalloon()
-            .show(com.intellij.ui.awt.RelativePoint.getCenterOf(component), com.intellij.openapi.ui.popup.Balloon.Position.below)
+            .show(
+                com.intellij.ui.awt.RelativePoint.getCenterOf(component),
+                com.intellij.openapi.ui.popup.Balloon.Position.below
+            )
     }
 
     override fun dispose() {

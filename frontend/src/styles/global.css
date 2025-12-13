@@ -51,7 +51,7 @@ html, body {
 }
 
 body {
-  /* 使用绝对定位确保填充整个视口，避免 JCEF 100vh 问题 */
+  /* 使用绝对定位确保填充整个视口，避免 IDE 嵌入式浏览器 100vh 问题 */
   position: fixed;
   top: 0;
   left: 0;
@@ -223,4 +223,18 @@ code {
   background-color: var(--theme-panel-background) !important;
   border: 1px solid var(--theme-border) !important;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Element Plus Tooltip 主题适配 */
+.el-popper.is-light,
+.el-popper.is-dark {
+  background-color: var(--theme-panel-background) !important;
+  border: 1px solid var(--theme-border) !important;
+  color: var(--theme-foreground) !important;
+}
+
+.el-popper.is-light .el-popper__arrow::before,
+.el-popper.is-dark .el-popper__arrow::before {
+  background-color: var(--theme-panel-background) !important;
+  border-color: var(--theme-border) !important;
 }

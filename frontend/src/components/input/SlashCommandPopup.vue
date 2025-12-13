@@ -5,9 +5,6 @@
     class="slash-command-popup"
     :style="popupStyle"
   >
-    <div class="popup-header">
-      <span class="header-title">{{ t('chat.slashCommands') }}</span>
-    </div>
     <div class="command-list">
       <div
         v-for="(cmd, index) in filteredCommands"
@@ -62,13 +59,13 @@ const commands = computed<SlashCommand[]>(() => [
   { name: '/rename', description: t('slashCommand.rename') },
 ])
 
-// 根据查询过滤命令
+// 根据查询过滤命令（只匹配命令名称，使用 startsWith）
 const filteredCommands = computed(() => {
   const q = props.query.toLowerCase()
   if (!q) return commands.value
+  // 只匹配命令名称（去掉 / 后比较）
   return commands.value.filter(cmd =>
-    cmd.name.toLowerCase().includes(q) ||
-    cmd.description.toLowerCase().includes(q)
+    cmd.name.slice(1).toLowerCase().startsWith(q)
   )
 })
 
@@ -156,26 +153,12 @@ onUnmounted(() => {
 
 <style scoped>
 .slash-command-popup {
-  background: var(--theme-background, #ffffff);
-  border: 1px solid var(--theme-border, #e1e4e8);
+  background: var(--theme-background);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   z-index: 10001;
   overflow: hidden;
-}
-
-.popup-header {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--theme-border, #e1e4e8);
-  background: var(--theme-panel-background, #f6f8fa);
-}
-
-.header-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--theme-secondary-foreground, #6a737d);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .command-list {
@@ -194,29 +177,29 @@ onUnmounted(() => {
 
 .command-item:hover,
 .command-item.selected {
-  background: var(--theme-hover-background, #f6f8fa);
+  background: var(--theme-hover-background);
 }
 
 .command-item.selected {
-  background: var(--theme-accent, #0366d6);
+  background: var(--theme-accent);
 }
 
 .command-item.selected .command-name,
 .command-item.selected .command-desc {
-  color: var(--theme-background, #ffffff);
+  color: var(--theme-background);
 }
 
 .command-name {
   font-size: 13px;
   font-weight: 600;
-  color: var(--theme-accent, #0366d6);
+  color: var(--theme-accent);
   font-family: monospace;
   flex-shrink: 0;
 }
 
 .command-desc {
   font-size: 12px;
-  color: var(--theme-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -226,6 +209,6 @@ onUnmounted(() => {
   padding: 16px 12px;
   text-align: center;
   font-size: 13px;
-  color: var(--theme-secondary-foreground, #6a737d);
+  color: var(--theme-secondary-foreground);
 }
 </style>

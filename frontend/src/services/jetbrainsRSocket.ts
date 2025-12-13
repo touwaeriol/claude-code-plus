@@ -1,0 +1,721 @@
+/**
+ * JetBrains IDE 集成 RSocket 服务
+ *
+ * 使用 RSocket + Protobuf 与后端通信
+ * 支持双向调用：
+ * - 前端 → 后端：openFile, showDiff, getTheme 等
+ * - 后端 → 前端：onThemeChanged, onSessionCommand 等
+ */
+
+import { RSocketClient } from './rsocket/RSocketClient'
+import { resolveServerHttpUrl } from '@/utils/serverUrl'
+import type {
+  OpenFileRequest,
+  ShowDiffRequest,
+  ShowMultiEditDiffRequest,
+  EditOperation
+} from './jetbrainsApi'
+
+// ========== Protobuf 轻量编解码 ==========
+
+/**
+ * 手写 Protobuf 编码工具
+ * 避免生成完整的 proto 定义
+ */
+const ProtoEncoder = {
+  /**
+   * 写入 varint
+   */
+  writeVarint(buffer: number[], value: number): void {
+    let v = value >>> 0
+    while (v > 0x7f) {
+      buffer.push((v & 0x7f) | 0x80)
+      v >>>= 7
+    }
+    buffer.push(v)
+  },
+
+  /**
+   * 写入字符串字段（field_number << 3 | 2）
+   */
+  writeString(buffer: number[], fieldNumber: number, value: string): void {
+    const tag = (fieldNumber << 3) | 2
+    buffer.push(tag)
+    const bytes = new TextEncoder().encode(value)
+    this.writeVarint(buffer, bytes.length)
+    bytes.forEach(b => buffer.push(b))
+  },
+
+  /**
+   * 写入 int32 字段（field_number << 3 | 0）
+   */
+  writeInt32(buffer: number[], fieldNumber: number, value: number): void {
+    const tag = (fieldNumber << 3) | 0
+    buffer.push(tag)
+    this.writeVarint(buffer, value)
+  },
+
+  /**
+   * 写入 bool 字段
+   */
+  writeBool(buffer: number[], fieldNumber: number, value: boolean): void {
+    if (value) {
+      const tag = (fieldNumber << 3) | 0
+      buffer.push(tag)
+      buffer.push(1)
+    }
+  },
+
+  /**
+   * 写入嵌套消息字段
+   */
+  writeMessage(buffer: number[], fieldNumber: number, messageBytes: number[]): void {
+    const tag = (fieldNumber << 3) | 2
+    buffer.push(tag)
+    this.writeVarint(buffer, messageBytes.length)
+    messageBytes.forEach(b => buffer.push(b))
+  }
+}
+
+/**
+ * 编码 JetBrainsOpenFileRequest
+ */
+function encodeOpenFileRequest(request: OpenFileRequest): Uint8Array {
+  const buffer: number[] = []
+  ProtoEncoder.writeString(buffer, 1, request.filePath)
+  if (request.line !== undefined) ProtoEncoder.writeInt32(buffer, 2, request.line)
+  if (request.column !== undefined) ProtoEncoder.writeInt32(buffer, 3, request.column)
+  if (request.startOffset !== undefined) ProtoEncoder.writeInt32(buffer, 4, request.startOffset)
+  if (request.endOffset !== undefined) ProtoEncoder.writeInt32(buffer, 5, request.endOffset)
+  return new Uint8Array(buffer)
+}
+
+/**
+ * 编码 JetBrainsShowDiffRequest
+ */
+function encodeShowDiffRequest(request: ShowDiffRequest): Uint8Array {
+  const buffer: number[] = []
+  ProtoEncoder.writeString(buffer, 1, request.filePath)
+  ProtoEncoder.writeString(buffer, 2, request.oldContent)
+  ProtoEncoder.writeString(buffer, 3, request.newContent)
+  if (request.title) ProtoEncoder.writeString(buffer, 4, request.title)
+  return new Uint8Array(buffer)
+}
+
+/**
+ * 编码单个 EditOperation
+ */
+function encodeEditOperation(edit: EditOperation): number[] {
+  const buffer: number[] = []
+  ProtoEncoder.writeString(buffer, 1, edit.oldString)
+  ProtoEncoder.writeString(buffer, 2, edit.newString)
+  if (edit.replaceAll) ProtoEncoder.writeBool(buffer, 3, edit.replaceAll)
+  return buffer
+}
+
+/**
+ * 编码 JetBrainsShowMultiEditDiffRequest
+ */
+function encodeShowMultiEditDiffRequest(request: ShowMultiEditDiffRequest): Uint8Array {
+  const buffer: number[] = []
+  ProtoEncoder.writeString(buffer, 1, request.filePath)
+  // repeated edits = 2
+  request.edits.forEach(edit => {
+    const editBytes = encodeEditOperation(edit)
+    ProtoEncoder.writeMessage(buffer, 2, editBytes)
+  })
+  if (request.currentContent) ProtoEncoder.writeString(buffer, 3, request.currentContent)
+  return new Uint8Array(buffer)
+}
+
+/**
+ * 编码 JetBrainsSetLocaleRequest
+ */
+function encodeSetLocaleRequest(locale: string): Uint8Array {
+  const buffer: number[] = []
+  ProtoEncoder.writeString(buffer, 1, locale)
+  return new Uint8Array(buffer)
+}
+
+/**
+ * 解码 JetBrainsOperationResponse
+ */
+function decodeOperationResponse(data: Uint8Array): { success: boolean; error?: string } {
+  let success = false
+  let error: string | undefined
+
+  let offset = 0
+  while (offset < data.length) {
+    const tag = data[offset++]
+    const fieldNumber = tag >> 3
+    const wireType = tag & 0x7
+
+    if (wireType === 0) {
+      // varint
+      let value = 0
+      let shift = 0
+      while (offset < data.length) {
+        const byte = data[offset++]
+        value |= (byte & 0x7f) << shift
+        if ((byte & 0x80) === 0) break
+        shift += 7
+      }
+      if (fieldNumber === 1) success = value !== 0
+    } else if (wireType === 2) {
+      // length-delimited
+      let length = 0
+      let shift = 0
+      while (offset < data.length) {
+        const byte = data[offset++]
+        length |= (byte & 0x7f) << shift
+        if ((byte & 0x80) === 0) break
+        shift += 7
+      }
+      const stringBytes = data.slice(offset, offset + length)
+      offset += length
+      if (fieldNumber === 2) error = new TextDecoder().decode(stringBytes)
+    }
+  }
+
+  return { success, error }
+}
+
+/**
+ * 解码 IdeThemeProto
+ */
+function decodeThemeResponse(data: Uint8Array): IdeTheme | null {
+  // 解码 JetBrainsGetThemeResponse，其中 theme = 1
+  let offset = 0
+  while (offset < data.length) {
+    const tag = data[offset++]
+    const fieldNumber = tag >> 3
+    const wireType = tag & 0x7
+
+    if (wireType === 2 && fieldNumber === 1) {
+      // 嵌套消息
+      let length = 0
+      let shift = 0
+      while (offset < data.length) {
+        const byte = data[offset++]
+        length |= (byte & 0x7f) << shift
+        if ((byte & 0x80) === 0) break
+        shift += 7
+      }
+      const themeBytes = data.slice(offset, offset + length)
+      return decodeIdeTheme(themeBytes)
+    }
+  }
+  return null
+}
+
+/**
+ * 解码 IdeThemeProto 内部
+ */
+function decodeIdeTheme(data: Uint8Array): IdeTheme {
+  const theme: any = {}
+  const fieldNames: Record<number, string> = {
+    1: 'background', 2: 'foreground', 3: 'borderColor', 4: 'panelBackground',
+    5: 'textFieldBackground', 6: 'selectionBackground', 7: 'selectionForeground',
+    8: 'linkColor', 9: 'errorColor', 10: 'warningColor', 11: 'successColor',
+    12: 'separatorColor', 13: 'hoverBackground', 14: 'accentColor',
+    15: 'infoBackground', 16: 'codeBackground', 17: 'secondaryForeground',
+    18: 'fontFamily', 19: 'fontSize', 20: 'editorFontFamily', 21: 'editorFontSize'
+  }
+
+  let offset = 0
+  while (offset < data.length) {
+    const tag = data[offset++]
+    const fieldNumber = tag >> 3
+    const wireType = tag & 0x7
+
+    if (wireType === 0) {
+      // varint (fontSize, editorFontSize)
+      let value = 0
+      let shift = 0
+      while (offset < data.length) {
+        const byte = data[offset++]
+        value |= (byte & 0x7f) << shift
+        if ((byte & 0x80) === 0) break
+        shift += 7
+      }
+      const name = fieldNames[fieldNumber]
+      if (name) theme[name] = value
+    } else if (wireType === 2) {
+      // length-delimited (string)
+      let length = 0
+      let shift = 0
+      while (offset < data.length) {
+        const byte = data[offset++]
+        length |= (byte & 0x7f) << shift
+        if ((byte & 0x80) === 0) break
+        shift += 7
+      }
+      const stringBytes = data.slice(offset, offset + length)
+      offset += length
+      const name = fieldNames[fieldNumber]
+      if (name) theme[name] = new TextDecoder().decode(stringBytes)
+    }
+  }
+
+  return theme as IdeTheme
+}
+
+/**
+ * 解码 JetBrainsGetLocaleResponse
+ */
+function decodeLocaleResponse(data: Uint8Array): string {
+  let offset = 0
+  while (offset < data.length) {
+    const tag = data[offset++]
+    const fieldNumber = tag >> 3
+    const wireType = tag & 0x7
+
+    if (wireType === 2 && fieldNumber === 1) {
+      let length = 0
+      let shift = 0
+      while (offset < data.length) {
+        const byte = data[offset++]
+        length |= (byte & 0x7f) << shift
+        if ((byte & 0x80) === 0) break
+        shift += 7
+      }
+      const stringBytes = data.slice(offset, offset + length)
+      return new TextDecoder().decode(stringBytes)
+    }
+  }
+  return 'en-US'
+}
+
+/**
+ * 解码 JetBrainsGetProjectPathResponse
+ */
+function decodeProjectPathResponse(data: Uint8Array): string {
+  let offset = 0
+  while (offset < data.length) {
+    const tag = data[offset++]
+    const fieldNumber = tag >> 3
+    const wireType = tag & 0x7
+
+    if (wireType === 2 && fieldNumber === 1) {
+      let length = 0
+      let shift = 0
+      while (offset < data.length) {
+        const byte = data[offset++]
+        length |= (byte & 0x7f) << shift
+        if ((byte & 0x80) === 0) break
+        shift += 7
+      }
+      const stringBytes = data.slice(offset, offset + length)
+      return new TextDecoder().decode(stringBytes)
+    }
+  }
+  return ''
+}
+
+/**
+ * 编码单个 SessionSummary
+ */
+function encodeSessionSummary(session: SessionSummary): number[] {
+  const buffer: number[] = []
+  ProtoEncoder.writeString(buffer, 1, session.id)
+  ProtoEncoder.writeString(buffer, 2, session.title)
+  if (session.sessionId) ProtoEncoder.writeString(buffer, 3, session.sessionId)
+  ProtoEncoder.writeBool(buffer, 4, session.isGenerating)
+  ProtoEncoder.writeBool(buffer, 5, session.isConnected)
+  ProtoEncoder.writeBool(buffer, 6, session.isConnecting)
+  return buffer
+}
+
+/**
+ * 编码 JetBrainsSessionState
+ */
+function encodeSessionState(state: SessionState): Uint8Array {
+  const buffer: number[] = []
+  // repeated sessions = 1
+  state.sessions.forEach(session => {
+    const sessionBytes = encodeSessionSummary(session)
+    ProtoEncoder.writeMessage(buffer, 1, sessionBytes)
+  })
+  if (state.activeSessionId) ProtoEncoder.writeString(buffer, 2, state.activeSessionId)
+  return new Uint8Array(buffer)
+}
+
+/**
+ * 解码 SessionCommand（从 Protobuf 字节）
+ */
+function decodeSessionCommandProto(data: Uint8Array): SessionCommand {
+  const typeMap: Record<number, SessionCommand['type']> = {
+    1: 'switch',
+    2: 'create',
+    3: 'close',
+    4: 'rename',
+    5: 'toggleHistory',
+    6: 'setLocale'
+  }
+
+  let type: SessionCommand['type'] = 'switch'
+  let sessionId: string | undefined
+  let newName: string | undefined
+  let locale: string | undefined
+
+  let offset = 0
+  while (offset < data.length) {
+    const tag = data[offset++]
+    const fieldNumber = tag >> 3
+    const wireType = tag & 0x7
+
+    if (wireType === 0) {
+      // varint
+      let value = 0
+      let shift = 0
+      while (offset < data.length) {
+        const byte = data[offset++]
+        value |= (byte & 0x7f) << shift
+        if ((byte & 0x80) === 0) break
+        shift += 7
+      }
+      if (fieldNumber === 1) {
+        type = typeMap[value] || 'switch'
+      }
+    } else if (wireType === 2) {
+      // length-delimited
+      let length = 0
+      let shift = 0
+      while (offset < data.length) {
+        const byte = data[offset++]
+        length |= (byte & 0x7f) << shift
+        if ((byte & 0x80) === 0) break
+        shift += 7
+      }
+      const stringBytes = data.slice(offset, offset + length)
+      offset += length
+      const stringValue = new TextDecoder().decode(stringBytes)
+
+      switch (fieldNumber) {
+        case 2: sessionId = stringValue; break
+        case 3: newName = stringValue; break
+        case 4: locale = stringValue; break
+      }
+    }
+  }
+
+  return { type, sessionId, newName, locale }
+}
+
+// ========== 类型定义 ==========
+
+export interface IdeTheme {
+  background: string
+  foreground: string
+  borderColor: string
+  panelBackground: string
+  textFieldBackground: string
+  selectionBackground: string
+  selectionForeground: string
+  linkColor: string
+  errorColor: string
+  warningColor: string
+  successColor: string
+  separatorColor: string
+  hoverBackground: string
+  accentColor: string
+  infoBackground: string
+  codeBackground: string
+  secondaryForeground: string
+  fontFamily: string
+  fontSize: number
+  editorFontFamily: string
+  editorFontSize: number
+}
+
+export interface SessionCommand {
+  type: 'switch' | 'create' | 'close' | 'rename' | 'toggleHistory' | 'setLocale'
+  sessionId?: string
+  newName?: string
+  locale?: string
+}
+
+export interface SessionSummary {
+  id: string
+  title: string
+  sessionId?: string | null
+  isGenerating: boolean
+  isConnected: boolean
+  isConnecting: boolean
+}
+
+export interface SessionState {
+  sessions: SessionSummary[]
+  activeSessionId?: string | null
+}
+
+export type ThemeChangeHandler = (theme: IdeTheme) => void
+export type SessionCommandHandler = (command: SessionCommand) => void
+
+// ========== RSocket 服务 ==========
+
+class JetBrainsRSocketService {
+  private client: RSocketClient | null = null
+  private themeChangeHandlers: ThemeChangeHandler[] = []
+  private sessionCommandHandlers: SessionCommandHandler[] = []
+  private connected = false
+
+  /**
+   * 连接到 JetBrains RSocket 端点
+   */
+  async connect(): Promise<boolean> {
+    if (this.connected) return true
+
+    try {
+      const httpUrl = resolveServerHttpUrl()
+      const wsUrl = httpUrl.replace(/^http/, 'ws') + '/jetbrains-rsocket'
+
+      this.client = new RSocketClient({ url: wsUrl })
+
+      // 注册反向调用处理器（接收 Uint8Array 数据）
+      this.client.registerHandler('jetbrains.onThemeChanged', async (data: Uint8Array) => {
+        console.log('[JetBrainsRSocket] 收到主题变化推送')
+        const theme = decodeIdeTheme(data)
+        this.themeChangeHandlers.forEach(h => h(theme))
+        return {}
+      })
+
+      this.client.registerHandler('jetbrains.onSessionCommand', async (data: Uint8Array) => {
+        console.log('[JetBrainsRSocket] 收到会话命令推送')
+        const command = decodeSessionCommandProto(data)
+        console.log('[JetBrainsRSocket] 会话命令:', command)
+        this.sessionCommandHandlers.forEach(h => h(command))
+        return {}
+      })
+
+      await this.client.connect()
+      this.connected = true
+      console.log('[JetBrainsRSocket] Connected')
+      return true
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Connection failed:', error)
+      return false
+    }
+  }
+
+  /**
+   * 断开连接
+   */
+  disconnect(): void {
+    if (this.client) {
+      this.client.disconnect()
+      this.client = null
+      this.connected = false
+      console.log('[JetBrainsRSocket] Disconnected')
+    }
+  }
+
+  /**
+   * 检查是否已连接
+   */
+  isConnected(): boolean {
+    return this.connected
+  }
+
+  // ========== 前端 → 后端 调用 ==========
+
+  /**
+   * 打开文件
+   */
+  async openFile(request: OpenFileRequest): Promise<boolean> {
+    if (!this.client) return false
+
+    try {
+      const data = encodeOpenFileRequest(request)
+      const response = await this.client.requestResponse('jetbrains.openFile', data)
+      const result = decodeOperationResponse(response)
+      if (result.success) {
+        console.log('[JetBrainsRSocket] Opened file:', request.filePath)
+      }
+      return result.success
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to open file:', error)
+      return false
+    }
+  }
+
+  /**
+   * 显示 Diff
+   */
+  async showDiff(request: ShowDiffRequest): Promise<boolean> {
+    if (!this.client) return false
+
+    try {
+      const data = encodeShowDiffRequest(request)
+      const response = await this.client.requestResponse('jetbrains.showDiff', data)
+      const result = decodeOperationResponse(response)
+      if (result.success) {
+        console.log('[JetBrainsRSocket] Showing diff for:', request.filePath)
+      }
+      return result.success
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to show diff:', error)
+      return false
+    }
+  }
+
+  /**
+   * 显示多编辑 Diff
+   */
+  async showMultiEditDiff(request: ShowMultiEditDiffRequest): Promise<boolean> {
+    if (!this.client) return false
+
+    try {
+      const data = encodeShowMultiEditDiffRequest(request)
+      const response = await this.client.requestResponse('jetbrains.showMultiEditDiff', data)
+      const result = decodeOperationResponse(response)
+      if (result.success) {
+        console.log('[JetBrainsRSocket] Showing multi-edit diff for:', request.filePath)
+      }
+      return result.success
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to show multi-edit diff:', error)
+      return false
+    }
+  }
+
+  /**
+   * 获取主题
+   */
+  async getTheme(): Promise<IdeTheme | null> {
+    if (!this.client) return null
+
+    try {
+      const response = await this.client.requestResponse('jetbrains.getTheme', new Uint8Array())
+      return decodeThemeResponse(response)
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to get theme:', error)
+      return null
+    }
+  }
+
+  /**
+   * 获取语言设置
+   */
+  async getLocale(): Promise<string> {
+    if (!this.client) return 'en-US'
+
+    try {
+      const response = await this.client.requestResponse('jetbrains.getLocale', new Uint8Array())
+      return decodeLocaleResponse(response)
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to get locale:', error)
+      return 'en-US'
+    }
+  }
+
+  /**
+   * 设置语言
+   */
+  async setLocale(locale: string): Promise<boolean> {
+    if (!this.client) return false
+
+    try {
+      const data = encodeSetLocaleRequest(locale)
+      const response = await this.client.requestResponse('jetbrains.setLocale', data)
+      const result = decodeOperationResponse(response)
+      return result.success
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to set locale:', error)
+      return false
+    }
+  }
+
+  /**
+   * 获取项目路径
+   */
+  async getProjectPath(): Promise<string | null> {
+    if (!this.client) return null
+
+    try {
+      const response = await this.client.requestResponse('jetbrains.getProjectPath', new Uint8Array())
+      return decodeProjectPathResponse(response)
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to get project path:', error)
+      return null
+    }
+  }
+
+  /**
+   * 上报会话状态到后端
+   */
+  async reportSessionState(state: SessionState): Promise<boolean> {
+    if (!this.client) return false
+
+    try {
+      const data = encodeSessionState(state)
+      const response = await this.client.requestResponse('jetbrains.reportSessionState', data)
+      const result = decodeOperationResponse(response)
+      if (result.success) {
+        console.log('[JetBrainsRSocket] Reported session state:', state.sessions.length, 'sessions')
+      }
+      return result.success
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to report session state:', error)
+      return false
+    }
+  }
+
+  // ========== 后端 → 前端 事件监听 ==========
+
+  /**
+   * 添加主题变化监听器
+   */
+  onThemeChange(handler: ThemeChangeHandler): () => void {
+    this.themeChangeHandlers.push(handler)
+    return () => {
+      const index = this.themeChangeHandlers.indexOf(handler)
+      if (index >= 0) this.themeChangeHandlers.splice(index, 1)
+    }
+  }
+
+  /**
+   * 添加会话命令监听器
+   */
+  onSessionCommand(handler: SessionCommandHandler): () => void {
+    this.sessionCommandHandlers.push(handler)
+    return () => {
+      const index = this.sessionCommandHandlers.indexOf(handler)
+      if (index >= 0) this.sessionCommandHandlers.splice(index, 1)
+    }
+  }
+
+  /**
+   * 解码会话命令（从 Protobuf 字节）
+   */
+  private decodeSessionCommand(data: any): SessionCommand {
+    // 如果是 Uint8Array，使用 Protobuf 解码
+    if (data instanceof Uint8Array) {
+      return decodeSessionCommandProto(data)
+    }
+    // 如果是 ArrayBuffer 或类似对象，转换为 Uint8Array
+    if (data && typeof data === 'object' && !(data instanceof Array)) {
+      const bytes = new Uint8Array(Object.values(data))
+      return decodeSessionCommandProto(bytes)
+    }
+    // 回退到简单解析
+    const typeMap: Record<number, SessionCommand['type']> = {
+      1: 'switch',
+      2: 'create',
+      3: 'close',
+      4: 'rename',
+      5: 'toggleHistory',
+      6: 'setLocale'
+    }
+    return {
+      type: typeMap[data?.type] || 'switch',
+      sessionId: data?.sessionId,
+      newName: data?.newName,
+      locale: data?.locale
+    }
+  }
+}
+
+// ========== 单例导出 ==========
+
+export const jetbrainsRSocket = new JetBrainsRSocketService()

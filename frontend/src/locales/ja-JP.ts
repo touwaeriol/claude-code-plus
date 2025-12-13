@@ -27,9 +27,9 @@ export default {
     renderFailed: 'レンダリング失敗'
   },
   chat: {
-    placeholder: 'メッセージを入力...',
-    placeholderWithShortcuts: 'メッセージを入力... (Enterで送信、Shift+Enterで改行、Ctrl+Enterで中断)',
-    placeholderWithShortcutsCtrl: 'メッセージを入力... (Enterで送信、Shift+Enterで改行、Ctrl+Enterで中断)',
+    placeholder: '',
+    placeholderWithShortcuts: '',
+    placeholderWithShortcutsCtrl: '',
     newSession: '新しいセッション',
     history: '履歴',
     thinking: '考え中...',
@@ -43,7 +43,7 @@ export default {
     emptyState: '新しいセッションを開始するか、履歴から選択してください。',
     sendMessage: 'メッセージを送信',
     sendMessageShortcut: 'メッセージを送信 (Enter) | 右クリックでその他のオプション',
-    addContext: 'コンテキストを追加',
+    addContext: "{'@'} コンテキストを追加",
     autoCleanupContext: 'コンテキスト自動クリーンアップ',
     autoCleanupContextTooltip: 'メッセージ送信後にコンテキストタグを自動的にクリア',
     dropFileToAddContext: 'ファイルをここにドロップしてコンテキストに追加',
@@ -171,7 +171,14 @@ export default {
     todoTool: {
       pending: '保留中',
       inProgress: '進行中',
-      completed: '完了'
+      completed: '完了',
+      tasksCount: '{n}件のタスク'
+    },
+    multiEdit: {
+      changes: '{n}箇所'
+    },
+    writeTool: {
+      lines: '{n}行'
     }
   },
   settings: {
@@ -239,6 +246,7 @@ export default {
     allow: '許可',
     deny: '拒否',
     denyReasonPlaceholder: '拒否理由（任意）',
+    noParams: 'パラメータなし',
     confirm: '確認',
     escToDeny: 'ESCで拒否',
     destination: {
@@ -263,6 +271,8 @@ export default {
       acceptEdits: '編集を自動承認',
       plan: 'プランモード',
       bypassPermissions: '権限をバイパス',
+      bypass: 'バイパス',
+      bypassTooltip: 'すべての権限確認をスキップして直接実行',
       dontAsk: '再度確認しない'
     }
   }
@@ -271,7 +281,12 @@ export default {
     interrupted: '[ユーザーによりリクエストが中断されました]'
   },
   compact: {
-    compacting: '会話コンテキストを圧縮中...'
+    compacting: '会話コンテキストを圧縮中...',
+    contextRestored: 'コンテキストが復元されました',
+    sessionSummary: '（セッションの要約）',
+    expand: '展開',
+    collapse: '折りたたむ',
+    originalTokens: '元のトークン'
   },
   slashCommand: {
     compact: '現在のセッションのコンテキストを圧縮',

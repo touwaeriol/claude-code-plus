@@ -2,16 +2,16 @@
  * 工具展示拦截器
  * 类似 Spring Boot 的 HandlerInterceptor 模式
  *
- * 在 IDEA JCEF 环境中，拦截工具点击事件，调用 IDEA 原生功能
+ * 在 JetBrains IDE 环境中，拦截工具点击事件，调用 IDEA 原生功能
+ * 通过 HTTP API 与后端通信
  */
 
 import {
-  getIdeaJcef,
-  isIdeaJcefAvailable,
-  type OpenFilePayload,
-  type ShowDiffPayload,
-  type ShowMultiEditDiffPayload
-} from './ideaJcefBridge'
+  jetbrainsBridge,
+  type OpenFileRequest,
+  type ShowDiffRequest,
+  type ShowMultiEditDiffRequest
+} from './jetbrainsApi'
 
 // ====== 工具输入类型定义 ======
 
@@ -58,9 +58,9 @@ export interface ToolShowContext<TInput = Record<string, unknown>> {
 }
 
 export interface ToolShowApi {
-  openFile: (payload: OpenFilePayload) => void
-  showDiff: (payload: ShowDiffPayload) => void
-  showMultiEditDiff: (payload: ShowMultiEditDiffPayload) => void
+  openFile: (payload: OpenFileRequest) => void
+  showDiff: (payload: ShowDiffRequest) => void
+  showMultiEditDiff: (payload: ShowMultiEditDiffRequest) => void
 }
 
 /**
@@ -77,10 +77,17 @@ class ToolShowInterceptorService {
   private initialized = false
 
   /**
-   * 检测拦截器是否可用（IDEA JCEF 环境）
+   * 检测拦截器是否可用（JetBrains IDE 环境）
    */
   isAvailable(): boolean {
-    return isIdeaJcefAvailable() && !!getIdeaJcef()?.toolShow
+    return jetbrainsBridge.isEnabled()
+  }
+
+  /**
+   * 检测拦截器是否已初始化
+   */
+  isInitialized(): boolean {
+    return this.initialized
   }
 
   /**
@@ -112,18 +119,35 @@ class ToolShowInterceptorService {
    * @returns true = 已拦截（IDEA 处理），false = 放行（前端展开）
    */
   intercept(context: ToolShowContext): boolean {
+    console.log('[ToolShowInterceptor] intercept called:', {
+      toolType: context.toolType,
+      isAvailable: this.isAvailable(),
+      hasHandler: this.handlers.has(context.toolType),
+      initialized: this.initialized,
+      handlersCount: this.handlers.size
+    })
+
     if (!this.isAvailable()) {
-      return false // 非 IDEA 环境，放行
+      console.log('[ToolShowInterceptor] Not available, passing through')
+      return false // 非 IDE 环境，放行
     }
 
     const handler = this.handlers.get(context.toolType)
     if (!handler) {
+      console.log(`[ToolShowInterceptor] No handler for ${context.toolType}, passing through`)
       return false // 没有注册 handler，放行
     }
 
-    const ideaJcef = getIdeaJcef()!
+    // 创建 API 适配器，调用 jetbrainsBridge
+    const api: ToolShowApi = {
+      openFile: (payload) => jetbrainsBridge.openFile(payload),
+      showDiff: (payload) => jetbrainsBridge.showDiff(payload),
+      showMultiEditDiff: (payload) => jetbrainsBridge.showMultiEditDiff(payload)
+    }
+
     try {
-      handler(context, ideaJcef.toolShow)
+      console.log(`[ToolShowInterceptor] Calling handler for ${context.toolType}`)
+      handler(context, api)
       return true // 拦截成功
     } catch (error) {
       console.error(`[ToolShowInterceptor] Handler error for ${context.toolType}:`, error)
@@ -135,10 +159,13 @@ class ToolShowInterceptorService {
    * 初始化默认 handlers
    */
   init(): void {
-    if (this.initialized) return
+    if (this.initialized) {
+      console.log('[ToolShowInterceptor] Already initialized, skipping')
+      return
+    }
     this.registerDefaultHandlers()
     this.initialized = true
-    console.log('✅ ToolShowInterceptor initialized')
+    console.log('✅ ToolShowInterceptor initialized with handlers:', Array.from(this.handlers.keys()))
   }
 
   private registerDefaultHandlers(): void {
@@ -146,7 +173,7 @@ class ToolShowInterceptorService {
     this.register<ReadToolInput>('Read', (ctx, api) => {
       api.openFile({
         filePath: ctx.input.file_path || ctx.input.path || '',
-        startLine: ctx.input.offset ? undefined : 1,
+        line: ctx.input.offset ? undefined : 1,
         startOffset: ctx.input.offset,
         endOffset:
           ctx.input.offset && ctx.input.limit ? ctx.input.offset + ctx.input.limit : undefined
@@ -188,14 +215,15 @@ class ToolShowInterceptorService {
 // 单例导出
 export const toolShowInterceptor = new ToolShowInterceptorService()
 
-// 自动初始化
-if (typeof window !== 'undefined') {
-  // 等待 IDEA JCEF 注入完成
-  window.addEventListener('idea:jcefReady', () => {
+/**
+ * 初始化工具展示拦截器
+ * 应在 JetBrains 集成初始化后调用
+ */
+export function initToolShowInterceptor(): void {
+  if (jetbrainsBridge.isEnabled()) {
     toolShowInterceptor.init()
-  })
-  // 如果已经注入，立即初始化
-  if (isIdeaJcefAvailable()) {
-    toolShowInterceptor.init()
+    console.log('[ToolShowInterceptor] Initialized with JetBrains bridge')
+  } else {
+    console.log('[ToolShowInterceptor] JetBrains bridge not enabled, skipping initialization')
   }
 }

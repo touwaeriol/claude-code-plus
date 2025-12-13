@@ -91,6 +91,10 @@ export interface UserMessage extends BaseDisplayItem {
   requestStats?: RequestStats
   /** 是否正在流式响应 */
   isStreaming?: boolean
+  /** 消息样式：'hint'=md渲染禁止编辑，'error'=错误颜色禁止编辑 */
+  style?: 'hint' | 'error'
+  /** 是否是回放消息（后端返回的历史/命令结果消息）：true=左对齐，false/undefined=右对齐 */
+  isReplay?: boolean
 }
 
 /**
@@ -127,14 +131,6 @@ export interface SystemMessage extends BaseDisplayItem {
  */
 export interface ErrorResult extends BaseDisplayItem {
   displayType: 'errorResult'
-  message: string
-}
-
-/**
- * 打断提示（用户中断请求时显示）
- */
-export interface InterruptedHint extends BaseDisplayItem {
-  displayType: 'interruptedHint'
   message: string
 }
 
@@ -531,7 +527,6 @@ export type DisplayItem =
   | ToolCall
   | SystemMessage
   | ErrorResult
-  | InterruptedHint
   | CompactSummary
   | CompactingStatus
   | LocalCommandOutput

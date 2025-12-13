@@ -26,20 +26,20 @@
       <!-- 压缩进行中状态 -->
       <CompactingCard v-if="isCompacting" />
 
-      <!-- 会话统计栏 -->
-      <SessionStatsBar :stats="toolStats" />
-
       <!-- 待发送队列（生成中时显示） -->
       <PendingMessageQueue
         @edit="handleEditPendingMessage"
         @remove="handleRemovePendingMessage"
+        @force-send="handleForceSendPendingMessage"
       />
 
-      <!-- 工具权限确认（输入框上方） -->
-      <ToolPermissionInteractive />
-
-      <!-- 用户问题（输入框上方） -->
-      <AskUserQuestionInteractive />
+      <!-- 悬浮层容器：权限请求 + 用户问题（覆盖在输入框上方） -->
+      <div class="floating-overlay-container">
+        <!-- 工具权限确认 -->
+        <ToolPermissionInteractive />
+        <!-- 用户问题 -->
+        <AskUserQuestionInteractive />
+      </div>
 
       <!-- 输入区域 -->
       <ChatInput
@@ -169,7 +169,6 @@ import MessageList from './MessageList.vue'
 import ChatInput from './ChatInput.vue'
 import ChatHeader from './ChatHeader.vue'
 import SessionListOverlay from './SessionListOverlay.vue'
-import SessionStatsBar from './SessionStatsBar.vue'
 import PendingMessageQueue from './PendingMessageQueue.vue'
 import CompactingCard from './CompactingCard.vue'
 import ToolPermissionInteractive from '@/components/tools/ToolPermissionInteractive.vue'
@@ -506,6 +505,20 @@ function handleRemovePendingMessage(id: string) {
   sessionStore.currentTab?.removeFromQueue(id)
 }
 
+async function handleForceSendPendingMessage(id: string) {
+  console.log('Force send pending message:', id)
+  // editQueueMessage 会从队列中移除并返回消息
+  const msg = sessionStore.currentTab?.editQueueMessage(id)
+  if (msg) {
+    // 打断当前生成并发送
+    await sessionStore.currentTab?.interrupt()
+    sessionStore.currentTab?.sendMessage({
+      contexts: msg.contexts,
+      contents: msg.contents
+    })
+  }
+}
+
 async function handleStopGeneration() {
   console.log('🛑 Stopping generation via Esc key')
   try {
@@ -691,6 +704,7 @@ async function handleHistorySelect(sessionId: string) {
   padding: 8px 12px;
   box-sizing: border-box;
   gap: 8px;
+  position: relative; /* 为悬浮层提供定位上下文 */
 }
 
 /* 消息列表区域 */
@@ -711,6 +725,24 @@ async function handleHistorySelect(sessionId: string) {
   width: 100%;
   padding: 0;
   box-sizing: border-box;
+}
+
+/* 悬浮层容器：权限请求 + 用户问题（底部与输入框底部对齐） */
+.floating-overlay-container {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.floating-overlay-container > * {
+  pointer-events: auto;
 }
 
 /* 错误对话框 */

@@ -28,9 +28,9 @@ export default {
     noMore: '没有更多了'
   },
   chat: {
-    placeholder: '输入消息...',
-    placeholderWithShortcuts: '输入消息... (Enter 发送, Shift+Enter 换行, Ctrl+Enter 打断发送)',
-    placeholderWithShortcutsCtrl: '输入消息... (Enter 发送, Shift+Enter 换行, Ctrl+Enter 打断发送)',
+    placeholder: '',
+    placeholderWithShortcuts: '',
+    placeholderWithShortcutsCtrl: '',
     input: {
       connecting: '正在初始化连接...',
       disconnected: '连接已断开，请刷新页面'
@@ -48,7 +48,7 @@ export default {
     emptyState: '开始一个新的会话，或选择一个历史记录。',
     sendMessage: '发送消息',
     sendMessageShortcut: '发送消息 (Enter) | 右键查看更多选项',
-    addContext: '添加上下文',
+    addContext: "{'@'} 添加上下文",
     autoCleanupContext: '自动清理上下文',
     autoCleanupContextTooltip: '发送消息后自动清空上下文标签',
     dropFileToAddContext: '释放文件以添加到上下文',
@@ -187,7 +187,14 @@ export default {
     todoTool: {
       pending: '待处理',
       inProgress: '进行中',
-      completed: '已完成'
+      completed: '已完成',
+      tasksCount: '{n}项任务'
+    },
+    multiEdit: {
+      changes: '{n}处'
+    },
+    writeTool: {
+      lines: '{n}行'
     }
   },
   settings: {
@@ -262,6 +269,7 @@ export default {
     allow: '允许',
     deny: '不允许',
     denyReasonPlaceholder: '拒绝原因（可选）',
+    noParams: '无参数信息',
     confirm: '确认',
     escToDeny: '按 ESC 直接拒绝',
     destination: {
@@ -286,6 +294,8 @@ export default {
       acceptEdits: '自动接受编辑',
       plan: '计划模式',
       bypassPermissions: '跳过权限',
+      bypass: '跳过',
+      bypassTooltip: '跳过所有权限确认，直接执行操作',
       dontAsk: '不再询问'
     }
   }
@@ -294,7 +304,12 @@ export default {
     interrupted: '[用户已打断请求]'
   },
   compact: {
-    compacting: '正在压缩会话上下文...'
+    compacting: '正在压缩会话上下文...',
+    contextRestored: '上下文已恢复',
+    sessionSummary: '（会话压缩摘要）',
+    expand: '展开',
+    collapse: '收起',
+    originalTokens: '原始 Token'
   },
   slashCommand: {
     compact: '压缩当前会话的上下文',

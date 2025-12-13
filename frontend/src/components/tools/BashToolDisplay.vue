@@ -76,8 +76,8 @@ const stderr = computed(() => {
 
 .bash-details {
   padding: 12px;
-  background: #f6f8fa;
-  border-top: 1px solid #e1e4e8;
+  background: var(--theme-panel-background);
+  border-top: 1px solid var(--theme-border);
 }
 
 .command-section {
@@ -85,18 +85,19 @@ const stderr = computed(() => {
 }
 
 .command-text {
-  background: #2d2d2d;
-  color: #e6e6e6;
+  background: var(--theme-code-background);
+  color: var(--theme-foreground);
   padding: 8px;
   border-radius: 4px;
   font-family: 'Consolas', 'Monaco', monospace;
   white-space: pre-wrap;
+  margin: 0;
 }
 
 .cwd,
 .timeout {
   font-size: 12px;
-  color: #586069;
+  color: var(--theme-secondary-foreground);
   margin-top: 4px;
 }
 
@@ -107,23 +108,24 @@ const stderr = computed(() => {
 }
 
 .output {
-  background: #111;
-  color: #eee;
+  background: var(--theme-code-background);
+  color: var(--theme-foreground);
   padding: 8px;
   border-radius: 4px;
   font-family: 'Consolas', 'Monaco', monospace;
   white-space: pre-wrap;
   max-height: 240px;
   overflow-y: auto;
+  margin: 0;
 }
 
 .output.stderr {
-  background: #2d1a1a;
-  color: #ffb3b3;
+  background: var(--theme-info-background);
+  color: var(--theme-error);
 }
 
 .no-output {
-  color: #888;
+  color: var(--theme-secondary-foreground);
   font-size: 12px;
 }
 </style>

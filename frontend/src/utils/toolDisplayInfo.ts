@@ -4,6 +4,10 @@
  */
 
 import type { ToolUseContent, ToolResultContent } from '@/types/message'
+import { i18n } from '@/i18n'
+
+// 获取翻译函数
+const t = (key: string, params?: Record<string, any>) => i18n.global.t(key, params)
 
 export interface ToolDisplayInfo {
   /** 工具图标 */
@@ -197,7 +201,7 @@ export function extractToolDisplayInfo(
     case 'MultiEdit': {
       // 折叠状态：显示文件名 (N处修改)
       const editsCount = toolInput.edits?.length || 0
-      primaryInfo = `${extractFileName(toolInput.file_path || toolInput.path || '')} (${editsCount}处)`
+      primaryInfo = `${extractFileName(toolInput.file_path || toolInput.path || '')} (${t('tools.multiEdit.changes', { n: editsCount })})`
       secondaryInfo = toolInput.file_path || toolInput.path || ''
       break
     }
@@ -242,9 +246,9 @@ export function extractToolDisplayInfo(
       const todos = toolInput?.todos
       // 如果 input 为空或 todos 未定义，显示"加载中"而不是"0项任务"
       if (!toolInput || todos === undefined) {
-        primaryInfo = '加载中...'
+        primaryInfo = t('common.loading')
       } else {
-        primaryInfo = `${todos.length}项任务`
+        primaryInfo = t('tools.todoTool.tasksCount', { n: todos.length })
       }
       secondaryInfo = ''
       break
@@ -405,7 +409,7 @@ function formatWritePrimaryInfo(input: any): string {
   }
 
   const lineCount = content.split('\n').length
-  return `${fileName} (${lineCount}行)`
+  return `${fileName} (${t('tools.writeTool.lines', { n: lineCount })})`
 }
 
 /**

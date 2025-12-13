@@ -36,12 +36,6 @@
       :error-message="item.message"
     />
 
-    <!-- 打断提示 -->
-    <InterruptedHintDisplay
-      v-else-if="item.displayType === 'interruptedHint'"
-      :message="item.message"
-    />
-
     <!-- 压缩摘要 -->
     <CompactSummaryCard
       v-else-if="item.displayType === 'compactSummary'"
@@ -76,7 +70,6 @@ import ThinkingDisplay from './ThinkingDisplay.vue'
 import ToolCallDisplay from './ToolCallDisplay.vue'
 import SystemMessageDisplay from './SystemMessageDisplay.vue'
 import ErrorResultDisplay from './ErrorResultDisplay.vue'
-import InterruptedHintDisplay from './InterruptedHintDisplay.vue'
 import CompactSummaryCard from './CompactSummaryCard.vue'
 import LocalCommandOutput from './LocalCommandOutput.vue'
 

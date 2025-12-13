@@ -70,19 +70,21 @@ function getStatusText(status: string): string {
 .todo-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 4px 0;
+  gap: 0;
+  padding: 2px 0;
 }
 
 .todo-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 4px;
-  background: var(--theme-background, #ffffff);
-  border: 1px solid var(--theme-border, rgba(0, 0, 0, 0.08));
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--theme-border, rgba(0, 0, 0, 0.06));
   transition: background-color 0.15s ease;
+}
+
+.todo-item:last-child {
+  border-bottom: none;
 }
 
 .todo-item:hover {
@@ -91,22 +93,19 @@ function getStatusText(status: string): string {
 
 .todo-item.pending .status-dot {
   background: #fb8c00;
-  box-shadow: 0 0 0 2px rgba(251, 140, 0, 0.15);
 }
 
 .todo-item.in_progress .status-dot {
   background: #1976d2;
-  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
 }
 
 .todo-item.completed .status-dot {
   background: #2e7d32;
-  box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.15);
 }
 
 .status-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -114,16 +113,13 @@ function getStatusText(status: string): string {
 .todo-text {
   flex: 1;
   color: var(--theme-foreground, #1a1a1a);
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 .todo-status {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
   font-weight: 500;
-  padding: 2px 6px;
-  border-radius: 3px;
-  background: var(--theme-panel-background, rgba(0, 0, 0, 0.02));
 }
 </style>

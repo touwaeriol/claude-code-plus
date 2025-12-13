@@ -1,6 +1,9 @@
 package com.asakii.server
-import com.asakii.plugin.tools.IdeToolsImpl
 
+import com.asakii.plugin.bridge.JetBrainsApiImpl
+import com.asakii.plugin.bridge.JetBrainsRSocketHandler
+import com.asakii.plugin.tools.IdeToolsImpl
+import com.asakii.rpc.api.JetBrainsApi
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
@@ -26,9 +29,14 @@ class HttpServerProjectService(private val project: Project) : Disposable {
 
     private var httpServer: HttpApiServer? = null
     private var extractedFrontendDir: Path? = null
+    private var _jetbrainsApi: JetBrainsApi? = null
 
     var serverUrl: String? = null
         private set
+
+    /** 获取 JetBrains API 实例（用于 title actions 等组件） */
+    val jetbrainsApi: JetBrainsApi?
+        get() = _jetbrainsApi
 
     init {
         logger.info("🚀 Initializing HTTP Server Project Service")
@@ -44,14 +52,30 @@ class HttpServerProjectService(private val project: Project) : Disposable {
             val frontendDir = prepareFrontendResources()
             logger.info("📂 Frontend directory: $frontendDir")
 
-            // 启动 Ktor HTTP 服务器
-            // 创建 IdeTools 的实现
+            // 创建 IdeTools 和 JetBrainsApi 的实现
             val ideTools = IdeToolsImpl(project)
+            val jetbrainsApi = JetBrainsApiImpl(project)
+            _jetbrainsApi = jetbrainsApi  // 保存引用供 title actions 使用
+            val jetbrainsRSocketHandler = JetBrainsRSocketHandler(jetbrainsApi)
+
+            // 监听主题变化，通过 RSocket 推送给前端
+            jetbrainsApi.theme.addChangeListener { theme ->
+                kotlinx.coroutines.runBlocking {
+                    jetbrainsRSocketHandler.pushThemeChanged(theme)
+                }
+            }
+
+            // 监听会话命令，通过 RSocket 推送给前端
+            jetbrainsApi.session.addCommandListener { command ->
+                kotlinx.coroutines.runBlocking {
+                    jetbrainsRSocketHandler.pushSessionCommand(command)
+                }
+            }
 
             // 启动 Ktor HTTP 服务器
             // 开发模式：使用环境变量指定端口（默认 8765）
             // 生产模式：随机端口（支持多项目）
-            val server = HttpApiServer(ideTools, scope, frontendDir)
+            val server = HttpApiServer(ideTools, scope, frontendDir, jetbrainsApi, jetbrainsRSocketHandler)
             val devPort = System.getenv("CLAUDE_DEV_PORT")?.toIntOrNull()
             val url = server.start(preferredPort = devPort)
             httpServer = server

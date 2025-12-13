@@ -28,9 +28,9 @@ export default {
     noMore: 'No more'
   },
   chat: {
-    placeholder: 'Type a message...',
-    placeholderWithShortcuts: 'Type a message... (Enter to send, Shift+Enter for new line, Ctrl+Enter to interrupt)',
-    placeholderWithShortcutsCtrl: 'Type a message... (Enter to send, Shift+Enter for new line, Ctrl+Enter to interrupt)',
+    placeholder: '',
+    placeholderWithShortcuts: '',
+    placeholderWithShortcutsCtrl: '',
     input: {
       connecting: 'Initializing connection...',
       disconnected: 'Disconnected, please refresh the page'
@@ -48,7 +48,7 @@ export default {
     emptyState: 'Start a new session or select one from history.',
     sendMessage: 'Send Message',
     sendMessageShortcut: 'Send Message (Enter) | Right-click for more options',
-    addContext: 'Add Context',
+    addContext: "{'@'} Add Context",
     autoCleanupContext: 'Auto Cleanup Context',
     autoCleanupContextTooltip: 'Automatically clear context tags after sending message',
     dropFileToAddContext: 'Drop files here to add to context',
@@ -187,7 +187,14 @@ export default {
     todoTool: {
       pending: 'Pending',
       inProgress: 'In progress',
-      completed: 'Completed'
+      completed: 'Completed',
+      tasksCount: '{n} tasks'
+    },
+    multiEdit: {
+      changes: '{n} changes'
+    },
+    writeTool: {
+      lines: '{n} lines'
     }
   },
   settings: {
@@ -262,6 +269,7 @@ export default {
     allow: 'Allow',
     deny: 'Deny',
     denyReasonPlaceholder: 'Reason for denial (optional)',
+    noParams: 'No parameters',
     confirm: 'Confirm',
     escToDeny: 'Press ESC to deny',
     destination: {
@@ -286,6 +294,8 @@ export default {
       acceptEdits: 'auto-accept edits',
       plan: 'plan mode',
       bypassPermissions: 'bypass permissions',
+      bypass: 'Bypass',
+      bypassTooltip: 'Skip all permission confirmations and execute directly',
       dontAsk: "don't ask"
     }
   }
@@ -294,7 +304,12 @@ export default {
     interrupted: '[Request interrupted by user]'
   },
   compact: {
-    compacting: 'Compacting conversation context...'
+    compacting: 'Compacting conversation context...',
+    contextRestored: 'Context restored',
+    sessionSummary: '(Session summary)',
+    expand: 'Expand',
+    collapse: 'Collapse',
+    originalTokens: 'Original tokens'
   },
   slashCommand: {
     compact: 'Compact current session context',

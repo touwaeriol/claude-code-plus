@@ -146,6 +146,7 @@ export class RSocketClient {
    */
   private createResponder(): Partial<RSocket> {
     return {
+      // 处理 request-response 模式
       requestResponse: (
         payload: Payload,
         responderStream: OnTerminalSubscriber & OnNextSubscriber & OnExtensionSubscriber
@@ -165,6 +166,28 @@ export class RSocketClient {
           },
           onExtension: () => {}
         }
+      },
+
+      // 处理 fire-and-forget 模式（用于会话命令、主题变化等推送）
+      fireAndForget: (
+        payload: Payload,
+        responderStream: OnTerminalSubscriber
+      ) => {
+        this.handleServerCall(payload)
+          .then(() => {
+            responderStream.onComplete()
+          })
+          .catch(error => {
+            log.error('[RSocketClient] fireAndForget 处理失败:', error)
+            responderStream.onError(error)
+          })
+
+        return {
+          cancel: () => {
+            log.debug('[RSocketClient] fireAndForget 请求被取消')
+          },
+          onExtension: () => {}
+        }
       }
     }
   }
@@ -172,7 +195,7 @@ export class RSocketClient {
   /**
    * 处理服务端调用（按路由分发）
    *
-   * 路由即方法名（如 'AskUserQuestion'），数据为 JSON
+   * 路由即方法名（如 'AskUserQuestion'），数据可以是 JSON 或 Protobuf
    */
   private async handleServerCall(payload: Payload): Promise<Payload> {
     const route = extractRoute(payload)
@@ -187,12 +210,11 @@ export class RSocketClient {
     }
 
     try {
-      // 解析 JSON 参数
+      // 直接传递原始字节，让 handler 自行解析（支持 JSON 和 Protobuf）
       const data = payload.data ? new Uint8Array(payload.data) : new Uint8Array()
-      const params = data.length > 0 ? JSON.parse(new TextDecoder().decode(data)) : {}
 
       // 执行 handler
-      const result = await handler(params)
+      const result = await handler(data)
 
       // 返回 JSON 响应
       const resultJson = JSON.stringify(result)

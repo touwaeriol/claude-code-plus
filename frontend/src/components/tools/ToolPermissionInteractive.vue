@@ -10,7 +10,7 @@
       <!-- 工具信息头部 -->
       <div class="permission-header">
         <span class="tool-icon">{{ getToolIcon(pendingPermission.toolName) }}</span>
-        <span class="tool-name">{{ getToolDisplayName(pendingPermission.toolName) }}</span>
+        <span class="tool-name">{{ getToolDisplayName(pendingPermission.toolName) || pendingPermission.toolName || 'Unknown Tool' }}</span>
         <span class="permission-label">{{ t('permission.needsAuth') }}</span>
       </div>
 
@@ -45,7 +45,8 @@
           </div>
         </template>
         <template v-else>
-          <pre class="params-preview">{{ formatParams(pendingPermission.input) }}</pre>
+          <pre v-if="hasInputParams(pendingPermission.input)" class="params-preview">{{ formatParams(pendingPermission.input) }}</pre>
+          <div v-else class="no-params-hint">{{ t('permission.noParams') }}</div>
         </template>
       </div>
 
@@ -231,12 +232,20 @@ function formatParams(params: Record<string, unknown>): string {
     return String(params)
   }
 }
+
+function hasInputParams(input: Record<string, unknown>): boolean {
+  if (!input) return false
+  return Object.keys(input).length > 0
+}
 </script>
 
 <style scoped>
 .permission-request {
-  margin: 4px 0;
   outline: none;
+  max-height: 60vh; /* 限制最大高度，避免遮挡过多 */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .permission-request:focus .permission-card {
@@ -249,6 +258,9 @@ function formatParams(params: Record<string, unknown>): string {
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
 }
 
 .permission-header {
@@ -281,7 +293,8 @@ function formatParams(params: Record<string, unknown>): string {
 
 .permission-content {
   padding: 16px;
-  max-height: 220px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   background: var(--theme-background, #fff);
 }
@@ -325,7 +338,8 @@ function formatParams(params: Record<string, unknown>): string {
 }
 
 .content-text {
-  background: #f6f8fa;
+  background: var(--theme-code-background, #f6f8fa);
+  color: var(--theme-foreground, #24292e);
   padding: 8px;
   border-radius: 4px;
   font-family: 'Consolas', 'Monaco', monospace;
@@ -349,7 +363,8 @@ function formatParams(params: Record<string, unknown>): string {
 }
 
 .edit-text {
-  background: #f6f8fa;
+  background: var(--theme-code-background, #f6f8fa);
+  color: var(--theme-foreground, #24292e);
   padding: 8px;
   border-radius: 4px;
   font-family: 'Consolas', 'Monaco', monospace;
@@ -362,17 +377,20 @@ function formatParams(params: Record<string, unknown>): string {
 }
 
 .edit-text.old {
-  background: #ffeef0;
-  border-left: 3px solid #cb2431;
+  background: var(--theme-diff-removed-bg, rgba(248, 81, 73, 0.15));
+  border-left: 3px solid var(--theme-diff-removed-border, #f85149);
+  color: var(--theme-diff-removed-text, var(--theme-foreground, #24292e));
 }
 
 .edit-text.new {
-  background: #e6ffed;
-  border-left: 3px solid #28a745;
+  background: var(--theme-diff-added-bg, rgba(63, 185, 80, 0.15));
+  border-left: 3px solid var(--theme-diff-added-border, #3fb950);
+  color: var(--theme-diff-added-text, var(--theme-foreground, #24292e));
 }
 
 .params-preview {
-  background: #f6f8fa;
+  background: var(--theme-code-background, #f6f8fa);
+  color: var(--theme-foreground, #24292e);
   padding: 12px;
   border-radius: 6px;
   font-family: 'Consolas', 'Monaco', monospace;
@@ -382,6 +400,13 @@ function formatParams(params: Record<string, unknown>): string {
   margin: 0;
   max-height: 100px;
   overflow-y: auto;
+}
+
+.no-params-hint {
+  color: var(--theme-secondary-foreground, #586069);
+  font-size: 13px;
+  font-style: italic;
+  padding: 8px 0;
 }
 
 .permission-options {
@@ -456,7 +481,7 @@ function formatParams(params: Record<string, unknown>): string {
 }
 
 .btn-deny {
-  background: #fff;
+  background: var(--theme-background, #fff);
   border: 1px solid var(--theme-error, #dc3545);
   color: var(--theme-error, #dc3545);
   flex-shrink: 0;

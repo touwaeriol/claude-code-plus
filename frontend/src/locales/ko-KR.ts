@@ -27,9 +27,9 @@ export default {
     renderFailed: '렌더링 실패'
   },
   chat: {
-    placeholder: '메시지 입력...',
-    placeholderWithShortcuts: '메시지 입력... (Enter로 보내기, Shift+Enter로 줄바꿈, Ctrl+Enter로 중단)',
-    placeholderWithShortcutsCtrl: '메시지 입력... (Enter로 보내기, Shift+Enter로 줄바꿈, Ctrl+Enter로 중단)',
+    placeholder: '',
+    placeholderWithShortcuts: '',
+    placeholderWithShortcutsCtrl: '',
     newSession: '새 세션',
     history: '기록',
     thinking: '생각 중...',
@@ -43,7 +43,7 @@ export default {
     emptyState: '새 세션을 시작하거나 기록에서 선택하세요.',
     sendMessage: '메시지 보내기',
     sendMessageShortcut: '메시지 보내기 (Enter) | 더 많은 옵션은 오른쪽 클릭',
-    addContext: '컨텍스트 추가',
+    addContext: "{'@'} 컨텍스트 추가",
     autoCleanupContext: '자동 컨텍스트 정리',
     autoCleanupContextTooltip: '메시지 전송 후 컨텍스트 태그 자동 정리',
     dropFileToAddContext: '파일을 여기에 놓아 컨텍스트에 추가',
@@ -171,7 +171,14 @@ export default {
     todoTool: {
       pending: '대기 중',
       inProgress: '진행 중',
-      completed: '완료됨'
+      completed: '완료됨',
+      tasksCount: '{n}개 작업'
+    },
+    multiEdit: {
+      changes: '{n}개 변경'
+    },
+    writeTool: {
+      lines: '{n}줄'
     }
   },
   settings: {
@@ -239,6 +246,7 @@ export default {
     allow: '허용',
     deny: '거부',
     denyReasonPlaceholder: '거부 사유 (선택)',
+    noParams: '매개변수 없음',
     confirm: '확인',
     escToDeny: 'ESC를 눌러 거부',
     destination: {
@@ -263,6 +271,8 @@ export default {
       acceptEdits: '편집 자동 수락',
       plan: '계획 모드',
       bypassPermissions: '권한 우회',
+      bypass: '우회',
+      bypassTooltip: '모든 권한 확인을 건너뛰고 직접 실행',
       dontAsk: '다시 묻지 않음'
     }
   }
@@ -271,7 +281,12 @@ export default {
     interrupted: '[사용자에 의해 요청이 중단되었습니다]'
   },
   compact: {
-    compacting: '대화 컨텍스트 압축 중...'
+    compacting: '대화 컨텍스트 압축 중...',
+    contextRestored: '컨텍스트 복원됨',
+    sessionSummary: '(세션 요약)',
+    expand: '펼치기',
+    collapse: '접기',
+    originalTokens: '원본 토큰'
   },
   slashCommand: {
     compact: '현재 세션 컨텍스트 압축',

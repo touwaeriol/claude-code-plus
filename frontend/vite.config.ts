@@ -4,6 +4,7 @@ import { resolve } from 'path'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
+import viteCompression from 'vite-plugin-compression'
 
 // JCEF 兼容性：将 script 标签移动到 body 底部，保持 type="module"
 function jcefCompatibility(): Plugin {
@@ -20,7 +21,10 @@ function jcefCompatibility(): Plugin {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const isProduction = mode === 'production'
+
+  return {
   plugins: [
     vue(),
     jcefCompatibility(),
@@ -33,7 +37,22 @@ export default defineConfig({
       resolvers: [ElementPlusResolver()],
       dts: 'components.d.ts',
       directoryAsNamespace: false
-    })
+    }),
+    // 生产模式启用 gzip 压缩
+    ...(isProduction ? [
+      viteCompression({
+        algorithm: 'gzip',
+        ext: '.gz',
+        threshold: 1024, // 大于 1KB 的文件才压缩
+        deleteOriginFile: false
+      }),
+      viteCompression({
+        algorithm: 'brotliCompress',
+        ext: '.br',
+        threshold: 1024,
+        deleteOriginFile: false
+      })
+    ] : [])
   ],
   resolve: {
     alias: {
@@ -71,7 +90,21 @@ export default defineConfig({
     // JCEF 兼容设置
     target: 'es2020',
     cssTarget: 'chrome80',
-    minify: 'esbuild',
+    // 生产模式使用 terser（压缩率更高），开发模式不压缩
+    minify: isProduction ? 'terser' : false,
+    terserOptions: isProduction ? {
+      compress: {
+        drop_console: true,  // 移除 console
+        drop_debugger: true, // 移除 debugger
+        pure_funcs: ['console.log', 'console.info', 'console.debug']
+      },
+      mangle: true,
+      format: {
+        comments: false // 移除注释
+      }
+    } : undefined,
+    // 开发模式不生成 sourcemap
+    sourcemap: !isProduction,
     rollupOptions: {
       output: {
         format: 'es',
@@ -116,4 +149,4 @@ export default defineConfig({
     chunkSizeWarningLimit: 1200
   },
   base: './'
-})
+}})

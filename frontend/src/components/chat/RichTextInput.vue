@@ -313,7 +313,8 @@ watch(() => props.modelValue, (newValue) => {
   if (!editor.value) return
   const currentText = editor.value.getText()
   if (newValue !== currentText) {
-    editor.value.commands.setContent(newValue || '')
+    // 使用 preserveWhitespace 保留尾部空格
+    editor.value.commands.setContent(newValue || '', false, { preserveWhitespace: 'full' })
   }
 })
 
@@ -503,9 +504,9 @@ function getText(): string {
   return editor.value?.getText() || ''
 }
 
-// 设置内容
+// 设置内容（保留空白字符）
 function setContent(text: string) {
-  editor.value?.commands.setContent(text)
+  editor.value?.commands.setContent(text, false, { preserveWhitespace: 'full' })
 }
 
 // 删除从光标位置到行首的内容
@@ -531,6 +532,13 @@ function deleteToLineStart() {
     .run()
 }
 
+// 插入换行（用于 Ctrl+J 快捷键）
+function insertNewLine() {
+  if (!editor.value) return
+  // 使用 TipTap 的 splitBlock 命令插入新段落（等同于换行）
+  editor.value.chain().focus().splitBlock().run()
+}
+
 // 清理
 onBeforeUnmount(() => {
   editor.value?.destroy()
@@ -550,6 +558,7 @@ defineExpose({
   extractContent,
   extractContentBlocks,
   deleteToLineStart,
+  insertNewLine,
 })
 </script>
 

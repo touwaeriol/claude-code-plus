@@ -4,18 +4,18 @@
     <div class="card-header" @click="toggleExpand">
       <div class="header-left">
         <span class="icon">{{ isExpanded ? '📖' : '📦' }}</span>
-        <span class="title">上下文已恢复</span>
-        <span class="subtitle">（会话压缩摘要）</span>
+        <span class="title">{{ $t('compact.contextRestored') }}</span>
+        <span class="subtitle">{{ $t('compact.sessionSummary') }}</span>
       </div>
       <button class="expand-button">
-        {{ isExpanded ? '收起 ▴' : '展开 ▾' }}
+        {{ isExpanded ? $t('compact.collapse') + ' ▴' : $t('compact.expand') + ' ▾' }}
       </button>
     </div>
 
     <!-- 摘要内容（可展开） -->
     <div v-if="isExpanded" class="card-content">
       <div v-if="preTokens" class="token-stats expanded">
-        <span class="token-label">原始 Token:</span>
+        <span class="token-label">{{ $t('compact.originalTokens') }}:</span>
         <span class="token-value">{{ formatTokens(preTokens) }}</span>
       </div>
       <div class="summary-text" v-html="renderedContent"></div>
@@ -24,7 +24,7 @@
     <!-- 折叠时的预览 -->
     <div v-else class="card-preview">
       <div v-if="preTokens" class="token-stats">
-        <span class="token-label">原始 Token:</span>
+        <span class="token-label">{{ $t('compact.originalTokens') }}:</span>
         <span class="token-value">{{ formatTokens(preTokens) }}</span>
       </div>
       <span class="preview-text">{{ previewText }}</span>
@@ -34,7 +34,10 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from '@/composables/useI18n'
 import type { ContentBlock } from '@/types/message'
+
+const { t } = useI18n()
 
 interface Props {
   content: ContentBlock[]

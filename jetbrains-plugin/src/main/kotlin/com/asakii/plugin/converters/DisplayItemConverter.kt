@@ -201,30 +201,17 @@ object DisplayItemConverter {
      * @param toolCall 工具调用对象
      * @param resultBlock 工具结果块
      */
-    @Suppress("KotlinConstantConditions")
     fun updateToolCallResult(toolCall: ToolCallItem, resultBlock: ToolResultBlock): ToolCallItem {
         // 更新状态
         val newStatus = if (resultBlock.isError == true) ToolCallStatus.FAILED else ToolCallStatus.SUCCESS
         val newEndTime = System.currentTimeMillis()
 
-        // 解析结果（content 类型在运行时可能变化，保留分支处理）
+        // 解析结果 (content 是 JsonElement? 类型)
         val content = resultBlock.content
         val newResult: ToolResult = if (resultBlock.isError == true) {
-            ToolResult.Error(
-                error = when (content) {
-                    is String -> content
-                    is JsonElement -> content.toString()
-                    else -> content?.toString() ?: "Unknown error"
-                }
-            )
+            ToolResult.Error(error = content?.toString() ?: "Unknown error")
         } else {
-            ToolResult.Success(
-                output = when (content) {
-                    is String -> content
-                    is JsonElement -> content.toString()
-                    else -> content?.toString() ?: ""
-                }
-            )
+            ToolResult.Success(output = content?.toString() ?: "")
         }
         
         // 创建更新后的对象（Kotlin 数据类是不可变的）

@@ -5,6 +5,56 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Claude Code Plus</title>
+  <!-- 🚀 立即应用初始主题，避免闪烁 -->
+  <script>
+    (function() {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var themeParam = params.get('initialTheme');
+        if (!themeParam) return;
+
+        var theme = JSON.parse(decodeURIComponent(themeParam));
+        var root = document.documentElement;
+
+        // 注入 CSS 变量
+        var vars = {
+          '--theme-background': theme.background,
+          '--theme-foreground': theme.foreground,
+          '--theme-panel-background': theme.panelBackground,
+          '--theme-border': theme.borderColor,
+          '--theme-text-field-background': theme.textFieldBackground,
+          '--theme-selection-background': theme.selectionBackground,
+          '--theme-selection-foreground': theme.selectionForeground,
+          '--theme-link': theme.linkColor,
+          '--theme-error': theme.errorColor,
+          '--theme-warning': theme.warningColor,
+          '--theme-success': theme.successColor,
+          '--theme-separator': theme.separatorColor,
+          '--theme-hover-background': theme.hoverBackground,
+          '--theme-accent': theme.accentColor,
+          '--theme-info-background': theme.infoBackground,
+          '--theme-code-background': theme.codeBackground,
+          '--theme-secondary-foreground': theme.secondaryForeground,
+          '--theme-card-background': theme.panelBackground
+        };
+
+        if (theme.fontFamily) vars['--theme-font-family'] = theme.fontFamily;
+        if (theme.fontSize) vars['--theme-font-size'] = theme.fontSize + 'px';
+        if (theme.editorFontFamily) vars['--theme-editor-font-family'] = theme.editorFontFamily;
+        if (theme.editorFontSize) vars['--theme-editor-font-size'] = theme.editorFontSize + 'px';
+
+        for (var key in vars) {
+          root.style.setProperty(key, vars[key]);
+        }
+
+        // 保存到 window 供 themeService 使用
+        window.__initialTheme = theme;
+        console.log('🎨 [HTML] Initial theme applied from URL');
+      } catch (e) {
+        console.warn('🎨 [HTML] Failed to apply initial theme:', e);
+      }
+    })();
+  </script>
 </head>
 <body>
   <div id="app"></div>

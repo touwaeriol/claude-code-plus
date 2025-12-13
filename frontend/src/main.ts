@@ -14,12 +14,12 @@ import App from './App.vue'
 import './styles/global.css'
 import { resolveServerHttpUrl } from '@/utils/serverUrl'
 import { i18n, getLocale } from '@/i18n'
-// 导入以触发自动初始化
-import '@/services/toolShowInterceptor'
+import { initJetBrainsIntegration } from '@/services/jetbrainsApi'
+import { initToolShowInterceptor } from '@/services/toolShowInterceptor'
 
 console.log('🚀 Initializing Vue application...')
 
-// 在 JCEF 中首次渲染时，100vh 可能无法正确计算，使用 JS 动态设置实际高度
+// 在 IDE 嵌入式浏览器中首次渲染时，100vh 可能无法正确计算，使用 JS 动态设置实际高度
 const updateViewportHeight = () => {
   const height = window.innerHeight
   if (height > 0) {
@@ -35,9 +35,9 @@ updateViewportHeight()
 window.addEventListener('resize', updateViewportHeight)
 window.addEventListener('orientationchange', updateViewportHeight)
 
-// JCEF 特殊处理：延迟触发多次 resize 以确保布局正确
-// JCEF 初始化时可能 innerHeight 为 0，需要等待容器准备好
-const jcefLayoutFix = () => {
+// IDE 嵌入式浏览器特殊处理：延迟触发多次 resize 以确保布局正确
+// 初始化时可能 innerHeight 为 0，需要等待容器准备好
+const ideLayoutFix = () => {
   const delays = [50, 100, 200, 500, 1000]
   delays.forEach(delay => {
     setTimeout(() => {
@@ -47,7 +47,7 @@ const jcefLayoutFix = () => {
     }, delay)
   })
 }
-jcefLayoutFix()
+ideLayoutFix()
 
 // 使用 ResizeObserver 监听 body 尺寸变化（比 resize 事件更可靠）
 if (typeof ResizeObserver !== 'undefined') {
@@ -76,6 +76,13 @@ async function initApp() {
   const locale = getLocale()
   const elementPlusLocale = getElementPlusLocale(locale)
 
+  // 初始化 JetBrains IDE 集成
+  const jetbrainsEnabled = await initJetBrainsIntegration()
+  if (jetbrainsEnabled) {
+    // JetBrains 集成启用后，初始化工具展示拦截器
+    initToolShowInterceptor()
+  }
+
   const app = createApp(App)
   const pinia = createPinia()
 
@@ -90,6 +97,9 @@ async function initApp() {
   app.mount('#app')
 
   console.log('✅ Vue application mounted with locale:', locale)
+  if (jetbrainsEnabled) {
+    console.log('✅ JetBrains IDE integration enabled')
+  }
 }
 
 initApp().catch((error) => {

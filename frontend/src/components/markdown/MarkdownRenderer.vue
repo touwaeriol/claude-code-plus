@@ -147,15 +147,16 @@ async function copyToClipboard(text: string) {
 }
 
 /**
- * 显示复制反馈
+ * 显示复制反馈（图标版）
  */
 function showCopyFeedback(button: HTMLElement) {
-  const originalText = button.textContent
-  button.textContent = '✓ ' + t('common.copied')
+  const originalHtml = button.innerHTML
+  // 显示对勾图标
+  button.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
   button.classList.add('copied')
 
   setTimeout(() => {
-    button.textContent = originalText
+    button.innerHTML = originalHtml
     button.classList.remove('copied')
   }, 2000)
 }
@@ -294,14 +295,17 @@ function showCopyFeedback(button: HTMLElement) {
 }
 
 .code-block-header .copy-btn {
-  padding: 4px 8px;
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
   border: 1px solid var(--theme-border);
   background: var(--theme-background);
   border-radius: 3px;
   cursor: pointer;
-  color: var(--theme-foreground);
+  color: var(--theme-secondary-foreground);
   transition: all 0.2s;
+  line-height: 1;
 }
 
 .code-block-header .copy-btn:hover {

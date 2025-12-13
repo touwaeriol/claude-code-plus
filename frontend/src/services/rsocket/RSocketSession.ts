@@ -189,6 +189,12 @@ export class RSocketSession {
 
   /**
    * 中断当前操作
+   *
+   * 注意：不要取消流订阅！后端会通过流发送打断结果：
+   * - user 消息: "[Request interrupted by user]"
+   * - result 消息: subtype="error_during_execution" 或 "interrupted"
+   *
+   * 异步发送 interrupt 请求，不阻塞等待
    */
   async interrupt(): Promise<void> {
     if (!this._isConnected || !this.client) {
@@ -197,27 +203,22 @@ export class RSocketSession {
 
     log.info('[RSocketSession] 中断请求')
 
-    // 取消当前流（如果有）
-    if (this.cancelStream) {
-      this.cancelStream()
-      this.cancelStream = null
-    }
+    // ⚠️ 不要取消流！后端会通过流发送打断结果
+    // if (this.cancelStream) {
+    //   this.cancelStream()
+    //   this.cancelStream = null
+    // }
 
-    // 发送 interrupt 请求
-    const responseData = await this.client.requestResponse('agent.interrupt')
-    const result = ProtoCodec.decodeStatusResult(responseData)
-
-    log.info(`[RSocketSession] 中断完成: ${result.status}`)
-
-    // 通知 handlers
-    const interruptMessage = {
-      type: 'result' as const,
-      subtype: 'interrupted',
-      provider: 'claude' as const,
-      is_error: false,
-      num_turns: 0
-    }
-    this.notifyMessageHandlers(interruptMessage as any)
+    // 异步发送 interrupt 请求，不阻塞
+    // 后端返回只是确认收到，实际打断结果通过流返回
+    this.client.requestResponse('agent.interrupt')
+      .then(responseData => {
+        const result = ProtoCodec.decodeStatusResult(responseData)
+        log.info(`[RSocketSession] 中断请求已确认: ${result.status}`)
+      })
+      .catch(err => {
+        log.warn('[RSocketSession] Interrupt request failed:', err)
+      })
   }
 
   /**

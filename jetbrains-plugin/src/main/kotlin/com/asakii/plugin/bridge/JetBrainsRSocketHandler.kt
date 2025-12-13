@@ -1,0 +1,410 @@
+package com.asakii.plugin.bridge
+
+import com.asakii.rpc.api.*
+import com.asakii.rpc.proto.IdeThemeProto
+import com.asakii.rpc.proto.JetBrainsGetLocaleResponse
+import com.asakii.rpc.proto.JetBrainsGetProjectPathResponse
+import com.asakii.rpc.proto.JetBrainsGetThemeResponse
+import com.asakii.rpc.proto.JetBrainsOperationResponse
+import com.asakii.rpc.proto.JetBrainsSessionCommandType as ProtoSessionCommandType
+import com.asakii.server.JetBrainsRSocketHandlerProvider
+import io.rsocket.kotlin.RSocket
+import io.rsocket.kotlin.RSocketRequestHandler
+import io.rsocket.kotlin.payload.Payload
+import io.rsocket.kotlin.payload.buildPayload
+import io.rsocket.kotlin.payload.data
+import kotlinx.coroutines.*
+import kotlinx.io.Buffer
+import kotlinx.io.readByteArray
+import kotlinx.io.write
+import mu.KotlinLogging
+import java.util.concurrent.ConcurrentHashMap
+import com.asakii.rpc.proto.JetBrainsOpenFileRequest as ProtoOpenFileRequest
+import com.asakii.rpc.proto.JetBrainsShowDiffRequest as ProtoShowDiffRequest
+import com.asakii.rpc.proto.JetBrainsShowMultiEditDiffRequest as ProtoShowMultiEditDiffRequest
+import com.asakii.rpc.proto.JetBrainsSetLocaleRequest as ProtoSetLocaleRequest
+import com.asakii.rpc.proto.JetBrainsSessionState as ProtoSessionState
+import com.asakii.rpc.proto.JetBrainsSessionCommand as ProtoSessionCommand
+
+/**
+ * JetBrains IDE 集成 RSocket 处理器
+ *
+ * 职责：
+ * 1. 处理前端调用（openFile, showDiff, getTheme 等）
+ * 2. 支持反向调用（pushThemeChange, pushSessionCommand 等）
+ *
+ * 路由表（前端 → 后端）：
+ * - jetbrains.openFile: 打开文件
+ * - jetbrains.showDiff: 显示 Diff
+ * - jetbrains.showMultiEditDiff: 显示多编辑 Diff
+ * - jetbrains.getTheme: 获取主题
+ * - jetbrains.getLocale: 获取语言
+ * - jetbrains.setLocale: 设置语言
+ * - jetbrains.getProjectPath: 获取项目路径
+ * - jetbrains.reportSessionState: 上报会话状态
+ *
+ * 反向调用路由（后端 → 前端）：
+ * - jetbrains.onThemeChanged: 主题变化
+ * - jetbrains.onSessionCommand: 会话命令
+ */
+class JetBrainsRSocketHandler(
+    private val jetbrainsApi: JetBrainsApi
+) : JetBrainsRSocketHandlerProvider {
+    private val logger = KotlinLogging.logger {}
+
+    // 客户端 requester（用于反向调用）
+    private var clientRequester: RSocket? = null
+
+    // 连接的客户端集合（支持多客户端）
+    private val connectedClients = ConcurrentHashMap<String, RSocket>()
+
+    /**
+     * 创建 RSocket 请求处理器
+     */
+    override fun createHandler(): RSocket {
+        logger.info("🔌 [JetBrains RSocket] 创建请求处理器")
+
+        return RSocketRequestHandler {
+            requestResponse { request ->
+                val route = extractRoute(request)
+                val dataBytes = request.data.readByteArray()
+                logger.info("📨 [JetBrains RSocket] ← $route")
+
+                when (route) {
+                    "jetbrains.openFile" -> handleOpenFile(dataBytes)
+                    "jetbrains.showDiff" -> handleShowDiff(dataBytes)
+                    "jetbrains.showMultiEditDiff" -> handleShowMultiEditDiff(dataBytes)
+                    "jetbrains.getTheme" -> handleGetTheme()
+                    "jetbrains.getLocale" -> handleGetLocale()
+                    "jetbrains.setLocale" -> handleSetLocale(dataBytes)
+                    "jetbrains.getProjectPath" -> handleGetProjectPath()
+                    "jetbrains.reportSessionState" -> handleReportSessionState(dataBytes)
+                    else -> {
+                        logger.warn("⚠️ [JetBrains RSocket] Unknown route: $route")
+                        buildErrorResponse("Unknown route: $route")
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 设置客户端 requester（用于反向调用）
+     */
+    override fun setClientRequester(clientId: String, requester: RSocket) {
+        this.clientRequester = requester
+        connectedClients[clientId] = requester
+        logger.info("🔗 [JetBrains RSocket] 客户端已连接: $clientId")
+    }
+
+    /**
+     * 移除客户端
+     */
+    override fun removeClient(clientId: String) {
+        connectedClients.remove(clientId)
+        if (connectedClients.isEmpty()) {
+            clientRequester = null
+        }
+        logger.info("🔌 [JetBrains RSocket] 客户端已断开: $clientId")
+    }
+
+    // ==================== 前端调用处理 ====================
+
+    private fun handleOpenFile(dataBytes: ByteArray): Payload {
+        return try {
+            val req = ProtoOpenFileRequest.parseFrom(dataBytes)
+            logger.info("📂 [JetBrains] openFile: ${req.filePath}")
+
+            val request = com.asakii.rpc.api.JetBrainsOpenFileRequest(
+                filePath = req.filePath,
+                line = if (req.hasLine()) req.line else null,
+                column = if (req.hasColumn()) req.column else null,
+                startOffset = if (req.hasStartOffset()) req.startOffset else null,
+                endOffset = if (req.hasEndOffset()) req.endOffset else null
+            )
+
+            val result = jetbrainsApi.file.openFile(request)
+            buildOperationResponse(result.isSuccess, result.exceptionOrNull()?.message)
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] openFile failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    private fun handleShowDiff(dataBytes: ByteArray): Payload {
+        return try {
+            val req = ProtoShowDiffRequest.parseFrom(dataBytes)
+            logger.info("📝 [JetBrains] showDiff: ${req.filePath}")
+
+            val request = com.asakii.rpc.api.JetBrainsShowDiffRequest(
+                filePath = req.filePath,
+                oldContent = req.oldContent,
+                newContent = req.newContent,
+                title = if (req.hasTitle()) req.title else null
+            )
+
+            val result = jetbrainsApi.file.showDiff(request)
+            buildOperationResponse(result.isSuccess, result.exceptionOrNull()?.message)
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] showDiff failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    private fun handleShowMultiEditDiff(dataBytes: ByteArray): Payload {
+        return try {
+            val req = ProtoShowMultiEditDiffRequest.parseFrom(dataBytes)
+            logger.info("📝 [JetBrains] showMultiEditDiff: ${req.filePath} (${req.editsCount} edits)")
+
+            val request = com.asakii.rpc.api.JetBrainsShowMultiEditDiffRequest(
+                filePath = req.filePath,
+                edits = req.editsList.map { edit ->
+                    com.asakii.rpc.api.JetBrainsEditOperation(
+                        oldString = edit.oldString,
+                        newString = edit.newString,
+                        replaceAll = edit.replaceAll
+                    )
+                },
+                currentContent = if (req.hasCurrentContent()) req.currentContent else null
+            )
+
+            val result = jetbrainsApi.file.showMultiEditDiff(request)
+            buildOperationResponse(result.isSuccess, result.exceptionOrNull()?.message)
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] showMultiEditDiff failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    private fun handleGetTheme(): Payload {
+        return try {
+            val theme = jetbrainsApi.theme.get()
+                ?: return buildErrorResponse("Theme not available")
+            logger.info("🎨 [JetBrains] getTheme")
+
+            val protoTheme = IdeThemeProto.newBuilder()
+                .setBackground(theme.background)
+                .setForeground(theme.foreground)
+                .setBorderColor(theme.borderColor)
+                .setPanelBackground(theme.panelBackground)
+                .setTextFieldBackground(theme.textFieldBackground)
+                .setSelectionBackground(theme.selectionBackground)
+                .setSelectionForeground(theme.selectionForeground)
+                .setLinkColor(theme.linkColor)
+                .setErrorColor(theme.errorColor)
+                .setWarningColor(theme.warningColor)
+                .setSuccessColor(theme.successColor)
+                .setSeparatorColor(theme.separatorColor)
+                .setHoverBackground(theme.hoverBackground)
+                .setAccentColor(theme.accentColor)
+                .setInfoBackground(theme.infoBackground)
+                .setCodeBackground(theme.codeBackground)
+                .setSecondaryForeground(theme.secondaryForeground)
+                .setFontFamily(theme.fontFamily)
+                .setFontSize(theme.fontSize)
+                .setEditorFontFamily(theme.editorFontFamily)
+                .setEditorFontSize(theme.editorFontSize)
+                .build()
+
+            val response = JetBrainsGetThemeResponse.newBuilder()
+                .setTheme(protoTheme)
+                .build()
+
+            buildPayload { data(response.toByteArray()) }
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] getTheme failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    private fun handleGetLocale(): Payload {
+        return try {
+            val locale = jetbrainsApi.locale.get()
+            logger.info("🌐 [JetBrains] getLocale: $locale")
+
+            val response = JetBrainsGetLocaleResponse.newBuilder()
+                .setLocale(locale)
+                .build()
+
+            buildPayload { data(response.toByteArray()) }
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] getLocale failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    private fun handleSetLocale(dataBytes: ByteArray): Payload {
+        return try {
+            val req = ProtoSetLocaleRequest.parseFrom(dataBytes)
+            logger.info("🌐 [JetBrains] setLocale: ${req.locale}")
+
+            val result = jetbrainsApi.locale.set(req.locale)
+            buildOperationResponse(result.isSuccess, result.exceptionOrNull()?.message)
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] setLocale failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    private fun handleGetProjectPath(): Payload {
+        return try {
+            val projectPath = jetbrainsApi.project.getPath()
+            logger.info("📁 [JetBrains] getProjectPath: $projectPath")
+
+            val response = JetBrainsGetProjectPathResponse.newBuilder()
+                .setProjectPath(projectPath)
+                .build()
+
+            buildPayload { data(response.toByteArray()) }
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] getProjectPath failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    private fun handleReportSessionState(dataBytes: ByteArray): Payload {
+        return try {
+            val req = ProtoSessionState.parseFrom(dataBytes)
+            logger.info("📊 [JetBrains] reportSessionState: ${req.sessionsCount} sessions")
+
+            val state = JetBrainsSessionState(
+                sessions = req.sessionsList.map { session ->
+                    JetBrainsSessionSummary(
+                        id = session.id,
+                        title = session.title,
+                        sessionId = if (session.hasSessionId()) session.sessionId else null,
+                        isGenerating = session.isGenerating,
+                        isConnected = session.isConnected,
+                        isConnecting = session.isConnecting
+                    )
+                },
+                activeSessionId = if (req.hasActiveSessionId()) req.activeSessionId else null
+            )
+
+            jetbrainsApi.session.receiveState(state)
+            buildOperationResponse(true, null)
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] reportSessionState failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    // ==================== 反向调用（后端 → 前端）====================
+
+    /**
+     * 推送主题变化到前端
+     */
+    suspend fun pushThemeChanged(theme: JetBrainsIdeTheme) {
+        val requester = clientRequester ?: run {
+            logger.warn("⚠️ [JetBrains RSocket] 无客户端连接，跳过主题推送")
+            return
+        }
+
+        try {
+            val protoTheme = IdeThemeProto.newBuilder()
+                .setBackground(theme.background)
+                .setForeground(theme.foreground)
+                .setBorderColor(theme.borderColor)
+                .setPanelBackground(theme.panelBackground)
+                .setTextFieldBackground(theme.textFieldBackground)
+                .setSelectionBackground(theme.selectionBackground)
+                .setSelectionForeground(theme.selectionForeground)
+                .setLinkColor(theme.linkColor)
+                .setErrorColor(theme.errorColor)
+                .setWarningColor(theme.warningColor)
+                .setSuccessColor(theme.successColor)
+                .setSeparatorColor(theme.separatorColor)
+                .setHoverBackground(theme.hoverBackground)
+                .setAccentColor(theme.accentColor)
+                .setInfoBackground(theme.infoBackground)
+                .setCodeBackground(theme.codeBackground)
+                .setSecondaryForeground(theme.secondaryForeground)
+                .setFontFamily(theme.fontFamily)
+                .setFontSize(theme.fontSize)
+                .setEditorFontFamily(theme.editorFontFamily)
+                .setEditorFontSize(theme.editorFontSize)
+                .build()
+
+            val payload = buildPayloadWithRoute("jetbrains.onThemeChanged", protoTheme.toByteArray())
+            requester.fireAndForget(payload)
+            logger.info("📤 [JetBrains RSocket] → pushThemeChanged")
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains RSocket] pushThemeChanged failed: ${e.message}")
+        }
+    }
+
+    /**
+     * 推送会话命令到前端
+     */
+    suspend fun pushSessionCommand(command: JetBrainsSessionCommand) {
+        val requester = clientRequester ?: run {
+            logger.warn("⚠️ [JetBrains RSocket] 无客户端连接，跳过命令推送")
+            return
+        }
+
+        try {
+            val protoType = when (command.type) {
+                JetBrainsSessionCommandType.SWITCH -> ProtoSessionCommandType.SESSION_COMMAND_SWITCH
+                JetBrainsSessionCommandType.CREATE -> ProtoSessionCommandType.SESSION_COMMAND_CREATE
+                JetBrainsSessionCommandType.CLOSE -> ProtoSessionCommandType.SESSION_COMMAND_CLOSE
+                JetBrainsSessionCommandType.RENAME -> ProtoSessionCommandType.SESSION_COMMAND_RENAME
+                JetBrainsSessionCommandType.TOGGLE_HISTORY -> ProtoSessionCommandType.SESSION_COMMAND_TOGGLE_HISTORY
+                JetBrainsSessionCommandType.SET_LOCALE -> ProtoSessionCommandType.SESSION_COMMAND_SET_LOCALE
+                else -> ProtoSessionCommandType.SESSION_COMMAND_UNSPECIFIED
+            }
+
+            val builder = ProtoSessionCommand.newBuilder().setType(protoType)
+            command.sessionId?.let { builder.setSessionId(it) }
+            command.newName?.let { builder.setNewName(it) }
+            command.locale?.let { builder.setLocale(it) }
+            val protoCommand = builder.build()
+
+            val payload = buildPayloadWithRoute("jetbrains.onSessionCommand", protoCommand.toByteArray())
+            requester.fireAndForget(payload)
+            logger.info("📤 [JetBrains RSocket] → pushSessionCommand: ${command.type}")
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains RSocket] pushSessionCommand failed: ${e.message}")
+        }
+    }
+
+    // ==================== 辅助方法 ====================
+
+    private fun extractRoute(payload: Payload): String {
+        val metadata = payload.metadata ?: throw IllegalArgumentException("Missing metadata")
+        val metadataBytes = metadata.readByteArray()
+        if (metadataBytes.isEmpty()) {
+            throw IllegalArgumentException("Empty metadata")
+        }
+
+        val length = metadataBytes[0].toInt() and 0xFF
+        return String(metadataBytes, 1, length, Charsets.UTF_8)
+    }
+
+    private fun buildPayloadWithRoute(route: String, data: ByteArray): Payload {
+        val routeBytes = route.toByteArray(Charsets.UTF_8)
+        val metadata = ByteArray(1 + routeBytes.size)
+        metadata[0] = routeBytes.size.toByte()
+        System.arraycopy(routeBytes, 0, metadata, 1, routeBytes.size)
+
+        val metadataBuffer = Buffer().apply { write(metadata) }
+        val dataBuffer = Buffer().apply { write(data) }
+
+        return buildPayload {
+            data(dataBuffer)
+            metadata(metadataBuffer)
+        }
+    }
+
+    private fun buildOperationResponse(success: Boolean, error: String?): Payload {
+        val response = JetBrainsOperationResponse.newBuilder().apply {
+            this.success = success
+            error?.let { this.error = it }
+        }.build()
+
+        return buildPayload { data(response.toByteArray()) }
+    }
+
+    private fun buildErrorResponse(error: String): Payload {
+        return buildOperationResponse(false, error)
+    }
+}

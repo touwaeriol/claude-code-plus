@@ -47,7 +47,6 @@
         :disabled="!enabled"
         @click="handleAddContextClick"
       >
-        <span class="btn-icon">📎</span>
         <span class="btn-text">{{ t('chat.addContext') }}</span>
       </button>
 
@@ -252,20 +251,25 @@
           />
 
           <!-- Skip Permissions 复选框 - Cursor 风格 -->
-          <label
+          <el-tooltip
             v-if="showPermissionControls"
-            class="cursor-checkbox"
-            :class="{ checked: skipPermissionsValue, disabled: !enabled }"
+            :content="t('permission.mode.bypassTooltip')"
+            placement="top"
           >
-            <input
-              v-model="skipPermissionsValue"
-              type="checkbox"
-              :disabled="!enabled"
-              @change="handleSkipPermissionsChange(skipPermissionsValue)"
+            <label
+              class="cursor-checkbox"
+              :class="{ checked: skipPermissionsValue, disabled: !enabled }"
             >
-            <span class="checkbox-icon">{{ skipPermissionsValue ? '☑' : '☐' }}</span>
-            <span class="checkbox-text">Skip</span>
-          </label>
+              <input
+                v-model="skipPermissionsValue"
+                type="checkbox"
+                :disabled="!enabled"
+                @change="handleSkipPermissionsChange(skipPermissionsValue)"
+              >
+              <span class="checkbox-icon">{{ skipPermissionsValue ? '☑' : '☐' }}</span>
+              <span class="checkbox-text">{{ t('permission.mode.bypass') }}</span>
+            </label>
+          </el-tooltip>
         </div>
       </div>
 
@@ -671,14 +675,7 @@ const hiddenContextsCount = computed(() => {
 })
 
 const placeholderText = computed(() => {
-  if (props.placeholderText) {
-    return props.placeholderText
-  }
-  // 根据操作系统使用不同的快捷键提示
-  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
-  return isMac
-    ? t('chat.placeholderWithShortcuts')
-    : t('chat.placeholderWithShortcutsCtrl')
+  return props.placeholderText || ''
 })
 
 // Watch props changes
@@ -796,15 +793,26 @@ function dismissAtSymbolPopup() {
 }
 
 // Slash Command Functions
+// 已知的斜杠命令列表
+const knownSlashCommands = ['/compact', '/context', '/rename']
+
 function checkSlashCommand() {
-  const text = inputText.value.trim()
+  const text = inputText.value  // 不使用 trim，保留空格以检测命令是否已完成
 
   // 只有当输入以 / 开头时才显示斜杠命令弹窗
   if (text.startsWith('/')) {
-    // 提取 / 后面的查询内容（第一个空格之前）
-    const spaceIndex = text.indexOf(' ')
-    const query = spaceIndex > 0 ? text.slice(1, spaceIndex) : text.slice(1)
-    slashCommandQuery.value = query
+    // 检查是否有空格/tab 等不可见字符
+    const hasWhitespace = /\s/.test(text)
+
+    // 如果有空白字符，不显示弹窗（和上下文选择器一样）
+    if (hasWhitespace) {
+      showSlashCommandPopup.value = false
+      slashCommandQuery.value = ''
+      return
+    }
+
+    // 提取查询内容（/ 后面的部分）
+    slashCommandQuery.value = text.slice(1)
     showSlashCommandPopup.value = true
   } else {
     showSlashCommandPopup.value = false
@@ -818,7 +826,7 @@ interface SlashCommand {
 }
 
 function handleSlashCommandSelect(cmd: SlashCommand) {
-  // 替换输入框内容为选中的命令
+  // 替换输入框内容为选中的命令（末尾加空格）
   richTextInputRef.value?.setContent(cmd.name + ' ')
   inputText.value = cmd.name + ' '
   showSlashCommandPopup.value = false
@@ -890,12 +898,16 @@ async function handleKeydown(event: KeyboardEvent) {
     return
   }
 
-  // Shift+Enter 或 Ctrl+J - 插入换行
-  if (
-    (event.key === 'Enter' && event.shiftKey) ||
-    (event.key === 'j' && event.ctrlKey)
-  ) {
+  // Shift+Enter - 插入换行（默认行为）
+  if (event.key === 'Enter' && event.shiftKey) {
     // 默认行为已经会插入换行，不需要额外处理
+    return
+  }
+
+  // Ctrl+J - 插入换行（需要主动处理，浏览器默认行为不是换行）
+  if (event.key === 'j' && event.ctrlKey && !event.shiftKey && !event.altKey) {
+    event.preventDefault()
+    richTextInputRef.value?.insertNewLine()
     return
   }
 
@@ -1355,26 +1367,25 @@ onUnmounted(() => {
   color: #fff;
 }
 
-/* Top Toolbar */
+/* Top Toolbar - 紧凑布局 */
 .top-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--theme-border, #e1e4e8);
+  gap: 4px;
+  padding: 4px 10px;
 }
 
 .add-context-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  height: 20px;
+  gap: 3px;
+  padding: 2px 6px;
+  height: 18px;
   border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   background: var(--theme-background, #ffffff);
   color: var(--theme-foreground, #24292e);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -1503,12 +1514,12 @@ onUnmounted(() => {
   cursor: default;
 }
 
-/* Input Area */
+/* Input Area - 更大的输入区域 */
 .input-area {
   position: relative;
-  padding: 8px 12px;
+  padding: 10px 12px;
   cursor: text;
-  min-height: 24px;
+  min-height: 60px;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -1557,7 +1568,7 @@ onUnmounted(() => {
 
 .message-textarea {
   width: 100%;
-  min-height: 40px;
+  min-height: 50px;
   height: 100%;  /* 填充父容器 */
   border: none;
   outline: none;
@@ -1578,12 +1589,12 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-/* Bottom Toolbar */
+/* Bottom Toolbar - 紧凑布局 */
 .bottom-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-top: 1px solid var(--theme-border, #e1e4e8);
   background: var(--theme-panel-background, #f6f8fa);
   position: relative;
@@ -1609,44 +1620,44 @@ onUnmounted(() => {
   gap: 2px;
 }
 
-/* ========== Cursor 风格选择器 - 无边框紧凑样式 ========== */
+/* ========== Cursor 风格选择器 - 更紧凑样式 ========== */
 .cursor-selector {
-  font-size: 13px;
+  font-size: 11px;
 }
 
 /* 模式选择器 - 带灰色背景 */
 .cursor-selector.mode-selector {
   width: auto;
-  min-width: 100px;
+  min-width: 80px;
 }
 
 .cursor-selector.mode-selector :deep(.el-select__wrapper) {
   background: rgba(0, 0, 0, 0.08) !important;
-  border-radius: 6px;
-  padding: 4px 8px;
+  border-radius: 4px;
+  padding: 2px 6px;
 }
 
 /* 模式选择器前缀图标 */
 .mode-prefix-icon {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--theme-secondary-foreground, #6a737d);
-  margin-right: 2px;
+  margin-right: 1px;
 }
 
 .cursor-selector.model-selector {
   width: auto;
-  min-width: 90px;
+  min-width: 70px;
 }
 
 /* 移除边框和背景，使用纯文字样式 */
 .cursor-selector :deep(.el-select__wrapper) {
-  padding: 4px 6px;
+  padding: 2px 4px;
   border: none !important;
   border-radius: 4px;
   background: transparent !important;
   box-shadow: none !important;
-  min-height: 24px;
-  gap: 2px;
+  min-height: 20px;
+  gap: 1px;
 }
 
 .cursor-selector :deep(.el-select__wrapper):hover {
@@ -1660,12 +1671,12 @@ onUnmounted(() => {
 
 .cursor-selector :deep(.el-select__placeholder) {
   color: var(--theme-secondary-foreground, #6a737d);
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .cursor-selector :deep(.el-select__selection) {
   color: var(--theme-secondary-foreground, #6a737d);
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .cursor-selector :deep(.el-select__suffix) {
@@ -1682,14 +1693,14 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-/* ========== Cursor 风格复选框 ========== */
+/* ========== Cursor 风格复选框 - 紧凑 ========== */
 .cursor-checkbox {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 4px 6px;
+  gap: 1px;
+  padding: 2px 4px;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 11px;
   color: var(--theme-secondary-foreground, #6a737d);
   cursor: pointer;
   user-select: none;
@@ -1714,11 +1725,11 @@ onUnmounted(() => {
 }
 
 .cursor-checkbox .checkbox-icon {
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .cursor-checkbox .checkbox-text {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 /* ========== 模式选择器下拉选项样式 ========== */
@@ -1793,34 +1804,34 @@ onUnmounted(() => {
 }
 
 .token-stats {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--theme-secondary-foreground, #6a737d);
-  padding: 4px 8px;
+  padding: 2px 6px;
   background: var(--theme-background, #ffffff);
   border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
 }
 
-/* ESC 打断提示 */
+/* ESC 打断提示 - 紧凑 */
 .esc-hint {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--theme-secondary-foreground, #6a737d);
-  padding: 4px 8px;
+  padding: 2px 6px;
   background: var(--theme-hover-background, rgba(0, 0, 0, 0.04));
   border-radius: 4px;
   white-space: nowrap;
 }
 
-/* ========== 简洁图标按钮 (Augment Code 风格) ========== */
+/* ========== 简洁图标按钮 - 紧凑 ========== */
 .icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   color: var(--theme-secondary-foreground, #6a737d);
   cursor: pointer;
@@ -1924,8 +1935,8 @@ onUnmounted(() => {
   align-items: flex-start;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--theme-error-background, #fef2f2);
-  border: 1px solid var(--theme-error, #ef4444);
+  background: var(--theme-info-background);
+  border: 1px solid var(--theme-error);
   border-radius: 6px;
   margin: 8px 12px 0;
   cursor: pointer;
@@ -1933,7 +1944,7 @@ onUnmounted(() => {
 }
 
 .error-banner:hover {
-  background: var(--theme-error-background-hover, #fee2e2);
+  background: var(--theme-hover-background);
 }
 
 .error-icon {

@@ -1,3 +1,5 @@
+import { jetbrainsBridge } from './jetbrainsApi'
+
 /**
  * 主题颜色接口
  */
@@ -73,9 +75,9 @@ export class ThemeService {
   private currentTheme: ThemeColors | null = null
   private listeners: Set<(theme: ThemeColors) => void> = new Set()
   private initialized = false
-  private bridgeReadyHandler: ((event: Event) => void) | null = null
   private themeMode: ThemeMode = 'system'
   private hasIdeBridge = false
+  private unsubscribeTheme: (() => void) | null = null
 
   /**
    * 初始化主题服务
@@ -92,25 +94,104 @@ export class ThemeService {
       return
     }
 
-    // 尝试绑定 IDE 桥接
-    if (this.bindThemeBridge()) {
+    // 🚀 优先从 URL 参数读取初始主题（IDE 模式加载时注入）
+    const initialTheme = this.getInitialThemeFromUrl()
+    if (initialTheme) {
+      console.log('🎨 [IDE] Applying initial theme from URL')
+      this.setTheme(initialTheme)
       this.hasIdeBridge = true
+      // 继续绑定 RSocket 以接收后续主题更新
+      this.bindJetBrainsThemeAsync()
       return
     }
 
-    // IDEA 模式但 JCEF 还没注入：等待注入后再初始化主题
-    const anyWindow = window as any
-    if (anyWindow.__IDEA_MODE__) {
-      console.log('🎨 [IDE] Waiting for JCEF bridge...')
-      this.waitForThemeBridge()
+    // 先应用系统主题，避免无主题状态
+    this.setTheme('system')
+
+    // 检查 JetBrains 桥接是否已启用
+    if (jetbrainsBridge.isEnabled()) {
+      console.log('🎨 [IDE] JetBrains bridge detected, fetching theme...')
+      await this.bindJetBrainsTheme()
       return
     }
 
     // 浏览器模式：应用系统主题偏好
     console.log('🎨 [Browser] No IDE bridge, applying system preference')
-    this.setTheme('system')
     this.watchSystemTheme()
-    this.waitForThemeBridge()
+  }
+
+  /**
+   * 从 URL 参数或 window.__initialTheme 读取初始主题
+   */
+  private getInitialThemeFromUrl(): ThemeColors | null {
+    try {
+      // 优先使用 index.html 中预解析的主题（更快）
+      const anyWindow = window as unknown as { __initialTheme?: ThemeColors }
+      if (anyWindow.__initialTheme) {
+        console.log('🎨 [URL] Using pre-parsed theme from window.__initialTheme')
+        return anyWindow.__initialTheme
+      }
+
+      // 回退到手动解析 URL
+      const params = new URLSearchParams(window.location.search)
+      const themeParam = params.get('initialTheme')
+      if (!themeParam) return null
+
+      const themeJson = decodeURIComponent(themeParam)
+      const theme = JSON.parse(themeJson) as ThemeColors
+      console.log('🎨 [URL] Found initial theme in URL params')
+      return theme
+    } catch (error) {
+      console.warn('🎨 [URL] Failed to parse initial theme:', error)
+      return null
+    }
+  }
+
+  /**
+   * 异步绑定 JetBrains 主题（用于后续更新，不阻塞初始化）
+   */
+  private bindJetBrainsThemeAsync() {
+    // 延迟执行，不阻塞初始渲染
+    setTimeout(async () => {
+      try {
+        // 订阅主题变化（无需再获取当前主题，已从 URL 获取）
+        this.unsubscribeTheme = jetbrainsBridge.onThemeChange((theme) => {
+          if (theme) {
+            this.setTheme(theme as ThemeColors)
+            console.log('🎨 [IDE] Theme updated via RSocket')
+          }
+        })
+        console.log('🎨 [IDE] Theme change listener registered')
+      } catch (error) {
+        console.warn('🎨 [IDE] Failed to bind theme listener:', error)
+      }
+    }, 100)
+  }
+
+  /**
+   * 绑定 JetBrains 主题（通过 RSocket）
+   */
+  private async bindJetBrainsTheme() {
+    try {
+      // 获取当前主题
+      const theme = await jetbrainsBridge.getTheme()
+      if (theme) {
+        this.setTheme(theme as ThemeColors)
+        this.hasIdeBridge = true
+        console.log('🎨 [IDE] ✅ Theme loaded via RSocket')
+      }
+
+      // 订阅主题变化
+      this.unsubscribeTheme = jetbrainsBridge.onThemeChange((theme) => {
+        if (theme) {
+          this.setTheme(theme as ThemeColors)
+          console.log('🎨 [IDE] Theme updated via RSocket')
+        }
+      })
+    } catch (error) {
+      console.warn('🎨 [IDE] Failed to get theme via RSocket:', error)
+      this.watchSystemTheme()
+    }
   }
 
   /**
@@ -217,49 +298,6 @@ export class ThemeService {
         console.error('❌ Theme listener error:', error)
       }
     })
-  }
-
-  private bindThemeBridge(): boolean {
-    const ideaJcef = (window as any).__IDEA_JCEF__
-    if (!ideaJcef?.theme?.getCurrent) return false
-
-    ideaJcef.theme.onChange = (theme: ThemeColors) => {
-      if (theme) this.setTheme(theme)
-    }
-
-    const currentTheme = ideaJcef.theme.getCurrent()
-    if (currentTheme) {
-      this.setTheme(currentTheme)
-    }
-
-    this.clearBridgeReadyHandler()
-    console.log('🎨 [IDE] IDEA JCEF theme bridge connected')
-    return true
-  }
-
-  private waitForThemeBridge() {
-    if (this.bridgeReadyHandler) return
-    this.bridgeReadyHandler = () => {
-      if (this.bindThemeBridge()) {
-        this.hasIdeBridge = true
-        this.clearBridgeReadyHandler()
-      }
-    }
-    window.addEventListener('idea:jcefReady', this.bridgeReadyHandler)
-    type ThemeEventListener = (e: Event) => void
-    window.addEventListener('idea:themeChange', ((e: CustomEvent<ThemeColors>) => {
-      if (e.detail) {
-        this.hasIdeBridge = true
-        this.setTheme(e.detail)
-      }
-    }) as ThemeEventListener)
-  }
-
-  private clearBridgeReadyHandler() {
-    if (this.bridgeReadyHandler) {
-      window.removeEventListener('idea:jcefReady', this.bridgeReadyHandler)
-      this.bridgeReadyHandler = null
-    }
   }
 
   private injectCssVariables(theme: ThemeColors) {
