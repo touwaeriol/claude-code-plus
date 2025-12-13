@@ -35,6 +35,12 @@ import {
   UserAnswerItemSchema,
   PermissionUpdateSchema,
   PermissionRuleValueSchema,
+  // JetBrains 集成（统一 ServerCall）
+  SessionCommandNotifySchema,
+  ThemeChangedNotifySchema,
+  type SessionCommandNotify,
+  type ThemeChangedNotify,
+  SessionCommandType,
   type ContentBlock,
   type AskUserQuestionRequest,
   type RequestPermissionRequest,
@@ -58,7 +64,7 @@ import type {
 } from '@/types/rpc'
 
 // 重新导出 Protobuf 枚举
-export { Provider, PermissionMode, SandboxMode }
+export { Provider, PermissionMode, SandboxMode, SessionCommandType }
 
 /**
  * RPC 类型到 Protobuf 类型的转换
@@ -661,8 +667,45 @@ function mapDeltaFromProto(proto: any): any {
 export interface DecodedServerCallRequest {
   callId: string
   method: string
-  params: AskUserQuestionParams | RequestPermissionParams | unknown
-  paramsCase: 'askUserQuestion' | 'requestPermission' | 'paramsJson' | undefined
+  params: AskUserQuestionParams | RequestPermissionParams | SessionCommandParams | ThemeChangedParams | unknown
+  paramsCase: 'askUserQuestion' | 'requestPermission' | 'sessionCommand' | 'themeChanged' | 'paramsJson' | undefined
+}
+
+/**
+ * SessionCommand 参数类型
+ */
+export interface SessionCommandParams {
+  type: 'switch' | 'create' | 'close' | 'rename' | 'toggleHistory' | 'setLocale' | 'unspecified'
+  sessionId?: string
+  newName?: string
+  locale?: string
+}
+
+/**
+ * ThemeChanged 参数类型
+ */
+export interface ThemeChangedParams {
+  background: string
+  foreground: string
+  borderColor: string
+  panelBackground: string
+  textFieldBackground: string
+  selectionBackground: string
+  selectionForeground: string
+  linkColor: string
+  errorColor: string
+  warningColor: string
+  successColor: string
+  separatorColor: string
+  hoverBackground: string
+  accentColor: string
+  infoBackground: string
+  codeBackground: string
+  secondaryForeground: string
+  fontFamily: string
+  fontSize: number
+  editorFontFamily: string
+  editorFontSize: number
 }
 
 /**
@@ -732,6 +775,12 @@ export function decodeServerCallRequest(data: Uint8Array): DecodedServerCallRequ
   } else if (proto.params.case === 'requestPermission') {
     paramsCase = 'requestPermission'
     params = mapRequestPermissionRequestFromProto(proto.params.value)
+  } else if (proto.params.case === 'sessionCommand') {
+    paramsCase = 'sessionCommand'
+    params = mapSessionCommandFromProto(proto.params.value)
+  } else if (proto.params.case === 'themeChanged') {
+    paramsCase = 'themeChanged'
+    params = mapThemeChangedFromProto(proto.params.value)
   } else if (proto.params.case === 'paramsJson') {
     paramsCase = 'paramsJson'
     try {
@@ -749,6 +798,62 @@ export function decodeServerCallRequest(data: Uint8Array): DecodedServerCallRequ
     method: proto.method,
     params,
     paramsCase
+  }
+}
+
+/**
+ * 从 Proto 映射 SessionCommandNotify
+ */
+function mapSessionCommandFromProto(proto: SessionCommandNotify): SessionCommandParams {
+  return {
+    type: mapSessionCommandTypeFromProto(proto.type),
+    sessionId: proto.sessionId,
+    newName: proto.newName,
+    locale: proto.locale
+  }
+}
+
+/**
+ * 映射 SessionCommandType
+ */
+function mapSessionCommandTypeFromProto(type: SessionCommandType): SessionCommandParams['type'] {
+  switch (type) {
+    case SessionCommandType.SESSION_CMD_SWITCH: return 'switch'
+    case SessionCommandType.SESSION_CMD_CREATE: return 'create'
+    case SessionCommandType.SESSION_CMD_CLOSE: return 'close'
+    case SessionCommandType.SESSION_CMD_RENAME: return 'rename'
+    case SessionCommandType.SESSION_CMD_TOGGLE_HISTORY: return 'toggleHistory'
+    case SessionCommandType.SESSION_CMD_SET_LOCALE: return 'setLocale'
+    default: return 'unspecified'
+  }
+}
+
+/**
+ * 从 Proto 映射 ThemeChangedNotify
+ */
+function mapThemeChangedFromProto(proto: ThemeChangedNotify): ThemeChangedParams {
+  return {
+    background: proto.background,
+    foreground: proto.foreground,
+    borderColor: proto.borderColor,
+    panelBackground: proto.panelBackground,
+    textFieldBackground: proto.textFieldBackground,
+    selectionBackground: proto.selectionBackground,
+    selectionForeground: proto.selectionForeground,
+    linkColor: proto.linkColor,
+    errorColor: proto.errorColor,
+    warningColor: proto.warningColor,
+    successColor: proto.successColor,
+    separatorColor: proto.separatorColor,
+    hoverBackground: proto.hoverBackground,
+    accentColor: proto.accentColor,
+    infoBackground: proto.infoBackground,
+    codeBackground: proto.codeBackground,
+    secondaryForeground: proto.secondaryForeground,
+    fontFamily: proto.fontFamily,
+    fontSize: proto.fontSize,
+    editorFontFamily: proto.editorFontFamily,
+    editorFontSize: proto.editorFontSize
   }
 }
 

@@ -435,6 +435,21 @@ export interface SessionCommand {
   locale?: string
 }
 
+/**
+ * 映射 protoCodec 的 SessionCommandParams.type 到 SessionCommand.type
+ */
+function mapSessionCommandType(type: string): SessionCommand['type'] {
+  switch (type) {
+    case 'switch': return 'switch'
+    case 'create': return 'create'
+    case 'close': return 'close'
+    case 'rename': return 'rename'
+    case 'toggleHistory': return 'toggleHistory'
+    case 'setLocale': return 'setLocale'
+    default: return 'switch' // fallback
+  }
+}
+
 export interface SessionSummary {
   id: string
   title: string
@@ -472,20 +487,50 @@ class JetBrainsRSocketService {
 
       this.client = new RSocketClient({ url: wsUrl })
 
-      // 注册反向调用处理器（接收 Uint8Array 数据）
-      this.client.registerHandler('jetbrains.onThemeChanged', async (data: Uint8Array) => {
-        console.log('[JetBrainsRSocket] 收到主题变化推送')
-        const theme = decodeIdeTheme(data)
+      // 注册 ServerCall handler（统一 Protobuf 格式）
+      // 后端通过 client.call 路由发送，RSocketClient 解码后按 method 分发
+      this.client.registerHandler('onThemeChanged', async (params: any) => {
+        console.log('[JetBrainsRSocket] 收到主题变化推送 (Protobuf)')
+        // params 已经是 ThemeChangedParams 类型
+        const theme: IdeTheme = {
+          background: params.background,
+          foreground: params.foreground,
+          borderColor: params.borderColor,
+          panelBackground: params.panelBackground,
+          textFieldBackground: params.textFieldBackground,
+          selectionBackground: params.selectionBackground,
+          selectionForeground: params.selectionForeground,
+          linkColor: params.linkColor,
+          errorColor: params.errorColor,
+          warningColor: params.warningColor,
+          successColor: params.successColor,
+          separatorColor: params.separatorColor,
+          hoverBackground: params.hoverBackground,
+          accentColor: params.accentColor,
+          infoBackground: params.infoBackground,
+          codeBackground: params.codeBackground,
+          secondaryForeground: params.secondaryForeground,
+          fontFamily: params.fontFamily,
+          fontSize: params.fontSize,
+          editorFontFamily: params.editorFontFamily,
+          editorFontSize: params.editorFontSize
+        }
         this.themeChangeHandlers.forEach(h => h(theme))
-        return {}
+        return {} // 返回空响应
       })
 
-      this.client.registerHandler('jetbrains.onSessionCommand', async (data: Uint8Array) => {
-        console.log('[JetBrainsRSocket] 收到会话命令推送')
-        const command = decodeSessionCommandProto(data)
+      this.client.registerHandler('onSessionCommand', async (params: any) => {
+        console.log('[JetBrainsRSocket] 收到会话命令推送 (Protobuf)')
+        // params 已经是 SessionCommandParams 类型
+        const command: SessionCommand = {
+          type: mapSessionCommandType(params.type),
+          sessionId: params.sessionId,
+          newName: params.newName,
+          locale: params.locale
+        }
         console.log('[JetBrainsRSocket] 会话命令:', command)
         this.sessionCommandHandlers.forEach(h => h(command))
-        return {}
+        return {} // 返回空响应
       })
 
       await this.client.connect()

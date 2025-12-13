@@ -21,6 +21,9 @@ const log = loggers.agent
 /** 服务端调用客户端的 handler 类型 */
 export type ServerCallHandler = (params: any) => Promise<any>
 
+/** 直接路由 handler 类型（接收原始字节数据） */
+export type DirectRouteHandler = (data: Uint8Array) => Promise<any>
+
 /** 连接断开事件处理器类型 */
 export type DisconnectHandler = (error?: Error) => void
 
@@ -88,8 +91,10 @@ export type StreamSubscriber<T> = {
 export class RSocketClient {
   private rsocket: RSocket | null = null
   private options: Required<RSocketClientOptions>
-  /** 注册的服务端调用处理器 */
+  /** 注册的服务端调用处理器（用于 client.call 路由的 Protobuf 方法） */
   private serverCallHandlers = new Map<string, ServerCallHandler>()
+  /** 直接路由处理器（用于非 client.call 路由） */
+  private directRouteHandlers = new Map<string, DirectRouteHandler>()
   /** 连接断开事件处理器 */
   private disconnectHandlers = new Set<DisconnectHandler>()
 
@@ -104,17 +109,32 @@ export class RSocketClient {
   }
 
   /**
-   * 注册服务端调用处理器
+   * 注册服务端调用处理器（用于 client.call 路由的 Protobuf 方法）
    * @param method 方法名（如 'AskUserQuestion'）
    * @param handler 处理函数
    * @returns 取消注册的函数
    */
   registerHandler(method: string, handler: ServerCallHandler): () => void {
-    log.info(`[RSocketClient] 注册 handler: ${method}`)
+    log.info(`[RSocketClient] 注册 Protobuf handler: ${method}`)
     this.serverCallHandlers.set(method, handler)
     return () => {
       this.serverCallHandlers.delete(method)
-      log.info(`[RSocketClient] 取消注册 handler: ${method}`)
+      log.info(`[RSocketClient] 取消注册 Protobuf handler: ${method}`)
+    }
+  }
+
+  /**
+   * 注册直接路由处理器（用于非 client.call 路由）
+   * @param route 路由名（如 'jetbrains.onSessionCommand'）
+   * @param handler 处理函数，接收原始字节数据
+   * @returns 取消注册的函数
+   */
+  registerDirectRouteHandler(route: string, handler: DirectRouteHandler): () => void {
+    log.info(`[RSocketClient] 注册直接路由 handler: ${route}`)
+    this.directRouteHandlers.set(route, handler)
+    return () => {
+      this.directRouteHandlers.delete(route)
+      log.info(`[RSocketClient] 取消注册直接路由 handler: ${route}`)
     }
   }
 
@@ -240,9 +260,11 @@ export class RSocketClient {
   }
 
   /**
-   * 处理服务端调用（Protobuf 模式）
+   * 处理服务端调用
    *
-   * 只支持 client.call 路由，使用 Protobuf ServerCallRequest/Response 格式。
+   * 支持两种模式：
+   * 1. client.call 路由 - 使用 Protobuf ServerCallRequest/Response 格式
+   * 2. 其他路由 - 直接路由模式，使用原始数据
    */
   private async handleServerCall(payload: Payload): Promise<Payload> {
     const route = extractRoute(payload)
@@ -250,13 +272,41 @@ export class RSocketClient {
 
     const data = payload.data ? new Uint8Array(payload.data) : new Uint8Array()
 
-    // 只支持 Protobuf ServerCall 路由
+    // 模式 1: Protobuf ServerCall 路由
     if (route === 'client.call') {
       return this.handleProtobufServerCall(data)
     }
 
-    // 不支持其他路由
-    throw new Error(`Unsupported route: ${route}. Only 'client.call' is supported.`)
+    // 模式 2: 直接路由模式
+    const directHandler = this.directRouteHandlers.get(route)
+    if (directHandler) {
+      return this.handleDirectRouteCall(route, data, directHandler)
+    }
+
+    // 不支持的路由
+    log.warn(`[RSocketClient] 未找到路由处理器: ${route}`)
+    throw new Error(`Unsupported route: ${route}. Register a handler using registerDirectRouteHandler().`)
+  }
+
+  /**
+   * 处理直接路由调用
+   */
+  private async handleDirectRouteCall(
+    route: string,
+    data: Uint8Array,
+    handler: DirectRouteHandler
+  ): Promise<Payload> {
+    try {
+      log.info(`[RSocketClient] 处理直接路由: ${route}`)
+      const result = await handler(data)
+      log.info(`[RSocketClient] 直接路由处理成功: ${route}`)
+      // 直接路由模式返回空 payload（fire-and-forget 通常不需要响应）
+      return { data: undefined }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      log.error(`[RSocketClient] 直接路由处理失败: ${route}, error=${errorMsg}`)
+      throw error
+    }
   }
 
   /**

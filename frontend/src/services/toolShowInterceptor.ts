@@ -175,8 +175,9 @@ class ToolShowInterceptorService {
         filePath: ctx.input.file_path || ctx.input.path || '',
         line: ctx.input.offset ? undefined : 1,
         startOffset: ctx.input.offset,
+        // endOffset = offset + limit - 1（例如 offset=600, limit=38 → 600-637行）
         endOffset:
-          ctx.input.offset && ctx.input.limit ? ctx.input.offset + ctx.input.limit : undefined
+          ctx.input.offset && ctx.input.limit ? ctx.input.offset + ctx.input.limit - 1 : undefined
       })
     })
 

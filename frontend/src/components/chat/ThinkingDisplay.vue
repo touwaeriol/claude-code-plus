@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
 import type { ThinkingContent } from '@/types/display'
 import { useI18n } from '@/composables/useI18n'
@@ -41,12 +41,45 @@ const isComplete = computed(() => !!props.thinking.signature)
 // 本地展开/折叠状态（用户手动操作）
 const isExpanded = ref(false)
 
-// 计算是否应该折叠：思考进行中不折叠，完成后默认折叠（除非用户展开）
+// 延迟折叠状态：思考完成后需要等待 3 秒才自动折叠
+const delayedCollapseReady = ref(false)
+let collapseTimer: ReturnType<typeof setTimeout> | null = null
+
+// 监听思考完成状态，完成后启动 3 秒延迟折叠
+watch(isComplete, (complete) => {
+  if (complete) {
+    // 思考完成，启动 3 秒延迟折叠计时器
+    collapseTimer = setTimeout(() => {
+      delayedCollapseReady.value = true
+    }, 3000)
+  } else {
+    // 思考未完成，重置状态
+    delayedCollapseReady.value = false
+    if (collapseTimer) {
+      clearTimeout(collapseTimer)
+      collapseTimer = null
+    }
+  }
+}, { immediate: true })
+
+// 清理计时器
+onUnmounted(() => {
+  if (collapseTimer) {
+    clearTimeout(collapseTimer)
+  }
+})
+
+// 计算是否应该折叠：
+// - 思考进行中：保持展开
+// - 思考完成后：等待 3 秒后才自动折叠（除非用户手动展开）
 const isCollapsed = computed(() => {
   if (!isComplete.value) {
     return false // 思考进行中，保持展开
   }
-  return !isExpanded.value // 思考完成后，根据用户操作决定
+  if (!delayedCollapseReady.value) {
+    return false // 思考刚完成，还在 3 秒等待期内，保持展开
+  }
+  return !isExpanded.value // 延迟时间到了，根据用户操作决定
 })
 
 // 点击切换展开/折叠（仅在思考完成后有效）

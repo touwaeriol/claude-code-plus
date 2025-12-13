@@ -221,7 +221,7 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
     }
 
     override fun init(toolWindow: ToolWindow) {
-        toolWindow.stripeTitle = "Claude AI"
+        toolWindow.stripeTitle = "Claude Code Plus"
     }
 
     override fun shouldBeAvailable(project: Project): Boolean = true

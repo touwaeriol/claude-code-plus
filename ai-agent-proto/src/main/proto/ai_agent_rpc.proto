@@ -611,16 +611,65 @@ message RequestPermissionResponse {
   optional string deny_reason = 3;
 }
 
+// ========== JetBrains IDE 集成（用于 ServerCallRequest） ==========
+
+// 会话命令类型（用于 ServerCallRequest）
+enum SessionCommandType {
+  SESSION_CMD_UNSPECIFIED = 0;
+  SESSION_CMD_SWITCH = 1;         // switchSession
+  SESSION_CMD_CREATE = 2;         // createSession
+  SESSION_CMD_CLOSE = 3;          // closeSession
+  SESSION_CMD_RENAME = 4;         // renameSession
+  SESSION_CMD_TOGGLE_HISTORY = 5; // toggleHistory
+  SESSION_CMD_SET_LOCALE = 6;     // setLocale
+}
+
+// 会话命令通知（后端→前端推送）
+message SessionCommandNotify {
+  SessionCommandType type = 1;
+  optional string session_id = 2;
+  optional string new_name = 3;
+  optional string locale = 4;
+}
+
+// 主题变更通知（后端→前端推送）
+message ThemeChangedNotify {
+  string background = 1;
+  string foreground = 2;
+  string border_color = 3;
+  string panel_background = 4;
+  string text_field_background = 5;
+  string selection_background = 6;
+  string selection_foreground = 7;
+  string link_color = 8;
+  string error_color = 9;
+  string warning_color = 10;
+  string success_color = 11;
+  string separator_color = 12;
+  string hover_background = 13;
+  string accent_color = 14;
+  string info_background = 15;
+  string code_background = 16;
+  string secondary_foreground = 17;
+  string font_family = 18;
+  int32 font_size = 19;
+  string editor_font_family = 20;
+  int32 editor_font_size = 21;
+}
+
 // ========== 服务端调用客户端 ==========
 
 // 服务端调用客户端的通用请求（支持类型化参数）
 message ServerCallRequest {
   string call_id = 1;       // 调用 ID，用于匹配响应
-  string method = 2;        // 方法名（如 'AskUserQuestion'）
+  string method = 2;        // 方法名（如 'AskUserQuestion', 'onSessionCommand', 'onThemeChanged'）
   oneof params {
     bytes params_json = 3;                          // 旧版兼容：JSON 序列化
     AskUserQuestionRequest ask_user_question = 10;  // AskUserQuestion 请求
     RequestPermissionRequest request_permission = 11; // RequestPermission 请求
+    // JetBrains IDE 集成
+    SessionCommandNotify session_command = 20;  // 会话命令通知
+    ThemeChangedNotify theme_changed = 21;      // 主题变更通知
   }
 }
 
@@ -632,6 +681,7 @@ message ServerCallResponse {
     bytes result_json = 3;                          // 旧版兼容：JSON 序列化
     AskUserQuestionResponse ask_user_question = 10; // AskUserQuestion 响应
     RequestPermissionResponse request_permission = 11; // RequestPermission 响应
+    // JetBrains 相关响应通常不需要返回数据，使用 success=true 即可
   }
   optional string error = 4; // 错误信息（如果失败）
 }

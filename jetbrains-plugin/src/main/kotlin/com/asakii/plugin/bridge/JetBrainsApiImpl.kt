@@ -62,25 +62,49 @@ class JetBrainsApiImpl(private val ideaProject: Project) : JetBrainsApi {
                         val fileEditorManager = FileEditorManager.getInstance(ideaProject)
                         val line = request.line
                         val column = request.column
-                        val startOffset = request.startOffset
-                        val descriptor = when {
-                            line != null && line > 0 -> {
-                                OpenFileDescriptor(
-                                    ideaProject,
-                                    file,
-                                    line - 1,
-                                    column?.let { it - 1 } ?: 0
-                                )
-                            }
-                            startOffset != null -> {
-                                OpenFileDescriptor(ideaProject, file, startOffset)
-                            }
-                            else -> {
-                                OpenFileDescriptor(ideaProject, file)
-                            }
+                        val startOffset = request.startOffset  // 1-based 行号
+                        val endOffset = request.endOffset      // 1-based 行号
+
+                        // 确定跳转的目标行
+                        val targetLine = when {
+                            startOffset != null && startOffset > 0 -> startOffset
+                            line != null && line > 0 -> line
+                            else -> null
                         }
-                        fileEditorManager.openTextEditor(descriptor, true)
-                        logger.info("✅ [JetBrainsApi.file] Opened: ${request.filePath}")
+
+                        val descriptor = if (targetLine != null) {
+                            OpenFileDescriptor(
+                                ideaProject,
+                                file,
+                                targetLine - 1,  // 转为 0-based
+                                column?.let { it - 1 } ?: 0
+                            )
+                        } else {
+                            OpenFileDescriptor(ideaProject, file)
+                        }
+
+                        val editor = fileEditorManager.openTextEditor(descriptor, true)
+
+                        // 如果有行范围参数，选中指定行范围
+                        if (editor != null && startOffset != null && endOffset != null && startOffset > 0 && endOffset >= startOffset) {
+                            val document = editor.document
+                            val lineCount = document.lineCount
+
+                            // 确保行号在有效范围内（转换为 0-based）
+                            val startLine = (startOffset - 1).coerceIn(0, lineCount - 1)
+                            val endLine = (endOffset - 1).coerceIn(0, lineCount - 1)
+
+                            // 获取行的字符偏移量
+                            val startCharOffset = document.getLineStartOffset(startLine)
+                            val endCharOffset = document.getLineEndOffset(endLine)
+
+                            // 选中指定行范围
+                            editor.selectionModel.setSelection(startCharOffset, endCharOffset)
+
+                            logger.info("✅ [JetBrainsApi.file] Opened with selection: ${request.filePath} (lines $startOffset-$endOffset)")
+                        } else {
+                            logger.info("✅ [JetBrainsApi.file] Opened: ${request.filePath}")
+                        }
                     } else {
                         logger.warning("⚠️ [JetBrainsApi.file] Not found: ${request.filePath}")
                     }

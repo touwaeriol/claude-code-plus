@@ -115,9 +115,9 @@ class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
         val filePath = data?.get("filePath")?.jsonPrimitive?.contentOrNull
         val line = data?.get("line")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
         val column = data?.get("column")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
-
-        val content = data?.get("content")?.jsonPrimitive?.contentOrNull
-        val selectContent = data?.get("selectContent")?.jsonPrimitive?.contentOrNull?.toBoolean() ?: false
+        // 行范围选择参数（1-based 行号）
+        val startOffset = data?.get("startOffset")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+        val endOffset = data?.get("endOffset")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
 
         if (filePath == null) {
             return FrontendResponse(false, error = "Missing filePath")
@@ -128,13 +128,42 @@ class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
                 val file = LocalFileSystem.getInstance().findFileByIoFile(File(filePath))
                 if (file != null) {
                     val fileEditorManager = FileEditorManager.getInstance(project)
-                    val descriptor = if (line != null && line > 0) {
-                        OpenFileDescriptor(project, file, line - 1, column?.let { it - 1 } ?: 0)
+
+                    // 确定跳转的行号
+                    val targetLine = when {
+                        startOffset != null && startOffset > 0 -> startOffset
+                        line != null && line > 0 -> line
+                        else -> null
+                    }
+
+                    val descriptor = if (targetLine != null) {
+                        OpenFileDescriptor(project, file, targetLine - 1, column?.let { it - 1 } ?: 0)
                     } else {
                         OpenFileDescriptor(project, file)
                     }
-                    fileEditorManager.openTextEditor(descriptor, true)
-                    logger.info("✅ Opened file: $filePath")
+
+                    val editor = fileEditorManager.openTextEditor(descriptor, true)
+
+                    // 如果有行范围参数，选中指定行范围
+                    if (editor != null && startOffset != null && endOffset != null && startOffset > 0 && endOffset >= startOffset) {
+                        val document = editor.document
+                        val lineCount = document.lineCount
+
+                        // 确保行号在有效范围内（转换为 0-based）
+                        val startLine = (startOffset - 1).coerceIn(0, lineCount - 1)
+                        val endLine = (endOffset - 1).coerceIn(0, lineCount - 1)
+
+                        // 获取行的字符偏移量
+                        val startCharOffset = document.getLineStartOffset(startLine)
+                        val endCharOffset = document.getLineEndOffset(endLine)
+
+                        // 选中指定行范围
+                        editor.selectionModel.setSelection(startCharOffset, endCharOffset)
+
+                        logger.info("✅ Opened file with selection: $filePath (lines $startOffset-$endOffset)")
+                    } else {
+                        logger.info("✅ Opened file: $filePath")
+                    }
                 } else {
                     logger.warning("⚠️ File not found: $filePath")
                 }

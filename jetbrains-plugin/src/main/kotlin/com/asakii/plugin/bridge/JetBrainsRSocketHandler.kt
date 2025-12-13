@@ -7,6 +7,10 @@ import com.asakii.rpc.proto.JetBrainsGetProjectPathResponse
 import com.asakii.rpc.proto.JetBrainsGetThemeResponse
 import com.asakii.rpc.proto.JetBrainsOperationResponse
 import com.asakii.rpc.proto.JetBrainsSessionCommandType as ProtoSessionCommandType
+import com.asakii.rpc.proto.ServerCallRequest
+import com.asakii.rpc.proto.SessionCommandNotify
+import com.asakii.rpc.proto.SessionCommandType
+import com.asakii.rpc.proto.ThemeChangedNotify
 import com.asakii.server.JetBrainsRSocketHandlerProvider
 import io.rsocket.kotlin.RSocket
 import io.rsocket.kotlin.RSocketRequestHandler
@@ -291,8 +295,11 @@ class JetBrainsRSocketHandler(
 
     // ==================== 反向调用（后端 → 前端）====================
 
+    // 调用 ID 计数器
+    private var callIdCounter = 0
+
     /**
-     * 推送主题变化到前端
+     * 推送主题变化到前端（使用统一的 client.call 路由）
      */
     suspend fun pushThemeChanged(theme: JetBrainsIdeTheme) {
         val requester = clientRequester ?: run {
@@ -301,7 +308,8 @@ class JetBrainsRSocketHandler(
         }
 
         try {
-            val protoTheme = IdeThemeProto.newBuilder()
+            // 构建 ThemeChangedNotify
+            val themeNotify = ThemeChangedNotify.newBuilder()
                 .setBackground(theme.background)
                 .setForeground(theme.foreground)
                 .setBorderColor(theme.borderColor)
@@ -325,16 +333,24 @@ class JetBrainsRSocketHandler(
                 .setEditorFontSize(theme.editorFontSize)
                 .build()
 
-            val payload = buildPayloadWithRoute("jetbrains.onThemeChanged", protoTheme.toByteArray())
+            // 包装为 ServerCallRequest
+            val callId = "jb-${++callIdCounter}"
+            val serverCall = ServerCallRequest.newBuilder()
+                .setCallId(callId)
+                .setMethod("onThemeChanged")
+                .setThemeChanged(themeNotify)
+                .build()
+
+            val payload = buildPayloadWithRoute("client.call", serverCall.toByteArray())
             requester.fireAndForget(payload)
-            logger.info("📤 [JetBrains RSocket] → pushThemeChanged")
+            logger.info("📤 [JetBrains RSocket] → pushThemeChanged (client.call)")
         } catch (e: Exception) {
             logger.error("❌ [JetBrains RSocket] pushThemeChanged failed: ${e.message}")
         }
     }
 
     /**
-     * 推送会话命令到前端
+     * 推送会话命令到前端（使用统一的 client.call 路由）
      */
     suspend fun pushSessionCommand(command: JetBrainsSessionCommand) {
         val requester = clientRequester ?: run {
@@ -343,25 +359,34 @@ class JetBrainsRSocketHandler(
         }
 
         try {
-            val protoType = when (command.type) {
-                JetBrainsSessionCommandType.SWITCH -> ProtoSessionCommandType.SESSION_COMMAND_SWITCH
-                JetBrainsSessionCommandType.CREATE -> ProtoSessionCommandType.SESSION_COMMAND_CREATE
-                JetBrainsSessionCommandType.CLOSE -> ProtoSessionCommandType.SESSION_COMMAND_CLOSE
-                JetBrainsSessionCommandType.RENAME -> ProtoSessionCommandType.SESSION_COMMAND_RENAME
-                JetBrainsSessionCommandType.TOGGLE_HISTORY -> ProtoSessionCommandType.SESSION_COMMAND_TOGGLE_HISTORY
-                JetBrainsSessionCommandType.SET_LOCALE -> ProtoSessionCommandType.SESSION_COMMAND_SET_LOCALE
-                else -> ProtoSessionCommandType.SESSION_COMMAND_UNSPECIFIED
+            // 转换为新的 SessionCommandType
+            val cmdType = when (command.type) {
+                JetBrainsSessionCommandType.SWITCH -> SessionCommandType.SESSION_CMD_SWITCH
+                JetBrainsSessionCommandType.CREATE -> SessionCommandType.SESSION_CMD_CREATE
+                JetBrainsSessionCommandType.CLOSE -> SessionCommandType.SESSION_CMD_CLOSE
+                JetBrainsSessionCommandType.RENAME -> SessionCommandType.SESSION_CMD_RENAME
+                JetBrainsSessionCommandType.TOGGLE_HISTORY -> SessionCommandType.SESSION_CMD_TOGGLE_HISTORY
+                JetBrainsSessionCommandType.SET_LOCALE -> SessionCommandType.SESSION_CMD_SET_LOCALE
+                else -> SessionCommandType.SESSION_CMD_UNSPECIFIED
             }
 
-            val builder = ProtoSessionCommand.newBuilder().setType(protoType)
-            command.sessionId?.let { builder.setSessionId(it) }
-            command.newName?.let { builder.setNewName(it) }
-            command.locale?.let { builder.setLocale(it) }
-            val protoCommand = builder.build()
+            // 构建 SessionCommandNotify
+            val cmdNotify = SessionCommandNotify.newBuilder().setType(cmdType)
+            command.sessionId?.let { cmdNotify.setSessionId(it) }
+            command.newName?.let { cmdNotify.setNewName(it) }
+            command.locale?.let { cmdNotify.setLocale(it) }
 
-            val payload = buildPayloadWithRoute("jetbrains.onSessionCommand", protoCommand.toByteArray())
+            // 包装为 ServerCallRequest
+            val callId = "jb-${++callIdCounter}"
+            val serverCall = ServerCallRequest.newBuilder()
+                .setCallId(callId)
+                .setMethod("onSessionCommand")
+                .setSessionCommand(cmdNotify.build())
+                .build()
+
+            val payload = buildPayloadWithRoute("client.call", serverCall.toByteArray())
             requester.fireAndForget(payload)
-            logger.info("📤 [JetBrains RSocket] → pushSessionCommand: ${command.type}")
+            logger.info("📤 [JetBrains RSocket] → pushSessionCommand (client.call): ${command.type}")
         } catch (e: Exception) {
             logger.error("❌ [JetBrains RSocket] pushSessionCommand failed: ${e.message}")
         }
