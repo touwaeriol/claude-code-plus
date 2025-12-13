@@ -163,6 +163,8 @@ const newMessageCount = computed({
   set: (val: number) => sessionStore.currentTab?.saveUiState({ newMessageCount: val })
 })
 const isNearBottom = ref(true)
+const userScrollLock = ref(false)  // 用户主动向上滚动时锁定自动滚动
+const lastScrollTop = ref(0)       // 上次滚动位置，用于检测滚动方向
 const lastMessageCount = ref(0)
 const lastTailId = ref<string | null>(null)
 const historyLoadInProgress = ref(false)
@@ -226,7 +228,8 @@ let autoScrollTimerId: number | null = null
 function startAutoScroll() {
   if (autoScrollTimerId !== null) return
   autoScrollTimerId = window.setInterval(() => {
-    if (isNearBottom.value) {
+    // 用户主动向上滚动时，不强制滚动到底部
+    if (isNearBottom.value && !userScrollLock.value) {
       scrollToBottom()
     }
   }, 200) // 每 200ms 检查并滚动
@@ -250,6 +253,7 @@ watch(
     } else {
       stopTimer()
       stopAutoScroll()   // 停止自动滚动
+      userScrollLock.value = false  // 流式响应结束时，重置锁定状态
     }
   },
   { immediate: true }
@@ -457,9 +461,23 @@ function handleScroll() {
     }
   }
 
+  // 检测用户滚动方向：向上滚动时锁定自动滚动
+  const scrollingUp = scrollTop < lastScrollTop.value
+  lastScrollTop.value = scrollTop
+
   // 判断是否在底部（允许 100px 的误差）
   const distanceFromBottom = scrollHeight - scrollTop - clientHeight
   isNearBottom.value = distanceFromBottom < 100
+
+  // 用户向上滚动且离开底部区域时，锁定自动滚动
+  if (scrollingUp && !isNearBottom.value && props.isStreaming) {
+    userScrollLock.value = true
+  }
+
+  // 用户滚动回底部时，解除锁定
+  if (isNearBottom.value) {
+    userScrollLock.value = false
+  }
 
   // 更新按钮显示状态
   showScrollToBottom.value = !isNearBottom.value && displayMessages.value.length > 0
@@ -478,6 +496,7 @@ function scrollToBottom() {
   showScrollToBottom.value = false
   newMessageCount.value = 0
   isNearBottom.value = true
+  userScrollLock.value = false  // 用户主动点击滚动到底部时，解除锁定
 }
 
 /**
