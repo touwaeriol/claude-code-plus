@@ -39,21 +39,7 @@ Claude Code Plus 是一个 IntelliJ IDEA 插件，将 Claude AI 直接集成到�
 - **丰富的工具集成** - 查看和交互 Claude 的工具使用（文件读写、bash 命令等）
 - **IDE 集成** - 点击打开文件、查看差异、跳转到指定行
 - **暗色主题支持** - 完全兼容 IntelliJ 的暗色主题
-- **导出功能** - 以多种格式保存���话历史
-
-## 📸 截图
-
-### 欢迎界面
-![欢迎界面](docs/screenshots/welcome-screen.png)
-
-### 工具执行演示
-![工具演示](docs/screenshots/tool-demo.png)
-
-### 权限请求
-![权限请求](docs/screenshots/permission-request.png)
-
-### 主界面
-![主界面](docs/screenshots/idea-integration.png)
+- **导出功能** - 以多种格式保存对话历史
 
 ## 📦 安装
 

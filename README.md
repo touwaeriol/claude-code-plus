@@ -41,20 +41,6 @@ Claude Code Plus is an IntelliJ IDEA plugin that integrates Claude AI directly i
 - **Dark Theme Support** - Fully compatible with IntelliJ's dark themes
 - **Export Capabilities** - Save conversation history in multiple formats
 
-## 📸 Screenshots
-
-### Welcome Screen
-![Welcome Screen](docs/screenshots/welcome-screen.png)
-
-### Tool Execution Demo
-![Tool Demo](docs/screenshots/tool-demo.png)
-
-### Permission Request
-![Permission Request](docs/screenshots/permission-request.png)
-
-### Main Interface
-![Main Interface](docs/screenshots/idea-integration.png)
-
 ## 📦 Installation
 
 ### Option 1: JetBrains Marketplace (Recommended)

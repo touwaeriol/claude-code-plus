@@ -159,7 +159,7 @@ const scrollerRef = ref<InstanceType<typeof DynamicScroller>>()
 const showScrollToBottom = ref(false)
 // newMessageCount 绑定到 sessionStore，随会话切换自动保存/恢复
 const newMessageCount = computed({
-  get: () => sessionStore.currentTab?.uiState.value.newMessageCount ?? 0,
+  get: () => sessionStore.currentTab?.uiState.newMessageCount ?? 0,
   set: (val: number) => sessionStore.currentTab?.saveUiState({ newMessageCount: val })
 })
 const isNearBottom = ref(true)

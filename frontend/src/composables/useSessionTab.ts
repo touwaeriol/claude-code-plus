@@ -604,6 +604,12 @@ export function useSessionTab(initialOrder: number = 0) {
                 await applyPendingSettingsIfNeeded()
             })
 
+            // 设置处理队列消息的回调（用于自动发送队列中的下一条消息）
+            messagesHandler.setProcessQueueFn(async () => {
+                log.debug(`[Tab ${tabId}] 处理队列中的下一条消息`)
+                await processNextQueuedMessage()
+            })
+
             // 注册双向 RPC 处理器
             registerRpcHandlers()
 

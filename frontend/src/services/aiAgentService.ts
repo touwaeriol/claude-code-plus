@@ -391,6 +391,8 @@ export class AiAgentService {
             }
 
             const result = await response.json()
+            // 调试日志：打印后端返回的原始数据
+            console.log('📋 [HTTP] 后端返回的历史会话原始数据:', JSON.stringify(result, null, 2))
             return result.sessions || []
         } catch (error) {
             console.warn('[aiAgentService] 获取历史会话列表失败:', error)

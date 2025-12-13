@@ -8,14 +8,112 @@ import com.asakii.rpc.api.JetBrainsSessionCommandType
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.ui.JBColor
+import com.intellij.ui.components.JBPanel
+import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil
+import java.awt.BorderLayout
+import java.awt.Component
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.logging.Logger
+import javax.swing.*
+
+/**
+ * 历史会话列表项类型
+ */
+sealed class SessionListItem {
+    data class GroupHeader(val title: String) : SessionListItem()
+    data class SessionItem(
+        val session: SessionMetadata,
+        val isActive: Boolean,
+        val timeStr: String,
+        val preview: String
+    ) : SessionListItem()
+
+    data object LoadMore : SessionListItem()
+}
+
+/**
+ * 自定义会话列表项渲染器 - 双行显示
+ */
+class SessionListCellRenderer : ListCellRenderer<SessionListItem> {
+
+    override fun getListCellRendererComponent(
+        list: JList<out SessionListItem>,
+        value: SessionListItem,
+        index: Int,
+        isSelected: Boolean,
+        cellHasFocus: Boolean
+    ): Component {
+        return when (value) {
+            is SessionListItem.GroupHeader -> createGroupHeader(value, isSelected)
+            is SessionListItem.SessionItem -> createSessionItem(value, isSelected)
+            is SessionListItem.LoadMore -> createLoadMore(isSelected)
+        }
+    }
+
+    private fun createSessionItem(item: SessionListItem.SessionItem, isSelected: Boolean): JPanel {
+        return JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            border = JBUI.Borders.empty(4, 8)
+            background = if (isSelected) UIUtil.getListSelectionBackground(true) else UIUtil.getListBackground()
+
+            // 左侧图标
+            val iconLabel = JLabel(
+                if (item.isActive) AllIcons.Actions.Checked else AllIcons.FileTypes.Any_type
+            )
+            add(iconLabel, BorderLayout.WEST)
+
+            // 右侧文字区域（双行）
+            val textPanel = JBPanel<JBPanel<*>>().apply {
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                isOpaque = false
+                border = JBUI.Borders.emptyLeft(8)
+
+                // 第一行：标题
+                add(JLabel(item.preview).apply {
+                    font = JBUI.Fonts.label()
+                    foreground = if (isSelected) UIUtil.getListSelectionForeground(true)
+                    else UIUtil.getLabelForeground()
+                })
+
+                // 第二行：时间 + 消息数
+                add(JLabel("${item.timeStr} · ${item.session.messageCount} 条消息").apply {
+                    font = JBUI.Fonts.smallFont()
+                    foreground = if (isSelected) UIUtil.getListSelectionForeground(true)
+                    else UIUtil.getLabelDisabledForeground()
+                })
+            }
+            add(textPanel, BorderLayout.CENTER)
+        }
+    }
+
+    private fun createGroupHeader(header: SessionListItem.GroupHeader, isSelected: Boolean): JPanel {
+        return JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            border = JBUI.Borders.empty(8, 8, 4, 8)
+            isOpaque = false
+            add(JLabel(header.title).apply {
+                font = JBUI.Fonts.miniFont()
+                foreground = UIUtil.getLabelDisabledForeground()
+            }, BorderLayout.WEST)
+        }
+    }
+
+    private fun createLoadMore(isSelected: Boolean): JPanel {
+        return JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            border = JBUI.Borders.empty(8)
+            background = if (isSelected) UIUtil.getListSelectionBackground(true) else UIUtil.getListBackground()
+            add(JLabel("加载更多...", AllIcons.General.ArrowDown, SwingConstants.LEFT).apply {
+                foreground = if (isSelected) UIUtil.getListSelectionForeground(true)
+                else JBColor.BLUE
+            }, BorderLayout.CENTER)
+        }
+    }
+}
 
 /**
  * 历史会话按钮 - 显示在 ToolWindow 标题栏右侧
@@ -29,40 +127,73 @@ class HistorySessionAction(
 ) : AnAction("历史会话", "查看历史会话", AllIcons.Actions.Search) {
 
     private val logger = Logger.getLogger(HistorySessionAction::class.java.name)
-    private val timeFormat = SimpleDateFormat("HH:mm")
     private val dateTimeFormat = SimpleDateFormat("MM-dd HH:mm")
+
+    // 分页状态
+    private var currentOffset = 0
+    private var hasMore = true
+    private val pageSize = 20
+    private var cachedSessions: MutableList<SessionMetadata> = mutableListOf()
+    private var lastEvent: AnActionEvent? = null
+    private var currentPopup: JBPopup? = null
 
     override fun actionPerformed(e: AnActionEvent) {
         logger.info("🔍 [HistorySessionAction] 点击历史会话按钮")
+        lastEvent = e
 
-        // 异步加载历史会话，避免阻塞 UI
+        // 重置分页状态
+        currentOffset = 0
+        hasMore = true
+        cachedSessions.clear()
+
+        // 加载第一页
+        loadSessions(e, reset = true)
+    }
+
+    /**
+     * 加载历史会话
+     */
+    private fun loadSessions(e: AnActionEvent, reset: Boolean = false) {
         ApplicationManager.getApplication().executeOnPooledThread {
             val projectPath = project.basePath ?: return@executeOnPooledThread
-            logger.info("🔍 [HistorySessionAction] 扫描项目历史会话: $projectPath")
+            logger.info("🔍 [HistorySessionAction] 扫描项目历史会话: $projectPath, offset=$currentOffset")
 
-            val sessions = ClaudeSessionScanner.scanHistorySessions(projectPath, 20, 0)
+            val sessions = ClaudeSessionScanner.scanHistorySessions(projectPath, pageSize, currentOffset)
             logger.info("🔍 [HistorySessionAction] 找到 ${sessions.size} 个历史会话")
+
+            // 更新分页状态
+            hasMore = sessions.size >= pageSize
+            if (reset) {
+                cachedSessions.clear()
+            }
+            cachedSessions.addAll(sessions)
+            currentOffset += sessions.size
 
             // 回到 UI 线程显示弹出菜单
             ApplicationManager.getApplication().invokeLater {
-                showSessionPopup(e, sessions)
+                showSessionPopup(e, cachedSessions.toList())
             }
+        }
+    }
+
+    /**
+     * 加载更多会话
+     */
+    private fun loadMoreSessions() {
+        lastEvent?.let { e ->
+            // 关闭当前弹窗
+            currentPopup?.cancel()
+            // 加载下一页
+            loadSessions(e, reset = false)
         }
     }
 
     private fun showSessionPopup(e: AnActionEvent, sessions: List<SessionMetadata>) {
         if (sessions.isEmpty()) {
             logger.info("[HistorySessionAction] 没有历史会话")
-            // 显示空状态
-            val emptyGroup = DefaultActionGroup().apply {
-                add(object : AnAction("暂无历史会话", null, null) {
-                    override fun actionPerformed(e: AnActionEvent) {}
-                    override fun update(e: AnActionEvent) {
-                        e.presentation.isEnabled = false
-                    }
-                })
-            }
-            showPopup(e, emptyGroup, "历史会话")
+            // 显示空状态弹窗
+            val emptyItems = listOf(SessionListItem.GroupHeader("暂无历史会话"))
+            showPopupWithItems(e, emptyItems, 0)
             return
         }
 
@@ -70,72 +201,121 @@ class HistorySessionAction(
         val currentState = sessionApi.getState()
         val activeSessionIds = currentState?.sessions?.mapNotNull { it.sessionId }?.toSet() ?: emptySet()
 
-        // 创建弹出菜单
-        val actionGroup = DefaultActionGroup()
+        // 构建列表项
+        val items = buildListItems(sessions, activeSessionIds, hasMore)
+        val sessionCount = items.filterIsInstance<SessionListItem.SessionItem>().size
 
-        // 按日期分组显示
-        var lastDateGroup: String? = null
-        val now = System.currentTimeMillis()
-
-        sessions.forEach { session ->
-            val dateGroup = getDateGroup(session.timestamp, now)
-
-            // 添加日期分组标题
-            if (dateGroup != lastDateGroup) {
-                if (lastDateGroup != null) {
-                    actionGroup.add(Separator.create())
-                }
-                // 添加分组标题
-                actionGroup.add(Separator.create(dateGroup))
-                lastDateGroup = dateGroup
-            }
-
-            val isActive = activeSessionIds.contains(session.sessionId)
-            val icon = if (isActive) AllIcons.Actions.Checked else AllIcons.FileTypes.Any_type
-            val timeStr = formatSessionTime(session.timestamp, now)
-            val preview = session.firstUserMessage.take(35).replace("\n", " ").trim()
-            val displayPreview = if (preview.isEmpty()) "新会话" else preview
-            val title = if (isActive) "● $displayPreview" else displayPreview
-            val description = "$timeStr · ${session.messageCount} 条消息"
-
-            actionGroup.add(object : AnAction(title, description, icon) {
-                override fun actionPerformed(e: AnActionEvent) {
-                    logger.info("🔍 [HistorySessionAction] 选择会话: ${session.sessionId}")
-                    // 发送命令给前端加载该会话
-                    sessionApi.sendCommand(
-                        JetBrainsSessionCommand(
-                            type = JetBrainsSessionCommandType.SWITCH,
-                            sessionId = session.sessionId
-                        )
-                    )
-                }
-            })
-        }
-
-        showPopup(e, actionGroup, "历史会话 (${sessions.size})")
+        showPopupWithItems(e, items, sessionCount)
     }
 
-    private fun showPopup(e: AnActionEvent, actionGroup: DefaultActionGroup, title: String) {
+    /**
+     * 使用 PopupChooserBuilder 显示弹窗
+     */
+    private fun showPopupWithItems(e: AnActionEvent, items: List<SessionListItem>, sessionCount: Int) {
         val popup = JBPopupFactory.getInstance()
-            .createActionGroupPopup(
-                title,
-                actionGroup,
-                e.dataContext,
-                JBPopupFactory.ActionSelectionAid.SPEEDSEARCH,
-                true
-            )
+            .createPopupChooserBuilder(items)
+            .setTitle("历史会话 ($sessionCount)")
+            .setRenderer(SessionListCellRenderer())
+            .setItemChosenCallback { selected ->
+                when (selected) {
+                    is SessionListItem.SessionItem -> {
+                        logger.info("🔍 [HistorySessionAction] 选择会话: ${selected.session.sessionId}")
+                        sessionApi.sendCommand(
+                            JetBrainsSessionCommand(
+                                type = JetBrainsSessionCommandType.SWITCH,
+                                sessionId = selected.session.sessionId
+                            )
+                        )
+                    }
 
+                    is SessionListItem.LoadMore -> {
+                        loadMoreSessions()
+                    }
+
+                    else -> {}
+                }
+            }
+            .setNamerForFiltering { item ->
+                when (item) {
+                    is SessionListItem.SessionItem -> item.preview
+                    else -> ""
+                }
+            }
+            .setMovable(true)
+            .setResizable(true)
+            .createPopup()
+
+        currentPopup = popup
+
+        // 显示弹窗
         val component = e.inputEvent?.component
         if (component != null) {
-            // 计算向左展开的位置（避免超出 IDEA 窗口）
-            val point = component.locationOnScreen
-            // 在组件左下角显示弹出菜单
-            val popupX = point.x - popup.content.preferredSize.width + component.width
-            val popupY = point.y + component.height
-            popup.showInScreenCoordinates(component, java.awt.Point(popupX, popupY))
+            popup.showUnderneathOf(component)
         } else {
             popup.showInFocusCenter()
         }
+    }
+
+    /**
+     * 构建列表项（带分组）
+     */
+    private fun buildListItems(
+        sessions: List<SessionMetadata>,
+        activeSessionIds: Set<String>,
+        hasMore: Boolean
+    ): List<SessionListItem> {
+        val items = mutableListOf<SessionListItem>()
+        val now = System.currentTimeMillis()
+
+        // 分离激活和历史会话
+        val (activeSessions, historySessions) = sessions.partition {
+            activeSessionIds.contains(it.sessionId)
+        }
+
+        // 激活中分组
+        if (activeSessions.isNotEmpty()) {
+            items.add(SessionListItem.GroupHeader("激活中"))
+            activeSessions.forEach { session ->
+                // 优先使用 customTitle，否则使用 firstUserMessage
+                val displayTitle = (session.customTitle ?: session.firstUserMessage)
+                    .take(35).replace("\n", " ").trim()
+                    .ifEmpty { "新会话" }
+                items.add(
+                    SessionListItem.SessionItem(
+                        session = session,
+                        isActive = true,
+                        timeStr = formatRelativeTime(session.timestamp, now),
+                        preview = displayTitle
+                    )
+                )
+            }
+        }
+
+        // 历史分组
+        if (historySessions.isNotEmpty()) {
+            items.add(SessionListItem.GroupHeader("历史"))
+            historySessions.forEach { session ->
+                // 优先使用 customTitle，否则使用 firstUserMessage
+                val displayTitle = (session.customTitle ?: session.firstUserMessage)
+                    .take(35).replace("\n", " ").trim()
+                    .ifEmpty { "新会话" }
+                items.add(
+                    SessionListItem.SessionItem(
+                        session = session,
+                        isActive = false,
+                        timeStr = formatRelativeTime(session.timestamp, now),
+                        preview = displayTitle
+                    )
+                )
+            }
+        }
+
+        // 加载更多
+        if (hasMore) {
+            items.add(SessionListItem.LoadMore)
+        }
+
+        return items
     }
 
     override fun update(e: AnActionEvent) {
@@ -143,35 +323,20 @@ class HistorySessionAction(
     }
 
     /**
-     * 获取日期分组标题（今天、昨天、本周、更早）
+     * 格式化相对时间（参考 Web 端）
      */
-    private fun getDateGroup(timestamp: Long, now: Long): String {
-        val dayMs = 24 * 60 * 60 * 1000L
+    private fun formatRelativeTime(timestamp: Long, now: Long): String {
         val diff = now - timestamp
-        val days = diff / dayMs
+        val minutes = diff / 60000
+        val hours = diff / 3600000
+        val days = diff / 86400000
 
         return when {
-            days < 1 -> "今天"
-            days < 2 -> "昨天"
-            days < 7 -> "本周"
-            days < 30 -> "本月"
-            else -> "更早"
-        }
-    }
-
-    /**
-     * 格式化会话时间（今天显示 HH:mm，其他显示 MM-dd HH:mm）
-     */
-    private fun formatSessionTime(timestamp: Long, now: Long): String {
-        val dayMs = 24 * 60 * 60 * 1000L
-        val diff = now - timestamp
-        val days = diff / dayMs
-        val date = Date(timestamp)
-
-        return when {
-            days < 1 -> "今天 ${timeFormat.format(date)}"
-            days < 2 -> "昨天 ${timeFormat.format(date)}"
-            else -> dateTimeFormat.format(date)
+            minutes < 1 -> "刚刚"
+            minutes < 60 -> "${minutes}分钟前"
+            hours < 24 -> "${hours}小时前"
+            days < 7 -> "${days}天前"
+            else -> dateTimeFormat.format(Date(timestamp))
         }
     }
 }

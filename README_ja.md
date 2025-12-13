@@ -41,20 +41,6 @@ Claude Code Plusは、Claude AIを開発環境に直接統合するIntelliJ IDEA
 - **ダークテーマ対応** - IntelliJのダークテーマと完全互換
 - **エクスポート機能** - 会話履歴を複数の形式で保存
 
-## 📸 スクリーンショット
-
-### ウェルカム画面
-![ウェルカム画面](docs/screenshots/welcome-screen.png)
-
-### ツール実行デモ
-![ツールデモ](docs/screenshots/tool-demo.png)
-
-### 権限リクエスト
-![権限リクエスト](docs/screenshots/permission-request.png)
-
-### メインインターフェース
-![メインインターフェース](docs/screenshots/idea-integration.png)
-
 ## 📦 インストール
 
 ### 方法1: JetBrains Marketplace（推奨）

@@ -41,20 +41,6 @@ Claude Code Plus는 Claude AI를 개발 환경에 직접 통합하는 IntelliJ I
 - **다크 테마 지원** - IntelliJ 다크 테마와 완전 호환
 - **내보내기 기능** - 대화 기록을 다양한 형식으로 저장
 
-## 📸 스크린샷
-
-### 환영 화면
-![환영 화면](docs/screenshots/welcome-screen.png)
-
-### 도구 실행 데모
-![도구 데모](docs/screenshots/tool-demo.png)
-
-### 권한 요청
-![권한 요청](docs/screenshots/permission-request.png)
-
-### 메인 인터페이스
-![메인 인터페이스](docs/screenshots/idea-integration.png)
-
 ## 📦 설치
 
 ### 방법 1: JetBrains Marketplace (권장)

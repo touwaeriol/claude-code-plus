@@ -13,7 +13,8 @@ data class SessionMetadata(
     val firstUserMessage: String,    // 首条用户消息预览
     val timestamp: Long,             // 最后更新时间（毫秒时间戳）
     val messageCount: Int,           // 消息数量
-    val projectPath: String          // 项目路径
+    val projectPath: String,         // 项目路径
+    val customTitle: String? = null  // 自定义标题（从 /rename 命令设置）
 )
 
 /**
@@ -169,12 +170,17 @@ object ClaudeSessionScanner {
         // 以文件修改时间为准，保证与文件浏览器排序一致
         lastTimestamp = maxOf(lastTimestamp, fileMtime)
 
+        // 加载自定义标题（从 JSONL 文件尾部高效查找）
+        val sessionId = file.nameWithoutExtension
+        val customTitle = findCustomTitleFromFile(file)
+
         return SessionMetadata(
-            sessionId = file.nameWithoutExtension,
+            sessionId = sessionId,
             firstUserMessage = firstUserMessage,
             timestamp = lastTimestamp,
             messageCount = messageCount,
-            projectPath = projectPath
+            projectPath = projectPath,
+            customTitle = customTitle
         )
     }
 
@@ -255,5 +261,70 @@ object ClaudeSessionScanner {
             // 文件只有一行
             return if (sb.isNotEmpty()) sb.reverse().toString() else null
         }
+    }
+
+    /**
+     * 从 JSONL 文件尾部查找 customTitle
+     * custom-title 记录格式: {"type":"custom-title","customTitle":"xxx","sessionId":"xxx"}
+     */
+    private fun findCustomTitleFromFile(file: File): String? {
+        if (!file.exists() || file.length() == 0L) {
+            return null
+        }
+
+        try {
+            // 从文件尾部读取最后 50 行（custom-title 通常在文件末尾）
+            val lines = mutableListOf<String>()
+            java.io.RandomAccessFile(file, "r").use { raf ->
+                var pos = file.length() - 1
+                val sb = StringBuilder()
+                var lineCount = 0
+                val maxLines = 50
+
+                while (pos >= 0 && lineCount < maxLines) {
+                    raf.seek(pos)
+                    val c = raf.read().toChar()
+
+                    if (c == '\n' || c == '\r') {
+                        if (sb.isNotEmpty()) {
+                            lines.add(sb.reverse().toString())
+                            sb.clear()
+                            lineCount++
+                        }
+                    } else {
+                        sb.append(c)
+                    }
+                    pos--
+                }
+
+                // 最后一行（文件开头）
+                if (sb.isNotEmpty() && lineCount < maxLines) {
+                    lines.add(sb.reverse().toString())
+                }
+            }
+
+            // 从后往前查找 custom-title 记录
+            for (line in lines) {
+                if (line.contains("\"type\":\"custom-title\"") || line.contains("\"type\": \"custom-title\"")) {
+                    try {
+                        val json = jsonParser.parseToJsonElement(line).jsonObject
+                        val type = json["type"]?.jsonPrimitive?.contentOrNull
+                        if (type == "custom-title") {
+                            val title = json["customTitle"]?.jsonPrimitive?.contentOrNull
+                            if (!title.isNullOrBlank()) {
+                                logger.info("[SessionScanner] 找到 custom-title: $title")
+                                return title
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // 忽略解析错误
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.warn("[SessionScanner] 查找 customTitle 失败: ${e.message}")
+        }
+
+        return null
     }
 }

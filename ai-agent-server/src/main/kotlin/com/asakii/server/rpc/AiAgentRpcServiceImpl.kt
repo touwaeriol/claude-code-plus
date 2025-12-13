@@ -275,12 +275,14 @@ class AiAgentRpcServiceImpl(
     override suspend fun getHistorySessions(maxResults: Int, offset: Int): RpcHistorySessionsResult {
         sdkLog.info("📋 [AI-Agent] 获取历史会话列表 (offset=$offset, maxResults=$maxResults)")
         val projectPath = ideTools.getProjectPath()
+        sdkLog.info("📋 [AI-Agent] 项目路径: $projectPath")
         val sessions = ClaudeSessionScanner.scanHistorySessions(projectPath, maxResults, offset)
         sdkLog.info("📋 [AI-Agent] 找到 ${sessions.size} 个历史会话")
         return RpcHistorySessionsResult(
             sessions = sessions.map { meta ->
                 // 为每个会话加载 customTitle（从 JSONL 文件尾部高效查找）
                 val customTitle = HistoryJsonlLoader.findCustomTitle(meta.sessionId, meta.projectPath)
+                sdkLog.info("📋 [AI-Agent] 会话 ${meta.sessionId.take(8)}... customTitle=${customTitle ?: "(无)"}")
                 RpcHistorySession(
                     sessionId = meta.sessionId,
                     firstUserMessage = meta.firstUserMessage,

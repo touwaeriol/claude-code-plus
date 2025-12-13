@@ -514,9 +514,8 @@ async function handleForceSendPendingMessage(id: string) {
   // editQueueMessage 会从队列中移除并返回消息
   const msg = sessionStore.currentTab?.editQueueMessage(id)
   if (msg) {
-    // 打断当前生成并发送
-    await sessionStore.currentTab?.interrupt()
-    sessionStore.currentTab?.sendMessage({
+    // 使用 forceSendMessage：打断 + 立即发送（跳过队列检查）
+    await sessionStore.currentTab?.forceSendMessage({
       contexts: msg.contexts,
       contents: msg.contents
     })
@@ -586,6 +585,10 @@ async function loadHistorySessions(reset = false) {
     historyOffset.value += sessions.length
     historyHasMore.value = sessions.length === HISTORY_PAGE_SIZE
     console.log('📋 Loaded', sessions.length, 'history sessions (total', historySessionList.value.length, ')')
+    // 调试日志：打印每个会话的 customTitle
+    sessions.forEach((s, i) => {
+      console.log(`📋 [${i}] sessionId=${s.sessionId.substring(0, 8)}... customTitle=${s.customTitle || '(无)'} firstMsg=${(s.firstUserMessage || '').substring(0, 30)}...`)
+    })
   } catch (error) {
     console.error('❗Error loading history sessions:', error)
   } finally {

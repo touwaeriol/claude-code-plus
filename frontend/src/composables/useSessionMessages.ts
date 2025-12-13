@@ -205,6 +205,13 @@ export function useSessionMessages(
     beforeProcessQueueFn = fn
   }
 
+  /**
+   * 设置处理队列消息的回调
+   */
+  function setProcessQueueFn(fn: () => Promise<void>): void {
+    processQueueFn = fn
+  }
+
 
   // ========== 计算属性 ==========
 
@@ -730,8 +737,12 @@ export function useSessionMessages(
       log.debug('[useSessionMessages] 请求完成')
     }
 
-    // 处理队列中的下一条消息（先调用回调，让 Tab 层应用 pending settings）
-    handleQueueAfterResult()
+    // is_error = false 时自动处理队列中的下一条消息
+    if (!resultData.is_error) {
+      handleQueueAfterResult()
+    } else {
+      log.info(`[useSessionMessages] 📋 is_error=true，不自动发送队列消息`)
+    }
   }
 
   /**
@@ -1336,6 +1347,7 @@ export function useSessionMessages(
 
     // 设置方法
     setBeforeProcessQueueFn,
+    setProcessQueueFn,
     appendMessagesBatch,
     prependMessagesBatch,
 
