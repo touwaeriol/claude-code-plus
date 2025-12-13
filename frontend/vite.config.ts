@@ -1,10 +1,28 @@
 import { defineConfig, Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
+import { copyFileSync, existsSync } from 'fs'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import viteCompression from 'vite-plugin-compression'
+
+// 生产模式：只复制必需的 public 文件（排除测试文件）
+function copyEssentialPublicFiles(): Plugin {
+  return {
+    name: 'copy-essential-public-files',
+    closeBundle() {
+      const publicFiles = ['favicon.svg'] // 只复制这些文件
+      publicFiles.forEach(file => {
+        const src = resolve(__dirname, 'public', file)
+        const dest = resolve(__dirname, 'dist', file)
+        if (existsSync(src)) {
+          copyFileSync(src, dest)
+        }
+      })
+    }
+  }
+}
 
 // JCEF 兼容性：将 script 标签移动到 body 底部，保持 type="module"
 function jcefCompatibility(): Plugin {
@@ -38,8 +56,9 @@ export default defineConfig(({ mode }) => {
       dts: 'components.d.ts',
       directoryAsNamespace: false
     }),
-    // 生产模式启用 gzip 压缩
+    // 生产模式启用 gzip 压缩 + 复制必需文件
     ...(isProduction ? [
+      copyEssentialPublicFiles(),
       viteCompression({
         algorithm: 'gzip',
         ext: '.gz',
@@ -84,9 +103,13 @@ export default defineConfig(({ mode }) => {
       }
     }
   },
+  // 生产模式排除测试文件
+  publicDir: isProduction ? false : 'public',
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // 生产模式手动复制需要的 public 文件
+    copyPublicDir: !isProduction,
     // JCEF 兼容设置
     target: 'es2020',
     cssTarget: 'chrome80',

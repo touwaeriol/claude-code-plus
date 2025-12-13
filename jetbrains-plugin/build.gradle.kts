@@ -217,6 +217,8 @@ val copyFrontendFiles by tasks.registering(Copy::class) {
     description = "Copy frontend build artifacts to resources (production)"
 
     dependsOn(buildFrontendWithVite)
+    // 确保不会与开发模式构建冲突
+    mustRunAfter(buildFrontendWithViteDev)
 
     // 🔧 使用 layout API 来避免配置缓存问题
     val frontendDistDir = layout.projectDirectory.dir("../frontend/dist")
@@ -248,6 +250,8 @@ val copyFrontendFilesDev by tasks.registering(Copy::class) {
     description = "Copy frontend build artifacts to resources (development)"
 
     dependsOn(buildFrontendWithViteDev)
+    // 确保不会与生产模式构建冲突
+    mustRunAfter(buildFrontendWithVite)
 
     val frontendDistDir = layout.projectDirectory.dir("../frontend/dist")
     val targetDir = layout.projectDirectory.dir("src/main/resources/frontend")
@@ -299,9 +303,10 @@ val cleanFrontend by tasks.registering(Delete::class) {
 // ===== 集成到主构建流程 =====
 
 tasks {
-    // 在处理资源之前先复制前端文件（开发模式）
+    // processResources 不自动依赖前端构建，由具体任务决定
+    // runIde 使用开发模式，buildPlugin 使用生产模式
     processResources {
-        dependsOn(copyFrontendFilesDev)
+        mustRunAfter(copyFrontendFiles, copyFrontendFilesDev)
     }
 
     // 清理时也清理前端
@@ -347,5 +352,7 @@ configurations {
     // 构建插件前先构建前端
     buildPlugin {
         dependsOn(buildFrontend)
+        // 设置输出文件名
+        archiveBaseName.set("claude-code-plus-jetbrains-plugin")
     }
 }
