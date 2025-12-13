@@ -13,3 +13,6 @@
 [submodule "external/opcode"]
 	path = external/opcode
 	url = https://github.com/winfunc/opcode.git
+[submodule "external/acemcp"]
+	path = external/acemcp
+	url = https://github.com/qy527145/acemcp.git

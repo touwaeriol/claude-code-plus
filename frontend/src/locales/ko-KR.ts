@@ -76,6 +76,7 @@ export default {
     enterToSend: 'Enter로 메시지 보내기 ·',
     noMessages: '메시지가 없습니다. 세션을 만들고 메시지를 보내세요.',
     thinkingLabel: '생각 중',
+    thinkingCollapsed: '생각 완료 (클릭하여 펼치기)',
     generating: '생성 중...',
     actualModel: '실제 모델',
     uploadImage: '이미지 업로드',

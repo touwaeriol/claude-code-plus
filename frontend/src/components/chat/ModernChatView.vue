@@ -66,8 +66,6 @@
         @stop="handleStopGeneration"
         @context-add="handleAddContext"
         @context-remove="handleRemoveContext"
-        @update:selected-model="handleModelChange"
-        @update:selected-permission="handlePermissionModeChange"
         @auto-cleanup-change="handleAutoCleanupChange"
       />
     </div>
@@ -159,8 +157,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, provide } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
-import { useSettingsStore } from '@/stores/settingsStore'
-import { SETTING_KEYS } from '@/composables/useSessionTab'
 import { useI18n } from '@/composables/useI18n'
 import { useEnvironment } from '@/composables/useEnvironment'
 import { setupIdeSessionBridge, onIdeHostCommand } from '@/bridges/ideSessionBridge'
@@ -198,7 +194,6 @@ provide('aiAgentService', aiAgentService)
 
 // 使用 stores
 const sessionStore = useSessionStore()
-const settingsStore = useSettingsStore()
 const { t } = useI18n()
 const { isInIde, detectEnvironment } = useEnvironment()
 const isIdeMode = isInIde
@@ -486,9 +481,18 @@ async function handleSendMessage(contents?: ContentBlock[], options?: SendOption
 async function handleForceSend(contents?: ContentBlock[], options?: SendOptions) {
   const safeContents = Array.isArray(contents) ? contents : []
   console.log('Force send:', safeContents.length, 'content blocks', options?.isSlashCommand ? '(slash command)' : '')
-  // 强制发送：先打断当前生成，再插队发送
-  await sessionStore.currentTab?.interrupt()
-  await handleSendMessage(safeContents, options)
+
+  // 如果是斜杠命令，不发送 contexts
+  const currentContexts = options?.isSlashCommand ? [] : [...uiState.value.contexts]
+
+  // 使用 forceSendMessage：打断 + 立即发送（跳过队列）
+  await sessionStore.currentTab?.forceSendMessage({
+    contexts: currentContexts,
+    contents: safeContents
+  }, { isSlashCommand: options?.isSlashCommand })
+
+  // 发送后清空上下文
+  uiState.value.contexts = []
 }
 
 function handleEditPendingMessage(id: string) {
@@ -545,36 +549,6 @@ function handleRemoveContext(context: ContextReference) {
   if (index !== -1) {
     uiState.value.contexts.splice(index, 1)
   }
-}
-
-async function handleModelChange(model: AiModel) {
-  console.log('Changing model:', model)
-  uiState.value.selectedModel = model
-
-  // 使用智能设置更新
-  const tab = sessionStore.currentTab
-  if (tab) {
-    try {
-      await tab.updateSettings({ model })
-      console.log('✅ Model updated:', model)
-    } catch (error) {
-      console.error('❌ Failed to update model:', error)
-    }
-  }
-}
-
-function handlePermissionModeChange(mode: PermissionMode) {
-  console.log('🔒 [handlePermissionModeChange] 切换权限模式:', mode)
-
-  // 保存到 pending（下次 query 时应用）
-  const tab = sessionStore.currentTab
-  if (tab) {
-    tab.setPendingSetting(SETTING_KEYS.PERMISSION_MODE, mode as any)
-    console.log('📝 [handlePermissionModeChange] 已保存到 pending，下次 query 时应用')
-  }
-
-  // 保存到全局设置（供新 Tab 继承）
-  settingsStore.updatePermissionMode(mode)
 }
 
 function handleAutoCleanupChange(cleanup: boolean) {

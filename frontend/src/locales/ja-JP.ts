@@ -76,6 +76,7 @@ export default {
     enterToSend: 'Enterでメッセージを送信 ·',
     noMessages: 'メッセージがありません。セッションを作成してメッセージを送信してください。',
     thinkingLabel: '思考中',
+    thinkingCollapsed: '思考完了 (クリックで展開)',
     generating: '生成中...',
     actualModel: '実際のモデル',
     uploadImage: '画像をアップロード',

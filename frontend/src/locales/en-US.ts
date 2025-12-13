@@ -84,6 +84,7 @@ export default {
     enterToSend: 'Enter to send message ·',
     noMessages: 'No messages. Please create a session and send a message.',
     thinkingLabel: 'Thinking',
+    thinkingCollapsed: 'Thinking complete (click to expand)',
     generating: 'Generating...',
     actualModel: 'Actual model',
     uploadImage: 'Upload image',

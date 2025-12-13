@@ -168,7 +168,7 @@
                 }
               ]
             }"
-            @change="$emit('permission-change', selectedPermissionValue)"
+            @change="setPermissionMode(selectedPermissionValue)"
           >
             <template #prefix>
               <span class="mode-prefix-icon">{{ getModeIcon(selectedPermissionValue) }}</span>
@@ -500,8 +500,6 @@ interface Emits {
   (e: 'stop'): void
   (e: 'context-add', context: ContextReference): void
   (e: 'context-remove', context: ContextReference): void
-  (e: 'model-change', model: AiModel): void
-  (e: 'permission-change', permission: PermissionMode): void
   (e: 'skip-permissions-change', skip: boolean): void
   (e: 'cancel'): void  // 取消编辑（仅 inline 模式）
 }
@@ -547,12 +545,12 @@ const {
   toggleThinkingEnabled,
   handleSkipPermissionsChange,
   cyclePermissionMode,
+  setPermissionMode,
   updatePermission,
   updateSkipPermissions
 } = useModelSelection({
   initialPermission: props.selectedPermission,
   initialSkipPermissions: props.skipPermissions,
-  onPermissionChange: (mode) => emit('permission-change', mode),
   onSkipPermissionsChange: (skip) => emit('skip-permissions-change', skip)
 })
 

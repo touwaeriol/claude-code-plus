@@ -32,8 +32,6 @@ export interface UseModelSelectionOptions {
   initialPermission?: PermissionMode
   /** 初始跳过权限状态 */
   initialSkipPermissions?: boolean
-  /** 权限模式变更回调 */
-  onPermissionChange?: (mode: PermissionMode) => void
   /** 跳过权限变更回调 */
   onSkipPermissionsChange?: (skip: boolean) => void
 }
@@ -196,22 +194,42 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
 
   /**
    * 轮换切换权限模式
+   * 直接保存到 pending，下次 query 时应用
    */
   function cyclePermissionMode() {
     const currentIndex = PERMISSION_MODES.indexOf(selectedPermissionValue.value)
     const nextIndex = (currentIndex + 1) % PERMISSION_MODES.length
     const nextMode = PERMISSION_MODES[nextIndex]
-    selectedPermissionValue.value = nextMode
-    options.onPermissionChange?.(nextMode)
-    console.log(`🔄 [PermissionMode] Shift+Tab -> ${nextMode}`)
+
+    console.log(`🔄 [cyclePermissionMode] 切换权限模式: ${nextMode}`)
+
+    // 保存到 pending（下次 query 时应用）
+    const tab = sessionStore.currentTab
+    if (tab) {
+      tab.setPendingSetting(SETTING_KEYS.PERMISSION_MODE, nextMode)
+      console.log(`📝 [cyclePermissionMode] 已保存到 pending，下次 query 时应用`)
+    }
+
+    // 保存到全局设置（供新 Tab 继承）
+    settingsStore.updatePermissionMode(nextMode)
   }
 
   /**
    * 设置权限模式
+   * 直接保存到 pending，下次 query 时应用
    */
   function setPermissionMode(mode: PermissionMode) {
-    selectedPermissionValue.value = mode
-    options.onPermissionChange?.(mode)
+    console.log(`🔒 [setPermissionMode] 设置权限模式: ${mode}`)
+
+    // 保存到 pending（下次 query 时应用）
+    const tab = sessionStore.currentTab
+    if (tab) {
+      tab.setPendingSetting(SETTING_KEYS.PERMISSION_MODE, mode)
+      console.log(`📝 [setPermissionMode] 已保存到 pending，下次 query 时应用`)
+    }
+
+    // 保存到全局设置（供新 Tab 继承）
+    settingsStore.updatePermissionMode(mode)
   }
 
   /**

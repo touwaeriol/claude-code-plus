@@ -559,11 +559,10 @@ export function useSessionTab(initialOrder: number = 0) {
     connectionState.status = ConnectionStatus.CONNECTING
     connectionState.lastError = null
 
-    // 保存设置
-    if (resolvedOptions.model) modelId.value = resolvedOptions.model
-    if (resolvedOptions.thinkingEnabled !== undefined) thinkingEnabled.value = resolvedOptions.thinkingEnabled
-    if (resolvedOptions.permissionMode) permissionMode.value = resolvedOptions.permissionMode
-    if (resolvedOptions.skipPermissions !== undefined) skipPermissions.value = resolvedOptions.skipPermissions
+    // 不覆盖 ref 值！
+    // 初始值已在 setInitialConnectOptions 中设置
+    // 用户修改通过 setPendingSetting 直接更新 ref
+    // connect 直接使用当前 ref 值构建请求
 
     try {
       const connectOptions: ConnectOptions = {
@@ -857,10 +856,13 @@ export function useSessionTab(initialOrder: number = 0) {
     if (!sessionId.value) return
 
     // 注册 AskUserQuestion 处理器
-    aiAgentService.register(sessionId.value, 'AskUserQuestion', async (params) => {
+    aiAgentService.register(sessionId.value, 'AskUserQuestion', async (rawParams) => {
+      // 解析 RPC 参数（可能是 Uint8Array 或字节数组对象格式）
+      const params = parseRpcParams(rawParams)
       log.info(`[Tab ${tabId}] 收到 AskUserQuestion 请求:`, params)
       // 调试日志：打印 RPC 原始参数
-      console.log('❓ [RPC AskUserQuestion] 原始参数:', JSON.stringify(params, null, 2))
+      console.log('❓ [RPC AskUserQuestion] 原始参数:', JSON.stringify(rawParams, null, 2))
+      console.log('❓ [RPC AskUserQuestion] 解析后参数:', JSON.stringify(params, null, 2))
 
       return new Promise((resolve, reject) => {
         const questionId = `question-${Date.now()}`
@@ -1089,6 +1091,49 @@ export function useSessionTab(initialOrder: number = 0) {
 
     await aiAgentService.interrupt(sessionId.value)
     log.info(`[Tab ${tabId}] 中断请求已发送`)
+  }
+
+  /**
+   * 强制发送消息（打断当前生成并立即发送）
+   *
+   * 与普通 sendMessage 的区别：
+   * - 先发送打断请求
+   * - 立即停止本地生成状态（不等待后端响应）
+   * - 跳过队列检查，直接发送消息
+   *
+   * @param message - 消息内容
+   * @param options - 发送选项
+   */
+  async function forceSendMessage(
+    message: { contexts: any[]; contents: ContentBlock[] },
+    options?: { isSlashCommand?: boolean }
+  ): Promise<void> {
+    // 如果正在生成，先打断
+    if (messagesHandler.isGenerating.value) {
+      log.info(`[Tab ${tabId}] 强制发送：先打断当前生成`)
+      // 发送打断请求（不等待后端响应）
+      if (sessionId.value) {
+        aiAgentService.interrupt(sessionId.value).catch(err => {
+          log.warn(`[Tab ${tabId}] 打断请求失败:`, err)
+        })
+      }
+      // 立即停止本地生成状态
+      messagesHandler.stopGenerating()
+    }
+
+    // 如果是斜杠命令，清空 contexts
+    if (options?.isSlashCommand) {
+      log.info(`[Tab ${tabId}] 检测到斜杠命令，忽略 contexts`)
+      message = { ...message, contexts: [] }
+    }
+
+    // 直接添加到 UI 并发送（跳过队列检查）
+    log.info(`[Tab ${tabId}] 强制发送：直接处理消息`)
+    const { userMessage, mergedContent } = messagesHandler.addMessageToUI(message)
+    touch()
+
+    // 发送消息到后端
+    await sendMessageToBackend(userMessage, mergedContent, message)
   }
 
   // ========== 设置管理 ==========
@@ -1409,6 +1454,7 @@ export function useSessionTab(initialOrder: number = 0) {
     // 消息发送
     sendMessage,
     sendTextMessage,
+    forceSendMessage,
     interrupt,
 
     // 队列管理

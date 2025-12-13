@@ -84,6 +84,7 @@ export default {
     enterToSend: 'Enter 发送消息 ·',
     noMessages: '没有消息。请创建会话并发送消息。',
     thinkingLabel: '思考过程',
+    thinkingCollapsed: '思考完成 (点击展开)',
     generating: '生成中...',
     actualModel: '实际模型',
     uploadImage: '上传图片',
