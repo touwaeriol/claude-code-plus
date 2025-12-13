@@ -517,6 +517,20 @@ class AiAgentRpcServiceImpl(
         // 注册 MCP Server（包含 AskUserQuestion 工具）
         val mcpServers = mapOf<String, Any>("user_interaction" to userInteractionServer)
 
+        // 收集所有 MCP 服务器的系统提示词追加内容
+        val mcpSystemPromptAppendix = buildMcpSystemPromptAppendix(mcpServers)
+
+        // 合并系统提示词：主提示词 + MCP 追加内容
+        val finalSystemPrompt = if (mcpSystemPromptAppendix.isNotBlank()) {
+            if (systemPrompt.isNullOrBlank()) {
+                mcpSystemPromptAppendix
+            } else {
+                "$systemPrompt\n\n$mcpSystemPromptAppendix"
+            }
+        } else {
+            systemPrompt
+        }
+
         // canUseTool 回调：通过 RPC 调用前端获取用户授权（带 tool_use_id 和 permissionSuggestions）
         val canUseToolCallback: CanUseTool = { toolName, input, toolUseId, context ->
             sdkLog.info("🔐 [canUseTool] 请求授权: toolName=$toolName, toolUseId=$toolUseId, suggestions=${context.suggestions.size}")
@@ -570,7 +584,7 @@ class AiAgentRpcServiceImpl(
         val claudeOptions = ClaudeAgentOptions(
             model = model,
             cwd = cwd,
-            systemPrompt = systemPrompt,
+            systemPrompt = finalSystemPrompt,
             dangerouslySkipPermissions = options.dangerouslySkipPermissions
                 ?: defaults.dangerouslySkipPermissions,
             allowDangerouslySkipPermissions = options.allowDangerouslySkipPermissions
@@ -589,6 +603,24 @@ class AiAgentRpcServiceImpl(
         )
 
         return ClaudeOverrides(options = claudeOptions)
+    }
+
+    /**
+     * 收集所有 MCP 服务器的系统提示词追加内容
+     *
+     * 遍历所有注册的 MCP 服务器，调用其 getSystemPromptAppendix() 方法，
+     * 将所有非空的追加内容合并为一个字符串。
+     *
+     * @param mcpServers MCP 服务器映射（名称 -> 服务器实例）
+     * @return 合并后的系统提示词追加内容
+     */
+    private fun buildMcpSystemPromptAppendix(mcpServers: Map<String, Any>): String {
+        return mcpServers.values
+            .filterIsInstance<com.asakii.claude.agent.sdk.mcp.McpServer>()
+            .mapNotNull { server ->
+                server.getSystemPromptAppendix()?.takeIf { it.isNotBlank() }
+            }
+            .joinToString("\n\n")
     }
 
     private fun buildCodexOverrides(

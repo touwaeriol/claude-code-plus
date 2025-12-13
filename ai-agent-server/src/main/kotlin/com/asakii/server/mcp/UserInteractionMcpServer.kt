@@ -180,6 +180,15 @@ private val mcpLogger = KotlinLogging.logger {}
 class UserInteractionMcpServer : McpServerBase() {
     private var clientCaller: ClientCaller? = null
 
+    /**
+     * 提供该 MCP 服务器的系统提示词追加内容
+     *
+     * 告知 AI 如何正确使用 AskUserQuestion 工具与用户进行交互
+     */
+    override fun getSystemPromptAppendix(): String = """
+        When you need clarification from the user, especially when presenting multiple options or choices, use the `mcp__user_interaction__AskUserQuestion` tool to ask questions. The user's response will be returned to you through this tool.
+    """.trimIndent()
+
     companion object {
         /** AskUserQuestion 工具的 JSON Schema 定义 */
         val ASK_USER_QUESTION_SCHEMA: Map<String, Any> = mapOf(

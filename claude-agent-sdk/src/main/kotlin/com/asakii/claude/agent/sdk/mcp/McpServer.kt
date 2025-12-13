@@ -32,6 +32,16 @@ interface McpServer {
         get() = null  // 默认无限超时
 
     /**
+     * 获取该 MCP 服务器的系统提示词追加内容
+     *
+     * MCP 服务器可以通过此方法提供额外的系统提示词，这些提示词将被追加到主系统提示词后面，
+     * 用于指导 AI 如何正确使用该服务器提供的工具。
+     *
+     * @return 系统提示词追加内容，返回 null 表示无额外提示词
+     */
+    fun getSystemPromptAppendix(): String? = null
+
+    /**
      * 列出所有可用工具
      */
     suspend fun listTools(): List<ToolDefinition>
