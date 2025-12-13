@@ -25,7 +25,8 @@ object IdeaThemeIntegration {
      */
     fun getCurrentThemeConfig(): IdeaThemeConfig {
         val colorScheme = EditorColorsManager.getInstance().globalScheme
-        val isDark = com.intellij.util.ui.StartupUiUtil.isDarkTheme
+        // 使用公开 API 替代 StartupUiUtil.isDarkTheme (internal API)
+        val isDark = !JBColor.isBright()
 
         return IdeaThemeConfig(
             isDarkTheme = isDark,
