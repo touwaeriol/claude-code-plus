@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://plugins.jetbrains.com/plugin/26972-claude-code-plus">
+  <a href="https://plugins.jetbrains.com/plugin/28343-claude-code-plus">
     <img src="https://img.shields.io/jetbrains/plugin/v/26972-claude-code-plus.svg" alt="JetBrains Plugin">
   </a>
   <a href="https://github.com/touwaeriol/claude-code-plus/releases">
@@ -103,7 +103,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
-- [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/26972-claude-code-plus)
+- [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/28343-claude-code-plus)
 - [GitHub Repository](https://github.com/touwaeriol/claude-code-plus)
 - [Issue Tracker](https://github.com/touwaeriol/claude-code-plus/issues)
 - [Changelog](https://github.com/touwaeriol/claude-code-plus/releases)

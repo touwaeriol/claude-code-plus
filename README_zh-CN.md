@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://plugins.jetbrains.com/plugin/26972-claude-code-plus">
+  <a href="https://plugins.jetbrains.com/plugin/28343-claude-code-plus">
     <img src="https://img.shields.io/jetbrains/plugin/v/26972-claude-code-plus.svg" alt="JetBrains Plugin">
   </a>
   <a href="https://github.com/touwaeriol/claude-code-plus/releases">
@@ -103,7 +103,7 @@ Claude Code Plus 是一个 IntelliJ IDEA 插件，将 Claude AI 直接集成到�
 
 ## 🔗 相关链接
 
-- [JetBrains 插件市场](https://plugins.jetbrains.com/plugin/26972-claude-code-plus)
+- [JetBrains 插件市场](https://plugins.jetbrains.com/plugin/28343-claude-code-plus)
 - [GitHub 仓库](https://github.com/touwaeriol/claude-code-plus)
 - [问题反馈](https://github.com/touwaeriol/claude-code-plus/issues)
 - [更新日志](https://github.com/touwaeriol/claude-code-plus/releases)

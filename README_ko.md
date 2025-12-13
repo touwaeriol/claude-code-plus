@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://plugins.jetbrains.com/plugin/26972-claude-code-plus">
+  <a href="https://plugins.jetbrains.com/plugin/28343-claude-code-plus">
     <img src="https://img.shields.io/jetbrains/plugin/v/26972-claude-code-plus.svg" alt="JetBrains Plugin">
   </a>
   <a href="https://github.com/touwaeriol/claude-code-plus/releases">
@@ -103,7 +103,7 @@ Claude Code Plus는 Claude AI를 개발 환경에 직접 통합하는 IntelliJ I
 
 ## 🔗 링크
 
-- [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/26972-claude-code-plus)
+- [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/28343-claude-code-plus)
 - [GitHub 저장소](https://github.com/touwaeriol/claude-code-plus)
 - [이슈 트래커](https://github.com/touwaeriol/claude-code-plus/issues)
 - [변경 로그](https://github.com/touwaeriol/claude-code-plus/releases)
