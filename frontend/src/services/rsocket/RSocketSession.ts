@@ -135,7 +135,10 @@ export class RSocketSession {
       onNext: (responseData) => {
         try {
           const rpcMessage = ProtoCodec.decodeRpcMessage(responseData)
-          console.log('[RSocket] → agent.query 消息:', JSON.stringify(rpcMessage, null, 2))
+          // 只打印完整消息，不打印 stream_event
+          if (rpcMessage.type !== 'stream_event') {
+            console.log('[RSocket] → agent.query 消息:', JSON.stringify(rpcMessage, null, 2))
+          }
           this.notifyMessageHandlers(rpcMessage)
         } catch (error) {
           log.error('[RSocketSession] 解析消息失败:', error)
@@ -170,7 +173,10 @@ export class RSocketSession {
       onNext: (responseData) => {
         try {
           const rpcMessage = ProtoCodec.decodeRpcMessage(responseData)
-          console.log('[RSocket] → agent.queryWithContent 消息:', JSON.stringify(rpcMessage, null, 2))
+          // 只打印完整消息，不打印 stream_event
+          if (rpcMessage.type !== 'stream_event') {
+            console.log('[RSocket] → agent.queryWithContent 消息:', JSON.stringify(rpcMessage, null, 2))
+          }
           this.notifyMessageHandlers(rpcMessage)
         } catch (error) {
           log.error('[RSocketSession] 解析消息失败:', error)
