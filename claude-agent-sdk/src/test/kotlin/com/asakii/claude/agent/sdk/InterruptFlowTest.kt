@@ -20,7 +20,7 @@ class InterruptFlowTest {
     @Test
     fun `test interrupt causes flow to end naturally`() = runBlocking {
         val client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 10,
                 includePartialMessages = true,
@@ -132,7 +132,7 @@ class InterruptFlowTest {
     @Test
     fun `test interrupt waits for flow completion`() = runBlocking {
         val client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 5,
                 includePartialMessages = true,
@@ -189,7 +189,7 @@ class InterruptFlowTest {
     @Test
     fun `test messages received before interrupt are preserved`() = runBlocking {
         val client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 5,
                 includePartialMessages = true,

@@ -4,11 +4,11 @@ import com.asakii.claude.agent.sdk.mcp.*
 import com.asakii.claude.agent.sdk.types.*
 
 /**
- * ClaudeCodeOptions 扩展函数 - 提供便捷的 MCP 服务器配置
+ * ClaudeAgentOptions 扩展函数 - 提供便捷的 MCP 服务器配置
  * 
  * 使用示例：
  * ```kotlin
- * val options = ClaudeCodeOptions(
+ * val options = ClaudeAgentOptions(
  *     model = "claude-3-5-sonnet-20241022",
  *     allowedTools = listOf("Bash", "Read", "mcp__calculator__*")
  * ).apply {
@@ -22,7 +22,7 @@ import com.asakii.claude.agent.sdk.types.*
 /**
  * 添加MCP服务器实例
  */
-fun ClaudeCodeOptions.addMcpServer(name: String, server: Any): ClaudeCodeOptions {
+fun ClaudeAgentOptions.addMcpServer(name: String, server: Any): ClaudeAgentOptions {
     val currentMcpServers = this.mcpServers?.toMutableMap() ?: mutableMapOf()
     currentMcpServers[name] = server
     
@@ -32,10 +32,10 @@ fun ClaudeCodeOptions.addMcpServer(name: String, server: Any): ClaudeCodeOptions
 /**
  * 添加安全Hook配置
  */
-fun ClaudeCodeOptions.addSecurityHooks(
+fun ClaudeAgentOptions.addSecurityHooks(
     dangerousPatterns: List<String> = listOf("rm -rf", "sudo", "format", "delete"),
     allowedCommands: List<String> = emptyList()
-): ClaudeCodeOptions {
+): ClaudeAgentOptions {
     val securityHooks = securityHook(dangerousPatterns, allowedCommands)
     
     val currentHooks = this.hooks?.toMutableMap() ?: mutableMapOf()
@@ -50,7 +50,7 @@ fun ClaudeCodeOptions.addSecurityHooks(
 /**
  * 添加统计Hook配置
  */
-fun ClaudeCodeOptions.addStatisticsHooks(): ClaudeCodeOptions {
+fun ClaudeAgentOptions.addStatisticsHooks(): ClaudeAgentOptions {
     val statsHooks = statisticsHook()
     
     val currentHooks = this.hooks?.toMutableMap() ?: mutableMapOf()
@@ -65,11 +65,11 @@ fun ClaudeCodeOptions.addStatisticsHooks(): ClaudeCodeOptions {
 /**
  * 添加自定义Hook
  */
-fun ClaudeCodeOptions.addHook(
+fun ClaudeAgentOptions.addHook(
     event: HookEvent,
     matcher: String?,
     callback: HookCallback
-): ClaudeCodeOptions {
+): ClaudeAgentOptions {
     val hookMatcher = HookMatcher(matcher, listOf(callback))
     
     val currentHooks = this.hooks?.toMutableMap() ?: mutableMapOf()
@@ -82,9 +82,9 @@ fun ClaudeCodeOptions.addHook(
 /**
  * 使用Hook Builder DSL添加Hook
  */
-fun ClaudeCodeOptions.addHooksDsl(
+fun ClaudeAgentOptions.addHooksDsl(
     init: HookBuilder.() -> Unit
-): ClaudeCodeOptions {
+): ClaudeAgentOptions {
     val newHooks = hookBuilder(init)
     
     val currentHooks = this.hooks?.toMutableMap() ?: mutableMapOf()
@@ -99,7 +99,7 @@ fun ClaudeCodeOptions.addHooksDsl(
 /**
  * 批量添加工具权限
  */
-fun ClaudeCodeOptions.addAllowedTools(vararg tools: String): ClaudeCodeOptions {
+fun ClaudeAgentOptions.addAllowedTools(vararg tools: String): ClaudeAgentOptions {
     val currentTools = this.allowedTools ?: emptyList()
     val newTools = currentTools + tools.toList()
     return this.copy(allowedTools = newTools)
@@ -108,7 +108,7 @@ fun ClaudeCodeOptions.addAllowedTools(vararg tools: String): ClaudeCodeOptions {
 /**
  * 添加MCP服务器相关的工具权限
  */
-fun ClaudeCodeOptions.addMcpServerTools(serverName: String, vararg tools: String): ClaudeCodeOptions {
+fun ClaudeAgentOptions.addMcpServerTools(serverName: String, vararg tools: String): ClaudeAgentOptions {
     val mcpTools = tools.map { "mcp__${serverName}__$it" }
     return addAllowedTools(*mcpTools.toTypedArray())
 }
@@ -116,6 +116,6 @@ fun ClaudeCodeOptions.addMcpServerTools(serverName: String, vararg tools: String
 /**
  * 为MCP服务器添加通配符权限
  */
-fun ClaudeCodeOptions.addMcpServerWildcardTools(serverName: String): ClaudeCodeOptions {
+fun ClaudeAgentOptions.addMcpServerWildcardTools(serverName: String): ClaudeAgentOptions {
     return addAllowedTools("mcp__${serverName}__*")
 }

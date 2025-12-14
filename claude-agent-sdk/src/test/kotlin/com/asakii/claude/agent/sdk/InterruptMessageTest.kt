@@ -13,7 +13,7 @@ class InterruptMessageTest {
     @Test
     fun `test interrupt message content details`() = runBlocking {
         val client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 5,
                 includePartialMessages = true,

@@ -543,7 +543,7 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
  * Usage:
  * ```kotlin
  * val client = claudeCodeSdkClient(
- *     ClaudeCodeOptions(
+ *     ClaudeAgentOptions(
  *         model = "claude-3-5-sonnet-20241022",
  *         allowedTools = listOf("Read", "Write")
  *     )
@@ -551,7 +551,7 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
  * ```
  */
 @JvmOverloads
-fun claudeCodeSdkClient(options: ClaudeCodeOptions = ClaudeCodeOptions()): ClaudeCodeSdkClient {
+fun claudeCodeSdkClient(options: ClaudeAgentOptions = ClaudeAgentOptions()): ClaudeCodeSdkClient {
     return ClaudeCodeSdkClient(options)
 }
 
@@ -561,7 +561,7 @@ fun claudeCodeSdkClient(options: ClaudeCodeOptions = ClaudeCodeOptions()): Claud
 @JvmOverloads
 suspend fun claudeQuery(
     prompt: String,
-    options: ClaudeCodeOptions = ClaudeCodeOptions()
+    options: ClaudeAgentOptions = ClaudeAgentOptions()
 ): List<Message> {
     return ClaudeCodeSdkClient(options).simpleQuery(prompt)
 }

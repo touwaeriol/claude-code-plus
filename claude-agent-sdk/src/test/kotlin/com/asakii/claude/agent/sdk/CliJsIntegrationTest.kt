@@ -30,7 +30,7 @@ class CliJsIntegrationTest {
     fun setUp() {
         sessionId = "test-clijs-${UUID.randomUUID()}"
         client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 1,
                 includePartialMessages = true  // 启用流式输出

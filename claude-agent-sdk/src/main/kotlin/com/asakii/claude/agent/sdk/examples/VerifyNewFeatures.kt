@@ -198,11 +198,11 @@ fun main() {
         testsFailed++
     }
 
-    // Test 11: Backward compatibility (ClaudeCodeOptions alias)
+    // Test 11: Backward compatibility (ClaudeAgentOptions alias)
     println("\nTest 11: Backward compatibility")
     try {
         @Suppress("DEPRECATION")
-        val options: ClaudeCodeOptions = ClaudeCodeOptions(
+        val options: ClaudeAgentOptions = ClaudeAgentOptions(
             systemPrompt = "Test",
             allowedTools = listOf("Read")
         )

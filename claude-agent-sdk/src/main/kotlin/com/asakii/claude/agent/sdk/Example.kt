@@ -9,7 +9,7 @@ import kotlinx.coroutines.runBlocking
  */
 fun main() = runBlocking {
     // Basic configuration
-    val options = ClaudeCodeOptions(
+    val options = ClaudeAgentOptions(
         model = "claude-3-5-sonnet",
         allowedTools = listOf("Read", "Write", "Bash"),
         permissionMode = PermissionMode.ACCEPT_EDITS
@@ -59,7 +59,7 @@ fun simpleExample() = runBlocking {
     try {
         val messages = claudeQuery(
             "What is 2 + 2?",
-            ClaudeCodeOptions(model = "claude-3-5-sonnet")
+            ClaudeAgentOptions(model = "claude-3-5-sonnet")
         )
         
         messages.forEach { message ->

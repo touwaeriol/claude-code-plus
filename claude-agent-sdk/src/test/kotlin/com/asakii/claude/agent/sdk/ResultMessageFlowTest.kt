@@ -22,7 +22,7 @@ class ResultMessageFlowTest {
     fun `test ResultMessage is received after all turns complete`() = runBlocking {
         // 创建启用 stream-json 的客户端
         val client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 5,  // 允许多轮
                 includePartialMessages = true,
@@ -114,7 +114,7 @@ class ResultMessageFlowTest {
     @Test
     fun `test ResultMessage contains usage statistics`() = runBlocking {
         val client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 1,
                 includePartialMessages = true,
@@ -160,7 +160,7 @@ class ResultMessageFlowTest {
     @Test
     fun `test message flow order in stream-json mode`() = runBlocking {
         val client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 2,
                 includePartialMessages = true,

@@ -2,7 +2,7 @@ package com.asakii.claude.agent.sdk
 
 
 import com.asakii.claude.agent.sdk.types.AssistantMessage
-import com.asakii.claude.agent.sdk.types.ClaudeCodeOptions
+import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.collect
 import org.junit.jupiter.api.AfterEach
@@ -21,7 +21,7 @@ class ModelSwitchIntegrationTest {
     fun setUp() {
         sessionId = "test-session-${UUID.randomUUID()}"
         client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 3,
                 includePartialMessages = false

@@ -80,11 +80,11 @@ sealed interface McpServerConfig {
 }
 
 /**
- * Claude Agent SDK options (formerly ClaudeCodeOptions).
+ * Claude Agent SDK options (formerly ClaudeAgentOptions).
  * Based on Python SDK v0.1.0 ClaudeAgentOptions.
  *
  * Breaking changes from previous versions:
- * - Renamed from ClaudeCodeOptions to ClaudeAgentOptions
+ * - Renamed from ClaudeAgentOptions to ClaudeAgentOptions
  * - systemPrompt now supports String or SystemPromptPreset
  * - appendSystemPrompt merged into systemPrompt
  * - No default system prompt or settings loaded (explicit configuration required)
@@ -167,16 +167,6 @@ data class ClaudeAgentOptions(
     val stream: Boolean = false,
     val streamingCallback: ((String) -> Unit)? = null
 )
-
-/**
- * Type alias for backward compatibility.
- * @deprecated Use ClaudeAgentOptions instead
- */
-@Deprecated(
-    message = "Use ClaudeAgentOptions instead. The SDK has been renamed from Claude Code to Claude Agent.",
-    replaceWith = ReplaceWith("ClaudeAgentOptions")
-)
-typealias ClaudeCodeOptions = ClaudeAgentOptions
 
 /**
  * Control request types for SDK protocol.

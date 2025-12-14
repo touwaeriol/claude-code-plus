@@ -18,7 +18,7 @@ import mu.KotlinLogging
  */
 class ControlProtocol(
     private val transport: Transport,
-    private val options: ClaudeCodeOptions
+    private val options: ClaudeAgentOptions
 ) {
     var systemInitCallback: ((String?) -> Unit)? = null
     private val messageParser = MessageParser()

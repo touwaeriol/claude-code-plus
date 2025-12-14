@@ -1,7 +1,7 @@
 package com.asakii.claude.agent.sdk
 
 
-import com.asakii.claude.agent.sdk.types.ClaudeCodeOptions
+import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -14,7 +14,7 @@ class InvalidModelSwitchTest {
     @BeforeEach
     fun setUp() = runBlocking {
         client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(model = "claude-sonnet-4-20250514", maxTurns = 1)
+            ClaudeAgentOptions(model = "claude-sonnet-4-20250514", maxTurns = 1)
         )
         client.connect()
     }

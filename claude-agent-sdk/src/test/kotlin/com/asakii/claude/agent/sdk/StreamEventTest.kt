@@ -25,7 +25,7 @@ class StreamEventTest {
     fun setUp() {
         sessionId = "test-stream-event-${UUID.randomUUID()}"
         client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 1,
                 includePartialMessages = true  // 启用流式输出
@@ -126,7 +126,7 @@ class StreamEventTest {
     fun `test SDK does not output StreamEvent when includePartialMessages is false`() = runBlocking {
         // 创建不启用流式输出的客户端
         val clientNoStream = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 1,
                 includePartialMessages = false  // 禁用流式输出

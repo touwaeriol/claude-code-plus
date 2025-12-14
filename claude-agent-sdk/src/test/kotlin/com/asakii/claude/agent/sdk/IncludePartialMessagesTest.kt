@@ -51,7 +51,7 @@ class IncludePartialMessagesTest {
 
         // 创建启用流式输出的客户端
         client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 1,
                 includePartialMessages = true, // 启用流式输出
@@ -166,7 +166,7 @@ class IncludePartialMessagesTest {
 
         // 创建禁用流式输出的客户端
         client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 1,
                 includePartialMessages = false  // 禁用流式输出
@@ -254,7 +254,7 @@ class IncludePartialMessagesTest {
 
         // 创建启用流式输出的客户端
         client = ClaudeCodeSdkClient(
-            ClaudeCodeOptions(
+            ClaudeAgentOptions(
                 model = "claude-sonnet-4-20250514",
                 maxTurns = 1,
                 includePartialMessages = true  // 启用流式输出
