@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.0.7] - 2025-12-15
 
 ### Added
 - JetBrains IDE session command and theme change notifications
