@@ -98,6 +98,10 @@ data class ClaudeAgentOptions(
     // Use SystemPromptPreset(preset = "claude_code") for default Claude Code behavior
     val systemPrompt: Any? = null, // String | SystemPromptPreset | null
 
+    // Append system prompt file - 追加系统提示词（用于 MCP 场景）
+    // 使用 --append-system-prompt-file 参数，不会替换默认提示词
+    val appendSystemPromptFile: String? = null,
+
     // MCP servers (can be McpServerConfig or McpServer instances)
     val mcpServers: Map<String, Any> = emptyMap(),
 

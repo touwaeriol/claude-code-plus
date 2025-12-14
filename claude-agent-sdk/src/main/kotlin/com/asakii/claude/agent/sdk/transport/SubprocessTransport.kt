@@ -338,7 +338,7 @@ class SubprocessTransport(
                             val tempFile = getOrCreateSystemPromptFile(appendText)
                             logger.info("📝 将 append-system-prompt 写入临时文件: $tempFile")
                             command.add("--append-system-prompt-file")
-                            command.add(tempFile.toAbsolutePath().toString())
+                            command.add("\"${tempFile.toAbsolutePath()}\"")
                         }
                     } else {
                         // Unknown preset, use as system prompt
@@ -353,15 +353,37 @@ class SubprocessTransport(
                 }
             }
         }
-        
-        // Allowed tools
-        if (options.allowedTools.isNotEmpty()) {
-            command.addAll(listOf("--allowed-tools", options.allowedTools.joinToString(",")))
+
+        // Append system prompt file（独立参数，用于 MCP 场景追加提示词）
+        // 使用 --append-system-prompt-file 参数，不会替换默认提示词
+        options.appendSystemPromptFile?.let { appendContent ->
+            val tempFile = getOrCreateSystemPromptFile(appendContent)
+            logger.info("📝 将 appendSystemPromptFile 写入临时文件: $tempFile")
+            command.add("--append-system-prompt-file")
+            command.add("\"${tempFile.toAbsolutePath()}\"")
         }
         
+        // Allowed tools
+        // Windows 下工具名可能包含特殊字符（如 Bash(git:*)），需要引号包围
+        if (options.allowedTools.isNotEmpty()) {
+            val toolsArg = options.allowedTools.joinToString(",")
+            val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+            if (isWindows) {
+                command.addAll(listOf("--allowed-tools", "\"$toolsArg\""))
+            } else {
+                command.addAll(listOf("--allowed-tools", toolsArg))
+            }
+        }
+
         // Disallowed tools
         if (options.disallowedTools.isNotEmpty()) {
-            command.addAll(listOf("--disallowed-tools", options.disallowedTools.joinToString(",")))
+            val toolsArg = options.disallowedTools.joinToString(",")
+            val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+            if (isWindows) {
+                command.addAll(listOf("--disallowed-tools", "\"$toolsArg\""))
+            } else {
+                command.addAll(listOf("--disallowed-tools", toolsArg))
+            }
         }
 
         // Agents (programmatic subagents) - 参考 Python SDK 实现
@@ -589,100 +611,43 @@ class SubprocessTransport(
             return listOf(customPath.toString())
         }
 
-        // 2. SDK 绑定的 CLI（次优先级，使用 Node.js 运行）
+        // 2. SDK 绑定的 CLI（使用 Node.js 运行）
         val bundledCliJs = findBundledCliJs()
         if (bundledCliJs != null) {
             val nodeCommand = findNodeExecutable()
-            if (nodeCommand != null) {
-                logger.info("✅ 使用 SDK 绑定的 CLI: node $bundledCliJs")
-                return listOf(nodeCommand, bundledCliJs)
-            } else {
-                logger.warn("⚠️ 找到绑定的 cli.js，但未找到 Node.js")
-            }
+            logger.info("✅ 使用 SDK 绑定的 CLI: $nodeCommand $bundledCliJs")
+            return listOf(nodeCommand, bundledCliJs)
         }
 
-        val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-
-        // 3. 系统全局安装的 CLI（参考 Python SDK）
-        // Windows 上优先查找 .exe（不是 .cmd）
-        // 因为 .cmd 是批处理文件，会经过 cmd.exe 解析，破坏 JSON 参数
-        if (isWindows) {
-            try {
-                val process = ProcessBuilder("where", "claude").start()
-                val result = process.inputStream.bufferedReader().readText().trim()
-                if (process.waitFor() == 0 && result.isNotEmpty()) {
-                    val lines = result.lines()
-                    // 优先选择 .exe 文件（不会经过 shell 解析）
-                    val exeFile = lines.find { it.endsWith(".exe") }
-                    if (exeFile != null) {
-                        logger.info("✅ 找到系统全局 claude.exe: $exeFile")
-                        return listOf(exeFile)
-                    }
-                    // 其次选择 .cmd（但会有参数问题）
-                    val cmdFile = lines.find { it.endsWith(".cmd") }
-                    if (cmdFile != null) {
-                        logger.warn("⚠️ 只找到 claude.cmd，JSON 参数可能被破坏: $cmdFile")
-                        return listOf(cmdFile)
-                    }
-                    return listOf(lines.first())
-                }
-            } catch (e: Exception) {
-                logger.info("where 命令失败: ${e.message}")
-            }
-        } else {
-            // Unix 系统
-            try {
-                val process = ProcessBuilder("which", "claude").start()
-                val result = process.inputStream.bufferedReader().readText().trim()
-                if (process.waitFor() == 0 && result.isNotEmpty()) {
-                    logger.info("✅ 找到系统全局 claude: $result")
-                    return listOf(result.lines().first())
-                }
-            } catch (e: Exception) {
-                logger.info("which 命令失败: ${e.message}")
-            }
-        }
-
-        // 回退到直接使用 "claude" 命令
-        logger.warn("⚠️ 未找到 CLI，回退到 'claude' 命令")
-        return listOf("claude")
+        // 未找到绑定的 CLI，抛出异常（不再回退到系统全局 CLI）
+        throw CLINotFoundException(
+            "未找到 SDK 绑定的 Claude CLI。请确保：\n" +
+            "1. 已运行 gradle processResources 或 gradle build\n" +
+            "2. cli-version.properties 配置正确\n" +
+            "3. bundled/claude-cli-<version>.js 文件存在于 resources 目录"
+        )
     }
 
     /**
-     * 查找 Node.js 可执行文件
+     * 返回 Node.js 命令名，直接依赖系统 PATH 环境变量
      */
-    private fun findNodeExecutable(): String? {
-        return try {
-            val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-            val command = if (isWindows) "where" else "which"
-
-            val process = ProcessBuilder(command, "node").start()
-            val result = process.inputStream.bufferedReader().readText().trim()
-
-            if (process.waitFor() == 0 && result.isNotEmpty()) {
-                val nodePath = result.lines().first()
-                logger.debug("找到 Node.js: $nodePath")
-                nodePath
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            logger.debug("查找 Node.js 失败: ${e.message}")
-            null
-        }
-    }
+    private fun findNodeExecutable(): String = "node"
 
     /**
      * 查找 SDK 绑定的 CLI (cli.js, 从 resources/bundled/ 目录)
      */
     private fun findBundledCliJs(): String? {
         return try {
-            // 读取 CLI 版本
+            // 读取 CLI 版本（cli-version.properties 由 copyCliVersionProps 任务复制到 resources 目录）
             val versionProps = Properties()
-            this::class.java.classLoader.getResourceAsStream("bundled/../cli-version.properties")?.use {
+            this::class.java.classLoader.getResourceAsStream("cli-version.properties")?.use {
                 versionProps.load(it)
             }
-            val cliVersion = versionProps.getProperty("cli.version") ?: return null
+            val cliVersion = versionProps.getProperty("cli.version")
+            if (cliVersion == null) {
+                logger.warn("⚠️ 未找到 cli-version.properties 或 cli.version 属性")
+                return null
+            }
 
             // cli.js 文件名：claude-cli-<version>.js
             val cliJsName = "claude-cli-$cliVersion.js"
@@ -857,6 +822,7 @@ class SubprocessTransport(
     /**
      * 获取或创建系统提示词临时文件（带缓存）
      * 使用内容摘要作为缓存 key，避免重复创建相同内容的临时文件
+     * 文件存放在 {tempDir}/claude-agent-sdk/system-prompts/ 子目录下，方便查找和管理
      */
     private fun getOrCreateSystemPromptFile(content: String): Path {
         // 计算内容摘要作为 key
@@ -870,8 +836,17 @@ class SubprocessTransport(
         }
 
         // 缓存未命中或文件已删除，创建新文件
+        // 使用子目录存放，方便查找：{tempDir}/claude-agent-sdk/system-prompts/
         val tempDir = Path.of(System.getProperty("java.io.tmpdir"))
-        val tempFile = tempDir.resolve("claude-system-prompt-$digest.txt")
+        val promptDir = tempDir.resolve("claude-agent-sdk").resolve("system-prompts")
+
+        // 确保子目录存在
+        if (!Files.exists(promptDir)) {
+            Files.createDirectories(promptDir)
+            logger.info("📁 创建系统提示词目录: $promptDir")
+        }
+
+        val tempFile = promptDir.resolve("prompt-$digest.txt")
 
         // 写入内容
         Files.writeString(tempFile, content)

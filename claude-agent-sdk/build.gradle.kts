@@ -463,9 +463,17 @@ val verifyCli = tasks.register("verifyCli") {
     }
 }
 
-// 将 downloadCli 添加到 processResources 依赖
+// 复制 cli-version.properties 到 resources 目录
+val copyCliVersionProps = tasks.register<Copy>("copyCliVersionProps") {
+    group = "build"
+    description = "复制 cli-version.properties 到 resources 目录"
+    from(file("cli-version.properties"))
+    into(file("src/main/resources"))
+}
+
+// 将 downloadCli 和 copyCliVersionProps 添加到 processResources 依赖
 tasks.named("processResources") {
-    dependsOn(downloadCli)
+    dependsOn(downloadCli, copyCliVersionProps)
 }
 
 // sourcesJar 任务也需要依赖 downloadCli（避免任务顺序问题）
