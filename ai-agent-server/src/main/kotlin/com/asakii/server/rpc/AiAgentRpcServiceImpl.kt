@@ -551,18 +551,8 @@ class AiAgentRpcServiceImpl(
         }
 
         // 收集所有 MCP 服务器的系统提示词追加内容
+        // 使用 appendSystemPromptFile 追加，不会替换 Claude Code 默认提示词
         val mcpSystemPromptAppendix = buildMcpSystemPromptAppendix(mcpServers)
-
-        // 合并系统提示词：主提示词 + MCP 追加内容
-        val finalSystemPrompt = if (mcpSystemPromptAppendix.isNotBlank()) {
-            if (systemPrompt.isNullOrBlank()) {
-                mcpSystemPromptAppendix
-            } else {
-                "$systemPrompt\n\n$mcpSystemPromptAppendix"
-            }
-        } else {
-            systemPrompt
-        }
 
         // canUseTool 回调：通过 RPC 调用前端获取用户授权（带 tool_use_id 和 permissionSuggestions）
         val canUseToolCallback: CanUseTool = { toolName, input, toolUseId, context ->
@@ -624,7 +614,10 @@ class AiAgentRpcServiceImpl(
         val claudeOptions = ClaudeAgentOptions(
             model = model,
             cwd = cwd,
-            systemPrompt = finalSystemPrompt,
+            // systemPrompt 只在用户明确指定时才传递，null 则保留 Claude Code 默认提示词
+            systemPrompt = systemPrompt,
+            // MCP 追加内容通过 appendSystemPromptFile 传递，不会替换默认提示词
+            appendSystemPromptFile = mcpSystemPromptAppendix.takeIf { it.isNotBlank() },
             dangerouslySkipPermissions = options.dangerouslySkipPermissions
                 ?: defaults.dangerouslySkipPermissions,
             allowDangerouslySkipPermissions = options.allowDangerouslySkipPermissions
