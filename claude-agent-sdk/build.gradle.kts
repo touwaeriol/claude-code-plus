@@ -58,8 +58,6 @@ dependencies {
     // 测试依赖
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
-    implementation(project(":ai-agent-rpc-api"))
-
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     testImplementation("io.mockk:mockk:1.13.8")
@@ -303,6 +301,15 @@ val downloadCli = tasks.register("downloadCli") {
     inputs.file(propsFile)
     outputs.dir(bundledDirFile)
 
+    // 确保 CLI 文件实际存在，而不仅仅是目录存在
+    outputs.upToDateWhen {
+        val props = Properties()
+        propsFile.inputStream().use { props.load(it) }
+        val cliVer = props.getProperty("cli.version") ?: return@upToDateWhen false
+        val cliJsFile = bundledDirFile.resolve("claude-cli-$cliVer.js")
+        cliJsFile.exists() && cliJsFile.length() > 0
+    }
+
     doLast {
         val props = Properties()
         propsFile.inputStream().use { props.load(it) }
@@ -476,9 +483,9 @@ tasks.named("processResources") {
     dependsOn(downloadCli, copyCliVersionProps)
 }
 
-// sourcesJar 任务也需要依赖 downloadCli（避免任务顺序问题）
+// sourcesJar 任务也需要依赖 downloadCli 和 copyCliVersionProps（避免任务顺序问题）
 tasks.named("sourcesJar") {
-    dependsOn(downloadCli)
+    dependsOn(downloadCli, copyCliVersionProps)
 }
 
 // clean 任务依赖 cleanCli

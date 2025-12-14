@@ -33,6 +33,7 @@ class JetBrainsMcpServerImpl(private val project: Project) : McpServerBase() {
     private lateinit var fileProblemsTool: FileProblemsTool
     private lateinit var fileIndexTool: FileIndexTool
     private lateinit var codeSearchTool: CodeSearchTool
+    private lateinit var findUsagesTool: FindUsagesTool
 
     override fun getSystemPromptAppendix(): String {
         return ResourceLoader.loadTextOrDefault(
@@ -51,7 +52,9 @@ class JetBrainsMcpServerImpl(private val project: Project) : McpServerBase() {
 
 These tools are faster and more accurate than file system operations because they use IDE's pre-built indexes.
 
-IMPORTANT: After completing code modifications, you MUST use `mcp__jetbrains__FileProblems` to perform static analysis validation on the modified files to minimize syntax errors."""
+IMPORTANT: After completing code modifications, you MUST use `mcp__jetbrains__FileProblems` to perform static analysis validation on the modified files to minimize syntax errors.
+
+IMPORTANT: When a project build/compile fails or a file is known to have syntax errors, use `mcp__jetbrains__FileProblems` with `includeWarnings: true` to quickly retrieve static analysis results and pinpoint issues. This is much faster than re-running the full build command."""
     }
 
     override suspend fun onInitialize() {
@@ -62,6 +65,7 @@ IMPORTANT: After completing code modifications, you MUST use `mcp__jetbrains__Fi
         fileProblemsTool = FileProblemsTool(project)
         fileIndexTool = FileIndexTool(project)
         codeSearchTool = CodeSearchTool(project)
+        findUsagesTool = FindUsagesTool(project)
         
         // 注册目录树工具
         registerToolFromSchema("DirectoryTree", directoryTreeTool.getInputSchema()) { arguments ->
@@ -82,8 +86,13 @@ IMPORTANT: After completing code modifications, you MUST use `mcp__jetbrains__Fi
         registerToolFromSchema("CodeSearch", codeSearchTool.getInputSchema()) { arguments ->
             codeSearchTool.execute(arguments)
         }
-        
-        logger.info { "✅ JetBrains MCP Server initialized, registered 4 tools" }
+
+        // 注册查找引用工具
+        registerToolFromSchema("FindUsages", findUsagesTool.getInputSchema()) { arguments ->
+            findUsagesTool.execute(arguments)
+        }
+
+        logger.info { "✅ JetBrains MCP Server initialized, registered 5 tools" }
     }
 }
 

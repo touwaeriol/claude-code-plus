@@ -10,7 +10,7 @@ plugins {
 
 
 group = "com.asakii"
-version = "1.0-SNAPSHOT"
+version = "1.0.8"
 
 // 集中管理依赖版本 - 与IntelliJ Platform 2025.1内置版本对齐
 extra["kotlinVersion"] = "2.1.20"  // 与IDE平台保持一致

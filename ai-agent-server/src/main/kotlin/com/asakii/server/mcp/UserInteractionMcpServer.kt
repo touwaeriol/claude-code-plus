@@ -271,6 +271,12 @@ class UserInteractionMcpServer : McpServerBase() {
 
         mcpLogger.info { "📩 [AskUserQuestion] 收到工具调用，参数: $arguments" }
 
+        // 1. 先进行参数校验
+        validateQuestions(arguments)?.let { error ->
+            mcpLogger.warn { "⚠️ [AskUserQuestion] 参数校验失败: $error" }
+            return ToolResult.error(error)
+        }
+
         return try {
             // 直接从 JsonObject 反序列化为强类型
             val normalized = normalizeQuestions(arguments)
@@ -311,13 +317,55 @@ class UserInteractionMcpServer : McpServerBase() {
             mcpLogger.info { "✅ [AskUserQuestion] 完成，返回: $content" }
             ToolResult.success(content)
 
+        } catch (e: kotlinx.serialization.SerializationException) {
+            mcpLogger.error { "❌ [AskUserQuestion] 参数格式错误: ${e.message}" }
+            ToolResult.error("参数格式错误，请检查 questions 数组结构是否正确")
         } catch (e: Exception) {
             mcpLogger.error { "❌ [AskUserQuestion] 处理失败: ${e.message}" }
             e.printStackTrace()
-            ToolResult.error("处理用户问题失败: ${e.message}")
+            ToolResult.error("处理用户问题时发生错误，请稍后重试")
         }
     }
 
+
+    /**
+     * 校验 questions 参数，返回错误信息或 null（通过）
+     */
+    private fun validateQuestions(arguments: JsonObject): String? {
+        val questions = arguments["questions"]
+
+        // 检查 questions 是否存在
+        if (questions == null) {
+            return "缺少必填参数 'questions'"
+        }
+
+        // 检查是否是字符串（常见错误）
+        if (questions is JsonPrimitive && questions.isString) {
+            return "参数 'questions' 应该是数组，而不是字符串。请直接传递数组，不要将其序列化为字符串"
+        }
+
+        // 检查是否是数组
+        if (questions !is JsonArray) {
+            return "参数 'questions' 必须是数组类型，当前类型: ${questions::class.simpleName}"
+        }
+
+        // 检查数组是否为空
+        if (questions.isEmpty()) {
+            return "参数 'questions' 不能为空数组"
+        }
+
+        // 校验每个问题项
+        questions.forEachIndexed { index, item ->
+            if (item !is JsonObject) {
+                return "questions[$index] 必须是对象，当前类型: ${item::class.simpleName}"
+            }
+            if (!item.containsKey("question")) {
+                return "questions[$index] 缺少必填字段 'question'"
+            }
+        }
+
+        return null // 校验通过
+    }
 
     /**
      * 对字符串化的 questions 进行修正，确保为 JsonArray
@@ -378,6 +426,13 @@ class UserInteractionMcpServer : McpServerBase() {
             val paramsJson = anyToJsonElement(arguments)
             mcpLogger.debug { "📦 转换后的 JSON: $paramsJson" }
             val paramsJsonNormalized = normalizeQuestions(paramsJson.jsonObject)
+
+            // 先进行参数校验
+            validateQuestions(paramsJsonNormalized)?.let { error ->
+                mcpLogger.warn { "⚠️ [AskUserQuestion] 参数校验失败: $error" }
+                return ToolResult.error(error)
+            }
+
             val params: AskUserQuestionParams = Json.decodeFromJsonElement(paramsJsonNormalized)
 
             mcpLogger.info { "📤 [AskUserQuestion] 解析后的参数: ${params.questions.size} 个问题" }
@@ -417,10 +472,13 @@ class UserInteractionMcpServer : McpServerBase() {
             mcpLogger.info { "✅ [AskUserQuestion] 完成，返回: $content" }
             return content
 
+        } catch (e: kotlinx.serialization.SerializationException) {
+            mcpLogger.error { "❌ [AskUserQuestion] 参数格式错误: ${e.message}" }
+            return ToolResult.error("参数格式错误，请检查 questions 数组结构是否正确")
         } catch (e: Exception) {
             mcpLogger.error { "❌ [AskUserQuestion] 处理失败: ${e.message}" }
             e.printStackTrace()
-            return ToolResult.error("处理用户问题失败: ${e.message}")
+            return ToolResult.error("处理用户问题时发生错误，请稍后重试")
         }
     }
 

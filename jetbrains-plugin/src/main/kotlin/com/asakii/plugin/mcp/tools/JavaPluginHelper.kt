@@ -1,7 +1,5 @@
 package com.asakii.plugin.mcp.tools
 
-import com.intellij.ide.plugins.PluginManagerCore
-import com.intellij.openapi.extensions.PluginId
 import com.intellij.psi.PsiElement
 import com.intellij.psi.search.GlobalSearchScope
 import cn.hutool.core.util.ClassUtil
@@ -27,8 +25,6 @@ import cn.hutool.core.util.ReflectUtil
  */
 object JavaPluginHelper {
 
-    private const val JAVA_PLUGIN_ID = "com.intellij.java"
-
     // ===== 类名常量 =====
     private object ClassNames {
         const val PSI_CLASS = "com.intellij.psi.PsiClass"
@@ -43,16 +39,14 @@ object JavaPluginHelper {
 
     /**
      * Java 插件是否可用
+     *
+     * 通过尝试加载 Java 插件特有的类 (PsiClass) 来检测。
+     * 这种方式不依赖任何 PluginManagerCore 或 PluginId API，
+     * 确保与所有 IntelliJ 版本兼容。
      */
     val isAvailable: Boolean by lazy {
-        try {
-            val pluginId = PluginId.findId(JAVA_PLUGIN_ID) ?: return@lazy false
-            val plugin = PluginManagerCore.getPlugin(pluginId) ?: return@lazy false
-            // 检查插件是否已加载（非禁用状态）
-            !PluginManagerCore.isDisabled(pluginId)
-        } catch (e: Exception) {
-            false
-        }
+        // 直接尝试加载 PsiClass，如果能加载成功则说明 Java 插件可用
+        loadClass(ClassNames.PSI_CLASS) != null
     }
 
     // ===== 类型检查 API =====

@@ -1,5 +1,6 @@
 package com.asakii.rpc.api
 
+import com.asakii.claude.agent.sdk.types.AgentDefinition
 import kotlinx.serialization.Serializable
 
 /**
@@ -75,6 +76,14 @@ interface IdeTools {
      * @return Result<Unit> 成功或失败
      */
     fun setLocale(locale: String): Result<Unit>
+
+    /**
+     * 获取子代理定义
+     *
+     * 从资源文件加载自定义子代理（如 JetBrains 专用的代码探索代理）
+     * @return 代理名称到定义的映射，如果没有自定义代理则返回空 Map
+     */
+    fun getAgentDefinitions(): Map<String, AgentDefinition> = emptyMap()
 }
 
 /**

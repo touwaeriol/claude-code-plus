@@ -28,8 +28,7 @@ data class FileProblem(
     val column: Int,        // 1-based
     val endLine: Int,       // 1-based
     val endColumn: Int,     // 1-based
-    val description: String? = null,
-    val quickFixHint: String? = null
+    val description: String? = null
 )
 
 @Serializable
@@ -119,16 +118,6 @@ class FileProblemsTool(private val project: Project) {
                     val endLine = document.getLineNumber(info.endOffset) + 1
                     val endColumn = info.endOffset - document.getLineStartOffset(endLine - 1) + 1
 
-                    // Note: quickFixActionRanges is deprecated, use findRegisteredQuickFix() instead
-                    // However, that requires IntentionAction context which is not available here
-                    // For now, we try to get quick fix hint via reflection to avoid deprecation warning
-                    val quickFixHint = try {
-                        @Suppress("DEPRECATION", "removal")
-                        info.quickFixActionRanges?.firstOrNull()?.first?.action?.text
-                    } catch (e: Exception) {
-                        null
-                    }
-
                     problems.add(FileProblem(
                         severity = severity,
                         message = info.description ?: info.toolTip ?: "Unknown issue",
@@ -136,8 +125,7 @@ class FileProblemsTool(private val project: Project) {
                         column = startColumn,
                         endLine = endLine,
                         endColumn = endColumn,
-                        description = info.toolTip,
-                        quickFixHint = quickFixHint
+                        description = info.toolTip
                     ))
                 }
             }
@@ -165,9 +153,6 @@ class FileProblemsTool(private val project: Project) {
                 }
                 val location = "${problem.line}:${problem.column}"
                 sb.appendLine("$icon [$location] ${problem.message}")
-                problem.quickFixHint?.let {
-                    sb.appendLine("   └─ Quick fix: $it")
-                }
             }
         }
 

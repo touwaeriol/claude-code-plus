@@ -550,6 +550,12 @@ class AiAgentRpcServiceImpl(
             sdkLog.info("✅ [buildClaudeOverrides] 已添加 JetBrains MCP Server")
         }
 
+        // 从 IdeTools 获取子代理定义（如 JetBrains 专用的代码探索代理）
+        val agents = ideTools.getAgentDefinitions()
+        if (agents.isNotEmpty()) {
+            sdkLog.info("📦 [buildClaudeOverrides] 加载了 ${agents.size} 个自定义代理: ${agents.keys.joinToString()}")
+        }
+
         // 收集所有 MCP 服务器的系统提示词追加内容
         // 使用 appendSystemPromptFile 追加，不会替换 Claude Code 默认提示词
         val mcpSystemPromptAppendix = buildMcpSystemPromptAppendix(mcpServers)
@@ -632,7 +638,9 @@ class AiAgentRpcServiceImpl(
             extraArgs = extraArgs,
             // 允许 user_interaction MCP 的工具默认通过权限检查，避免向用户提问还需要授权
             allowedTools = listOf("mcp__user_interaction__AskUserQuestion"),
-            mcpServers = mcpServers
+            mcpServers = mcpServers,
+            // 自定义子代理定义（如 JetBrains 专用的代码探索代理）
+            agents = agents.ifEmpty { null }
         )
 
         return ClaudeOverrides(options = claudeOptions)

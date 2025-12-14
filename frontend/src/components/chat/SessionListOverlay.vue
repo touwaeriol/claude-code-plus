@@ -12,7 +12,7 @@
 
         <div class="overlay-panel">
           <div class="overlay-header">
-            <h3 class="overlay-title">{{ $t('session.history') }} <span class="session-count">{{ sessions.length }}</span></h3>
+            <h3 class="overlay-title">{{ $t('session.history') }} <span class="session-count">({{ historySessions.length }})</span></h3>
             <button
               class="close-btn"
               type="button"

@@ -48,7 +48,7 @@ class DirectoryTreeTool(private val project: Project) {
         val filesOnly = arguments["filesOnly"] as? Boolean ?: false
         val includeHidden = arguments["includeHidden"] as? Boolean ?: false
         val pattern = arguments["pattern"] as? String
-        val maxEntries = ((arguments["maxEntries"] as? Number)?.toInt() ?: 500).coerceIn(1, 2000)
+        val maxEntries = ((arguments["maxEntries"] as? Number)?.toInt() ?: 100).coerceAtLeast(1)
 
         val projectPath = project.basePath
             ?: return ToolResult.error("Cannot get project path")

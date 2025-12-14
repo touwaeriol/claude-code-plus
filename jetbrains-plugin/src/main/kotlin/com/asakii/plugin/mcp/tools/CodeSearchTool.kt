@@ -65,7 +65,7 @@ class CodeSearchTool(private val project: Project) {
         val fileMask = arguments["fileMask"] as? String
         val scopeStr = arguments["scope"] as? String ?: "Project"
         val scopeArg = arguments["scopeArg"] as? String
-        val maxResults = ((arguments["maxResults"] as? Number)?.toInt() ?: 100).coerceIn(1, 500)
+        val maxResults = ((arguments["maxResults"] as? Number)?.toInt() ?: 30).coerceAtLeast(1)
         val offset = ((arguments["offset"] as? Number)?.toInt() ?: 0).coerceAtLeast(0)
         val includeContext = arguments["includeContext"] as? Boolean ?: false
 
@@ -121,7 +121,7 @@ class CodeSearchTool(private val project: Project) {
                         if (scopeArg.isNullOrBlank()) {
                             throw IllegalArgumentException("Module scope requires scopeArg (module name)")
                         }
-                        val module = ReadAction.compute<Module?, Exception> {
+                        val module = ReadAction.compute<com.intellij.openapi.module.Module?, Exception> {
                             ModuleManager.getInstance(project).findModuleByName(scopeArg)
                         } ?: throw IllegalArgumentException("Module not found: $scopeArg")
                         moduleName = scopeArg

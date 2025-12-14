@@ -1,5 +1,7 @@
 package com.asakii.plugin.tools
 
+import com.asakii.claude.agent.sdk.types.AgentDefinition
+import com.asakii.plugin.utils.ResourceLoader
 import com.asakii.rpc.api.*
 import com.asakii.server.tools.IdeToolsDefault
 import com.intellij.diff.DiffContentFactory
@@ -383,6 +385,20 @@ class IdeToolsImpl(
         } catch (e: Exception) {
             logger.warning("Failed to set locale preference: ${e.message}")
             Result.failure(e)
+        }
+    }
+
+    override fun getAgentDefinitions(): Map<String, AgentDefinition> {
+        return try {
+            // AgentDefinition 类型由 SDK 统一提供，无需转换
+            val agents = ResourceLoader.loadAllAgentDefinitions()
+            if (agents.isNotEmpty()) {
+                logger.info("📦 Loaded ${agents.size} custom agents: ${agents.keys.joinToString()}")
+            }
+            agents
+        } catch (e: Exception) {
+            logger.warning("Failed to load agent definitions: ${e.message}")
+            emptyMap()
         }
     }
 }

@@ -69,36 +69,70 @@ class SessionTabsAction(
     // Tab 固定宽度
     private val tabFixedWidth = JBUI.scale(100)
     private val tabHeight = JBUI.scale(22)
-    private val overflowButtonWidth = JBUI.scale(24)
 
     // 可见标签和隐藏标签
     private var visibleTabs: List<JetBrainsSessionSummary> = emptyList()
     private var hiddenTabs: List<JetBrainsSessionSummary> = emptyList()
 
-    // 溢出按钮
-    private val overflowButton = createOverflowButton()
+    // 滚动按钮
+    private val scrollLeftButton = createScrollButton(isLeft = true)
+    private val scrollRightButton = createScrollButton(isLeft = false)
 
-    // 主面板 - 使用自定义布局实现自适应
+    // 滚动位置
+    private var scrollOffset = 0
+
+    // 最大可见标签数（防止占用过多标题栏空间）
+    private val maxVisibleTabsLimit = 5
+
+    // 滚动按钮宽度
+    private val scrollButtonWidth = JBUI.scale(22)
+
+    // 主面板 - 使用自定义布局实现滚动
     private val tabsPanel = object : JBPanel<JBPanel<*>>(null) {
         private val tabComponents = mutableListOf<JComponent>()
+        private var lastKnownWidth = 0
 
         init {
             isOpaque = false
+
             // 监听大小变化，重新计算可见标签
             addComponentListener(object : ComponentAdapter() {
                 override fun componentResized(e: ComponentEvent?) {
-                    SwingUtilities.invokeLater { relayout() }
+                    if (width != lastKnownWidth && width > 0) {
+                        lastKnownWidth = width
+                        SwingUtilities.invokeLater { relayout() }
+                    }
                 }
             })
+
+            // 监听组件添加到层次结构（确保初始化时触发布局）
+            addHierarchyListener { e ->
+                if ((e.changeFlags and java.awt.event.HierarchyEvent.SHOWING_CHANGED.toLong()) != 0L) {
+                    if (isShowing) {
+                        SwingUtilities.invokeLater {
+                            // 延迟执行确保父容器已完成布局
+                            Timer(50) {
+                                (it.source as? Timer)?.stop()
+                                relayout()
+                            }.start()
+                        }
+                    }
+                }
+            }
         }
 
         fun setTabs(tabs: List<JComponent>) {
             tabComponents.clear()
             tabComponents.addAll(tabs)
-            relayout()
+            // 重置滚动位置
+            scrollOffset = 0
+            // 延迟布局，确保组件尺寸已确定
+            SwingUtilities.invokeLater {
+                relayout()
+            }
         }
 
-        private fun relayout() {
+        fun relayout() {
             removeAll()
 
             if (tabComponents.isEmpty()) {
@@ -107,57 +141,55 @@ class SessionTabsAction(
                 return
             }
 
-            val availableWidth = width
-            if (availableWidth <= 0) {
-                // 布局未完成，添加所有组件
-                tabComponents.forEach { add(it) }
-                revalidate()
-                repaint()
-                return
-            }
-
-            // 计算可以显示多少个标签
-            val maxVisibleTabs = (availableWidth - overflowButtonWidth) / tabFixedWidth
-            val needsOverflow = tabComponents.size > maxVisibleTabs && maxVisibleTabs > 0
+            // 固定最多显示 maxVisibleTabsLimit 个标签，不使用滚动
+            val maxVisibleTabs = minOf(tabComponents.size, maxVisibleTabsLimit)
 
             var x = 0
-            val visibleCount = if (needsOverflow) maxOf(1, maxVisibleTabs) else tabComponents.size
 
-            // 更新可见/隐藏标签列表
-            visibleTabs = sessions.take(visibleCount)
-            hiddenTabs = if (needsOverflow) sessions.drop(visibleCount) else emptyList()
+            // 添加可见标签（最多 5 个）
+            visibleTabs = sessions.take(maxVisibleTabs)
+            hiddenTabs = sessions.drop(maxVisibleTabs)
 
-            // 添加可见标签
-            for (i in 0 until minOf(visibleCount, tabComponents.size)) {
+            for (i in 0 until maxVisibleTabs) {
                 val tab = tabComponents[i]
                 add(tab)
                 tab.setBounds(x, 0, tabFixedWidth, tabHeight)
                 x += tabFixedWidth
             }
 
-            // 添加溢出按钮
-            if (needsOverflow) {
-                add(overflowButton)
-                overflowButton.setBounds(x, 0, overflowButtonWidth, tabHeight)
-                overflowButton.isVisible = true
-                updateOverflowButtonText()
-            } else {
-                overflowButton.isVisible = false
-            }
-
             revalidate()
             repaint()
         }
 
+        fun scrollLeft() {
+            if (scrollOffset > 0) {
+                scrollOffset--
+                relayout()
+            }
+        }
+
+        fun scrollRight() {
+            val availableWidth = width
+            val tabsAreaWidth = availableWidth - scrollButtonWidth * 2
+            val maxVisibleTabs = maxOf(1, tabsAreaWidth / tabFixedWidth)
+            val maxOffset = maxOf(0, tabComponents.size - maxVisibleTabs)
+            if (scrollOffset < maxOffset) {
+                scrollOffset++
+                relayout()
+            }
+        }
+
         override fun getPreferredSize(): Dimension {
-            // 返回所有标签的总宽度
-            val totalWidth = tabComponents.size * tabFixedWidth + overflowButtonWidth
-            return Dimension(totalWidth, tabHeight)
+            val visibleCount = minOf(tabComponents.size, maxVisibleTabsLimit)
+            return Dimension(visibleCount * tabFixedWidth, tabHeight)
         }
 
         override fun getMinimumSize(): Dimension {
-            // 最小显示 1 个标签 + 溢出按钮
-            return Dimension(tabFixedWidth + overflowButtonWidth, tabHeight)
+            return Dimension(tabFixedWidth, tabHeight)
+        }
+
+        override fun getMaximumSize(): Dimension {
+            return getPreferredSize()
         }
     }
 
@@ -172,17 +204,16 @@ class SessionTabsAction(
         render(latestState)
     }
 
-    private fun createOverflowButton(): JButton {
+    private fun createScrollButton(isLeft: Boolean): JButton {
         return object : JButton() {
             private var hovered = false
 
             init {
-                font = JBUI.Fonts.smallFont()
                 isFocusPainted = false
                 isBorderPainted = false
                 isContentAreaFilled = false
                 cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-                toolTipText = "More sessions..."
+                toolTipText = if (isLeft) "Scroll left" else "Scroll right"
 
                 addMouseListener(object : MouseAdapter() {
                     override fun mouseEntered(e: MouseEvent) {
@@ -196,7 +227,13 @@ class SessionTabsAction(
                     }
 
                     override fun mouseClicked(e: MouseEvent) {
-                        showOverflowMenu(e)
+                        if (isEnabled) {
+                            if (isLeft) {
+                                tabsPanel.scrollLeft()
+                            } else {
+                                tabsPanel.scrollRight()
+                            }
+                        }
                     }
                 })
             }
@@ -210,63 +247,73 @@ class SessionTabsAction(
                 val arc = JBUI.scale(6).toFloat()
 
                 // 背景
-                if (hovered) {
-                    g2.color = UIUtil.getListSelectionBackground(false)
-                    g2.fill(RoundRectangle2D.Float(0f, 0f, w, h, arc, arc))
+                when {
+                    !isEnabled -> {
+                        // 禁用状态：淡色背景
+                        g2.color = JBUI.CurrentTheme.DefaultTabs.borderColor()
+                        g2.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.3f)
+                        g2.fill(RoundRectangle2D.Float(1f, 1f, w - 2, h - 2, arc, arc))
+                        g2.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1f)
+                    }
+                    hovered -> {
+                        // 悬停状态：高亮背景
+                        g2.color = JBUI.CurrentTheme.Focus.focusColor()
+                        g2.fill(RoundRectangle2D.Float(1f, 1f, w - 2, h - 2, arc, arc))
+                    }
+                    else -> {
+                        // 正常状态：边框
+                        g2.color = JBUI.CurrentTheme.DefaultTabs.borderColor()
+                        g2.stroke = BasicStroke(1f)
+                        g2.draw(RoundRectangle2D.Float(0.5f, 0.5f, w - 1, h - 1, arc, arc))
+                    }
                 }
 
-                // 边框
-                g2.color = JBUI.CurrentTheme.DefaultTabs.borderColor()
-                g2.stroke = BasicStroke(1f)
-                g2.draw(RoundRectangle2D.Float(0.5f, 0.5f, w - 1, h - 1, arc, arc))
+                // 绘制箭头
+                val arrowColor = when {
+                    !isEnabled -> UIUtil.getLabelDisabledForeground()
+                    hovered -> Color.WHITE
+                    else -> UIUtil.getLabelForeground()
+                }
+                g2.color = arrowColor
+                g2.stroke = BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
 
-                // 绘制文字
-                g2.color = UIUtil.getLabelForeground()
-                g2.font = font
-                val fm = g2.fontMetrics
-                val text = text ?: "▼"
-                val textX = (w - fm.stringWidth(text)) / 2
-                val textY = (h + fm.ascent - fm.descent) / 2
-                g2.drawString(text, textX, textY)
+                val centerX = w / 2
+                val centerY = h / 2
+                val arrowSize = JBUI.scale(4).toFloat()
+
+                if (isLeft) {
+                    // 左箭头 <
+                    g2.drawLine(
+                        (centerX + arrowSize / 2).toInt(),
+                        (centerY - arrowSize).toInt(),
+                        (centerX - arrowSize / 2).toInt(),
+                        centerY.toInt()
+                    )
+                    g2.drawLine(
+                        (centerX - arrowSize / 2).toInt(),
+                        centerY.toInt(),
+                        (centerX + arrowSize / 2).toInt(),
+                        (centerY + arrowSize).toInt()
+                    )
+                } else {
+                    // 右箭头 >
+                    g2.drawLine(
+                        (centerX - arrowSize / 2).toInt(),
+                        (centerY - arrowSize).toInt(),
+                        (centerX + arrowSize / 2).toInt(),
+                        centerY.toInt()
+                    )
+                    g2.drawLine(
+                        (centerX + arrowSize / 2).toInt(),
+                        centerY.toInt(),
+                        (centerX - arrowSize / 2).toInt(),
+                        (centerY + arrowSize).toInt()
+                    )
+                }
 
                 g2.dispose()
             }
         }
-    }
-
-    private fun updateOverflowButtonText() {
-        overflowButton.text = "+${hiddenTabs.size}"
-    }
-
-    private fun showOverflowMenu(e: MouseEvent) {
-        if (hiddenTabs.isEmpty()) return
-
-        val popup = JBPopupFactory.getInstance().createListPopup(
-            object : BaseListPopupStep<JetBrainsSessionSummary>("Hidden Sessions", hiddenTabs) {
-                override fun getTextFor(value: JetBrainsSessionSummary): String {
-                    val prefix = when {
-                        value.isGenerating -> "● "
-                        value.isConnecting -> "◐ "
-                        value.isConnected -> "● "
-                        else -> "○ "
-                    }
-                    return prefix + value.title
-                }
-
-                override fun onChosen(selectedValue: JetBrainsSessionSummary, finalChoice: Boolean): PopupStep<*>? {
-                    if (finalChoice) {
-                        sessionApi.sendCommand(
-                            JetBrainsSessionCommand(
-                                type = JetBrainsSessionCommandType.SWITCH,
-                                sessionId = selectedValue.id
-                            )
-                        )
-                    }
-                    return FINAL_CHOICE
-                }
-            }
-        )
-        popup.show(com.intellij.ui.awt.RelativePoint(e.component, Point(0, e.component.height)))
     }
 
     override fun actionPerformed(e: AnActionEvent) = Unit

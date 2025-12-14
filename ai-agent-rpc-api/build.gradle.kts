@@ -12,6 +12,9 @@ dependencies {
 
     // Coroutines for Flow
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
+
+    // Claude Agent SDK - AgentDefinition 类型由 SDK 统一提供
+    api(project(":claude-agent-sdk"))
 }
 
 

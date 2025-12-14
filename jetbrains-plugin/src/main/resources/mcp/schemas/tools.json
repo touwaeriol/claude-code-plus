@@ -5,24 +5,30 @@
     "properties": {
       "query": {
         "type": "string",
-        "description": "Search keyword (supports fuzzy matching, e.g. \"UserSvc\" matches \"UserService\")"
+        "description": "搜索关键词"
       },
       "searchType": {
         "type": "string",
         "enum": ["All", "Classes", "Files", "Symbols", "Actions", "Text"],
-        "description": "Search type: All (everything), Classes (class/interface names), Files (file names), Symbols (methods/fields), Actions (IDE actions), Text (for text search use CodeSearch instead)",
+        "description": "搜索类型:All(全部)、Classes(类)、Files(文件)、Symbols(符号)、Actions(动作)、Text(文本)",
         "default": "All"
+      },
+      "scope": {
+        "type": "string",
+        "enum": ["Project", "All", "ProductionFiles", "TestFiles", "Scratches"],
+        "description": "搜索范围:Project(仅项目文件)、All(所有地方,包括库)、ProductionFiles(仅生产代码)、TestFiles(仅测试代码)、Scratches(草稿和控制台)",
+        "default": "Project"
       },
       "maxResults": {
         "type": "integer",
-        "description": "Maximum number of results to return",
+        "description": "最大结果数",
         "default": 50,
         "minimum": 1,
         "maximum": 200
       },
       "offset": {
         "type": "integer",
-        "description": "Skip first N results (for pagination)",
+        "description": "分页偏移量",
         "default": 0,
         "minimum": 0
       }
@@ -31,7 +37,9 @@
     "examples": [
       {"query": "UserService", "searchType": "Classes"},
       {"query": "config.json", "searchType": "Files"},
-      {"query": "handleClick", "searchType": "Symbols"}
+      {"query": "handleClick", "searchType": "Symbols"},
+      {"query": "String", "searchType": "Classes", "scope": "All"},
+      {"query": "Test", "searchType": "Files", "scope": "TestFiles"}
     ]
   },
 
@@ -68,8 +76,8 @@
       "maxEntries": {
         "type": "integer",
         "description": "Maximum number of entries to return (prevents overwhelming output for large directories)",
-        "default": 500,
-        "maximum": 2000
+        "default": 100,
+        "minimum": 1
       }
     },
     "required": [],
@@ -120,9 +128,8 @@
       "maxResults": {
         "type": "integer",
         "description": "Maximum number of matches to return",
-        "default": 100,
-        "minimum": 1,
-        "maximum": 500
+        "default": 30,
+        "minimum": 1
       },
       "offset": {
         "type": "integer",
@@ -161,12 +168,91 @@
         "type": "boolean",
         "description": "Include weak warnings/suggestions (gray highlights in IDE)",
         "default": false
+      },
+      "maxProblems": {
+        "type": "integer",
+        "description": "Maximum number of problems to return",
+        "default": 50,
+        "minimum": 1
       }
     },
     "required": ["filePath"],
     "examples": [
       {"filePath": "src/main/kotlin/Service.kt"},
       {"filePath": "frontend/src/App.vue", "includeWeakWarnings": true}
+    ]
+  },
+
+  "FindUsages": {
+    "type": "object",
+    "description": "Find all usages/references of a symbol (class, method, field, variable, etc.) in the project. Similar to IDE's Find Usages (Alt+F7) feature. Supports fine-grained usage type filtering.",
+    "properties": {
+      "filePath": {
+        "type": "string",
+        "description": "File path where the symbol is defined (relative to project root or absolute path)"
+      },
+      "symbolName": {
+        "type": "string",
+        "description": "Name of the symbol to find usages for. Optional if line/column are provided."
+      },
+      "line": {
+        "type": "integer",
+        "description": "Line number where the symbol is located (1-based). Use this with column for precise positioning.",
+        "minimum": 1
+      },
+      "column": {
+        "type": "integer",
+        "description": "Column number where the symbol is located (1-based). Used with line for precise positioning.",
+        "minimum": 1
+      },
+      "symbolType": {
+        "type": "string",
+        "enum": ["Auto", "Class", "Method", "Field", "Variable", "Parameter", "File"],
+        "description": "Type of symbol to search for. Auto (default) detects automatically.",
+        "default": "Auto"
+      },
+      "usageTypes": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["All", "Inheritance", "Instantiation", "TypeReference", "Import", "Override", "Call", "MethodReference", "Read", "Write"]
+        },
+        "description": "Filter by usage types. For classes: Inheritance (extends/implements), Instantiation (new), TypeReference, Import. For methods: Override (子类重写), Call (调用), MethodReference (::method). For fields/variables: Read, Write. Default: [\"All\"]",
+        "default": ["All"]
+      },
+      "searchScope": {
+        "type": "string",
+        "enum": ["Project", "Module", "Directory"],
+        "description": "Search scope. Project (default): entire project. Module: specific module (requires scopeArg). Directory: specific folder (requires scopeArg).",
+        "default": "Project"
+      },
+      "scopeArg": {
+        "type": "string",
+        "description": "Required when searchScope is Module or Directory. For Module: module name. For Directory: relative path from project root."
+      },
+      "maxResults": {
+        "type": "integer",
+        "description": "Maximum number of usages to return",
+        "default": 50,
+        "minimum": 1,
+        "maximum": 500
+      },
+      "offset": {
+        "type": "integer",
+        "description": "Skip first N results (for pagination)",
+        "default": 0,
+        "minimum": 0
+      }
+    },
+    "required": ["filePath"],
+    "examples": [
+      {"filePath": "src/main/kotlin/UserService.kt", "symbolName": "getUserById"},
+      {"filePath": "src/main/kotlin/UserService.kt", "line": 25, "column": 10},
+      {"filePath": "src/models/User.kt", "symbolName": "User", "symbolType": "Class", "usageTypes": ["Inheritance"]},
+      {"filePath": "src/models/User.kt", "symbolName": "User", "usageTypes": ["Instantiation", "TypeReference"]},
+      {"filePath": "src/service/Api.kt", "symbolName": "fetch", "symbolType": "Method", "usageTypes": ["Override"]},
+      {"filePath": "src/config.kt", "symbolName": "apiKey", "usageTypes": ["Write"]},
+      {"filePath": "src/utils/helper.ts", "symbolName": "formatDate", "searchScope": "Module", "scopeArg": "frontend"}
     ]
   }
 }

@@ -658,7 +658,10 @@ async function handleLoadMoreHistorySessions() {
 }
 
 async function handleHistorySelect(sessionId: string) {
+  // 立刻关闭弹窗，提供即时反馈
+  isHistoryOverlayVisible.value = false
   uiState.value.isLoadingHistory = true
+
   try {
     // 检查是否是活跃 Tab
     const activeTab = sessionStore.tabs.find(t => t.tabId === sessionId || t.sessionId.value === sessionId)
@@ -681,7 +684,6 @@ async function handleHistorySelect(sessionId: string) {
       }
     }
 
-    isHistoryOverlayVisible.value = false
     const historyPromise = (sessionStore.currentTab as any)?.__historyPromise as Promise<void> | undefined
     if (historyPromise) {
       await historyPromise

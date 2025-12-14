@@ -1,3 +1,5 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+
 plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
@@ -89,6 +91,20 @@ intellijPlatform {
         ideaVersion {
             sinceBuild.set(providers.gradleProperty("pluginSinceBuild"))
             untilBuild.set(providers.gradleProperty("pluginUntilBuild"))
+        }
+    }
+
+    // 插件兼容性验证配置 (2024.2 ~ 2025.3)
+    // 注意: 从 2025.3 开始，IntelliJ IDEA 合并为统一版本，需使用 IntellijIdea 类型
+    pluginVerification {
+        ides {
+            // 2024.x 和 2025.1/2025.2 使用 IntellijIdeaCommunity
+            ide(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2.6")
+            ide(IntelliJPlatformType.IntellijIdeaCommunity, "2024.3.5")
+            ide(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1.5")
+            ide(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
+            // 2025.3+ 使用统一的 IntellijIdea 类型
+            ide(IntelliJPlatformType.IntellijIdea, "2025.3")
         }
     }
 
