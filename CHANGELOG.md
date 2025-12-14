@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- SchemaValidator for MCP tool schema validation
+- ResourceLoaderTest for resource loading validation
+
+### Changed
+- Improve UserInteractionMcpServer with better question handling
+- Enhance MCP tools (CodeSearch, DirectoryTree, FileProblems)
+- Improve HistorySessionAction and SessionTabsAction UI
+- Update tools.json schema definitions
+
+### Removed
+- Remove deprecated ClaudeActionHandler and SessionActionHandler
+- Remove obsolete IdeActionBridge and IdeActionBridgeImpl
+- Remove unused AgentDefinitionsProvider and ClaudeSessionManager
+
 ## [1.0.7] - 2025-12-15
 
 ### Added
