@@ -1,17 +1,5 @@
-特别提醒：请使用简体中文
-可使用的jetbrains mcp（如果可用）工具(没有提到的mcp工具不建议使用，但是可以使用)：
--- execute_run_configuration、get_run_configurations：
-当我让你重启时，是希望你在idea中重启，而不是通过命令行重启
-当前项目中运行特定的运行配置，并等待其在指定超时时间内完成。该工具会等待执行结束，有些运行配置都不会结束，这些运行配置超时时间请设置10s@since 2025/12/10 19:05
--- get_file_problems：编写代码时，没修改文件完成，务必使用改工具检查静态编译错误。如果文件出现编译错误，可以使用改工具定位
--- find_files_by_glob
--- find_files_by_name_keyword
--- list_directory_tree
--- reformat_file：需要格式化文件时使用
--- search_in_files_by_regex
--- search_in_files_by_text
--- rename_refactoring：重构代码时使用改工具正确批量重构
--- execute_terminal_command：使用该工具执行命令，该工具是使用操作系统的自带默认终端
+特别提醒：请使用简体中文进行交流
+特别提醒：git commit 不使用中文，而是使用英文
 
 # Claude Code Plus - 架构说明
 
