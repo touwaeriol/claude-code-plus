@@ -307,7 +307,15 @@ const historySessions = computed(() => {
 })
 
 const sessionTokenUsage = computed<EnhancedTokenUsage | null>(() => {
-  return null
+  const stats = sessionStore.currentTab?.stats.getCumulativeStats()
+  if (!stats) return null
+  return {
+    inputTokens: stats.totalInputTokens,
+    outputTokens: stats.totalOutputTokens,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: stats.totalInputTokens + stats.totalOutputTokens
+  }
 })
 
 // 连接状态（用于显示）

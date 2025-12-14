@@ -4,14 +4,14 @@
     :class="statusClass"
     :title="tooltipText"
   >
-    <span class="usage-text">[{{ formattedTokens }}/{{ formattedMaxTokens }}]</span>
+    <span class="usage-text">{{ formattedTokens }}</span>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { EnhancedMessage, TokenUsage } from '@/types/enhancedMessage'
-import { MessageRole, getTotalTokens } from '@/types/enhancedMessage'
+import { MessageRole } from '@/types/enhancedMessage'
 import { getModelContextLength } from '@/config/modelConfig'
 
 /**
@@ -36,13 +36,6 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 /**
- * 获取最新的 TokenUsage
- */
-const latestTokenUsage = computed((): TokenUsage | null => {
-  return findLatestTokenUsage(props.messageHistory) || props.sessionTokenUsage || null
-})
-
-/**
  * 模型的上下文窗口大小
  */
 const maxTokens = computed(() => {
@@ -51,11 +44,21 @@ const maxTokens = computed(() => {
 
 /**
  * 当前已使用的 token 数量
- * 参考 opcode: input_tokens + output_tokens
+ * 参考 opcode: 累加所有消息的 input_tokens + output_tokens
  */
 const totalTokens = computed(() => {
-  if (!latestTokenUsage.value) return 0
-  return getTotalTokens(latestTokenUsage.value)
+  // 优先使用 sessionTokenUsage（来自 useSessionStats 的累计统计）
+  if (props.sessionTokenUsage) {
+    return props.sessionTokenUsage.inputTokens + props.sessionTokenUsage.outputTokens
+  }
+
+  // 回退：遍历消息历史累加（opcode 方式）
+  return props.messageHistory.reduce((total, msg) => {
+    if (msg.role === MessageRole.ASSISTANT && msg.tokenUsage) {
+      return total + msg.tokenUsage.inputTokens + msg.tokenUsage.outputTokens
+    }
+    return total
+  }, 0)
 })
 
 /**
@@ -81,31 +84,42 @@ const statusClass = computed(() => {
  * 格式化显示的 token 数量
  */
 const formattedTokens = computed(() => formatTokenCount(totalTokens.value))
-const formattedMaxTokens = computed(() => formatTokenCount(maxTokens.value))
+
+/**
+ * 累计的输入/输出 token（用于 tooltip 显示）
+ */
+const cumulativeInputTokens = computed(() => {
+  if (props.sessionTokenUsage) {
+    return props.sessionTokenUsage.inputTokens
+  }
+  return props.messageHistory.reduce((total, msg) => {
+    if (msg.role === MessageRole.ASSISTANT && msg.tokenUsage) {
+      return total + msg.tokenUsage.inputTokens
+    }
+    return total
+  }, 0)
+})
+
+const cumulativeOutputTokens = computed(() => {
+  if (props.sessionTokenUsage) {
+    return props.sessionTokenUsage.outputTokens
+  }
+  return props.messageHistory.reduce((total, msg) => {
+    if (msg.role === MessageRole.ASSISTANT && msg.tokenUsage) {
+      return total + msg.tokenUsage.outputTokens
+    }
+    return total
+  }, 0)
+})
 
 /**
  * 悬浮提示文本（参考 opcode 简洁风格）
  */
 const tooltipText = computed(() => {
-  if (!latestTokenUsage.value) {
-    return `上下文: 0 / ${maxTokens.value.toLocaleString()} tokens (0%)`
-  }
-
-  const usage = latestTokenUsage.value
-  let text = `上下文: ${totalTokens.value.toLocaleString()} / ${maxTokens.value.toLocaleString()} tokens (${percentage.value}%)`
+  let text = `累计: ${totalTokens.value.toLocaleString()} tokens`
   text += `\n\n📊 Token 统计:`
-  text += `\n• 输入: ${usage.inputTokens.toLocaleString()}`
-  text += `\n• 输出: ${usage.outputTokens.toLocaleString()}`
-
-  if (usage.cacheReadTokens > 0 || usage.cacheCreationTokens > 0) {
-    text += `\n\n⚡ 缓存:`
-    if (usage.cacheCreationTokens > 0) {
-      text += `\n• 创建: ${usage.cacheCreationTokens.toLocaleString()}`
-    }
-    if (usage.cacheReadTokens > 0) {
-      text += `\n• 命中: ${usage.cacheReadTokens.toLocaleString()}`
-    }
-  }
+  text += `\n• 输入: ${cumulativeInputTokens.value.toLocaleString()}`
+  text += `\n• 输出: ${cumulativeOutputTokens.value.toLocaleString()}`
 
   // 状态提示
   const p = percentage.value
@@ -117,19 +131,6 @@ const tooltipText = computed(() => {
 
   return text
 })
-
-/**
- * 逆序遍历找最新的 token usage
- */
-function findLatestTokenUsage(messageHistory: EnhancedMessage[]): TokenUsage | null {
-  for (let i = messageHistory.length - 1; i >= 0; i--) {
-    const message = messageHistory[i]
-    if (message.role === MessageRole.ASSISTANT && message.tokenUsage) {
-      return message.tokenUsage
-    }
-  }
-  return null
-}
 
 /**
  * 格式化 token 数量显示（参考 opcode）

@@ -291,16 +291,6 @@
           {{ formatTokenUsage(tokenUsage) }}
         </div>
 
-        <!-- Streaming Token 统计 (生成期间显示，参考 openai-codex) -->
-        <div
-          v-if="isGenerating"
-          class="streaming-token-stats"
-          :title="streamingStatsTooltip"
-        >
-          <span class="streaming-dot">●</span>
-          <span class="streaming-text">{{ streamingStatsText }}</span>
-        </div>
-
         <!-- ESC 打断提示 -->
         <span
           v-if="isGenerating"
@@ -496,10 +486,6 @@ interface Props {
   editDisabled?: boolean     // 是否禁用发送（当前阶段用于编辑模式）
   // Toast 函数
   showToast?: (message: string, duration?: number) => void
-  // Streaming Token 统计 (参考 opcode)
-  streamingStartTime?: number  // 流式响应开始时间
-  streamingInputTokens?: number  // 输入 tokens
-  streamingOutputTokens?: number  // 输出 tokens
 }
 
 interface SendOptions {
@@ -531,10 +517,7 @@ const props = withDefaults(defineProps<Props>(), {
   showSendButton: true,
   placeholderText: '',
   inline: false,
-  editDisabled: false,
-  streamingStartTime: 0,
-  streamingInputTokens: 0,
-  streamingOutputTokens: 0
+  editDisabled: false
 })
 
 const emit = defineEmits<Emits>()
@@ -601,109 +584,6 @@ const atSymbolSearchResults = ref<IndexedFileInfo[]>([])
 // Slash Command Popup State
 const showSlashCommandPopup = ref(false)
 const slashCommandQuery = ref('')
-
-// ========== Streaming Token 统计 ==========
-const streamingElapsedTime = ref(0)
-let streamingTimerId: number | null = null
-
-// 格式化耗时
-function formatStreamingDuration(ms: number): string {
-  const seconds = Math.floor(ms / 1000)
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  const remainingSecs = seconds % 60
-  if (minutes < 60) return `${minutes}m${remainingSecs}s`
-  const hours = Math.floor(minutes / 60)
-  const remainingMins = minutes % 60
-  return `${hours}h${remainingMins}m${remainingSecs}s`
-}
-
-/**
- * 格式化 token 数量（参考 opcode）
- * - >= 1,000,000 → X.XXM
- * - >= 1,000 → X.XK
- * - < 1,000 → X
- */
-function formatStreamingTokens(count: number): string {
-  if (count >= 1_000_000) {
-    return `${(count / 1_000_000).toFixed(2)}M`
-  } else if (count >= 1_000) {
-    return `${(count / 1_000).toFixed(1)}K`
-  }
-  return count.toLocaleString()
-}
-
-/**
- * 计算总 token 数（参考 opcode: input + output）
- */
-const streamingTotalTokens = computed(() => {
-  return props.streamingInputTokens + props.streamingOutputTokens
-})
-
-/**
- * Streaming 状态统计文本（参考 opcode 简洁格式）
- * 格式: "5s · 1.2k tokens"
- */
-const streamingStatsText = computed(() => {
-  const duration = formatStreamingDuration(streamingElapsedTime.value)
-  const total = formatStreamingTokens(streamingTotalTokens.value)
-  return `${duration} · ${total} tokens`
-})
-
-/**
- * Streaming 详细统计（用于 tooltip）
- */
-const streamingStatsTooltip = computed(() => {
-  const duration = formatStreamingDuration(streamingElapsedTime.value)
-  const input = props.streamingInputTokens
-  const output = props.streamingOutputTokens
-  const total = streamingTotalTokens.value
-
-  let text = `⏱️ 耗时: ${duration}\n\n`
-  text += `📊 Token 统计:\n`
-  text += `• 输入: ${input.toLocaleString()}\n`
-  text += `• 输出: ${output.toLocaleString()}\n`
-  text += `• 总计: ${total.toLocaleString()}`
-
-  return text
-})
-
-// 启动计时器
-function startStreamingTimer() {
-  if (streamingTimerId !== null) return
-  const startTime = props.streamingStartTime || Date.now()
-  streamingElapsedTime.value = Date.now() - startTime
-  streamingTimerId = window.setInterval(() => {
-    streamingElapsedTime.value = Date.now() - startTime
-  }, 100)
-}
-
-// 停止计时器
-function stopStreamingTimer() {
-  if (streamingTimerId !== null) {
-    clearInterval(streamingTimerId)
-    streamingTimerId = null
-  }
-  streamingElapsedTime.value = 0
-}
-
-// 监听 isGenerating 变化
-watch(
-  () => props.isGenerating,
-  (generating) => {
-    if (generating) {
-      startStreamingTimer()
-    } else {
-      stopStreamingTimer()
-    }
-  },
-  { immediate: true }
-)
-
-// 组件卸载时清理计时器
-onUnmounted(() => {
-  stopStreamingTimer()
-})
 
 // 输入框大小调整 composable
 const { containerHeight, startResize } = useInputResize()
@@ -1937,34 +1817,6 @@ onUnmounted(() => {
   background: var(--theme-hover-background, rgba(0, 0, 0, 0.04));
   border-radius: 4px;
   white-space: nowrap;
-}
-
-/* Streaming Token 统计 - 生成期间显示 */
-.streaming-token-stats {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-family: monospace;
-  color: var(--theme-success, #22c55e);
-  padding: 2px 8px;
-  background: var(--theme-hover-background, rgba(0, 0, 0, 0.04));
-  border-radius: 4px;
-  white-space: nowrap;
-}
-
-.streaming-token-stats .streaming-dot {
-  font-size: 8px;
-  animation: streaming-pulse 1s ease-in-out infinite;
-}
-
-.streaming-token-stats .streaming-text {
-  color: var(--theme-foreground, #24292e);
-}
-
-@keyframes streaming-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
 }
 
 /* ========== 简洁图标按钮 - 紧凑 ========== */

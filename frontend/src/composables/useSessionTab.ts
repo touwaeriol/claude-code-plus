@@ -572,6 +572,9 @@ export function useSessionTab(initialOrder: number = 0) {
     function handleSessionDisconnected(error?: Error): void {
         log.warn(`[Tab ${tabId}] 会话被动断开`, error?.message)
 
+        // ✅ 先保存当前 sessionId 用于重连恢复会话上下文
+        const currentSessionIdForResume = sessionId.value
+
         // 更新连接状态
         connectionState.status = ConnectionStatus.DISCONNECTED
         connectionState.lastError = error?.message || '连接已断开'
@@ -595,10 +598,14 @@ export function useSessionTab(initialOrder: number = 0) {
         // 显示错误提示消息并触发自动重连
         messagesHandler.addErrorMessage('连接已断开，正在自动重连，请稍后重新发送消息')
 
-        // 触发自动重连
+        // 触发自动重连，携带当前会话 ID 以恢复会话上下文
         if (initialConnectOptions.value) {
-            log.info(`[Tab ${tabId}] 触发自动重连...`)
-            scheduleReconnect(initialConnectOptions.value)
+            log.info(`[Tab ${tabId}] 触发自动重连，resume=${currentSessionIdForResume}`)
+            scheduleReconnect({
+                ...initialConnectOptions.value,
+                // 优先使用当前会话 ID，如果没有则使用初始配置中的 resume
+                resume: currentSessionIdForResume || initialConnectOptions.value.resume
+            })
         }
     }
 

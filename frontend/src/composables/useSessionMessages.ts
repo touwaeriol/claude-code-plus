@@ -714,13 +714,32 @@ export function useSessionMessages(
       log.info('[useSessionMessages] 🛑 isGenerating 已设为 false')
       stats.cancelRequestTracking()
 
-      // 找到最近一条 parentToolUseId 为空的用户消息，设置 style: 'error'
-      for (let i = displayItems.length - 1; i >= 0; i--) {
-        const item = displayItems[i]
-        if (isDisplayUserMessage(item) && !(item as any).parentToolUseId) {
-          (item as any).style = 'error'
-          log.info('[useSessionMessages] 🛑 标记用户消息 style: error', item.id)
-          break
+      // 标记打断相关的用户消息为 error 样式
+      // - error_during_execution: 标记最后一条用户消息
+      // - interrupted: 标记包含 "[Request interrupted by user]" 的打断提示消息
+      if (resultData.subtype === 'error_during_execution') {
+        for (let i = displayItems.length - 1; i >= 0; i--) {
+          const item = displayItems[i]
+          if (isDisplayUserMessage(item) && !(item as any).parentToolUseId) {
+            (item as any).style = 'error'
+            log.info('[useSessionMessages] 🛑 标记用户消息 style: error', item.id)
+            break
+          }
+        }
+      } else if (resultData.subtype === 'interrupted') {
+        // 找到打断提示消息并标记为 error 样式（红色）
+        for (let i = displayItems.length - 1; i >= 0; i--) {
+          const item = displayItems[i]
+          if (isDisplayUserMessage(item) && !(item as any).parentToolUseId) {
+            const userItem = item as UserMessage
+            // 检查消息内容是否为打断提示
+            const textContent = userItem.content?.find(b => b.type === 'text') as { text?: string } | undefined
+            if (textContent?.text?.includes('[Request interrupted by user]')) {
+              (item as any).style = 'error'
+              log.info('[useSessionMessages] 🛑 标记打断提示消息 style: error', item.id)
+              break
+            }
+          }
         }
       }
       touchMessages()
@@ -730,6 +749,16 @@ export function useSessionMessages(
     if (!isInterrupted && resultData.is_error && resultData.result) {
       lastError.value = resultData.result
       log.warn(`[useSessionMessages] 后端返回错误: ${resultData.result}`)
+
+      // 标记最近的用户消息为 error 样式
+      for (let i = displayItems.length - 1; i >= 0; i--) {
+        const item = displayItems[i]
+        if (isDisplayUserMessage(item) && !(item as any).parentToolUseId) {
+          (item as any).style = 'error'
+          log.info('[useSessionMessages] 🛑 标记用户消息 style: error (is_error=true)', item.id)
+          break
+        }
+      }
 
       pushDisplayItems([{
         id: `error-${Date.now()}`,
