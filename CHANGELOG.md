@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [1.0.7] - 2025-12-15
 
 ### Added
+- Full Plan Mode support for implementation planning workflow
 - JetBrains IDE session command and theme change notifications
 - Collapsible thinking display and force send functionality
 - System prompt appendix support for MCP servers
