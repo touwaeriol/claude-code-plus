@@ -46,8 +46,10 @@ object JavaPluginHelper {
      */
     val isAvailable: Boolean by lazy {
         try {
-            val pluginId = PluginId.getId(JAVA_PLUGIN_ID)
-            PluginManagerCore.getPlugin(pluginId)?.isEnabled == true
+            val pluginId = PluginId.findId(JAVA_PLUGIN_ID) ?: return@lazy false
+            val plugin = PluginManagerCore.getPlugin(pluginId) ?: return@lazy false
+            // 检查插件是否已加载（非禁用状态）
+            !PluginManagerCore.isDisabled(pluginId)
         } catch (e: Exception) {
             false
         }

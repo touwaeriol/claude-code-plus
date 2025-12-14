@@ -86,7 +86,6 @@ object ToolSchemaLoader {
             }
             is JsonArray -> element.map { jsonElementToAny(it) }
             is JsonObject -> jsonElementToMap(element)
-            else -> element.toString()
         }
     }
 }

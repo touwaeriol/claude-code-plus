@@ -2,8 +2,6 @@ package com.asakii.plugin.mcp.tools
 
 import com.asakii.claude.agent.sdk.mcp.ToolResult
 import com.asakii.plugin.mcp.ToolSchemaLoader
-import com.intellij.ide.util.gotoByName.GotoClassModel2
-import com.intellij.ide.util.gotoByName.GotoSymbolModel2
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocumentManager
@@ -11,7 +9,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.GlobalSearchScopes
+import com.intellij.psi.search.PsiShortNamesCache
 import com.intellij.openapi.roots.TestSourcesFilter
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ide.scratch.ScratchUtil
@@ -123,58 +121,74 @@ class FileIndexTool(private val project: Project) {
                     }
                     
                     SearchIndexType.Classes -> {
-                        // 类搜索 - 使用 GotoClassModel2
-                        @Suppress("DEPRECATION")
-                        val model = GotoClassModel2(project)
-                        val names = model.getNames(includeLibraries)
-                        val matchingNames = names.filter { it.lowercase().contains(queryLower) }
+                        // 类搜索 - 使用 PsiShortNamesCache
+                        val cache = PsiShortNamesCache.getInstance(project)
+                        val allClassNames = cache.allClassNames
+                        val matchingNames = allClassNames.filter { it.lowercase().contains(queryLower) }
 
                         // 过滤并收集结果
-                        val filteredResults = matchingNames.mapNotNull { name ->
-                            val elements = model.getElementsByName(name, includeLibraries, name)
-                            (elements.firstOrNull() as? PsiElement)?.let { psiElement ->
-                                val file = psiElement.containingFile?.virtualFile
-                                // 检查文件是否在 scope 内
+                        val searchScope = if (includeLibraries) GlobalSearchScope.allScope(project) else baseScope
+                        val filteredResults = matchingNames.flatMap { name ->
+                            cache.getClassesByName(name, searchScope).mapNotNull { psiClass ->
+                                val file = psiClass.containingFile?.virtualFile
                                 if (file != null && baseScope.contains(file)) {
                                     IndexSearchResult(
                                         name = name,
                                         path = file.path.removePrefix(project.basePath ?: "").removePrefix("/"),
                                         type = "Class",
-                                        description = getElementDescription(psiElement)
+                                        description = getElementDescription(psiClass)
                                     )
                                 } else null
                             }
-                        }
+                        }.distinctBy { "${it.name}:${it.path}" }
                         totalFound = filteredResults.size
                         results.addAll(filteredResults.drop(offset).take(maxResults))
                     }
 
                     SearchIndexType.Symbols -> {
-                        // 符号搜索 - 使用 GotoSymbolModel2
-                        // Note: GotoSymbolModel2(Project) is scheduled for removal, but no direct replacement available
-                        // Using ChooseByNameModelEx.getItemProvider() requires UI context
-                        @Suppress("DEPRECATION", "removal", "OVERRIDE_DEPRECATION")
-                        val model = GotoSymbolModel2(project)
-                        val names = model.getNames(includeLibraries)
-                        val matchingNames = names.filter { it.lowercase().contains(queryLower) }
+                        // 符号搜索 - 使用 PsiShortNamesCache 搜索方法和字段
+                        val cache = PsiShortNamesCache.getInstance(project)
+                        val symbolSearchScope = if (includeLibraries) GlobalSearchScope.allScope(project) else baseScope
 
-                        // 过滤并收集结果
-                        val filteredResults = matchingNames.mapNotNull { name ->
-                            val elements = model.getElementsByName(name, includeLibraries, name)
-                            (elements.firstOrNull() as? PsiElement)?.let { psiElement ->
-                                val file = psiElement.containingFile?.virtualFile
-                                // 检查文件是否在 scope 内
+                        // 搜索方法
+                        val allMethodNames = cache.allMethodNames
+                        val matchingMethodNames = allMethodNames.filter { it.lowercase().contains(queryLower) }
+
+                        val methodResults = matchingMethodNames.flatMap { name ->
+                            cache.getMethodsByName(name, symbolSearchScope).mapNotNull { method ->
+                                val file = method.containingFile?.virtualFile
                                 if (file != null && baseScope.contains(file)) {
                                     IndexSearchResult(
                                         name = name,
                                         path = file.path.removePrefix(project.basePath ?: "").removePrefix("/"),
-                                        type = getSymbolType(psiElement),
-                                        description = getElementDescription(psiElement),
-                                        line = getElementLine(psiElement)
+                                        type = "Method",
+                                        description = getElementDescription(method),
+                                        line = getElementLine(method)
                                     )
                                 } else null
                             }
                         }
+
+                        // 搜索字段
+                        val allFieldNames = cache.allFieldNames
+                        val matchingFieldNames = allFieldNames.filter { it.lowercase().contains(queryLower) }
+
+                        val fieldResults = matchingFieldNames.flatMap { name ->
+                            cache.getFieldsByName(name, symbolSearchScope).mapNotNull { field ->
+                                val file = field.containingFile?.virtualFile
+                                if (file != null && baseScope.contains(file)) {
+                                    IndexSearchResult(
+                                        name = name,
+                                        path = file.path.removePrefix(project.basePath ?: "").removePrefix("/"),
+                                        type = "Field",
+                                        description = getElementDescription(field),
+                                        line = getElementLine(field)
+                                    )
+                                } else null
+                            }
+                        }
+
+                        val filteredResults = (methodResults + fieldResults).distinctBy { "${it.name}:${it.path}:${it.line}" }
                         totalFound = filteredResults.size
                         results.addAll(filteredResults.drop(offset).take(maxResults))
                     }
