@@ -541,8 +541,14 @@ class AiAgentRpcServiceImpl(
             "output-format" to "stream-json"
         )
 
-        // 注册 MCP Server（包含 AskUserQuestion 工具）
-        val mcpServers = mapOf<String, Any>("user_interaction" to userInteractionServer)
+        // 注册 MCP Server（包含 AskUserQuestion 工具和 JetBrains IDE 工具）
+        val mcpServers = mutableMapOf<String, Any>("user_interaction" to userInteractionServer)
+
+        // 添加 JetBrains MCP Server（如果可用）
+        jetBrainsMcpServerProvider.getServer()?.let { jetbrainsMcp ->
+            mcpServers["jetbrains"] = jetbrainsMcp
+            sdkLog.info("✅ [buildClaudeOverrides] 已添加 JetBrains MCP Server")
+        }
 
         // 收集所有 MCP 服务器的系统提示词追加内容
         val mcpSystemPromptAppendix = buildMcpSystemPromptAppendix(mcpServers)
