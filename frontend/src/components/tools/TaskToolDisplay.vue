@@ -11,7 +11,12 @@
         <!-- 注意：Desc 和 Model 已在折叠状态的标题行显示，展开后不再重复显示 -->
         <div class="params-section">
           <div v-if="prompt" class="prompt-section">
-            <div class="section-title">Prompt</div>
+            <div class="section-header-row">
+              <div class="section-title">Prompt</div>
+              <button class="copy-btn" @click.stop="copyPrompt" :title="promptCopied ? '已复制' : '复制提示词'">
+                {{ promptCopied ? '✓' : '📋' }}
+              </button>
+            </div>
             <div class="prompt-content">
               <MarkdownRenderer :content="prompt" />
             </div>
@@ -39,8 +44,13 @@
 
         <!-- 3. 结果区域 -->
         <div v-if="hasResult" class="result-section">
-          <div class="section-title">Result</div>
-<div class="result-content">
+          <div class="section-header-row">
+            <div class="section-title">Result</div>
+            <button class="copy-btn" @click.stop="copyResult" :title="resultCopied ? '已复制' : '复制结果'">
+              {{ resultCopied ? '✓' : '📋' }}
+            </button>
+          </div>
+          <div class="result-content">
             <MarkdownRenderer :content="resultText" />
           </div>
         </div>
@@ -70,6 +80,34 @@ const props = defineProps<Props>()
 const expanded = ref(false)
 // 子代理调用过程默认展开
 const processExpanded = ref(true)
+
+// 复制状态
+const promptCopied = ref(false)
+const resultCopied = ref(false)
+
+// 复制提示词
+async function copyPrompt() {
+  if (!prompt.value) return
+  try {
+    await navigator.clipboard.writeText(prompt.value)
+    promptCopied.value = true
+    setTimeout(() => { promptCopied.value = false }, 2000)
+  } catch (e) {
+    console.error('复制失败:', e)
+  }
+}
+
+// 复制结果
+async function copyResult() {
+  if (!resultText.value) return
+  try {
+    await navigator.clipboard.writeText(resultText.value)
+    resultCopied.value = true
+    setTimeout(() => { resultCopied.value = false }, 2000)
+  } catch (e) {
+    console.error('复制失败:', e)
+  }
+}
 
 // 从上下文获取 projectPath 和 aiAgentService
 const projectPath = inject<ComputedRef<string>>('projectPath')
@@ -242,12 +280,41 @@ const hasDetails = computed(() => !!description.value || !!prompt.value)
   /* Desc 和 Model 移到折叠状态标题行显示，此处只有 Prompt */
 }
 
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .section-title {
   font-size: 11px;
   font-weight: 600;
   color: var(--theme-secondary-foreground);
   text-transform: uppercase;
   margin: 0;
+}
+
+.copy-btn {
+  background: transparent;
+  border: 1px solid var(--theme-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--theme-secondary-foreground);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 22px;
+}
+
+.copy-btn:hover {
+  background: var(--theme-hover-background);
+  border-color: var(--theme-primary);
+  color: var(--theme-primary);
 }
 
 .prompt-content {

@@ -102,6 +102,20 @@ data class CompactMetadata(
 )
 
 /**
+ * Permission denial information for tools that were denied.
+ */
+@Serializable
+data class PermissionDenial(
+    @SerialName("tool_name")
+    val toolName: String,
+    @SerialName("tool_use_id")
+    val toolUseId: String? = null,
+    @SerialName("tool_input")
+    val toolInput: JsonElement? = null,
+    val reason: String? = null
+)
+
+/**
  * Result message with cost and usage information.
  */
 @Serializable
@@ -121,7 +135,9 @@ data class ResultMessage(
     @SerialName("total_cost_usd")
     val totalCostUsd: Double? = null,
     val usage: JsonElement? = null,
-    val result: String? = null
+    val result: String? = null,
+    @SerialName("permission_denials")
+    val permissionDenials: List<PermissionDenial>? = null
 ) : Message
 
 /**

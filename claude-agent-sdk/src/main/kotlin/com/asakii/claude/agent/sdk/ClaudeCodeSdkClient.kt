@@ -135,6 +135,8 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
         logger.info("  - allowDangerouslySkipPermissions: ${options.allowDangerouslySkipPermissions}")
         logger.info("  - allowedTools: ${options.allowedTools}")
         logger.info("  - includePartialMessages: ${options.includePartialMessages}")
+        logger.info("  - canUseTool: ${options.canUseTool != null}")
+        logger.info("  - permissionPromptToolName: ${options.permissionPromptToolName}")
         
         // Create or use provided transport
         actualTransport = transport ?: SubprocessTransport(options, streamingMode = true)

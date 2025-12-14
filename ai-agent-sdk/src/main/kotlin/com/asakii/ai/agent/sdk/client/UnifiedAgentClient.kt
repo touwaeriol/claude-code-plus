@@ -37,6 +37,11 @@ interface UnifiedAgentClient {
     suspend fun disconnect()
 
     /**
+     * 检查客户端是否已连接。
+     */
+    fun isConnected(): Boolean
+
+    /**
      * 获取当前客户端支持的能力（静态，编译时确定）。
      * connect() 内部会调用此方法获取能力信息。
      */

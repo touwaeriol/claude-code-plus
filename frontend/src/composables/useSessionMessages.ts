@@ -182,6 +182,15 @@ export function useSessionMessages(
   const isGenerating = ref(false)
 
   /**
+   * 打断模式
+   * - null: 正常完成（非打断）
+   * - 'clear': 打断并清空队列（用户主动打断）
+   * - 'keep': 打断但保留队列并自动发送（强制发送场景）
+   */
+  type InterruptMode = null | 'clear' | 'keep'
+  let interruptMode: InterruptMode = null
+
+  /**
    * 最后一次错误信息
    */
   const lastError = ref<string | null>(null)
@@ -737,20 +746,38 @@ export function useSessionMessages(
       log.debug('[useSessionMessages] 请求完成')
     }
 
-    // is_error = false 时自动处理队列中的下一条消息
-    if (!resultData.is_error) {
+    // 自动处理队列中的下一条消息
+    // 1. is_error = false 时（正常完成）
+    // 2. isInterrupted = true 时（打断场景，支持 forceSendMessage 的自动重发）
+    if (!resultData.is_error || isInterrupted) {
       handleQueueAfterResult()
     } else {
-      log.info(`[useSessionMessages] 📋 is_error=true，不自动发送队列消息`)
+      log.info(`[useSessionMessages] 📋 is_error=true 且非打断，不自动发送队列消息`)
     }
   }
 
   /**
    * 生成完成后处理队列
    * 先调用 beforeProcessQueueFn（应用 pending settings），再处理队列
+   *
+   * 根据 interruptMode 决定行为：
+   * - 'clear': 清空队列，不自动发送（用户主动打断）
+   * - 'keep' 或 null: 保留队列，自动发送下一条
    */
   async function handleQueueAfterResult(): Promise<void> {
-    log.info('[useSessionMessages] 📋 handleQueueAfterResult 调用，队列长度:', messageQueue.value.length)
+    log.info('[useSessionMessages] 📋 handleQueueAfterResult 调用，interruptMode:', interruptMode, '队列长度:', messageQueue.value.length)
+
+    // 打断模式为 'clear' 时，清空队列
+    if (interruptMode === 'clear') {
+      log.info('[useSessionMessages] 📋 打断模式为 clear，清空队列')
+      messageQueue.value = []
+      interruptMode = null  // 重置
+      return
+    }
+
+    // 重置打断模式（'keep' 或 null 都走正常流程）
+    interruptMode = null
+
     if (messageQueue.value.length === 0) {
       log.info('[useSessionMessages] 📋 队列为空，跳过')
       return
@@ -955,6 +982,44 @@ export function useSessionMessages(
       mergedContent,
       createdAt: Date.now()
     })
+  }
+
+  /**
+   * 将消息插入队列最前面（用于强制发送场景）
+   * 不添加到 UI，等待 result 返回后自动发送
+   */
+  function prependToQueue(message: { contexts: any[]; contents: ContentBlock[] }): void {
+    // 将 contexts 转换为 ContentBlock 格式
+    const contextBlocks = message.contexts.length > 0
+      ? buildUserMessageContent({
+          text: '',
+          contexts: message.contexts
+        })
+      : []
+
+    // 合并: contexts 内容块 + 用户输入内容块
+    const mergedContent = [...contextBlocks, ...message.contents]
+
+    const id = `user-${Date.now()}`
+    log.info(`[useSessionMessages] 消息插入队列最前面: ${id}`)
+
+    messageQueue.value.unshift({
+      id,
+      contexts: message.contexts,
+      contents: message.contents,
+      mergedContent,
+      createdAt: Date.now()
+    })
+  }
+
+  /**
+   * 设置打断模式
+   * - 'clear': 打断后清空队列（用户主动打断）
+   * - 'keep': 打断后保留队列并自动发送（强制发送场景）
+   */
+  function setInterruptMode(mode: InterruptMode): void {
+    interruptMode = mode
+    log.info(`[useSessionMessages] 设置打断模式: ${mode}`)
   }
 
   /**
@@ -1369,6 +1434,8 @@ export function useSessionMessages(
     editQueueMessage,
     removeFromQueue,
     clearQueue,
+    prependToQueue,
+    setInterruptMode,
 
     // 查询方法
     findStreamingAssistantMessage,

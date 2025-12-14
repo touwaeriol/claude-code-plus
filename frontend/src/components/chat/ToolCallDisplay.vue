@@ -77,6 +77,10 @@
       v-else-if="toolCall.toolType === CLAUDE_TOOL_TYPE.EXIT_PLAN_MODE"
       :tool-call="toolCall"
     />
+    <EnterPlanModeToolDisplay
+      v-else-if="toolCall.toolType === CLAUDE_TOOL_TYPE.ENTER_PLAN_MODE"
+      :tool-call="toolCall"
+    />
     <SkillToolDisplay
       v-else-if="toolCall.toolType === CLAUDE_TOOL_TYPE.SKILL"
       :tool-call="toolCall"
@@ -133,6 +137,7 @@ import AskUserQuestionDisplay from '@/components/tools/AskUserQuestionDisplay.vu
 // 其他 Claude 工具
 import NotebookEditToolDisplay from '@/components/tools/NotebookEditToolDisplay.vue'
 import ExitPlanModeToolDisplay from '@/components/tools/ExitPlanModeToolDisplay.vue'
+import EnterPlanModeToolDisplay from '@/components/tools/EnterPlanModeToolDisplay.vue'
 import SkillToolDisplay from '@/components/tools/SkillToolDisplay.vue'
 import SlashCommandToolDisplay from '@/components/tools/SlashCommandToolDisplay.vue'
 import ListMcpResourcesToolDisplay from '@/components/tools/ListMcpResourcesToolDisplay.vue'

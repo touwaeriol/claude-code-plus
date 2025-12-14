@@ -37,6 +37,7 @@ export default {
     stop: '중지',
     stopGenerating: '생성 중지',
     escToInterrupt: 'ESC로 중단',
+    streamingStatsTooltip: '통계: 소요시간 ↑입력 tokens ↓출력 tokens',
     slashCommands: '슬래시 명령어',
     noMatchingCommands: '일치하는 명령어 없음',
     welcome: '안녕하세요! 저는 AI 코딩 어시스턴트 Claude입니다.',

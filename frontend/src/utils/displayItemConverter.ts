@@ -185,7 +185,23 @@ export function convertMessageToDisplayItems(
     }
 
     // 处理回放消息（isReplay = true）
+    // 注意：即使是 replay 消息，如果包含 tool_result，也需要处理它
     if (isReplayMessage(message)) {
+      // 先处理 tool_result（关联到对应的 tool_use 卡片）
+      const toolResults = (message.content as ContentBlock[]).filter(b => b.type === 'tool_result') as ToolResultContent[]
+      for (const resultBlock of toolResults) {
+        const toolCall = pendingToolCalls.get(resultBlock.tool_use_id)
+        if (toolCall) {
+          updateToolCallResult(toolCall, resultBlock)
+        }
+      }
+
+      // 如果只有 tool_result，不需要显示为用户消息
+      const hasOnlyToolResult = message.content.every(b => b.type === 'tool_result' || b.type === 'tool_use')
+      if (hasOnlyToolResult && toolResults.length > 0) {
+        return displayItems
+      }
+
       const textBlock = message.content.find(b => b.type === 'text') as { type: 'text', text: string } | undefined
       if (textBlock?.text) {
         // 尝试解析 XML 标签（本地命令输出）
@@ -346,7 +362,23 @@ export function convertToDisplayItems(
       }
 
       // 处理回放消息（isReplay = true）
+      // 注意：即使是 replay 消息，如果包含 tool_result，也需要处理它
       if (isReplayMessage(message)) {
+        // 先处理 tool_result（关联到对应的 tool_use 卡片）
+        const toolResults = (message.content as ContentBlock[]).filter(b => b.type === 'tool_result') as ToolResultContent[]
+        for (const resultBlock of toolResults) {
+          const toolCall = pendingToolCalls.get(resultBlock.tool_use_id)
+          if (toolCall) {
+            updateToolCallResult(toolCall, resultBlock)
+          }
+        }
+
+        // 如果只有 tool_result，不需要显示为用户消息
+        const hasOnlyToolResult = message.content.every(b => b.type === 'tool_result' || b.type === 'tool_use')
+        if (hasOnlyToolResult && toolResults.length > 0) {
+          continue
+        }
+
         const textBlock = message.content.find(b => b.type === 'text') as { type: 'text', text: string } | undefined
         if (textBlock?.text) {
           // 尝试解析 XML 标签（本地命令输出）

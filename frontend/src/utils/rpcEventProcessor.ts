@@ -562,7 +562,7 @@ function processErrorEvent(
   event: RpcErrorEvent
 ): RpcEventProcessResult {
   log.error(`RPC Error: ${event.message}`)
-  
+
   // 可以在这里添加错误处理逻辑，比如显示错误消息
   // 目前只记录日志，不更新消息状态
 

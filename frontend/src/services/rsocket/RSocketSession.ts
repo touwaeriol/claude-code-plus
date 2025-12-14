@@ -10,6 +10,7 @@
 
 import {RSocketClient, createRSocketClient, type DisconnectHandler} from './RSocketClient'
 import {ProtoCodec} from './protoCodec'
+import {isReconnectRequiredError} from './errorCodes'
 import {resolveServerWsUrl} from '@/utils/serverUrl'
 import {loggers} from '@/utils/logger'
 import type {
@@ -437,6 +438,15 @@ export class RSocketSession {
     }
 
     private handleError(error: Error): void {
+        // 检测是否是需要重连的错误（如 NOT_CONNECTED）
+        if (isReconnectRequiredError(error)) {
+            log.warn('[RSocketSession] 检测到需要重连的错误，触发断开流程:', error.message)
+            // 触发断开流程，这会通知 useSessionTab 的 onSessionDisconnect 订阅，从而触发自动重连
+            this.handleConnectionLost(error)
+            return
+        }
+
+        // 其他错误通知订阅者
         this.errorHandlers.forEach(handler => {
             try {
                 handler(error)

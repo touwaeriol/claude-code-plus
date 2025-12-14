@@ -1,5 +1,8 @@
 package com.asakii.claude.agent.sdk.transport
 
+import cn.hutool.cache.CacheUtil
+import cn.hutool.cache.impl.TimedCache
+import cn.hutool.crypto.digest.DigestUtil
 import com.asakii.claude.agent.sdk.exceptions.*
 import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
 import com.asakii.claude.agent.sdk.types.PermissionMode
@@ -41,6 +44,15 @@ class SubprocessTransport(
     companion object {
         // Windows 命令行长度限制（参考 Python SDK）
         private const val CMD_LENGTH_LIMIT = 8000
+
+        // 系统提示词临时文件缓存（TTL = 1 小时）
+        // key = 内容摘要 (MD5), value = 临时文件路径
+        private val systemPromptFileCache: TimedCache<String, Path> = CacheUtil.newTimedCache(60 * 60 * 1000L)
+
+        init {
+            // 启动定时清理过期缓存
+            systemPromptFileCache.schedulePrune(60 * 1000L) // 每分钟清理一次
+        }
     }
     
     private val json = Json {
@@ -317,17 +329,19 @@ class SubprocessTransport(
                 }
                 is SystemPromptPreset -> {
                     if (prompt.preset == "claude_code") {
-                        // Use the preset flag
-                        command.add("--system-prompt-preset")
-                        command.add(prompt.preset)
-
-                        // Add append if provided
+                        // For claude_code preset, use default system prompt (don't pass --system-prompt)
+                        // Only add append if provided
                         prompt.append?.let { appendText ->
-                            command.add("--append-system-prompt")
-                            command.add(appendText)
+                            // 使用 --append-system-prompt-file 避免 Windows 命令行参数问题
+                            // 参考: https://github.com/anthropics/claude-code/issues/3411
+                            // 多行文本在 Windows 上会破坏后续命令行参数的解析
+                            val tempFile = getOrCreateSystemPromptFile(appendText)
+                            logger.info("📝 将 append-system-prompt 写入临时文件: $tempFile")
+                            command.add("--append-system-prompt-file")
+                            command.add(tempFile.toAbsolutePath().toString())
                         }
                     } else {
-                        // Unknown preset, convert to string
+                        // Unknown preset, use as system prompt
                         command.add("--system-prompt")
                         command.add(prompt.preset)
                     }
@@ -395,9 +409,11 @@ class SubprocessTransport(
             command.add("--allow-dangerously-skip-permissions")
         }
 
-        // Permission prompt tool - 配置授权请求使用的 MCP 工具
-        // 当 Claude 需要执行敏感操作时，会调用此工具请求用户授权
-        // 如果提供了 canUseTool 回调，自动设置为 "stdio"（与 Python SDK 一致）
+        // Permission prompt tool - 配置授权请求使用的方式
+        // 当设置为 "stdio" 时，Claude CLI 会通过控制协议 (control_request/control_response) 发送权限请求
+        // SDK 的 ControlProtocol.handlePermissionRequest() 会处理 subtype="can_use_tool" 并调用 canUseTool 回调
+        logger.info("🔍 [buildCommand] options.canUseTool=${options.canUseTool != null}, options.permissionPromptToolName=${options.permissionPromptToolName}")
+        // 如果提供了 canUseTool 回调，自动设置为 "stdio" 以启用控制协议权限请求
         val effectivePermissionPromptTool = options.permissionPromptToolName
             ?: if (options.canUseTool != null) "stdio" else null
         effectivePermissionPromptTool?.let { tool ->
@@ -836,5 +852,35 @@ class SubprocessTransport(
         } catch (e: Exception) {
             false
         }
+    }
+
+    /**
+     * 获取或创建系统提示词临时文件（带缓存）
+     * 使用内容摘要作为缓存 key，避免重复创建相同内容的临时文件
+     */
+    private fun getOrCreateSystemPromptFile(content: String): Path {
+        // 计算内容摘要作为 key
+        val digest = DigestUtil.md5Hex(content)
+
+        // 尝试从缓存获取
+        val cachedPath = systemPromptFileCache.get(digest)
+        if (cachedPath != null && Files.exists(cachedPath)) {
+            logger.info("📦 使用缓存的系统提示词文件: $cachedPath (digest: $digest)")
+            return cachedPath
+        }
+
+        // 缓存未命中或文件已删除，创建新文件
+        val tempDir = Path.of(System.getProperty("java.io.tmpdir"))
+        val tempFile = tempDir.resolve("claude-system-prompt-$digest.txt")
+
+        // 写入内容
+        Files.writeString(tempFile, content)
+        tempFile.toFile().deleteOnExit()
+
+        // 存入缓存
+        systemPromptFileCache.put(digest, tempFile)
+        logger.info("📝 创建新的系统提示词文件: $tempFile (digest: $digest)")
+
+        return tempFile
     }
 }

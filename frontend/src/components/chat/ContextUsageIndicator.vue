@@ -1,6 +1,5 @@
 <template>
   <div
-    v-if="totalTokens > 0"
     class="context-usage-indicator"
     :class="statusClass"
     :title="tooltipText"
@@ -12,14 +11,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { EnhancedMessage, TokenUsage } from '@/types/enhancedMessage'
-import { MessageRole } from '@/types/enhancedMessage'
+import { MessageRole, getTotalTokens } from '@/types/enhancedMessage'
 import { getModelContextLength } from '@/config/modelConfig'
 
-// Token 使用量阈值常量（基于 Claude Code 的设计）
+/**
+ * Token 使用量阈值常量（参考 opcode）
+ */
 const TOKEN_USAGE_THRESHOLDS = {
-  CRITICAL: 95,  // 危险红色 - 上下文窗口即将用完
-  WARNING: 92,   // 警告橙色 - Claude Code 自动压缩阈值
-  CAUTION: 75,   // 注意黄色 - 接近压缩阈值
+  CRITICAL: 95,  // 危险红色
+  WARNING: 90,   // 警告橙色
+  CAUTION: 75,   // 注意黄色
   NORMAL: 0      // 正常灰色
 } as const
 
@@ -35,20 +36,31 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 /**
- * 🎯 基于 Claude Code 原理的精确 Token 统计
- * 实现 VE→HY5→zY5 函数链
+ * 获取最新的 TokenUsage
  */
-const totalTokens = computed(() => {
-  return calculateAccurateTokens(
-    props.messageHistory,
-    props.sessionTokenUsage
-  )
+const latestTokenUsage = computed((): TokenUsage | null => {
+  return findLatestTokenUsage(props.messageHistory) || props.sessionTokenUsage || null
 })
 
+/**
+ * 模型的上下文窗口大小
+ */
 const maxTokens = computed(() => {
   return getModelContextLength(props.currentModel)
 })
 
+/**
+ * 当前已使用的 token 数量
+ * 参考 opcode: input_tokens + output_tokens
+ */
+const totalTokens = computed(() => {
+  if (!latestTokenUsage.value) return 0
+  return getTotalTokens(latestTokenUsage.value)
+})
+
+/**
+ * 使用百分比
+ */
 const percentage = computed(() => {
   if (maxTokens.value === 0) return 0
   return Math.round((totalTokens.value / maxTokens.value) * 100)
@@ -56,7 +68,6 @@ const percentage = computed(() => {
 
 /**
  * 状态颜色类名
- * 基于 Claude Code 的 92% 阈值系统
  */
 const statusClass = computed(() => {
   const p = percentage.value
@@ -67,155 +78,72 @@ const statusClass = computed(() => {
 })
 
 /**
- * 格式化 Token 数量显示
+ * 格式化显示的 token 数量
  */
 const formattedTokens = computed(() => formatTokenCount(totalTokens.value))
 const formattedMaxTokens = computed(() => formatTokenCount(maxTokens.value))
 
 /**
- * 悬浮提示文本
+ * 悬浮提示文本（参考 opcode 简洁风格）
  */
 const tooltipText = computed(() => {
-  const sections = [
-    getUsageText(),
-    getStatisticsText(),
-    getCacheOptimizationText(),
-    getStatusHintText()
-  ].filter(Boolean)
+  if (!latestTokenUsage.value) {
+    return `上下文: 0 / ${maxTokens.value.toLocaleString()} tokens (0%)`
+  }
 
-  return sections.join('\n\n')
+  const usage = latestTokenUsage.value
+  let text = `上下文: ${totalTokens.value.toLocaleString()} / ${maxTokens.value.toLocaleString()} tokens (${percentage.value}%)`
+  text += `\n\n📊 Token 统计:`
+  text += `\n• 输入: ${usage.inputTokens.toLocaleString()}`
+  text += `\n• 输出: ${usage.outputTokens.toLocaleString()}`
+
+  if (usage.cacheReadTokens > 0 || usage.cacheCreationTokens > 0) {
+    text += `\n\n⚡ 缓存:`
+    if (usage.cacheCreationTokens > 0) {
+      text += `\n• 创建: ${usage.cacheCreationTokens.toLocaleString()}`
+    }
+    if (usage.cacheReadTokens > 0) {
+      text += `\n• 命中: ${usage.cacheReadTokens.toLocaleString()}`
+    }
+  }
+
+  // 状态提示
+  const p = percentage.value
+  if (p >= TOKEN_USAGE_THRESHOLDS.CRITICAL) {
+    text += `\n\n🚨 上下文即将用完！`
+  } else if (p >= TOKEN_USAGE_THRESHOLDS.WARNING) {
+    text += `\n\n⚠️ 建议开启新对话`
+  }
+
+  return text
 })
 
 /**
- * 获取使用量文本
- */
-function getUsageText(): string {
-  return `上下文使用: ${totalTokens.value.toLocaleString()} / ${maxTokens.value.toLocaleString()} tokens (${percentage.value}%)`
-}
-
-/**
- * 获取统计原理说明文本
- */
-function getStatisticsText(): string {
-  let text = '📊 统计原理:'
-  if (props.messageHistory.length > 0) {
-    text += '\n• 基于 Claude Code 的 VE→HY5→zY5 函数链'
-    text += '\n• VE: 逆序遍历找最新 assistant 消息'
-    text += '\n• HY5: 过滤 synthetic 消息，取真实 API 调用'
-    text += '\n• zY5: 累加 input（上行）+ output（下行）tokens'
-  } else {
-    text += '\n• 新会话，暂无 API 调用数据'
-  }
-  return text
-}
-
-/**
- * 获取缓存优化说明文本
- */
-function getCacheOptimizationText(): string {
-  if (!props.sessionTokenUsage || props.sessionTokenUsage.cacheCreationTokens === 0) {
-    return ''
-  }
-
-  let text = '⚡ 缓存优化:'
-  text += `\n• 缓存创建: ${props.sessionTokenUsage.cacheCreationTokens.toLocaleString()} tokens`
-  if (props.sessionTokenUsage.cacheReadTokens > 0) {
-    text += `\n• 缓存复用: ${props.sessionTokenUsage.cacheReadTokens.toLocaleString()} tokens`
-  }
-  return text
-}
-
-/**
- * 获取状态提示文本
- */
-function getStatusHintText(): string {
-  const p = percentage.value
-  if (p >= TOKEN_USAGE_THRESHOLDS.CRITICAL) {
-    return '🚨 上下文窗口即将用完！建议立即开启新对话'
-  }
-  if (p >= TOKEN_USAGE_THRESHOLDS.WARNING) {
-    return '⚠️ 已达到 Claude Code 的 92% 自动压缩阈值'
-  }
-  if (p >= TOKEN_USAGE_THRESHOLDS.CAUTION) {
-    return '💡 接近 92% 阈值，可考虑开启新对话'
-  }
-  if (p >= 50) {
-    return '💡 上下文已使用一半，注意管理'
-  }
-  return ''
-}
-
-/**
- * 🎯 实现 Claude Code 的 VE 函数：逆序遍历找最新 token usage
+ * 逆序遍历找最新的 token usage
  */
 function findLatestTokenUsage(messageHistory: EnhancedMessage[]): TokenUsage | null {
   for (let i = messageHistory.length - 1; i >= 0; i--) {
     const message = messageHistory[i]
-    if (isValidAssistantMessage(message)) {
-      return message.tokenUsage || null
+    if (message.role === MessageRole.ASSISTANT && message.tokenUsage) {
+      return message.tokenUsage
     }
   }
   return null
 }
 
 /**
- * 🎯 实现 Claude Code 的 HY5 函数：验证 assistant 消息有效性
- * 过滤掉合成消息，只使用真实 API 调用的数据
- */
-function isValidAssistantMessage(message: EnhancedMessage): boolean {
-  // 必须是 assistant 消息且有 token 使用量
-  if (message.role !== MessageRole.ASSISTANT || !message.tokenUsage) {
-    return false
-  }
-
-  // 检查是否包含 synthetic 标记（合成消息）
-  const hasSyntheticContent = message.orderedElements.some(item => {
-    if (item.displayType === 'content') {
-      const contentItem = item as { displayType: 'content'; content: string; timestamp: number }
-      return contentItem.content?.includes('<synthetic>')
-    }
-    return false
-  })
-
-  return !hasSyntheticContent
-}
-
-/**
- * 🎯 计算此次请求的上下行 token 消耗
- * inputTokens: 上行（上传）token
- * outputTokens: 下行（下载）token
- */
-function calculateTotalTokens(usage: TokenUsage): number {
-  return usage.inputTokens + usage.outputTokens
-}
-
-/**
- * 基于 Claude Code 原理的精确 Token 统计
- */
-function calculateAccurateTokens(
-  messageHistory: EnhancedMessage[],
-  sessionTokenUsage: TokenUsage | null
-): number {
-  const latestUsage = findLatestTokenUsage(messageHistory)
-  
-  if (latestUsage) {
-    return calculateTotalTokens(latestUsage)
-  }
-
-  if (sessionTokenUsage) {
-    return calculateTotalTokens(sessionTokenUsage)
-  }
-
-  return 0
-}
-
-/**
- * 格式化 token 数量显示
+ * 格式化 token 数量显示（参考 opcode）
+ * - >= 1,000,000 → X.XXM
+ * - >= 1,000 → X.XK
+ * - < 1,000 → X
  */
 function formatTokenCount(tokens: number): string {
-  if (tokens < 1000) return tokens.toString()
-  if (tokens < 10000) return (tokens / 1000).toFixed(1) + 'k'
-  return Math.round(tokens / 1000) + 'k'
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(2)}M`
+  } else if (tokens >= 1_000) {
+    return `${(tokens / 1_000).toFixed(1)}K`
+  }
+  return tokens.toLocaleString()
 }
 </script>
 
@@ -239,7 +167,7 @@ function formatTokenCount(tokens: number): string {
   white-space: nowrap;
 }
 
-/* 状态颜色 - 使用 CSS 变量以支持主题 */
+/* 状态颜色 */
 .status-normal {
   color: var(--theme-text-secondary, #6a737d);
 }
@@ -257,4 +185,3 @@ function formatTokenCount(tokens: number): string {
   font-weight: 600;
 }
 </style>
-

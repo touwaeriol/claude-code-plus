@@ -57,6 +57,16 @@
           {{ t('permission.allow') }}
         </button>
 
+        <!-- ExitPlanMode 专用选项 -->
+        <template v-if="isExitPlanMode">
+          <button class="btn-option btn-allow-rule" @click="handleApproveWithMode('acceptEdits')">
+            Allow, with Accept Edits
+          </button>
+          <button class="btn-option btn-allow-rule" @click="handleApproveWithMode('bypassPermissions')">
+            Allow, with Bypass
+          </button>
+        </template>
+
         <!-- 动态渲染 permissionSuggestions -->
         <button
           v-for="(suggestion, index) in pendingPermission.permissionSuggestions"
@@ -105,6 +115,11 @@ const pendingPermission = computed(() => {
   return permissions.length > 0 ? permissions[0] : null
 })
 
+// 检查是否是 ExitPlanMode 权限请求
+const isExitPlanMode = computed(() => {
+  return pendingPermission.value?.toolName === 'ExitPlanMode'
+})
+
 // 当有新的权限请求时，自动聚焦并清空拒绝原因
 watch(pendingPermission, (newVal) => {
   if (newVal) {
@@ -118,6 +133,20 @@ watch(pendingPermission, (newVal) => {
 function handleApprove() {
   if (pendingPermission.value) {
     sessionStore.respondPermission(pendingPermission.value.id, { approved: true })
+  }
+}
+
+// ExitPlanMode 专用：允许并切换到指定模式
+async function handleApproveWithMode(mode: 'acceptEdits' | 'bypassPermissions') {
+  if (pendingPermission.value) {
+    // 先返回权限结果为 true
+    sessionStore.respondPermission(pendingPermission.value.id, { approved: true })
+
+    // 然后调用 API 设置权限模式
+    const tab = sessionStore.currentTab
+    if (tab) {
+      await tab.setPermissionMode(mode)
+    }
   }
 }
 

@@ -151,27 +151,83 @@ export function useSessionTab(initialOrder: number = 0) {
     const skipPermissions = ref(false)
     const initialConnectOptions = ref<TabConnectOptions | null>(null)
 
-    // ========== 设置延迟应用机制 ==========
-    // 上次 query 时实际应用的设置
-    const lastAppliedSettings = ref<{
-        model: string | null
-        permissionMode: RpcPermissionMode
-        thinkingEnabled: boolean
-        skipPermissions: boolean
-    }>({
-        model: null,
-        permissionMode: 'default',
-        thinkingEnabled: true,
-        skipPermissions: false
-    })
+    // ========== 设置跟踪（用于检测设置变更）==========
+    /**
+     * 上次应用到后端的设置快照
+     */
+    const lastAppliedSettings = ref<Partial<TabConnectOptions>>({})
 
-    // 待应用的设置（UI 修改后保存到这里，下次 query 时应用）
-    const pendingSettings = ref<{
-        model?: string
-        permissionMode?: RpcPermissionMode
-        thinkingEnabled?: boolean
-        skipPermissions?: boolean
-    }>({})
+    /**
+     * 待应用的设置（在下次发送消息前应用）
+     */
+    const pendingSettings = ref<Partial<TabConnectOptions>>({})
+
+    /**
+     * 更新 lastAppliedSettings 为当前设置
+     */
+    function updateLastAppliedSettings(): void {
+        lastAppliedSettings.value = {
+            model: modelId.value || undefined,
+            thinkingEnabled: thinkingEnabled.value,
+            permissionMode: permissionMode.value,
+            skipPermissions: skipPermissions.value
+        }
+    }
+
+    /**
+     * 应用待处理的设置（如果有变更）
+     */
+    async function applyPendingSettingsIfNeeded(): Promise<void> {
+        if (Object.keys(pendingSettings.value).length === 0) {
+            return
+        }
+
+        log.info(`[Tab ${tabId}] 应用待处理设置:`, pendingSettings.value)
+
+        // 检查是否需要重连
+        const needsReconnect = pendingSettings.value.thinkingEnabled !== undefined ||
+            pendingSettings.value.skipPermissions !== undefined
+
+        if (needsReconnect) {
+            // 需要重连的设置
+            await updateSettings(pendingSettings.value)
+        } else {
+            // 只有 RPC 设置，直接应用
+            if (pendingSettings.value.model !== undefined) {
+                await setModel(pendingSettings.value.model)
+            }
+            if (pendingSettings.value.permissionMode !== undefined) {
+                await setPermissionModeValue(pendingSettings.value.permissionMode)
+            }
+        }
+
+        // 清空待处理设置
+        pendingSettings.value = {}
+        updateLastAppliedSettings()
+    }
+
+    /**
+     * 设置待应用的设置项
+     */
+    function setPendingSetting<K extends keyof TabConnectOptions>(key: K, value: TabConnectOptions[K]): void {
+        pendingSettings.value = {...pendingSettings.value, [key]: value}
+        // 同时更新本地状态
+        switch (key) {
+            case 'model':
+                modelId.value = value as string
+                break
+            case 'thinkingEnabled':
+                thinkingEnabled.value = value as boolean
+                break
+            case 'permissionMode':
+                permissionMode.value = value as RpcPermissionMode
+                break
+            case 'skipPermissions':
+                skipPermissions.value = value as boolean
+                break
+        }
+    }
+
 
     function setInitialConnectOptions(options: TabConnectOptions) {
         initialConnectOptions.value = {...options}
@@ -536,8 +592,14 @@ export function useSessionTab(initialOrder: number = 0) {
             unsubscribeDisconnect = null
         }
 
-        // 显示错误提示消息
-        messagesHandler.addErrorMessage('连接已断开，请点击重新连接')
+        // 显示错误提示消息并触发自动重连
+        messagesHandler.addErrorMessage('连接已断开，正在自动重连，请稍后重新发送消息')
+
+        // 触发自动重连
+        if (initialConnectOptions.value) {
+            log.info(`[Tab ${tabId}] 触发自动重连...`)
+            scheduleReconnect(initialConnectOptions.value)
+        }
     }
 
     /**
@@ -1048,10 +1110,6 @@ export function useSessionTab(initialOrder: number = 0) {
         originalMessage: { contexts: any[]; contents: ContentBlock[] }
     ): Promise<void> {
         try {
-            // 应用待定设置（可能触发重连）
-            log.info(`[Tab ${tabId}] 应用待定设置...`)
-            await applyPendingSettingsIfNeeded()
-
             // 确保连接就绪
             log.info(`[Tab ${tabId}] 确保连接就绪...`)
             await ensureConnected()
@@ -1102,25 +1160,27 @@ export function useSessionTab(initialOrder: number = 0) {
     /**
      * 中断当前操作
      *
-     * 注意：此方法只发送中断请求，不会清空消息队列
-     * 如需清空队列，请在调用前显式调用 clearQueue()
+     * 用户主动打断时调用，会清空消息队列
+     * 打断后 result 返回时，handleQueueAfterResult 会检测到 'clear' 模式并清空队列
      */
     async function interrupt(): Promise<void> {
         if (!sessionId.value) {
             throw new Error('会话未连接')
         }
 
+        // 设置打断模式为 clear（result 返回后会清空队列）
+        messagesHandler.setInterruptMode('clear')
+
         await aiAgentService.interrupt(sessionId.value)
-        log.info(`[Tab ${tabId}] 中断请求已发送`)
+        log.info(`[Tab ${tabId}] 中断请求已发送（队列将在 result 返回后清空）`)
     }
 
     /**
-     * 强制发送消息（打断当前生成并立即发送）
+     * 强制发送消息（打断当前生成并在打断完成后自动发送）
      *
      * 与普通 sendMessage 的区别：
-     * - 先发送打断请求
-     * - 立即停止本地生成状态（不等待后端响应）
-     * - 跳过队列检查，直接发送消息
+     * - 如果正在生成：消息插队到队列最前面，发送打断请求，等待 result 返回后自动发送
+     * - 如果没有生成：直接发送（与 sendMessage 相同）
      *
      * @param message - 消息内容
      * @param options - 发送选项
@@ -1129,26 +1189,30 @@ export function useSessionTab(initialOrder: number = 0) {
         message: { contexts: any[]; contents: ContentBlock[] },
         options?: { isSlashCommand?: boolean }
     ): Promise<void> {
-        // 如果正在生成，先打断
-        if (messagesHandler.isGenerating.value) {
-            log.info(`[Tab ${tabId}] 强制发送：先打断当前生成`)
-            // 发送打断请求（不等待后端响应）
-            if (sessionId.value) {
-                aiAgentService.interrupt(sessionId.value).catch(err => {
-                    log.warn(`[Tab ${tabId}] 打断请求失败:`, err)
-                })
-            }
-            // 立即停止本地生成状态
-            messagesHandler.stopGenerating()
-        }
-
         // 如果是斜杠命令，清空 contexts
         if (options?.isSlashCommand) {
             log.info(`[Tab ${tabId}] 检测到斜杠命令，忽略 contexts`)
             message = {...message, contexts: []}
         }
 
-        // 直接添加到 UI 并发送（跳过队列检查）
+        // 如果正在生成，需要打断
+        if (messagesHandler.isGenerating.value) {
+            log.info(`[Tab ${tabId}] 强制发送：打断当前生成，消息插队`)
+
+            // 1. 设置打断模式为 keep（保留队列并自动发送）
+            messagesHandler.setInterruptMode('keep')
+
+            // 2. 将消息插入队列最前面（不添加到 UI，等 result 返回后自动发送时再添加）
+            messagesHandler.prependToQueue(message)
+
+            // 3. 发送打断请求（result 返回后会自动发送队列中的第一条消息）
+            if (sessionId.value) {
+                await aiAgentService.interrupt(sessionId.value)
+            }
+            return
+        }
+
+        // 没有生成中：直接添加到 UI 并发送
         log.info(`[Tab ${tabId}] 强制发送：直接处理消息`)
         const {userMessage, mergedContent} = messagesHandler.addMessageToUI(message)
         touch()
@@ -1259,101 +1323,6 @@ export function useSessionTab(initialOrder: number = 0) {
                 await setPermissionModeValue(settings.permissionMode)
             }
         }
-    }
-
-    // ========== 设置延迟应用 ==========
-
-    /**
-     * 保存设置到 pending（不立即应用）
-     * UI 会立即反映新值，但实际设置在下次 query 时才生效
-     */
-    function setPendingSetting<K extends keyof typeof pendingSettings.value>(
-        key: K,
-        value: NonNullable<typeof pendingSettings.value[K]>
-    ): void {
-        log.info(`[Tab ${tabId}] 保存 pending 设置: ${key} = ${value}`)
-
-        // 更新 pending
-        pendingSettings.value = {...pendingSettings.value, [key]: value}
-
-        // 同时更新本地 ref（UI 立即反映）
-        if (key === 'model') modelId.value = value as string
-        if (key === 'permissionMode') permissionMode.value = value as RpcPermissionMode
-        if (key === 'thinkingEnabled') thinkingEnabled.value = value as boolean
-        if (key === 'skipPermissions') skipPermissions.value = value as boolean
-    }
-
-    /**
-     * 检查是否有待应用的设置
-     */
-    function hasPendingSettings(): boolean {
-        return Object.keys(pendingSettings.value).length > 0
-    }
-
-    /**
-     * 在 query 前应用待定设置
-     * 比较 pending 和 lastApplied，按需调用 RPC 或 reconnect
-     */
-    async function applyPendingSettingsIfNeeded(): Promise<void> {
-        if (!hasPendingSettings()) {
-            log.debug(`[Tab ${tabId}] 无待应用设置`)
-            return
-        }
-
-        log.info(`[Tab ${tabId}] 应用 pending 设置:`, pendingSettings.value)
-
-        const pending = pendingSettings.value
-        const lastApplied = lastAppliedSettings.value
-
-        // 判断哪些设置需要更新
-        const needsReconnect =
-            (pending.thinkingEnabled !== undefined && pending.thinkingEnabled !== lastApplied.thinkingEnabled) ||
-            (pending.skipPermissions !== undefined && pending.skipPermissions !== lastApplied.skipPermissions)
-
-        const needsRpcUpdate =
-            (pending.model !== undefined && pending.model !== lastApplied.model) ||
-            (pending.permissionMode !== undefined && pending.permissionMode !== lastApplied.permissionMode)
-
-        // 清空 pending（在应用之前清空，避免重复应用）
-        pendingSettings.value = {}
-
-        // 如果需要 reconnect，重连会应用所有设置
-        if (needsReconnect) {
-            log.info(`[Tab ${tabId}] 设置需要重连`)
-            await reconnect({
-                model: modelId.value || undefined,
-                thinkingEnabled: thinkingEnabled.value,
-                permissionMode: permissionMode.value,
-                skipPermissions: skipPermissions.value
-            })
-            return
-        }
-
-        // 只需要 RPC 更新
-        if (needsRpcUpdate) {
-            log.info(`[Tab ${tabId}] 通过 RPC 应用设置`)
-            if (pending.model !== undefined && pending.model !== lastApplied.model) {
-                await setModel(pending.model)
-            }
-            if (pending.permissionMode !== undefined && pending.permissionMode !== lastApplied.permissionMode) {
-                await setPermissionModeValue(pending.permissionMode)
-            }
-            // 更新 lastApplied
-            updateLastAppliedSettings()
-        }
-    }
-
-    /**
-     * 更新 lastAppliedSettings 为当前设置
-     */
-    function updateLastAppliedSettings(): void {
-        lastAppliedSettings.value = {
-            model: modelId.value,
-            permissionMode: permissionMode.value,
-            thinkingEnabled: thinkingEnabled.value,
-            skipPermissions: skipPermissions.value
-        }
-        log.debug(`[Tab ${tabId}] lastAppliedSettings 已更新:`, lastAppliedSettings.value)
     }
 
     // ========== 辅助方法 ==========
@@ -1494,11 +1463,7 @@ export function useSessionTab(initialOrder: number = 0) {
         setPermissionMode: setPermissionModeValue,
         setLocalPermissionMode,
         updateSettings,
-
-        // 设置延迟应用
         setPendingSetting,
-        hasPendingSettings,
-        applyPendingSettingsIfNeeded,
         pendingSettings,
         lastAppliedSettings,
 

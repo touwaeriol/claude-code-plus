@@ -42,6 +42,7 @@ export default {
     stop: '停止',
     stopGenerating: '停止生成',
     escToInterrupt: 'ESC 打断',
+    streamingStatsTooltip: '生成统计：耗时 ↑上行tokens ↓下行tokens',
     slashCommands: '斜杠命令',
     noMatchingCommands: '没有匹配的命令',
     welcome: '你好！我是 Claude，你的 AI 编程助手。',

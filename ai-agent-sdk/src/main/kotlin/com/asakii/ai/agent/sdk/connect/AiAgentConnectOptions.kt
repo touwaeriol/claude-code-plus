@@ -68,6 +68,9 @@ fun AiAgentConnectOptions.normalize(): AiAgentConnectContext = when (provider) {
 private fun AiAgentConnectOptions.normalizeForClaude(): AiAgentConnectContext {
     val base = claude.options ?: ClaudeAgentOptions()
 
+    // 🔍 调试日志：检查 base 中的 canUseTool
+    println("🔍 [normalizeForClaude] base.canUseTool=${base.canUseTool != null}, base.permissionMode=${base.permissionMode}")
+
     // 注意：copy() 会保留所有未显式指定的字段（包括 mcpServers、permissionPromptToolName 等）
     // print = true: 必须启用非交互式模式，否则 Claude CLI 会尝试启动 TUI，在非 TTY 环境会失败
     val normalized = base.copy(
@@ -77,6 +80,9 @@ private fun AiAgentConnectOptions.normalizeForClaude(): AiAgentConnectContext {
         resume = resumeSessionId ?: base.resume,
         print = true  // 非交互式模式，避免 "Raw mode is not supported" 错误
     )
+
+    // 🔍 调试日志：检查 normalized 中的 canUseTool（copy 后是否保留）
+    println("🔍 [normalizeForClaude] normalized.canUseTool=${normalized.canUseTool != null}, normalized.permissionMode=${normalized.permissionMode}")
 
     return AiAgentConnectContext(
         provider = AiAgentProvider.CLAUDE,

@@ -37,6 +37,7 @@ export default {
     stop: '停止',
     stopGenerating: '生成を停止',
     escToInterrupt: 'ESC で中断',
+    streamingStatsTooltip: '統計：所要時間 ↑入力tokens ↓出力tokens',
     slashCommands: 'スラッシュコマンド',
     noMatchingCommands: '一致するコマンドがありません',
     welcome: 'こんにちは！私はAIコーディングアシスタントのClaudeです。',

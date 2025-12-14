@@ -398,6 +398,7 @@ class ControlProtocol(
      * Handle incoming control requests from CLI.
      */
     private suspend fun handleControlRequest(requestId: String, request: ControlRequest) {
+        logger.info("🎯 [handleControlRequest] 收到控制请求: requestId=$requestId, subtype=${request.subtype}, type=${request::class.simpleName}")
         try {
             val response = when (request) {
                 is HookCallbackRequest -> handleHookCallback(request)
@@ -446,6 +447,12 @@ class ControlProtocol(
      * Handle tool permission requests.
      */
     private suspend fun handlePermissionRequest(request: PermissionRequest): JsonElement {
+        logger.info("🔐 [handlePermissionRequest] ==========================================")
+        logger.info("🔐 [handlePermissionRequest] 收到权限请求: toolName=${request.toolName}, toolUseId=${request.toolUseId}")
+        logger.info("🔐 [handlePermissionRequest] input keys: ${(request.input as? JsonObject)?.keys}")
+        logger.info("🔐 [handlePermissionRequest] suggestions count: ${request.permissionSuggestions?.size ?: 0}")
+        logger.info("🔐 [handlePermissionRequest] canUseTool callback configured: ${options.canUseTool != null}")
+
         val canUseTool = options.canUseTool
             ?: throw ControlProtocolException("No permission callback configured")
 

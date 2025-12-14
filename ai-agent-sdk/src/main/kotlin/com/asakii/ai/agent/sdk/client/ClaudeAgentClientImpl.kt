@@ -188,6 +188,10 @@ class ClaudeAgentClientImpl(
         context = null
     }
 
+    override fun isConnected(): Boolean {
+        return client?.isConnected() == true
+    }
+
     // ==================== 能力相关方法 ====================
 
     override fun getCapabilities(): AgentCapabilities = ClaudeCapabilities

@@ -1,6 +1,10 @@
 /**
  * 模型选择相关的 composable
  * 处理模型切换、思考开关、权限模式
+ *
+ * 简化策略：
+ * - model/permissionMode 切换：直接调用 RPC（立即生效于下一轮对话）
+ * - thinkingEnabled/skipPermissions 切换：需要重连
  */
 import { ref, computed } from 'vue'
 import type { PermissionMode } from '@/types/enhancedMessage'
@@ -13,7 +17,6 @@ import {
 } from '@/constants/models'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { SETTING_KEYS } from '@/composables/useSessionTab'
 
 // 权限模式列表
 const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']
@@ -103,9 +106,9 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
 
   /**
    * 处理模型切换
-   * 保存到 pending，下次 query 时才应用
+   * 直接调用 RPC/重连（立即生效于下一轮对话）
    */
-  function handleBaseModelChange(model: BaseModel) {
+  async function handleBaseModelChange(model: BaseModel) {
     const capability = MODEL_CAPABILITIES[model]
 
     // 根据模型能力自动设置思考开关
@@ -124,31 +127,33 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
 
     console.log(`🔄 [handleBaseModelChange] 切换模型: ${capability.displayName}, thinking=${newThinkingEnabled}`)
 
-    // 保存到 pending（下次 query 时应用）
+    // 直接调用 updateSettings，它会智能处理 RPC 或重连
     const tab = sessionStore.currentTab
     if (tab) {
-      tab.setPendingSetting(SETTING_KEYS.MODEL, capability.modelId)
-      tab.setPendingSetting(SETTING_KEYS.THINKING_ENABLED, newThinkingEnabled)
-      console.log(`📝 [handleBaseModelChange] 已保存到 pending，下次 query 时应用`)
+      await tab.updateSettings({
+        model: capability.modelId,
+        thinkingEnabled: newThinkingEnabled
+      })
+      console.log(`✅ [handleBaseModelChange] 模型切换完成`)
     }
   }
 
   /**
    * 处理思考开关切换
-   * 只保存到 pending，下次 query 时才应用
+   * 直接调用 updateSettings（需要重连）
    */
-  function handleThinkingToggle(enabled: boolean) {
+  async function handleThinkingToggle(enabled: boolean) {
     if (!canToggleThinkingComputed.value) {
       return
     }
 
     console.log(`🧠 [handleThinkingToggle] 切换思考: ${enabled}`)
 
-    // 保存到 pending（下次 query 时应用）
+    // 直接调用 updateSettings（thinkingEnabled 需要重连）
     const tab = sessionStore.currentTab
     if (tab) {
-      tab.setPendingSetting(SETTING_KEYS.THINKING_ENABLED, enabled)
-      console.log(`📝 [handleThinkingToggle] 已保存到 pending，下次 query 时应用`)
+      await tab.updateSettings({ thinkingEnabled: enabled })
+      console.log(`✅ [handleThinkingToggle] 思考切换完成`)
     }
   }
 
@@ -172,17 +177,17 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
 
   /**
    * 处理跳过权限开关切换
-   * 只保存到 pending，下次 query 时才应用
+   * 直接调用 updateSettings（需要重连）
    */
-  function handleSkipPermissionsChange(enabled: boolean) {
+  async function handleSkipPermissionsChange(enabled: boolean) {
     console.log(`🔓 [handleSkipPermissionsChange] 切换跳过权限: ${enabled}`)
     skipPermissionsValue.value = enabled
 
-    // 保存到 pending（下次 query 时应用）
+    // 直接调用 updateSettings（skipPermissions 需要重连）
     const tab = sessionStore.currentTab
     if (tab) {
-      tab.setPendingSetting(SETTING_KEYS.SKIP_PERMISSIONS, enabled)
-      console.log(`📝 [handleSkipPermissionsChange] 已保存到 pending，下次 query 时应用`)
+      await tab.updateSettings({ skipPermissions: enabled })
+      console.log(`✅ [handleSkipPermissionsChange] 跳过权限切换完成`)
     }
 
     // 保存到全局设置（供新 Tab 继承）
@@ -194,20 +199,20 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
 
   /**
    * 轮换切换权限模式
-   * 直接保存到 pending，下次 query 时应用
+   * 直接调用 RPC（立即生效于下一轮对话）
    */
-  function cyclePermissionMode() {
+  async function cyclePermissionMode() {
     const currentIndex = PERMISSION_MODES.indexOf(selectedPermissionValue.value)
     const nextIndex = (currentIndex + 1) % PERMISSION_MODES.length
     const nextMode = PERMISSION_MODES[nextIndex]
 
     console.log(`🔄 [cyclePermissionMode] 切换权限模式: ${nextMode}`)
 
-    // 保存到 pending（下次 query 时应用）
+    // 直接调用 RPC
     const tab = sessionStore.currentTab
     if (tab) {
-      tab.setPendingSetting(SETTING_KEYS.PERMISSION_MODE, nextMode)
-      console.log(`📝 [cyclePermissionMode] 已保存到 pending，下次 query 时应用`)
+      await tab.setPermissionMode(nextMode)
+      console.log(`✅ [cyclePermissionMode] 权限模式切换完成`)
     }
 
     // 保存到全局设置（供新 Tab 继承）
@@ -216,16 +221,16 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
 
   /**
    * 设置权限模式
-   * 直接保存到 pending，下次 query 时应用
+   * 直接调用 RPC（立即生效于下一轮对话）
    */
-  function setPermissionMode(mode: PermissionMode) {
+  async function setPermissionMode(mode: PermissionMode) {
     console.log(`🔒 [setPermissionMode] 设置权限模式: ${mode}`)
 
-    // 保存到 pending（下次 query 时应用）
+    // 直接调用 RPC
     const tab = sessionStore.currentTab
     if (tab) {
-      tab.setPendingSetting(SETTING_KEYS.PERMISSION_MODE, mode)
-      console.log(`📝 [setPermissionMode] 已保存到 pending，下次 query 时应用`)
+      await tab.setPermissionMode(mode)
+      console.log(`✅ [setPermissionMode] 权限模式切换完成`)
     }
 
     // 保存到全局设置（供新 Tab 继承）

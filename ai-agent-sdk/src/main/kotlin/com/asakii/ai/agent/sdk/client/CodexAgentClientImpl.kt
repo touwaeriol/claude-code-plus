@@ -111,6 +111,10 @@ class CodexAgentClientImpl(
         context = null
     }
 
+    override fun isConnected(): Boolean {
+        return client != null && session != null
+    }
+
     // ==================== 能力相关方法 ====================
 
     override fun getCapabilities(): AgentCapabilities = CodexCapabilities

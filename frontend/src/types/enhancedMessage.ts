@@ -70,13 +70,21 @@ export type MessageTimelineItem =
 
 /**
  * Token 使用信息
+ * 参考 opcode 的简单累计方式
  */
 export interface TokenUsage {
-  inputTokens: number
-  outputTokens: number
-  cacheCreationTokens: number
-  cacheReadTokens: number
-  totalTokens: number
+  inputTokens: number         // 输入 token
+  outputTokens: number        // 输出 token
+  cacheCreationTokens: number // 缓存创建 token
+  cacheReadTokens: number     // 缓存读取 token
+  totalTokens: number         // 总计 (input + output)
+}
+
+/**
+ * 计算总 token 数（参考 opcode: input + output）
+ */
+export function getTotalTokens(usage: TokenUsage): number {
+  return usage.inputTokens + usage.outputTokens
 }
 
 /**

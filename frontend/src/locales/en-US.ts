@@ -42,6 +42,7 @@ export default {
     stop: 'Stop',
     stopGenerating: 'Stop Generating',
     escToInterrupt: 'ESC to interrupt',
+    streamingStatsTooltip: 'Stats: Duration ↑Input tokens ↓Output tokens',
     slashCommands: 'Slash Commands',
     noMatchingCommands: 'No matching commands',
     welcome: 'Hello! I am Claude, your AI coding assistant.',

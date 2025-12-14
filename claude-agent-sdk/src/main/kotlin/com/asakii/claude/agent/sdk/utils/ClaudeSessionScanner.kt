@@ -43,6 +43,8 @@ object ClaudeSessionScanner {
      * @param projectPath 项目路径
      * @param maxResults 最大结果数
      * @return 会话元数据列表，按时间戳降序排列
+     *
+     * 优化策略：分批扫描，每次扫描10个文件，找到足够的有效会话后提前返回
      */
     fun scanHistorySessions(projectPath: String, maxResults: Int, offset: Int = 0): List<SessionMetadata> {
         val claudeDir = getClaudeDir()
@@ -56,22 +58,38 @@ object ClaudeSessionScanner {
 
         val jsonlFiles = projectDir.listFiles { file ->
             file.extension == "jsonl"
-        } ?: emptyArray()
+        }?.sortedByDescending { it.lastModified() } ?: emptyList()  // 按修改时间降序，优先扫描最新的
 
-        logger.info("[SessionScanner] 找到 ${jsonlFiles.size} 个会话文件，开始并行扫描...")
+        logger.info("[SessionScanner] 找到 ${jsonlFiles.size} 个会话文件，开始分批扫描...")
 
-        // 并行扫描所有文件（充分利用多核 CPU）
-        val metadata = runBlocking {
-            jsonlFiles.map { file ->
-                async(Dispatchers.IO) {
-                    extractSessionMetadata(file, projectPath)
+        val batchSize = 10  // 每批扫描10个文件
+        val targetCount = maxResults + offset  // 需要的有效会话数（包含offset跳过的部分）
+        val collectedMetadata = mutableListOf<SessionMetadata>()
+
+        // 分批扫描，找到足够的有效会话后提前返回
+        runBlocking {
+            for (batch in jsonlFiles.chunked(batchSize)) {
+                val batchResults = batch.map { file ->
+                    async(Dispatchers.IO) {
+                        extractSessionMetadata(file, projectPath)
+                    }
+                }.awaitAll().filterNotNull()
+
+                collectedMetadata.addAll(batchResults)
+
+                logger.info("[SessionScanner] 已扫描 ${minOf(collectedMetadata.size + (jsonlFiles.indexOf(batch.last()) + 1), jsonlFiles.size)} 个文件，有效会话数: ${collectedMetadata.size}")
+
+                // 已经找到足够的有效会话，提前返回
+                if (collectedMetadata.size >= targetCount) {
+                    logger.info("[SessionScanner] 已找到 ${collectedMetadata.size} 个有效会话，提前结束扫描")
+                    break
                 }
-            }.awaitAll().filterNotNull()
+            }
         }
 
-        logger.info("[SessionScanner] 并行扫描完成，有效会话数: ${metadata.size}")
+        logger.info("[SessionScanner] 扫描完成，有效会话数: ${collectedMetadata.size}")
 
-        val sorted = metadata.sortedByDescending { it.timestamp }
+        val sorted = collectedMetadata.sortedByDescending { it.timestamp }
         return sorted
             .drop(offset.coerceAtLeast(0))
             .take(maxResults)

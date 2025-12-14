@@ -35,6 +35,8 @@ import com.asakii.rpc.proto.GetHistoryMetadataRequest
 import com.asakii.rpc.proto.LoadHistoryRequest
 import com.asakii.server.history.HistoryJsonlLoader
 import com.asakii.server.rpc.AiAgentRpcServiceImpl
+import com.asakii.server.mcp.JetBrainsMcpServerProvider
+import com.asakii.server.mcp.DefaultJetBrainsMcpServerProvider
 import com.asakii.server.rsocket.ProtoConverter.toProto
 import io.rsocket.kotlin.ktor.server.RSocketSupport
 import io.rsocket.kotlin.ktor.server.rSocket
@@ -121,7 +123,8 @@ class HttpApiServer(
     private val scope: CoroutineScope,
     private val frontendDir: Path? = null,  // 开发模式下可以为 null
     private val jetbrainsApi: JetBrainsApi = DefaultJetBrainsApi,  // 默认不支持 JetBrains 集成
-    private val jetbrainsRSocketHandler: JetBrainsRSocketHandlerProvider? = null  // JetBrains RSocket 处理器
+    private val jetbrainsRSocketHandler: JetBrainsRSocketHandlerProvider? = null,  // JetBrains RSocket 处理器
+    private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider  // JetBrains MCP Server Provider
 ) : com.asakii.bridge.EventBridge {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -192,9 +195,24 @@ class HttpApiServer(
                 val serverPort = configuredPort
 
                 // RSocket RPC 路由 (Protobuf over RSocket)
+                // 重要：每个连接创建完全独立的 handler，绝不共享任何状态！
                 rSocket("rsocket") {
-                    val rsocketHandler = com.asakii.server.rsocket.RSocketHandler(ideTools)
-                    rsocketHandler.setClientRequester(requester)
+                    val connectionId = java.util.UUID.randomUUID().toString()
+                    logger.info { "🔌 [RSocket] 新连接: $connectionId" }
+
+                    // 直接在构造时传入 requester，确保每个连接使用独立的 requester
+                    val rsocketHandler = com.asakii.server.rsocket.RSocketHandler(
+                        ideTools = ideTools,
+                        clientRequester = requester,
+                        connectionId = connectionId,
+                        jetBrainsMcpServerProvider = jetBrainsMcpServerProvider
+                    )
+
+                    // 监听连接关闭
+                    requester.coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion { cause ->
+                        logger.info { "🔌 [RSocket] 连接断开: $connectionId (cause: ${cause?.message ?: "正常关闭"})" }
+                    }
+
                     rsocketHandler.createHandler()
                 }
 
@@ -391,8 +409,12 @@ class HttpApiServer(
 
                             logger.info { "📋 [HTTP] 获取历史会话列表 (offset=$offset, maxResults=$maxResults)" }
 
-                            // 直接调用 RPC 服务实现（复用逻辑）
-                            val rpcService = com.asakii.server.rpc.AiAgentRpcServiceImpl(ideTools, null)
+                            // 直接调用 RPC 服务实现（复用逻辑，传递 JetBrains MCP Server Provider）
+                            val rpcService = com.asakii.server.rpc.AiAgentRpcServiceImpl(
+                                ideTools = ideTools,
+                                clientCaller = null,
+                                jetBrainsMcpServerProvider = jetBrainsMcpServerProvider
+                            )
                             val result = rpcService.getHistorySessions(maxResults, offset)
 
                             call.respond(HttpStatusCode.OK, result)
@@ -413,7 +435,11 @@ class HttpApiServer(
                             val sessionId = req.sessionId
                             val projectPath = req.projectPath
 
-                            val rpcService = AiAgentRpcServiceImpl(ideTools, null)
+                            val rpcService = AiAgentRpcServiceImpl(
+                                ideTools = ideTools,
+                                clientCaller = null,
+                                jetBrainsMcpServerProvider = jetBrainsMcpServerProvider
+                            )
                             val meta = rpcService.getHistoryMetadata(sessionId, projectPath).toProto()
 
                             call.respondBytes(
@@ -434,7 +460,11 @@ class HttpApiServer(
                         try {
                             val body = call.receive<ByteArray>()
                             val req = LoadHistoryRequest.parseFrom(body)
-                            val rpcService = AiAgentRpcServiceImpl(ideTools, null)
+                            val rpcService = AiAgentRpcServiceImpl(
+                                ideTools = ideTools,
+                                clientCaller = null,
+                                jetBrainsMcpServerProvider = jetBrainsMcpServerProvider
+                            )
                             val result = rpcService.loadHistory(
                                 req.sessionId,
                                 req.projectPath,

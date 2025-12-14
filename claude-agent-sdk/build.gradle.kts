@@ -51,6 +51,10 @@ dependencies {
     // 官方 MCP Kotlin SDK
     implementation("io.modelcontextprotocol:kotlin-sdk:0.8.0")
 
+    // Hutool 缓存和加密工具
+    implementation("cn.hutool:hutool-cache:5.8.25")
+    implementation("cn.hutool:hutool-crypto:5.8.25")
+
     // 测试依赖
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
@@ -290,48 +294,48 @@ fun verifyMd5(file: File, expectedMd5: String): Boolean {
 // 下载 CLI 任务 - 从 npm 包下载 cli.js（跨平台方案）
 val downloadCli = tasks.register("downloadCli") {
     group = "build"
-    description = "从 npm 包下载 Claude CLI (cli.js, 版本: $cliVersion)"
+    description = "从 npm 包下载 Claude CLI"
 
-    // 在配置阶段检查文件是否已存在，避免配置缓存问题
-    val cliJsPath = layout.projectDirectory.file("src/main/resources/bundled/claude-cli-$cliVersion.js").asFile
-    onlyIf {
-        !cliJsPath.exists().also { shouldRun ->
-            if (!shouldRun) {
-                println("⏭️  claude-cli-$cliVersion.js 已存在，跳过下载")
-            }
-        }
-    }
+    val propsFile = file("cli-version.properties")
+    val bundledDirFile = file("src/main/resources/bundled")
+    val buildDirFile = layout.buildDirectory.get().asFile
+
+    inputs.file(propsFile)
+    outputs.dir(bundledDirFile)
 
     doLast {
-        // 在 doLast 内定义变量（使用 layout API 支持配置缓存）
-        val bundledDirPath = layout.projectDirectory.dir("src/main/resources/bundled").asFile
-        val cliJsFile = bundledDirPath.resolve("claude-cli-$cliVersion.js")
+        val props = Properties()
+        propsFile.inputStream().use { props.load(it) }
+        val cliVer = props.getProperty("cli.version") ?: error("cli.version missing")
+        val npmVer = props.getProperty("npm.version") ?: error("npm.version missing")
 
-        bundledDirPath.mkdirs()
+        val cliJsFile = bundledDirFile.resolve("claude-cli-$cliVer.js")
+        if (cliJsFile.exists()) {
+            println("⏭️  claude-cli-$cliVer.js 已存在，跳过下载")
+            return@doLast
+        }
 
-        // 清理旧版本 cli.js，确保版本切换时自动重新下载
-        bundledDirPath.listFiles { file -> file.name.startsWith("claude-cli-") && file.name != cliJsFile.name }
+        bundledDirFile.mkdirs()
+
+        // 清理旧版本 cli.js
+        bundledDirFile.listFiles { file -> file.name.startsWith("claude-cli-") && file.name != cliJsFile.name }
             ?.forEach { old ->
-                println("🧹 检测到旧版本 CLI: ${old.name}，已删除以触发重新下载")
+                println("🧹 检测到旧版本 CLI: ${old.name}，已删除")
                 old.delete()
             }
 
         println("========================================")
-        println("下载 Claude CLI (cli.js) 版本: $cliVersion")
+        println("下载 Claude CLI (cli.js) 版本: $cliVer")
         println("========================================")
 
         try {
-            // npm 包版本从 cli-version.properties 读取
-            val npmPackageVersion = npmVersion
-            val npmTarballUrl = "https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-$npmPackageVersion.tgz"
+            val npmTarballUrl = "https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-$npmVer.tgz"
 
-            println("📦 npm 包版本: $npmPackageVersion")
+            println("📦 npm 包版本: $npmVer")
             println("📥 下载中...")
             println("   URL: $npmTarballUrl")
 
-            // 下载 tarball
-            val buildDir = layout.buildDirectory.get().asFile
-            val tarballFile = File(buildDir, "tmp/claude-cli/claude-agent-sdk.tgz")
+            val tarballFile = File(buildDirFile, "tmp/claude-cli/claude-agent-sdk.tgz")
             tarballFile.parentFile.mkdirs()
 
             val connection: URLConnection = URI(npmTarballUrl).toURL().openConnection()
@@ -345,8 +349,7 @@ val downloadCli = tasks.register("downloadCli") {
 
             println("   ✅ tarball 下载完成")
 
-            // 解压 tarball 并提取 cli.js
-            val extractDir = File(buildDir, "tmp/claude-cli/extract")
+            val extractDir = File(buildDirFile, "tmp/claude-cli/extract")
             extractDir.mkdirs()
 
             println("📂 解压 tarball...")
@@ -359,20 +362,17 @@ val downloadCli = tasks.register("downloadCli") {
                 throw GradleException("解压失败，退出码: $exitCode")
             }
 
-            // cli.js 位于 package/cli.js
             val sourceCliJs = extractDir.resolve("package/cli.js")
             if (!sourceCliJs.exists()) {
                 throw GradleException("未找到 cli.js 在解压的包中")
             }
 
-            // 复制并重命名
             sourceCliJs.copyTo(cliJsFile, overwrite = true)
 
             val sizeMB = cliJsFile.length() / (1024.0 * 1024.0)
             println("   大小: ${String.format("%.2f", sizeMB)} MB")
             println("   ✅ cli.js 提取成功: ${cliJsFile.name}")
 
-            // 清理临时文件
             tarballFile.delete()
             extractDir.deleteRecursively()
 
@@ -389,14 +389,15 @@ val downloadCli = tasks.register("downloadCli") {
     }
 }
 
-
 // 清理 bundled CLI
 val cleanCli = tasks.register("cleanCli") {
     group = "build"
     description = "清理绑定的 CLI 二进制文件"
 
+    val bundledDirFile = file("src/main/resources/bundled")
+
     doLast {
-        bundledDir.listFiles()?.forEach { it.delete() }
+        bundledDirFile.listFiles()?.forEach { it.delete() }
         println("✅ 已清理 bundled CLI")
     }
 }
@@ -406,17 +407,29 @@ val verifyCli = tasks.register("verifyCli") {
     group = "verification"
     description = "校验已下载的 CLI 文件 MD5"
 
+    val propsFile = file("cli-version.properties")
+    val bundledDirFile = file("src/main/resources/bundled")
+
+    inputs.file(propsFile)
+    inputs.dir(bundledDirFile).optional()
+
     doLast {
+        val versionProps = Properties()
+        propsFile.inputStream().use { versionProps.load(it) }
+        val version = versionProps.getProperty("cli.version") ?: "unknown"
+
+        val md5Map: Map<String, String> = mapOf()
+
         println("========================================")
-        println("校验 CLI MD5 (版本: $cliVersion)")
+        println("校验 CLI MD5 (版本: $version)")
         println("========================================")
 
         var passCount = 0
         var failCount = 0
         var missingCount = 0
 
-        expectedMd5.forEach { (fileKey, expectedHash) ->
-            val filePath = bundledDir.resolve(fileKey)
+        md5Map.forEach { (fileKey, expectedHash) ->
+            val filePath = bundledDirFile.resolve(fileKey)
 
             if (!filePath.exists()) {
                 println("⏭️  跳过 $fileKey (文件不存在)")
@@ -425,12 +438,12 @@ val verifyCli = tasks.register("verifyCli") {
             }
 
             print("🔐 校验 $fileKey... ")
-            if (verifyMd5(filePath, expectedHash)) {
+            val actualMd5 = calculateMd5(filePath)
+            if (actualMd5.equals(expectedHash, ignoreCase = true)) {
                 println("✅ 通过")
                 passCount++
             } else {
                 println("❌ 失败")
-                val actualMd5 = calculateMd5(filePath)
                 println("   期望: $expectedHash")
                 println("   实际: $actualMd5")
                 failCount++

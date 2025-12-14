@@ -10,7 +10,10 @@ import com.asakii.ai.agent.sdk.connect.AiAgentConnectOptions
 import com.asakii.ai.agent.sdk.connect.ClaudeOverrides
 import com.asakii.ai.agent.sdk.connect.CodexOverrides
 import com.asakii.ai.agent.sdk.model.*
+import com.asakii.claude.agent.sdk.exceptions.ClientNotConnectedException
 import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
+import com.asakii.server.rsocket.RSocketErrorCodes
+import io.rsocket.kotlin.RSocketError
 import com.asakii.claude.agent.sdk.types.PermissionMode
 import com.asakii.claude.agent.sdk.types.PermissionResultAllow
 import com.asakii.claude.agent.sdk.types.PermissionResultDeny
@@ -42,6 +45,8 @@ import com.asakii.server.mcp.PermissionBehavior as McpPermissionBehavior
 import com.asakii.server.mcp.PermissionMode as McpPermissionMode
 import com.asakii.server.mcp.PermissionRuleValue as McpPermissionRuleValue
 import com.asakii.server.mcp.UserInteractionMcpServer
+import com.asakii.server.mcp.JetBrainsMcpServerProvider
+import com.asakii.server.mcp.DefaultJetBrainsMcpServerProvider
 import com.asakii.server.logging.StandaloneLogging
 import com.asakii.server.logging.asyncInfo
 import com.asakii.server.settings.ClaudeSettingsLoader
@@ -79,6 +84,7 @@ import com.asakii.server.history.HistoryJsonlLoader
 class AiAgentRpcServiceImpl(
     private val ideTools: IdeTools,
     private val clientCaller: ClientCaller? = null,
+    private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider,
     private val serviceConfig: AiAgentServiceConfig = AiAgentServiceConfig(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : AiAgentRpcService {
@@ -296,6 +302,7 @@ class AiAgentRpcServiceImpl(
     }
 
         private fun executeTurn(block: suspend (UnifiedAgentClient) -> Unit): Flow<RpcMessage> {
+        // 检查客户端状态
         val activeClient = client ?: error("AI Agent 尚未连接，请先调用 connect()")
 
         return channelFlow {
@@ -395,7 +402,18 @@ class AiAgentRpcServiceImpl(
             try {
                 block(activeClient)
                 sdkLog.info("[executeTurn] block done")
+            } catch (e: ClientNotConnectedException) {
+                // 客户端未连接异常，转换为自定义 RSocket 错误码
+                sdkLog.warn("[executeTurn] 客户端未连接: ${e.message}")
+                collector.cancel()
+                throw RSocketError.Custom(RSocketErrorCodes.NOT_CONNECTED, e.message ?: "Client not connected")
             } catch (t: Throwable) {
+                // 检查是否是包装的 ClientNotConnectedException
+                if (t.cause is ClientNotConnectedException) {
+                    sdkLog.warn("[executeTurn] 客户端未连接 (wrapped): ${t.cause?.message}")
+                    collector.cancel()
+                    throw RSocketError.Custom(RSocketErrorCodes.NOT_CONNECTED, t.cause?.message ?: "Client not connected")
+                }
                 sdkLog.error("[executeTurn] block failed: ${t.message}")
                 collector.cancel()
                 throw t
