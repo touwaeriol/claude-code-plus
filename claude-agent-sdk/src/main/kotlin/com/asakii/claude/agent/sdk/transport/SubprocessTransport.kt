@@ -404,8 +404,16 @@ class SubprocessTransport(
                     }
                 }.toString()
 
-                command.addAll(listOf("--agents", agentsJson))
-                logger.info("🤖 配置自定义代理: ${agents.keys.joinToString(", ")}")
+                // Windows 下需要转义 JSON 中的双引号（与 --mcp-config 处理一致）
+                val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+                if (isWindows) {
+                    val escapedJson = "\"" + agentsJson.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+                    command.addAll(listOf("--agents", escapedJson))
+                    logger.info("🤖 配置自定义代理（Windows 转义）: ${agents.keys.joinToString(", ")}")
+                } else {
+                    command.addAll(listOf("--agents", agentsJson))
+                    logger.info("🤖 配置自定义代理: ${agents.keys.joinToString(", ")}")
+                }
             }
         }
 
