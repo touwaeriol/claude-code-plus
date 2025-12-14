@@ -294,8 +294,9 @@ const editor = useEditor({
     emit('blur')
   },
   onUpdate({ editor }) {
-    const text = editor.getText()
-    emit('update:modelValue', text)
+    // 使用 JSON 格式存储，完全无损保留所有节点和属性
+    const json = JSON.stringify(editor.getJSON())
+    emit('update:modelValue', json)
   },
   onCreate({ editor }) {
     // 编辑器创建后，确保 placeholder 使用最新的翻译文本
@@ -308,13 +309,19 @@ const editor = useEditor({
   },
 })
 
-// 监听 props 变化
+// 监听 props 变化（modelValue 现在是 JSON 字符串格式）
 watch(() => props.modelValue, (newValue) => {
   if (!editor.value) return
-  const currentText = editor.value.getText()
-  if (newValue !== currentText) {
-    // 使用 preserveWhitespace 保留尾部空格
-    editor.value.commands.setContent(newValue || '', false, { preserveWhitespace: 'full' })
+  const currentJson = JSON.stringify(editor.value.getJSON())
+  if (newValue !== currentJson) {
+    // 尝试解析 JSON，如果失败则作为纯文本处理（兼容旧数据）
+    try {
+      const content = newValue ? JSON.parse(newValue) : ''
+      editor.value.commands.setContent(content, false, { preserveWhitespace: 'full' })
+    } catch {
+      // 非 JSON 格式，作为纯文本处理
+      editor.value.commands.setContent(newValue || '', false, { preserveWhitespace: 'full' })
+    }
   }
 })
 

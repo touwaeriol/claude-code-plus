@@ -395,7 +395,13 @@ object ClaudeSessionManager {
         // cwd 由服务端指定（从项目路径获取）
         // 设置 output-format 为 stream-json（必需）
         val extraArgs = mapOf("output-format" to "stream-json")
-        
+
+        // 从 IdeActionBridge 获取子代理定义
+        val agents = ideActionBridge.getAgentDefinitions()
+        if (agents.isNotEmpty()) {
+            logger.info { "📦 加载了 ${agents.size} 个子代理: ${agents.keys.joinToString()}" }
+        }
+
         return ClaudeAgentOptions(
             model = model,
             cwd = projectPath,  // 服务端指定
@@ -407,6 +413,7 @@ object ClaudeSessionManager {
             systemPrompt = systemPrompt,
             includePartialMessages = includePartialMessages ?: false,
             maxThinkingTokens = maxThinkingTokens,
+            agents = agents.ifEmpty { null },  // 加载的子代理定义
             // 启用 print 和 verbose（与 stream-json 一起使用时必需）
             print = true,
             verbose = true,

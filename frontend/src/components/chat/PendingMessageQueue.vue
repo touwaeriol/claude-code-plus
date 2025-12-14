@@ -96,12 +96,10 @@ function formatPreview(msg: PendingMessage): string {
     }
   }
 
-  // 输入框内容
+  // 输入框内容 - 不在此处截断，由 CSS 的 text-overflow: ellipsis 处理
   for (const block of msg.contents) {
     if (block.type === 'text' && 'text' in block) {
-      const text = (block as any).text as string
-      const truncated = text.length > 30 ? text.slice(0, 30) + '...' : text
-      parts.push(truncated)
+      parts.push((block as any).text as string)
     } else if (block.type === 'image') {
       parts.push('[Image]')
     }
@@ -158,6 +156,7 @@ function formatPreview(msg: PendingMessage): string {
   transition: background 0.15s;
   width: 100%;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .queue-item:hover {

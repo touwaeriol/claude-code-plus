@@ -34,6 +34,12 @@ interface JetBrainsFileApi {
     fun openFile(request: JetBrainsOpenFileRequest): Result<Unit>
     fun showDiff(request: JetBrainsShowDiffRequest): Result<Unit>
     fun showMultiEditDiff(request: JetBrainsShowMultiEditDiffRequest): Result<Unit>
+
+    /** 展示编辑预览 diff（从文件读取当前内容，应用编辑后显示 diff） */
+    fun showEditPreviewDiff(request: JetBrainsShowEditPreviewRequest): Result<Unit>
+
+    /** 展示 Markdown 内容（用于计划预览） */
+    fun showMarkdown(request: JetBrainsShowMarkdownRequest): Result<Unit>
 }
 
 // ========== 主题 API ==========
@@ -88,6 +94,8 @@ object DefaultJetBrainsApi : JetBrainsApi {
         override fun openFile(request: JetBrainsOpenFileRequest) = Result.failure<Unit>(error)
         override fun showDiff(request: JetBrainsShowDiffRequest) = Result.failure<Unit>(error)
         override fun showMultiEditDiff(request: JetBrainsShowMultiEditDiffRequest) = Result.failure<Unit>(error)
+        override fun showEditPreviewDiff(request: JetBrainsShowEditPreviewRequest) = Result.failure<Unit>(error)
+        override fun showMarkdown(request: JetBrainsShowMarkdownRequest) = Result.failure<Unit>(error)
     }
 
     override val theme = object : JetBrainsThemeApi {
@@ -147,6 +155,19 @@ data class JetBrainsShowMultiEditDiffRequest(
     val filePath: String,
     val edits: List<JetBrainsEditOperation>,
     val currentContent: String? = null
+)
+
+/** 编辑预览请求（从文件读取当前内容，应用编辑后显示 diff） */
+data class JetBrainsShowEditPreviewRequest(
+    val filePath: String,
+    val edits: List<JetBrainsEditOperation>,
+    val title: String? = null
+)
+
+/** Markdown 内容显示请求 */
+data class JetBrainsShowMarkdownRequest(
+    val content: String,
+    val title: String? = null
 )
 
 @Serializable

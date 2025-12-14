@@ -303,7 +303,39 @@ abstract class McpServerBase : McpServer {
         registeredTools[name] = toolHandler
         logger.info("🔧 手动注册工具(完整Schema): $name - $description")
     }
-    
+
+    /**
+     * 从 Schema 中注册工具（自动提取 description）
+     *
+     * Schema 中应包含 "description" 字段，如果没有则使用空字符串。
+     * 此方法会自动从 inputSchema 中提取 description，避免重复定义。
+     *
+     * 使用示例：
+     * ```kotlin
+     * registerToolFromSchema("CodeSearch", codeSearchTool.getInputSchema()) { arguments ->
+     *     codeSearchTool.execute(arguments)
+     * }
+     * ```
+     */
+    protected fun registerToolFromSchema(
+        name: String,
+        inputSchema: Map<String, Any>,
+        handler: suspend (Map<String, Any>) -> Any
+    ) {
+        // 从 schema 中提取 description
+        val description = inputSchema["description"] as? String ?: ""
+
+        val toolHandler = ToolHandlerWithSchema(
+            name = name,
+            description = description,
+            inputSchema = inputSchema,
+            handler = handler
+        )
+
+        registeredTools[name] = toolHandler
+        logger.info("🔧 注册工具(从Schema): $name - $description")
+    }
+
     /**
      * 实现 McpServer.listTools()
      */

@@ -26,6 +26,8 @@ import java.util.concurrent.ConcurrentHashMap
 import com.asakii.rpc.proto.JetBrainsOpenFileRequest as ProtoOpenFileRequest
 import com.asakii.rpc.proto.JetBrainsShowDiffRequest as ProtoShowDiffRequest
 import com.asakii.rpc.proto.JetBrainsShowMultiEditDiffRequest as ProtoShowMultiEditDiffRequest
+import com.asakii.rpc.proto.JetBrainsShowEditPreviewRequest as ProtoShowEditPreviewRequest
+import com.asakii.rpc.proto.JetBrainsShowMarkdownRequest as ProtoShowMarkdownRequest
 import com.asakii.rpc.proto.JetBrainsSetLocaleRequest as ProtoSetLocaleRequest
 import com.asakii.rpc.proto.JetBrainsSessionState as ProtoSessionState
 import com.asakii.rpc.proto.JetBrainsSessionCommand as ProtoSessionCommand
@@ -78,6 +80,8 @@ class JetBrainsRSocketHandler(
                     "jetbrains.openFile" -> handleOpenFile(dataBytes)
                     "jetbrains.showDiff" -> handleShowDiff(dataBytes)
                     "jetbrains.showMultiEditDiff" -> handleShowMultiEditDiff(dataBytes)
+                    "jetbrains.showEditPreviewDiff" -> handleShowEditPreviewDiff(dataBytes)
+                    "jetbrains.showMarkdown" -> handleShowMarkdown(dataBytes)
                     "jetbrains.getTheme" -> handleGetTheme()
                     "jetbrains.getLocale" -> handleGetLocale()
                     "jetbrains.setLocale" -> handleSetLocale(dataBytes)
@@ -176,6 +180,49 @@ class JetBrainsRSocketHandler(
             buildOperationResponse(result.isSuccess, result.exceptionOrNull()?.message)
         } catch (e: Exception) {
             logger.error("❌ [JetBrains] showMultiEditDiff failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    private fun handleShowEditPreviewDiff(dataBytes: ByteArray): Payload {
+        return try {
+            val req = ProtoShowEditPreviewRequest.parseFrom(dataBytes)
+            logger.info("👀 [JetBrains] showEditPreviewDiff: ${req.filePath} (${req.editsCount} edits)")
+
+            val request = com.asakii.rpc.api.JetBrainsShowEditPreviewRequest(
+                filePath = req.filePath,
+                edits = req.editsList.map { edit ->
+                    com.asakii.rpc.api.JetBrainsEditOperation(
+                        oldString = edit.oldString,
+                        newString = edit.newString,
+                        replaceAll = edit.replaceAll
+                    )
+                },
+                title = if (req.hasTitle()) req.title else null
+            )
+
+            val result = jetbrainsApi.file.showEditPreviewDiff(request)
+            buildOperationResponse(result.isSuccess, result.exceptionOrNull()?.message)
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] showEditPreviewDiff failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    private fun handleShowMarkdown(dataBytes: ByteArray): Payload {
+        return try {
+            val req = ProtoShowMarkdownRequest.parseFrom(dataBytes)
+            logger.info("📄 [JetBrains] showMarkdown: ${req.title ?: "Plan Preview"}")
+
+            val request = com.asakii.rpc.api.JetBrainsShowMarkdownRequest(
+                content = req.content,
+                title = if (req.hasTitle()) req.title else null
+            )
+
+            val result = jetbrainsApi.file.showMarkdown(request)
+            buildOperationResponse(result.isSuccess, result.exceptionOrNull()?.message)
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] showMarkdown failed: ${e.message}")
             buildErrorResponse(e.message ?: "Unknown error")
         }
     }

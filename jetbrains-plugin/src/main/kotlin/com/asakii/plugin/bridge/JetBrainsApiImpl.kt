@@ -14,6 +14,7 @@ import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.testFramework.LightVirtualFile
 import com.intellij.ui.JBColor
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
@@ -177,6 +178,80 @@ class JetBrainsApiImpl(private val ideaProject: Project) : JetBrainsApi {
                 Result.success(Unit)
             } catch (e: Exception) {
                 logger.severe("❌ [JetBrainsApi.file] Failed to show multi-edit diff: ${e.message}")
+                Result.failure(e)
+            }
+        }
+
+        override fun showEditPreviewDiff(request: JetBrainsShowEditPreviewRequest): Result<Unit> {
+            return try {
+                ApplicationManager.getApplication().invokeLater {
+                    val file = LocalFileSystem.getInstance().findFileByPath(request.filePath)
+                    file?.refresh(false, false)
+                    val currentContent = file?.let { String(it.contentsToByteArray(), Charsets.UTF_8) } ?: ""
+
+                    // 依次应用所有编辑操作得到预览后的内容
+                    var afterContent = currentContent
+                    for (edit in request.edits) {
+                        afterContent = if (edit.replaceAll) {
+                            afterContent.replace(edit.oldString, edit.newString)
+                        } else {
+                            val index = afterContent.indexOf(edit.oldString)
+                            if (index >= 0) {
+                                buildString {
+                                    append(afterContent.substring(0, index))
+                                    append(edit.newString)
+                                    append(afterContent.substring(index + edit.oldString.length))
+                                }
+                            } else {
+                                // 找不到时保持不变，记录警告
+                                logger.warning("⚠️ [JetBrainsApi.file] oldString not found in file, skipping edit")
+                                afterContent
+                            }
+                        }
+                    }
+
+                    val fileName = File(request.filePath).name
+                    val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
+
+                    val leftContent = DiffContentFactory.getInstance()
+                        .create(ideaProject, currentContent, fileType)
+                    val rightContent = DiffContentFactory.getInstance()
+                        .create(ideaProject, afterContent, fileType)
+
+                    val diffRequest = SimpleDiffRequest(
+                        request.title ?: "Edit Preview: $fileName",
+                        leftContent,
+                        rightContent,
+                        "$fileName (current)",
+                        "$fileName (after edit)"
+                    )
+
+                    DiffManager.getInstance().showDiff(ideaProject, diffRequest)
+                    logger.info("✅ [JetBrainsApi.file] Showing edit preview diff: ${request.filePath}")
+                }
+                Result.success(Unit)
+            } catch (e: Exception) {
+                logger.severe("❌ [JetBrainsApi.file] Failed to show edit preview diff: ${e.message}")
+                Result.failure(e)
+            }
+        }
+
+        override fun showMarkdown(request: JetBrainsShowMarkdownRequest): Result<Unit> {
+            return try {
+                ApplicationManager.getApplication().invokeLater {
+                    // 创建临时虚拟文件并打开（IDEA 会自动渲染 Markdown）
+                    val fileName = request.title?.let { "$it.md" } ?: "plan-preview.md"
+                    val tempFile = LightVirtualFile(
+                        fileName,
+                        FileTypeManager.getInstance().getFileTypeByExtension("md"),
+                        request.content
+                    )
+                    FileEditorManager.getInstance(ideaProject).openFile(tempFile, true)
+                    logger.info("✅ [JetBrainsApi.file] Showing markdown: $fileName")
+                }
+                Result.success(Unit)
+            } catch (e: Exception) {
+                logger.severe("❌ [JetBrainsApi.file] Failed to show markdown: ${e.message}")
                 Result.failure(e)
             }
         }

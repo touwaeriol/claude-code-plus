@@ -427,7 +427,7 @@
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { AiModel, type PermissionMode, type EnhancedMessage, type TokenUsage as EnhancedTokenUsage, type ImageReference } from '@/types/enhancedMessage'
-import type { ContextReference, ContextDisplayType } from '@/types/display'
+import type { ContextReference } from '@/types/display'
 import type { ContentBlock } from '@/types/message'
 import AtSymbolFilePopup from '@/components/input/AtSymbolFilePopup.vue'
 import FileSelectPopup from '@/components/input/FileSelectPopup.vue'
@@ -486,6 +486,8 @@ interface Props {
   editDisabled?: boolean     // 是否禁用发送（当前阶段用于编辑模式）
   // Toast 函数
   showToast?: (message: string, duration?: number) => void
+  // v-model 支持：输入框文本（用于 Tab 切换时保持状态）
+  modelValue?: string
 }
 
 interface SendOptions {
@@ -501,6 +503,7 @@ interface Emits {
   (e: 'context-remove', context: ContextReference): void
   (e: 'skip-permissions-change', skip: boolean): void
   (e: 'cancel'): void  // 取消编辑（仅 inline 模式）
+  (e: 'update:modelValue', value: string): void  // v-model 支持
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -517,7 +520,8 @@ const props = withDefaults(defineProps<Props>(), {
   showSendButton: true,
   placeholderText: '',
   inline: false,
-  editDisabled: false
+  editDisabled: false,
+  modelValue: ''
 })
 
 const emit = defineEmits<Emits>()
@@ -532,7 +536,7 @@ const sessionStore = useSessionStore()
 const {
   currentModel,
   currentThinkingMode,
-  canToggleThinkingComputed,
+  canToggleThinkingComputed: _canToggleThinkingComputed,
   thinkingEnabled,
   selectedPermissionValue,
   skipPermissionsValue,
@@ -571,7 +575,11 @@ const addContextButtonRef = ref<HTMLButtonElement>()
 const imageInputRef = ref<HTMLInputElement>()
 
 // State
-const inputText = ref('')
+// inputText 使用 computed 支持 v-model，实现多 Tab 输入框状态隔离
+const inputText = computed({
+  get: () => props.modelValue,
+  set: (value: string) => emit('update:modelValue', value)
+})
 const isFocused = ref(false)
 const showContextSelectorPopup = ref(false)
 const contextSearchResults = ref<IndexedFileInfo[]>([])
@@ -593,8 +601,8 @@ const {
   showSendContextMenu,
   sendContextMenuPosition,
   handleSendButtonContextMenu,
-  handleSendFromContextMenu: _handleSendFromContextMenu,
-  handleForceSendFromContextMenu: _handleForceSendFromContextMenu,
+  handleSendFromContextMenu,
+  handleForceSendFromContextMenu,
   closeSendContextMenu
 } = useContextMenu({
   onSend: () => handleSend(),
@@ -747,7 +755,9 @@ async function handleRichTextSubmit(_content: { text: string; images: { id: stri
 async function checkAtSymbol() {
   // 使用 RichTextInput 的光标位置
   const cursorPosition = richTextInputRef.value?.getCursorPosition() ?? 0
-  const atResult = isInAtQuery(inputText.value, cursorPosition)
+  // 使用纯文本进行 @ 符号检测（inputText 现在是 HTML 格式）
+  const plainText = richTextInputRef.value?.getText() ?? ''
+  const atResult = isInAtQuery(plainText, cursorPosition)
 
   if (atResult) {
     // 在 @ 查询中
@@ -790,11 +800,12 @@ function dismissAtSymbolPopup() {
 }
 
 // Slash Command Functions
-// 已知的斜杠命令列表
-const knownSlashCommands = ['/compact', '/context', '/rename']
+// 已知的斜杠命令列表（保留以备将来使用）
+const _knownSlashCommands = ['/compact', '/context', '/rename']
 
 function checkSlashCommand() {
-  const text = inputText.value  // 不使用 trim，保留空格以检测命令是否已完成
+  // 使用纯文本检测斜杠命令（inputText 现在是 HTML 格式）
+  const text = richTextInputRef.value?.getText() ?? ''  // 不使用 trim，保留空格以检测命令是否已完成
 
   // 只有当输入以 / 开头时才显示斜杠命令弹窗
   if (text.startsWith('/')) {

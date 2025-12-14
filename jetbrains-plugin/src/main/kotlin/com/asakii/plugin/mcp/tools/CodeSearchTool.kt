@@ -1,23 +1,21 @@
 package com.asakii.plugin.mcp.tools
 
 import com.asakii.claude.agent.sdk.mcp.ToolResult
-import com.intellij.find.FindManager
+import com.asakii.plugin.mcp.ToolSchemaLoader
 import com.intellij.find.FindModel
 import com.intellij.find.impl.FindInProjectUtil
 import com.intellij.openapi.application.ReadAction
-import com.intellij.openapi.module.Module
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.module.ModuleManager
+import com.intellij.openapi.progress.EmptyProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.PsiDocumentManager
-import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.usages.UsageInfo2UsageAdapter
+import com.intellij.usageView.UsageInfo
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.io.File
+import java.util.concurrent.ConcurrentLinkedQueue
 
 @Serializable
 enum class SearchScope {
@@ -56,67 +54,11 @@ data class CodeSearchResult(
  */
 class CodeSearchTool(private val project: Project) {
 
-    fun getInputSchema(): Map<String, Any> = mapOf(
-        "type" to "object",
-        "properties" to mapOf(
-            "query" to mapOf(
-                "type" to "string",
-                "description" to "搜索文本或正则表达式"
-            ),
-            "isRegex" to mapOf(
-                "type" to "boolean",
-                "description" to "是否使用正则表达式",
-                "default" to false
-            ),
-            "caseSensitive" to mapOf(
-                "type" to "boolean",
-                "description" to "是否区分大小写",
-                "default" to false
-            ),
-            "wholeWords" to mapOf(
-                "type" to "boolean",
-                "description" to "是否全词匹配",
-                "default" to false
-            ),
-            "fileMask" to mapOf(
-                "type" to "string",
-                "description" to "文件类型过滤（如 \"*.kt,*.java\" 或 \"*.{kt,java}\"）"
-            ),
-            "scope" to mapOf(
-                "type" to "string",
-                "enum" to listOf("Project", "Module", "Directory", "Scope"),
-                "description" to "搜索范围：Project（整个项目）、Module（指定模块）、Directory（指定目录）、Scope（指定 Scope）",
-                "default" to "Project"
-            ),
-            "scopeArg" to mapOf(
-                "type" to "string",
-                "description" to "范围参数：模块名（Module）、相对目录路径（Directory）或 Scope 名称（Scope）"
-            ),
-            "maxResults" to mapOf(
-                "type" to "integer",
-                "description" to "最大结果数",
-                "default" to 100,
-                "minimum" to 1,
-                "maximum" to 500
-            ),
-            "offset" to mapOf(
-                "type" to "integer",
-                "description" to "分页偏移量",
-                "default" to 0,
-                "minimum" to 0
-            ),
-            "includeContext" to mapOf(
-                "type" to "boolean",
-                "description" to "是否包含上下文行",
-                "default" to false
-            )
-        ),
-        "required" to listOf("query")
-    )
+    fun getInputSchema(): Map<String, Any> = ToolSchemaLoader.getSchema("CodeSearch")
 
     suspend fun execute(arguments: Map<String, Any>): Any {
         val query = arguments["query"] as? String
-            ?: return ToolResult.error("缺少必需参数: query")
+            ?: return ToolResult.error("Missing required parameter: query")
         val isRegex = arguments["isRegex"] as? Boolean ?: false
         val caseSensitive = arguments["caseSensitive"] as? Boolean ?: false
         val wholeWords = arguments["wholeWords"] as? Boolean ?: false
@@ -130,19 +72,18 @@ class CodeSearchTool(private val project: Project) {
         val scope = try {
             SearchScope.valueOf(scopeStr)
         } catch (e: Exception) {
-            return ToolResult.error("无效的搜索范围: $scopeStr")
+            return ToolResult.error("Invalid search scope: $scopeStr")
         }
 
         if (query.isBlank()) {
-            return ToolResult.error("搜索内容不能为空")
+            return ToolResult.error("Search query cannot be empty")
         }
 
-        // 验证正则表达式
         if (isRegex) {
             try {
                 Regex(query)
             } catch (e: Exception) {
-                return ToolResult.error("无效的正则表达式: ${e.message}")
+                return ToolResult.error("Invalid regex: ${e.message}")
             }
         }
 
@@ -150,91 +91,98 @@ class CodeSearchTool(private val project: Project) {
         var totalMatches = 0
         val filesWithMatches = mutableSetOf<String>()
 
+        val projectPath = project.basePath ?: return ToolResult.error("Project base path not found")
+
         try {
-            ReadAction.run<Exception> {
-                val findManager = FindManager.getInstance(project)
-                val findModel = FindModel().apply {
-                    stringToFind = query
-                    this.isRegularExpressions = isRegex
-                    this.isCaseSensitive = caseSensitive
-                    this.isWholeWordsOnly = wholeWords
-                    this.isProjectScope = (scope == SearchScope.Project)
-                    
-                    // 设置文件过滤
-                    if (!fileMask.isNullOrBlank()) {
-                        this.fileFilter = fileMask
-                        this.isCustomScope = true
-                    }
+            // 1. 配置 FindModel
+            val findModel = FindModel().apply {
+                stringToFind = query
+                isRegularExpressions = isRegex
+                isCaseSensitive = caseSensitive
+                isWholeWordsOnly = wholeWords
+
+                // 关键配置：启用全局搜索模式
+                isGlobal = true
+                isFindAll = true
+                isMultipleFiles = true
+                isWithSubdirectories = true
+
+                // 设置文件过滤
+                if (!fileMask.isNullOrBlank()) {
+                    fileFilter = fileMask
                 }
 
-                // 根据 scope 设置搜索范围
-                val searchScope = when (scope) {
-                    SearchScope.Project -> GlobalSearchScope.projectScope(project)
+                // 设置搜索范围
+                when (scope) {
+                    SearchScope.Project -> {
+                        isProjectScope = true
+                    }
                     SearchScope.Module -> {
                         if (scopeArg.isNullOrBlank()) {
-                            return@run // 需要模块名
+                            throw IllegalArgumentException("Module scope requires scopeArg (module name)")
                         }
-                        val module = ModuleManager.getInstance(project).findModuleByName(scopeArg)
-                        if (module != null) {
-                            GlobalSearchScope.moduleScope(module)
-                        } else {
-                            return@run // 模块不存在
-                        }
+                        val module = ReadAction.compute<Module?, Exception> {
+                            ModuleManager.getInstance(project).findModuleByName(scopeArg)
+                        } ?: throw IllegalArgumentException("Module not found: $scopeArg")
+                        moduleName = scopeArg
+                        isProjectScope = false
                     }
                     SearchScope.Directory -> {
                         if (scopeArg.isNullOrBlank()) {
-                            return@run // 需要目录路径
+                            throw IllegalArgumentException("Directory scope requires scopeArg (directory path)")
                         }
-                        val projectPath = project.basePath ?: return@run
                         val dirPath = File(projectPath, scopeArg).canonicalPath
                         val dir = LocalFileSystem.getInstance().findFileByPath(dirPath)
-                        if (dir != null && dir.isDirectory) {
-                            GlobalSearchScope.projectScope(project).restrictToDirectory(dir, true)
-                        } else {
-                            return@run // 目录不存在
+                        if (dir == null || !dir.isDirectory) {
+                            throw IllegalArgumentException("Directory not found: $scopeArg")
                         }
+                        directoryName = dirPath
+                        isProjectScope = false
                     }
                     SearchScope.Scope -> {
-                        // 使用命名 Scope（简化实现）
-                        GlobalSearchScope.projectScope(project)
+                        isProjectScope = false
+                        isCustomScope = true
                     }
                 }
+            }
 
-                // 执行搜索
-                val usages = mutableListOf<UsageInfo2UsageAdapter>()
+            // 2. 执行搜索 - 需要在 ProgressIndicator 上下文中
+            val usages = ConcurrentLinkedQueue<UsageInfo>()
+            val maxToCollect = offset + maxResults + 100 // 多取一些以计算 hasMore
+
+            val indicator = EmptyProgressIndicator()
+            ProgressManager.getInstance().runProcess({
                 val presentation = FindInProjectUtil.setupViewPresentation(findModel)
                 val processPresentation = FindInProjectUtil.setupProcessPresentation(presentation)
+
                 FindInProjectUtil.findUsages(
                     findModel,
                     project,
                     { usage ->
-                        if (usage is UsageInfo2UsageAdapter) {
-                            usages.add(usage)
-                        }
-                        usages.size < (offset + maxResults + 100) // 多取一些以计算 hasMore
+                        usages.add(usage)
+                        usages.size < maxToCollect
                     },
                     processPresentation
                 )
+            }, indicator)
 
-                totalMatches = usages.size
-                
-                // 转换结果
-                usages.drop(offset).take(maxResults).forEach { usage ->
-                    val usageInfo = usage.usageInfo
+            totalMatches = usages.size
+
+            // 3. 在 ReadAction 中转换结果
+            val usageList = usages.toList()
+            ReadAction.run<Exception> {
+                usageList.drop(offset).take(maxResults).forEach { usageInfo ->
                     val file = usageInfo.virtualFile ?: return@forEach
-                    val document = usageInfo.element?.let {
-                        PsiDocumentManager.getInstance(project).getDocument(it.containingFile)
-                    }
-                    
-                    val projectPath = project.basePath ?: ""
-                    val relativePath = file.path.removePrefix(projectPath).removePrefix("/")
+                    val document = FileDocumentManager.getInstance().getDocument(file)
+
+                    val relativePath = file.path.removePrefix(projectPath).removePrefix("/").removePrefix("\\")
                     filesWithMatches.add(relativePath)
 
                     val startOffset = usageInfo.navigationOffset
                     val line = document?.getLineNumber(startOffset)?.plus(1) ?: 1
                     val lineStart = document?.getLineStartOffset(line - 1) ?: 0
                     val column = startOffset - lineStart + 1
-                    
+
                     val lineContent = document?.let { doc ->
                         val lineEnd = doc.getLineEndOffset(line - 1)
                         doc.getText(TextRange(lineStart, lineEnd))
@@ -259,43 +207,42 @@ class CodeSearchTool(private val project: Project) {
                     ))
                 }
             }
+        } catch (e: IllegalArgumentException) {
+            return ToolResult.error(e.message ?: "Invalid argument")
         } catch (e: Exception) {
-            return ToolResult.error("搜索时出错: ${e.message}")
+            return ToolResult.error("Search error: ${e.message}")
         }
 
-        val result = CodeSearchResult(
-            query = query,
-            isRegex = isRegex,
-            caseSensitive = caseSensitive,
-            scope = scope,
-            matches = matches,
-            totalMatches = totalMatches,
-            filesWithMatches = filesWithMatches.size,
-            hasMore = offset + matches.size < totalMatches,
-            offset = offset,
-            limit = maxResults
-        )
+        val sb = StringBuilder()
+        val regexFlag = if (isRegex) " (regex)" else ""
+        val caseFlag = if (caseSensitive) " (case sensitive)" else ""
+        sb.appendLine("🔍 Search: \"$query\"$regexFlag$caseFlag")
+        sb.appendLine("📁 Scope: $scope${scopeArg?.let { " ($it)" } ?: ""}")
+        sb.appendLine()
 
-        return Json.encodeToString(result)
-    }
-    
-    // 扩展函数：限制搜索范围到目录下
-    private fun GlobalSearchScope.restrictToDirectory(dir: VirtualFile, recursive: Boolean): GlobalSearchScope {
-        return object : GlobalSearchScope(project) {
-            override fun contains(file: VirtualFile): Boolean {
-                if (recursive) {
-                    var parent = file.parent
-                    while (parent != null) {
-                        if (parent == dir) return true
-                        parent = parent.parent
+        if (matches.isEmpty()) {
+            sb.appendLine("No results found")
+        } else {
+            val groupedByFile = matches.groupBy { it.filePath }
+            groupedByFile.forEach { (filePath, fileMatches) ->
+                sb.appendLine("📄 $filePath")
+                fileMatches.forEach { match ->
+                    match.contextBefore?.let { sb.appendLine("   ${match.line - 1}│ $it") }
+                    sb.appendLine("   ${match.line}│ ${match.lineContent}  ← match")
+                    match.contextAfter?.let { sb.appendLine("   ${match.line + 1}│ $it") }
+                    if (fileMatches.size > 1 && match != fileMatches.last()) {
+                        sb.appendLine("   ...")
                     }
-                    return false
-                } else {
-                    return file.parent == dir
                 }
+                sb.appendLine()
             }
-            override fun isSearchInModuleContent(aModule: Module) = true
-            override fun isSearchInLibraries() = false
         }
+
+        sb.append("📊 Found $totalMatches matches in ${filesWithMatches.size} files")
+        if (offset + matches.size < totalMatches) {
+            sb.append(" (showing ${offset + 1}-${offset + matches.size})")
+        }
+
+        return sb.toString()
     }
 }

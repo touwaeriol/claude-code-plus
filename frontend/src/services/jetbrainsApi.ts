@@ -48,6 +48,19 @@ export interface ShowMultiEditDiffRequest {
   currentContent?: string
 }
 
+/** 编辑预览请求（权限请求时使用） */
+export interface ShowEditPreviewRequest {
+  filePath: string
+  edits: EditOperation[]
+  title?: string
+}
+
+/** Markdown 显示请求（计划预览） */
+export interface ShowMarkdownRequest {
+  content: string
+  title?: string
+}
+
 // ========== 环境检测 ==========
 
 /**
@@ -167,6 +180,22 @@ class JetBrainsBridgeService {
   async showMultiEditDiff(request: ShowMultiEditDiffRequest): Promise<boolean> {
     if (!this.enabled) return false
     return jetbrainsRSocket.showMultiEditDiff(request)
+  }
+
+  /**
+   * 显示编辑预览 Diff（权限请求时使用）
+   */
+  async showEditPreviewDiff(request: ShowEditPreviewRequest): Promise<boolean> {
+    if (!this.enabled) return false
+    return jetbrainsRSocket.showEditPreviewDiff(request)
+  }
+
+  /**
+   * 显示 Markdown 内容（计划预览）
+   */
+  async showMarkdown(request: ShowMarkdownRequest): Promise<boolean> {
+    if (!this.enabled) return false
+    return jetbrainsRSocket.showMarkdown(request)
   }
 
   /**

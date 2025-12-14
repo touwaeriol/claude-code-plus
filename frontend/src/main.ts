@@ -1,6 +1,6 @@
 // Buffer polyfill for rsocket (browser compatibility)
 import { Buffer } from 'buffer'
-globalThis.Buffer = Buffer
+;(globalThis as any).Buffer = Buffer
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'

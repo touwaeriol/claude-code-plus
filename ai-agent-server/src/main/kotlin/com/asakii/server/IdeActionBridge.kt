@@ -2,7 +2,10 @@ package com.asakii.server
 
 import com.asakii.bridge.FrontendRequest
 import com.asakii.bridge.FrontendResponse
+import com.asakii.claude.agent.sdk.types.AgentDefinition
 import com.asakii.rpc.api.IdeTheme
+import com.asakii.server.agents.AgentDefinitionsProvider
+import com.asakii.server.agents.DefaultAgentDefinitionsProvider
 import kotlinx.serialization.json.JsonPrimitive
 import java.util.Locale
 
@@ -19,6 +22,12 @@ interface IdeActionBridge {
     fun showDiff(request: FrontendRequest): FrontendResponse
     fun searchFiles(query: String, maxResults: Int): List<Any>
     fun getRecentFiles(maxResults: Int): List<Any>
+
+    /**
+     * 获取子代理定义
+     * @return 代理名称到定义的映射
+     */
+    fun getAgentDefinitions(): Map<String, AgentDefinition> = DefaultAgentDefinitionsProvider.getAgentDefinitions()
 
     /**
      * A mock implementation for standalone testing.

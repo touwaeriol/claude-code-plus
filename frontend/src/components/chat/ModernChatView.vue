@@ -44,8 +44,9 @@
       <!-- 输入区域 -->
       <ChatInput
         ref="chatInputRef"
+        v-model="currentTabInputText"
         :pending-tasks="pendingTasks"
-        :contexts="uiState.contexts"
+        :contexts="currentTabContexts"
         :is-generating="currentSessionIsStreaming"
         :enabled="true"
         :show-toast="showToast"
@@ -131,7 +132,7 @@
           {{ t('chat.debug.pendingTasks') }}: {{ pendingTasks.length }}
         </div>
         <div class="debug-item">
-          {{ t('chat.debug.contexts') }}: {{ uiState.contexts.length }}
+          {{ t('chat.debug.contexts') }}: {{ currentTabContexts.length }}
         </div>
       </div>
     </div>
@@ -187,7 +188,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   sessionId: undefined,
-  projectPath: () => process.cwd?.() || '/default/project',
+  projectPath: '/default/project',
   showDebug: false
 })
 
@@ -262,8 +263,8 @@ const hasMoreHistory = computed(() => sessionStore.currentHasMoreHistory)
 // 是否正在压缩会话
 const isCompacting = computed(() => sessionStore.currentTab?.isCompacting.value ?? false)
 
-// 计算工具使用统计
-const toolStats = computed(() => calculateToolStats(displayItems.value))
+// 计算工具使用统计（保留以备将来使用）
+const _toolStats = computed(() => calculateToolStats(displayItems.value))
 
 const historySessions = computed(() => {
   // 活跃 Tab 列表
@@ -315,6 +316,26 @@ const sessionTokenUsage = computed<EnhancedTokenUsage | null>(() => {
     cacheCreationTokens: 0,
     cacheReadTokens: 0,
     totalTokens: stats.totalInputTokens + stats.totalOutputTokens
+  }
+})
+
+// 当前 Tab 的输入框文本（双向绑定，实现多 Tab 输入框状态隔离）
+const currentTabInputText = computed({
+  get: () => sessionStore.currentTab?.uiState.inputText ?? '',
+  set: (value: string) => {
+    if (sessionStore.currentTab) {
+      sessionStore.currentTab.uiState.inputText = value
+    }
+  }
+})
+
+// 当前 Tab 的 contexts（实现多 Tab contexts 状态隔离）
+const currentTabContexts = computed({
+  get: () => sessionStore.currentTab?.uiState.contexts ?? [],
+  set: (value: any[]) => {
+    if (sessionStore.currentTab) {
+      sessionStore.currentTab.uiState.contexts = value
+    }
   }
 })
 
@@ -472,8 +493,11 @@ async function handleSendMessage(contents?: ContentBlock[], options?: SendOption
     // 连接状态检查已移至 ChatInput.handleSend，此处不再重复检查
 
     // 如果是斜杠命令，不发送 contexts
-    const currentContexts = options?.isSlashCommand ? [] : [...uiState.value.contexts]
-    uiState.value.contexts = []
+    const currentContexts = options?.isSlashCommand ? [] : [...currentTabContexts.value]
+    // 清空当前 Tab 的 contexts
+    if (sessionStore.currentTab) {
+      sessionStore.currentTab.uiState.contexts = []
+    }
 
     console.log('Sending message via currentTab', options?.isSlashCommand ? '(no contexts for slash command)' : `(${currentContexts.length} contexts)`)
     sessionStore.currentTab.sendMessage({
@@ -494,7 +518,7 @@ async function handleForceSend(contents?: ContentBlock[], options?: SendOptions)
   console.log('Force send:', safeContents.length, 'content blocks', options?.isSlashCommand ? '(slash command)' : '')
 
   // 如果是斜杠命令，不发送 contexts
-  const currentContexts = options?.isSlashCommand ? [] : [...uiState.value.contexts]
+  const currentContexts = options?.isSlashCommand ? [] : [...currentTabContexts.value]
 
   // 使用 forceSendMessage：打断 + 立即发送（跳过队列）
   await sessionStore.currentTab?.forceSendMessage({
@@ -502,15 +526,17 @@ async function handleForceSend(contents?: ContentBlock[], options?: SendOptions)
     contents: safeContents
   }, { isSlashCommand: options?.isSlashCommand })
 
-  // 发送后清空上下文
-  uiState.value.contexts = []
+  // 发送后清空当前 Tab 的上下文
+  if (sessionStore.currentTab) {
+    sessionStore.currentTab.uiState.contexts = []
+  }
 }
 
 function handleEditPendingMessage(id: string) {
   console.log('Edit pending message:', id)
   const msg = sessionStore.currentTab?.editQueueMessage(id)
-  if (msg) {
-    uiState.value.contexts = [...msg.contexts]
+  if (msg && sessionStore.currentTab) {
+    sessionStore.currentTab.uiState.contexts = [...msg.contexts]
     chatInputRef.value?.setContent(msg.contents)
   }
 }
@@ -550,14 +576,15 @@ async function handleStopGeneration() {
 
 function handleAddContext(context: ContextReference) {
   console.log('Adding context:', context)
-  uiState.value.contexts.push(context)
+  if (sessionStore.currentTab) {
+    sessionStore.currentTab.uiState.contexts = [...currentTabContexts.value, context]
+  }
 }
 
 function handleRemoveContext(context: ContextReference) {
   console.log('Removing context:', context)
-  const index = uiState.value.contexts.findIndex(c => c.uri === context.uri)
-  if (index !== -1) {
-    uiState.value.contexts.splice(index, 1)
+  if (sessionStore.currentTab) {
+    sessionStore.currentTab.uiState.contexts = currentTabContexts.value.filter(c => c.uri !== context.uri)
   }
 }
 

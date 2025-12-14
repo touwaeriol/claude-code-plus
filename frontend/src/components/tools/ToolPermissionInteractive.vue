@@ -32,6 +32,9 @@
           <div class="file-info">
             <span class="file-icon">✏️</span>
             <span class="file-path">{{ pendingPermission.input.file_path }}</span>
+            <button v-if="isIdeEnvironment()" class="btn-preview" @click="showEditPreview">
+              {{ t('permission.viewInIdea') }}
+            </button>
           </div>
           <div v-if="pendingPermission.input.old_string" class="edit-preview">
             <div class="edit-section">
@@ -44,6 +47,27 @@
             </div>
           </div>
         </template>
+        <template v-else-if="pendingPermission.toolName === 'MultiEdit'">
+          <div class="file-info">
+            <span class="file-icon">📋</span>
+            <span class="file-path">{{ pendingPermission.input.file_path }}</span>
+            <button v-if="isIdeEnvironment()" class="btn-preview" @click="showMultiEditPreview">
+              {{ t('permission.viewInIdea') }}
+            </button>
+          </div>
+          <div class="multi-edit-info">
+            <span class="edit-count">{{ pendingPermission.input.edits?.length || 0 }} {{ t('permission.edits') }}</span>
+          </div>
+        </template>
+        <template v-else-if="isExitPlanMode">
+          <div class="plan-info">
+            <span class="plan-icon">📋</span>
+            <span class="plan-label">{{ t('permission.planReady') }}</span>
+            <button v-if="isIdeEnvironment()" class="btn-preview" @click="showPlanPreview">
+              {{ t('permission.viewInIdea') }}
+            </button>
+          </div>
+        </template>
         <template v-else>
           <pre v-if="hasInputParams(pendingPermission.input)" class="params-preview">{{ formatParams(pendingPermission.input) }}</pre>
           <div v-else class="no-params-hint">{{ t('permission.noParams') }}</div>
@@ -53,7 +77,7 @@
       <!-- 操作选项 -->
       <div class="permission-options">
         <!-- 允许（仅本次） -->
-        <button class="btn-option btn-allow" @click="handleApprove">
+        <button class="btn-option btn-allow" @click="isExitPlanMode ? handleApproveWithMode('default') : handleApprove()">
           {{ t('permission.allow') }}
         </button>
 
@@ -101,6 +125,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useI18n } from '@/composables/useI18n'
+import { jetbrainsBridge, isIdeEnvironment } from '@/services/jetbrainsApi'
 import type { PermissionUpdate } from '@/types/permission'
 
 const { t } = useI18n()
@@ -137,7 +162,7 @@ function handleApprove() {
 }
 
 // ExitPlanMode 专用：允许并切换到指定模式
-async function handleApproveWithMode(mode: 'acceptEdits' | 'bypassPermissions') {
+async function handleApproveWithMode(mode: 'default' | 'acceptEdits' | 'bypassPermissions') {
   if (pendingPermission.value) {
     // 先返回权限结果为 true
     sessionStore.respondPermission(pendingPermission.value.id, { approved: true })
@@ -146,6 +171,10 @@ async function handleApproveWithMode(mode: 'acceptEdits' | 'bypassPermissions') 
     const tab = sessionStore.currentTab
     if (tab) {
       await tab.setPermissionMode(mode)
+      // 如果是 bypassPermissions 模式，同时更新 UI 上的 Bypass 开关
+      if (mode === 'bypassPermissions') {
+        tab.skipPermissions.value = true
+      }
     }
   }
 }
@@ -156,6 +185,13 @@ function handleAllowWithUpdate(update: PermissionUpdate) {
     // 不需要调用 setPermissionMode RPC，SDK 收到响应后会自行切换
     if (update.type === 'setMode' && update.mode) {
       sessionStore.setLocalPermissionMode(update.mode)
+      // 如果是 bypassPermissions 模式，同时更新 UI 上的 Bypass 开关
+      if (update.mode === 'bypassPermissions') {
+        const tab = sessionStore.currentTab
+        if (tab) {
+          tab.skipPermissions.value = true
+        }
+      }
     }
 
     sessionStore.respondPermission(pendingPermission.value.id, {
@@ -171,6 +207,64 @@ function handleDeny() {
       approved: false,
       denyReason: denyReason.value || undefined
     })
+  }
+}
+
+// ========== IDE 预览方法 ==========
+
+async function showEditPreview() {
+  if (!pendingPermission.value) return
+  const input = pendingPermission.value.input
+
+  const success = await jetbrainsBridge.showEditPreviewDiff({
+    filePath: input.file_path || '',
+    edits: [{
+      oldString: input.old_string || '',
+      newString: input.new_string || '',
+      replaceAll: input.replace_all || false
+    }],
+    title: `${t('permission.editPreviewTitle')}: ${input.file_path}`
+  })
+
+  if (!success) {
+    console.warn('[ToolPermission] Failed to show edit preview')
+  }
+}
+
+async function showMultiEditPreview() {
+  if (!pendingPermission.value) return
+  const input = pendingPermission.value.input
+
+  if (!input.file_path || !input.edits) return
+
+  const success = await jetbrainsBridge.showEditPreviewDiff({
+    filePath: input.file_path,
+    edits: input.edits.map((e: any) => ({
+      oldString: e.old_string || '',
+      newString: e.new_string || '',
+      replaceAll: e.replace_all || false
+    })),
+    title: `${t('permission.multiEditPreviewTitle')}: ${input.file_path}`
+  })
+
+  if (!success) {
+    console.warn('[ToolPermission] Failed to show multi-edit preview')
+  }
+}
+
+async function showPlanPreview() {
+  if (!pendingPermission.value) return
+  const planContent = pendingPermission.value.input.planContent as string
+
+  if (planContent) {
+    const success = await jetbrainsBridge.showMarkdown({
+      content: planContent,
+      title: t('permission.planPreviewTitle')
+    })
+
+    if (!success) {
+      console.warn('[ToolPermission] Failed to show plan preview')
+    }
   }
 }
 
@@ -348,6 +442,52 @@ function hasInputParams(input: Record<string, unknown>): boolean {
   background: var(--theme-panel-background, #f6f8fa);
   border-radius: 6px;
   margin-bottom: 8px;
+}
+
+.btn-preview {
+  font-size: 12px;
+  padding: 4px 8px;
+  background: var(--theme-accent-subtle, #e8f1fb);
+  color: var(--theme-accent, #0366d6);
+  border: 1px solid var(--theme-accent, #0366d6);
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: auto;
+  transition: all 0.15s ease;
+}
+
+.btn-preview:hover {
+  background: var(--theme-accent, #0366d6);
+  color: #fff;
+}
+
+.multi-edit-info {
+  padding: 8px 12px;
+  background: var(--theme-panel-background, #f6f8fa);
+  border-radius: 6px;
+}
+
+.edit-count {
+  font-size: 13px;
+  color: var(--theme-secondary-foreground, #586069);
+}
+
+.plan-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--theme-panel-background, #f6f8fa);
+  border-radius: 6px;
+}
+
+.plan-icon {
+  font-size: 16px;
+}
+
+.plan-label {
+  font-size: 13px;
+  color: var(--theme-foreground, #24292e);
 }
 
 .file-icon {

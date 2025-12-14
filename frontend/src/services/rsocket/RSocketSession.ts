@@ -53,7 +53,7 @@ export class RSocketSession {
     private _capabilities: RpcCapabilities | null = null
     private messageHandlers = new Set<MessageHandler>()
     private errorHandlers = new Set<ErrorHandler>()
-    private cancelStream: (() => void) | null = null
+    private _cancelStream: (() => void) | null = null
     private wsUrl: string
     /** 等待连接后注册的 handlers */
     private pendingHandlers = new Map<string, (params: any) => Promise<any>>()

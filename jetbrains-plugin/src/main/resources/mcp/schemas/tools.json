@@ -1,0 +1,172 @@
+{
+  "FileIndex": {
+    "type": "object",
+    "description": "Search files, classes, and symbols in the IDE index by keywords. Faster than file system search, supports fuzzy matching.",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Search keyword (supports fuzzy matching, e.g. \"UserSvc\" matches \"UserService\")"
+      },
+      "searchType": {
+        "type": "string",
+        "enum": ["All", "Classes", "Files", "Symbols", "Actions", "Text"],
+        "description": "Search type: All (everything), Classes (class/interface names), Files (file names), Symbols (methods/fields), Actions (IDE actions), Text (for text search use CodeSearch instead)",
+        "default": "All"
+      },
+      "maxResults": {
+        "type": "integer",
+        "description": "Maximum number of results to return",
+        "default": 50,
+        "minimum": 1,
+        "maximum": 200
+      },
+      "offset": {
+        "type": "integer",
+        "description": "Skip first N results (for pagination)",
+        "default": 0,
+        "minimum": 0
+      }
+    },
+    "required": ["query"],
+    "examples": [
+      {"query": "UserService", "searchType": "Classes"},
+      {"query": "config.json", "searchType": "Files"},
+      {"query": "handleClick", "searchType": "Symbols"}
+    ]
+  },
+
+  "DirectoryTree": {
+    "type": "object",
+    "description": "Get the tree structure of the project directory. Supports depth limit, file filtering, and hidden files options.",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "Path relative to project root (e.g. \"src/main\", \"frontend/src\")",
+        "default": "."
+      },
+      "maxDepth": {
+        "type": "integer",
+        "description": "Maximum recursion depth (1-10)",
+        "default": 3,
+        "minimum": 1,
+        "maximum": 10
+      },
+      "filesOnly": {
+        "type": "boolean",
+        "description": "Show only files, hide directory entries",
+        "default": false
+      },
+      "includeHidden": {
+        "type": "boolean",
+        "description": "Include hidden files/directories (names starting with .)",
+        "default": false
+      },
+      "pattern": {
+        "type": "string",
+        "description": "File name filter using glob patterns. Examples: \"*.kt\" (Kotlin files), \"*.{ts,vue}\" (TypeScript and Vue), \"Test*\" (files starting with Test)"
+      },
+      "maxEntries": {
+        "type": "integer",
+        "description": "Maximum number of entries to return (prevents overwhelming output for large directories)",
+        "default": 500,
+        "maximum": 2000
+      }
+    },
+    "required": [],
+    "examples": [
+      {"path": "src", "maxDepth": 2},
+      {"path": "frontend/src/components", "pattern": "*.vue"},
+      {"pattern": "*.kt", "filesOnly": true}
+    ]
+  },
+
+  "CodeSearch": {
+    "type": "object",
+    "description": "Search code content across project files (like IDE's Find in Files). Uses IDEA's indexing for fast searches.",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Search text or regular expression pattern to find in file contents"
+      },
+      "isRegex": {
+        "type": "boolean",
+        "description": "Treat query as regular expression (e.g. \"log.*Error\", \"function\\s+\\w+\")",
+        "default": false
+      },
+      "caseSensitive": {
+        "type": "boolean",
+        "description": "Case sensitive search",
+        "default": false
+      },
+      "wholeWords": {
+        "type": "boolean",
+        "description": "Match whole words only (not substrings)",
+        "default": false
+      },
+      "fileMask": {
+        "type": "string",
+        "description": "File name filter using glob patterns. Examples: \"*.vue\" (Vue files), \"*.kt,*.java\" (multiple types), \"*.{ts,tsx}\" (TypeScript files), \"Test*.kt\" (files starting with Test)"
+      },
+      "scope": {
+        "type": "string",
+        "enum": ["Project", "Module", "Directory", "Scope"],
+        "description": "Search scope: Project (entire project), Module (specific module), Directory (specific folder), Scope (custom IDE scope)",
+        "default": "Project"
+      },
+      "scopeArg": {
+        "type": "string",
+        "description": "Required when scope is not Project. For Module: module name (e.g. \"frontend\"). For Directory: relative path from project root (e.g. \"src/main/kotlin\"). For Scope: IDE scope name."
+      },
+      "maxResults": {
+        "type": "integer",
+        "description": "Maximum number of matches to return",
+        "default": 100,
+        "minimum": 1,
+        "maximum": 500
+      },
+      "offset": {
+        "type": "integer",
+        "description": "Skip first N results (for pagination)",
+        "default": 0,
+        "minimum": 0
+      },
+      "includeContext": {
+        "type": "boolean",
+        "description": "Include one line before and after each match for context",
+        "default": false
+      }
+    },
+    "required": ["query"],
+    "examples": [
+      {"query": "TODO", "fileMask": "*.kt"},
+      {"query": "import.*vue", "isRegex": true, "fileMask": "*.ts,*.vue"},
+      {"query": "class", "scope": "Directory", "scopeArg": "src/main"}
+    ]
+  },
+
+  "FileProblems": {
+    "type": "object",
+    "description": "Get static analysis results for a file, including compilation errors, warnings and code inspection issues. Uses IDE's real-time analysis capability.",
+    "properties": {
+      "filePath": {
+        "type": "string",
+        "description": "File path relative to project root (e.g. \"src/main/kotlin/MyClass.kt\", \"frontend/src/App.vue\")"
+      },
+      "includeWarnings": {
+        "type": "boolean",
+        "description": "Include warnings (yellow highlights in IDE)",
+        "default": true
+      },
+      "includeWeakWarnings": {
+        "type": "boolean",
+        "description": "Include weak warnings/suggestions (gray highlights in IDE)",
+        "default": false
+      }
+    },
+    "required": ["filePath"],
+    "examples": [
+      {"filePath": "src/main/kotlin/Service.kt"},
+      {"filePath": "frontend/src/App.vue", "includeWeakWarnings": true}
+    ]
+  }
+}

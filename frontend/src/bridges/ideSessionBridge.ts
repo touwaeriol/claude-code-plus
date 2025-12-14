@@ -26,7 +26,7 @@ const hostCommandHandlers = new Set<HostCommandHandler>()
 let activeConsumers = 0
 let stopWatchHandle: WatchStopHandle | null = null
 let defaultHandler: HostCommandHandler | null = null
-let cachedSessionStore: SessionStore | null = null
+let _cachedSessionStore: SessionStore | null = null
 let removeSessionCommandListener: (() => void) | null = null
 
 function ensureGlobalBridge() {
@@ -254,7 +254,7 @@ function buildSessionSnapshot(store: SessionStore) {
 
 function startWatching(store: SessionStore) {
   // 缓存 store 引用
-  cachedSessionStore = store
+  _cachedSessionStore = store
 
   // 注册 RSocket 会话命令监听器
   removeSessionCommandListener = jetbrainsRSocket.onSessionCommand(handleSessionCommand)
@@ -291,7 +291,7 @@ export function setupIdeSessionBridge(sessionStore: SessionStore) {
       }
       removeSessionCommandListener?.()
       removeSessionCommandListener = null
-      cachedSessionStore = null
+      _cachedSessionStore = null
     }
   }
 }

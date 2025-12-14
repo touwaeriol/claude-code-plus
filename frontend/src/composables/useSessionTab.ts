@@ -47,6 +47,7 @@ export interface UIState {
     contexts: any[]
     scrollPosition: number
     newMessageCount: number  // 滚动按钮上的新消息计数
+    showScrollToBottom: boolean  // 是否显示滚动到底部按钮
 }
 
 /**
@@ -242,7 +243,8 @@ export function useSessionTab(initialOrder: number = 0) {
         inputText: '',
         contexts: [],
         scrollPosition: 0,
-        newMessageCount: 0
+        newMessageCount: 0,
+        showScrollToBottom: false
     })
 
     // ========== 压缩状态 ==========
@@ -598,14 +600,21 @@ export function useSessionTab(initialOrder: number = 0) {
         // 显示错误提示消息并触发自动重连
         messagesHandler.addErrorMessage('连接已断开，正在自动重连，请稍后重新发送消息')
 
+        // ✅ 更新 initialConnectOptions，加入 resume 参数
+        // 这样即使用户在自动重连前手动发送消息（触发 ensureConnected），也能正确恢复会话
+        if (initialConnectOptions.value) {
+            const resumeId = currentSessionIdForResume || initialConnectOptions.value.resume
+            initialConnectOptions.value = {
+                ...initialConnectOptions.value,
+                resume: resumeId
+            }
+            log.info(`[Tab ${tabId}] 已更新 initialConnectOptions.resume=${resumeId}`)
+        }
+
         // 触发自动重连，携带当前会话 ID 以恢复会话上下文
         if (initialConnectOptions.value) {
-            log.info(`[Tab ${tabId}] 触发自动重连，resume=${currentSessionIdForResume}`)
-            scheduleReconnect({
-                ...initialConnectOptions.value,
-                // 优先使用当前会话 ID，如果没有则使用初始配置中的 resume
-                resume: currentSessionIdForResume || initialConnectOptions.value.resume
-            })
+            log.info(`[Tab ${tabId}] 触发自动重连，resume=${initialConnectOptions.value.resume}`)
+            scheduleReconnect(initialConnectOptions.value)
         }
     }
 
@@ -639,13 +648,14 @@ export function useSessionTab(initialOrder: number = 0) {
         // connect 直接使用当前 ref 值构建请求
 
         try {
+            // dangerouslySkipPermissions 由前端处理，永远不传递给后端
             const connectOptions: ConnectOptions = {
                 includePartialMessages: true,
                 allowDangerouslySkipPermissions: true,
                 model: modelId.value || undefined,
                 thinkingEnabled: thinkingEnabled.value,
                 permissionMode: permissionMode.value,
-                dangerouslySkipPermissions: skipPermissions.value,
+                dangerouslySkipPermissions: false,
                 continueConversation: resolvedOptions.continueConversation,
                 resume: resolvedOptions.resume
             }
@@ -903,13 +913,14 @@ export function useSessionTab(initialOrder: number = 0) {
         if (options?.skipPermissions !== undefined) skipPermissions.value = options.skipPermissions
 
         try {
+            // dangerouslySkipPermissions 由前端处理，永远不传递给后端
             const connectOptions: ConnectOptions = {
                 includePartialMessages: true,
                 allowDangerouslySkipPermissions: true,
                 model: modelId.value || undefined,
                 thinkingEnabled: thinkingEnabled.value,
                 permissionMode: permissionMode.value,
-                dangerouslySkipPermissions: skipPermissions.value,
+                dangerouslySkipPermissions: false,
                 continueConversation: options?.continueConversation,
                 resume: options?.resume
             }
@@ -980,6 +991,12 @@ export function useSessionTab(initialOrder: number = 0) {
             const permissionSuggestions = params.permissionSuggestions
 
             log.info(`[Tab ${tabId}] 收到权限请求: ${toolName}`)
+
+            // skipPermissions (Bypass) 模式下自动批准（ExitPlanMode 除外，必须用户确认）
+            if (skipPermissions.value && toolName !== 'ExitPlanMode') {
+                log.info(`[Tab ${tabId}] Bypass 模式，自动批准: ${toolName}`)
+                return { approved: true }
+            }
 
             return new Promise((resolve, reject) => {
                 const permissionId = `permission-${Date.now()}`
@@ -1169,6 +1186,8 @@ export function useSessionTab(initialOrder: number = 0) {
      *
      * 用户主动打断时调用，会清空消息队列
      * 打断后 result 返回时，handleQueueAfterResult 会检测到 'clear' 模式并清空队列
+     *
+     * 兜底机制：interrupt 请求返回后（无论成功/异常），如果 isGenerating 还是 true，立即清理
      */
     async function interrupt(): Promise<void> {
         if (!sessionId.value) {
@@ -1178,8 +1197,20 @@ export function useSessionTab(initialOrder: number = 0) {
         // 设置打断模式为 clear（result 返回后会清空队列）
         messagesHandler.setInterruptMode('clear')
 
-        await aiAgentService.interrupt(sessionId.value)
-        log.info(`[Tab ${tabId}] 中断请求已发送（队列将在 result 返回后清空）`)
+        try {
+            await aiAgentService.interrupt(sessionId.value)
+            log.info(`[Tab ${tabId}] 中断请求已发送`)
+        } catch (err) {
+            log.error(`[Tab ${tabId}] 中断请求失败:`, err)
+        } finally {
+            // 兜底：如果 interrupt 返回后 isGenerating 还是 true，立即清理
+            // （正常情况下应该由 result 消息触发清理，但后端异常时可能没有 result）
+            if (messagesHandler.isGenerating.value) {
+                log.warn(`[Tab ${tabId}] 中断返回后 isGenerating 仍为 true，手动清理`)
+                messagesHandler.stopGenerating()
+                messagesHandler.clearQueue()
+            }
+        }
     }
 
     /**

@@ -13,6 +13,8 @@ import type {
   OpenFileRequest,
   ShowDiffRequest,
   ShowMultiEditDiffRequest,
+  ShowEditPreviewRequest,
+  ShowMarkdownRequest,
   EditOperation
 } from './jetbrainsApi'
 
@@ -125,6 +127,31 @@ function encodeShowMultiEditDiffRequest(request: ShowMultiEditDiffRequest): Uint
     ProtoEncoder.writeMessage(buffer, 2, editBytes)
   })
   if (request.currentContent) ProtoEncoder.writeString(buffer, 3, request.currentContent)
+  return new Uint8Array(buffer)
+}
+
+/**
+ * 编码 JetBrainsShowEditPreviewRequest
+ */
+function encodeShowEditPreviewRequest(request: ShowEditPreviewRequest): Uint8Array {
+  const buffer: number[] = []
+  ProtoEncoder.writeString(buffer, 1, request.filePath)
+  // repeated edits = 2
+  request.edits.forEach(edit => {
+    const editBytes = encodeEditOperation(edit)
+    ProtoEncoder.writeMessage(buffer, 2, editBytes)
+  })
+  if (request.title) ProtoEncoder.writeString(buffer, 3, request.title)
+  return new Uint8Array(buffer)
+}
+
+/**
+ * 编码 JetBrainsShowMarkdownRequest
+ */
+function encodeShowMarkdownRequest(request: ShowMarkdownRequest): Uint8Array {
+  const buffer: number[] = []
+  ProtoEncoder.writeString(buffer, 1, request.content)
+  if (request.title) ProtoEncoder.writeString(buffer, 2, request.title)
   return new Uint8Array(buffer)
 }
 
@@ -625,6 +652,46 @@ class JetBrainsRSocketService {
   }
 
   /**
+   * 显示编辑预览 Diff（权限请求时使用）
+   */
+  async showEditPreviewDiff(request: ShowEditPreviewRequest): Promise<boolean> {
+    if (!this.client) return false
+
+    try {
+      const data = encodeShowEditPreviewRequest(request)
+      const response = await this.client.requestResponse('jetbrains.showEditPreviewDiff', data)
+      const result = decodeOperationResponse(response)
+      if (result.success) {
+        console.log('[JetBrainsRSocket] Showing edit preview diff for:', request.filePath)
+      }
+      return result.success
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to show edit preview diff:', error)
+      return false
+    }
+  }
+
+  /**
+   * 显示 Markdown 内容（计划预览）
+   */
+  async showMarkdown(request: ShowMarkdownRequest): Promise<boolean> {
+    if (!this.client) return false
+
+    try {
+      const data = encodeShowMarkdownRequest(request)
+      const response = await this.client.requestResponse('jetbrains.showMarkdown', data)
+      const result = decodeOperationResponse(response)
+      if (result.success) {
+        console.log('[JetBrainsRSocket] Showing markdown:', request.title || 'Plan Preview')
+      }
+      return result.success
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to show markdown:', error)
+      return false
+    }
+  }
+
+  /**
    * 获取主题
    */
   async getTheme(): Promise<IdeTheme | null> {
@@ -732,8 +799,9 @@ class JetBrainsRSocketService {
 
   /**
    * 解码会话命令（从 Protobuf 字节）
+   * 保留以备将来使用
    */
-  private decodeSessionCommand(data: any): SessionCommand {
+  private _decodeSessionCommand(data: any): SessionCommand {
     // 如果是 Uint8Array，使用 Protobuf 解码
     if (data instanceof Uint8Array) {
       return decodeSessionCommandProto(data)

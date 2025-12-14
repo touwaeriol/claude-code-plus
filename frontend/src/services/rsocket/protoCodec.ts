@@ -36,8 +36,6 @@ import {
   PermissionUpdateSchema,
   PermissionRuleValueSchema,
   // JetBrains 集成（统一 ServerCall）
-  SessionCommandNotifySchema,
-  ThemeChangedNotifySchema,
   type SessionCommandNotify,
   type ThemeChangedNotify,
   SessionCommandType,

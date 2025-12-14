@@ -72,6 +72,7 @@ function getStatusText(status: string): string {
   flex-direction: column;
   gap: 0;
   padding: 2px 0;
+  width: 100%;
 }
 
 .todo-item {

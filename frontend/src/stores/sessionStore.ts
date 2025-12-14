@@ -22,7 +22,7 @@ import { MODEL_CAPABILITIES, BaseModel } from '@/constants/models'
 import type { RpcPermissionMode } from '@/types/rpc'
 import { ConnectionStatus } from '@/types/display'
 import { loggers } from '@/utils/logger'
-import { HISTORY_INITIAL_LOAD, HISTORY_LAZY_LOAD_SIZE } from '@/constants/messageWindow'
+import { HISTORY_INITIAL_LOAD } from '@/constants/messageWindow'
 import { aiAgentService } from '@/services/aiAgentService'
 
 const log = loggers.session
@@ -280,7 +280,7 @@ export const useSessionStore = defineStore('session', () => {
     externalSessionId: string,
     name?: string,
     projectPath?: string,
-    messageCount?: number
+    _messageCount?: number
   ): Promise<SessionTabInstance | null> {
     if (!externalSessionId) return null
 

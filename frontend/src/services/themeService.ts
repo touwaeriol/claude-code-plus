@@ -77,7 +77,7 @@ export class ThemeService {
   private initialized = false
   private themeMode: ThemeMode = 'system'
   private hasIdeBridge = false
-  private unsubscribeTheme: (() => void) | null = null
+  private _unsubscribeTheme: (() => void) | null = null
 
   /**
    * 初始化主题服务

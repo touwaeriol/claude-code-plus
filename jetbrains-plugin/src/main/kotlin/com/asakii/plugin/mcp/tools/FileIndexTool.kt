@@ -1,6 +1,7 @@
 package com.asakii.plugin.mcp.tools
 
 import com.asakii.claude.agent.sdk.mcp.ToolResult
+import com.asakii.plugin.mcp.ToolSchemaLoader
 import com.intellij.ide.util.gotoByName.GotoClassModel2
 import com.intellij.ide.util.gotoByName.GotoSymbolModel2
 import com.intellij.openapi.application.ReadAction
@@ -11,7 +12,6 @@ import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 @Serializable
@@ -46,51 +46,23 @@ data class FileIndexSearchResult(
  */
 class FileIndexTool(private val project: Project) {
 
-    fun getInputSchema(): Map<String, Any> = mapOf(
-        "type" to "object",
-        "properties" to mapOf(
-            "query" to mapOf(
-                "type" to "string",
-                "description" to "搜索关键词"
-            ),
-            "searchType" to mapOf(
-                "type" to "string",
-                "enum" to listOf("All", "Classes", "Files", "Symbols", "Actions", "Text"),
-                "description" to "搜索类型：All（全部）、Classes（类）、Files（文件）、Symbols（符号）、Actions（动作）、Text（文本）",
-                "default" to "All"
-            ),
-            "maxResults" to mapOf(
-                "type" to "integer",
-                "description" to "最大结果数",
-                "default" to 50,
-                "minimum" to 1,
-                "maximum" to 200
-            ),
-            "offset" to mapOf(
-                "type" to "integer",
-                "description" to "分页偏移量",
-                "default" to 0,
-                "minimum" to 0
-            )
-        ),
-        "required" to listOf("query")
-    )
+    fun getInputSchema(): Map<String, Any> = ToolSchemaLoader.getSchema("FileIndex")
 
-    suspend fun execute(arguments: Map<String, Any>): Any {
+    fun execute(arguments: Map<String, Any>): Any {
         val query = arguments["query"] as? String
-            ?: return ToolResult.error("缺少必需参数: query")
+            ?: return ToolResult.error("Missing required parameter: query")
         val searchTypeStr = arguments["searchType"] as? String ?: "All"
         val maxResults = ((arguments["maxResults"] as? Number)?.toInt() ?: 50).coerceIn(1, 200)
         val offset = ((arguments["offset"] as? Number)?.toInt() ?: 0).coerceAtLeast(0)
 
         val searchType = try {
             SearchIndexType.valueOf(searchTypeStr)
-        } catch (e: Exception) {
-            return ToolResult.error("无效的搜索类型: $searchTypeStr")
+        } catch (_: Exception) {
+            return ToolResult.error("Invalid search type: $searchTypeStr")
         }
 
         if (query.isBlank()) {
-            return ToolResult.error("搜索关键词不能为空")
+            return ToolResult.error("Search keyword cannot be empty")
         }
 
         val results = mutableListOf<IndexSearchResult>()
@@ -129,6 +101,7 @@ class FileIndexTool(private val project: Project) {
                     
                     SearchIndexType.Classes -> {
                         // 类搜索 - 使用 GotoClassModel2
+                        @Suppress("DEPRECATION")
                         val model = GotoClassModel2(project)
                         val names = model.getNames(false) // false = 不包含库中的类
                         val matchingNames = names.filter { it.lowercase().contains(queryLower) }
@@ -151,6 +124,7 @@ class FileIndexTool(private val project: Project) {
 
                     SearchIndexType.Symbols -> {
                         // 符号搜索 - 使用 GotoSymbolModel2
+                        @Suppress("DEPRECATION", "removal")
                         val model = GotoSymbolModel2(project)
                         val names = model.getNames(false)
                         val matchingNames = names.filter { it.lowercase().contains(queryLower) }
@@ -177,7 +151,7 @@ class FileIndexTool(private val project: Project) {
                         results.add(IndexSearchResult(
                             name = "Actions search",
                             type = "Info",
-                            description = "动作搜索功能需要 UI 上下文，建议使用 IDEA 的 Search Everywhere (Shift+Shift)"
+                            description = "Actions search requires UI context. Use IDEA's Search Everywhere (Shift+Shift)"
                         ))
                         totalFound = 1
                     }
@@ -187,27 +161,49 @@ class FileIndexTool(private val project: Project) {
                         results.add(IndexSearchResult(
                             name = "Text search",
                             type = "Info",
-                            description = "文本内容搜索请使用 FindInFiles 工具，支持更多搜索选项"
+                            description = "For text content search, use CodeSearch tool which supports more options"
                         ))
                         totalFound = 1
                     }
                 }
             }
         } catch (e: Exception) {
-            return ToolResult.error("搜索时出错: ${e.message}")
+            return ToolResult.error("Search error: ${e.message}")
         }
 
-        val result = FileIndexSearchResult(
-            query = query,
-            searchType = searchType,
-            results = results,
-            totalFound = totalFound,
-            hasMore = offset + results.size < totalFound,
-            offset = offset,
-            limit = maxResults
-        )
+        val sb = StringBuilder()
+        sb.appendLine("🔍 Search: \"$query\" (type: $searchType)")
+        sb.appendLine()
 
-        return Json.encodeToString(result)
+        if (results.isEmpty()) {
+            sb.appendLine("No results found")
+        } else {
+            results.forEachIndexed { index, item ->
+                val icon = when (item.type) {
+                    "File" -> "📄"
+                    "Class" -> "📦"
+                    "Method" -> "🔧"
+                    "Field" -> "📌"
+                    "Symbol" -> "🔹"
+                    else -> "•"
+                }
+                val lineInfo = item.line?.let { ":$it" } ?: ""
+                val pathInfo = item.path?.let { " → $it$lineInfo" } ?: ""
+
+                sb.appendLine("${index + offset + 1}. $icon ${item.name}$pathInfo")
+                item.description?.let { desc ->
+                    if (desc != item.name) sb.appendLine("   └─ $desc")
+                }
+            }
+        }
+
+        sb.appendLine()
+        sb.append("📊 Found $totalFound results")
+        if (offset + results.size < totalFound) {
+            sb.append(" (showing ${offset + 1}-${offset + results.size}, more available)")
+        }
+
+        return sb.toString()
     }
 
     private fun getSymbolType(element: PsiElement?): String {

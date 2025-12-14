@@ -37,7 +37,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import type { ContentBlock } from '@/types/message'
 
-const { t } = useI18n()
+const { t: _t } = useI18n()
 
 interface Props {
   content: ContentBlock[]

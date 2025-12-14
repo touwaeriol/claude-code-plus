@@ -56,7 +56,7 @@ import { parseLocalCommandTags } from '@/utils/xmlTagParser'
  * - 同一消息里包含 tool_use 时才检查
  * - 以大量花括号/引号/冒号为主，且包含常见字段名（todos/status/file_path 等）
  */
-function isLikelyToolInputText(text: string, content: ContentBlock[]): boolean {
+function _isLikelyToolInputText(text: string, content: ContentBlock[]): boolean {
   const hasToolUse = content.some(isToolUseBlock)
   if (!hasToolUse) return false
 

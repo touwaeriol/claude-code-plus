@@ -298,7 +298,7 @@ export class RSocketClient {
   ): Promise<Payload> {
     try {
       log.info(`[RSocketClient] 处理直接路由: ${route}`)
-      const result = await handler(data)
+      await handler(data)
       log.info(`[RSocketClient] 直接路由处理成功: ${route}`)
       // 直接路由模式返回空 payload（fire-and-forget 通常不需要响应）
       return { data: undefined }

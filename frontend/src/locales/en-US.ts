@@ -274,6 +274,11 @@ export default {
     noParams: 'No parameters',
     confirm: 'Confirm',
     escToDeny: 'Press ESC to deny',
+    viewInIdea: 'View in IDEA',
+    edits: 'edits',
+    planReady: 'Plan is ready',
+    replace: 'Replace',
+    with: 'With',
     destination: {
       session: 'this session',
       projectSettings: 'project settings',
@@ -299,7 +304,10 @@ export default {
       bypass: 'Bypass',
       bypassTooltip: 'Skip all permission confirmations and execute directly',
       dontAsk: "don't ask"
-    }
+    },
+    editPreviewTitle: 'Edit Preview',
+    multiEditPreviewTitle: 'Multi-Edit Preview',
+    planPreviewTitle: 'Plan Preview'
   }
   ,
   system: {

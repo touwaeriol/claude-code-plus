@@ -174,10 +174,16 @@ function scrollRight() {
 
 onMounted(() => {
   nextTick(() => {
-    updateScrollState()
+    // 延迟一帧确保 draggable 组件完全渲染
+    requestAnimationFrame(() => {
+      updateScrollState()
+    })
     // 监听容器大小变化
     if (scrollContainer.value) {
-      resizeObserver = new ResizeObserver(updateScrollState)
+      resizeObserver = new ResizeObserver(() => {
+        // 使用 requestAnimationFrame 避免频繁更新
+        requestAnimationFrame(updateScrollState)
+      })
       resizeObserver.observe(scrollContainer.value)
     }
   })
@@ -187,9 +193,24 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
 })
 
-watch(() => props.sessions, (newSessions) => {
+watch(() => props.sessions, (newSessions, oldSessions) => {
+  const wasAdded = newSessions.length > (oldSessions?.length || 0)
   localTabs.value = [...newSessions]
-  nextTick(updateScrollState)
+  // 延迟两帧确保 DOM 更新完成
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        updateScrollState()
+        // 如果新增了标签，滚动到最右边
+        if (wasAdded && scrollContainer.value) {
+          scrollContainer.value.scrollTo({
+            left: scrollContainer.value.scrollWidth,
+            behavior: 'smooth'
+          })
+        }
+      })
+    })
+  })
 }, { deep: true })
 
 function handleTabClick(tab: SessionTabInfo) {
@@ -295,6 +316,7 @@ function displaySessionId(tab: SessionTabInfo): string | null {
   align-items: center;
   gap: 4px;
   min-width: 0;
+  flex-shrink: 0;
 }
 
 /* 滚动指示器 */

@@ -1,10 +1,9 @@
 package com.asakii.plugin.mcp.tools
 
 import com.asakii.claude.agent.sdk.mcp.ToolResult
+import com.asakii.plugin.mcp.ToolSchemaLoader
 import com.intellij.openapi.project.Project
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.io.File
 import java.nio.file.FileSystems
 import java.nio.file.PathMatcher
@@ -41,44 +40,7 @@ data class DirectoryTreeResult(
  */
 class DirectoryTreeTool(private val project: Project) {
 
-    fun getInputSchema(): Map<String, Any> = mapOf(
-        "type" to "object",
-        "properties" to mapOf(
-            "path" to mapOf(
-                "type" to "string",
-                "description" to "相对于项目根目录的路径，默认为项目根目录（\".\"）",
-                "default" to "."
-            ),
-            "maxDepth" to mapOf(
-                "type" to "integer",
-                "description" to "最大递归深度，默认 3，最大 10",
-                "default" to 3,
-                "minimum" to 1,
-                "maximum" to 10
-            ),
-            "filesOnly" to mapOf(
-                "type" to "boolean",
-                "description" to "是否只显示文件而不显示目录",
-                "default" to false
-            ),
-            "includeHidden" to mapOf(
-                "type" to "boolean",
-                "description" to "是否包含隐藏文件/目录（以 . 开头）",
-                "default" to false
-            ),
-            "pattern" to mapOf(
-                "type" to "string",
-                "description" to "文件名匹配模式（glob 格式，如 \"*.kt\"、\"*.{kt,java}\"）"
-            ),
-            "maxEntries" to mapOf(
-                "type" to "integer",
-                "description" to "最大返回条目数，防止结果过大",
-                "default" to 500,
-                "maximum" to 2000
-            )
-        ),
-        "required" to emptyList<String>()
-    )
+    fun getInputSchema(): Map<String, Any> = ToolSchemaLoader.getSchema("DirectoryTree")
 
     suspend fun execute(arguments: Map<String, Any>): Any {
         val path = (arguments["path"] as? String)?.takeIf { it.isNotBlank() } ?: "."
@@ -88,21 +50,20 @@ class DirectoryTreeTool(private val project: Project) {
         val pattern = arguments["pattern"] as? String
         val maxEntries = ((arguments["maxEntries"] as? Number)?.toInt() ?: 500).coerceIn(1, 2000)
 
-        val projectPath = project.basePath 
-            ?: return ToolResult.error("无法获取项目路径")
-        
-        // 验证路径安全性（防止目录遍历攻击）
+        val projectPath = project.basePath
+            ?: return ToolResult.error("Cannot get project path")
+
         val targetPath = File(projectPath, path).canonicalPath
         if (!targetPath.startsWith(File(projectPath).canonicalPath)) {
-            return ToolResult.error("路径必须在项目目录内")
+            return ToolResult.error("Path must be within project directory")
         }
-        
+
         val targetDir = File(targetPath)
         if (!targetDir.exists()) {
-            return ToolResult.error("目录不存在: $path")
+            return ToolResult.error("Directory not found: $path")
         }
         if (!targetDir.isDirectory) {
-            return ToolResult.error("指定路径不是目录: $path")
+            return ToolResult.error("Path is not a directory: $path")
         }
 
         // 编译 glob 模式
@@ -186,15 +147,42 @@ class DirectoryTreeTool(private val project: Project) {
 
         val entries = buildTree(targetDir, 1, "")
 
-        val result = DirectoryTreeResult(
-            root = path,
-            entries = entries,
-            totalFiles = totalFiles,
-            totalDirectories = totalDirectories,
-            truncated = truncated,
-            maxDepthReached = maxDepthReached
-        )
+        // 生成易读的树形文本格式
+        val sb = StringBuilder()
+        sb.appendLine("📂 $path")
 
-        return Json.encodeToString(result)
+        fun renderTree(items: List<DirectoryEntry>, prefix: String = "") {
+            items.forEachIndexed { index, entry ->
+                val isLast = index == items.lastIndex
+                val connector = if (isLast) "└── " else "├── "
+                val icon = if (entry.isDirectory) "📁" else "📄"
+                val sizeInfo = entry.size?.let { " (${formatSize(it)})" } ?: ""
+
+                sb.appendLine("$prefix$connector$icon ${entry.name}$sizeInfo")
+
+                entry.children?.let { children ->
+                    val newPrefix = prefix + if (isLast) "    " else "│   "
+                    renderTree(children, newPrefix)
+                }
+            }
+        }
+
+        renderTree(entries)
+
+        sb.appendLine()
+        sb.append("📊 Statistics: $totalFiles files, $totalDirectories directories")
+        if (truncated) sb.append(" (truncated, max entries reached)")
+        if (maxDepthReached) sb.append(" (max depth reached)")
+
+        return sb.toString()
+    }
+
+    private fun formatSize(bytes: Long): String {
+        return when {
+            bytes < 1024 -> "${bytes}B"
+            bytes < 1024 * 1024 -> "${bytes / 1024}KB"
+            bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)}MB"
+            else -> "${bytes / (1024 * 1024 * 1024)}GB"
+        }
     }
 }

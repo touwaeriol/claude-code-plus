@@ -77,6 +77,21 @@ message JetBrainsShowMultiEditDiffRequest {
   optional string current_content = 3;
 }
 
+// ========== 编辑预览Diff（权限请求时使用）==========
+
+message JetBrainsShowEditPreviewRequest {
+  string file_path = 1;
+  repeated JetBrainsEditOperation edits = 2;
+  optional string title = 3;
+}
+
+// ========== 显示Markdown（计划预览）==========
+
+message JetBrainsShowMarkdownRequest {
+  string content = 1;
+  optional string title = 2;
+}
+
 // ========== 会话状态（前端→后端）==========
 
 message JetBrainsSessionSummary {

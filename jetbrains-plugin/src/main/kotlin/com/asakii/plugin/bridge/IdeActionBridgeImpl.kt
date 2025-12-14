@@ -2,6 +2,8 @@ package com.asakii.plugin.bridge
 
 import com.asakii.bridge.FrontendRequest
 import com.asakii.bridge.FrontendResponse
+import com.asakii.claude.agent.sdk.types.AgentDefinition
+import com.asakii.plugin.agents.AgentDefinitionsProviderImpl
 import com.asakii.rpc.api.IdeTheme
 import com.asakii.server.IdeActionBridge
 import com.intellij.ui.JBColor
@@ -33,6 +35,7 @@ import com.intellij.util.ui.JBUI
 class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
 
     private val PREFERRED_LOCALE_KEY = "com.asakii.locale"
+    private val agentDefinitionsProvider = AgentDefinitionsProviderImpl()
 
     override fun getTheme(): IdeTheme {
         // 获取编辑器配色方案以获取字体设置
@@ -329,5 +332,9 @@ class IdeActionBridgeImpl(private val project: Project) : IdeActionBridge {
 
     override fun getRecentFiles(maxResults: Int): List<String> {
         return FileEditorManager.getInstance(project).openFiles.mapNotNull { it.path }.take(maxResults)
+    }
+
+    override fun getAgentDefinitions(): Map<String, AgentDefinition> {
+        return agentDefinitionsProvider.getAgentDefinitions()
     }
 }

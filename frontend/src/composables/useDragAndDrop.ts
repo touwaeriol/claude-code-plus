@@ -4,7 +4,6 @@
  */
 import { ref } from 'vue'
 import type { ContextReference, ContextDisplayType } from '@/types/display'
-import type { ImageReference } from '@/types/enhancedMessage'
 
 export interface UseDragAndDropOptions {
   /** 添加上下文回调 */
