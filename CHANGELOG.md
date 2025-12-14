@@ -29,8 +29,8 @@ All notable changes to this project will be documented in this file.
 
 ### SDK
 - Add appendSystemPromptFile option for MCP system prompt appendix
-- Simplify CLI discovery to only use bundled CLI
-- Improve system prompt temp file organization
+- Switch to Node.js direct execution of official bundled cli.js (no longer fallback to global CLI)
+- Improve system prompt temp file organization in dedicated subdirectory
 
 ## [1.0.6] - 2025-12-14
 
