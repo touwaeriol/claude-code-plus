@@ -1,0 +1,6 @@
+<idea-plugin>
+    <!--
+        This file is loaded only when com.intellij.java plugin is available.
+        Java-specific extensions can be registered here.
+    -->
+</idea-plugin>

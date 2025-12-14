@@ -11,12 +11,25 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.search.GlobalSearchScopes
+import com.intellij.openapi.roots.TestSourcesFilter
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.ide.scratch.ScratchUtil
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 @Serializable
 enum class SearchIndexType {
     All, Classes, Files, Symbols, Actions, Text
+}
+
+@Serializable
+enum class SearchIndexScope {
+    Project,            // 仅项目文件
+    All,                // 所有地方（包括库）
+    ProductionFiles,    // 仅生产代码（不含测试）
+    TestFiles,          // 仅测试代码
+    Scratches           // Scratches and Consoles
 }
 
 @Serializable
@@ -52,13 +65,20 @@ class FileIndexTool(private val project: Project) {
         val query = arguments["query"] as? String
             ?: return ToolResult.error("Missing required parameter: query")
         val searchTypeStr = arguments["searchType"] as? String ?: "All"
-        val maxResults = ((arguments["maxResults"] as? Number)?.toInt() ?: 50).coerceIn(1, 200)
+        val scopeStr = arguments["scope"] as? String ?: "Project"
+        val maxResults = ((arguments["maxResults"] as? Number)?.toInt() ?: 50).coerceAtLeast(1)
         val offset = ((arguments["offset"] as? Number)?.toInt() ?: 0).coerceAtLeast(0)
 
         val searchType = try {
             SearchIndexType.valueOf(searchTypeStr)
         } catch (_: Exception) {
             return ToolResult.error("Invalid search type: $searchTypeStr")
+        }
+
+        val searchScope = try {
+            SearchIndexScope.valueOf(scopeStr)
+        } catch (_: Exception) {
+            return ToolResult.error("Invalid scope: $scopeStr. Valid values: Project, All, ProductionFiles, TestFiles, Scratches")
         }
 
         if (query.isBlank()) {
@@ -70,8 +90,11 @@ class FileIndexTool(private val project: Project) {
 
         try {
             ReadAction.run<Exception> {
-                val projectScope = GlobalSearchScope.projectScope(project)
+                val baseScope = createSearchScope(searchScope)
                 val queryLower = query.lowercase()
+
+                // 是否包含库（用于 Classes/Symbols 搜索）
+                val includeLibraries = searchScope == SearchIndexScope.All
 
                 when (searchType) {
                     SearchIndexType.Files, SearchIndexType.All -> {
@@ -80,7 +103,7 @@ class FileIndexTool(private val project: Project) {
                         val matchingFiles = allFileNames
                             .filter { it.lowercase().contains(queryLower) }
                             .flatMap { fileName ->
-                                FilenameIndex.getVirtualFilesByName(fileName, projectScope).map { file ->
+                                FilenameIndex.getVirtualFilesByName(fileName, baseScope).map { file ->
                                     val relativePath = project.basePath?.let { 
                                         file.path.removePrefix(it).removePrefix("/") 
                                     } ?: file.path
@@ -103,47 +126,57 @@ class FileIndexTool(private val project: Project) {
                         // 类搜索 - 使用 GotoClassModel2
                         @Suppress("DEPRECATION")
                         val model = GotoClassModel2(project)
-                        val names = model.getNames(false) // false = 不包含库中的类
+                        val names = model.getNames(includeLibraries)
                         val matchingNames = names.filter { it.lowercase().contains(queryLower) }
-                        
-                        totalFound = matchingNames.size
-                        matchingNames.drop(offset).take(maxResults).forEach { name ->
-                            val elements = model.getElementsByName(name, false, name)
+
+                        // 过滤并收集结果
+                        val filteredResults = matchingNames.mapNotNull { name ->
+                            val elements = model.getElementsByName(name, includeLibraries, name)
                             (elements.firstOrNull() as? PsiElement)?.let { psiElement ->
                                 val file = psiElement.containingFile?.virtualFile
-
-                                results.add(IndexSearchResult(
-                                    name = name,
-                                    path = file?.path?.removePrefix(project.basePath ?: "")?.removePrefix("/"),
-                                    type = "Class",
-                                    description = getElementDescription(psiElement)
-                                ))
+                                // 检查文件是否在 scope 内
+                                if (file != null && baseScope.contains(file)) {
+                                    IndexSearchResult(
+                                        name = name,
+                                        path = file.path.removePrefix(project.basePath ?: "").removePrefix("/"),
+                                        type = "Class",
+                                        description = getElementDescription(psiElement)
+                                    )
+                                } else null
                             }
                         }
+                        totalFound = filteredResults.size
+                        results.addAll(filteredResults.drop(offset).take(maxResults))
                     }
 
                     SearchIndexType.Symbols -> {
                         // 符号搜索 - 使用 GotoSymbolModel2
-                        @Suppress("DEPRECATION", "removal")
+                        // Note: GotoSymbolModel2(Project) is scheduled for removal, but no direct replacement available
+                        // Using ChooseByNameModelEx.getItemProvider() requires UI context
+                        @Suppress("DEPRECATION", "removal", "OVERRIDE_DEPRECATION")
                         val model = GotoSymbolModel2(project)
-                        val names = model.getNames(false)
+                        val names = model.getNames(includeLibraries)
                         val matchingNames = names.filter { it.lowercase().contains(queryLower) }
 
-                        totalFound = matchingNames.size
-                        matchingNames.drop(offset).take(maxResults).forEach { name ->
-                            val elements = model.getElementsByName(name, false, name)
+                        // 过滤并收集结果
+                        val filteredResults = matchingNames.mapNotNull { name ->
+                            val elements = model.getElementsByName(name, includeLibraries, name)
                             (elements.firstOrNull() as? PsiElement)?.let { psiElement ->
                                 val file = psiElement.containingFile?.virtualFile
-
-                                results.add(IndexSearchResult(
-                                    name = name,
-                                    path = file?.path?.removePrefix(project.basePath ?: "")?.removePrefix("/"),
-                                    type = getSymbolType(psiElement),
-                                    description = getElementDescription(psiElement),
-                                    line = getElementLine(psiElement)
-                                ))
+                                // 检查文件是否在 scope 内
+                                if (file != null && baseScope.contains(file)) {
+                                    IndexSearchResult(
+                                        name = name,
+                                        path = file.path.removePrefix(project.basePath ?: "").removePrefix("/"),
+                                        type = getSymbolType(psiElement),
+                                        description = getElementDescription(psiElement),
+                                        line = getElementLine(psiElement)
+                                    )
+                                } else null
                             }
                         }
+                        totalFound = filteredResults.size
+                        results.addAll(filteredResults.drop(offset).take(maxResults))
                     }
                     
                     SearchIndexType.Actions -> {
@@ -172,7 +205,7 @@ class FileIndexTool(private val project: Project) {
         }
 
         val sb = StringBuilder()
-        sb.appendLine("🔍 Search: \"$query\" (type: $searchType)")
+        sb.appendLine("🔍 Search: \"$query\" (type: $searchType, scope: $searchScope)")
         sb.appendLine()
 
         if (results.isEmpty()) {
@@ -229,5 +262,51 @@ class FileIndexTool(private val project: Project) {
         val document = PsiDocumentManager.getInstance(element.project)
             .getDocument(file) ?: return null
         return document.getLineNumber(element.textOffset) + 1
+    }
+
+    /**
+     * 根据 SearchIndexScope 创建对应的 GlobalSearchScope
+     */
+    private fun createSearchScope(scope: SearchIndexScope): GlobalSearchScope {
+        return when (scope) {
+            SearchIndexScope.Project -> GlobalSearchScope.projectScope(project)
+            SearchIndexScope.All -> GlobalSearchScope.allScope(project)
+            SearchIndexScope.ProductionFiles -> {
+                // 仅生产代码（排除测试目录）
+                val thisProject = project // 捕获非空的 project 引用
+                GlobalSearchScope.projectScope(thisProject).let { projectScope ->
+                    object : GlobalSearchScope(thisProject) {
+                        override fun contains(file: VirtualFile): Boolean {
+                            return projectScope.contains(file) && !TestSourcesFilter.isTestSources(file, thisProject)
+                        }
+                        override fun isSearchInModuleContent(aModule: com.intellij.openapi.module.Module) = true
+                        override fun isSearchInLibraries() = false
+                    }
+                }
+            }
+            SearchIndexScope.TestFiles -> {
+                // 仅测试代码
+                val thisProject = project // 捕获非空的 project 引用
+                GlobalSearchScope.projectScope(thisProject).let { projectScope ->
+                    object : GlobalSearchScope(thisProject) {
+                        override fun contains(file: VirtualFile): Boolean {
+                            return projectScope.contains(file) && TestSourcesFilter.isTestSources(file, thisProject)
+                        }
+                        override fun isSearchInModuleContent(aModule: com.intellij.openapi.module.Module) = true
+                        override fun isSearchInLibraries() = false
+                    }
+                }
+            }
+            SearchIndexScope.Scratches -> {
+                // Scratches and Consoles
+                object : GlobalSearchScope(project) {
+                    override fun contains(file: VirtualFile): Boolean {
+                        return ScratchUtil.isScratch(file)
+                    }
+                    override fun isSearchInModuleContent(aModule: com.intellij.openapi.module.Module) = false
+                    override fun isSearchInLibraries() = false
+                }
+            }
+        }
     }
 }

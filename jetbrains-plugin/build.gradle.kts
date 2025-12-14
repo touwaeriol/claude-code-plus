@@ -25,7 +25,10 @@ dependencies {
         // 🔧 使用具体的方法而不是通用的 create()，以支持 runIde 任务
         // IC = IntelliJ IDEA Community
         intellijIdeaCommunity(providers.gradleProperty("platformVersion").get())
-        
+
+        // 🔧 添加 Java 插件依赖，用于 ClassInheritorsSearch、OverridingMethodsSearch 等 API
+        bundledPlugin("com.intellij.java")
+
         // UI 框架说明：
         // 本项目使用 Swing + IntelliJ JB UI 组件（官方推荐方案）
         // 可选使用 Kotlin UI DSL (com.intellij.ui.dsl.builder.*) - 已内置在 IntelliJ Platform 中，无需额外依赖
@@ -42,6 +45,12 @@ dependencies {
     // 🔧 Kotlin serialization 运行时依赖
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${rootProject.extra["serializationVersion"]}")
     
+    // JSON Schema 校验
+    implementation("com.networknt:json-schema-validator:1.5.4")
+
+    // Hutool 反射工具 - 用于可选依赖的反射调用
+    implementation("cn.hutool:hutool-core:5.8.25")
+
     // Markdown 渲染支持
     implementation("org.commonmark:commonmark:0.21.0")
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.21.0")
@@ -67,6 +76,8 @@ dependencies {
     // 测试依赖 - 使用 compileOnly 避免与 IDE 内置版本冲突
     testCompileOnly(kotlin("stdlib"))
     testImplementation("io.mockk:mockk:1.13.8")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    testImplementation(kotlin("test-junit5"))
 }
 
 // IntelliJ 平台配置
@@ -119,10 +130,12 @@ val checkNodeInstalled by tasks.registering(Exec::class) {
 
     doLast {
         if (executionResult.get().exitValue != 0) {
-            throw GradleException("""
+            throw GradleException(
+                """
                 ❌ Node.js is not installed!
                 Please install Node.js from: https://nodejs.org/
-            """.trimIndent())
+                """.trimIndent(),
+            )
         }
     }
 }
@@ -303,6 +316,11 @@ val cleanFrontend by tasks.registering(Delete::class) {
 // ===== 集成到主构建流程 =====
 
 tasks {
+    // 配置测试任务使用 JUnit Platform
+    test {
+        useJUnitPlatform()
+    }
+
     // processResources 不自动依赖前端构建，由具体任务决定
     // runIde 使用开发模式，buildPlugin 使用生产模式
     processResources {
@@ -315,6 +333,8 @@ tasks {
     }
 
     runIde {
+        // 确保运行前下载了 CLI（来自 claude-agent-sdk 模块）
+        dependsOn(":claude-agent-sdk:downloadCli")
         // 确保运行前构建了前端（开发模式，无压缩，更快）
         dependsOn(buildFrontendDev)
 
@@ -327,7 +347,7 @@ tasks {
             "-Dfile.encoding=UTF-8",
             "-Dconsole.encoding=UTF-8",
             "-Dsun.stdout.encoding=UTF-8",
-            "-Dsun.stderr.encoding=UTF-8"
+            "-Dsun.stderr.encoding=UTF-8",
         )
     }
 
@@ -335,6 +355,14 @@ tasks {
         enabled = false
     }
 
+    // 构建插件前先下载 CLI 并构建前端
+    buildPlugin {
+        dependsOn(":claude-agent-sdk:downloadCli")
+        dependsOn(buildFrontend)
+        // 设置输出文件名
+        archiveBaseName.set("claude-code-plus-jetbrains-plugin")
+    }
+}
 
 // 🔧 对于插件模块，只排除运行时的 kotlinx-coroutines，保留编译时
 configurations {
@@ -346,13 +374,5 @@ configurations {
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-debug")
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-test")
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-jdk8")
-    }
-}
-
-    // 构建插件前先构建前端
-    buildPlugin {
-        dependsOn(buildFrontend)
-        // 设置输出文件名
-        archiveBaseName.set("claude-code-plus-jetbrains-plugin")
     }
 }

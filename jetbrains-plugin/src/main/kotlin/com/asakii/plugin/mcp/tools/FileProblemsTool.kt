@@ -56,6 +56,7 @@ class FileProblemsTool(private val project: Project) {
             ?: return ToolResult.error("Missing required parameter: filePath")
         val includeWarnings = arguments["includeWarnings"] as? Boolean ?: true
         val includeWeakWarnings = arguments["includeWeakWarnings"] as? Boolean ?: false
+        val maxProblems = ((arguments["maxProblems"] as? Number)?.toInt() ?: 50).coerceAtLeast(1)
 
         val projectPath = project.basePath
             ?: return ToolResult.error("Cannot get project path")
@@ -88,6 +89,7 @@ class FileProblemsTool(private val project: Project) {
                 val highlighters = markupModel.allHighlighters
 
                 for (highlighter in highlighters) {
+                    if (problems.size >= maxProblems) break
                     if (!highlighter.isValid) continue
                     val info = HighlightInfo.fromRangeHighlighter(highlighter) ?: continue
                     val severity = when {
@@ -96,12 +98,12 @@ class FileProblemsTool(private val project: Project) {
                             ProblemSeverity.ERROR
                         }
                         info.severity == HighlightSeverity.WARNING -> {
-                            if (!includeWarnings) return@run
+                            if (!includeWarnings) continue
                             warningCount++
                             ProblemSeverity.WARNING
                         }
                         info.severity == HighlightSeverity.WEAK_WARNING -> {
-                            if (!includeWeakWarnings) return@run
+                            if (!includeWeakWarnings) continue
                             weakWarningCount++
                             ProblemSeverity.WEAK_WARNING
                         }
@@ -117,8 +119,15 @@ class FileProblemsTool(private val project: Project) {
                     val endLine = document.getLineNumber(info.endOffset) + 1
                     val endColumn = info.endOffset - document.getLineStartOffset(endLine - 1) + 1
 
-                    @Suppress("DEPRECATION")
-                    val quickFixHint = info.quickFixActionRanges?.firstOrNull()?.first?.action?.text
+                    // Note: quickFixActionRanges is deprecated, use findRegisteredQuickFix() instead
+                    // However, that requires IntentionAction context which is not available here
+                    // For now, we try to get quick fix hint via reflection to avoid deprecation warning
+                    val quickFixHint = try {
+                        @Suppress("DEPRECATION", "removal")
+                        info.quickFixActionRanges?.firstOrNull()?.first?.action?.text
+                    } catch (e: Exception) {
+                        null
+                    }
 
                     problems.add(FileProblem(
                         severity = severity,

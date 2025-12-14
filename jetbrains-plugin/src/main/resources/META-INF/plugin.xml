@@ -103,6 +103,8 @@
     ]]></change-notes>
     
     <depends>com.intellij.modules.platform</depends>
+    <!-- Java plugin dependency for PsiClass, PsiMethod, ClassInheritorsSearch, etc. -->
+    <depends optional="true" config-file="plugin-withJava.xml">com.intellij.java</depends>
 
     <idea-version since-build="242.0" until-build="253.*"/>
     
