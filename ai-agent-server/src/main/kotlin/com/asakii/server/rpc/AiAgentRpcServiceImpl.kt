@@ -482,6 +482,33 @@ class AiAgentRpcServiceImpl(
         )
     }
 
+    override suspend fun truncateHistory(
+        sessionId: String,
+        messageUuid: String,
+        projectPath: String
+    ): RpcTruncateHistoryResult {
+        sdkLog.info("✂️ [SDK] 截断历史: sessionId=$sessionId, messageUuid=$messageUuid, projectPath=$projectPath")
+        return try {
+            val remainingLines = HistoryJsonlLoader.truncateHistory(
+                sessionId = sessionId,
+                projectPath = projectPath,
+                messageUuid = messageUuid
+            )
+            sdkLog.info("✅ [SDK] 历史截断成功: remainingLines=$remainingLines")
+            RpcTruncateHistoryResult(
+                success = true,
+                remainingLines = remainingLines
+            )
+        } catch (e: Exception) {
+            sdkLog.error("❌ [SDK] 历史截断失败: ${e.message}", e)
+            RpcTruncateHistoryResult(
+                success = false,
+                remainingLines = -1,
+                error = e.message ?: "Unknown error"
+            )
+        }
+    }
+
     private suspend fun disconnectInternal() {
         try {
             client?.disconnect()
@@ -634,10 +661,11 @@ class AiAgentRpcServiceImpl(
             canUseTool = canUseToolCallback,
             continueConversation = options.continueConversation ?: false,
             resume = options.resumeSessionId,
+            replayUserMessages = options.replayUserMessages ?: false,
             maxThinkingTokens = maxThinkingTokens,
             extraArgs = extraArgs,
-            // 允许 user_interaction MCP 的工具默认通过权限检查，避免向用户提问还需要授权
-            allowedTools = listOf("mcp__user_interaction__AskUserQuestion"),
+            // 动态收集所有 MCP 服务器声明的需要自动允许的工具
+            allowedTools = buildMcpAllowedTools(mcpServers),
             mcpServers = mcpServers,
             // 自定义子代理定义（如 JetBrains 专用的代码探索代理）
             agents = agents.ifEmpty { null }
@@ -662,6 +690,27 @@ class AiAgentRpcServiceImpl(
                 server.getSystemPromptAppendix()?.takeIf { it.isNotBlank() }
             }
             .joinToString("\n\n")
+    }
+
+    /**
+     * 收集所有 MCP 服务器声明的需要自动允许的工具
+     *
+     * 遍历所有注册的 MCP 服务器，调用其 getAllowedTools() 方法，
+     * 将工具名称转换为完整格式（mcp__{serverName}__{toolName}）后合并。
+     *
+     * @param mcpServers MCP 服务器映射（名称 -> 服务器实例）
+     * @return 需要自动允许的工具列表（完整格式）
+     */
+    private fun buildMcpAllowedTools(mcpServers: Map<String, Any>): List<String> {
+        return mcpServers.entries
+            .mapNotNull { (serverName, server) ->
+                (server as? com.asakii.claude.agent.sdk.mcp.McpServer)?.let { mcpServer ->
+                    mcpServer.getAllowedTools().map { toolName ->
+                        "mcp__${serverName}__$toolName"
+                    }
+                }
+            }
+            .flatten()
     }
 
     private fun buildCodexOverrides(
@@ -846,13 +895,14 @@ class AiAgentRpcServiceImpl(
                 ),
                 provider = rpcProvider,
                 isReplay = isReplay,
-                parentToolUseId = parentToolUseId
+                parentToolUseId = parentToolUseId,
+                uuid = uuid
             )
 
             is UiAssistantMessage -> {
-                println("🔍 [toRpcMessage] UiAssistantMessage: content.size=${content.size}, parentToolUseId=$parentToolUseId")
+                sdkLog.debug { "🔍 [toRpcMessage] UiAssistantMessage: content.size=${content.size}, parentToolUseId=$parentToolUseId, uuid=$uuid" }
                 content.forEachIndexed { idx, block ->
-                    println("🔍 [toRpcMessage] UiAssistantMessage content[$idx]: type=${block::class.simpleName}, ${if (block is ToolUseContent) "input=${block.input}" else ""}")
+                    sdkLog.debug { "🔍 [toRpcMessage] UiAssistantMessage content[$idx]: type=${block::class.simpleName}, ${if (block is ToolUseContent) "input=${block.input}" else ""}" }
                 }
                 RpcAssistantMessage(
                     id = id,
@@ -860,7 +910,8 @@ class AiAgentRpcServiceImpl(
                         content = content.map { it.toRpcContentBlock() }
                     ),
                     provider = rpcProvider,
-                    parentToolUseId = parentToolUseId
+                    parentToolUseId = parentToolUseId,
+                    uuid = uuid
                 )
             }
 
@@ -894,6 +945,17 @@ class AiAgentRpcServiceImpl(
                     trigger = trigger,
                     preTokens = preTokens
                 ),
+                provider = rpcProvider
+            )
+
+            is UiSystemInit -> RpcSystemInitMessage(
+                sessionId = sessionId,
+                cwd = cwd,
+                model = model,
+                permissionMode = permissionMode,
+                apiKeySource = apiKeySource,
+                tools = tools,
+                mcpServers = mcpServers?.map { RpcMcpServerInfo(it.name, it.status) },
                 provider = rpcProvider
             )
         }
@@ -1084,6 +1146,7 @@ class AiAgentRpcServiceImpl(
         is UiThinkingStart -> "index=${event.index}"
         is UiStatusSystem -> "status=${event.status}, sessionId=${event.sessionId}"
         is UiCompactBoundary -> "sessionId=${event.sessionId}, trigger=${event.trigger}, preTokens=${event.preTokens}"
+        is UiSystemInit -> "sessionId=${event.sessionId}, model=${event.model}, permissionMode=${event.permissionMode}"
     }
 
     /**

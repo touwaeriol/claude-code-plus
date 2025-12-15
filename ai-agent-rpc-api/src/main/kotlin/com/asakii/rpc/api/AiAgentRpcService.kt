@@ -98,4 +98,21 @@ interface AiAgentRpcService {
         sessionId: String? = null,
         projectPath: String? = null
     ): RpcHistoryMetadata
+
+    /**
+     * 截断历史记录（用于编辑重发功能）
+     *
+     * 从指定的消息 UUID 开始截断 JSONL 历史文件，该消息及其后续所有消息都会被删除。
+     * 通常在截断后需要断开连接并创建新会话。
+     *
+     * @param sessionId 会话 ID
+     * @param messageUuid 要截断的消息 UUID（从该消息开始截断，包含该消息）
+     * @param projectPath 项目路径（用于定位 JSONL 文件）
+     * @return 截断结果
+     */
+    suspend fun truncateHistory(
+        sessionId: String,
+        messageUuid: String,
+        projectPath: String
+    ): RpcTruncateHistoryResult
 }

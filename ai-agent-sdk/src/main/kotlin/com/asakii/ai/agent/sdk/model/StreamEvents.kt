@@ -98,7 +98,9 @@ data class AssistantMessageEvent(
     val model: String? = null,
     val tokenUsage: UnifiedUsage? = null,
     /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
-    val parentToolUseId: String? = null
+    val parentToolUseId: String? = null,
+    /** 消息唯一标识符（用于编辑重发功能定位 JSONL 截断位置） */
+    val uuid: String? = null
 ) : NormalizedStreamEvent
 
 data class UserMessageEvent(
@@ -107,7 +109,9 @@ data class UserMessageEvent(
     /** 是否是回放消息（用于区分压缩摘要） */
     val isReplay: Boolean? = null,
     /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
-    val parentToolUseId: String? = null
+    val parentToolUseId: String? = null,
+    /** 消息唯一标识符（用于编辑重发功能定位 JSONL 截断位置） */
+    val uuid: String? = null
 ) : NormalizedStreamEvent
 
 /**
@@ -128,6 +132,29 @@ data class CompactBoundaryEvent(
     val trigger: String?,    // "manual" 或 "auto"
     val preTokens: Int?      // 压缩前的 token 数
 ) : NormalizedStreamEvent
+
+/**
+ * 系统初始化事件 - 每次 query 开始时发送
+ * 包含真正的 sessionId，用于会话恢复和历史消息关联
+ */
+data class SystemInitEvent(
+    override val provider: AiAgentProvider,
+    val sessionId: String,
+    val cwd: String? = null,
+    val model: String? = null,
+    val permissionMode: String? = null,
+    val apiKeySource: String? = null,
+    val tools: List<String>? = null,
+    val mcpServers: List<McpServerInfoModel>? = null
+) : NormalizedStreamEvent
+
+/**
+ * MCP 服务器信息（统一模型）
+ */
+data class McpServerInfoModel(
+    val name: String,
+    val status: String
+)
 
 /**
  * UI 直接消费的事件。
@@ -197,7 +224,9 @@ data class UiAssistantMessage(
     val id: String? = null,
     val content: List<UnifiedContentBlock>,
     /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
-    val parentToolUseId: String? = null
+    val parentToolUseId: String? = null,
+    /** 消息唯一标识符（用于编辑重发功能定位 JSONL 截断位置） */
+    val uuid: String? = null
 ) : UiStreamEvent
 
 data class UiResultMessage(
@@ -217,7 +246,9 @@ data class UiUserMessage(
     /** 是否是回放消息（用于区分压缩摘要） */
     val isReplay: Boolean? = null,
     /** 父工具调用 ID（用于标识子代理消息所属的父 Task） */
-    val parentToolUseId: String? = null
+    val parentToolUseId: String? = null,
+    /** 消息唯一标识符（用于编辑重发功能定位 JSONL 截断位置） */
+    val uuid: String? = null
 ) : UiStreamEvent
 
 /**
@@ -235,6 +266,20 @@ data class UiCompactBoundary(
     val sessionId: String,
     val trigger: String?,    // "manual" 或 "auto"
     val preTokens: Int?      // 压缩前的 token 数
+) : UiStreamEvent
+
+/**
+ * 系统初始化消息 - 每次 query 开始时发送
+ * 包含真正的 sessionId，用于会话恢复和历史消息关联
+ */
+data class UiSystemInit(
+    val sessionId: String,
+    val cwd: String? = null,
+    val model: String? = null,
+    val permissionMode: String? = null,
+    val apiKeySource: String? = null,
+    val tools: List<String>? = null,
+    val mcpServers: List<McpServerInfoModel>? = null
 ) : UiStreamEvent
 
 /**

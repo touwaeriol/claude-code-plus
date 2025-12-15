@@ -106,6 +106,7 @@ class RSocketHandler(
                     "agent.setModel" -> handleSetModel(dataBytes, rpcService)
                     "agent.setPermissionMode" -> handleSetPermissionMode(dataBytes, rpcService)
                     "agent.getHistory" -> handleGetHistory(rpcService)
+                    "agent.truncateHistory" -> handleTruncateHistory(dataBytes, rpcService)
                     else -> throw IllegalArgumentException("Unknown route: $route")
                 }
 
@@ -198,6 +199,14 @@ class RSocketHandler(
         wsLog.info("?? [RSocket] getHistory request")
         val result = rpcService.getHistory()
         wsLog.info("?? [RSocket] getHistory result: messages=${result.messages.size}")
+        return buildPayload { data(result.toProto().toByteArray()) }
+    }
+
+    private suspend fun handleTruncateHistory(dataBytes: ByteArray, rpcService: AiAgentRpcService): Payload {
+        val req = TruncateHistoryRequest.parseFrom(dataBytes)
+        wsLog.info("✂️ [RSocket] truncateHistory request: sessionId=${req.sessionId}, messageUuid=${req.messageUuid}")
+        val result = rpcService.truncateHistory(req.sessionId, req.messageUuid, req.projectPath)
+        wsLog.info("✂️ [RSocket] truncateHistory result: success=${result.success}, remainingLines=${result.remainingLines}")
         return buildPayload { data(result.toProto().toByteArray()) }
     }
 

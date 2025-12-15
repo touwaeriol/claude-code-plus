@@ -4,6 +4,8 @@ import com.asakii.rpc.api.RpcAssistantMessage
 import com.asakii.rpc.api.RpcCapabilities
 import com.asakii.rpc.api.RpcCommandExecutionBlock
 import com.asakii.rpc.api.RpcCompactBoundaryMessage
+import com.asakii.rpc.api.RpcSystemInitMessage
+import com.asakii.rpc.api.RpcMcpServerInfo as RpcMcpServerInfoApi
 import com.asakii.rpc.api.RpcCompactMetadata as RpcCompactMetadataApi
 import com.asakii.rpc.api.RpcConnectOptions
 import com.asakii.rpc.api.RpcConnectResult as RpcConnectResultApi
@@ -22,6 +24,7 @@ import com.asakii.rpc.api.RpcHistoryMetadata as RpcHistoryMetadataApi
 import com.asakii.rpc.api.RpcHistoryResult as RpcHistoryResultApi
 import com.asakii.rpc.api.RpcHistorySession as RpcHistorySessionApi
 import com.asakii.rpc.api.RpcHistorySessionsResult as RpcHistorySessionsResultApi
+import com.asakii.rpc.api.RpcTruncateHistoryResult as RpcTruncateHistoryResultApi
 import com.asakii.rpc.api.RpcImageBlock
 import com.asakii.rpc.api.RpcImageSource as RpcImageSourceApi
 import com.asakii.rpc.api.RpcInputJsonDelta
@@ -172,7 +175,8 @@ object ProtoConverter {
         thinkingEnabled = if (hasThinkingEnabled()) thinkingEnabled else null,
         baseUrl = if (hasBaseUrl()) baseUrl else null,
         apiKey = if (hasApiKey()) apiKey else null,
-        sandboxMode = if (hasSandboxMode()) sandboxMode.toRpc() else null
+        sandboxMode = if (hasSandboxMode()) sandboxMode.toRpc() else null,
+        replayUserMessages = if (hasReplayUserMessages()) replayUserMessages else null
     )
 
     // ==================== ConnectResult ====================
@@ -252,6 +256,12 @@ object ProtoConverter {
         availableCount = this@toProto.availableCount
     }
 
+    fun RpcTruncateHistoryResultApi.toProto(): com.asakii.rpc.proto.TruncateHistoryResult = com.asakii.rpc.proto.truncateHistoryResult {
+        success = this@toProto.success
+        remainingLines = this@toProto.remainingLines
+        this@toProto.error?.let { error = it }
+    }
+
     // ==================== RpcMessage -> Proto ====================
 
     fun RpcMessageApi.toProto(): RpcMessage = rpcMessage {
@@ -263,6 +273,7 @@ object ProtoConverter {
             is RpcErrorMessageApi -> this@toProto.provider.toProto()
             is RpcStatusSystemMessage -> this@toProto.provider.toProto()
             is RpcCompactBoundaryMessage -> this@toProto.provider.toProto()
+            is RpcSystemInitMessage -> this@toProto.provider.toProto()
         }
 
         when (val msg = this@toProto) {
@@ -273,6 +284,7 @@ object ProtoConverter {
             is RpcErrorMessageApi -> error = msg.toProtoErrorMessage()
             is RpcStatusSystemMessage -> statusSystem = msg.toProtoStatusSystemMessage()
             is RpcCompactBoundaryMessage -> compactBoundary = msg.toProtoCompactBoundaryMessage()
+            is RpcSystemInitMessage -> systemInit = msg.toProtoSystemInitMessage()
         }
     }
 
@@ -280,12 +292,14 @@ object ProtoConverter {
         message = this@toProtoUserMessage.message.toProto()
         this@toProtoUserMessage.parentToolUseId?.let { parentToolUseId = it }
         this@toProtoUserMessage.isReplay?.let { isReplay = it }
+        this@toProtoUserMessage.uuid?.let { uuid = it }
     }
 
     private fun RpcAssistantMessage.toProtoAssistantMessage(): AssistantMessage = assistantMessage {
         message = this@toProtoAssistantMessage.message.toProto()
         this@toProtoAssistantMessage.id?.let { id = it }
         this@toProtoAssistantMessage.parentToolUseId?.let { parentToolUseId = it }
+        this@toProtoAssistantMessage.uuid?.let { uuid = it }
     }
 
     private fun RpcResultMessageApi.toProtoResultMessage(): ResultMessage = resultMessage {
@@ -326,6 +340,23 @@ object ProtoConverter {
     private fun RpcCompactMetadataApi.toProtoCompactMetadata(): CompactMetadata = compactMetadata {
         this@toProtoCompactMetadata.trigger?.let { trigger = it }
         this@toProtoCompactMetadata.preTokens?.let { preTokens = it }
+    }
+
+    private fun RpcSystemInitMessage.toProtoSystemInitMessage(): SystemInitMessage = systemInitMessage {
+        sessionId = this@toProtoSystemInitMessage.sessionId
+        this@toProtoSystemInitMessage.cwd?.let { cwd = it }
+        this@toProtoSystemInitMessage.model?.let { model = it }
+        this@toProtoSystemInitMessage.permissionMode?.let { permissionMode = it }
+        this@toProtoSystemInitMessage.apiKeySource?.let { apiKeySource = it }
+        this@toProtoSystemInitMessage.tools?.let { tools.addAll(it) }
+        this@toProtoSystemInitMessage.mcpServers?.let { servers ->
+            mcpServers.addAll(servers.map { it.toProtoMcpServerInfo() })
+        }
+    }
+
+    private fun RpcMcpServerInfoApi.toProtoMcpServerInfo(): McpServerInfo = mcpServerInfo {
+        name = this@toProtoMcpServerInfo.name
+        status = this@toProtoMcpServerInfo.status
     }
 
     // ==================== MessageContent ====================

@@ -2,7 +2,10 @@
   <div
     class="unified-chat-input-container"
     :class="{ focused: isFocused, generating: isGenerating, 'inline-mode': inline }"
-    :style="containerHeight ? { height: containerHeight + 'px' } : {}"
+    :style="{
+      height: containerHeight ? containerHeight + 'px' : undefined,
+      '--input-max-height': INPUT_MAX_HEIGHT + 'px'
+    }"
   >
     <!-- 顶部拖拽条 -->
     <div
@@ -442,7 +445,7 @@ import { useSessionStore } from '@/stores/sessionStore'
 // Composables
 import { useImageHandling } from '@/composables/useImageHandling'
 import { useDragAndDrop } from '@/composables/useDragAndDrop'
-import { useInputResize } from '@/composables/useInputResize'
+import { useInputResize, INPUT_MAX_HEIGHT } from '@/composables/useInputResize'
 import { useModelSelection } from '@/composables/useModelSelection'
 import { useContextMenu } from '@/composables/useContextMenu'
 
@@ -1528,6 +1531,7 @@ onUnmounted(() => {
   padding: 10px 12px;
   cursor: text;
   min-height: 60px;
+  max-height: var(--input-max-height);  /* 使用 CSS 变量，由 JS 设置 */
   overflow-y: auto;
   overflow-x: hidden;
 }

@@ -49,15 +49,12 @@ class SessionTabsAction(
     private var currentState: JetBrainsSessionState? = null
     private var removeListener: (() -> Unit)? = null
 
-    // 脉冲动画
-    private var pulseScale = 1.0f
-    private var pulseOpacity = 1.0f
-    private val pulseTimer = Timer(50) {
-        pulseScale += 0.05f
-        pulseOpacity -= 0.03f
-        if (pulseScale > 1.5f) {
-            pulseScale = 1.0f
-            pulseOpacity = 1.0f
+    // 弹跳动画（使用 sin 函数实现平滑弹跳）
+    private var pulsePhase = 0.0
+    private val pulseTimer = Timer(30) {  // 更快的刷新率
+        pulsePhase += 0.2
+        if (pulsePhase > Math.PI * 2) {
+            pulsePhase = 0.0
         }
         tabsPanel.repaint()
     }
@@ -365,8 +362,7 @@ class SessionTabsAction(
             pulseTimer.start()
         } else if (!needsAnimation && pulseTimer.isRunning) {
             pulseTimer.stop()
-            pulseScale = 1.0f
-            pulseOpacity = 1.0f
+            pulsePhase = 0.0
         }
     }
 
@@ -516,14 +512,17 @@ class SessionTabsAction(
 
                 when {
                     isConnecting -> {
-                        val pulseSize = dotSize * pulseScale
+                        // 连接中：蓝色脉冲动画
+                        val bounceScale = 1.0f + 0.3f * kotlin.math.sin(pulsePhase).toFloat()
+                        val bounceOpacity = 0.5f + 0.5f * kotlin.math.cos(pulsePhase).toFloat()
+                        val pulseSize = dotSize * bounceScale
                         val pulseX = x + (dotSize - pulseSize) / 2
                         val pulseY = centerY - pulseSize / 2
                         g2.color = Color(
                             colorConnecting.red,
                             colorConnecting.green,
                             colorConnecting.blue,
-                            (pulseOpacity * 100).toInt()
+                            (bounceOpacity * 80).toInt()
                         )
                         g2.fill(Ellipse2D.Float(pulseX, pulseY, pulseSize, pulseSize))
                         g2.color = colorConnecting
@@ -531,16 +530,21 @@ class SessionTabsAction(
                     }
 
                     isGenerating -> {
-                        val pulseSize = dotSize * pulseScale
+                        // 生成中：绿色弹跳动画（更明显的效果）
+                        val bounceScale = 1.0f + 0.4f * kotlin.math.sin(pulsePhase).toFloat()
+                        val bounceOpacity = 0.4f + 0.6f * kotlin.math.cos(pulsePhase).toFloat()
+                        val pulseSize = dotSize * bounceScale
                         val pulseX = x + (dotSize - pulseSize) / 2
                         val pulseY = centerY - pulseSize / 2
+                        // 外圈光晕
                         g2.color = Color(
                             colorConnected.red,
                             colorConnected.green,
                             colorConnected.blue,
-                            (pulseOpacity * 100).toInt()
+                            (bounceOpacity * 100).toInt()
                         )
                         g2.fill(Ellipse2D.Float(pulseX, pulseY, pulseSize, pulseSize))
+                        // 中心实心点
                         g2.color = colorConnected
                         g2.fill(Ellipse2D.Float(x, dotY, dotSize, dotSize))
                     }

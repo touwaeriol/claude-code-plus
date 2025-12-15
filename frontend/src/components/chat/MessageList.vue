@@ -282,9 +282,13 @@ function setupResizeObserver() {
   if (!el || resizeObserver) return
 
   resizeObserver = new ResizeObserver(() => {
-    // 当容器高度变化且用户锁定时，立即恢复滚动位置
-    if (userScrollLock.value && lockedScrollTop.value > 0) {
-      el.scrollTop = lockedScrollTop.value
+    // 用户锁定期间，不自动调整滚动位置，避免展开卡片等操作触发意外滚动
+    if (userScrollLock.value) {
+      return
+    }
+    // 未锁定且在底部时，保持滚动到底部
+    if (isNearBottom.value && props.isStreaming) {
+      scrollToBottomSilent()
     }
   })
 
@@ -530,11 +534,6 @@ function handleScroll() {
     userScrollLock.value = true
     lockedScrollTop.value = scrollTop  // 保存锁定时的滚动位置
     stopAutoScroll()  // 直接停止定时器
-  }
-
-  // 用户锁定状态下滚动时，持续更新锁定位置
-  if (userScrollLock.value && scrollDelta > 0) {
-    lockedScrollTop.value = scrollTop
   }
 
   // 用户主动向下滚动回到底部时，解除锁定并恢复自动滚动

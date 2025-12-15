@@ -26,7 +26,9 @@ data class UserMessage(
      * - isReplay = false: 压缩摘要（新生成的上下文）
      * - isReplay = true: 确认消息（如 "Compacted"）
      */
-    val isReplay: Boolean? = null
+    val isReplay: Boolean? = null,
+    /** 消息唯一标识符（用于编辑重发功能定位 JSONL 截断位置） */
+    val uuid: String? = null
 ) : Message
 
 /**
@@ -46,7 +48,9 @@ data class AssistantMessage(
      * - 非 null: 子代理消息，值为触发该子代理的 Task 工具调用 ID
      */
     @SerialName("parent_tool_use_id")
-    val parentToolUseId: String? = null
+    val parentToolUseId: String? = null,
+    /** 消息唯一标识符（用于编辑重发功能定位 JSONL 截断位置） */
+    val uuid: String? = null
 ) : Message
 
 /**
@@ -168,4 +172,34 @@ data class TokenUsage(
     val cacheCreationInputTokens: Int? = null,
     @SerialName("cache_read_input_tokens")
     val cacheReadInputTokens: Int? = null
+)
+
+/**
+ * System init message - sent at the start of each query from Claude CLI.
+ * Contains session information that can be used for session resumption.
+ *
+ * Example: {"type":"system","subtype":"init","session_id":"...","model":"claude-opus-4-5-20251101",...}
+ */
+@Serializable
+data class SystemInitMessage(
+    val subtype: String = "init",
+    @SerialName("session_id")
+    val sessionId: String,
+    val cwd: String? = null,
+    val model: String? = null,
+    val permissionMode: String? = null,
+    val apiKeySource: String? = null,
+    val tools: List<String>? = null,
+    @SerialName("mcp_servers")
+    val mcpServers: List<CliMcpServerInfo>? = null
+) : Message
+
+/**
+ * MCP server info in system init message (from CLI).
+ * Note: This is different from McpTypes.McpServerInfo which is for MCP protocol initialization.
+ */
+@Serializable
+data class CliMcpServerInfo(
+    val name: String,
+    val status: String
 )

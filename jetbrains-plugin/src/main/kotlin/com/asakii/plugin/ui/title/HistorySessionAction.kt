@@ -203,10 +203,11 @@ class HistorySessionAction(
         ApplicationManager.getApplication().executeOnPooledThread {
             val projectPath = project.basePath ?: return@executeOnPooledThread
 
-            // 获取当前激活会话数量
+            // 获取当前激活会话（只用真实的 sessionId 去重，忽略 null）
             val currentState = sessionApi.getState()
-            val activeSessionIds = currentState?.sessions?.mapNotNull { it.sessionId }?.toSet() ?: emptySet()
-            val activeCount = activeSessionIds.size
+            val activeSessions = currentState?.sessions ?: emptyList()
+            val activeRealSessionIds = activeSessions.mapNotNull { it.sessionId }.toSet()
+            val activeCount = activeSessions.size
 
             // 历史会话需要加载的数量 = pageSize - 激活会话数量
             val historyToLoad = maxOf(pageSize - activeCount, 1)
@@ -255,10 +256,11 @@ class HistorySessionAction(
     private fun showLoadingPopupWithCurrent(e: AnActionEvent) {
         val currentState = sessionApi.getState()
         val activeSessions = currentState?.sessions ?: emptyList()
-        val activeSessionIds = activeSessions.mapNotNull { it.sessionId }.toSet()
+        // 只用真实的 sessionId 去重（后端会话 ID）
+        val activeRealSessionIds = activeSessions.mapNotNull { it.sessionId }.toSet()
 
         // 历史会话排除激活的
-        val filteredHistory = cachedSessions.filter { !activeSessionIds.contains(it.sessionId) }
+        val filteredHistory = cachedSessions.filter { !activeRealSessionIds.contains(it.sessionId) }
 
         val items = buildListItems(activeSessions, filteredHistory, hasMore = false)
         val mutableItems = items.toMutableList()
@@ -272,10 +274,11 @@ class HistorySessionAction(
         // 获取当前活动会话
         val currentState = sessionApi.getState()
         val activeSessions = currentState?.sessions ?: emptyList()
-        val activeSessionIds = activeSessions.mapNotNull { it.sessionId }.toSet()
+        // 只用真实的 sessionId 去重（后端会话 ID）
+        val activeRealSessionIds = activeSessions.mapNotNull { it.sessionId }.toSet()
 
         // 历史会话排除激活的
-        val filteredHistory = historySessions.filter { !activeSessionIds.contains(it.sessionId) }
+        val filteredHistory = historySessions.filter { !activeRealSessionIds.contains(it.sessionId) }
 
         // 如果激活会话和历史会话都为空
         if (activeSessions.isEmpty() && filteredHistory.isEmpty()) {

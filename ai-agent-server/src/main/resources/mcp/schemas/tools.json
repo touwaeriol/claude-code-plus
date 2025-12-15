@@ -1,0 +1,49 @@
+{
+  "AskUserQuestion": {
+    "type": "object",
+    "description": "向用户询问问题并获取选择。使用此工具在需要用户输入或确认时与用户交互。",
+    "properties": {
+      "questions": {
+        "type": "array",
+        "description": "问题列表",
+        "items": {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "string",
+              "description": "问题内容"
+            },
+            "header": {
+              "type": "string",
+              "description": "问题标题/分类标签"
+            },
+            "options": {
+              "type": "array",
+              "description": "选项列表",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "description": "选项显示文本"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "选项描述(可选)"
+                  }
+                },
+                "required": ["label"]
+              }
+            },
+            "multiSelect": {
+              "type": "boolean",
+              "description": "是否允许多选,默认 false"
+            }
+          },
+          "required": ["question", "header", "options"]
+        }
+      }
+    },
+    "required": ["questions"]
+  }
+}

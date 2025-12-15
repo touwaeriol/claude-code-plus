@@ -3,6 +3,7 @@ package com.asakii.server
 import com.asakii.plugin.bridge.JetBrainsApiImpl
 import com.asakii.plugin.bridge.JetBrainsRSocketHandler
 import com.asakii.plugin.mcp.JetBrainsMcpServerProviderImpl
+import com.asakii.server.logging.StandaloneLogging
 import com.asakii.plugin.tools.IdeToolsImpl
 import com.asakii.rpc.api.JetBrainsApi
 
@@ -40,8 +41,29 @@ class HttpServerProjectService(private val project: Project) : Disposable {
         get() = _jetbrainsApi
 
     init {
+        // 首先配置日志系统
+        configureLogging()
+
         logger.info("🚀 Initializing HTTP Server Project Service")
         startServer()
+    }
+
+    /**
+     * 配置日志系统
+     * 将日志输出到项目的 .log 目录，支持滚动备份
+     */
+    private fun configureLogging() {
+        try {
+            val projectBasePath = project.basePath
+            if (projectBasePath != null) {
+                StandaloneLogging.configure(java.io.File(projectBasePath))
+                logger.info("📝 Logging configured to: $projectBasePath/.log/")
+            } else {
+                logger.warning("⚠️ Project base path is null, logging to .log directory skipped")
+            }
+        } catch (e: Exception) {
+            logger.warning("⚠️ Failed to configure logging: ${e.message}")
+        }
     }
 
     /**

@@ -561,4 +561,109 @@ object HistoryJsonlLoader {
         val regex = Regex("""agentId:\s*([a-f0-9]+)""", RegexOption.IGNORE_CASE)
         return regex.find(text)?.groupValues?.get(1)
     }
+
+    /**
+     * Truncate history file from the message with the specified UUID.
+     * Keeps all messages before the target UUID, removes the target message and all subsequent messages.
+     *
+     * Implementation:
+     * 1. Read lines until we find the target UUID
+     * 2. Write all lines before the target to a temporary file
+     * 3. Replace original file with temp file
+     * 4. Clear metadata cache
+     *
+     * @param sessionId Session ID
+     * @param projectPath Project path
+     * @param messageUuid UUID of the message to truncate from (inclusive - this message will be removed)
+     * @return Number of physical lines remaining after truncation
+     * @throws IllegalArgumentException if sessionId, projectPath or messageUuid is blank
+     * @throws IllegalStateException if file does not exist or UUID not found
+     */
+    fun truncateHistory(
+        sessionId: String,
+        projectPath: String,
+        messageUuid: String
+    ): Int {
+        require(sessionId.isNotBlank()) { "sessionId cannot be blank" }
+        require(projectPath.isNotBlank()) { "projectPath cannot be blank" }
+        require(messageUuid.isNotBlank()) { "messageUuid cannot be blank" }
+
+        val claudeDir = ClaudeSessionScanner.getClaudeDir()
+        val projectId = ProjectPathUtils.projectPathToDirectoryName(projectPath)
+        val historyFile = File(claudeDir, "projects/$projectId/$sessionId.jsonl")
+
+        if (!historyFile.exists()) {
+            log.warn("[History] Truncate failed: file does not exist ${historyFile.absolutePath}")
+            throw IllegalStateException("History file does not exist: ${historyFile.absolutePath}")
+        }
+
+        log.info("[History] Truncating history: sessionId=$sessionId, messageUuid=$messageUuid, file=${historyFile.absolutePath}")
+
+        // Create temp file
+        val tempFile = File(historyFile.parentFile, "${sessionId}.jsonl.tmp")
+
+        try {
+            var keptLines = 0
+            var foundUuid = false
+
+            historyFile.bufferedReader().use { reader ->
+                tempFile.bufferedWriter().use { writer ->
+                    while (true) {
+                        val line = reader.readLine() ?: break
+
+                        // Check if this line contains the target UUID
+                        // Quick string check first, then parse JSON if needed
+                        if (line.contains("\"uuid\"") && line.contains(messageUuid)) {
+                            // Verify by parsing JSON
+                            try {
+                                val json = parser.parseToJsonElement(line).jsonObject
+                                val uuid = json["uuid"]?.jsonPrimitive?.contentOrNull
+                                if (uuid == messageUuid) {
+                                    foundUuid = true
+                                    log.info("[History] Found target UUID at line ${keptLines + 1}, truncating from here")
+                                    break  // Stop writing, truncate from this point
+                                }
+                            } catch (e: Exception) {
+                                // JSON parse failed, continue
+                            }
+                        }
+
+                        // Write line to temp file
+                        writer.write(line)
+                        writer.newLine()
+                        keptLines++
+                    }
+                }
+            }
+
+            if (!foundUuid) {
+                // Clean up temp file
+                tempFile.delete()
+                log.warn("[History] Truncate failed: UUID not found $messageUuid")
+                throw IllegalStateException("Message UUID not found in history: $messageUuid")
+            }
+
+            // Replace original file with temp file
+            // On Windows, rename might fail if the file is locked, so use copy + delete
+            if (!tempFile.renameTo(historyFile)) {
+                log.debug("[History] rename failed, using copy + delete")
+                tempFile.copyTo(historyFile, overwrite = true)
+                tempFile.delete()
+            }
+
+            // Clear cached metadata for this file
+            metadataCache.remove(historyFile.absolutePath)
+
+            log.info("[History] Truncation complete: kept $keptLines lines")
+            return keptLines
+        } catch (e: Exception) {
+            // Clean up temp file on error
+            if (tempFile.exists()) {
+                tempFile.delete()
+            }
+            if (e is IllegalStateException) throw e  // Re-throw our own exceptions
+            log.error("[History] Truncation failed: ${e.message}", e)
+            throw e
+        }
+    }
 }

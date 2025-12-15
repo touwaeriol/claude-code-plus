@@ -1,7 +1,7 @@
 package com.asakii.plugin.mcp.tools
 
 import com.asakii.claude.agent.sdk.mcp.ToolResult
-import com.asakii.plugin.mcp.ToolSchemaLoader
+import com.asakii.server.mcp.schema.ToolSchemaLoader
 import com.intellij.openapi.project.Project
 import kotlinx.serialization.Serializable
 import java.io.File
@@ -44,7 +44,8 @@ class DirectoryTreeTool(private val project: Project) {
 
     suspend fun execute(arguments: Map<String, Any>): Any {
         val path = (arguments["path"] as? String)?.takeIf { it.isNotBlank() } ?: "."
-        val maxDepth = ((arguments["maxDepth"] as? Number)?.toInt() ?: 3).coerceIn(1, 10)
+        val maxDepthArg = (arguments["maxDepth"] as? Number)?.toInt() ?: 3
+        val maxDepth = if (maxDepthArg <= 0) Int.MAX_VALUE else maxDepthArg  // -1 or 0 means unlimited
         val filesOnly = arguments["filesOnly"] as? Boolean ?: false
         val includeHidden = arguments["includeHidden"] as? Boolean ?: false
         val pattern = arguments["pattern"] as? String

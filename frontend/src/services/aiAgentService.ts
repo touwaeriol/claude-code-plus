@@ -497,6 +497,34 @@ export class AiAgentService {
             customTitle: meta.customTitle
         }
     }
+
+    /**
+     * 截断历史记录（用于编辑重发功能）
+     *
+     * 从指定的消息 UUID 开始截断 JSONL 历史文件，该消息及其后续所有消息都会被删除。
+     *
+     * @param params 截断参数
+     * @param params.sessionId 会话 ID
+     * @param params.messageUuid 要截断的消息 UUID（从该消息开始截断，包含该消息）
+     * @param params.projectPath 项目路径（用于定位 JSONL 文件）
+     * @returns 截断结果
+     */
+    async truncateHistory(params: {
+        sessionId: string
+        messageUuid: string
+        projectPath: string
+    }): Promise<{ success: boolean; remainingLines: number; error?: string }> {
+        console.log('✂️ [AiAgentService] 截断历史:', params)
+
+        // 获取任意一个已连接的会话来发送 RSocket 请求
+        // 因为 truncateHistory 是针对文件操作，不需要特定会话
+        const session = this.sessions.values().next().value as RSocketSession | undefined
+        if (!session || !session.isConnected) {
+            throw new Error('没有可用的 RSocket 连接')
+        }
+
+        return await session.truncateHistory(params)
+    }
 }
 
 // 导出单例

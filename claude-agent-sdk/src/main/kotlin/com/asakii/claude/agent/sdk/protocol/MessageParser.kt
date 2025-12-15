@@ -63,12 +63,15 @@ class MessageParser {
         val sessionId = jsonObject["session_id"]?.jsonPrimitive?.content ?: "default"
         // 解析 isReplay 字段（用于区分压缩摘要消息）
         val isReplay = jsonObject["isReplay"]?.jsonPrimitive?.booleanOrNull
+        // 解析 uuid 字段（用于编辑重发功能）
+        val uuid = jsonObject["uuid"]?.jsonPrimitive?.contentOrNull
 
         return UserMessage(
             content = content,
             parentToolUseId = parentToolUseId,
             sessionId = sessionId,
-            isReplay = isReplay
+            isReplay = isReplay,
+            uuid = uuid
         )
     }
     
@@ -101,13 +104,16 @@ class MessageParser {
 
         // 解析 parent_tool_use_id（用于子代理消息路由）
         val parentToolUseId = jsonObject["parent_tool_use_id"]?.jsonPrimitive?.contentOrNull
+        // 解析 uuid 字段（用于编辑重发功能）
+        val uuid = jsonObject["uuid"]?.jsonPrimitive?.contentOrNull
 
         return AssistantMessage(
             id = id,
             content = content,
             model = model,
             tokenUsage = tokenUsage,
-            parentToolUseId = parentToolUseId
+            parentToolUseId = parentToolUseId,
+            uuid = uuid
         )
     }
     

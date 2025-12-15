@@ -221,6 +221,7 @@ export function convertMessageToDisplayItems(
         const userMessage: UserMessage = {
           displayType: 'userMessage',
           id: message.id,
+          uuid: (message as UnifiedMessage).uuid,
           content: [{ type: 'text', text: textBlock.text }] as any,
           timestamp: message.timestamp,
           isReplay: true,
@@ -249,6 +250,7 @@ export function convertMessageToDisplayItems(
       const userMessage: UserMessage = {
         displayType: 'userMessage',
         id: message.id,
+        uuid: (message as UnifiedMessage).uuid,
         contexts: contexts.length > 0 ? contexts : undefined,
         content: parsed.userContent as any,
         timestamp: message.timestamp

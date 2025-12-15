@@ -310,10 +310,14 @@ export const useSessionStore = defineStore('session', () => {
     const resumeLabel = externalSessionId.slice(-8) || externalSessionId
     const tab = await createTab(name || `历史会话 ${resumeLabel}`, {
       continueConversation: true,
-      resume: externalSessionId
+      resumeSessionId: externalSessionId
     })
     // 先把 sessionId 显示为历史 ID，方便悬停/复制（连接成功后会覆盖成新的 sessionId）
     tab.sessionId.value = externalSessionId
+    // 设置项目路径（用于编辑重发等功能）
+    if (projectPath) {
+      tab.projectPath.value = projectPath
+    }
 
     // 异步后台加载历史，避免阻塞 UI，默认取尾部 TAIL_LIMIT
     // 使用 offset=-1 表示从尾部加载（避免 messageCount 统计不准确导致越界）
@@ -435,6 +439,46 @@ export const useSessionStore = defineStore('session', () => {
       }
     })
     log.debug(`[SessionStore] 更新 Tab 排序`)
+  }
+
+  /**
+   * 重置当前 Tab 为空的新会话
+   *
+   * 与 createTab 不同，这个方法不会创建新 Tab，而是清空当前 Tab 的所有状态
+   */
+  async function resetCurrentTab(): Promise<void> {
+    const tab = currentTab.value
+    if (!tab) {
+      log.warn(`[SessionStore] 没有当前 Tab，无法重置`)
+      return
+    }
+
+    // 1. 断开连接
+    await tab.disconnect()
+
+    // 2. 重置所有状态
+    tab.reset()
+
+    // 3. 重置 sessionId
+    tab.sessionId.value = null
+
+    // 4. 重新设置名称
+    const shortTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    tab.name.value = i18n.global.t('session.defaultName', { time: shortTime })
+
+    // 5. 保留之前的设置，设置初始连接选项
+    const connectOptions: TabConnectOptions = {
+      model: tab.modelId.value || DEFAULT_SESSION_SETTINGS.modelId,
+      thinkingEnabled: tab.thinkingEnabled.value ?? DEFAULT_SESSION_SETTINGS.thinkingEnabled,
+      permissionMode: tab.permissionMode.value || DEFAULT_SESSION_SETTINGS.permissionMode,
+      skipPermissions: tab.skipPermissions.value ?? DEFAULT_SESSION_SETTINGS.skipPermissions
+    }
+    tab.setInitialConnectOptions(connectOptions)
+
+    // 6. 同步连接状态
+    currentConnectionState.value = tab.connectionState.status
+
+    log.info(`[SessionStore] 已重置当前 Tab: ${tab.tabId}`)
   }
 
   // ========== 向后兼容的方法 ==========
@@ -681,6 +725,7 @@ export const useSessionStore = defineStore('session', () => {
     deleteSession,
     updateTabOrder,
     renameSession,
+    resetCurrentTab,
 
     // 消息操作（向后兼容）
     sendMessage,

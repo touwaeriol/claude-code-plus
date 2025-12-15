@@ -22,9 +22,8 @@
       "maxResults": {
         "type": "integer",
         "description": "最大结果数",
-        "default": 50,
-        "minimum": 1,
-        "maximum": 200
+        "default": 20,
+        "minimum": 1
       },
       "offset": {
         "type": "integer",
@@ -54,10 +53,8 @@
       },
       "maxDepth": {
         "type": "integer",
-        "description": "Maximum recursion depth (1-10)",
-        "default": 3,
-        "minimum": 1,
-        "maximum": 10
+        "description": "Maximum recursion depth. Use -1 or 0 for unlimited depth.",
+        "default": 3
       },
       "filesOnly": {
         "type": "boolean",
@@ -128,7 +125,7 @@
       "maxResults": {
         "type": "integer",
         "description": "Maximum number of matches to return",
-        "default": 30,
+        "default": 10,
         "minimum": 1
       },
       "offset": {
@@ -141,6 +138,12 @@
         "type": "boolean",
         "description": "Include one line before and after each match for context",
         "default": false
+      },
+      "maxLineLength": {
+        "type": "integer",
+        "description": "Maximum length of line content in results (longer lines are truncated). Set to a very large value to get full content.",
+        "default": 200,
+        "minimum": 1
       }
     },
     "required": ["query"],
@@ -233,9 +236,8 @@
       "maxResults": {
         "type": "integer",
         "description": "Maximum number of usages to return",
-        "default": 50,
-        "minimum": 1,
-        "maximum": 500
+        "default": 20,
+        "minimum": 1
       },
       "offset": {
         "type": "integer",

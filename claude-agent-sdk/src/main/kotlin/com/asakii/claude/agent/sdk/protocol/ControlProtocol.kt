@@ -345,33 +345,33 @@ class ControlProtocol(
         try {
             val jsonObject = jsonElement.jsonObject
             val serverInfo = mutableMapOf<String, Any>()
-            
+
             // Extract server information from init message
-            jsonObject["session_id"]?.jsonPrimitive?.content?.let { serverInfo["session_id"] = it }
-            jsonObject["cwd"]?.jsonPrimitive?.content?.let { serverInfo["cwd"] = it }
+            val sessionId = jsonObject["session_id"]?.jsonPrimitive?.content ?: "default"
+            serverInfo["session_id"] = sessionId
+            val cwd = jsonObject["cwd"]?.jsonPrimitive?.content
+            cwd?.let { serverInfo["cwd"] = it }
             val modelId = jsonObject["model"]?.jsonPrimitive?.content
             modelId?.let { serverInfo["model"] = it }
-            jsonObject["permissionMode"]?.jsonPrimitive?.content?.let { serverInfo["permissionMode"] = it }
-            jsonObject["apiKeySource"]?.jsonPrimitive?.content?.let { serverInfo["apiKeySource"] = it }
-            
+            val permissionMode = jsonObject["permissionMode"]?.jsonPrimitive?.content
+            permissionMode?.let { serverInfo["permissionMode"] = it }
+            val apiKeySource = jsonObject["apiKeySource"]?.jsonPrimitive?.content
+            apiKeySource?.let { serverInfo["apiKeySource"] = it }
+
             // Extract tools array
-            jsonObject["tools"]?.jsonArray?.let { toolsArray ->
-                val tools = toolsArray.map { it.jsonPrimitive.content }
-                serverInfo["tools"] = tools
-            }
-            
+            val tools = jsonObject["tools"]?.jsonArray?.map { it.jsonPrimitive.content }
+            tools?.let { serverInfo["tools"] = it }
+
             // Extract MCP servers
-            jsonObject["mcp_servers"]?.jsonArray?.let { mcpArray ->
-                val mcpServers = mcpArray.map { mcpServer ->
-                    val mcpObj = mcpServer.jsonObject
-                    mapOf(
-                        "name" to (mcpObj["name"]?.jsonPrimitive?.content ?: ""),
-                        "status" to (mcpObj["status"]?.jsonPrimitive?.content ?: "")
-                    )
-                }
-                serverInfo["mcp_servers"] = mcpServers
+            val mcpServers = jsonObject["mcp_servers"]?.jsonArray?.map { mcpServer ->
+                val mcpObj = mcpServer.jsonObject
+                CliMcpServerInfo(
+                    name = mcpObj["name"]?.jsonPrimitive?.content ?: "",
+                    status = mcpObj["status"]?.jsonPrimitive?.content ?: ""
+                )
             }
-            
+            mcpServers?.let { serverInfo["mcp_servers"] = it }
+
             // 注册hooks（如果提供了的话）
             val hooksConfig = options.hooks?.let { hooks ->
                 convertHooksToProtocolFormat(hooks)
@@ -380,12 +380,25 @@ class ControlProtocol(
                 // 发送hook注册消息（但这只是可选的，主要依赖动态回调）
                 // serverInfo["hooks_registered"] = true
             }
-            
+
             serverInfo["status"] = "connected"
-            
+
             // Send to waiting initialize function
             _systemInitReceived.trySend(serverInfo)
-            
+
+            // 🆕 发送 SystemInitMessage 到 sdkMessages，让前端获取真正的 sessionId
+            val systemInitMessage = SystemInitMessage(
+                sessionId = sessionId,
+                cwd = cwd,
+                model = modelId,
+                permissionMode = permissionMode,
+                apiKeySource = apiKeySource,
+                tools = tools,
+                mcpServers = mcpServers
+            )
+            logger.info("📤 [ControlProtocol] 发送 SystemInitMessage 到 sdkMessages: sessionId=$sessionId, model=$modelId")
+            _sdkMessages.send(systemInitMessage)
+
             println("System initialization received: $serverInfo")
             systemInitCallback?.invoke(modelId)
         } catch (e: Exception) {

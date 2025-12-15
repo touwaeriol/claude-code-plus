@@ -63,9 +63,19 @@
           <div class="plan-info">
             <span class="plan-icon">📋</span>
             <span class="plan-label">{{ t('permission.planReady') }}</span>
-            <button v-if="isIdeEnvironment()" class="btn-preview" @click="showPlanPreview">
+            <button class="btn-preview" @click="togglePlanExpand">
+              {{ planExpanded ? t('permission.collapse') : t('permission.expand') }}
+            </button>
+            <button v-if="isIdeEnvironment() && planContent" class="btn-preview" @click="openPlanInIdea">
               {{ t('permission.viewInIdea') }}
             </button>
+          </div>
+          <!-- 展开显示 plan 内容 -->
+          <div v-if="planExpanded && planContent" class="plan-expanded-content">
+            <MarkdownRenderer :content="planContent" />
+          </div>
+          <div v-else-if="planExpanded && !planContent" class="plan-error">
+            {{ t('permission.noPlanContent') }}
           </div>
         </template>
         <template v-else>
@@ -126,6 +136,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useI18n } from '@/composables/useI18n'
 import { jetbrainsBridge, isIdeEnvironment } from '@/services/jetbrainsApi'
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 import type { PermissionUpdate } from '@/types/permission'
 
 const { t } = useI18n()
@@ -133,6 +144,34 @@ const sessionStore = useSessionStore()
 
 const containerRef = ref<HTMLElement | null>(null)
 const denyReason = ref('')
+
+// Plan 展开状态
+const planExpanded = ref(false)
+
+// Plan 内容（计算属性）
+const planContent = computed(() => {
+  if (!pendingPermission.value) return ''
+  return (pendingPermission.value.input.plan as string) || ''
+})
+
+// 切换 plan 展开/收起
+function togglePlanExpand() {
+  planExpanded.value = !planExpanded.value
+}
+
+// 在 IDEA 中打开 plan
+async function openPlanInIdea() {
+  if (!planContent.value) return
+
+  const success = await jetbrainsBridge.showMarkdown({
+    content: planContent.value,
+    title: t('permission.planPreviewTitle')
+  })
+
+  if (!success) {
+    console.warn('[ToolPermission] Failed to open plan in IDEA')
+  }
+}
 
 // 获取当前会话的第一个待处理授权请求
 const pendingPermission = computed(() => {
@@ -249,22 +288,6 @@ async function showMultiEditPreview() {
 
   if (!success) {
     console.warn('[ToolPermission] Failed to show multi-edit preview')
-  }
-}
-
-async function showPlanPreview() {
-  if (!pendingPermission.value) return
-  const planContent = pendingPermission.value.input.planContent as string
-
-  if (planContent) {
-    const success = await jetbrainsBridge.showMarkdown({
-      content: planContent,
-      title: t('permission.planPreviewTitle')
-    })
-
-    if (!success) {
-      console.warn('[ToolPermission] Failed to show plan preview')
-    }
   }
 }
 
@@ -668,5 +691,37 @@ function hasInputParams(input: Record<string, unknown>): boolean {
   padding: 8px 16px;
   background: var(--theme-panel-background, #f6f8fa);
   border-top: 1px solid var(--theme-border, #e1e4e8);
+}
+
+/* Plan 展开内容样式 */
+.plan-expanded-content {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--theme-code-background, #f6f8fa);
+  border: 1px solid var(--theme-border, #e1e4e8);
+  border-radius: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.plan-expanded-content :deep(pre) {
+  margin: 0;
+  padding: 8px;
+  background: var(--theme-background, #fff);
+  border-radius: 4px;
+}
+
+.plan-expanded-content :deep(code) {
+  font-size: 12px;
+}
+
+.plan-error {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--theme-error-subtle, rgba(220, 53, 69, 0.1));
+  border: 1px solid var(--theme-error, #dc3545);
+  border-radius: 6px;
+  color: var(--theme-error, #dc3545);
+  font-size: 13px;
 }
 </style>

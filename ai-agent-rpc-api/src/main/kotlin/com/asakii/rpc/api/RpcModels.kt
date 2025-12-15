@@ -116,7 +116,10 @@ data class RpcConnectOptions(
     // === Codex 相关配置（根据 provider 能力生效）===
     val baseUrl: String? = null,
     val apiKey: String? = null,
-    val sandboxMode: RpcSandboxMode? = null
+    val sandboxMode: RpcSandboxMode? = null,
+
+    // === 会话恢复相关配置 ===
+    val replayUserMessages: Boolean? = null  // 恢复会话时重放用户消息
 )
 
 /**
@@ -225,7 +228,9 @@ data class RpcUserMessage(
      * - isReplay = false: 压缩摘要（新生成的上下文）
      * - isReplay = true: 确认消息（如 "Compacted"）
      */
-    val isReplay: Boolean? = null
+    val isReplay: Boolean? = null,
+    /** 消息唯一标识符（用于编辑重发功能定位 JSONL 截断位置） */
+    val uuid: String? = null
 ) : RpcMessage
 
 /**
@@ -243,7 +248,9 @@ data class RpcAssistantMessage(
      * - 非 null: 子代理消息，值为触发该子代理的 Task 工具调用 ID
      */
     @SerialName("parent_tool_use_id")
-    val parentToolUseId: String? = null
+    val parentToolUseId: String? = null,
+    /** 消息唯一标识符（用于编辑重发功能定位 JSONL 截断位置） */
+    val uuid: String? = null
 ) : RpcMessage
 
 /**
@@ -322,6 +329,34 @@ data class RpcCompactBoundaryMessage(
     val compactMetadata: RpcCompactMetadata? = null,
     override val provider: RpcProvider?
 ) : RpcMessage
+
+/**
+ * 系统初始化消息 - 每次 query 开始时 Claude CLI 发送
+ * 包含真正的 sessionId，用于会话恢复和历史消息关联
+ */
+@Serializable
+@SerialName("system_init")
+data class RpcSystemInitMessage(
+    @SerialName("session_id")
+    val sessionId: String,
+    val cwd: String? = null,
+    val model: String? = null,
+    val permissionMode: String? = null,
+    val apiKeySource: String? = null,
+    val tools: List<String>? = null,
+    @SerialName("mcp_servers")
+    val mcpServers: List<RpcMcpServerInfo>? = null,
+    override val provider: RpcProvider?
+) : RpcMessage
+
+/**
+ * MCP 服务器信息
+ */
+@Serializable
+data class RpcMcpServerInfo(
+    val name: String,
+    val status: String
+)
 
 /**
  * 压缩元数据
@@ -595,4 +630,14 @@ data class RpcHistoryMetadata(
     val sessionId: String,      // 会话 ID
     val projectPath: String,    // 项目路径
     val customTitle: String? = null  // 自定义标题（从 /rename 命令设置）
+)
+
+/**
+ * 历史截断结果（用于编辑重发功能）
+ */
+@Serializable
+data class RpcTruncateHistoryResult(
+    val success: Boolean,
+    val remainingLines: Int,    // 截断后剩余的行数
+    val error: String? = null   // 错误信息（如果失败）
 )

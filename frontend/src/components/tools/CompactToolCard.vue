@@ -56,6 +56,11 @@
         </span>
       </template>
 
+      <!-- 自定义操作按钮插槽 -->
+      <span v-if="$slots['header-actions']" class="header-actions" @click.stop>
+        <slot name="header-actions" />
+      </span>
+
       <!-- 状态指示器 -->
       <span class="status-indicator" :class="`status-${displayInfo?.status || 'pending'}`">
         <span v-if="displayInfo?.isInputLoading || displayInfo?.status === 'pending' || !displayInfo?.status" class="spinner" />
@@ -247,8 +252,15 @@ function getBadgeClass(changes: string): string {
   color: var(--theme-accent);
 }
 
-.status-indicator {
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin-left: auto;
+  flex-shrink: 0;
+}
+
+.status-indicator {
   flex-shrink: 0;
   display: flex;
   align-items: center;

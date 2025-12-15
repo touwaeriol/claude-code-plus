@@ -6,7 +6,7 @@
     <SessionTabs
       :sessions="sessionTabList"
       :current-session-id="currentTabId"
-      :can-close="activeTabs.length > 1"
+      :can-close="true"
       @switch="handleSwitchTab"
       @close="handleCloseTab"
       @reorder="handleReorder"
@@ -80,8 +80,11 @@ async function handleSwitchTab(tabId: string) {
 }
 
 async function handleCloseTab(tabId: string) {
-  // 如果只有一个会话，不允许关闭
-  if (activeTabs.value.length <= 1) return
+  // 如果只有一个会话，重置为空的新会话（无视生成中状态）
+  if (activeTabs.value.length <= 1) {
+    await sessionStore.resetCurrentTab()
+    return
+  }
 
   // 如果关闭的是当前会话，先切换到其他会话
   if (tabId === currentTabId.value) {
@@ -96,7 +99,13 @@ async function handleCloseTab(tabId: string) {
 }
 
 async function handleNewSession() {
-  await sessionStore.createTab()
+  // 如果当前正在生成中，新建一个新的 Tab
+  // 如果没有正在生成中，直接清空当前 Tab 变成空的新会话
+  if (sessionStore.currentIsGenerating) {
+    await sessionStore.createTab()
+  } else {
+    await sessionStore.resetCurrentTab()
+  }
 }
 
 function handleReorder(newOrder: string[]) {

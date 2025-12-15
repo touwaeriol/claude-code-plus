@@ -46,9 +46,6 @@ dependencies {
 
     // 🔧 Kotlin serialization 运行时依赖
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${rootProject.extra["serializationVersion"]}")
-    
-    // JSON Schema 校验
-    implementation("com.networknt:json-schema-validator:1.5.4")
 
     // Hutool 反射工具 - 用于可选依赖的反射调用
     implementation("cn.hutool:hutool-core:5.8.25")

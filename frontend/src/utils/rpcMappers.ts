@@ -97,6 +97,7 @@ export function mapRpcMessageToMessage(msg: RpcAssistantMessage | RpcUserMessage
 
   return {
     id: messageId,
+    uuid: msg.uuid,
     role: msg.type,
     timestamp: Date.now(),
     content: contentBlocks,

@@ -177,17 +177,17 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
 
   /**
    * 处理跳过权限开关切换
-   * 直接调用 updateSettings（需要重连）
+   * skipPermissions 是纯前端行为，只更新本地状态，不需要重连
    */
-  async function handleSkipPermissionsChange(enabled: boolean) {
+  function handleSkipPermissionsChange(enabled: boolean) {
     console.log(`🔓 [handleSkipPermissionsChange] 切换跳过权限: ${enabled}`)
     skipPermissionsValue.value = enabled
 
-    // 直接调用 updateSettings（skipPermissions 需要重连）
+    // 直接更新 Tab 的本地状态（不触发重连）
     const tab = sessionStore.currentTab
     if (tab) {
-      await tab.updateSettings({ skipPermissions: enabled })
-      console.log(`✅ [handleSkipPermissionsChange] 跳过权限切换完成`)
+      tab.setPendingSetting('skipPermissions', enabled)
+      console.log(`✅ [handleSkipPermissionsChange] 跳过权限已更新（纯前端，无需重连）`)
     }
 
     // 保存到全局设置（供新 Tab 继承）

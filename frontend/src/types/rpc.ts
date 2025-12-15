@@ -23,7 +23,7 @@ export type RpcPermissionMode = 'default' | 'bypassPermissions' | 'acceptEdits' 
 // ============================================================================
 
 /** 消息类型枚举 */
-export type RpcMessageType = 'user' | 'assistant' | 'result' | 'stream_event' | 'error' | 'status_system' | 'compact_boundary'
+export type RpcMessageType = 'user' | 'assistant' | 'result' | 'stream_event' | 'error' | 'status_system' | 'compact_boundary' | 'system_init'
 
 /** 基础消息接口 */
 interface RpcMessageBase {
@@ -117,6 +117,24 @@ export interface RpcCompactBoundaryMessage extends RpcMessageBase {
   compact_metadata?: RpcCompactMetadata
 }
 
+/** MCP 服务器信息 */
+export interface RpcMcpServerInfo {
+  name: string
+  status: string
+}
+
+/** 系统初始化消息 - 每次 query 开始时 Claude CLI 发送 */
+export interface RpcSystemInitMessage extends RpcMessageBase {
+  type: 'system_init'
+  session_id: string
+  cwd?: string
+  model?: string
+  permissionMode?: string
+  apiKeySource?: string
+  tools?: string[]
+  mcpServers?: RpcMcpServerInfo[]
+}
+
 /** 所有 RPC 消息联合类型 */
 export type RpcMessage =
   | RpcUserMessage
@@ -126,6 +144,7 @@ export type RpcMessage =
   | RpcErrorMessage
   | RpcStatusSystemMessage
   | RpcCompactBoundaryMessage
+  | RpcSystemInitMessage
 
 /** 消息内容（assistant/user 消息的 message 字段） */
 export interface RpcMessageContent {
@@ -483,7 +502,6 @@ export interface RpcConnectOptions {
   initialPrompt?: string
   sessionId?: string
   resumeSessionId?: string
-  resume?: string  // 恢复会话 ID（别名）
   metadata?: Record<string, string>
 
   // === Claude 相关配置（根据 provider 能力生效）===
@@ -498,6 +516,9 @@ export interface RpcConnectOptions {
   baseUrl?: string
   apiKey?: string
   sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access'
+
+  // === 会话恢复相关配置 ===
+  replayUserMessages?: boolean  // 恢复会话时重放用户消息
 }
 
 /** Agent 能力声明 */
@@ -545,6 +566,16 @@ export interface RpcHistoryResult {
   count: number
   /** 当前文件中可用的总消息数（快照） */
   availableCount: number
+}
+
+/** 历史截断结果（用于编辑重发功能） */
+export interface RpcTruncateHistoryResult {
+  /** 是否成功 */
+  success: boolean
+  /** 截断后剩余的行数 */
+  remainingLines: number
+  /** 错误信息（如果失败） */
+  error?: string
 }
 
 // ============================================================================
@@ -611,3 +642,53 @@ export type RpcAppStreamEvent =
   | RpcErrorEvent
   | (RpcAssistantMessage & { content: RpcContentBlock[] })
   | (RpcUserMessage & { content?: RpcContentBlock[] })
+
+// ============================================================================
+// 重新导出 RPC 类系统（支持 instanceof 判断）
+// ============================================================================
+
+export {
+  // 消息类
+  RpcMessage as RpcMessageClass,
+  RpcUserMessage as RpcUserMessageClass,
+  RpcAssistantMessage as RpcAssistantMessageClass,
+  RpcResultMessage as RpcResultMessageClass,
+  RpcStreamEventMessage as RpcStreamEventMessageClass,
+  RpcErrorMessage as RpcErrorMessageClass,
+  RpcStatusSystemMessage as RpcStatusSystemMessageClass,
+  RpcCompactBoundaryMessage as RpcCompactBoundaryMessageClass,
+  RpcUnknownMessage as RpcUnknownMessageClass,
+  RpcMessageContent as RpcMessageContentClass,
+  // 内容块类
+  ContentBlock as ContentBlockClass,
+  TextBlock,
+  ThinkingBlock,
+  ToolUseBlock,
+  ToolResultBlock,
+  ImageBlock,
+  CommandExecutionBlock,
+  FileChangeBlock,
+  McpToolCallBlock,
+  WebSearchBlock,
+  TodoListBlock,
+  ErrorBlock,
+  UnknownBlock,
+  // 流事件类
+  StreamEventData,
+  MessageStartEvent,
+  ContentBlockStartEvent,
+  ContentBlockDeltaEvent,
+  ContentBlockStopEvent,
+  MessageDeltaEvent,
+  MessageStopEvent,
+  UnknownEvent,
+  // 工厂函数
+  createMessage,
+  createBlock,
+  createBlocks,
+  createEvent,
+  // 类型守卫
+  MessageGuards,
+  BlockGuards,
+  EventGuards
+} from './rpc/index'

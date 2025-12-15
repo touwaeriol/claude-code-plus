@@ -21,7 +21,7 @@ interface LoggerConfig {
 const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV
 
 const config: LoggerConfig = {
-  level: isDev ? LogLevel.DEBUG : LogLevel.WARN,
+  level: isDev ? LogLevel.DEBUG : LogLevel.INFO,
   enabledModules: null,
   timestamp: false
 }

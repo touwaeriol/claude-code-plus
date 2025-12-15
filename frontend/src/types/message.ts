@@ -6,6 +6,11 @@ export type MessageRole = 'user' | 'assistant' | 'system' | 'result'
 
 export interface UnifiedMessage {
   id: string
+  /**
+   * 消息的 UUID（来自 JSONL 历史文件的顶层字段）
+   * 用于编辑重发时定位截断位置
+   */
+  uuid?: string
   role: MessageRole
   timestamp: number
   content: ContentBlock[]

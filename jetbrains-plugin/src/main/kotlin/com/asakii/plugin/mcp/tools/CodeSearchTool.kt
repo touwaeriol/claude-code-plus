@@ -1,7 +1,7 @@
 package com.asakii.plugin.mcp.tools
 
 import com.asakii.claude.agent.sdk.mcp.ToolResult
-import com.asakii.plugin.mcp.ToolSchemaLoader
+import com.asakii.server.mcp.schema.ToolSchemaLoader
 import com.intellij.find.FindModel
 import com.intellij.find.impl.FindInProjectUtil
 import com.intellij.openapi.application.ReadAction
@@ -65,9 +65,10 @@ class CodeSearchTool(private val project: Project) {
         val fileMask = arguments["fileMask"] as? String
         val scopeStr = arguments["scope"] as? String ?: "Project"
         val scopeArg = arguments["scopeArg"] as? String
-        val maxResults = ((arguments["maxResults"] as? Number)?.toInt() ?: 30).coerceAtLeast(1)
+        val maxResults = ((arguments["maxResults"] as? Number)?.toInt() ?: 10).coerceAtLeast(1)
         val offset = ((arguments["offset"] as? Number)?.toInt() ?: 0).coerceAtLeast(0)
         val includeContext = arguments["includeContext"] as? Boolean ?: false
+        val maxLineLength = ((arguments["maxLineLength"] as? Number)?.toInt() ?: 200).coerceAtLeast(1)
 
         val scope = try {
             SearchScope.valueOf(scopeStr)
@@ -185,7 +186,18 @@ class CodeSearchTool(private val project: Project) {
 
                     val lineContent = document?.let { doc ->
                         val lineEnd = doc.getLineEndOffset(line - 1)
-                        doc.getText(TextRange(lineStart, lineEnd))
+                        val fullContent = doc.getText(TextRange(lineStart, lineEnd))
+                        // 限制行内容长度，以匹配位置为中心截取，确保关键词可见
+                        if (fullContent.length > maxLineLength) {
+                            val matchPosInLine = column - 1 // 0-based position in line
+                            val halfLen = maxLineLength / 2
+                            val start = (matchPosInLine - halfLen).coerceAtLeast(0)
+                            val end = (start + maxLineLength).coerceAtMost(fullContent.length)
+                            val adjustedStart = if (end == fullContent.length) (end - maxLineLength).coerceAtLeast(0) else start
+                            val prefix = if (adjustedStart > 0) "..." else ""
+                            val suffix = if (end < fullContent.length) "..." else ""
+                            prefix + fullContent.substring(adjustedStart, end) + suffix
+                        } else fullContent
                     } ?: ""
 
                     matches.add(CodeSearchMatch(
@@ -197,12 +209,14 @@ class CodeSearchTool(private val project: Project) {
                         contextBefore = if (includeContext && document != null && line > 1) {
                             val prevLineStart = document.getLineStartOffset(line - 2)
                             val prevLineEnd = document.getLineEndOffset(line - 2)
-                            document.getText(TextRange(prevLineStart, prevLineEnd)).trim()
+                            val ctx = document.getText(TextRange(prevLineStart, prevLineEnd)).trim()
+                            if (ctx.length > maxLineLength) ctx.take(maxLineLength) + "..." else ctx
                         } else null,
                         contextAfter = if (includeContext && document != null && line < (document.lineCount)) {
                             val nextLineStart = document.getLineStartOffset(line)
                             val nextLineEnd = document.getLineEndOffset(line)
-                            document.getText(TextRange(nextLineStart, nextLineEnd)).trim()
+                            val ctx = document.getText(TextRange(nextLineStart, nextLineEnd)).trim()
+                            if (ctx.length > maxLineLength) ctx.take(maxLineLength) + "..." else ctx
                         } else null
                     ))
                 }

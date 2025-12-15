@@ -29,6 +29,7 @@ class ClaudeStreamAdapter(
         is UserMessage -> handleUserMessage(message)
         is StatusSystemMessage -> handleStatusSystemMessage(message)
         is CompactBoundaryMessage -> handleCompactBoundaryMessage(message)
+        is SystemInitMessage -> handleSystemInitMessage(message)
         else -> emptyList()
     }
 
@@ -49,6 +50,21 @@ class ClaudeStreamAdapter(
                 sessionId = message.sessionId,
                 trigger = message.compactMetadata?.trigger,
                 preTokens = message.compactMetadata?.preTokens
+            )
+        )
+    }
+
+    private fun handleSystemInitMessage(message: SystemInitMessage): List<NormalizedStreamEvent> {
+        return listOf(
+            SystemInitEvent(
+                provider = AiAgentProvider.CLAUDE,
+                sessionId = message.sessionId,
+                cwd = message.cwd,
+                model = message.model,
+                permissionMode = message.permissionMode,
+                apiKeySource = message.apiKeySource,
+                tools = message.tools,
+                mcpServers = message.mcpServers?.map { McpServerInfoModel(it.name, it.status) }
             )
         )
     }
@@ -76,7 +92,8 @@ class ClaudeStreamAdapter(
                 content = contentBlocks,
                 model = message.model,
                 tokenUsage = usage,
-                parentToolUseId = message.parentToolUseId
+                parentToolUseId = message.parentToolUseId,
+                uuid = message.uuid
             )
         )
     }
@@ -122,7 +139,8 @@ class ClaudeStreamAdapter(
                 provider = AiAgentProvider.CLAUDE,
                 content = contentBlocks,
                 isReplay = message.isReplay,
-                parentToolUseId = message.parentToolUseId
+                parentToolUseId = message.parentToolUseId,
+                uuid = message.uuid
             )
         )
     }

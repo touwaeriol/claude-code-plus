@@ -1,17 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <!-- 控制台输出，文件输出由 StandaloneLogging 动态配置 -->
-    <property name="CONSOLE_LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
+    <!--
+        禁用控制台输出，只使用文件日志。
+        原因：当服务器作为子进程运行时，stdout/stderr 会被父进程捕获并再次记录为日志，形成死循环。
+        文件日志由 StandaloneLogging 动态配置到 <project>/.log/ 目录。
+    -->
 
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
-            <charset>UTF-8</charset>
-        </encoder>
-    </appender>
-
+    <!-- 默认不输出任何日志到控制台，StandaloneLogging 会配置文件 appender -->
     <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
+        <!-- 无 appender，日志由 StandaloneLogging 动态添加 -->
     </root>
 </configuration>
 

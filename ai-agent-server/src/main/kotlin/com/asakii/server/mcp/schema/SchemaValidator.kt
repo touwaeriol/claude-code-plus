@@ -1,4 +1,4 @@
-package com.asakii.plugin.mcp
+package com.asakii.server.mcp.schema
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -93,6 +93,22 @@ object SchemaValidator {
             return ValidationResult.Valid
         }
 
+        return validateWithSchema(schema, arguments, customValidators)
+    }
+
+    /**
+     * 使用指定的 Schema 校验参数
+     *
+     * @param schema JSON Schema 定义
+     * @param arguments 要校验的参数
+     * @param customValidators 自定义校验器
+     * @return 校验结果
+     */
+    fun validateWithSchema(
+        schema: Map<String, Any>,
+        arguments: Map<String, Any>,
+        customValidators: List<(Map<String, Any>) -> ValidationError?> = emptyList()
+    ): ValidationResult {
         val errors = mutableListOf<ValidationError>()
 
         // 1. 使用 JSON Schema 库校验
@@ -107,7 +123,7 @@ object SchemaValidator {
                 errors.add(convertToValidationError(msg, schema))
             }
         } catch (e: Exception) {
-            logger.error(e) { "JSON Schema validation failed for tool: $toolName" }
+            logger.error(e) { "JSON Schema validation failed" }
             // 如果库校验失败，回退到基础校验
             errors.addAll(fallbackValidation(schema, arguments))
         }
@@ -132,7 +148,6 @@ object SchemaValidator {
         schema: Map<String, Any>
     ): ValidationError {
         // 从 instanceLocation 提取参数名
-        // 例如: "$.symbolName" -> "symbolName", "$" -> "(root)"
         val path = msg.instanceLocation?.toString() ?: msg.evaluationPath?.toString() ?: ""
         val paramName = when {
             path == "$" || path.isEmpty() -> extractParamFromMessage(msg.message)
@@ -158,7 +173,6 @@ object SchemaValidator {
      * 从错误消息中提取参数名
      */
     private fun extractParamFromMessage(message: String): String {
-        // 尝试从消息中提取参数名，例如 "required property 'symbolName' not found"
         val regex = Regex("""'([^']+)'""")
         return regex.find(message)?.groupValues?.get(1) ?: "(root)"
     }
@@ -173,7 +187,6 @@ object SchemaValidator {
         return when {
             type.contains("required") -> "Missing required parameter"
             type.contains("type") -> {
-                // 提取期望的类型
                 val expectedType = Regex("""expected type: (\w+)""").find(originalMessage)?.groupValues?.get(1)
                     ?: Regex("""type: (\w+)""").find(originalMessage)?.groupValues?.get(1)
                 if (expectedType != null) {
@@ -182,9 +195,7 @@ object SchemaValidator {
                     "Invalid type"
                 }
             }
-            type.contains("enum") -> {
-                "Invalid value"
-            }
+            type.contains("enum") -> "Invalid value"
             type.contains("minimum") -> {
                 val minimum = Regex("""minimum (-?\d+\.?\d*)""").find(originalMessage)?.groupValues?.get(1)
                 "Value is below minimum${minimum?.let { " ($it)" } ?: ""}"

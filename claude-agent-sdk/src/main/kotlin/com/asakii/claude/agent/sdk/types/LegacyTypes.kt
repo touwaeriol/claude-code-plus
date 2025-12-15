@@ -56,6 +56,7 @@ val Message.type: MessageType
         is SystemMessage -> MessageType.SYSTEM
         is StatusSystemMessage -> MessageType.SYSTEM
         is CompactBoundaryMessage -> MessageType.SYSTEM
+        is SystemInitMessage -> MessageType.SYSTEM
         is ResultMessage -> MessageType.END
         is StreamEvent -> MessageType.SYSTEM // Treat stream events as system messages
     }
@@ -76,6 +77,7 @@ val Message.content: String?
         is SystemMessage -> "系统消息: ${this.subtype}"
         is StatusSystemMessage -> "状态: ${this.status ?: "null"}"
         is CompactBoundaryMessage -> "压缩边界: preTokens=${this.compactMetadata?.preTokens}"
+        is SystemInitMessage -> "初始化: sessionId=${this.sessionId}, model=${this.model}"
         is ResultMessage -> "结果: ${this.result ?: ""}"
         is StreamEvent -> "流事件: ${this.uuid}"
     }
@@ -99,6 +101,7 @@ val Message.messageId: String?
         is SystemMessage -> null
         is StatusSystemMessage -> sessionId
         is CompactBoundaryMessage -> sessionId
+        is SystemInitMessage -> sessionId
         is ResultMessage -> null
         is StreamEvent -> uuid
     }

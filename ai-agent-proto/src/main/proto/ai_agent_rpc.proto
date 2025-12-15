@@ -81,6 +81,9 @@ message ConnectOptions {
   optional string base_url = 20;
   optional string api_key = 21;
   optional SandboxMode sandbox_mode = 22;
+
+  // 会话恢复相关配置
+  optional bool replay_user_messages = 30;  // 恢复会话时重放用户消息
 }
 
 // 对应 RpcCapabilities
@@ -267,6 +270,7 @@ message RpcMessage {
     ErrorMessage error = 6;
     StatusSystemMessage status_system = 7;
     CompactBoundaryMessage compact_boundary = 8;
+    SystemInitMessage system_init = 9;
   }
 }
 
@@ -275,6 +279,7 @@ message UserMessage {
   MessageContent message = 1;
   optional string parent_tool_use_id = 2;
   optional bool is_replay = 3;
+  optional string uuid = 4;  // 消息唯一标识符（用于编辑重发功能）
 }
 
 // 对应 RpcAssistantMessage
@@ -285,6 +290,7 @@ message AssistantMessage {
   // - 空: 主会话消息
   // - 非空: 子代理消息，值为触发该子代理的 Task 工具调用 ID
   optional string parent_tool_use_id = 3;
+  optional string uuid = 4;  // 消息唯一标识符（用于编辑重发功能）
 }
 
 // 对应 RpcResultMessage
@@ -323,6 +329,24 @@ message CompactBoundaryMessage {
 message CompactMetadata {
   optional string trigger = 1;
   optional int32 pre_tokens = 2;
+}
+
+// 对应 RpcSystemInitMessage - 系统初始化消息
+// 每次 query 开始时 Claude CLI 发送，包含真正的 sessionId
+message SystemInitMessage {
+  string session_id = 1;
+  optional string cwd = 2;
+  optional string model = 3;
+  optional string permission_mode = 4;
+  optional string api_key_source = 5;
+  repeated string tools = 6;
+  repeated McpServerInfo mcp_servers = 7;
+}
+
+// 对应 RpcMcpServerInfo - MCP 服务器信息
+message McpServerInfo {
+  string name = 1;
+  string status = 2;
 }
 
 // ============================================================================
@@ -684,4 +708,22 @@ message ServerCallResponse {
     // JetBrains 相关响应通常不需要返回数据，使用 success=true 即可
   }
   optional string error = 4; // 错误信息（如果失败）
+}
+
+// ============================================================================
+// 历史截断（编辑重发功能）
+// ============================================================================
+
+// 截断历史请求
+message TruncateHistoryRequest {
+  string session_id = 1;      // 会话 ID
+  string message_uuid = 2;    // 要截断的消息 UUID（从该消息开始截断，包含该消息）
+  string project_path = 3;    // 项目路径（用于定位 JSONL 文件）
+}
+
+// 截断历史响应
+message TruncateHistoryResult {
+  bool success = 1;
+  int32 remaining_lines = 2;  // 截断后剩余的行数
+  optional string error = 3;  // 错误信息（如果失败）
 }

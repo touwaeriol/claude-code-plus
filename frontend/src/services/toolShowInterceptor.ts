@@ -124,8 +124,15 @@ class ToolShowInterceptorService {
       isAvailable: this.isAvailable(),
       hasHandler: this.handlers.has(context.toolType),
       initialized: this.initialized,
-      handlersCount: this.handlers.size
+      handlersCount: this.handlers.size,
+      isError: context.result?.is_error
     })
+
+    // 如果工具执行失败，不拦截，让前端展开显示错误信息
+    if (context.result?.is_error) {
+      console.log('[ToolShowInterceptor] Tool execution failed, passing through to show error')
+      return false
+    }
 
     if (!this.isAvailable()) {
       console.log('[ToolShowInterceptor] Not available, passing through')

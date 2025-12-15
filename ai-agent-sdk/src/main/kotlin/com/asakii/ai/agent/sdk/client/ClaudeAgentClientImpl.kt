@@ -141,6 +141,9 @@ class ClaudeAgentClientImpl(
                         is com.asakii.ai.agent.sdk.model.UiCompactBoundary -> {
                             logger.info("📦 [ClaudeAgentClientImpl] UiCompactBoundary: trigger=${event.trigger}, preTokens=${event.preTokens}")
                         }
+                        is com.asakii.ai.agent.sdk.model.UiSystemInit -> {
+                            logger.info("🚀 [ClaudeAgentClientImpl] UiSystemInit: sessionId=${event.sessionId}, model=${event.model}")
+                        }
                     }
                     
                     try {

@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
+    "dev": "npm run proto:generate && vite",
+    "build": "npm run proto:generate && vite build",
+    "build:dev": "npm run proto:generate && vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint src --ext .ts,.vue",
     "lint:fix": "eslint src --ext .ts,.vue --fix",

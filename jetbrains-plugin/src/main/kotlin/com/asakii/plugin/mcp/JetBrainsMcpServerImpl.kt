@@ -8,6 +8,7 @@ import com.asakii.claude.agent.sdk.mcp.annotations.McpServerConfig
 import com.asakii.plugin.mcp.tools.*
 import com.asakii.plugin.utils.ResourceLoader
 import com.asakii.server.mcp.JetBrainsMcpServerProvider
+import com.asakii.server.mcp.schema.ToolSchemaLoader
 import com.intellij.openapi.project.Project
 import mu.KotlinLogging
 
@@ -42,6 +43,18 @@ class JetBrainsMcpServerImpl(private val project: Project) : McpServerBase() {
         )
     }
 
+    /**
+     * 获取需要自动允许的工具列表
+     * JetBrains MCP 的所有工具都应该自动允许，因为它们只是读取 IDE 信息
+     */
+    override fun getAllowedTools(): List<String> = listOf(
+        "DirectoryTree",
+        "FileProblems",
+        "FileIndex",
+        "CodeSearch",
+        "FindUsages"
+    )
+
     companion object {
         private const val DEFAULT_MCP_INSTRUCTIONS = """You have access to JetBrains IDE tools that leverage the IDE's powerful indexing and analysis capabilities:
 
@@ -59,7 +72,10 @@ IMPORTANT: When a project build/compile fails or a file is known to have syntax 
 
     override suspend fun onInitialize() {
         logger.info { "🔧 Initializing JetBrains MCP Server for project: ${project.name}" }
-        
+
+        // 注册 JetBrains 插件的 Schema 来源
+        ToolSchemaLoader.registerSchemaSource(JetBrainsSchemaSource)
+
         // 初始化工具实例
         directoryTreeTool = DirectoryTreeTool(project)
         fileProblemsTool = FileProblemsTool(project)
@@ -102,10 +118,26 @@ IMPORTANT: When a project build/compile fails or a file is known to have syntax 
  * 在 jetbrains-plugin 模块中实现，提供对 IDEA Platform API 的访问。
  */
 class JetBrainsMcpServerProviderImpl(private val project: Project) : JetBrainsMcpServerProvider {
-    
+
     private val _server: McpServer by lazy {
         JetBrainsMcpServerImpl(project)
     }
-    
+
     override fun getServer(): McpServer = _server
+}
+
+/**
+ * JetBrains 插件的 Schema 来源
+ *
+ * 从 jetbrains-plugin 的 resources/mcp/schemas/tools.json 加载工具 Schema
+ */
+private object JetBrainsSchemaSource : ToolSchemaLoader.SchemaSource {
+    private const val SCHEMA_PATH = "/mcp/schemas/tools.json"
+
+    override fun loadSchemas(): Map<String, Map<String, Any>> {
+        return ToolSchemaLoader.loadFromClasspath(
+            JetBrainsMcpServerImpl::class.java,
+            SCHEMA_PATH
+        )
+    }
 }

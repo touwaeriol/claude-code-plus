@@ -339,6 +339,35 @@ export class RSocketSession {
     }
 
     /**
+     * 截断历史记录（用于编辑重发功能）
+     *
+     * 从指定的消息 UUID 开始截断 JSONL 历史文件，该消息及其后续所有消息都会被删除。
+     * 通常在截断后需要断开连接并创建新会话。
+     *
+     * @param params 截断参数
+     * @param params.sessionId 会话 ID
+     * @param params.messageUuid 要截断的消息 UUID（从该消息开始截断，包含该消息）
+     * @param params.projectPath 项目路径（用于定位 JSONL 文件）
+     * @returns 截断结果
+     */
+    async truncateHistory(params: {
+        sessionId: string
+        messageUuid: string
+        projectPath: string
+    }): Promise<{ success: boolean; remainingLines: number; error?: string }> {
+        if (!this._isConnected || !this.client) {
+            throw new Error('Session not connected')
+        }
+
+        console.log('[RSocket] ← agent.truncateHistory 发送:', JSON.stringify(params, null, 2))
+        const data = ProtoCodec.encodeTruncateHistoryRequest(params)
+        const responseData = await this.client.requestResponse('agent.truncateHistory', data)
+        const result = ProtoCodec.decodeTruncateHistoryResult(responseData)
+        console.log('[RSocket] → agent.truncateHistory 结果:', JSON.stringify(result, null, 2))
+        return result
+    }
+
+    /**
      * 订阅消息事件
      */
     onMessage(handler: MessageHandler): () => void {
@@ -396,7 +425,6 @@ export class RSocketSession {
 
         // 清理状态
         this._isConnected = false
-        this.sessionId = null
         this._capabilities = null
         this.cancelStream = null
         this.client = null
@@ -416,6 +444,9 @@ export class RSocketSession {
                 log.error('[RSocketSession] 断开回调执行失败:', e)
             }
         })
+
+        // 最后再清理 sessionId：让上层断开回调仍可读取到旧 sessionId（用于自动重连 resume）
+        this.sessionId = null
     }
 
     private checkCapability(cap: keyof RpcCapabilities, method: string): void {

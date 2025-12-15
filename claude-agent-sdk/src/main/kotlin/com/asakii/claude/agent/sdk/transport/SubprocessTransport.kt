@@ -460,7 +460,12 @@ class SubprocessTransport(
         options.resume?.let { sessionId ->
             command.addAll(listOf("--resume", sessionId))
         }
-        
+
+        // Replay user messages when resuming session
+        if (options.replayUserMessages) {
+            command.add("--replay-user-messages")
+        }
+
         // Max turns
         options.maxTurns?.let { turns ->
             command.addAll(listOf("--max-turns", turns.toString()))

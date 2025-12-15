@@ -1,10 +1,10 @@
 package com.asakii.plugin.mcp.tools
 
 import com.asakii.claude.agent.sdk.mcp.ToolResult
-import com.asakii.plugin.mcp.SchemaValidator
-import com.asakii.plugin.mcp.ToolSchemaLoader
-import com.asakii.plugin.mcp.ValidationError
-import com.asakii.plugin.mcp.ValidationResult
+import com.asakii.server.mcp.schema.SchemaValidator
+import com.asakii.server.mcp.schema.ToolSchemaLoader
+import com.asakii.server.mcp.schema.ValidationError
+import com.asakii.server.mcp.schema.ValidationResult
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -122,7 +122,7 @@ class FindUsagesTool(private val project: Project) {
         val symbolTypeStr = arguments["symbolType"] as? String ?: "Auto"
         val searchScopeStr = arguments["searchScope"] as? String ?: "Project"
         val scopeArg = arguments["scopeArg"] as? String
-        val maxResults = ((arguments["maxResults"] as? Number)?.toInt() ?: 50).coerceIn(1, 500)
+        val maxResults = ((arguments["maxResults"] as? Number)?.toInt() ?: 20).coerceAtLeast(1)
         val offset = ((arguments["offset"] as? Number)?.toInt() ?: 0).coerceAtLeast(0)
 
         // 解析枚举值 (已通过 Schema 校验，直接转换)

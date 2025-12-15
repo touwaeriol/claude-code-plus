@@ -6,6 +6,8 @@ import com.asakii.claude.agent.sdk.mcp.annotations.McpServerConfig
 import com.asakii.rpc.proto.AskUserQuestionRequest
 import com.asakii.rpc.proto.QuestionItem as ProtoQuestionItem
 import com.asakii.rpc.proto.QuestionOption as ProtoQuestionOption
+import com.asakii.server.mcp.schema.SchemaValidator
+import com.asakii.server.mcp.schema.ValidationResult
 import com.asakii.server.rpc.ClientCaller
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -183,17 +185,91 @@ class UserInteractionMcpServer : McpServerBase() {
     private var clientCaller: ClientCaller? = null
 
     /**
+     * 工具调用超时时间
+     * AskUserQuestion 需要等待用户响应，设置为 null 表示无限超时
+     */
+    override val timeout: Long? = null
+
+    /**
+     * 获取需要自动允许的工具列表
+     * AskUserQuestion 工具需要自动允许，避免向用户提问还需要授权
+     */
+    override fun getAllowedTools(): List<String> = listOf("AskUserQuestion")
+
+    /**
      * 提供该 MCP 服务器的系统提示词追加内容
      *
      * 告知 AI 如何正确使用 AskUserQuestion 工具与用户进行交互
      */
-    override fun getSystemPromptAppendix(): String = """
-        When you need clarification from the user, especially when presenting multiple options or choices, use the `mcp__user_interaction__AskUserQuestion` tool to ask questions. The user's response will be returned to you through this tool.
-    """.trimIndent()
+    override fun getSystemPromptAppendix(): String {
+        return Companion.loadResourceText("/prompts/user-interaction-mcp-instructions.md")
+            ?: "When you need clarification from the user, use the `mcp__user_interaction__AskUserQuestion` tool to ask questions."
+    }
 
     companion object {
-        /** AskUserQuestion 工具的 JSON Schema 定义 */
-        val ASK_USER_QUESTION_SCHEMA: Map<String, Any> = mapOf(
+        /** AskUserQuestion 工具的 JSON Schema 定义（从资源文件加载） */
+        val ASK_USER_QUESTION_SCHEMA: Map<String, Any> by lazy {
+            loadToolSchema("AskUserQuestion")
+        }
+
+        /**
+         * 从资源文件加载工具 Schema
+         */
+        private fun loadToolSchema(toolName: String): Map<String, Any> {
+            val resourcePath = "/mcp/schemas/tools.json"
+            val content = UserInteractionMcpServer::class.java.getResourceAsStream(resourcePath)
+                ?.bufferedReader()
+                ?.readText()
+                ?: run {
+                    mcpLogger.warn { "⚠️ 无法加载资源文件: $resourcePath，使用默认 Schema" }
+                    return getDefaultSchema()
+                }
+
+            return try {
+                val json = Json { ignoreUnknownKeys = true }
+                val toolsMap = json.decodeFromString<Map<String, JsonObject>>(content)
+                val toolSchema = toolsMap[toolName]
+                    ?: run {
+                        mcpLogger.warn { "⚠️ 工具 Schema 未找到: $toolName，使用默认 Schema" }
+                        return getDefaultSchema()
+                    }
+                jsonObjectToMap(toolSchema)
+            } catch (e: Exception) {
+                mcpLogger.error { "❌ 解析工具 Schema 失败: ${e.message}" }
+                getDefaultSchema()
+            }
+        }
+
+        /**
+         * 将 JsonObject 递归转换为 Map<String, Any>
+         */
+        private fun jsonObjectToMap(jsonObject: JsonObject): Map<String, Any> {
+            return jsonObject.mapValues { (_, value) -> jsonElementToAny(value) }
+        }
+
+        /**
+         * 将 JsonElement 递归转换为 Any
+         */
+        private fun jsonElementToAny(element: JsonElement): Any {
+            return when (element) {
+                is JsonPrimitive -> when {
+                    element.isString -> element.content
+                    element.booleanOrNull != null -> element.boolean
+                    element.intOrNull != null -> element.int
+                    element.longOrNull != null -> element.long
+                    element.doubleOrNull != null -> element.double
+                    else -> element.content
+                }
+                is JsonArray -> element.map { jsonElementToAny(it) }
+                is JsonObject -> jsonObjectToMap(element)
+                is JsonNull -> ""
+            }
+        }
+
+        /**
+         * 默认 Schema（当资源文件加载失败时使用）
+         */
+        private fun getDefaultSchema(): Map<String, Any> = mapOf(
             "type" to "object",
             "properties" to mapOf(
                 "questions" to mapOf(
@@ -202,36 +278,21 @@ class UserInteractionMcpServer : McpServerBase() {
                     "items" to mapOf(
                         "type" to "object",
                         "properties" to mapOf(
-                            "question" to mapOf(
-                                "type" to "string",
-                                "description" to "问题内容"
-                            ),
-                            "header" to mapOf(
-                                "type" to "string",
-                                "description" to "问题标题/分类标签"
-                            ),
+                            "question" to mapOf("type" to "string", "description" to "问题内容"),
+                            "header" to mapOf("type" to "string", "description" to "问题标题/分类标签"),
                             "options" to mapOf(
                                 "type" to "array",
                                 "description" to "选项列表",
                                 "items" to mapOf(
                                     "type" to "object",
                                     "properties" to mapOf(
-                                        "label" to mapOf(
-                                            "type" to "string",
-                                            "description" to "选项显示文本"
-                                        ),
-                                        "description" to mapOf(
-                                            "type" to "string",
-                                            "description" to "选项描述（可选）"
-                                        )
+                                        "label" to mapOf("type" to "string", "description" to "选项显示文本"),
+                                        "description" to mapOf("type" to "string", "description" to "选项描述(可选)")
                                     ),
                                     "required" to listOf("label")
                                 )
                             ),
-                            "multiSelect" to mapOf(
-                                "type" to "boolean",
-                                "description" to "是否允许多选，默认 false"
-                            )
+                            "multiSelect" to mapOf("type" to "boolean", "description" to "是否允许多选,默认 false")
                         ),
                         "required" to listOf("question", "header", "options")
                     )
@@ -240,6 +301,15 @@ class UserInteractionMcpServer : McpServerBase() {
             "required" to listOf("questions")
         )
 
+        /**
+         * 从资源文件加载文本内容
+         */
+        private fun loadResourceText(resourcePath: String): String? {
+            return UserInteractionMcpServer::class.java.getResourceAsStream(resourcePath)
+                ?.bufferedReader()
+                ?.readText()
+                ?.trim()
+        }
     }
 
     /**
@@ -271,10 +341,30 @@ class UserInteractionMcpServer : McpServerBase() {
 
         mcpLogger.info { "📩 [AskUserQuestion] 收到工具调用，参数: $arguments" }
 
-        // 1. 先进行参数校验
-        validateQuestions(arguments)?.let { error ->
-            mcpLogger.warn { "⚠️ [AskUserQuestion] 参数校验失败: $error" }
-            return ToolResult.error(error)
+        // 1. 使用 SchemaValidator 进行参数校验
+        val argumentsMap = jsonObjectToMap(arguments)
+        val validationResult = SchemaValidator.validateWithSchema(
+            schema = ASK_USER_QUESTION_SCHEMA,
+            arguments = argumentsMap,
+            customValidators = listOf(
+                // 自定义校验：检测误传字符串的情况
+                { args ->
+                    val questions = args["questions"]
+                    if (questions is String) {
+                        com.asakii.server.mcp.schema.ValidationError(
+                            parameter = "questions",
+                            message = "Parameter should be an array, not a string",
+                            hint = "Pass the array directly without serializing it to a string"
+                        )
+                    } else null
+                }
+            )
+        )
+
+        if (validationResult is ValidationResult.Invalid) {
+            val errorMsg = validationResult.formatMessage()
+            mcpLogger.warn { "⚠️ [AskUserQuestion] 参数校验失败:\n$errorMsg" }
+            return ToolResult.error(errorMsg)
         }
 
         return try {
@@ -329,42 +419,29 @@ class UserInteractionMcpServer : McpServerBase() {
 
 
     /**
-     * 校验 questions 参数，返回错误信息或 null（通过）
+     * 将 JsonObject 转换为 Map<String, Any> 供 SchemaValidator 使用
      */
-    private fun validateQuestions(arguments: JsonObject): String? {
-        val questions = arguments["questions"]
+    private fun jsonObjectToMap(jsonObject: JsonObject): Map<String, Any> {
+        return jsonObject.mapValues { (_, value) -> jsonElementToAnyForValidation(value) }
+    }
 
-        // 检查 questions 是否存在
-        if (questions == null) {
-            return "缺少必填参数 'questions'"
-        }
-
-        // 检查是否是字符串（常见错误）
-        if (questions is JsonPrimitive && questions.isString) {
-            return "参数 'questions' 应该是数组，而不是字符串。请直接传递数组，不要将其序列化为字符串"
-        }
-
-        // 检查是否是数组
-        if (questions !is JsonArray) {
-            return "参数 'questions' 必须是数组类型，当前类型: ${questions::class.simpleName}"
-        }
-
-        // 检查数组是否为空
-        if (questions.isEmpty()) {
-            return "参数 'questions' 不能为空数组"
-        }
-
-        // 校验每个问题项
-        questions.forEachIndexed { index, item ->
-            if (item !is JsonObject) {
-                return "questions[$index] 必须是对象，当前类型: ${item::class.simpleName}"
+    /**
+     * 将 JsonElement 转换为 Any
+     */
+    private fun jsonElementToAnyForValidation(element: JsonElement): Any {
+        return when (element) {
+            is JsonPrimitive -> when {
+                element.isString -> element.content
+                element.booleanOrNull != null -> element.boolean
+                element.intOrNull != null -> element.int
+                element.longOrNull != null -> element.long
+                element.doubleOrNull != null -> element.double
+                else -> element.content
             }
-            if (!item.containsKey("question")) {
-                return "questions[$index] 缺少必填字段 'question'"
-            }
+            is JsonArray -> element.map { jsonElementToAnyForValidation(it) }
+            is JsonObject -> jsonObjectToMap(element)
+            is JsonNull -> ""
         }
-
-        return null // 校验通过
     }
 
     /**
@@ -427,11 +504,6 @@ class UserInteractionMcpServer : McpServerBase() {
             mcpLogger.debug { "📦 转换后的 JSON: $paramsJson" }
             val paramsJsonNormalized = normalizeQuestions(paramsJson.jsonObject)
 
-            // 先进行参数校验
-            validateQuestions(paramsJsonNormalized)?.let { error ->
-                mcpLogger.warn { "⚠️ [AskUserQuestion] 参数校验失败: $error" }
-                return ToolResult.error(error)
-            }
 
             val params: AskUserQuestionParams = Json.decodeFromJsonElement(paramsJsonNormalized)
 

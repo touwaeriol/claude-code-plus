@@ -4,6 +4,11 @@
  */
 import { ref } from 'vue'
 
+/** 输入框最小高度（px） */
+export const INPUT_MIN_HEIGHT = 110
+/** 输入框最大高度（px） */
+export const INPUT_MAX_HEIGHT = 500
+
 export interface UseInputResizeOptions {
   /** 最小高度 */
   minHeight?: number

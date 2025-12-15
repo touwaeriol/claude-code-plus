@@ -17,11 +17,11 @@
       <!-- 左侧占位元素，填充空白区域使整行可交互 -->
       <div class="row-spacer"></div>
       <div class="message-wrapper">
-        <!-- Edit button (shown on hover, adjacent to bubble) -->
+        <!-- Edit button (shown on hover when uuid exists, adjacent to bubble) -->
         <button
-          v-show="showEditButton"
+          v-show="showEditButton && props.message.uuid"
           class="edit-button"
-          title="Edit message"
+          title="Edit and resend message"
           @click="enterEditMode"
         >
           <span class="edit-icon">✏️</span>
@@ -81,11 +81,10 @@
       <ChatInput
         ref="chatInputRef"
         :inline="true"
-        :edit-disabled="true"
         :contexts="editContexts"
         :show-context-controls="true"
-        :show-model-selector="true"
-        :show-permission-controls="true"
+        :show-model-selector="false"
+        :show-permission-controls="false"
         @send="handleEditSubmit"
         @cancel="exitEditMode"
         @context-add="handleContextAdd"
@@ -114,11 +113,14 @@ import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 import ChatInput from './ChatInput.vue'
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 import { ideaBridge } from '@/services/ideaBridge'
+import { useSessionStore } from '@/stores/sessionStore'
 
 // 兼容 Message 和 UserMessage (DisplayItem) 类型
 interface Props {
   message: {
     id?: string
+    /** JSONL 历史文件中的 UUID，用于编辑重发时定位截断位置 */
+    uuid?: string
     content?: ContentBlock[]
     contexts?: ContextReference[]  // DisplayItem 中的 contexts 已经包含图片
     style?: 'hint' | 'error'  // 消息样式：hint=md渲染，error=错误颜色
@@ -169,10 +171,47 @@ function exitEditMode() {
   editContexts.value = []
 }
 
-// 处理编辑提交（当前阶段禁用，预留接口）
-function handleEditSubmit(_contents: ContentBlock[]) {
-  // 当前阶段不实现，预留接口
-  // 后续开放时：调用 sessionStore 更新消息
+// 处理编辑提交
+async function handleEditSubmit(contents: ContentBlock[]) {
+  const uuid = props.message.uuid
+  if (!uuid) {
+    console.warn('[UserMessageBubble] 消息没有 uuid，无法编辑重发')
+    exitEditMode()
+    return
+  }
+
+  const sessionStore = useSessionStore()
+  const currentTab = sessionStore.currentTab
+  if (!currentTab) {
+    console.warn('[UserMessageBubble] 没有活动的 tab')
+    exitEditMode()
+    return
+  }
+
+  // 从 currentTab 获取项目路径
+  const projectPath = currentTab.projectPath.value
+  console.log('[UserMessageBubble] 项目路径:', projectPath)
+
+  if (!projectPath) {
+    console.warn('[UserMessageBubble] 项目路径为空，无法编辑重发')
+    exitEditMode()
+    return
+  }
+
+  // 调用编辑重发方法
+  try {
+    await currentTab.editAndResendMessage(
+      uuid,
+      {
+        contexts: editContexts.value,
+        contents
+      },
+      projectPath
+    )
+  } catch (e) {
+    console.error('[UserMessageBubble] 编辑重发失败:', e)
+  }
+
   exitEditMode()
 }
 

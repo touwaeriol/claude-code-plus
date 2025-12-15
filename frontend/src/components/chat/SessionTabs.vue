@@ -43,13 +43,15 @@
               class="status-indicator"
               :class="{
                 connecting: tab.connectionStatus === 'CONNECTING',
+                generating: tab.isGenerating,
                 connected: tab.connectionStatus === 'CONNECTED',
                 disconnected: tab.connectionStatus === 'DISCONNECTED',
                 error: tab.connectionStatus === 'ERROR'
               }"
               :title="statusTitle(tab)"
             >
-              <span v-if="tab.connectionStatus === 'CONNECTING'" class="dot-pulse" />
+              <span v-if="tab.connectionStatus === 'CONNECTING'" class="dot-pulse connecting" />
+              <span v-else-if="tab.isGenerating" class="dot-pulse generating" />
               <span v-else class="dot-solid" />
             </span>
 
@@ -65,12 +67,6 @@
             />
             <!-- 显示模式 -->
             <span v-else class="tab-name">{{ tab.name || t('session.unnamed') }}</span>
-
-            <span
-              v-if="tab.isGenerating"
-              class="generating-dot"
-              :title="t('chat.connectionStatus.generating') || 'Generating'"
-            />
 
             <button
               v-if="canClose"
@@ -427,12 +423,21 @@ function displaySessionId(tab: SessionTabInfo): string | null {
   box-shadow: 0 0 6px rgba(215, 58, 73, 0.8);
 }
 
-.status-indicator.connecting .dot-pulse {
+.status-indicator .dot-pulse {
   width: 6px;
   height: 6px;
   border-radius: 50%;
+}
+
+.status-indicator .dot-pulse.connecting {
   background: var(--theme-accent, #0366d6);
   animation: dot-pulse 1s ease-in-out infinite;
+}
+
+.status-indicator .dot-pulse.generating {
+  background: var(--theme-success, #28a745);
+  animation: dot-bounce 0.6s ease-in-out infinite;
+  box-shadow: 0 0 8px rgba(40, 167, 69, 0.6);
 }
 
 @keyframes dot-pulse {
@@ -443,6 +448,17 @@ function displaySessionId(tab: SessionTabInfo): string | null {
   50% {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes dot-bounce {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0.7;
   }
 }
 
@@ -461,27 +477,6 @@ function displaySessionId(tab: SessionTabInfo): string | null {
   color: inherit;
   font-size: inherit;
   outline: none;
-}
-
-.generating-dot {
-  width: 6px;
-  height: 6px;
-  margin-left: 6px;
-  border-radius: 50%;
-  background: var(--theme-success, #28a745);
-  animation: pulse 1.5s ease-in-out infinite;
-  flex-shrink: 0;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.6;
-    transform: scale(0.85);
-  }
 }
 
 .close-btn {

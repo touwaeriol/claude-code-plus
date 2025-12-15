@@ -14,6 +14,8 @@ import {
   SetPermissionModeRequestSchema,
   LoadHistoryRequestSchema,
   GetHistoryMetadataRequestSchema,
+  TruncateHistoryRequestSchema,
+  TruncateHistoryResultSchema,
   StatusResultSchema,
   SetModelResultSchema,
   SetPermissionModeResultSchema,
@@ -56,10 +58,43 @@ import type {
   RpcConnectResult,
   RpcPermissionMode,
   RpcContentBlock,
-  RpcMessage as RpcMessageType,
   RpcSessionStatus,
   RpcContentStatus
 } from '@/types/rpc'
+
+// 导入新的 RPC 类系统（直接从子模块导入原始类名）
+import {
+  // 消息类
+  RpcMessage,
+  RpcUserMessage,
+  RpcAssistantMessage,
+  RpcResultMessage,
+  RpcStreamEventMessage,
+  RpcErrorMessage,
+  RpcStatusSystemMessage,
+  RpcCompactBoundaryMessage,
+  RpcSystemInitMessage,
+  RpcUnknownMessage,
+  // 内容块类
+  ContentBlock as RpcContentBlockClass,
+  TextBlock,
+  ThinkingBlock,
+  ToolUseBlock,
+  ToolResultBlock,
+  ImageBlock,
+  CommandExecutionBlock,
+  ErrorBlock,
+  UnknownBlock,
+  // 流事件类
+  StreamEventData,
+  MessageStartEvent,
+  ContentBlockStartEvent,
+  ContentBlockDeltaEvent,
+  ContentBlockStopEvent,
+  MessageDeltaEvent,
+  MessageStopEvent,
+  UnknownEvent
+} from '@/types/rpc/index'
 
 // 重新导出 Protobuf 枚举
 export { Provider, PermissionMode, SandboxMode, SessionCommandType }
@@ -92,7 +127,8 @@ export const ProtoCodec = {
       thinkingEnabled: options.thinkingEnabled,
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
-      sandboxMode: options.sandboxMode ? mapSandboxModeToProto(options.sandboxMode) : undefined
+      sandboxMode: options.sandboxMode ? mapSandboxModeToProto(options.sandboxMode) : undefined,
+      replayUserMessages: options.replayUserMessages
     })
 
     return toBinary(ConnectOptionsSchema, proto)
@@ -183,6 +219,18 @@ export const ProtoCodec = {
     return toBinary(GetHistoryMetadataRequestSchema, request)
   },
 
+  /**
+   * 编码 TruncateHistoryRequest（用于编辑重发功能）
+   */
+  encodeTruncateHistoryRequest(params: { sessionId: string; messageUuid: string; projectPath: string }): Uint8Array {
+    const request = create(TruncateHistoryRequestSchema, {
+      sessionId: params.sessionId,
+      messageUuid: params.messageUuid,
+      projectPath: params.projectPath
+    })
+    return toBinary(TruncateHistoryRequestSchema, request)
+  },
+
   // ==================== 解码（Protobuf bytes -> RPC）====================
 
   /**
@@ -238,8 +286,9 @@ export const ProtoCodec = {
 
   /**
    * 解码 History
+   * 返回的消息数组中每个元素都是 RpcMessage 类实例，支持 instanceof 判断
    */
-  decodeHistory(data: Uint8Array): { messages: RpcMessageType[] } {
+  decodeHistory(data: Uint8Array): { messages: RpcMessage[] } {
     const proto = fromBinary(HistorySchema, data)
     return {
       messages: proto.messages.map(mapRpcMessageFromProto)
@@ -278,8 +327,9 @@ export const ProtoCodec = {
 
   /**
    * 解码历史加载结果（分页查询）
+   * 返回的消息数组中每个元素都是 RpcMessage 类实例，支持 instanceof 判断
    */
-  decodeHistoryResult(data: Uint8Array): { messages: RpcMessageType[]; offset: number; count: number; availableCount: number } {
+  decodeHistoryResult(data: Uint8Array): { messages: RpcMessage[]; offset: number; count: number; availableCount: number } {
     const proto = fromBinary(HistoryResultSchema, data)
     return {
       messages: proto.messages.map(mapRpcMessageFromProto),
@@ -290,9 +340,22 @@ export const ProtoCodec = {
   },
 
   /**
-   * 解码 RpcMessage（流式事件）
+   * 解码 TruncateHistoryResult（用于编辑重发功能）
    */
-  decodeRpcMessage(data: Uint8Array): RpcMessageType {
+  decodeTruncateHistoryResult(data: Uint8Array): { success: boolean; remainingLines: number; error?: string } {
+    const proto = fromBinary(TruncateHistoryResultSchema, data)
+    return {
+      success: proto.success,
+      remainingLines: proto.remainingLines,
+      error: proto.error || undefined
+    }
+  },
+
+  /**
+   * 解码 RpcMessage（流式事件）
+   * 返回 RpcMessage 类实例，支持 instanceof 判断
+   */
+  decodeRpcMessage(data: Uint8Array): RpcMessage {
     const proto = fromBinary(RpcMessageSchema, data)
     return mapRpcMessageFromProto(proto)
   }
@@ -408,34 +471,40 @@ function mapContentBlockToProto(block: RpcContentBlock): ContentBlock {
   return proto
 }
 
-function mapRpcMessageFromProto(proto: any): RpcMessageType {
+/**
+ * 将 Protobuf 消息转换为 RPC 类实例
+ * 返回的对象支持 instanceof 判断
+ */
+function mapRpcMessageFromProto(proto: any): RpcMessage {
   const provider = mapProviderFromProto(proto.provider)
 
   switch (proto.message?.case) {
     case 'user':
-      return {
+      return new RpcUserMessage({
         type: 'user',
         provider,
         message: {
-          content: proto.message.value.message?.content.map(mapContentBlockFromProto) || []
+          content: proto.message.value.message?.content.map(mapContentBlockFromProtoAsClass) || []
         },
         parentToolUseId: proto.message.value.parentToolUseId,
-        isReplay: proto.message.value.isReplay
-      } as any
+        isReplay: proto.message.value.isReplay,
+        uuid: proto.message.value.uuid
+      })
 
     case 'assistant':
-      return {
+      return new RpcAssistantMessage({
         type: 'assistant',
         provider,
         message: {
-          content: proto.message.value.message?.content.map(mapContentBlockFromProto) || []
+          content: proto.message.value.message?.content.map(mapContentBlockFromProtoAsClass) || []
         },
         id: proto.message.value.id,
-        parentToolUseId: proto.message.value.parentToolUseId
-      } as any
+        parentToolUseId: proto.message.value.parentToolUseId,
+        uuid: proto.message.value.uuid
+      })
 
     case 'result':
-      return {
+      return new RpcResultMessage({
         type: 'result',
         provider,
         subtype: proto.message.value.subtype,
@@ -446,29 +515,29 @@ function mapRpcMessageFromProto(proto: any): RpcMessageType {
         session_id: proto.message.value.sessionId,
         total_cost_usd: proto.message.value.totalCostUsd,
         result: proto.message.value.result
-      } as any
+      })
 
     case 'streamEvent':
-      return mapStreamEventFromProto(proto.message.value, provider)
+      return mapStreamEventFromProtoAsClass(proto.message.value, provider)
 
     case 'error':
-      return {
+      return new RpcErrorMessage({
         type: 'error',
         provider,
         message: proto.message.value.errorMessage
-      } as any
+      })
 
     case 'statusSystem':
-      return {
+      return new RpcStatusSystemMessage({
         type: 'status_system',
         provider,
         subtype: proto.message.value.subtype,
         status: proto.message.value.status,
         session_id: proto.message.value.sessionId
-      } as any
+      })
 
     case 'compactBoundary':
-      return {
+      return new RpcCompactBoundaryMessage({
         type: 'compact_boundary',
         provider,
         subtype: proto.message.value.subtype,
@@ -477,14 +546,177 @@ function mapRpcMessageFromProto(proto: any): RpcMessageType {
           trigger: proto.message.value.compactMetadata.trigger,
           pre_tokens: proto.message.value.compactMetadata.preTokens
         } : undefined
-      } as any
+      })
+
+    case 'systemInit':
+      return new RpcSystemInitMessage({
+        type: 'system_init',
+        provider,
+        session_id: proto.message.value.sessionId,
+        cwd: proto.message.value.cwd,
+        model: proto.message.value.model,
+        permissionMode: proto.message.value.permissionMode,
+        apiKeySource: proto.message.value.apiKeySource,
+        tools: proto.message.value.tools,
+        mcpServers: proto.message.value.mcpServers?.map(s => ({ name: s.name, status: s.status }))
+      })
 
     default:
-      return { type: 'unknown', provider } as any
+      return new RpcUnknownMessage({ type: 'unknown', provider })
   }
 }
 
-function mapStreamEventFromProto(proto: any, provider: 'claude' | 'codex'): RpcMessageType {
+/**
+ * 将 Protobuf ContentBlock 转换为 RPC 类实例
+ * 返回的对象支持 instanceof 判断
+ */
+function mapContentBlockFromProtoAsClass(proto: ContentBlock): RpcContentBlockClass {
+  if (!proto.block) {
+    return new TextBlock({ type: 'text', text: '' })
+  }
+
+  switch (proto.block.case) {
+    case 'text':
+      return new TextBlock({ type: 'text', text: proto.block.value.text })
+
+    case 'thinking':
+      return new ThinkingBlock({
+        type: 'thinking',
+        thinking: proto.block.value.thinking,
+        signature: proto.block.value.signature
+      })
+
+    case 'toolUse':
+      return new ToolUseBlock({
+        type: 'tool_use',
+        id: proto.block.value.id,
+        name: proto.block.value.toolName,
+        tool_type: proto.block.value.toolType,
+        input_json: proto.block.value.inputJson ? new TextDecoder().decode(proto.block.value.inputJson) : undefined,
+        status: mapContentStatusFromProto(proto.block.value.status)
+      })
+
+    case 'toolResult':
+      return new ToolResultBlock({
+        type: 'tool_result',
+        tool_use_id: proto.block.value.toolUseId,
+        content_json: proto.block.value.contentJson ? new TextDecoder().decode(proto.block.value.contentJson) : undefined,
+        is_error: proto.block.value.isError,
+        agent_id: proto.block.value.agentId
+      })
+
+    case 'image':
+      return new ImageBlock({
+        type: 'image',
+        source: {
+          type: proto.block.value.source?.type || 'base64',
+          media_type: proto.block.value.source?.mediaType || 'image/png',
+          data: proto.block.value.source?.data,
+          url: proto.block.value.source?.url
+        }
+      })
+
+    case 'commandExecution':
+      return new CommandExecutionBlock({
+        type: 'command_execution',
+        command: proto.block.value.command,
+        output: proto.block.value.output,
+        exit_code: proto.block.value.exitCode,
+        status: mapContentStatusFromProto(proto.block.value.status)
+      })
+
+    case 'error':
+      return new ErrorBlock({
+        type: 'error',
+        message: proto.block.value.message
+      })
+
+    default:
+      return new UnknownBlock({ type: 'unknown', raw: proto })
+  }
+}
+
+/**
+ * 将 Protobuf StreamEvent 转换为 RpcStreamEventMessage 类实例
+ * 返回的对象支持 instanceof 判断
+ */
+function mapStreamEventFromProtoAsClass(proto: any, provider: 'claude' | 'codex'): RpcStreamEventMessage {
+  const eventData = proto.event
+  let event: StreamEventData
+
+  if (!eventData || !eventData.event) {
+    console.warn('[protoCodec] stream_event has no event field:', proto)
+    event = new UnknownEvent({ type: 'unknown' })
+  } else {
+    const innerEvent = eventData.event
+
+    switch (innerEvent.case) {
+      case 'messageStart':
+        event = new MessageStartEvent({
+          type: 'message_start',
+          message: innerEvent.value.messageInfo ? {
+            id: innerEvent.value.messageInfo.id,
+            model: innerEvent.value.messageInfo.model,
+            content: innerEvent.value.messageInfo.content?.map(mapContentBlockFromProtoAsClass) || []
+          } : undefined
+        })
+        break
+
+      case 'contentBlockStart':
+        event = new ContentBlockStartEvent({
+          type: 'content_block_start',
+          index: innerEvent.value.index,
+          content_block: mapContentBlockFromProtoAsClass(innerEvent.value.contentBlock)
+        })
+        break
+
+      case 'contentBlockDelta':
+        event = new ContentBlockDeltaEvent({
+          type: 'content_block_delta',
+          index: innerEvent.value.index,
+          delta: mapDeltaFromProto(innerEvent.value.delta)
+        })
+        break
+
+      case 'contentBlockStop':
+        event = new ContentBlockStopEvent({
+          type: 'content_block_stop',
+          index: innerEvent.value.index
+        })
+        break
+
+      case 'messageDelta':
+        event = new MessageDeltaEvent({
+          type: 'message_delta',
+          usage: innerEvent.value.usage ? {
+            input_tokens: innerEvent.value.usage.inputTokens,
+            output_tokens: innerEvent.value.usage.outputTokens
+          } : undefined
+        })
+        break
+
+      case 'messageStop':
+        event = new MessageStopEvent({ type: 'message_stop' })
+        break
+
+      default:
+        console.warn('[protoCodec] unknown stream_event.event.case:', innerEvent.case, innerEvent)
+        event = new UnknownEvent({ type: 'unknown', originalType: innerEvent.case })
+    }
+  }
+
+  return new RpcStreamEventMessage({
+    type: 'stream_event',
+    provider,
+    uuid: proto.uuid,
+    session_id: proto.sessionId,
+    parentToolUseId: proto.parentToolUseId,
+    event
+  })
+}
+
+// 保留旧的函数用于兼容（返回普通对象）
+function mapStreamEventFromProto(proto: any, provider: 'claude' | 'codex'): any {
   const base = {
     type: 'stream_event' as const,
     provider,

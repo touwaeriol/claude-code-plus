@@ -1,7 +1,7 @@
 package com.asakii.plugin.mcp.tools
 
 import com.asakii.claude.agent.sdk.mcp.ToolResult
-import com.asakii.plugin.mcp.ToolSchemaLoader
+import com.asakii.server.mcp.schema.ToolSchemaLoader
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocumentManager
@@ -64,7 +64,7 @@ class FileIndexTool(private val project: Project) {
             ?: return ToolResult.error("Missing required parameter: query")
         val searchTypeStr = arguments["searchType"] as? String ?: "All"
         val scopeStr = arguments["scope"] as? String ?: "Project"
-        val maxResults = ((arguments["maxResults"] as? Number)?.toInt() ?: 50).coerceAtLeast(1)
+        val maxResults = ((arguments["maxResults"] as? Number)?.toInt() ?: 20).coerceAtLeast(1)
         val offset = ((arguments["offset"] as? Number)?.toInt() ?: 0).coerceAtLeast(0)
 
         val searchType = try {

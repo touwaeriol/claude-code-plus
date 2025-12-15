@@ -35,10 +35,10 @@ class UiStreamAdapter {
                 )
             )
             is AssistantMessageEvent -> listOf(
-                UiAssistantMessage(id = event.id, content = event.content, parentToolUseId = event.parentToolUseId)
+                UiAssistantMessage(id = event.id, content = event.content, parentToolUseId = event.parentToolUseId, uuid = event.uuid)
             )
             is UserMessageEvent -> listOf(
-                UiUserMessage(event.content, event.isReplay, event.parentToolUseId)
+                UiUserMessage(event.content, event.isReplay, event.parentToolUseId, event.uuid)
             )
             is StatusSystemEvent -> listOf(
                 UiStatusSystem(status = event.status, sessionId = event.sessionId)
@@ -48,6 +48,17 @@ class UiStreamAdapter {
                     sessionId = event.sessionId,
                     trigger = event.trigger,
                     preTokens = event.preTokens
+                )
+            )
+            is SystemInitEvent -> listOf(
+                UiSystemInit(
+                    sessionId = event.sessionId,
+                    cwd = event.cwd,
+                    model = event.model,
+                    permissionMode = event.permissionMode,
+                    apiKeySource = event.apiKeySource,
+                    tools = event.tools,
+                    mcpServers = event.mcpServers
                 )
             )
             is TurnStartedEvent -> emptyList()

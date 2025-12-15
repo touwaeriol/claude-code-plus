@@ -25,11 +25,31 @@ interface McpServer {
 
     /**
      * 工具调用超时时间（毫秒）
-     * - null 或 0: 无限超时（适用于需要用户交互的工具，如 AskUserQuestion）
+     * - null 或 0 或负数: 无限超时（适用于需要用户交互的工具，如 AskUserQuestion）
      * - 正数: 指定超时时间
      */
     val timeout: Long?
         get() = null  // 默认无限超时
+
+    /**
+     * 是否在收到进度报告时重置超时计时器
+     *
+     * 当设置为 true 时，只要 MCP 工具持续报告进度，超时计时器就会重置。
+     * 这允许长时间运行的操作（如需要用户交互）不会因为超时而失败。
+     *
+     * 参考: https://github.com/anthropics/claude-code/issues/470
+     */
+    val resetTimeoutOnProgress: Boolean
+        get() = false
+
+    /**
+     * 是否启用进度报告
+     *
+     * 当设置为 true 时，MCP 服务器应该在执行长时间操作时定期报告进度。
+     * 配合 resetTimeoutOnProgress 使用可以防止超时。
+     */
+    val progressReportingEnabled: Boolean
+        get() = false
 
     /**
      * 获取该 MCP 服务器的系统提示词追加内容
@@ -40,6 +60,19 @@ interface McpServer {
      * @return 系统提示词追加内容，返回 null 表示无额外提示词
      */
     fun getSystemPromptAppendix(): String? = null
+
+    /**
+     * 获取该 MCP 服务器需要自动允许的工具列表
+     *
+     * 返回的工具名称将被添加到 Claude CLI 的 --allowed-tools 参数中，
+     * 这些工具将自动获得权限批准，无需用户手动确认。
+     *
+     * 注意：返回的是简短工具名（如 "AskUserQuestion"），
+     * 系统会自动添加 mcp__{serverName}__ 前缀。
+     *
+     * @return 需要自动允许的工具名列表，默认返回空列表
+     */
+    fun getAllowedTools(): List<String> = emptyList()
 
     /**
      * 列出所有可用工具

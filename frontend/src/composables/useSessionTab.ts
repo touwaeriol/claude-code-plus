@@ -26,7 +26,8 @@ import {
     isUserMessage as isRpcUserMessage,
     type RpcStatusSystemMessage,
     type RpcCompactBoundaryMessage,
-    type RpcCompactMetadata
+    type RpcCompactMetadata,
+    type RpcSystemInitMessage
 } from '@/types/rpc'
 import {mapRpcMessageToMessage} from '@/utils/rpcMappers'
 import {useSessionTools, type SessionToolsInstance} from './useSessionTools'
@@ -36,6 +37,7 @@ import {useSessionMessages, type SessionMessagesInstance} from './useSessionMess
 import {loggers} from '@/utils/logger'
 import type {PendingPermissionRequest, PendingUserQuestion, PermissionResponse} from '@/types/permission'
 import {HISTORY_LAZY_LOAD_SIZE, HISTORY_PAGE_SIZE} from '@/constants/messageWindow'
+import {ideaBridge} from '@/services/ideaBridge'
 
 const log = loggers.session
 
@@ -72,7 +74,7 @@ export interface TabConnectOptions {
     permissionMode?: RpcPermissionMode
     skipPermissions?: boolean
     continueConversation?: boolean
-    resume?: string
+    resumeSessionId?: string
 }
 
 /**
@@ -96,6 +98,7 @@ export type NormalizedRpcMessage =
     | { kind: 'result'; data: RpcResultMessage }
     | { kind: 'status_system'; data: RpcStatusSystemMessage }
     | { kind: 'compact_boundary'; data: RpcCompactBoundaryMessage }
+    | { kind: 'system_init'; data: RpcSystemInitMessage }
 
 /**
  * 检查是否是 status_system 消息
@@ -109,6 +112,13 @@ function isStatusSystemMessage(msg: RpcMessage): msg is RpcStatusSystemMessage {
  */
 function isCompactBoundaryMessage(msg: RpcMessage): msg is RpcCompactBoundaryMessage {
     return msg.type === 'compact_boundary'
+}
+
+/**
+ * 检查是否是 system_init 消息
+ */
+function isSystemInitMessage(msg: RpcMessage): msg is RpcSystemInitMessage {
+    return msg.type === 'system_init'
 }
 
 /**
@@ -131,6 +141,7 @@ export function useSessionTab(initialOrder: number = 0) {
     // ========== Tab 基础信息 ==========
     const tabId = `tab-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
     const sessionId = ref<string | null>(null)
+    const projectPath = ref<string | null>(null)
     const name = ref('新会话')
     const createdAt = Date.now()
     const updatedAt = ref(createdAt)
@@ -167,11 +178,11 @@ export function useSessionTab(initialOrder: number = 0) {
      * 更新 lastAppliedSettings 为当前设置
      */
     function updateLastAppliedSettings(): void {
+        // skipPermissions 是纯前端行为，不需要跟踪
         lastAppliedSettings.value = {
             model: modelId.value || undefined,
             thinkingEnabled: thinkingEnabled.value,
-            permissionMode: permissionMode.value,
-            skipPermissions: skipPermissions.value
+            permissionMode: permissionMode.value
         }
     }
 
@@ -185,9 +196,8 @@ export function useSessionTab(initialOrder: number = 0) {
 
         log.info(`[Tab ${tabId}] 应用待处理设置:`, pendingSettings.value)
 
-        // 检查是否需要重连
-        const needsReconnect = pendingSettings.value.thinkingEnabled !== undefined ||
-            pendingSettings.value.skipPermissions !== undefined
+        // 检查是否需要重连（skipPermissions 是纯前端行为，不需要重连）
+        const needsReconnect = pendingSettings.value.thinkingEnabled !== undefined
 
         if (needsReconnect) {
             // 需要重连的设置
@@ -211,6 +221,12 @@ export function useSessionTab(initialOrder: number = 0) {
      * 设置待应用的设置项
      */
     function setPendingSetting<K extends keyof TabConnectOptions>(key: K, value: TabConnectOptions[K]): void {
+        // skipPermissions 是纯前端行为，不放入 pendingSettings
+        if (key === 'skipPermissions') {
+            skipPermissions.value = value as boolean
+            return
+        }
+
         pendingSettings.value = {...pendingSettings.value, [key]: value}
         // 同时更新本地状态
         switch (key) {
@@ -222,9 +238,6 @@ export function useSessionTab(initialOrder: number = 0) {
                 break
             case 'permissionMode':
                 permissionMode.value = value as RpcPermissionMode
-                break
-            case 'skipPermissions':
-                skipPermissions.value = value as boolean
                 break
         }
     }
@@ -272,7 +285,7 @@ export function useSessionTab(initialOrder: number = 0) {
     /**
      * 恢复来源的会话 ID（如果是从历史 resume 而来）
      */
-    const resumeFromSessionId = computed(() => initialConnectOptions.value?.resume ?? null)
+    const resumeFromSessionId = computed(() => initialConnectOptions.value?.resumeSessionId ?? null)
 
     // ========== 历史加载状态 ==========
     const historyState = reactive({
@@ -422,7 +435,13 @@ export function useSessionTab(initialOrder: number = 0) {
             return {kind: 'compact_boundary', data: raw}
         }
 
-        // 5. 尝试识别 assistant / user 消息
+        // 5. 尝试识别 system_init 消息
+        if (isSystemInitMessage(raw)) {
+            log.info('[normalizeRpcMessage] 识别到 system_init 消息, sessionId:', raw.session_id)
+            return {kind: 'system_init', data: raw}
+        }
+
+        // 6. 尝试识别 assistant / user 消息
         if (isRpcAssistantMessage(raw) || isRpcUserMessage(raw)) {
             const mapped = mapRpcMessageToMessage(raw)
             if (!mapped) return null
@@ -449,6 +468,13 @@ export function useSessionTab(initialOrder: number = 0) {
 
         if (normalized.kind === 'compact_boundary') {
             handleCompactBoundaryMessage(normalized.data)
+            touch()
+            return
+        }
+
+        // system_init 消息用于更新真正的 sessionId
+        if (normalized.kind === 'system_init') {
+            handleSystemInitMessage(normalized.data)
             touch()
             return
         }
@@ -557,6 +583,28 @@ export function useSessionTab(initialOrder: number = 0) {
         log.info(`[Tab ${tabId}] 📦 pendingCompactMetadata 已设置:`, pendingCompactMetadata.value)
     }
 
+    /**
+     * 处理 system_init 消息（每次 query 开始时从 Claude CLI 发送）
+     * 更新真正的 sessionId，用于会话恢复和历史消息关联
+     */
+    function handleSystemInitMessage(message: RpcSystemInitMessage): void {
+        const oldSessionId = sessionId.value
+        const newSessionId = message.session_id
+
+        if (oldSessionId !== newSessionId) {
+            log.info(`[Tab ${tabId}] 🔑 更新 sessionId: ${oldSessionId} -> ${newSessionId}`)
+            sessionId.value = newSessionId
+        }
+
+        // 更新模型信息（如果有变化）
+        if (message.model && message.model !== settings.model) {
+            log.info(`[Tab ${tabId}] 📦 system_init 模型: ${message.model}`)
+            settings.model = message.model
+        }
+
+        log.debug(`[Tab ${tabId}] 📦 system_init: cwd=${message.cwd}, permissionMode=${message.permissionMode}, tools=${message.tools?.length || 0}`)
+    }
+
     // ========== 连接管理 ==========
 
     // 重连配置
@@ -600,20 +648,20 @@ export function useSessionTab(initialOrder: number = 0) {
         // 显示错误提示消息并触发自动重连
         messagesHandler.addErrorMessage('连接已断开，正在自动重连，请稍后重新发送消息')
 
-        // ✅ 更新 initialConnectOptions，加入 resume 参数
+        // ✅ 更新 initialConnectOptions，加入 resumeSessionId 参数
         // 这样即使用户在自动重连前手动发送消息（触发 ensureConnected），也能正确恢复会话
         if (initialConnectOptions.value) {
-            const resumeId = currentSessionIdForResume || initialConnectOptions.value.resume
+            const resumeId = currentSessionIdForResume || initialConnectOptions.value.resumeSessionId
             initialConnectOptions.value = {
                 ...initialConnectOptions.value,
-                resume: resumeId
+                resumeSessionId: resumeId
             }
-            log.info(`[Tab ${tabId}] 已更新 initialConnectOptions.resume=${resumeId}`)
+            log.info(`[Tab ${tabId}] 已更新 initialConnectOptions.resumeSessionId=${resumeId}`)
         }
 
         // 触发自动重连，携带当前会话 ID 以恢复会话上下文
         if (initialConnectOptions.value) {
-            log.info(`[Tab ${tabId}] 触发自动重连，resume=${initialConnectOptions.value.resume}`)
+            log.info(`[Tab ${tabId}] 触发自动重连，resumeSessionId=${initialConnectOptions.value.resumeSessionId}`)
             scheduleReconnect(initialConnectOptions.value)
         }
     }
@@ -657,7 +705,9 @@ export function useSessionTab(initialOrder: number = 0) {
                 permissionMode: permissionMode.value,
                 dangerouslySkipPermissions: false,
                 continueConversation: resolvedOptions.continueConversation,
-                resume: resolvedOptions.resume
+                resumeSessionId: resolvedOptions.resumeSessionId,
+                // 固定开启重放用户消息
+                replayUserMessages: true
             }
 
             const result = await aiAgentService.connect(connectOptions, handleMessage)
@@ -695,6 +745,17 @@ export function useSessionTab(initialOrder: number = 0) {
             // 连接成功后，更新 lastAppliedSettings 并清空 pendingSettings
             updateLastAppliedSettings()
             pendingSettings.value = {}
+
+            // 获取并保存项目路径
+            try {
+                const pathResult = await ideaBridge.query('ide.getProjectPath', {})
+                if (pathResult.success && pathResult.data?.projectPath) {
+                    projectPath.value = pathResult.data.projectPath as string
+                    log.info(`[Tab ${tabId}] 项目路径: ${projectPath.value}`)
+                }
+            } catch (e) {
+                log.warn(`[Tab ${tabId}] 获取项目路径失败:`, e)
+            }
 
             log.info(`[Tab ${tabId}] 连接成功: sessionId=${result.sessionId}`)
 
@@ -922,7 +983,7 @@ export function useSessionTab(initialOrder: number = 0) {
                 permissionMode: permissionMode.value,
                 dangerouslySkipPermissions: false,
                 continueConversation: options?.continueConversation,
-                resume: options?.resume
+                resumeSessionId: options?.resumeSessionId
             }
 
             // 使用 reconnectSession 复用 WebSocket
@@ -1032,6 +1093,7 @@ export function useSessionTab(initialOrder: number = 0) {
      */
     async function ensureConnected(): Promise<void> {
         if (connectionState.status === ConnectionStatus.CONNECTED) {
+            log.debug(`[Tab ${tabId}] 连接已就绪，无需重连`)
             return
         }
 
@@ -1259,6 +1321,85 @@ export function useSessionTab(initialOrder: number = 0) {
         await sendMessageToBackend(userMessage, mergedContent, message)
     }
 
+    /**
+     * 编辑并重发消息（用于用户编辑历史消息后重新发送）
+     *
+     * 流程：
+     * 1. 如果正在生成，打断当前生成
+     * 2. 调用后端 truncateHistory API 截断 JSONL 历史文件
+     * 3. 前端截断 displayItems 和 messages
+     * 4. 断开当前连接
+     * 5. 重连并恢复之前的会话 (resumeSessionId)
+     * 6. 发送编辑后的消息
+     *
+     * @param uuid - 要截断的消息 UUID（该消息及其后的所有消息将被删除）
+     * @param newMessage - 编辑后的新消息内容
+     * @param projectPath - 项目路径（用于定位 JSONL 文件）
+     */
+    async function editAndResendMessage(
+        uuid: string,
+        newMessage: { contexts: any[]; contents: ContentBlock[] },
+        projectPath: string
+    ): Promise<void> {
+        log.info(`[Tab ${tabId}] 🔄 编辑重发: uuid=${uuid}`)
+
+        const currentSessionId = sessionId.value
+        if (!currentSessionId) {
+            throw new Error('会话未连接，无法编辑重发')
+        }
+
+        try {
+            // 1. 如果正在生成，打断
+            if (messagesHandler.isGenerating.value) {
+                log.info(`[Tab ${tabId}] 正在生成中，先打断`)
+                messagesHandler.setInterruptMode('clear')
+                await aiAgentService.interrupt(currentSessionId)
+                messagesHandler.stopGenerating()
+            }
+
+            // 2. 调用后端 truncateHistory API
+            log.info(`[Tab ${tabId}] 调用后端 truncateHistory API`)
+            const truncateResult = await aiAgentService.truncateHistory({
+                sessionId: currentSessionId,
+                messageUuid: uuid,
+                projectPath
+            })
+
+            if (!truncateResult.success) {
+                throw new Error(truncateResult.error || '截断历史失败')
+            }
+
+            log.info(`[Tab ${tabId}] ✅ 后端历史截断成功: remainingLines=${truncateResult.remainingLines}`)
+
+            // 3. 前端截断 displayItems 和 messages
+            const frontendTruncated = messagesHandler.truncateMessages(uuid)
+            if (!frontendTruncated) {
+                log.warn(`[Tab ${tabId}] 前端截断失败，但后端已截断，继续重发`)
+            }
+
+            // 4. 断开当前连接
+            log.info(`[Tab ${tabId}] 断开当前连接`)
+            await disconnect()
+
+            // 5. 重连并恢复之前的会话
+            log.info(`[Tab ${tabId}] 重连会话: resumeSessionId=${currentSessionId}`)
+            await connect({
+                ...initialConnectOptions.value,
+                resumeSessionId: currentSessionId
+            })
+
+            // 6. 发送编辑后的消息
+            log.info(`[Tab ${tabId}] 发送编辑后的消息`)
+            await sendMessage(newMessage)
+
+            log.info(`[Tab ${tabId}] ✅ 编辑重发完成`)
+        } catch (error) {
+            log.error(`[Tab ${tabId}] ❌ 编辑重发失败:`, error)
+            messagesHandler.addErrorMessage(`编辑重发失败: ${error instanceof Error ? error.message : String(error)}`)
+            throw error
+        }
+    }
+
     // ========== 设置管理 ==========
 
     /**
@@ -1313,12 +1454,14 @@ export function useSessionTab(initialOrder: number = 0) {
      *
      * 策略：
      * - 有 RPC API 的设置（model, permissionMode）：直接调用 RPC
-     * - 无 RPC API 的设置（thinkingEnabled, skipPermissions）：需要重连
+     * - 无 RPC API 的设置（thinkingEnabled）：需要重连
+     * - skipPermissions：纯前端行为，只更新本地状态，不需要重连
      * - 混合修改且包含需要重连的：统一重连，所有参数通过 connect 传递
      */
     async function updateSettings(settings: SettingsUpdate): Promise<void> {
         const hasRpcSettings = settings.model !== undefined || settings.permissionMode !== undefined
-        const hasReconnectSettings = settings.thinkingEnabled !== undefined || settings.skipPermissions !== undefined
+        const hasReconnectSettings = settings.thinkingEnabled !== undefined
+        // skipPermissions 是纯前端行为，不需要重连
 
         // 如果未连接，只更新本地状态
         if (!sessionId.value || connectionState.status !== ConnectionStatus.CONNECTED) {
@@ -1330,7 +1473,8 @@ export function useSessionTab(initialOrder: number = 0) {
             return
         }
 
-        // 需要重连的情况：包含 thinkingEnabled 或 skipPermissions
+        // 需要重连的情况：只有 thinkingEnabled 需要重连
+        // skipPermissions 是纯前端行为，不需要重连
         if (hasReconnectSettings) {
             log.info(`[Tab ${tabId}] 设置需要重连: `, settings)
 
@@ -1338,14 +1482,12 @@ export function useSessionTab(initialOrder: number = 0) {
             if (settings.model !== undefined) modelId.value = settings.model
             if (settings.permissionMode !== undefined) permissionMode.value = settings.permissionMode
             if (settings.thinkingEnabled !== undefined) thinkingEnabled.value = settings.thinkingEnabled
-            if (settings.skipPermissions !== undefined) skipPermissions.value = settings.skipPermissions
 
-            // 重连，所有设置通过 connect 参数传递
+            // 重连，所有设置通过 connect 参数传递（skipPermissions 不传，因为是纯前端行为）
             await reconnect({
                 model: modelId.value || undefined,
                 thinkingEnabled: thinkingEnabled.value,
-                permissionMode: permissionMode.value,
-                skipPermissions: skipPermissions.value
+                permissionMode: permissionMode.value
             })
             return
         }
@@ -1430,6 +1572,7 @@ export function useSessionTab(initialOrder: number = 0) {
 
         // 基础信息（响应式）
         sessionId,
+        projectPath,
         name,
         order,
         updatedAt,
@@ -1490,6 +1633,7 @@ export function useSessionTab(initialOrder: number = 0) {
         sendTextMessage,
         forceSendMessage,
         interrupt,
+        editAndResendMessage,
 
         // 队列管理
         editQueueMessage: messagesHandler.editQueueMessage,

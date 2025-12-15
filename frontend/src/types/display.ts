@@ -83,6 +83,8 @@ export interface BaseDisplayItem {
  */
 export interface UserMessage extends BaseDisplayItem {
   displayType: 'userMessage'
+  /** JSONL 历史文件中的 UUID，用于编辑重发时定位截断位置 */
+  uuid?: string
   /** 上下文引用（@文件路径、图片等），从 content 开头解析出来 */
   contexts?: ContextReference[]
   /** 用户直接输入的内容（第一个普通文本块之后的内容，保持顺序） */

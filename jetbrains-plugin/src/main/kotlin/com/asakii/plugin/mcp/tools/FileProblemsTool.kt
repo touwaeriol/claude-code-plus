@@ -1,19 +1,26 @@
 package com.asakii.plugin.mcp.tools
 
 import com.asakii.claude.agent.sdk.mcp.ToolResult
-import com.asakii.plugin.mcp.ToolSchemaLoader
-import com.intellij.codeInsight.daemon.impl.HighlightInfo
-import com.intellij.lang.annotation.HighlightSeverity
+import com.asakii.server.mcp.schema.ToolSchemaLoader
+import com.intellij.codeHighlighting.HighlightDisplayLevel
+import com.intellij.codeInspection.InspectionEngine
+import com.intellij.codeInspection.InspectionManager
+import com.intellij.codeInspection.ProblemDescriptor
+import com.intellij.codeInspection.ProblemHighlightType
+import com.intellij.codeInspection.ex.InspectionProfileImpl
+import com.intellij.codeInspection.ex.LocalInspectionToolWrapper
 import com.intellij.openapi.application.ReadAction
-import com.intellij.openapi.editor.impl.DocumentMarkupModel
-import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.profile.codeInspection.InspectionProjectProfileManager
+import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import mu.KotlinLogging
 import java.io.File
+
+private val logger = KotlinLogging.logger {}
 
 @Serializable
 enum class ProblemSeverity {
@@ -43,8 +50,9 @@ data class FileProblemsResult(
 
 /**
  * 文件静态错误工具
- * 
- * 获取指定文件的静态分析结果，包括编译错误、警告和代码检查问题
+ *
+ * 使用 InspectionEngine API 直接运行检查，无需打开文件
+ * 参考: https://plugins.jetbrains.com/docs/intellij/code-inspections.html
  */
 class FileProblemsTool(private val project: Project) {
 
@@ -75,61 +83,65 @@ class FileProblemsTool(private val project: Project) {
         var weakWarningCount = 0
 
         try {
-            ReadAction.run<Exception> {
-                val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
-                    ?: return@run
+            // 使用 InspectionEngine 直接运行检查，无需打开文件
+            val problemDescriptors = runInspectionsOnFile(virtualFile, includeWarnings, includeWeakWarnings)
 
-                val document = FileDocumentManager.getInstance().getDocument(virtualFile) 
-                    ?: return@run
+            logger.debug { "📊 Found ${problemDescriptors.size} problems for $filePath" }
 
-                // 获取高亮信息 - 使用公共 API
-                val markupModel = DocumentMarkupModel.forDocument(document, project, false)
-                    ?: return@run
-                val highlighters = markupModel.allHighlighters
+            for (descriptor in problemDescriptors) {
+                if (problems.size >= maxProblems) break
 
-                for (highlighter in highlighters) {
-                    if (problems.size >= maxProblems) break
-                    if (!highlighter.isValid) continue
-                    val info = HighlightInfo.fromRangeHighlighter(highlighter) ?: continue
-                    val severity = when {
-                        info.severity == HighlightSeverity.ERROR -> {
-                            errorCount++
-                            ProblemSeverity.ERROR
-                        }
-                        info.severity == HighlightSeverity.WARNING -> {
-                            if (!includeWarnings) continue
-                            warningCount++
-                            ProblemSeverity.WARNING
-                        }
-                        info.severity == HighlightSeverity.WEAK_WARNING -> {
-                            if (!includeWeakWarnings) continue
-                            weakWarningCount++
-                            ProblemSeverity.WEAK_WARNING
-                        }
-                        info.severity.myVal >= HighlightSeverity.INFORMATION.myVal -> {
-                            ProblemSeverity.INFO
-                        }
-                        else -> continue
+                val severity = when (descriptor.highlightType) {
+                    ProblemHighlightType.ERROR,
+                    ProblemHighlightType.GENERIC_ERROR,
+                    ProblemHighlightType.GENERIC_ERROR_OR_WARNING -> {
+                        errorCount++
+                        ProblemSeverity.ERROR
                     }
-
-                    // 计算行列号
-                    val startLine = document.getLineNumber(info.startOffset) + 1
-                    val startColumn = info.startOffset - document.getLineStartOffset(startLine - 1) + 1
-                    val endLine = document.getLineNumber(info.endOffset) + 1
-                    val endColumn = info.endOffset - document.getLineStartOffset(endLine - 1) + 1
-
-                    problems.add(FileProblem(
-                        severity = severity,
-                        message = info.description ?: info.toolTip ?: "Unknown issue",
-                        line = startLine,
-                        column = startColumn,
-                        endLine = endLine,
-                        endColumn = endColumn,
-                        description = info.toolTip
-                    ))
+                    ProblemHighlightType.WARNING -> {
+                        if (!includeWarnings) continue
+                        warningCount++
+                        ProblemSeverity.WARNING
+                    }
+                    ProblemHighlightType.WEAK_WARNING,
+                    ProblemHighlightType.INFORMATION -> {
+                        if (!includeWeakWarnings) continue
+                        weakWarningCount++
+                        ProblemSeverity.WEAK_WARNING
+                    }
+                    else -> {
+                        if (!includeWeakWarnings) continue
+                        ProblemSeverity.INFO
+                    }
                 }
+
+                // 获取位置信息
+                val psiElement = descriptor.psiElement
+                val textRange = descriptor.textRangeInElement ?: psiElement?.textRange
+                val document = psiElement?.containingFile?.viewProvider?.document
+
+                val (line, column, endLine, endColumn) = if (document != null && textRange != null) {
+                    val startLine = document.getLineNumber(textRange.startOffset) + 1
+                    val startCol = textRange.startOffset - document.getLineStartOffset(startLine - 1) + 1
+                    val endL = document.getLineNumber(textRange.endOffset) + 1
+                    val endCol = textRange.endOffset - document.getLineStartOffset(endL - 1) + 1
+                    listOf(startLine, startCol, endL, endCol)
+                } else {
+                    listOf(1, 1, 1, 1)
+                }
+
+                problems.add(FileProblem(
+                    severity = severity,
+                    message = descriptor.descriptionTemplate ?: "Unknown issue",
+                    line = line,
+                    column = column,
+                    endLine = endLine,
+                    endColumn = endColumn,
+                    description = descriptor.toString()
+                ))
             }
         } catch (e: Exception) {
+            logger.error(e) { "❌ Analysis error for $filePath" }
             return ToolResult.error("Analysis error: ${e.message}")
         }
 
@@ -168,5 +180,82 @@ class FileProblemsTool(private val project: Project) {
         }
 
         return sb.toString()
+    }
+
+    /**
+     * 使用 InspectionEngine 直接在文件上运行检查
+     * 无需打开文件，直接通过 PsiFile 运行
+     */
+    private fun runInspectionsOnFile(
+        virtualFile: com.intellij.openapi.vfs.VirtualFile,
+        includeWarnings: Boolean,
+        includeWeakWarnings: Boolean
+    ): List<ProblemDescriptor> {
+        return try {
+            ProgressManager.getInstance().runProcessWithProgressSynchronously<List<ProblemDescriptor>, Exception>(
+                {
+                    ReadAction.compute<List<ProblemDescriptor>, Exception> {
+                        val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
+                            ?: return@compute emptyList()
+
+                        runInspectionsOnPsiFile(psiFile, includeWarnings, includeWeakWarnings)
+                    }
+                },
+                "Analyzing ${virtualFile.name}",
+                true,
+                project
+            ) ?: emptyList()
+        } catch (e: Exception) {
+            logger.error(e) { "❌ Error running inspections" }
+            emptyList()
+        }
+    }
+
+    /**
+     * 在 PsiFile 上运行所有启用的检查
+     */
+    private fun runInspectionsOnPsiFile(
+        psiFile: PsiFile,
+        includeWarnings: Boolean,
+        includeWeakWarnings: Boolean
+    ): List<ProblemDescriptor> {
+        val inspectionManager = InspectionManager.getInstance(project)
+        val context = inspectionManager.createNewGlobalContext()
+
+        // 获取当前项目的检查配置
+        val profile = InspectionProjectProfileManager.getInstance(project).currentProfile as? InspectionProfileImpl
+            ?: return emptyList()
+
+        val problems = mutableListOf<ProblemDescriptor>()
+
+        // 获取所有启用的检查工具 - getAllEnabledInspectionTools 返回 List<Tools>
+        val toolsList = profile.getAllEnabledInspectionTools(project)
+
+        for (tools in toolsList) {
+            // 从 Tools 中获取默认的 InspectionToolWrapper
+            val toolWrapper = tools.tool
+
+            // 只运行 LocalInspectionTool（文件级别的检查）
+            if (toolWrapper !is LocalInspectionToolWrapper) continue
+
+            // 根据严重级别过滤 - 使用 tools 获取默认级别
+            val defaultLevel = tools.defaultState.level
+            val isWarning = defaultLevel == HighlightDisplayLevel.WARNING
+            val isWeakWarning = defaultLevel == HighlightDisplayLevel.WEAK_WARNING ||
+                               defaultLevel == HighlightDisplayLevel.DO_NOT_SHOW
+
+            if (!includeWarnings && isWarning) continue
+            if (!includeWeakWarnings && isWeakWarning) continue
+
+            try {
+                val descriptors = InspectionEngine.runInspectionOnFile(psiFile, toolWrapper, context)
+                problems.addAll(descriptors)
+            } catch (e: Exception) {
+                // 忽略单个检查的错误，继续运行其他检查
+                logger.debug { "⚠️ Inspection ${toolWrapper.shortName} failed: ${e.message}" }
+            }
+        }
+
+        return problems
     }
 }

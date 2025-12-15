@@ -275,8 +275,11 @@ export default {
     confirm: 'Confirm',
     escToDeny: 'Press ESC to deny',
     viewInIdea: 'View in IDEA',
+    expand: 'Expand',
+    collapse: 'Collapse',
     edits: 'edits',
     planReady: 'Plan is ready',
+    noPlanContent: 'No plan content available',
     replace: 'Replace',
     with: 'With',
     destination: {
