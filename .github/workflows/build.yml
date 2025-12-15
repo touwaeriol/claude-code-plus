@@ -45,6 +45,9 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
+      - name: Verify Plugin
+        run: ./gradlew verifyPlugin --no-daemon --stacktrace
+
       - name: Build Plugin
         run: ./gradlew buildPlugin --no-daemon --stacktrace
 

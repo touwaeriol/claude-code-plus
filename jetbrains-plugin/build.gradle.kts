@@ -25,8 +25,8 @@ dependencies {
     // IntelliJ Platform dependencies
     intellijPlatform {
         // 🔧 使用具体的方法而不是通用的 create()，以支持 runIde 任务
-        // IC = IntelliJ IDEA Community
-        intellijIdeaCommunity(providers.gradleProperty("platformVersion").get())
+        // 从 2025.3 开始，IC/IU 合并为统一版本，使用 intellijIdea()
+        intellijIdea(providers.gradleProperty("platformVersion").get())
 
         // 🔧 添加 Java 插件依赖，用于 ClassInheritorsSearch、OverridingMethodsSearch 等 API
         bundledPlugin("com.intellij.java")
@@ -101,7 +101,7 @@ intellijPlatform {
             ide(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1.5")
             ide(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
             // 2025.3+ 使用统一的 IntellijIdea 类型
-            ide(IntelliJPlatformType.IntellijIdea, "2025.3")
+            ide(IntelliJPlatformType.IntellijIdea, "253.28294.334")
         }
     }
 
