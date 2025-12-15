@@ -328,5 +328,12 @@ export default {
     compact: 'Compact current session context',
     context: 'Show current session context info',
     rename: 'Rename current session'
+  },
+  askUser: {
+    title: 'Claude needs your answer',
+    typeSomething: 'Type something...',
+    cancel: 'Cancel',
+    submit: 'Submit',
+    answer: 'Answer'
   }
 }
