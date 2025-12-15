@@ -41,6 +41,33 @@ Claude Code Plusは、Claude AIを開発環境に直接統合するIntelliJ IDEA
 - **ダークテーマ対応** - IntelliJのダークテーマと完全互換
 - **エクスポート機能** - 会話履歴を複数の形式で保存
 
+## 📸 スクリーンショット
+
+### ツール呼び出しデモ
+Read、Write、Edit操作の詳細情報を含むClaudeのツール使用を表示。
+
+![ツール呼び出しデモ](docs/screenshots/tool-calls-demo.png)
+
+### @メンションファイル検索
+@メンション機能でプロジェクト内のファイルをすばやく参照。
+
+![@ メンションファイル検索](docs/screenshots/at-mention-file-search.png)
+
+### モデルセレクター
+異なるClaudeモデル間で切り替え（Opus 4.5、Sonnet 4.5、Haiku 4.5）。
+
+![モデルセレクター](docs/screenshots/model-selector.png)
+
+### 権限リクエスト
+ファイル書き込み操作のセキュアな認証ダイアログ。
+
+![権限リクエスト](docs/screenshots/permission-request.png)
+
+### ユーザー質問ダイアログ
+モデル選択と機能設定をサポートする、Claudeがユーザーに質問するインタラクティブなダイアログ。
+
+![ユーザー質問ダイアログ](docs/screenshots/user-question-dialog.png)
+
 ## 📦 インストール
 
 ### 方法1: JetBrains Marketplace（推奨）
@@ -57,27 +84,42 @@ Claude Code Plusは、Claude AIを開発環境に直接統合するIntelliJ IDEA
 ## 🔧 要件
 
 - **JetBrains IDE**: IntelliJ IDEA 2024.2 - 2025.3.x (Build 242-253)
-- **Node.js**: v18以上（[ダウンロード](https://nodejs.org/)）
-- **Claude認証**: 初回セットアップが必要
+- **Node.js**: v18以上（[ダウンロード](https://nodejs.org/)）- `node` コマンドがPATHで利用可能であること
+- **Claude Code**: 初回セットアップが必要
   - ターミナルで実行: `npx @anthropic-ai/claude-code`
   - プロンプトに従って認証を完了
   - 詳細なセットアップガイドは[公式ドキュメント](https://docs.anthropic.com/en/docs/claude-code/getting-started)を参照
 
 > **注**: プラグインにはClaude CLIがバンドルされています - 別途CLIのインストールは不要です！
 
+### APIキーの使用（代替方法）
+
+Claude Codeサブスクリプションの代わりに独自のAnthropic APIキーを使用したい場合は、[cc-switch](https://github.com/farion1231/cc-switch)で設定できます：
+
+```bash
+npx cc-switch
+```
+
+このツールはClaude Codeの異なる認証方法を切り替えるのに役立ちます。
+
 ## 🚀 クイックスタート
 
 1. 上記のインストール手順に従ってプラグインをインストール
-2. Claude CLIがインストールされ、認証されていることを確認
+2. Claude Codeがインストールされ、認証されていることを確認
 3. **Claude Code Plus** ツールウィンドウを開く（右サイドバー）
 4. Claudeとの会話を開始！
 
 ### ヒント
 - `@` を使ってファイルをメンションし、コンテキストとして追加
 - ツール出力のファイルパスをクリックするとエディタで開く
+- ツールカード（Read/Write/Edit）をクリックしてdiffプレビューを表示
+- `ESC` を押してAI生成を中断
+- モデルセレクターでいつでもモデルを切り替え（Opus/Sonnet/Haiku）
 - キーボードショートカット:
   - `Ctrl+J` - クイックアクション
   - `Ctrl+U` - 共通操作
+  - `Enter` - メッセージ送信
+  - `Shift+Enter` - 入力欄で改行
 
 ## 🤝 コントリビューション
 
