@@ -146,7 +146,13 @@ class HistorySessionAction(
     override fun actionPerformed(e: AnActionEvent) {
         logger.info("🔍 [HistorySessionAction] 点击历史会话按钮")
         lastEvent = e
+        refreshSessionList(e)
+    }
 
+    /**
+     * 刷新会话列表（可被内部方法调用，避免直接调用 actionPerformed）
+     */
+    private fun refreshSessionList(e: AnActionEvent) {
         // 重置分页状态
         currentOffset = 0
         hasMore = true
@@ -423,7 +429,7 @@ class HistorySessionAction(
 
             // 4. 刷新弹窗（重新加载历史会话列表）
             ApplicationManager.getApplication().invokeLater {
-                lastEvent?.let { actionPerformed(it) }
+                lastEvent?.let { refreshSessionList(it) }
             }
         }
     }
