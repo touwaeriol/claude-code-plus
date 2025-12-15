@@ -56,6 +56,13 @@ interface UnifiedAgentClient {
     suspend fun interrupt()
 
     /**
+     * 将当前任务移到后台运行。
+     * 任务会继续执行，但不会阻塞等待用户输入。
+     * @throws UnsupportedOperationException if !capabilities.canRunInBackground
+     */
+    suspend fun runInBackground()
+
+    /**
      * 动态切换模型（不重连）。
      * @param model 目标模型名称
      * @return 实际切换后的模型名称

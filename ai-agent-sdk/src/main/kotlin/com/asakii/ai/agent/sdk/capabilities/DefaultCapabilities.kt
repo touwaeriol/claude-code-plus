@@ -25,6 +25,7 @@ object ClaudeCapabilities : AgentCapabilities {
     override val canSendRichContent = true
     override val canThink = true
     override val canResumeSession = true
+    override val canRunInBackground = true
 }
 
 /**
@@ -45,4 +46,5 @@ object CodexCapabilities : AgentCapabilities {
     override val canSendRichContent = false
     override val canThink = false
     override val canResumeSession = true
+    override val canRunInBackground = false
 }

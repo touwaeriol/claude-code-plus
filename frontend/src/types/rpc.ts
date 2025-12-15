@@ -531,6 +531,7 @@ export interface RpcCapabilities {
   canSendRichContent: boolean
   canThink: boolean
   canResumeSession: boolean
+  canRunInBackground: boolean
 }
 
 export interface RpcConnectResult {

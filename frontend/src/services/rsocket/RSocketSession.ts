@@ -238,6 +238,31 @@ export class RSocketSession {
     }
 
     /**
+     * 将当前执行的任务切换到后台运行
+     *
+     * 这个功能允许用户继续其他操作，而当前任务在后台继续执行。
+     * 仅在有活跃任务正在执行时有效。
+     */
+    async runInBackground(): Promise<void> {
+        if (!this._isConnected || !this.client) {
+            throw new Error('Session not connected')
+        }
+
+        this.checkCapability('canRunInBackground', 'runInBackground')
+
+        log.info('[RSocketSession] 后台运行请求')
+
+        try {
+            const responseData = await this.client.requestResponse('agent.runInBackground')
+            const result = ProtoCodec.decodeStatusResult(responseData)
+            log.info(`[RSocketSession] 后台运行请求已确认: ${result.status}`)
+        } catch (err) {
+            log.warn('[RSocketSession] Run in background request failed:', err)
+            throw err
+        }
+    }
+
+    /**
      * 主动断开连接
      */
     async disconnect(): Promise<void> {

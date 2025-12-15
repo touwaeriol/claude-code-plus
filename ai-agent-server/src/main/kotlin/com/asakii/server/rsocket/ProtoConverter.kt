@@ -201,6 +201,7 @@ object ProtoConverter {
         canSendRichContent = this@toProto.canSendRichContent
         canThink = this@toProto.canThink
         canResumeSession = this@toProto.canResumeSession
+        canRunInBackground = this@toProto.canRunInBackground
     }
 
     // ==================== StatusResult ====================
@@ -523,6 +524,8 @@ object ProtoConverter {
         this@toProtoUsage.inputTokens?.let { inputTokens = it }
         this@toProtoUsage.outputTokens?.let { outputTokens = it }
         this@toProtoUsage.cachedInputTokens?.let { cachedInputTokens = it }
+        this@toProtoUsage.cacheCreationTokens?.let { cacheCreationTokens = it }
+        this@toProtoUsage.cacheReadTokens?.let { cacheReadTokens = it }
         this@toProtoUsage.provider?.let { provider = it.toProto() }
         this@toProtoUsage.raw?.let { rawJson = ByteString.copyFromUtf8(json.encodeToString(it)) }
     }

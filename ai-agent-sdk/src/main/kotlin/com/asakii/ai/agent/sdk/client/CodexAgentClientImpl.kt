@@ -104,6 +104,12 @@ class CodexAgentClientImpl(
         activeCancellationJob?.cancel()
     }
 
+    override suspend fun runInBackground() {
+        throw UnsupportedOperationException(
+            "runInBackground is not supported by ${provider.name}"
+        )
+    }
+
     override suspend fun disconnect() {
         activeCancellationJob?.cancel()
         client = null

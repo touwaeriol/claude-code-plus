@@ -96,6 +96,7 @@ message Capabilities {
   bool can_send_rich_content = 6;
   bool can_think = 7;
   bool can_resume_session = 8;
+  bool can_run_in_background = 9;
 }
 
 // 对应 RpcConnectResult
@@ -447,9 +448,11 @@ message InputJsonDelta {
 message Usage {
   optional int32 input_tokens = 1;
   optional int32 output_tokens = 2;
-  optional int32 cached_input_tokens = 3;
+  optional int32 cached_input_tokens = 3;  // 保留兼容，等于 cache_creation + cache_read
   optional Provider provider = 4;
   optional bytes raw_json = 5;  // JsonElement
+  optional int32 cache_creation_tokens = 6;  // 新创建到缓存的 tokens
+  optional int32 cache_read_tokens = 7;      // 从缓存读取的 tokens
 }
 
 // ============================================================================

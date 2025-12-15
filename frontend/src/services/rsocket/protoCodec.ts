@@ -251,7 +251,8 @@ export const ProtoCodec = {
         canSkipPermissions: proto.capabilities.canSkipPermissions,
         canSendRichContent: proto.capabilities.canSendRichContent,
         canThink: proto.capabilities.canThink,
-        canResumeSession: proto.capabilities.canResumeSession
+        canResumeSession: proto.capabilities.canResumeSession,
+        canRunInBackground: proto.capabilities.canRunInBackground
       } : undefined,
       cwd: proto.cwd
     }
@@ -690,7 +691,10 @@ function mapStreamEventFromProtoAsClass(proto: any, provider: 'claude' | 'codex'
           type: 'message_delta',
           usage: innerEvent.value.usage ? {
             input_tokens: innerEvent.value.usage.inputTokens,
-            output_tokens: innerEvent.value.usage.outputTokens
+            output_tokens: innerEvent.value.usage.outputTokens,
+            cached_input_tokens: innerEvent.value.usage.cachedInputTokens,
+            cache_creation_tokens: innerEvent.value.usage.cacheCreationTokens,
+            cache_read_tokens: innerEvent.value.usage.cacheReadTokens
           } : undefined
         })
         break
@@ -789,7 +793,10 @@ function mapStreamEventFromProto(proto: any, provider: 'claude' | 'codex'): any 
           type: 'message_delta',
           usage: event.value.usage ? {
             input_tokens: event.value.usage.inputTokens,
-            output_tokens: event.value.usage.outputTokens
+            output_tokens: event.value.usage.outputTokens,
+            cached_input_tokens: event.value.usage.cachedInputTokens,
+            cache_creation_tokens: event.value.usage.cacheCreationTokens,
+            cache_read_tokens: event.value.usage.cacheReadTokens
           } : undefined
         }
       } as any

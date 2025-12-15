@@ -80,7 +80,9 @@ class ClaudeStreamAdapter(
             UnifiedUsage(
                 inputTokens = it.inputTokens,
                 outputTokens = it.outputTokens,
-                cachedInputTokens = it.cacheReadInputTokens ?: it.cacheCreationInputTokens,
+                cachedInputTokens = (it.cacheReadInputTokens ?: 0) + (it.cacheCreationInputTokens ?: 0),
+                cacheCreationTokens = it.cacheCreationInputTokens,
+                cacheReadTokens = it.cacheReadInputTokens,
                 provider = AiAgentProvider.CLAUDE,
                 raw = json.encodeToJsonElement(TokenUsage.serializer(), it)
             )
@@ -342,7 +344,9 @@ class ClaudeStreamAdapter(
             UnifiedUsage(
                 inputTokens = usage.inputTokens,
                 outputTokens = usage.outputTokens,
-                cachedInputTokens = usage.cacheReadInputTokens ?: usage.cacheCreationInputTokens,
+                cachedInputTokens = (usage.cacheReadInputTokens ?: 0) + (usage.cacheCreationInputTokens ?: 0),
+                cacheCreationTokens = usage.cacheCreationInputTokens,
+                cacheReadTokens = usage.cacheReadInputTokens,
                 provider = AiAgentProvider.CLAUDE,
                 raw = element
             )

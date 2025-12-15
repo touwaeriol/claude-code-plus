@@ -35,4 +35,7 @@ interface AgentCapabilities {
 
     /** 是否支持会话恢复 */
     val canResumeSession: Boolean
+
+    /** 是否支持后台运行（将当前任务移到后台） */
+    val canRunInBackground: Boolean
 }

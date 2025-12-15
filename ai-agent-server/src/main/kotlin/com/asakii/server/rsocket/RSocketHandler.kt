@@ -102,6 +102,7 @@ class RSocketHandler(
                 val response = when (route) {
                     "agent.connect" -> handleConnect(dataBytes, rpcService)
                     "agent.interrupt" -> handleInterrupt(rpcService)
+                    "agent.runInBackground" -> handleRunInBackground(rpcService)
                     "agent.disconnect" -> handleDisconnect(rpcService)
                     "agent.setModel" -> handleSetModel(dataBytes, rpcService)
                     "agent.setPermissionMode" -> handleSetPermissionMode(dataBytes, rpcService)
@@ -169,6 +170,13 @@ class RSocketHandler(
         wsLog.info("📥 [RSocket] interrupt request")
         val result = rpcService.interrupt()
         wsLog.info("📤 [RSocket] interrupt result: status=${result.status}")
+        return buildPayload { data(result.toProto().toByteArray()) }
+    }
+
+    private suspend fun handleRunInBackground(rpcService: AiAgentRpcService): Payload {
+        wsLog.info("📥 [RSocket] runInBackground request")
+        val result = rpcService.runInBackground()
+        wsLog.info("📤 [RSocket] runInBackground result: status=${result.status}")
         return buildPayload { data(result.toProto().toByteArray()) }
     }
 

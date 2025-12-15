@@ -134,7 +134,8 @@ data class RpcCapabilities(
     val canSkipPermissions: Boolean,
     val canSendRichContent: Boolean,
     val canThink: Boolean,
-    val canResumeSession: Boolean
+    val canResumeSession: Boolean,
+    val canRunInBackground: Boolean
 )
 
 /**
@@ -468,7 +469,9 @@ data class RpcInputJsonDelta(
 data class RpcUsage(
     val inputTokens: Int? = null,
     val outputTokens: Int? = null,
-    val cachedInputTokens: Int? = null,
+    val cachedInputTokens: Int? = null,  // 保留兼容，等于 cacheCreationTokens + cacheReadTokens
+    val cacheCreationTokens: Int? = null,  // 新创建到缓存的 tokens
+    val cacheReadTokens: Int? = null,      // 从缓存读取的 tokens
     val provider: RpcProvider? = null,
     val raw: JsonElement? = null
 )

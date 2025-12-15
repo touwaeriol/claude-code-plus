@@ -186,6 +186,11 @@ class ClaudeAgentClientImpl(
         client?.interrupt()
     }
 
+    override suspend fun runInBackground() {
+        checkCapability(getCapabilities().canRunInBackground, "runInBackground")
+        client?.runInBackground()
+    }
+
     override suspend fun disconnect() {
         client?.disconnect()
         context = null

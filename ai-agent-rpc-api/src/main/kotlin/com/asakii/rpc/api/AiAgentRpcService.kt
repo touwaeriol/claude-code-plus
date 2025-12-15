@@ -42,6 +42,11 @@ interface AiAgentRpcService {
     suspend fun interrupt(): RpcStatusResult
 
     /**
+     * 将当前任务移到后台运行
+     */
+    suspend fun runInBackground(): RpcStatusResult
+
+    /**
      * 断开会话
      */
     suspend fun disconnect(): RpcStatusResult

@@ -249,6 +249,14 @@ class AiAgentRpcServiceImpl(
         return RpcStatusResult(status = RpcSessionStatus.INTERRUPTED)
     }
 
+    override suspend fun runInBackground(): RpcStatusResult {
+        sdkLog.info("🔄 [SDK] 将任务移到后台运行")
+        val activeClient = client ?: error("AI Agent 尚未连接，请先调用 connect()")
+        activeClient.runInBackground()
+        sdkLog.info("✅ [SDK] runInBackground 请求已提交")
+        return RpcStatusResult(status = RpcSessionStatus.CONNECTED)
+    }
+
     override suspend fun disconnect(): RpcStatusResult {
         sdkLog.info("馃攲 [AI-Agent] 鏂紑浼氳瘽: $sessionId")
         disconnectInternal()
@@ -1025,6 +1033,8 @@ class AiAgentRpcServiceImpl(
         inputTokens = inputTokens,
         outputTokens = outputTokens,
         cachedInputTokens = cachedInputTokens,
+        cacheCreationTokens = cacheCreationTokens,
+        cacheReadTokens = cacheReadTokens,
         provider = provider.toRpcProvider(),
         raw = raw
     )
@@ -1101,7 +1111,8 @@ class AiAgentRpcServiceImpl(
         canSkipPermissions = canSkipPermissions,
         canSendRichContent = canSendRichContent,
         canThink = canThink,
-        canResumeSession = canResumeSession
+        canResumeSession = canResumeSession,
+        canRunInBackground = canRunInBackground
     )
 
     /**
