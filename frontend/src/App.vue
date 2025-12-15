@@ -76,6 +76,7 @@ import ToastContainer from '@/components/toast/ToastContainer.vue'
 import { ideaBridge } from '@/services/ideaBridge'
 import { themeService } from '@/services/themeService'
 import { useEnvironment } from '@/composables/useEnvironment'
+import { syncIdeLocale } from '@/i18n'
 
 const bridgeReady = ref(false)
 const showDebug = ref(false) // 默认隐藏调试面板
@@ -113,6 +114,14 @@ onMounted(async () => {
     await themeService.initialize()
     themeSource.value = themeService.hasIde() ? 'IDE' : 'Web (系统)'
     console.log('Theme service initialized')
+
+    // IDEA 环境 + 主题同步开启时，同步 IDEA 语言设置
+    if (themeService.hasIde()) {
+      const syncedLocale = await syncIdeLocale()
+      if (syncedLocale) {
+        console.log(`🌐 Locale synced from IDE: ${syncedLocale}`)
+      }
+    }
 
     // 监听主题变化
     themeService.onThemeChange(() => {

@@ -1,8 +1,7 @@
 <template>
   <div class="modern-chat-view">
-    <!-- 会话标签栏（仅 Web 模式显示，IDE 模式在标题栏） -->
+    <!-- 会话标签栏 -->
     <ChatHeader
-      v-if="!isIdeMode"
       class="chat-header-bar"
       @toggle-history="toggleHistoryOverlay"
     />
@@ -308,14 +307,20 @@ const historySessions = computed(() => {
 })
 
 const sessionTokenUsage = computed<EnhancedTokenUsage | null>(() => {
-  const stats = sessionStore.currentTab?.stats.getCumulativeStats()
-  if (!stats) return null
+  const lastUsage = sessionStore.currentTab?.stats.getLastMessageUsage()
+  if (!lastUsage) return null
+
+  // 完整上下文大小 = input_tokens + cache_creation_tokens + cache_read_tokens（最后一条消息的值）
+  // 前端自己计算缓存总量
+  const cachedInputTokens = lastUsage.cacheCreationTokens + lastUsage.cacheReadTokens
+  const contextSize = lastUsage.inputTokens + cachedInputTokens
+
   return {
-    inputTokens: stats.totalInputTokens,
-    outputTokens: stats.totalOutputTokens,
-    cacheCreationTokens: 0,
-    cacheReadTokens: 0,
-    totalTokens: stats.totalInputTokens + stats.totalOutputTokens
+    inputTokens: contextSize,  // 用于 ContextUsageIndicator 显示完整上下文大小
+    outputTokens: lastUsage.outputTokens,
+    cacheCreationTokens: lastUsage.cacheCreationTokens,
+    cacheReadTokens: lastUsage.cacheReadTokens,
+    totalTokens: contextSize
   }
 })
 

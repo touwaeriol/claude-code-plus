@@ -25,12 +25,14 @@
         📋
       </button>
       <button
-        class="icon-btn primary"
+        class="new-session-btn"
         type="button"
         title="New Session"
         @click="handleNewSession"
       >
-        ➕
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
       </button>
       <ThemeSwitcher />
       <LanguageSwitcher />
@@ -224,5 +226,33 @@ function handleRename(tabId: string, newName: string) {
 .icon-btn.primary:hover {
   background: var(--theme-accent-hover, #0256c2);
   border-color: transparent;
+}
+
+.new-session-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--theme-border, #d0d7de);
+  background: var(--theme-background, #ffffff);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-muted-foreground, #656d76);
+  transition: all 0.15s ease;
+}
+
+.new-session-btn:hover {
+  background: var(--theme-accent, #0366d6);
+  border-color: var(--theme-accent, #0366d6);
+  color: #ffffff;
+}
+
+.new-session-btn:active {
+  transform: scale(0.95);
+}
+
+.new-session-btn svg {
+  flex-shrink: 0;
 }
 </style>

@@ -3,6 +3,7 @@
     :display-info="displayInfoWithAgent"
     :is-expanded="expanded"
     :has-details="hasDetails"
+    :supports-background="true"
     @click="expanded = !expanded"
   >
     <template #details>

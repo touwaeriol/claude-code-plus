@@ -140,6 +140,7 @@ export default {
     copyContent: '复制内容',
     openInEditor: '在编辑器中打开',
     parsingParams: '正在解析参数...',
+    ctrlBToBackground: 'Ctrl+B 后台运行',
     contentTruncated: '内容已截断',
     noOutput: '无输出',
     replaceAll: '全部替换',

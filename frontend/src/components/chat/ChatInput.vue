@@ -253,22 +253,15 @@
             @toggle="handleThinkingToggle"
           />
 
-          <!-- Skip Permissions 开关 - 与 ThinkingToggle 风格一致 -->
-          <div
+          <!-- Skip Permissions 开关 -->
+          <StatusToggle
             v-if="showPermissionControls"
-            class="bypass-toggle"
-            :class="{
-              'is-enabled': skipPermissionsValue,
-              'is-disabled': !enabled
-            }"
-            :title="t('permission.mode.bypassTooltip')"
-            @click="enabled && handleSkipPermissionsChange(!skipPermissionsValue)"
-          >
-            <span class="bypass-label">{{ t('permission.mode.bypass') }}</span>
-            <span class="bypass-indicator">
-              <span :class="['dot', skipPermissionsValue ? 'active' : 'inactive']" />
-            </span>
-          </div>
+            :label="t('permission.mode.bypass')"
+            :enabled="skipPermissionsValue"
+            :disabled="!enabled"
+            :tooltip="t('permission.mode.bypassTooltip')"
+            @toggle="handleSkipPermissionsChange"
+          />
         </div>
       </div>
 
@@ -276,8 +269,6 @@
       <div class="toolbar-right">
         <!-- 上下文使用量指示器 -->
         <ContextUsageIndicator
-          :current-model="selectedModelValue"
-          :message-history="messageHistory"
           :session-token-usage="sessionTokenUsage"
         />
 
@@ -435,6 +426,7 @@ import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 import RichTextInput from './RichTextInput.vue'
 import ThinkingToggle from './ThinkingToggle.vue'
+import StatusToggle from './StatusToggle.vue'
 import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
 import { isInAtQuery } from '@/utils/atSymbolDetector'
 import { useSessionStore } from '@/stores/sessionStore'
@@ -905,6 +897,13 @@ async function handleKeydown(event: KeyboardEvent) {
     return
   }
 
+  // Ctrl+B - 将当前任务切换到后台运行
+  if (event.key === 'b' && event.ctrlKey && !event.shiftKey && !event.altKey) {
+    event.preventDefault()
+    handleRunInBackground()
+    return
+  }
+
   // Shift+Enter - 插入换行（默认行为）
   if (event.key === 'Enter' && event.shiftKey) {
     // 默认行为已经会插入换行，不需要额外处理
@@ -931,6 +930,22 @@ async function handleKeydown(event: KeyboardEvent) {
 // toggleThinkingEnabled, cyclePermissionMode, getBaseModelLabel, getModeIcon,
 // handleBaseModelChange, handleThinkingToggle, handleSkipPermissionsChange
 // 这些函数现在由 useModelSelection composable 提供
+
+/**
+ * 处理后台运行快捷键
+ */
+async function handleRunInBackground() {
+  if (!props.isGenerating) {
+    return  // 没有正在执行的任务，忽略
+  }
+
+  try {
+    await sessionStore.runInBackground()
+    console.log('✅ [ChatInput] 后台运行请求已发送')
+  } catch (err) {
+    console.error('[ChatInput] 后台运行请求失败:', err)
+  }
+}
 
 async function handleSend() {
   if (!canSend.value) return
@@ -1699,60 +1714,6 @@ onUnmounted(() => {
 .cursor-selector.is-disabled :deep(.el-select__wrapper) {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-/* ========== Bypass Toggle - 与 ThinkingToggle 风格一致 ========== */
-.bypass-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  user-select: none;
-  color: var(--theme-secondary-foreground, #6b7280);
-  background: transparent;
-}
-
-.bypass-toggle:hover:not(.is-disabled) {
-  background: var(--theme-hover-background, rgba(0, 0, 0, 0.05));
-}
-
-.bypass-toggle.is-enabled {
-  color: var(--theme-accent, #0366d6);
-}
-
-.bypass-toggle.is-disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.bypass-label {
-  font-weight: 500;
-}
-
-.bypass-indicator {
-  display: flex;
-  align-items: center;
-  margin-left: 2px;
-}
-
-.bypass-indicator .dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  transition: background-color 0.2s ease;
-}
-
-.bypass-indicator .dot.active {
-  background: var(--theme-success, #22c55e);
-}
-
-.bypass-indicator .dot.inactive {
-  background: var(--theme-secondary-foreground, #9ca3af);
-  opacity: 0.5;
 }
 
 /* ========== 模式选择器下拉选项样式 ========== */

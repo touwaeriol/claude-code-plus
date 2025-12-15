@@ -533,6 +533,16 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   /**
+   * 后台运行（通过当前 Tab）
+   */
+  async function runInBackground(): Promise<void> {
+    if (!currentTab.value) {
+      throw new Error('当前没有活跃的会话')
+    }
+    await currentTab.value.runInBackground()
+  }
+
+  /**
    * 设置模型（通过当前 Tab）
    */
   async function setModel(model: string): Promise<void> {
@@ -749,6 +759,7 @@ export const useSessionStore = defineStore('session', () => {
     sendMessage,
     enqueueMessage,
     interrupt,
+    runInBackground,
     setModel,
     setPermissionMode,
     setLocalPermissionMode,

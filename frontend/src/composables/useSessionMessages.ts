@@ -271,10 +271,23 @@ export function useSessionMessages(
 
     // 更新 token 使用量
     if (eventType === 'message_delta' && 'usage' in event && event.usage) {
-      const usage = event.usage as { input_tokens?: number; output_tokens?: number; inputTokens?: number; outputTokens?: number }
+      const usage = event.usage as {
+        input_tokens?: number
+        output_tokens?: number
+        cached_input_tokens?: number
+        cache_creation_tokens?: number
+        cache_read_tokens?: number
+        inputTokens?: number
+        outputTokens?: number
+        cachedInputTokens?: number
+        cacheCreationTokens?: number
+        cacheReadTokens?: number
+      }
       stats.addTokenUsage(
         usage.input_tokens ?? usage.inputTokens ?? 0,
-        usage.output_tokens ?? usage.outputTokens ?? 0
+        usage.output_tokens ?? usage.outputTokens ?? 0,
+        usage.cache_creation_tokens ?? usage.cacheCreationTokens ?? 0,
+        usage.cache_read_tokens ?? usage.cacheReadTokens ?? 0
       )
     }
 
@@ -1003,6 +1016,18 @@ export function useSessionMessages(
     // 添加到 UI（用户立即可见）
     messages.push(userMessage)
     const newDisplayItems = convertMessageToDisplayItems(userMessage, tools.pendingToolCalls)
+
+    // 记录发送时的上下文大小（用于重新编辑时显示）
+    const lastUsage = stats.getLastMessageUsage()
+    if (lastUsage.inputTokens > 0) {
+      for (const item of newDisplayItems) {
+        if (isDisplayUserMessage(item)) {
+          (item as UserMessage).contextTokens = lastUsage.inputTokens
+          log.debug('[useSessionMessages] 记录上下文大小:', lastUsage.inputTokens)
+        }
+      }
+    }
+
     pushDisplayItems(newDisplayItems)
     log.debug('[useSessionMessages] 用户消息已添加:', userMessage.id)
 

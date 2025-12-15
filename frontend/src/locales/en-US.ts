@@ -140,6 +140,7 @@ export default {
     copyContent: 'Copy Content',
     openInEditor: 'Open in editor',
     parsingParams: 'Parsing parameters...',
+    ctrlBToBackground: 'Ctrl+B to background',
     contentTruncated: 'Content truncated',
     noOutput: 'No output',
     replaceAll: 'Replace all',

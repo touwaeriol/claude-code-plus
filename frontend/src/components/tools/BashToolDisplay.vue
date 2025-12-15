@@ -4,6 +4,7 @@
       :display-info="displayInfo"
       :is-expanded="expanded"
       :has-details="true"
+      :supports-background="true"
       @click="expanded = !expanded"
     >
       <template #details>

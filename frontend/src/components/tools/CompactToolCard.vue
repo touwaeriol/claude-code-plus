@@ -61,6 +61,11 @@
         <slot name="header-actions" />
       </span>
 
+      <!-- 后台运行提示 -->
+      <span v-if="showBackgroundHint" class="background-hint">
+        {{ t('tools.ctrlBToBackground') }}
+      </span>
+
       <!-- 状态指示器 -->
       <span class="status-indicator" :class="`status-${displayInfo?.status || 'pending'}`">
         <span v-if="displayInfo?.isInputLoading || displayInfo?.status === 'pending' || !displayInfo?.status" class="spinner" />
@@ -84,12 +89,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import type { ToolDisplayInfo } from '@/utils/toolDisplayInfo'
 import { toolShowInterceptor } from '@/services/toolShowInterceptor'
 
 const { t } = useI18n()
+
+// 后台运行提示相关
+const showBackgroundHint = ref(false)
+let backgroundHintTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
  * 工具调用数据（用于拦截器）
@@ -110,12 +119,15 @@ interface Props {
   clickable?: boolean
   /** 工具调用数据（用于拦截器） */
   toolCall?: ToolCallData
+  /** 是否支持后台运行（仅 Bash/Task 支持） */
+  supportsBackground?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   isExpanded: false,
   hasDetails: false,
   clickable: true,
+  supportsBackground: false,
 })
 
 const emit = defineEmits<{
@@ -158,6 +170,38 @@ function getBadgeClass(changes: string): string {
   if (changes.startsWith('-')) return 'badge-remove'
   return ''
 }
+
+// 监听状态变化，启动/清除后台运行提示计时器
+watch(
+  () => props.displayInfo?.status,
+  (status) => {
+    // 清除之前的计时器
+    if (backgroundHintTimer) {
+      clearTimeout(backgroundHintTimer)
+      backgroundHintTimer = null
+    }
+    showBackgroundHint.value = false
+
+    // 只有支持后台运行的工具（Bash/Task）且状态是 pending 时，5秒后显示提示
+    if (props.supportsBackground && (status === 'pending' || !status)) {
+      backgroundHintTimer = setTimeout(() => {
+        // 再次检查状态，确保仍在执行中
+        if (props.displayInfo?.status === 'pending' || !props.displayInfo?.status) {
+          showBackgroundHint.value = true
+        }
+      }, 5000)
+    }
+  },
+  { immediate: true }
+)
+
+// 组件卸载时清除计时器
+onUnmounted(() => {
+  if (backgroundHintTimer) {
+    clearTimeout(backgroundHintTimer)
+    backgroundHintTimer = null
+  }
+})
 </script>
 
 <style scoped>
@@ -376,5 +420,17 @@ function getBadgeClass(changes: string): string {
   max-height: 200px;
   overflow-y: auto;
   line-height: 1.5;
+}
+
+/* 后台运行提示样式 */
+.background-hint {
+  font-size: 11px;
+  color: var(--theme-secondary-foreground);
+  background: color-mix(in srgb, var(--theme-accent) 10%, transparent);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+  animation: fadeIn 0.3s ease;
 }
 </style>

@@ -46,6 +46,17 @@ export interface CumulativeStats {
 }
 
 /**
+ * 最后一条消息的 usage（用于计算完整上下文大小）
+ */
+export interface LastMessageUsage {
+  inputTokens: number
+  outputTokens: number
+  cachedInputTokens: number  // 保留兼容，等于 cacheCreationTokens + cacheReadTokens
+  cacheCreationTokens: number  // 新创建到缓存的 tokens
+  cacheReadTokens: number      // 从缓存读取的 tokens
+}
+
+/**
  * 会话统计 Composable
  *
  * 设计原则：
@@ -74,6 +85,18 @@ export function useSessionStats() {
     totalDuration: 0,
     successfulRequests: 0,
     failedRequests: 0
+  })
+
+  /**
+   * 最后一条消息的 usage（用于计算完整上下文大小）
+   * 每次收到消息时更新，保存最新的 usage 数据
+   */
+  const lastMessageUsage = ref<LastMessageUsage>({
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedInputTokens: 0,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0
   })
 
   // ========== 计算属性 ==========
@@ -146,8 +169,15 @@ export function useSessionStats() {
    *
    * @param inputTokens 输入 tokens
    * @param outputTokens 输出 tokens
+   * @param cacheCreationTokens 新创建到缓存的 tokens
+   * @param cacheReadTokens 从缓存读取的 tokens
    */
-  function addTokenUsage(inputTokens: number, outputTokens: number): void {
+  function addTokenUsage(
+    inputTokens: number,
+    outputTokens: number,
+    cacheCreationTokens: number = 0,
+    cacheReadTokens: number = 0
+  ): void {
     if (requestTracker.value) {
       requestTracker.value.inputTokens += inputTokens
       requestTracker.value.outputTokens += outputTokens
@@ -157,7 +187,19 @@ export function useSessionStats() {
     cumulativeStats.totalInputTokens += inputTokens
     cumulativeStats.totalOutputTokens += outputTokens
 
-    log.debug(`[useSessionStats] 添加 Token 使用: input=${inputTokens}, output=${outputTokens}`)
+    // 计算总缓存（保留兼容）
+    const cachedInputTokens = cacheCreationTokens + cacheReadTokens
+
+    // 更新最后一条消息的 usage（用于完整上下文大小计算）
+    lastMessageUsage.value = {
+      inputTokens,
+      outputTokens,
+      cachedInputTokens,
+      cacheCreationTokens,
+      cacheReadTokens
+    }
+
+    log.debug(`[useSessionStats] 添加 Token 使用: input=${inputTokens}, output=${outputTokens}, cacheCreation=${cacheCreationTokens}, cacheRead=${cacheReadTokens}`)
   }
 
   /**
@@ -237,6 +279,13 @@ export function useSessionStats() {
   }
 
   /**
+   * 获取最后一条消息的 usage（用于计算完整上下文大小）
+   */
+  function getLastMessageUsage(): LastMessageUsage {
+    return { ...lastMessageUsage.value }
+  }
+
+  /**
    * 重置累计统计
    */
   function resetCumulativeStats(): void {
@@ -246,6 +295,13 @@ export function useSessionStats() {
     cumulativeStats.totalDuration = 0
     cumulativeStats.successfulRequests = 0
     cumulativeStats.failedRequests = 0
+    lastMessageUsage.value = {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0
+    }
     log.debug('[useSessionStats] 累计统计已重置')
   }
 
@@ -282,6 +338,7 @@ export function useSessionStats() {
     // 查询方法
     getCurrentTracker,
     getCumulativeStats,
+    getLastMessageUsage,
 
     // 管理方法
     resetCumulativeStats,

@@ -169,9 +169,7 @@ const newMessageCount = computed({
 const isNearBottom = ref(true)
 const userScrollLock = ref(false)  // 用户主动向上滚动时锁定自动滚动
 const lastScrollTop = ref(0)       // 上次滚动位置，用于检测滚动方向
-const lockedScrollTop = ref(0)     // 锁定时保存的滚动位置
-const lastMessageCount = ref(0)
-const lastTailId = ref<string | null>(null)
+const isTabSwitching = ref(false)  // Tab 切换中，阻止其他滚动逻辑
 const historyLoadInProgress = ref(false)
 const historyLoadRequested = ref(false)
 const historyScrollHeightBefore = ref(0)
@@ -226,35 +224,6 @@ function stopTimer() {
   }
 }
 
-// 自动滚动定时器
-let autoScrollTimerId: number | null = null
-
-// 启动自动滚动（在流式响应期间，如果用户在底部则定期滚动）
-function startAutoScroll() {
-  if (autoScrollTimerId !== null) return
-  // 如果用户已锁定滚动，不启动自动滚动
-  if (userScrollLock.value) return
-
-  autoScrollTimerId = window.setInterval(() => {
-    // 用户锁定时，绝对不滚动（最高优先级检查）
-    if (userScrollLock.value) {
-      stopAutoScroll()
-      return
-    }
-    // 只有在底部时才自动滚动
-    if (isNearBottom.value) {
-      scrollToBottomSilent()  // 使用静默滚动，不解除用户锁定
-    }
-  }, 200) // 每 200ms 检查并滚动
-}
-
-// 停止自动滚动
-function stopAutoScroll() {
-  if (autoScrollTimerId !== null) {
-    clearInterval(autoScrollTimerId)
-    autoScrollTimerId = null
-  }
-}
 
 // 监听 isStreaming 变化
 watch(
@@ -262,64 +231,62 @@ watch(
   (streaming) => {
     if (streaming) {
       startTimer()
-      startAutoScroll()  // 开始自动滚动
     } else {
       stopTimer()
-      stopAutoScroll()   // 停止自动滚动
       userScrollLock.value = false  // 流式响应结束时，重置锁定状态
-      lockedScrollTop.value = 0     // 清除锁定位置
     }
   },
   { immediate: true }
 )
 
-// ResizeObserver 用于监听滚动容器高度变化
-let resizeObserver: ResizeObserver | null = null
-
-// 设置 ResizeObserver 来保持滚动位置
-function setupResizeObserver() {
-  const el = scrollerRef.value?.$el as HTMLElement | undefined
-  if (!el || resizeObserver) return
-
-  resizeObserver = new ResizeObserver(() => {
-    // 用户锁定期间，不自动调整滚动位置，避免展开卡片等操作触发意外滚动
-    if (userScrollLock.value) {
-      return
-    }
-    // 未锁定且在底部时，保持滚动到底部
-    if (isNearBottom.value && props.isStreaming) {
-      scrollToBottomSilent()
-    }
-  })
-
-  // 监听滚动容器内部内容的高度变化
-  const wrapper = el.querySelector('.vue-recycle-scroller__item-wrapper')
-  if (wrapper) {
-    resizeObserver.observe(wrapper)
-  }
-}
-
-function cleanupResizeObserver() {
-  if (resizeObserver) {
-    resizeObserver.disconnect()
-    resizeObserver = null
-  }
-}
 
 onMounted(() => {
   if (props.isStreaming) {
     startTimer()
-    startAutoScroll()
   }
-  // 延迟设置 ResizeObserver，等待虚拟滚动器渲染
-  setTimeout(setupResizeObserver, 100)
 })
 
 onUnmounted(() => {
   stopTimer()
-  stopAutoScroll()
-  cleanupResizeObserver()
 })
+
+// 监听 tab 切换，恢复滚动位置
+watch(
+  () => sessionStore.currentTabId,
+  async (newTabId, oldTabId) => {
+    if (!newTabId || newTabId === oldTabId) return
+
+    // 标记 tab 切换中，阻止其他滚动逻辑
+    isTabSwitching.value = true
+
+    const savedPosition = sessionStore.currentTab?.uiState.scrollPosition ?? 0
+
+    // 等待 Vue 渲染 + 浏览器重绘
+    await nextTick()
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+
+    const el = scrollerRef.value?.$el as HTMLElement | undefined
+    if (el) {
+      if (savedPosition > 0) {
+        // 恢复保存的位置
+        el.scrollTop = savedPosition
+        lastScrollTop.value = savedPosition
+        const distanceFromBottom = el.scrollHeight - savedPosition - el.clientHeight
+        isNearBottom.value = distanceFromBottom < 50
+        userScrollLock.value = !isNearBottom.value
+      } else {
+        // 没有保存位置，滚动到底部
+        el.scrollTop = el.scrollHeight
+        lastScrollTop.value = el.scrollTop
+        isNearBottom.value = true
+        userScrollLock.value = false
+      }
+    }
+
+    await nextTick()
+    isTabSwitching.value = false
+  }
+)
 
 // 为虚拟列表准备数据源
 // 优先使用 displayItems，如果没有则使用 messages（向后兼容）
@@ -328,103 +295,58 @@ const displayMessages = computed(() => props.displayItems || props.messages || [
 // 使用新的 DisplayItemRenderer 还是旧的 MessageDisplay
 const messageComponent = computed(() => props.displayItems ? DisplayItemRenderer : MessageDisplay)
 
-// 监听消息变化
+// 监听消息变化 - 简化版本：只在新消息到达且用户在底部时滚动
 watch(() => displayMessages.value.length, async (newCount, oldCount) => {
+  // Tab 切换中，不处理消息变化
+  if (isTabSwitching.value) {
+    return
+  }
+
   const added = newCount - oldCount
-  const tailId = newCount > 0 ? displayMessages.value[newCount - 1]?.id ?? null : null
-  const tailChanged = tailId !== lastTailId.value
 
-  // 首次批量加载（如历史回放尾页）默认跳到底部
+  // 首次批量加载：跳到底部
   if (oldCount === 0 && newCount > 0) {
-    lastMessageCount.value = newCount
-    lastTailId.value = tailId
     await nextTick()
     scrollToBottom()
     forceUpdateScroller()
     return
   }
 
-  // 历史分页期间不计未读，但需要更新滚动位置保持
-  if (historyLoadInProgress.value && added > 0) {
-    lastMessageCount.value = newCount
-    lastTailId.value = tailId
-    await nextTick()
-    forceUpdateScroller()
-    // 不滚动，由 isLoading watch 处理滚动位置保持
-    return
-  }
-
-  // 如果是加载历史会话完成（从 loading 变为 false，且消息数量大于 0）
-  // 此时应该滚动到底部
-  if (props.isLoading === false && added > 0 && !historyLoadInProgress.value) {
-    lastMessageCount.value = newCount
-    lastTailId.value = tailId
-    await nextTick()
-    scrollToBottom()
-    newMessageCount.value = 0
-    forceUpdateScroller()
-    return
-  }
-
-  // 如果用户锁定了滚动，绝对不自动滚动（即使 isNearBottom 为 true）
-  if (userScrollLock.value && (added > 0 || tailChanged)) {
-    newMessageCount.value = newMessageCount.value + (added > 0 ? added : 1)
-    showScrollToBottom.value = true
-    // 不自动滚动，让用户决定是否点击按钮
-    lastMessageCount.value = newCount
-    lastTailId.value = tailId
+  // 历史分页加载中：不滚动，由 isLoading watch 处理
+  if (historyLoadInProgress.value) {
     await nextTick()
     forceUpdateScroller()
     return
   }
 
-  // 用户未锁定但不在底部时，也不自动滚动
-  if (!isNearBottom.value && (added > 0 || tailChanged)) {
-    newMessageCount.value = newMessageCount.value + (added > 0 ? added : 1)
-    showScrollToBottom.value = true
-    lastMessageCount.value = newCount
-    lastTailId.value = tailId
+  // 新消息到达
+  if (added > 0) {
+    // 用户锁定或不在底部：显示按钮，不滚动
+    if (userScrollLock.value || !isNearBottom.value) {
+      newMessageCount.value += added
+      showScrollToBottom.value = true
+      // 保存当前滚动位置
+      const el = scrollerRef.value?.$el as HTMLElement | undefined
+      const savedScrollTop = el?.scrollTop ?? 0
+      await nextTick()
+      forceUpdateScroller()
+      // 恢复滚动位置
+      await nextTick()
+      if (el) el.scrollTop = savedScrollTop
+    } else {
+      // 在底部且未锁定：自动滚动
+      await nextTick()
+      scrollToBottomSilent()
+      newMessageCount.value = 0
+      forceUpdateScroller()
+    }
+  } else {
+    // 消息数量没有增加（可能是更新），正常更新 scroller
     await nextTick()
     forceUpdateScroller()
-    return
   }
-
-  // 只有在底部且未被用户锁定时才自动滚动
-  if (isNearBottom.value && !userScrollLock.value) {
-    await nextTick()
-    scrollToBottomSilent()  // 使用静默滚动，不解除用户锁定
-    newMessageCount.value = 0
-  }
-
-  lastMessageCount.value = newCount
-  lastTailId.value = tailId
-
-  // 强制 DynamicScroller 重新计算尺寸
-  await nextTick()
-  forceUpdateScroller()
 })
 
-// 监听消息内容变化（深度监听），强制重新计算尺寸
-// 滚动位置保持由 ResizeObserver 处理
-watch(() => displayMessages.value, async () => {
-  const el = scrollerRef.value?.$el as HTMLElement | undefined
-  if (!el) return
-
-  const wasLocked = userScrollLock.value
-
-  // 用户锁定滚动时：更新锁定位置（ResizeObserver 会用这个值恢复位置）
-  if (wasLocked && lockedScrollTop.value === 0) {
-    lockedScrollTop.value = el.scrollTop
-  }
-
-  await nextTick()
-  forceUpdateScroller()
-
-  // 用户锁定时，确保按钮可见
-  if (wasLocked) {
-    showScrollToBottom.value = true
-  }
-}, { deep: true })
 
 // 强制 DynamicScroller 重新计算所有项目尺寸
 function forceUpdateScroller() {
@@ -520,35 +442,32 @@ function handleScroll() {
     }
   }
 
-  // 检测用户滚动方向：向上滚动时锁定自动滚动
+  // 检测用户滚动方向
   const scrollingUp = scrollTop < lastScrollTop.value
   const scrollDelta = Math.abs(scrollTop - lastScrollTop.value)
   lastScrollTop.value = scrollTop
 
-  // 判断是否在底部（允许 50px 的误差，约 1-2 行文本高度）
+  // 判断是否在底部（允许 50px 的误差）
   const distanceFromBottom = scrollHeight - scrollTop - clientHeight
   isNearBottom.value = distanceFromBottom < 50
 
-  // 用户向上滚动时，立即停止自动滚动并锁定当前位置
-  if (scrollingUp && scrollDelta > 5) {  // 添加阈值，避免微小抖动触发
+  // 用户向上滚动时，锁定自动滚动
+  if (scrollingUp && scrollDelta > 5) {
     userScrollLock.value = true
-    lockedScrollTop.value = scrollTop  // 保存锁定时的滚动位置
-    stopAutoScroll()  // 直接停止定时器
   }
 
-  // 用户主动向下滚动回到底部时，解除锁定并恢复自动滚动
-  // 必须满足：1. 在底部 2. 正在向下滚动 3. 滚动距离足够大（表示用户主动操作）
+  // 用户主动向下滚动回到底部时，解除锁定
   if (isNearBottom.value && !scrollingUp && scrollDelta > 10) {
     userScrollLock.value = false
-    lockedScrollTop.value = 0  // 清除锁定位置
-    // 如果正在流式响应，恢复自动滚动
-    if (props.isStreaming) {
-      startAutoScroll()
-    }
   }
 
   // 更新按钮显示状态
   showScrollToBottom.value = !isNearBottom.value && displayMessages.value.length > 0
+
+  // 保存滚动位置到 sessionStore（Tab 切换中不保存）
+  if (!isTabSwitching.value && sessionStore.currentTab) {
+    sessionStore.currentTab.saveUiState({ scrollPosition: scrollTop })
+  }
 }
 
 /**
@@ -686,6 +605,7 @@ async function ensureScrollable(): Promise<void> {
   overflow: hidden;
   min-height: 0; /* 关键：防止 flex 子元素溢出 */
   background: var(--theme-background, #ffffff);
+  position: relative; /* 为 scroll-to-bottom 按钮提供定位上下文 */
 }
 
 .message-list {

@@ -1294,6 +1294,31 @@ export function useSessionTab(initialOrder: number = 0) {
     }
 
     /**
+     * 将当前执行的任务切换到后台运行
+     *
+     * 这个功能允许用户继续其他操作，而当前任务在后台继续执行。
+     * 仅在有活跃任务正在执行时有效。
+     */
+    async function runInBackground(): Promise<void> {
+        if (!rsocketSession.value) {
+            throw new Error('会话未连接')
+        }
+
+        if (!messagesHandler.isGenerating.value) {
+            log.warn(`[Tab ${tabId}] 没有正在执行的任务，无法切换到后台`)
+            return
+        }
+
+        try {
+            await rsocketSession.value.runInBackground()
+            log.info(`[Tab ${tabId}] 后台运行请求已发送`)
+        } catch (err) {
+            log.error(`[Tab ${tabId}] 后台运行请求失败:`, err)
+            throw err
+        }
+    }
+
+    /**
      * 强制发送消息（打断当前生成并在打断完成后自动发送）
      *
      * 与普通 sendMessage 的区别：
@@ -1571,6 +1596,7 @@ export function useSessionTab(initialOrder: number = 0) {
         if (state.contexts !== undefined) uiState.contexts = state.contexts
         if (state.scrollPosition !== undefined) uiState.scrollPosition = state.scrollPosition
         if (state.newMessageCount !== undefined) uiState.newMessageCount = state.newMessageCount
+        if (state.showScrollToBottom !== undefined) uiState.showScrollToBottom = state.showScrollToBottom
     }
 
     /**
@@ -1589,6 +1615,7 @@ export function useSessionTab(initialOrder: number = 0) {
         uiState.contexts = []
         uiState.scrollPosition = 0
         uiState.newMessageCount = 0
+        uiState.showScrollToBottom = false
 
         // 重置错误状态
         connectionState.lastError = null
@@ -1666,6 +1693,7 @@ export function useSessionTab(initialOrder: number = 0) {
         sendTextMessageDirect,
         forceSendMessage,
         interrupt,
+        runInBackground,
         editAndResendMessage,
 
         // 队列管理
