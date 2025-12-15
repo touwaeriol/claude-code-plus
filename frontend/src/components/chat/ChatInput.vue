@@ -253,26 +253,22 @@
             @toggle="handleThinkingToggle"
           />
 
-          <!-- Skip Permissions 复选框 - Cursor 风格 -->
-          <el-tooltip
+          <!-- Skip Permissions 开关 - 与 ThinkingToggle 风格一致 -->
+          <div
             v-if="showPermissionControls"
-            :content="t('permission.mode.bypassTooltip')"
-            placement="top"
+            class="bypass-toggle"
+            :class="{
+              'is-enabled': skipPermissionsValue,
+              'is-disabled': !enabled
+            }"
+            :title="t('permission.mode.bypassTooltip')"
+            @click="enabled && handleSkipPermissionsChange(!skipPermissionsValue)"
           >
-            <label
-              class="cursor-checkbox"
-              :class="{ checked: skipPermissionsValue, disabled: !enabled }"
-            >
-              <input
-                v-model="skipPermissionsValue"
-                type="checkbox"
-                :disabled="!enabled"
-                @change="handleSkipPermissionsChange(skipPermissionsValue)"
-              >
-              <span class="checkbox-icon">{{ skipPermissionsValue ? '☑' : '☐' }}</span>
-              <span class="checkbox-text">{{ t('permission.mode.bypass') }}</span>
-            </label>
-          </el-tooltip>
+            <span class="bypass-label">{{ t('permission.mode.bypass') }}</span>
+            <span class="bypass-indicator">
+              <span :class="['dot', skipPermissionsValue ? 'active' : 'inactive']" />
+            </span>
+          </div>
         </div>
       </div>
 
@@ -1705,43 +1701,58 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-/* ========== Cursor 风格复选框 - 紧凑 ========== */
-.cursor-checkbox {
-  display: flex;
+/* ========== Bypass Toggle - 与 ThinkingToggle 风格一致 ========== */
+.bypass-toggle {
+  display: inline-flex;
   align-items: center;
-  gap: 1px;
-  padding: 2px 4px;
+  gap: 2px;
+  padding: 2px 6px;
   border-radius: 4px;
   font-size: 11px;
-  color: var(--theme-secondary-foreground, #6a737d);
   cursor: pointer;
+  transition: all 0.2s ease;
   user-select: none;
-  transition: background 0.15s ease;
+  color: var(--theme-secondary-foreground, #6b7280);
+  background: transparent;
 }
 
-.cursor-checkbox:hover:not(.disabled) {
+.bypass-toggle:hover:not(.is-disabled) {
   background: var(--theme-hover-background, rgba(0, 0, 0, 0.05));
 }
 
-.cursor-checkbox.checked {
+.bypass-toggle.is-enabled {
   color: var(--theme-accent, #0366d6);
 }
 
-.cursor-checkbox.disabled {
+.bypass-toggle.is-disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.cursor-checkbox input[type="checkbox"] {
-  display: none;
+.bypass-label {
+  font-weight: 500;
 }
 
-.cursor-checkbox .checkbox-icon {
-  font-size: 12px;
+.bypass-indicator {
+  display: flex;
+  align-items: center;
+  margin-left: 2px;
 }
 
-.cursor-checkbox .checkbox-text {
-  font-size: 12px;
+.bypass-indicator .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  transition: background-color 0.2s ease;
+}
+
+.bypass-indicator .dot.active {
+  background: var(--theme-success, #22c55e);
+}
+
+.bypass-indicator .dot.inactive {
+  background: var(--theme-secondary-foreground, #9ca3af);
+  opacity: 0.5;
 }
 
 /* ========== 模式选择器下拉选项样式 ========== */
