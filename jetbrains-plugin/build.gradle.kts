@@ -79,6 +79,24 @@ dependencies {
     testImplementation(kotlin("test-junit5"))
 }
 
+// 从 CHANGELOG.md 提取最新版本的变更日志
+fun extractLatestChangelog(): String {
+    val changelogFile = file("../CHANGELOG.md")
+    if (!changelogFile.exists()) return "<p>See CHANGELOG.md for details</p>"
+
+    val content = changelogFile.readText()
+    val versionRegex = Regex("""## \[[\d.]+\].*?(?=## \[|\Z)""", RegexOption.DOT_MATCHES_ALL)
+    val latestSection = versionRegex.find(content)?.value ?: return "<p>See CHANGELOG.md for details</p>"
+
+    // 转换 Markdown 为简单 HTML
+    return latestSection
+        .replace(Regex("""## \[([\d.]+)\] - (.+)"""), "<h3>Version $1 ($2)</h3>")
+        .replace(Regex("""### (.+)"""), "<h4>$1</h4>")
+        .replace(Regex("""^- (.+)$""", RegexOption.MULTILINE), "<li>$1</li>")
+        .replace(Regex("""(<li>.*</li>\n?)+""")) { "<ul>${it.value}</ul>" }
+        .trim()
+}
+
 // IntelliJ 平台配置
 intellijPlatform {
     pluginConfiguration {
@@ -89,6 +107,9 @@ intellijPlatform {
             sinceBuild.set(providers.gradleProperty("pluginSinceBuild"))
             untilBuild.set(providers.gradleProperty("pluginUntilBuild"))
         }
+
+        // 从 CHANGELOG.md 读取变更日志
+        changeNotes.set(provider { extractLatestChangelog() })
     }
 
     // 插件兼容性验证配置 (2024.2 ~ 2025.3)
