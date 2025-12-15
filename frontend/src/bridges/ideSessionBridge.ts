@@ -3,7 +3,6 @@ import localeService from '@/services/localeService'
 import type { useSessionStore } from '@/stores/sessionStore'
 import { useToastStore } from '@/stores/toastStore'
 import { ConnectionStatus } from '@/types/display'
-import { aiAgentService } from '@/services/aiAgentService'
 import { jetbrainsRSocket, type SessionCommand, type SessionState } from '@/services/jetbrainsRSocket'
 
 export interface HostCommand {
@@ -75,7 +74,9 @@ function handleSessionCommand(command: SessionCommand) {
           command.type === 'close' ? 'closeSession' :
           command.type === 'rename' ? 'renameSession' :
           command.type === 'toggleHistory' ? 'toggleHistory' :
-          command.type === 'setLocale' ? 'setLocale' : command.type,
+          command.type === 'setLocale' ? 'setLocale' :
+          command.type === 'delete' ? 'deleteSession' :
+          command.type === 'reset' ? 'resetSession' : command.type,
     payload: {
       sessionId: command.sessionId,
       newName: command.newName,
@@ -127,6 +128,21 @@ function registerDefaultHandler(store: SessionStore) {
           console.log('[IDE Bridge] Created new tab:', tab.tabId)
           break
         }
+        case 'resetSession': {
+          // 重置/清空当前会话（不新建 Tab）
+          const currentTabId = store.currentTabId
+          if (currentTabId) {
+            const tabs = resolveSessionList(store)
+            const currentTab = tabs.find((t: any) => t.tabId === currentTabId)
+            if (currentTab && typeof currentTab.reset === 'function') {
+              await currentTab.reset()
+              console.log('[IDE Bridge] Reset current tab:', currentTabId)
+            } else {
+              console.warn('[IDE Bridge] Current tab does not support reset')
+            }
+          }
+          break
+        }
         case 'closeSession': {
           const tabId = command.payload?.sessionId
           if (tabId) {
@@ -149,6 +165,40 @@ function registerDefaultHandler(store: SessionStore) {
           }
           break
         }
+        case 'deleteSession': {
+          // 删除历史会话（后端已删除文件，前端只需关闭对应的 Tab）
+          const sessionId = command.payload?.sessionId
+          if (sessionId) {
+            const tabs = resolveSessionList(store)
+            // 查找匹配的 Tab（通过 sessionId 匹配）
+            const matchingTab = tabs.find((t: any) => {
+              const tabSessionId = typeof t.sessionId === 'object' ? t.sessionId?.value : t.sessionId
+              return tabSessionId === sessionId
+            })
+            if (matchingTab) {
+              // 如果只有一个会话，不关闭
+              if (tabs.length <= 1) {
+                console.warn('[IDE Bridge] Cannot delete the last tab, resetting instead')
+                // 可选：重置当前 Tab 为新会话
+                break
+              }
+              // 如果删除的是当前会话，先切换到其他会话
+              const currentId = store.currentTabId
+              if (matchingTab.tabId === currentId) {
+                const otherTab = tabs.find((t: any) => t.tabId !== matchingTab.tabId)
+                if (otherTab) {
+                  await store.switchTab(otherTab.tabId)
+                }
+              }
+              // 关闭 Tab
+              await store.closeTab(matchingTab.tabId)
+              console.log(`[IDE Bridge] Deleted session ${sessionId}`)
+            } else {
+              console.log(`[IDE Bridge] Session ${sessionId} not loaded as tab, nothing to close`)
+            }
+          }
+          break
+        }
         case 'renameSession': {
           // IDEA 发送的重命名命令
           const tabId = command.payload?.sessionId
@@ -166,15 +216,14 @@ function registerDefaultHandler(store: SessionStore) {
                   tab.name.value = newName
                 }
               }
-              // 2. 发送 /rename 命令到后端
-              const sessionId = tab.sessionId?.value ?? tab.sessionId
+              // 2. 发送 /rename 命令到后端（通过 Tab 实例直接发送）
               const toastStore = useToastStore()
-              if (sessionId) {
-                aiAgentService.sendMessage(sessionId, `/rename ${newName}`)
+              if (tab.session?.isConnected && typeof tab.sendTextMessageDirect === 'function') {
+                tab.sendTextMessageDirect(`/rename ${newName}`)
                   .then(() => {
                     toastStore.success(`Rename success: "${newName}"`)
                   })
-                  .catch(err => {
+                  .catch((err: Error) => {
                     console.error('[IDE Bridge] 发送 /rename 命令失败:', err)
                     toastStore.error('Rename failed')
                   })

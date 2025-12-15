@@ -1,45 +1,18 @@
 /**
  * AI Agent 服务
- * 封装 RSocket + Protobuf 会话生命周期管理。
  *
- * 迁移说明：已从 WebSocket JSON-RPC 迁移到 RSocket + Protobuf
+ * 重构后的版本：只保留 HTTP API 方法。
+ * RSocket 会话管理已移至 useSessionTab（每个 Tab 直接持有 RSocketSession 实例）。
  */
 
-import {
-    RSocketSession,
-    ConnectOptions as SessionConnectOptions,
-    ContentBlock
-} from './rsocket'
 import {ProtoCodec} from './rsocket/protoCodec'
-import type {AgentStreamEvent} from './rsocket'
+import type {RSocketSession} from './rsocket/RSocketSession'
 import type {HistorySessionMetadata} from '@/types/session'
-import type {
-    RpcCapabilities,
-    RpcPermissionMode,
-    RpcSetPermissionModeResult,
-    RpcMessage
-} from '@/types/rpc'
+import type {RpcMessage} from '@/types/rpc'
 import {resolveServerHttpUrl} from '@/utils/serverUrl'
 
-export type ConnectOptions = SessionConnectOptions
-
-export type MessageHandler = (message: RpcMessage) => void
-
-/**
- * 服务器请求处理器类型（双向 RPC）
- */
-export type ServerRequestHandler = (params: any) => Promise<any>
-
-/**
- * 会话断开事件处理器类型
- */
-export type SessionDisconnectHandler = (sessionId: string, error?: Error) => void
-
-/** connect 返回结果 */
-export interface ConnectResult {
-    sessionId: string
-    capabilities: RpcCapabilities | null
-}
+// 重新导出类型以保持向后兼容
+export type {ConnectOptions} from './rsocket/RSocketSession'
 
 /** 历史文件元数据 */
 export interface HistoryMetadata {
@@ -49,327 +22,13 @@ export interface HistoryMetadata {
     customTitle?: string    // 自定义标题（从 /rename 命令设置）
 }
 
+/**
+ * AI Agent HTTP 服务
+ *
+ * 注意：RSocket 会话相关操作已移至 useSessionTab，
+ * 此服务只负责纯 HTTP API 调用（历史记录加载等）。
+ */
 export class AiAgentService {
-    // 会话管理 - sessionId -> RSocketSession
-    private sessions = new Map<string, RSocketSession>()
-    // 会话断开事件处理器
-    private disconnectHandlers = new Set<SessionDisconnectHandler>()
-
-    /**
-     * 创建并连接到新会话
-     *
-     * @param options 连接选项
-     * @param onMessage 消息处理回调
-     * @returns 连接结果（sessionId + capabilities）
-     */
-    async connect(
-        options: ConnectOptions = {},
-        onMessage: MessageHandler
-    ): Promise<ConnectResult> {
-        const session = new RSocketSession()
-
-        // 订阅消息
-        session.onMessage(onMessage)
-
-        // 订阅断开事件
-        session.onDisconnect((error) => {
-            const sid = session.currentSessionId
-            if (sid) {
-                console.log(`🔌 会话被动断开: ${sid}`, error?.message)
-                this.sessions.delete(sid)
-                // 通知上层
-                this.disconnectHandlers.forEach(handler => {
-                    try {
-                        handler(sid, error)
-                    } catch (e) {
-                        console.error('[AiAgentService] 断开回调执行失败:', e)
-                    }
-                })
-            }
-        })
-
-        // 连接并获取会话ID
-        const sessionId = await session.connect(options)
-
-        // 保存会话实例
-        this.sessions.set(sessionId, session)
-
-        console.log(`🔌 会话已连接: ${sessionId}`, session.capabilities)
-        return {
-            sessionId,
-            capabilities: session.capabilities
-        }
-    }
-
-    /**
-     * 发送消息 (纯文本，内部转为 stream-json 格式)
-     *
-     * @param sessionId 会话ID
-     * @param message 用户消息内容
-     */
-    async sendMessage(sessionId: string, message: string): Promise<void> {
-        const session = this.sessions.get(sessionId)
-        if (!session) {
-            throw new Error(`会话不存在: ${sessionId}`)
-        }
-
-        console.log(`📤 发送消息到会话 ${sessionId}: ${message.substring(0, 50)}...`)
-        // 统一使用 stream-json 格式，为后续图片支持做准备
-        await session.sendMessageWithContent([{type: 'text', text: message}])
-    }
-
-    /**
-     * 发送消息 (支持图片，RPC 格式)
-     *
-     * @param sessionId 会话ID
-     * @param content 内容块数组，格式:
-     *   - 文本: { type: 'text', text: '...' }
-     *   - 图片: { type: 'image', source: { type: 'base64', media_type: 'image/png', data: '...' } }
-     */
-    async sendMessageWithContent(sessionId: string, content: ContentBlock[]): Promise<void> {
-        const session = this.sessions.get(sessionId)
-        if (!session) {
-            throw new Error(`会话不存在: ${sessionId}`)
-        }
-
-        console.log(`📤 发送内容到会话 ${sessionId}: ${content.length} 个内容块`)
-        await session.sendMessageWithContent(content)
-    }
-
-    /**
-     * 中断当前操作
-     *
-     * @param sessionId 会话ID
-     */
-    async interrupt(sessionId: string): Promise<void> {
-        const session = this.sessions.get(sessionId)
-        if (!session) {
-            throw new Error(`会话不存在: ${sessionId}`)
-        }
-
-        console.log(`⏸️ 中断会话: ${sessionId}`)
-        await session.interrupt()
-    }
-
-    /**
-     * 断开会话连接
-     *
-     * @param sessionId 会话ID
-     */
-    async disconnect(sessionId: string): Promise<void> {
-        const session = this.sessions.get(sessionId)
-        if (!session) {
-            console.warn(`会话不存在: ${sessionId}`)
-            return
-        }
-
-        console.log(`🔌 断开会话: ${sessionId}`)
-        await session.disconnect()
-        this.sessions.delete(sessionId)
-    }
-
-    /**
-     * 断开所有会话连接
-     */
-    async disconnectAll(): Promise<void> {
-        console.log(`🔌 断开所有会话连接 (${this.sessions.size} 个)`)
-
-        const disconnectPromises = Array.from(this.sessions.values()).map(session =>
-            session.disconnect().catch(err => console.error('断开会话失败:', err))
-        )
-
-        await Promise.all(disconnectPromises)
-        this.sessions.clear()
-    }
-
-    /**
-     * 重连会话（复用 WebSocket）
-     * 只发送 disconnect + connect RPC，不关闭 WebSocket
-     *
-     * @param sessionId 当前会话ID
-     * @param options 连接选项
-     * @returns 新的会话ID
-     */
-    async reconnectSession(
-        sessionId: string,
-        options?: ConnectOptions
-    ): Promise<{ sessionId: string; capabilities: RpcCapabilities | null }> {
-        const session = this.sessions.get(sessionId)
-        if (!session) {
-            throw new Error(`会话不存在: ${sessionId}`)
-        }
-
-        console.log(`🔄 重连会话: ${sessionId}`)
-
-        const newSessionId = await session.reconnectSession(options)
-
-        // 更新 sessions map（如果 sessionId 变化）
-        if (newSessionId !== sessionId) {
-            this.sessions.delete(sessionId)
-            this.sessions.set(newSessionId, session)
-        }
-
-        return {
-            sessionId: newSessionId,
-            capabilities: session.capabilities
-        }
-    }
-
-    /**
-     * 检查会话是否已连接
-     *
-     * @param sessionId 会话ID
-     */
-    isConnected(sessionId: string): boolean {
-        const session = this.sessions.get(sessionId)
-        return session?.isConnected ?? false
-    }
-
-    /**
-     * 订阅会话断开事件
-     *
-     * 当任何会话被动断开（网络问题、服务器重启等）时会触发此回调。
-     * 主动调用 disconnect() 不会触发此事件。
-     *
-     * @param handler 断开事件处理器
-     * @returns 取消订阅函数
-     */
-    onSessionDisconnect(handler: SessionDisconnectHandler): () => void {
-        this.disconnectHandlers.add(handler)
-        return () => {
-            this.disconnectHandlers.delete(handler)
-        }
-    }
-
-    /**
-     * 获取会话实例
-     *
-     * @param sessionId 会话ID
-     * @returns RSocketSession 实例，如果不存在则返回 undefined
-     */
-    getSession(sessionId: string): RSocketSession | undefined {
-        return this.sessions.get(sessionId)
-    }
-
-    /**
-     * 获取活跃连接数
-     */
-    getActiveConnectionCount(): number {
-        return this.sessions.size
-    }
-
-    /**
-     * 设置模型
-     *
-     * @param sessionId 会话ID
-     * @param model 模型名称
-     */
-    async setModel(sessionId: string, model: string): Promise<void> {
-        const session = this.sessions.get(sessionId)
-        if (!session) {
-            throw new Error(`会话不存在: ${sessionId}`)
-        }
-
-        console.log(`🔧 设置模型: ${sessionId} -> ${model}`)
-        await session.setModel(model)
-    }
-
-    /**
-     * 获取会话历史
-     *
-     * @param sessionId 会话ID
-     */
-    async getHistory(sessionId: string): Promise<AgentStreamEvent[]> {
-        const session = this.sessions.get(sessionId)
-        if (!session) {
-            throw new Error(`会话不存在: ${sessionId}`)
-        }
-
-        return await session.getHistory()
-    }
-
-    /**
-     * 设置权限模式
-     *
-     * @param sessionId 会话ID
-     * @param mode 权限模式
-     */
-    async setPermissionMode(sessionId: string, mode: RpcPermissionMode): Promise<RpcSetPermissionModeResult> {
-        const session = this.sessions.get(sessionId)
-        if (!session) {
-            throw new Error(`会话不存在: ${sessionId}`)
-        }
-
-        console.log(`🔧 设置权限模式: ${sessionId} -> ${mode}`)
-        return await session.setPermissionMode(mode)
-    }
-
-    /**
-     * 获取会话能力信息
-     *
-     * @param sessionId 会话ID
-     */
-    getCapabilities(sessionId: string): RpcCapabilities | null {
-        const session = this.sessions.get(sessionId)
-        if (!session) {
-            return null
-        }
-        return session.capabilities
-    }
-
-    /**
-     * 注册服务器请求处理器（双向 RPC）
-     *
-     * 用于处理服务器主动发起的请求，如 AskUserQuestion。
-     *
-     * @param sessionId 会话ID
-     * @param method 方法名（如 'AskUserQuestion'）
-     * @param handler 处理函数
-     * @returns 取消注册的函数，失败时返回空函数
-     *
-     * @example
-     * aiAgentService.register(sessionId, 'AskUserQuestion', async (params) => {
-     *   const answers = await showQuestionDialog(params.questions)
-     *   return { answers }
-     * })
-     */
-    register(
-        sessionId: string,
-        method: string,
-        handler: ServerRequestHandler
-    ): () => void {
-        const session = this.sessions.get(sessionId)
-        if (!session) {
-            console.warn(`[aiAgentService] 注册处理器失败，会话不存在: ${sessionId}`)
-            return () => {
-            }
-        }
-
-        console.log(`🔧 注册服务器请求处理器: ${sessionId} -> ${method}`)
-        return session.register(method, handler)
-    }
-
-    /**
-     * 批量注册服务器请求处理器
-     *
-     * @param sessionId 会话ID
-     * @param handlers 处理器映射 { method: handler }
-     * @returns 取消所有注册的函数
-     */
-    registerAll(
-        sessionId: string,
-        handlers: Record<string, ServerRequestHandler>
-    ): () => void {
-        const unregisterFns: Array<() => void> = []
-
-        for (const [method, handler] of Object.entries(handlers)) {
-            unregisterFns.push(this.register(sessionId, method, handler))
-        }
-
-        return () => {
-            unregisterFns.forEach(fn => fn())
-        }
-    }
 
     /**
      * 获取项目的历史会话列表（通过 HTTP，避免 RSocket 连接）
@@ -431,7 +90,8 @@ export class AiAgentService {
         }
 
         const buffer = new Uint8Array(await response.arrayBuffer())
-        return ProtoCodec.decodeHistoryResult(buffer)
+        // 类型断言解决不同路径导入 RpcMessage 类型不兼容的问题
+        return ProtoCodec.decodeHistoryResult(buffer) as any
     }
 
     /**
@@ -460,7 +120,6 @@ export class AiAgentService {
      * 获取历史文件元数据（文件总行数等）
      *
      * @param params 查询参数
-     * @param transportSessionId 可选的传输会话 ID
      * @returns 历史文件元数据
      */
     async getHistoryMetadata(
@@ -502,25 +161,27 @@ export class AiAgentService {
      * 截断历史记录（用于编辑重发功能）
      *
      * 从指定的消息 UUID 开始截断 JSONL 历史文件，该消息及其后续所有消息都会被删除。
+     * 这是一个文件操作，不依赖于特定会话状态，但需要一个已连接的 RSocket 连接来发送请求。
      *
+     * @param session 任意已连接的 RSocketSession 实例（用于发送 RSocket 请求）
      * @param params 截断参数
-     * @param params.sessionId 会话 ID
+     * @param params.sessionId 目标会话 ID（历史文件标识）
      * @param params.messageUuid 要截断的消息 UUID（从该消息开始截断，包含该消息）
      * @param params.projectPath 项目路径（用于定位 JSONL 文件）
      * @returns 截断结果
      */
-    async truncateHistory(params: {
-        sessionId: string
-        messageUuid: string
-        projectPath: string
-    }): Promise<{ success: boolean; remainingLines: number; error?: string }> {
+    async truncateHistory(
+        session: RSocketSession,
+        params: {
+            sessionId: string
+            messageUuid: string
+            projectPath: string
+        }
+    ): Promise<{ success: boolean; remainingLines: number; error?: string }> {
         console.log('✂️ [AiAgentService] 截断历史:', params)
 
-        // 获取任意一个已连接的会话来发送 RSocket 请求
-        // 因为 truncateHistory 是针对文件操作，不需要特定会话
-        const session = this.sessions.values().next().value as RSocketSession | undefined
-        if (!session || !session.isConnected) {
-            throw new Error('没有可用的 RSocket 连接')
+        if (!session.isConnected) {
+            throw new Error('RSocket 连接未建立')
         }
 
         return await session.truncateHistory(params)

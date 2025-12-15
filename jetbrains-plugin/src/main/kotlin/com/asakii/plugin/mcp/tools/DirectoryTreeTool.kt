@@ -148,18 +148,20 @@ class DirectoryTreeTool(private val project: Project) {
 
         val entries = buildTree(targetDir, 1, "")
 
-        // 生成易读的树形文本格式
+        // 生成 Markdown 格式的树形结构
         val sb = StringBuilder()
-        sb.appendLine("📂 $path")
+        sb.appendLine("## Directory Tree: `$path`")
+        sb.appendLine()
+        sb.appendLine("```")
 
         fun renderTree(items: List<DirectoryEntry>, prefix: String = "") {
             items.forEachIndexed { index, entry ->
                 val isLast = index == items.lastIndex
                 val connector = if (isLast) "└── " else "├── "
-                val icon = if (entry.isDirectory) "📁" else "📄"
                 val sizeInfo = entry.size?.let { " (${formatSize(it)})" } ?: ""
+                val dirMarker = if (entry.isDirectory) "/" else ""
 
-                sb.appendLine("$prefix$connector$icon ${entry.name}$sizeInfo")
+                sb.appendLine("$prefix$connector${entry.name}$dirMarker$sizeInfo")
 
                 entry.children?.let { children ->
                     val newPrefix = prefix + if (isLast) "    " else "│   "
@@ -169,11 +171,13 @@ class DirectoryTreeTool(private val project: Project) {
         }
 
         renderTree(entries)
+        sb.appendLine("```")
 
         sb.appendLine()
-        sb.append("📊 Statistics: $totalFiles files, $totalDirectories directories")
-        if (truncated) sb.append(" (truncated, max entries reached)")
-        if (maxDepthReached) sb.append(" (max depth reached)")
+        sb.appendLine("---")
+        sb.append("**Statistics:** $totalFiles files, $totalDirectories directories")
+        if (truncated) sb.append(" *(truncated, max entries reached)*")
+        if (maxDepthReached) sb.append(" *(max depth reached)*")
 
         return sb.toString()
     }

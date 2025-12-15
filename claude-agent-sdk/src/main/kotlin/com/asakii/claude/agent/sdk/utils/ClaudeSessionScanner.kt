@@ -282,6 +282,37 @@ object ClaudeSessionScanner {
     }
 
     /**
+     * 删除历史会话
+     *
+     * @param projectPath 项目路径
+     * @param sessionId 会话 ID（文件名，不含扩展名）
+     * @return true 删除成功，false 删除失败
+     */
+    fun deleteSession(projectPath: String, sessionId: String): Boolean {
+        val claudeDir = getClaudeDir()
+        val projectId = ProjectPathUtils.projectPathToDirectoryName(projectPath)
+        val sessionFile = File(claudeDir, "projects/$projectId/$sessionId.jsonl")
+
+        if (!sessionFile.exists()) {
+            logger.warn("[SessionScanner] 会话文件不存在: ${sessionFile.absolutePath}")
+            return false
+        }
+
+        return try {
+            val deleted = sessionFile.delete()
+            if (deleted) {
+                logger.info("[SessionScanner] 已删除会话文件: ${sessionFile.absolutePath}")
+            } else {
+                logger.warn("[SessionScanner] 删除会话文件失败: ${sessionFile.absolutePath}")
+            }
+            deleted
+        } catch (e: Exception) {
+            logger.error("[SessionScanner] 删除会话文件异常: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
      * 从 JSONL 文件尾部查找 customTitle
      * custom-title 记录格式: {"type":"custom-title","customTitle":"xxx","sessionId":"xxx"}
      */

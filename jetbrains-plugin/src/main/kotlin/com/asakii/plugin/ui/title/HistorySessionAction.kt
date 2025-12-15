@@ -13,12 +13,16 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.openapi.ui.popup.PopupStep
+import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBPanel
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import java.awt.BorderLayout
 import java.awt.Component
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.logging.Logger
@@ -299,37 +303,56 @@ class HistorySessionAction(
      * 使用 PopupChooserBuilder 显示弹窗
      */
     private fun showPopupWithItems(e: AnActionEvent, items: List<SessionListItem>, sessionCount: Int) {
+        // 创建自定义列表模型
+        val listModel = DefaultListModel<SessionListItem>()
+        items.forEach { listModel.addElement(it) }
+
+        val list = JList(listModel).apply {
+            cellRenderer = SessionListCellRenderer()
+            selectionMode = ListSelectionModel.SINGLE_SELECTION
+
+            // 左键单击选择会话
+            addMouseListener(object : MouseAdapter() {
+                override fun mouseClicked(evt: MouseEvent) {
+                    val index = locationToIndex(evt.point)
+                    if (index < 0) return
+
+                    val selected = model.getElementAt(index)
+
+                    if (SwingUtilities.isRightMouseButton(evt)) {
+                        // 右键点击显示上下文菜单
+                        if (selected is SessionListItem.SessionItem && !selected.isActive) {
+                            showSessionContextMenu(evt, selected)
+                        }
+                    } else if (SwingUtilities.isLeftMouseButton(evt) && evt.clickCount == 1) {
+                        // 左键单击
+                        when (selected) {
+                            is SessionListItem.SessionItem -> {
+                                logger.info("🔍 [HistorySessionAction] 选择会话: ${selected.session.sessionId}")
+                                currentPopup?.cancel()
+                                sessionApi.sendCommand(
+                                    JetBrainsSessionCommand(
+                                        type = JetBrainsSessionCommandType.SWITCH,
+                                        sessionId = selected.session.sessionId
+                                    )
+                                )
+                            }
+                            is SessionListItem.LoadMore -> {
+                                loadMoreSessions()
+                            }
+                            else -> {}
+                        }
+                    }
+                }
+            })
+        }
+
         val popup = JBPopupFactory.getInstance()
-            .createPopupChooserBuilder(items)
+            .createComponentPopupBuilder(JScrollPane(list), list)
             .setTitle("历史会话 ($sessionCount)")
-            .setRenderer(SessionListCellRenderer())
-            .setItemChosenCallback { selected ->
-                when (selected) {
-                    is SessionListItem.SessionItem -> {
-                        logger.info("🔍 [HistorySessionAction] 选择会话: ${selected.session.sessionId}")
-                        sessionApi.sendCommand(
-                            JetBrainsSessionCommand(
-                                type = JetBrainsSessionCommandType.SWITCH,
-                                sessionId = selected.session.sessionId
-                            )
-                        )
-                    }
-
-                    is SessionListItem.LoadMore -> {
-                        loadMoreSessions()
-                    }
-
-                    else -> {}
-                }
-            }
-            .setNamerForFiltering { item ->
-                when (item) {
-                    is SessionListItem.SessionItem -> item.preview
-                    else -> ""
-                }
-            }
             .setMovable(true)
             .setResizable(true)
+            .setRequestFocus(true)
             .createPopup()
 
         currentPopup = popup
@@ -340,6 +363,68 @@ class HistorySessionAction(
             popup.showUnderneathOf(component)
         } else {
             popup.showInFocusCenter()
+        }
+    }
+
+    /**
+     * 显示会话上下文菜单（右键菜单）
+     */
+    private fun showSessionContextMenu(evt: MouseEvent, item: SessionListItem.SessionItem) {
+        val menuItems = listOf(
+            "删除会话" to { deleteHistorySession(item.session) }
+        )
+
+        val popup = JBPopupFactory.getInstance().createListPopup(
+            object : BaseListPopupStep<Pair<String, () -> Unit>>("", menuItems) {
+                override fun getTextFor(value: Pair<String, () -> Unit>): String = value.first
+
+                override fun onChosen(selectedValue: Pair<String, () -> Unit>, finalChoice: Boolean): PopupStep<*>? {
+                    if (finalChoice) {
+                        selectedValue.second()
+                    }
+                    return FINAL_CHOICE
+                }
+            }
+        )
+        popup.show(com.intellij.ui.awt.RelativePoint(evt))
+    }
+
+    /**
+     * 删除历史会话
+     * 1. 直接删除历史文件
+     * 2. 通知前端删除会话（如果已加载）
+     */
+    private fun deleteHistorySession(session: SessionMetadata) {
+        logger.info("🗑️ [HistorySessionAction] 删除历史会话: ${session.sessionId}")
+
+        // 关闭当前弹窗
+        currentPopup?.cancel()
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            // 1. 直接删除历史文件
+            val deleted = ClaudeSessionScanner.deleteSession(session.projectPath, session.sessionId)
+
+            if (deleted) {
+                logger.info("✅ [HistorySessionAction] 历史文件删除成功: ${session.sessionId}")
+
+                // 2. 从缓存中移除
+                cachedSessions.removeIf { it.sessionId == session.sessionId }
+
+                // 3. 通知前端删除会话（如果已加载为 Tab）
+                sessionApi.sendCommand(
+                    JetBrainsSessionCommand(
+                        type = JetBrainsSessionCommandType.DELETE,
+                        sessionId = session.sessionId
+                    )
+                )
+            } else {
+                logger.warn("❌ [HistorySessionAction] 历史文件删除失败: ${session.sessionId}")
+            }
+
+            // 4. 刷新弹窗（重新加载历史会话列表）
+            ApplicationManager.getApplication().invokeLater {
+                lastEvent?.let { actionPerformed(it) }
+            }
         }
     }
 

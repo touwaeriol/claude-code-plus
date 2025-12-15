@@ -306,36 +306,40 @@ class FindUsagesTool(private val project: Project) {
         // 构建输出
         val sb = StringBuilder()
         val actualName = (foundElement as? PsiNamedElement)?.name ?: symbolName ?: "element"
-        sb.appendLine("🔍 Find Usages: $actualName ($foundElementType)")
+        sb.appendLine("## Find Usages: `$actualName` ($foundElementType)")
+        sb.appendLine()
 
         if (definitionFile != null) {
-            sb.appendLine("📍 Definition: $definitionFile:$definitionLine")
+            sb.appendLine("**Definition:** `$definitionFile:$definitionLine`")
         }
 
         if (usageTypes.isNotEmpty() && !usageTypes.contains(UsageType.All)) {
-            sb.appendLine("🎯 Filter: ${usageTypes.joinToString(", ")}")
+            sb.appendLine("**Filter:** ${usageTypes.joinToString(", ")}")
         }
         sb.appendLine()
 
         if (usages.isEmpty()) {
-            sb.appendLine("No usages found in project scope")
+            sb.appendLine("*No usages found in project scope*")
         } else {
             // 按使用类型分组显示
             val groupedUsages = usages.groupBy { it.usageType }
             groupedUsages.forEach { (type, typeUsages) ->
-                sb.appendLine("## $type (${typeUsages.size})")
+                sb.appendLine("### $type (${typeUsages.size})")
+                sb.appendLine()
+                sb.appendLine("| # | Location | Context |")
+                sb.appendLine("|---|----------|---------|")
                 typeUsages.forEachIndexed { index, usage ->
-                    val icon = getUsageTypeIcon(usage.usageType)
-                    sb.appendLine("  ${index + 1}. $icon ${usage.filePath}:${usage.line}:${usage.column}")
-                    sb.appendLine("     └─ ${usage.context}")
+                    val escapedContext = usage.context.replace("|", "\\|").replace("`", "\\`")
+                    sb.appendLine("| ${index + 1} | `${usage.filePath}:${usage.line}:${usage.column}` | `$escapedContext` |")
                 }
                 sb.appendLine()
             }
         }
 
-        sb.append("📊 Found $totalFound usages")
+        sb.appendLine("---")
+        sb.append("**Summary:** $totalFound usages")
         if (offset + usages.size < totalFound) {
-            sb.append(" (showing ${offset + 1}-${offset + usages.size}, more available)")
+            sb.append(" *(showing ${offset + 1}-${offset + usages.size}, more available)*")
         }
 
         return sb.toString()

@@ -13,9 +13,10 @@
  * - useSessionMessages: 消息处理
  */
 
-import {ref, reactive, computed} from 'vue'
+import {ref, reactive, computed, shallowRef} from 'vue'
 import {aiAgentService} from '@/services/aiAgentService'
 import type {ConnectOptions} from '@/services/aiAgentService'
+import {RSocketSession} from '@/services/rsocket/RSocketSession'
 import type {ContentBlock, Message} from '@/types/message'
 import {ConnectionStatus} from '@/types/display'
 import type {RpcCapabilities, RpcPermissionMode, RpcMessage, RpcStreamEvent, RpcResultMessage} from '@/types/rpc'
@@ -149,6 +150,9 @@ export function useSessionTab(initialOrder: number = 0) {
     const order = ref(initialOrder)
 
     // ========== 连接状态 ==========
+    // 直接持有 RSocketSession 实例（核心重构：每个 Tab 拥有自己的会话）
+    const rsocketSession = shallowRef<RSocketSession | null>(null)
+
     // 使用 reactive 对象而不是 ref，以便在 shallowRef 容器中也能被追踪
     const connectionState = reactive({
         status: ConnectionStatus.DISCONNECTED as ConnectionStatus,
@@ -585,21 +589,22 @@ export function useSessionTab(initialOrder: number = 0) {
 
     /**
      * 处理 system_init 消息（每次 query 开始时从 Claude CLI 发送）
-     * 更新真正的 sessionId，用于会话恢复和历史消息关联
+     * 更新 sessionId，用于会话恢复和历史消息关联
+     *
+     * 新架构说明：每个 Tab 直接持有 RSocketSession 实例，不再通过 Map 查找。
+     * 因此可以安全更新 sessionId.value，保持前端与后端 sessionId 同步。
      */
     function handleSystemInitMessage(message: RpcSystemInitMessage): void {
-        const oldSessionId = sessionId.value
-        const newSessionId = message.session_id
-
-        if (oldSessionId !== newSessionId) {
-            log.info(`[Tab ${tabId}] 🔑 更新 sessionId: ${oldSessionId} -> ${newSessionId}`)
-            sessionId.value = newSessionId
+        // 更新 sessionId（新架构下可以安全更新，不再有 Map key 同步问题）
+        if (message.session_id && message.session_id !== sessionId.value) {
+            log.info(`[Tab ${tabId}] 📦 system_init 更新 sessionId: ${sessionId.value} -> ${message.session_id}`)
+            sessionId.value = message.session_id
         }
 
         // 更新模型信息（如果有变化）
-        if (message.model && message.model !== settings.model) {
+        if (message.model && message.model !== modelId.value) {
             log.info(`[Tab ${tabId}] 📦 system_init 模型: ${message.model}`)
-            settings.model = message.model
+            modelId.value = message.model
         }
 
         log.debug(`[Tab ${tabId}] 📦 system_init: cwd=${message.cwd}, permissionMode=${message.permissionMode}, tools=${message.tools?.length || 0}`)
@@ -613,9 +618,6 @@ export function useSessionTab(initialOrder: number = 0) {
     let reconnectAttempts = 0
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
-    // 断开事件订阅取消函数
-    let unsubscribeDisconnect: (() => void) | null = null
-
     /**
      * 处理会话被动断开
      */
@@ -628,6 +630,7 @@ export function useSessionTab(initialOrder: number = 0) {
         // 更新连接状态
         connectionState.status = ConnectionStatus.DISCONNECTED
         connectionState.lastError = error?.message || '连接已断开'
+        rsocketSession.value = null
         sessionId.value = null
 
         // 停止生成状态
@@ -638,12 +641,6 @@ export function useSessionTab(initialOrder: number = 0) {
         // 取消所有待处理的权限和问题
         permissions.cancelAllPermissions('连接断开')
         permissions.cancelAllQuestions('连接断开')
-
-        // 清理订阅
-        if (unsubscribeDisconnect) {
-            unsubscribeDisconnect()
-            unsubscribeDisconnect = null
-        }
 
         // 显示错误提示消息并触发自动重连
         messagesHandler.addErrorMessage('连接已断开，正在自动重连，请稍后重新发送消息')
@@ -677,13 +674,14 @@ export function useSessionTab(initialOrder: number = 0) {
         }
 
         // 如果已有连接，先断开旧连接
-        if (sessionId.value) {
+        if (rsocketSession.value) {
             log.info(`[Tab ${tabId}] 断开旧连接: ${sessionId.value}`)
             try {
-                await aiAgentService.disconnect(sessionId.value)
+                await rsocketSession.value.disconnect()
             } catch (e) {
                 log.warn(`[Tab ${tabId}] 断开旧连接失败:`, e)
             }
+            rsocketSession.value = null
             sessionId.value = null
         }
 
@@ -696,6 +694,19 @@ export function useSessionTab(initialOrder: number = 0) {
         // connect 直接使用当前 ref 值构建请求
 
         try {
+            // 创建新的 RSocketSession 实例
+            const session = new RSocketSession()
+
+            // 订阅消息事件
+            session.onMessage(handleMessage)
+
+            // 订阅断开事件（被动断开时触发）
+            session.onDisconnect((error) => {
+                if (rsocketSession.value === session) {
+                    handleSessionDisconnected(error)
+                }
+            })
+
             // dangerouslySkipPermissions 由前端处理，永远不传递给后端
             const connectOptions: ConnectOptions = {
                 includePartialMessages: true,
@@ -710,22 +721,18 @@ export function useSessionTab(initialOrder: number = 0) {
                 replayUserMessages: true
             }
 
-            const result = await aiAgentService.connect(connectOptions, handleMessage)
+            // 连接并获取 sessionId
+            const newSessionId = await session.connect(connectOptions)
 
-            sessionId.value = result.sessionId
-            connectionState.capabilities = result.capabilities
+            // 保存会话实例和状态
+            rsocketSession.value = session
+            sessionId.value = newSessionId
+            connectionState.capabilities = session.capabilities
             connectionState.status = ConnectionStatus.CONNECTED
             connectionState.lastError = null
 
             // 连接成功，重置重连计数
             reconnectAttempts = 0
-
-            // 订阅会话断开事件
-            unsubscribeDisconnect = aiAgentService.onSessionDisconnect((sid, error) => {
-                if (sid === sessionId.value) {
-                    handleSessionDisconnected(error)
-                }
-            })
 
             // 设置处理队列前的回调（用于应用 pending settings）
             messagesHandler.setBeforeProcessQueueFn(async () => {
@@ -757,7 +764,7 @@ export function useSessionTab(initialOrder: number = 0) {
                 log.warn(`[Tab ${tabId}] 获取项目路径失败:`, e)
             }
 
-            log.info(`[Tab ${tabId}] 连接成功: sessionId=${result.sessionId}`)
+            log.info(`[Tab ${tabId}] 连接成功: sessionId=${newSessionId}`)
 
             // 连接成功后，处理队列中的消息
             processNextQueuedMessage()
@@ -814,18 +821,13 @@ export function useSessionTab(initialOrder: number = 0) {
         // 取消自动重连
         cancelReconnect()
 
-        // 先取消订阅，避免主动断开触发 handleSessionDisconnected
-        if (unsubscribeDisconnect) {
-            unsubscribeDisconnect()
-            unsubscribeDisconnect = null
-        }
-
-        if (sessionId.value) {
+        if (rsocketSession.value) {
             try {
-                await aiAgentService.disconnect(sessionId.value)
+                await rsocketSession.value.disconnect()
             } catch (error) {
                 log.warn(`[Tab ${tabId}] 断开连接失败:`, error)
             }
+            rsocketSession.value = null
         }
 
         sessionId.value = null
@@ -953,7 +955,7 @@ export function useSessionTab(initialOrder: number = 0) {
      * 只发送 disconnect + connect RPC，不关闭 WebSocket
      */
     async function reconnect(options?: TabConnectOptions): Promise<void> {
-        if (!sessionId.value) {
+        if (!rsocketSession.value) {
             // 如果没有会话，走完整的 connect 流程
             await connect(options || {
                 model: modelId.value || undefined,
@@ -987,10 +989,10 @@ export function useSessionTab(initialOrder: number = 0) {
             }
 
             // 使用 reconnectSession 复用 WebSocket
-            const result = await aiAgentService.reconnectSession(sessionId.value, connectOptions)
+            const newSessionId = await rsocketSession.value.reconnectSession(connectOptions)
 
-            sessionId.value = result.sessionId
-            connectionState.capabilities = result.capabilities
+            sessionId.value = newSessionId
+            connectionState.capabilities = rsocketSession.value.capabilities
             connectionState.status = ConnectionStatus.CONNECTED
             connectionState.lastError = null
 
@@ -998,7 +1000,7 @@ export function useSessionTab(initialOrder: number = 0) {
             updateLastAppliedSettings()
             pendingSettings.value = {}
 
-            log.info(`[Tab ${tabId}] 重连成功: sessionId=${result.sessionId}`)
+            log.info(`[Tab ${tabId}] 重连成功: sessionId=${newSessionId}`)
 
             // 重连成功后，处理队列中的消息
             processNextQueuedMessage()
@@ -1018,11 +1020,11 @@ export function useSessionTab(initialOrder: number = 0) {
      * 注册双向 RPC 处理器
      */
     function registerRpcHandlers(): void {
-        if (!sessionId.value) return
+        if (!rsocketSession.value) return
 
         // 注册 AskUserQuestion 处理器
         // Protobuf 模式：参数已经是解码后的 AskUserQuestionParams 对象
-        aiAgentService.register(sessionId.value, 'AskUserQuestion', async (params: Record<string, any>) => {
+        rsocketSession.value.register('AskUserQuestion', async (params: Record<string, any>) => {
             log.info(`[Tab ${tabId}] 收到 AskUserQuestion 请求: ${params.questions?.length || 0} 个问题`)
 
             return new Promise((resolve, reject) => {
@@ -1045,7 +1047,7 @@ export function useSessionTab(initialOrder: number = 0) {
 
         // 注册 RequestPermission 处理器
         // Protobuf 模式：参数已经是解码后的 RequestPermissionParams 对象
-        aiAgentService.register(sessionId.value, 'RequestPermission', async (params: Record<string, any>) => {
+        rsocketSession.value.register('RequestPermission', async (params: Record<string, any>) => {
             const toolName = params.toolName || 'Unknown'
             const toolUseId = params.toolUseId
             const input = params.input || {}
@@ -1200,7 +1202,7 @@ export function useSessionTab(initialOrder: number = 0) {
             log.info(`[Tab ${tabId}] 确保连接就绪...`)
             await ensureConnected()
 
-            if (!sessionId.value) {
+            if (!rsocketSession.value) {
                 throw new Error('会话未连接')
             }
 
@@ -1208,8 +1210,8 @@ export function useSessionTab(initialOrder: number = 0) {
             messagesHandler.startGenerating(userMessage.id)
             log.info(`[Tab ${tabId}] 开始发送消息到后端...`)
 
-            // 直接调用 aiAgentService 发送
-            await aiAgentService.sendMessageWithContent(sessionId.value, mergedContent as any)
+            // 直接调用 rsocketSession 发送
+            await rsocketSession.value.sendMessageWithContent(mergedContent as any)
             log.info(`[Tab ${tabId}] 消息发送完成`)
         } catch (err) {
             log.error(`[Tab ${tabId}] ❌ 发送消息失败:`, err)
@@ -1244,6 +1246,22 @@ export function useSessionTab(initialOrder: number = 0) {
     }
 
     /**
+     * 直接发送文本消息到后端（绕过队列和 UI 显示）
+     *
+     * 用于外部组件（如 ChatHeader、ideSessionBridge）发送斜杠命令（如 /rename）
+     * 不会将消息添加到 UI，不受队列和生成状态影响
+     *
+     * @param text - 要发送的纯文本消息
+     */
+    async function sendTextMessageDirect(text: string): Promise<void> {
+        if (!rsocketSession.value) {
+            throw new Error('会话未连接')
+        }
+        await rsocketSession.value.sendMessage(text)
+        log.info(`[Tab ${tabId}] 直接发送文本消息: ${text}`)
+    }
+
+    /**
      * 中断当前操作
      *
      * 用户主动打断时调用，会清空消息队列
@@ -1252,7 +1270,7 @@ export function useSessionTab(initialOrder: number = 0) {
      * 兜底机制：interrupt 请求返回后（无论成功/异常），如果 isGenerating 还是 true，立即清理
      */
     async function interrupt(): Promise<void> {
-        if (!sessionId.value) {
+        if (!rsocketSession.value) {
             throw new Error('会话未连接')
         }
 
@@ -1260,7 +1278,7 @@ export function useSessionTab(initialOrder: number = 0) {
         messagesHandler.setInterruptMode('clear')
 
         try {
-            await aiAgentService.interrupt(sessionId.value)
+            await rsocketSession.value.interrupt()
             log.info(`[Tab ${tabId}] 中断请求已发送`)
         } catch (err) {
             log.error(`[Tab ${tabId}] 中断请求失败:`, err)
@@ -1306,8 +1324,8 @@ export function useSessionTab(initialOrder: number = 0) {
             messagesHandler.prependToQueue(message)
 
             // 3. 发送打断请求（result 返回后会自动发送队列中的第一条消息）
-            if (sessionId.value) {
-                await aiAgentService.interrupt(sessionId.value)
+            if (rsocketSession.value) {
+                await rsocketSession.value.interrupt()
             }
             return
         }
@@ -1353,13 +1371,18 @@ export function useSessionTab(initialOrder: number = 0) {
             if (messagesHandler.isGenerating.value) {
                 log.info(`[Tab ${tabId}] 正在生成中，先打断`)
                 messagesHandler.setInterruptMode('clear')
-                await aiAgentService.interrupt(currentSessionId)
+                if (rsocketSession.value) {
+                    await rsocketSession.value.interrupt()
+                }
                 messagesHandler.stopGenerating()
             }
 
-            // 2. 调用后端 truncateHistory API
+            // 2. 调用后端 truncateHistory API（通过 aiAgentService，传入当前 session）
             log.info(`[Tab ${tabId}] 调用后端 truncateHistory API`)
-            const truncateResult = await aiAgentService.truncateHistory({
+            if (!rsocketSession.value) {
+                throw new Error('会话未连接')
+            }
+            const truncateResult = await aiAgentService.truncateHistory(rsocketSession.value, {
                 sessionId: currentSessionId,
                 messageUuid: uuid,
                 projectPath
@@ -1406,12 +1429,12 @@ export function useSessionTab(initialOrder: number = 0) {
      * 设置模型（需要重连才能生效）
      */
     async function setModel(model: string): Promise<void> {
-        if (!sessionId.value) {
+        if (!rsocketSession.value) {
             modelId.value = model
             return
         }
 
-        await aiAgentService.setModel(sessionId.value, model)
+        await rsocketSession.value.setModel(model)
         modelId.value = model
         log.info(`[Tab ${tabId}] 模型已设置: ${model}`)
     }
@@ -1420,12 +1443,12 @@ export function useSessionTab(initialOrder: number = 0) {
      * 设置权限模式
      */
     async function setPermissionModeValue(mode: RpcPermissionMode): Promise<void> {
-        if (!sessionId.value) {
+        if (!rsocketSession.value) {
             permissionMode.value = mode
             return
         }
 
-        await aiAgentService.setPermissionMode(sessionId.value, mode)
+        await rsocketSession.value.setPermissionMode(mode)
         permissionMode.value = mode
         log.info(`[Tab ${tabId}] 权限模式已设置: ${mode}`)
     }
@@ -1631,6 +1654,7 @@ export function useSessionTab(initialOrder: number = 0) {
         // 消息发送
         sendMessage,
         sendTextMessage,
+        sendTextMessageDirect,
         forceSendMessage,
         interrupt,
         editAndResendMessage,
@@ -1661,7 +1685,12 @@ export function useSessionTab(initialOrder: number = 0) {
 
         // 历史回放
         loadHistory,
-        loadMoreHistory
+        loadMoreHistory,
+
+        // 会话实例访问（用于外部组件检查连接状态）
+        get session() {
+            return rsocketSession.value
+        }
     }
 }
 

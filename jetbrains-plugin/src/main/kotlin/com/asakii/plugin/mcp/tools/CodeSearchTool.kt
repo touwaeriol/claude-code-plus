@@ -230,31 +230,38 @@ class CodeSearchTool(private val project: Project) {
         val sb = StringBuilder()
         val regexFlag = if (isRegex) " (regex)" else ""
         val caseFlag = if (caseSensitive) " (case sensitive)" else ""
-        sb.appendLine("🔍 Search: \"$query\"$regexFlag$caseFlag")
-        sb.appendLine("📁 Scope: $scope${scopeArg?.let { " ($it)" } ?: ""}")
+        sb.appendLine("## Search: `$query`$regexFlag$caseFlag")
+        sb.appendLine()
+        sb.appendLine("**Scope:** $scope${scopeArg?.let { " ($it)" } ?: ""}")
         sb.appendLine()
 
         if (matches.isEmpty()) {
-            sb.appendLine("No results found")
+            sb.appendLine("*No results found*")
         } else {
             val groupedByFile = matches.groupBy { it.filePath }
             groupedByFile.forEach { (filePath, fileMatches) ->
-                sb.appendLine("📄 $filePath")
+                sb.appendLine("### `$filePath`")
+                sb.appendLine()
+                sb.appendLine("| Line | Content |")
+                sb.appendLine("|------|---------|")
                 fileMatches.forEach { match ->
-                    match.contextBefore?.let { sb.appendLine("   ${match.line - 1}│ $it") }
-                    sb.appendLine("   ${match.line}│ ${match.lineContent}  ← match")
-                    match.contextAfter?.let { sb.appendLine("   ${match.line + 1}│ $it") }
-                    if (fileMatches.size > 1 && match != fileMatches.last()) {
-                        sb.appendLine("   ...")
+                    match.contextBefore?.let {
+                        sb.appendLine("| ${match.line - 1} | `$it` |")
+                    }
+                    val escapedContent = match.lineContent.replace("|", "\\|").replace("`", "\\`")
+                    sb.appendLine("| **${match.line}** | `$escapedContent` **← match** |")
+                    match.contextAfter?.let {
+                        sb.appendLine("| ${match.line + 1} | `$it` |")
                     }
                 }
                 sb.appendLine()
             }
         }
 
-        sb.append("📊 Found $totalMatches matches in ${filesWithMatches.size} files")
+        sb.appendLine("---")
+        sb.append("**Summary:** $totalMatches matches in ${filesWithMatches.size} files")
         if (offset + matches.size < totalMatches) {
-            sb.append(" (showing ${offset + 1}-${offset + matches.size})")
+            sb.append(" *(showing ${offset + 1}-${offset + matches.size})*")
         }
 
         return sb.toString()

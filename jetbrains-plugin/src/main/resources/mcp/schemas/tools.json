@@ -167,9 +167,14 @@
         "description": "Include warnings (yellow highlights in IDE)",
         "default": true
       },
+      "includeSuggestions": {
+        "type": "boolean",
+        "description": "Include suggestions/weak warnings (gray highlights in IDE, code style issues, unused symbols)",
+        "default": false
+      },
       "includeWeakWarnings": {
         "type": "boolean",
-        "description": "Include weak warnings/suggestions (gray highlights in IDE)",
+        "description": "Deprecated: use includeSuggestions instead. Include weak warnings/suggestions (gray highlights in IDE)",
         "default": false
       },
       "maxProblems": {
@@ -182,7 +187,7 @@
     "required": ["filePath"],
     "examples": [
       {"filePath": "src/main/kotlin/Service.kt"},
-      {"filePath": "frontend/src/App.vue", "includeWeakWarnings": true}
+      {"filePath": "frontend/src/App.vue", "includeSuggestions": true}
     ]
   },
 

@@ -646,6 +646,8 @@ enum SessionCommandType {
   SESSION_CMD_RENAME = 4;         // renameSession
   SESSION_CMD_TOGGLE_HISTORY = 5; // toggleHistory
   SESSION_CMD_SET_LOCALE = 6;     // setLocale
+  SESSION_CMD_DELETE = 7;         // deleteSession（删除历史会话）
+  SESSION_CMD_RESET = 8;          // resetSession（重置/清空当前会话）
 }
 
 // 会话命令通知（后端→前端推送）

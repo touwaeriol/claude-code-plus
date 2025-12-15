@@ -39,6 +39,7 @@ fun simpleTool(
             when (result) {
                 is ToolResult -> result
                 Unit -> ToolResult.success("操作完成")
+                is String -> ToolResult.success(result)  // 显式匹配 String 以调用正确的重载
                 else -> ToolResult.success(result)
             }
         } catch (e: Exception) {

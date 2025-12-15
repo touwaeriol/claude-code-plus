@@ -216,7 +216,9 @@ enum class JetBrainsSessionCommandType {
     CLOSE,
     RENAME,
     TOGGLE_HISTORY,
-    SET_LOCALE
+    SET_LOCALE,
+    DELETE,  // 删除历史会话（直接删除文件，不需要同步）
+    RESET    // 重置/清空当前会话（不新建 Tab）
 }
 
 data class JetBrainsSessionCommand(

@@ -3,7 +3,7 @@
 You have access to JetBrains IDE tools that leverage the IDE's powerful indexing and analysis capabilities:
 
 - `mcp__jetbrains__DirectoryTree`: Browse project directory structure with filtering options
-- `mcp__jetbrains__FileProblems`: Get static analysis results (errors, warnings) for a file
+- `mcp__jetbrains__FileProblems`: Get static analysis results for a file (syntax errors, code errors, warnings, suggestions)
 - `mcp__jetbrains__FileIndex`: Search files, classes, and symbols using IDE index (supports scope filtering)
 - `mcp__jetbrains__CodeSearch`: Search code content across project files (like Find in Files)
 - `mcp__jetbrains__FindUsages`: Find all references/usages of a symbol (class, method, field, variable) in the project

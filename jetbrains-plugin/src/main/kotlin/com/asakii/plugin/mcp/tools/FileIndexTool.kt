@@ -219,35 +219,28 @@ class FileIndexTool(private val project: Project) {
         }
 
         val sb = StringBuilder()
-        sb.appendLine("🔍 Search: \"$query\" (type: $searchType, scope: $searchScope)")
+        sb.appendLine("## Index Search: `$query`")
+        sb.appendLine()
+        sb.appendLine("**Type:** $searchType | **Scope:** $searchScope")
         sb.appendLine()
 
         if (results.isEmpty()) {
-            sb.appendLine("No results found")
+            sb.appendLine("*No results found*")
         } else {
+            sb.appendLine("| # | Type | Name | Path | Line |")
+            sb.appendLine("|---|------|------|------|------|")
             results.forEachIndexed { index, item ->
-                val icon = when (item.type) {
-                    "File" -> "📄"
-                    "Class" -> "📦"
-                    "Method" -> "🔧"
-                    "Field" -> "📌"
-                    "Symbol" -> "🔹"
-                    else -> "•"
-                }
-                val lineInfo = item.line?.let { ":$it" } ?: ""
-                val pathInfo = item.path?.let { " → $it$lineInfo" } ?: ""
-
-                sb.appendLine("${index + offset + 1}. $icon ${item.name}$pathInfo")
-                item.description?.let { desc ->
-                    if (desc != item.name) sb.appendLine("   └─ $desc")
-                }
+                val lineInfo = item.line?.toString() ?: "-"
+                val pathInfo = item.path ?: "-"
+                sb.appendLine("| ${index + offset + 1} | ${item.type} | `${item.name}` | `$pathInfo` | $lineInfo |")
             }
         }
 
         sb.appendLine()
-        sb.append("📊 Found $totalFound results")
+        sb.appendLine("---")
+        sb.append("**Summary:** $totalFound results")
         if (offset + results.size < totalFound) {
-            sb.append(" (showing ${offset + 1}-${offset + results.size}, more available)")
+            sb.append(" *(showing ${offset + 1}-${offset + results.size}, more available)*")
         }
 
         return sb.toString()

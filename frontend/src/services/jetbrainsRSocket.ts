@@ -377,7 +377,9 @@ function decodeSessionCommandProto(data: Uint8Array): SessionCommand {
     3: 'close',
     4: 'rename',
     5: 'toggleHistory',
-    6: 'setLocale'
+    6: 'setLocale',
+    7: 'delete',
+    8: 'reset'
   }
 
   let type: SessionCommand['type'] = 'switch'
@@ -456,7 +458,7 @@ export interface IdeTheme {
 }
 
 export interface SessionCommand {
-  type: 'switch' | 'create' | 'close' | 'rename' | 'toggleHistory' | 'setLocale'
+  type: 'switch' | 'create' | 'close' | 'rename' | 'toggleHistory' | 'setLocale' | 'delete' | 'reset'
   sessionId?: string
   newName?: string
   locale?: string
@@ -473,6 +475,8 @@ function mapSessionCommandType(type: string): SessionCommand['type'] {
     case 'rename': return 'rename'
     case 'toggleHistory': return 'toggleHistory'
     case 'setLocale': return 'setLocale'
+    case 'delete': return 'delete'
+    case 'reset': return 'reset'
     default: return 'switch' // fallback
   }
 }
@@ -818,7 +822,9 @@ class JetBrainsRSocketService {
       3: 'close',
       4: 'rename',
       5: 'toggleHistory',
-      6: 'setLocale'
+      6: 'setLocale',
+      7: 'delete',
+      8: 'reset'
     }
     return {
       type: typeMap[data?.type] || 'switch',

@@ -414,6 +414,8 @@ class JetBrainsRSocketHandler(
                 JetBrainsSessionCommandType.RENAME -> SessionCommandType.SESSION_CMD_RENAME
                 JetBrainsSessionCommandType.TOGGLE_HISTORY -> SessionCommandType.SESSION_CMD_TOGGLE_HISTORY
                 JetBrainsSessionCommandType.SET_LOCALE -> SessionCommandType.SESSION_CMD_SET_LOCALE
+                JetBrainsSessionCommandType.DELETE -> SessionCommandType.SESSION_CMD_DELETE
+                JetBrainsSessionCommandType.RESET -> SessionCommandType.SESSION_CMD_RESET
                 else -> SessionCommandType.SESSION_CMD_UNSPECIFIED
             }
 

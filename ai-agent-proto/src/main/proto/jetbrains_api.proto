@@ -118,6 +118,8 @@ enum JetBrainsSessionCommandType {
   SESSION_COMMAND_RENAME = 4;         // renameSession
   SESSION_COMMAND_TOGGLE_HISTORY = 5; // toggleHistory
   SESSION_COMMAND_SET_LOCALE = 6;     // setLocale
+  SESSION_COMMAND_DELETE = 7;         // deleteSession（删除历史会话）
+  SESSION_COMMAND_RESET = 8;          // resetSession（重置/清空当前会话）
 }
 
 message JetBrainsSessionCommand {

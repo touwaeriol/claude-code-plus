@@ -43,7 +43,6 @@ import { computed } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useToastStore } from '@/stores/toastStore'
 import { ConnectionStatus } from '@/types/display'
-import { aiAgentService } from '@/services/aiAgentService'
 import SessionTabs, { type SessionTabInfo } from './SessionTabs.vue'
 import ThemeSwitcher from '@/components/toolbar/ThemeSwitcher.vue'
 import LanguageSwitcher from '@/components/toolbar/LanguageSwitcher.vue'
@@ -117,14 +116,13 @@ function handleRename(tabId: string, newName: string) {
   if (tab) {
     // 1. 立即更新 UI
     tab.rename(newName)
-    // 2. 直接发送 /rename 命令到后端（绕过队列，即使正在生成也发送）
-    const sessionId = tab.sessionId.value
-    if (sessionId && tab.connectionState.status === ConnectionStatus.CONNECTED) {
-      aiAgentService.sendMessage(sessionId, `/rename ${newName}`)
+    // 2. 直接发送 /rename 命令到后端（通过 Tab 实例，绕过队列）
+    if (tab.session?.isConnected) {
+      tab.sendTextMessageDirect(`/rename ${newName}`)
         .then(() => {
           toastStore.success(`Rename success: "${newName}"`)
         })
-        .catch(err => {
+        .catch((err: Error) => {
           console.error('[ChatHeader] 发送 /rename 命令失败:', err)
           toastStore.error('Rename failed')
         })

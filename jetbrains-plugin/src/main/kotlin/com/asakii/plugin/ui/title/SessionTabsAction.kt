@@ -617,7 +617,33 @@ class SessionTabsAction(
     }
 
     private fun handleClose(sessionId: String) {
-        if (sessions.size <= 1) return
+        if (sessions.size <= 1) {
+            // 最后一个会话，不删除 Tab，而是重置/清空当前会话
+            logger.info("🔄 [SessionTabsAction] 最后一个会话，发送 RESET 命令清空")
+            sessionApi.sendCommand(
+                JetBrainsSessionCommand(
+                    type = JetBrainsSessionCommandType.RESET
+                )
+            )
+            return
+        }
+
+        // 1. 先直接更新本地状态（立即响应，不等待前端同步）
+        val newSessions = sessions.filter { it.id != sessionId }
+        val newActiveId = if (activeSessionId == sessionId) {
+            newSessions.firstOrNull()?.id
+        } else {
+            activeSessionId
+        }
+
+        // 构建新状态并直接渲染
+        val newState = JetBrainsSessionState(
+            sessions = newSessions,
+            activeSessionId = newActiveId
+        )
+        render(newState)
+
+        // 2. 然后通知前端删除会话
         sessionApi.sendCommand(
             JetBrainsSessionCommand(
                 type = JetBrainsSessionCommandType.CLOSE,
