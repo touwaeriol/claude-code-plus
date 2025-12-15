@@ -203,19 +203,18 @@ class FileProblemsTool(private val project: Project) {
         includeWeakWarnings: Boolean
     ): AnalysisResult {
         return try {
-            ProgressManager.getInstance().runProcessWithProgressSynchronously<AnalysisResult, Exception>(
-                {
-                    ReadAction.compute<AnalysisResult, Exception> {
-                        val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
-                            ?: return@compute AnalysisResult(emptyList(), emptyList())
+            // 使用 EmptyProgressIndicator 静默运行，避免显示弹窗
+            val indicator = com.intellij.openapi.progress.EmptyProgressIndicator()
+            val computation: () -> AnalysisResult = {
+                ReadAction.compute<AnalysisResult, Exception> {
+                    val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
+                        ?: return@compute AnalysisResult(emptyList(), emptyList())
 
-                        runInspectionsOnPsiFile(psiFile, includeWarnings, includeWeakWarnings)
-                    }
-                },
-                "Analyzing ${virtualFile.name}",
-                true,
-                project
-            ) ?: AnalysisResult(emptyList(), emptyList())
+                    runInspectionsOnPsiFile(psiFile, includeWarnings, includeWeakWarnings)
+                }
+            }
+            ProgressManager.getInstance().runProcess(computation, indicator)
+                ?: AnalysisResult(emptyList(), emptyList())
         } catch (e: Exception) {
             logger.error(e) { "❌ Error running inspections" }
             AnalysisResult(emptyList(), emptyList())

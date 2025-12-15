@@ -1,8 +1,5 @@
 package com.asakii.plugin.ui
 
-import com.asakii.plugin.ui.title.HistorySessionAction
-import com.asakii.plugin.ui.title.NewSessionAction
-import com.asakii.plugin.ui.title.SessionTabsAction
 import com.asakii.server.HttpServerProjectService
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -25,11 +22,9 @@ import com.intellij.ui.components.JBPanel
 import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.util.ui.JBUI
-import com.intellij.util.ui.UIUtil
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.awt.BorderLayout
-import java.awt.Color
 import java.awt.Cursor
 import java.awt.datatransfer.StringSelection
 import java.awt.event.MouseAdapter
@@ -103,22 +98,8 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         toolWindow.contentManager.addContent(content)
         Disposer.register(content, browser)
 
-        // 获取 JetBrainsApi 的 session 接口（用于 title actions）
-        val sessionApi = httpService.jetbrainsApi?.session
-        if (sessionApi == null) {
-            logger.warn("⚠️ JetBrainsApi not available, title actions will be disabled")
-            toolWindowEx?.setTitleActions(titleActions)
-            return
-        }
-
-        // 左侧 Tab Actions：HTTP 指示器 + 会话标签
-        val sessionTabsAction = SessionTabsAction(sessionApi)
-        Disposer.register(content, sessionTabsAction)
-        toolWindowEx?.setTabActions(serverIndicatorAction, sessionTabsAction)
-
-        // 右侧 Title Actions：历史会话 + 新建会话
-        titleActions.add(HistorySessionAction(sessionApi, project))
-        titleActions.add(NewSessionAction(sessionApi))
+        // 左侧 Tab Actions：HTTP 指示器
+        toolWindowEx?.setTabActions(serverIndicatorAction)
 
         toolWindowEx?.setTitleActions(titleActions)
 

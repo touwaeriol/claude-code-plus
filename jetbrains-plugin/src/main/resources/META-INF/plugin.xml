@@ -1,4 +1,4 @@
-<idea-plugin>
+<idea-plugin require-restart="false">
     <id>com.claudecodeplus</id>
     <name>Claude Code Plus</name>
     <vendor email="liuxiongfenglove@gmail.com" url="https://github.com/touwaeriol/claude-code-plus">Claude Code Plus Team</vendor>
