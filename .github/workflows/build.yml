@@ -78,7 +78,7 @@ jobs:
           df -h
 
       - name: Verify Plugin for ${{ matrix.ide.name }}
-        run: ./gradlew verifyPlugin -PverifyIdeType=${{ matrix.ide.type }} -PverifyIdeVersion=${{ matrix.ide.version }} --no-daemon --stacktrace
+        run: ./gradlew verifyPlugin -PverifyIdeType=${{ matrix.ide.type }} -PverifyIdeVersion=${{ matrix.ide.version }} --no-daemon --no-configuration-cache --stacktrace
 
   # 构建插件
   build:
@@ -122,7 +122,7 @@ jobs:
             gradle-${{ runner.os }}-
 
       - name: Build Plugin
-        run: ./gradlew buildPlugin --no-daemon --stacktrace
+        run: ./gradlew buildPlugin --no-daemon --no-configuration-cache --stacktrace
 
       - name: Extract plugin artifact
         id: extract
