@@ -45,6 +45,18 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
+      - name: Free disk space
+        run: |
+          echo "=== Before cleanup ==="
+          df -h
+          # Remove unnecessary tools and libraries
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          echo "=== After cleanup ==="
+          df -h
+
       - name: Verify Plugin
         run: ./gradlew verifyPlugin --no-daemon --stacktrace
 
