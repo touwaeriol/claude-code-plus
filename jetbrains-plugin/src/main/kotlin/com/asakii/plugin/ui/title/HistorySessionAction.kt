@@ -418,7 +418,7 @@ class HistorySessionAction(
                     )
                 )
             } else {
-                logger.warn("❌ [HistorySessionAction] 历史文件删除失败: ${session.sessionId}")
+                logger.warning("❌ [HistorySessionAction] 历史文件删除失败: ${session.sessionId}")
             }
 
             // 4. 刷新弹窗（重新加载历史会话列表）
