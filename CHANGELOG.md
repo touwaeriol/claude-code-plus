@@ -2,22 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.0.8] - 2025-12-15
 
 ### Added
+- Dynamic MCP tool allowlist for flexible tool permissions
 - SchemaValidator for MCP tool schema validation
 - ResourceLoaderTest for resource loading validation
+- Edit-and-resend message functionality improvements
 
 ### Changed
 - Improve UserInteractionMcpServer with better question handling
 - Enhance MCP tools (CodeSearch, DirectoryTree, FileProblems)
 - Improve HistorySessionAction and SessionTabsAction UI
 - Update tools.json schema definitions
+- Session tabs animation changed from pulse to spinner effect
+- Allow closing the last session tab (resets instead of removes)
+- Simplify session architecture and improve history UI
+- Hide edit button during streaming response
+
+### Fixed
+- Avoid calling override-only actionPerformed method directly
+- Correct Logger.warn to Logger.warning
+- Resolve compiler warnings in jetbrains-plugin
+- Escape agents JSON for Windows command line
+- Resolve IntelliJ 253 compatibility issues with optional Java plugin
 
 ### Removed
 - Remove deprecated ClaudeActionHandler and SessionActionHandler
 - Remove obsolete IdeActionBridge and IdeActionBridgeImpl
 - Remove unused AgentDefinitionsProvider and ClaudeSessionManager
+- Remove deprecated ClaudeCodeOptions typealias
 
 ## [1.0.7] - 2025-12-15
 
