@@ -332,6 +332,30 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
     }
 
     /**
+     * Run the current task in the background.
+     *
+     * This allows the current task to continue running without blocking for user input.
+     * The task will complete in the background and results will still be emitted via receiveResponse().
+     *
+     * Example:
+     * ```kotlin
+     * val client = ClaudeCodeSdkClient(options)
+     * client.connect()
+     * client.query("Run tests and fix any failures")
+     *
+     * // After 5 seconds, move to background
+     * delay(5000)
+     * client.runInBackground()
+     *
+     * // Task continues in background, results still flow via receiveResponse()
+     * ```
+     */
+    suspend fun runInBackground() {
+        ensureConnected()
+        controlProtocol!!.runInBackground()
+    }
+
+    /**
      * Change permission mode during conversation.
      *
      * This allows dynamically switching between permission modes without reconnecting.

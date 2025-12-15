@@ -658,12 +658,27 @@ class ControlProtocol(
     suspend fun interrupt() {
         val interruptRequest = InterruptRequest()
         val response = sendControlRequest(interruptRequest)
-        
+
         if (response.subtype == "error") {
             throw ControlProtocolException("Interrupt failed: ${response.error}")
         }
     }
-    
+
+    /**
+     * Send run_in_background request to CLI.
+     * This allows the current task to continue running in the background
+     * without blocking for user input.
+     */
+    suspend fun runInBackground() {
+        val request = RunInBackgroundRequest()
+        val response = sendControlRequest(request)
+
+        if (response.subtype == "error") {
+            throw ControlProtocolException("Run in background failed: ${response.error}")
+        }
+        logger.info("✅ [ControlProtocol] 任务已切换到后台运行")
+    }
+
     /**
      * Convert hooks configuration to protocol format.
      */

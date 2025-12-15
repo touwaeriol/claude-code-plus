@@ -183,6 +183,11 @@ data class InterruptRequest(
 ) : ControlRequest
 
 @Serializable
+data class RunInBackgroundRequest(
+    override val subtype: String = "run_in_background"
+) : ControlRequest
+
+@Serializable
 data class PermissionRequest(
     override val subtype: String = "can_use_tool",
     val toolName: String,

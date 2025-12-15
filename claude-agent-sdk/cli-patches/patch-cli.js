@@ -139,7 +139,7 @@ console.log('🔍 验证补丁结果...');
 const verifications = [
   { pattern: '__backgroundSignalResolver', desc: '模块级变量' },
   { pattern: '__backgroundSignalResolver=', desc: '变量赋值' },
-  { pattern: 'move_to_background', desc: '控制命令' }
+  { pattern: 'run_in_background', desc: '控制命令' }
 ];
 
 let verifyPassed = 0;

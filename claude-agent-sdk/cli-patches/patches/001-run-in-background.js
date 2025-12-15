@@ -1,7 +1,7 @@
 /**
- * move_to_background 补丁
+ * run_in_background 补丁
  *
- * 添加 move_to_background 控制命令，允许 SDK 将运行中的任务移到后台。
+ * 添加 run_in_background 控制命令，允许 SDK 将运行中的任务移到后台。
  *
  * 使用混合策略:
  * - AST 用于精确定位
@@ -9,8 +9,8 @@
  */
 
 module.exports = {
-  id: 'move_to_background',
-  description: 'Add move_to_background control command for SDK background execution',
+  id: 'run_in_background',
+  description: 'Add run_in_background control command for SDK background execution',
   priority: 100,
   required: true,
   disabled: false,
@@ -171,7 +171,7 @@ module.exports = {
       }
     });
 
-    // ========== Step 3: 在控制请求处理中添加 move_to_background ==========
+    // ========== Step 3: 在控制请求处理中添加 run_in_background ==========
 
     traverse(ast, {
       IfStatement(path) {
@@ -208,7 +208,7 @@ module.exports = {
             ),
             t.identifier('subtype')
           ),
-          t.stringLiteral('move_to_background')
+          t.stringLiteral('run_in_background')
         );
 
         // 创建处理代码块
@@ -244,7 +244,7 @@ module.exports = {
 
         path.replaceWith(newIfStatement);
         step3Done = true;
-        details.push('添加了 move_to_background 控制命令处理');
+        details.push('添加了 run_in_background 控制命令处理');
         path.stop();
       }
     });

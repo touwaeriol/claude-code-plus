@@ -200,6 +200,10 @@ fun main() = runBlocking {
                 is StatusSystemMessage -> {
                     println("\n[StatusSystemMessage]")
                 }
+
+                is SystemInitMessage -> {
+                    println("\n[SystemInitMessage]")
+                }
             }
         }
 

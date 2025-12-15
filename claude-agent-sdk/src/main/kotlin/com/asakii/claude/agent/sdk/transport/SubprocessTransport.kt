@@ -22,7 +22,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Properties
 import mu.KotlinLogging
-import kotlin.io.path.exists
 
 /**
  * Transport implementation using subprocess for Claude CLI communication.
@@ -667,52 +666,37 @@ class SubprocessTransport(
                 return null
             }
 
-            // 优先查找增强版 CLI，然后回退到原始版本
-            val cliCandidates = listOf(
-                "claude-cli-$cliVersion-ast-enhanced.js",  // AST 增强版 (支持后台执行)
-                "claude-cli-$cliVersion-enhanced.js",      // 字符串增强版 (带补丁)
-                "claude-cli-$cliVersion.js"                // 原始版本
-            )
+            // 查找增强版 CLI
+            val cliJsName = "claude-cli-$cliVersion-enhanced.js"
+            val resourcePath = "bundled/$cliJsName"
+            logger.info("🔍 查找绑定的 CLI: $resourcePath")
+            val resource = this::class.java.classLoader.getResource(resourcePath)
 
-            for (cliJsName in cliCandidates) {
-                val resourcePath = "bundled/$cliJsName"
-                logger.info("🔍 查找绑定的 CLI: $resourcePath")
-                val resource = this::class.java.classLoader.getResource(resourcePath)
+            if (resource != null) {
+                // 如果资源在 JAR 内，提取到临时文件
+                if (resource.protocol == "jar") {
+                    val tempFile = kotlin.io.path.createTempFile("claude-cli-", ".js").toFile()
+                    tempFile.deleteOnExit()
 
-                if (resource != null) {
-                    val isAstEnhanced = cliJsName.contains("-ast-enhanced")
-                    val isEnhanced = cliJsName.contains("-enhanced")
-                    val cliType = when {
-                        isAstEnhanced -> "AST增强版"
-                        isEnhanced -> "增强版"
-                        else -> "原始版"
+                    resource.openStream().use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
                     }
 
-                    // 如果资源在 JAR 内，提取到临时文件
-                    if (resource.protocol == "jar") {
-                        val tempFile = kotlin.io.path.createTempFile("claude-cli-", ".js").toFile()
-                        tempFile.deleteOnExit()
-
-                        resource.openStream().use { input ->
-                            tempFile.outputStream().use { output ->
-                                input.copyTo(output)
-                            }
-                        }
-
-                        logger.info("📦 从 JAR 提取 $cliType CLI: ${tempFile.absolutePath}")
-                        return tempFile.absolutePath
-                    } else {
-                        // 资源在文件系统中（开发模式）
-                        val file = java.io.File(resource.toURI())
-                        if (file.exists()) {
-                            logger.info("📦 找到本地绑定的 $cliType CLI: ${file.absolutePath}")
-                            return file.absolutePath
-                        }
+                    logger.info("📦 从 JAR 提取 CLI: ${tempFile.absolutePath}")
+                    return tempFile.absolutePath
+                } else {
+                    // 资源在文件系统中（开发模式）
+                    val file = java.io.File(resource.toURI())
+                    if (file.exists()) {
+                        logger.info("📦 找到本地绑定的 CLI: ${file.absolutePath}")
+                        return file.absolutePath
                     }
                 }
             }
 
-            logger.warn("⚠️ 未找到任何绑定的 CLI")
+            logger.warn("⚠️ 未找到绑定的 CLI: $cliJsName")
             null
         } catch (e: Exception) {
             logger.debug("查找绑定 CLI 失败: ${e.message}")
