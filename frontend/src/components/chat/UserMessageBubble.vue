@@ -72,6 +72,12 @@
           >
             {{ isCollapsed ? 'Expand ▾' : 'Collapse ▴' }}
           </button>
+
+          <!-- 上下文大小指示器（发送时的快照） -->
+          <ContextUsageIndicator
+            v-if="contextTokens > 0"
+            :session-token-usage="{ inputTokens: contextTokens, outputTokens: 0 }"
+          />
         </div>
       </div>
     </template>
@@ -112,6 +118,7 @@ import { linkifyText, getLinkFromEvent, handleLinkClick } from '@/utils/linkify'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 import ChatInput from './ChatInput.vue'
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
+import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import { ideaBridge } from '@/services/ideaBridge'
 import { useSessionStore } from '@/stores/sessionStore'
 
@@ -199,12 +206,18 @@ async function handleEditSubmit(contents: ContentBlock[]) {
     return
   }
 
-  // 调用编辑重发方法
+  // 保存编辑上下文的副本（因为 exitEditMode 会清空它）
+  const contextsToSend = [...editContexts.value]
+
+  // 先退出编辑模式，让用户立即看到反馈
+  exitEditMode()
+
+  // 异步调用编辑重发方法
   try {
     await currentTab.editAndResendMessage(
       uuid,
       {
-        contexts: editContexts.value,
+        contexts: contextsToSend,
         contents
       },
       projectPath
@@ -212,8 +225,6 @@ async function handleEditSubmit(contents: ContentBlock[]) {
   } catch (e) {
     console.error('[UserMessageBubble] 编辑重发失败:', e)
   }
-
-  exitEditMode()
 }
 
 // 处理上下文添加
@@ -310,6 +321,21 @@ const imageBlocks = computed(() => {
 const isLongMessage = computed(() => {
   return messageText.value.length > 200 || imageBlocks.value.length > 2
 })
+
+// 发送时的上下文大小
+const contextTokens = computed(() => {
+  return (props.message as any).contextTokens || 0
+})
+
+// 格式化 token 数量
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`
+  } else if (tokens >= 1_000) {
+    return `${(tokens / 1_000).toFixed(1)}K`
+  }
+  return String(tokens)
+}
 
 // 切换折叠状态
 function toggleCollapse() {
