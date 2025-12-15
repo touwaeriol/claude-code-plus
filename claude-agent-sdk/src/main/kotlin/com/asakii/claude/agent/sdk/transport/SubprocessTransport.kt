@@ -511,21 +511,25 @@ class SubprocessTransport(
                                 "type" to "sdk",
                                 "name" to config.name
                             )
-                            // 添加超时配置（null 或 0 表示无限超时）
-                            config.timeout?.let { timeout ->
-                                if (timeout > 0) {
-                                    serverConfig["timeout"] = timeout
-                                }
-                                // timeout 为 null 或 0 时不传递，CLI 默认无限等待
+                            // 添加超时配置
+                            // timeout > 0: 指定超时时间（毫秒）
+                            // timeout <= 0 或 null: 显式传递 -1 表示无限超时
+                            val timeout = config.timeout
+                            if (timeout != null && timeout > 0) {
+                                serverConfig["timeout"] = timeout
+                            } else {
+                                // 显式传递 -1 表示无限超时，确保 CLI 不使用默认超时
+                                serverConfig["timeout"] = -1
                             }
                             serversForCli[name] = serverConfig
-                            logger.info("📦 添加 MCP 服务器实例配置: $name -> type=sdk, timeout=${config.timeout ?: "infinite"}")
+                            logger.info("📦 添加 MCP 服务器实例配置: $name -> type=sdk, timeout=${timeout ?: "infinite"}")
                         } else {
                             serversForCli[name] = mapOf(
                                 "type" to "sdk",
-                                "name" to name
+                                "name" to name,
+                                "timeout" to -1  // 默认无限超时
                             )
-                            logger.info("📦 添加 MCP 服务器实例配置: $name -> type=sdk")
+                            logger.info("📦 添加 MCP 服务器实例配置: $name -> type=sdk, timeout=infinite")
                         }
                     }
                 }
@@ -665,8 +669,9 @@ class SubprocessTransport(
 
             // 优先查找增强版 CLI，然后回退到原始版本
             val cliCandidates = listOf(
-                "claude-cli-$cliVersion-enhanced.js",  // 增强版 (带补丁)
-                "claude-cli-$cliVersion.js"            // 原始版本
+                "claude-cli-$cliVersion-ast-enhanced.js",  // AST 增强版 (支持后台执行)
+                "claude-cli-$cliVersion-enhanced.js",      // 字符串增强版 (带补丁)
+                "claude-cli-$cliVersion.js"                // 原始版本
             )
 
             for (cliJsName in cliCandidates) {
@@ -675,8 +680,13 @@ class SubprocessTransport(
                 val resource = this::class.java.classLoader.getResource(resourcePath)
 
                 if (resource != null) {
+                    val isAstEnhanced = cliJsName.contains("-ast-enhanced")
                     val isEnhanced = cliJsName.contains("-enhanced")
-                    val cliType = if (isEnhanced) "增强版" else "原始版"
+                    val cliType = when {
+                        isAstEnhanced -> "AST增强版"
+                        isEnhanced -> "增强版"
+                        else -> "原始版"
+                    }
 
                     // 如果资源在 JAR 内，提取到临时文件
                     if (resource.protocol == "jar") {
