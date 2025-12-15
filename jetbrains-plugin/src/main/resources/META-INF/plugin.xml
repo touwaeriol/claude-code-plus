@@ -2,9 +2,9 @@
     <id>com.claudecodeplus</id>
     <name>Claude Code Plus</name>
     <vendor email="liuxiongfenglove@gmail.com" url="https://github.com/touwaeriol/claude-code-plus">Claude Code Plus Team</vendor>
-    
-    <version>1.0.5</version>
-    
+
+    <!-- version is set from gradle.properties via pluginVersion -->
+
     <description><![CDATA[
     <h2>Claude Code Plus - Advanced AI Programming Assistant</h2>
 
@@ -37,71 +37,9 @@
     
     <p>We welcome your feedback and contributions! Please report any bugs or suggestions on our GitHub Issues page.</p>
     ]]></description>
-    
-    <change-notes><![CDATA[
-    <h3>Version 1.0.5 - IntelliJ 2025.3 Support & UI Improvements</h3>
-    <ul>
-        <li><strong>Platform Update:</strong> Extended support to IntelliJ IDEA 2025.3.x (Build 253)</li>
-        <li><strong>Markdown Rendering:</strong> Task sub-agent prompts and results now use rich Markdown renderer</li>
-        <li><strong>Internationalization:</strong> Unified all tool display components to English for consistency</li>
-        <li><strong>Session Tab Sync:</strong> Fixed IDE title bar session tabs synchronization issues</li>
-        <li><strong>Frontend Refactoring:</strong> Extracted ChatInput composables for better code organization</li>
-        <li><strong>History Loading:</strong> Optimized history session loading with file metadata caching</li>
-        <li><strong>UI Polish:</strong> Improved FileSelectPopup with compact single-line layout</li>
-        <li><strong>Keyboard Shortcuts:</strong> Added Ctrl+J and Ctrl+U shortcuts for common actions</li>
-    </ul>
 
-    <h3>Version 1.0.4 - IntelliJ 2025.2.3 Support</h3>
-    <ul>
-        <li><strong>Platform Update:</strong> Updated to IntelliJ IDEA 2025.2.3 (Build 252.26830.84)</li>
-        <li><strong>ViewModel Architecture:</strong> Migrated to ViewModel-based architecture for tool display components</li>
-        <li><strong>Source Code Sync:</strong> Synchronized with IntelliJ Community Edition 252.26830 branch</li>
-        <li><strong>Enhanced Tool Mapping:</strong> Added ToolCallMapper for better type conversion</li>
-        <li><strong>Service Reorganization:</strong> Moved platform services to jetbrains-plugin module</li>
-        <li><strong>Code Cleanup:</strong> Removed deprecated test files and documentation</li>
-    </ul>
+    <!-- change-notes is auto-generated from CHANGELOG.md via build.gradle.kts -->
 
-    <h3>Version 1.0.3 - Architecture Modernization and Code Cleanup</h3>
-    <ul>
-        <li><strong>Architecture Refactoring:</strong> Completely removed cli-wrapper module and simplified project structure</li>
-        <li><strong>SDK Migration:</strong> Migrated essential services to claude-agent-sdk module for better organization</li>
-        <li><strong>Performance Improvements:</strong> Eliminated 19,000+ lines of legacy code, reducing plugin size by ~88%</li>
-        <li><strong>Enhanced Token Statistics:</strong> Improved context usage indicators with visual progress rings</li>
-        <li><strong>Code Quality:</strong> Removed deprecated components and consolidated duplicate functionality</li>
-        <li><strong>Stability:</strong> Maintained full functionality while significantly simplifying codebase</li>
-    </ul>
-
-    <h3>Version 1.0.2 - Performance and Stability Updates</h3>
-    <ul>
-        <li><strong>Performance Optimizations:</strong> Improved response times and reduced memory usage</li>
-        <li><strong>Stability Improvements:</strong> Fixed various edge cases and improved error handling</li>
-        <li><strong>UI Enhancements:</strong> Better visual feedback and smoother user experience</li>
-        <li><strong>Bug Fixes:</strong> Resolved issues with session management and tool integration</li>
-        <li><strong>Compatibility:</strong> Enhanced compatibility with IntelliJ IDEA 2025.x versions</li>
-    </ul>
-    
-    <h3>Version 1.0.1 - Enhanced IDE Integration</h3>
-    <ul>
-        <li><strong>IDE Integration Improvements:</strong> Read tool clicks now open files directly in IntelliJ IDEA editor</li>
-        <li><strong>Smart Line Navigation:</strong> Read tool with line parameters automatically jumps to specified lines and selects the content</li>
-        <li><strong>Enhanced Tool Display:</strong> Improved visual feedback for tool execution with better status indicators</li>
-        <li><strong>Bug Fixes:</strong> Fixed integration chain between UI components and IDE services</li>
-        <li><strong>Code Review Support:</strong> Selected text ranges help developers review AI-analyzed code sections</li>
-    </ul>
-    
-    <h3>Version 1.0.0 - Initial Release</h3>
-    <ul>
-        <li>Initial public release</li>
-        <li>Full Claude AI integration</li>
-        <li>Context management with @ mentions</li>
-        <li>MCP service configuration</li>
-        <li>Multi-tab session support</li>
-        <li>Dark theme compatibility</li>
-        <li>Performance optimizations for instant response</li>
-        <li>Session state persistence across tool window switches</li>
-    </ul>
-    ]]></change-notes>
-    
     <depends>com.intellij.modules.platform</depends>
     <!-- Java plugin dependency for PsiClass, PsiMethod, ClassInheritorsSearch, etc. -->
     <depends optional="true" config-file="plugin-withJava.xml">com.intellij.java</depends>

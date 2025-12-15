@@ -1016,18 +1016,6 @@ export function useSessionMessages(
     // 添加到 UI（用户立即可见）
     messages.push(userMessage)
     const newDisplayItems = convertMessageToDisplayItems(userMessage, tools.pendingToolCalls)
-
-    // 记录发送时的上下文大小（用于重新编辑时显示）
-    const lastUsage = stats.getLastMessageUsage()
-    if (lastUsage.inputTokens > 0) {
-      for (const item of newDisplayItems) {
-        if (isDisplayUserMessage(item)) {
-          (item as UserMessage).contextTokens = lastUsage.inputTokens
-          log.debug('[useSessionMessages] 记录上下文大小:', lastUsage.inputTokens)
-        }
-      }
-    }
-
     pushDisplayItems(newDisplayItems)
     log.debug('[useSessionMessages] 用户消息已添加:', userMessage.id)
 

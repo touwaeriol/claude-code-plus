@@ -97,8 +97,6 @@ export interface UserMessage extends BaseDisplayItem {
   style?: 'hint' | 'error'
   /** 是否是回放消息（后端返回的历史/命令结果消息）：true=左对齐，false/undefined=右对齐 */
   isReplay?: boolean
-  /** 发送时的上下文大小（tokens），用于重新编辑时显示 */
-  contextTokens?: number
 }
 
 /**

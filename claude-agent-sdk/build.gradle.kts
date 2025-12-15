@@ -498,7 +498,7 @@ val installPatchDeps = tasks.register("installPatchDeps") {
     inputs.file(packageJsonPath)
     outputs.dir(nodeModulesPath)
 
-    onlyIf { file(packageJsonPath).exists() }
+    onlyIf { File(packageJsonPath).exists() }
 
     doLast {
         val patchesDir = File(patchesDirPath)
@@ -544,7 +544,7 @@ val patchCli = tasks.register("patchCli") {
     inputs.dir(patchesDirPath)
     outputs.dir(bundledDirPath)
 
-    onlyIf { file(patchScriptPath).exists() }
+    onlyIf { File(patchScriptPath).exists() }
 
     doLast {
         val propsFile = File(propsFilePath)

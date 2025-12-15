@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.9] - 2025-12-16
+
+### Added
+- Context size snapshot display on user messages (shows input tokens at send time)
+- Dynamic plugin support declaration (require-restart="false")
+
+### Changed
+- Centralize version and changelog in gradle.properties and CHANGELOG.md
+- Exit edit mode immediately before resending message for better UX
+
+### Fixed
+- Fix inline editor not closing after edit-and-resend
+- Fix bundled CLI filename (ast-enhanced -> enhanced)
+
 ## [1.0.8] - 2025-12-15
 
 ### Added
