@@ -101,7 +101,7 @@ intellijPlatform {
             ide(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1.5")
             ide(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
             // 2025.3+ 使用统一的 IntellijIdea 类型
-            ide(IntelliJPlatformType.IntellijIdea, "253.28294.334")
+            ide(IntelliJPlatformType.IntellijIdea, "2025.3")
         }
     }
 
