@@ -1424,16 +1424,20 @@ export function useSessionMessages(
   }
 
   /**
-   * 截断消息（用于编辑重发功能）
+   * 更新消息并截断其后的内容（用于编辑重发功能）
    *
-   * 从指定的 displayItem 开始截断，该项及其后续所有项都会被删除。
-   * 同时删除对应的 messages 数据。
+   * 找到指定 UUID 的用户消息，更新其内容并清空 UUID（让它看起来像新发送的消息），
+   * 然后删除该消息之后的所有 displayItems 和 messages。
    *
-   * @param uuid 要截断的用户消息 UUID（从该消息开始截断，包含该消息）
-   * @returns 是否成功找到并截断
+   * @param uuid 要更新的用户消息 UUID
+   * @param newContent 新的消息内容
+   * @returns 更新后的 Message 对象和 mergedContent，用于后续发送；失败时返回 null
    */
-  function truncateMessages(uuid: string): boolean {
-    log.info(`[useSessionMessages] 截断消息: uuid=${uuid}`)
+  function truncateMessages(
+    uuid: string,
+    newContent: { contexts?: any[]; contents: ContentBlock[] }
+  ): { userMessage: Message; mergedContent: ContentBlock[] } | null {
+    log.info(`[useSessionMessages] 更新并截断消息: uuid=${uuid}`)
 
     // 1. 在 displayItems 中找到对应的 UserMessage
     const displayIndex = displayItems.findIndex(
@@ -1442,32 +1446,57 @@ export function useSessionMessages(
 
     if (displayIndex === -1) {
       log.warn(`[useSessionMessages] 未找到 uuid=${uuid} 的消息`)
-      return false
+      return null
     }
 
-    // 2. 从 displayStore 和 displayItems 中截断
-    const truncatedDisplayItems = displayItems.slice(0, displayIndex)
+    // 2. 获取并更新 displayItem
+    const currentDisplayItem = displayItems[displayIndex] as UserMessage
+    currentDisplayItem.content = newContent.contents
+    currentDisplayItem.contexts = newContent.contexts
+    // 清空 UUID，让消息看起来像新发送的
+    currentDisplayItem.uuid = undefined
+    // 清空请求统计（因为要重新发送）
+    currentDisplayItem.requestStats = undefined
+
+    // 3. 构建 mergedContent（与 addMessageToUI 相同逻辑）
+    const contextBlocks = (newContent.contexts?.length ?? 0) > 0
+      ? buildUserMessageContent({
+          text: '',
+          contexts: newContent.contexts!
+        })
+      : []
+    const mergedContent = [...contextBlocks, ...newContent.contents]
+
+    // 4. 更新 messages 中对应的 Message
+    const messageIndex = messages.findIndex(m => m.id === currentDisplayItem.id)
+    let userMessage: Message
+    if (messageIndex !== -1) {
+      messages[messageIndex].content = mergedContent
+      userMessage = messages[messageIndex]
+      // 删除之后的消息
+      messages.splice(messageIndex + 1)
+      log.info(`[useSessionMessages] 从 messages index=${messageIndex + 1} 开始截断`)
+    } else {
+      // 如果找不到对应的 message（不应该发生），创建一个新的
+      userMessage = {
+        id: currentDisplayItem.id,
+        role: 'user',
+        timestamp: Date.now(),
+        content: mergedContent
+      }
+      log.warn(`[useSessionMessages] 未找到对应的 message，创建新的`)
+    }
+
+    // 5. 保留当前消息，只截断其后的 displayItems
+    const truncatedDisplayItems = displayItems.slice(0, displayIndex + 1)
     displayStore.clear()
     if (truncatedDisplayItems.length > 0) {
       displayStore.pushBatch(truncatedDisplayItems)
     }
     displayItems.splice(0, displayItems.length, ...truncatedDisplayItems)
 
-    // 3. 从 messages 中截断（找到对应 message 的 index）
-    // 注意：messages 和 displayItems 不是 1:1 对应的，需要找到对应的 message
-    // 用户消息的 id 格式是 'user-{timestamp}'，而 uuid 是来自 JSONL 的字段
-    // 我们需要通过 id 来匹配
-    const truncatedItem = displayItems[displayIndex] as UserMessage | undefined
-    if (truncatedItem) {
-      const messageIndex = messages.findIndex(m => m.id === truncatedItem.id)
-      if (messageIndex !== -1) {
-        messages.splice(messageIndex)
-        log.info(`[useSessionMessages] 从 messages index=${messageIndex} 开始截断`)
-      }
-    }
-
     log.info(`[useSessionMessages] 截断完成: displayItems 剩余 ${displayItems.length} 个, messages 剩余 ${messages.length} 个`)
-    return true
+    return { userMessage, mergedContent }
   }
 
   /**

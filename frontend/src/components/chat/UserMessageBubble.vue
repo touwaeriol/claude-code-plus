@@ -17,9 +17,9 @@
       <!-- 左侧占位元素，填充空白区域使整行可交互 -->
       <div class="row-spacer"></div>
       <div class="message-wrapper">
-        <!-- Edit button (shown on hover when uuid exists, adjacent to bubble) -->
+        <!-- Edit button (shown on hover when uuid exists and not streaming, adjacent to bubble) -->
         <button
-          v-show="showEditButton && props.message.uuid"
+          v-show="showEditButton && props.message.uuid && !props.message.isStreaming"
           class="edit-button"
           title="Edit and resend message"
           @click="enterEditMode"
@@ -125,6 +125,7 @@ interface Props {
     contexts?: ContextReference[]  // DisplayItem 中的 contexts 已经包含图片
     style?: 'hint' | 'error'  // 消息样式：hint=md渲染，error=错误颜色
     isReplay?: boolean  // 是否是回放消息：true=左对齐，false/undefined=右对齐
+    isStreaming?: boolean  // 是否正在流式响应（此时不显示编辑按钮）
     [key: string]: unknown
   }
 }

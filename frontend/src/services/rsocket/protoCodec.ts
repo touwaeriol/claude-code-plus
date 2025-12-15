@@ -1054,6 +1054,8 @@ function mapSessionCommandTypeFromProto(type: SessionCommandType): SessionComman
     case SessionCommandType.SESSION_CMD_RENAME: return 'rename'
     case SessionCommandType.SESSION_CMD_TOGGLE_HISTORY: return 'toggleHistory'
     case SessionCommandType.SESSION_CMD_SET_LOCALE: return 'setLocale'
+    case SessionCommandType.SESSION_CMD_DELETE: return 'delete'
+    case SessionCommandType.SESSION_CMD_RESET: return 'reset'
     default: return 'unspecified'
   }
 }

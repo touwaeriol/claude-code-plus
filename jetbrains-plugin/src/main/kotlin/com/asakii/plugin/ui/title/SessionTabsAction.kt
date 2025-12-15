@@ -49,12 +49,12 @@ class SessionTabsAction(
     private var currentState: JetBrainsSessionState? = null
     private var removeListener: (() -> Unit)? = null
 
-    // 弹跳动画（使用 sin 函数实现平滑弹跳）
-    private var pulsePhase = 0.0
-    private val pulseTimer = Timer(30) {  // 更快的刷新率
-        pulsePhase += 0.2
-        if (pulsePhase > Math.PI * 2) {
-            pulsePhase = 0.0
+    // 旋转动画（转圈效果）
+    private var spinAngle = 0.0
+    private val spinTimer = Timer(16) {  // 约 60fps 的刷新率
+        spinAngle += 8.0  // 每帧旋转 8 度
+        if (spinAngle >= 360.0) {
+            spinAngle = 0.0
         }
         tabsPanel.repaint()
     }
@@ -349,7 +349,7 @@ class SessionTabsAction(
                         isConnected = session.isConnected,
                         isConnecting = session.isConnecting,
                         isGenerating = session.isGenerating,
-                        canClose = sessions.size > 1
+                        canClose = true  // 最后一个会话也显示关闭按钮（点击时会重置而非删除）
                     )
                 )
             }
@@ -358,11 +358,11 @@ class SessionTabsAction(
         tabsPanel.setTabs(tabs)
 
         val needsAnimation = sessions.any { it.isGenerating || it.isConnecting }
-        if (needsAnimation && !pulseTimer.isRunning) {
-            pulseTimer.start()
-        } else if (!needsAnimation && pulseTimer.isRunning) {
-            pulseTimer.stop()
-            pulsePhase = 0.0
+        if (needsAnimation && !spinTimer.isRunning) {
+            spinTimer.start()
+        } else if (!needsAnimation && spinTimer.isRunning) {
+            spinTimer.stop()
+            spinAngle = 0.0
         }
     }
 
@@ -512,41 +512,13 @@ class SessionTabsAction(
 
                 when {
                     isConnecting -> {
-                        // 连接中：蓝色脉冲动画
-                        val bounceScale = 1.0f + 0.3f * kotlin.math.sin(pulsePhase).toFloat()
-                        val bounceOpacity = 0.5f + 0.5f * kotlin.math.cos(pulsePhase).toFloat()
-                        val pulseSize = dotSize * bounceScale
-                        val pulseX = x + (dotSize - pulseSize) / 2
-                        val pulseY = centerY - pulseSize / 2
-                        g2.color = Color(
-                            colorConnecting.red,
-                            colorConnecting.green,
-                            colorConnecting.blue,
-                            (bounceOpacity * 80).toInt()
-                        )
-                        g2.fill(Ellipse2D.Float(pulseX, pulseY, pulseSize, pulseSize))
-                        g2.color = colorConnecting
-                        g2.fill(Ellipse2D.Float(x, dotY, dotSize, dotSize))
+                        // 连接中：蓝色转圈动画
+                        drawSpinner(g2, x, centerY, dotSize, colorConnecting)
                     }
 
                     isGenerating -> {
-                        // 生成中：绿色弹跳动画（更明显的效果）
-                        val bounceScale = 1.0f + 0.4f * kotlin.math.sin(pulsePhase).toFloat()
-                        val bounceOpacity = 0.4f + 0.6f * kotlin.math.cos(pulsePhase).toFloat()
-                        val pulseSize = dotSize * bounceScale
-                        val pulseX = x + (dotSize - pulseSize) / 2
-                        val pulseY = centerY - pulseSize / 2
-                        // 外圈光晕
-                        g2.color = Color(
-                            colorConnected.red,
-                            colorConnected.green,
-                            colorConnected.blue,
-                            (bounceOpacity * 100).toInt()
-                        )
-                        g2.fill(Ellipse2D.Float(pulseX, pulseY, pulseSize, pulseSize))
-                        // 中心实心点
-                        g2.color = colorConnected
-                        g2.fill(Ellipse2D.Float(x, dotY, dotSize, dotSize))
+                        // 生成中：绿色转圈动画
+                        drawSpinner(g2, x, centerY, dotSize, colorConnected)
                     }
 
                     else -> {
@@ -616,6 +588,35 @@ class SessionTabsAction(
         }
     }
 
+    /**
+     * 绘制转圈 spinner 动画
+     */
+    private fun drawSpinner(g2: Graphics2D, x: Float, centerY: Float, size: Float, color: Color) {
+        val strokeWidth = JBUI.scale(2).toFloat()
+        val radius = (size - strokeWidth) / 2
+
+        // 绘制背景圆（淡色）
+        g2.color = Color(color.red, color.green, color.blue, 40)
+        g2.stroke = BasicStroke(strokeWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+        g2.draw(Ellipse2D.Float(x + strokeWidth / 2, centerY - radius, radius * 2, radius * 2))
+
+        // 绘制旋转的弧形
+        g2.color = color
+        val arcExtent = 120  // 弧形角度
+        val startAngle = spinAngle.toInt()
+
+        val arc = java.awt.geom.Arc2D.Float(
+            x + strokeWidth / 2,
+            centerY - radius,
+            radius * 2,
+            radius * 2,
+            startAngle.toFloat(),
+            arcExtent.toFloat(),
+            java.awt.geom.Arc2D.OPEN
+        )
+        g2.draw(arc)
+    }
+
     private fun handleClose(sessionId: String) {
         if (sessions.size <= 1) {
             // 最后一个会话，不删除 Tab，而是重置/清空当前会话
@@ -629,9 +630,15 @@ class SessionTabsAction(
         }
 
         // 1. 先直接更新本地状态（立即响应，不等待前端同步）
+        val currentIndex = sessions.indexOfFirst { it.id == sessionId }
         val newSessions = sessions.filter { it.id != sessionId }
         val newActiveId = if (activeSessionId == sessionId) {
-            newSessions.firstOrNull()?.id
+            // 优先选择前一个会话（往前最近的），否则选择后一个
+            if (currentIndex > 0) {
+                newSessions.getOrNull(currentIndex - 1)?.id
+            } else {
+                newSessions.firstOrNull()?.id
+            }
         } else {
             activeSessionId
         }
@@ -718,6 +725,6 @@ class SessionTabsAction(
     override fun dispose() {
         removeListener?.invoke()
         removeListener = null
-        pulseTimer.stop()
+        spinTimer.stop()
     }
 }

@@ -1394,9 +1394,12 @@ export function useSessionTab(initialOrder: number = 0) {
 
             log.info(`[Tab ${tabId}] ✅ 后端历史截断成功: remainingLines=${truncateResult.remainingLines}`)
 
-            // 3. 前端截断 displayItems 和 messages
-            const frontendTruncated = messagesHandler.truncateMessages(uuid)
-            if (!frontendTruncated) {
+            // 3. 前端更新消息内容并截断其后的 displayItems 和 messages
+            const truncatedData = messagesHandler.truncateMessages(uuid, {
+                contexts: newMessage.contexts,
+                contents: newMessage.contents
+            })
+            if (!truncatedData) {
                 log.warn(`[Tab ${tabId}] 前端截断失败，但后端已截断，继续重发`)
             }
 
@@ -1411,9 +1414,15 @@ export function useSessionTab(initialOrder: number = 0) {
                 resumeSessionId: currentSessionId
             })
 
-            // 6. 发送编辑后的消息
+            // 6. 发送编辑后的消息（直接发送，不创建新的 UI 消息）
             log.info(`[Tab ${tabId}] 发送编辑后的消息`)
-            await sendMessage(newMessage)
+            if (truncatedData) {
+                // 使用已更新的消息直接发送
+                await sendMessageToBackend(truncatedData.userMessage, truncatedData.mergedContent, newMessage)
+            } else {
+                // 回退：如果前端截断失败，用常规方式发送（会创建新消息）
+                await sendMessage(newMessage)
+            }
 
             log.info(`[Tab ${tabId}] ✅ 编辑重发完成`)
         } catch (error) {

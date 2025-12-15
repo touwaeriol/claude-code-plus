@@ -152,15 +152,7 @@ function registerDefaultHandler(store: SessionStore) {
               console.warn('[IDE Bridge] Cannot close the last tab')
               break
             }
-            // 如果关闭的是当前会话，先切换到其他会话
-            const currentId = store.currentTabId
-            if (tabId === currentId) {
-              const otherTab = tabs.find((t: any) => t.tabId !== tabId)
-              if (otherTab) {
-                await store.switchTab(otherTab.tabId)
-              }
-            }
-            // 关闭 Tab
+            // 直接关闭 Tab，closeTab 内部会处理切换到前一个会话的逻辑
             await store.closeTab(tabId)
           }
           break
@@ -179,18 +171,9 @@ function registerDefaultHandler(store: SessionStore) {
               // 如果只有一个会话，不关闭
               if (tabs.length <= 1) {
                 console.warn('[IDE Bridge] Cannot delete the last tab, resetting instead')
-                // 可选：重置当前 Tab 为新会话
                 break
               }
-              // 如果删除的是当前会话，先切换到其他会话
-              const currentId = store.currentTabId
-              if (matchingTab.tabId === currentId) {
-                const otherTab = tabs.find((t: any) => t.tabId !== matchingTab.tabId)
-                if (otherTab) {
-                  await store.switchTab(otherTab.tabId)
-                }
-              }
-              // 关闭 Tab
+              // 直接关闭 Tab，closeTab 内部会处理切换到前一个会话的逻辑
               await store.closeTab(matchingTab.tabId)
               console.log(`[IDE Bridge] Deleted session ${sessionId}`)
             } else {

@@ -402,15 +402,33 @@ export const useSessionStore = defineStore('session', () => {
       return false
     }
 
+    // 如果关闭的是当前 Tab，先确定要切换到哪个 Tab
+    let nextTab: SessionTabInstance | null = null
+    if (currentTab.value === tab) {
+      // 按 order 排序的列表中找到当前 Tab 的位置
+      const sortedTabs = [...tabs.value].sort((a, b) => a.order.value - b.order.value)
+      const currentIndex = sortedTabs.findIndex(t => t === tab)
+
+      // 优先选择前一个 Tab（往前最近的），否则选择后一个
+      if (currentIndex > 0) {
+        nextTab = sortedTabs[currentIndex - 1]
+      } else if (sortedTabs.length > 1) {
+        nextTab = sortedTabs[currentIndex + 1]
+      }
+    }
+
     // 断开连接
     await tab.disconnect()
 
     // 从列表移除（shallowRef 需要替换整个数组才能触发响应式）
     tabs.value = tabs.value.filter(t => t !== tab)
 
-    // 如果关闭的是当前 Tab，切换到其他 Tab
+    // 切换到确定的下一个 Tab
     if (currentTab.value === tab) {
-      currentTab.value = tabs.value[0] || null
+      currentTab.value = nextTab
+      if (nextTab) {
+        currentConnectionState.value = nextTab.connectionState.status
+      }
     }
 
     log.info(`[SessionStore] 关闭 Tab: ${tab.tabId}`)

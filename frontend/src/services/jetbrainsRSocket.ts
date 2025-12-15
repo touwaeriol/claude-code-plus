@@ -477,7 +477,9 @@ function mapSessionCommandType(type: string): SessionCommand['type'] {
     case 'setLocale': return 'setLocale'
     case 'delete': return 'delete'
     case 'reset': return 'reset'
-    default: return 'switch' // fallback
+    default:
+      console.warn(`[JetBrainsRSocket] Unknown session command type: ${type}`)
+      return type as SessionCommand['type'] // 保持原值，避免错误转换
   }
 }
 

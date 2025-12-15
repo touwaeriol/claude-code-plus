@@ -50,8 +50,8 @@
               }"
               :title="statusTitle(tab)"
             >
-              <span v-if="tab.connectionStatus === 'CONNECTING'" class="dot-pulse connecting" />
-              <span v-else-if="tab.isGenerating" class="dot-pulse generating" />
+              <span v-if="tab.connectionStatus === 'CONNECTING'" class="spinner connecting" />
+              <span v-else-if="tab.isGenerating" class="spinner generating" />
               <span v-else class="dot-solid" />
             </span>
 
@@ -423,42 +423,33 @@ function displaySessionId(tab: SessionTabInfo): string | null {
   box-shadow: 0 0 6px rgba(215, 58, 73, 0.8);
 }
 
-.status-indicator .dot-pulse {
-  width: 6px;
-  height: 6px;
+.status-indicator .spinner {
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
+  border: 2px solid transparent;
+  box-sizing: border-box;
 }
 
-.status-indicator .dot-pulse.connecting {
-  background: var(--theme-accent, #0366d6);
-  animation: dot-pulse 1s ease-in-out infinite;
+.status-indicator .spinner.connecting {
+  border-top-color: var(--theme-accent, #0366d6);
+  border-right-color: var(--theme-accent, #0366d6);
+  animation: spin 0.8s linear infinite;
 }
 
-.status-indicator .dot-pulse.generating {
-  background: var(--theme-success, #28a745);
-  animation: dot-bounce 0.6s ease-in-out infinite;
-  box-shadow: 0 0 8px rgba(40, 167, 69, 0.6);
+.status-indicator .spinner.generating {
+  border-top-color: var(--theme-success, #28a745);
+  border-right-color: var(--theme-success, #28a745);
+  animation: spin 0.6s linear infinite;
+  box-shadow: 0 0 6px rgba(40, 167, 69, 0.4);
 }
 
-@keyframes dot-pulse {
-  0%, 100% {
-    opacity: 0.4;
-    transform: scale(0.8);
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
   }
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes dot-bounce {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.4);
-    opacity: 0.7;
+  100% {
+    transform: rotate(360deg);
   }
 }
 
