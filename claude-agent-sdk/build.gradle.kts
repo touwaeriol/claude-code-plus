@@ -485,22 +485,25 @@ tasks.named("clean") {
 
 // ========== CLI 补丁系统 (AST 转换) ==========
 
-val cliPatchesDir = file("cli-patches")
-
 // 安装 AST 补丁依赖
 val installPatchDeps = tasks.register("installPatchDeps") {
     group = "build"
     description = "安装 AST 补丁脚本的 npm 依赖"
 
-    val packageJson = cliPatchesDir.resolve("package.json")
-    val nodeModules = cliPatchesDir.resolve("node_modules")
+    // 将路径捕获到局部变量，避免 configuration cache 问题
+    val patchesDirPath = file("cli-patches").absolutePath
+    val packageJsonPath = file("cli-patches/package.json").absolutePath
+    val nodeModulesPath = file("cli-patches/node_modules").absolutePath
 
-    inputs.file(packageJson)
-    outputs.dir(nodeModules)
+    inputs.file(packageJsonPath)
+    outputs.dir(nodeModulesPath)
 
-    onlyIf { packageJson.exists() }
+    onlyIf { file(packageJsonPath).exists() }
 
     doLast {
+        val patchesDir = File(patchesDirPath)
+        val nodeModules = File(nodeModulesPath)
+
         if (nodeModules.exists() && nodeModules.resolve("@babel/parser").exists()) {
             println("⏭️  npm 依赖已安装，跳过")
             return@doLast
@@ -508,7 +511,7 @@ val installPatchDeps = tasks.register("installPatchDeps") {
 
         println("📦 安装 AST 补丁依赖...")
         val process = ProcessBuilder("npm", "install")
-            .directory(cliPatchesDir)
+            .directory(patchesDir)
             .redirectErrorStream(true)
             .start()
 
@@ -529,19 +532,26 @@ val patchCli = tasks.register("patchCli") {
     description = "使用 AST 转换应用补丁生成增强版 CLI"
     dependsOn(downloadCli, installPatchDeps)
 
-    val propsFile = file("cli-version.properties")
-    val bundledDirFile = file("src/main/resources/bundled")
-    val patchScript = cliPatchesDir.resolve("patch-cli.js")
-    val patchesDir = cliPatchesDir.resolve("patches")
+    // 将路径捕获到局部变量，避免 configuration cache 问题
+    val propsFilePath = file("cli-version.properties").absolutePath
+    val bundledDirPath = file("src/main/resources/bundled").absolutePath
+    val patchScriptPath = file("cli-patches/patch-cli.js").absolutePath
+    val patchesDirPath = file("cli-patches/patches").absolutePath
+    val cliPatchesDirPath = file("cli-patches").absolutePath
 
-    inputs.file(propsFile)
-    inputs.file(patchScript)
-    inputs.dir(patchesDir)
-    outputs.dir(bundledDirFile)
+    inputs.file(propsFilePath)
+    inputs.file(patchScriptPath)
+    inputs.dir(patchesDirPath)
+    outputs.dir(bundledDirPath)
 
-    onlyIf { patchScript.exists() }
+    onlyIf { file(patchScriptPath).exists() }
 
     doLast {
+        val propsFile = File(propsFilePath)
+        val bundledDirFile = File(bundledDirPath)
+        val patchScript = File(patchScriptPath)
+        val cliPatchesDir = File(cliPatchesDirPath)
+
         val props = Properties()
         propsFile.inputStream().use { props.load(it) }
         val cliVer = props.getProperty("cli.version") ?: error("cli.version missing")
@@ -586,10 +596,14 @@ val verifyPatches = tasks.register("verifyPatches") {
     description = "验证补丁是否正确应用"
     dependsOn(patchCli)
 
-    val propsFile = file("cli-version.properties")
-    val bundledDirFile = file("src/main/resources/bundled")
+    // 将路径捕获到局部变量，避免 configuration cache 问题
+    val propsFilePath = file("cli-version.properties").absolutePath
+    val bundledDirPath = file("src/main/resources/bundled").absolutePath
 
     doLast {
+        val propsFile = File(propsFilePath)
+        val bundledDirFile = File(bundledDirPath)
+
         val props = Properties()
         propsFile.inputStream().use { props.load(it) }
         val cliVer = props.getProperty("cli.version") ?: error("cli.version missing")
@@ -608,7 +622,7 @@ val verifyPatches = tasks.register("verifyPatches") {
 
         val checks = listOf(
             "__backgroundSignalResolver" to "模块级变量",
-            "move_to_background" to "控制命令"
+            "run_in_background" to "控制命令"
         )
 
         var passed = 0
