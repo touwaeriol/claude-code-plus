@@ -1,0 +1,106 @@
+name: Build Plugin
+
+on:
+  push:
+    branches: [ '**' ]
+    tags: [ '**' ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: ${{ steps.extract.outputs.artifact-name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties') }}-${{ hashFiles('**/*.gradle*','**/*.kts') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Build Plugin
+        run: ./gradlew buildPlugin --no-daemon --stacktrace
+
+      - name: Extract plugin artifact
+        id: extract
+        run: |
+          set -e
+          echo "Searching for plugin zip under */build/distributions/ ..."
+          ZIP_FILE=$(bash -lc 'find . -type f -path "*/build/distributions/*.zip" | head -n 1')
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No plugin zip found under */build/distributions/";
+            echo "Listing possible build directories for debug:";
+            find . -maxdepth 5 -type d -name "build" -print -exec ls -la {} \; || true;
+            exit 1;
+          fi
+          echo "Found zip: $ZIP_FILE"
+          ARTIFACT_NAME=$(basename "$ZIP_FILE" .zip)
+          echo "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          mkdir -p extracted
+          echo "Unzipping $ZIP_FILE to extracted/"
+          unzip -q "$ZIP_FILE" -d extracted/
+
+      - name: Upload extracted artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.extract.outputs.artifact-name }}
+          path: extracted/**
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: dist
+
+      - name: Repackage downloaded content as zip
+        id: repackage
+        run: |
+          set -e
+          cd dist
+          ZIP_NAME="${{ needs.build.outputs.artifact-name }}.zip"
+          zip -r ../${ZIP_NAME} .
+          cd ..
+          echo "zip-path=./${ZIP_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.repackage.outputs.zip-path }}
+          generate_release_notes: true
+
