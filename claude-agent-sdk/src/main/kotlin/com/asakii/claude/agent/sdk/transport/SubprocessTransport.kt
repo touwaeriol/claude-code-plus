@@ -648,6 +648,7 @@ class SubprocessTransport(
 
     /**
      * 查找 SDK 绑定的 CLI (cli.js, 从 resources/bundled/ 目录)
+     * 优先使用增强版 CLI (带补丁)，如果不存在则回退到原始版本
      */
     private fun findBundledCliJs(): String? {
         return try {
@@ -662,38 +663,46 @@ class SubprocessTransport(
                 return null
             }
 
-            // cli.js 文件名：claude-cli-<version>.js
-            val cliJsName = "claude-cli-$cliVersion.js"
-            val resourcePath = "bundled/$cliJsName"
+            // 优先查找增强版 CLI，然后回退到原始版本
+            val cliCandidates = listOf(
+                "claude-cli-$cliVersion-enhanced.js",  // 增强版 (带补丁)
+                "claude-cli-$cliVersion.js"            // 原始版本
+            )
 
-            logger.info("🔍 查找绑定的 CLI: $resourcePath")
-            val resource = this::class.java.classLoader.getResource(resourcePath)
-            logger.info("🔍 ClassLoader.getResource() 结果: $resource")
+            for (cliJsName in cliCandidates) {
+                val resourcePath = "bundled/$cliJsName"
+                logger.info("🔍 查找绑定的 CLI: $resourcePath")
+                val resource = this::class.java.classLoader.getResource(resourcePath)
 
-            if (resource != null) {
-                // 如果资源在 JAR 内，提取到临时文件
-                if (resource.protocol == "jar") {
-                    val tempFile = kotlin.io.path.createTempFile("claude-cli-", ".js").toFile()
-                    tempFile.deleteOnExit()
+                if (resource != null) {
+                    val isEnhanced = cliJsName.contains("-enhanced")
+                    val cliType = if (isEnhanced) "增强版" else "原始版"
 
-                    resource.openStream().use { input ->
-                        tempFile.outputStream().use { output ->
-                            input.copyTo(output)
+                    // 如果资源在 JAR 内，提取到临时文件
+                    if (resource.protocol == "jar") {
+                        val tempFile = kotlin.io.path.createTempFile("claude-cli-", ".js").toFile()
+                        tempFile.deleteOnExit()
+
+                        resource.openStream().use { input ->
+                            tempFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
                         }
-                    }
 
-                    logger.info("📦 从 JAR 提取 CLI: ${tempFile.absolutePath}")
-                    return tempFile.absolutePath
-                } else {
-                    // 资源在文件系统中（开发模式）
-                    val file = java.io.File(resource.toURI())
-                    if (file.exists()) {
-                        logger.info("📦 找到本地绑定的 CLI: ${file.absolutePath}")
-                        return file.absolutePath
+                        logger.info("📦 从 JAR 提取 $cliType CLI: ${tempFile.absolutePath}")
+                        return tempFile.absolutePath
+                    } else {
+                        // 资源在文件系统中（开发模式）
+                        val file = java.io.File(resource.toURI())
+                        if (file.exists()) {
+                            logger.info("📦 找到本地绑定的 $cliType CLI: ${file.absolutePath}")
+                            return file.absolutePath
+                        }
                     }
                 }
             }
 
+            logger.warn("⚠️ 未找到任何绑定的 CLI")
             null
         } catch (e: Exception) {
             logger.debug("查找绑定 CLI 失败: ${e.message}")

@@ -478,17 +478,168 @@ val copyCliVersionProps = tasks.register<Copy>("copyCliVersionProps") {
     into(file("src/main/resources"))
 }
 
-// 将 downloadCli 和 copyCliVersionProps 添加到 processResources 依赖
-tasks.named("processResources") {
-    dependsOn(downloadCli, copyCliVersionProps)
-}
-
-// sourcesJar 任务也需要依赖 downloadCli 和 copyCliVersionProps（避免任务顺序问题）
-tasks.named("sourcesJar") {
-    dependsOn(downloadCli, copyCliVersionProps)
-}
-
 // clean 任务依赖 cleanCli
 tasks.named("clean") {
     dependsOn(cleanCli)
+}
+
+// ========== CLI 补丁系统 (AST 转换) ==========
+
+val cliPatchesDir = file("cli-patches")
+
+// 安装 AST 补丁依赖
+val installPatchDeps = tasks.register("installPatchDeps") {
+    group = "build"
+    description = "安装 AST 补丁脚本的 npm 依赖"
+
+    val packageJson = cliPatchesDir.resolve("package.json")
+    val nodeModules = cliPatchesDir.resolve("node_modules")
+
+    inputs.file(packageJson)
+    outputs.dir(nodeModules)
+
+    onlyIf { packageJson.exists() }
+
+    doLast {
+        if (nodeModules.exists() && nodeModules.resolve("@babel/parser").exists()) {
+            println("⏭️  npm 依赖已安装，跳过")
+            return@doLast
+        }
+
+        println("📦 安装 AST 补丁依赖...")
+        val process = ProcessBuilder("npm", "install")
+            .directory(cliPatchesDir)
+            .redirectErrorStream(true)
+            .start()
+
+        val output = process.inputStream.bufferedReader().readText()
+        val exitCode = process.waitFor()
+
+        if (exitCode != 0) {
+            println(output)
+            throw GradleException("npm install 失败")
+        }
+        println("   ✅ 依赖安装完成")
+    }
+}
+
+// 使用 AST 应用补丁
+val patchCli = tasks.register("patchCli") {
+    group = "build"
+    description = "使用 AST 转换应用补丁生成增强版 CLI"
+    dependsOn(downloadCli, installPatchDeps)
+
+    val propsFile = file("cli-version.properties")
+    val bundledDirFile = file("src/main/resources/bundled")
+    val patchScript = cliPatchesDir.resolve("patch-cli.js")
+    val patchesDir = cliPatchesDir.resolve("patches")
+
+    inputs.file(propsFile)
+    inputs.file(patchScript)
+    inputs.dir(patchesDir)
+    outputs.dir(bundledDirFile)
+
+    onlyIf { patchScript.exists() }
+
+    doLast {
+        val props = Properties()
+        propsFile.inputStream().use { props.load(it) }
+        val cliVer = props.getProperty("cli.version") ?: error("cli.version missing")
+
+        val cliJsFile = bundledDirFile.resolve("claude-cli-$cliVer.js")
+        val enhancedFile = bundledDirFile.resolve("claude-cli-$cliVer-enhanced.js")
+
+        if (!cliJsFile.exists()) {
+            throw GradleException("CLI 文件不存在: ${cliJsFile.absolutePath}")
+        }
+
+        println("========================================")
+        println("使用 AST 转换应用补丁")
+        println("========================================")
+
+        val process = ProcessBuilder(
+            "node",
+            patchScript.absolutePath,
+            cliJsFile.absolutePath,
+            enhancedFile.absolutePath
+        )
+            .directory(cliPatchesDir)
+            .redirectErrorStream(true)
+            .start()
+
+        // 实时输出
+        process.inputStream.bufferedReader().forEachLine { line ->
+            println(line)
+        }
+
+        val exitCode = process.waitFor()
+
+        if (exitCode != 0) {
+            throw GradleException("AST 补丁应用失败")
+        }
+    }
+}
+
+// 验证补丁
+val verifyPatches = tasks.register("verifyPatches") {
+    group = "verification"
+    description = "验证补丁是否正确应用"
+    dependsOn(patchCli)
+
+    val propsFile = file("cli-version.properties")
+    val bundledDirFile = file("src/main/resources/bundled")
+
+    doLast {
+        val props = Properties()
+        propsFile.inputStream().use { props.load(it) }
+        val cliVer = props.getProperty("cli.version") ?: error("cli.version missing")
+
+        val enhancedFile = bundledDirFile.resolve("claude-cli-$cliVer-enhanced.js")
+
+        if (!enhancedFile.exists()) {
+            throw GradleException("增强版 CLI 不存在")
+        }
+
+        val content = enhancedFile.readText()
+
+        println("========================================")
+        println("验证补丁应用")
+        println("========================================")
+
+        val checks = listOf(
+            "__backgroundSignalResolver" to "模块级变量",
+            "move_to_background" to "控制命令"
+        )
+
+        var passed = 0
+        var failed = 0
+
+        for ((pattern, desc) in checks) {
+            if (content.contains(pattern)) {
+                println("✅ $desc: 已找到 '$pattern'")
+                passed++
+            } else {
+                println("❌ $desc: 未找到 '$pattern'")
+                failed++
+            }
+        }
+
+        println()
+        println("验证结果: $passed 通过, $failed 失败")
+        println("========================================")
+
+        if (failed > 0) {
+            throw GradleException("补丁验证失败")
+        }
+    }
+}
+
+// 修改 processResources 依赖
+tasks.named("processResources") {
+    dependsOn(downloadCli, copyCliVersionProps, patchCli)
+}
+
+// sourcesJar 任务也需要依赖 patchCli（避免任务顺序问题）
+tasks.named("sourcesJar") {
+    dependsOn(downloadCli, copyCliVersionProps, patchCli)
 }

@@ -1,0 +1,19 @@
+{
+  "name": "claude-cli-patches",
+  "version": "1.0.0",
+  "description": "AST-based patches for Claude CLI enhancement",
+  "main": "patch-cli.js",
+  "scripts": {
+    "patch": "node patch-cli.js",
+    "test": "node patch-cli.js --dry-run"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.23.0",
+    "@babel/traverse": "^7.23.0",
+    "@babel/generator": "^7.23.0",
+    "@babel/types": "^7.23.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
