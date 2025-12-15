@@ -15,12 +15,14 @@ import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
-import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBPanel
+import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import java.awt.BorderLayout
 import java.awt.Component
+import java.awt.Dimension
+import java.awt.event.AdjustmentEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.text.SimpleDateFormat
@@ -40,7 +42,7 @@ sealed class SessionListItem {
         val preview: String
     ) : SessionListItem()
 
-    data object LoadMore : SessionListItem()
+    data object LoadingIndicator : SessionListItem()
 }
 
 /**
@@ -58,7 +60,7 @@ class SessionListCellRenderer : ListCellRenderer<SessionListItem> {
         return when (value) {
             is SessionListItem.GroupHeader -> createGroupHeader(value, isSelected)
             is SessionListItem.SessionItem -> createSessionItem(value, isSelected)
-            is SessionListItem.LoadMore -> createLoadMore(isSelected)
+            is SessionListItem.LoadingIndicator -> createLoadingIndicator()
         }
     }
 
@@ -108,13 +110,12 @@ class SessionListCellRenderer : ListCellRenderer<SessionListItem> {
         }
     }
 
-    private fun createLoadMore(isSelected: Boolean): JPanel {
+    private fun createLoadingIndicator(): JPanel {
         return JBPanel<JBPanel<*>>(BorderLayout()).apply {
             border = JBUI.Borders.empty(8)
-            background = if (isSelected) UIUtil.getListSelectionBackground(true) else UIUtil.getListBackground()
-            add(JLabel("加载更多...", AllIcons.General.ArrowDown, SwingConstants.LEFT).apply {
-                foreground = if (isSelected) UIUtil.getListSelectionForeground(true)
-                else JBColor.BLUE
+            isOpaque = false
+            add(JLabel("加载中...", AllIcons.Process.Step_1, SwingConstants.CENTER).apply {
+                foreground = UIUtil.getLabelDisabledForeground()
             }, BorderLayout.CENTER)
         }
     }
@@ -130,6 +131,11 @@ class HistorySessionAction(
     private val sessionApi: JetBrainsSessionApi,
     private val project: Project
 ) : AnAction("历史会话", "查看历史会话", AllIcons.Actions.Search) {
+
+    companion object {
+        private const val POPUP_WIDTH = 350
+        private const val POPUP_HEIGHT = 400
+    }
 
     private val logger = Logger.getLogger(HistorySessionAction::class.java.name)
     private val dateTimeFormat = SimpleDateFormat("MM-dd HH:mm")
@@ -245,41 +251,6 @@ class HistorySessionAction(
         }
     }
 
-    /**
-     * 加载更多会话
-     */
-    private fun loadMoreSessions() {
-        lastEvent?.let { e ->
-            isLoading = true
-            // 关闭当前弹窗
-            currentPopup?.cancel()
-            // 显示加载中状态
-            showLoadingPopupWithCurrent(e)
-            // 加载下一页
-            loadSessions(e, reset = false)
-        }
-    }
-
-    /**
-     * 显示加载中状态（保留当前已加载的数据）
-     */
-    private fun showLoadingPopupWithCurrent(e: AnActionEvent) {
-        val currentState = sessionApi.getState()
-        val activeSessions = currentState?.sessions ?: emptyList()
-        // 只用真实的 sessionId 去重（后端会话 ID）
-        val activeRealSessionIds = activeSessions.mapNotNull { it.sessionId }.toSet()
-
-        // 历史会话排除激活的
-        val filteredHistory = cachedSessions.filter { !activeRealSessionIds.contains(it.sessionId) }
-
-        val items = buildListItems(activeSessions, filteredHistory, hasMore = false)
-        val mutableItems = items.toMutableList()
-        mutableItems.add(SessionListItem.GroupHeader("加载更多中..."))
-
-        val sessionCount = mutableItems.filterIsInstance<SessionListItem.SessionItem>().size
-        showPopupWithItems(e, mutableItems, sessionCount)
-    }
-
     private fun showSessionPopup(e: AnActionEvent, historySessions: List<SessionMetadata>) {
         // 获取当前活动会话
         val currentState = sessionApi.getState()
@@ -299,7 +270,7 @@ class HistorySessionAction(
         }
 
         // 构建列表项
-        val items = buildListItems(activeSessions, filteredHistory, hasMore)
+        val items = buildListItems(activeSessions, filteredHistory)
         val sessionCount = items.filterIsInstance<SessionListItem.SessionItem>().size
 
         showPopupWithItems(e, items, sessionCount)
@@ -307,6 +278,7 @@ class HistorySessionAction(
 
     /**
      * 使用 PopupChooserBuilder 显示弹窗
+     * 固定大小 350x400，滚动到底部自动加载更多
      */
     private fun showPopupWithItems(e: AnActionEvent, items: List<SessionListItem>, sessionCount: Int) {
         // 创建自定义列表模型
@@ -343,9 +315,6 @@ class HistorySessionAction(
                                     )
                                 )
                             }
-                            is SessionListItem.LoadMore -> {
-                                loadMoreSessions()
-                            }
                             else -> {}
                         }
                     }
@@ -353,22 +322,118 @@ class HistorySessionAction(
             })
         }
 
+        // 创建滚动面板并添加滚动监听
+        val scrollPane = JBScrollPane(list).apply {
+            preferredSize = Dimension(POPUP_WIDTH, POPUP_HEIGHT)
+            minimumSize = Dimension(POPUP_WIDTH, POPUP_HEIGHT)
+            border = null
+
+            // 滚动到底部自动加载更多
+            verticalScrollBar.addAdjustmentListener { evt: AdjustmentEvent ->
+                if (!evt.valueIsAdjusting && hasMore && !isLoading) {
+                    val scrollBar = evt.adjustable
+                    val extent = scrollBar.visibleAmount
+                    val maximum = scrollBar.maximum
+                    val value = scrollBar.value
+
+                    // 当滚动到距离底部 50px 以内时触发加载
+                    if (value + extent >= maximum - 50) {
+                        logger.info("🔍 [HistorySessionAction] 滚动触发加载更多")
+                        loadMoreSessionsInPlace(listModel, list)
+                    }
+                }
+            }
+        }
+
+        // 创建容器面板确保固定大小
+        val containerPanel = JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            preferredSize = Dimension(POPUP_WIDTH, POPUP_HEIGHT)
+            add(scrollPane, BorderLayout.CENTER)
+        }
+
         val popup = JBPopupFactory.getInstance()
-            .createComponentPopupBuilder(JScrollPane(list), list)
+            .createComponentPopupBuilder(containerPanel, list)
             .setTitle("历史会话 ($sessionCount)")
-            .setMovable(true)
-            .setResizable(true)
+            .setMovable(false)
+            .setResizable(false)
             .setRequestFocus(true)
             .createPopup()
 
         currentPopup = popup
 
-        // 显示弹窗
+        // 显示弹窗 - 固定在按钮下方
         val component = e.inputEvent?.component
         if (component != null) {
             popup.showUnderneathOf(component)
         } else {
             popup.showInFocusCenter()
+        }
+    }
+
+    /**
+     * 在当前弹窗内加载更多会话（不关闭弹窗）
+     */
+    private fun loadMoreSessionsInPlace(listModel: DefaultListModel<SessionListItem>, list: JList<SessionListItem>) {
+        if (isLoading || !hasMore) return
+        isLoading = true
+
+        // 添加加载指示器
+        ApplicationManager.getApplication().invokeLater {
+            listModel.addElement(SessionListItem.LoadingIndicator)
+        }
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val projectPath = project.basePath ?: return@executeOnPooledThread
+
+            // 获取当前激活会话
+            val currentState = sessionApi.getState()
+            val activeSessions = currentState?.sessions ?: emptyList()
+            val activeRealSessionIds = activeSessions.mapNotNull { it.sessionId }.toSet()
+            val activeCount = activeSessions.size
+
+            val historyToLoad = maxOf(pageSize - activeCount, 1)
+
+            logger.info("🔍 [HistorySessionAction] 滚动加载更多: offset=$currentOffset, historyToLoad=$historyToLoad")
+
+            val sessions = ClaudeSessionScanner.scanHistorySessions(projectPath, historyToLoad, currentOffset)
+            logger.info("🔍 [HistorySessionAction] 加载到 ${sessions.size} 个历史会话")
+
+            // 更新分页状态
+            hasMore = sessions.size >= historyToLoad
+            cachedSessions.addAll(sessions)
+            currentOffset += sessions.size
+            isLoading = false
+
+            // 回到 UI 线程更新列表
+            ApplicationManager.getApplication().invokeLater {
+                // 移除加载指示器
+                for (i in listModel.size() - 1 downTo 0) {
+                    if (listModel.getElementAt(i) is SessionListItem.LoadingIndicator) {
+                        listModel.removeElementAt(i)
+                    }
+                }
+
+                // 添加新加载的会话
+                val now = System.currentTimeMillis()
+                val filteredSessions = sessions.filter { !activeRealSessionIds.contains(it.sessionId) }
+                filteredSessions.forEach { session ->
+                    val displayTitle = (session.customTitle ?: session.firstUserMessage)
+                        .take(35).replace("\n", " ").trim()
+                        .ifEmpty { "新会话" }
+                    listModel.addElement(
+                        SessionListItem.SessionItem(
+                            session = session,
+                            isActive = false,
+                            timeStr = formatRelativeTime(session.timestamp, now),
+                            preview = displayTitle
+                        )
+                    )
+                }
+
+                // 刷新列表
+                list.revalidate()
+                list.repaint()
+            }
         }
     }
 
@@ -438,12 +503,10 @@ class HistorySessionAction(
      * 构建列表项（带分组）
      * @param activeSessions 激活中的会话（从 sessionApi 获取）
      * @param historySessions 历史会话（从文件扫描获取，已排除激活会话）
-     * @param hasMore 是否有更多历史会话
      */
     private fun buildListItems(
         activeSessions: List<JetBrainsSessionSummary>,
-        historySessions: List<SessionMetadata>,
-        hasMore: Boolean
+        historySessions: List<SessionMetadata>
     ): List<SessionListItem> {
         val items = mutableListOf<SessionListItem>()
         val now = System.currentTimeMillis()
@@ -490,11 +553,6 @@ class HistorySessionAction(
                     )
                 )
             }
-        }
-
-        // 加载更多
-        if (hasMore) {
-            items.add(SessionListItem.LoadMore)
         }
 
         return items

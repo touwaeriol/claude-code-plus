@@ -3,6 +3,8 @@
     class="thinking-display"
     :class="{ collapsed: isCollapsed, expandable: isComplete }"
     @click="handleClick"
+    @mouseenter="handleMouseEnter"
+    @mouseleave="handleMouseLeave"
   >
     <div class="thinking-header">
       <span class="thinking-icon">💭</span>
@@ -45,13 +47,43 @@ const isExpanded = ref(false)
 const delayedCollapseReady = ref(false)
 let collapseTimer: ReturnType<typeof setTimeout> | null = null
 
+// 鼠标悬停状态：悬停时暂停自动折叠
+const isHovering = ref(false)
+
+// 启动折叠计时器
+function startCollapseTimer() {
+  if (collapseTimer) {
+    clearTimeout(collapseTimer)
+  }
+  collapseTimer = setTimeout(() => {
+    delayedCollapseReady.value = true
+  }, 3000)
+}
+
+// 鼠标进入：清除计时器，暂停自动折叠
+function handleMouseEnter() {
+  isHovering.value = true
+  if (collapseTimer) {
+    clearTimeout(collapseTimer)
+    collapseTimer = null
+  }
+}
+
+// 鼠标离开：如果思考已完成且尚未折叠，重新启动计时器
+function handleMouseLeave() {
+  isHovering.value = false
+  if (isComplete.value && !delayedCollapseReady.value) {
+    startCollapseTimer()
+  }
+}
+
 // 监听思考完成状态，完成后启动 3 秒延迟折叠
 watch(isComplete, (complete) => {
   if (complete) {
-    // 思考完成，启动 3 秒延迟折叠计时器
-    collapseTimer = setTimeout(() => {
-      delayedCollapseReady.value = true
-    }, 3000)
+    // 思考完成，如果鼠标不在悬停状态，启动计时器
+    if (!isHovering.value) {
+      startCollapseTimer()
+    }
   } else {
     // 思考未完成，重置状态
     delayedCollapseReady.value = false
