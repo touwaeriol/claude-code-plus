@@ -322,20 +322,26 @@ const isLongMessage = computed(() => {
   return messageText.value.length > 200 || imageBlocks.value.length > 2
 })
 
-// 发送时的上下文大小
+// 发送时的上下文大小（从前一条 AI 回复的 stats 中获取）
 const contextTokens = computed(() => {
-  return (props.message as any).contextTokens || 0
-})
+  const sessionStore = useSessionStore()
+  const currentTab = sessionStore.currentTab
+  if (!currentTab) return 0
 
-// 格式化 token 数量
-function formatTokenCount(tokens: number): string {
-  if (tokens >= 1_000_000) {
-    return `${(tokens / 1_000_000).toFixed(1)}M`
-  } else if (tokens >= 1_000) {
-    return `${(tokens / 1_000).toFixed(1)}K`
+  // displayItems 是 reactive 数组，不需要 .value
+  const displayItems = currentTab.displayItems
+  const currentIndex = displayItems.findIndex(item => item.id === props.message.id)
+  if (currentIndex <= 0) return 0
+
+  // 向前查找最近的带有 stats.inputTokens 的 AssistantText
+  for (let i = currentIndex - 1; i >= 0; i--) {
+    const item = displayItems[i] as any
+    if (item.displayType === 'assistantText' && item.stats?.inputTokens) {
+      return item.stats.inputTokens
+    }
   }
-  return String(tokens)
-}
+  return 0
+})
 
 // 切换折叠状态
 function toggleCollapse() {
