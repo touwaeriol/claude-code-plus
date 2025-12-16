@@ -5,29 +5,29 @@
     "properties": {
       "query": {
         "type": "string",
-        "description": "搜索关键词"
+        "description": "Search keywords"
       },
       "searchType": {
         "type": "string",
         "enum": ["All", "Classes", "Files", "Symbols", "Actions", "Text"],
-        "description": "搜索类型:All(全部)、Classes(类)、Files(文件)、Symbols(符号)、Actions(动作)、Text(文本)",
+        "description": "Search type",
         "default": "All"
       },
       "scope": {
         "type": "string",
         "enum": ["Project", "All", "ProductionFiles", "TestFiles", "Scratches"],
-        "description": "搜索范围:Project(仅项目文件)、All(所有地方,包括库)、ProductionFiles(仅生产代码)、TestFiles(仅测试代码)、Scratches(草稿和控制台)",
+        "description": "Search scope",
         "default": "Project"
       },
       "maxResults": {
         "type": "integer",
-        "description": "最大结果数",
+        "description": "Max results",
         "default": 20,
         "minimum": 1
       },
       "offset": {
         "type": "integer",
-        "description": "分页偏移量",
+        "description": "Offset",
         "default": 0,
         "minimum": 0
       }
@@ -225,7 +225,7 @@
           "type": "string",
           "enum": ["All", "Inheritance", "Instantiation", "TypeReference", "Import", "Override", "Call", "MethodReference", "Read", "Write"]
         },
-        "description": "Filter by usage types. For classes: Inheritance (extends/implements), Instantiation (new), TypeReference, Import. For methods: Override (子类重写), Call (调用), MethodReference (::method). For fields/variables: Read, Write. Default: [\"All\"]",
+        "description": "Filter by usage types. For classes: Inheritance (extends/implements), Instantiation (new), TypeReference, Import. For methods: Override (Override), Call (Call), MethodReference (::method). For fields/variables: Read, Write. Default: [\"All\"]",
         "default": ["All"]
       },
       "searchScope": {

@@ -15,26 +15,18 @@ IMPORTANT: Prefer JetBrains tools over file system tools (faster and more reliab
 
 IMPORTANT: After completing code modifications, you MUST use `mcp__jetbrains__FileProblems` to perform static analysis validation on the modified files to minimize syntax errors.
 
-### Refactoring with JetBrains Tools
+### Refactoring Workflow
 
-When performing refactoring tasks, use the following workflow:
+When renaming symbols:
+1. Use `FindUsages` or `CodeSearch` to find the symbol and get its line number
+2. Use `Rename` with the line number (required) to safely rename across the project
+3. Use `FileProblems` to validate changes
 
-1. **Find Usages First**: Use `mcp__jetbrains__FindUsages` to understand where a symbol is used and get its precise location
-2. **Rename Safely**: Use `mcp__jetbrains__Rename` with the line/column from FindUsages to safely rename and update all references
-3. **Validate Changes**: Use `mcp__jetbrains__FileProblems` to check for errors after refactoring
+Example: `FindUsages(symbolName="getUserById")` → line 42 → `Rename(line=42, newName="fetchUserById")`
 
-Example workflow:
-```
-1. mcp__jetbrains__FindUsages - Find "getUserById" (returns: line 42, column 10)
-2. mcp__jetbrains__Rename - Rename at line 42 to "fetchUserById"
-3. mcp__jetbrains__FileProblems - Check affected files for errors
-```
-
-**IMPORTANT**: `mcp__jetbrains__Rename` requires `line` parameter (and optionally `column`) to precisely locate the symbol. Always use `FindUsages` or `CodeSearch` first to get the symbol location.
+**Note**: `Rename` requires `line` parameter for precise location. Use `Rename` for symbols (auto-updates all references); use `Edit` for other text changes.
 
 ### Subagents
-
-You have access to specialized subagents optimized for JetBrains IDE:
 
 - `ExploreWithJetbrains`: Code exploration agent leveraging JetBrains IDE indexing capabilities. Use for fast file/class/symbol search and code structure analysis. Prefer this when exploring or understanding codebases. (Tools: Read, mcp__jetbrains__FileIndex, mcp__jetbrains__CodeSearch, mcp__jetbrains__DirectoryTree, mcp__jetbrains__FileProblems)
 
