@@ -124,7 +124,8 @@ class HttpApiServer(
     private val frontendDir: Path? = null,  // 开发模式下可以为 null
     private val jetbrainsApi: JetBrainsApi = DefaultJetBrainsApi,  // 默认不支持 JetBrains 集成
     private val jetbrainsRSocketHandler: JetBrainsRSocketHandlerProvider? = null,  // JetBrains RSocket 处理器
-    private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider  // JetBrains MCP Server Provider
+    private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider,  // JetBrains MCP Server Provider
+    private val serviceConfigProvider: () -> com.asakii.server.config.AiAgentServiceConfig = { com.asakii.server.config.AiAgentServiceConfig() }  // 服务配置提供者（每次 connect 时调用获取最新配置）
 ) : com.asakii.bridge.EventBridge {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -200,12 +201,16 @@ class HttpApiServer(
                     val connectionId = java.util.UUID.randomUUID().toString()
                     logger.info { "🔌 [RSocket] 新连接: $connectionId" }
 
+                    // 每次连接时调用 provider 获取最新配置（支持用户实时更新设置）
+                    val currentConfig = serviceConfigProvider()
+
                     // 直接在构造时传入 requester，确保每个连接使用独立的 requester
                     val rsocketHandler = com.asakii.server.rsocket.RSocketHandler(
                         ideTools = ideTools,
                         clientRequester = requester,
                         connectionId = connectionId,
-                        jetBrainsMcpServerProvider = jetBrainsMcpServerProvider
+                        jetBrainsMcpServerProvider = jetBrainsMcpServerProvider,
+                        serviceConfigProvider = { currentConfig }
                     )
 
                     // 监听连接关闭
@@ -423,6 +428,37 @@ class HttpApiServer(
                             call.respond(
                                 HttpStatusCode.InternalServerError,
                                 mapOf("error" to (e.message ?: "Unknown error"))
+                            )
+                        }
+                    }
+
+                    // 删除历史会话 API
+                    delete("/history/sessions/{sessionId}") {
+                        try {
+                            val sessionId = call.parameters["sessionId"]
+                                ?: return@delete call.respond(
+                                    HttpStatusCode.BadRequest,
+                                    mapOf("success" to false, "error" to "Missing sessionId")
+                                )
+
+                            logger.info { "🗑️ [HTTP] 删除历史会话: $sessionId" }
+
+                            val projectPath = ideTools.getProjectPath()
+                            val deleted = com.asakii.claude.agent.sdk.utils.ClaudeSessionScanner.deleteSession(projectPath, sessionId)
+
+                            if (deleted) {
+                                call.respond(HttpStatusCode.OK, mapOf("success" to true))
+                            } else {
+                                call.respond(
+                                    HttpStatusCode.NotFound,
+                                    mapOf("success" to false, "error" to "Session not found or delete failed")
+                                )
+                            }
+                        } catch (e: Exception) {
+                            logger.error(e) { "❌ [HTTP] 删除历史会话失败" }
+                            call.respond(
+                                HttpStatusCode.InternalServerError,
+                                mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
                             )
                         }
                     }

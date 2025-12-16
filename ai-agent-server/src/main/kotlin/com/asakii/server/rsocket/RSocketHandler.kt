@@ -59,7 +59,8 @@ class RSocketHandler(
     private val ideTools: IdeTools,
     private val clientRequester: RSocket,  // 必须在构造时传入，确保每个连接独立
     private val connectionId: String = java.util.UUID.randomUUID().toString(),  // 连接唯一标识
-    private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider  // JetBrains MCP Server Provider
+    private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider,  // JetBrains MCP Server Provider
+    private val serviceConfigProvider: () -> com.asakii.server.config.AiAgentServiceConfig = { com.asakii.server.config.AiAgentServiceConfig() }  // 服务配置提供者（每次 connect 时获取最新配置）
 ) {
     // 使用 ws.log 专用 logger
     private val wsLog = KotlinLogging.logger(StandaloneLogging.WS_LOGGER)
@@ -83,11 +84,12 @@ class RSocketHandler(
         // 创建 ClientCaller（初始时 requester 可能为空）
         val clientCaller = createClientCaller(callIdCounter)
 
-        // 为每个连接创建独立的 RPC 服务（传递 JetBrains MCP Server Provider）
+        // 为每个连接创建独立的 RPC 服务（传递 JetBrains MCP Server Provider 和服务配置提供者）
         val rpcService: AiAgentRpcService = AiAgentRpcServiceImpl(
             ideTools = ideTools,
             clientCaller = clientCaller,
-            jetBrainsMcpServerProvider = jetBrainsMcpServerProvider
+            jetBrainsMcpServerProvider = jetBrainsMcpServerProvider,
+            serviceConfigProvider = serviceConfigProvider
         )
 
         val handler = RSocketRequestHandler {

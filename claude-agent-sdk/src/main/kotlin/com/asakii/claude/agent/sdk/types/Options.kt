@@ -141,6 +141,10 @@ data class ClaudeAgentOptions(
     // CLI path - NEW: Specify custom Claude CLI binary path
     val cliPath: Path? = null,
 
+    // Node.js path - Specify custom Node.js executable path
+    // If not set, uses "node" from system PATH
+    val nodePath: String? = null,
+
     // Hook configurations
     val hooks: Map<HookEvent, List<HookMatcher>>? = null,
 

@@ -645,9 +645,12 @@ class SubprocessTransport(
     }
 
     /**
-     * 返回 Node.js 命令名，直接依赖系统 PATH 环境变量
+     * 返回 Node.js 可执行文件路径
+     * 优先使用用户配置的路径，否则使用系统 PATH 中的 "node"
      */
-    private fun findNodeExecutable(): String = "node"
+    private fun findNodeExecutable(): String {
+        return options.nodePath?.takeIf { it.isNotBlank() } ?: "node"
+    }
 
     /**
      * 查找 SDK 绑定的 CLI (cli.js, 从 resources/bundled/ 目录)
