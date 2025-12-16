@@ -90,6 +90,12 @@ interface IdeTools {
      * @return NodeDetectionResult 检测结果（包含路径、版本等）
      */
     fun detectNode(): NodeDetectionResult
+
+    /**
+     * 获取当前活动编辑器中的文件信息
+     * @return ActiveFileInfo? 活动文件信息，如果没有活动文件则返回 null
+     */
+    fun getActiveEditorFile(): ActiveFileInfo? = null
 }
 
 /**
@@ -164,4 +170,28 @@ data class NodeDetectionResult(
     val path: String? = null,        // Node.js 路径（如果找到）
     val version: String? = null,     // Node.js 版本（如果找到）
     val error: String? = null        // 错误信息（如果检测失败）
+)
+
+/**
+ * 活动文件信息
+ */
+@Serializable
+data class ActiveFileInfo(
+    val path: String,                     // 文件绝对路径
+    val relativePath: String,             // 相对项目根目录的路径
+    val name: String,                     // 文件名
+    val line: Int? = null,                // 光标所在行（1-based）
+    val column: Int? = null,              // 光标所在列（1-based）
+    val hasSelection: Boolean = false,    // 是否有选区
+    val startLine: Int? = null,           // 选区开始行（1-based）
+    val startColumn: Int? = null,         // 选区开始列（1-based）
+    val endLine: Int? = null,             // 选区结束行（1-based）
+    val endColumn: Int? = null,           // 选区结束列（1-based）
+    val selectedContent: String? = null,  // 选中的内容
+    // 文件类型相关字段
+    val fileType: String = "text",        // 文件类型: "text", "diff", "image", "binary"
+    // Diff 视图专用字段
+    val diffOldContent: String? = null,   // Diff 旧内容（左侧）
+    val diffNewContent: String? = null,   // Diff 新内容（右侧）
+    val diffTitle: String? = null         // Diff 标题
 )

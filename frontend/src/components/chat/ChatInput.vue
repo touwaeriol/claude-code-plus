@@ -59,8 +59,8 @@
         class="context-tag active-file-tag"
         :title="currentActiveFile?.path"
       >
-        <span class="tag-icon">📍</span>
-        <span class="tag-text">{{ activeFileDisplayText }}</span>
+        <span class="tag-file-name">{{ activeFileName }}</span>
+        <span v-if="activeFileLineRange" class="tag-line-range">{{ activeFileLineRange }}</span>
         <button
           class="tag-remove"
           :title="t('common.remove')"
@@ -76,6 +76,7 @@
         :key="`context-${index}`"
         class="context-tag"
         :class="{ 'image-tag': isImageContext(context) }"
+        :title="getContextFullPath(context)"
       >
         <!-- 图片：只显示缩略图，点击可预览 -->
         <template v-if="isImageContext(context)">
@@ -742,18 +743,48 @@ const shouldShowActiveFile = computed(() => {
   return currentActiveFile.value !== null && !activeFileDismissed.value
 })
 
-// 获取活跃文件的显示文本
-const activeFileDisplayText = computed(() => {
+// 从路径中提取文件名
+function getFileName(filePath: string): string {
+  const parts = filePath.replace(/\\/g, '/').split('/')
+  return parts[parts.length - 1] || filePath
+}
+
+// 获取活跃文件的文件名（可能被截断）
+const activeFileName = computed(() => {
+  if (!currentActiveFile.value) return ''
+  return getFileName(currentActiveFile.value.relativePath)
+})
+
+// 获取活跃文件的行号范围（包含列信息）
+const activeFileLineRange = computed(() => {
   if (!currentActiveFile.value) return ''
   const file = currentActiveFile.value
   if (file.hasSelection && file.startLine && file.endLine) {
+    // 选区：显示起始行:列-结束行:列
+    const startCol = file.startColumn || 1
+    const endCol = file.endColumn || 1
+    return `:${file.startLine}:${startCol}-${file.endLine}:${endCol}`
+  } else if (file.line) {
+    // 光标：显示行:列
+    const col = file.column || 1
+    return `:${file.line}:${col}`
+  }
+  return ''
+})
+
+// 获取活跃文件的显示文本（只显示文件名和范围）- 保留以兼容其他地方
+const activeFileDisplayText = computed(() => {
+  if (!currentActiveFile.value) return ''
+  const file = currentActiveFile.value
+  const fileName = getFileName(file.relativePath)
+  if (file.hasSelection && file.startLine && file.endLine) {
     // 有选区时显示行号范围
-    return `${file.relativePath}:${file.startLine}-${file.endLine}`
+    return `${fileName}:${file.startLine}-${file.endLine}`
   } else if (file.line) {
     // 有光标位置时显示行号
-    return `${file.relativePath}:${file.line}`
+    return `${fileName}:${file.line}`
   }
-  return file.relativePath
+  return fileName
 })
 
 // 关闭当前活跃文件标签
@@ -762,26 +793,58 @@ function dismissActiveFile() {
 }
 
 /**
+ * XML 转义辅助函数
+ */
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/**
  * 生成 <current-open-file/> 格式的标记文本
  * 用于发送消息时标识当前打开的文件
+ * 支持不同文件类型：text, diff, image, binary
  */
 function generateActiveFileTag(): string | null {
   if (!shouldShowActiveFile.value || !currentActiveFile.value) {
     return null
   }
   const file = currentActiveFile.value
+  const fileType = file.fileType || 'text'
+
+  // 处理 Diff 视图
+  if (fileType === 'diff') {
+    let tag = `<current-open-file path="${file.relativePath}" file-type="diff"`
+    if (file.diffTitle) {
+      tag += ` diff-title="${escapeXml(file.diffTitle)}"`
+    }
+    // Diff 内容通过子元素传递，避免属性值过长
+    tag += '>'
+    if (file.diffOldContent !== undefined && file.diffOldContent !== null) {
+      tag += `\n<diff-old-content><![CDATA[${file.diffOldContent}]]></diff-old-content>`
+    }
+    if (file.diffNewContent !== undefined && file.diffNewContent !== null) {
+      tag += `\n<diff-new-content><![CDATA[${file.diffNewContent}]]></diff-new-content>`
+    }
+    tag += '\n</current-open-file>'
+    return tag
+  }
+
+  // 处理图片和二进制文件：只传递路径
+  if (fileType === 'image' || fileType === 'binary') {
+    return `<current-open-file path="${file.relativePath}" file-type="${fileType}"/>`
+  }
+
+  // 处理普通文本文件（保持原有逻辑）
   if (file.hasSelection && file.startLine && file.startColumn && file.endLine && file.endColumn) {
     // 有选区
     let tag = `<current-open-file path="${file.relativePath}" start-line="${file.startLine}" start-column="${file.startColumn}" end-line="${file.endLine}" end-column="${file.endColumn}"`
     // 如果有选中的文本内容，添加 selected-content 属性
     if (file.selectedContent) {
-      // 对选中内容进行 XML 转义，避免特殊字符破坏 XML 结构
-      const escapedContent = file.selectedContent
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-      tag += ` selected-content="${escapedContent}"`
+      tag += ` selected-content="${escapeXml(file.selectedContent)}"`
     }
     tag += '/>'
     return tag
@@ -1188,19 +1251,41 @@ function handleContextSelect(result: IndexedFileInfo) {
 
 
 /**
- * 获取上下文显示文本（使用类型守卫）
+ * 获取上下文完整路径（用于 tooltip 显示）
+ */
+function getContextFullPath(context: ContextReference): string {
+  if (isImageReference(context)) {
+    return context.name || '图片'
+  }
+  if (isFileReference(context)) {
+    return context.fullPath || context.path || context.uri || ''
+  }
+  if (isUrlReference(context)) {
+    return context.url || ''
+  }
+  return context.uri || ''
+}
+
+/**
+ * 获取上下文显示文本（使用类型守卫）- 只显示文件名
  */
 function getContextDisplay(context: ContextReference): string {
   if (isImageReference(context)) {
     return '图片'  // 简化显示，不显示无意义的文件名
   }
   if (isFileReference(context)) {
-    return context.path?.split(/[\\/]/).pop() || context.path || ''
+    // 只显示文件名，不显示完整路径
+    const path = context.path || context.uri || ''
+    const parts = path.replace(/\\/g, '/').split('/')
+    return parts[parts.length - 1] || path
   }
   if (isUrlReference(context)) {
     return context.title || context.url || ''
   }
-  return context.uri || ''
+  // 默认情况下也只取最后一部分
+  const uri = context.uri || ''
+  const parts = uri.replace(/\\/g, '/').split('/')
+  return parts[parts.length - 1] || uri
 }
 
 /**
@@ -1613,12 +1698,12 @@ onUnmounted(() => {
 .context-tag {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
+  gap: 4px;
+  padding: 2px 6px;
   background: var(--theme-background, #ffffff);
   border: 1px solid var(--theme-border, #e1e4e8);
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: 3px;
+  font-size: 11px;
 }
 
 .context-tag.image-tag {
@@ -1626,7 +1711,7 @@ onUnmounted(() => {
   padding: 2px;
 }
 
-/* 活跃文件标签 - 特殊样式突出显示 */
+/* 活跃文件标签 - 紧凑样式 */
 .context-tag.active-file-tag {
   background: rgba(3, 102, 214, 0.08);
   border-color: var(--theme-accent, #0366d6);
@@ -1634,11 +1719,24 @@ onUnmounted(() => {
 
 .context-tag.active-file-tag .tag-icon {
   color: var(--theme-accent, #0366d6);
+  font-size: 10px;
+  flex-shrink: 0;
 }
 
-.context-tag.active-file-tag .tag-text {
+.context-tag.active-file-tag .tag-file-name {
   color: var(--theme-accent, #0366d6);
   font-weight: 500;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-tag.active-file-tag .tag-line-range {
+  color: var(--theme-accent, #0366d6);
+  font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* 图片标签的删除按钮 - 右上角叠加 */
@@ -1664,10 +1762,10 @@ onUnmounted(() => {
 }
 
 .tag-image-preview {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: 3px;
   border: 1px solid var(--theme-border, #e1e4e8);
   cursor: pointer;
   transition: transform 0.15s;
@@ -1678,23 +1776,28 @@ onUnmounted(() => {
 }
 
 .tag-icon {
-  font-size: 14px;
+  font-size: 10px;
 }
 
 .tag-text {
   color: var(--theme-link, #0366d6);
   font-family: monospace;
+  font-size: 11px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tag-remove {
   padding: 0;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border: none;
   background: transparent;
   color: var(--theme-secondary-foreground, #586069);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 12px;
   line-height: 1;
 }
 

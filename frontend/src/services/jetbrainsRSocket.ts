@@ -608,6 +608,12 @@ export interface ActiveFileInfo {
   endLine?: number       // 选区结束行（1-based）
   endColumn?: number     // 选区结束列（1-based）
   selectedContent?: string // 选中的文本内容（可选）
+  // 文件类型相关字段
+  fileType?: string      // 文件类型: "text", "diff", "image", "binary"
+  // Diff 视图专用字段
+  diffOldContent?: string  // Diff 旧内容（左侧）
+  diffNewContent?: string  // Diff 新内容（右侧）
+  diffTitle?: string       // Diff 标题
 }
 
 // IDE 设置接口

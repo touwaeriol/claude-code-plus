@@ -7,6 +7,8 @@ import com.asakii.rpc.api.ActiveFileInfo
 import com.asakii.server.tools.IdeToolsDefault
 import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffManager
+import com.intellij.diff.contents.DocumentContent
+import com.intellij.diff.editor.DiffRequestProcessorEditor
 import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.l10n.LocalizationUtil
@@ -409,63 +411,47 @@ class IdeToolsImpl(
             ApplicationManager.getApplication().invokeAndWait {
                 ApplicationManager.getApplication().runReadAction {
                     val fileEditorManager = FileEditorManager.getInstance(project)
-                    val selectedEditor = fileEditorManager.selectedTextEditor
+                    val selectedFileEditor = fileEditorManager.selectedEditor
+                    val selectedTextEditor = fileEditorManager.selectedTextEditor
                     val selectedFile = fileEditorManager.selectedFiles.firstOrNull()
+                    val projectPath = project.basePath ?: ""
 
+                    // 检查是否是 Diff 编辑器
+                    if (selectedFileEditor is DiffRequestProcessorEditor) {
+                        result = handleDiffEditor(selectedFileEditor, projectPath)
+                        return@runReadAction
+                    }
+
+                    // 处理普通文件
                     if (selectedFile != null) {
-                        val projectPath = project.basePath ?: ""
                         val absolutePath = selectedFile.path
-                        val relativePath = if (projectPath.isNotEmpty() && absolutePath.startsWith(projectPath)) {
-                            absolutePath.removePrefix(projectPath).removePrefix("/").removePrefix("\\")
-                        } else {
-                            absolutePath
-                        }
+                        val relativePath = calculateRelativePath(absolutePath, projectPath)
+                        val fileName = selectedFile.name
 
-                        // 获取光标位置
-                        val caret = selectedEditor?.caretModel?.primaryCaret
-                        val line = caret?.logicalPosition?.line?.plus(1) // 转换为 1-based
-                        val column = caret?.logicalPosition?.column?.plus(1) // 转换为 1-based
+                        // 检查文件类型
+                        val fileType = determineFileType(selectedFile)
 
-                        // 获取选区信息
-                        val selectionModel = selectedEditor?.selectionModel
-                        val hasSelection = selectionModel?.hasSelection() == true
-                        var startLine: Int? = null
-                        var startColumn: Int? = null
-                        var endLine: Int? = null
-                        var endColumn: Int? = null
-                        var selectedContent: String? = null
-
-                        if (hasSelection && selectedEditor != null) {
-                            val document = selectedEditor.document
-                            val selectionStart = selectionModel!!.selectionStart
-                            val selectionEnd = selectionModel.selectionEnd
-
-                            startLine = document.getLineNumber(selectionStart) + 1 // 转换为 1-based
-                            startColumn = selectionStart - document.getLineStartOffset(startLine - 1) + 1
-                            endLine = document.getLineNumber(selectionEnd) + 1 // 转换为 1-based
-                            endColumn = selectionEnd - document.getLineStartOffset(endLine - 1) + 1
-
-                            // 获取选中的文本内容
-                            selectedContent = selectionModel.selectedText
-                        }
-
-                        result = ActiveFileInfo(
-                            path = absolutePath,
-                            relativePath = relativePath,
-                            name = selectedFile.name,
-                            line = line,
-                            column = column,
-                            hasSelection = hasSelection,
-                            startLine = startLine,
-                            startColumn = startColumn,
-                            endLine = endLine,
-                            endColumn = endColumn,
-                            selectedContent = selectedContent
-                        )
-                        if (hasSelection) {
-                            logger.info("✅ Active editor file: $relativePath (selection: $startLine:$startColumn - $endLine:$endColumn)")
-                        } else {
-                            logger.info("✅ Active editor file: $relativePath (line=$line, column=$column)")
+                        when (fileType) {
+                            "image", "binary" -> {
+                                // 图片和二进制文件：只返回路径，不获取内容
+                                result = ActiveFileInfo(
+                                    path = absolutePath,
+                                    relativePath = relativePath,
+                                    name = fileName,
+                                    fileType = fileType
+                                )
+                                logger.info("✅ Active $fileType file: $relativePath")
+                            }
+                            else -> {
+                                // 文本文件：获取光标位置和选区信息
+                                result = handleTextEditor(
+                                    selectedTextEditor,
+                                    absolutePath,
+                                    relativePath,
+                                    fileName,
+                                    fileType
+                                )
+                            }
                         }
                     }
                 }
@@ -474,6 +460,151 @@ class IdeToolsImpl(
         } catch (e: Exception) {
             logger.warning("Failed to get active editor file: ${e.message}")
             null
+        }
+    }
+
+    /**
+     * 处理 Diff 编辑器，获取 Diff 内容
+     */
+    private fun handleDiffEditor(diffEditor: DiffRequestProcessorEditor, projectPath: String): ActiveFileInfo? {
+        return try {
+            val processor = diffEditor.processor
+            val request = processor.activeRequest
+
+            if (request is SimpleDiffRequest) {
+                val contents = request.contents
+                val title = request.title ?: "Diff"
+
+                // 获取左侧（旧）和右侧（新）内容
+                val oldContent = (contents.getOrNull(0) as? DocumentContent)?.document?.text
+                val newContent = (contents.getOrNull(1) as? DocumentContent)?.document?.text
+
+                // 尝试从 Diff 请求中获取文件路径
+                val contentTitles = request.contentTitles
+                val filePath = contentTitles.firstOrNull { it?.contains("/") == true || it?.contains("\\") == true }
+                    ?: request.title
+                    ?: "Diff"
+
+                val relativePath = calculateRelativePath(filePath, projectPath)
+
+                logger.info("✅ Active diff: $title (old: ${oldContent?.length ?: 0} chars, new: ${newContent?.length ?: 0} chars)")
+
+                ActiveFileInfo(
+                    path = filePath,
+                    relativePath = relativePath,
+                    name = File(filePath).name,
+                    fileType = "diff",
+                    diffOldContent = oldContent,
+                    diffNewContent = newContent,
+                    diffTitle = title
+                )
+            } else {
+                logger.info("⚠️ Diff request is not SimpleDiffRequest: ${request?.javaClass?.name}")
+                null
+            }
+        } catch (e: Exception) {
+            logger.warning("Failed to handle diff editor: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * 处理文本编辑器，获取光标位置和选区信息
+     */
+    private fun handleTextEditor(
+        selectedEditor: com.intellij.openapi.editor.Editor?,
+        absolutePath: String,
+        relativePath: String,
+        fileName: String,
+        fileType: String
+    ): ActiveFileInfo {
+        // 获取光标位置
+        val caret = selectedEditor?.caretModel?.primaryCaret
+        val line = caret?.logicalPosition?.line?.plus(1) // 转换为 1-based
+        val column = caret?.logicalPosition?.column?.plus(1) // 转换为 1-based
+
+        // 获取选区信息
+        val selectionModel = selectedEditor?.selectionModel
+        val hasSelection = selectionModel?.hasSelection() == true
+        var startLine: Int? = null
+        var startColumn: Int? = null
+        var endLine: Int? = null
+        var endColumn: Int? = null
+        var selectedContent: String? = null
+
+        if (hasSelection && selectedEditor != null) {
+            val document = selectedEditor.document
+            val selectionStart = selectionModel!!.selectionStart
+            val selectionEnd = selectionModel.selectionEnd
+
+            startLine = document.getLineNumber(selectionStart) + 1 // 转换为 1-based
+            startColumn = selectionStart - document.getLineStartOffset(startLine - 1) + 1
+            endLine = document.getLineNumber(selectionEnd) + 1 // 转换为 1-based
+            endColumn = selectionEnd - document.getLineStartOffset(endLine - 1) + 1
+
+            // 获取选中的文本内容
+            selectedContent = selectionModel.selectedText
+        }
+
+        if (hasSelection) {
+            logger.info("✅ Active editor file: $relativePath (selection: $startLine:$startColumn - $endLine:$endColumn)")
+        } else {
+            logger.info("✅ Active editor file: $relativePath (line=$line, column=$column)")
+        }
+
+        return ActiveFileInfo(
+            path = absolutePath,
+            relativePath = relativePath,
+            name = fileName,
+            line = line,
+            column = column,
+            hasSelection = hasSelection,
+            startLine = startLine,
+            startColumn = startColumn,
+            endLine = endLine,
+            endColumn = endColumn,
+            selectedContent = selectedContent,
+            fileType = fileType
+        )
+    }
+
+    /**
+     * 计算相对路径
+     */
+    private fun calculateRelativePath(absolutePath: String, projectPath: String): String {
+        return if (projectPath.isNotEmpty() && absolutePath.startsWith(projectPath)) {
+            absolutePath.removePrefix(projectPath).removePrefix("/").removePrefix("\\")
+        } else {
+            absolutePath
+        }
+    }
+
+    /**
+     * 确定文件类型
+     */
+    private fun determineFileType(file: VirtualFile): String {
+        val extension = file.extension?.lowercase() ?: ""
+
+        // 常见图片扩展名
+        val imageExtensions = setOf(
+            "png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico", "tiff", "tif"
+        )
+
+        // 常见二进制文件扩展名
+        val binaryExtensions = setOf(
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+            "zip", "tar", "gz", "rar", "7z",
+            "exe", "dll", "so", "dylib",
+            "class", "jar", "war",
+            "mp3", "mp4", "avi", "mov", "wav", "flac",
+            "ttf", "otf", "woff", "woff2"
+        )
+
+        return when {
+            extension in imageExtensions -> "image"
+            extension in binaryExtensions -> "binary"
+            file.fileType.isBinary -> "binary"
+            else -> "text"
         }
     }
 }
