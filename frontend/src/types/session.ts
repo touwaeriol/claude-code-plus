@@ -23,11 +23,12 @@ export interface RequestTrackerInfo {
 
 /**
  * UI 状态（用于切换会话时保存/恢复）
+ * @deprecated 使用 useSessionTab.ts 中的 UIState
  */
 export interface UIState {
   inputText: string
   contexts: any[]  // ContextReference[]
-  scrollPosition: number
+  scrollState: import('@/composables/useSessionTab').ScrollState
 }
 
 /**

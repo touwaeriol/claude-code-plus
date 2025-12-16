@@ -241,7 +241,12 @@ export default {
     unnamed: '未命名会话',
     empty: '暂无活动会话',
     messages: '条消息',
-    loadHistoryFailed: '加载历史会话失败'
+    loadHistoryFailed: '加载历史会话失败',
+    deleteSuccess: '会话已删除',
+    deleteFailed: '删除会话失败',
+    loadMore: '加载更多',
+    scrollToLoadMore: '下滑加载更多',
+    selected: '已选择'
   },
   time: {
     justNow: '刚刚',

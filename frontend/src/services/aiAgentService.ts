@@ -117,6 +117,37 @@ export class AiAgentService {
     }
 
     /**
+     * 删除历史会话（删除 JSONL 文件）
+     *
+     * @param sessionId 会话 ID
+     * @returns 删除结果
+     */
+    async deleteHistorySession(sessionId: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            console.log(`🗑️ [HTTP] 删除历史会话: ${sessionId}`)
+
+            const baseUrl = resolveServerHttpUrl()
+            const url = `${baseUrl}/api/history/sessions/${encodeURIComponent(sessionId)}`
+
+            const response = await fetch(url, {
+                method: 'DELETE'
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+            }
+
+            const result = await response.json()
+            console.log('🗑️ [HTTP] 删除结果:', result)
+            return result
+        } catch (error) {
+            console.error('[aiAgentService] 删除历史会话失败:', error)
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+        }
+    }
+
+    /**
      * 获取历史文件元数据（文件总行数等）
      *
      * @param params 查询参数

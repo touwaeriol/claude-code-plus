@@ -115,16 +115,11 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       console.log('✅ [IdeSettings] 已应用 IDE 默认设置:', updates)
 
-      // 4. 同步 skipPermissions 到当前会话（如果有的话）
-      // 使用动态导入避免循环依赖
-      import('./sessionStore').then(({ useSessionStore }) => {
-        const sessionStore = useSessionStore()
-        const currentTab = sessionStore.currentTab
-        if (currentTab && updates.skipPermissions !== undefined) {
-          currentTab.setPendingSetting('skipPermissions', updates.skipPermissions)
-          console.log('🔄 [IdeSettings] 已同步 skipPermissions 到当前会话:', updates.skipPermissions)
-        }
-      })
+      // 4. 通过事件总线通知 sessionStore 同步 skipPermissions
+      if (updates.skipPermissions !== undefined) {
+        eventBus.emit('settings:skipPermissionsChanged', { skipPermissions: updates.skipPermissions })
+        console.log('🔄 [IdeSettings] 已发布 skipPermissions 变更事件:', updates.skipPermissions)
+      }
     }
   }
 

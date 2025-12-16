@@ -241,7 +241,12 @@ export default {
     unnamed: 'Unnamed session',
     empty: 'No active sessions',
     messages: 'messages',
-    loadHistoryFailed: 'Failed to load history sessions'
+    loadHistoryFailed: 'Failed to load history sessions',
+    deleteSuccess: 'Session deleted',
+    deleteFailed: 'Failed to delete session',
+    loadMore: 'Load more',
+    scrollToLoadMore: 'Scroll down to load more',
+    selected: 'Selected'
   },
   time: {
     justNow: 'Just now',

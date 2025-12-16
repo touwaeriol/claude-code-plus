@@ -589,6 +589,7 @@ export function useSessionMessages(
           if (contentBlock.type === 'text') {
             contentBlock.text += delta.text
             updateTextDisplayItemIncrementally(message, index, contentBlock.text)
+            stats.incrementContentVersion() // 触发自动滚动
           }
           break
 
@@ -596,6 +597,7 @@ export function useSessionMessages(
           if (contentBlock.type === 'thinking') {
             contentBlock.thinking += delta.thinking
             updateThinkingDisplayItemIncrementally(message, index, contentBlock.thinking)
+            stats.incrementContentVersion() // 触发自动滚动
           }
           break
 

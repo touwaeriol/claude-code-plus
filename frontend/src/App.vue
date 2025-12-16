@@ -69,13 +69,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import ModernChatView from '@/components/chat/ModernChatView.vue'
 import TestDisplayItems from '@/views/TestDisplayItems.vue'
 import ToastContainer from '@/components/toast/ToastContainer.vue'
 import { ideaBridge } from '@/services/ideaBridge'
 import { themeService } from '@/services/themeService'
 import { useEnvironment } from '@/composables/useEnvironment'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { syncIdeLocale } from '@/i18n'
 
 const bridgeReady = ref(false)
@@ -92,6 +93,7 @@ const sessionId = ref<string | undefined>(undefined)
 const projectPath = ref<string>('')
 
 const { detectEnvironment } = useEnvironment()
+const settingsStore = useSettingsStore()
 
 onMounted(async () => {
   console.log('App mounted - ModernChatView loaded')
@@ -121,6 +123,12 @@ onMounted(async () => {
       if (syncedLocale) {
         console.log(`🌐 Locale synced from IDE: ${syncedLocale}`)
       }
+
+      // 加载 IDE 设置并注册监听器
+      console.log('Loading IDE settings...')
+      await settingsStore.loadIdeSettings()
+      settingsStore.initIdeSettingsListener()
+      console.log('IDE settings initialized')
     }
 
     // 监听主题变化
@@ -179,6 +187,11 @@ function toggleTheme() {
   console.log('Toggling theme...')
   themeService.toggleTheme()
 }
+
+onUnmounted(() => {
+  // 清理 IDE 设置监听器
+  settingsStore.cleanupIdeSettingsListener()
+})
 </script>
 
 <style scoped>
@@ -195,7 +208,7 @@ function toggleTheme() {
   min-height: 0;
   background: var(--theme-background);
   color: var(--theme-foreground);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--theme-font-family);
 }
 
 /* 主聊天视图容器 */

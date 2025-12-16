@@ -14,6 +14,8 @@ version = providers.gradleProperty("pluginVersion").get()
 dependencies {
     implementation(project(":ai-agent-server"))
     implementation(project(":ai-agent-proto")) // Protobuf 生成的类型
+    // 添加 ai-agent-sdk 依赖 (包含 AiAgentProvider 等核心类型)
+    implementation(project(":ai-agent-sdk"))
 
 
 

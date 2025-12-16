@@ -99,6 +99,12 @@ export function useSessionStats() {
     cacheReadTokens: 0
   })
 
+  /**
+   * 流式内容版本号
+   * 每次有内容增量更新时递增，用于触发自动滚动
+   */
+  const streamingContentVersion = ref(0)
+
   // ========== 计算属性 ==========
 
   /**
@@ -200,6 +206,15 @@ export function useSessionStats() {
     }
 
     log.debug(`[useSessionStats] 添加 Token 使用: input=${inputTokens}, output=${outputTokens}, cacheCreation=${cacheCreationTokens}, cacheRead=${cacheReadTokens}`)
+  }
+
+  /**
+   * 递增流式内容版本号
+   * 每次有内容增量更新（如 thinking_delta、text_delta）时调用
+   * 用于触发自动滚动
+   */
+  function incrementContentVersion(): void {
+    streamingContentVersion.value++
   }
 
   /**
@@ -320,6 +335,7 @@ export function useSessionStats() {
     // 响应式状态
     requestTracker,
     cumulativeStats,
+    streamingContentVersion,
 
     // 计算属性
     hasActiveRequest,
@@ -331,6 +347,7 @@ export function useSessionStats() {
     startRequestTracking,
     setStreamingMessageId,
     addTokenUsage,
+    incrementContentVersion,
     getRequestStats,
     finishRequestTracking,
     cancelRequestTracking,

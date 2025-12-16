@@ -57,6 +57,9 @@ export interface Settings {
 
   // 跳过权限确认（dangerouslySkipPermissions）
   skipPermissions: boolean
+
+  // 流式输出时包含部分消息（用于实时 token 用量信息）
+  includePartialMessages: boolean
 }
 
 /**
@@ -74,7 +77,8 @@ export const DEFAULT_SETTINGS: Settings = {
   temperature: null,
   verbose: false,
   apiKey: null,
-  skipPermissions: false  // 默认不跳过权限检查，需要用户授权
+  skipPermissions: false,  // 默认不跳过权限检查，需要用户授权
+  includePartialMessages: true  // 默认包含部分消息
 }
 
 /**
