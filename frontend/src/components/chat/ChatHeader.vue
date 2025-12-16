@@ -102,7 +102,9 @@ async function handleCloseTab(tabId: string) {
 async function handleNewSession() {
   // 如果当前正在生成中，新建一个新的 Tab
   // 如果没有正在生成中，直接清空当前 Tab 变成空的新会话
-  if (sessionStore.currentIsGenerating) {
+  // 注意：直接从 Tab 实例读取 isGenerating，避免 shallowRef 响应性问题
+  const isCurrentGenerating = sessionStore.currentTab?.isGenerating.value ?? false
+  if (isCurrentGenerating) {
     await sessionStore.createTab()
   } else {
     await sessionStore.resetCurrentTab()
