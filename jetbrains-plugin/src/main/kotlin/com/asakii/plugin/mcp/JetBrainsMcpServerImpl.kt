@@ -35,6 +35,7 @@ class JetBrainsMcpServerImpl(private val project: Project) : McpServerBase() {
     private lateinit var fileIndexTool: FileIndexTool
     private lateinit var codeSearchTool: CodeSearchTool
     private lateinit var findUsagesTool: FindUsagesTool
+    private lateinit var renameTool: RenameTool
 
     override fun getSystemPromptAppendix(): String {
         return ResourceLoader.loadTextOrDefault(
@@ -52,7 +53,8 @@ class JetBrainsMcpServerImpl(private val project: Project) : McpServerBase() {
         "FileProblems",
         "FileIndex",
         "CodeSearch",
-        "FindUsages"
+        "FindUsages",
+        "Rename"
     )
 
     companion object {
@@ -82,7 +84,8 @@ IMPORTANT: When a project build/compile fails or a file is known to have syntax 
         fileIndexTool = FileIndexTool(project)
         codeSearchTool = CodeSearchTool(project)
         findUsagesTool = FindUsagesTool(project)
-        
+        renameTool = RenameTool(project)
+
         // 注册目录树工具
         registerToolFromSchema("DirectoryTree", directoryTreeTool.getInputSchema()) { arguments ->
             directoryTreeTool.execute(arguments)
@@ -108,7 +111,12 @@ IMPORTANT: When a project build/compile fails or a file is known to have syntax 
             findUsagesTool.execute(arguments)
         }
 
-        logger.info { "✅ JetBrains MCP Server initialized, registered 5 tools" }
+        // 注册重命名工具
+        registerToolFromSchema("Rename", renameTool.getInputSchema()) { arguments ->
+            renameTool.execute(arguments)
+        }
+
+        logger.info { "✅ JetBrains MCP Server initialized, registered 6 tools" }
     }
 }
 

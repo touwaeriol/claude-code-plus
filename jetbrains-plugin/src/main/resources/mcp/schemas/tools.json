@@ -261,5 +261,53 @@
       {"filePath": "src/config.kt", "symbolName": "apiKey", "usageTypes": ["Write"]},
       {"filePath": "src/utils/helper.ts", "symbolName": "formatDate", "searchScope": "Module", "scopeArg": "frontend"}
     ]
+  },
+
+  "Rename": {
+    "type": "object",
+    "description": "Safely rename a symbol (class, method, field, variable, etc.) and automatically update all references. Similar to IDE's Refactor > Rename (Shift+F6) feature. This ensures refactoring safety across the entire project.",
+    "properties": {
+      "filePath": {
+        "type": "string",
+        "description": "File path where the symbol is defined (relative to project root or absolute path)"
+      },
+      "newName": {
+        "type": "string",
+        "description": "New name for the symbol"
+      },
+      "line": {
+        "type": "integer",
+        "description": "Line number where the symbol is located (1-based)",
+        "minimum": 1
+      },
+      "column": {
+        "type": "integer",
+        "description": "Column number where the symbol is located (1-based, optional). If not provided, searches from the beginning of the line.",
+        "minimum": 1
+      },
+      "symbolType": {
+        "type": "string",
+        "enum": ["Auto", "Class", "Method", "Field", "Variable", "Parameter", "File"],
+        "description": "Type of symbol to rename. Auto (default) detects automatically.",
+        "default": "Auto"
+      },
+      "searchInComments": {
+        "type": "boolean",
+        "description": "Also rename occurrences in comments",
+        "default": true
+      },
+      "searchInStrings": {
+        "type": "boolean",
+        "description": "Also rename occurrences in string literals",
+        "default": false
+      }
+    },
+    "required": ["filePath", "newName", "line"],
+    "examples": [
+      {"filePath": "src/main/kotlin/UserService.kt", "line": 25, "column": 10, "newName": "fetchUserById"},
+      {"filePath": "src/main/kotlin/UserService.kt", "line": 10, "newName": "findUser"},
+      {"filePath": "src/models/User.kt", "line": 5, "newName": "UserModel", "symbolType": "Class"},
+      {"filePath": "src/config.kt", "line": 12, "newName": "API_KEY", "searchInComments": true, "searchInStrings": true}
+    ]
   }
 }
