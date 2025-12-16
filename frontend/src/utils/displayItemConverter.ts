@@ -423,14 +423,41 @@ export function convertToDisplayItems(
             displayItems.push(localCommandOutput)
             continue
           }
+
+          // 解析 <current-open-file/> 标记
+          let displayText = textBlock.text
+          let currentOpenFile = undefined
+          if (hasCurrentOpenFileTag(displayText)) {
+            currentOpenFile = parseCurrentOpenFileTag(displayText) || undefined
+            displayText = removeCurrentOpenFileTag(displayText)
+          }
+
+          // 如果移除标记后没有内容，则只显示文件标记
+          if (!displayText.trim() && currentOpenFile) {
+            const userMessage: UserMessage = {
+              displayType: 'userMessage',
+              id: message.id,
+              uuid: (message as UnifiedMessage).uuid,
+              content: [] as any,
+              timestamp: message.timestamp,
+              isReplay: true,
+              style: 'hint',
+              currentOpenFile
+            }
+            displayItems.push(userMessage)
+            continue
+          }
+
           // 没有本地命令标签，作为普通回放消息显示（左对齐，markdown 渲染，次要颜色）
           const userMessage: UserMessage = {
             displayType: 'userMessage',
             id: message.id,
-            content: [{ type: 'text', text: textBlock.text }] as any,
+            uuid: (message as UnifiedMessage).uuid,
+            content: displayText.trim() ? [{ type: 'text', text: displayText }] as any : [] as any,
             timestamp: message.timestamp,
             isReplay: true,
-            style: 'hint'
+            style: 'hint',
+            currentOpenFile
           }
           displayItems.push(userMessage)
         }

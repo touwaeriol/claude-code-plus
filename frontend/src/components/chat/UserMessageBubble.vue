@@ -5,7 +5,7 @@
     <div
       v-if="hasCurrentOpenFile"
       class="history-file-tag"
-      :title="currentOpenFile?.path"
+      :title="currentOpenFileFullPath"
       @click="handleOpenFileClick"
     >
       <span class="tag-icon">📍</span>
@@ -40,6 +40,16 @@
 
         <!-- 消息气泡 -->
         <div class="user-message-bubble">
+          <!-- 当前打开文件标记（如果有） -->
+          <div
+            v-if="hasCurrentOpenFile"
+            class="bubble-file-tag"
+            :title="currentOpenFileFullPath"
+            @click.stop="handleOpenFileClick"
+          >
+            <span class="tag-icon">📍</span>
+            <span class="tag-text">{{ currentOpenFileDisplayText }}</span>
+          </div>
           <!-- 单一气泡容器 -->
           <div class="bubble-content" :class="{ collapsed: isCollapsed && isLongMessage }">
             <!-- 上下文图片（在文字上方） -->
@@ -125,6 +135,7 @@ import { onClickOutside } from '@vueuse/core'
 import type { ImageBlock, ContentBlock } from '@/types/message'
 import type { ContextReference } from '@/types/display'
 import type { ParsedCurrentOpenFile } from '@/utils/xmlTagParser'
+import { hasCurrentOpenFileTag, parseCurrentOpenFileTag, removeCurrentOpenFileTag } from '@/utils/xmlTagParser'
 import { isFileReference } from '@/utils/userMessageBuilder'
 import { linkifyText, getLinkFromEvent, handleLinkClick } from '@/utils/linkify'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
@@ -271,7 +282,7 @@ const contextImagesAsBlocks = computed((): ImageBlock[] => {
   }))
 })
 
-// 提取用户输入的文本内容（排除文件引用）
+// 提取用户输入的文本内容（排除文件引用，移除 current-open-file 标签）
 const messageText = computed(() => {
   const content = props.message.content
   if (!content || !Array.isArray(content)) {
@@ -290,11 +301,34 @@ const messageText = computed(() => {
     })
     .map(block => {
       if (block.type === 'text' && 'text' in block) {
-        return (block as any).text
+        let text = (block as any).text
+        // 移除 current-open-file 标签（它会在文件标记区域单独显示）
+        if (hasCurrentOpenFileTag(text)) {
+          text = removeCurrentOpenFileTag(text)
+        }
+        return text
       }
       return ''
     })
     .join('\n')
+})
+
+// 从消息文本中解析 currentOpenFile（用于非 replay 消息）
+const parsedCurrentOpenFile = computed((): ParsedCurrentOpenFile | undefined => {
+  const content = props.message.content
+  if (!content || !Array.isArray(content)) {
+    return undefined
+  }
+
+  for (const block of content) {
+    if (block.type === 'text' && 'text' in block) {
+      const text = (block as any).text || ''
+      if (hasCurrentOpenFileTag(text)) {
+        return parseCurrentOpenFileTag(text) || undefined
+      }
+    }
+  }
+  return undefined
 })
 
 // 渲染后的文本（带链接）
@@ -304,28 +338,59 @@ const renderedText = computed(() => {
   return result.html
 })
 
-// 获取当前打开文件标记（从历史消息中解析）
+// 获取当前打开文件标记（优先从 props 获取，其次从消息文本解析）
 const currentOpenFile = computed((): ParsedCurrentOpenFile | undefined => {
-  return props.message.currentOpenFile as ParsedCurrentOpenFile | undefined
+  // 优先使用 props 中的 currentOpenFile（历史消息中解析的）
+  if (props.message.currentOpenFile) {
+    return props.message.currentOpenFile as ParsedCurrentOpenFile
+  }
+  // 否则从消息文本中解析
+  return parsedCurrentOpenFile.value
 })
 
-// 是否显示当前打开文件标记
+// 是否显示当前打开文件标记（replay 和非 replay 消息都支持）
 const hasCurrentOpenFile = computed(() => {
-  return props.message.isReplay && currentOpenFile.value
+  return !!currentOpenFile.value
 })
 
-// 当前打开文件的显示文本
+// 从路径中提取文件名
+function getFileName(filePath: string): string {
+  const parts = filePath.replace(/\\/g, '/').split('/')
+  return parts[parts.length - 1] || filePath
+}
+
+// 当前打开文件的显示文本（只显示文件名，悬停显示全路径）
 const currentOpenFileDisplayText = computed(() => {
   const file = currentOpenFile.value
   if (!file) return ''
+  const fileName = getFileName(file.path)
   if (file.startLine && file.endLine) {
     // 有选区
-    return `${file.path}:${file.startLine}-${file.endLine}`
+    return `${fileName}:${file.startLine}-${file.endLine}`
   } else if (file.line) {
     // 有光标位置
-    return `${file.path}:${file.line}`
+    return `${fileName}:${file.line}`
   }
-  return file.path
+  return fileName
+})
+
+// 当前打开文件的完整路径提示（用于 title 属性，包含选中内容）
+const currentOpenFileFullPath = computed(() => {
+  const file = currentOpenFile.value
+  if (!file) return ''
+  let pathInfo = ''
+  if (file.startLine && file.endLine) {
+    pathInfo = `${file.path}:${file.startLine}-${file.endLine}`
+  } else if (file.line) {
+    pathInfo = `${file.path}:${file.line}`
+  } else {
+    pathInfo = file.path
+  }
+  // 如果有选中内容，添加到提示中
+  if (file.selectedContent) {
+    return `${pathInfo}\n\n选中内容:\n${file.selectedContent}`
+  }
+  return pathInfo
 })
 
 // 点击文件标记打开文件
@@ -683,6 +748,42 @@ function closeImagePreview() {
   color: var(--theme-accent, #0366d6);
   font-weight: 500;
   font-family: var(--editor-font-family, monospace);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 气泡消息中的文件标记 */
+.bubble-file-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.bubble-file-tag:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.bubble-file-tag .tag-icon {
+  font-size: 12px;
+}
+
+.bubble-file-tag .tag-text {
+  font-weight: 500;
+  font-family: var(--editor-font-family, monospace);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 </style>

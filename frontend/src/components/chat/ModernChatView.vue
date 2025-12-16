@@ -162,6 +162,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, provide } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useI18n } from '@/composables/useI18n'
 import { useEnvironment } from '@/composables/useEnvironment'
 import { setupIdeSessionBridge, onIdeHostCommand } from '@/bridges/ideSessionBridge'
@@ -199,6 +200,7 @@ provide('aiAgentService', aiAgentService)
 
 // 使用 stores
 const sessionStore = useSessionStore()
+const settingsStore = useSettingsStore()
 const { t } = useI18n()
 const { isInIde, detectEnvironment } = useEnvironment()
 const isIdeMode = isInIde
@@ -421,6 +423,14 @@ onMounted(async () => {
     // 没有 Tab 时创建默认会话
     if (!sessionStore.hasTabs) {
       console.log('No existing tabs, creating default...')
+
+      // 在 IDE 环境下，确保 IDE 设置已加载完成后再创建 Tab
+      // 这样 defaultBypassPermissions 等设置才能正确应用
+      if (isIdeMode.value && !settingsStore.ideSettings) {
+        console.log('Waiting for IDE settings to load...')
+        await settingsStore.loadIdeSettings()
+        console.log('IDE settings loaded, skipPermissions:', settingsStore.settings.skipPermissions)
+      }
 
       // 并行执行：创建 Tab（RSocket 连接）+ 加载历史会话列表（HTTP）
       const [tab] = await Promise.all([
