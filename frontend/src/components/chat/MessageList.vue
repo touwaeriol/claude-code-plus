@@ -378,6 +378,19 @@ watch(
   { immediate: true }
 )
 
+// 监听 streamingStartTime 变化（切换 Tab 时重启计时器）
+// 解决问题：多个 Tab 同时生成时，切换 Tab 后计时器显示错误
+watch(
+  () => props.streamingStartTime,
+  () => {
+    if (props.isStreaming) {
+      // 重启计时器以使用新的 startTime
+      stopTimer()
+      startTimer()
+    }
+  }
+)
+
 // 监听流式响应时的内容变化（通过 outputTokens 变化检测）
 // 解决问题：消息数量不变但内容更新时，需要自动滚动
 watch(

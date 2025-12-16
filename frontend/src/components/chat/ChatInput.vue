@@ -600,7 +600,15 @@ const slashCommandQuery = ref('')
 
 // Active File State (当前打开的文件 - 由 IDEA 推送)
 const currentActiveFile = ref<ActiveFileInfo | null>(null)
-const activeFileDismissed = ref(false)  // 用户是否手动关闭了当前文件显示
+// activeFileDismissed 从 sessionStore 获取，每个 Tab 独立
+const activeFileDismissed = computed({
+  get: () => sessionStore.currentTab?.uiState.activeFileDismissed ?? false,
+  set: (value: boolean) => {
+    if (sessionStore.currentTab) {
+      sessionStore.currentTab.uiState.activeFileDismissed = value
+    }
+  }
+})
 let activeFileUnsubscribe: (() => void) | null = null
 
 // 输入框大小调整 composable
