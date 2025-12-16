@@ -8,8 +8,8 @@
       :title="currentOpenFileFullPath"
       @click="handleOpenFileClick"
     >
-      <span class="tag-icon">📍</span>
-      <span class="tag-text">{{ currentOpenFileDisplayText }}</span>
+      <span class="tag-file-name">{{ currentOpenFileName }}</span>
+      <span v-if="currentOpenFileLineRange" class="tag-line-range">{{ currentOpenFileLineRange }}</span>
     </div>
     <!-- 消息内容（如果有） -->
     <MarkdownRenderer v-if="messageText" :content="messageText" />
@@ -47,8 +47,8 @@
             :title="currentOpenFileFullPath"
             @click.stop="handleOpenFileClick"
           >
-            <span class="tag-icon">📍</span>
-            <span class="tag-text">{{ currentOpenFileDisplayText }}</span>
+            <span class="tag-file-name">{{ currentOpenFileName }}</span>
+            <span v-if="currentOpenFileLineRange" class="tag-line-range">{{ currentOpenFileLineRange }}</span>
           </div>
           <!-- 单一气泡容器 -->
           <div class="bubble-content" :class="{ collapsed: isCollapsed && isLongMessage }">
@@ -359,7 +359,31 @@ function getFileName(filePath: string): string {
   return parts[parts.length - 1] || filePath
 }
 
-// 当前打开文件的显示文本（只显示文件名，悬停显示全路径）
+// 当前打开文件的文件名（可能被截断）
+const currentOpenFileName = computed(() => {
+  const file = currentOpenFile.value
+  if (!file) return ''
+  return getFileName(file.path)
+})
+
+// 当前打开文件的行号范围（包含列信息）
+const currentOpenFileLineRange = computed(() => {
+  const file = currentOpenFile.value
+  if (!file) return ''
+  if (file.startLine && file.endLine) {
+    // 选区：显示起始行:列-结束行:列
+    const startCol = file.startColumn || 1
+    const endCol = file.endColumn || 1
+    return `:${file.startLine}:${startCol}-${file.endLine}:${endCol}`
+  } else if (file.line) {
+    // 光标：显示行:列
+    const col = file.column || 1
+    return `:${file.line}:${col}`
+  }
+  return ''
+})
+
+// 当前打开文件的显示文本（只显示文件名，悬停显示全路径）- 保留以兼容
 const currentOpenFileDisplayText = computed(() => {
   const file = currentOpenFile.value
   if (!file) return ''
@@ -720,17 +744,17 @@ function closeImagePreview() {
   color: var(--theme-error);
 }
 
-/* 历史消息中的文件标记 */
+/* 历史消息中的文件标记 - 紧凑样式 */
 .history-file-tag {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  margin-bottom: 6px;
+  gap: 3px;
+  padding: 1px 6px;
+  margin-bottom: 4px;
   background: rgba(3, 102, 214, 0.08);
   border: 1px solid var(--theme-accent, #0366d6);
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: 3px;
+  font-size: 11px;
   cursor: pointer;
   transition: background 0.2s;
 }
@@ -740,31 +764,40 @@ function closeImagePreview() {
 }
 
 .history-file-tag .tag-icon {
-  font-size: 12px;
+  font-size: 10px;
   color: var(--theme-accent, #0366d6);
+  flex-shrink: 0;
 }
 
-.history-file-tag .tag-text {
+.history-file-tag .tag-file-name {
   color: var(--theme-accent, #0366d6);
   font-weight: 500;
   font-family: var(--editor-font-family, monospace);
-  max-width: 300px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 气泡消息中的文件标记 */
+.history-file-tag .tag-line-range {
+  color: var(--theme-accent, #0366d6);
+  font-weight: 600;
+  font-family: var(--editor-font-family, monospace);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* 气泡消息中的文件标记 - 紧凑样式 */
 .bubble-file-tag {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  margin-bottom: 6px;
+  gap: 3px;
+  padding: 1px 6px;
+  margin-bottom: 4px;
   background: rgba(255, 255, 255, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: 3px;
+  font-size: 11px;
   cursor: pointer;
   transition: background 0.2s;
 }
@@ -774,15 +807,23 @@ function closeImagePreview() {
 }
 
 .bubble-file-tag .tag-icon {
-  font-size: 12px;
+  font-size: 10px;
+  flex-shrink: 0;
 }
 
-.bubble-file-tag .tag-text {
+.bubble-file-tag .tag-file-name {
   font-weight: 500;
   font-family: var(--editor-font-family, monospace);
-  max-width: 200px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bubble-file-tag .tag-line-range {
+  font-weight: 600;
+  font-family: var(--editor-font-family, monospace);
+  flex-shrink: 0;
   white-space: nowrap;
 }
 
