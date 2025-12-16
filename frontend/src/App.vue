@@ -77,7 +77,8 @@ import { ideaBridge } from '@/services/ideaBridge'
 import { themeService } from '@/services/themeService'
 import { useEnvironment } from '@/composables/useEnvironment'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { syncIdeLocale } from '@/i18n'
+import { i18n, normalizeLocale } from '@/i18n'
+import { jetbrainsBridge } from '@/services/jetbrainsApi'
 
 const bridgeReady = ref(false)
 const showDebug = ref(false) // 默认隐藏调试面板
@@ -119,9 +120,15 @@ onMounted(async () => {
 
     // IDEA 环境 + 主题同步开启时，同步 IDEA 语言设置
     if (themeService.hasIde()) {
-      const syncedLocale = await syncIdeLocale()
-      if (syncedLocale) {
-        console.log(`🌐 Locale synced from IDE: ${syncedLocale}`)
+      try {
+        const ideLocale = await jetbrainsBridge.getLocale()
+        if (ideLocale) {
+          const normalizedLocale = normalizeLocale(ideLocale)
+          i18n.global.locale.value = normalizedLocale
+          console.log(`🌐 Locale synced from IDE: ${ideLocale} -> ${normalizedLocale}`)
+        }
+      } catch (error) {
+        console.error('🌐 Failed to sync IDE locale:', error)
       }
 
       // 加载 IDE 设置并注册监听器

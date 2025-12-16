@@ -250,7 +250,6 @@ export const useSessionStore = defineStore('session', () => {
     log.info(`[SessionStore] 创建 Tab: ${tab.tabId}`)
 
     // 获取连接设置（使用 IDEA 默认设置，而非从当前会话复制）
-    const settingsStore = useSettingsStore()
     const globalSettings = settingsStore.settings
     const connectOptions: TabConnectOptions = options || {
       model: MODEL_CAPABILITIES[globalSettings.model]?.modelId || DEFAULT_SESSION_SETTINGS.modelId,
