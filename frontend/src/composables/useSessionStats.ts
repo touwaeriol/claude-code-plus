@@ -171,8 +171,6 @@ export function useSessionStats() {
   /**
    * 添加 Token 使用量
    *
-   * 在收到 result 消息时调用
-   *
    * @param inputTokens 输入 tokens
    * @param outputTokens 输出 tokens
    * @param cacheCreationTokens 新创建到缓存的 tokens

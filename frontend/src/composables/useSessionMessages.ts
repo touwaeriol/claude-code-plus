@@ -269,9 +269,16 @@ export function useSessionMessages(
     const eventType = event.type
     log.debug(`[useSessionMessages] 处理事件: ${eventType}`)
 
-    // 更新 token 使用量
-    if (eventType === 'message_delta' && 'usage' in event && event.usage) {
-      const usage = event.usage as {
+    // 更新 token 使用量（message_start 和 message_delta 都可能包含 usage）
+    // message_start: 包含 event.message.usage（初始 input_tokens）
+    // message_delta: 包含 event.usage（最终的 input_tokens + output_tokens）
+    const usageSource =
+      (eventType === 'message_start' && event.message?.usage) ? event.message.usage :
+      (eventType === 'message_delta' && event.usage) ? event.usage :
+      null
+
+    if (usageSource) {
+      const usage = usageSource as {
         input_tokens?: number
         output_tokens?: number
         cached_input_tokens?: number
@@ -684,10 +691,27 @@ export function useSessionMessages(
     let inputTokens = 0
     let outputTokens = 0
 
-    const usage = resultData.usage as { input_tokens?: number; output_tokens?: number } | undefined
+    const usage = resultData.usage as {
+      input_tokens?: number
+      output_tokens?: number
+      cache_creation_input_tokens?: number
+      cache_read_input_tokens?: number
+    } | undefined
     if (usage) {
       inputTokens = usage.input_tokens || 0
       outputTokens = usage.output_tokens || 0
+    }
+
+    // 非流式模式下，从 RpcResultMessage 累加 usage
+    // 流式模式下 tracker 已经通过 message_start/message_delta 累加过了
+    if (tracker && tracker.inputTokens === 0 && tracker.outputTokens === 0 && usage) {
+      stats.addTokenUsage(
+        inputTokens,
+        outputTokens,
+        usage.cache_creation_input_tokens || 0,
+        usage.cache_read_input_tokens || 0
+      )
+      log.debug('[useSessionMessages] 非流式模式，从 RpcResultMessage 累加 usage')
     }
 
     // 计算请求时长
