@@ -341,6 +341,7 @@
     <!-- Send Button Context Menu (发送按钮右键菜单) -->
     <div
       v-if="showSendContextMenu"
+      ref="sendContextMenuRef"
       class="send-context-menu"
       :style="{
         left: sendContextMenuPosition.x + 'px',
@@ -365,13 +366,7 @@
       </div>
     </div>
 
-    <!-- Context Menu Backdrop (点击外部关闭菜单) -->
-    <div
-      v-if="showSendContextMenu"
-      class="context-menu-backdrop"
-      @click="closeSendContextMenu"
-    />
-
+    <!-- Context menu：通过全局监听关闭（不使用全屏遮罩） -->
     <!-- Context Selector Popup (上下文选择器弹窗) - 使用统一组件 -->
     <FileSelectPopup
       :visible="showContextSelectorPopup"
@@ -643,6 +638,51 @@ const selectedModelValue = computed({
 
 
 // Computed
+const sendContextMenuRef = ref<HTMLElement | null>(null)
+
+function handleGlobalSendContextMenuMouseDown(event: MouseEvent) {
+  if (!showSendContextMenu.value) return
+
+  const targetNode = event.target instanceof Node ? event.target : null
+  if (targetNode && sendContextMenuRef.value?.contains(targetNode)) {
+    return
+  }
+
+  // 不吞事件：让本次点击继续传递给真实目标
+  closeSendContextMenu()
+}
+
+function handleGlobalSendContextMenuContextMenu(event: MouseEvent) {
+  if (!showSendContextMenu.value) return
+
+  const targetNode = event.target instanceof Node ? event.target : null
+  if (targetNode && sendContextMenuRef.value?.contains(targetNode)) {
+    return
+  }
+
+  closeSendContextMenu()
+}
+
+function bindSendContextMenuGlobalHandlers() {
+  document.addEventListener('mousedown', handleGlobalSendContextMenuMouseDown, true)
+  document.addEventListener('contextmenu', handleGlobalSendContextMenuContextMenu, true)
+  window.addEventListener('blur', closeSendContextMenu)
+}
+
+function unbindSendContextMenuGlobalHandlers() {
+  document.removeEventListener('mousedown', handleGlobalSendContextMenuMouseDown, true)
+  document.removeEventListener('contextmenu', handleGlobalSendContextMenuContextMenu, true)
+  window.removeEventListener('blur', closeSendContextMenu)
+}
+
+watch(showSendContextMenu, (isOpen) => {
+  if (isOpen) {
+    bindSendContextMenuGlobalHandlers()
+  } else {
+    unbindSendContextMenuGlobalHandlers()
+  }
+})
+
 const visibleTasks = computed(() => {
   return props.pendingTasks.filter(
     task => task.status === 'PENDING' || task.status === 'RUNNING'
@@ -1230,6 +1270,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  unbindSendContextMenuGlobalHandlers()
   // 移除全局键盘监听
   document.removeEventListener('keydown', handleGlobalKeydown)
 })
@@ -1901,16 +1942,6 @@ onUnmounted(() => {
 .menu-text {
   font-weight: 500;
   color: var(--theme-foreground, #24292e);
-}
-
-.context-menu-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 9999;
-  background: transparent;
 }
 
 /* 错误提示区域 */
