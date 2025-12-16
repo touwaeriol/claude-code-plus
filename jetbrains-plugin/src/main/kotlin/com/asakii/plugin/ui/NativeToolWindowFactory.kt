@@ -28,6 +28,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.awt.BorderLayout
 import java.awt.Cursor
+import java.awt.Dimension
 import java.awt.datatransfer.StringSelection
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
@@ -35,6 +36,8 @@ import java.io.IOException
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import javax.swing.JComponent
+import javax.swing.JDialog
+import javax.swing.SwingUtilities
 
 /**
  * ToolWindow 工厂：IDE 模式下使用 JBCefBrowser 加载 Vue 前端，
@@ -276,13 +279,50 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
 
     /**
      * 打开 DevTools 窗口
+     * 使用 JDialog + JBCefBrowser 方式，兼容 Windows 平台
      */
     private fun openDevToolsInDialog(project: Project, browser: JBCefBrowser) {
         try {
-            browser.openDevtools()
-            logger.info("✅ DevTools window opened successfully")
+            // 获取 DevTools 的 CefBrowser 实例
+            val devTools = browser.cefBrowser.devTools
+
+            // 创建一个新的 JBCefBrowser 来承载 DevTools
+            val devToolsBrowser = JBCefBrowser.createBuilder()
+                .setCefBrowser(devTools)
+                .setClient(browser.jbCefClient)
+                .build()
+
+            // 在 Swing EDT 线程中创建对话框
+            SwingUtilities.invokeLater {
+                val frame = com.intellij.openapi.wm.WindowManager.getInstance().getFrame(project)
+                val dialog = JDialog(frame, "DevTools - Claude Code Plus", false).apply {
+                    defaultCloseOperation = JDialog.DISPOSE_ON_CLOSE
+                    preferredSize = Dimension(1200, 800)
+                    layout = BorderLayout()
+                    add(devToolsBrowser.component, BorderLayout.CENTER)
+                    pack()
+                    setLocationRelativeTo(frame)
+                }
+
+                // 当对话框关闭时，释放 DevTools 浏览器资源
+                dialog.addWindowListener(object : java.awt.event.WindowAdapter() {
+                    override fun windowClosed(e: java.awt.event.WindowEvent?) {
+                        devToolsBrowser.dispose()
+                    }
+                })
+
+                dialog.isVisible = true
+                logger.info("✅ DevTools dialog opened successfully")
+            }
         } catch (e: Exception) {
             logger.error("❌ Failed to open DevTools: ${e.message}", e)
+            // 如果上述方法失败，尝试使用原始方法作为后备
+            try {
+                browser.openDevtools()
+                logger.info("✅ DevTools opened via fallback method")
+            } catch (e2: Exception) {
+                logger.error("❌ Fallback openDevtools() also failed: ${e2.message}", e2)
+            }
         }
     }
 
