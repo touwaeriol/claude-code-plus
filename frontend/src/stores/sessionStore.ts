@@ -24,6 +24,8 @@ import { ConnectionStatus } from '@/types/display'
 import { loggers } from '@/utils/logger'
 import { HISTORY_INITIAL_LOAD } from '@/constants/messageWindow'
 import { aiAgentService } from '@/services/aiAgentService'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { eventBus } from '@/utils/eventBus'
 
 const log = loggers.session
 
@@ -213,9 +215,6 @@ export const useSessionStore = defineStore('session', () => {
    * @param options 连接选项
    */
   async function createTab(name?: string, options?: TabConnectOptions): Promise<SessionTabInstance> {
-    // 先保存当前 Tab 的设置（在切换之前！）
-    const previousSettings = currentSessionSettings.value
-
     // 计算新的 order
     const maxOrder = tabs.value.length > 0
       ? Math.max(...tabs.value.map(t => t.order.value))
@@ -237,15 +236,17 @@ export const useSessionStore = defineStore('session', () => {
 
     log.info(`[SessionStore] 创建 Tab: ${tab.tabId}`)
 
-    // 获取连接设置（从之前保存的设置继承或使用默认值）
+    // 获取连接设置（使用 IDEA 默认设置，而非从当前会话复制）
+    const settingsStore = useSettingsStore()
+    const globalSettings = settingsStore.settings
     const connectOptions: TabConnectOptions = options || {
-      model: previousSettings?.modelId || DEFAULT_SESSION_SETTINGS.modelId,
-      thinkingEnabled: previousSettings?.thinkingEnabled ?? DEFAULT_SESSION_SETTINGS.thinkingEnabled,
-      permissionMode: previousSettings?.permissionMode || DEFAULT_SESSION_SETTINGS.permissionMode,
-      skipPermissions: previousSettings?.skipPermissions ?? DEFAULT_SESSION_SETTINGS.skipPermissions
+      model: MODEL_CAPABILITIES[globalSettings.model]?.modelId || DEFAULT_SESSION_SETTINGS.modelId,
+      thinkingEnabled: globalSettings.thinkingEnabled ?? DEFAULT_SESSION_SETTINGS.thinkingEnabled,
+      permissionMode: (globalSettings.permissionMode as RpcPermissionMode) || DEFAULT_SESSION_SETTINGS.permissionMode,
+      skipPermissions: globalSettings.skipPermissions ?? DEFAULT_SESSION_SETTINGS.skipPermissions
     }
 
-    log.info(`[SessionStore] 新 Tab 继承设置:`, connectOptions)
+    log.info(`[SessionStore] 新 Tab 使用全局设置:`, connectOptions)
 
     // 延迟连接：保存初始连接配置，等首次发送时再 connect
     tab.setInitialConnectOptions(connectOptions)

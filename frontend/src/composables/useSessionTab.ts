@@ -39,8 +39,55 @@ import {loggers} from '@/utils/logger'
 import type {PendingPermissionRequest, PendingUserQuestion, PermissionResponse} from '@/types/permission'
 import {HISTORY_LAZY_LOAD_SIZE, HISTORY_PAGE_SIZE} from '@/constants/messageWindow'
 import {ideaBridge} from '@/services/ideaBridge'
+import {useSettingsStore} from '@/stores/settingsStore'
 
 const log = loggers.session
+
+/**
+ * 滚动模式
+ * - follow: 跟随模式，新消息自动滚动到底部
+ * - browse: 浏览模式，锁定位置，显示新消息计数
+ */
+export type ScrollMode = 'follow' | 'browse'
+
+/**
+ * 滚动锚点信息
+ * 用于精确恢复滚动位置（基于 item ID 而非像素值）
+ */
+export interface ScrollAnchor {
+    /** 锚点 item 的 ID（稳定，不受历史消息加载影响） */
+    itemId: string
+    /** 该 item 距离视口顶部的偏移量 (px) */
+    offsetFromViewportTop: number
+    /** 保存时的视口高度（用于验证） */
+    viewportHeight: number
+    /** 保存时间戳 */
+    savedAt: number
+}
+
+/**
+ * 滚动状态
+ */
+export interface ScrollState {
+    /** 滚动模式 */
+    mode: ScrollMode
+    /** 锚点信息（browse 模式下有效） */
+    anchor: ScrollAnchor | null
+    /** 新消息计数（browse 模式下累计） */
+    newMessageCount: number
+    /** 是否在底部区域（50px 内） */
+    isNearBottom: boolean
+}
+
+/**
+ * 默认滚动状态
+ */
+export const DEFAULT_SCROLL_STATE: ScrollState = {
+    mode: 'follow',
+    anchor: null,
+    newMessageCount: 0,
+    isNearBottom: true
+}
 
 /**
  * UI 状态（用于切换会话时保存/恢复）
@@ -48,9 +95,8 @@ const log = loggers.session
 export interface UIState {
     inputText: string
     contexts: any[]
-    scrollPosition: number
-    newMessageCount: number  // 滚动按钮上的新消息计数
-    showScrollToBottom: boolean  // 是否显示滚动到底部按钮
+    /** 滚动状态（替代原来的 scrollPosition/newMessageCount/showScrollToBottom） */
+    scrollState: ScrollState
 }
 
 /**
@@ -259,9 +305,7 @@ export function useSessionTab(initialOrder: number = 0) {
     const uiState = reactive<UIState>({
         inputText: '',
         contexts: [],
-        scrollPosition: 0,
-        newMessageCount: 0,
-        showScrollToBottom: false
+        scrollState: { ...DEFAULT_SCROLL_STATE }
     })
 
     // ========== 压缩状态 ==========
@@ -708,8 +752,9 @@ export function useSessionTab(initialOrder: number = 0) {
             })
 
             // dangerouslySkipPermissions 由前端处理，永远不传递给后端
+            const settingsStore = useSettingsStore()
             const connectOptions: ConnectOptions = {
-                includePartialMessages: true,
+                includePartialMessages: settingsStore.settings.includePartialMessages ?? true,
                 allowDangerouslySkipPermissions: true,
                 model: modelId.value || undefined,
                 thinkingEnabled: thinkingEnabled.value,
@@ -977,8 +1022,9 @@ export function useSessionTab(initialOrder: number = 0) {
 
         try {
             // dangerouslySkipPermissions 由前端处理，永远不传递给后端
+            const settingsStore = useSettingsStore()
             const connectOptions: ConnectOptions = {
-                includePartialMessages: true,
+                includePartialMessages: settingsStore.settings.includePartialMessages ?? true,
                 allowDangerouslySkipPermissions: true,
                 model: modelId.value || undefined,
                 thinkingEnabled: thinkingEnabled.value,
@@ -1594,9 +1640,10 @@ export function useSessionTab(initialOrder: number = 0) {
     function saveUiState(state: Partial<UIState>): void {
         if (state.inputText !== undefined) uiState.inputText = state.inputText
         if (state.contexts !== undefined) uiState.contexts = state.contexts
-        if (state.scrollPosition !== undefined) uiState.scrollPosition = state.scrollPosition
-        if (state.newMessageCount !== undefined) uiState.newMessageCount = state.newMessageCount
-        if (state.showScrollToBottom !== undefined) uiState.showScrollToBottom = state.showScrollToBottom
+        if (state.scrollState !== undefined) {
+            // 深度合并 scrollState
+            Object.assign(uiState.scrollState, state.scrollState)
+        }
     }
 
     /**
@@ -1613,9 +1660,7 @@ export function useSessionTab(initialOrder: number = 0) {
         // 重置 UI 状态
         uiState.inputText = ''
         uiState.contexts = []
-        uiState.scrollPosition = 0
-        uiState.newMessageCount = 0
-        uiState.showScrollToBottom = false
+        Object.assign(uiState.scrollState, DEFAULT_SCROLL_STATE)
 
         // 重置错误状态
         connectionState.lastError = null

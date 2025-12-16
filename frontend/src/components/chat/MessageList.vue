@@ -117,6 +117,8 @@ import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import type { Message } from '@/types/message'
 import type { DisplayItem } from '@/types/display'
+import type { ScrollState, ScrollAnchor } from '@/composables/useSessionTab'
+import { DEFAULT_SCROLL_STATE } from '@/composables/useSessionTab'
 import MessageDisplay from './MessageDisplay.vue'
 import DisplayItemRenderer from './DisplayItemRenderer.vue'
 import {
@@ -136,6 +138,7 @@ interface Props {
   streamingStartTime?: number  // 流式响应开始时间
   inputTokens?: number  // 上行 token
   outputTokens?: number  // 下行 token
+  contentVersion?: number  // 流式内容版本号（用于触发自动滚动）
   connectionStatus?: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED'  // 连接状态
   hasMoreHistory?: boolean  // 顶部分页可用
 }
@@ -146,6 +149,7 @@ const props = withDefaults(defineProps<Props>(), {
   streamingStartTime: 0,
   inputTokens: 0,
   outputTokens: 0,
+  contentVersion: 0,
   connectionStatus: 'DISCONNECTED',
   hasMoreHistory: false
 })
@@ -156,18 +160,153 @@ const emit = defineEmits<{
 
 const wrapperRef = ref<HTMLElement>()
 const scrollerRef = ref<InstanceType<typeof DynamicScroller>>()
-// showScrollToBottom 绑定到 sessionStore，随会话切换自动保存/恢复
-const showScrollToBottom = computed({
-  get: () => sessionStore.currentTab?.uiState.showScrollToBottom ?? false,
-  set: (val: boolean) => sessionStore.currentTab?.saveUiState({ showScrollToBottom: val })
+
+// ========== 滚动状态管理（基于 ID + Offset 锚点方案） ==========
+
+/**
+ * 滚动状态（双向绑定到 sessionStore）
+ */
+const scrollState = computed({
+  get: (): ScrollState => sessionStore.currentTab?.uiState.scrollState ?? { ...DEFAULT_SCROLL_STATE },
+  set: (val: Partial<ScrollState>) => {
+    if (sessionStore.currentTab) {
+      sessionStore.currentTab.saveUiState({
+        scrollState: { ...scrollState.value, ...val }
+      })
+    }
+  }
 })
-// newMessageCount 绑定到 sessionStore，随会话切换自动保存/恢复
-const newMessageCount = computed({
-  get: () => sessionStore.currentTab?.uiState.newMessageCount ?? 0,
-  set: (val: number) => sessionStore.currentTab?.saveUiState({ newMessageCount: val })
-})
-const isNearBottom = ref(true)
-const userScrollLock = ref(false)  // 用户主动向上滚动时锁定自动滚动
+
+/**
+ * 是否显示"回到底部"按钮（browse 模式下显示）
+ */
+const showScrollToBottom = computed(() =>
+  scrollState.value.mode === 'browse' && displayMessages.value.length > 0
+)
+
+/**
+ * 新消息计数
+ */
+const newMessageCount = computed(() => scrollState.value.newMessageCount)
+
+/**
+ * 计算当前滚动锚点
+ * 策略：找到视口 30% 位置的 item 作为锚点（更靠上，高度变化时更稳定）
+ */
+function computeScrollAnchor(): ScrollAnchor | null {
+  const el = scrollerRef.value?.$el as HTMLElement | undefined
+  if (!el || displayMessages.value.length === 0) return null
+
+  const clientHeight = el.clientHeight
+  const targetPosition = clientHeight * 0.3  // 视口 30% 位置
+
+  // 遍历已渲染的 item，找到覆盖目标位置的 item
+  const items = el.querySelectorAll('[data-index]')
+  let anchorItem: Element | null = null
+  let anchorOffsetFromTop = 0
+  let anchorIndex = -1
+
+  for (const item of items) {
+    const rect = item.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    const itemTopRelativeToViewport = rect.top - elRect.top
+    const itemBottomRelativeToViewport = rect.bottom - elRect.top
+
+    // 找到覆盖视口 30% 位置的 item
+    if (itemTopRelativeToViewport <= targetPosition &&
+        itemBottomRelativeToViewport >= targetPosition) {
+      anchorItem = item
+      anchorOffsetFromTop = itemTopRelativeToViewport
+      anchorIndex = parseInt(item.getAttribute('data-index') || '-1', 10)
+      break
+    }
+  }
+
+  // 回退：使用第一个可见 item
+  if (!anchorItem && items.length > 0) {
+    anchorItem = items[0]
+    const rect = anchorItem.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    anchorOffsetFromTop = rect.top - elRect.top
+    anchorIndex = parseInt(anchorItem.getAttribute('data-index') || '-1', 10)
+  }
+
+  if (anchorIndex < 0 || anchorIndex >= displayMessages.value.length) return null
+
+  const itemId = displayMessages.value[anchorIndex].id
+
+  return {
+    itemId,
+    offsetFromViewportTop: anchorOffsetFromTop,
+    viewportHeight: clientHeight,
+    savedAt: Date.now()
+  }
+}
+
+/**
+ * 恢复滚动位置
+ * 策略：通过 ID 找到 item -> 估算滚动 -> 等待渲染 -> 微调
+ */
+async function restoreScrollPosition(anchor: ScrollAnchor): Promise<void> {
+  const el = scrollerRef.value?.$el as HTMLElement | undefined
+  if (!el) return
+
+  // 1. 通过 ID 找到当前 index
+  const index = displayMessages.value.findIndex(item => item.id === anchor.itemId)
+  if (index === -1) {
+    // ID 不存在（被清理了），回退到底部
+    console.log('🔄 [Scroll] Anchor item not found, scrolling to bottom')
+    scrollToBottom()
+    return
+  }
+
+  // 2. 估算滚动位置（假设每个 item 平均高度 100px）
+  const estimatedScrollTop = index * 100 - anchor.offsetFromViewportTop
+  el.scrollTop = Math.max(0, estimatedScrollTop)
+
+  // 3. 等待 DynamicScroller 渲染
+  await nextTick()
+  scrollerRef.value?.forceUpdate?.()
+  await nextTick()
+  await new Promise(resolve => requestAnimationFrame(resolve))
+
+  // 4. 精确定位：找到实际渲染的 item 并微调
+  const renderedItem = el.querySelector(`[data-index="${index}"]`)
+  if (renderedItem) {
+    const rect = renderedItem.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    const currentOffsetFromTop = rect.top - elRect.top
+    const adjustment = currentOffsetFromTop - anchor.offsetFromViewportTop
+    el.scrollTop += adjustment
+  }
+
+  // 5. 更新状态
+  lastScrollTop.value = el.scrollTop
+  const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+  const nearBottom = distanceFromBottom < 50
+
+  if (nearBottom) {
+    // 恢复后发现在底部，切换到 follow 模式
+    scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0, isNearBottom: true }
+  }
+
+  console.log(`🔄 [Scroll] Restored to item ${anchor.itemId} (index=${index})`)
+}
+
+// 防抖保存锚点
+let saveAnchorTimer: number | null = null
+function debouncedSaveAnchor() {
+  if (saveAnchorTimer) clearTimeout(saveAnchorTimer)
+  saveAnchorTimer = window.setTimeout(() => {
+    if (scrollState.value.mode === 'browse' && !isTabSwitching.value) {
+      const anchor = computeScrollAnchor()
+      if (anchor) {
+        scrollState.value = { ...scrollState.value, anchor }
+      }
+    }
+  }, 100)
+}
+
 const lastScrollTop = ref(0)       // 上次滚动位置，用于检测滚动方向
 const isTabSwitching = ref(false)  // Tab 切换中，阻止其他滚动逻辑
 const historyLoadInProgress = ref(false)
@@ -233,21 +372,94 @@ watch(
       startTimer()
     } else {
       stopTimer()
-      userScrollLock.value = false  // 流式响应结束时，重置锁定状态
+      // 注意：流式结束时不再自动解锁，避免打断用户阅读历史消息
+      // 用户需要手动滚动到底部或点击按钮才会解锁
     }
   },
   { immediate: true }
 )
 
+// 监听流式响应时的内容变化（通过 outputTokens 变化检测）
+// 解决问题：消息数量不变但内容更新时，需要自动滚动
+watch(
+  () => props.outputTokens,
+  () => {
+    // 只在流式响应中、follow 模式时才自动滚动
+    if (props.isStreaming && scrollState.value.mode === 'follow') {
+      scrollToBottomSilent()
+    }
+  }
+)
+
+// 监听流式内容版本号变化（thinking/text delta 更新时触发）
+// 解决问题：思考内容换行时自动滚动
+watch(
+  () => props.contentVersion,
+  () => {
+    // 只在流式响应中、follow 模式时才自动滚动
+    if (props.isStreaming && scrollState.value.mode === 'follow') {
+      scrollToBottomSilent()
+    }
+  }
+)
+
+// 监听用户滚轮事件 - 向上滚动切换到 browse 模式
+function handleWheel(e: WheelEvent) {
+  // deltaY < 0 表示向上滚动
+  if (e.deltaY < 0 && scrollState.value.mode === 'follow') {
+    // 切换到 browse 模式，保存当前锚点
+    const anchor = computeScrollAnchor()
+    scrollState.value = {
+      mode: 'browse',
+      anchor,
+      newMessageCount: 0,
+      isNearBottom: false
+    }
+    console.log('🔄 [Scroll] Switched to browse mode')
+  }
+}
+
+// 添加 wheel 事件监听器（需要在 DynamicScroller 渲染后调用）
+let wheelListenerAdded = false
+function addWheelListener() {
+  if (wheelListenerAdded) return
+  const el = scrollerRef.value?.$el as HTMLElement | undefined
+  if (el) {
+    el.addEventListener('wheel', handleWheel, { passive: true })
+    wheelListenerAdded = true
+    console.log('🔄 [Scroll] Wheel listener added')
+  }
+}
+
+// 监听 displayMessages 变化，当从空变为有内容时添加事件监听器
+watch(
+  () => displayMessages.value.length,
+  (newLen, oldLen) => {
+    if (newLen > 0 && oldLen === 0) {
+      // 消息从无到有，需要等待 DynamicScroller 渲染后添加事件监听器
+      nextTick(() => {
+        addWheelListener()
+      })
+    }
+  }
+)
 
 onMounted(() => {
   if (props.isStreaming) {
     startTimer()
   }
+  // 延迟添加事件监听，确保 scrollerRef 已挂载
+  nextTick(() => {
+    addWheelListener()
+  })
 })
 
 onUnmounted(() => {
   stopTimer()
+  const el = scrollerRef.value?.$el as HTMLElement | undefined
+  if (el) {
+    el.removeEventListener('wheel', handleWheel)
+  }
 })
 
 // 监听 tab 切换，恢复滚动位置
@@ -259,32 +471,31 @@ watch(
     // 标记 tab 切换中，阻止其他滚动逻辑
     isTabSwitching.value = true
 
-    const savedPosition = sessionStore.currentTab?.uiState.scrollPosition ?? 0
+    const savedScrollState = sessionStore.currentTab?.uiState.scrollState
 
     // 等待 Vue 渲染 + 浏览器重绘
     await nextTick()
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
 
-    const el = scrollerRef.value?.$el as HTMLElement | undefined
-    if (el) {
-      if (savedPosition > 0) {
-        // 恢复保存的位置
-        el.scrollTop = savedPosition
-        lastScrollTop.value = savedPosition
-        const distanceFromBottom = el.scrollHeight - savedPosition - el.clientHeight
-        isNearBottom.value = distanceFromBottom < 50
-        userScrollLock.value = !isNearBottom.value
-      } else {
-        // 没有保存位置，滚动到底部
+    if (savedScrollState?.mode === 'browse' && savedScrollState.anchor) {
+      // browse 模式：恢复锚点位置
+      await restoreScrollPosition(savedScrollState.anchor)
+    } else {
+      // follow 模式或无锚点：滚动到底部
+      const el = scrollerRef.value?.$el as HTMLElement | undefined
+      if (el) {
         el.scrollTop = el.scrollHeight
         lastScrollTop.value = el.scrollTop
-        isNearBottom.value = true
-        userScrollLock.value = false
+      }
+      // 确保状态为 follow
+      if (sessionStore.currentTab) {
+        scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0, isNearBottom: true }
       }
     }
 
     await nextTick()
     isTabSwitching.value = false
+    console.log(`🔄 [Scroll] Tab switched, mode=${savedScrollState?.mode ?? 'follow'}`)
   }
 )
 
@@ -295,7 +506,7 @@ const displayMessages = computed(() => props.displayItems || props.messages || [
 // 使用新的 DisplayItemRenderer 还是旧的 MessageDisplay
 const messageComponent = computed(() => props.displayItems ? DisplayItemRenderer : MessageDisplay)
 
-// 监听消息变化 - 简化版本：只在新消息到达且用户在底部时滚动
+// 监听消息变化 - 基于双模式的滚动处理
 watch(() => displayMessages.value.length, async (newCount, oldCount) => {
   // Tab 切换中，不处理消息变化
   if (isTabSwitching.value) {
@@ -321,10 +532,10 @@ watch(() => displayMessages.value.length, async (newCount, oldCount) => {
 
   // 新消息到达
   if (added > 0) {
-    // 用户锁定或不在底部：显示按钮，不滚动
-    if (userScrollLock.value || !isNearBottom.value) {
-      newMessageCount.value += added
-      showScrollToBottom.value = true
+    if (scrollState.value.mode === 'browse') {
+      // browse 模式：累计新消息计数，保持位置
+      const currentCount = scrollState.value.newMessageCount
+      scrollState.value = { ...scrollState.value, newMessageCount: currentCount + added }
       // 保存当前滚动位置
       const el = scrollerRef.value?.$el as HTMLElement | undefined
       const savedScrollTop = el?.scrollTop ?? 0
@@ -334,10 +545,9 @@ watch(() => displayMessages.value.length, async (newCount, oldCount) => {
       await nextTick()
       if (el) el.scrollTop = savedScrollTop
     } else {
-      // 在底部且未锁定：自动滚动
+      // follow 模式：自动滚动到底部
       await nextTick()
       scrollToBottomSilent()
-      newMessageCount.value = 0
       forceUpdateScroller()
     }
   } else {
@@ -356,8 +566,8 @@ function forceUpdateScroller() {
 }
 
 watch(() => props.isLoading, async (newValue, oldValue) => {
-  // 加载开始时，如果在底部则保持在底部
-  if (newValue && isNearBottom.value) {
+  // 加载开始时，如果是 follow 模式则保持在底部
+  if (newValue && scrollState.value.mode === 'follow') {
     await nextTick()
     scrollToBottom()
   }
@@ -392,8 +602,8 @@ watch(() => props.isLoading, async (newValue, oldValue) => {
       historyLoadRequested.value = false
       historyLoadInProgress.value = false
 
-      newMessageCount.value = 0
-      isNearBottom.value = true
+      // 确保是 follow 模式
+      scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0, isNearBottom: true }
     }
   }
 })
@@ -409,24 +619,12 @@ function handleScroll() {
   const scrollHeight = el.scrollHeight
   const clientHeight = el.clientHeight
 
-  // 顶部分页 - 添加调试日志
+  // 顶部分页 - 触发加载更多历史
   const shouldTrigger = scrollTop < HISTORY_TRIGGER_THRESHOLD &&
     props.hasMoreHistory &&
     !props.isLoading &&
     !historyLoadInProgress.value &&
     !historyLoadRequested.value
-
-  if (scrollTop < HISTORY_TRIGGER_THRESHOLD && scrollTop < 100) {
-    console.log('🔍 [懒加载检查]', {
-      scrollTop,
-      threshold: HISTORY_TRIGGER_THRESHOLD,
-      hasMoreHistory: props.hasMoreHistory,
-      isLoading: props.isLoading,
-      historyLoadInProgress: historyLoadInProgress.value,
-      historyLoadRequested: historyLoadRequested.value,
-      shouldTrigger
-    })
-  }
 
   if (shouldTrigger) {
     console.log('✅ [懒加载] 触发加载更多历史')
@@ -442,36 +640,35 @@ function handleScroll() {
     }
   }
 
-  // 检测用户滚动方向
-  const scrollingUp = scrollTop < lastScrollTop.value
-  const scrollDelta = Math.abs(scrollTop - lastScrollTop.value)
   lastScrollTop.value = scrollTop
 
   // 判断是否在底部（允许 50px 的误差）
   const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-  isNearBottom.value = distanceFromBottom < 50
+  const nearBottom = distanceFromBottom < 50
 
-  // 用户向上滚动时，锁定自动滚动
-  if (scrollingUp && scrollDelta > 5) {
-    userScrollLock.value = true
-  }
-
-  // 用户主动向下滚动回到底部时，解除锁定
-  if (isNearBottom.value && !scrollingUp && scrollDelta > 10) {
-    userScrollLock.value = false
-  }
-
-  // 更新按钮显示状态
-  showScrollToBottom.value = !isNearBottom.value && displayMessages.value.length > 0
-
-  // 保存滚动位置到 sessionStore（Tab 切换中不保存）
-  if (!isTabSwitching.value && sessionStore.currentTab) {
-    sessionStore.currentTab.saveUiState({ scrollPosition: scrollTop })
+  // 到达底部时自动切换回 follow 模式
+  if (nearBottom && scrollState.value.mode === 'browse') {
+    scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0, isNearBottom: true }
+    console.log('🔄 [Scroll] Switched to follow mode (reached bottom)')
+  } else if (!nearBottom && scrollState.value.mode === 'follow') {
+    // 离开底部且当前是 follow 模式，切换到 browse 模式
+    // 这样即使 wheel 事件没有触发（如滚动条拖动），也能显示"回到底部"按钮
+    const anchor = computeScrollAnchor()
+    scrollState.value = {
+      mode: 'browse',
+      anchor,
+      newMessageCount: 0,
+      isNearBottom: false
+    }
+    console.log('🔄 [Scroll] Switched to browse mode (left bottom)')
+  } else if (!nearBottom && scrollState.value.mode === 'browse') {
+    // browse 模式下，防抖保存锚点
+    debouncedSaveAnchor()
   }
 }
 
 /**
- * 程序调用的滚动到底部（不解除用户锁定）
+ * 程序调用的滚动到底部（follow 模式下使用）
  */
 function scrollToBottomSilent() {
   if (scrollerRef.value) {
@@ -479,19 +676,16 @@ function scrollToBottomSilent() {
   } else if (wrapperRef.value) {
     wrapperRef.value.scrollTop = wrapperRef.value.scrollHeight
   }
-  // 只更新位置相关状态，不解除用户锁定
-  isNearBottom.value = true
 }
 
 /**
- * 用户主动点击"回到底部"按钮（解除锁定）
+ * 用户主动点击"回到底部"按钮（切换到 follow 模式）
  */
 function scrollToBottom() {
   scrollToBottomSilent()
-  // 用户主动操作，解除锁定并重置状态
-  showScrollToBottom.value = false
-  newMessageCount.value = 0
-  userScrollLock.value = false
+  // 用户主动操作，切换到 follow 模式
+  scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0, isNearBottom: true }
+  console.log('🔄 [Scroll] User clicked scroll to bottom')
 }
 
 /**
@@ -665,9 +859,9 @@ async function ensureScrollable(): Promise<void> {
   display: inline-block;
   padding: 3px 6px;
   font-size: 11px;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  background: var(--theme-panel-background, #f6f8fa);
-  border: 1px solid var(--theme-border, #e1e4e8);
+  font-family: var(--theme-editor-font-family);
+  background: var(--theme-panel-background);
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   color: var(--theme-foreground, #24292e);
@@ -688,8 +882,8 @@ async function ensureScrollable(): Promise<void> {
   border: 1px solid var(--theme-accent, #0366d6);
   border-radius: 6px 6px 0 0;
   font-size: 12px;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  color: var(--theme-text-secondary, #586069);
+  font-family: var(--theme-editor-font-family);
+  color: var(--theme-secondary-foreground);
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
   z-index: 10;
 }

@@ -88,43 +88,76 @@
                 >
                   {{ $t('session.noHistory') }}
                 </div>
-                <button
+                <div
                   v-for="session in historySessions"
                   :key="session.id"
-                  type="button"
-                  class="session-item"
-                  :title="session.id"
-                  :class="{ active: session.id === currentSessionId }"
-                  @click="handleSelect(session.id)"
+                  class="session-item-wrapper"
                 >
-                  <span class="session-status-icon history">📝</span>
-                  <div class="session-item-main">
-                    <div class="session-name">
-                      <span>{{ session.name || $t('session.unnamed') }}</span>
-                      <button
-                        type="button"
-                        class="copy-btn"
-                        :title="$t('common.copySessionId')"
-                        :aria-label="`Copy ${session.id}`"
-                        @click.stop="copySessionId(session.id)"
-                      >
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                        </svg>
-                      </button>
+                  <button
+                    type="button"
+                    class="session-item"
+                    :title="session.id"
+                    :class="{ active: session.id === currentSessionId }"
+                    @click="handleSelect(session.id)"
+                  >
+                    <span class="session-status-icon history">📝</span>
+                    <div class="session-item-main">
+                      <div class="session-name">
+                        <span>{{ session.name || $t('session.unnamed') }}</span>
+                      </div>
+                      <div class="session-meta">
+                        <span>{{ formatRelativeTime(session.timestamp) }}</span>
+                        <span>·</span>
+                        <span>{{ session.messageCount }} {{ $t('session.messages') }}</span>
+                      </div>
                     </div>
-                    <div class="session-meta">
-                      <span>{{ formatRelativeTime(session.timestamp) }}</span>
-                      <span>·</span>
-                      <span>{{ session.messageCount }} {{ $t('session.messages') }}</span>
-                    </div>
+                  </button>
+                  <div class="session-item-actions">
+                    <button
+                      type="button"
+                      class="item-action-btn copy-btn"
+                      :title="$t('common.copySessionId')"
+                      @click.stop="copySessionId(session.id)"
+                    >
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="item-action-btn delete-btn"
+                      :title="$t('common.delete')"
+                      @click.stop="handleDeleteSession(session.id)"
+                    >
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      </svg>
+                    </button>
                   </div>
-                </button>
+                </div>
               </div>
+
               <div class="session-list-footer">
-                <span v-if="loadingMore">{{ $t('common.loading') }}</span>
-                <span v-else-if="!hasMore">{{ $t('common.noMore') }}</span>
+                <span v-if="loadingMore" class="loading-text">
+                  <span class="footer-spinner" />
+                  {{ $t('common.loading') }}
+                </span>
+                <!-- 没有滚动条时显示按钮，让用户手动加载 -->
+                <button
+                  v-else-if="hasMore && !canScroll"
+                  type="button"
+                  class="load-more-btn"
+                  @click="emit('load-more')"
+                >
+                  {{ $t('session.loadMore') }}
+                </button>
+                <!-- 有滚动条时显示提示文字 -->
+                <span v-else-if="hasMore && canScroll" class="scroll-hint">
+                  {{ $t('session.scrollToLoadMore') }}
+                </span>
+                <span v-else class="no-more-text">{{ $t('common.noMore') }}</span>
               </div>
             </div>
           </div>
@@ -170,6 +203,7 @@ const emit = defineEmits<{
   (e: 'close'): void
   (e: 'select-session', sessionId: string): void
   (e: 'load-more'): void
+  (e: 'delete-session', sessionId: string): void
 }>()
 
 // 激活的会话（已连接）
@@ -216,6 +250,18 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 const sessionListRef = ref<HTMLElement | null>(null)
+const canScroll = ref(false)
+
+function checkCanScroll() {
+  const el = sessionListRef.value
+  if (!el) {
+    canScroll.value = false
+    return
+  }
+  // 如果 scrollHeight > clientHeight，说明有滚动条
+  canScroll.value = el.scrollHeight > el.clientHeight + 10
+}
+
 function handleScroll() {
   if (!props.hasMore || props.loading || props.loadingMore) return
   const el = sessionListRef.value
@@ -233,6 +279,7 @@ watch(
       window.addEventListener('keydown', handleKeydown)
       nextTick(() => {
         sessionListRef.value?.addEventListener('scroll', handleScroll, { passive: true })
+        checkCanScroll()
       })
     } else {
       window.removeEventListener('keydown', handleKeydown)
@@ -240,6 +287,14 @@ watch(
     }
   },
   { immediate: true }
+)
+
+// 监听 sessions 变化，重新检测是否可滚动
+watch(
+  () => props.sessions.length,
+  () => {
+    nextTick(checkCanScroll)
+  }
 )
 
 onBeforeUnmount(() => {
@@ -254,6 +309,10 @@ async function copySessionId(id: string) {
     console.error('Failed to copy sessionId:', error)
   }
 }
+
+function handleDeleteSession(sessionId: string) {
+  emit('delete-session', sessionId)
+}
 </script>
 
 <style scoped>
@@ -261,7 +320,7 @@ async function copySessionId(id: string) {
   position: fixed;
   inset: 0;
   z-index: 1300;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--theme-font-family);
 }
 
 .overlay-backdrop {
@@ -381,10 +440,58 @@ async function copySessionId(id: string) {
 }
 
 .session-list-footer {
-  padding: 8px;
+  padding: 12px 8px;
   text-align: center;
   font-size: 12px;
   color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
+}
+
+.loading-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--theme-border, rgba(0, 0, 0, 0.15));
+  border-top-color: var(--theme-accent, #0366d6);
+  animation: spin 0.8s linear infinite;
+}
+
+.load-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 16px;
+  border: 1px solid var(--theme-border, rgba(0, 0, 0, 0.15));
+  border-radius: 6px;
+  background: var(--theme-background, #fff);
+  color: var(--theme-foreground, #333);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.load-more-btn:hover {
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.04));
+  border-color: var(--theme-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
+}
+
+.load-more-btn:active {
+  transform: scale(0.98);
+}
+
+.no-more-text {
+  opacity: 0.6;
+}
+
+.scroll-hint {
+  opacity: 0.5;
+  font-size: 11px;
 }
 
 .session-group {
@@ -476,33 +583,62 @@ async function copySessionId(id: string) {
   gap: 6px;
 }
 
-.copy-btn {
+/* 选中状态 - 保留用于可能的未来需求 */
+.session-item.selected {
+  background: rgba(3, 102, 214, 0.12);
+  border-color: var(--theme-accent, #0366d6);
+}
+
+/* 历史会话项容器 */
+.session-item-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-item-wrapper .session-item {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 行内操作按钮 */
+.session-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding-right: 4px;
+}
+
+.item-action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-  color: var(--theme-foreground-muted, rgba(0, 0, 0, 0.5));
-  opacity: 0;
-  transition: opacity 0.15s, background-color 0.15s, color 0.15s;
+  color: var(--theme-secondary-foreground, rgba(0, 0, 0, 0.5));
+  transition: all 0.15s ease;
 }
 
-.session-item:hover .copy-btn {
-  opacity: 1;
+.item-action-btn:hover {
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.08));
+  color: var(--theme-foreground, #333);
 }
 
-.copy-btn:hover {
-  background: var(--theme-background-hover, rgba(0, 0, 0, 0.08));
-  color: var(--theme-foreground, #111);
+.item-action-btn.copy-btn:hover {
+  color: var(--theme-accent, #0366d6);
 }
 
-.copy-btn svg {
+.item-action-btn.delete-btn:hover {
+  background: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
+}
+
+.item-action-btn svg {
   flex-shrink: 0;
 }
 
