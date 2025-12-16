@@ -3,9 +3,13 @@ package com.asakii.server
 import com.asakii.plugin.bridge.JetBrainsApiImpl
 import com.asakii.plugin.bridge.JetBrainsRSocketHandler
 import com.asakii.plugin.mcp.JetBrainsMcpServerProviderImpl
+import com.asakii.server.config.AiAgentServiceConfig
+import com.asakii.server.config.ClaudeDefaults
+import com.asakii.server.config.CodexDefaults
 import com.asakii.server.logging.StandaloneLogging
 import com.asakii.plugin.tools.IdeToolsImpl
 import com.asakii.rpc.api.JetBrainsApi
+import com.asakii.settings.AgentSettingsService
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
@@ -95,13 +99,38 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                 }
             }
 
+            // 监听设置变化，通过 RSocket 推送给前端
+            AgentSettingsService.getInstance().addChangeListener { settings ->
+                kotlinx.coroutines.runBlocking {
+                    jetbrainsRSocketHandler.pushSettingsChanged(settings)
+                }
+            }
+
             // 创建 JetBrains MCP Server Provider
             val jetBrainsMcpServerProvider = JetBrainsMcpServerProviderImpl(project)
+
+            // 创建服务配置提供者（每次 connect 时调用，获取最新的用户设置）
+            val serviceConfigProvider: () -> AiAgentServiceConfig = {
+                val settings = AgentSettingsService.getInstance()
+                logger.info("📦 Loading agent settings: nodePath=${settings.nodePath.ifBlank { "(system PATH)" }}, model=${settings.defaultModelEnum.displayName}, permissionMode=${settings.permissionMode}, userInteractionMcp=${settings.enableUserInteractionMcp}, jetbrainsMcp=${settings.enableJetBrainsMcp}, defaultBypass=${settings.defaultBypassPermissions}")
+                AiAgentServiceConfig(
+                    defaultModel = settings.defaultModelId,
+                    claude = ClaudeDefaults(
+                        nodePath = settings.nodePath.takeIf { it.isNotBlank() },
+                        permissionMode = settings.permissionMode.takeIf { it.isNotBlank() && it != "default" },
+                        includePartialMessages = settings.includePartialMessages,
+                        enableUserInteractionMcp = settings.enableUserInteractionMcp,
+                        enableJetBrainsMcp = settings.enableJetBrainsMcp,
+                        dangerouslySkipPermissions = settings.defaultBypassPermissions
+                    ),
+                    codex = CodexDefaults()  // Codex 配置已移除，使用默认值
+                )
+            }
 
             // 启动 Ktor HTTP 服务器
             // 开发模式：使用环境变量指定端口（默认 8765）
             // 生产模式：随机端口（支持多项目）
-            val server = HttpApiServer(ideTools, scope, frontendDir, jetbrainsApi, jetbrainsRSocketHandler, jetBrainsMcpServerProvider)
+            val server = HttpApiServer(ideTools, scope, frontendDir, jetbrainsApi, jetbrainsRSocketHandler, jetBrainsMcpServerProvider, serviceConfigProvider)
             val devPort = System.getenv("CLAUDE_DEV_PORT")?.toIntOrNull()
             val url = server.start(preferredPort = devPort)
             httpServer = server
@@ -174,6 +203,29 @@ class HttpServerProjectService(private val project: Project) : Disposable {
      * 获取 HTTP 服务器实例
      */
     fun getServer(): HttpApiServer? = httpServer
+
+    /**
+     * 重启 HTTP 服务器
+     * 会清除前端资源缓存，重新解压并启动服务器
+     * @return 新的服务器 URL，如果重启失败则返回 null
+     */
+    fun restart(): String? {
+        logger.info("🔄 Restarting HTTP Server...")
+
+        // 1. 停止当前服务器
+        httpServer?.stop()
+        httpServer = null
+
+        // 2. 清除前端资源缓存（这样会重新从 JAR 解压最新资源）
+        extractedFrontendDir?.toFile()?.deleteRecursively()
+        extractedFrontendDir = null
+
+        // 3. 重新启动服务器
+        startServer()
+
+        logger.info("✅ HTTP Server restarted at: $serverUrl")
+        return serverUrl
+    }
 
     override fun dispose() {
         logger.info("🛑 Disposing HTTP Server Project Service")

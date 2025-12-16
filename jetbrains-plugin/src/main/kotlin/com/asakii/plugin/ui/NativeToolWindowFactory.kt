@@ -1,11 +1,13 @@
 package com.asakii.plugin.ui
 
 import com.asakii.server.HttpServerProjectService
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ex.CustomComponentAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.ide.CopyPasteManager
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.MessageType
@@ -53,7 +55,18 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         val serverIndicatorAction = ComponentAction(createServerPortIndicator(project))
 
         // 标题栏动作（会话控件按顺序置于右侧）
-        val titleActions = mutableListOf<AnAction>()
+        val titleActions = mutableListOf<AnAction>(
+            // Settings button
+            object : AnAction(
+                "Settings",
+                "Open Claude Code Plus Settings",
+                AllIcons.General.Settings
+            ) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    ShowSettingsUtil.getInstance().showSettingsDialog(project, "com.asakii.settings")
+                }
+            }
+        )
 
         if (serverUrl.isNullOrBlank()) {
             logger.warn("⚠️ HTTP Server is not ready, showing placeholder panel")
@@ -64,7 +77,11 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
             return
         }
 
-        val browser = JBCefBrowser()
+        // 使用 Builder 模式显式禁用 OSR，避免 IDEA 2025.x 中上下文菜单和 DevTools 被禁用
+        val browser = JBCefBrowser.createBuilder()
+            .setOffScreenRendering(false)
+            .setEnableOpenDevToolsMenuItem(true)
+            .build()
 
         // 构建 URL 参数：ide=true + 初始主题
         val jetbrainsApi = httpService.jetbrainsApi
@@ -101,6 +118,49 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         // 左侧 Tab Actions：HTTP 指示器
         toolWindowEx?.setTabActions(serverIndicatorAction)
 
+        // 在标题栏最左边添加刷新按钮
+        val refreshAction = object : AnAction(
+            "Refresh",
+            "Restart server and reload frontend (clears frontend cache)",
+            AllIcons.Actions.Refresh
+        ) {
+            override fun actionPerformed(e: AnActionEvent) {
+                logger.info("🔄 Restarting server and refreshing frontend...")
+
+                // 重启服务器以重新加载前端资源
+                val newUrl = httpService.restart()
+
+                if (newUrl != null) {
+                    // 构建新的 URL 参数
+                    val newThemeParam = try {
+                        val theme = httpService.jetbrainsApi?.theme?.get()
+                        if (theme != null) {
+                            val themeJson = Json.encodeToString(theme)
+                            val encoded = URLEncoder.encode(themeJson, StandardCharsets.UTF_8.toString())
+                            "&initialTheme=$encoded"
+                        } else ""
+                    } catch (ex: Exception) {
+                        logger.warn("⚠️ Failed to encode initial theme: ${ex.message}")
+                        ""
+                    }
+
+                    val newTargetUrl = if (newUrl.contains("?")) {
+                        "$newUrl&ide=true$newThemeParam"
+                    } else {
+                        "$newUrl?ide=true$newThemeParam"
+                    }
+
+                    logger.info("🔗 Loading new URL: ${newTargetUrl.take(100)}...")
+                    browser.loadURL(newTargetUrl)
+                } else {
+                    // 如果重启失败，仅刷新页面
+                    logger.warn("⚠️ Server restart failed, just reloading page")
+                    browser.cefBrowser.reloadIgnoreCache()
+                }
+            }
+        }
+        titleActions.add(0, refreshAction)
+
         toolWindowEx?.setTitleActions(titleActions)
 
         // 三个点菜单中添加 DevTools
@@ -111,7 +171,19 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
                 com.intellij.icons.AllIcons.Toolwindows.ToolWindowDebugger
             ) {
                 override fun actionPerformed(e: AnActionEvent) {
-                    browser.openDevtools()
+                    openDevToolsInDialog(project, browser)
+                }
+            })
+            add(object : AnAction(
+                "Open in External Browser",
+                "在外部浏览器中打开并使用 Chrome DevTools 调试",
+                AllIcons.Xml.Browsers.Chrome
+            ) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    val url = httpService.serverUrl
+                    if (url != null) {
+                        openInBrowser(project, url)
+                    }
                 }
             })
         }
@@ -198,6 +270,18 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
             }
         } catch (e: IOException) {
             logger.warn("Failed to open browser: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 打开 DevTools 窗口
+     */
+    private fun openDevToolsInDialog(project: Project, browser: JBCefBrowser) {
+        try {
+            browser.openDevtools()
+            logger.info("✅ DevTools window opened successfully")
+        } catch (e: Exception) {
+            logger.error("❌ Failed to open DevTools: ${e.message}", e)
         }
     }
 
