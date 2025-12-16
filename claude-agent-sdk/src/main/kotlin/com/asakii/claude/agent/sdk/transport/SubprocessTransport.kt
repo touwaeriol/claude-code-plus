@@ -456,14 +456,10 @@ class SubprocessTransport(
                     }
                 }.toString()
 
-                // 创建临时文件存储 agents JSON
-                val tempFile = Files.createTempFile("claude_agents_", ".json")
-                Files.writeString(tempFile, agentsJson)
-                tempFiles.add(tempFile)
-
-                // 使用 @filepath 引用
-                command.addAll(listOf("--agents", "@${tempFile.toAbsolutePath()}"))
-                logger.info("🤖 配置自定义代理（使用文件）: ${agents.keys.joinToString(", ")} -> $tempFile")
+                // --agents 参数接受 JSON 字符串（不是文件路径）
+                // 直接传递 JSON 字符串
+                command.addAll(listOf("--agents", agentsJson))
+                logger.info("🤖 配置自定义代理（JSON 字符串）: ${agents.keys.joinToString(", ")}")
             }
         }
 
@@ -609,8 +605,8 @@ class SubprocessTransport(
                 Files.writeString(tempFile, mcpConfigJson)
                 tempFiles.add(tempFile)
 
-                // 使用 @filepath 引用
-                command.addAll(listOf("--mcp-config", "@${tempFile.toAbsolutePath()}"))
+                // --mcp-config 参数接受文件路径（不需要 @ 前缀）
+                command.addAll(listOf("--mcp-config", tempFile.toAbsolutePath().toString()))
                 logger.info("🔧 MCP 配置（使用文件）: $tempFile")
                 logger.debug("🔧 MCP 配置内容: $mcpConfigJson")
             }
@@ -674,10 +670,64 @@ class SubprocessTransport(
 
     /**
      * 返回 Node.js 可执行文件路径
-     * 优先使用用户配置的路径，否则使用系统 PATH 中的 "node"
+     * 优先级：
+     * 1. 用户配置的路径（如果有）
+     * 2. 自动检测到的路径（通过 login shell 查找）
+     * 3. 回退到 "node"（依赖系统 PATH）
      */
     private fun findNodeExecutable(): String {
-        return options.nodePath?.takeIf { it.isNotBlank() } ?: "node"
+        // 1. 用户配置的路径（最高优先级）
+        options.nodePath?.takeIf { it.isNotBlank() }?.let { userPath ->
+            logger.info("✅ 使用用户配置的 Node.js 路径: $userPath")
+            return userPath
+        }
+
+        // 2. 尝试自动检测 Node.js 路径
+        val detectedPath = detectNodePath()
+        if (detectedPath.isNotEmpty()) {
+            logger.info("✅ 检测到 Node.js 路径: $detectedPath")
+            return detectedPath
+        }
+
+        // 3. 回退到 "node"（依赖系统 PATH）
+        logger.info("⚠️ 未检测到 Node.js 路径，回退使用 'node' 命令（依赖系统 PATH）")
+        return "node"
+    }
+
+    /**
+     * 自动检测系统中的 Node.js 路径
+     * 使用 login shell 执行，以正确加载用户的环境变量（PATH 等）
+     * @return Node.js 可执行文件路径，未找到返回空字符串
+     */
+    private fun detectNodePath(): String {
+        val osName = System.getProperty("os.name").lowercase()
+        val isWindows = osName.contains("windows")
+
+        try {
+            val command = if (isWindows) {
+                // Windows: 使用 cmd /c
+                arrayOf("cmd", "/c", "where", "node")
+            } else {
+                // macOS/Linux: 使用 login shell 执行 which node
+                val defaultShell = System.getenv("SHELL") ?: "/bin/bash"
+                arrayOf(defaultShell, "-l", "-c", "which node")
+            }
+
+            val process = ProcessBuilder(*command)
+                .redirectErrorStream(true)
+                .start()
+
+            val result = process.inputStream.bufferedReader().readLine()?.trim()
+            val exitCode = process.waitFor()
+
+            if (exitCode == 0 && !result.isNullOrBlank() && java.io.File(result).exists()) {
+                return result
+            }
+        } catch (e: Exception) {
+            logger.debug("⚠️ 检测 Node.js 路径失败: ${e.message}")
+        }
+
+        return ""
     }
 
     /**

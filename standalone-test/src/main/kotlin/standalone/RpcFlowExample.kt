@@ -64,5 +64,10 @@ private object ConsoleIdeTools : IdeTools {
     override fun getLocale(): String = "en-US"
 
     override fun setLocale(locale: String): Result<Unit> = Result.success(Unit)
+
+    override fun detectNode(): NodeDetectionResult = NodeDetectionResult(
+        found = false,
+        error = "Standalone sample - Node.js detection not supported"
+    )
 }
 

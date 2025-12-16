@@ -695,7 +695,9 @@ class AiAgentRpcServiceImpl(
             // 自定义子代理定义（如 JetBrains 专用的代码探索代理）
             agents = agents.ifEmpty { null },
             // Node.js 可执行文件路径（用户配置 > 环境变量 > 默认 "node"）
-            nodePath = defaults.nodePath
+            nodePath = defaults.nodePath,
+            // Claude CLI settings.json 路径（用于加载环境变量等配置）
+            settings = defaults.settings
         )
 
         return ClaudeOverrides(options = claudeOptions)

@@ -1,6 +1,6 @@
 package com.asakii.settings
 
-import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.options.ConfigurableGroup
 import com.intellij.openapi.options.SearchableConfigurable
@@ -80,11 +80,36 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
 
         // Node.js 路径
         nodePathField = TextFieldWithBrowseButton().apply {
-            val descriptor = FileChooserDescriptorFactory.createSingleFileDescriptor()
-                .withTitle("Select Node.js Executable")
-                .withDescription("Choose the path to node executable")
+            // 使用新的 API：FileChooserDescriptor(chooseFiles, chooseFolders, chooseJars, ...)
+            val descriptor = FileChooserDescriptor(
+                true,   // chooseFiles
+                false,  // chooseFolders
+                false,  // chooseJars
+                false,  // chooseJarsAsFiles
+                false,  // chooseJarContents
+                false   // chooseMultiple
+            ).withTitle("Select Node.js Executable")
+             .withDescription("Choose the path to node executable")
             addBrowseFolderListener(null, descriptor)
-            toolTipText = "Leave empty to use system PATH"
+            toolTipText = "Leave empty to auto-detect from system PATH"
+
+            // 设置 placeholder 文本，显示自动检测的路径和版本
+            // textField 需要转换为 JBTextField 才能访问 emptyText
+            val textField = this.textField
+            if (textField is com.intellij.ui.components.JBTextField) {
+                val nodeInfo = AgentSettingsService.detectNodeInfo()
+                if (nodeInfo != null) {
+                    // 显示格式：路径 (版本号)
+                    val hint = if (nodeInfo.version != null) {
+                        "${nodeInfo.path} (${nodeInfo.version})"
+                    } else {
+                        nodeInfo.path
+                    }
+                    textField.emptyText.text = hint
+                } else {
+                    textField.emptyText.text = "Auto-detect from system PATH (Node.js not found)"
+                }
+            }
         }
 
         // 默认模型（下拉框）
@@ -104,9 +129,11 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
             toolTipText = "Default permission mode for new sessions"
         }
 
-        // 包含部分消息
+        // 包含部分消息（强制启用，禁止修改）
         includePartialMessagesCheckbox = JBCheckBox("Include partial messages in stream").apply {
-            toolTipText = "Include partial/streaming messages in the response"
+            toolTipText = "Include partial/streaming messages in the response (always enabled)"
+            isSelected = true
+            isEnabled = false  // 禁止修改
         }
 
         mainPanel = FormBuilder.createFormBuilder()
@@ -146,11 +173,10 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
     override fun isModified(): Boolean {
         val settings = AgentSettingsService.getInstance()
         val selectedModel = defaultModelCombo?.selectedItem as? DefaultModel
-        // Node.js 路径比较：考虑自动检测的情况
+        // Node.js 路径比较：只比较用户输入的值
         val currentNodePath = nodePathField?.text ?: ""
         val savedNodePath = settings.nodePath
-        val detectedNodePath = if (savedNodePath.isEmpty()) AgentSettingsService.detectNodePath() else savedNodePath
-        val nodePathModified = currentNodePath != detectedNodePath
+        val nodePathModified = currentNodePath != savedNodePath
 
         return nodePathModified ||
                 selectedModel?.name != settings.defaultModel ||
@@ -177,14 +203,21 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
 
     override fun reset() {
         val settings = AgentSettingsService.getInstance()
-        // 如果用户未设置路径，尝试自动检测
-        val nodePath = settings.nodePath.ifEmpty { AgentSettingsService.detectNodePath() }
-        nodePathField?.text = nodePath
+        // 只恢复用户保存的路径，不自动填充检测的路径
+        // 检测的路径显示在 placeholder 中
+        nodePathField?.text = settings.nodePath
+
         // 从枚举名称恢复选中项
         val modelEnum = DefaultModel.fromName(settings.defaultModel) ?: DefaultModel.OPUS_45
         defaultModelCombo?.selectedItem = modelEnum
         permissionModeCombo?.selectedItem = settings.permissionMode
-        includePartialMessagesCheckbox?.isSelected = settings.includePartialMessages
+        // includePartialMessages 强制为 true 并禁用修改
+        // 如果之前保存的是 false，也强制修正为 true
+        if (!settings.includePartialMessages) {
+            settings.includePartialMessages = true
+        }
+        includePartialMessagesCheckbox?.isSelected = true
+        includePartialMessagesCheckbox?.isEnabled = false
         enableUserInteractionMcpCheckbox?.isSelected = settings.enableUserInteractionMcp
         enableJetBrainsMcpCheckbox?.isSelected = settings.enableJetBrainsMcp
         defaultBypassPermissionsCheckbox?.isSelected = settings.defaultBypassPermissions

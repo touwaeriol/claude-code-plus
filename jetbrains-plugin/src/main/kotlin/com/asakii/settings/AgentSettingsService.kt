@@ -132,15 +132,44 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         fun getInstance(): AgentSettingsService = service()
 
         /**
+         * Node.js 检测结果
+         */
+        data class NodeInfo(
+            val path: String,
+            val version: String? = null
+        )
+
+        /**
+         * 检测 Node.js 路径和版本
+         * @return NodeInfo 包含路径和版本，未找到返回 null
+         */
+        fun detectNodeInfo(): NodeInfo? {
+            val path = detectNodePath()
+            if (path.isEmpty()) return null
+
+            val version = detectNodeVersion(path)
+            return NodeInfo(path, version)
+        }
+
+        /**
          * 自动检测系统中的 Node.js 路径
+         * 使用 login shell 执行，以正确加载用户的环境变量（PATH 等）
          * @return Node.js 可执行文件路径，未找到返回空字符串
          */
         fun detectNodePath(): String {
             val isWindows = System.getProperty("os.name").lowercase().contains("win")
 
-            // 1. 尝试通过系统命令查找
+            // 1. 尝试通过 login shell 查找（与运行时逻辑一致）
             try {
-                val command = if (isWindows) arrayOf("cmd", "/c", "where", "node") else arrayOf("which", "node")
+                val command = if (isWindows) {
+                    // Windows: 使用 cmd /c
+                    arrayOf("cmd", "/c", "where", "node")
+                } else {
+                    // macOS/Linux: 使用 login shell 执行 which node
+                    val defaultShell = System.getenv("SHELL") ?: "/bin/bash"
+                    arrayOf(defaultShell, "-l", "-c", "which node")
+                }
+
                 val process = ProcessBuilder(*command)
                     .redirectErrorStream(true)
                     .start()
@@ -181,6 +210,39 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
             }
 
             return ""
+        }
+
+        /**
+         * 检测 Node.js 版本
+         * @param nodePath Node.js 可执行文件路径
+         * @return 版本号（如 v24.2.0），未检测到返回 null
+         */
+        private fun detectNodeVersion(nodePath: String): String? {
+            val isWindows = System.getProperty("os.name").lowercase().contains("win")
+
+            try {
+                val command = if (isWindows) {
+                    arrayOf("cmd", "/c", nodePath, "--version")
+                } else {
+                    val defaultShell = System.getenv("SHELL") ?: "/bin/bash"
+                    arrayOf(defaultShell, "-l", "-c", "$nodePath --version")
+                }
+
+                val process = ProcessBuilder(*command)
+                    .redirectErrorStream(true)
+                    .start()
+
+                val result = process.inputStream.bufferedReader().readLine()?.trim()
+                val exitCode = process.waitFor()
+
+                if (exitCode == 0 && !result.isNullOrBlank()) {
+                    return result
+                }
+            } catch (_: Exception) {
+                // 忽略错误
+            }
+
+            return null
         }
     }
 }

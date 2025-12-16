@@ -84,6 +84,12 @@ interface IdeTools {
      * @return 代理名称到定义的映射，如果没有自定义代理则返回空 Map
      */
     fun getAgentDefinitions(): Map<String, AgentDefinition> = emptyMap()
+
+    /**
+     * 检测 Node.js 安装信息
+     * @return NodeDetectionResult 检测结果（包含路径、版本等）
+     */
+    fun detectNode(): NodeDetectionResult
 }
 
 /**
@@ -147,4 +153,15 @@ data class IdeTheme(
     val fontSize: Int = 13,
     val editorFontFamily: String = "JetBrains Mono, Consolas, monospace",
     val editorFontSize: Int = 13
+)
+
+/**
+ * Node.js 检测结果
+ */
+@Serializable
+data class NodeDetectionResult(
+    val found: Boolean,              // 是否找到 Node.js
+    val path: String? = null,        // Node.js 路径（如果找到）
+    val version: String? = null,     // Node.js 版本（如果找到）
+    val error: String? = null        // 错误信息（如果检测失败）
 )

@@ -117,9 +117,9 @@ export default defineConfig(({ mode }) => {
     minify: isProduction ? 'terser' : false,
     terserOptions: isProduction ? {
       compress: {
-        drop_console: true,  // 移除 console
-        drop_debugger: true, // 移除 debugger
-        pure_funcs: ['console.log', 'console.info', 'console.debug']
+        drop_console: false,  // ✅ 保留 console（用于生产环境调试）
+        drop_debugger: true,  // 移除 debugger
+        pure_funcs: []        // ✅ 不移除任何 console 函数
       },
       mangle: true,
       format: {

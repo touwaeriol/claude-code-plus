@@ -56,6 +56,19 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
 
         // 标题栏动作（会话控件按顺序置于右侧）
         val titleActions = mutableListOf<AnAction>(
+            // Open in External Browser button
+            object : AnAction(
+                "Open in External Browser",
+                "在外部浏览器中打开并使用 Chrome DevTools 调试",
+                AllIcons.Xml.Browsers.Chrome
+            ) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    val url = httpService.serverUrl
+                    if (url != null) {
+                        openInBrowser(project, url)
+                    }
+                }
+            },
             // Settings button
             object : AnAction(
                 "Settings",
@@ -163,7 +176,7 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
 
         toolWindowEx?.setTitleActions(titleActions)
 
-        // 三个点菜单中添加 DevTools
+        // 三个点菜单中只保留 DevTools
         val gearActions = com.intellij.openapi.actionSystem.DefaultActionGroup().apply {
             add(object : AnAction(
                 "Open DevTools",
@@ -172,18 +185,6 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
             ) {
                 override fun actionPerformed(e: AnActionEvent) {
                     openDevToolsInDialog(project, browser)
-                }
-            })
-            add(object : AnAction(
-                "Open in External Browser",
-                "在外部浏览器中打开并使用 Chrome DevTools 调试",
-                AllIcons.Xml.Browsers.Chrome
-            ) {
-                override fun actionPerformed(e: AnActionEvent) {
-                    val url = httpService.serverUrl
-                    if (url != null) {
-                        openInBrowser(project, url)
-                    }
                 }
             })
         }

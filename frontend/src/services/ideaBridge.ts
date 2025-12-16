@@ -300,6 +300,10 @@ export async function setLocale(locale: string) {
   return getIdeaBridge().query('ide.setLocale', locale)
 }
 
+export async function detectNode() {
+  return getIdeaBridge().query('node.detect')
+}
+
 // 为兼容性保留，也导出命名方式
 export const ideService = {
   openFile,
@@ -307,7 +311,8 @@ export const ideService = {
   searchFiles,
   getFileContent,
   getLocale,
-  setLocale
+  setLocale,
+  detectNode
 }
 
 export const aiAgentBridgeService = {

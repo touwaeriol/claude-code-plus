@@ -165,5 +165,96 @@ open class IdeToolsDefault(
         logger.info { "[Default] Locale set to: $locale" }
         return Result.success(Unit)
     }
+
+    override open fun detectNode(): NodeDetectionResult {
+        logger.info { "[Default] Detecting Node.js installation..." }
+
+        val osName = System.getProperty("os.name").lowercase()
+        val isWindows = osName.contains("windows")
+
+        try {
+            // 1. 检测 Node.js 路径
+            val nodePath = detectNodePath(isWindows)
+            if (nodePath == null) {
+                return NodeDetectionResult(
+                    found = false,
+                    error = "Node.js not found. Please install Node.js and ensure it's in your system PATH."
+                )
+            }
+
+            // 2. 检测 Node.js 版本
+            val version = detectNodeVersion(nodePath, isWindows)
+
+            return NodeDetectionResult(
+                found = true,
+                path = nodePath,
+                version = version
+            )
+        } catch (e: Exception) {
+            logger.error { "Failed to detect Node.js: ${e.message}" }
+            return NodeDetectionResult(
+                found = false,
+                error = "Detection failed: ${e.message}"
+            )
+        }
+    }
+
+    /**
+     * 检测 Node.js 路径
+     */
+    private fun detectNodePath(isWindows: Boolean): String? {
+        try {
+            val command = if (isWindows) {
+                arrayOf("cmd", "/c", "where", "node")
+            } else {
+                val defaultShell = System.getenv("SHELL") ?: "/bin/bash"
+                arrayOf(defaultShell, "-l", "-c", "which node")
+            }
+
+            val process = ProcessBuilder(*command)
+                .redirectErrorStream(true)
+                .start()
+
+            val result = process.inputStream.bufferedReader().readLine()?.trim()
+            val exitCode = process.waitFor()
+
+            if (exitCode == 0 && !result.isNullOrBlank() && File(result).exists()) {
+                return result
+            }
+        } catch (e: Exception) {
+            logger.debug { "Failed to detect Node.js path: ${e.message}" }
+        }
+
+        return null
+    }
+
+    /**
+     * 检测 Node.js 版本
+     */
+    private fun detectNodeVersion(nodePath: String, isWindows: Boolean): String? {
+        try {
+            val command = if (isWindows) {
+                arrayOf("cmd", "/c", nodePath, "--version")
+            } else {
+                val defaultShell = System.getenv("SHELL") ?: "/bin/bash"
+                arrayOf(defaultShell, "-l", "-c", "$nodePath --version")
+            }
+
+            val process = ProcessBuilder(*command)
+                .redirectErrorStream(true)
+                .start()
+
+            val result = process.inputStream.bufferedReader().readLine()?.trim()
+            val exitCode = process.waitFor()
+
+            if (exitCode == 0 && !result.isNullOrBlank()) {
+                return result
+            }
+        } catch (e: Exception) {
+            logger.debug { "Failed to detect Node.js version: ${e.message}" }
+        }
+
+        return null
+    }
 }
 

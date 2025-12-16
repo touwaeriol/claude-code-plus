@@ -164,17 +164,32 @@ intellijPlatform {
 
 // ===== 前端构建任务 =====
 
-// 获取 npm 命令（Windows 使用 npm.cmd）
-val npmCommand = if (System.getProperty("os.name").lowercase().contains("windows")) {
-    "npm.cmd"
-} else {
-    "npm"
+/**
+ * 获取用户默认终端
+ */
+fun getDefaultShell(): String {
+    val osName = System.getProperty("os.name").lowercase()
+    return when {
+        osName.contains("windows") -> "powershell.exe"
+        else -> System.getenv("SHELL") ?: "/bin/sh"
+    }
 }
 
-// 检查 Node.js 是否安装
+/**
+ * 在用户默认终端中执行命令
+ */
+fun shellCommand(command: String): List<String> {
+    val shell = getDefaultShell()
+    return when {
+        shell.contains("powershell") -> listOf(shell, "-Command", command)
+        else -> listOf(shell, "-c", command)
+    }
+}
+
+// 检查 Node.js 是否安装（可选检查，不阻塞构建）
 val checkNodeInstalled by tasks.registering(Exec::class) {
     group = "frontend"
-    description = "Check if Node.js is installed"
+    description = "Check if Node.js is installed (optional check)"
 
     commandLine("node", "--version")
 
@@ -182,12 +197,13 @@ val checkNodeInstalled by tasks.registering(Exec::class) {
 
     doLast {
         if (executionResult.get().exitValue != 0) {
-            throw GradleException(
-                """
-                ❌ Node.js is not installed!
-                Please install Node.js from: https://nodejs.org/
-                """.trimIndent(),
-            )
+            logger.warn("""
+                ⚠️ Node.js not found in Gradle's PATH
+                This is normal if you use NVM or custom Node installation.
+                Frontend build will use npm/node from system PATH.
+            """.trimIndent())
+        } else {
+            logger.lifecycle("✅ Node.js found in PATH")
         }
     }
 }
@@ -197,10 +213,11 @@ val installFrontendDeps by tasks.registering(Exec::class) {
     group = "frontend"
     description = "Install frontend dependencies"
 
-    dependsOn(checkNodeInstalled)
+    val shell = getDefaultShell()
+    val npmCmd = shellCommand("npm install --legacy-peer-deps")
 
     workingDir = file("../frontend")
-    commandLine(npmCommand, "install", "--legacy-peer-deps")  // 使用 legacy-peer-deps 解决依赖冲突
+    commandLine(*npmCmd.toTypedArray())
 
     // 只有当 package.json 改变或 node_modules 不存在时才执行
     inputs.file("../frontend/package.json")
@@ -210,7 +227,7 @@ val installFrontendDeps by tasks.registering(Exec::class) {
     doNotTrackState("node_modules contains symbolic links on Windows that Gradle cannot snapshot")
 
     doFirst {
-        println("📦 Installing frontend dependencies...")
+        println("📦 Installing frontend dependencies via $shell...")
     }
 }
 
@@ -219,10 +236,12 @@ val buildFrontendWithVite by tasks.registering(Exec::class) {
     group = "frontend"
     description = "Build Vue frontend with Vite (production mode with full optimization)"
 
+    val npmCmd = shellCommand("npm run build")
+
     dependsOn(installFrontendDeps)
 
     workingDir = file("../frontend")
-    commandLine(npmCommand, "run", "build")
+    commandLine(*npmCmd.toTypedArray())
 
     // 输入：所有源文件
     inputs.dir("../frontend/src")
@@ -250,10 +269,12 @@ val buildFrontendWithViteDev by tasks.registering(Exec::class) {
     group = "frontend"
     description = "Build Vue frontend with Vite (development mode, no optimization)"
 
+    val npmCmd = shellCommand("npm run build:dev")
+
     dependsOn(installFrontendDeps)
 
     workingDir = file("../frontend")
-    commandLine(npmCommand, "run", "build:dev")
+    commandLine(*npmCmd.toTypedArray())
 
     // 输入：所有源文件
     inputs.dir("../frontend/src")

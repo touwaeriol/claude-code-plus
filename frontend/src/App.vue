@@ -156,6 +156,23 @@ onMounted(async () => {
       projectPath.value = '获取失败'
     }
 
+    // 检测 Node.js 是否安装
+    try {
+      const response = await ideaBridge.query('node.detect', {})
+      if (response.success && response.data) {
+        const { found, path, version, error } = response.data
+        if (found) {
+          console.log(`✅ Node.js detected: ${path} (${version})`)
+        } else {
+          console.warn('⚠️ Node.js not detected:', error)
+          // 显示警告提示（可选，避免打扰用户）
+          // 用户可以在设置中配置 Node.js 路径
+        }
+      }
+    } catch (error) {
+      console.error('Failed to detect Node.js:', error)
+    }
+
     // 检查关键 DOM 元素的高度 (用于调试布局问题)
     setTimeout(() => {
       const app = document.getElementById('app')

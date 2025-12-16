@@ -304,6 +304,19 @@ class HttpApiServer(
                                     )
                                     call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
+                                "node.detect" -> {
+                                    val result = ideTools.detectNode()
+                                    val response = FrontendResponse(
+                                        success = result.found,
+                                        data = mapOf(
+                                            "found" to JsonPrimitive(result.found),
+                                            "path" to JsonPrimitive(result.path ?: ""),
+                                            "version" to JsonPrimitive(result.version ?: ""),
+                                            "error" to JsonPrimitive(result.error ?: "")
+                                        )
+                                    )
+                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
+                                }
                                 else -> {
                                     call.respondText(
                                         """{"success":false,"error":"Unknown action: $action"}""",
