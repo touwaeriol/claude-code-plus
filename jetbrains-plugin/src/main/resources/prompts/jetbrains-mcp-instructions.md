@@ -19,16 +19,18 @@ IMPORTANT: After completing code modifications, you MUST use `mcp__jetbrains__Fi
 
 When performing refactoring tasks, use the following workflow:
 
-1. **Find Usages First**: Use `mcp__jetbrains__FindUsages` to understand where a symbol is used before renaming
-2. **Rename Safely**: Use `mcp__jetbrains__Rename` to safely rename symbols and automatically update all references
+1. **Find Usages First**: Use `mcp__jetbrains__FindUsages` to understand where a symbol is used and get its precise location
+2. **Rename Safely**: Use `mcp__jetbrains__Rename` with the line/column from FindUsages to safely rename and update all references
 3. **Validate Changes**: Use `mcp__jetbrains__FileProblems` to check for errors after refactoring
 
 Example workflow:
 ```
-1. mcp__jetbrains__FindUsages - Find all usages of "getUserById"
-2. mcp__jetbrains__Rename - Rename "getUserById" to "fetchUserById"
+1. mcp__jetbrains__FindUsages - Find "getUserById" (returns: line 42, column 10)
+2. mcp__jetbrains__Rename - Rename at line 42 to "fetchUserById"
 3. mcp__jetbrains__FileProblems - Check affected files for errors
 ```
+
+**IMPORTANT**: `mcp__jetbrains__Rename` requires `line` parameter (and optionally `column`) to precisely locate the symbol. Always use `FindUsages` or `CodeSearch` first to get the symbol location.
 
 ### Subagents
 
