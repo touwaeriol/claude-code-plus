@@ -3,6 +3,7 @@ package com.asakii.plugin.tools
 import com.asakii.claude.agent.sdk.types.AgentDefinition
 import com.asakii.plugin.utils.ResourceLoader
 import com.asakii.rpc.api.*
+import com.asakii.rpc.api.ActiveFileInfo
 import com.asakii.server.tools.IdeToolsDefault
 import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffManager
@@ -399,6 +400,80 @@ class IdeToolsImpl(
         } catch (e: Exception) {
             logger.warning("Failed to load agent definitions: ${e.message}")
             emptyMap()
+        }
+    }
+
+    override fun getActiveEditorFile(): ActiveFileInfo? {
+        return try {
+            var result: ActiveFileInfo? = null
+            ApplicationManager.getApplication().invokeAndWait {
+                ApplicationManager.getApplication().runReadAction {
+                    val fileEditorManager = FileEditorManager.getInstance(project)
+                    val selectedEditor = fileEditorManager.selectedTextEditor
+                    val selectedFile = fileEditorManager.selectedFiles.firstOrNull()
+
+                    if (selectedFile != null) {
+                        val projectPath = project.basePath ?: ""
+                        val absolutePath = selectedFile.path
+                        val relativePath = if (projectPath.isNotEmpty() && absolutePath.startsWith(projectPath)) {
+                            absolutePath.removePrefix(projectPath).removePrefix("/").removePrefix("\\")
+                        } else {
+                            absolutePath
+                        }
+
+                        // 获取光标位置
+                        val caret = selectedEditor?.caretModel?.primaryCaret
+                        val line = caret?.logicalPosition?.line?.plus(1) // 转换为 1-based
+                        val column = caret?.logicalPosition?.column?.plus(1) // 转换为 1-based
+
+                        // 获取选区信息
+                        val selectionModel = selectedEditor?.selectionModel
+                        val hasSelection = selectionModel?.hasSelection() == true
+                        var startLine: Int? = null
+                        var startColumn: Int? = null
+                        var endLine: Int? = null
+                        var endColumn: Int? = null
+                        var selectedContent: String? = null
+
+                        if (hasSelection && selectedEditor != null) {
+                            val document = selectedEditor.document
+                            val selectionStart = selectionModel!!.selectionStart
+                            val selectionEnd = selectionModel.selectionEnd
+
+                            startLine = document.getLineNumber(selectionStart) + 1 // 转换为 1-based
+                            startColumn = selectionStart - document.getLineStartOffset(startLine - 1) + 1
+                            endLine = document.getLineNumber(selectionEnd) + 1 // 转换为 1-based
+                            endColumn = selectionEnd - document.getLineStartOffset(endLine - 1) + 1
+
+                            // 获取选中的文本内容
+                            selectedContent = selectionModel.selectedText
+                        }
+
+                        result = ActiveFileInfo(
+                            path = absolutePath,
+                            relativePath = relativePath,
+                            name = selectedFile.name,
+                            line = line,
+                            column = column,
+                            hasSelection = hasSelection,
+                            startLine = startLine,
+                            startColumn = startColumn,
+                            endLine = endLine,
+                            endColumn = endColumn,
+                            selectedContent = selectedContent
+                        )
+                        if (hasSelection) {
+                            logger.info("✅ Active editor file: $relativePath (selection: $startLine:$startColumn - $endLine:$endColumn)")
+                        } else {
+                            logger.info("✅ Active editor file: $relativePath (line=$line, column=$column)")
+                        }
+                    }
+                }
+            }
+            result
+        } catch (e: Exception) {
+            logger.warning("Failed to get active editor file: ${e.message}")
+            null
         }
     }
 }

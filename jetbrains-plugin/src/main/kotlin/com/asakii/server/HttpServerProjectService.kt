@@ -13,7 +13,13 @@ import com.asakii.settings.AgentSettingsService
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.editor.event.SelectionEvent
+import com.intellij.openapi.editor.event.SelectionListener
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.FileEditorManagerEvent
+import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -105,6 +111,9 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                     jetbrainsRSocketHandler.pushSettingsChanged(settings)
                 }
             }
+
+            // 监听文件编辑器切换，通过 RSocket 推送给前端
+            setupFileEditorListener(ideTools, jetbrainsRSocketHandler)
 
             // 创建 JetBrains MCP Server Provider
             val jetBrainsMcpServerProvider = JetBrainsMcpServerProviderImpl(project)
@@ -238,6 +247,73 @@ class HttpServerProjectService(private val project: Project) : Disposable {
 
         scope.cancel()
         logger.info("✅ HTTP Server Project Service disposed")
+    }
+
+    /**
+     * 设置文件编辑器监听器
+     * 监听文件切换和选区变化，推送给前端
+     */
+    private fun setupFileEditorListener(
+        ideTools: IdeToolsImpl,
+        jetbrainsRSocketHandler: JetBrainsRSocketHandler
+    ) {
+        // 监听文件切换事件
+        project.messageBus.connect(this).subscribe(
+            FileEditorManagerListener.FILE_EDITOR_MANAGER,
+            object : FileEditorManagerListener {
+                override fun selectionChanged(event: FileEditorManagerEvent) {
+                    // 当切换到新文件时推送
+                    pushActiveFileUpdate(ideTools, jetbrainsRSocketHandler)
+                }
+
+                override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+                    // 打开新文件时推送
+                    pushActiveFileUpdate(ideTools, jetbrainsRSocketHandler)
+                }
+
+                override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
+                    // 关闭文件时推送（可能活跃文件变化了）
+                    pushActiveFileUpdate(ideTools, jetbrainsRSocketHandler)
+                }
+            }
+        )
+
+        // 监听选区变化（用户选中代码时）
+        // 注意：选区变化非常频繁，需要添加防抖
+        val fileEditorManager = FileEditorManager.getInstance(project)
+        fileEditorManager.selectedTextEditor?.let { editor ->
+            editor.selectionModel.addSelectionListener(object : SelectionListener {
+                private var lastPushTime = 0L
+                private val debounceMs = 300L  // 300ms 防抖
+
+                override fun selectionChanged(e: SelectionEvent) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastPushTime > debounceMs) {
+                        lastPushTime = now
+                        pushActiveFileUpdate(ideTools, jetbrainsRSocketHandler)
+                    }
+                }
+            }, this)
+        }
+
+        logger.info("📡 File editor listener registered")
+    }
+
+    /**
+     * 推送活跃文件更新
+     */
+    private fun pushActiveFileUpdate(
+        ideTools: IdeToolsImpl,
+        jetbrainsRSocketHandler: JetBrainsRSocketHandler
+    ) {
+        try {
+            val activeFile = ideTools.getActiveEditorFile()
+            kotlinx.coroutines.runBlocking {
+                jetbrainsRSocketHandler.pushActiveFileChanged(activeFile)
+            }
+        } catch (e: Exception) {
+            logger.warning("Failed to push active file update: ${e.message}")
+        }
     }
 
     companion object {

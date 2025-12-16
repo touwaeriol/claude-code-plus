@@ -1,6 +1,7 @@
 package com.asakii.plugin.bridge
 
 import com.asakii.rpc.api.*
+import com.asakii.rpc.proto.ActiveFileChangedNotify
 import com.asakii.rpc.proto.IdeThemeProto
 import com.asakii.rpc.proto.GetIdeSettingsResponse
 import com.asakii.rpc.proto.IdeSettings
@@ -509,6 +510,54 @@ class JetBrainsRSocketHandler(
             logger.info("📤 [JetBrains RSocket] → pushSessionCommand (client.call): ${command.type}")
         } catch (e: Exception) {
             logger.error("❌ [JetBrains RSocket] pushSessionCommand failed: ${e.message}")
+        }
+    }
+
+    /**
+     * 推送活跃文件变更到前端（使用统一的 client.call 路由）
+     */
+    suspend fun pushActiveFileChanged(activeFile: ActiveFileInfo?) {
+        val requester = clientRequester ?: run {
+            logger.warn("⚠️ [JetBrains RSocket] 无客户端连接，跳过活跃文件推送")
+            return
+        }
+
+        try {
+            // 构建 ActiveFileChangedNotify
+            val notifyBuilder = ActiveFileChangedNotify.newBuilder()
+                .setHasActiveFile(activeFile != null)
+
+            if (activeFile != null) {
+                notifyBuilder.setPath(activeFile.path)
+                notifyBuilder.setRelativePath(activeFile.relativePath)
+                notifyBuilder.setName(activeFile.name)
+                activeFile.line?.let { notifyBuilder.setLine(it) }
+                activeFile.column?.let { notifyBuilder.setColumn(it) }
+                notifyBuilder.setHasSelection(activeFile.hasSelection)
+                activeFile.startLine?.let { notifyBuilder.setStartLine(it) }
+                activeFile.startColumn?.let { notifyBuilder.setStartColumn(it) }
+                activeFile.endLine?.let { notifyBuilder.setEndLine(it) }
+                activeFile.endColumn?.let { notifyBuilder.setEndColumn(it) }
+            }
+
+            // 包装为 ServerCallRequest
+            val callId = "jb-${++callIdCounter}"
+            val serverCall = ServerCallRequest.newBuilder()
+                .setCallId(callId)
+                .setMethod("onActiveFileChanged")
+                .setActiveFileChanged(notifyBuilder.build())
+                .build()
+
+            val payload = buildPayloadWithRoute("client.call", serverCall.toByteArray())
+            requester.fireAndForget(payload)
+            if (activeFile != null) {
+                logger.info("📤 [JetBrains RSocket] → pushActiveFileChanged: ${activeFile.relativePath}" +
+                    if (activeFile.hasSelection) " (selection: ${activeFile.startLine}:${activeFile.startColumn} - ${activeFile.endLine}:${activeFile.endColumn})" else "")
+            } else {
+                logger.info("📤 [JetBrains RSocket] → pushActiveFileChanged: null (no active file)")
+            }
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains RSocket] pushActiveFileChanged failed: ${e.message}")
         }
     }
 

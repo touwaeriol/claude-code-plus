@@ -40,6 +40,7 @@ import {
   // JetBrains 集成（统一 ServerCall）
   type SessionCommandNotify,
   type ThemeChangedNotify,
+  type ActiveFileChangedNotify,
   SessionCommandType,
   type ContentBlock,
   type AskUserQuestionRequest,
@@ -904,8 +905,8 @@ function mapDeltaFromProto(proto: any): any {
 export interface DecodedServerCallRequest {
   callId: string
   method: string
-  params: AskUserQuestionParams | RequestPermissionParams | SessionCommandParams | ThemeChangedParams | unknown
-  paramsCase: 'askUserQuestion' | 'requestPermission' | 'sessionCommand' | 'themeChanged' | 'paramsJson' | undefined
+  params: AskUserQuestionParams | RequestPermissionParams | SessionCommandParams | ThemeChangedParams | ActiveFileChangedParams | unknown
+  paramsCase: 'askUserQuestion' | 'requestPermission' | 'sessionCommand' | 'themeChanged' | 'activeFileChanged' | 'paramsJson' | undefined
 }
 
 /**
@@ -943,6 +944,24 @@ export interface ThemeChangedParams {
   fontSize: number
   editorFontFamily: string
   editorFontSize: number
+}
+
+/**
+ * ActiveFileChanged 参数类型（活跃文件变更通知）
+ */
+export interface ActiveFileChangedParams {
+  hasActiveFile: boolean
+  path?: string
+  relativePath?: string
+  name?: string
+  line?: number
+  column?: number
+  hasSelection: boolean
+  startLine?: number
+  startColumn?: number
+  endLine?: number
+  endColumn?: number
+  selectedContent?: string
 }
 
 /**
@@ -1018,6 +1037,9 @@ export function decodeServerCallRequest(data: Uint8Array): DecodedServerCallRequ
   } else if (proto.params.case === 'themeChanged') {
     paramsCase = 'themeChanged'
     params = mapThemeChangedFromProto(proto.params.value)
+  } else if (proto.params.case === 'activeFileChanged') {
+    paramsCase = 'activeFileChanged'
+    params = mapActiveFileChangedFromProto(proto.params.value)
   } else if (proto.params.case === 'paramsJson') {
     paramsCase = 'paramsJson'
     try {
@@ -1093,6 +1115,26 @@ function mapThemeChangedFromProto(proto: ThemeChangedNotify): ThemeChangedParams
     fontSize: proto.fontSize,
     editorFontFamily: proto.editorFontFamily,
     editorFontSize: proto.editorFontSize
+  }
+}
+
+/**
+ * 从 Proto 映射 ActiveFileChangedNotify
+ */
+function mapActiveFileChangedFromProto(proto: ActiveFileChangedNotify): ActiveFileChangedParams {
+  return {
+    hasActiveFile: proto.hasActiveFile,
+    path: proto.path,
+    relativePath: proto.relativePath,
+    name: proto.name,
+    line: proto.line,
+    column: proto.column,
+    hasSelection: proto.hasSelection,
+    startLine: proto.startLine,
+    startColumn: proto.startColumn,
+    endLine: proto.endLine,
+    endColumn: proto.endColumn,
+    selectedContent: proto.selectedContent
   }
 }
 

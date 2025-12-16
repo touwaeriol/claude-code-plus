@@ -256,5 +256,11 @@ open class IdeToolsDefault(
 
         return null
     }
+
+    override open fun getActiveEditorFile(): ActiveFileInfo? {
+        logger.info { "[Default] getActiveEditorFile is not supported in browser mode" }
+        // 浏览器模式下没有活跃编辑器，返回 null
+        return null
+    }
 }
 

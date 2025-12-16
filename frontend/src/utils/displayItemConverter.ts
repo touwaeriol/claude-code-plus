@@ -49,7 +49,7 @@ function isReplayMessage(message: Message): message is UnifiedMessage & { isRepl
 import type { ThinkingContent as DisplayThinkingContent } from '@/types/display'
 import { isToolUseBlock, isTextBlock } from '@/utils/contentBlockUtils'
 import { parseUserMessage } from '@/utils/userMessageBuilder'
-import { parseLocalCommandTags } from '@/utils/xmlTagParser'
+import { parseLocalCommandTags, parseCurrentOpenFileTag, removeCurrentOpenFileTag, hasCurrentOpenFileTag } from '@/utils/xmlTagParser'
 
 /**
  * 粗略判断文本块是否是工具输入参数的“原样 dump”
@@ -217,15 +217,42 @@ export function convertMessageToDisplayItems(
           displayItems.push(localCommandOutput)
           return displayItems
         }
+
+        // 解析 <current-open-file/> 标记
+        let displayText = textBlock.text
+        let currentOpenFile = undefined
+        if (hasCurrentOpenFileTag(displayText)) {
+          currentOpenFile = parseCurrentOpenFileTag(displayText) || undefined
+          displayText = removeCurrentOpenFileTag(displayText)
+        }
+
+        // 如果移除标记后没有内容，则不显示（只有标记没有实际消息）
+        if (!displayText.trim() && currentOpenFile) {
+          // 只有文件标记没有消息内容，仍然需要显示标记
+          const userMessage: UserMessage = {
+            displayType: 'userMessage',
+            id: message.id,
+            uuid: (message as UnifiedMessage).uuid,
+            content: [] as any,
+            timestamp: message.timestamp,
+            isReplay: true,
+            style: 'hint',
+            currentOpenFile
+          }
+          displayItems.push(userMessage)
+          return displayItems
+        }
+
         // 没有本地命令标签，作为普通回放消息显示（左对齐，markdown 渲染，次要颜色）
         const userMessage: UserMessage = {
           displayType: 'userMessage',
           id: message.id,
           uuid: (message as UnifiedMessage).uuid,
-          content: [{ type: 'text', text: textBlock.text }] as any,
+          content: displayText.trim() ? [{ type: 'text', text: displayText }] as any : [] as any,
           timestamp: message.timestamp,
           isReplay: true,
-          style: 'hint'
+          style: 'hint',
+          currentOpenFile
         }
         displayItems.push(userMessage)
         return displayItems

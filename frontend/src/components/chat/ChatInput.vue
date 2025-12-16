@@ -53,6 +53,23 @@
         <span class="btn-text">{{ t('chat.addContext') }}</span>
       </button>
 
+      <!-- Active File Tag (当前打开的文件 - 由 IDEA 推送) -->
+      <div
+        v-if="shouldShowActiveFile"
+        class="context-tag active-file-tag"
+        :title="currentActiveFile?.path"
+      >
+        <span class="tag-icon">📍</span>
+        <span class="tag-text">{{ activeFileDisplayText }}</span>
+        <button
+          class="tag-remove"
+          :title="t('common.remove')"
+          @click="dismissActiveFile"
+        >
+          ×
+        </button>
+      </div>
+
       <!-- Context Tags (上下文标签) - 只显示前三个 -->
       <div
         v-for="(context, index) in visibleContexts"
@@ -414,6 +431,7 @@ import { useI18n } from '@/composables/useI18n'
 import { AiModel, type PermissionMode, type EnhancedMessage, type TokenUsage as EnhancedTokenUsage, type ImageReference } from '@/types/enhancedMessage'
 import type { ContextReference } from '@/types/display'
 import type { ContentBlock } from '@/types/message'
+import { jetbrainsRSocket, type ActiveFileInfo } from '@/services/jetbrainsRSocket'
 import AtSymbolFilePopup from '@/components/input/AtSymbolFilePopup.vue'
 import FileSelectPopup from '@/components/input/FileSelectPopup.vue'
 import SlashCommandPopup from '@/components/input/SlashCommandPopup.vue'
@@ -579,6 +597,11 @@ const atSymbolSearchResults = ref<IndexedFileInfo[]>([])
 const showSlashCommandPopup = ref(false)
 const slashCommandQuery = ref('')
 
+// Active File State (当前打开的文件 - 由 IDEA 推送)
+const currentActiveFile = ref<ActiveFileInfo | null>(null)
+const activeFileDismissed = ref(false)  // 用户是否手动关闭了当前文件显示
+let activeFileUnsubscribe: (() => void) | null = null
+
 // 输入框大小调整 composable
 const { containerHeight, startResize } = useInputResize()
 
@@ -714,6 +737,79 @@ const placeholderText = computed(() => {
   return props.placeholderText || ''
 })
 
+// 是否应该显示当前打开的文件标签
+const shouldShowActiveFile = computed(() => {
+  return currentActiveFile.value !== null && !activeFileDismissed.value
+})
+
+// 获取活跃文件的显示文本
+const activeFileDisplayText = computed(() => {
+  if (!currentActiveFile.value) return ''
+  const file = currentActiveFile.value
+  if (file.hasSelection && file.startLine && file.endLine) {
+    // 有选区时显示行号范围
+    return `${file.relativePath}:${file.startLine}-${file.endLine}`
+  } else if (file.line) {
+    // 有光标位置时显示行号
+    return `${file.relativePath}:${file.line}`
+  }
+  return file.relativePath
+})
+
+// 关闭当前活跃文件标签
+function dismissActiveFile() {
+  activeFileDismissed.value = true
+}
+
+/**
+ * 生成 <current-open-file/> 格式的标记文本
+ * 用于发送消息时标识当前打开的文件
+ */
+function generateActiveFileTag(): string | null {
+  if (!shouldShowActiveFile.value || !currentActiveFile.value) {
+    return null
+  }
+  const file = currentActiveFile.value
+  if (file.hasSelection && file.startLine && file.startColumn && file.endLine && file.endColumn) {
+    // 有选区
+    let tag = `<current-open-file path="${file.relativePath}" start-line="${file.startLine}" start-column="${file.startColumn}" end-line="${file.endLine}" end-column="${file.endColumn}"`
+    // 如果有选中的文本内容，添加 selected-content 属性
+    if (file.selectedContent) {
+      // 对选中内容进行 XML 转义，避免特殊字符破坏 XML 结构
+      const escapedContent = file.selectedContent
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+      tag += ` selected-content="${escapedContent}"`
+    }
+    tag += '/>'
+    return tag
+  } else if (file.line && file.column) {
+    // 只有光标位置
+    return `<current-open-file path="${file.relativePath}" line="${file.line}" column="${file.column}"/>`
+  } else {
+    // 只有文件路径
+    return `<current-open-file path="${file.relativePath}"/>`
+  }
+}
+
+/**
+ * 在内容块数组开头插入活跃文件标记
+ */
+function prependActiveFileTag(contents: ContentBlock[]): ContentBlock[] {
+  const tag = generateActiveFileTag()
+  if (!tag) {
+    return contents
+  }
+  // 创建文本块，包含活跃文件标记
+  const activeFileBlock: ContentBlock = {
+    type: 'text',
+    text: tag
+  }
+  return [activeFileBlock, ...contents]
+}
+
 // Watch props changes
 // Model selection is now driven by settingsStore (UiModelOption)，不再直接依赖 props.selectedModel
 watch(() => props.selectedPermission, (newValue) => {
@@ -763,7 +859,7 @@ async function handleRichTextSubmit(_content: { text: string; images: { id: stri
   if (!props.enabled) return
 
   // 使用新方法提取有序内容块
-  const contents = richTextInputRef.value?.extractContentBlocks() || []
+  let contents = richTextInputRef.value?.extractContentBlocks() || []
 
   if (contents.length === 0) return
 
@@ -773,6 +869,11 @@ async function handleRichTextSubmit(_content: { text: string; images: { id: stri
 
   // 关闭斜杠命令弹窗
   dismissSlashCommandPopup()
+
+  // 如果不是斜杠命令，在内容开头添加当前打开文件标记
+  if (!isSlashCommand) {
+    contents = prependActiveFileTag(contents)
+  }
 
   // 发送消息（父组件的 enqueueMessage 会自动处理队列逻辑）
   emit('send', contents, { isSlashCommand })
@@ -991,7 +1092,7 @@ async function handleSend() {
   if (!canSend.value) return
 
   // 使用新方法提取有序内容块
-  const contents = richTextInputRef.value?.extractContentBlocks() || []
+  let contents = richTextInputRef.value?.extractContentBlocks() || []
 
   if (contents.length > 0) {
     // 检测是否是斜杠命令
@@ -1000,6 +1101,11 @@ async function handleSend() {
 
     // 关闭斜杠命令弹窗
     dismissSlashCommandPopup()
+
+    // 如果不是斜杠命令，在内容开头添加当前打开文件标记
+    if (!isSlashCommand) {
+      contents = prependActiveFileTag(contents)
+    }
 
     // 先展示到 UI，连接状态由 Tab 层处理
     emit('send', contents, { isSlashCommand })
@@ -1013,9 +1119,12 @@ async function handleSend() {
 
 async function handleForceSend() {
   // 使用新方法提取有序内容块
-  const contents = richTextInputRef.value?.extractContentBlocks() || []
+  let contents = richTextInputRef.value?.extractContentBlocks() || []
 
   if (contents.length === 0 || !props.isGenerating) return
+
+  // 在内容开头添加当前打开文件标记
+  contents = prependActiveFileTag(contents)
 
   emit('force-send', contents)
 
@@ -1267,12 +1376,25 @@ onMounted(() => {
 
   // 添加全局键盘监听
   document.addEventListener('keydown', handleGlobalKeydown)
+
+  // 订阅活跃文件变更
+  activeFileUnsubscribe = jetbrainsRSocket.onActiveFileChange((file) => {
+    currentActiveFile.value = file
+    // 当新文件推送过来时，重置 dismissed 状态
+    activeFileDismissed.value = false
+    console.log('📂 [ChatInput] 活跃文件更新:', file?.relativePath || '无')
+  })
 })
 
 onUnmounted(() => {
   unbindSendContextMenuGlobalHandlers()
   // 移除全局键盘监听
   document.removeEventListener('keydown', handleGlobalKeydown)
+  // 取消订阅活跃文件变更
+  if (activeFileUnsubscribe) {
+    activeFileUnsubscribe()
+    activeFileUnsubscribe = null
+  }
 })
 </script>
 
@@ -1502,6 +1624,21 @@ onUnmounted(() => {
 .context-tag.image-tag {
   position: relative;
   padding: 2px;
+}
+
+/* 活跃文件标签 - 特殊样式突出显示 */
+.context-tag.active-file-tag {
+  background: rgba(3, 102, 214, 0.08);
+  border-color: var(--theme-accent, #0366d6);
+}
+
+.context-tag.active-file-tag .tag-icon {
+  color: var(--theme-accent, #0366d6);
+}
+
+.context-tag.active-file-tag .tag-text {
+  color: var(--theme-accent, #0366d6);
+  font-weight: 500;
 }
 
 /* 图片标签的删除按钮 - 右上角叠加 */

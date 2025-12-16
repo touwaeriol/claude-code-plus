@@ -592,6 +592,23 @@ export interface SessionState {
 export type ThemeChangeHandler = (theme: IdeTheme) => void
 export type SessionCommandHandler = (command: SessionCommand) => void
 export type SettingsChangeHandler = (settings: IdeSettings) => void
+export type ActiveFileChangeHandler = (activeFile: ActiveFileInfo | null) => void
+
+// 当前活跃文件信息
+export interface ActiveFileInfo {
+  path: string           // 文件绝对路径
+  relativePath: string   // 相对于项目根目录的路径
+  name: string           // 文件名
+  line?: number          // 当前光标所在行（1-based）
+  column?: number        // 当前光标所在列（1-based）
+  // 选区信息
+  hasSelection: boolean
+  startLine?: number     // 选区起始行（1-based）
+  startColumn?: number   // 选区起始列（1-based）
+  endLine?: number       // 选区结束行（1-based）
+  endColumn?: number     // 选区结束列（1-based）
+  selectedContent?: string // 选中的文本内容（可选）
+}
 
 // IDE 设置接口
 export interface IdeSettings {
@@ -610,6 +627,7 @@ class JetBrainsRSocketService {
   private themeChangeHandlers: ThemeChangeHandler[] = []
   private sessionCommandHandlers: SessionCommandHandler[] = []
   private settingsChangeHandlers: SettingsChangeHandler[] = []
+  private activeFileChangeHandlers: ActiveFileChangeHandler[] = []
   private connected = false
 
   /**
@@ -684,6 +702,33 @@ class JetBrainsRSocketService {
         }
         console.log('[JetBrainsRSocket] 设置变更:', settings)
         this.settingsChangeHandlers.forEach(h => h(settings))
+        return {} // 返回空响应
+      })
+
+      this.client.registerHandler('onActiveFileChanged', async (params: any) => {
+        console.log('[JetBrainsRSocket] 收到活跃文件变更推送 (Protobuf)')
+        // params 是 ActiveFileChangedNotify 类型
+        let activeFile: ActiveFileInfo | null = null
+        if (params.hasActiveFile) {
+          activeFile = {
+            path: params.path || '',
+            relativePath: params.relativePath || '',
+            name: params.name || '',
+            line: params.line || undefined,
+            column: params.column || undefined,
+            hasSelection: params.hasSelection || false,
+            startLine: params.startLine || undefined,
+            startColumn: params.startColumn || undefined,
+            endLine: params.endLine || undefined,
+            endColumn: params.endColumn || undefined,
+            selectedContent: params.selectedContent || undefined
+          }
+          console.log('[JetBrainsRSocket] 活跃文件:', activeFile.relativePath,
+            activeFile.hasSelection ? `(selection: ${activeFile.startLine}:${activeFile.startColumn} - ${activeFile.endLine}:${activeFile.endColumn}, content: ${activeFile.selectedContent?.substring(0, 50)}...)` : '')
+        } else {
+          console.log('[JetBrainsRSocket] 无活跃文件')
+        }
+        this.activeFileChangeHandlers.forEach(h => h(activeFile))
         return {} // 返回空响应
       })
 
@@ -947,6 +992,17 @@ class JetBrainsRSocketService {
     return () => {
       const index = this.settingsChangeHandlers.indexOf(handler)
       if (index >= 0) this.settingsChangeHandlers.splice(index, 1)
+    }
+  }
+
+  /**
+   * 添加活跃文件变更监听器
+   */
+  onActiveFileChange(handler: ActiveFileChangeHandler): () => void {
+    this.activeFileChangeHandlers.push(handler)
+    return () => {
+      const index = this.activeFileChangeHandlers.indexOf(handler)
+      if (index >= 0) this.activeFileChangeHandlers.splice(index, 1)
     }
   }
 

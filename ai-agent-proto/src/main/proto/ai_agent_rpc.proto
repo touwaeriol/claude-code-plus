@@ -706,6 +706,23 @@ message IdeSettingsChangedNotify {
   IdeSettings settings = 1;
 }
 
+// 活跃文件变更通知（后端→前端推送）
+message ActiveFileChangedNotify {
+  bool has_active_file = 1;           // 是否有活跃文件（如果打开的是 diff 窗口等则为 false）
+  optional string path = 2;           // 文件绝对路径
+  optional string relative_path = 3;  // 相对于项目根目录的路径
+  optional string name = 4;           // 文件名
+  optional int32 line = 5;            // 当前光标所在行（1-based）
+  optional int32 column = 6;          // 当前光标所在列（1-based）
+  // 选区信息
+  bool has_selection = 7;             // 是否有选区
+  optional int32 start_line = 8;      // 选区起始行（1-based）
+  optional int32 start_column = 9;    // 选区起始列（1-based）
+  optional int32 end_line = 10;       // 选区结束行（1-based）
+  optional int32 end_column = 11;     // 选区结束列（1-based）
+  optional string selected_content = 12;  // 选中的文本内容
+}
+
 // ========== 服务端调用客户端 ==========
 
 // 服务端调用客户端的通用请求（支持类型化参数）
@@ -720,6 +737,7 @@ message ServerCallRequest {
     SessionCommandNotify session_command = 20;  // 会话命令通知
     ThemeChangedNotify theme_changed = 21;      // 主题变更通知
     IdeSettingsChangedNotify settings_changed = 22;  // IDE 设置变更通知
+    ActiveFileChangedNotify active_file_changed = 23;  // 活跃文件变更通知
   }
 }
 

@@ -1,7 +1,18 @@
 <template>
   <!-- 回放消息（isReplay=true）：左对齐，使用 markdown 渲染 -->
   <div v-if="props.message.isReplay" class="replay-user-message" :class="props.message.style">
-    <MarkdownRenderer :content="messageText" />
+    <!-- 当前打开文件标记（历史消息中解析） -->
+    <div
+      v-if="hasCurrentOpenFile"
+      class="history-file-tag"
+      :title="currentOpenFile?.path"
+      @click="handleOpenFileClick"
+    >
+      <span class="tag-icon">📍</span>
+      <span class="tag-text">{{ currentOpenFileDisplayText }}</span>
+    </div>
+    <!-- 消息内容（如果有） -->
+    <MarkdownRenderer v-if="messageText" :content="messageText" />
   </div>
 
   <!-- 用户发送的消息（isReplay=false/undefined）：右对齐，带气泡、可编辑 -->
@@ -113,6 +124,7 @@ import { ref, computed, nextTick } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import type { ImageBlock, ContentBlock } from '@/types/message'
 import type { ContextReference } from '@/types/display'
+import type { ParsedCurrentOpenFile } from '@/utils/xmlTagParser'
 import { isFileReference } from '@/utils/userMessageBuilder'
 import { linkifyText, getLinkFromEvent, handleLinkClick } from '@/utils/linkify'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
@@ -291,6 +303,41 @@ const renderedText = computed(() => {
   const result = linkifyText(messageText.value)
   return result.html
 })
+
+// 获取当前打开文件标记（从历史消息中解析）
+const currentOpenFile = computed((): ParsedCurrentOpenFile | undefined => {
+  return props.message.currentOpenFile as ParsedCurrentOpenFile | undefined
+})
+
+// 是否显示当前打开文件标记
+const hasCurrentOpenFile = computed(() => {
+  return props.message.isReplay && currentOpenFile.value
+})
+
+// 当前打开文件的显示文本
+const currentOpenFileDisplayText = computed(() => {
+  const file = currentOpenFile.value
+  if (!file) return ''
+  if (file.startLine && file.endLine) {
+    // 有选区
+    return `${file.path}:${file.startLine}-${file.endLine}`
+  } else if (file.line) {
+    // 有光标位置
+    return `${file.path}:${file.line}`
+  }
+  return file.path
+})
+
+// 点击文件标记打开文件
+function handleOpenFileClick() {
+  const file = currentOpenFile.value
+  if (!file) return
+  ideaBridge.query('ide.openFile', {
+    filePath: file.path,
+    line: file.startLine || file.line || 1,
+    column: file.startColumn || file.column || 1
+  })
+}
 
 // 处理消息文本中的链接点击
 function handleMessageClick(event: MouseEvent) {
@@ -606,6 +653,36 @@ function closeImagePreview() {
 /* error 样式：使用错误颜色 */
 .replay-user-message.error {
   color: var(--theme-error);
+}
+
+/* 历史消息中的文件标记 */
+.history-file-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  margin-bottom: 6px;
+  background: rgba(3, 102, 214, 0.08);
+  border: 1px solid var(--theme-accent, #0366d6);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.history-file-tag:hover {
+  background: rgba(3, 102, 214, 0.15);
+}
+
+.history-file-tag .tag-icon {
+  font-size: 12px;
+  color: var(--theme-accent, #0366d6);
+}
+
+.history-file-tag .tag-text {
+  color: var(--theme-accent, #0366d6);
+  font-weight: 500;
+  font-family: var(--editor-font-family, monospace);
 }
 
 </style>

@@ -317,6 +317,29 @@ class HttpApiServer(
                                     )
                                     call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
+                                "ide.getActiveFile" -> {
+                                    val activeFile = ideTools.getActiveEditorFile()
+                                    val response = if (activeFile != null) {
+                                        FrontendResponse(
+                                            success = true,
+                                            data = mapOf(
+                                                "path" to JsonPrimitive(activeFile.path),
+                                                "relativePath" to JsonPrimitive(activeFile.relativePath),
+                                                "name" to JsonPrimitive(activeFile.name),
+                                                "line" to JsonPrimitive(activeFile.line ?: 0),
+                                                "column" to JsonPrimitive(activeFile.column ?: 0),
+                                                "hasSelection" to JsonPrimitive(activeFile.hasSelection),
+                                                "startLine" to JsonPrimitive(activeFile.startLine ?: 0),
+                                                "startColumn" to JsonPrimitive(activeFile.startColumn ?: 0),
+                                                "endLine" to JsonPrimitive(activeFile.endLine ?: 0),
+                                                "endColumn" to JsonPrimitive(activeFile.endColumn ?: 0)
+                                            )
+                                        )
+                                    } else {
+                                        FrontendResponse(success = true, data = null)
+                                    }
+                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
+                                }
                                 else -> {
                                     call.respondText(
                                         """{"success":false,"error":"Unknown action: $action"}""",
