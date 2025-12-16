@@ -114,12 +114,6 @@ export const useSettingsStore = defineStore('settings', () => {
         ...updates
       }
       console.log('✅ [IdeSettings] 已应用 IDE 默认设置:', updates)
-
-      // 4. 通过事件总线通知 sessionStore 同步 skipPermissions
-      if (updates.skipPermissions !== undefined) {
-        eventBus.emit('settings:skipPermissionsChanged', { skipPermissions: updates.skipPermissions })
-        console.log('🔄 [IdeSettings] 已发布 skipPermissions 变更事件:', updates.skipPermissions)
-      }
     }
   }
 

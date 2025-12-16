@@ -15,7 +15,7 @@
  */
 
 import { ref, computed, shallowRef, watch } from 'vue'
-import { defineStore } from 'pinia'
+import { defineStore, storeToRefs } from 'pinia'
 import { i18n } from '@/i18n'
 import { useSessionTab, type SessionTabInstance, type TabConnectOptions } from '@/composables/useSessionTab'
 import { MODEL_CAPABILITIES, BaseModel } from '@/constants/models'
@@ -25,7 +25,6 @@ import { loggers } from '@/utils/logger'
 import { HISTORY_INITIAL_LOAD } from '@/constants/messageWindow'
 import { aiAgentService } from '@/services/aiAgentService'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { eventBus } from '@/utils/eventBus'
 
 const log = loggers.session
 
@@ -160,6 +159,20 @@ export const useSessionStore = defineStore('session', () => {
       displayItemsVersion.value++
     },
     { immediate: true }
+  )
+
+  // 监听 settingsStore.skipPermissions 变化，同步到当前 Tab
+  // 这样 settingsStore 不需要导入 sessionStore，避免循环依赖
+  const settingsStore = useSettingsStore()
+  const { settings } = storeToRefs(settingsStore)
+  watch(
+    () => settings.value.skipPermissions,
+    (newValue) => {
+      if (currentTab.value && newValue !== undefined) {
+        currentTab.value.setPendingSetting('skipPermissions', newValue)
+        log.info(`[SessionStore] 同步 skipPermissions 到当前会话: ${newValue}`)
+      }
+    }
   )
 
   /**
