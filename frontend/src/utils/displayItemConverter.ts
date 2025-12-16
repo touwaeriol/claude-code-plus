@@ -202,60 +202,52 @@ export function convertMessageToDisplayItems(
         return displayItems
       }
 
+      // 尝试解析本地命令标签
       const textBlock = message.content.find(b => b.type === 'text') as { type: 'text', text: string } | undefined
       if (textBlock?.text) {
-        // 尝试解析 XML 标签（本地命令输出）
-        const parsed = parseLocalCommandTags(textBlock.text)
-        if (parsed) {
+        const localCommand = parseLocalCommandTags(textBlock.text)
+        if (localCommand) {
           const localCommandOutput: LocalCommandOutput = {
             displayType: 'localCommandOutput',
             id: message.id,
-            command: parsed.content,
-            outputType: parsed.type,
+            command: localCommand.content,
+            outputType: localCommand.type,
             timestamp: message.timestamp
           }
           displayItems.push(localCommandOutput)
           return displayItems
         }
+      }
 
-        // 解析 <current-open-file/> 标记
-        let displayText = textBlock.text
-        let currentOpenFile = undefined
-        if (hasCurrentOpenFileTag(displayText)) {
-          currentOpenFile = parseCurrentOpenFileTag(displayText) || undefined
-          displayText = removeCurrentOpenFileTag(displayText)
+      // 使用 parseUserMessage 统一解析（包含文件引用、current-open-file 等）
+      const parsed = parseUserMessage(message.content as any)
+      const contexts: ContextReference[] = [...parsed.contexts]
+      for (const imgBlock of parsed.contextImages) {
+        if (imgBlock.source.type === 'base64') {
+          contexts.push({
+            type: 'image',
+            uri: `image://context-${message.id}-${contexts.length}`,
+            displayType: 'TAG',
+            mimeType: imgBlock.source.media_type,
+            base64Data: imgBlock.source.data
+          })
         }
+      }
 
-        // 如果移除标记后没有内容，则不显示（只有标记没有实际消息）
-        if (!displayText.trim() && currentOpenFile) {
-          // 只有文件标记没有消息内容，仍然需要显示标记
-          const userMessage: UserMessage = {
-            displayType: 'userMessage',
-            id: message.id,
-            uuid: (message as UnifiedMessage).uuid,
-            content: [] as any,
-            timestamp: message.timestamp,
-            isReplay: true,
-            style: 'hint',
-            currentOpenFile
-          }
-          displayItems.push(userMessage)
-          return displayItems
-        }
-
-        // 没有本地命令标签，作为普通回放消息显示（左对齐，markdown 渲染，次要颜色）
+      // 如果有内容或上下文，创建用户消息
+      if (parsed.userContent.length > 0 || contexts.length > 0 || parsed.currentOpenFile) {
         const userMessage: UserMessage = {
           displayType: 'userMessage',
           id: message.id,
           uuid: (message as UnifiedMessage).uuid,
-          content: displayText.trim() ? [{ type: 'text', text: displayText }] as any : [] as any,
+          contexts: contexts.length > 0 ? contexts : undefined,
+          content: parsed.userContent as any,
           timestamp: message.timestamp,
           isReplay: true,
           style: 'hint',
-          currentOpenFile
+          currentOpenFile: parsed.currentOpenFile
         }
         displayItems.push(userMessage)
-        return displayItems
       }
       return displayItems
     }
@@ -273,14 +265,15 @@ export function convertMessageToDisplayItems(
         })
       }
     }
-    if (parsed.userContent.length > 0 || contexts.length > 0) {
+    if (parsed.userContent.length > 0 || contexts.length > 0 || parsed.currentOpenFile) {
       const userMessage: UserMessage = {
         displayType: 'userMessage',
         id: message.id,
         uuid: (message as UnifiedMessage).uuid,
         contexts: contexts.length > 0 ? contexts : undefined,
         content: parsed.userContent as any,
-        timestamp: message.timestamp
+        timestamp: message.timestamp,
+        currentOpenFile: parsed.currentOpenFile
       }
       displayItems.push(userMessage)
     }
@@ -408,56 +401,48 @@ export function convertToDisplayItems(
           continue
         }
 
+        // 尝试解析本地命令标签
         const textBlock = message.content.find(b => b.type === 'text') as { type: 'text', text: string } | undefined
         if (textBlock?.text) {
-          // 尝试解析 XML 标签（本地命令输出）
-          const parsed = parseLocalCommandTags(textBlock.text)
-          if (parsed) {
+          const localCommand = parseLocalCommandTags(textBlock.text)
+          if (localCommand) {
             const localCommandOutput: LocalCommandOutput = {
               displayType: 'localCommandOutput',
               id: message.id,
-              command: parsed.content,
-              outputType: parsed.type,
+              command: localCommand.content,
+              outputType: localCommand.type,
               timestamp: message.timestamp
             }
             displayItems.push(localCommandOutput)
             continue
           }
+        }
 
-          // 解析 <current-open-file/> 标记
-          let displayText = textBlock.text
-          let currentOpenFile = undefined
-          if (hasCurrentOpenFileTag(displayText)) {
-            currentOpenFile = parseCurrentOpenFileTag(displayText) || undefined
-            displayText = removeCurrentOpenFileTag(displayText)
-          }
+        // 使用 parseUserMessage 统一解析（包含文件引用、current-open-file 等）
+        const parsed = parseUserMessage(message.content as any)
+        const contexts: ContextReference[] = [
+          ...parsed.contexts,
+          ...parsed.contextImages.map(img => ({
+            type: 'image' as const,
+            uri: `image://context`,
+            displayType: 'TAG' as const,
+            mimeType: img.source.media_type,
+            base64Data: img.source.type === 'base64' ? img.source.data : undefined
+          }))
+        ]
 
-          // 如果移除标记后没有内容，则只显示文件标记
-          if (!displayText.trim() && currentOpenFile) {
-            const userMessage: UserMessage = {
-              displayType: 'userMessage',
-              id: message.id,
-              uuid: (message as UnifiedMessage).uuid,
-              content: [] as any,
-              timestamp: message.timestamp,
-              isReplay: true,
-              style: 'hint',
-              currentOpenFile
-            }
-            displayItems.push(userMessage)
-            continue
-          }
-
-          // 没有本地命令标签，作为普通回放消息显示（左对齐，markdown 渲染，次要颜色）
+        // 如果有内容或上下文，创建用户消息
+        if (parsed.userContent.length > 0 || contexts.length > 0 || parsed.currentOpenFile) {
           const userMessage: UserMessage = {
             displayType: 'userMessage',
             id: message.id,
             uuid: (message as UnifiedMessage).uuid,
-            content: displayText.trim() ? [{ type: 'text', text: displayText }] as any : [] as any,
+            contexts: contexts.length > 0 ? contexts : undefined,
+            content: parsed.userContent.length > 0 ? (parsed.userContent as any) : [],
             timestamp: message.timestamp,
             isReplay: true,
             style: 'hint',
-            currentOpenFile
+            currentOpenFile: parsed.currentOpenFile
           }
           displayItems.push(userMessage)
         }
@@ -482,7 +467,8 @@ export function convertToDisplayItems(
         id: message.id,
         contexts: contexts.length > 0 ? contexts : undefined,
         content: content.length > 0 ? (content as any) : [],
-        timestamp: message.timestamp
+        timestamp: message.timestamp,
+        currentOpenFile: parsed.currentOpenFile
       }
       displayItems.push(userMessage)
 

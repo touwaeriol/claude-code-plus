@@ -1,5 +1,6 @@
 import type { ContentBlock, TextBlock, ImageBlock } from '@/types/message'
 import type { ContextReference } from '@/types/display'
+import { hasCurrentOpenFileTag, parseCurrentOpenFileTag, removeCurrentOpenFileTag, type ParsedCurrentOpenFile } from '@/utils/xmlTagParser'
 
 /**
  * 解析用户消息的结果
@@ -8,6 +9,7 @@ export interface ParsedUserMessage {
   contexts: ContextReference[]      // 上下文引用（文件引用）
   contextImages: ImageBlock[]       // Context 图片
   userContent: ContentBlock[]       // 用户输入内容（文本 + 图片）
+  currentOpenFile?: ParsedCurrentOpenFile  // 当前打开的文件标记
 }
 
 /**
@@ -20,6 +22,7 @@ export function parseUserMessage(content: ContentBlock[]): ParsedUserMessage {
   const contexts: ContextReference[] = []
   const contextImages: ImageBlock[] = []
   const userContent: ContentBlock[] = []
+  let currentOpenFile: ParsedCurrentOpenFile | undefined = undefined
 
   let foundFirstUserText = false
 
@@ -31,19 +34,38 @@ export function parseUserMessage(content: ContentBlock[]): ParsedUserMessage {
 
     if (block.type === 'text') {
       const textBlock = block as TextBlock
+      let text = textBlock.text
+
+      // 检查并解析 <current-open-file> 标签
+      if (hasCurrentOpenFileTag(text)) {
+        const parsed = parseCurrentOpenFileTag(text)
+        if (parsed) {
+          currentOpenFile = parsed
+        }
+        // 移除标签
+        text = removeCurrentOpenFileTag(text)
+      }
+
+      // 如果移除标签后没有内容，跳过
+      if (!text.trim()) {
+        continue
+      }
 
       // 检查是否是文件引用格式（例如：@file:///path/to/file.ts）
-      const fileRefMatch = textBlock.text.match(/^@file:\/\/(.+)$/)
+      const fileRefMatch = text.match(/^@file:\/\/(.+)$/)
       if (fileRefMatch && !foundFirstUserText) {
+        // 提取文件路径（去除 file:// 前缀后的部分）
+        const filePath = fileRefMatch[1]
         contexts.push({
           type: 'file',
-          uri: `file://${fileRefMatch[1]}`,
+          uri: `file://${filePath}`,
+          path: filePath,
           displayType: 'TAG'
         })
       } else {
         // 第一个普通文本块之后的所有内容都是用户输入
         foundFirstUserText = true
-        userContent.push(block)
+        userContent.push({ type: 'text', text } as TextBlock)
       }
     } else if (block.type === 'image') {
       const imageBlock = block as ImageBlock
@@ -64,7 +86,8 @@ export function parseUserMessage(content: ContentBlock[]): ParsedUserMessage {
   return {
     contexts,
     contextImages,
-    userContent
+    userContent,
+    currentOpenFile
   }
 }
 
