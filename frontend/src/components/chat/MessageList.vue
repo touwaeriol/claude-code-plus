@@ -3,7 +3,12 @@
     ref="wrapperRef"
     class="message-list-wrapper"
   >
-    <div v-if="displayMessages.length === 0" class="empty-state">
+    <div v-if="isLoading" class="loading-indicator">
+      <div class="loading-spinner" />
+      <span>{{ t('chat.loadingHistory') }}</span>
+    </div>
+
+    <div v-else-if="displayMessages.length === 0" class="empty-state">
       <div class="empty-content">
         <div class="shortcut-hints">
           <div class="shortcut-item">
@@ -84,14 +89,6 @@
         </div>
       </template>
     </DynamicScroller>
-
-    <div
-      v-else-if="isLoading"
-      class="loading-indicator"
-    >
-      <div class="loading-spinner" />
-      <span>{{ t('chat.loadingHistory') }}</span>
-    </div>
 
     <!-- 回到底部按钮 -->
     <transition name="fade-slide">
@@ -870,18 +867,17 @@ async function ensureScrollable(): Promise<void> {
   font-weight: 600;
 }
 
-/* Streaming 状态指示器 - 跟随消息列表末尾 */
+/* Streaming 状态指示器 - 左对齐，宽度自适应 */
 .streaming-indicator {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  padding: 6px 12px;
-  margin: 8px;
+  padding: 4px 10px;
+  margin: 4px 0 4px 8px;
   background: var(--theme-card-background, #ffffff);
   border: 1px solid var(--theme-accent, #0366d6);
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: 12px;
+  font-size: 11px;
   font-family: var(--theme-editor-font-family);
   color: var(--theme-secondary-foreground);
 }
