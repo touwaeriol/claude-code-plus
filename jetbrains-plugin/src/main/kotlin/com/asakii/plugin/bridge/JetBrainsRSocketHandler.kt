@@ -2,6 +2,9 @@ package com.asakii.plugin.bridge
 
 import com.asakii.rpc.api.*
 import com.asakii.rpc.proto.IdeThemeProto
+import com.asakii.rpc.proto.GetIdeSettingsResponse
+import com.asakii.rpc.proto.IdeSettings
+import com.asakii.rpc.proto.IdeSettingsChangedNotify
 import com.asakii.rpc.proto.JetBrainsGetLocaleResponse
 import com.asakii.rpc.proto.JetBrainsGetProjectPathResponse
 import com.asakii.rpc.proto.JetBrainsGetThemeResponse
@@ -11,6 +14,7 @@ import com.asakii.rpc.proto.ServerCallRequest
 import com.asakii.rpc.proto.SessionCommandNotify
 import com.asakii.rpc.proto.SessionCommandType
 import com.asakii.rpc.proto.ThemeChangedNotify
+import com.asakii.settings.AgentSettingsService
 import com.asakii.server.JetBrainsRSocketHandlerProvider
 import io.rsocket.kotlin.RSocket
 import io.rsocket.kotlin.RSocketRequestHandler
@@ -83,6 +87,7 @@ class JetBrainsRSocketHandler(
                     "jetbrains.showEditPreviewDiff" -> handleShowEditPreviewDiff(dataBytes)
                     "jetbrains.showMarkdown" -> handleShowMarkdown(dataBytes)
                     "jetbrains.getTheme" -> handleGetTheme()
+                    "jetbrains.getSettings" -> handleGetSettings()
                     "jetbrains.getLocale" -> handleGetLocale()
                     "jetbrains.setLocale" -> handleSetLocale(dataBytes)
                     "jetbrains.getProjectPath" -> handleGetProjectPath()
@@ -223,6 +228,31 @@ class JetBrainsRSocketHandler(
             buildOperationResponse(result.isSuccess, result.exceptionOrNull()?.message)
         } catch (e: Exception) {
             logger.error("❌ [JetBrains] showMarkdown failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    private fun handleGetSettings(): Payload {
+        return try {
+            val settings = AgentSettingsService.getInstance()
+            logger.info("⚙️ [JetBrains] getSettings")
+
+            val ideSettings = IdeSettings.newBuilder()
+                .setDefaultModelId(settings.defaultModelId)
+                .setDefaultModelName(settings.defaultModelEnum.displayName)
+                .setDefaultBypassPermissions(settings.defaultBypassPermissions)
+                .setEnableUserInteractionMcp(settings.enableUserInteractionMcp)
+                .setEnableJetbrainsMcp(settings.enableJetBrainsMcp)
+                .setIncludePartialMessages(settings.includePartialMessages)
+                .build()
+
+            val response = GetIdeSettingsResponse.newBuilder()
+                .setSettings(ideSettings)
+                .build()
+
+            buildPayload { data(response.toByteArray()) }
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] getSettings failed: ${e.message}")
             buildErrorResponse(e.message ?: "Unknown error")
         }
     }
@@ -393,6 +423,47 @@ class JetBrainsRSocketHandler(
             logger.info("📤 [JetBrains RSocket] → pushThemeChanged (client.call)")
         } catch (e: Exception) {
             logger.error("❌ [JetBrains RSocket] pushThemeChanged failed: ${e.message}")
+        }
+    }
+
+    /**
+     * 推送设置变更到前端（使用统一的 client.call 路由）
+     */
+    suspend fun pushSettingsChanged(settings: AgentSettingsService) {
+        val requester = clientRequester ?: run {
+            logger.warn("⚠️ [JetBrains RSocket] 无客户端连接，跳过设置推送")
+            return
+        }
+
+        try {
+            // 构建 IdeSettings
+            val ideSettings = IdeSettings.newBuilder()
+                .setDefaultModelId(settings.defaultModelId)
+                .setDefaultModelName(settings.defaultModelEnum.displayName)
+                .setDefaultBypassPermissions(settings.defaultBypassPermissions)
+                .setEnableUserInteractionMcp(settings.enableUserInteractionMcp)
+                .setEnableJetbrainsMcp(settings.enableJetBrainsMcp)
+                .setIncludePartialMessages(settings.includePartialMessages)
+                .build()
+
+            // 构建 IdeSettingsChangedNotify
+            val settingsNotify = IdeSettingsChangedNotify.newBuilder()
+                .setSettings(ideSettings)
+                .build()
+
+            // 包装为 ServerCallRequest
+            val callId = "jb-${++callIdCounter}"
+            val serverCall = ServerCallRequest.newBuilder()
+                .setCallId(callId)
+                .setMethod("onSettingsChanged")
+                .setSettingsChanged(settingsNotify)
+                .build()
+
+            val payload = buildPayloadWithRoute("client.call", serverCall.toByteArray())
+            requester.fireAndForget(payload)
+            logger.info("📤 [JetBrains RSocket] → pushSettingsChanged (client.call)")
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains RSocket] pushSettingsChanged failed: ${e.message}")
         }
     }
 

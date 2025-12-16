@@ -85,7 +85,7 @@ class AiAgentRpcServiceImpl(
     private val ideTools: IdeTools,
     private val clientCaller: ClientCaller? = null,
     private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider,
-    private val serviceConfig: AiAgentServiceConfig = AiAgentServiceConfig(),
+    private val serviceConfigProvider: () -> AiAgentServiceConfig = { AiAgentServiceConfig() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : AiAgentRpcService {
 
@@ -102,7 +102,7 @@ class AiAgentRpcServiceImpl(
     private var nextContentIndex = 0
     private val toolContentIndex = mutableMapOf<String, Int>()
     private var client: UnifiedAgentClient? = null
-    private var currentProvider: AiAgentProvider = serviceConfig.defaultProvider
+    private var currentProvider: AiAgentProvider = AiAgentProvider.CLAUDE  // 默认值，connect 时会根据配置更新
     private var lastConnectOptions: RpcConnectOptions? = null
 
     // 🔧 追踪当前 query 的完成状态，用于 interrupt 同步等待
@@ -528,6 +528,10 @@ class AiAgentRpcServiceImpl(
     }
 
     private fun buildConnectOptions(options: RpcConnectOptions): AiAgentConnectOptions {
+        // 每次 connect 时调用 provider 获取最新配置
+        val serviceConfig = serviceConfigProvider()
+        sdkLog.info("🔧 [buildConnectOptions] 获取最新配置: enableUserInteractionMcp=${serviceConfig.claude.enableUserInteractionMcp}, enableJetBrainsMcp=${serviceConfig.claude.enableJetBrainsMcp}")
+
         val provider = options.provider.toSdkProvider(serviceConfig.defaultProvider)
         val model = options.model ?: serviceConfig.defaultModel
         val systemPrompt = options.systemPrompt ?: serviceConfig.defaultSystemPrompt
@@ -536,8 +540,8 @@ class AiAgentRpcServiceImpl(
         val resume = options.resumeSessionId
         val metadata = options.metadata.ifEmpty { emptyMap() }
 
-                val claudeOverrides = buildClaudeOverrides(model, systemPrompt, options, metadata)
-        val codexOverrides = buildCodexOverrides(model, options)
+        val claudeOverrides = buildClaudeOverrides(model, systemPrompt, options, metadata, serviceConfig)
+        val codexOverrides = buildCodexOverrides(model, options, serviceConfig)
 
         return AiAgentConnectOptions(
             provider = provider,
@@ -556,7 +560,8 @@ class AiAgentRpcServiceImpl(
         model: String?,
         systemPrompt: String?,
         options: RpcConnectOptions,
-        metadata: Map<String, String>
+        metadata: Map<String, String>,
+        serviceConfig: AiAgentServiceConfig
     ): ClaudeOverrides {
         val cwd = ideTools.getProjectPath().takeIf { it.isNotBlank() }?.let { Path.of(it) }
         val defaults = serviceConfig.claude
@@ -576,13 +581,25 @@ class AiAgentRpcServiceImpl(
             "output-format" to "stream-json"
         )
 
-        // 注册 MCP Server（包含 AskUserQuestion 工具和 JetBrains IDE 工具）
-        val mcpServers = mutableMapOf<String, Any>("user_interaction" to userInteractionServer)
+        // 注册 MCP Server（根据配置决定是否启用）
+        val mcpServers = mutableMapOf<String, Any>()
 
-        // 添加 JetBrains MCP Server（如果可用）
-        jetBrainsMcpServerProvider.getServer()?.let { jetbrainsMcp ->
-            mcpServers["jetbrains"] = jetbrainsMcp
-            sdkLog.info("✅ [buildClaudeOverrides] 已添加 JetBrains MCP Server")
+        // 添加用户交互 MCP Server（如果启用）
+        if (defaults.enableUserInteractionMcp) {
+            mcpServers["user_interaction"] = userInteractionServer
+            sdkLog.info("✅ [buildClaudeOverrides] 已添加 User Interaction MCP Server")
+        } else {
+            sdkLog.info("⏭️ [buildClaudeOverrides] User Interaction MCP Server 已禁用")
+        }
+
+        // 添加 JetBrains MCP Server（如果启用且可用）
+        if (defaults.enableJetBrainsMcp) {
+            jetBrainsMcpServerProvider.getServer()?.let { jetbrainsMcp ->
+                mcpServers["jetbrains"] = jetbrainsMcp
+                sdkLog.info("✅ [buildClaudeOverrides] 已添加 JetBrains MCP Server")
+            }
+        } else {
+            sdkLog.info("⏭️ [buildClaudeOverrides] JetBrains MCP Server 已禁用")
         }
 
         // 从 IdeTools 获取子代理定义（如 JetBrains 专用的代码探索代理）
@@ -676,7 +693,9 @@ class AiAgentRpcServiceImpl(
             allowedTools = buildMcpAllowedTools(mcpServers),
             mcpServers = mcpServers,
             // 自定义子代理定义（如 JetBrains 专用的代码探索代理）
-            agents = agents.ifEmpty { null }
+            agents = agents.ifEmpty { null },
+            // Node.js 可执行文件路径（用户配置 > 环境变量 > 默认 "node"）
+            nodePath = defaults.nodePath
         )
 
         return ClaudeOverrides(options = claudeOptions)
@@ -723,7 +742,8 @@ class AiAgentRpcServiceImpl(
 
     private fun buildCodexOverrides(
         model: String?,
-        options: RpcConnectOptions
+        options: RpcConnectOptions,
+        serviceConfig: AiAgentServiceConfig
     ): CodexOverrides {
         val codexDefaults = serviceConfig.codex
 

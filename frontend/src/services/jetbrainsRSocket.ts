@@ -340,6 +340,98 @@ function decodeProjectPathResponse(data: Uint8Array): string {
 }
 
 /**
+ * 解码 GetIdeSettingsResponse
+ *
+ * Proto 定义：
+ * message GetIdeSettingsResponse {
+ *   IdeSettings settings = 1;
+ * }
+ * message IdeSettings {
+ *   string default_model_id = 1;
+ *   string default_model_name = 2;
+ *   bool default_bypass_permissions = 3;
+ *   bool enable_user_interaction_mcp = 4;
+ *   bool enable_jetbrains_mcp = 5;
+ * }
+ */
+function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
+  const settings: Partial<IdeSettings> = {
+    defaultModelId: '',
+    defaultModelName: '',
+    defaultBypassPermissions: false,
+    enableUserInteractionMcp: true,
+    enableJetbrainsMcp: true,
+    includePartialMessages: true
+  }
+
+  // 内部解析 IdeSettings 消息
+  function parseIdeSettings(settingsBytes: Uint8Array) {
+    let offset = 0
+    while (offset < settingsBytes.length) {
+      const tag = settingsBytes[offset++]
+      const fieldNumber = tag >> 3
+      const wireType = tag & 0x7
+
+      if (wireType === 0) {
+        // varint (bool)
+        let value = 0
+        let shift = 0
+        while (offset < settingsBytes.length) {
+          const byte = settingsBytes[offset++]
+          value |= (byte & 0x7f) << shift
+          if ((byte & 0x80) === 0) break
+          shift += 7
+        }
+        if (fieldNumber === 3) settings.defaultBypassPermissions = value !== 0
+        if (fieldNumber === 4) settings.enableUserInteractionMcp = value !== 0
+        if (fieldNumber === 5) settings.enableJetbrainsMcp = value !== 0
+        if (fieldNumber === 6) settings.includePartialMessages = value !== 0
+      } else if (wireType === 2) {
+        // length-delimited (string)
+        let length = 0
+        let shift = 0
+        while (offset < settingsBytes.length) {
+          const byte = settingsBytes[offset++]
+          length |= (byte & 0x7f) << shift
+          if ((byte & 0x80) === 0) break
+          shift += 7
+        }
+        const stringBytes = settingsBytes.slice(offset, offset + length)
+        offset += length
+        const str = new TextDecoder().decode(stringBytes)
+        if (fieldNumber === 1) settings.defaultModelId = str
+        if (fieldNumber === 2) settings.defaultModelName = str
+      }
+    }
+  }
+
+  // 解析外层 GetIdeSettingsResponse
+  let offset = 0
+  while (offset < data.length) {
+    const tag = data[offset++]
+    const fieldNumber = tag >> 3
+    const wireType = tag & 0x7
+
+    if (wireType === 2 && fieldNumber === 1) {
+      // nested message (IdeSettings)
+      let length = 0
+      let shift = 0
+      while (offset < data.length) {
+        const byte = data[offset++]
+        length |= (byte & 0x7f) << shift
+        if ((byte & 0x80) === 0) break
+        shift += 7
+      }
+      const settingsBytes = data.slice(offset, offset + length)
+      offset += length
+      parseIdeSettings(settingsBytes)
+    }
+  }
+
+  return settings as IdeSettings
+}
+
+/**
  * 编码单个 SessionSummary
  */
 function encodeSessionSummary(session: SessionSummary): number[] {
@@ -499,6 +591,17 @@ export interface SessionState {
 
 export type ThemeChangeHandler = (theme: IdeTheme) => void
 export type SessionCommandHandler = (command: SessionCommand) => void
+export type SettingsChangeHandler = (settings: IdeSettings) => void
+
+// IDE 设置接口
+export interface IdeSettings {
+  defaultModelId: string
+  defaultModelName: string
+  defaultBypassPermissions: boolean
+  enableUserInteractionMcp: boolean
+  enableJetbrainsMcp: boolean
+  includePartialMessages: boolean
+}
 
 // ========== RSocket 服务 ==========
 
@@ -506,6 +609,7 @@ class JetBrainsRSocketService {
   private client: RSocketClient | null = null
   private themeChangeHandlers: ThemeChangeHandler[] = []
   private sessionCommandHandlers: SessionCommandHandler[] = []
+  private settingsChangeHandlers: SettingsChangeHandler[] = []
   private connected = false
 
   /**
@@ -563,6 +667,23 @@ class JetBrainsRSocketService {
         }
         console.log('[JetBrainsRSocket] 会话命令:', command)
         this.sessionCommandHandlers.forEach(h => h(command))
+        return {} // 返回空响应
+      })
+
+      this.client.registerHandler('onSettingsChanged', async (params: any) => {
+        console.log('[JetBrainsRSocket] 收到设置变更推送 (Protobuf)')
+        // params.settings 包含 IdeSettings
+        const settingsData = params.settings || params
+        const settings: IdeSettings = {
+          defaultModelId: settingsData.defaultModelId || '',
+          defaultModelName: settingsData.defaultModelName || '',
+          defaultBypassPermissions: settingsData.defaultBypassPermissions || false,
+          enableUserInteractionMcp: settingsData.enableUserInteractionMcp ?? true,
+          enableJetbrainsMcp: settingsData.enableJetbrainsMcp ?? true,
+          includePartialMessages: settingsData.includePartialMessages ?? true
+        }
+        console.log('[JetBrainsRSocket] 设置变更:', settings)
+        this.settingsChangeHandlers.forEach(h => h(settings))
         return {} // 返回空响应
       })
 
@@ -713,6 +834,21 @@ class JetBrainsRSocketService {
   }
 
   /**
+   * 获取 IDE 设置
+   */
+  async getSettings(): Promise<IdeSettings | null> {
+    if (!this.client) return null
+
+    try {
+      const response = await this.client.requestResponse('jetbrains.getSettings', new Uint8Array())
+      return decodeSettingsResponse(response)
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to get settings:', error)
+      return null
+    }
+  }
+
+  /**
    * 获取语言设置
    */
   async getLocale(): Promise<string> {
@@ -800,6 +936,17 @@ class JetBrainsRSocketService {
     return () => {
       const index = this.sessionCommandHandlers.indexOf(handler)
       if (index >= 0) this.sessionCommandHandlers.splice(index, 1)
+    }
+  }
+
+  /**
+   * 添加设置变更监听器
+   */
+  onSettingsChange(handler: SettingsChangeHandler): () => void {
+    this.settingsChangeHandlers.push(handler)
+    return () => {
+      const index = this.settingsChangeHandlers.indexOf(handler)
+      if (index >= 0) this.settingsChangeHandlers.splice(index, 1)
     }
   }
 

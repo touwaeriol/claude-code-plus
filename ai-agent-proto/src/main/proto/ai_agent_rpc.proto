@@ -540,6 +540,11 @@ message EmptyRequest {}
 // 空响应
 message EmptyResponse {}
 
+// 获取 IDE 设置响应
+message GetIdeSettingsResponse {
+  IdeSettings settings = 1;
+}
+
 // ============================================================================
 // 反向调用（服务端 -> 客户端）
 // ============================================================================
@@ -686,12 +691,27 @@ message ThemeChangedNotify {
   int32 editor_font_size = 21;
 }
 
+// IDE 设置（用于前后端同步）
+message IdeSettings {
+  string default_model_id = 1;           // 默认模型 ID（如 "claude-opus-4-5-20251101"）
+  string default_model_name = 2;         // 默认模型显示名称（如 "Opus 4.5"）
+  bool default_bypass_permissions = 3;   // 默认启用 ByPass
+  bool enable_user_interaction_mcp = 4;  // 启用用户交互 MCP
+  bool enable_jetbrains_mcp = 5;         // 启用 JetBrains IDE MCP
+  bool include_partial_messages = 6;     // 在流中包含部分消息
+}
+
+// 设置变更通知（后端→前端推送）
+message IdeSettingsChangedNotify {
+  IdeSettings settings = 1;
+}
+
 // ========== 服务端调用客户端 ==========
 
 // 服务端调用客户端的通用请求（支持类型化参数）
 message ServerCallRequest {
   string call_id = 1;       // 调用 ID，用于匹配响应
-  string method = 2;        // 方法名（如 'AskUserQuestion', 'onSessionCommand', 'onThemeChanged'）
+  string method = 2;        // 方法名（如 'AskUserQuestion', 'onSessionCommand', 'onThemeChanged', 'onSettingsChanged'）
   oneof params {
     bytes params_json = 3;                          // 旧版兼容：JSON 序列化
     AskUserQuestionRequest ask_user_question = 10;  // AskUserQuestion 请求
@@ -699,6 +719,7 @@ message ServerCallRequest {
     // JetBrains IDE 集成
     SessionCommandNotify session_command = 20;  // 会话命令通知
     ThemeChangedNotify theme_changed = 21;      // 主题变更通知
+    IdeSettingsChangedNotify settings_changed = 22;  // IDE 设置变更通知
   }
 }
 

@@ -1,13 +1,16 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { ideaBridge } from '@/services/ideaBridge'
+import { jetbrainsRSocket, type IdeSettings } from '@/services/jetbrainsRSocket'
 import { DEFAULT_SETTINGS, type Settings, PermissionMode } from '@/types/settings'
-import { BaseModel, MODEL_CAPABILITIES, migrateModelSettings } from '@/constants/models'
+import { BaseModel, MODEL_CAPABILITIES, migrateModelSettings, findBaseModelByModelId } from '@/constants/models'
 
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<Settings>({ ...DEFAULT_SETTINGS })
+  const ideSettings = ref<IdeSettings | null>(null)
   const loading = ref(false)
   const showPanel = ref(false)
+  let settingsChangeUnsubscribe: (() => void) | null = null
 
   /**
    * 迁移旧设置到新格式
@@ -50,6 +53,109 @@ export const useSettingsStore = defineStore('settings', () => {
       console.error('❌ Error loading settings:', error)
     } finally {
       loading.value = false
+    }
+  }
+
+  /**
+   * 从 IDEA 加载 IDE 设置
+   */
+  async function loadIdeSettings() {
+    try {
+      console.log('⚙️ Loading IDE settings from JetBrains...')
+      const result = await jetbrainsRSocket.getSettings()
+
+      if (result) {
+        ideSettings.value = result
+        console.log('✅ IDE settings loaded:', result)
+        applyIdeSettings(result)
+      } else {
+        console.warn('⚠️ Failed to load IDE settings')
+      }
+    } catch (error) {
+      console.error('❌ Error loading IDE settings:', error)
+    }
+  }
+
+  /**
+   * 应用 IDE 设置到前端
+   * 将后端 IDEA 的默认设置应用为前端的默认设置
+   */
+  function applyIdeSettings(newIdeSettings: IdeSettings) {
+    const updates: Partial<Settings> = {}
+
+    // 1. 应用默认模型设置
+    if (newIdeSettings.defaultModelId) {
+      const baseModel = findBaseModelByModelId(newIdeSettings.defaultModelId)
+      if (baseModel) {
+        updates.model = baseModel
+        // 使用模型的默认思考设置
+        updates.thinkingEnabled = MODEL_CAPABILITIES[baseModel].defaultThinkingEnabled
+        console.log('🎯 [IdeSettings] 应用默认模型:', baseModel, '思考:', updates.thinkingEnabled)
+      } else {
+        console.warn('⚠️ [IdeSettings] 未知的模型 ID:', newIdeSettings.defaultModelId)
+      }
+    }
+
+    // 2. 应用 ByPass 权限设置（同步到当前会话）
+    const newBypassValue = newIdeSettings.defaultBypassPermissions ?? false
+    updates.skipPermissions = newBypassValue
+    console.log('🔓 [IdeSettings] ByPass 权限设置:', newBypassValue)
+
+    // 3. 应用 includePartialMessages 设置
+    if (newIdeSettings.includePartialMessages !== undefined) {
+      updates.includePartialMessages = newIdeSettings.includePartialMessages
+      console.log('📡 [IdeSettings] Include Partial Messages:', newIdeSettings.includePartialMessages)
+    }
+
+    // 如果有更新，合并到设置中
+    if (Object.keys(updates).length > 0) {
+      settings.value = {
+        ...settings.value,
+        ...updates
+      }
+      console.log('✅ [IdeSettings] 已应用 IDE 默认设置:', updates)
+
+      // 4. 同步 skipPermissions 到当前会话（如果有的话）
+      // 使用动态导入避免循环依赖
+      import('./sessionStore').then(({ useSessionStore }) => {
+        const sessionStore = useSessionStore()
+        const currentTab = sessionStore.currentTab
+        if (currentTab && updates.skipPermissions !== undefined) {
+          currentTab.setPendingSetting('skipPermissions', updates.skipPermissions)
+          console.log('🔄 [IdeSettings] 已同步 skipPermissions 到当前会话:', updates.skipPermissions)
+        }
+      })
+    }
+  }
+
+  /**
+   * 处理 IDE 设置变更（从后端推送）
+   */
+  function handleIdeSettingsChange(newIdeSettings: IdeSettings) {
+    console.log('📥 [IdeSettings] 收到设置变更推送:', newIdeSettings)
+    ideSettings.value = newIdeSettings
+    applyIdeSettings(newIdeSettings)
+  }
+
+  /**
+   * 初始化 IDE 设置监听
+   */
+  function initIdeSettingsListener() {
+    if (settingsChangeUnsubscribe) {
+      settingsChangeUnsubscribe()
+    }
+    settingsChangeUnsubscribe = jetbrainsRSocket.onSettingsChange(handleIdeSettingsChange)
+    console.log('👂 [IdeSettings] 已注册设置变更监听器')
+  }
+
+  /**
+   * 清理 IDE 设置监听
+   */
+  function cleanupIdeSettingsListener() {
+    if (settingsChangeUnsubscribe) {
+      settingsChangeUnsubscribe()
+      settingsChangeUnsubscribe = null
+      console.log('🧹 [IdeSettings] 已移除设置变更监听器')
     }
   }
 
@@ -138,9 +244,13 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     settings,
+    ideSettings,
     loading,
     showPanel,
     loadSettings,
+    loadIdeSettings,
+    initIdeSettingsListener,
+    cleanupIdeSettingsListener,
     saveSettings,
     updateModel,
     updatePermissionMode,

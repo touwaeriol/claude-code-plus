@@ -97,6 +97,20 @@ export function canToggleThinking(model: BaseModel): boolean {
   return MODEL_CAPABILITIES[model].thinkingMode === 'optional'
 }
 
+/**
+ * 根据 modelId 查找对应的 BaseModel
+ * @param modelId 模型 ID（如 'claude-opus-4-5-20251101'）
+ * @returns 对应的 BaseModel，未找到返回 undefined
+ */
+export function findBaseModelByModelId(modelId: string): BaseModel | undefined {
+  for (const [key, capability] of Object.entries(MODEL_CAPABILITIES)) {
+    if (capability.modelId === modelId) {
+      return key as BaseModel
+    }
+  }
+  return undefined
+}
+
 // ==================== 旧架构（向后兼容，标记废弃）====================
 
 /**
