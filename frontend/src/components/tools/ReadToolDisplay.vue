@@ -227,7 +227,7 @@ async function copyContent() {
 }
 
 .tool-file {
-  font-family: monospace;
+  font-family: var(--theme-editor-font-family);
   color: var(--theme-foreground, #24292e);
 }
 
@@ -261,7 +261,7 @@ async function copyContent() {
 }
 
 .info-row .value {
-  font-family: monospace;
+  font-family: var(--theme-editor-font-family);
   color: var(--theme-foreground, #24292e);
 }
 

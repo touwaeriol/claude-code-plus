@@ -118,7 +118,7 @@ const hasDetails = computed(() => Object.keys(params.value).length > 0 || hasRes
   align-items: flex-start;
   gap: 8px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--theme-editor-font-family);
   line-height: 1.4;
 }
 

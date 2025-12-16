@@ -94,7 +94,7 @@ const replaceAll = computed(() => props.toolCall.input.replace_all || false)
   margin: 0;
   padding: 12px;
   font-size: 12px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--theme-editor-font-family);
   max-height: 200px;
   overflow: auto;
   background: var(--theme-background, white);

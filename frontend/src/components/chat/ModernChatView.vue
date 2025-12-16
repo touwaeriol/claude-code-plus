@@ -17,6 +17,7 @@
         :streaming-start-time="streamingStartTime"
         :input-tokens="streamingInputTokens"
         :output-tokens="streamingOutputTokens"
+        :content-version="streamingContentVersion"
         :connection-status="connectionStatusForDisplay"
         class="message-list-area"
         @load-more-history="handleLoadMoreHistory"
@@ -146,6 +147,7 @@
       @close="isHistoryOverlayVisible = false"
       @select-session="handleHistorySelect"
       @load-more="handleLoadMoreHistorySessions"
+      @delete-session="handleDeleteSession"
     />
 
     <!-- Toast 提示 -->
@@ -371,6 +373,10 @@ const streamingInputTokens = computed(() => {
 
 const streamingOutputTokens = computed(() => {
   return currentRequestTracker.value?.outputTokens ?? 0
+})
+
+const streamingContentVersion = computed(() => {
+  return sessionStore.currentTab?.stats.streamingContentVersion.value ?? 0
 })
 
 const pendingTasks = ref<PendingTask[]>([])
@@ -697,6 +703,26 @@ async function handleHistorySelect(sessionId: string) {
     uiState.value.isLoadingHistory = false
   }
 }
+
+async function handleDeleteSession(sessionId: string) {
+  console.log('🗑️ Deleting session:', sessionId)
+
+  try {
+    const result = await aiAgentService.deleteHistorySession(sessionId)
+    if (result.success) {
+      // 从历史会话列表中移除
+      historySessionList.value = historySessionList.value.filter(h => h.sessionId !== sessionId)
+      showToast(t('session.deleteSuccess'))
+      console.log('✅ Session deleted:', sessionId)
+    } else {
+      showToast(result.error || t('session.deleteFailed'))
+      console.error('❌ Failed to delete session:', result.error)
+    }
+  } catch (error) {
+    console.error('❌ Error deleting session:', error)
+    showToast(t('session.deleteFailed'))
+  }
+}
 </script>
 
 <style scoped>
@@ -707,7 +733,7 @@ async function handleHistorySelect(sessionId: string) {
   min-height: 100%;
   background: var(--theme-background);
   color: var(--theme-foreground);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--theme-font-family);
 }
 
 .chat-header-bar {

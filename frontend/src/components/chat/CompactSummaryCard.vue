@@ -212,7 +212,7 @@ const renderedContent = computed(() => {
   font-size: 12px;
   font-weight: 600;
   color: var(--theme-accent);
-  font-family: var(--font-mono);
+  font-family: var(--theme-editor-font-family);
 }
 
 .preview-text {
@@ -265,7 +265,7 @@ const renderedContent = computed(() => {
   background: var(--theme-selection-background);
   padding: 1px 4px;
   border-radius: 3px;
-  font-family: monospace;
+  font-family: var(--theme-editor-font-family);
   font-size: 12px;
 }
 

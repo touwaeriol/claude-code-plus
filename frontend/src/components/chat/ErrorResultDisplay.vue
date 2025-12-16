@@ -54,10 +54,10 @@ const { t } = useI18n()
 
 .error-message {
   margin: 0;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-family: var(--theme-editor-font-family);
   font-size: 12px;
   line-height: 1.5;
-  color: var(--theme-error, #dc2626);
+  color: var(--theme-error);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 200px;

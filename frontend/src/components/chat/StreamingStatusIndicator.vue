@@ -193,7 +193,7 @@ function formatTime(ms: number): string {
   padding-left: 16px;
   border-left: 1px solid var(--el-border-color-light);
   color: var(--el-text-color-secondary);
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-family: var(--theme-editor-font-family);
 }
 
 .token-label {
@@ -221,7 +221,7 @@ function formatTime(ms: number): string {
   padding-left: 16px;
   border-left: 1px solid var(--el-border-color-light);
   color: var(--el-text-color-secondary);
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-family: var(--theme-editor-font-family);
 }
 
 .time-icon {
@@ -253,6 +253,6 @@ function formatTime(ms: number): string {
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 12px;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-family: var(--theme-editor-font-family);
 }
 </style>

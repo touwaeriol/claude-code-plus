@@ -615,8 +615,8 @@ defineExpose({
   outline: none;
   font-size: 14px;
   line-height: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  color: var(--theme-foreground, #24292e);
+  font-family: var(--theme-font-family);
+  color: var(--theme-foreground);
   white-space: pre-wrap;
   word-break: break-word;
 }

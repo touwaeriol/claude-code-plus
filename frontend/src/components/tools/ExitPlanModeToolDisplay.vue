@@ -141,7 +141,7 @@ async function openPlanInIdea() {
   border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--theme-editor-font-family);
   white-space: pre-wrap;
 }
 
@@ -157,7 +157,7 @@ async function openPlanInIdea() {
   border: 1px solid var(--theme-error, #dc3545);
   border-radius: 4px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--theme-editor-font-family);
   white-space: pre-wrap;
   color: var(--theme-error, #dc3545);
 }

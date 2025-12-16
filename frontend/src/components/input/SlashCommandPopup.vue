@@ -193,7 +193,7 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 600;
   color: var(--theme-accent);
-  font-family: monospace;
+  font-family: var(--theme-editor-font-family);
   flex-shrink: 0;
 }
 

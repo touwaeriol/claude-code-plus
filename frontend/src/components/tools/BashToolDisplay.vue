@@ -90,7 +90,7 @@ const stderr = computed(() => {
   color: var(--theme-foreground);
   padding: 8px;
   border-radius: 4px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--theme-editor-font-family);
   white-space: pre-wrap;
   margin: 0;
 }
@@ -113,7 +113,7 @@ const stderr = computed(() => {
   color: var(--theme-foreground);
   padding: 8px;
   border-radius: 4px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--theme-editor-font-family);
   white-space: pre-wrap;
   max-height: 240px;
   overflow-y: auto;

@@ -450,7 +450,7 @@ function hasInputParams(input: Record<string, unknown>): boolean {
   color: #e6e6e6;
   padding: 12px;
   border-radius: 6px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--theme-editor-font-family);
   font-size: 13px;
   white-space: pre-wrap;
   word-break: break-all;
@@ -518,7 +518,7 @@ function hasInputParams(input: Record<string, unknown>): boolean {
 }
 
 .file-path {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--theme-editor-font-family);
   font-size: 13px;
   color: var(--theme-foreground, #24292e);
   word-break: break-all;
@@ -534,7 +534,7 @@ function hasInputParams(input: Record<string, unknown>): boolean {
   color: var(--theme-foreground, #24292e);
   padding: 8px;
   border-radius: 4px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--theme-editor-font-family);
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;
@@ -559,7 +559,7 @@ function hasInputParams(input: Record<string, unknown>): boolean {
   color: var(--theme-foreground, #24292e);
   padding: 8px;
   border-radius: 4px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--theme-editor-font-family);
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;
@@ -585,7 +585,7 @@ function hasInputParams(input: Record<string, unknown>): boolean {
   color: var(--theme-foreground, #24292e);
   padding: 12px;
   border-radius: 6px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--theme-editor-font-family);
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;

@@ -57,7 +57,7 @@ const diffLines = computed(() => {
   margin: 0;
   padding: 12px;
   font-size: 12px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--theme-editor-font-family);
 }
 
 .diff-code-block code {

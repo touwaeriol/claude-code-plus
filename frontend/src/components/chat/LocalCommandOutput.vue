@@ -22,7 +22,7 @@ defineProps<Props>()
   padding: 4px 12px;
   border-radius: 16px;
   font-size: 13px;
-  font-family: var(--font-mono);
+  font-family: var(--theme-editor-font-family);
   margin: 8px 16px;
 }
 

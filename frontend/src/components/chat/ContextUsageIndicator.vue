@@ -59,7 +59,7 @@ function formatTokenCount(tokens: number): string {
   align-items: center;
   padding: 2px 6px;
   font-size: 12px;
-  font-family: var(--theme-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  font-family: var(--theme-font-family);
   font-weight: 500;
   color: var(--theme-text-secondary, #57606a);
   cursor: help;

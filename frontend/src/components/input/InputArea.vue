@@ -519,7 +519,7 @@ function handleSend() {
 }
 
 .chip-label {
-  font-family: monospace;
+  font-family: var(--theme-editor-font-family);
 }
 
 .chip-remove {
@@ -592,7 +592,7 @@ function handleSend() {
   border-radius: 6px;
   background: #ffffff;
   color: #24292e;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--theme-font-family);
   font-size: 14px;
   line-height: 1.6;
   resize: vertical;
@@ -658,7 +658,7 @@ function handleSend() {
 .suggestion-path {
   font-size: 11px;
   color: #586069;
-  font-family: monospace;
+  font-family: var(--theme-editor-font-family);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

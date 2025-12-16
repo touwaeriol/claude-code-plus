@@ -70,7 +70,7 @@ watch(() => [props.code, props.language], highlight)
   width: 100%;
   max-height: var(--code-max-height, none);
   overflow: auto;
-  font-family: 'Consolas', 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-family: var(--theme-editor-font-family);
   font-size: 12px;
   line-height: 1.5;
 }

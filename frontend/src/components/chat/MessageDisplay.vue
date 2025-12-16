@@ -358,11 +358,11 @@ const textContent = computed(() => {
 
 .result-id {
   font-size: 13px;
-  font-family: monospace;
+  font-family: var(--theme-editor-font-family);
 }
 
 .result-content {
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-family: var(--theme-editor-font-family);
   font-size: 12px;
   background: var(--theme-code-background, #ffffff);
   padding: 8px;

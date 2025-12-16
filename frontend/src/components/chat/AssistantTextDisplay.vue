@@ -104,8 +104,8 @@ function formatNumber(num: number): string {
   border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 12px;
   font-size: 11px;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
-  color: var(--theme-secondary-foreground, #586069);
+  font-family: var(--theme-editor-font-family);
+  color: var(--theme-secondary-foreground);
   cursor: default;
   user-select: none;
 }

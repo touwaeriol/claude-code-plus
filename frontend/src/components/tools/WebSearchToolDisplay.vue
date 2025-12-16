@@ -161,7 +161,7 @@ const hasDetails = computed(() => !!query.value)
   border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--theme-editor-font-family);
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 300px;

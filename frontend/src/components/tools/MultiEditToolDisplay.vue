@@ -191,7 +191,7 @@ async function copyText(text: string) {
 .diff-content {
   margin: 0;
   padding: 8px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--theme-editor-font-family);
   font-size: 12px;
   white-space: pre-wrap;
 }

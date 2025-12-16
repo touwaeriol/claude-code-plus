@@ -171,7 +171,7 @@ async function copyContent() {
   margin: 0;
   padding: 0;
   font-size: 12px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--theme-editor-font-family);
   max-height: 300px;
   overflow: auto;
 }
