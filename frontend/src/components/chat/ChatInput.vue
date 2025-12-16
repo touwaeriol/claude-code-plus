@@ -1240,7 +1240,7 @@ function handleContextSelect(result: IndexedFileInfo) {
     uri: result.relativePath,
     displayType: 'TAG',
     path: result.relativePath,
-    fullPath: result.relativePath,
+    fullPath: result.absolutePath,  // 使用绝对路径作为完整路径（用于 tooltip 显示）
     name: result.name
   }
 
