@@ -60,6 +60,16 @@
             serviceImplementation="com.asakii.settings.McpSettingsService"/>
 
         <applicationService
+            serviceImplementation="com.asakii.settings.AgentSettingsService"/>
+
+        <!-- Settings Page -->
+        <applicationConfigurable
+            parentId="tools"
+            instance="com.asakii.settings.ClaudeCodePlusConfigurable"
+            id="com.asakii.settings"
+            displayName="Claude Code Plus"/>
+
+        <applicationService
             serviceImplementation="com.asakii.plugin.services.ClaudeCodePlusBackgroundService"/>
 
         <!-- project-level service -->
