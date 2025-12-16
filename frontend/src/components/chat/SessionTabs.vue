@@ -32,9 +32,7 @@
               connecting: tab.connectionStatus === 'CONNECTING',
               error: tab.connectionStatus === 'ERROR'
             }"
-            :title="displaySessionId(tab)
-              ? `${displaySessionId(tab)} · ${t('session.copyHint') || '再次单击或双击复制'}`
-              : t('chat.connectionStatus.disconnected')"
+            :title="displaySessionId(tab) || t('chat.connectionStatus.disconnected')"
             @click="handleTabClick(tab)"
             @dblclick.stop="handleTabDblClick(tab)"
             @click.middle.prevent="handleCloseTab(tab.id)"
@@ -101,7 +99,6 @@
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import draggable from 'vuedraggable'
 import { useI18n } from '@/composables/useI18n'
-import { useToastStore } from '@/stores/toastStore'
 
 export interface SessionTabInfo {
   id: string  // tabId
@@ -131,7 +128,6 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const toast = useToastStore()
 
 const localTabs = ref<SessionTabInfo[]>([...props.sessions])
 
@@ -210,12 +206,6 @@ watch(() => props.sessions, (newSessions, oldSessions) => {
 }, { deep: true })
 
 function handleTabClick(tab: SessionTabInfo) {
-  // 当前激活且有 sessionId 时，单击直接复制
-  const copyId = displaySessionId(tab)
-  if (tab.id === props.currentSessionId && copyId) {
-    copySessionId(copyId)
-    return
-  }
   if (tab.id === props.currentSessionId) {
     emit('toggle-list')
     return
@@ -262,18 +252,6 @@ function statusTitle(tab: SessionTabInfo): string {
   if (tab.connectionStatus === 'DISCONNECTED') return t('chat.connectionStatus.disconnected')
   if (tab.connectionStatus === 'ERROR') return tab.error || (t('chat.connectionStatus.error') || '连接错误')
   return t('chat.connectionStatus.disconnected')
-}
-
-async function copySessionId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id)
-    const displayId = id.length > 18 ? `${id.slice(0, 8)}...${id.slice(-4)}` : id
-    const prefix = t('session.copySuccess') || '会话 ID 已复制'
-    toast.success(`${prefix}：${displayId}`)
-  } catch (error) {
-    console.error('复制会话 ID 失败:', error)
-    toast.error(t('session.copyFailed') || '复制失败')
-  }
 }
 
 function displaySessionId(tab: SessionTabInfo): string | null {

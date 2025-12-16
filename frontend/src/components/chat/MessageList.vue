@@ -72,16 +72,18 @@
           />
         </DynamicScrollerItem>
       </template>
-    </DynamicScroller>
 
-    <!-- Streaming 状态指示器 -->
-    <div
-      v-if="isStreaming"
-      class="streaming-indicator"
-    >
-      <span class="streaming-dot">●</span>
-      <span class="streaming-stats">{{ streamingStats }}</span>
-    </div>
+      <!-- Streaming 状态指示器 - 在消息列表末尾 -->
+      <template #after>
+        <div
+          v-if="isStreaming"
+          class="streaming-indicator"
+        >
+          <span class="streaming-dot">●</span>
+          <span class="streaming-stats">{{ streamingStats }}</span>
+        </div>
+      </template>
+    </DynamicScroller>
 
     <div
       v-else-if="isLoading"
@@ -868,24 +870,20 @@ async function ensureScrollable(): Promise<void> {
   font-weight: 600;
 }
 
-/* Streaming 状态指示器 - 固定在底部（输入框上方） */
+/* Streaming 状态指示器 - 跟随消息列表末尾 */
 .streaming-indicator {
-  position: sticky;
-  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 4px 12px;
-  margin: 0 8px;
+  padding: 6px 12px;
+  margin: 8px;
   background: var(--theme-card-background, #ffffff);
   border: 1px solid var(--theme-accent, #0366d6);
-  border-radius: 6px 6px 0 0;
+  border-radius: 6px;
   font-size: 12px;
   font-family: var(--theme-editor-font-family);
   color: var(--theme-secondary-foreground);
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
-  z-index: 10;
 }
 
 .streaming-dot {
