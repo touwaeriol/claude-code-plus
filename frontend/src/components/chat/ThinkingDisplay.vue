@@ -126,7 +126,7 @@ function handleClick() {
 .thinking-display {
   width: 100%;
   margin: 0;
-  padding: 4px 8px;
+  padding: 2px 8px;
   background: color-mix(in srgb, var(--theme-secondary-foreground) 8%, transparent);
   border-left: 2px solid color-mix(in srgb, var(--theme-secondary-foreground) 35%, transparent);
   border-radius: 3px;
@@ -182,7 +182,7 @@ function handleClick() {
   font-style: italic;
   line-height: 1.6;
   opacity: 0.85;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .markdown-content {

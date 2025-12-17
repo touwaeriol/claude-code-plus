@@ -86,9 +86,9 @@ const item = computed(() => props.source)
 .display-item-renderer {
   width: 100%;
   /* DynamicScroller 高度计算不包含外边距，把间距放在内边距避免重叠 */
-  padding: 1px 0;
+  padding: 0;
   box-sizing: border-box;
-  min-height: 18px;
+  min-height: 16px;
 }
 
 .unknown-item {

@@ -85,7 +85,7 @@ function formatNumber(num: number): string {
 <style scoped>
 .assistant-text {
   margin: 0;
-  padding: 4px 0;
+  padding: 2px 0;
   max-width: 100%;
 }
 
