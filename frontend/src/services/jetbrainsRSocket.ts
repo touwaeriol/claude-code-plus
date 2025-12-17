@@ -352,16 +352,32 @@ function decodeProjectPathResponse(data: Uint8Array): string {
  *   bool default_bypass_permissions = 3;
  *   bool enable_user_interaction_mcp = 4;
  *   bool enable_jetbrains_mcp = 5;
+ *   bool include_partial_messages = 6;
+ *   string default_thinking_level = 7;  // 旧字段，向后兼容
+ *   int32 default_thinking_tokens = 8;
+ *   string default_thinking_level_id = 9;  // 新字段
+ *   repeated ThinkingLevelConfig thinking_levels = 10;  // 新字段
  * }
  */
 function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
+  // 默认思考级别列表
+  const defaultThinkingLevels: ThinkingLevelConfig[] = [
+    { id: 'off', name: 'Off', tokens: 0, isCustom: false },
+    { id: 'think', name: 'Think', tokens: 2048, isCustom: false },
+    { id: 'ultra', name: 'Ultra', tokens: 8096, isCustom: false }
+  ]
+
   const settings: Partial<IdeSettings> = {
     defaultModelId: '',
     defaultModelName: '',
     defaultBypassPermissions: false,
     enableUserInteractionMcp: true,
     enableJetbrainsMcp: true,
-    includePartialMessages: true
+    includePartialMessages: true,
+    defaultThinkingLevel: 'ULTRA',
+    defaultThinkingTokens: 8096,
+    defaultThinkingLevelId: 'ultra',
+    thinkingLevels: defaultThinkingLevels
   }
 
   // 内部解析 IdeSettings 消息
@@ -373,7 +389,7 @@ function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
       const wireType = tag & 0x7
 
       if (wireType === 0) {
-        // varint (bool)
+        // varint (bool or int32)
         let value = 0
         let shift = 0
         while (offset < settingsBytes.length) {
@@ -386,8 +402,9 @@ function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
         if (fieldNumber === 4) settings.enableUserInteractionMcp = value !== 0
         if (fieldNumber === 5) settings.enableJetbrainsMcp = value !== 0
         if (fieldNumber === 6) settings.includePartialMessages = value !== 0
+        if (fieldNumber === 8) settings.defaultThinkingTokens = value
       } else if (wireType === 2) {
-        // length-delimited (string)
+        // length-delimited (string or nested message)
         let length = 0
         let shift = 0
         while (offset < settingsBytes.length) {
@@ -396,13 +413,74 @@ function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
           if ((byte & 0x80) === 0) break
           shift += 7
         }
-        const stringBytes = settingsBytes.slice(offset, offset + length)
+        const contentBytes = settingsBytes.slice(offset, offset + length)
         offset += length
-        const str = new TextDecoder().decode(stringBytes)
-        if (fieldNumber === 1) settings.defaultModelId = str
-        if (fieldNumber === 2) settings.defaultModelName = str
+
+        if (fieldNumber === 10) {
+          // ThinkingLevelConfig message (repeated)
+          const level = parseThinkingLevelConfig(contentBytes)
+          if (level) {
+            // 如果是第一次遇到思考级别，清空默认列表
+            if (settings.thinkingLevels === defaultThinkingLevels) {
+              settings.thinkingLevels = []
+            }
+            settings.thinkingLevels.push(level)
+          }
+        } else {
+          // string fields
+          const str = new TextDecoder().decode(contentBytes)
+          if (fieldNumber === 1) settings.defaultModelId = str
+          if (fieldNumber === 2) settings.defaultModelName = str
+          if (fieldNumber === 7) settings.defaultThinkingLevel = str
+          if (fieldNumber === 9) settings.defaultThinkingLevelId = str
+        }
       }
     }
+  }
+
+  // 解析 ThinkingLevelConfig 消息
+  function parseThinkingLevelConfig(bytes: Uint8Array): ThinkingLevelConfig | null {
+    const config: Partial<ThinkingLevelConfig> = {
+      id: '',
+      name: '',
+      tokens: 0,
+      isCustom: false
+    }
+    let offset = 0
+    while (offset < bytes.length) {
+      const tag = bytes[offset++]
+      const fieldNumber = tag >> 3
+      const wireType = tag & 0x7
+
+      if (wireType === 0) {
+        // varint (int32 or bool)
+        let value = 0
+        let shift = 0
+        while (offset < bytes.length) {
+          const byte = bytes[offset++]
+          value |= (byte & 0x7f) << shift
+          if ((byte & 0x80) === 0) break
+          shift += 7
+        }
+        if (fieldNumber === 3) config.tokens = value
+        if (fieldNumber === 4) config.isCustom = value !== 0
+      } else if (wireType === 2) {
+        // length-delimited (string)
+        let length = 0
+        let shift = 0
+        while (offset < bytes.length) {
+          const byte = bytes[offset++]
+          length |= (byte & 0x7f) << shift
+          if ((byte & 0x80) === 0) break
+          shift += 7
+        }
+        const str = new TextDecoder().decode(bytes.slice(offset, offset + length))
+        offset += length
+        if (fieldNumber === 1) config.id = str
+        if (fieldNumber === 2) config.name = str
+      }
+    }
+    return config as ThinkingLevelConfig
   }
 
   // 解析外层 GetIdeSettingsResponse
@@ -624,6 +702,20 @@ export interface IdeSettings {
   enableUserInteractionMcp: boolean
   enableJetbrainsMcp: boolean
   includePartialMessages: boolean
+  // 思考配置
+  defaultThinkingLevelId: string  // 默认思考级别 ID（如 "off", "think", "ultra", "custom_xxx"）
+  defaultThinkingTokens: number   // 默认思考 token 数量
+  thinkingLevels: ThinkingLevelConfig[]  // 所有可用的思考级别
+  // 旧字段，保留向后兼容
+  defaultThinkingLevel?: string  // 思考等级枚举名称（如 "HIGH", "MEDIUM", "OFF"）
+}
+
+// 思考级别配置
+export interface ThinkingLevelConfig {
+  id: string        // 唯一标识：off, think, ultra, custom_xxx
+  name: string      // 显示名称
+  tokens: number    // token 数量
+  isCustom: boolean // 是否为自定义级别
 }
 
 // ========== RSocket 服务 ==========
@@ -698,13 +790,25 @@ class JetBrainsRSocketService {
         console.log('[JetBrainsRSocket] 收到设置变更推送 (Protobuf)')
         // params.settings 包含 IdeSettings
         const settingsData = params.settings || params
+
+        // 默认思考级别列表
+        const defaultThinkingLevels: ThinkingLevelConfig[] = [
+          { id: 'off', name: 'Off', tokens: 0, isCustom: false },
+          { id: 'think', name: 'Think', tokens: 2048, isCustom: false },
+          { id: 'ultra', name: 'Ultra', tokens: 8096, isCustom: false }
+        ]
+
         const settings: IdeSettings = {
           defaultModelId: settingsData.defaultModelId || '',
           defaultModelName: settingsData.defaultModelName || '',
           defaultBypassPermissions: settingsData.defaultBypassPermissions || false,
           enableUserInteractionMcp: settingsData.enableUserInteractionMcp ?? true,
           enableJetbrainsMcp: settingsData.enableJetbrainsMcp ?? true,
-          includePartialMessages: settingsData.includePartialMessages ?? true
+          includePartialMessages: settingsData.includePartialMessages ?? true,
+          defaultThinkingLevel: settingsData.defaultThinkingLevel || 'ULTRA',
+          defaultThinkingTokens: settingsData.defaultThinkingTokens ?? 8096,
+          defaultThinkingLevelId: settingsData.defaultThinkingLevelId || 'ultra',
+          thinkingLevels: settingsData.thinkingLevels || defaultThinkingLevels
         }
         console.log('[JetBrainsRSocket] 设置变更:', settings)
         this.settingsChangeHandlers.forEach(h => h(settings))

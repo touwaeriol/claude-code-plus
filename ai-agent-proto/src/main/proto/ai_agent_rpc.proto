@@ -483,6 +483,11 @@ message HistorySessionsResult {
 // RPC 请求/响应（RSocket 路由用）
 // ============================================================================
 
+// IDE 环境检测响应
+message HasIdeEnvironmentResponse {
+  bool has_ide = 1;
+}
+
 message QueryRequest {
   string message = 1;
 }
@@ -497,6 +502,17 @@ message SetModelRequest {
 
 message SetPermissionModeRequest {
   PermissionMode mode = 1;
+}
+
+// 设置思考 token 上限请求
+message SetMaxThinkingTokensRequest {
+  optional int32 max_thinking_tokens = 1;  // null = 禁用, 0 = 禁用, 正数 = 设置上限
+}
+
+// 设置思考 token 上限响应
+message SetMaxThinkingTokensResult {
+  SessionStatus status = 1;
+  optional int32 max_thinking_tokens = 2;  // 设置后的值
 }
 
 message GetHistorySessionsRequest {
@@ -699,6 +715,19 @@ message IdeSettings {
   bool enable_user_interaction_mcp = 4;  // 启用用户交互 MCP
   bool enable_jetbrains_mcp = 5;         // 启用 JetBrains IDE MCP
   bool include_partial_messages = 6;     // 在流中包含部分消息
+  // 思考配置
+  string default_thinking_level = 7;     // 默认思考等级（旧字段，向后兼容）
+  int32 default_thinking_tokens = 8;     // 默认思考 token 数量
+  string default_thinking_level_id = 9;  // 默认思考级别 ID（如 "off", "think", "ultra", "custom_xxx"）
+  repeated ThinkingLevelConfig thinking_levels = 10;  // 所有可用的思考级别
+}
+
+// 思考级别配置
+message ThinkingLevelConfig {
+  string id = 1;        // 唯一标识：off, think, ultra, custom_xxx
+  string name = 2;      // 显示名称
+  int32 tokens = 3;     // token 数量
+  bool is_custom = 4;   // 是否为自定义级别
 }
 
 // 设置变更通知（后端→前端推送）

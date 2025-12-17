@@ -5,16 +5,19 @@ import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.options.ConfigurableGroup
 import com.intellij.openapi.options.SearchableConfigurable
 import com.intellij.openapi.ui.ComboBox
+import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
+import com.intellij.ui.components.JBList
+import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.FormBuilder
-import javax.swing.DefaultComboBoxModel
-import javax.swing.JComponent
-import javax.swing.JPanel
+import javax.swing.*
+import java.awt.BorderLayout
 import java.awt.Component
-import javax.swing.JList
-import javax.swing.DefaultListCellRenderer
+import java.awt.Dimension
+import java.awt.FlowLayout
 
 /**
  * 模型下拉框渲染器
@@ -36,6 +39,52 @@ class DefaultModelRenderer : DefaultListCellRenderer() {
 }
 
 /**
+ * 思考级别下拉框渲染器
+ */
+class ThinkingLevelConfigRenderer : DefaultListCellRenderer() {
+    override fun getListCellRendererComponent(
+        list: JList<*>?,
+        value: Any?,
+        index: Int,
+        isSelected: Boolean,
+        cellHasFocus: Boolean
+    ): Component {
+        val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+        if (value is ThinkingLevelConfig) {
+            text = value.name
+            toolTipText = "${value.tokens} tokens"
+        }
+        return component
+    }
+}
+
+/**
+ * 添加自定义思考级别对话框
+ */
+class AddCustomThinkingLevelDialog(parent: Component?) : DialogWrapper(parent, true) {
+    private val nameField = JTextField(20)
+    private val tokensSpinner = JSpinner(SpinnerNumberModel(4096, 1, 128000, 1024))
+
+    init {
+        title = "Add Custom Thinking Level"
+        init()
+    }
+
+    override fun createCenterPanel(): JComponent {
+        return JPanel(BorderLayout()).apply {
+            val formPanel = FormBuilder.createFormBuilder()
+                .addLabeledComponent("Name:", nameField)
+                .addLabeledComponent("Tokens:", tokensSpinner)
+                .panel
+            add(formPanel, BorderLayout.CENTER)
+        }
+    }
+
+    fun getName(): String = nameField.text.trim()
+    fun getTokens(): Int = tokensSpinner.value as Int
+}
+
+/**
  * Claude Code Plus 主配置页面
  */
 class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
@@ -52,6 +101,11 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
     // Claude 配置
     private var nodePathField: TextFieldWithBrowseButton? = null
     private var defaultModelCombo: ComboBox<DefaultModel>? = null
+    private var defaultThinkingLevelCombo: ComboBox<ThinkingLevelConfig>? = null
+    private var thinkTokensSpinner: JSpinner? = null
+    private var ultraTokensSpinner: JSpinner? = null
+    private var customLevelsList: JBList<ThinkingLevelConfig>? = null
+    private var customLevelsListModel: DefaultListModel<ThinkingLevelConfig>? = null
     private var permissionModeCombo: ComboBox<String>? = null
     private var includePartialMessagesCheckbox: JBCheckBox? = null
 
@@ -80,7 +134,6 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
 
         // Node.js 路径
         nodePathField = TextFieldWithBrowseButton().apply {
-            // 使用新的 API：FileChooserDescriptor(chooseFiles, chooseFolders, chooseJars, ...)
             val descriptor = FileChooserDescriptor(
                 true,   // chooseFiles
                 false,  // chooseFolders
@@ -93,13 +146,10 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
             addBrowseFolderListener(null, descriptor)
             toolTipText = "Leave empty to auto-detect from system PATH"
 
-            // 设置 placeholder 文本，显示自动检测的路径和版本
-            // textField 需要转换为 JBTextField 才能访问 emptyText
             val textField = this.textField
             if (textField is com.intellij.ui.components.JBTextField) {
                 val nodeInfo = AgentSettingsService.detectNodeInfo()
                 if (nodeInfo != null) {
-                    // 显示格式：路径 (版本号)
                     val hint = if (nodeInfo.version != null) {
                         "${nodeInfo.path} (${nodeInfo.version})"
                     } else {
@@ -118,6 +168,110 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
             toolTipText = "Default model for new sessions"
         }
 
+        // 默认思考级别下拉框
+        defaultThinkingLevelCombo = ComboBox<ThinkingLevelConfig>().apply {
+            renderer = ThinkingLevelConfigRenderer()
+            toolTipText = "Default thinking level for new sessions"
+        }
+
+        // Think tokens 配置
+        thinkTokensSpinner = JSpinner(SpinnerNumberModel(2048, 1, 128000, 256)).apply {
+            toolTipText = "Token budget for Think level"
+            preferredSize = Dimension(100, preferredSize.height)
+        }
+
+        // Ultra tokens 配置
+        ultraTokensSpinner = JSpinner(SpinnerNumberModel(8096, 1, 128000, 256)).apply {
+            toolTipText = "Token budget for Ultra level"
+            preferredSize = Dimension(100, preferredSize.height)
+        }
+
+        // 自定义级别列表
+        customLevelsListModel = DefaultListModel()
+        customLevelsList = JBList(customLevelsListModel).apply {
+            cellRenderer = object : DefaultListCellRenderer() {
+                override fun getListCellRendererComponent(
+                    list: JList<*>?,
+                    value: Any?,
+                    index: Int,
+                    isSelected: Boolean,
+                    cellHasFocus: Boolean
+                ): Component {
+                    val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                    if (value is ThinkingLevelConfig) {
+                        text = "${value.name} (${value.tokens} tokens)"
+                    }
+                    return component
+                }
+            }
+        }
+
+        // 自定义级别面板（列表 + 按钮）
+        val addButton = JButton("Add").apply {
+            addActionListener {
+                val dialog = AddCustomThinkingLevelDialog(mainPanel)
+                if (dialog.showAndGet()) {
+                    val name = dialog.getName()
+                    val tokens = dialog.getTokens()
+                    if (name.isNotEmpty()) {
+                        val id = "custom_${System.currentTimeMillis()}"
+                        val newLevel = ThinkingLevelConfig(id, name, tokens, isCustom = true)
+                        customLevelsListModel?.addElement(newLevel)
+                        updateThinkingLevelCombo()
+                    }
+                }
+            }
+        }
+
+        val removeButton = JButton("Remove").apply {
+            addActionListener {
+                val selected = customLevelsList?.selectedValue
+                if (selected != null) {
+                    customLevelsListModel?.removeElement(selected)
+                    updateThinkingLevelCombo()
+                }
+            }
+        }
+
+        val customLevelsButtonPanel = JPanel(FlowLayout(FlowLayout.LEFT, 5, 0)).apply {
+            add(addButton)
+            add(removeButton)
+        }
+
+        val customLevelsPanel = JPanel(BorderLayout()).apply {
+            add(JBScrollPane(customLevelsList).apply {
+                preferredSize = Dimension(300, 80)
+            }, BorderLayout.CENTER)
+            add(customLevelsButtonPanel, BorderLayout.SOUTH)
+        }
+
+        // 思考配置面板
+        val thinkingConfigPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+
+            // Think tokens 行
+            val thinkRow = JPanel(FlowLayout(FlowLayout.LEFT, 5, 2)).apply {
+                add(JBLabel("Think tokens:"))
+                add(thinkTokensSpinner)
+            }
+            add(thinkRow)
+
+            // Ultra tokens 行
+            val ultraRow = JPanel(FlowLayout(FlowLayout.LEFT, 5, 2)).apply {
+                add(JBLabel("Ultra tokens:"))
+                add(ultraTokensSpinner)
+            }
+            add(ultraRow)
+
+            // 自定义级别
+            add(JBLabel("Custom levels:"))
+            add(customLevelsPanel)
+        }
+
+        // 当 spinner 值变化时更新下拉框
+        thinkTokensSpinner?.addChangeListener { updateThinkingLevelCombo() }
+        ultraTokensSpinner?.addChangeListener { updateThinkingLevelCombo() }
+
         // 权限模式
         permissionModeCombo = ComboBox(DefaultComboBoxModel(arrayOf(
             "default",
@@ -133,7 +287,7 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
         includePartialMessagesCheckbox = JBCheckBox("Include partial messages in stream").apply {
             toolTipText = "Include partial/streaming messages in the response (always enabled)"
             isSelected = true
-            isEnabled = false  // 禁止修改
+            isEnabled = false
         }
 
         mainPanel = FormBuilder.createFormBuilder()
@@ -159,6 +313,15 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
             .addComponent(JBLabel("<html><font color='gray' size='-1'>  Path to Node.js executable. Leave empty to auto-detect from system PATH.</font></html>"))
             .addLabeledComponent(JBLabel("Default model:"), defaultModelCombo!!, 1, false)
             .addComponent(JBLabel("<html><font color='gray' size='-1'>  Opus 4.5 = Most capable | Sonnet 4 = Balanced | Haiku 3.5 = Fastest</font></html>"))
+            .addLabeledComponent(JBLabel("Default thinking:"), defaultThinkingLevelCombo!!, 1, false)
+            .addComponent(JBLabel("<html><font color='gray' size='-1'>  Default thinking level for new sessions</font></html>"))
+            // 思考配置
+            .addSeparator()
+            .addComponent(JBLabel("<html><b>Thinking levels configuration</b></html>"))
+            .addComponent(JBLabel("<html><font color='gray' size='-1'>Configure token budgets for each thinking level</font></html>"))
+            .addComponent(thinkingConfigPanel)
+            // 权限模式
+            .addSeparator()
             .addLabeledComponent(JBLabel("Permission mode:"), permissionModeCombo!!, 1, false)
             .addComponent(JBLabel("<html><font color='gray' size='-1'>  default = Ask for each action | bypassPermissions = Auto-approve all actions</font></html>"))
             .addComponent(includePartialMessagesCheckbox!!)
@@ -170,16 +333,66 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
         return mainPanel!!
     }
 
+    /**
+     * 更新思考级别下拉框的选项
+     */
+    private fun updateThinkingLevelCombo() {
+        val currentSelection = defaultThinkingLevelCombo?.selectedItem as? ThinkingLevelConfig
+        val currentId = currentSelection?.id
+
+        val allLevels = buildAllThinkingLevels()
+        val model = DefaultComboBoxModel(allLevels.toTypedArray())
+        defaultThinkingLevelCombo?.model = model
+
+        // 恢复选中项
+        val toSelect = allLevels.find { it.id == currentId } ?: allLevels.find { it.id == "ultra" }
+        defaultThinkingLevelCombo?.selectedItem = toSelect
+    }
+
+    /**
+     * 构建所有思考级别列表
+     */
+    private fun buildAllThinkingLevels(): List<ThinkingLevelConfig> {
+        val presetLevels = listOf(
+            ThinkingLevelConfig("off", "Off", 0, isCustom = false),
+            ThinkingLevelConfig("think", "Think", thinkTokensSpinner?.value as? Int ?: 2048, isCustom = false),
+            ThinkingLevelConfig("ultra", "Ultra", ultraTokensSpinner?.value as? Int ?: 8096, isCustom = false)
+        )
+        val customLevels = mutableListOf<ThinkingLevelConfig>()
+        for (i in 0 until (customLevelsListModel?.size() ?: 0)) {
+            customLevelsListModel?.getElementAt(i)?.let { customLevels.add(it) }
+        }
+        return presetLevels + customLevels
+    }
+
     override fun isModified(): Boolean {
         val settings = AgentSettingsService.getInstance()
         val selectedModel = defaultModelCombo?.selectedItem as? DefaultModel
-        // Node.js 路径比较：只比较用户输入的值
+        val selectedThinkingLevel = defaultThinkingLevelCombo?.selectedItem as? ThinkingLevelConfig
+
         val currentNodePath = nodePathField?.text ?: ""
         val savedNodePath = settings.nodePath
         val nodePathModified = currentNodePath != savedNodePath
 
+        // 思考配置比较
+        val thinkingLevelModified = selectedThinkingLevel?.id != settings.defaultThinkingLevelId
+        val thinkTokensModified = (thinkTokensSpinner?.value as? Int ?: 2048) != settings.thinkTokens
+        val ultraTokensModified = (ultraTokensSpinner?.value as? Int ?: 8096) != settings.ultraTokens
+
+        // 自定义级别比较
+        val currentCustomLevels = mutableListOf<ThinkingLevelConfig>()
+        for (i in 0 until (customLevelsListModel?.size() ?: 0)) {
+            customLevelsListModel?.getElementAt(i)?.let { currentCustomLevels.add(it) }
+        }
+        val savedCustomLevels = settings.getCustomThinkingLevels()
+        val customLevelsModified = currentCustomLevels != savedCustomLevels
+
         return nodePathModified ||
                 selectedModel?.name != settings.defaultModel ||
+                thinkingLevelModified ||
+                thinkTokensModified ||
+                ultraTokensModified ||
+                customLevelsModified ||
                 permissionModeCombo?.selectedItem != settings.permissionMode ||
                 includePartialMessagesCheckbox?.isSelected != settings.includePartialMessages ||
                 enableUserInteractionMcpCheckbox?.isSelected != settings.enableUserInteractionMcp ||
@@ -191,11 +404,21 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
         val settings = AgentSettingsService.getInstance()
         settings.nodePath = nodePathField?.text ?: ""
         settings.defaultModel = (defaultModelCombo?.selectedItem as? DefaultModel)?.name ?: DefaultModel.OPUS_45.name
+        settings.defaultThinkingLevelId = (defaultThinkingLevelCombo?.selectedItem as? ThinkingLevelConfig)?.id ?: "ultra"
+        settings.thinkTokens = thinkTokensSpinner?.value as? Int ?: 2048
+        settings.ultraTokens = ultraTokensSpinner?.value as? Int ?: 8096
         settings.permissionMode = permissionModeCombo?.selectedItem as? String ?: "default"
         settings.includePartialMessages = includePartialMessagesCheckbox?.isSelected ?: true
         settings.enableUserInteractionMcp = enableUserInteractionMcpCheckbox?.isSelected ?: true
         settings.enableJetBrainsMcp = enableJetBrainsMcpCheckbox?.isSelected ?: true
         settings.defaultBypassPermissions = defaultBypassPermissionsCheckbox?.isSelected ?: false
+
+        // 保存自定义级别
+        val customLevels = mutableListOf<ThinkingLevelConfig>()
+        for (i in 0 until (customLevelsListModel?.size() ?: 0)) {
+            customLevelsListModel?.getElementAt(i)?.let { customLevels.add(it) }
+        }
+        settings.setCustomThinkingLevels(customLevels)
 
         // 通知监听器设置已变更
         settings.notifyChange()
@@ -203,16 +426,27 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
 
     override fun reset() {
         val settings = AgentSettingsService.getInstance()
-        // 只恢复用户保存的路径，不自动填充检测的路径
-        // 检测的路径显示在 placeholder 中
         nodePathField?.text = settings.nodePath
 
-        // 从枚举名称恢复选中项
+        // 恢复模型选择
         val modelEnum = DefaultModel.fromName(settings.defaultModel) ?: DefaultModel.OPUS_45
         defaultModelCombo?.selectedItem = modelEnum
+
+        // 恢复思考 token 配置
+        thinkTokensSpinner?.value = settings.thinkTokens
+        ultraTokensSpinner?.value = settings.ultraTokens
+
+        // 恢复自定义级别
+        customLevelsListModel?.clear()
+        settings.getCustomThinkingLevels().forEach { customLevelsListModel?.addElement(it) }
+
+        // 更新并恢复默认思考级别
+        updateThinkingLevelCombo()
+        val allLevels = buildAllThinkingLevels()
+        val toSelect = allLevels.find { it.id == settings.defaultThinkingLevelId } ?: allLevels.find { it.id == "ultra" }
+        defaultThinkingLevelCombo?.selectedItem = toSelect
+
         permissionModeCombo?.selectedItem = settings.permissionMode
-        // includePartialMessages 强制为 true 并禁用修改
-        // 如果之前保存的是 false，也强制修正为 true
         if (!settings.includePartialMessages) {
             settings.includePartialMessages = true
         }
@@ -226,6 +460,11 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
     override fun disposeUIResources() {
         nodePathField = null
         defaultModelCombo = null
+        defaultThinkingLevelCombo = null
+        thinkTokensSpinner = null
+        ultraTokensSpinner = null
+        customLevelsList = null
+        customLevelsListModel = null
         permissionModeCombo = null
         includePartialMessagesCheckbox = null
         enableUserInteractionMcpCheckbox = null

@@ -1,10 +1,10 @@
 /**
  * 模型选择相关的 composable
- * 处理模型切换、思考开关、权限模式
+ * 处理模型切换、思考级别、权限模式
  *
  * 简化策略：
- * - model/permissionMode 切换：直接调用 RPC（立即生效于下一轮对话）
- * - thinkingEnabled/skipPermissions 切换：需要重连
+ * - model/permissionMode/thinkingLevel 切换：直接调用 RPC（立即生效于下一轮对话）
+ * - skipPermissions 切换：纯前端行为，不需要重连
  */
 import { ref, computed } from 'vue'
 import type { PermissionMode } from '@/types/enhancedMessage'
@@ -17,6 +17,15 @@ import {
 } from '@/constants/models'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import type { ThinkingLevel } from '@/composables/useSessionTab'
+import type { ThinkingLevelConfig } from '@/services/jetbrainsRSocket'
+
+// 默认思考级别列表
+const DEFAULT_THINKING_LEVELS: ThinkingLevelConfig[] = [
+  { id: 'off', name: 'Off', tokens: 0, isCustom: false },
+  { id: 'think', name: 'Think', tokens: 2048, isCustom: false },
+  { id: 'ultra', name: 'Ultra', tokens: 8096, isCustom: false }
+]
 
 // 权限模式列表
 const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']
@@ -63,13 +72,13 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
     return (entry?.[0] as BaseModel) ?? BaseModel.OPUS_45
   })
 
-  // 当前思考开关状态（直接绑定到 Tab 状态）
-  const currentThinkingEnabled = computed(() => {
+  // 当前思考级别（直接绑定到 Tab 状态）
+  const thinkingLevel = computed((): ThinkingLevel => {
     const tab = sessionStore.currentTab
     if (!tab) {
-      return MODEL_CAPABILITIES[BaseModel.OPUS_45].defaultThinkingEnabled
+      return 8096  // 默认 Ultra
     }
-    return tab.thinkingEnabled.value
+    return tab.thinkingLevel.value
   })
 
   // 当前模型的思考模式
@@ -82,9 +91,14 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
     return canToggleThinking(currentModel.value)
   })
 
-  // 当前思考开关状态（用于 UI 显示）
+  // 当前思考是否启用（用于 UI 显示兼容）
   const thinkingEnabled = computed(() => {
-    return getEffectiveThinkingEnabled(currentModel.value, currentThinkingEnabled.value)
+    return thinkingLevel.value > 0
+  })
+
+  // 可用思考级别列表（从 IDE 设置获取）
+  const thinkingLevels = computed((): ThinkingLevelConfig[] => {
+    return settingsStore.ideSettings?.thinkingLevels || DEFAULT_THINKING_LEVELS
   })
 
   // 可用模型列表
@@ -111,54 +125,64 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
   async function handleBaseModelChange(model: BaseModel) {
     const capability = MODEL_CAPABILITIES[model]
 
-    // 根据模型能力自动设置思考开关
-    let newThinkingEnabled: boolean
+    // 根据模型能力自动设置思考级别
+    let newThinkingLevel: ThinkingLevel
     switch (capability.thinkingMode) {
       case 'always':
-        newThinkingEnabled = true
+        newThinkingLevel = 8096  // Ultra
         break
       case 'never':
-        newThinkingEnabled = false
+        newThinkingLevel = 0     // Off
         break
       case 'optional':
-        newThinkingEnabled = capability.defaultThinkingEnabled
+        // 保持当前级别，如果当前是 0 则设为默认
+        newThinkingLevel = thinkingLevel.value > 0 ? thinkingLevel.value : 8096
         break
     }
 
-    console.log(`🔄 [handleBaseModelChange] 切换模型: ${capability.displayName}, thinking=${newThinkingEnabled}`)
+    console.log(`🔄 [handleBaseModelChange] 切换模型: ${capability.displayName}, thinkingLevel=${newThinkingLevel}`)
 
-    // 直接调用 updateSettings，它会智能处理 RPC 或重连
+    // 直接调用 updateSettings，它会智能处理 RPC
     const tab = sessionStore.currentTab
     if (tab) {
       await tab.updateSettings({
         model: capability.modelId,
-        thinkingEnabled: newThinkingEnabled
+        thinkingLevel: newThinkingLevel
       })
       console.log(`✅ [handleBaseModelChange] 模型切换完成`)
     }
   }
 
   /**
-   * 处理思考开关切换
-   * 直接调用 updateSettings（需要重连）
+   * 处理思考级别切换
+   * 直接调用 RPC（立即生效于下一轮对话）
    */
-  async function handleThinkingToggle(enabled: boolean) {
+  async function handleThinkingLevelChange(level: ThinkingLevel) {
     if (!canToggleThinkingComputed.value) {
       return
     }
 
-    console.log(`🧠 [handleThinkingToggle] 切换思考: ${enabled}`)
+    console.log(`🧠 [handleThinkingLevelChange] 切换思考级别: ${level}`)
 
-    // 直接调用 updateSettings（thinkingEnabled 需要重连）
+    // 直接调用 updateSettings
     const tab = sessionStore.currentTab
     if (tab) {
-      await tab.updateSettings({ thinkingEnabled: enabled })
-      console.log(`✅ [handleThinkingToggle] 思考切换完成`)
+      await tab.updateSettings({ thinkingLevel: level })
+      console.log(`✅ [handleThinkingLevelChange] 思考级别切换完成`)
     }
   }
 
   /**
-   * 切换思考开关（简化版本，用于键盘快捷键）
+   * 处理思考开关切换（向后兼容）
+   */
+  async function handleThinkingToggle(enabled: boolean) {
+    const level: ThinkingLevel = enabled ? 8096 : 0
+    await handleThinkingLevelChange(level)
+  }
+
+  /**
+   * 切换思考级别（用于键盘快捷键）
+   * 在 Off -> Think -> Ultra 之间循环
    */
   async function toggleThinkingEnabled(source: 'click' | 'keyboard' = 'click') {
     // 检查是否可以切换
@@ -169,10 +193,14 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
 
     if (thinkingTogglePending.value) return
 
-    // 调用处理函数
-    const nextValue = !thinkingEnabled.value
-    console.log(`🧠 [ThinkingToggle] ${source} -> ${nextValue}`)
-    handleThinkingToggle(nextValue)
+    // 在三个级别之间循环：0 -> 2048 -> 8096 -> 0
+    const levels: ThinkingLevel[] = [0, 2048, 8096]
+    const currentIndex = levels.indexOf(thinkingLevel.value)
+    const nextIndex = (currentIndex + 1) % levels.length
+    const nextLevel = levels[nextIndex]
+
+    console.log(`🧠 [ThinkingToggle] ${source} -> ${nextLevel}`)
+    await handleThinkingLevelChange(nextLevel)
   }
 
   /**
@@ -254,7 +282,8 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
   return {
     // 状态
     currentModel,
-    currentThinkingEnabled,
+    thinkingLevel,
+    thinkingLevels,
     currentThinkingMode,
     canToggleThinkingComputed,
     thinkingEnabled,
@@ -268,6 +297,7 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
     getBaseModelLabel,
     getModeIcon,
     handleBaseModelChange,
+    handleThinkingLevelChange,
     handleThinkingToggle,
     toggleThinkingEnabled,
     handleSkipPermissionsChange,

@@ -238,6 +238,16 @@ class JetBrainsRSocketHandler(
             val settings = AgentSettingsService.getInstance()
             logger.info("⚙️ [JetBrains] getSettings")
 
+            // 转换思考级别列表为 Proto 格式
+            val thinkingLevelsProto = settings.getAllThinkingLevels().map { level ->
+                com.asakii.proto.AiAgentRpc.ThinkingLevelConfig.newBuilder()
+                    .setId(level.id)
+                    .setName(level.name)
+                    .setTokens(level.tokens)
+                    .setIsCustom(level.isCustom)
+                    .build()
+            }
+
             val ideSettings = IdeSettings.newBuilder()
                 .setDefaultModelId(settings.defaultModelId)
                 .setDefaultModelName(settings.defaultModelEnum.displayName)
@@ -245,6 +255,10 @@ class JetBrainsRSocketHandler(
                 .setEnableUserInteractionMcp(settings.enableUserInteractionMcp)
                 .setEnableJetbrainsMcp(settings.enableJetBrainsMcp)
                 .setIncludePartialMessages(settings.includePartialMessages)
+                .setDefaultThinkingLevel(settings.defaultThinkingLevelEnum.name)
+                .setDefaultThinkingTokens(settings.defaultThinkingTokens)
+                .setDefaultThinkingLevelId(settings.defaultThinkingLevelId)
+                .addAllThinkingLevels(thinkingLevelsProto)
                 .build()
 
             val response = GetIdeSettingsResponse.newBuilder()
@@ -445,6 +459,8 @@ class JetBrainsRSocketHandler(
                 .setEnableUserInteractionMcp(settings.enableUserInteractionMcp)
                 .setEnableJetbrainsMcp(settings.enableJetBrainsMcp)
                 .setIncludePartialMessages(settings.includePartialMessages)
+                .setDefaultThinkingLevel(settings.defaultThinkingLevelEnum.name)
+                .setDefaultThinkingTokens(settings.defaultThinkingTokens)
                 .build()
 
             // 构建 IdeSettingsChangedNotify

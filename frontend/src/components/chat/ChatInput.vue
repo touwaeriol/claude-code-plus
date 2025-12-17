@@ -263,12 +263,13 @@
             </el-option>
           </el-select>
 
-          <!-- 思考开关 - 独立组件 -->
+          <!-- 思考级别选择器 - 独立组件 -->
           <ThinkingToggle
             v-if="showModelSelector"
             :thinking-mode="currentThinkingMode"
-            :enabled="thinkingEnabled"
-            @toggle="handleThinkingToggle"
+            :thinking-tokens="thinkingLevel"
+            :thinking-levels="thinkingLevels"
+            @change="handleThinkingLevelChange"
           />
 
           <!-- Skip Permissions 开关 -->
@@ -392,6 +393,7 @@
       :anchor-element="addContextButtonRef ?? null"
       :show-search-input="true"
       :placeholder="t('tools.search')"
+      :is-indexing="contextIsIndexing"
       @select="handleContextSelect"
       @dismiss="handleContextDismiss"
       @search="handleContextSearch"
@@ -403,6 +405,7 @@
       :files="atSymbolSearchResults"
       :anchor-element="richTextInputElement"
       :at-position="atSymbolPosition"
+      :is-indexing="atSymbolIsIndexing"
       @select="handleAtSymbolFileSelect"
       @dismiss="dismissAtSymbolPopup"
     />
@@ -542,14 +545,16 @@ const {
   currentModel,
   currentThinkingMode,
   canToggleThinkingComputed: _canToggleThinkingComputed,
-  thinkingEnabled,
+  thinkingLevel,
+  thinkingLevels,
+  thinkingEnabled: _thinkingEnabled,
   selectedPermissionValue,
   skipPermissionsValue,
   baseModelOptions,
   getBaseModelLabel,
   getModeIcon,
   handleBaseModelChange,
-  handleThinkingToggle,
+  handleThinkingLevelChange,
   toggleThinkingEnabled,
   handleSkipPermissionsChange,
   cyclePermissionMode,
@@ -588,11 +593,13 @@ const inputText = computed({
 const isFocused = ref(false)
 const showContextSelectorPopup = ref(false)
 const contextSearchResults = ref<IndexedFileInfo[]>([])
+const contextIsIndexing = ref(false)  // Add Context 弹窗的索引状态
 
 // @ Symbol File Popup State
 const showAtSymbolPopup = ref(false)
 const atSymbolPosition = ref(0)
 const atSymbolSearchResults = ref<IndexedFileInfo[]>([])
+const atSymbolIsIndexing = ref(false)  // 是否正在索引
 
 // Slash Command Popup State
 const showSlashCommandPopup = ref(false)
@@ -968,17 +975,22 @@ async function checkAtSymbol() {
 
     // 搜索文件（空查询时返回项目根目录文件）
     try {
-      atSymbolSearchResults.value = await fileSearchService.searchFiles(atResult.query, 10)
-      showAtSymbolPopup.value = atSymbolSearchResults.value.length > 0
+      const result = await fileSearchService.searchFiles(atResult.query, 10)
+      atSymbolSearchResults.value = result.files
+      atSymbolIsIndexing.value = result.isIndexing
+      // 有结果或正在索引时显示弹窗
+      showAtSymbolPopup.value = result.files.length > 0 || result.isIndexing
     } catch (error) {
       console.error('文件搜索失败:', error)
       atSymbolSearchResults.value = []
+      atSymbolIsIndexing.value = false
       showAtSymbolPopup.value = false
     }
   } else {
     // 不在 @ 查询中
     showAtSymbolPopup.value = false
     atSymbolSearchResults.value = []
+    atSymbolIsIndexing.value = false
   }
 }
 
@@ -987,10 +999,12 @@ function handleAtSymbolFileSelect(file: IndexedFileInfo) {
   const cursorPosition = richTextInputRef.value?.getCursorPosition() ?? 0
 
   // 删除从 @ 位置到当前光标位置的文本，然后插入文件引用节点
+  // 传递相对路径和绝对路径，用于 tooltip 显示完整路径
   richTextInputRef.value?.replaceRangeWithFileReference(
     atSymbolPosition.value,
     cursorPosition,
-    file.relativePath
+    file.relativePath,
+    file.absolutePath
   )
 
   // 关闭弹窗
@@ -1000,6 +1014,7 @@ function handleAtSymbolFileSelect(file: IndexedFileInfo) {
 function dismissAtSymbolPopup() {
   showAtSymbolPopup.value = false
   atSymbolSearchResults.value = []
+  atSymbolIsIndexing.value = false
 }
 
 // Slash Command Functions
@@ -1217,10 +1232,13 @@ async function handleAddContextClick() {
 
   // 空查询返回项目根目录文件
   try {
-    contextSearchResults.value = await fileSearchService.searchFiles('', 10)
+    const result = await fileSearchService.searchFiles('', 10)
+    contextSearchResults.value = result.files
+    contextIsIndexing.value = result.isIndexing
   } catch (error) {
     console.error('获取文件失败:', error)
     contextSearchResults.value = []
+    contextIsIndexing.value = false
   }
 }
 
@@ -1229,16 +1247,20 @@ async function handleContextSearch(query: string) {
 
   // 统一使用 searchFiles（空查询返回项目根目录文件）
   try {
-    contextSearchResults.value = await fileSearchService.searchFiles(trimmedQuery, 10)
+    const result = await fileSearchService.searchFiles(trimmedQuery, 10)
+    contextSearchResults.value = result.files
+    contextIsIndexing.value = result.isIndexing
   } catch (error) {
     console.error('文件搜索失败:', error)
     contextSearchResults.value = []
+    contextIsIndexing.value = false
   }
 }
 
 function handleContextDismiss() {
   showContextSelectorPopup.value = false
   contextSearchResults.value = []
+  contextIsIndexing.value = false
 }
 
 function handleContextSelect(result: IndexedFileInfo) {

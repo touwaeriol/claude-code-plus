@@ -5,6 +5,18 @@ import { jetbrainsRSocket, type IdeSettings } from '@/services/jetbrainsRSocket'
 import { DEFAULT_SETTINGS, type Settings, PermissionMode } from '@/types/settings'
 import { BaseModel, MODEL_CAPABILITIES, migrateModelSettings, findBaseModelByModelId } from '@/constants/models'
 
+/**
+ * HTTP 获取的默认设置（用于浏览器模式）
+ */
+interface HttpDefaultSettings {
+  defaultModelId: string
+  defaultBypassPermissions: boolean
+  includePartialMessages: boolean
+  // 思考配置（新增）
+  defaultThinkingLevel: string  // 思考等级枚举名称
+  defaultThinkingTokens: number // 思考 token 数量
+}
+
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<Settings>({ ...DEFAULT_SETTINGS })
   const ideSettings = ref<IdeSettings | null>(null)
@@ -88,20 +100,30 @@ export const useSettingsStore = defineStore('settings', () => {
       const baseModel = findBaseModelByModelId(newIdeSettings.defaultModelId)
       if (baseModel) {
         updates.model = baseModel
-        // 使用模型的默认思考设置
-        updates.thinkingEnabled = MODEL_CAPABILITIES[baseModel].defaultThinkingEnabled
-        console.log('🎯 [IdeSettings] 应用默认模型:', baseModel, '思考:', updates.thinkingEnabled)
+        console.log('🎯 [IdeSettings] 应用默认模型:', baseModel)
       } else {
         console.warn('⚠️ [IdeSettings] 未知的模型 ID:', newIdeSettings.defaultModelId)
       }
     }
 
-    // 2. 应用 ByPass 权限设置（同步到当前会话）
+    // 2. 应用思考配置
+    const thinkingLevelId = newIdeSettings.defaultThinkingLevelId || 'ultra'
+    const thinkingTokens = newIdeSettings.defaultThinkingTokens ?? 8096
+    updates.thinkingEnabled = thinkingLevelId !== 'off' && thinkingTokens > 0
+    updates.maxThinkingTokens = thinkingTokens
+    console.log('🧠 [IdeSettings] 思考配置:', {
+      levelId: thinkingLevelId,
+      tokens: thinkingTokens,
+      enabled: updates.thinkingEnabled,
+      levels: newIdeSettings.thinkingLevels
+    })
+
+    // 3. 应用 ByPass 权限设置（同步到当前会话）
     const newBypassValue = newIdeSettings.defaultBypassPermissions ?? false
     updates.skipPermissions = newBypassValue
     console.log('🔓 [IdeSettings] ByPass 权限设置:', newBypassValue)
 
-    // 3. 应用 includePartialMessages 设置
+    // 4. 应用 includePartialMessages 设置
     if (newIdeSettings.includePartialMessages !== undefined) {
       updates.includePartialMessages = newIdeSettings.includePartialMessages
       console.log('📡 [IdeSettings] Include Partial Messages:', newIdeSettings.includePartialMessages)
@@ -145,6 +167,68 @@ export const useSettingsStore = defineStore('settings', () => {
       settingsChangeUnsubscribe()
       settingsChangeUnsubscribe = null
       console.log('🧹 [IdeSettings] 已移除设置变更监听器')
+    }
+  }
+
+  /**
+   * 从 HTTP API 加载默认设置（用于浏览器模式）
+   *
+   * 当不在 IDE 环境中时，通过 HTTP API 获取后端配置的默认设置
+   */
+  async function loadDefaultSettings() {
+    try {
+      console.log('⚙️ Loading default settings from HTTP API...')
+      const response = await ideaBridge.query('settings.getDefault')
+
+      if (response.success && response.data) {
+        const httpSettings = response.data as HttpDefaultSettings
+        const updates: Partial<Settings> = {}
+
+        // 1. 应用默认模型设置
+        if (httpSettings.defaultModelId) {
+          const baseModel = findBaseModelByModelId(httpSettings.defaultModelId)
+          if (baseModel) {
+            updates.model = baseModel
+            console.log('🎯 [DefaultSettings] 应用默认模型:', baseModel)
+          } else {
+            console.warn('⚠️ [DefaultSettings] 未知的模型 ID:', httpSettings.defaultModelId)
+          }
+        }
+
+        // 2. 应用思考配置
+        const thinkingLevel = httpSettings.defaultThinkingLevel || 'HIGH'
+        const thinkingTokens = httpSettings.defaultThinkingTokens ?? 8192
+        updates.thinkingEnabled = thinkingLevel !== 'OFF' && thinkingTokens > 0
+        updates.maxThinkingTokens = thinkingTokens
+        console.log('🧠 [DefaultSettings] 思考配置:', {
+          level: thinkingLevel,
+          tokens: thinkingTokens,
+          enabled: updates.thinkingEnabled
+        })
+
+        // 3. 应用 ByPass 权限设置
+        updates.skipPermissions = httpSettings.defaultBypassPermissions ?? false
+        console.log('🔓 [DefaultSettings] ByPass 权限设置:', updates.skipPermissions)
+
+        // 4. 应用 includePartialMessages 设置
+        if (httpSettings.includePartialMessages !== undefined) {
+          updates.includePartialMessages = httpSettings.includePartialMessages
+          console.log('📡 [DefaultSettings] Include Partial Messages:', httpSettings.includePartialMessages)
+        }
+
+        // 合并到设置中
+        if (Object.keys(updates).length > 0) {
+          settings.value = {
+            ...settings.value,
+            ...updates
+          }
+          console.log('✅ [DefaultSettings] 已应用默认设置:', updates)
+        }
+      } else {
+        console.warn('⚠️ Failed to load default settings from HTTP API')
+      }
+    } catch (error) {
+      console.error('❌ Error loading default settings:', error)
     }
   }
 
@@ -238,6 +322,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showPanel,
     loadSettings,
     loadIdeSettings,
+    loadDefaultSettings,
     initIdeSettingsListener,
     cleanupIdeSettingsListener,
     saveSettings,

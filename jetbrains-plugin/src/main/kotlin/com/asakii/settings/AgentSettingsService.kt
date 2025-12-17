@@ -2,6 +2,9 @@ package com.asakii.settings
 
 import com.intellij.openapi.components.*
 import com.intellij.util.xmlb.XmlSerializerUtil
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 /**
  * 默认模型枚举
@@ -21,6 +24,36 @@ enum class DefaultModel(val modelId: String, val displayName: String) {
         }
     }
 }
+
+/**
+ * 默认思考等级枚举
+ *
+ * 简化为三个核心级别：Off、Think、Ultra
+ */
+enum class DefaultThinkingLevel(val displayName: String, val description: String) {
+    OFF("Off", "Disable extended thinking"),
+    THINK("Think", "Standard thinking for most tasks"),
+    ULTRA("Ultra", "Deep thinking for complex tasks");
+
+    companion object {
+        fun fromName(name: String?): DefaultThinkingLevel? {
+            return entries.find { it.name == name }
+        }
+    }
+}
+
+/**
+ * 思考级别配置
+ *
+ * 用于存储思考级别的完整信息，包括预设级别和自定义级别
+ */
+@Serializable
+data class ThinkingLevelConfig(
+    val id: String,        // 唯一标识：off, think, ultra, custom_xxx
+    val name: String,      // 显示名称
+    val tokens: Int,       // token 数量
+    val isCustom: Boolean = false  // 是否为自定义级别
+)
 
 /**
  * AI Agent 配置持久化服务（应用级别）
@@ -47,6 +80,16 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
 
         // 默认模型（使用枚举名称存储，如 "OPUS_45"）
         var defaultModel: String = DefaultModel.OPUS_45.name,
+
+        // 默认思考等级 ID（如 "off", "think", "ultra", "custom_xxx"）
+        var defaultThinkingLevelId: String = "ultra",
+
+        // 预设思考级别的 token 配置
+        var thinkTokens: Int = 2048,
+        var ultraTokens: Int = 8096,
+
+        // 自定义思考级别列表（JSON 序列化）
+        var customThinkingLevels: String = "[]",
 
         // 默认权限模式：default, acceptEdits, plan, bypassPermissions, dontAsk
         var permissionMode: String = "default",
@@ -126,6 +169,109 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     var includePartialMessages: Boolean
         get() = state.includePartialMessages
         set(value) { state.includePartialMessages = value }
+
+    var defaultThinkingLevelId: String
+        get() = state.defaultThinkingLevelId
+        set(value) { state.defaultThinkingLevelId = value }
+
+    var thinkTokens: Int
+        get() = state.thinkTokens
+        set(value) { state.thinkTokens = value }
+
+    var ultraTokens: Int
+        get() = state.ultraTokens
+        set(value) { state.ultraTokens = value }
+
+    var customThinkingLevelsJson: String
+        get() = state.customThinkingLevels
+        set(value) { state.customThinkingLevels = value }
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * 获取自定义思考级别列表
+     */
+    fun getCustomThinkingLevels(): List<ThinkingLevelConfig> {
+        return try {
+            json.decodeFromString<List<ThinkingLevelConfig>>(state.customThinkingLevels)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 设置自定义思考级别列表
+     */
+    fun setCustomThinkingLevels(levels: List<ThinkingLevelConfig>) {
+        state.customThinkingLevels = json.encodeToString(levels)
+    }
+
+    /**
+     * 添加自定义思考级别
+     */
+    fun addCustomThinkingLevel(name: String, tokens: Int): ThinkingLevelConfig {
+        val levels = getCustomThinkingLevels().toMutableList()
+        val id = "custom_${System.currentTimeMillis()}"
+        val newLevel = ThinkingLevelConfig(id, name, tokens, isCustom = true)
+        levels.add(newLevel)
+        setCustomThinkingLevels(levels)
+        return newLevel
+    }
+
+    /**
+     * 删除自定义思考级别
+     */
+    fun removeCustomThinkingLevel(id: String) {
+        val levels = getCustomThinkingLevels().toMutableList()
+        levels.removeIf { it.id == id }
+        setCustomThinkingLevels(levels)
+        // 如果删除的是当前默认级别，切换到 ultra
+        if (state.defaultThinkingLevelId == id) {
+            state.defaultThinkingLevelId = "ultra"
+        }
+    }
+
+    /**
+     * 获取所有思考级别（预设 + 自定义）
+     */
+    fun getAllThinkingLevels(): List<ThinkingLevelConfig> {
+        val presetLevels = listOf(
+            ThinkingLevelConfig("off", "Off", 0, isCustom = false),
+            ThinkingLevelConfig("think", "Think", state.thinkTokens, isCustom = false),
+            ThinkingLevelConfig("ultra", "Ultra", state.ultraTokens, isCustom = false)
+        )
+        return presetLevels + getCustomThinkingLevels()
+    }
+
+    /**
+     * 根据 ID 获取思考级别配置
+     */
+    fun getThinkingLevelById(id: String): ThinkingLevelConfig? {
+        return getAllThinkingLevels().find { it.id == id }
+    }
+
+    /**
+     * 获取当前默认思考级别的 token 数量
+     */
+    val defaultThinkingTokens: Int
+        get() = getThinkingLevelById(state.defaultThinkingLevelId)?.tokens ?: state.ultraTokens
+
+    // 为了向后兼容，保留 defaultThinkingLevel 属性（映射到新结构）
+    var defaultThinkingLevel: String
+        get() = when (state.defaultThinkingLevelId) {
+            "off" -> "OFF"
+            "think" -> "THINK"
+            "ultra" -> "ULTRA"
+            else -> "ULTRA"  // 自定义级别映射为 ULTRA（用于旧 API 兼容）
+        }
+        set(value) {
+            state.defaultThinkingLevelId = when (value.uppercase()) {
+                "OFF" -> "off"
+                "THINK" -> "think"
+                "ULTRA", "HIGH", "VERY_HIGH", "MEDIUM", "LOW" -> "ultra"  // 旧级别都映射到 ultra
+                else -> "ultra"
+            }
+        }
 
     companion object {
         @JvmStatic
