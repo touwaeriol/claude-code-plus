@@ -97,16 +97,16 @@
                 @click="openImagePreview(image)"
               />
             </div>
-          </div>
 
-          <!-- 折叠/展开按钮 -->
-          <button
-            v-if="isLongMessage"
-            class="toggle-button"
-            @click="toggleCollapse"
-          >
-            {{ isCollapsed ? 'Expand ▾' : 'Collapse ▴' }}
-          </button>
+            <!-- 折叠/展开按钮 - 放在内容底部 -->
+            <button
+              v-if="isLongMessage"
+              class="toggle-button"
+              @click.stop="toggleCollapse"
+            >
+              {{ isCollapsed ? t('common.expand') : t('common.collapse') }} {{ isCollapsed ? '▾' : '▴' }}
+            </button>
+          </div>
 
           <!-- 上下文大小指示器（发送时的快照） -->
           <ContextUsageIndicator
@@ -146,6 +146,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
 import { onClickOutside } from '@vueuse/core'
+import { useI18n } from '@/composables/useI18n'
 import type { ImageBlock, ContentBlock } from '@/types/message'
 import type { ContextReference } from '@/types/display'
 import type { ParsedCurrentOpenFile } from '@/utils/xmlTagParser'
@@ -175,6 +176,9 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+// i18n
+const { t } = useI18n()
 
 // 折叠状态
 const isCollapsed = ref(true)
@@ -647,19 +651,21 @@ function closeImagePreview() {
 }
 
 .bubble-content.collapsed {
-  max-height: 120px;
+  max-height: 150px;
   overflow: hidden;
   position: relative;
 }
 
-.bubble-content.collapsed::after {
+.bubble-content.collapsed::before {
   content: '';
   position: absolute;
-  bottom: 0;
+  bottom: 28px;  /* 按钮高度 + 一点间距 */
   left: 0;
   right: 0;
   height: 40px;
   background: linear-gradient(to bottom, transparent, var(--theme-selection-background));
+  pointer-events: none;
+  z-index: 1;
 }
 
 .message-text {
@@ -747,20 +753,25 @@ function closeImagePreview() {
 
 
 .toggle-button {
-  padding: 4px 10px;
-  margin-top: 6px;
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  margin-top: 8px;
   background: transparent;
-  border: 1px solid var(--theme-border);
-  border-radius: 4px;
-  font-size: 11px;
-  color: var(--theme-secondary-foreground);
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 12px;
+  color: var(--theme-selection-foreground);
+  opacity: 0.8;
   cursor: pointer;
   transition: all 0.2s ease;
+  position: relative;
+  z-index: 2;
 }
 
 .toggle-button:hover {
-  background: var(--theme-hover-background);
-  border-color: var(--theme-border);
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* 回放消息（isReplay=true）：靠左，无气泡，md 渲染 */

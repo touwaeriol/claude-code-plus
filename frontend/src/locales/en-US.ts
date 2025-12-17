@@ -25,7 +25,9 @@ export default {
     copyFailed: 'Copy failed',
     copied: 'Copied',
     renderFailed: 'Render failed',
-    noMore: 'No more'
+    noMore: 'No more',
+    expand: 'Expand',
+    collapse: 'Collapse'
   },
   chat: {
     placeholder: '',

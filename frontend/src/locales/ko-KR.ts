@@ -24,7 +24,10 @@ export default {
     cancelled: '취소됨',
     copyFailed: '복사 실패',
     copied: '복사됨',
-    renderFailed: '렌더링 실패'
+    renderFailed: '렌더링 실패',
+    noMore: '더 이상 없음',
+    expand: '펼치기',
+    collapse: '접기'
   },
   chat: {
     placeholder: '',

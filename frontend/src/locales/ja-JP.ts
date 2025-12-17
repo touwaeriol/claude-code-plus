@@ -24,7 +24,10 @@ export default {
     cancelled: 'キャンセル済み',
     copyFailed: 'コピー失敗',
     copied: 'コピー済み',
-    renderFailed: 'レンダリング失敗'
+    renderFailed: 'レンダリング失敗',
+    noMore: 'これ以上はありません',
+    expand: '展開',
+    collapse: '折りたたむ'
   },
   chat: {
     placeholder: '',

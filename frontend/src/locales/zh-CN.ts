@@ -25,7 +25,9 @@ export default {
     copyFailed: '复制失败',
     copied: '已复制',
     renderFailed: '渲染失败',
-    noMore: '没有更多了'
+    noMore: '没有更多了',
+    expand: '展开',
+    collapse: '收起'
   },
   chat: {
     placeholder: '',
