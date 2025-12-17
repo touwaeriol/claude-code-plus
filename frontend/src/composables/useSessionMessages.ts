@@ -293,7 +293,6 @@ export function useSessionMessages(
       stats.addTokenUsage(
         usage.input_tokens ?? usage.inputTokens ?? 0,
         usage.output_tokens ?? usage.outputTokens ?? 0,
-        usage.cache_creation_tokens ?? usage.cacheCreationTokens ?? 0,
         usage.cache_read_tokens ?? usage.cacheReadTokens ?? 0
       )
     }
@@ -708,7 +707,6 @@ export function useSessionMessages(
       stats.addTokenUsage(
         inputTokens,
         outputTokens,
-        usage.cache_creation_input_tokens || 0,
         usage.cache_read_input_tokens || 0
       )
       log.debug('[useSessionMessages] 非流式模式，从 RpcResultMessage 累加 usage')

@@ -173,41 +173,32 @@ export function useSessionStats() {
    *
    * @param inputTokens 输入 tokens
    * @param outputTokens 输出 tokens
-   * @param cacheCreationTokens 新创建到缓存的 tokens
    * @param cacheReadTokens 从缓存读取的 tokens
    */
   function addTokenUsage(
     inputTokens: number,
     outputTokens: number,
-    cacheCreationTokens: number = 0,
     cacheReadTokens: number = 0
   ): void {
-    // 本次请求新增的上行 tokens = 非缓存 input + 新写入缓存
-    // 不包括 cacheReadTokens（历史缓存内容）
-    const newInputTokens = inputTokens + cacheCreationTokens
-
     if (requestTracker.value) {
-      requestTracker.value.inputTokens += newInputTokens
+      requestTracker.value.inputTokens += inputTokens
       requestTracker.value.outputTokens += outputTokens
     }
 
     // 累加到累计统计
-    cumulativeStats.totalInputTokens += newInputTokens
+    cumulativeStats.totalInputTokens += inputTokens
     cumulativeStats.totalOutputTokens += outputTokens
-
-    // 计算总缓存（保留兼容）
-    const cachedInputTokens = cacheCreationTokens + cacheReadTokens
 
     // 更新最后一条消息的 usage（用于完整上下文大小计算）
     lastMessageUsage.value = {
       inputTokens,
       outputTokens,
-      cachedInputTokens,
-      cacheCreationTokens,
+      cachedInputTokens: cacheReadTokens,
+      cacheCreationTokens: 0,
       cacheReadTokens
     }
 
-    log.debug(`[useSessionStats] 添加 Token 使用: newInput=${newInputTokens} (input=${inputTokens} + cacheCreation=${cacheCreationTokens}), output=${outputTokens}, cacheRead=${cacheReadTokens}`)
+    log.debug(`[useSessionStats] 添加 Token 使用: input=${inputTokens}, output=${outputTokens}, cacheRead=${cacheReadTokens}`)
   }
 
   /**
