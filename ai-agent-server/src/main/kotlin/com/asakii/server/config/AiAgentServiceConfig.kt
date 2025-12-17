@@ -34,6 +34,9 @@ data class ClaudeDefaults(
     val enableJetBrainsMcp: Boolean = true,
     val enableContext7Mcp: Boolean = false,
     val context7ApiKey: String? = null,
+    val enableSequentialThinkingMcp: Boolean = false,
+    // MCP 系统提示词（由 plugin 模块加载并传入）
+    val mcpInstructions: String? = null,
     // 思考配置
     val defaultThinkingLevel: String = "HIGH",  // 默认思考等级：OFF, LOW, MEDIUM, HIGH, VERY_HIGH, CUSTOM
     val defaultThinkingTokens: Int = 8192,      // 默认思考 token 数量

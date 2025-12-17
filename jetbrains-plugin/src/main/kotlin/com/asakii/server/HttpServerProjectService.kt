@@ -138,6 +138,8 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                         enableJetBrainsMcp = settings.enableJetBrainsMcp,
                         enableContext7Mcp = settings.enableContext7Mcp,
                         context7ApiKey = settings.context7ApiKey.takeIf { it.isNotBlank() },
+                        enableSequentialThinkingMcp = settings.enableSequentialThinkingMcp,
+                        mcpInstructions = loadMcpInstructions(settings),
                         dangerouslySkipPermissions = settings.defaultBypassPermissions,
                         defaultThinkingLevel = settings.defaultThinkingLevel,
                         defaultThinkingTokens = settings.defaultThinkingTokens,
@@ -258,6 +260,42 @@ class HttpServerProjectService(private val project: Project) : Disposable {
 
         scope.cancel()
         logger.info("✅ HTTP Server Project Service disposed")
+    }
+
+    /**
+     * 加载 MCP 系统提示词
+     * 根据启用的 MCP 服务器加载对应的指令文件
+     */
+    private fun loadMcpInstructions(settings: AgentSettingsService): String? {
+        val instructions = mutableListOf<String>()
+
+        if (settings.enableContext7Mcp) {
+            loadResourceFile("prompts/context7-mcp-instructions.md")?.let {
+                instructions.add(it)
+                logger.info("📝 Loaded Context7 MCP instructions")
+            }
+        }
+
+        if (settings.enableSequentialThinkingMcp) {
+            loadResourceFile("prompts/sequential-thinking-mcp-instructions.md")?.let {
+                instructions.add(it)
+                logger.info("📝 Loaded Sequential Thinking MCP instructions")
+            }
+        }
+
+        return instructions.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
+    }
+
+    /**
+     * 从资源文件加载内容
+     */
+    private fun loadResourceFile(path: String): String? {
+        return try {
+            javaClass.classLoader.getResourceAsStream(path)?.bufferedReader()?.use { it.readText() }
+        } catch (e: Exception) {
+            logger.warning("⚠️ Failed to load resource file: $path - ${e.message}")
+            null
+        }
     }
 
     /**

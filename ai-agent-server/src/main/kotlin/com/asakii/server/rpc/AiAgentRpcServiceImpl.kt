@@ -639,17 +639,14 @@ class AiAgentRpcServiceImpl(
         // 使用 appendSystemPromptFile 追加，不会替换 Claude Code 默认提示词
         var mcpSystemPromptAppendix = buildMcpSystemPromptAppendix(mcpServers)
 
-        // 如果启用了 Context7 MCP，追加其系统提示词
-        if (defaults.enableContext7Mcp) {
-            val context7Instructions = loadContext7Instructions()
-            if (context7Instructions.isNotBlank()) {
-                mcpSystemPromptAppendix = if (mcpSystemPromptAppendix.isNotBlank()) {
-                    "$mcpSystemPromptAppendix\n\n$context7Instructions"
-                } else {
-                    context7Instructions
-                }
-                sdkLog.info("📝 [buildClaudeOverrides] 已追加 Context7 系统提示词")
+        // 追加由 plugin 模块加载的 MCP 指令（Context7、Playwright 等）
+        defaults.mcpInstructions?.takeIf { it.isNotBlank() }?.let { instructions ->
+            mcpSystemPromptAppendix = if (mcpSystemPromptAppendix.isNotBlank()) {
+                "$mcpSystemPromptAppendix\n\n$instructions"
+            } else {
+                instructions
             }
+            sdkLog.info("📝 [buildClaudeOverrides] 已追加 MCP 系统提示词")
         }
 
         // canUseTool 回调：通过 RPC 调用前端获取用户授权（带 tool_use_id 和 permissionSuggestions）
@@ -761,21 +758,6 @@ class AiAgentRpcServiceImpl(
                 server.getSystemPromptAppendix()?.takeIf { it.isNotBlank() }
             }
             .joinToString("\n\n")
-    }
-
-    /**
-     * 加载 Context7 MCP 的系统提示词
-     *
-     * @return Context7 系统提示词内容，加载失败返回空字符串
-     */
-    private fun loadContext7Instructions(): String {
-        return try {
-            val inputStream = javaClass.classLoader.getResourceAsStream("prompts/context7-mcp-instructions.md")
-            inputStream?.bufferedReader()?.use { it.readText() } ?: ""
-        } catch (e: Exception) {
-            sdkLog.warn("⚠️ [loadContext7Instructions] 加载 Context7 提示词失败: ${e.message}")
-            ""
-        }
     }
 
     /**
