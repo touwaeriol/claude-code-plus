@@ -26,6 +26,9 @@ export interface ThemeColors {
   fontSize?: number
   editorFontFamily?: string
   editorFontSize?: number
+  // 状态颜色（可选，后端可配置）
+  pendingColor?: string   // 解析参数中（默认使用 accentColor）
+  runningColor?: string   // 执行中（默认使用 successColor）
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system'
@@ -231,9 +234,67 @@ export class ThemeService {
       'SF Mono',
       'Segoe UI',
       'Tahoma',
-      'Geneva'
+      'Geneva',
+      // 常见中文字体
+      'Microsoft YaHei',
+      'Microsoft YaHei UI',
+      '微软雅黑',
+      'SimHei',
+      '黑体',
+      'SimSun',
+      '宋体',
+      'PingFang SC',
+      'Hiragino Sans GB',
+      'STHeiti',
+      'WenQuanYi Micro Hei'
     ]
     return systemFonts.some((sf) => sf.toLowerCase() === fontName.toLowerCase())
+  }
+
+  /**
+   * IDEA/JBR 内置字体白名单（只有这些字体可以从后端下载）
+   */
+  private readonly ideaBuiltinFonts = [
+    'JetBrains Mono',
+    'Fira Code',
+    'Droid Sans',
+    'Droid Sans Mono',
+    'Droid Serif',
+    'Inconsolata',
+    'Inter'
+  ]
+
+  /**
+   * 检查字体是否是 IDEA 内置字体（可从后端下载）
+   */
+  private isIdeaBuiltinFont(fontName: string): boolean {
+    return this.ideaBuiltinFonts.some(
+      (f) => f.toLowerCase() === fontName.toLowerCase()
+    )
+  }
+
+  /**
+   * 检测字体是否在系统中可用
+   * 通过比较渲染宽度来判断字体是否存在
+   */
+  private isFontAvailable(fontFamily: string): boolean {
+    // 使用 Canvas 检测字体是否可用
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return false
+
+    const testString = 'abcdefghijklmnopqrstuvwxyz0123456789'
+
+    // 使用默认 monospace 作为基准
+    ctx.font = '72px monospace'
+    const defaultWidth = ctx.measureText(testString).width
+
+    // 使用目标字体（带 monospace 回退）
+    ctx.font = `72px "${fontFamily}", monospace`
+    const testWidth = ctx.measureText(testString).width
+
+    // 如果宽度不同，说明字体存在
+    return defaultWidth !== testWidth
   }
 
   /**
@@ -246,12 +307,25 @@ export class ThemeService {
       return
     }
 
+    // 检测字体是否已在系统中可用
+    if (this.isFontAvailable(fontName)) {
+      console.log(`🔤 [Font] Already available in system: ${fontName}`)
+      this.loadedFonts.add(fontName)
+      return
+    }
+
+    // 检查是否是 IDEA 内置字体（只有内置字体才尝试下载）
+    if (!this.isIdeaBuiltinFont(fontName)) {
+      console.log(`🔤 [Font] Not an IDEA builtin font, skip download: ${fontName}`)
+      return
+    }
+
     try {
       // 获取后端 URL
       const serverUrl = this.getServerUrl()
       const fontUrl = `${serverUrl}/api/font/${encodeURIComponent(fontName)}`
 
-      console.log(`🔤 [Font] Fetching: ${fontUrl}`)
+      console.log(`🔤 [Font] Downloading IDEA builtin font: ${fontUrl}`)
 
       const response = await fetch(fontUrl)
 
@@ -513,7 +587,10 @@ export class ThemeService {
       '--theme-info-background': theme.infoBackground,
       '--theme-code-background': theme.codeBackground,
       '--theme-secondary-foreground': theme.secondaryForeground,
-      '--theme-card-background': theme.panelBackground
+      '--theme-card-background': theme.panelBackground,
+      // 状态颜色（使用后端配置或回退到默认值）
+      '--theme-pending': theme.pendingColor || theme.accentColor,
+      '--theme-running': theme.runningColor || theme.successColor
     }
 
     // 字体变量（如果存在）

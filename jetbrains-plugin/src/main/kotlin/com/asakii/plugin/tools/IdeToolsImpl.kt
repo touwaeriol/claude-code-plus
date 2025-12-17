@@ -14,6 +14,7 @@ import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.l10n.LocalizationUtil
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.fileTypes.FileTypeManager
@@ -707,6 +708,27 @@ class IdeToolsImpl(
     override fun hasIdeEnvironment(): Boolean = true
 
     /**
+     * IDEA/JBR 内置字体名称到文件名的映射表
+     * 只包含 IDEA 内置字体，系统字体让浏览器自己找
+     */
+    private val fontNameMapping = mapOf(
+        // JetBrains 字体
+        "jetbrains mono" to "JetBrainsMono-Regular",
+        "jetbrainsmono" to "JetBrainsMono-Regular",
+        "fira code" to "FiraCode-Regular",
+        "firacode" to "FiraCode-Regular",
+        // JBR 内置字体
+        "droid sans" to "DroidSans",
+        "droidsans" to "DroidSans",
+        "droid sans mono" to "DroidSansMono",
+        "droidsansmono" to "DroidSansMono",
+        "droid serif" to "DroidSerif-Regular",
+        "droidserif" to "DroidSerif-Regular",
+        "inconsolata" to "Inconsolata",
+        "inter" to "Inter-Regular",
+    )
+
+    /**
      * 获取字体文件数据
      *
      * 从系统字体目录中查找指定字体并返回其二进制数据
@@ -717,38 +739,29 @@ class IdeToolsImpl(
             // 标准化字体名称（移除空格、转小写）
             val normalizedName = fontFamily.lowercase().replace(" ", "")
 
-            // 获取系统字体目录
+            // 查找映射表中的文件名
+            val mappedFileName = fontNameMapping[normalizedName]
+            logger.info("🔤 [Font] Looking for: $fontFamily (normalized: $normalizedName, mapped: $mappedFileName)")
+
+            // 只搜索 IDEA/JBR 内置字体目录（系统字体让浏览器自己找）
             val fontDirs = mutableListOf<File>()
 
-            // Windows 字体目录
-            val windowsFontDir = File("C:\\Windows\\Fonts")
-            if (windowsFontDir.exists()) fontDirs.add(windowsFontDir)
-
-            // 用户字体目录 (Windows)
-            val userFontDir = File(System.getProperty("user.home"), "AppData/Local/Microsoft/Windows/Fonts")
-            if (userFontDir.exists()) fontDirs.add(userFontDir)
-
-            // macOS 字体目录
-            val macSystemFontDir = File("/System/Library/Fonts")
-            if (macSystemFontDir.exists()) fontDirs.add(macSystemFontDir)
-            val macLibraryFontDir = File("/Library/Fonts")
-            if (macLibraryFontDir.exists()) fontDirs.add(macLibraryFontDir)
-            val macUserFontDir = File(System.getProperty("user.home"), "Library/Fonts")
-            if (macUserFontDir.exists()) fontDirs.add(macUserFontDir)
-
-            // Linux 字体目录
-            val linuxFontDir = File("/usr/share/fonts")
-            if (linuxFontDir.exists()) fontDirs.add(linuxFontDir)
-            val linuxLocalFontDir = File("/usr/local/share/fonts")
-            if (linuxLocalFontDir.exists()) fontDirs.add(linuxLocalFontDir)
-            val linuxUserFontDir = File(System.getProperty("user.home"), ".fonts")
-            if (linuxUserFontDir.exists()) fontDirs.add(linuxUserFontDir)
-            val linuxUserFontDir2 = File(System.getProperty("user.home"), ".local/share/fonts")
-            if (linuxUserFontDir2.exists()) fontDirs.add(linuxUserFontDir2)
+            try {
+                val ideaHome = PathManager.getHomePath()
+                val jbrFontsDir = File(ideaHome, "jbr/lib/fonts")
+                if (jbrFontsDir.exists()) {
+                    fontDirs.add(jbrFontsDir)
+                    logger.info("🔤 [Font] JBR fonts dir: ${jbrFontsDir.absolutePath}")
+                } else {
+                    logger.warning("🔤 [Font] JBR fonts dir not found: ${jbrFontsDir.absolutePath}")
+                }
+            } catch (e: Exception) {
+                logger.warning("Failed to get IDEA home path: ${e.message}")
+            }
 
             // 搜索字体文件
             for (fontDir in fontDirs) {
-                val fontFile = findFontFile(fontDir, normalizedName, fontFamily)
+                val fontFile = findFontFile(fontDir, normalizedName, mappedFileName)
                 if (fontFile != null) {
                     val extension = fontFile.extension.lowercase()
                     val format = when (extension) {
@@ -786,8 +799,11 @@ class IdeToolsImpl(
 
     /**
      * 在目录中递归搜索字体文件
+     * @param dir 搜索目录
+     * @param normalizedName 标准化的字体名称（小写，无空格）
+     * @param mappedFileName 映射表中的文件名（可为空）
      */
-    private fun findFontFile(dir: File, normalizedName: String, @Suppress("UNUSED_PARAMETER") originalName: String): File? {
+    private fun findFontFile(dir: File, normalizedName: String, mappedFileName: String?): File? {
         val fontExtensions = setOf("ttf", "otf", "woff", "woff2")
 
         // 遍历目录（包括子目录）
@@ -795,7 +811,18 @@ class IdeToolsImpl(
             .filter { it.isFile && it.extension.lowercase() in fontExtensions }
             .toList()
 
-        // 首先尝试精确匹配（不区分大小写）
+        // 1. 首先尝试使用映射的文件名精确匹配
+        if (mappedFileName != null) {
+            val mappedLower = mappedFileName.lowercase()
+            for (file in files) {
+                val fileName = file.nameWithoutExtension.lowercase()
+                if (fileName == mappedLower || fileName.startsWith(mappedLower)) {
+                    return file
+                }
+            }
+        }
+
+        // 2. 尝试标准化名称精确匹配
         for (file in files) {
             val fileName = file.nameWithoutExtension.lowercase().replace(" ", "").replace("-", "").replace("_", "")
             if (fileName == normalizedName ||
@@ -805,7 +832,7 @@ class IdeToolsImpl(
             }
         }
 
-        // 尝试匹配常见变体
+        // 3. 尝试匹配常见变体
         val variants = listOf(
             normalizedName,
             "${normalizedName}regular",
