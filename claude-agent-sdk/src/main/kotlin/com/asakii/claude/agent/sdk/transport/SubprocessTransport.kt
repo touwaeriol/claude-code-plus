@@ -60,8 +60,45 @@ class SubprocessTransport(
         ignoreUnknownKeys = true
         isLenient = true
     }
-    
+
     private val logger = KotlinLogging.logger {}
+
+    /**
+     * 检测当前操作系统是否为 Windows
+     */
+    private fun isWindows(): Boolean {
+        return System.getProperty("os.name").lowercase().contains("windows")
+    }
+
+    /**
+     * 根据平台为参数添加引号（Windows 需要，Unix 不需要）
+     * @param arg 原始参数字符串
+     * @param isWindows 是否为 Windows 平台
+     * @return 处理后的参数字符串
+     */
+    private fun wrapArgForPlatform(arg: String, isWindows: Boolean): String {
+        return if (isWindows) {
+            "\"$arg\""
+        } else {
+            arg
+        }
+    }
+
+    /**
+     * 根据平台处理 JSON 参数（Windows 需要转义，Unix 直接传递）
+     * @param json JSON 字符串
+     * @param isWindows 是否为 Windows 平台
+     * @return 处理后的参数字符串
+     */
+    private fun wrapJsonForPlatform(json: String, isWindows: Boolean): String {
+        return if (isWindows) {
+            // Windows: 先转义反斜杠，再转义引号，最后用引号包裹
+            "\"" + json.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        } else {
+            // Unix: 直接传递 JSON 字符串
+            json
+        }
+    }
     
     override suspend fun connect() = withContext(Dispatchers.IO) {
         try {
@@ -308,6 +345,9 @@ class SubprocessTransport(
     private fun buildCommand(): List<String> {
         val command = mutableListOf<String>()
 
+        // 提前检测平台，避免重复调用
+        val isWindows = isWindows()
+
         // Base command - try to find claude executable (may return [node, cli.js] or [claude])
         command.addAll(findClaudeExecutable())
         
@@ -388,19 +428,19 @@ class SubprocessTransport(
             val tempFile = getOrCreateSystemPromptFile(appendContent)
             logger.info("📝 将 appendSystemPromptFile 写入临时文件: $tempFile")
             command.add("--append-system-prompt-file")
-            command.add("\"${tempFile.toAbsolutePath()}\"")
+            command.add(wrapArgForPlatform(tempFile.toAbsolutePath().toString(), isWindows))
         }
 
-        // Allowed tools（统一用引号包裹，工具名可能含特殊字符如 Bash(git:*)）
+        // Allowed tools（Windows 需要引号包裹，Unix 系统不需要）
         if (options.allowedTools.isNotEmpty()) {
             val toolsArg = options.allowedTools.joinToString(",")
-            command.addAll(listOf("--allowed-tools", "\"$toolsArg\""))
+            command.addAll(listOf("--allowed-tools", wrapArgForPlatform(toolsArg, isWindows)))
         }
 
         // Disallowed tools
         if (options.disallowedTools.isNotEmpty()) {
             val toolsArg = options.disallowedTools.joinToString(",")
-            command.addAll(listOf("--disallowed-tools", "\"$toolsArg\""))
+            command.addAll(listOf("--disallowed-tools", wrapArgForPlatform(toolsArg, isWindows)))
         }
 
         // Agents (programmatic subagents)
@@ -421,9 +461,8 @@ class SubprocessTransport(
                     }
                 }.toString()
 
-                // 统一转义：先转义反斜杠，再转义引号，最后用引号包裹
-                val escapedJson = "\"" + agentsJson.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-                command.addAll(listOf("--agents", escapedJson))
+                // 根据平台处理 JSON（Windows 需要转义，Unix 直接传递）
+                command.addAll(listOf("--agents", wrapJsonForPlatform(agentsJson, isWindows)))
                 logger.info("🤖 配置自定义代理: ${agents.keys.joinToString(", ")}")
             }
         }

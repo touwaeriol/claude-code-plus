@@ -36,6 +36,7 @@ import java.util.logging.Logger
  * - 继承 IdeToolsDefault 的通用实现（文件搜索、内容读取等）
  * - 覆盖需要 IDEA Platform API 的方法（openFile、showDiff、getTheme 等）
  */
+@Suppress("DEPRECATION")  // TODO: 迁移到 DiffEditorViewerFileEditors (需要 IntelliJ 2023.3+)
 class IdeToolsImpl(
     private val project: Project
 ) : IdeToolsDefault(project.basePath) {
@@ -422,6 +423,7 @@ class IdeToolsImpl(
                     val projectPath = project.basePath ?: ""
 
                     // 检查是否是 Diff 编辑器
+                    @Suppress("DEPRECATION")  // TODO: 迁移到 DiffEditorViewerFileEditors
                     if (selectedFileEditor is DiffRequestProcessorEditor) {
                         result = handleDiffEditor(selectedFileEditor, projectPath)
                         return@runReadAction
@@ -469,11 +471,14 @@ class IdeToolsImpl(
     }
 
     /**
-     * 处理 Diff 编辑器，获取 Diff 内容
-     * 支持所有 ContentDiffRequest 类型，包括 SimpleDiffRequest、LocalChangeListDiffRequest 等
+     * 处理 Diff 编辑器,获取 Diff 内容
+     * 支持所有 ContentDiffRequest 类型,包括 SimpleDiffRequest、LocalChangeListDiffRequest 等
+     * TODO: 迁移到 DiffEditorViewerFileEditors (需要 IntelliJ 2023.3+)
      */
+    @Suppress("DEPRECATION")
     private fun handleDiffEditor(diffEditor: DiffRequestProcessorEditor, projectPath: String): ActiveFileInfo? {
         return try {
+            @Suppress("DEPRECATION")
             val processor = diffEditor.processor
             val request = processor.activeRequest
 
@@ -624,10 +629,13 @@ class IdeToolsImpl(
         var endColumn: Int? = null
         var selectedContent: String? = null
 
-        if (hasSelection && selectedEditor != null) {
-            val document = selectedEditor.document
-            val selectionStart = selectionModel!!.selectionStart
-            val selectionEnd = selectionModel.selectionEnd
+        // 智能转换: 如果 hasSelection 为 true,则 selectionModel 和 selectedEditor 必然非空
+        if (hasSelection) {
+            val editor = selectedEditor!!
+            val selection = selectionModel!!
+            val document = editor.document
+            val selectionStart = selection.selectionStart
+            val selectionEnd = selection.selectionEnd
 
             startLine = document.getLineNumber(selectionStart) + 1 // 转换为 1-based
             startColumn = selectionStart - document.getLineStartOffset(startLine - 1) + 1
@@ -635,7 +643,7 @@ class IdeToolsImpl(
             endColumn = selectionEnd - document.getLineStartOffset(endLine - 1) + 1
 
             // 获取选中的文本内容
-            selectedContent = selectionModel.selectedText
+            selectedContent = selection.selectedText
         }
 
         if (hasSelection) {

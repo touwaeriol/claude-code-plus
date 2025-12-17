@@ -101,12 +101,13 @@ class HookBuilder {
     ) {
         val hookCallback: HookCallback = { input, toolUseId, context ->
             val toolName = input["tool_name"] as? String ?: ""
-            val toolInput = input["tool_input"] as? Map<*, *> ?: emptyMap<String, Any>()
-            
+            @Suppress("UNCHECKED_CAST")
+            val toolInput = (input["tool_input"] as? Map<*, *> ?: emptyMap<String, Any>()) as Map<String, Any>
+
             val toolCall = ToolCall(
                 toolName = toolName,
                 toolUseId = toolUseId,
-                input = toolInput as Map<String, Any>,
+                input = toolInput,
                 context = context
             )
             
