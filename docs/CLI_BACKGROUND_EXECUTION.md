@@ -13,6 +13,17 @@ Claude Code CLI 支持两种后台执行方式：
 | `&` 前缀 | 任务启动前 | 在消息开头加 `&` | 从一开始就以后台模式启动任务 |
 | Ctrl+B | 任务运行中 | 按下 Ctrl+B | 将正在运行的任务移到后台 |
 
+### ⚠️ 重要：两种不同的后台执行机制
+
+CLI 中存在**两种不同的后台执行机制**，分别用于不同类型的工具：
+
+| 工具类型 | Ctrl+B 回调 | 机制 | 变量 |
+|----------|-------------|------|------|
+| **子代理 (Task tool)** | `g()` - resolver | 解锁 `Promise.race` | `__backgroundSignalResolver` |
+| **Bash 命令** | `M()` - setter | 设置 `H = taskId` | `__bashBackgroundCallback` |
+
+这两种机制必须同时支持，才能实现完整的 SDK 后台执行功能。
+
 ---
 
 ## 1. 命令前缀识别系统
@@ -630,7 +641,195 @@ transport.write("\u0002")
 
 ---
 
-## 8. 参考文档
+## 8. AST 补丁实现详解
+
+本节详细说明 `001-run-in-background.js` 补丁的实现原理。
+
+### 8.1 补丁架构
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        AST 补丁应用流程                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Step 1: 添加模块级变量                                                   │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │  let __backgroundSignalResolver = null;  // 子代理后台信号          │ │
+│  │  let __bashBackgroundCallback = null;    // Bash 后台回调           │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+│  Step 2: 暴露子代理 resolver                                             │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │  // 在 Promise.race 定义处                                         │ │
+│  │  let g = () => { x() };                                            │ │
+│  │  __backgroundSignalResolver = g;  // ← 插入                        │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+│  Step 3: 添加 run_in_background 控制命令处理                             │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │  if (k.request.subtype === "run_in_background") {                  │ │
+│  │    __backgroundSignalResolver?.();    // 触发子代理后台             │ │
+│  │    __backgroundSignalResolver = null;                              │ │
+│  │    __bashBackgroundCallback?.();      // 触发 Bash 后台             │ │
+│  │    __bashBackgroundCallback = null;                                │ │
+│  │    g(k);  // 发送响应                                               │ │
+│  │  }                                                                 │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+│  Step 4: 暴露 Bash 后台回调                                              │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │  // 在 Bash 工具的 createElement(S81, {onBackground: M}) 调用前     │ │
+│  │  __bashBackgroundCallback = M;  // ← 插入                          │ │
+│  │  G({jsx: createElement(S81, {onBackground: M}), ...});             │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 8.2 两种后台机制的详细对比
+
+#### 子代理 (Task tool) 后台机制
+
+```javascript
+// 代码位置: ~line 2631
+// Promise.race 模式
+
+let x, m = new Promise((VA) => { x = VA });  // 创建 Promise
+let g = () => { x() };                        // g 是 resolver
+__backgroundSignalResolver = g;               // 暴露到模块级 (补丁添加)
+
+// 循环中
+OA = await Promise.race([
+  VA.then(ZA => ({type: "message", result: ZA})),  // 正常消息
+  m.then(() => ({type: "background"}))             // 后台信号 ← g() 触发
+]);
+
+if (OA.type === "background") {
+  // 创建 LocalAgentTask，任务继续在后台运行
+  return;
+}
+```
+
+**触发流程**:
+1. SDK 发送 `run_in_background` 控制消息
+2. `__backgroundSignalResolver?.()` 被调用
+3. `m` Promise 被 resolve
+4. `Promise.race` 返回 `{type: "background"}`
+5. 创建后台任务，前台返回
+
+#### Bash 命令后台机制
+
+```javascript
+// 代码位置: ~line 3132
+// 轮询检查模式
+
+let H = void 0;  // backgroundTaskId
+
+function q(y, h) {
+  O().then(x => {  // O() 返回任务 ID 的 Promise
+    H = x;          // 设置 backgroundTaskId
+    if (h) h(x);
+  });
+}
+
+function M() {
+  q("tengu_bash_command_background", ...);
+}
+
+// 循环中
+while (true) {
+  // ... 处理输出 ...
+
+  if (H) {  // 检查是否设置了 backgroundTaskId
+    return { stdout: "", stderr: "", code: 0, backgroundTaskId: H };
+  }
+
+  // 延时后显示 S81 组件
+  if (g >= threshold && G) {
+    __bashBackgroundCallback = M;  // 暴露到模块级 (补丁添加)
+    G({jsx: createElement(S81, {onBackground: M}), ...});
+  }
+
+  yield { type: "progress", ... };
+}
+```
+
+**触发流程**:
+1. SDK 发送 `run_in_background` 控制消息
+2. `__bashBackgroundCallback?.()` 被调用，即 `M()`
+3. `M()` 调用 `q()`，`q()` 内部 `O().then()` 设置 `H = taskId`
+4. 循环中 `if (H)` 检测到 `H` 有值
+5. 返回带有 `backgroundTaskId` 的结果
+
+### 8.3 AST 匹配策略
+
+#### Step 2: 子代理 resolver 暴露
+
+**匹配模式**: 在 `SequenceExpression` 中查找：
+- 赋值表达式，右侧是箭头函数
+- 箭头函数体是单个函数调用（无参数）
+- 后续表达式是布尔值赋值
+
+```javascript
+// 匹配: x, m = new Promise(...), g = () => { x() }, t = false
+//                                ↑ 这里匹配并插入暴露代码
+```
+
+#### Step 4: Bash 后台回调暴露
+
+**匹配模式**: 查找 `CallExpression`：
+- `callee` 是 `*.createElement`
+- 第一个参数是标识符 (S81)
+- 第二个参数是对象，包含 `onBackground` 属性
+- 同一对象包含 `shouldHidePromptInput` 或 `showSpinner`（确认是 Bash 工具）
+
+```javascript
+// 匹配: createElement(S81, {onBackground: M, shouldHidePromptInput: false, ...})
+//       ↑ 在此调用前插入 __bashBackgroundCallback = M
+```
+
+### 8.4 补丁文件结构
+
+```
+claude-agent-sdk/cli-patches/
+├── patches/
+│   ├── 001-run-in-background.js   # 主补丁文件
+│   └── index.js                    # 补丁注册表
+├── patch-cli.js                    # 补丁应用脚本
+├── claude-cli-2.0.69.js           # 原始 CLI
+└── package.json                    # 依赖 (Babel)
+```
+
+### 8.5 使用方法
+
+```bash
+cd claude-agent-sdk/cli-patches
+
+# 安装依赖
+npm install
+
+# 验证补丁 (dry-run)
+node patch-cli.js --dry-run claude-cli-2.0.69.js
+
+# 应用补丁
+node patch-cli.js claude-cli-2.0.69.js ../src/main/resources/bundled/claude-cli-2.0.69-enhanced.js
+```
+
+### 8.6 验证检查项
+
+补丁应用后，验证以下内容存在于增强版 CLI 中：
+
+| 检查项 | 模式 | 说明 |
+|--------|------|------|
+| 子代理模块级变量 | `__backgroundSignalResolver` | Step 1 添加 |
+| 子代理变量赋值 | `__backgroundSignalResolver=` | Step 2 添加 |
+| Bash 模块级变量 | `__bashBackgroundCallback` | Step 1 添加 |
+| Bash 变量赋值 | `__bashBackgroundCallback=` | Step 4 添加 |
+| 控制命令 | `run_in_background` | Step 3 添加 |
+
+---
+
+## 9. 参考文档
 
 - [SDK 数据流架构](./DATA_FLOW_ARCHITECTURE.md)
 - [SDK 数据模型](./sdk-data-models.md)

@@ -289,24 +289,24 @@ fun verifyMd5(file: File, expectedMd5: String): Boolean {
     return actualMd5.equals(expectedMd5, ignoreCase = true)
 }
 
-// 下载 CLI 任务 - 从 npm 包下载 cli.js（跨平台方案）
+// 下载 CLI 任务 - 从 npm 包下载 cli.js 到 cli-patches 目录（用于打补丁）
 val downloadCli = tasks.register("downloadCli") {
     group = "build"
-    description = "从 npm 包下载 Claude CLI"
+    description = "从 npm 包下载 Claude CLI 到 cli-patches 目录"
 
     val propsFile = file("cli-version.properties")
-    val bundledDirFile = file("src/main/resources/bundled")
+    val cliPatchesDirFile = file("cli-patches")  // 改为 cli-patches 目录
     val buildDirFile = layout.buildDirectory.get().asFile
 
     inputs.file(propsFile)
-    outputs.dir(bundledDirFile)
+    outputs.dir(cliPatchesDirFile)
 
     // 确保 CLI 文件实际存在，而不仅仅是目录存在
     outputs.upToDateWhen {
         val props = Properties()
         propsFile.inputStream().use { props.load(it) }
         val cliVer = props.getProperty("cli.version") ?: return@upToDateWhen false
-        val cliJsFile = bundledDirFile.resolve("claude-cli-$cliVer.js")
+        val cliJsFile = cliPatchesDirFile.resolve("claude-cli-$cliVer.js")
         cliJsFile.exists() && cliJsFile.length() > 0
     }
 
@@ -316,20 +316,24 @@ val downloadCli = tasks.register("downloadCli") {
         val cliVer = props.getProperty("cli.version") ?: error("cli.version missing")
         val npmVer = props.getProperty("npm.version") ?: error("npm.version missing")
 
-        val cliJsFile = bundledDirFile.resolve("claude-cli-$cliVer.js")
+        val cliJsFile = cliPatchesDirFile.resolve("claude-cli-$cliVer.js")
         if (cliJsFile.exists()) {
-            println("⏭️  claude-cli-$cliVer.js 已存在，跳过下载")
+            println("⏭️  claude-cli-$cliVer.js 已存在于 cli-patches，跳过下载")
             return@doLast
         }
 
-        bundledDirFile.mkdirs()
+        cliPatchesDirFile.mkdirs()
 
-        // 清理旧版本 cli.js
-        bundledDirFile.listFiles { file -> file.name.startsWith("claude-cli-") && file.name != cliJsFile.name }
-            ?.forEach { old ->
-                println("🧹 检测到旧版本 CLI: ${old.name}，已删除")
-                old.delete()
-            }
+        // 清理旧版本 cli.js（只清理原始版本，不清理 enhanced 版本）
+        cliPatchesDirFile.listFiles { file ->
+            file.name.startsWith("claude-cli-") &&
+            file.name.endsWith(".js") &&
+            !file.name.contains("-enhanced") &&
+            file.name != cliJsFile.name
+        }?.forEach { old ->
+            println("🧹 检测到旧版本 CLI: ${old.name}，已删除")
+            old.delete()
+        }
 
         println("========================================")
         println("下载 Claude CLI (cli.js) 版本: $cliVer")
@@ -385,7 +389,7 @@ val downloadCli = tasks.register("downloadCli") {
 
             println("\n========================================")
             println("✅ 下载完成！")
-            println("   文件: ${cliJsFile.name}")
+            println("   文件: cli-patches/${cliJsFile.name}")
             println("========================================")
 
         } catch (e: Exception) {
@@ -396,16 +400,28 @@ val downloadCli = tasks.register("downloadCli") {
     }
 }
 
-// 清理 bundled CLI
+// 清理 CLI 文件
 val cleanCli = tasks.register("cleanCli") {
     group = "build"
-    description = "清理绑定的 CLI 二进制文件"
+    description = "清理 CLI 文件（bundled 和 cli-patches 目录）"
 
     val bundledDirFile = file("src/main/resources/bundled")
+    val cliPatchesDirFile = file("cli-patches")
 
     doLast {
-        bundledDirFile.listFiles()?.forEach { it.delete() }
-        println("✅ 已清理 bundled CLI")
+        // 清理 bundled 目录（增强版 CLI）
+        bundledDirFile.listFiles { file -> file.name.startsWith("claude-cli-") }?.forEach {
+            it.delete()
+            println("🧹 已删除: bundled/${it.name}")
+        }
+        // 清理 cli-patches 目录（原始 CLI）
+        cliPatchesDirFile.listFiles { file ->
+            file.name.startsWith("claude-cli-") && file.name.endsWith(".js")
+        }?.forEach {
+            it.delete()
+            println("🧹 已删除: cli-patches/${it.name}")
+        }
+        println("✅ 已清理 CLI 文件")
     }
 }
 
@@ -556,12 +572,17 @@ val patchCli = tasks.register("patchCli") {
         propsFile.inputStream().use { props.load(it) }
         val cliVer = props.getProperty("cli.version") ?: error("cli.version missing")
 
-        val cliJsFile = bundledDirFile.resolve("claude-cli-$cliVer.js")
+        // 从 cli-patches 目录读取原始 CLI
+        val cliJsFile = cliPatchesDir.resolve("claude-cli-$cliVer.js")
+        // 输出增强版到 bundled 目录
         val enhancedFile = bundledDirFile.resolve("claude-cli-$cliVer-enhanced.js")
 
         if (!cliJsFile.exists()) {
             throw GradleException("CLI 文件不存在: ${cliJsFile.absolutePath}")
         }
+
+        // 确保 bundled 目录存在
+        bundledDirFile.mkdirs()
 
         println("========================================")
         println("使用 AST 转换应用补丁")

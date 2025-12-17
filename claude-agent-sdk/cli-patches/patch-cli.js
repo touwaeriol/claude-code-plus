@@ -137,8 +137,10 @@ console.log();
 console.log('🔍 验证补丁结果...');
 
 const verifications = [
-  { pattern: '__backgroundSignalResolver', desc: '模块级变量' },
-  { pattern: '__backgroundSignalResolver=', desc: '变量赋值' },
+  { pattern: '__backgroundSignalResolver', desc: '子代理模块级变量' },
+  { pattern: '__backgroundSignalResolver=', desc: '子代理变量赋值' },
+  { pattern: '__bashBackgroundCallback', desc: 'Bash 模块级变量' },
+  { pattern: '__bashBackgroundCallback=', desc: 'Bash 变量赋值' },
   { pattern: 'run_in_background', desc: '控制命令' }
 ];
 
