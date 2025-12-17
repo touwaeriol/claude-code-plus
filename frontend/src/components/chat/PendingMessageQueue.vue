@@ -14,7 +14,21 @@
         class="queue-item"
       >
         <span class="item-index">{{ index + 1 }}.</span>
-        <span class="item-preview">{{ formatPreview(msg) }}</span>
+        <!-- 按原始顺序渲染内容：contexts → 文本 → 图片 -->
+        <div class="item-content">
+          <template v-for="(item, itemIndex) in getOrderedPreviewItems(msg)" :key="itemIndex">
+            <!-- 图片缩略图 -->
+            <img
+              v-if="item.type === 'image'"
+              :src="item.src"
+              class="item-image-thumb"
+              alt="图片"
+              @click="openImagePreview(item.src!)"
+            />
+            <!-- 文本/标签 -->
+            <span v-else class="item-text">{{ item.text }}</span>
+          </template>
+        </div>
         <div class="item-actions">
           <!-- 打断并发送按钮 -->
           <button
@@ -54,14 +68,20 @@
         </div>
       </div>
     </div>
+
+    <!-- 图片预览弹窗 -->
+    <div v-if="previewImage" class="image-preview-overlay" @click="closeImagePreview">
+      <img :src="previewImage" class="preview-image" alt="预览图片" @click.stop />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useI18n } from '@/composables/useI18n'
 import type { PendingMessage } from '@/types/session'
+import { hasCurrentOpenFileTag, parseCurrentOpenFileTag, removeCurrentOpenFileTag } from '@/utils/xmlTagParser'
 
 const { t } = useI18n()
 const sessionStore = useSessionStore()
@@ -78,34 +98,108 @@ const emit = defineEmits<{
   (e: 'force-send', id: string): void
 }>()
 
-/**
- * 格式化消息预览（一行显示）
- */
-function formatPreview(msg: PendingMessage): string {
-  const parts: string[] = []
+// 图片预览状态
+const previewImage = ref<string | null>(null)
 
-  // 上下文
+function openImagePreview(src: string) {
+  previewImage.value = src
+}
+
+function closeImagePreview() {
+  previewImage.value = null
+}
+
+/**
+ * 从路径中提取文件名
+ */
+function getFileName(filePath: string): string {
+  const parts = filePath.replace(/\\/g, '/').split('/')
+  return parts[parts.length - 1] || filePath
+}
+
+/**
+ * 预览项类型
+ */
+interface PreviewItem {
+  type: 'text' | 'image'
+  text?: string
+  src?: string
+}
+
+/**
+ * 按原始顺序生成预览项
+ * 顺序：current-open-file 标签 → contexts（文件标签、图片）→ contents（文本、图片）
+ */
+function getOrderedPreviewItems(msg: PendingMessage): PreviewItem[] {
+  const items: PreviewItem[] = []
+
+  // 1. 先处理 current-open-file 标签（从 contents 中提取，放在最前面）
+  let currentOpenFileText = ''
+  for (const block of msg.contents) {
+    if (block.type === 'text' && 'text' in block) {
+      const text = (block as any).text as string
+      if (hasCurrentOpenFileTag(text)) {
+        const parsed = parseCurrentOpenFileTag(text)
+        if (parsed) {
+          const fileName = getFileName(parsed.path)
+          if (parsed.startLine && parsed.endLine) {
+            const startCol = parsed.startColumn || 1
+            const endCol = parsed.endColumn || 1
+            currentOpenFileText = `[${fileName}:${parsed.startLine}:${startCol}-${parsed.endLine}:${endCol}]`
+          } else if (parsed.line) {
+            const col = parsed.column || 1
+            currentOpenFileText = `[${fileName}:${parsed.line}:${col}]`
+          } else {
+            currentOpenFileText = `[${fileName}]`
+          }
+        }
+        break
+      }
+    }
+  }
+  if (currentOpenFileText) {
+    items.push({ type: 'text', text: currentOpenFileText })
+  }
+
+  // 2. contexts（文件标签、图片）- 按原始顺序
   if (msg.contexts?.length) {
     for (const ctx of msg.contexts) {
-      if (ctx.type === 'image') {
-        parts.push('[Img]')
-      } else if (ctx.type === 'file') {
+      if (ctx.type === 'file') {
         const fileName = ctx.uri?.split('/').pop() || ctx.uri
-        parts.push(`[@${fileName}]`)
+        items.push({ type: 'text', text: `[@${fileName}]` })
+      } else if (ctx.type === 'image' && (ctx as any).base64Data) {
+        const mimeType = (ctx as any).mimeType || 'image/png'
+        items.push({ type: 'image', src: `data:${mimeType};base64,${(ctx as any).base64Data}` })
       }
     }
   }
 
-  // 输入框内容 - 不在此处截断，由 CSS 的 text-overflow: ellipsis 处理
+  // 3. contents（文本、图片）- 按原始顺序
   for (const block of msg.contents) {
     if (block.type === 'text' && 'text' in block) {
-      parts.push((block as any).text as string)
-    } else if (block.type === 'image') {
-      parts.push('[Image]')
+      let text = (block as any).text as string
+      // 移除 current-open-file 标签（已在上面单独处理）
+      if (hasCurrentOpenFileTag(text)) {
+        text = removeCurrentOpenFileTag(text)
+      }
+      if (text.trim()) {
+        items.push({ type: 'text', text: text.trim() })
+      }
+    } else if (block.type === 'image' && 'source' in block) {
+      const source = (block as any).source
+      if (source?.type === 'base64' && source.data) {
+        const mimeType = source.media_type || 'image/png'
+        items.push({ type: 'image', src: `data:${mimeType};base64,${source.data}` })
+      }
     }
   }
 
-  return parts.join(' ') || '(空消息)'
+  // 如果没有任何内容，显示空消息提示
+  if (items.length === 0) {
+    items.push({ type: 'text', text: '(空消息)' })
+  }
+
+  return items
 }
 </script>
 
@@ -170,9 +264,17 @@ function formatPreview(msg: PendingMessage): string {
   flex-shrink: 0;
 }
 
-.item-preview {
+/* 内容区域 - 按顺序显示文本和图片 */
+.item-content {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.item-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -231,6 +333,45 @@ function formatPreview(msg: PendingMessage): string {
 .action-btn.delete-btn:hover {
   background: rgba(239, 68, 68, 0.15);
   color: var(--theme-error, #dc2626);
+}
+
+/* 图片缩略图 */
+.item-image-thumb {
+  width: 20px;
+  height: 20px;
+  object-fit: cover;
+  border-radius: 3px;
+  border: 1px solid var(--theme-border);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.item-image-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* 图片预览弹窗 */
+.image-preview-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  cursor: pointer;
+}
+
+.preview-image {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 4px;
+  cursor: default;
 }
 
 </style>
