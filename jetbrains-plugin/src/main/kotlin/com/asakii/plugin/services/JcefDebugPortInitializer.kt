@@ -28,9 +28,14 @@ class JcefDebugPortInitializer : ApplicationInitializedListener {
 
     override suspend fun execute() {
         try {
+            // 使用反射调用 Registry API 避免 Kotlin 编译器生成 Companion 引用
+            // 这样可以兼容 2024.2.6 等旧版本（没有 Registry.Companion）
+            val registryClass = Class.forName("com.intellij.openapi.util.registry.Registry")
+
             // 检查当前 Registry 设置
             val currentPort = try {
-                Registry.get(REGISTRY_KEY).asInteger()
+                val intValueMethod = registryClass.getDeclaredMethod("intValue", String::class.java, Int::class.javaPrimitiveType)
+                intValueMethod.invoke(null, REGISTRY_KEY, -1) as Int
             } catch (_: Exception) {
                 -1
             }
@@ -39,9 +44,25 @@ class JcefDebugPortInitializer : ApplicationInitializedListener {
             if (currentPort == -1) {
                 val randomPort = findAvailablePort()
                 if (randomPort != null) {
-                    Registry.get(REGISTRY_KEY).setValue(randomPort)
+                    val success = try {
+                        val getMethod = registryClass.getDeclaredMethod("get", String::class.java)
+                        val registryValue = getMethod.invoke(null, REGISTRY_KEY)
+
+                        val setValueMethod = registryValue.javaClass.getDeclaredMethod("setValue", Int::class.javaPrimitiveType)
+                        setValueMethod.invoke(registryValue, randomPort)
+                        true
+                    } catch (e: Exception) {
+                        logger.warn("⚠️ Could not set JCEF debug port via reflection: ${e.message}")
+                        false
+                    }
+
                     initializedPort = randomPort
-                    logger.info("✅ JCEF debug port initialized to: $randomPort")
+                    if (success) {
+                        logger.info("✅ JCEF debug port initialized to: $randomPort")
+                    } else {
+                        logger.info("ℹ️ JCEF debug port available: $randomPort (manual setup required)")
+                        logger.info("ℹ️ To enable JCEF remote debugging, set Registry key '$REGISTRY_KEY' to $randomPort")
+                    }
                 } else {
                     logger.warn("⚠️ Could not find available port for JCEF debugging")
                 }

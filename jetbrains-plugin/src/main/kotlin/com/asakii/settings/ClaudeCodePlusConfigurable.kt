@@ -102,7 +102,7 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
                 false   // chooseMultiple
             ).withTitle("Select Node.js Executable")
              .withDescription("Choose the path to node executable")
-            addBrowseFolderListener(null, descriptor)
+            addBrowseFolderListener("Select Node.js Executable", "Choose the path to node executable", null, descriptor)
             toolTipText = "Leave empty to auto-detect from system PATH"
 
             val textField = this.textField
