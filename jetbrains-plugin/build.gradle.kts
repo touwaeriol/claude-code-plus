@@ -123,23 +123,23 @@ intellijPlatform {
             val verifyIdeVersion = providers.gradleProperty("verifyIdeVersion").orNull
 
             if (verifyIdeType != null && verifyIdeVersion != null) {
-                // CI 分批验证模式：只验证指定的单个 IDE
+                // CI 分批验证模式:只验证指定的单个 IDE
                 val ideType = when (verifyIdeType) {
                     "IC" -> IntelliJPlatformType.IntellijIdeaCommunity
                     "IU" -> IntelliJPlatformType.IntellijIdeaUltimate
                     "II" -> IntelliJPlatformType.IntellijIdea  // 2025.3+ 统一版本
                     else -> throw GradleException("Unknown IDE type: $verifyIdeType. Use IC, IU, or II")
                 }
-                ide(ideType, verifyIdeVersion)
+                create(ideType, verifyIdeVersion)
             } else {
-                // 本地开发模式：验证所有关键版本
+                // 本地开发模式:验证所有关键版本
                 // 2024.x 和 2025.1/2025.2 使用 IntellijIdeaCommunity
-                ide(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2.6")
-                ide(IntelliJPlatformType.IntellijIdeaCommunity, "2024.3.5")
-                ide(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1.5")
-                ide(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
+                create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2.6")
+                create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.3.5")
+                create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1.5")
+                create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
                 // 2025.3+ 使用统一的 IntellijIdea 类型
-                ide(IntelliJPlatformType.IntellijIdea, "2025.3")
+                create(IntelliJPlatformType.IntellijIdea, "2025.3")
             }
         }
     }
@@ -392,6 +392,13 @@ tasks {
     // 配置测试任务使用 JUnit Platform
     test {
         useJUnitPlatform()
+
+        // 🔧 禁用 CDS 和类共享警告
+        jvmArgs(
+            "-Xshare:off",  // 禁用类数据共享,避免 CDS 警告
+            "-XX:+UnlockDiagnosticVMOptions",
+            "-XX:-PrintWarnings",  // 禁用 VM 警告输出
+        )
     }
 
     // processResources 不自动依赖前端构建，由具体任务决定
@@ -421,10 +428,19 @@ tasks {
             "-Dconsole.encoding=UTF-8",
             "-Dsun.stdout.encoding=UTF-8",
             "-Dsun.stderr.encoding=UTF-8",
+            // 🔧 禁用 CDS 和类共享警告
+            "-Xshare:off",  // 禁用类数据共享,避免 CDS 警告
+            "-XX:+UnlockDiagnosticVMOptions",
+            "-XX:-PrintWarnings",  // 禁用 VM 警告输出
         )
     }
 
     buildSearchableOptions {
+        enabled = false
+    }
+
+    // 禁用 prepareJarSearchableOptions，因为 buildSearchableOptions 已禁用
+    prepareJarSearchableOptions {
         enabled = false
     }
 
