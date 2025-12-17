@@ -227,13 +227,17 @@ export class RSocketSession {
 
         // 等待后端确认收到中断请求
         // 这确保了中断命令已被处理，前端状态更新才有意义
+        // 使用较短的超时（3秒），避免卡住时用户等待过久
         try {
-            const responseData = await this.client.requestResponse('agent.interrupt')
+            const responseData = await this.client.requestResponse('agent.interrupt', undefined, 3000)
             const result = ProtoCodec.decodeStatusResult(responseData)
             log.info(`[RSocketSession] 中断请求已确认: ${result.status}`)
         } catch (err) {
             log.warn('[RSocketSession] Interrupt request failed:', err)
-            // 不抛出异常，让调用方的 finally 块继续执行清理逻辑
+            // 超时或失败时，强制断开连接触发重连
+            // handleConnectionLost 会通知上层，由 useSessionTab 的 onSessionDisconnect 处理自动重连
+            const error = err instanceof Error ? err : new Error(String(err))
+            this.handleConnectionLost(error)
         }
     }
 
