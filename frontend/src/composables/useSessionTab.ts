@@ -1690,9 +1690,9 @@ export function useSessionTab(initialOrder: number = 0) {
         messagesHandler.reset()
         resetHistoryState()
 
-        // 重置 UI 状态
-        uiState.inputText = ''
-        uiState.contexts = []
+        // 重置 UI 状态（保留输入框内容和附件）
+        // uiState.inputText = ''   // 保留输入框内容
+        // uiState.contexts = []    // 保留附件池
         Object.assign(uiState.scrollState, DEFAULT_SCROLL_STATE)
 
         // 重置错误状态

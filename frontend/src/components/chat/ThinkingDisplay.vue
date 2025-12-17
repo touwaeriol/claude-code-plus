@@ -57,7 +57,7 @@ function startCollapseTimer() {
   }
   collapseTimer = setTimeout(() => {
     delayedCollapseReady.value = true
-  }, 3000)
+  }, 500)
 }
 
 // 鼠标进入：清除计时器，暂停自动折叠
@@ -126,10 +126,10 @@ function handleClick() {
 .thinking-display {
   width: 100%;
   margin: 0;
-  padding: 6px 10px;
+  padding: 4px 8px;
   background: color-mix(in srgb, var(--theme-secondary-foreground) 8%, transparent);
-  border-left: 3px solid color-mix(in srgb, var(--theme-secondary-foreground) 35%, transparent);
-  border-radius: 4px;
+  border-left: 2px solid color-mix(in srgb, var(--theme-secondary-foreground) 35%, transparent);
+  border-radius: 3px;
   transition: all 0.2s ease;
 }
 
@@ -142,7 +142,12 @@ function handleClick() {
 }
 
 .thinking-display.collapsed {
-  padding: 4px 10px;
+  padding: 2px 6px;
+}
+
+.thinking-display.collapsed .thinking-header {
+  min-height: 16px;
+  line-height: 1.2;
 }
 
 .thinking-header {
