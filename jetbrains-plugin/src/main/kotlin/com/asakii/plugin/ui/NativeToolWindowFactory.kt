@@ -52,7 +52,8 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         val contentFactory = ContentFactory.getInstance()
         val httpService = HttpServerProjectService.getInstance(project)
         val serverUrl = httpService.serverUrl
-        val serverIndicatorAction = ComponentAction(createServerPortIndicator(project))
+        val serverIndicatorLabel = createServerPortIndicator(project)
+        val serverIndicatorAction = ComponentAction(serverIndicatorLabel)
 
         // 标题栏动作（会话控件按顺序置于右侧）
         val titleActions = mutableListOf<AnAction>(
@@ -111,9 +112,9 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         }
 
         val targetUrl = if (serverUrl.contains("?")) {
-            "$serverUrl&ide=true$themeParam"
+            "$serverUrl&ide=true&scrollMultiplier=2.5$themeParam"
         } else {
-            "$serverUrl?ide=true$themeParam"
+            "$serverUrl?ide=true&scrollMultiplier=2.5$themeParam"
         }
         logger.info("🔗 Loading URL with initial theme: ${targetUrl.take(100)}...")
         browser.loadURL(targetUrl)
@@ -144,6 +145,9 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
                 val newUrl = httpService.restart()
 
                 if (newUrl != null) {
+                    // 更新 URL 指示器
+                    serverIndicatorLabel.text = "🌐 $newUrl"
+
                     // 构建新的 URL 参数
                     val newThemeParam = try {
                         val theme = httpService.jetbrainsApi?.theme?.get()
@@ -158,9 +162,9 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
                     }
 
                     val newTargetUrl = if (newUrl.contains("?")) {
-                        "$newUrl&ide=true$newThemeParam"
+                        "$newUrl&ide=true&scrollMultiplier=2.5$newThemeParam"
                     } else {
-                        "$newUrl?ide=true$newThemeParam"
+                        "$newUrl?ide=true&scrollMultiplier=2.5$newThemeParam"
                     }
 
                     logger.info("🔗 Loading new URL: ${newTargetUrl.take(100)}...")
@@ -220,13 +224,13 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
      */
     private fun createServerPortIndicator(project: Project): JBLabel {
         val httpService = HttpServerProjectService.getInstance(project)
-        val serverUrl = httpService.serverUrl ?: "未启动"
+        val initialUrl = httpService.serverUrl ?: "未启动"
 
         // 使用 IDEA 主题的链接颜色
         val linkColor = JBUI.CurrentTheme.Link.Foreground.ENABLED
         val linkHoverColor = JBUI.CurrentTheme.Link.Foreground.HOVERED
 
-        val label = JBLabel("🌐 $serverUrl")
+        val label = JBLabel("🌐 $initialUrl")
         label.font = JBUI.Fonts.smallFont()
         label.foreground = linkColor
         label.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
@@ -234,15 +238,17 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
 
         label.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
+                // 动态获取最新的 serverUrl
+                val currentUrl = httpService.serverUrl ?: "未启动"
                 if (e.clickCount == 1) {
-                    CopyPasteManager.getInstance().setContents(StringSelection(serverUrl))
+                    CopyPasteManager.getInstance().setContents(StringSelection(currentUrl))
                     JBPopupFactory.getInstance()
-                        .createHtmlTextBalloonBuilder("已复制：$serverUrl", MessageType.INFO, null)
+                        .createHtmlTextBalloonBuilder("已复制：$currentUrl", MessageType.INFO, null)
                         .setFadeoutTime(2000)
                         .createBalloon()
                         .show(RelativePoint.getCenterOf(label), Balloon.Position.below)
                 } else if (e.clickCount == 2) {
-                    openInBrowser(project, serverUrl)
+                    openInBrowser(project, currentUrl)
                 }
             }
 

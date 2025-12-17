@@ -16,6 +16,7 @@ import { resolveServerHttpUrl } from '@/utils/serverUrl'
 import { i18n, getLocale } from '@/i18n'
 import { initJetBrainsIntegration } from '@/services/jetbrainsApi'
 import { initToolShowInterceptor } from '@/services/toolShowInterceptor'
+import { initScrollBoost } from '@/utils/scrollBoost'
 
 console.log('🚀 Initializing Vue application...')
 
@@ -75,6 +76,9 @@ function getElementPlusLocale(locale: string) {
 async function initApp() {
   const locale = getLocale()
   const elementPlusLocale = getElementPlusLocale(locale)
+
+  // 初始化滚动增强（根据 URL 参数 scrollMultiplier）
+  initScrollBoost()
 
   // 初始化 JetBrains IDE 集成
   const jetbrainsEnabled = await initJetBrainsIntegration()
