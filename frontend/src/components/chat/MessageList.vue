@@ -494,9 +494,10 @@ watch(
       await restoreScrollPosition(savedScrollState.anchor)
     } else {
       // follow 模式或无锚点：滚动到底部
+      // 使用可靠的滚动方法，因为虚拟列表可能还没完全渲染
+      await scrollToBottomReliably()
       const el = scrollerRef.value?.$el as HTMLElement | undefined
       if (el) {
-        el.scrollTop = el.scrollHeight
         lastScrollTop.value = el.scrollTop
       }
       // 确保状态为 follow
