@@ -54,61 +54,72 @@
       </button>
 
       <!-- Active File Tag (当前打开的文件 - 由 IDEA 推送) -->
-      <div
+      <el-tooltip
         v-if="shouldShowActiveFile"
-        class="context-tag active-file-tag"
-        :title="currentActiveFile?.path"
+        :content="currentActiveFile?.path || ''"
+        placement="top"
+        :show-after="300"
       >
-        <span class="tag-file-name">{{ activeFileName }}</span>
-        <span v-if="activeFileLineRange" class="tag-line-range">{{ activeFileLineRange }}</span>
-        <button
-          class="tag-remove"
-          :title="t('common.remove')"
-          @click="dismissActiveFile"
-        >
-          ×
-        </button>
-      </div>
+        <div class="context-tag active-file-tag">
+          <span class="tag-file-name">{{ activeFileName }}</span>
+          <span v-if="activeFileLineRange" class="tag-line-range">{{ activeFileLineRange }}</span>
+          <button
+            class="tag-remove"
+            :title="t('common.remove')"
+            @click.stop="dismissActiveFile"
+          >
+            ×
+          </button>
+        </div>
+      </el-tooltip>
 
       <!-- Context Tags (上下文标签) - 只显示前三个 -->
-      <div
+      <el-tooltip
         v-for="(context, index) in visibleContexts"
         :key="`context-${index}`"
-        class="context-tag"
-        :class="{ 'image-tag': isImageContext(context) }"
-        :title="getContextFullPath(context)"
+        :content="getContextFullPath(context)"
+        placement="top"
+        :show-after="300"
       >
-        <!-- 图片：只显示缩略图，点击可预览 -->
-        <template v-if="isImageContext(context)">
-          <img
-            :src="getContextImagePreviewUrl(context)"
-            class="tag-image-preview"
-            alt="图片"
-            @click="openContextImagePreview(context)"
-          >
-        </template>
-        <!-- 非图片：显示图标和文字 -->
-        <template v-else>
-          <span class="tag-icon">{{ getContextIcon(context) }}</span>
-          <span class="tag-text">{{ getContextDisplay(context) }}</span>
-        </template>
-        <button
-          class="tag-remove"
-          :title="t('common.remove')"
-          @click="removeContext(context)"
+        <div
+          class="context-tag"
+          :class="{ 'image-tag': isImageContext(context) }"
         >
-          ×
-        </button>
-      </div>
+          <!-- 图片：只显示缩略图，点击可预览 -->
+          <template v-if="isImageContext(context)">
+            <img
+              :src="getContextImagePreviewUrl(context)"
+              class="tag-image-preview"
+              alt="图片"
+              @click="openContextImagePreview(context)"
+            >
+          </template>
+          <!-- 非图片：显示图标和文字 -->
+          <template v-else>
+            <span class="tag-icon">{{ getContextIcon(context) }}</span>
+            <span class="tag-text">{{ getContextDisplay(context) }}</span>
+          </template>
+          <button
+            class="tag-remove"
+            :title="t('common.remove')"
+            @click.stop="removeContext(context)"
+          >
+            ×
+          </button>
+        </div>
+      </el-tooltip>
 
       <!-- 更多 Context 提示 -->
-      <div
+      <el-tooltip
         v-if="hiddenContextsCount > 0"
-        class="context-more-hint"
-        :title="t('chat.moreContexts', { count: hiddenContextsCount })"
+        :content="t('chat.moreContexts', { count: hiddenContextsCount })"
+        placement="bottom"
+        :show-after="300"
       >
-        +{{ hiddenContextsCount }}
-      </div>
+        <div class="context-more-hint">
+          +{{ hiddenContextsCount }}
+        </div>
+      </el-tooltip>
     </div>
 
     <!-- 拖放区域提示 -->
