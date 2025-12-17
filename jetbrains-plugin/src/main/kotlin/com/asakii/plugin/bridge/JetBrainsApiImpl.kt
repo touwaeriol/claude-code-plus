@@ -256,6 +256,86 @@ class JetBrainsApiImpl(private val ideaProject: Project) : JetBrainsApi {
             }
         }
 
+        override fun getActiveFile(): ActiveFileInfo? {
+            return try {
+                var result: ActiveFileInfo? = null
+                ApplicationManager.getApplication().invokeAndWait {
+                    ApplicationManager.getApplication().runReadAction {
+                        val fileEditorManager = FileEditorManager.getInstance(ideaProject)
+                        val selectedTextEditor = fileEditorManager.selectedTextEditor
+                        val selectedFile = fileEditorManager.selectedFiles.firstOrNull()
+                        val projectPath = ideaProject.basePath ?: ""
+
+                        if (selectedFile != null) {
+                            val absolutePath = selectedFile.path
+                            val relativePath = if (absolutePath.startsWith(projectPath)) {
+                                absolutePath.removePrefix(projectPath).removePrefix("/").removePrefix("\\")
+                            } else {
+                                absolutePath
+                            }
+                            val fileName = selectedFile.name
+
+                            // 获取光标位置和选区信息
+                            val editor = selectedTextEditor
+                            if (editor != null) {
+                                val caretModel = editor.caretModel
+                                val selectionModel = editor.selectionModel
+                                val document = editor.document
+
+                                val caretOffset = caretModel.offset
+                                val line = document.getLineNumber(caretOffset) + 1
+                                val column = caretOffset - document.getLineStartOffset(line - 1) + 1
+
+                                val hasSelection = selectionModel.hasSelection()
+                                var startLine: Int? = null
+                                var startColumn: Int? = null
+                                var endLine: Int? = null
+                                var endColumn: Int? = null
+                                var selectedContent: String? = null
+
+                                if (hasSelection) {
+                                    val startOffset = selectionModel.selectionStart
+                                    val endOffset = selectionModel.selectionEnd
+                                    startLine = document.getLineNumber(startOffset) + 1
+                                    startColumn = startOffset - document.getLineStartOffset(startLine - 1) + 1
+                                    endLine = document.getLineNumber(endOffset) + 1
+                                    endColumn = endOffset - document.getLineStartOffset(endLine - 1) + 1
+                                    selectedContent = selectionModel.selectedText
+                                }
+
+                                result = ActiveFileInfo(
+                                    path = absolutePath,
+                                    relativePath = relativePath,
+                                    name = fileName,
+                                    line = line,
+                                    column = column,
+                                    hasSelection = hasSelection,
+                                    startLine = startLine,
+                                    startColumn = startColumn,
+                                    endLine = endLine,
+                                    endColumn = endColumn,
+                                    selectedContent = selectedContent
+                                )
+                                logger.info("✅ [JetBrainsApi.file] Active file: $relativePath")
+                            } else {
+                                // 非文本编辑器，只返回路径
+                                result = ActiveFileInfo(
+                                    path = absolutePath,
+                                    relativePath = relativePath,
+                                    name = fileName
+                                )
+                                logger.info("✅ [JetBrainsApi.file] Active file (no editor): $relativePath")
+                            }
+                        }
+                    }
+                }
+                result
+            } catch (e: Exception) {
+                logger.severe("❌ [JetBrainsApi.file] Failed to get active file: ${e.message}")
+                null
+            }
+        }
+
         private fun rebuildBeforeContent(afterContent: String, edits: List<JetBrainsEditOperation>): String {
             var content = afterContent
             for (operation in edits.asReversed()) {
@@ -299,8 +379,8 @@ class JetBrainsApiImpl(private val ideaProject: Project) : JetBrainsApi {
             val editorFontSize = editorScheme.editorFontSize
 
             val uiFont = JBUI.Fonts.label()
-            val uiFontFamily = uiFont.family
             val uiFontSize = uiFont.size
+            logger.info("🔤 [Theme] fontFamily=${uiFont.family}, fontSize=$uiFontSize")
 
             return JetBrainsIdeTheme(
                 background = colorToHex(UIUtil.getPanelBackground()),
@@ -310,19 +390,19 @@ class JetBrainsApiImpl(private val ideaProject: Project) : JetBrainsApi {
                 textFieldBackground = colorToHex(UIUtil.getTextFieldBackground()),
                 selectionBackground = colorToHex(UIUtil.getListSelectionBackground(true)),
                 selectionForeground = colorToHex(UIUtil.getListSelectionForeground(true)),
-                linkColor = colorToHex(JBColor.namedColor("Link.foreground", JBColor.BLUE)),
-                errorColor = colorToHex(JBColor.RED),
-                warningColor = colorToHex(JBColor.YELLOW),
-                successColor = colorToHex(JBColor.GREEN),
+                linkColor = colorToHex(JBUI.CurrentTheme.Link.Foreground.ENABLED),
+                errorColor = colorToHex(UIUtil.getErrorForeground()),
+                warningColor = colorToHex(JBUI.CurrentTheme.Label.WARNING_FOREGROUND),
+                successColor = colorToHex(JBUI.CurrentTheme.Banner.SUCCESS_BACKGROUND),
                 separatorColor = colorToHex(JBColor.border()),
-                hoverBackground = colorToHex(JBColor.namedColor("List.hoverBackground", UIUtil.getPanelBackground())),
-                accentColor = colorToHex(JBColor.namedColor("Accent.focusColor", JBColor.BLUE)),
-                infoBackground = colorToHex(JBColor.namedColor("Component.infoForeground", JBColor.GRAY)),
+                hoverBackground = colorToHex(JBColor.namedColor("List.hoverBackground")),
+                accentColor = colorToHex(JBColor.namedColor("Accent.focusColor")),
+                infoBackground = colorToHex(JBUI.CurrentTheme.Banner.INFO_BACKGROUND),
                 codeBackground = colorToHex(UIUtil.getTextFieldBackground()),
-                secondaryForeground = colorToHex(JBColor.GRAY),
-                fontFamily = "$uiFontFamily, -apple-system, BlinkMacSystemFont, sans-serif",
+                secondaryForeground = colorToHex(JBUI.CurrentTheme.Label.foreground(false)),
+                fontFamily = uiFont.getFamily(),
                 fontSize = uiFontSize,
-                editorFontFamily = "$editorFontName, JetBrains Mono, Consolas, monospace",
+                editorFontFamily = editorFontName,
                 editorFontSize = editorFontSize
             )
         }
