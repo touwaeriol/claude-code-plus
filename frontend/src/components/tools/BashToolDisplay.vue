@@ -4,7 +4,7 @@
       :display-info="displayInfo"
       :is-expanded="expanded"
       :has-details="true"
-      :supports-background="true"
+      :supports-background="!isSubagent"
       @click="expanded = !expanded"
     >
       <template #details>
@@ -37,6 +37,9 @@ interface Props {
 
 const props = defineProps<Props>()
 const expanded = ref(false)
+
+// 判断是否是子代理的 Bash 调用（子代理不显示 run in background 提示）
+const isSubagent = computed(() => !!(props.toolCall as any).parentToolUseId)
 
 const displayInfo = computed(() => extractToolDisplayInfo(props.toolCall as any, props.toolCall.result as any))
 

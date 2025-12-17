@@ -3,7 +3,7 @@
     :display-info="displayInfoWithAgent"
     :is-expanded="expanded"
     :has-details="hasDetails"
-    :supports-background="true"
+    :supports-background="!isSubagent"
     @click="expanded = !expanded"
   >
     <template #details>
@@ -81,6 +81,9 @@ const props = defineProps<Props>()
 const expanded = ref(false)
 // 子代理调用过程默认展开
 const processExpanded = ref(true)
+
+// 判断是否是子代理的 Task 调用（子代理不显示 run in background 提示）
+const isSubagent = computed(() => !!(props.toolCall as any).parentToolUseId)
 
 // 复制状态
 const promptCopied = ref(false)

@@ -78,9 +78,26 @@ module.exports = {
 
         // 创建处理代码块 - 模拟 Ctrl+B 按键
         const handlerBlock = t.blockStatement([
-          // 1. 模拟 Ctrl+B 按键: process.stdin.emit('data', '\x02')
+          // 1. 模拟 Ctrl+B 按键
           //    \x02 是 Ctrl+B 的 ASCII 码
-          //    Ink 框架会捕获这个事件，触发当前活跃组件的 onBackground 回调
+          //    CLI 2.0.71 中 Ink 框架使用 readable 事件和 stdin.read() 来处理输入
+          //    所以需要使用 stdin.unshift() 将数据放入缓冲区，然后触发 readable 事件
+          //    这样 handleReadable 回调会调用 stdin.read() 读取到我们注入的数据
+          t.expressionStatement(
+            t.callExpression(
+              t.memberExpression(
+                t.memberExpression(
+                  t.identifier('process'),
+                  t.identifier('stdin')
+                ),
+                t.identifier('unshift')
+              ),
+              [
+                t.stringLiteral('\x02')  // Ctrl+B
+              ]
+            )
+          ),
+          // 2. 触发 readable 事件，让 Ink 的 handleReadable 回调处理输入
           t.expressionStatement(
             t.callExpression(
               t.memberExpression(
@@ -91,12 +108,11 @@ module.exports = {
                 t.identifier('emit')
               ),
               [
-                t.stringLiteral('data'),
-                t.stringLiteral('\x02')  // Ctrl+B
+                t.stringLiteral('readable')
               ]
             )
           ),
-          // 2. 发送成功响应
+          // 3. 发送成功响应
           t.expressionStatement(
             t.callExpression(
               t.identifier(responderName),

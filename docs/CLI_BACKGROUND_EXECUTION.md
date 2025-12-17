@@ -615,16 +615,313 @@ transport.write("\u0002")
 
 通过分析 CLI 代码，现有的 `control_request` subtype 包括：
 
-| subtype | 作用 |
-|---------|------|
-| `interrupt` | 中断当前任务（已有） |
-| `initialize` | 初始化会话 |
-| `set_permission_mode` | 设置权限模式 |
-| `set_model` | 切换模型 |
-| `set_max_thinking_tokens` | 设置思考 token 上限 |
-| `mcp_status` | 获取 MCP 状态 |
-| `mcp_message` | 发送 MCP 消息 |
-| `move_to_background` | **待添加**: 移至后台 |
+#### CLI 2.0.71 版本 (2024-12-18 更新)
+
+| subtype | 作用 | 版本 |
+|---------|------|------|
+| `interrupt` | 中断当前任务 | 原有 |
+| `initialize` | 初始化会话 | 原有 |
+| `set_permission_mode` | 设置权限模式 | 原有 |
+| `set_model` | 切换模型 | 原有 |
+| `set_max_thinking_tokens` | 设置思考 token 上限 | 原有 |
+| `mcp_status` | 获取 MCP 状态 | 原有 |
+| `mcp_message` | 发送 MCP 消息 | 原有 |
+| `rewind_files` | 回退文件到指定消息状态 | 2.0.71 新增 |
+| `mcp_set_servers` | 动态设置 MCP 服务器 | 2.0.71 新增 |
+| `can_use_tool` | 工具使用权限查询 | 2.0.71 新增 |
+| `run_in_background` | **补丁添加**: 移至后台 | 补丁 |
+
+#### 关键代码位置 (2.0.71)
+
+| 功能 | 字节偏移 | 说明 |
+|------|----------|------|
+| 控制请求处理入口 | ~10826385 | `if(d.request.subtype==="interrupt")` |
+| S81 组件 (cK1) | ~9878331 | 监听 Ctrl+B，显示 "run in background" |
+| Promise.race 后台信号 | ~9885400 | `let x,u=new Promise...let g=()=>{x()}` |
+| background 类型检测 | ~9885667 | `type:"background"` |
+
+#### 控制请求参数和响应详解
+
+##### 1. `interrupt` - 中断当前任务
+
+**请求**:
+```json
+{
+  "type": "control_request",
+  "request_id": "req_1",
+  "request": {
+    "subtype": "interrupt"
+  }
+}
+```
+
+**响应**: 成功响应 (无额外数据)
+
+---
+
+##### 2. `initialize` - 初始化会话
+
+**请求**:
+```json
+{
+  "type": "control_request",
+  "request_id": "req_1",
+  "request": {
+    "subtype": "initialize",
+    "systemPrompt": "可选: 自定义系统提示词",
+    "appendSystemPrompt": "可选: 追加到系统提示词",
+    "agents": [],
+    "hooks": {},
+    "jsonSchema": {},
+    "sdkMcpServers": ["server1", "server2"]
+  }
+}
+```
+
+**响应**:
+```json
+{
+  "type": "control_response",
+  "response": {
+    "subtype": "success",
+    "request_id": "req_1",
+    "response": {
+      "commands": [
+        {"name": "命令名", "description": "描述", "argumentHint": "参数提示"}
+      ],
+      "output_style": "streaming",
+      "available_output_styles": ["streaming", "full"],
+      "models": ["claude-3-5-sonnet-20241022", "..."],
+      "account": {
+        "email": "user@example.com",
+        "organization": "org_name",
+        "subscriptionType": "pro",
+        "tokenSource": "api_key",
+        "apiKeySource": "env"
+      }
+    }
+  }
+}
+```
+
+**错误响应** (已初始化):
+```json
+{
+  "type": "control_response",
+  "response": {
+    "subtype": "error",
+    "request_id": "req_1",
+    "error": "Already initialized",
+    "pending_permission_requests": []
+  }
+}
+```
+
+---
+
+##### 3. `set_permission_mode` - 设置权限模式
+
+**请求**:
+```json
+{
+  "type": "control_request",
+  "request_id": "req_1",
+  "request": {
+    "subtype": "set_permission_mode",
+    "mode": "default" | "plan" | "bypassPermissions"
+  }
+}
+```
+
+**响应**:
+```json
+{
+  "type": "control_response",
+  "response": {
+    "subtype": "success",
+    "request_id": "req_1",
+    "response": {
+      "mode": "default"
+    }
+  }
+}
+```
+
+---
+
+##### 4. `set_model` - 切换模型
+
+**请求**:
+```json
+{
+  "type": "control_request",
+  "request_id": "req_1",
+  "request": {
+    "subtype": "set_model",
+    "model": "claude-3-5-sonnet-20241022" | "default"
+  }
+}
+```
+
+**响应**: 成功响应 (无额外数据)
+
+---
+
+##### 5. `set_max_thinking_tokens` - 设置思考 token 上限
+
+**请求**:
+```json
+{
+  "type": "control_request",
+  "request_id": "req_1",
+  "request": {
+    "subtype": "set_max_thinking_tokens",
+    "max_thinking_tokens": 10000 | null
+  }
+}
+```
+
+**响应**: 成功响应 (无额外数据)
+
+---
+
+##### 6. `mcp_status` - 获取 MCP 状态
+
+**请求**:
+```json
+{
+  "type": "control_request",
+  "request_id": "req_1",
+  "request": {
+    "subtype": "mcp_status"
+  }
+}
+```
+
+**响应**:
+```json
+{
+  "type": "control_response",
+  "response": {
+    "subtype": "success",
+    "request_id": "req_1",
+    "response": {
+      "mcpServers": [
+        {
+          "name": "server_name",
+          "status": "connected" | "failed" | "sdk",
+          "serverInfo": { ... }
+        }
+      ]
+    }
+  }
+}
+```
+
+---
+
+##### 7. `mcp_message` - 发送 MCP 消息
+
+**请求**:
+```json
+{
+  "type": "control_request",
+  "request_id": "req_1",
+  "request": {
+    "subtype": "mcp_message",
+    "server_name": "target_server",
+    "message": { ... }
+  }
+}
+```
+
+**响应**: 成功响应 (无额外数据)
+
+---
+
+##### 8. `rewind_files` - 回退文件 (2.0.71 新增)
+
+**请求**:
+```json
+{
+  "type": "control_request",
+  "request_id": "req_1",
+  "request": {
+    "subtype": "rewind_files",
+    "user_message_id": "msg_uuid"
+  }
+}
+```
+
+**响应**: 成功响应 (无额外数据)
+
+**错误响应**: 返回错误消息字符串
+
+---
+
+##### 9. `mcp_set_servers` - 动态设置 MCP 服务器 (2.0.71 新增)
+
+**⚠️ 重要：这是完全替换模式，不是增量更新！**
+- 请求中的服务器会被添加或更新
+- 请求中**没有**的服务器会被**移除**
+- 如果只想添加服务器而不移除现有的，需要先调用 `mcp_status` 获取当前服务器列表，然后合并后再调用
+
+**请求**:
+```json
+{
+  "type": "control_request",
+  "request_id": "req_1",
+  "request": {
+    "subtype": "mcp_set_servers",
+    "servers": {
+      "server_name": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-xxx"],
+        "env": {}
+      }
+    }
+  }
+}
+```
+
+**响应**:
+```json
+{
+  "type": "control_response",
+  "response": {
+    "subtype": "success",
+    "request_id": "req_1",
+    "response": {
+      "added": ["new_server"],
+      "removed": ["old_server"],
+      "errors": {
+        "failed_server": "Connection failed"
+      }
+    }
+  }
+}
+```
+
+---
+
+##### 10. `run_in_background` - 移至后台 (补丁添加)
+
+**请求**:
+```json
+{
+  "type": "control_request",
+  "request_id": "req_1",
+  "request": {
+    "subtype": "run_in_background"
+  }
+}
+```
+
+**响应**: 成功响应 (无额外数据)
+
+**说明**: 此命令通过补丁添加，模拟 Ctrl+B 按键触发后台执行。
+
+---
 
 ### 7.3 后台任务的输出获取
 
@@ -633,7 +930,32 @@ transport.write("\u0002")
 - **CLI 交互模式**: 使用 `/tasks` 命令查看，使用 `TaskOutput` 工具获取结果
 - **SDK 模式**: 需要额外实现任务状态查询和输出获取的控制命令
 
-### 7.4 潜在的改进方向
+### 7.4 官方 SDK 控制请求支持情况
+
+#### Python SDK (claude-agent-sdk-python v0.1.17+)
+
+| SDK 类型 | subtype | CLI 支持 | 说明 |
+|----------|---------|----------|------|
+| `SDKControlInterruptRequest` | `interrupt` | ✅ | 中断任务 |
+| `SDKControlInitializeRequest` | `initialize` | ✅ | 初始化会话 |
+| `SDKControlSetPermissionModeRequest` | `set_permission_mode` | ✅ | 设置权限模式 |
+| `SDKControlPermissionRequest` | `can_use_tool` | ✅ | 工具权限查询 |
+| `SDKHookCallbackRequest` | `hook_callback` | ✅ | Hook 回调 (内部) |
+| `SDKControlMcpMessageRequest` | `mcp_message` | ✅ | MCP 消息 |
+| `SDKControlRewindFilesRequest` | `rewind_files` | ✅ | 回退文件 |
+
+**Python SDK 尚未支持的 CLI 控制请求**:
+
+| subtype | 说明 | 状态 |
+|---------|------|------|
+| `set_model` | 切换模型 | ❌ 未定义 |
+| `set_max_thinking_tokens` | 设置思考 token 上限 | ❌ 未定义 |
+| `mcp_status` | 获取 MCP 状态 | ❌ 未定义 |
+| `mcp_set_servers` | 动态设置 MCP 服务器 | ❌ 未定义 |
+
+> **注意**: Python SDK 类型定义位于 `src/claude_agent_sdk/types.py`
+
+### 7.5 潜在的改进方向
 
 1. **添加 `list_background_tasks` 控制命令**: 列出所有后台任务
 2. **添加 `get_task_output` 控制命令**: 获取指定任务的输出
@@ -809,23 +1131,33 @@ cd claude-agent-sdk/cli-patches
 npm install
 
 # 验证补丁 (dry-run)
-node patch-cli.js --dry-run claude-cli-2.0.69.js
+node patch-cli.js --dry-run claude-cli-2.0.71.js
 
 # 应用补丁
-node patch-cli.js claude-cli-2.0.69.js ../src/main/resources/bundled/claude-cli-2.0.69-enhanced.js
+node patch-cli.js claude-cli-2.0.71.js ../src/main/resources/bundled/claude-cli-2.0.71-enhanced.js
 ```
 
-### 8.6 验证检查项
+### 8.6 版本兼容性测试
+
+| CLI 版本 | 补丁状态 | 测试日期 |
+|----------|----------|----------|
+| 2.0.69 | ✅ 兼容 | 2024-12 |
+| 2.0.71 | ✅ 兼容 | 2024-12-18 |
+
+补丁采用 AST 模式匹配，查找 `if(*.request.subtype==="interrupt")` 结构，因此对变量名混淆不敏感，具有较好的版本兼容性。
+
+### 8.7 验证检查项
 
 补丁应用后，验证以下内容存在于增强版 CLI 中：
 
 | 检查项 | 模式 | 说明 |
 |--------|------|------|
-| 子代理模块级变量 | `__backgroundSignalResolver` | Step 1 添加 |
-| 子代理变量赋值 | `__backgroundSignalResolver=` | Step 2 添加 |
-| Bash 模块级变量 | `__bashBackgroundCallback` | Step 1 添加 |
-| Bash 变量赋值 | `__bashBackgroundCallback=` | Step 4 添加 |
-| 控制命令 | `run_in_background` | Step 3 添加 |
+| 控制命令 | `run_in_background` | 新增的 subtype |
+| 注入缓冲区 | `process.stdin.unshift` | 将 Ctrl+B 注入 stdin 缓冲区 |
+| 触发事件 | `process.stdin.emit` | 触发 readable 事件 |
+| ASCII 码 | `\x02` | Ctrl+B 的 ASCII 码 |
+
+> **注意**: CLI 2.0.71 使用 Ink 框架的 `readable` 事件处理输入，补丁通过 `stdin.unshift('\x02')` 将 Ctrl+B 注入缓冲区，然后 `emit('readable')` 触发处理。这种方式与 CLI 原生行为一致。
 
 ---
 

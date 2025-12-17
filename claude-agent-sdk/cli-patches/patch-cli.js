@@ -138,7 +138,8 @@ console.log('🔍 验证补丁结果...');
 
 const verifications = [
   { pattern: 'run_in_background', desc: '控制命令' },
-  { pattern: 'process.stdin.emit', desc: '模拟 Ctrl+B 按键' },
+  { pattern: 'process.stdin.unshift', desc: '注入 Ctrl+B 到 stdin 缓冲区' },
+  { pattern: 'process.stdin.emit', desc: '触发 readable 事件' },
   { pattern: '\\x02', desc: 'Ctrl+B ASCII 码' }
 ];
 
