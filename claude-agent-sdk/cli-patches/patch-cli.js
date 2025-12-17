@@ -137,11 +137,9 @@ console.log();
 console.log('🔍 验证补丁结果...');
 
 const verifications = [
-  { pattern: '__backgroundSignalResolver', desc: '子代理模块级变量' },
-  { pattern: '__backgroundSignalResolver=', desc: '子代理变量赋值' },
-  { pattern: '__bashBackgroundCallback', desc: 'Bash 模块级变量' },
-  { pattern: '__bashBackgroundCallback=', desc: 'Bash 变量赋值' },
-  { pattern: 'run_in_background', desc: '控制命令' }
+  { pattern: 'run_in_background', desc: '控制命令' },
+  { pattern: 'process.stdin.emit', desc: '模拟 Ctrl+B 按键' },
+  { pattern: '\\x02', desc: 'Ctrl+B ASCII 码' }
 ];
 
 let verifyPassed = 0;

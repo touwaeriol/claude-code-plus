@@ -84,8 +84,13 @@
           v-if="isStreaming"
           class="streaming-indicator"
         >
-          <span class="streaming-dot">●</span>
-          <span class="streaming-stats">{{ streamingStats }}</span>
+          <span class="generating-text">Generating</span>
+          <span class="bouncing-dots">
+            <span class="dot">.</span>
+            <span class="dot">.</span>
+            <span class="dot">.</span>
+          </span>
+          <span class="streaming-stats">({{ streamingStats }})</span>
         </div>
       </template>
     </DynamicScroller>
@@ -341,8 +346,11 @@ const streamingStats = computed(() => {
   const duration = formatDuration(elapsedTime.value)
   const input = formatTokens(props.inputTokens)
   const output = formatTokens(props.outputTokens)
-  return `${duration} ↑${input} ↓${output} tokens`
+  return `esc to interrupt · ${duration} ↑${input} ↓${output}`
 })
+
+// 格式化耗时显示（保留以备后用）
+const formattedElapsedTime = computed(() => formatDuration(elapsedTime.value))
 
 // 启动计时器
 function startTimer() {
@@ -885,25 +893,51 @@ async function ensureScrollable(): Promise<void> {
 .streaming-indicator {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
   padding: 4px 10px;
   margin: 4px 0 4px 8px;
-  background: var(--theme-card-background, #ffffff);
-  border: 1px solid var(--theme-accent, #0366d6);
-  border-radius: 12px;
   font-size: 11px;
   font-family: var(--theme-editor-font-family);
   color: var(--theme-secondary-foreground);
 }
 
-.streaming-dot {
-  color: var(--theme-accent, #0366d6);
-  animation: pulse 1s ease-in-out infinite;
+.generating-text {
+  color: #D97706;
+  font-weight: 500;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+.bouncing-dots {
+  display: inline-flex;
+  margin-right: 4px;
+}
+
+.bouncing-dots .dot {
+  color: #D97706;
+  font-weight: bold;
+  animation: bounce 1.4s ease-in-out infinite;
+}
+
+.bouncing-dots .dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.bouncing-dots .dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.bouncing-dots .dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 0.6;
+  }
 }
 
 .streaming-stats {

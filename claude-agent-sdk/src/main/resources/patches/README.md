@@ -26,7 +26,8 @@ Each patch file is a JSON file with the following structure:
 }
 ```
 
-## Patch Types
+
+
 
 - `replace`: Replace the search string with the replacement
 - `before`: Insert the replacement before the search string
