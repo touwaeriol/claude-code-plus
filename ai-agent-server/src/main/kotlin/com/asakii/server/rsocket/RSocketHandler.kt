@@ -19,11 +19,13 @@ import io.rsocket.kotlin.RSocketRequestHandler
 import io.rsocket.kotlin.payload.Payload
 import io.rsocket.kotlin.payload.buildPayload
 import io.rsocket.kotlin.payload.data
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withTimeout
@@ -136,12 +138,15 @@ class RSocketHandler(
             }
         }
 
-        // 监听连接关闭，自动清理 SDK 资源
+        // 监听连接关闭，自动清理 SDK 资源（非阻塞）
         handler.coroutineContext[Job]?.invokeOnCompletion { cause ->
             wsLog.info("🔌 [RSocket] [$connectionId] 连接关闭，自动清理资源 (cause: ${cause?.message ?: "正常关闭"})")
-            runBlocking(Dispatchers.IO) {
+            // 使用独立的协程作用域进行异步清理，避免阻塞回调
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                 try {
-                    rpcService.disconnect()
+                    withTimeout(10000) { // 10秒超时
+                        rpcService.disconnect()
+                    }
                     wsLog.info("✅ [RSocket] [$connectionId] SDK 资源已清理")
                 } catch (e: Exception) {
                     wsLog.warn("⚠️ [RSocket] [$connectionId] 清理 SDK 资源时出错: ${e.message}")

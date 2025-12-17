@@ -127,19 +127,20 @@ class ClaudeToolWindowListener(private val project: Project) : ToolWindowManager
         withContext(Dispatchers.IO) {
             try {
                 val projectPath = project.basePath ?: return@withContext
-                
-                // 获取项目所有会话状态
-                val projectStates: Map<String, SessionState> = backgroundService.observeProjectUpdates(projectPath)
-                    .firstOrNull() ?: emptyMap()
+
+                // 获取项目所有会话状态（添加超时保护）
+                val projectStates: Map<String, SessionState> = withTimeoutOrNull(3000) {
+                    backgroundService.observeProjectUpdates(projectPath).firstOrNull()
+                } ?: emptyMap()
 
                 logger.info("💾 保存 ${projectStates.size} 个会话状态")
 
                 // 记录活跃会话ID
                 activeSessionIds.clear()
                 activeSessionIds.addAll(projectStates.keys)
-                
+
                 // 后台服务已经在内存中维护状态，这里只需记录会话ID
-                
+
             } catch (e: Exception) {
                 logger.error("保存会话状态失败", e)
             }
@@ -185,15 +186,17 @@ class ClaudeToolWindowListener(private val project: Project) : ToolWindowManager
         // 这里应该从UI组件获取当前所有标签页的会话ID
         // 暂时从后台服务获取
         val projectPath = project.basePath ?: return
-        
+
         listenerScope.launch {
             try {
-                val projectStates: Map<String, SessionState> = backgroundService.observeProjectUpdates(projectPath)
-                    .firstOrNull() ?: emptyMap()
+                // 添加超时保护
+                val projectStates: Map<String, SessionState> = withTimeoutOrNull(3000) {
+                    backgroundService.observeProjectUpdates(projectPath).firstOrNull()
+                } ?: emptyMap()
 
                 activeSessionIds.clear()
                 activeSessionIds.addAll(projectStates.keys)
-                
+
                 logger.info("📝 记录活跃会话ID: $activeSessionIds")
             } catch (e: Exception) {
                 logger.error("记录会话ID失败", e)

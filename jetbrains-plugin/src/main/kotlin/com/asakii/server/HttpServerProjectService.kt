@@ -7,6 +7,7 @@ import com.asakii.plugin.mcp.JetBrainsMcpServerProviderImpl
 import com.asakii.server.config.AiAgentServiceConfig
 import com.asakii.server.config.ClaudeDefaults
 import com.asakii.server.config.CodexDefaults
+import com.asakii.server.config.McpServerConfig
 import com.asakii.server.logging.StandaloneLogging
 import com.asakii.plugin.tools.IdeToolsImpl
 import com.asakii.rpc.api.JetBrainsApi
@@ -25,6 +26,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import java.net.JarURLConnection
 import java.nio.file.Files
 import java.nio.file.Path
@@ -92,24 +99,42 @@ class HttpServerProjectService(private val project: Project) : Disposable {
             _jetbrainsApi = jetbrainsApi  // 保存引用供 title actions 使用
             val jetbrainsRSocketHandler = JetBrainsRSocketHandler(jetbrainsApi)
 
-            // 监听主题变化，通过 RSocket 推送给前端
+            // 监听主题变化，通过 RSocket 推送给前端（非阻塞）
             jetbrainsApi.theme.addChangeListener { theme ->
-                kotlinx.coroutines.runBlocking {
-                    jetbrainsRSocketHandler.pushThemeChanged(theme)
+                scope.launch {
+                    try {
+                        withTimeout(5000) {
+                            jetbrainsRSocketHandler.pushThemeChanged(theme)
+                        }
+                    } catch (e: Exception) {
+                        logger.warning("⚠️ Failed to push theme change: ${e.message}")
+                    }
                 }
             }
 
-            // 监听会话命令，通过 RSocket 推送给前端
+            // 监听会话命令，通过 RSocket 推送给前端（非阻塞）
             jetbrainsApi.session.addCommandListener { command ->
-                kotlinx.coroutines.runBlocking {
-                    jetbrainsRSocketHandler.pushSessionCommand(command)
+                scope.launch {
+                    try {
+                        withTimeout(5000) {
+                            jetbrainsRSocketHandler.pushSessionCommand(command)
+                        }
+                    } catch (e: Exception) {
+                        logger.warning("⚠️ Failed to push session command: ${e.message}")
+                    }
                 }
             }
 
-            // 监听设置变化，通过 RSocket 推送给前端
+            // 监听设置变化，通过 RSocket 推送给前端（非阻塞）
             AgentSettingsService.getInstance().addChangeListener { settings ->
-                kotlinx.coroutines.runBlocking {
-                    jetbrainsRSocketHandler.pushSettingsChanged(settings)
+                scope.launch {
+                    try {
+                        withTimeout(5000) {
+                            jetbrainsRSocketHandler.pushSettingsChanged(settings)
+                        }
+                    } catch (e: Exception) {
+                        logger.warning("⚠️ Failed to push settings change: ${e.message}")
+                    }
                 }
             }
 
@@ -139,6 +164,7 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                         enableContext7Mcp = settings.enableContext7Mcp,
                         context7ApiKey = settings.context7ApiKey.takeIf { it.isNotBlank() },
                         enableSequentialThinkingMcp = settings.enableSequentialThinkingMcp,
+                        mcpServersConfig = loadMcpServersConfig(settings),
                         mcpInstructions = loadMcpInstructions(settings),
                         dangerouslySkipPermissions = settings.defaultBypassPermissions,
                         defaultThinkingLevel = settings.defaultThinkingLevel,
@@ -299,6 +325,90 @@ class HttpServerProjectService(private val project: Project) : Disposable {
     }
 
     /**
+     * 加载 MCP 服务器配置
+     * 从资源文件 mcp/mcp-servers.json 读取配置，根据用户设置决定启用哪些 MCP
+     */
+    private fun loadMcpServersConfig(settings: AgentSettingsService): List<McpServerConfig> {
+        val configs = mutableListOf<McpServerConfig>()
+
+        try {
+            val jsonContent = loadResourceFile("mcp/mcp-servers.json") ?: return emptyList()
+            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            val serversJson = json.parseToJsonElement(jsonContent).jsonObject["servers"]?.jsonObject ?: return emptyList()
+
+            for ((name, serverJson) in serversJson) {
+                val server = serverJson.jsonObject
+                val enabledSetting = server["enabledSetting"]?.jsonPrimitive?.contentOrNull ?: continue
+
+                // 根据设置判断是否启用
+                val enabled = when (enabledSetting) {
+                    "enableContext7Mcp" -> settings.enableContext7Mcp
+                    "enableSequentialThinkingMcp" -> settings.enableSequentialThinkingMcp
+                    else -> false
+                }
+
+                if (!enabled) {
+                    logger.info("⏭️ MCP Server '$name' is disabled")
+                    continue
+                }
+
+                val type = server["type"]?.jsonPrimitive?.contentOrNull ?: continue
+                val description = server["description"]?.jsonPrimitive?.contentOrNull
+
+                val config = when (type) {
+                    "http" -> {
+                        val url = server["url"]?.jsonPrimitive?.contentOrNull ?: continue
+                        val apiKeySetting = server["apiKeySetting"]?.jsonPrimitive?.contentOrNull
+                        val apiKeyHeader = server["apiKeyHeader"]?.jsonPrimitive?.contentOrNull
+
+                        // 构建 headers（如果有 API Key）
+                        val headers = if (apiKeySetting != null && apiKeyHeader != null) {
+                            val apiKey = when (apiKeySetting) {
+                                "context7ApiKey" -> settings.context7ApiKey.takeIf { it.isNotBlank() }
+                                else -> null
+                            }
+                            apiKey?.let { mapOf(apiKeyHeader to it) }
+                        } else null
+
+                        McpServerConfig(
+                            name = name,
+                            type = type,
+                            enabled = true,
+                            url = url,
+                            headers = headers,
+                            description = description
+                        )
+                    }
+                    "stdio" -> {
+                        val command = server["command"]?.jsonPrimitive?.contentOrNull ?: continue
+                        val args = server["args"]?.jsonArray?.map { it.jsonPrimitive.content }
+
+                        McpServerConfig(
+                            name = name,
+                            type = type,
+                            enabled = true,
+                            command = command,
+                            args = args,
+                            description = description
+                        )
+                    }
+                    else -> {
+                        logger.warning("⚠️ Unknown MCP server type: $type for '$name'")
+                        continue
+                    }
+                }
+
+                configs.add(config)
+                logger.info("✅ Loaded MCP Server config: $name (type=$type)")
+            }
+        } catch (e: Exception) {
+            logger.warning("⚠️ Failed to load MCP servers config: ${e.message}")
+        }
+
+        return configs
+    }
+
+    /**
      * 设置文件编辑器监听器
      * 监听文件切换和选区变化，推送给前端
      */
@@ -369,19 +479,21 @@ class HttpServerProjectService(private val project: Project) : Disposable {
     }
 
     /**
-     * 推送活跃文件更新
+     * 推送活跃文件更新（非阻塞）
      */
     private fun pushActiveFileUpdate(
         ideTools: IdeToolsImpl,
         jetbrainsRSocketHandler: JetBrainsRSocketHandler
     ) {
-        try {
-            val activeFile = ideTools.getActiveEditorFile()
-            kotlinx.coroutines.runBlocking {
-                jetbrainsRSocketHandler.pushActiveFileChanged(activeFile)
+        scope.launch {
+            try {
+                val activeFile = ideTools.getActiveEditorFile()
+                withTimeout(5000) {
+                    jetbrainsRSocketHandler.pushActiveFileChanged(activeFile)
+                }
+            } catch (e: Exception) {
+                logger.warning("⚠️ Failed to push active file update: ${e.message}")
             }
-        } catch (e: Exception) {
-            logger.warning("Failed to push active file update: ${e.message}")
         }
     }
 
