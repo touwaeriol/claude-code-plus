@@ -430,8 +430,8 @@ export const useSessionStore = defineStore('session', () => {
       }
     }
 
-    // 断开连接
-    await tab.disconnect()
+    // 断开连接（不等待，后端会自动检测连接关闭并清理资源）
+    tab.disconnect()
 
     // 从列表移除（shallowRef 需要替换整个数组才能触发响应式）
     tabs.value = tabs.value.filter(t => t !== tab)
@@ -484,8 +484,8 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
 
-    // 1. 断开连接
-    await tab.disconnect()
+    // 1. 断开连接（同步，不等待）
+    tab.disconnect()
 
     // 2. 重置所有状态
     tab.reset()

@@ -733,11 +733,7 @@ export function useSessionTab(initialOrder: number = 0) {
         // 如果已有连接，先断开旧连接
         if (rsocketSession.value) {
             log.info(`[Tab ${tabId}] 断开旧连接: ${sessionId.value}`)
-            try {
-                await rsocketSession.value.disconnect()
-            } catch (e) {
-                log.warn(`[Tab ${tabId}] 断开旧连接失败:`, e)
-            }
+            rsocketSession.value.disconnect()
             rsocketSession.value = null
             sessionId.value = null
         }
@@ -892,11 +888,7 @@ export function useSessionTab(initialOrder: number = 0) {
         cancelReconnect()
 
         if (rsocketSession.value) {
-            try {
-                await rsocketSession.value.disconnect()
-            } catch (error) {
-                log.warn(`[Tab ${tabId}] 断开连接失败:`, error)
-            }
+            rsocketSession.value.disconnect()
             rsocketSession.value = null
         }
 

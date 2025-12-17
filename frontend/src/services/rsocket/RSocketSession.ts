@@ -296,15 +296,12 @@ export class RSocketSession {
 
     /**
      * 主动断开连接
+     *
+     * 直接关闭底层连接，不等待 agent.disconnect RPC。
+     * 后端会通过 RSocket 连接关闭事件自动检测并清理会话资源。
      */
-    async disconnect(): Promise<void> {
+    disconnect(): void {
         if (this._isConnected && this.client) {
-            try {
-                await this.client.requestResponse('agent.disconnect')
-            } catch (error) {
-                log.warn('[RSocketSession] disconnect 请求失败:', error)
-            }
-
             // 先取消订阅，避免 client.disconnect() 触发 handleConnectionLost
             if (this.unsubscribeClientDisconnect) {
                 this.unsubscribeClientDisconnect()
