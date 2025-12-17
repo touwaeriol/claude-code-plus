@@ -54,7 +54,9 @@ const FileReference = Node.create({
         tag: 'span[data-file-ref]',
         getAttrs: (node) => {
           if (typeof node === 'string') return false
-          return { path: node.getAttribute('data-file-ref') }
+          return {
+            path: node.getAttribute('data-file-ref'),
+          }
         },
       },
     ]
@@ -671,6 +673,7 @@ defineExpose({
 
 /* 文件引用样式 - 蓝色文字 + 下划线 */
 .rich-text-editor :deep(.file-reference) {
+  position: relative;
   color: var(--theme-link, #0366d6);
   text-decoration: underline;
   text-decoration-style: solid;
@@ -684,6 +687,32 @@ defineExpose({
   color: var(--theme-link-hover, #0550ae);
   text-decoration-thickness: 2px;
 }
+
+/* 自定义 tooltip - JCEF 不支持原生 title tooltip */
+.rich-text-editor :deep(.file-reference[data-file-ref]:not([data-file-ref=""]))::after {
+  content: attr(data-file-ref);
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  padding: 4px 8px;
+  background: var(--theme-foreground, #24292e);
+  color: var(--theme-background, #ffffff);
+  font-size: 12px;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, visibility 0.15s;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.rich-text-editor :deep(.file-reference[data-file-ref]:not([data-file-ref=""]):hover)::after {
+  opacity: 1;
+  visibility: visible;
+}
+
 
 
 </style>

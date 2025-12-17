@@ -300,14 +300,6 @@
           {{ formatTokenUsage(tokenUsage) }}
         </div>
 
-        <!-- ESC 打断提示 -->
-        <span
-          v-if="isGenerating"
-          class="esc-hint"
-        >
-          {{ t('chat.escToInterrupt') }}
-        </span>
-
         <!-- 图片上传按钮 - 简洁图标 -->
         <button
           class="icon-btn attach-btn"
@@ -998,12 +990,10 @@ function handleAtSymbolFileSelect(file: IndexedFileInfo) {
   // 使用 RichTextInput 的方法删除 @ 查询并插入文件引用节点
   const cursorPosition = richTextInputRef.value?.getCursorPosition() ?? 0
 
-  // 删除从 @ 位置到当前光标位置的文本，然后插入文件引用节点
-  // 传递相对路径和绝对路径，用于 tooltip 显示完整路径
+  // 删除从 @ 位置到当前光标位置的文本，然后插入文件引用节点（使用绝对路径）
   richTextInputRef.value?.replaceRangeWithFileReference(
     atSymbolPosition.value,
     cursorPosition,
-    file.relativePath,
     file.absolutePath
   )
 
@@ -1498,6 +1488,16 @@ onMounted(() => {
     // 当新文件推送过来时，重置 dismissed 状态
     activeFileDismissed.value = false
     console.log('📂 [ChatInput] 活跃文件更新:', file?.relativePath || '无')
+  })
+
+  // 初始化时主动获取当前活跃文件（解决前端启动时 IDE 已打开文件的场景）
+  jetbrainsRSocket.getActiveFile().then((file) => {
+    if (file) {
+      currentActiveFile.value = file
+      console.log('📂 [ChatInput] 初始活跃文件:', file.relativePath)
+    }
+  }).catch((error) => {
+    console.warn('📂 [ChatInput] 获取初始活跃文件失败:', error)
   })
 })
 
@@ -2105,16 +2105,6 @@ onUnmounted(() => {
   background: var(--theme-background, #ffffff);
   border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 4px;
-}
-
-/* ESC 打断提示 - 紧凑 */
-.esc-hint {
-  font-size: 10px;
-  color: var(--theme-secondary-foreground, #6a737d);
-  padding: 2px 6px;
-  background: var(--theme-hover-background, rgba(0, 0, 0, 0.04));
-  border-radius: 4px;
-  white-space: nowrap;
 }
 
 /* ========== 简洁图标按钮 - 紧凑 ========== */
