@@ -63,13 +63,16 @@ const FileReference = Node.create({
   },
 
   renderHTML({ node, HTMLAttributes }) {
+    const path = node.attrs.path
+    // 只显示文件名，完整路径通过 hover tooltip 显示
+    const fileName = path.split(/[/\\]/).pop() || path
     return [
       'span',
       mergeAttributes(HTMLAttributes, {
         class: 'file-reference',
-        'data-file-ref': node.attrs.path,
+        'data-file-ref': path,
       }),
-      `@${node.attrs.path}`,
+      `@${fileName}`,
     ]
   },
 })
