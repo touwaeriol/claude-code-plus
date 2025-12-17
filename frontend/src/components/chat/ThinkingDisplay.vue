@@ -7,7 +7,7 @@
     @mouseleave="handleMouseLeave"
   >
     <div class="thinking-header">
-      <span class="thinking-icon">💭</span>
+      <span class="thinking-icon">🧠</span>
       <span class="thinking-label">
         {{ isCollapsed ? t('chat.thinkingCollapsed') : t('chat.thinkingLabel') }}
       </span>
@@ -125,7 +125,7 @@ function handleClick() {
 <style scoped>
 .thinking-display {
   width: 100%;
-  margin: 0;
+  margin: 1px 0;
   padding: 2px 8px;
   background: color-mix(in srgb, var(--theme-secondary-foreground) 8%, transparent);
   border-left: 2px solid color-mix(in srgb, var(--theme-secondary-foreground) 35%, transparent);

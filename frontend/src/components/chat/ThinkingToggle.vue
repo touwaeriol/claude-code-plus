@@ -4,6 +4,7 @@
     :class="{ 'is-disabled': !canToggle }"
     :title="tooltipText"
   >
+    <span class="thinking-icon">🧠</span>
     <el-select
       v-model="selectedLevelId"
       :disabled="!canToggle"
@@ -108,9 +109,14 @@ function onLevelChange() {
 .thinking-select {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   font-size: 11px;
   user-select: none;
+}
+
+.thinking-icon {
+  font-size: 12px;
+  line-height: 1;
 }
 
 .thinking-select.is-disabled {
