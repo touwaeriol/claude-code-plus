@@ -163,7 +163,6 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                         enableJetBrainsMcp = settings.enableJetBrainsMcp,
                         enableContext7Mcp = settings.enableContext7Mcp,
                         context7ApiKey = settings.context7ApiKey.takeIf { it.isNotBlank() },
-                        enableSequentialThinkingMcp = settings.enableSequentialThinkingMcp,
                         mcpServersConfig = loadMcpServersConfig(settings),
                         mcpInstructions = loadMcpInstructions(settings),
                         dangerouslySkipPermissions = settings.defaultBypassPermissions,
@@ -302,13 +301,6 @@ class HttpServerProjectService(private val project: Project) : Disposable {
             }
         }
 
-        if (settings.enableSequentialThinkingMcp) {
-            loadResourceFile("prompts/sequential-thinking-mcp-instructions.md")?.let {
-                instructions.add(it)
-                logger.info("📝 Loaded Sequential Thinking MCP instructions")
-            }
-        }
-
         return instructions.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
     }
 
@@ -343,7 +335,6 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                 // 根据设置判断是否启用
                 val enabled = when (enabledSetting) {
                     "enableContext7Mcp" -> settings.enableContext7Mcp
-                    "enableSequentialThinkingMcp" -> settings.enableSequentialThinkingMcp
                     else -> false
                 }
 

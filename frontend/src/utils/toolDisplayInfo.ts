@@ -70,7 +70,6 @@ const TOOL_ICONS: Record<string, string> = {
   grep: '🔍',
   glob: '🔍',
   'codebase-retrieval': '🧠',
-  'sequential-thinking': '🧠',
   'todo-write': '✅',
   'web-search': '🌐',
   'web-fetch': '🌐',
@@ -120,7 +119,6 @@ const ACTION_TYPES: Record<string, string> = {
   grep: 'Grep',
   glob: 'Glob',
   'codebase-retrieval': 'Codebase',
-  'sequential-thinking': 'Thinking',
   'todo-write': 'TodoWrite',
   'web-search': 'WebSearch',
   'web-fetch': 'WebFetch',
@@ -277,11 +275,6 @@ export function extractToolDisplayInfo(
     case 'codebase-retrieval':
       primaryInfo = 'Retrieving from: <> Codebase'
       secondaryInfo = toolInput.information_request || ''
-      break
-
-    case 'sequential-thinking':
-      primaryInfo = toolInput.thought || ''
-      secondaryInfo = `Thought ${toolInput.thought_number || 0}/${toolInput.total_thoughts || 0}`
       break
 
     case 'bash-output':

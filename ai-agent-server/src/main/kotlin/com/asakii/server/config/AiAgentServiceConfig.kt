@@ -34,7 +34,8 @@ data class ClaudeDefaults(
     val enableJetBrainsMcp: Boolean = true,
     val enableContext7Mcp: Boolean = false,
     val context7ApiKey: String? = null,
-    val enableSequentialThinkingMcp: Boolean = false,
+    // MCP 服务器配置（从资源文件加载，由 plugin 模块传入）
+    val mcpServersConfig: List<McpServerConfig> = emptyList(),
     // MCP 系统提示词（由 plugin 模块加载并传入）
     val mcpInstructions: String? = null,
     // 思考配置
@@ -44,6 +45,24 @@ data class ClaudeDefaults(
     // PRE_TOOL_USE: 保存 IDEA 中的文件到磁盘
     // POST_TOOL_USE: 重新加载文件到 IDEA
     val ideaFileSyncHooks: Map<HookEvent, List<HookMatcher>>? = null
+)
+
+/**
+ * MCP 服务器配置
+ */
+data class McpServerConfig(
+    val name: String,
+    val type: String,  // "http" or "stdio"
+    val enabled: Boolean,
+    // HTTP 类型配置
+    val url: String? = null,
+    val headers: Map<String, String>? = null,
+    // stdio 类型配置
+    val command: String? = null,
+    val args: List<String>? = null,
+    val env: Map<String, String>? = null,
+    // 描述
+    val description: String? = null
 )
 
 /**

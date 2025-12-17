@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "context7": {
+      "enabledSetting": "enableContext7Mcp",
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "apiKeySetting": "context7ApiKey",
+      "apiKeyHeader": "CONTEXT7_API_KEY",
+      "description": "Context7 MCP - Fetch up-to-date documentation for libraries"
+    }
+  }
+}

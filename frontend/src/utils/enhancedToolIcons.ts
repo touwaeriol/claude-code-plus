@@ -196,10 +196,6 @@ export const ENHANCED_TOOL_ICONS: Record<string, ToolIconConfig> = {
   },
 
   // ==================== AI 功能 ====================
-  'sequential-thinking': {
-    icon: '🤔',
-    description: '思维链',
-  },
   'ask-user-question': {
     icon: '❓',
     description: '询问用户',

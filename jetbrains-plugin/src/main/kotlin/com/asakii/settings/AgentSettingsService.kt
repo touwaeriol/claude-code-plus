@@ -73,7 +73,6 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var enableJetBrainsMcp: Boolean = true,        // JetBrains IDE MCP（IDE 索引工具）
         var enableContext7Mcp: Boolean = false,        // Context7 MCP（获取最新库文档）
         var context7ApiKey: String = "",               // Context7 API Key（可选）
-        var enableSequentialThinkingMcp: Boolean = false, // Sequential Thinking MCP（顺序思考，模型已支持扩展思考时无需开启）
 
         // 默认启用 ByPass 权限（前端自动应用）
         var defaultBypassPermissions: Boolean = false,
@@ -152,10 +151,6 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     var context7ApiKey: String
         get() = state.context7ApiKey
         set(value) { state.context7ApiKey = value }
-
-    var enableSequentialThinkingMcp: Boolean
-        get() = state.enableSequentialThinkingMcp
-        set(value) { state.enableSequentialThinkingMcp = value }
 
     var defaultBypassPermissions: Boolean
         get() = state.defaultBypassPermissions

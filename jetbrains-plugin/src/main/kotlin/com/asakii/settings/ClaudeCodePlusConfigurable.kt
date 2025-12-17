@@ -46,7 +46,6 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
     private var enableJetBrainsMcpCheckbox: JBCheckBox? = null
     private var enableContext7McpCheckbox: JBCheckBox? = null
     private var context7ApiKeyField: JBTextField? = null
-    private var enableSequentialThinkingMcpCheckbox: JBCheckBox? = null
 
     // 默认 ByPass 配置
     private var defaultBypassPermissionsCheckbox: JBCheckBox? = null
@@ -85,10 +84,6 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
         context7ApiKeyField = JBTextField().apply {
             toolTipText = "Optional: Your Context7 API key for higher rate limits"
             emptyText.text = "Optional API key"
-        }
-
-        enableSequentialThinkingMcpCheckbox = JBCheckBox("Enable Sequential Thinking MCP").apply {
-            toolTipText = "Enable sequential thinking for step-by-step reasoning. Not needed if model already supports extended thinking."
         }
 
         // 默认 ByPass 配置
@@ -219,8 +214,6 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
             .addComponent(JBLabel("<html><font color='gray' size='-1'>  └ Fetches up-to-date documentation for any library (React, Vue, Ktor, etc.).</font></html>"))
             .addLabeledComponent(JBLabel("  Context7 API key:"), context7ApiKeyField!!, 1, false)
             .addComponent(JBLabel("<html><font color='gray' size='-1'>    └ Optional: Provide your API key for higher rate limits.</font></html>"))
-            .addComponent(enableSequentialThinkingMcpCheckbox!!)
-            .addComponent(JBLabel("<html><font color='gray' size='-1'>  └ Step-by-step reasoning. Not needed if model already supports extended thinking.</font></html>"))
             // 默认 ByPass 设置
             .addSeparator()
             .addComponent(JBLabel("<html><b>Default permissions</b></html>"))
@@ -307,7 +300,6 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
                 enableJetBrainsMcpCheckbox?.isSelected != settings.enableJetBrainsMcp ||
                 enableContext7McpCheckbox?.isSelected != settings.enableContext7Mcp ||
                 context7ApiKeyField?.text != settings.context7ApiKey ||
-                enableSequentialThinkingMcpCheckbox?.isSelected != settings.enableSequentialThinkingMcp ||
                 defaultBypassPermissionsCheckbox?.isSelected != settings.defaultBypassPermissions
     }
 
@@ -324,7 +316,6 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
         settings.enableJetBrainsMcp = enableJetBrainsMcpCheckbox?.isSelected ?: true
         settings.enableContext7Mcp = enableContext7McpCheckbox?.isSelected ?: false
         settings.context7ApiKey = context7ApiKeyField?.text ?: ""
-        settings.enableSequentialThinkingMcp = enableSequentialThinkingMcpCheckbox?.isSelected ?: false
         settings.defaultBypassPermissions = defaultBypassPermissionsCheckbox?.isSelected ?: false
 
         // 通知监听器设置已变更
@@ -359,7 +350,6 @@ class ClaudeCodePlusConfigurable : SearchableConfigurable, ConfigurableGroup {
         enableJetBrainsMcpCheckbox?.isSelected = settings.enableJetBrainsMcp
         enableContext7McpCheckbox?.isSelected = settings.enableContext7Mcp
         context7ApiKeyField?.text = settings.context7ApiKey
-        enableSequentialThinkingMcpCheckbox?.isSelected = settings.enableSequentialThinkingMcp
         defaultBypassPermissionsCheckbox?.isSelected = settings.defaultBypassPermissions
     }
 
