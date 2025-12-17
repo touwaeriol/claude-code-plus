@@ -207,7 +207,7 @@ watch(() => props.sessions, (newSessions, oldSessions) => {
 
 function handleTabClick(tab: SessionTabInfo) {
   if (tab.id === props.currentSessionId) {
-    emit('toggle-list')
+    // 点击当前激活的 tab 不做任何事
     return
   }
   emit('switch', tab.id)
