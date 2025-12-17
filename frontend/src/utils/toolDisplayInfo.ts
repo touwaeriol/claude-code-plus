@@ -151,8 +151,8 @@ export function extractToolDisplayInfo(
   // 直接使用后端格式：result.is_error
   const status = result?.is_error ? 'error' : (result ? 'success' : 'pending')
 
-  // 不再区分"解析参数"和"执行中"，统一显示为执行中
-  const isInputLoading = false
+  // 判断是否还在解析参数（input 为空或只有部分字段）
+  const isInputLoading = !result && (!toolInput || Object.keys(toolInput).length === 0)
 
   let primaryInfo = ''
   let secondaryInfo = ''

@@ -896,7 +896,7 @@ async function ensureScrollable(): Promise<void> {
   gap: 0;
   padding: 4px 10px;
   margin: 8px 0 4px -6px;
-  font-size: 15px;
+  font-size: 12px;
   font-family: var(--theme-editor-font-family);
   color: var(--theme-secondary-foreground);
 }

@@ -68,7 +68,10 @@
 
       <!-- 状态指示器 -->
       <span class="status-indicator" :class="`status-${displayInfo?.status || 'pending'}`">
-        <span v-if="displayInfo?.isInputLoading || displayInfo?.status === 'pending' || !displayInfo?.status" class="spinner" />
+        <!-- 解析参数中：蓝色转圈 -->
+        <span v-if="displayInfo?.isInputLoading" class="spinner spinner-parsing" />
+        <!-- 执行中：绿色转圈 -->
+        <span v-else-if="!displayInfo?.status || displayInfo?.status === 'pending'" class="spinner spinner-running" />
         <span v-else class="dot" />
       </span>
     </div>
@@ -208,9 +211,9 @@ onUnmounted(() => {
 .compact-tool-card {
   display: flex;
   flex-direction: column;
-  padding: 6px 10px;
-  margin-bottom: 2px;
-  border-radius: 6px;
+  padding: 2px 6px;
+  margin-bottom: 0;
+  border-radius: 4px;
   background: var(--theme-panel-background);
   border: 1px solid var(--theme-border);
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -228,20 +231,20 @@ onUnmounted(() => {
 .card-content {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   font-size: var(--theme-font-size, 13px);
-  line-height: 1.4;
-  min-height: 20px;
+  line-height: 1.2;
+  min-height: 16px;
 }
 
 .tool-icon {
-  font-size: 16px;
+  font-size: 14px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
 }
 
 .action-type {
@@ -274,9 +277,9 @@ onUnmounted(() => {
 }
 
 .line-changes-badge {
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10px;
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -309,42 +312,47 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-left: auto;  /* 始终推到最右边 */
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
 }
 
 .status-indicator .dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   transition: all 0.2s ease;
-  position: relative;
 }
 
+/* 绿色 - 完成 */
 .status-success .dot {
   background-color: var(--theme-success);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--theme-success) 50%, transparent);
 }
 
+/* 红色 - 失败 */
 .status-error .dot {
   background-color: var(--theme-error);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--theme-error) 50%, transparent);
 }
 
-.status-pending .dot {
-  background-color: var(--theme-secondary-foreground);
-  opacity: 0.5;
-}
-
-/* 加载动画 - 旋转的圆圈 */
+/* 转圈基础样式 */
 .status-indicator .spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--theme-border);
-  border-top-color: var(--theme-accent);
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid transparent;
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  animation: spin 0.6s linear infinite;
+}
+
+/* 解析参数中（默认蓝色） */
+.status-indicator .spinner-parsing {
+  border-top-color: var(--theme-pending);
+  border-right-color: var(--theme-pending);
+}
+
+/* 执行中（默认绿色） */
+.status-indicator .spinner-running {
+  border-top-color: var(--theme-running);
+  border-right-color: var(--theme-running);
 }
 
 @keyframes spin {
@@ -355,10 +363,10 @@ onUnmounted(() => {
 
 /* 展开内容 */
 .expanded-content {
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: 4px;
+  padding-top: 4px;
   border-top: 1px solid var(--theme-border);
-  animation: slideDown 0.2s ease;
+  animation: slideDown 0.15s ease;
 }
 
 @keyframes slideDown {

@@ -4,7 +4,6 @@
     :class="{ 'is-disabled': !canToggle }"
     :title="tooltipText"
   >
-    <span class="select-label">{{ $t('thinking.label') }}</span>
     <el-select
       v-model="selectedLevelId"
       :disabled="!canToggle"
@@ -116,11 +115,6 @@ function onLevelChange() {
 
 .thinking-select.is-disabled {
   opacity: 0.5;
-}
-
-.select-label {
-  color: var(--theme-secondary-foreground, #6b7280);
-  font-weight: 500;
 }
 
 .level-select {

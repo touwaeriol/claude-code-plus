@@ -386,19 +386,19 @@ function displaySessionId(tab: SessionTabInfo): string | null {
   border-radius: 50%;
 }
 
+/* 绿色 - 连接完成/生成完成 */
 .status-indicator.connected .dot-solid {
-  background: var(--theme-success, #28a745);
-  box-shadow: 0 0 6px rgba(40, 167, 69, 0.6);
+  background: var(--theme-success);
 }
 
+/* 红色 - 未连接 */
 .status-indicator.disconnected .dot-solid {
-  background: var(--theme-error, #d73a49);
-  box-shadow: 0 0 4px rgba(215, 58, 73, 0.5);
+  background: var(--theme-error);
 }
 
+/* 红色 - 错误 */
 .status-indicator.error .dot-solid {
-  background: var(--theme-error, #d73a49);
-  box-shadow: 0 0 6px rgba(215, 58, 73, 0.8);
+  background: var(--theme-error);
 }
 
 .status-indicator .spinner {
@@ -409,17 +409,18 @@ function displaySessionId(tab: SessionTabInfo): string | null {
   box-sizing: border-box;
 }
 
+/* 蓝色转圈 - 连接中 */
 .status-indicator .spinner.connecting {
-  border-top-color: var(--theme-accent, #0366d6);
-  border-right-color: var(--theme-accent, #0366d6);
+  border-top-color: var(--theme-accent);
+  border-right-color: var(--theme-accent);
   animation: spin 0.8s linear infinite;
 }
 
+/* 绿色转圈 - 生成中 */
 .status-indicator .spinner.generating {
-  border-top-color: var(--theme-success, #28a745);
-  border-right-color: var(--theme-success, #28a745);
+  border-top-color: var(--theme-success);
+  border-right-color: var(--theme-success);
   animation: spin 0.6s linear infinite;
-  box-shadow: 0 0 6px rgba(40, 167, 69, 0.4);
 }
 
 @keyframes spin {

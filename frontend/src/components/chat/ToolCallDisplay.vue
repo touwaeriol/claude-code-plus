@@ -170,6 +170,6 @@ const isJetBrainsMcpTool = computed(() => {
 
 <style scoped>
 .tool-call-display {
-  margin: 2px 0;
+  margin: 1px 0;
 }
 </style>
