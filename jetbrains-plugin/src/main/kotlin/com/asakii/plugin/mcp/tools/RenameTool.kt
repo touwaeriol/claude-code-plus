@@ -10,6 +10,7 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.psi.*
+import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.refactoring.rename.RenameProcessor
@@ -28,6 +29,25 @@ data class RenameResult(
     val affectedFiles: List<String> = emptyList(),
     val error: String? = null
 )
+
+/**
+ * 符号类型枚举（共享给 FindUsages 和 Rename 工具）
+ */
+@Serializable
+enum class SymbolType {
+    Auto,
+    Class,
+    Interface,
+    Enum,
+    Object,
+    Method,
+    Function,
+    Field,
+    Property,
+    Variable,
+    Parameter,
+    File
+}
 
 /**
  * Rename 工具
@@ -154,7 +174,7 @@ class RenameTool(private val project: Project) {
                 originalName = (foundElement as? PsiNamedElement)?.name ?: "element"
 
                 // 统计引用数量和受影响的文件
-                val references = ReferencesSearch.search(foundElement!!, project.allScope()).findAll()
+                val references = ReferencesSearch.search(foundElement!!, GlobalSearchScope.allScope(project)).findAll()
                 usagesCount = references.size + 1 // +1 for the definition itself
 
                 affectedFilesSet.add(psiFile.virtualFile.path)
@@ -166,7 +186,7 @@ class RenameTool(private val project: Project) {
             // 执行重命名
             val renameSuccessful = WriteCommandAction.runWriteCommandAction<Boolean>(project) {
                 try {
-                    val processor = RenameProcessor(project, foundElement, newName, searchInComments, searchInStrings)
+                    val processor = RenameProcessor(project, foundElement!!, newName, searchInComments, searchInStrings)
                     processor.run()
                     true
                 } catch (e: Exception) {

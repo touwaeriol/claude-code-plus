@@ -505,6 +505,7 @@ tasks.named("clean") {
 val installPatchDeps = tasks.register("installPatchDeps") {
     group = "build"
     description = "安装 AST 补丁脚本的 npm 依赖"
+    dependsOn(downloadCli)  // 显式声明依赖，确保 cli-patches/package.json 已存在
 
     // 将路径捕获到局部变量，避免 configuration cache 问题
     val patchesDirPath = file("cli-patches").absolutePath

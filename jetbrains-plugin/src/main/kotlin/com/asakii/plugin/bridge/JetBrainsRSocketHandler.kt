@@ -49,6 +49,8 @@ import com.asakii.rpc.proto.JetBrainsSessionCommand as ProtoSessionCommand
  * - jetbrains.showDiff: 显示 Diff
  * - jetbrains.showMultiEditDiff: 显示多编辑 Diff
  * - jetbrains.getTheme: 获取主题
+ * - jetbrains.getActiveFile: 获取当前活跃文件
+ * - jetbrains.getSettings: 获取 IDE 设置
  * - jetbrains.getLocale: 获取语言
  * - jetbrains.setLocale: 设置语言
  * - jetbrains.getProjectPath: 获取项目路径
@@ -57,6 +59,7 @@ import com.asakii.rpc.proto.JetBrainsSessionCommand as ProtoSessionCommand
  * 反向调用路由（后端 → 前端）：
  * - jetbrains.onThemeChanged: 主题变化
  * - jetbrains.onSessionCommand: 会话命令
+ * - jetbrains.onActiveFileChanged: 活跃文件变化
  */
 class JetBrainsRSocketHandler(
     private val jetbrainsApi: JetBrainsApi
@@ -88,6 +91,7 @@ class JetBrainsRSocketHandler(
                     "jetbrains.showEditPreviewDiff" -> handleShowEditPreviewDiff(dataBytes)
                     "jetbrains.showMarkdown" -> handleShowMarkdown(dataBytes)
                     "jetbrains.getTheme" -> handleGetTheme()
+                    "jetbrains.getActiveFile" -> handleGetActiveFile()
                     "jetbrains.getSettings" -> handleGetSettings()
                     "jetbrains.getLocale" -> handleGetLocale()
                     "jetbrains.setLocale" -> handleSetLocale(dataBytes)
@@ -239,8 +243,8 @@ class JetBrainsRSocketHandler(
             logger.info("⚙️ [JetBrains] getSettings")
 
             // 转换思考级别列表为 Proto 格式
-            val thinkingLevelsProto = settings.getAllThinkingLevels().map { level ->
-                com.asakii.proto.AiAgentRpc.ThinkingLevelConfig.newBuilder()
+            val thinkingLevelsProto = settings.getAllThinkingLevels().map { level: com.asakii.settings.ThinkingLevelConfig ->
+                com.asakii.rpc.proto.ThinkingLevelConfig.newBuilder()
                     .setId(level.id)
                     .setName(level.name)
                     .setTokens(level.tokens)
@@ -255,7 +259,7 @@ class JetBrainsRSocketHandler(
                 .setEnableUserInteractionMcp(settings.enableUserInteractionMcp)
                 .setEnableJetbrainsMcp(settings.enableJetBrainsMcp)
                 .setIncludePartialMessages(settings.includePartialMessages)
-                .setDefaultThinkingLevel(settings.defaultThinkingLevelEnum.name)
+                .setDefaultThinkingLevel(settings.defaultThinkingLevel)
                 .setDefaultThinkingTokens(settings.defaultThinkingTokens)
                 .setDefaultThinkingLevelId(settings.defaultThinkingLevelId)
                 .addAllThinkingLevels(thinkingLevelsProto)
@@ -268,6 +272,35 @@ class JetBrainsRSocketHandler(
             buildPayload { data(response.toByteArray()) }
         } catch (e: Exception) {
             logger.error("❌ [JetBrains] getSettings failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    private fun handleGetActiveFile(): Payload {
+        return try {
+            val activeFile = jetbrainsApi.file.getActiveFile()
+            logger.info("📂 [JetBrains] getActiveFile: ${activeFile?.relativePath ?: "null"}")
+
+            val notifyBuilder = ActiveFileChangedNotify.newBuilder()
+                .setHasActiveFile(activeFile != null)
+
+            if (activeFile != null) {
+                notifyBuilder.setPath(activeFile.path)
+                notifyBuilder.setRelativePath(activeFile.relativePath)
+                notifyBuilder.setName(activeFile.name)
+                activeFile.line?.let { notifyBuilder.setLine(it) }
+                activeFile.column?.let { notifyBuilder.setColumn(it) }
+                notifyBuilder.setHasSelection(activeFile.hasSelection)
+                activeFile.startLine?.let { notifyBuilder.setStartLine(it) }
+                activeFile.startColumn?.let { notifyBuilder.setStartColumn(it) }
+                activeFile.endLine?.let { notifyBuilder.setEndLine(it) }
+                activeFile.endColumn?.let { notifyBuilder.setEndColumn(it) }
+                activeFile.selectedContent?.let { notifyBuilder.setSelectedContent(it) }
+            }
+
+            buildPayload { data(notifyBuilder.build().toByteArray()) }
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] getActiveFile failed: ${e.message}")
             buildErrorResponse(e.message ?: "Unknown error")
         }
     }
@@ -392,9 +425,11 @@ class JetBrainsRSocketHandler(
 
     /**
      * 推送主题变化到前端（使用统一的 client.call 路由）
+     * 广播给所有连接的客户端
      */
     suspend fun pushThemeChanged(theme: JetBrainsIdeTheme) {
-        val requester = clientRequester ?: run {
+        val clients = connectedClients.values.toList()
+        if (clients.isEmpty()) {
             logger.warn("⚠️ [JetBrains RSocket] 无客户端连接，跳过主题推送")
             return
         }
@@ -433,9 +468,19 @@ class JetBrainsRSocketHandler(
                 .setThemeChanged(themeNotify)
                 .build()
 
-            val payload = buildPayloadWithRoute("client.call", serverCall.toByteArray())
-            requester.fireAndForget(payload)
-            logger.info("📤 [JetBrains RSocket] → pushThemeChanged (client.call)")
+            val serverCallBytes = serverCall.toByteArray()
+
+            // 广播给所有连接的客户端
+            // 注意：每个客户端需要独立的 Payload，因为 Buffer 会被消费
+            clients.forEach { requester ->
+                try {
+                    val payload = buildPayloadWithRoute("client.call", serverCallBytes)
+                    requester.fireAndForget(payload)
+                } catch (e: Exception) {
+                    logger.warn("⚠️ [JetBrains RSocket] 推送主题给客户端失败: ${e.message}")
+                }
+            }
+            logger.info("📤 [JetBrains RSocket] → pushThemeChanged (to ${clients.size} clients)")
         } catch (e: Exception) {
             logger.error("❌ [JetBrains RSocket] pushThemeChanged failed: ${e.message}")
         }
@@ -443,9 +488,11 @@ class JetBrainsRSocketHandler(
 
     /**
      * 推送设置变更到前端（使用统一的 client.call 路由）
+     * 广播给所有连接的客户端
      */
     suspend fun pushSettingsChanged(settings: AgentSettingsService) {
-        val requester = clientRequester ?: run {
+        val clients = connectedClients.values.toList()
+        if (clients.isEmpty()) {
             logger.warn("⚠️ [JetBrains RSocket] 无客户端连接，跳过设置推送")
             return
         }
@@ -459,7 +506,7 @@ class JetBrainsRSocketHandler(
                 .setEnableUserInteractionMcp(settings.enableUserInteractionMcp)
                 .setEnableJetbrainsMcp(settings.enableJetBrainsMcp)
                 .setIncludePartialMessages(settings.includePartialMessages)
-                .setDefaultThinkingLevel(settings.defaultThinkingLevelEnum.name)
+                .setDefaultThinkingLevel(settings.defaultThinkingLevel)
                 .setDefaultThinkingTokens(settings.defaultThinkingTokens)
                 .build()
 
@@ -476,9 +523,19 @@ class JetBrainsRSocketHandler(
                 .setSettingsChanged(settingsNotify)
                 .build()
 
-            val payload = buildPayloadWithRoute("client.call", serverCall.toByteArray())
-            requester.fireAndForget(payload)
-            logger.info("📤 [JetBrains RSocket] → pushSettingsChanged (client.call)")
+            val serverCallBytes = serverCall.toByteArray()
+
+            // 广播给所有连接的客户端
+            // 注意：每个客户端需要独立的 Payload，因为 Buffer 会被消费
+            clients.forEach { requester ->
+                try {
+                    val payload = buildPayloadWithRoute("client.call", serverCallBytes)
+                    requester.fireAndForget(payload)
+                } catch (e: Exception) {
+                    logger.warn("⚠️ [JetBrains RSocket] 推送设置给客户端失败: ${e.message}")
+                }
+            }
+            logger.info("📤 [JetBrains RSocket] → pushSettingsChanged (to ${clients.size} clients)")
         } catch (e: Exception) {
             logger.error("❌ [JetBrains RSocket] pushSettingsChanged failed: ${e.message}")
         }
@@ -486,9 +543,11 @@ class JetBrainsRSocketHandler(
 
     /**
      * 推送会话命令到前端（使用统一的 client.call 路由）
+     * 广播给所有连接的客户端
      */
     suspend fun pushSessionCommand(command: JetBrainsSessionCommand) {
-        val requester = clientRequester ?: run {
+        val clients = connectedClients.values.toList()
+        if (clients.isEmpty()) {
             logger.warn("⚠️ [JetBrains RSocket] 无客户端连接，跳过命令推送")
             return
         }
@@ -521,9 +580,19 @@ class JetBrainsRSocketHandler(
                 .setSessionCommand(cmdNotify.build())
                 .build()
 
-            val payload = buildPayloadWithRoute("client.call", serverCall.toByteArray())
-            requester.fireAndForget(payload)
-            logger.info("📤 [JetBrains RSocket] → pushSessionCommand (client.call): ${command.type}")
+            val serverCallBytes = serverCall.toByteArray()
+
+            // 广播给所有连接的客户端
+            // 注意：每个客户端需要独立的 Payload，因为 Buffer 会被消费
+            clients.forEach { requester ->
+                try {
+                    val payload = buildPayloadWithRoute("client.call", serverCallBytes)
+                    requester.fireAndForget(payload)
+                } catch (e: Exception) {
+                    logger.warn("⚠️ [JetBrains RSocket] 推送命令给客户端失败: ${e.message}")
+                }
+            }
+            logger.info("📤 [JetBrains RSocket] → pushSessionCommand: ${command.type} (to ${clients.size} clients)")
         } catch (e: Exception) {
             logger.error("❌ [JetBrains RSocket] pushSessionCommand failed: ${e.message}")
         }
@@ -531,9 +600,11 @@ class JetBrainsRSocketHandler(
 
     /**
      * 推送活跃文件变更到前端（使用统一的 client.call 路由）
+     * 广播给所有连接的客户端
      */
     suspend fun pushActiveFileChanged(activeFile: ActiveFileInfo?) {
-        val requester = clientRequester ?: run {
+        val clients = connectedClients.values.toList()
+        if (clients.isEmpty()) {
             logger.warn("⚠️ [JetBrains RSocket] 无客户端连接，跳过活跃文件推送")
             return
         }
@@ -564,13 +635,24 @@ class JetBrainsRSocketHandler(
                 .setActiveFileChanged(notifyBuilder.build())
                 .build()
 
-            val payload = buildPayloadWithRoute("client.call", serverCall.toByteArray())
-            requester.fireAndForget(payload)
+            val serverCallBytes = serverCall.toByteArray()
+
+            // 广播给所有连接的客户端
+            // 注意：每个客户端需要独立的 Payload，因为 Buffer 会被消费
+            clients.forEach { requester ->
+                try {
+                    val payload = buildPayloadWithRoute("client.call", serverCallBytes)
+                    requester.fireAndForget(payload)
+                } catch (e: Exception) {
+                    logger.warn("⚠️ [JetBrains RSocket] 推送给客户端失败: ${e.message}")
+                }
+            }
+
             if (activeFile != null) {
-                logger.info("📤 [JetBrains RSocket] → pushActiveFileChanged: ${activeFile.relativePath}" +
+                logger.info("📤 [JetBrains RSocket] → pushActiveFileChanged: ${activeFile.relativePath} (to ${clients.size} clients)" +
                     if (activeFile.hasSelection) " (selection: ${activeFile.startLine}:${activeFile.startColumn} - ${activeFile.endLine}:${activeFile.endColumn})" else "")
             } else {
-                logger.info("📤 [JetBrains RSocket] → pushActiveFileChanged: null (no active file)")
+                logger.info("📤 [JetBrains RSocket] → pushActiveFileChanged: null (no active file, to ${clients.size} clients)")
             }
         } catch (e: Exception) {
             logger.error("❌ [JetBrains RSocket] pushActiveFileChanged failed: ${e.message}")

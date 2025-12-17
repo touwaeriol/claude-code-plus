@@ -261,7 +261,8 @@ export default {
     alwaysOn: '此模型强制开启思考',
     notSupported: '此模型不支持思考',
     toggleOn: '点击开启思考',
-    toggleOff: '点击关闭思考'
+    toggleOff: '点击关闭思考',
+    selectLevel: '选择思考级别'
   },
   context: {
     usage: '上下文使用: {used} / {max} tokens ({percentage}%)',

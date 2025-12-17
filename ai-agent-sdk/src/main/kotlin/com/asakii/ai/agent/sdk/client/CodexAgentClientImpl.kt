@@ -137,6 +137,12 @@ class CodexAgentClientImpl(
         )
     }
 
+    override suspend fun setMaxThinkingTokens(maxThinkingTokens: Int?) {
+        throw UnsupportedOperationException(
+            "setMaxThinkingTokens is not supported by ${provider.name}"
+        )
+    }
+
     override fun getCurrentPermissionMode(): AiPermissionMode? = null
 }
 

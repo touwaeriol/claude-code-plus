@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 @Serializable
 enum class SearchScope {
-    Project, Module, Directory, Scope
+    Project, All, Module, Directory, Scope
 }
 
 @Serializable
@@ -117,6 +117,11 @@ class CodeSearchTool(private val project: Project) {
                 when (scope) {
                     SearchScope.Project -> {
                         isProjectScope = true
+                    }
+                    SearchScope.All -> {
+                        // 搜索所有地方（项目 + 库源码）
+                        // FindModel 不直接支持搜索库，这里设为 projectScope=false 让其搜索更广范围
+                        isProjectScope = false
                     }
                     SearchScope.Module -> {
                         if (scopeArg.isNullOrBlank()) {

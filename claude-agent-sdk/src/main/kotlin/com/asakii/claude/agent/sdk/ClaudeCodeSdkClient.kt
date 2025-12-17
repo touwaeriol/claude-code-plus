@@ -464,6 +464,21 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
     }
 
     /**
+     * Dynamically set max thinking tokens without reconnecting.
+     *
+     * @param maxThinkingTokens The maximum thinking tokens:
+     *   - null: Disable thinking (use default behavior)
+     *   - 0: Disable thinking
+     *   - positive value: Set the limit (e.g., 8000, 16000)
+     */
+    suspend fun setMaxThinkingTokens(maxThinkingTokens: Int?) = runCommand {
+        ensureConnected()
+        logger.info("🧠 设置思考 token 上限: $maxThinkingTokens")
+        controlProtocol!!.setMaxThinkingTokens(maxThinkingTokens)
+        logger.info("✅ 思考 token 上限已设置为: $maxThinkingTokens")
+    }
+
+    /**
      * Get server initialization information.
      */
     fun getServerInfo(): Map<String, Any>? = serverInfo

@@ -40,6 +40,9 @@ interface JetBrainsFileApi {
 
     /** 展示 Markdown 内容（用于计划预览） */
     fun showMarkdown(request: JetBrainsShowMarkdownRequest): Result<Unit>
+
+    /** 获取当前活跃编辑器中的文件信息 */
+    fun getActiveFile(): ActiveFileInfo?
 }
 
 // ========== 主题 API ==========
@@ -96,6 +99,7 @@ object DefaultJetBrainsApi : JetBrainsApi {
         override fun showMultiEditDiff(request: JetBrainsShowMultiEditDiffRequest) = Result.failure<Unit>(error)
         override fun showEditPreviewDiff(request: JetBrainsShowEditPreviewRequest) = Result.failure<Unit>(error)
         override fun showMarkdown(request: JetBrainsShowMarkdownRequest) = Result.failure<Unit>(error)
+        override fun getActiveFile(): ActiveFileInfo? = null
     }
 
     override val theme = object : JetBrainsThemeApi {

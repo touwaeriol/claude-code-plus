@@ -96,6 +96,25 @@ interface IdeTools {
      * @return ActiveFileInfo? 活动文件信息，如果没有活动文件则返回 null
      */
     fun getActiveEditorFile(): ActiveFileInfo? = null
+
+    /**
+     * 检查是否在 IDE 环境中运行
+     *
+     * - ai-agent-server (IdeToolsDefault): 返回 false
+     * - jetbrains-plugin (IdeToolsImpl): 返回 true
+     *
+     * 前端根据此值决定是否连接 jetbrains-rsocket 获取 IDE 设置
+     * @return Boolean 是否在 IDE 环境中
+     */
+    fun hasIdeEnvironment(): Boolean = false
+
+    /**
+     * 获取字体文件数据
+     *
+     * @param fontFamily 字体名称（如 "JetBrains Mono"）
+     * @return FontData? 字体数据，如果字体不存在或无法读取则返回 null
+     */
+    fun getFontData(fontFamily: String): FontData? = null
 }
 
 /**
@@ -195,3 +214,26 @@ data class ActiveFileInfo(
     val diffNewContent: String? = null,   // Diff 新内容（右侧）
     val diffTitle: String? = null         // Diff 标题
 )
+
+/**
+ * 字体数据
+ */
+data class FontData(
+    val fontFamily: String,               // 字体名称
+    val data: ByteArray,                  // 字体文件二进制数据
+    val format: String = "truetype",      // 字体格式：truetype, opentype, woff, woff2
+    val mimeType: String = "font/ttf"     // MIME 类型
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as FontData
+        return fontFamily == other.fontFamily && data.contentEquals(other.data)
+    }
+
+    override fun hashCode(): Int {
+        var result = fontFamily.hashCode()
+        result = 31 * result + data.contentHashCode()
+        return result
+    }
+}

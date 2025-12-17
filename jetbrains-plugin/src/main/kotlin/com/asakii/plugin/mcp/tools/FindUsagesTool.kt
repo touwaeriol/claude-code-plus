@@ -16,17 +16,6 @@ import com.intellij.psi.util.PsiTreeUtil
 import kotlinx.serialization.Serializable
 import java.io.File
 
-@Serializable
-enum class SymbolType {
-    Auto,       // 自动检测
-    Class,      // 类/接口/枚举
-    Method,     // 方法/函数
-    Field,      // 字段/属性
-    Variable,   // 局部变量
-    Parameter,  // 参数
-    File        // 文件引用
-}
-
 /**
  * 使用类型 - 针对不同符号类型的细粒度过滤
  */
@@ -471,9 +460,9 @@ class FindUsagesTool(private val project: Project) {
                 if (element is PsiNamedElement && element.name == name) {
                     val matches = when (symbolType) {
                         SymbolType.Auto -> true
-                        SymbolType.Class -> isClassLike(element)
-                        SymbolType.Method -> isMethodLike(element)
-                        SymbolType.Field -> isFieldLike(element)
+                        SymbolType.Class, SymbolType.Interface, SymbolType.Enum, SymbolType.Object -> isClassLike(element)
+                        SymbolType.Method, SymbolType.Function -> isMethodLike(element)
+                        SymbolType.Field, SymbolType.Property -> isFieldLike(element)
                         SymbolType.Variable -> isVariableLike(element)
                         SymbolType.Parameter -> isParameter(element)
                         SymbolType.File -> false // 文件引用不在这里处理

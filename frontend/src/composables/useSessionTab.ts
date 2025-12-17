@@ -115,11 +115,25 @@ export interface TabInfo {
 }
 
 /**
+ * 思考级别（token 数量）
+ * - 0: 关闭思考
+ * - 正数: 思考 token 预算
+ *
+ * 常用值：
+ * - 0: Off
+ * - 1024: Low (1K)
+ * - 4096: Medium (4K)
+ * - 8192: High (8K) - 默认值
+ * - 16384: Very High (16K)
+ */
+export type ThinkingLevel = number
+
+/**
  * 连接配置
  */
 export interface TabConnectOptions {
     model?: string
-    thinkingEnabled?: boolean
+    thinkingLevel?: ThinkingLevel
     permissionMode?: RpcPermissionMode
     skipPermissions?: boolean
     continueConversation?: boolean
@@ -132,7 +146,7 @@ export interface TabConnectOptions {
 export const SETTING_KEYS = {
     MODEL: 'model',
     PERMISSION_MODE: 'permissionMode',
-    THINKING_ENABLED: 'thinkingEnabled',
+    THINKING_LEVEL: 'thinkingLevel',
     SKIP_PERMISSIONS: 'skipPermissions',
 } as const
 
@@ -210,7 +224,7 @@ export function useSessionTab(initialOrder: number = 0) {
 
     // ========== 连接设置（连接时确定，切换需要重连）==========
     const modelId = ref<string | null>(null)
-    const thinkingEnabled = ref(true)
+    const thinkingLevel = ref<ThinkingLevel>(8096)  // 默认 Ultra
     const permissionMode = ref<RpcPermissionMode>('default')
     const skipPermissions = ref(false)
     const initialConnectOptions = ref<TabConnectOptions | null>(null)
@@ -233,7 +247,7 @@ export function useSessionTab(initialOrder: number = 0) {
         // skipPermissions 是纯前端行为，不需要跟踪
         lastAppliedSettings.value = {
             model: modelId.value || undefined,
-            thinkingEnabled: thinkingEnabled.value,
+            thinkingLevel: thinkingLevel.value,
             permissionMode: permissionMode.value
         }
     }
@@ -248,20 +262,16 @@ export function useSessionTab(initialOrder: number = 0) {
 
         log.info(`[Tab ${tabId}] 应用待处理设置:`, pendingSettings.value)
 
-        // 检查是否需要重连（skipPermissions 是纯前端行为，不需要重连）
-        const needsReconnect = pendingSettings.value.thinkingEnabled !== undefined
-
-        if (needsReconnect) {
-            // 需要重连的设置
-            await updateSettings(pendingSettings.value)
-        } else {
-            // 只有 RPC 设置，直接应用
-            if (pendingSettings.value.model !== undefined) {
-                await setModel(pendingSettings.value.model)
-            }
-            if (pendingSettings.value.permissionMode !== undefined) {
-                await setPermissionModeValue(pendingSettings.value.permissionMode)
-            }
+        // thinkingLevel 现在可以动态切换，无需重连
+        // model 和 permissionMode 也可以 RPC 切换
+        if (pendingSettings.value.model !== undefined) {
+            await setModel(pendingSettings.value.model)
+        }
+        if (pendingSettings.value.permissionMode !== undefined) {
+            await setPermissionModeValue(pendingSettings.value.permissionMode)
+        }
+        if (pendingSettings.value.thinkingLevel !== undefined) {
+            await setThinkingLevelValue(pendingSettings.value.thinkingLevel)
         }
 
         // 清空待处理设置
@@ -285,8 +295,8 @@ export function useSessionTab(initialOrder: number = 0) {
             case 'model':
                 modelId.value = value as string
                 break
-            case 'thinkingEnabled':
-                thinkingEnabled.value = value as boolean
+            case 'thinkingLevel':
+                thinkingLevel.value = value as ThinkingLevel
                 break
             case 'permissionMode':
                 permissionMode.value = value as RpcPermissionMode
@@ -298,7 +308,7 @@ export function useSessionTab(initialOrder: number = 0) {
     function setInitialConnectOptions(options: TabConnectOptions) {
         initialConnectOptions.value = {...options}
         if (options.model) modelId.value = options.model
-        if (options.thinkingEnabled !== undefined) thinkingEnabled.value = options.thinkingEnabled
+        if (options.thinkingLevel !== undefined) thinkingLevel.value = options.thinkingLevel
         if (options.permissionMode) permissionMode.value = options.permissionMode
         if (options.skipPermissions !== undefined) skipPermissions.value = options.skipPermissions
     }
@@ -754,15 +764,17 @@ export function useSessionTab(initialOrder: number = 0) {
                 }
             })
 
-            // dangerouslySkipPermissions 由前端处理，永远不传递给后端
+            // 从 settingsStore 获取设置（已从 IDEA 同步）
             const settingsStore = useSettingsStore()
             const connectOptions: ConnectOptions = {
                 includePartialMessages: settingsStore.settings.includePartialMessages ?? true,
                 allowDangerouslySkipPermissions: true,
                 model: modelId.value || undefined,
-                thinkingEnabled: thinkingEnabled.value,
+                // 连接时只传递 boolean（是否启用思考），具体级别在连接后设置
+                thinkingEnabled: thinkingLevel.value > 0,
                 permissionMode: permissionMode.value,
-                dangerouslySkipPermissions: false,
+                // 从前端设置读取（已从 IDEA 同步）
+                dangerouslySkipPermissions: settingsStore.settings.skipPermissions,
                 continueConversation: resolvedOptions.continueConversation,
                 resumeSessionId: resolvedOptions.resumeSessionId,
                 // 固定开启重放用户消息
@@ -771,6 +783,16 @@ export function useSessionTab(initialOrder: number = 0) {
 
             // 连接并获取 sessionId
             const newSessionId = await session.connect(connectOptions)
+
+            // 连接成功后，设置具体的思考级别（如果启用了思考）
+            if (thinkingLevel.value > 0) {
+                try {
+                    await session.setMaxThinkingTokens(thinkingLevel.value)
+                    log.info(`[Tab ${tabId}] 思考级别已设置: ${thinkingLevel.value}`)
+                } catch (e) {
+                    log.warn(`[Tab ${tabId}] 设置思考级别失败:`, e)
+                }
+            }
 
             // 保存会话实例和状态
             rsocketSession.value = session
@@ -1007,7 +1029,7 @@ export function useSessionTab(initialOrder: number = 0) {
             // 如果没有会话，走完整的 connect 流程
             await connect(options || {
                 model: modelId.value || undefined,
-                thinkingEnabled: thinkingEnabled.value,
+                thinkingLevel: thinkingLevel.value,
                 permissionMode: permissionMode.value,
                 skipPermissions: skipPermissions.value
             })
@@ -1019,26 +1041,38 @@ export function useSessionTab(initialOrder: number = 0) {
 
         // 更新本地设置
         if (options?.model) modelId.value = options.model
-        if (options?.thinkingEnabled !== undefined) thinkingEnabled.value = options.thinkingEnabled
+        if (options?.thinkingLevel !== undefined) thinkingLevel.value = options.thinkingLevel
         if (options?.permissionMode) permissionMode.value = options.permissionMode
         if (options?.skipPermissions !== undefined) skipPermissions.value = options.skipPermissions
 
         try {
-            // dangerouslySkipPermissions 由前端处理，永远不传递给后端
+            // 从 settingsStore 获取设置（已从 IDEA 同步）
             const settingsStore = useSettingsStore()
             const connectOptions: ConnectOptions = {
                 includePartialMessages: settingsStore.settings.includePartialMessages ?? true,
                 allowDangerouslySkipPermissions: true,
                 model: modelId.value || undefined,
-                thinkingEnabled: thinkingEnabled.value,
+                // 连接时只传递 boolean（是否启用思考），具体级别在连接后设置
+                thinkingEnabled: thinkingLevel.value > 0,
                 permissionMode: permissionMode.value,
-                dangerouslySkipPermissions: false,
+                // 从前端设置读取（已从 IDEA 同步）
+                dangerouslySkipPermissions: settingsStore.settings.skipPermissions,
                 continueConversation: options?.continueConversation,
                 resumeSessionId: options?.resumeSessionId
             }
 
             // 使用 reconnectSession 复用 WebSocket
             const newSessionId = await rsocketSession.value.reconnectSession(connectOptions)
+
+            // 重连成功后，设置具体的思考级别（如果启用了思考）
+            if (thinkingLevel.value > 0) {
+                try {
+                    await rsocketSession.value.setMaxThinkingTokens(thinkingLevel.value)
+                    log.info(`[Tab ${tabId}] 重连后思考级别已设置: ${thinkingLevel.value}`)
+                } catch (e) {
+                    log.warn(`[Tab ${tabId}] 重连后设置思考级别失败:`, e)
+                }
+            }
 
             sessionId.value = newSessionId
             connectionState.capabilities = rsocketSession.value.capabilities
@@ -1537,6 +1571,23 @@ export function useSessionTab(initialOrder: number = 0) {
     }
 
     /**
+     * 设置思考级别
+     */
+    async function setThinkingLevelValue(level: ThinkingLevel): Promise<void> {
+        if (!rsocketSession.value) {
+            thinkingLevel.value = level
+            return
+        }
+
+        // 调用 RSocket API 动态设置思考 token 上限
+        // level: 0=Off, 2048=Think, 8096=Ultra
+        const maxThinkingTokens = level === 0 ? 0 : level
+        await rsocketSession.value.setMaxThinkingTokens(maxThinkingTokens)
+        thinkingLevel.value = level
+        log.info(`[Tab ${tabId}] 思考级别已设置: ${level}`)
+    }
+
+    /**
      * 仅更新本地权限模式状态，不调用后端 RPC
      * 用于 SDK 会自行处理模式切换的场景（如权限建议中的 setMode）
      */
@@ -1551,7 +1602,7 @@ export function useSessionTab(initialOrder: number = 0) {
     interface SettingsUpdate {
         model?: string
         permissionMode?: RpcPermissionMode
-        thinkingEnabled?: boolean
+        thinkingLevel?: ThinkingLevel
         skipPermissions?: boolean
     }
 
@@ -1559,55 +1610,34 @@ export function useSessionTab(initialOrder: number = 0) {
      * 智能更新设置
      *
      * 策略：
-     * - 有 RPC API 的设置（model, permissionMode）：直接调用 RPC
-     * - 无 RPC API 的设置（thinkingEnabled）：需要重连
-     * - skipPermissions：纯前端行为，只更新本地状态，不需要重连
-     * - 混合修改且包含需要重连的：统一重连，所有参数通过 connect 传递
+     * - 所有设置（model, permissionMode, thinkingLevel）：都可以通过 RPC 动态设置
+     * - skipPermissions：纯前端行为，只更新本地状态
      */
     async function updateSettings(settings: SettingsUpdate): Promise<void> {
-        const hasRpcSettings = settings.model !== undefined || settings.permissionMode !== undefined
-        const hasReconnectSettings = settings.thinkingEnabled !== undefined
-        // skipPermissions 是纯前端行为，不需要重连
-
         // 如果未连接，只更新本地状态
         if (!sessionId.value || connectionState.status !== ConnectionStatus.CONNECTED) {
             if (settings.model !== undefined) modelId.value = settings.model
             if (settings.permissionMode !== undefined) permissionMode.value = settings.permissionMode
-            if (settings.thinkingEnabled !== undefined) thinkingEnabled.value = settings.thinkingEnabled
+            if (settings.thinkingLevel !== undefined) thinkingLevel.value = settings.thinkingLevel
             if (settings.skipPermissions !== undefined) skipPermissions.value = settings.skipPermissions
             log.info(`[Tab ${tabId}] 未连接，仅更新本地设置`)
             return
         }
 
-        // 需要重连的情况：只有 thinkingEnabled 需要重连
-        // skipPermissions 是纯前端行为，不需要重连
-        if (hasReconnectSettings) {
-            log.info(`[Tab ${tabId}] 设置需要重连: `, settings)
+        // 通过 RPC 动态更新设置
+        log.info(`[Tab ${tabId}] 通过 RPC 更新设置: `, settings)
 
-            // 先更新本地状态
-            if (settings.model !== undefined) modelId.value = settings.model
-            if (settings.permissionMode !== undefined) permissionMode.value = settings.permissionMode
-            if (settings.thinkingEnabled !== undefined) thinkingEnabled.value = settings.thinkingEnabled
-
-            // 重连，所有设置通过 connect 参数传递（skipPermissions 不传，因为是纯前端行为）
-            await reconnect({
-                model: modelId.value || undefined,
-                thinkingEnabled: thinkingEnabled.value,
-                permissionMode: permissionMode.value
-            })
-            return
+        if (settings.model !== undefined) {
+            await setModel(settings.model)
         }
-
-        // 只有 RPC 设置，直接调用 RPC
-        if (hasRpcSettings) {
-            log.info(`[Tab ${tabId}] 通过 RPC 更新设置: `, settings)
-
-            if (settings.model !== undefined) {
-                await setModel(settings.model)
-            }
-            if (settings.permissionMode !== undefined) {
-                await setPermissionModeValue(settings.permissionMode)
-            }
+        if (settings.permissionMode !== undefined) {
+            await setPermissionModeValue(settings.permissionMode)
+        }
+        if (settings.thinkingLevel !== undefined) {
+            await setThinkingLevelValue(settings.thinkingLevel)
+        }
+        if (settings.skipPermissions !== undefined) {
+            skipPermissions.value = settings.skipPermissions
         }
     }
 
@@ -1700,7 +1730,7 @@ export function useSessionTab(initialOrder: number = 0) {
 
         // 连接设置
         modelId,
-        thinkingEnabled,
+        thinkingLevel,
         permissionMode,
         skipPermissions,
         resumeFromSessionId,
@@ -1752,6 +1782,7 @@ export function useSessionTab(initialOrder: number = 0) {
         // 设置管理
         setModel,
         setPermissionMode: setPermissionModeValue,
+        setThinkingLevel: setThinkingLevelValue,
         setLocalPermissionMode,
         updateSettings,
         setPendingSetting,

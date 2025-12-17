@@ -84,7 +84,8 @@ data class IndexedFileInfo(
 data class FileSearchResponse(
     val success: Boolean,
     val data: List<IndexedFileInfo>? = null,
-    val error: String? = null
+    val error: String? = null,
+    val errorCode: String? = null  // 错误码：INDEXING 表示正在索引
 )
 
 /**
@@ -340,6 +341,29 @@ class HttpApiServer(
                                     }
                                     call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
+                                "ide.hasIdeEnvironment" -> {
+                                    val hasIde = ideTools.hasIdeEnvironment()
+                                    val response = FrontendResponse(
+                                        success = true,
+                                        data = mapOf("hasIde" to JsonPrimitive(hasIde))
+                                    )
+                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
+                                }
+                                "settings.getDefault" -> {
+                                    // 获取默认配置（浏览器模式下使用，IDE 模式下使用 RSocket）
+                                    val config = serviceConfigProvider()
+                                    val response = FrontendResponse(
+                                        success = true,
+                                        data = mapOf(
+                                            "defaultModelId" to JsonPrimitive(config.defaultModel ?: ""),
+                                            "defaultBypassPermissions" to JsonPrimitive(config.claude.dangerouslySkipPermissions),
+                                            "includePartialMessages" to JsonPrimitive(config.claude.includePartialMessages),
+                                            "defaultThinkingLevel" to JsonPrimitive(config.claude.defaultThinkingLevel),
+                                            "defaultThinkingTokens" to JsonPrimitive(config.claude.defaultThinkingTokens)
+                                        )
+                                    )
+                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
+                                }
                                 else -> {
                                     call.respondText(
                                         """{"success":false,"error":"Unknown action: $action"}""",
@@ -420,11 +444,26 @@ class HttpApiServer(
                                 }
                                 call.respond(FileSearchResponse(success = true, data = fileInfos))
                             } catch (e: Exception) {
-                                logger.error { "❌ Failed to search files: ${e.message}" }
-                                call.respond(
-                                    HttpStatusCode.InternalServerError,
-                                    FileSearchResponse(success = false, error = e.message ?: "Unknown error")
-                                )
+                                // 检查是否是索引中异常（通过异常类名或消息判断）
+                                val isIndexingError = e::class.simpleName == "IndexingInProgressException" ||
+                                        e.message?.contains("indexing", ignoreCase = true) == true
+
+                                if (isIndexingError) {
+                                    logger.info { "⏳ Project is indexing, file search unavailable" }
+                                    call.respond(
+                                        FileSearchResponse(
+                                            success = false,
+                                            error = "Project is indexing, please wait",
+                                            errorCode = "INDEXING"
+                                        )
+                                    )
+                                } else {
+                                    logger.error { "❌ Failed to search files: ${e.message}" }
+                                    call.respond(
+                                        HttpStatusCode.InternalServerError,
+                                        FileSearchResponse(success = false, error = e.message ?: "Unknown error")
+                                    )
+                                }
                             }
                         }
                     }
@@ -550,6 +589,44 @@ class HttpApiServer(
                             )
                         } catch (e: Exception) {
                             logger.error(e) { "❌ [HTTP] 加载历史失败" }
+                            call.respond(
+                                HttpStatusCode.InternalServerError,
+                                mapOf("error" to (e.message ?: "Unknown error"))
+                            )
+                        }
+                    }
+
+                    // 字体下载 API
+                    get("/font/{fontFamily}") {
+                        try {
+                            val fontFamily = call.parameters["fontFamily"]
+                                ?: return@get call.respond(
+                                    HttpStatusCode.BadRequest,
+                                    mapOf("error" to "Missing fontFamily parameter")
+                                )
+
+                            logger.info { "🔤 [Font] Requesting font: $fontFamily" }
+
+                            val fontData = ideTools.getFontData(fontFamily)
+                            if (fontData != null) {
+                                logger.info { "✅ [Font] Found font: ${fontData.fontFamily} (${fontData.data.size} bytes)" }
+                                call.response.headers.append(
+                                    HttpHeaders.ContentDisposition,
+                                    "attachment; filename=\"${fontFamily}.ttf\""
+                                )
+                                call.respondBytes(
+                                    bytes = fontData.data,
+                                    contentType = ContentType.parse(fontData.mimeType)
+                                )
+                            } else {
+                                logger.info { "⚠️ [Font] Font not found: $fontFamily" }
+                                call.respond(
+                                    HttpStatusCode.NotFound,
+                                    mapOf("error" to "Font not found: $fontFamily")
+                                )
+                            }
+                        } catch (e: Exception) {
+                            logger.error { "❌ [Font] Failed to get font: ${e.message}" }
                             call.respond(
                                 HttpStatusCode.InternalServerError,
                                 mapOf("error" to (e.message ?: "Unknown error"))

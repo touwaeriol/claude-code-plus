@@ -263,6 +263,34 @@ export class RSocketSession {
     }
 
     /**
+     * 动态设置思考 token 上限（无需重连）
+     *
+     * @param maxThinkingTokens 思考 token 上限：
+     *   - null: 禁用思考（使用默认行为）
+     *   - 0: 禁用思考
+     *   - 正整数: 设置上限（如 8000, 16000）
+     */
+    async setMaxThinkingTokens(maxThinkingTokens: number | null): Promise<void> {
+        if (!this._isConnected || !this.client) {
+            throw new Error('Session not connected')
+        }
+
+        this.checkCapability('canThink', 'setMaxThinkingTokens')
+
+        console.log('[RSocket] ← agent.setMaxThinkingTokens 发送:', JSON.stringify({maxThinkingTokens}, null, 2))
+
+        try {
+            const data = ProtoCodec.encodeSetMaxThinkingTokensRequest(maxThinkingTokens)
+            const responseData = await this.client.requestResponse('agent.setMaxThinkingTokens', data)
+            const result = ProtoCodec.decodeSetMaxThinkingTokensResult(responseData)
+            console.log('[RSocket] → agent.setMaxThinkingTokens 结果:', JSON.stringify(result, null, 2))
+        } catch (err) {
+            log.warn('[RSocketSession] Set max thinking tokens request failed:', err)
+            throw err
+        }
+    }
+
+    /**
      * 主动断开连接
      */
     async disconnect(): Promise<void> {

@@ -9,6 +9,7 @@ import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffManager
 import com.intellij.diff.contents.DocumentContent
 import com.intellij.diff.editor.DiffRequestProcessorEditor
+import com.intellij.diff.requests.ContentDiffRequest
 import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.l10n.LocalizationUtil
@@ -394,9 +395,12 @@ class IdeToolsImpl(
     override fun getAgentDefinitions(): Map<String, AgentDefinition> {
         return try {
             // AgentDefinition 类型由 SDK 统一提供，无需转换
+            logger.info("🔍 [getAgentDefinitions] 开始加载自定义代理...")
             val agents = ResourceLoader.loadAllAgentDefinitions()
             if (agents.isNotEmpty()) {
                 logger.info("📦 Loaded ${agents.size} custom agents: ${agents.keys.joinToString()}")
+            } else {
+                logger.warning("⚠️ [getAgentDefinitions] 未加载到任何自定义代理，请检查 agents/agents.json 资源文件")
             }
             agents
         } catch (e: Exception) {
@@ -465,29 +469,28 @@ class IdeToolsImpl(
 
     /**
      * 处理 Diff 编辑器，获取 Diff 内容
+     * 支持所有 ContentDiffRequest 类型，包括 SimpleDiffRequest、LocalChangeListDiffRequest 等
      */
     private fun handleDiffEditor(diffEditor: DiffRequestProcessorEditor, projectPath: String): ActiveFileInfo? {
         return try {
             val processor = diffEditor.processor
             val request = processor.activeRequest
 
-            if (request is SimpleDiffRequest) {
+            // 支持所有 ContentDiffRequest 类型（SimpleDiffRequest 是其子类）
+            if (request is ContentDiffRequest) {
                 val contents = request.contents
                 val title = request.title ?: "Diff"
+                val contentTitles = request.contentTitles
 
                 // 获取左侧（旧）和右侧（新）内容
                 val oldContent = (contents.getOrNull(0) as? DocumentContent)?.document?.text
                 val newContent = (contents.getOrNull(1) as? DocumentContent)?.document?.text
 
-                // 尝试从 Diff 请求中获取文件路径
-                val contentTitles = request.contentTitles
-                val filePath = contentTitles.firstOrNull { it?.contains("/") == true || it?.contains("\\") == true }
-                    ?: request.title
-                    ?: "Diff"
-
+                // 尝试从多个来源获取文件路径
+                val filePath = extractFilePathFromDiff(contentTitles, title, contents)
                 val relativePath = calculateRelativePath(filePath, projectPath)
 
-                logger.info("✅ Active diff: $title (old: ${oldContent?.length ?: 0} chars, new: ${newContent?.length ?: 0} chars)")
+                logger.info("✅ Active diff (${request.javaClass.simpleName}): $title -> $filePath")
 
                 ActiveFileInfo(
                     path = filePath,
@@ -499,13 +502,101 @@ class IdeToolsImpl(
                     diffTitle = title
                 )
             } else {
-                logger.info("⚠️ Diff request is not SimpleDiffRequest: ${request?.javaClass?.name}")
-                null
+                // 对于非 ContentDiffRequest 类型，尝试从虚拟文件获取信息
+                val virtualFile = diffEditor.file
+                val filePath = virtualFile?.let { extractFilePathFromVirtualFile(it) }
+
+                if (filePath != null) {
+                    val relativePath = calculateRelativePath(filePath, projectPath)
+                    logger.info("✅ Active diff (from virtual file): $filePath")
+
+                    ActiveFileInfo(
+                        path = filePath,
+                        relativePath = relativePath,
+                        name = File(filePath).name,
+                        fileType = "diff",
+                        diffTitle = request?.title ?: virtualFile.name
+                    )
+                } else {
+                    logger.info("⚠️ Unsupported diff request type: ${request?.javaClass?.name}")
+                    null
+                }
             }
         } catch (e: Exception) {
             logger.warning("Failed to handle diff editor: ${e.message}")
             null
         }
+    }
+
+    /**
+     * 从 Diff 内容中提取文件路径
+     */
+    private fun extractFilePathFromDiff(
+        contentTitles: List<String?>,
+        title: String,
+        contents: List<com.intellij.diff.contents.DiffContent>
+    ): String {
+        // 1. 尝试从 contentTitles 获取路径
+        val pathFromTitles = contentTitles.asSequence()
+            .filterNotNull()
+            .firstOrNull { it.contains("/") || it.contains("\\") }
+        if (pathFromTitles != null) return pathFromTitles
+
+        // 2. 尝试从 DiffContent 的 VirtualFile 获取路径
+        for (content in contents) {
+            if (content is DocumentContent) {
+                val file = content.highlightFile
+                if (file != null && file.path.isNotEmpty()) {
+                    return file.path
+                }
+            }
+        }
+
+        // 3. 从标题中提取文件名
+        val fileNameFromTitle = extractFileNameFromTitle(title)
+        if (fileNameFromTitle != null) return fileNameFromTitle
+
+        // 4. 最后回退到标题本身
+        return title
+    }
+
+    /**
+     * 从标题中提取文件名
+     * 例如: "Commit: SubprocessTransport.kt" -> "SubprocessTransport.kt"
+     */
+    private fun extractFileNameFromTitle(title: String): String? {
+        // 匹配常见的标题模式
+        val patterns = listOf(
+            Regex("""(?:Commit|Changes|Diff):\s*(.+)"""),  // "Commit: file.kt"
+            Regex("""(.+?)\s+vs\s+.+"""),                   // "file.kt vs HEAD"
+            Regex("""(.+?)\s*\(.+\)""")                     // "file.kt (before)"
+        )
+
+        for (pattern in patterns) {
+            val match = pattern.find(title)
+            if (match != null) {
+                val extracted = match.groupValues[1].trim()
+                if (extracted.isNotEmpty() && extracted != title) {
+                    return extracted
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * 从虚拟文件中提取实际文件路径
+     */
+    private fun extractFilePathFromVirtualFile(virtualFile: VirtualFile): String? {
+        // 某些 diff 虚拟文件可能包含原始文件的引用
+        val name = virtualFile.name
+
+        // 跳过明显的虚拟文件名
+        if (name.contains("DiffVirtualFile") || name.contains("Preview")) {
+            return null
+        }
+
+        return virtualFile.path
     }
 
     /**
@@ -606,6 +697,132 @@ class IdeToolsImpl(
             file.fileType.isBinary -> "binary"
             else -> "text"
         }
+    }
+
+    /**
+     * 检查是否在 IDE 环境中运行
+     *
+     * IdeToolsImpl 由 jetbrains-plugin 提供，表示在 IDEA 中运行
+     */
+    override fun hasIdeEnvironment(): Boolean = true
+
+    /**
+     * 获取字体文件数据
+     *
+     * 从系统字体目录中查找指定字体并返回其二进制数据
+     * 支持 TrueType (.ttf) 和 OpenType (.otf) 字体
+     */
+    override fun getFontData(fontFamily: String): FontData? {
+        return try {
+            // 标准化字体名称（移除空格、转小写）
+            val normalizedName = fontFamily.lowercase().replace(" ", "")
+
+            // 获取系统字体目录
+            val fontDirs = mutableListOf<File>()
+
+            // Windows 字体目录
+            val windowsFontDir = File("C:\\Windows\\Fonts")
+            if (windowsFontDir.exists()) fontDirs.add(windowsFontDir)
+
+            // 用户字体目录 (Windows)
+            val userFontDir = File(System.getProperty("user.home"), "AppData/Local/Microsoft/Windows/Fonts")
+            if (userFontDir.exists()) fontDirs.add(userFontDir)
+
+            // macOS 字体目录
+            val macSystemFontDir = File("/System/Library/Fonts")
+            if (macSystemFontDir.exists()) fontDirs.add(macSystemFontDir)
+            val macLibraryFontDir = File("/Library/Fonts")
+            if (macLibraryFontDir.exists()) fontDirs.add(macLibraryFontDir)
+            val macUserFontDir = File(System.getProperty("user.home"), "Library/Fonts")
+            if (macUserFontDir.exists()) fontDirs.add(macUserFontDir)
+
+            // Linux 字体目录
+            val linuxFontDir = File("/usr/share/fonts")
+            if (linuxFontDir.exists()) fontDirs.add(linuxFontDir)
+            val linuxLocalFontDir = File("/usr/local/share/fonts")
+            if (linuxLocalFontDir.exists()) fontDirs.add(linuxLocalFontDir)
+            val linuxUserFontDir = File(System.getProperty("user.home"), ".fonts")
+            if (linuxUserFontDir.exists()) fontDirs.add(linuxUserFontDir)
+            val linuxUserFontDir2 = File(System.getProperty("user.home"), ".local/share/fonts")
+            if (linuxUserFontDir2.exists()) fontDirs.add(linuxUserFontDir2)
+
+            // 搜索字体文件
+            for (fontDir in fontDirs) {
+                val fontFile = findFontFile(fontDir, normalizedName, fontFamily)
+                if (fontFile != null) {
+                    val extension = fontFile.extension.lowercase()
+                    val format = when (extension) {
+                        "ttf" -> "truetype"
+                        "otf" -> "opentype"
+                        "woff" -> "woff"
+                        "woff2" -> "woff2"
+                        else -> "truetype"
+                    }
+                    val mimeType = when (extension) {
+                        "ttf" -> "font/ttf"
+                        "otf" -> "font/otf"
+                        "woff" -> "font/woff"
+                        "woff2" -> "font/woff2"
+                        else -> "font/ttf"
+                    }
+
+                    logger.info("✅ Found font file: ${fontFile.absolutePath}")
+                    return FontData(
+                        fontFamily = fontFamily,
+                        data = fontFile.readBytes(),
+                        format = format,
+                        mimeType = mimeType
+                    )
+                }
+            }
+
+            logger.info("⚠️ Font not found: $fontFamily")
+            null
+        } catch (e: Exception) {
+            logger.warning("Failed to get font data: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * 在目录中递归搜索字体文件
+     */
+    private fun findFontFile(dir: File, normalizedName: String, @Suppress("UNUSED_PARAMETER") originalName: String): File? {
+        val fontExtensions = setOf("ttf", "otf", "woff", "woff2")
+
+        // 遍历目录（包括子目录）
+        val files = dir.walkTopDown()
+            .filter { it.isFile && it.extension.lowercase() in fontExtensions }
+            .toList()
+
+        // 首先尝试精确匹配（不区分大小写）
+        for (file in files) {
+            val fileName = file.nameWithoutExtension.lowercase().replace(" ", "").replace("-", "").replace("_", "")
+            if (fileName == normalizedName ||
+                fileName == normalizedName.replace("-", "") ||
+                fileName.startsWith(normalizedName)) {
+                return file
+            }
+        }
+
+        // 尝试匹配常见变体
+        val variants = listOf(
+            normalizedName,
+            "${normalizedName}regular",
+            "${normalizedName}-regular",
+            "${normalizedName}_regular",
+            "${normalizedName}medium",
+            "${normalizedName}-medium",
+        )
+
+        for (file in files) {
+            val fileName = file.nameWithoutExtension.lowercase().replace(" ", "").replace("-", "").replace("_", "")
+            if (variants.any { fileName.contains(it) }) {
+                return file
+            }
+        }
+
+        return null
     }
 }
 

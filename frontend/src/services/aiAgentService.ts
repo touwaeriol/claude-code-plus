@@ -217,6 +217,42 @@ export class AiAgentService {
 
         return await session.truncateHistory(params)
     }
+
+    /**
+     * 检查是否在 IDE 环境中运行
+     *
+     * - ai-agent-server (默认): 返回 false
+     * - jetbrains-plugin (IDEA): 返回 true
+     *
+     * 前端根据此值决定是否连接 jetbrains-rsocket 获取 IDE 设置
+     */
+    async hasIdeEnvironment(): Promise<boolean> {
+        try {
+            const baseUrl = resolveServerHttpUrl()
+            const url = `${baseUrl}/api/`
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ action: 'ide.hasIdeEnvironment' })
+            })
+
+            if (!response.ok) {
+                console.warn('[aiAgentService] hasIdeEnvironment 请求失败:', response.status)
+                return false
+            }
+
+            const result = await response.json()
+            const hasIde = result.data?.hasIde ?? false
+            console.log('🖥️ [aiAgentService] hasIdeEnvironment:', hasIde)
+            return hasIde
+        } catch (error) {
+            console.warn('[aiAgentService] hasIdeEnvironment 请求异常:', error)
+            return false
+        }
+    }
 }
 
 // 导出单例

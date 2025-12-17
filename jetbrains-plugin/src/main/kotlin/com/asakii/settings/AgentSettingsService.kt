@@ -71,6 +71,8 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         // MCP 服务器启用配置（放在最前面）
         var enableUserInteractionMcp: Boolean = true,  // 用户交互 MCP（AskUserQuestion 工具）
         var enableJetBrainsMcp: Boolean = true,        // JetBrains IDE MCP（IDE 索引工具）
+        var enableContext7Mcp: Boolean = false,        // Context7 MCP（获取最新库文档）
+        var context7ApiKey: String = "",               // Context7 API Key（可选）
 
         // 默认启用 ByPass 权限（前端自动应用）
         var defaultBypassPermissions: Boolean = false,
@@ -142,6 +144,14 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         get() = state.enableJetBrainsMcp
         set(value) { state.enableJetBrainsMcp = value }
 
+    var enableContext7Mcp: Boolean
+        get() = state.enableContext7Mcp
+        set(value) { state.enableContext7Mcp = value }
+
+    var context7ApiKey: String
+        get() = state.context7ApiKey
+        set(value) { state.context7ApiKey = value }
+
     var defaultBypassPermissions: Boolean
         get() = state.defaultBypassPermissions
         set(value) { state.defaultBypassPermissions = value }
@@ -171,7 +181,11 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         set(value) { state.includePartialMessages = value }
 
     var defaultThinkingLevelId: String
-        get() = state.defaultThinkingLevelId
+        get() {
+            val id = state.defaultThinkingLevelId
+            // 只允许预设级别 ID，无效的自定义级别 fallback 到 ultra
+            return if (id in listOf("off", "think", "ultra")) id else "ultra"
+        }
         set(value) { state.defaultThinkingLevelId = value }
 
     var thinkTokens: Int
@@ -232,15 +246,14 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     }
 
     /**
-     * 获取所有思考级别（预设 + 自定义）
+     * 获取所有思考级别（仅预设级别）
      */
     fun getAllThinkingLevels(): List<ThinkingLevelConfig> {
-        val presetLevels = listOf(
+        return listOf(
             ThinkingLevelConfig("off", "Off", 0, isCustom = false),
             ThinkingLevelConfig("think", "Think", state.thinkTokens, isCustom = false),
             ThinkingLevelConfig("ultra", "Ultra", state.ultraTokens, isCustom = false)
         )
-        return presetLevels + getCustomThinkingLevels()
     }
 
     /**

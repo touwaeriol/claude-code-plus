@@ -104,9 +104,9 @@ class ControlProtocol(
      * 因为 CLI 启动后会立即发送 mcp_message 请求
      */
     fun registerMcpServers() {
-        println("🔄 注册 MCP 服务器...")
-        println("📋 MCP 服务器配置: ${options.mcpServers}")
-        println("📋 MCP 服务器数量: ${options.mcpServers.size}")
+        logger.info { "🔄 注册 MCP 服务器..." }
+        logger.debug { "📋 MCP 服务器配置: ${options.mcpServers}" }
+        logger.debug { "📋 MCP 服务器数量: ${options.mcpServers.size}" }
 
         options.mcpServers.forEach { (name, config) ->
             when {
@@ -116,22 +116,22 @@ class ControlProtocol(
                         when (instance) {
                             is McpServer -> {
                                 newMcpServers[name] = instance
-                                println("📦 注册新接口 MCP 服务器: $name (${instance::class.simpleName})")
+                                logger.info { "📦 注册新接口 MCP 服务器: $name (${instance::class.simpleName})" }
                             }
                             else -> {
                                 sdkMcpServers[name] = instance
-                                println("📦 注册旧版 SDK MCP 服务器: $name")
+                                logger.info { "📦 注册旧版 SDK MCP 服务器: $name" }
                             }
                         }
                     }
                 }
                 config is McpServer -> {
                     newMcpServers[name] = config
-                    println("📦 注册直接提供的 MCP 服务器: $name (${config::class.simpleName})")
+                    logger.info { "📦 注册直接提供的 MCP 服务器: $name (${config::class.simpleName})" }
                 }
             }
         }
-        println("✅ MCP 服务器注册完成: ${newMcpServers.keys + sdkMcpServers.keys}")
+        logger.info { "✅ MCP 服务器注册完成: ${newMcpServers.keys + sdkMcpServers.keys}" }
     }
 
     /**
@@ -143,7 +143,7 @@ class ControlProtocol(
             return _initializationResult.await()
         }
 
-        println("🔄 初始化控制协议...")
+        logger.info { "🔄 初始化控制协议..." }
 
         // 构建hooks配置（仿照Python SDK的hooks_config构建）
         val hooksConfig = mutableMapOf<String, JsonElement>()
@@ -166,7 +166,7 @@ class ControlProtocol(
                             val callbackId = "hook_${hookIdCounter.incrementAndGet()}"
                             hookCallbacks[callbackId] = callback
                             callbackIds.add(callbackId)
-                            println("🎣 注册Hook回调: $callbackId")
+                            logger.info { "🎣 注册Hook回调: $callbackId" }
                         }
                         
                         eventMatchers.add(buildJsonObject {
@@ -202,7 +202,7 @@ class ControlProtocol(
         val result = response.response?.jsonObject?.toMap() ?: mapOf("status" to "initialized")
         _initializationResult.complete(result)
 
-        println("✅ 控制协议初始化完成")
+        logger.info { "✅ 控制协议初始化完成" }
         return result
     }
     
@@ -399,10 +399,10 @@ class ControlProtocol(
             logger.info("📤 [ControlProtocol] 发送 SystemInitMessage 到 sdkMessages: sessionId=$sessionId, model=$modelId")
             _sdkMessages.send(systemInitMessage)
 
-            println("System initialization received: $serverInfo")
+            logger.info { "System initialization received: $serverInfo" }
             systemInitCallback?.invoke(modelId)
         } catch (e: Exception) {
-            println("Failed to handle system init: ${e.message}")
+            logger.warn(e) { "Failed to handle system init: ${e.message}" }
             _systemInitReceived.trySend(mapOf("status" to "error", "error" to (e.message ?: "Unknown error")))
         }
     }
@@ -524,7 +524,7 @@ class ControlProtocol(
         val serverName = request.serverName
         val message = request.message
         
-        println("📨 处理MCP消息: server=$serverName, method=${message.jsonObject["method"]?.jsonPrimitive?.content}")
+        logger.debug { "📨 处理MCP消息: server=$serverName, method=${message.jsonObject["method"]?.jsonPrimitive?.content}" }
         
         // 检查新接口服务器是否存在
         val newServer = newMcpServers[serverName]
@@ -564,7 +564,7 @@ class ControlProtocol(
                 }
             }
         } catch (e: Exception) {
-            println("❌ MCP消息处理失败: ${e.message}")
+            logger.warn(e) { "❌ MCP消息处理失败: ${e.message}" }
             return buildJsonObject {
                 put("jsonrpc", "2.0")
                 id?.let { put("id", it) }
@@ -680,6 +680,25 @@ class ControlProtocol(
     }
 
     /**
+     * Set max thinking tokens for the current session.
+     * This allows dynamic control of thinking mode without reconnecting.
+     *
+     * @param maxThinkingTokens The maximum thinking tokens to set:
+     *   - null: Disable thinking (use default behavior)
+     *   - 0: Disable thinking
+     *   - positive value: Set the limit (e.g., 8000, 16000)
+     */
+    suspend fun setMaxThinkingTokens(maxThinkingTokens: Int?) {
+        val request = SetMaxThinkingTokensRequest(maxThinkingTokens = maxThinkingTokens)
+        val response = sendControlRequest(request)
+
+        if (response.subtype == "error") {
+            throw ControlProtocolException("Set max thinking tokens failed: ${response.error}")
+        }
+        logger.info("✅ [ControlProtocol] 设置 maxThinkingTokens = $maxThinkingTokens")
+    }
+
+    /**
      * Convert hooks configuration to protocol format.
      */
     private fun convertHooksToProtocolFormat(hooks: Map<HookEvent, List<HookMatcher>>): Map<String, JsonElement> {
@@ -776,7 +795,7 @@ class ControlProtocol(
                 // 直接传递 JsonObject，让工具自己反序列化为强类型
                 val argumentsJson = params["arguments"]?.jsonObject ?: buildJsonObject {}
 
-                println("🛠️ 调用新接口工具: $toolName, args: $argumentsJson")
+                logger.debug { "🛠️ 调用新接口工具: $toolName, args: $argumentsJson" }
 
                 val result = server.callToolJson(toolName, argumentsJson)
                 

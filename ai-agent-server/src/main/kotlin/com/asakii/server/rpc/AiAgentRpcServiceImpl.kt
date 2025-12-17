@@ -75,7 +75,6 @@ import kotlinx.serialization.json.put
 import java.io.File
 import java.nio.file.Path
 import java.util.UUID
-import kotlinx.coroutines.flow.flow
 import com.asakii.server.history.HistoryJsonlLoader
 
 /**
@@ -255,6 +254,14 @@ class AiAgentRpcServiceImpl(
         activeClient.runInBackground()
         sdkLog.info("✅ [SDK] runInBackground 请求已提交")
         return RpcStatusResult(status = RpcSessionStatus.CONNECTED)
+    }
+
+    override suspend fun setMaxThinkingTokens(maxThinkingTokens: Int?): RpcSetMaxThinkingTokensResult {
+        sdkLog.info("🧠 [SDK] 设置思考 token 上限: $maxThinkingTokens")
+        val activeClient = client ?: error("AI Agent 尚未连接，请先调用 connect()")
+        activeClient.setMaxThinkingTokens(maxThinkingTokens)
+        sdkLog.info("✅ [SDK] setMaxThinkingTokens 请求已提交: $maxThinkingTokens")
+        return RpcSetMaxThinkingTokensResult(maxThinkingTokens = maxThinkingTokens)
     }
 
     override suspend fun disconnect(): RpcStatusResult {
@@ -602,15 +609,48 @@ class AiAgentRpcServiceImpl(
             sdkLog.info("⏭️ [buildClaudeOverrides] JetBrains MCP Server 已禁用")
         }
 
+        // 添加 Context7 MCP Server（如果启用）
+        if (defaults.enableContext7Mcp) {
+            val context7Config = mutableMapOf<String, Any>(
+                "type" to "http",
+                "url" to "https://mcp.context7.com/mcp"
+            )
+            // 如果用户配置了 API Key，则添加到 headers 中
+            defaults.context7ApiKey?.takeIf { it.isNotBlank() }?.let { apiKey ->
+                context7Config["headers"] = mapOf("CONTEXT7_API_KEY" to apiKey)
+                sdkLog.info("✅ [buildClaudeOverrides] 已添加 Context7 MCP Server (with API key)")
+            } ?: run {
+                sdkLog.info("✅ [buildClaudeOverrides] 已添加 Context7 MCP Server (without API key)")
+            }
+            mcpServers["context7"] = context7Config
+        } else {
+            sdkLog.info("⏭️ [buildClaudeOverrides] Context7 MCP Server 已禁用")
+        }
+
         // 从 IdeTools 获取子代理定义（如 JetBrains 专用的代码探索代理）
         val agents = ideTools.getAgentDefinitions()
         if (agents.isNotEmpty()) {
             sdkLog.info("📦 [buildClaudeOverrides] 加载了 ${agents.size} 个自定义代理: ${agents.keys.joinToString()}")
+        } else {
+            sdkLog.warn("⚠️ [buildClaudeOverrides] 未加载到任何自定义代理 (ideTools类型=${ideTools::class.simpleName})")
         }
 
         // 收集所有 MCP 服务器的系统提示词追加内容
         // 使用 appendSystemPromptFile 追加，不会替换 Claude Code 默认提示词
-        val mcpSystemPromptAppendix = buildMcpSystemPromptAppendix(mcpServers)
+        var mcpSystemPromptAppendix = buildMcpSystemPromptAppendix(mcpServers)
+
+        // 如果启用了 Context7 MCP，追加其系统提示词
+        if (defaults.enableContext7Mcp) {
+            val context7Instructions = loadContext7Instructions()
+            if (context7Instructions.isNotBlank()) {
+                mcpSystemPromptAppendix = if (mcpSystemPromptAppendix.isNotBlank()) {
+                    "$mcpSystemPromptAppendix\n\n$context7Instructions"
+                } else {
+                    context7Instructions
+                }
+                sdkLog.info("📝 [buildClaudeOverrides] 已追加 Context7 系统提示词")
+            }
+        }
 
         // canUseTool 回调：通过 RPC 调用前端获取用户授权（带 tool_use_id 和 permissionSuggestions）
         val canUseToolCallback: CanUseTool = { toolName, input, toolUseId, context ->
@@ -697,7 +737,9 @@ class AiAgentRpcServiceImpl(
             // Node.js 可执行文件路径（用户配置 > 环境变量 > 默认 "node"）
             nodePath = defaults.nodePath,
             // Claude CLI settings.json 路径（用于加载环境变量等配置）
-            settings = defaults.settings
+            settings = defaults.settings,
+            // IDEA 文件同步 hooks（由 jetbrains-plugin 提供）
+            hooks = defaults.ideaFileSyncHooks
         )
 
         return ClaudeOverrides(options = claudeOptions)
@@ -719,6 +761,21 @@ class AiAgentRpcServiceImpl(
                 server.getSystemPromptAppendix()?.takeIf { it.isNotBlank() }
             }
             .joinToString("\n\n")
+    }
+
+    /**
+     * 加载 Context7 MCP 的系统提示词
+     *
+     * @return Context7 系统提示词内容，加载失败返回空字符串
+     */
+    private fun loadContext7Instructions(): String {
+        return try {
+            val inputStream = javaClass.classLoader.getResourceAsStream("prompts/context7-mcp-instructions.md")
+            inputStream?.bufferedReader()?.use { it.readText() } ?: ""
+        } catch (e: Exception) {
+            sdkLog.warn("⚠️ [loadContext7Instructions] 加载 Context7 提示词失败: ${e.message}")
+            ""
+        }
     }
 
     /**

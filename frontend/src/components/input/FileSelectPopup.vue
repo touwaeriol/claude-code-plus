@@ -22,21 +22,28 @@
 
       <!-- 文件列表 -->
       <div class="file-list">
-        <div
-          v-for="(file, index) in files"
-          :key="file.absolutePath || file.relativePath"
-          :class="['file-item', { selected: index === selectedIndex }]"
-          @click="selectFile(file)"
-          @mouseenter="selectedIndex = index"
-        >
-          <span class="file-icon">{{ file.isDirectory ? '📁' : getFileIcon(file.fileType) }}</span>
-          <span class="file-name">{{ file.name }}</span>
-          <span class="file-path">{{ file.relativePath }}</span>
+        <!-- 索引中提示 -->
+        <div v-if="isIndexing" class="indexing-notice">
+          <span class="indexing-icon">⏳</span>
+          <span>Indexing in progress...</span>
         </div>
-        <!-- 无结果提示 -->
-        <div v-if="files.length === 0 && showSearchInput" class="no-results">
+        <template v-else>
+          <div
+            v-for="(file, index) in files"
+            :key="file.absolutePath || file.relativePath"
+            :class="['file-item', { selected: index === selectedIndex }]"
+            @click="selectFile(file)"
+            @mouseenter="selectedIndex = index"
+          >
+            <span class="file-icon">{{ file.isDirectory ? '📁' : getFileIcon(file.fileType) }}</span>
+            <span class="file-name">{{ file.name }}</span>
+            <span class="file-path">{{ file.relativePath }}</span>
+          </div>
+          <!-- 无结果提示 -->
+          <div v-if="files.length === 0 && showSearchInput" class="no-results">
 No results
-        </div>
+          </div>
+        </template>
       </div>
 
       <!-- 底部路径显示栏 -->
@@ -57,6 +64,7 @@ const props = defineProps<{
   anchorElement: HTMLElement | null
   showSearchInput?: boolean
   placeholder?: string
+  isIndexing?: boolean  // 是否正在索引
 }>()
 
 const emit = defineEmits<{
@@ -72,10 +80,11 @@ const searchQuery = ref('')
 
 // 是否显示弹窗
 // - 有搜索框时：只要 visible 就显示（即使没有搜索结果）
-// - 无搜索框时：需要 visible 且有文件才显示
+// - 无搜索框时：需要 visible 且 (有文件 或 正在索引)
 const shouldShow = computed(() => {
   if (!props.visible) return false
   if (props.showSearchInput) return true
+  if (props.isIndexing) return true  // 索引中也显示弹窗
   return props.files.length > 0
 })
 
@@ -328,6 +337,20 @@ onUnmounted(() => {
   text-align: center;
   font-size: 13px;
   color: var(--theme-text-secondary, #6a737d);
+}
+
+.indexing-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 8px;
+  font-size: 13px;
+  color: var(--theme-text-secondary, #6a737d);
+}
+
+.indexing-icon {
+  font-size: 16px;
 }
 
 .file-path-bar {

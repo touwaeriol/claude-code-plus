@@ -148,10 +148,19 @@ fun main(args: Array<String>) = runBlocking {
     }
 
     // 5. 实例化 HttpApiServer
+    // 配置默认设置（可通过环境变量或配置文件覆盖）
+    val defaultConfig = com.asakii.server.config.AiAgentServiceConfig(
+        defaultModel = System.getenv("CLAUDE_DEFAULT_MODEL"),  // 例如: "claude-sonnet-4-5-20250929"
+        claude = com.asakii.server.config.ClaudeDefaults(
+            dangerouslySkipPermissions = System.getenv("CLAUDE_BYPASS_PERMISSIONS")?.toBoolean() ?: false,
+            includePartialMessages = System.getenv("CLAUDE_INCLUDE_PARTIAL_MESSAGES")?.toBoolean() ?: true
+        )
+    )
     val server = HttpApiServer(
         ideTools = defaultIdeTools,
         scope = scope,
-        frontendDir = if (devMode) null else frontendDistDir
+        frontendDir = if (devMode) null else frontendDistDir,
+        serviceConfigProvider = { defaultConfig }
     )
 
     // 6. 启动服务器并打印 URL

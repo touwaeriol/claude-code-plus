@@ -40,18 +40,32 @@
 
         <!-- 消息气泡 -->
         <div class="user-message-bubble">
-          <!-- 当前打开文件标记（如果有） -->
-          <div
-            v-if="hasCurrentOpenFile"
-            class="bubble-file-tag"
-            :title="currentOpenFileFullPath"
-            @click.stop="handleOpenFileClick"
-          >
-            <span class="tag-file-name">{{ currentOpenFileName }}</span>
-            <span v-if="currentOpenFileLineRange" class="tag-line-range">{{ currentOpenFileLineRange }}</span>
-          </div>
           <!-- 单一气泡容器 -->
           <div class="bubble-content" :class="{ collapsed: isCollapsed && isLongMessage }">
+            <!-- 上下文标签区域（当前打开文件 + 文件引用） -->
+            <div v-if="hasCurrentOpenFile || contextFileRefs.length > 0" class="context-tags">
+              <!-- 当前打开文件标记 -->
+              <span
+                v-if="hasCurrentOpenFile"
+                class="bubble-file-tag"
+                :title="currentOpenFileFullPath"
+                @click.stop="handleOpenFileClick"
+              >
+                <span class="tag-file-name">{{ currentOpenFileName }}</span>
+                <span v-if="currentOpenFileLineRange" class="tag-line-range">{{ currentOpenFileLineRange }}</span>
+              </span>
+              <!-- 文件引用标签 -->
+              <span
+                v-for="(fileRef, index) in contextFileRefs"
+                :key="`file-${index}`"
+                class="bubble-file-tag file-ref"
+                :title="fileRef.fullPath || fileRef.uri"
+                @click.stop="handleFileRefClick(fileRef)"
+              >
+                <span class="tag-prefix">@</span>
+                <span class="tag-file-name">{{ getFileRefName(fileRef) }}</span>
+              </span>
+            </div>
             <!-- 上下文图片（在文字上方） -->
             <div v-if="contextImagesAsBlocks.length > 0" class="context-images">
               <img
@@ -269,6 +283,27 @@ const contextImageRefs = computed(() => {
   if (!ctxs || !Array.isArray(ctxs)) return []
   return ctxs.filter(ctx => ctx.type === 'image' && ctx.base64Data)
 })
+
+// 从 DisplayItem.contexts 中提取文件引用（ContextReference 类型）
+const contextFileRefs = computed(() => {
+  const ctxs = props.message.contexts
+  if (!ctxs || !Array.isArray(ctxs)) return []
+  return ctxs.filter(ctx => ctx.type === 'file')
+})
+
+// 获取文件引用的显示名称
+function getFileRefName(fileRef: ContextReference): string {
+  const path = fileRef.fullPath || fileRef.path || fileRef.uri?.replace(/^file:\/\//, '') || ''
+  return getFileName(path)
+}
+
+// 点击文件引用打开文件
+function handleFileRefClick(fileRef: ContextReference) {
+  const filePath = fileRef.fullPath || fileRef.path || fileRef.uri?.replace(/^file:\/\//, '')
+  if (filePath) {
+    ideaBridge.query('ide.openFile', { filePath })
+  }
+}
 
 // 将 ContextReference 转换为 ImageBlock 格式（用于复用 getImageSrc 等函数）
 const contextImagesAsBlocks = computed((): ImageBlock[] => {
@@ -787,13 +822,20 @@ function closeImagePreview() {
   white-space: nowrap;
 }
 
+/* 上下文标签区域 - 横向排列 */
+.context-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
 /* 气泡消息中的文件标记 - 紧凑样式 */
 .bubble-file-tag {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   padding: 1px 6px;
-  margin-bottom: 4px;
   background: rgba(255, 255, 255, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 3px;
@@ -825,6 +867,12 @@ function closeImagePreview() {
   font-family: var(--editor-font-family, monospace);
   flex-shrink: 0;
   white-space: nowrap;
+}
+
+/* 文件引用的 @ 前缀 */
+.bubble-file-tag .tag-prefix {
+  font-weight: 600;
+  opacity: 0.7;
 }
 
 </style>

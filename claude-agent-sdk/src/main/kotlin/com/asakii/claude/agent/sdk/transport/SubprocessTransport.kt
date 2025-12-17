@@ -68,23 +68,40 @@ class SubprocessTransport(
             val command = buildCommand()
             logger.info("🚀 构建Claude CLI命令: ${command.joinToString(" ")}")
 
-            // 构建通过 shell 执行的命令
-            val (shellCommand, shellArgs) = buildShellCommand(command)
-            logger.info("🐚 通过 Shell 执行: $shellCommand ${shellArgs.joinToString(" ")}")
+            // 直接执行命令，不使用 shell 包装
+            // 根据业界最佳实践：直接执行比通过 shell 更安全、stdin/stdout 管道更可靠
+            // 参考: https://www.baeldung.com/java-lang-processbuilder-api
+            logger.info("⚡ 直接执行命令（不使用 shell）")
 
-            // 同时输出到控制台，方便调试
-            val fullCommand = listOf(shellCommand) + shellArgs
-            println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            println("🚀 Claude CLI 启动命令:")
-            println("   Shell: $shellCommand")
-            println("   Args: ${shellArgs.joinToString("\n         ")}")
-            println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            // 记录 CLI 启动命令到日志
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info("🚀 Claude CLI 启动命令:")
+            logger.info("   直接执行: ${command.joinToString(" ")}")
+            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-            val processBuilder = ProcessBuilder(fullCommand).apply {
+            val processBuilder = ProcessBuilder(command).apply {
                 // Set working directory if provided
                 options.cwd?.let {
                     logger.info("📂 设置工作目录: $it")
                     directory(it.toFile())
+                }
+
+                // 打印 JVM 继承的环境变量（用于调试）
+                val systemEnv = System.getenv()
+                logger.info("🌐 JVM 环境变量 (共 ${systemEnv.size} 个):")
+                systemEnv.entries.sortedBy { it.key }.forEach { (key, value) ->
+                    // 敏感信息脱敏
+                    val displayValue = if (key.contains("KEY", ignoreCase = true) ||
+                                           key.contains("SECRET", ignoreCase = true) ||
+                                           key.contains("TOKEN", ignoreCase = true) ||
+                                           key.contains("PASSWORD", ignoreCase = true)) {
+                        "***"
+                    } else if (value.length > 100) {
+                        "${value.take(100)}..."
+                    } else {
+                        value
+                    }
+                    logger.info("   $key=$displayValue")
                 }
 
                 // Set environment variables (user-provided env)
@@ -284,56 +301,6 @@ class SubprocessTransport(
     }
     
     override fun isConnected(): Boolean = isConnectedFlag && process?.isAlive == true
-    
-    /**
-     * 构建通过 shell 执行命令的包装器
-     * 返回 Pair<shell路径, shell参数列表>
-     *
-     * macOS/Linux: 使用 login shell 来加载用户的 ~/.zshrc 或 ~/.bashrc
-     * Windows: 使用 cmd /c 或 powershell
-     */
-    private fun buildShellCommand(command: List<String>): Pair<String, List<String>> {
-        val osName = System.getProperty("os.name").lowercase()
-        val isWindows = osName.contains("windows")
-
-        return if (isWindows) {
-            // Windows: 使用 cmd /c
-            val cmdString = command.joinToString(" ") { arg ->
-                // Windows 命令行转义：如果包含空格或特殊字符，用双引号包围
-                if (arg.contains(" ") || arg.contains("&") || arg.contains("|")) {
-                    "\"$arg\""
-                } else {
-                    arg
-                }
-            }
-            "cmd.exe" to listOf("/c", cmdString)
-        } else {
-            // macOS/Linux: 使用用户的 login shell，默认 bash
-            val defaultShell = System.getenv("SHELL") ?: "/bin/bash"
-            logger.info("🐚 检测到用户默认 shell: $defaultShell")
-
-            // 构建命令字符串，正确转义
-            val cmdString = command.joinToString(" ") { arg ->
-                // Unix shell 转义：如果包含空格、引号或特殊字符，用单引号包围
-                when {
-                    arg.contains("'") -> {
-                        // 包含单引号：使用双引号，并转义双引号
-                        "\"${arg.replace("\"", "\\\"")}\""
-                    }
-                    arg.contains(" ") || arg.contains("\"") || arg.contains("$") || arg.contains("`") -> {
-                        // 包含空格或其他特殊字符：用单引号包围
-                        "'$arg'"
-                    }
-                    else -> arg
-                }
-            }
-
-            logger.info("📋 Shell 命令字符串: $cmdString")
-
-            // 使用 -l (login shell) 来加载用户的 ~/.zshrc 或 ~/.bashrc
-            defaultShell to listOf("-l", "-c", cmdString)
-        }
-    }
 
     /**
      * Build the Claude CLI command with appropriate arguments.
@@ -437,8 +404,8 @@ class SubprocessTransport(
             command.addAll(listOf("--disallowed-tools", toolsArg))
         }
 
-        // Agents (programmatic subagents) - 参考 Python SDK 实现
-        // 使用文件方式传递，避免 JSON 转义问题
+        // Agents (programmatic subagents)
+        // 与 Python SDK 一致：将 Map<String, AgentDefinition> 转换为 JSON 字符串传递给 CLI
         options.agents?.let { agents ->
             if (agents.isNotEmpty()) {
                 val agentsJson = buildJsonObject {
@@ -456,10 +423,22 @@ class SubprocessTransport(
                     }
                 }.toString()
 
-                // --agents 参数接受 JSON 字符串（不是文件路径）
-                // 直接传递 JSON 字符串
-                command.addAll(listOf("--agents", agentsJson))
-                logger.info("🤖 配置自定义代理（JSON 字符串）: ${agents.keys.joinToString(", ")}")
+                // Windows 上 ProcessBuilder 处理双引号有 bug (JDK-8131908)
+                // 需要手动转义 JSON 中的双引号
+                // 参考: https://bugs.openjdk.org/browse/JDK-8131908
+                val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+                val escapedJson = if (isWindows) {
+                    // Windows: 将 " 转义为 \"，ProcessBuilder 会正确传递给子进程
+                    agentsJson.replace("\"", "\\\"")
+                } else {
+                    agentsJson
+                }
+
+                command.addAll(listOf("--agents", escapedJson))
+                logger.info("🤖 配置自定义代理: ${agents.keys.joinToString(", ")}")
+                if (isWindows) {
+                    logger.debug("📝 Windows 转义后的 JSON: $escapedJson")
+                }
             }
         }
 
@@ -729,96 +708,6 @@ class SubprocessTransport(
 
         return ""
     }
-
-    /**
-     * 加载用户终端的环境变量
-     * - macOS/Linux: 从用户的默认 shell ($SHELL 环境变量) 加载
-     * - Windows: 从 PowerShell 加载
-     *
-     * 这确保 CLI 可以访问用户在终端配置中设置的所有环境变量
-     * （如 ANTHROPIC_API_KEY, PATH 等）
-     */
-    private fun loadShellEnvironment(): Map<String, String> {
-        return try {
-            val osName = System.getProperty("os.name").lowercase()
-            val homeDir = System.getProperty("user.home")
-
-            val (shellCommand, shellArgs) = when {
-                osName.contains("windows") -> {
-                    // Windows: 使用 PowerShell 获取环境变量
-                    "powershell.exe" to listOf(
-                        "-NoProfile",
-                        "-Command",
-                        "Get-ChildItem Env: | ForEach-Object { Write-Output \"${'$'}(${'$'}_.Name)=${'$'}(${'$'}_.Value)\" }"
-                    )
-                }
-                else -> {
-                    // Unix-like: 使用 $SHELL 环境变量获取用户默认 shell
-                    val defaultShell = System.getenv("SHELL") ?: "/bin/sh"
-                    logger.info("🐚 检测到用户默认 shell: $defaultShell")
-
-                    // 根据 shell 类型确定配置文件
-                    val rcFile = when {
-                        defaultShell.contains("zsh") -> "$homeDir/.zshrc"
-                        defaultShell.contains("bash") -> "$homeDir/.bashrc"
-                        defaultShell.contains("fish") -> "$homeDir/.config/fish/config.fish"
-                        else -> null
-                    }
-
-                    val command = if (rcFile != null && java.io.File(rcFile).exists()) {
-                        logger.info("📄 加载配置文件: $rcFile")
-                        // 加载 RC 文件后输出环境变量
-                        when {
-                            defaultShell.contains("fish") -> {
-                                // fish shell 使用不同的语法
-                                "source $rcFile 2>/dev/null; env"
-                            }
-                            else -> {
-                                // bash/zsh
-                                "source $rcFile 2>/dev/null; env"
-                            }
-                        }
-                    } else {
-                        logger.info("⚠️ 未找到配置文件，直接输出当前环境变量")
-                        // 直接输出环境变量
-                        "env"
-                    }
-
-                    defaultShell to listOf("-c", command)
-                }
-            }
-
-            logger.info("🐚 执行 shell 命令: $shellCommand ${shellArgs.joinToString(" ")}")
-
-            val process = ProcessBuilder(listOf(shellCommand) + shellArgs)
-                .redirectErrorStream(true)
-                .start()
-
-            val envMap = mutableMapOf<String, String>()
-            process.inputStream.bufferedReader().useLines { lines ->
-                lines.forEach { line ->
-                    val separator = line.indexOf('=')
-                    if (separator > 0) {
-                        val key = line.substring(0, separator)
-                        val value = line.substring(separator + 1)
-                        envMap[key] = value
-                    }
-                }
-            }
-
-            val exitCode = process.waitFor()
-            if (exitCode != 0) {
-                logger.warn("⚠️ Shell 环境变量加载退出码: $exitCode")
-            }
-
-            logger.info("✅ 成功加载 ${envMap.size} 个终端环境变量")
-            envMap
-        } catch (e: Exception) {
-            logger.warn("⚠️ 无法加载终端环境变量: ${e.message}")
-            emptyMap()
-        }
-    }
-
     /**
      * 查找 SDK 绑定的 CLI (cli.js, 从 resources/bundled/ 目录)
      * 优先使用增强版 CLI (带补丁)，如果不存在则回退到原始版本

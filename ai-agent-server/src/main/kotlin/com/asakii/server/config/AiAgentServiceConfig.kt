@@ -1,6 +1,8 @@
 package com.asakii.server.config
 
 import com.asakii.ai.agent.sdk.AiAgentProvider
+import com.asakii.claude.agent.sdk.types.HookEvent
+import com.asakii.claude.agent.sdk.types.HookMatcher
 
 /**
  * AI Agent 服务配置
@@ -29,7 +31,16 @@ data class ClaudeDefaults(
     val settings: String? = null,
     // 集成 MCP 服务器启用配置
     val enableUserInteractionMcp: Boolean = true,
-    val enableJetBrainsMcp: Boolean = true
+    val enableJetBrainsMcp: Boolean = true,
+    val enableContext7Mcp: Boolean = false,
+    val context7ApiKey: String? = null,
+    // 思考配置
+    val defaultThinkingLevel: String = "HIGH",  // 默认思考等级：OFF, LOW, MEDIUM, HIGH, VERY_HIGH, CUSTOM
+    val defaultThinkingTokens: Int = 8192,      // 默认思考 token 数量
+    // IDEA 文件同步 hooks（由 jetbrains-plugin 提供）
+    // PRE_TOOL_USE: 保存 IDEA 中的文件到磁盘
+    // POST_TOOL_USE: 重新加载文件到 IDEA
+    val ideaFileSyncHooks: Map<HookEvent, List<HookMatcher>>? = null
 )
 
 /**

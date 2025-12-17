@@ -221,6 +221,13 @@ data class SetModelRequest(
 ) : ControlRequest
 
 @Serializable
+data class SetMaxThinkingTokensRequest(
+    override val subtype: String = "set_max_thinking_tokens",
+    @SerialName("max_thinking_tokens")
+    val maxThinkingTokens: Int?  // null 表示禁用/使用默认值，0 也表示禁用
+) : ControlRequest
+
+@Serializable
 data class HookCallbackRequest(
     override val subtype: String = "hook_callback",
     val callbackId: String,

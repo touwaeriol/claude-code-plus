@@ -21,6 +21,16 @@ export interface FileSearchResponse {
   success: boolean
   data?: IndexedFileInfo[]
   error?: string
+  errorCode?: string  // 错误码：INDEXING 表示正在索引
+}
+
+/**
+ * 文件搜索结果（包含错误状态）
+ */
+export interface FileSearchResult {
+  files: IndexedFileInfo[]
+  isIndexing: boolean  // 是否正在索引
+  error?: string
 }
 
 /**
@@ -62,8 +72,9 @@ export class FileSearchService {
    * 搜索文件（空查询时返回项目根目录文件）
    * @param query 搜索关键词（空字符串返回根目录文件）
    * @param maxResults 最大结果数（默认 10）
+   * @returns 搜索结果，包含文件列表和索引状态
    */
-  async searchFiles(query: string, maxResults: number = 10): Promise<IndexedFileInfo[]> {
+  async searchFiles(query: string, maxResults: number = 10): Promise<FileSearchResult> {
     try {
       const response = await fetch(
         this.getApiUrl(`/api/files/search?query=${encodeURIComponent(query)}&maxResults=${maxResults}`)
@@ -71,7 +82,7 @@ export class FileSearchService {
 
       if (!response.ok) {
         console.warn('文件搜索失败:', response.statusText)
-        return []
+        return { files: [], isIndexing: false, error: response.statusText }
       }
 
       const result: unknown = await response.json()
@@ -79,19 +90,24 @@ export class FileSearchService {
       // 使用类型守卫验证响应
       if (!isFileSearchResponse(result)) {
         console.warn('文件搜索响应格式无效:', result)
-        return []
+        return { files: [], isIndexing: false, error: '响应格式无效' }
+      }
+
+      // 检查是否是索引中状态
+      if (result.errorCode === 'INDEXING') {
+        return { files: [], isIndexing: true, error: result.error }
       }
 
       if (result.success && result.data) {
         // 过滤并验证每个文件对象
-        return result.data.filter(isIndexedFileInfo)
+        return { files: result.data.filter(isIndexedFileInfo), isIndexing: false }
       }
 
       console.warn('文件搜索失败:', result.error)
-      return []
+      return { files: [], isIndexing: false, error: result.error }
     } catch (error) {
       console.error('文件搜索异常:', error)
-      return []
+      return { files: [], isIndexing: false, error: String(error) }
     }
   }
 

@@ -5,6 +5,7 @@
     :files="files"
     :anchor-element="anchorElement"
     :show-search-input="false"
+    :is-indexing="isIndexing"
     @select="handleSelect"
     @dismiss="handleDismiss"
   />
@@ -19,6 +20,7 @@ defineProps<{
   files: IndexedFileInfo[]
   anchorElement: HTMLElement | null
   atPosition: number
+  isIndexing?: boolean  // 是否正在索引
 }>()
 
 const emit = defineEmits<{

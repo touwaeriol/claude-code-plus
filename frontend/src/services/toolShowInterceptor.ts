@@ -8,6 +8,7 @@
 
 import {
   jetbrainsBridge,
+  isIdeEnvironment,
   type OpenFileRequest,
   type ShowDiffRequest,
   type ShowMultiEditDiffRequest
@@ -77,10 +78,12 @@ class ToolShowInterceptorService {
   private initialized = false
 
   /**
-   * 检测拦截器是否可用（JetBrains IDE 环境）
+   * 检测拦截器是否可用
+   * 只有在 IDE 插件内运行且后端支持时才可用
+   * 浏览器环境下不可用（看不到 IDEA 界面，直接展示卡片）
    */
   isAvailable(): boolean {
-    return jetbrainsBridge.isEnabled()
+    return isIdeEnvironment() && jetbrainsBridge.isEnabled()
   }
 
   /**
@@ -225,13 +228,13 @@ export const toolShowInterceptor = new ToolShowInterceptorService()
 
 /**
  * 初始化工具展示拦截器
- * 应在 JetBrains 集成初始化后调用
+ * 仅在 IDE 插件内且后端支持时初始化
  */
 export function initToolShowInterceptor(): void {
-  if (jetbrainsBridge.isEnabled()) {
+  if (isIdeEnvironment() && jetbrainsBridge.isEnabled()) {
     toolShowInterceptor.init()
-    console.log('[ToolShowInterceptor] Initialized with JetBrains bridge')
+    console.log('[ToolShowInterceptor] Initialized in IDE plugin mode')
   } else {
-    console.log('[ToolShowInterceptor] JetBrains bridge not enabled, skipping initialization')
+    console.log('[ToolShowInterceptor] Skipped - browser mode or no JetBrains bridge')
   }
 }

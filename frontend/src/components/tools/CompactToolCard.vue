@@ -311,6 +311,7 @@ onUnmounted(() => {
   justify-content: center;
   width: 18px;
   height: 18px;
+  margin-left: auto;  /* 始终推到最右边 */
 }
 
 .status-indicator .dot {

@@ -42,6 +42,7 @@ import com.asakii.rpc.api.RpcSandboxMode as RpcSandboxModeApi
 import com.asakii.rpc.api.RpcSessionStatus as RpcSessionStatusApi
 import com.asakii.rpc.api.RpcSetModelResult as RpcSetModelResultApi
 import com.asakii.rpc.api.RpcSetPermissionModeResult as RpcSetPermissionModeResultApi
+import com.asakii.rpc.api.RpcSetMaxThinkingTokensResult as RpcSetMaxThinkingTokensResultApi
 import com.asakii.rpc.api.RpcStatusResult as RpcStatusResultApi
 import com.asakii.rpc.api.RpcStatusSystemMessage
 import com.asakii.rpc.api.RpcStreamEvent as RpcStreamEventApi
@@ -222,6 +223,13 @@ object ProtoConverter {
     fun RpcSetPermissionModeResultApi.toProto(): SetPermissionModeResult = setPermissionModeResult {
         mode = this@toProto.mode.toProto()
         success = true
+    }
+
+    // ==================== SetMaxThinkingTokensResult ====================
+
+    fun RpcSetMaxThinkingTokensResultApi.toProto(): com.asakii.rpc.proto.SetMaxThinkingTokensResult = com.asakii.rpc.proto.setMaxThinkingTokensResult {
+        status = this@toProto.status.toProto()
+        this@toProto.maxThinkingTokens?.let { maxThinkingTokens = it }
     }
 
     // ==================== History ====================

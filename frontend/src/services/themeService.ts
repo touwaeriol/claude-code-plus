@@ -1,4 +1,4 @@
-import { jetbrainsBridge } from './jetbrainsApi'
+import { jetbrainsBridge, isIdeEnvironment } from './jetbrainsApi'
 
 /**
  * 主题颜色接口
@@ -78,6 +78,7 @@ export class ThemeService {
   private themeMode: ThemeMode = 'system'
   private hasIdeBridge = false
   private _unsubscribeTheme: (() => void) | null = null
+  private loadedFonts: Set<string> = new Set() // 记录已加载的字体
 
   /**
    * 初始化主题服务
@@ -94,12 +95,14 @@ export class ThemeService {
       return
     }
 
-    // 🚀 优先从 URL 参数读取初始主题（IDE 模式加载时注入）
+    // 🚀 优先从 URL 参数读取初始主题
     const initialTheme = this.getInitialThemeFromUrl()
     if (initialTheme) {
-      console.log('🎨 [IDE] Applying initial theme from URL')
+      console.log('🎨 [URL] Applying initial theme from URL')
       this.setTheme(initialTheme)
       this.hasIdeBridge = true
+      // 加载字体
+      await this.loadFontsFromBackend(initialTheme)
       // 继续绑定 RSocket 以接收后续主题更新
       this.bindJetBrainsThemeAsync()
       return
@@ -108,15 +111,16 @@ export class ThemeService {
     // 先应用系统主题，避免无主题状态
     this.setTheme('system')
 
-    // 检查 JetBrains 桥接是否已启用
+    // 统一逻辑：浏览器和 IDEA 插件都使用 IDEA 主题
+    // 只要后端支持 JetBrains 集成就使用 IDEA 主题
     if (jetbrainsBridge.isEnabled()) {
-      console.log('🎨 [IDE] JetBrains bridge detected, fetching theme...')
+      console.log('🎨 [Unified] Using IDEA theme (backend supports JetBrains)')
       await this.bindJetBrainsTheme()
       return
     }
 
-    // 浏览器模式：应用系统主题偏好
-    console.log('🎨 [Browser] No IDE bridge, applying system preference')
+    // 后端不支持 JetBrains 集成：使用系统主题
+    console.log('🎨 [Fallback] Using system theme (no JetBrains backend)')
     this.watchSystemTheme()
   }
 
@@ -148,6 +152,187 @@ export class ThemeService {
   }
 
   /**
+   * 从后端加载字体
+   * 通过 HTTP API 下载字体文件并注入 @font-face
+   */
+  private async loadFontsFromBackend(theme: ThemeColors): Promise<void> {
+    const fontsToLoad: string[] = []
+
+    // 收集需要加载的字体
+    if (theme.fontFamily) {
+      const primaryFont = this.extractPrimaryFont(theme.fontFamily)
+      if (primaryFont && !this.isSystemFont(primaryFont)) {
+        fontsToLoad.push(primaryFont)
+      }
+    }
+
+    if (theme.editorFontFamily) {
+      const editorFont = this.extractPrimaryFont(theme.editorFontFamily)
+      if (editorFont && !this.isSystemFont(editorFont) && !fontsToLoad.includes(editorFont)) {
+        fontsToLoad.push(editorFont)
+      }
+    }
+
+    if (fontsToLoad.length === 0) {
+      console.log('🔤 [Font] No custom fonts to load')
+      return
+    }
+
+    console.log('🔤 [Font] Loading fonts:', fontsToLoad)
+
+    // 并行加载所有字体
+    await Promise.all(fontsToLoad.map((fontName) => this.loadFont(fontName)))
+  }
+
+  /**
+   * 从字体族字符串中提取主字体名称
+   * 例如: "JetBrains Mono, Consolas, monospace" -> "JetBrains Mono"
+   */
+  private extractPrimaryFont(fontFamily: string): string | null {
+    const fonts = fontFamily.split(',').map((f) => f.trim().replace(/['"]/g, ''))
+    return fonts[0] || null
+  }
+
+  /**
+   * 检查是否为系统字体（不需要下载）
+   */
+  private isSystemFont(fontName: string): boolean {
+    const systemFonts = [
+      'sans-serif',
+      'serif',
+      'monospace',
+      'cursive',
+      'fantasy',
+      'system-ui',
+      'ui-sans-serif',
+      'ui-serif',
+      'ui-monospace',
+      'ui-rounded',
+      'Arial',
+      'Helvetica',
+      'Times New Roman',
+      'Times',
+      'Courier New',
+      'Courier',
+      'Verdana',
+      'Georgia',
+      'Palatino',
+      'Garamond',
+      'Bookman',
+      'Comic Sans MS',
+      'Trebuchet MS',
+      'Arial Black',
+      'Impact',
+      'Consolas',
+      'Monaco',
+      'Lucida Console',
+      'Lucida Sans Typewriter',
+      'Menlo',
+      'SF Mono',
+      'Segoe UI',
+      'Tahoma',
+      'Geneva'
+    ]
+    return systemFonts.some((sf) => sf.toLowerCase() === fontName.toLowerCase())
+  }
+
+  /**
+   * 加载单个字体
+   */
+  private async loadFont(fontName: string): Promise<void> {
+    // 检查是否已加载
+    if (this.loadedFonts.has(fontName)) {
+      console.log(`🔤 [Font] Already loaded: ${fontName}`)
+      return
+    }
+
+    try {
+      // 获取后端 URL
+      const serverUrl = this.getServerUrl()
+      const fontUrl = `${serverUrl}/api/font/${encodeURIComponent(fontName)}`
+
+      console.log(`🔤 [Font] Fetching: ${fontUrl}`)
+
+      const response = await fetch(fontUrl)
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log(`🔤 [Font] Not found on server: ${fontName} (using fallback)`)
+        } else {
+          console.warn(`🔤 [Font] Failed to load ${fontName}: ${response.status}`)
+        }
+        return
+      }
+
+      // 获取字体数据
+      const fontBlob = await response.blob()
+      const fontDataUrl = URL.createObjectURL(fontBlob)
+
+      // 检测字体格式
+      const contentType = response.headers.get('Content-Type') || 'font/ttf'
+      const format = this.getFormatFromMimeType(contentType)
+
+      // 创建 @font-face 规则
+      const fontFace = new FontFace(fontName, `url(${fontDataUrl})`, {
+        style: 'normal',
+        weight: '400'
+      })
+
+      // 加载字体
+      await fontFace.load()
+
+      // 添加到文档字体
+      document.fonts.add(fontFace)
+      this.loadedFonts.add(fontName)
+
+      console.log(`✅ [Font] Loaded: ${fontName} (format: ${format})`)
+    } catch (error) {
+      console.warn(`🔤 [Font] Error loading ${fontName}:`, error)
+    }
+  }
+
+  /**
+   * 根据 MIME 类型获取字体格式
+   */
+  private getFormatFromMimeType(mimeType: string): string {
+    const formatMap: Record<string, string> = {
+      'font/ttf': 'truetype',
+      'font/otf': 'opentype',
+      'font/woff': 'woff',
+      'font/woff2': 'woff2',
+      'application/x-font-ttf': 'truetype',
+      'application/x-font-opentype': 'opentype'
+    }
+    return formatMap[mimeType] || 'truetype'
+  }
+
+  /**
+   * 获取服务器 URL
+   */
+  private getServerUrl(): string {
+    // 优先使用注入的 serverUrl
+    const anyWindow = window as unknown as { __serverUrl?: string }
+    if (anyWindow.__serverUrl) {
+      return anyWindow.__serverUrl
+    }
+
+    // 从环境变量获取
+    const envUrl = import.meta.env.VITE_SERVER_URL
+    if (envUrl) {
+      return envUrl
+    }
+
+    // 从端口获取
+    const envPort = import.meta.env.VITE_BACKEND_PORT
+    if (envPort) {
+      return `http://localhost:${envPort}`
+    }
+
+    // 默认端口
+    return 'http://localhost:8765'
+  }
+
+  /**
    * 异步绑定 JetBrains 主题（用于后续更新，不阻塞初始化）
    */
   private bindJetBrainsThemeAsync() {
@@ -159,6 +344,8 @@ export class ThemeService {
           if (theme) {
             this.setTheme(theme as ThemeColors)
             console.log('🎨 [IDE] Theme updated via RSocket')
+            // 主题变化时检查是否需要加载新字体
+            this.loadFontsFromBackend(theme as ThemeColors)
           }
         })
         console.log('🎨 [IDE] Theme change listener registered')
@@ -179,6 +366,8 @@ export class ThemeService {
         this.setTheme(theme as ThemeColors)
         this.hasIdeBridge = true
         console.log('🎨 [IDE] ✅ Theme loaded via RSocket')
+        // 加载字体
+        await this.loadFontsFromBackend(theme as ThemeColors)
       }
 
       // 订阅主题变化
@@ -186,6 +375,8 @@ export class ThemeService {
         if (theme) {
           this.setTheme(theme as ThemeColors)
           console.log('🎨 [IDE] Theme updated via RSocket')
+          // 主题变化时也检查是否需要加载新字体
+          this.loadFontsFromBackend(theme as ThemeColors)
         }
       })
     } catch (error) {

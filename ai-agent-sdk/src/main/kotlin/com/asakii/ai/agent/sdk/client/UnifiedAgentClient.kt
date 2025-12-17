@@ -79,6 +79,16 @@ interface UnifiedAgentClient {
     suspend fun setPermissionMode(mode: AiPermissionMode)
 
     /**
+     * 动态设置思考 token 上限（无需重连）。
+     * @param maxThinkingTokens 思考 token 上限：
+     *   - null: 禁用思考（使用默认行为）
+     *   - 0: 禁用思考
+     *   - 正整数: 设置上限（如 8000, 16000）
+     * @throws UnsupportedOperationException if !capabilities.canThink
+     */
+    suspend fun setMaxThinkingTokens(maxThinkingTokens: Int?)
+
+    /**
      * 获取当前权限模式。
      * @return 当前权限模式，如果不支持则返回 null
      */

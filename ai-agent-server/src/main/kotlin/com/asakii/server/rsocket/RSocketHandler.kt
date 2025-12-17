@@ -105,11 +105,13 @@ class RSocketHandler(
                     "agent.connect" -> handleConnect(dataBytes, rpcService)
                     "agent.interrupt" -> handleInterrupt(rpcService)
                     "agent.runInBackground" -> handleRunInBackground(rpcService)
+                    "agent.setMaxThinkingTokens" -> handleSetMaxThinkingTokens(dataBytes, rpcService)
                     "agent.disconnect" -> handleDisconnect(rpcService)
                     "agent.setModel" -> handleSetModel(dataBytes, rpcService)
                     "agent.setPermissionMode" -> handleSetPermissionMode(dataBytes, rpcService)
                     "agent.getHistory" -> handleGetHistory(rpcService)
                     "agent.truncateHistory" -> handleTruncateHistory(dataBytes, rpcService)
+                    "agent.hasIdeEnvironment" -> handleHasIdeEnvironment()
                     else -> throw IllegalArgumentException("Unknown route: $route")
                 }
 
@@ -182,6 +184,15 @@ class RSocketHandler(
         return buildPayload { data(result.toProto().toByteArray()) }
     }
 
+    private suspend fun handleSetMaxThinkingTokens(dataBytes: ByteArray, rpcService: AiAgentRpcService): Payload {
+        val req = com.asakii.rpc.proto.SetMaxThinkingTokensRequest.parseFrom(dataBytes)
+        val maxThinkingTokens = if (req.hasMaxThinkingTokens()) req.maxThinkingTokens else null
+        wsLog.info("📥 [RSocket] setMaxThinkingTokens request: maxThinkingTokens=$maxThinkingTokens")
+        val result = rpcService.setMaxThinkingTokens(maxThinkingTokens)
+        wsLog.info("📤 [RSocket] setMaxThinkingTokens result: maxThinkingTokens=${result.maxThinkingTokens}")
+        return buildPayload { data(result.toProto().toByteArray()) }
+    }
+
     private suspend fun handleDisconnect(rpcService: AiAgentRpcService): Payload {
         wsLog.info("📥 [RSocket] disconnect request")
         val result = rpcService.disconnect()
@@ -218,6 +229,15 @@ class RSocketHandler(
         val result = rpcService.truncateHistory(req.sessionId, req.messageUuid, req.projectPath)
         wsLog.info("✂️ [RSocket] truncateHistory result: success=${result.success}, remainingLines=${result.remainingLines}")
         return buildPayload { data(result.toProto().toByteArray()) }
+    }
+
+    private fun handleHasIdeEnvironment(): Payload {
+        val hasIde = ideTools.hasIdeEnvironment()
+        wsLog.info("🖥️ [RSocket] hasIdeEnvironment: $hasIde")
+        val response = HasIdeEnvironmentResponse.newBuilder()
+            .setHasIde(hasIde)
+            .build()
+        return buildPayload { data(response.toByteArray()) }
     }
 
     // ==================== Request-Stream Handlers ====================

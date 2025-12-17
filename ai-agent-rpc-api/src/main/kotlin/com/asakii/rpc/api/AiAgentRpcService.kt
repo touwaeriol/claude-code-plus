@@ -47,6 +47,17 @@ interface AiAgentRpcService {
     suspend fun runInBackground(): RpcStatusResult
 
     /**
+     * 动态设置思考 token 上限（无需重连）
+     *
+     * @param maxThinkingTokens 思考 token 上限：
+     *   - null: 禁用思考（使用默认行为）
+     *   - 0: 禁用思考
+     *   - 正整数: 设置上限（如 8000, 16000）
+     * @return 设置结果
+     */
+    suspend fun setMaxThinkingTokens(maxThinkingTokens: Int?): RpcSetMaxThinkingTokensResult
+
+    /**
      * 断开会话
      */
     suspend fun disconnect(): RpcStatusResult

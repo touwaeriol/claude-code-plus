@@ -5,20 +5,21 @@
     :title="tooltipText"
   >
     <span class="select-label">{{ $t('thinking.label') }}</span>
-    <select
+    <el-select
       v-model="selectedLevelId"
       :disabled="!canToggle"
       class="level-select"
+      placement="top"
+      size="small"
       @change="onLevelChange"
     >
-      <option
+      <el-option
         v-for="level in levels"
         :key="level.id"
         :value="level.id"
-      >
-        {{ level.name }}
-      </option>
-    </select>
+        :label="level.name"
+      />
+    </el-select>
   </div>
 </template>
 
@@ -39,13 +40,7 @@ interface Props {
   thinkingLevels?: ThinkingLevelConfig[]
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  thinkingLevels: () => [
-    { id: 'off', name: 'Off', tokens: 0, isCustom: false },
-    { id: 'think', name: 'Think', tokens: 2048, isCustom: false },
-    { id: 'ultra', name: 'Ultra', tokens: 8096, isCustom: false }
-  ]
-})
+const props = defineProps<Props>()
 
 const emit = defineEmits<{
   (e: 'change', tokens: number): void
@@ -129,35 +124,25 @@ function onLevelChange() {
 }
 
 .level-select {
-  padding: 2px 6px;
-  border: 1px solid var(--theme-border-color, rgba(0, 0, 0, 0.1));
-  border-radius: 4px;
-  background: var(--theme-panel-background, rgba(0, 0, 0, 0.05));
-  color: var(--theme-foreground, #333);
+  width: 80px;
+}
+
+.level-select :deep(.el-select__wrapper) {
   font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  min-width: 70px;
+  min-height: 22px;
+  padding: 2px 6px;
+  background: transparent;
+  box-shadow: none !important;
+  border: none !important;
+  border-radius: 4px;
+  gap: 2px;
 }
 
-.level-select:hover:not(:disabled) {
-  border-color: var(--theme-accent, #0366d6);
+.level-select :deep(.el-select__wrapper:hover) {
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.06));
 }
 
-.level-select:focus {
-  outline: none;
-  border-color: var(--theme-accent, #0366d6);
-  box-shadow: 0 0 0 2px rgba(3, 102, 214, 0.2);
-}
-
-.level-select:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.level-select option {
-  background: var(--theme-background, #fff);
-  color: var(--theme-foreground, #333);
+.level-select :deep(.el-select__wrapper.is-focused) {
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.06));
 }
 </style>

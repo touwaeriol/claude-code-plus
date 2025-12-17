@@ -28,7 +28,6 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.awt.BorderLayout
 import java.awt.Cursor
-import java.awt.Dimension
 import java.awt.datatransfer.StringSelection
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
@@ -36,8 +35,6 @@ import java.io.IOException
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import javax.swing.JComponent
-import javax.swing.JDialog
-import javax.swing.SwingUtilities
 
 /**
  * ToolWindow 工厂：IDE 模式下使用 JBCefBrowser 加载 Vue 前端，
@@ -137,7 +134,7 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
         // 在标题栏最左边添加刷新按钮
         val refreshAction = object : AnAction(
             "Refresh",
-            "Restart server and reload frontend (clears frontend cache)",
+            "Restart backend server and reload frontend",
             AllIcons.Actions.Refresh
         ) {
             override fun actionPerformed(e: AnActionEvent) {
@@ -279,49 +276,32 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
 
     /**
      * 打开 DevTools 窗口
-     * 使用 JDialog + JBCefBrowser 方式，兼容 Windows 平台
+     * 在 Windows 上 JCEF out-of-process 模式可能导致 DevTools 无法打开
+     * 参考: https://platform.jetbrains.com/t/tests-using-jcef-on-windows-failed-with-2025-1/1493
      */
     private fun openDevToolsInDialog(project: Project, browser: JBCefBrowser) {
         try {
-            // 获取 DevTools 的 CefBrowser 实例
-            val devTools = browser.cefBrowser.devTools
-
-            // 创建一个新的 JBCefBrowser 来承载 DevTools
-            val devToolsBrowser = JBCefBrowser.createBuilder()
-                .setCefBrowser(devTools)
-                .setClient(browser.jbCefClient)
-                .build()
-
-            // 在 Swing EDT 线程中创建对话框
-            SwingUtilities.invokeLater {
-                val frame = com.intellij.openapi.wm.WindowManager.getInstance().getFrame(project)
-                val dialog = JDialog(frame, "DevTools - Claude Code Plus", false).apply {
-                    defaultCloseOperation = JDialog.DISPOSE_ON_CLOSE
-                    preferredSize = Dimension(1200, 800)
-                    layout = BorderLayout()
-                    add(devToolsBrowser.component, BorderLayout.CENTER)
-                    pack()
-                    setLocationRelativeTo(frame)
-                }
-
-                // 当对话框关闭时，释放 DevTools 浏览器资源
-                dialog.addWindowListener(object : java.awt.event.WindowAdapter() {
-                    override fun windowClosed(e: java.awt.event.WindowEvent?) {
-                        devToolsBrowser.dispose()
-                    }
-                })
-
-                dialog.isVisible = true
-                logger.info("✅ DevTools dialog opened successfully")
-            }
+            // 方案1: 使用 JBCefBrowser 封装的 openDevtools 方法
+            browser.openDevtools()
+            logger.info("✅ DevTools window opened via JBCefBrowser.openDevtools()")
         } catch (e: Exception) {
-            logger.error("❌ Failed to open DevTools: ${e.message}", e)
-            // 如果上述方法失败，尝试使用原始方法作为后备
+            logger.warn("⚠️ JBCefBrowser.openDevtools() failed: ${e.message}")
             try {
-                browser.openDevtools()
-                logger.info("✅ DevTools opened via fallback method")
+                // 方案2: 直接调用 CefBrowser.openDevTools
+                browser.cefBrowser.openDevTools(null)
+                logger.info("✅ DevTools window opened via CefBrowser.openDevTools()")
             } catch (e2: Exception) {
-                logger.error("❌ Fallback openDevtools() also failed: ${e2.message}", e2)
+                logger.error("❌ All DevTools methods failed: ${e2.message}", e2)
+                // 方案3: 提示用户在外部浏览器中打开
+                val serverUrl = HttpServerProjectService.getInstance(project).serverUrl
+                if (serverUrl != null) {
+                    com.intellij.openapi.ui.Messages.showInfoMessage(
+                        project,
+                        "DevTools 无法在 IDE 内打开 (Windows JCEF 兼容性问题)。\n\n" +
+                        "请在外部浏览器中打开以下地址，使用浏览器的 DevTools (F12)：\n$serverUrl",
+                        "DevTools"
+                    )
+                }
             }
         }
     }

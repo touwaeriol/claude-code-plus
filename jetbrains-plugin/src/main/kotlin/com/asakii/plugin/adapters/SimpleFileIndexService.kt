@@ -15,6 +15,11 @@ import com.intellij.openapi.diagnostic.Logger
 import java.io.File
 
 /**
+ * 索引正在进行中异常
+ */
+class IndexingInProgressException(message: String = "Project is indexing") : Exception(message)
+
+/**
  * 简单的 FileIndexService 实现
  * 提供基本的文件搜索功能
  */
@@ -32,81 +37,7 @@ class SimpleFileIndexService(
     private fun isProjectIndexing(): Boolean {
         return DumbService.getInstance(project).isDumb
     }
-    
-    /**
-     * 当索引正在进行时使用的简单文件搜索
-     * 不依赖IntelliJ的索引系统，直接遍历文件系统
-     */
-    private suspend fun searchFilesWithoutIndex(
-        query: String,
-        maxResults: Int,
-        fileTypes: List<String>
-    ): List<IndexedFileInfo> = withContext(Dispatchers.IO) {
-        try {
-            val results = mutableListOf<IndexedFileInfo>()
-            val queryLower = query.lowercase()
-            val projectBasePath = project.basePath ?: return@withContext emptyList()
-            
-            val projectDir = File(projectBasePath)
-            
-            // 首先查找根目录下的直接匹配文件（优先级最高）
-            projectDir.listFiles()?.filter { file ->
-                !file.isDirectory && 
-                file.name.lowercase().contains(queryLower) &&
-                (fileTypes.isEmpty() || fileTypes.contains(file.extension?.lowercase() ?: ""))
-            }?.forEach { file ->
-                results.add(createFileInfoFromFile(file, projectDir))
-            }
-            
-            // 然后递归搜索子目录（如果还需要更多结果）
-            if (results.size < maxResults) {
-                projectDir.walkTopDown()
-                    .filter { !it.isDirectory && it.parent != projectBasePath } // 排除根目录文件（已处理）
-                    .filter { file ->
-                        file.name.lowercase().contains(queryLower) &&
-                        (fileTypes.isEmpty() || fileTypes.contains(file.extension?.lowercase() ?: ""))
-                    }
-                    .take(maxResults - results.size)
-                    .forEach { file ->
-                        results.add(createFileInfoFromFile(file, projectDir))
-                    }
-            }
-            
-            // 按相关性和路径深度排序
-            results.sortedWith(compareBy(
-                // 精确匹配优先
-                { !it.name.equals(query, ignoreCase = true) },
-                // 根目录文件优先（路径深度最小）
-                { it.relativePath.count { it == '/' || it == File.separatorChar } },
-                // 前缀匹配次之
-                { !it.name.startsWith(query, ignoreCase = true) },
-                // 文件名字母排序
-                { it.name.lowercase() }
-            )).take(maxResults)
-        } catch (e: Exception) {
-            logger.warn("Fallback search failed: ${e.message}")
-            emptyList()
-        }
-    }
-    
-    /**
-     * 从 File 对象创建 IndexedFileInfo
-     */
-    private fun createFileInfoFromFile(file: File, projectDir: File): IndexedFileInfo {
-        val relativePath = file.relativeTo(projectDir).path
-        return IndexedFileInfo(
-            name = file.name,
-            relativePath = relativePath,
-            absolutePath = file.absolutePath,
-            fileType = file.extension ?: "",
-            size = file.length(),
-            lastModified = file.lastModified(),
-            isDirectory = false,
-            language = detectLanguage(file.extension ?: ""),
-            encoding = "UTF-8"
-        )
-    }
-    
+
     override suspend fun initialize(rootPath: String) {
         // IntelliJ 自动管理索引，不需要手动初始化
     }
@@ -116,18 +47,17 @@ class SimpleFileIndexService(
     }
     
     override suspend fun searchFiles(
-        query: String, 
+        query: String,
         maxResults: Int,
         fileTypes: List<String>
     ): List<IndexedFileInfo> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
-        
-        // 如果索引正在进行，提供有限的搜索功能
+
+        // 如果索引正在进行，抛出异常
         if (isProjectIndexing()) {
-            logger.info("Project is indexing, providing limited file search")
-            return@withContext searchFilesWithoutIndex(query, maxResults, fileTypes)
+            throw IndexingInProgressException("Project is indexing, please wait")
         }
-        
+
         try {
             ReadAction.compute<List<IndexedFileInfo>, Exception> {
                 val results = mutableListOf<IndexedFileInfo>()

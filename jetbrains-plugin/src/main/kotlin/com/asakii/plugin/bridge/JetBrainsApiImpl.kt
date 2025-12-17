@@ -392,7 +392,7 @@ class JetBrainsApiImpl(private val ideaProject: Project) : JetBrainsApi {
                 selectionForeground = colorToHex(UIUtil.getListSelectionForeground(true)),
                 linkColor = colorToHex(JBUI.CurrentTheme.Link.Foreground.ENABLED),
                 errorColor = colorToHex(UIUtil.getErrorForeground()),
-                warningColor = colorToHex(JBUI.CurrentTheme.Label.WARNING_FOREGROUND),
+                warningColor = colorToHex(JBColor.namedColor("Label.warningForeground", JBColor.YELLOW)),
                 successColor = colorToHex(JBUI.CurrentTheme.Banner.SUCCESS_BACKGROUND),
                 separatorColor = colorToHex(JBColor.border()),
                 hoverBackground = colorToHex(JBColor.namedColor("List.hoverBackground")),

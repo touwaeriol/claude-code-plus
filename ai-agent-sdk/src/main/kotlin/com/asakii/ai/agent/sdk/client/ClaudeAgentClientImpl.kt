@@ -220,6 +220,12 @@ class ClaudeAgentClientImpl(
         logger.info("✅ [ClaudeAgentClientImpl] 权限模式已切换为: $mode")
     }
 
+    override suspend fun setMaxThinkingTokens(maxThinkingTokens: Int?) {
+        checkCapability(getCapabilities().canThink, "setMaxThinkingTokens")
+        client?.setMaxThinkingTokens(maxThinkingTokens)
+        logger.info("✅ [ClaudeAgentClientImpl] 思考 token 上限已设置为: $maxThinkingTokens")
+    }
+
     override fun getCurrentPermissionMode(): AiPermissionMode = currentPermissionMode
 
     private fun checkCapability(supported: Boolean, method: String) {

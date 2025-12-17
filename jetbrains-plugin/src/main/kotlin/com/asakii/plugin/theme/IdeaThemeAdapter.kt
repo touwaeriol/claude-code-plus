@@ -49,19 +49,5 @@ class IdeaThemeAdapter {
                 logger.error("注册主题监听器失败", e)
             }
         }
-
-        /**
-         * 获取当前主题的实际颜色值
-         * 直接从 IDE 获取，不做亮暗判断
-         */
-        fun getCurrentColors(): Map<String, Int> {
-            return mapOf(
-                "background" to UIUtil.getPanelBackground().rgb,
-                "foreground" to UIUtil.getLabelForeground().rgb,
-                "borderColor" to JBColor.border().rgb,
-                "selectionBackground" to UIUtil.getListSelectionBackground(true).rgb,
-                "selectionForeground" to UIUtil.getListSelectionForeground(true).rgb
-            )
-        }
     }
 }

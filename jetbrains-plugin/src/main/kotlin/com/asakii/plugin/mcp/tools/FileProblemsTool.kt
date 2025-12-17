@@ -3,14 +3,19 @@ package com.asakii.plugin.mcp.tools
 import com.asakii.claude.agent.sdk.mcp.ToolResult
 import com.asakii.server.mcp.schema.ToolSchemaLoader
 import com.intellij.codeHighlighting.HighlightDisplayLevel
+import com.intellij.codeInsight.daemon.impl.HighlightInfo
+import com.intellij.codeInsight.daemon.impl.HighlightVisitor
+import com.intellij.codeInsight.daemon.impl.analysis.HighlightInfoHolder
 import com.intellij.codeInspection.InspectionEngine
 import com.intellij.codeInspection.InspectionManager
 import com.intellij.codeInspection.ProblemDescriptor
 import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.codeInspection.ex.InspectionProfileImpl
 import com.intellij.codeInspection.ex.LocalInspectionToolWrapper
+import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.profile.codeInspection.InspectionProjectProfileManager
@@ -39,10 +44,12 @@ enum class ProblemSeverity {
 }
 
 /**
- * 分析结果：区分语法错误和代码检查问题
+ * 分析结果：区分语法错误、编译器错误和代码检查问题
  */
 private data class AnalysisResult(
+    val psiFile: PsiFile?,  // 用于计算行列信息
     val syntaxErrors: List<ProblemDescriptor>,
+    val highlightVisitorProblems: List<HighlightInfo>,  // 来自 HighlightVisitor（包含编译器错误）
     val inspectionProblems: List<Pair<ProblemDescriptor, HighlightDisplayLevel?>>
 )
 
@@ -109,7 +116,7 @@ class FileProblemsTool(private val project: Project) {
             // 使用 InspectionEngine 直接运行检查，无需打开文件
             val analysisResult = runInspectionsOnFile(virtualFile, includeWarnings, includeWeakWarnings)
 
-            logger.debug { "📊 Found ${analysisResult.syntaxErrors.size} syntax errors and ${analysisResult.inspectionProblems.size} inspection problems for $filePath" }
+            logger.debug { "📊 Found ${analysisResult.syntaxErrors.size} syntax errors, ${analysisResult.highlightVisitorProblems.size} highlight visitor problems and ${analysisResult.inspectionProblems.size} inspection problems for $filePath" }
 
             // 1. 处理语法错误（始终包含）
             for (descriptor in analysisResult.syntaxErrors) {
@@ -118,7 +125,34 @@ class FileProblemsTool(private val project: Project) {
                 addProblemFromDescriptor(descriptor, ProblemSeverity.SYNTAX_ERROR, problems)
             }
 
-            // 2. 处理代码检查问题
+            // 2. 处理 HighlightVisitor 检测到的问题（编译器错误等）
+            for (highlightInfo in analysisResult.highlightVisitorProblems) {
+                if (problems.size >= maxProblems) break
+
+                val severity = classifyHighlightInfo(highlightInfo.severity)
+
+                when (severity) {
+                    ProblemSeverity.SYNTAX_ERROR -> {
+                        // 语法错误已在上面处理
+                        continue
+                    }
+                    ProblemSeverity.ERROR -> {
+                        errorCount++
+                    }
+                    ProblemSeverity.WARNING -> {
+                        if (!includeWarnings) continue
+                        warningCount++
+                    }
+                    ProblemSeverity.SUGGESTION -> {
+                        if (!includeWeakWarnings) continue
+                        suggestionCount++
+                    }
+                }
+
+                addProblemFromHighlightInfo(highlightInfo, severity, problems, analysisResult.psiFile)
+            }
+
+            // 3. 处理代码检查问题
             for ((descriptor, inspectionLevel) in analysisResult.inspectionProblems) {
                 if (problems.size >= maxProblems) break
 
@@ -194,7 +228,7 @@ class FileProblemsTool(private val project: Project) {
     }
 
     /**
-     * 使用 InspectionEngine 直接在文件上运行检查
+     * 使用 InspectionEngine 和 HighlightVisitor 直接在文件上运行检查
      * 无需打开文件，直接通过 PsiFile 运行
      */
     private fun runInspectionsOnFile(
@@ -208,22 +242,22 @@ class FileProblemsTool(private val project: Project) {
             val computation: () -> AnalysisResult = {
                 ReadAction.compute<AnalysisResult, Exception> {
                     val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
-                        ?: return@compute AnalysisResult(emptyList(), emptyList())
+                        ?: return@compute AnalysisResult(null, emptyList(), emptyList(), emptyList())
 
                     runInspectionsOnPsiFile(psiFile, includeWarnings, includeWeakWarnings)
                 }
             }
             ProgressManager.getInstance().runProcess(computation, indicator)
-                ?: AnalysisResult(emptyList(), emptyList())
+                ?: AnalysisResult(null, emptyList(), emptyList(), emptyList())
         } catch (e: Exception) {
             logger.error(e) { "❌ Error running inspections" }
-            AnalysisResult(emptyList(), emptyList())
+            AnalysisResult(null, emptyList(), emptyList(), emptyList())
         }
     }
 
     /**
      * 在 PsiFile 上运行所有启用的检查
-     * 返回结构化的分析结果，区分语法错误和代码检查问题
+     * 返回结构化的分析结果，区分语法错误、编译器错误和代码检查问题
      */
     private fun runInspectionsOnPsiFile(
         psiFile: PsiFile,
@@ -235,13 +269,17 @@ class FileProblemsTool(private val project: Project) {
 
         // 获取当前项目的检查配置
         val profile = InspectionProjectProfileManager.getInstance(project).currentProfile as? InspectionProfileImpl
-            ?: return AnalysisResult(emptyList(), emptyList())
+            ?: return AnalysisResult(psiFile, emptyList(), emptyList(), emptyList())
 
         // 1. 收集 PSI 语法错误（解析器级别的错误，最重要）
         val syntaxErrors = collectPsiSyntaxErrors(psiFile, inspectionManager)
         logger.debug { "📊 Found ${syntaxErrors.size} PSI syntax errors" }
 
-        // 2. 运行代码检查（LocalInspectionTool），并保存每个检查的配置级别
+        // 2. 运行 HighlightVisitor 分析（检测编译器错误，如类型不匹配）
+        val highlightVisitorProblems = runHighlightVisitors(psiFile)
+        logger.debug { "📊 Found ${highlightVisitorProblems.size} highlight visitor problems" }
+
+        // 3. 运行代码检查（LocalInspectionTool），并保存每个检查的配置级别
         val inspectionProblems = mutableListOf<Pair<ProblemDescriptor, HighlightDisplayLevel?>>()
         val toolsList = profile.getAllEnabledInspectionTools(project)
 
@@ -272,7 +310,70 @@ class FileProblemsTool(private val project: Project) {
             }
         }
 
-        return AnalysisResult(syntaxErrors, inspectionProblems)
+        return AnalysisResult(psiFile, syntaxErrors, highlightVisitorProblems, inspectionProblems)
+    }
+
+    /**
+     * 运行 HighlightVisitor 分析
+     *
+     * HighlightVisitor 可以检测编译器级别的错误，如：
+     * - 类型不匹配
+     * - 未解析的引用
+     * - 无效的方法调用
+     *
+     * 这些错误不需要文件在编辑器中打开就能检测到
+     */
+    private fun runHighlightVisitors(psiFile: PsiFile): List<HighlightInfo> {
+        // 如果在 dumb mode 中，跳过需要索引的分析
+        if (DumbService.isDumb(project)) {
+            logger.debug { "⚠️ Skipping HighlightVisitor analysis in dumb mode" }
+            return emptyList()
+        }
+
+        val problems = mutableListOf<HighlightInfo>()
+
+        try {
+            // 创建 HighlightInfoHolder 来收集问题
+            val holder = HighlightInfoHolder(psiFile)
+
+            // 获取所有注册的 HighlightVisitor
+            val visitors = HighlightVisitor.EP_HIGHLIGHT_VISITOR.getExtensions(project)
+
+            for (visitor in visitors) {
+                // 检查 visitor 是否适合当前文件
+                if (!visitor.suitableForFile(psiFile)) continue
+
+                try {
+                    // 克隆 visitor 以确保线程安全
+                    val clonedVisitor = visitor.clone()
+
+                    // 运行分析
+                    clonedVisitor.analyze(psiFile, true, holder) {
+                        // 访问所有元素
+                        psiFile.accept(object : PsiRecursiveElementVisitor() {
+                            override fun visitElement(element: com.intellij.psi.PsiElement) {
+                                clonedVisitor.visit(element)
+                                super.visitElement(element)
+                            }
+                        })
+                    }
+                } catch (e: Exception) {
+                    logger.debug { "⚠️ HighlightVisitor ${visitor.javaClass.simpleName} failed: ${e.message}" }
+                }
+            }
+
+            // 从 holder 中提取所有问题
+            for (i in 0 until holder.size()) {
+                val info = holder[i]
+                if (info != null) {
+                    problems.add(info)
+                }
+            }
+        } catch (e: Exception) {
+            logger.error(e) { "❌ Error running HighlightVisitor analysis" }
+        }
+
+        return problems
     }
 
     /**
@@ -308,6 +409,18 @@ class FileProblemsTool(private val project: Project) {
         })
 
         return problems
+    }
+
+    /**
+     * 根据 HighlightSeverity 分类问题
+     */
+    private fun classifyHighlightInfo(severity: HighlightSeverity): ProblemSeverity {
+        return when {
+            severity >= HighlightSeverity.ERROR -> ProblemSeverity.ERROR
+            severity >= HighlightSeverity.WARNING -> ProblemSeverity.WARNING
+            severity >= HighlightSeverity.WEAK_WARNING -> ProblemSeverity.SUGGESTION
+            else -> ProblemSeverity.SUGGESTION
+        }
     }
 
     /**
@@ -392,6 +505,43 @@ class FileProblemsTool(private val project: Project) {
             endLine = endLine,
             endColumn = endColumn,
             description = descriptor.toString()
+        ))
+    }
+
+    /**
+     * 从 HighlightInfo 创建 FileProblem 并添加到列表
+     */
+    private fun addProblemFromHighlightInfo(
+        info: HighlightInfo,
+        severity: ProblemSeverity,
+        problems: MutableList<FileProblem>,
+        psiFile: PsiFile?
+    ) {
+        val document = psiFile?.viewProvider?.document
+
+        // 通过 offset 计算行列信息
+        val (line, column, endLine, endColumn) = if (document != null) {
+            try {
+                val startLine = document.getLineNumber(info.startOffset) + 1
+                val startCol = info.startOffset - document.getLineStartOffset(startLine - 1) + 1
+                val endL = document.getLineNumber(info.endOffset) + 1
+                val endCol = info.endOffset - document.getLineStartOffset(endL - 1) + 1
+                listOf(startLine, startCol, endL, endCol)
+            } catch (e: Exception) {
+                listOf(1, 1, 1, 1)
+            }
+        } else {
+            listOf(1, 1, 1, 1)
+        }
+
+        problems.add(FileProblem(
+            severity = severity,
+            message = info.description ?: "Unknown issue",
+            line = line,
+            column = column,
+            endLine = endLine,
+            endColumn = endColumn,
+            description = info.toolTip
         ))
     }
 }

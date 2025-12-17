@@ -37,7 +37,7 @@ export type { SessionTabInstance } from '@/composables/useSessionTab'
  */
   const DEFAULT_SESSION_SETTINGS = {
   modelId: MODEL_CAPABILITIES[BaseModel.OPUS_45].modelId,
-  thinkingEnabled: MODEL_CAPABILITIES[BaseModel.OPUS_45].defaultThinkingEnabled,
+  thinkingLevel: 8192, // High (8K) - 默认思考等级
   permissionMode: 'default' as RpcPermissionMode,
   skipPermissions: false
 }
@@ -253,7 +253,7 @@ export const useSessionStore = defineStore('session', () => {
     const globalSettings = settingsStore.settings
     const connectOptions: TabConnectOptions = options || {
       model: MODEL_CAPABILITIES[globalSettings.model]?.modelId || DEFAULT_SESSION_SETTINGS.modelId,
-      thinkingEnabled: globalSettings.thinkingEnabled ?? DEFAULT_SESSION_SETTINGS.thinkingEnabled,
+      thinkingLevel: globalSettings.maxThinkingTokens ?? DEFAULT_SESSION_SETTINGS.thinkingLevel,
       permissionMode: (globalSettings.permissionMode as RpcPermissionMode) || DEFAULT_SESSION_SETTINGS.permissionMode,
       skipPermissions: globalSettings.skipPermissions ?? DEFAULT_SESSION_SETTINGS.skipPermissions
     }

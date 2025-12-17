@@ -2,6 +2,7 @@ package com.asakii.server
 
 import com.asakii.plugin.bridge.JetBrainsApiImpl
 import com.asakii.plugin.bridge.JetBrainsRSocketHandler
+import com.asakii.plugin.hooks.IdeaFileSyncHooks
 import com.asakii.plugin.mcp.JetBrainsMcpServerProviderImpl
 import com.asakii.server.config.AiAgentServiceConfig
 import com.asakii.server.config.ClaudeDefaults
@@ -121,7 +122,12 @@ class HttpServerProjectService(private val project: Project) : Disposable {
             // 创建服务配置提供者（每次 connect 时调用，获取最新的用户设置）
             val serviceConfigProvider: () -> AiAgentServiceConfig = {
                 val settings = AgentSettingsService.getInstance()
-                logger.info("📦 Loading agent settings: nodePath=${settings.nodePath.ifBlank { "(system PATH)" }}, model=${settings.defaultModelEnum.displayName}, permissionMode=${settings.permissionMode}, userInteractionMcp=${settings.enableUserInteractionMcp}, jetbrainsMcp=${settings.enableJetBrainsMcp}, defaultBypass=${settings.defaultBypassPermissions}")
+                val thinkingLevelName = settings.getThinkingLevelById(settings.defaultThinkingLevelId)?.name ?: "Ultra"
+                logger.info("📦 Loading agent settings: nodePath=${settings.nodePath.ifBlank { "(system PATH)" }}, model=${settings.defaultModelEnum.displayName}, thinkingLevel=$thinkingLevelName (${settings.defaultThinkingTokens} tokens), permissionMode=${settings.permissionMode}, userInteractionMcp=${settings.enableUserInteractionMcp}, jetbrainsMcp=${settings.enableJetBrainsMcp}, defaultBypass=${settings.defaultBypassPermissions}")
+
+                // 创建 IDEA 文件同步 hooks
+                val fileSyncHooks = IdeaFileSyncHooks.create(project)
+
                 AiAgentServiceConfig(
                     defaultModel = settings.defaultModelId,
                     claude = ClaudeDefaults(
@@ -130,7 +136,12 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                         includePartialMessages = settings.includePartialMessages,
                         enableUserInteractionMcp = settings.enableUserInteractionMcp,
                         enableJetBrainsMcp = settings.enableJetBrainsMcp,
-                        dangerouslySkipPermissions = settings.defaultBypassPermissions
+                        enableContext7Mcp = settings.enableContext7Mcp,
+                        context7ApiKey = settings.context7ApiKey.takeIf { it.isNotBlank() },
+                        dangerouslySkipPermissions = settings.defaultBypassPermissions,
+                        defaultThinkingLevel = settings.defaultThinkingLevel,
+                        defaultThinkingTokens = settings.defaultThinkingTokens,
+                        ideaFileSyncHooks = fileSyncHooks
                     ),
                     codex = CodexDefaults()  // Codex 配置已移除，使用默认值
                 )
@@ -257,17 +268,52 @@ class HttpServerProjectService(private val project: Project) : Disposable {
         ideTools: IdeToolsImpl,
         jetbrainsRSocketHandler: JetBrainsRSocketHandler
     ) {
+        // 用于存储当前监听的编辑器，避免重复注册
+        var currentEditor: com.intellij.openapi.editor.Editor? = null
+        var selectionListener: SelectionListener? = null
+
+        // 注册选区监听器的函数
+        fun registerSelectionListener() {
+            val fileEditorManager = FileEditorManager.getInstance(project)
+            val editor = fileEditorManager.selectedTextEditor
+
+            // 如果编辑器没有变化，不需要重新注册
+            if (editor == currentEditor) return
+
+            // 移除旧的监听器
+            selectionListener?.let { listener ->
+                currentEditor?.selectionModel?.removeSelectionListener(listener)
+            }
+
+            currentEditor = editor
+
+            // 为新编辑器注册选区监听器
+            editor?.let { ed ->
+                val listener = object : SelectionListener {
+                    override fun selectionChanged(e: SelectionEvent) {
+                        // 直接推送，不做防抖
+                        pushActiveFileUpdate(ideTools, jetbrainsRSocketHandler)
+                    }
+                }
+                selectionListener = listener
+                ed.selectionModel.addSelectionListener(listener, this)
+                logger.info("📡 Selection listener registered for: ${ed.document}")
+            }
+        }
+
         // 监听文件切换事件
         project.messageBus.connect(this).subscribe(
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun selectionChanged(event: FileEditorManagerEvent) {
-                    // 当切换到新文件时推送
+                    // 当切换到新文件时，重新注册选区监听器并推送
+                    registerSelectionListener()
                     pushActiveFileUpdate(ideTools, jetbrainsRSocketHandler)
                 }
 
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-                    // 打开新文件时推送
+                    // 打开新文件时，重新注册选区监听器并推送
+                    registerSelectionListener()
                     pushActiveFileUpdate(ideTools, jetbrainsRSocketHandler)
                 }
 
@@ -275,26 +321,11 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                     // 关闭文件时推送（可能活跃文件变化了）
                     pushActiveFileUpdate(ideTools, jetbrainsRSocketHandler)
                 }
-            }
+            } as FileEditorManagerListener
         )
 
-        // 监听选区变化（用户选中代码时）
-        // 注意：选区变化非常频繁，需要添加防抖
-        val fileEditorManager = FileEditorManager.getInstance(project)
-        fileEditorManager.selectedTextEditor?.let { editor ->
-            editor.selectionModel.addSelectionListener(object : SelectionListener {
-                private var lastPushTime = 0L
-                private val debounceMs = 300L  // 300ms 防抖
-
-                override fun selectionChanged(e: SelectionEvent) {
-                    val now = System.currentTimeMillis()
-                    if (now - lastPushTime > debounceMs) {
-                        lastPushTime = now
-                        pushActiveFileUpdate(ideTools, jetbrainsRSocketHandler)
-                    }
-                }
-            }, this)
-        }
+        // 初始注册选区监听器
+        registerSelectionListener()
 
         logger.info("📡 File editor listener registered")
     }

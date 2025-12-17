@@ -5,6 +5,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
 import java.nio.file.Path
 
+private val prettyJson = Json { prettyPrint = true }
+
 /**
  * 测试 AskUserQuestion 工具调用
  *
@@ -131,7 +133,7 @@ fun main() = runBlocking {
                                     println("\n  ⭐⭐⭐ AskUserQuestion 工具被调用! ⭐⭐⭐")
                                     println("  完整 Input:")
                                     try {
-                                        val formatted = Json { prettyPrint = true }.encodeToString(
+                                        val formatted = prettyJson.encodeToString(
                                             JsonElement.serializer(),
                                             block.input
                                         )

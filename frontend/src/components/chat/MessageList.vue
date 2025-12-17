@@ -828,7 +828,7 @@ async function ensureScrollable(): Promise<void> {
   min-height: 0; /* 关键：防止 flex 子元素溢出 */
   overflow-y: auto !important;
   overflow-x: hidden;
-  padding: 4px 6px 16px 6px; /* 底部留出空隙 */
+  padding: 4px 6px 4px 6px; /* 减少底部留白 */
 }
 
 /* 修复 vue-virtual-scroller 的默认样式可能导致的内容截断 */
@@ -895,8 +895,8 @@ async function ensureScrollable(): Promise<void> {
   align-items: center;
   gap: 0;
   padding: 4px 10px;
-  margin: 4px 0 4px 8px;
-  font-size: 11px;
+  margin: 8px 0 4px -6px;
+  font-size: 15px;
   font-family: var(--theme-editor-font-family);
   color: var(--theme-secondary-foreground);
 }
@@ -996,9 +996,9 @@ async function ensureScrollable(): Promise<void> {
   right: 24px;
   width: 48px;
   height: 48px;
-  background: var(--theme-accent, #0366d6);
-  color: white;
-  border: none;
+  background: var(--theme-panel-background, #f6f8fa);
+  color: var(--theme-foreground, #24292e);
+  border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 24px;
   cursor: pointer;
   display: flex;
@@ -1012,7 +1012,8 @@ async function ensureScrollable(): Promise<void> {
 .scroll-to-bottom-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
-  background: var(--theme-accent-hover, #0256c2);
+  background: var(--theme-hover-background, #f0f0f0);
+  border-color: var(--theme-accent, #0366d6);
 }
 
 .scroll-to-bottom-btn:active {

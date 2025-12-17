@@ -178,6 +178,16 @@ data class RpcSetModelResult(
 )
 
 /**
+ * 设置思考 token 上限结果
+ */
+@Serializable
+data class RpcSetMaxThinkingTokensResult(
+    val status: RpcSessionStatus = RpcSessionStatus.CONNECTED,
+    /** null 表示禁用/使用默认值，0 也表示禁用 */
+    val maxThinkingTokens: Int?
+)
+
+/**
  * 历史消息
  */
 @Serializable

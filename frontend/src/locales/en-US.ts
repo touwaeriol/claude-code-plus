@@ -261,7 +261,8 @@ export default {
     alwaysOn: 'Thinking is always enabled for this model',
     notSupported: 'This model does not support thinking',
     toggleOn: 'Click to enable thinking',
-    toggleOff: 'Click to disable thinking'
+    toggleOff: 'Click to disable thinking',
+    selectLevel: 'Select thinking level'
   },
   context: {
     usage: 'Context usage: {used} / {max} tokens ({percentage}%)',

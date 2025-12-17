@@ -13,6 +13,7 @@ import com.intellij.psi.search.PsiShortNamesCache
 import com.intellij.openapi.roots.TestSourcesFilter
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ide.scratch.ScratchUtil
+import com.intellij.psi.codeStyle.NameUtil
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -89,23 +90,28 @@ class FileIndexTool(private val project: Project) {
         try {
             ReadAction.run<Exception> {
                 val baseScope = createSearchScope(searchScope)
-                val queryLower = query.lowercase()
 
                 // 是否包含库（用于 Classes/Symbols 搜索）
                 val includeLibraries = searchScope == SearchIndexScope.All
 
                 when (searchType) {
                     SearchIndexType.Files, SearchIndexType.All -> {
-                        // 文件搜索
+                        // 文件搜索 - 使用 IDEA 原生匹配器排序
+                        val matcher = NameUtil.buildMatcher("*$query").build()
                         val allFileNames = FilenameIndex.getAllFilenames(project)
-                        val matchingFiles = allFileNames
-                            .filter { it.lowercase().contains(queryLower) }
+
+                        // 过滤并按匹配度排序
+                        val sortedFileNames = allFileNames
+                            .filter { matcher.matches(it) }
+                            .sortedByDescending { matcher.matchingDegree(it) }
+
+                        val matchingFiles = sortedFileNames
                             .flatMap { fileName ->
                                 FilenameIndex.getVirtualFilesByName(fileName, baseScope).map { file ->
-                                    val relativePath = project.basePath?.let { 
-                                        file.path.removePrefix(it).removePrefix("/") 
+                                    val relativePath = project.basePath?.let {
+                                        file.path.removePrefix(it).removePrefix("/")
                                     } ?: file.path
-                                    
+
                                     IndexSearchResult(
                                         name = file.name,
                                         path = relativePath,
@@ -115,21 +121,26 @@ class FileIndexTool(private val project: Project) {
                                 }
                             }
                             .distinctBy { it.path }
-                        
+
                         totalFound += matchingFiles.size
                         results.addAll(matchingFiles.drop(offset).take(maxResults))
                     }
                     
                     SearchIndexType.Classes -> {
-                        // 类搜索 - 使用 PsiShortNamesCache
+                        // 类搜索 - 使用 IDEA 原生匹配器排序
+                        val matcher = NameUtil.buildMatcher("*$query").build()
                         val cache = PsiShortNamesCache.getInstance(project)
                         val allClassNames = cache.allClassNames
-                        val matchingNames = allClassNames.filter { it.lowercase().contains(queryLower) }
 
-                        // 过滤并收集结果
-                        val searchScope = if (includeLibraries) GlobalSearchScope.allScope(project) else baseScope
-                        val filteredResults = matchingNames.flatMap { name ->
-                            cache.getClassesByName(name, searchScope).mapNotNull { psiClass ->
+                        // 过滤并按匹配度排序
+                        val sortedNames = allClassNames
+                            .filter { matcher.matches(it) }
+                            .sortedByDescending { matcher.matchingDegree(it) }
+
+                        // 收集结果（按排序后的顺序）
+                        val classSearchScope = if (includeLibraries) GlobalSearchScope.allScope(project) else baseScope
+                        val filteredResults = sortedNames.flatMap { name ->
+                            cache.getClassesByName(name, classSearchScope).mapNotNull { psiClass ->
                                 val file = psiClass.containingFile?.virtualFile
                                 if (file != null && baseScope.contains(file)) {
                                     IndexSearchResult(
@@ -146,15 +157,18 @@ class FileIndexTool(private val project: Project) {
                     }
 
                     SearchIndexType.Symbols -> {
-                        // 符号搜索 - 使用 PsiShortNamesCache 搜索方法和字段
+                        // 符号搜索 - 使用 IDEA 原生匹配器排序
+                        val matcher = NameUtil.buildMatcher("*$query").build()
                         val cache = PsiShortNamesCache.getInstance(project)
                         val symbolSearchScope = if (includeLibraries) GlobalSearchScope.allScope(project) else baseScope
 
-                        // 搜索方法
+                        // 搜索方法 - 按匹配度排序
                         val allMethodNames = cache.allMethodNames
-                        val matchingMethodNames = allMethodNames.filter { it.lowercase().contains(queryLower) }
+                        val sortedMethodNames = allMethodNames
+                            .filter { matcher.matches(it) }
+                            .sortedByDescending { matcher.matchingDegree(it) }
 
-                        val methodResults = matchingMethodNames.flatMap { name ->
+                        val methodResults = sortedMethodNames.flatMap { name ->
                             cache.getMethodsByName(name, symbolSearchScope).mapNotNull { method ->
                                 val file = method.containingFile?.virtualFile
                                 if (file != null && baseScope.contains(file)) {
@@ -169,11 +183,13 @@ class FileIndexTool(private val project: Project) {
                             }
                         }
 
-                        // 搜索字段
+                        // 搜索字段 - 按匹配度排序
                         val allFieldNames = cache.allFieldNames
-                        val matchingFieldNames = allFieldNames.filter { it.lowercase().contains(queryLower) }
+                        val sortedFieldNames = allFieldNames
+                            .filter { matcher.matches(it) }
+                            .sortedByDescending { matcher.matchingDegree(it) }
 
-                        val fieldResults = matchingFieldNames.flatMap { name ->
+                        val fieldResults = sortedFieldNames.flatMap { name ->
                             cache.getFieldsByName(name, symbolSearchScope).mapNotNull { field ->
                                 val file = field.containingFile?.virtualFile
                                 if (file != null && baseScope.contains(file)) {
@@ -188,9 +204,13 @@ class FileIndexTool(private val project: Project) {
                             }
                         }
 
-                        val filteredResults = (methodResults + fieldResults).distinctBy { "${it.name}:${it.path}:${it.line}" }
-                        totalFound = filteredResults.size
-                        results.addAll(filteredResults.drop(offset).take(maxResults))
+                        // 合并结果并按匹配度重新排序
+                        val allSymbolResults = (methodResults + fieldResults)
+                        val sortedResults = allSymbolResults
+                            .sortedByDescending { matcher.matchingDegree(it.name) }
+                            .distinctBy { "${it.name}:${it.path}:${it.line}" }
+                        totalFound = sortedResults.size
+                        results.addAll(sortedResults.drop(offset).take(maxResults))
                     }
                     
                     SearchIndexType.Actions -> {

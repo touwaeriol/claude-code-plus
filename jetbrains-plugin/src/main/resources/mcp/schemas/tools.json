@@ -114,8 +114,8 @@
       },
       "scope": {
         "type": "string",
-        "enum": ["Project", "Module", "Directory", "Scope"],
-        "description": "Search scope: Project (entire project), Module (specific module), Directory (specific folder), Scope (custom IDE scope)",
+        "enum": ["Project", "All", "Module", "Directory", "Scope"],
+        "description": "Search scope: Project (entire project), All (project + libraries), Module (specific module), Directory (specific folder), Scope (custom IDE scope)",
         "default": "Project"
       },
       "scopeArg": {

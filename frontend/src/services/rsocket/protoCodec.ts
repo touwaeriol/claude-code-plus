@@ -172,6 +172,83 @@ export const ProtoCodec = {
   },
 
   /**
+   * 编码 SetMaxThinkingTokensRequest
+   * 手写轻量编码，避免前端重新生成 proto 定义
+   *
+   * Proto 定义:
+   * message SetMaxThinkingTokensRequest {
+   *   optional int32 max_thinking_tokens = 1;  // null = 禁用, 0 = 禁用, 正数 = 设置上限
+   * }
+   */
+  encodeSetMaxThinkingTokensRequest(maxThinkingTokens: number | null): Uint8Array {
+    if (maxThinkingTokens === null) {
+      // null 值：发送空消息（不设置任何字段）
+      return new Uint8Array(0)
+    }
+
+    // 手写 protobuf 编码: field 1 (tag=8), varint
+    const buffer: number[] = []
+    const writeVarint = (value: number) => {
+      let v = value >>> 0
+      while (v > 0x7f) {
+        buffer.push((v & 0x7f) | 0x80)
+        v >>>= 7
+      }
+      buffer.push(v)
+    }
+
+    // Field 1, wire type 0 (varint): tag = (1 << 3) | 0 = 8
+    buffer.push(8)
+    writeVarint(maxThinkingTokens)
+
+    return new Uint8Array(buffer)
+  },
+
+  /**
+   * 解码 SetMaxThinkingTokensResult
+   * 手写轻量解码
+   *
+   * Proto 定义:
+   * message SetMaxThinkingTokensResult {
+   *   SessionStatus status = 1;
+   *   optional int32 max_thinking_tokens = 2;
+   * }
+   */
+  decodeSetMaxThinkingTokensResult(data: Uint8Array): { status: RpcSessionStatus; maxThinkingTokens: number | null } {
+    let status: RpcSessionStatus = 'connected'
+    let maxThinkingTokens: number | null = null
+
+    let offset = 0
+    while (offset < data.length) {
+      const tag = data[offset++]
+      const fieldNumber = tag >> 3
+      const wireType = tag & 0x07
+
+      if (wireType === 0) {
+        // varint
+        let value = 0
+        let shift = 0
+        let b: number
+        do {
+          b = data[offset++]
+          value |= (b & 0x7f) << shift
+          shift += 7
+        } while (b & 0x80)
+
+        if (fieldNumber === 1) {
+          // status: SessionStatus enum
+          status = mapSessionStatusFromProto(value)
+        } else if (fieldNumber === 2) {
+          // max_thinking_tokens
+          maxThinkingTokens = value
+        }
+      }
+    }
+
+    return { status, maxThinkingTokens }
+  },
+
+  /**
    * 编码 GetHistorySessionsRequest
    */
   encodeGetHistorySessionsRequest(maxResults: number, offset = 0): Uint8Array {
