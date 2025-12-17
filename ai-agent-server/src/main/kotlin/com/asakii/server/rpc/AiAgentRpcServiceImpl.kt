@@ -609,22 +609,36 @@ class AiAgentRpcServiceImpl(
             sdkLog.info("⏭️ [buildClaudeOverrides] JetBrains MCP Server 已禁用")
         }
 
-        // 添加 Context7 MCP Server（如果启用）
-        if (defaults.enableContext7Mcp) {
-            val context7Config = mutableMapOf<String, Any>(
-                "type" to "http",
-                "url" to "https://mcp.context7.com/mcp"
-            )
-            // 如果用户配置了 API Key，则添加到 headers 中
-            defaults.context7ApiKey?.takeIf { it.isNotBlank() }?.let { apiKey ->
-                context7Config["headers"] = mapOf("CONTEXT7_API_KEY" to apiKey)
-                sdkLog.info("✅ [buildClaudeOverrides] 已添加 Context7 MCP Server (with API key)")
-            } ?: run {
-                sdkLog.info("✅ [buildClaudeOverrides] 已添加 Context7 MCP Server (without API key)")
+        // 添加从配置文件加载的 MCP 服务器
+        for (mcpConfig in defaults.mcpServersConfig) {
+            if (!mcpConfig.enabled) continue
+
+            val serverConfig: Map<String, Any> = when (mcpConfig.type) {
+                "http" -> {
+                    val config = mutableMapOf<String, Any>(
+                        "type" to "http",
+                        "url" to (mcpConfig.url ?: continue)
+                    )
+                    mcpConfig.headers?.let { config["headers"] = it }
+                    config
+                }
+                "stdio" -> {
+                    val config = mutableMapOf<String, Any>(
+                        "type" to "stdio",
+                        "command" to (mcpConfig.command ?: continue)
+                    )
+                    mcpConfig.args?.let { config["args"] = it }
+                    mcpConfig.env?.let { config["env"] = it }
+                    config
+                }
+                else -> {
+                    sdkLog.warn("⚠️ [buildClaudeOverrides] 未知 MCP 类型: ${mcpConfig.type} for '${mcpConfig.name}'")
+                    continue
+                }
             }
-            mcpServers["context7"] = context7Config
-        } else {
-            sdkLog.info("⏭️ [buildClaudeOverrides] Context7 MCP Server 已禁用")
+
+            mcpServers[mcpConfig.name] = serverConfig
+            sdkLog.info("✅ [buildClaudeOverrides] 已添加 MCP Server: ${mcpConfig.name} (type=${mcpConfig.type})")
         }
 
         // 从 IdeTools 获取子代理定义（如 JetBrains 专用的代码探索代理）

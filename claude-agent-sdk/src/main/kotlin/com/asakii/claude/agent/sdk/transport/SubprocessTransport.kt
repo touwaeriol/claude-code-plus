@@ -557,6 +557,29 @@ class SubprocessTransport(
                                         is Number -> put(key, value)
                                         is Boolean -> put(key, value)
                                         null -> put(key, JsonNull)
+                                        is List<*> -> putJsonArray(key) {
+                                            value.forEach { item ->
+                                                when (item) {
+                                                    is String -> add(item)
+                                                    is Number -> add(item)
+                                                    is Boolean -> add(item)
+                                                    null -> add(JsonNull)
+                                                    else -> add(item.toString())
+                                                }
+                                            }
+                                        }
+                                        is Map<*, *> -> putJsonObject(key) {
+                                            @Suppress("UNCHECKED_CAST")
+                                            (value as Map<String, Any?>).forEach { (k, v) ->
+                                                when (v) {
+                                                    is String -> put(k, v)
+                                                    is Number -> put(k, v)
+                                                    is Boolean -> put(k, v)
+                                                    null -> put(k, JsonNull)
+                                                    else -> put(k, v.toString())
+                                                }
+                                            }
+                                        }
                                         else -> put(key, value.toString())
                                     }
                                 }
