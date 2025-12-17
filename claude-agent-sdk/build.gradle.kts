@@ -71,11 +71,12 @@ tasks.test {
     useJUnitPlatform()
 }
 
-val dokkaJavadoc by tasks.getting(DokkaTask::class)
-
+// 🔧 配置 Dokka 任务以支持配置缓存
 tasks.named<Jar>("javadocJar") {
+    val dokkaJavadoc = tasks.named<DokkaTask>("dokkaJavadoc")
     dependsOn(dokkaJavadoc)
-    from(dokkaJavadoc.outputDirectory)
+    // 使用 Provider API 延迟解析,避免配置缓存问题
+    from(dokkaJavadoc.map { it.outputDirectory })
 }
 
 fun MavenPublication.configureCommonPom(displayName: String, moduleDescription: String) {

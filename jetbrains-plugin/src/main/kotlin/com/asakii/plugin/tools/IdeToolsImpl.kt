@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")  // TODO: 迁移到 DiffEditorViewerFileEditors (需要 IntelliJ 2023.3+)
+
 package com.asakii.plugin.tools
 
 import com.asakii.claude.agent.sdk.types.AgentDefinition

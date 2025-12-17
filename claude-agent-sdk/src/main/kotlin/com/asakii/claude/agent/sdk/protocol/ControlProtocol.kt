@@ -513,7 +513,6 @@ class ControlProtocol(
                     }
                 }
             }
-            else -> throw ControlProtocolException("Unknown permission result type")
         }
     }
     

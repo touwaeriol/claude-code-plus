@@ -110,10 +110,11 @@ suspend fun demonstrateEnhancedMcp() {
         val schema = tool.inputSchema
         @Suppress("UNCHECKED_CAST")
         val properties = (schema["properties"] as? Map<String, Map<String, Any>>) ?: emptyMap()
-        
+
         properties.forEach { (paramName, paramSchema) ->
             val description = paramSchema["description"] as? String ?: ""
             val type = paramSchema["type"] as? String ?: "unknown"
+            @Suppress("UNCHECKED_CAST")
             val required = ((schema["required"] as? List<String>) ?: emptyList()).contains(paramName)
             val requiredMark = if (required) "*" else ""
             println("  • $paramName$requiredMark ($type): $description")

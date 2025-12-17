@@ -432,7 +432,6 @@ object ToolTypeParser {
             is JsonObject -> {
                 element.mapValues { (_, value) -> parseJsonValue(value) }
             }
-            else -> element.toString()
         }
     }
 }

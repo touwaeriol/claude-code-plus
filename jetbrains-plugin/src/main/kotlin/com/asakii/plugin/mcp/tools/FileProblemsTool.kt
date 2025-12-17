@@ -365,9 +365,7 @@ class FileProblemsTool(private val project: Project) {
             // 从 holder 中提取所有问题
             for (i in 0 until holder.size()) {
                 val info = holder[i]
-                if (info != null) {
-                    problems.add(info)
-                }
+                problems.add(info)
             }
         } catch (e: Exception) {
             logger.error(e) { "❌ Error running HighlightVisitor analysis" }
