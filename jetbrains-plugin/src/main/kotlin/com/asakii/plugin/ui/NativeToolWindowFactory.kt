@@ -7,6 +7,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ex.CustomComponentAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.ide.CopyPasteManager
+import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -22,6 +23,7 @@ import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.content.ContentFactory
+import com.intellij.ui.jcef.JBCefApp
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.util.ui.JBUI
 import kotlinx.serialization.encodeToString
@@ -180,7 +182,7 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
 
         toolWindowEx?.setTitleActions(titleActions)
 
-        // 三个点菜单中只保留 DevTools
+        // 三个点菜单中保留 DevTools 选项
         val gearActions = com.intellij.openapi.actionSystem.DefaultActionGroup().apply {
             add(object : AnAction(
                 "Open DevTools",
@@ -189,6 +191,15 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
             ) {
                 override fun actionPerformed(e: AnActionEvent) {
                     openDevToolsInDialog(project, browser)
+                }
+            })
+            add(object : AnAction(
+                "Open DevTools in Chrome",
+                "使用 Chrome 远程调试 (Windows JCEF 兼容性更好)",
+                AllIcons.Xml.Browsers.Chrome
+            ) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    openDevToolsInChrome(project)
                 }
             })
         }
@@ -309,6 +320,47 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * 使用 Chrome 远程调试打开 DevTools
+     * 通过 JCEF 内置的远程调试端口连接
+     */
+    private fun openDevToolsInChrome(project: Project) {
+        if (!JBCefApp.isSupported()) {
+            logger.warn("⚠️ JCEF is not supported")
+            com.intellij.openapi.ui.Messages.showWarningDialog(
+                project,
+                "JCEF 不受支持，无法使用远程调试。",
+                "DevTools"
+            )
+            return
+        }
+
+        try {
+            // 使用异步方法获取远程调试端口
+            JBCefApp.getInstance().getRemoteDebuggingPort { port ->
+                if (port != null && port > 0) {
+                    val debugUrl = "http://localhost:$port"
+                    logger.info("🔗 Opening Chrome DevTools at: $debugUrl")
+                    BrowserUtil.browse(debugUrl)
+                } else {
+                    logger.warn("⚠️ Remote debugging port not available")
+                    com.intellij.openapi.ui.Messages.showWarningDialog(
+                        project,
+                        "远程调试端口不可用。\n\n" +
+                        "请尝试在 Registry 中设置 ide.browser.jcef.debug.port 为一个有效端口（如 9222）。",
+                        "DevTools"
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("❌ Failed to get remote debugging port: ${e.message}", e)
+            // 降级方案：使用默认端口
+            val defaultPort = 9222
+            logger.info("🔗 Trying default port: $defaultPort")
+            BrowserUtil.browse("http://localhost:$defaultPort")
         }
     }
 
