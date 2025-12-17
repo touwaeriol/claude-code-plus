@@ -26,7 +26,7 @@ data class TextBlock(
 @SerialName("thinking")
 data class ThinkingBlock(
     val thinking: String,
-    val signature: String
+    val signature: String? = null
 ) : ContentBlock
 
 /**

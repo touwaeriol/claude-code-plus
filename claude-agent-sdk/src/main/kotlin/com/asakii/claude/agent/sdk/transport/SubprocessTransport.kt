@@ -384,28 +384,26 @@ class SubprocessTransport(
         }
 
         // Append system prompt file（独立参数，用于 MCP 场景追加提示词）
-        // 使用 --append-system-prompt-file 参数，不会替换默认提示词
         options.appendSystemPromptFile?.let { appendContent ->
             val tempFile = getOrCreateSystemPromptFile(appendContent)
             logger.info("📝 将 appendSystemPromptFile 写入临时文件: $tempFile")
             command.add("--append-system-prompt-file")
-            command.add(tempFile.toAbsolutePath().toString())
+            command.add("\"${tempFile.toAbsolutePath()}\"")
         }
-        
-        // Allowed tools
+
+        // Allowed tools（统一用引号包裹，工具名可能含特殊字符如 Bash(git:*)）
         if (options.allowedTools.isNotEmpty()) {
             val toolsArg = options.allowedTools.joinToString(",")
-            command.addAll(listOf("--allowed-tools", toolsArg))
+            command.addAll(listOf("--allowed-tools", "\"$toolsArg\""))
         }
 
         // Disallowed tools
         if (options.disallowedTools.isNotEmpty()) {
             val toolsArg = options.disallowedTools.joinToString(",")
-            command.addAll(listOf("--disallowed-tools", toolsArg))
+            command.addAll(listOf("--disallowed-tools", "\"$toolsArg\""))
         }
 
         // Agents (programmatic subagents)
-        // 与 Python SDK 一致：将 Map<String, AgentDefinition> 转换为 JSON 字符串传递给 CLI
         options.agents?.let { agents ->
             if (agents.isNotEmpty()) {
                 val agentsJson = buildJsonObject {
@@ -423,22 +421,10 @@ class SubprocessTransport(
                     }
                 }.toString()
 
-                // Windows 上 ProcessBuilder 处理双引号有 bug (JDK-8131908)
-                // 需要手动转义 JSON 中的双引号
-                // 参考: https://bugs.openjdk.org/browse/JDK-8131908
-                val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-                val escapedJson = if (isWindows) {
-                    // Windows: 将 " 转义为 \"，ProcessBuilder 会正确传递给子进程
-                    agentsJson.replace("\"", "\\\"")
-                } else {
-                    agentsJson
-                }
-
+                // 统一转义：先转义反斜杠，再转义引号，最后用引号包裹
+                val escapedJson = "\"" + agentsJson.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
                 command.addAll(listOf("--agents", escapedJson))
                 logger.info("🤖 配置自定义代理: ${agents.keys.joinToString(", ")}")
-                if (isWindows) {
-                    logger.debug("📝 Windows 转义后的 JSON: $escapedJson")
-                }
             }
         }
 

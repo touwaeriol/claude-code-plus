@@ -243,10 +243,9 @@ class MessageParser {
                 TextBlock(text)
             }
             "thinking" -> {
-                val thinking = jsonObject["thinking"]?.jsonPrimitive?.content 
+                val thinking = jsonObject["thinking"]?.jsonPrimitive?.content
                     ?: throw MessageParsingException("Missing 'thinking' in thinking block")
-                val signature = jsonObject["signature"]?.jsonPrimitive?.content 
-                    ?: throw MessageParsingException("Missing 'signature' in thinking block")
+                val signature = jsonObject["signature"]?.jsonPrimitive?.contentOrNull
                 ThinkingBlock(thinking, signature)
             }
             "tool_use" -> {
