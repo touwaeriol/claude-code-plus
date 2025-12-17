@@ -9,355 +9,198 @@
 
 import { RSocketClient } from './rsocket/RSocketClient'
 import { resolveServerHttpUrl } from '@/utils/serverUrl'
+import { create, toBinary, fromBinary } from '@bufbuild/protobuf'
+import {
+  JetBrainsOpenFileRequestSchema,
+  JetBrainsShowDiffRequestSchema,
+  JetBrainsShowMultiEditDiffRequestSchema,
+  JetBrainsShowEditPreviewRequestSchema,
+  JetBrainsShowMarkdownRequestSchema,
+  JetBrainsEditOperationSchema,
+  JetBrainsOperationResponseSchema,
+  JetBrainsGetThemeResponseSchema,
+  JetBrainsGetLocaleResponseSchema,
+  JetBrainsGetProjectPathResponseSchema,
+  JetBrainsSetLocaleRequestSchema,
+  JetBrainsSessionStateSchema,
+  JetBrainsSessionSummarySchema
+} from '@/proto/jetbrains_api_pb'
+import {
+  GetIdeSettingsResponseSchema,
+  ActiveFileChangedNotifySchema
+} from '@/proto/ai_agent_rpc_pb'
 import type {
   OpenFileRequest,
   ShowDiffRequest,
   ShowMultiEditDiffRequest,
   ShowEditPreviewRequest,
-  ShowMarkdownRequest,
-  EditOperation
+  ShowMarkdownRequest
 } from './jetbrainsApi'
 
-// ========== Protobuf 轻量编解码 ==========
-
-/**
- * 手写 Protobuf 编码工具
- * 避免生成完整的 proto 定义
- */
-const ProtoEncoder = {
-  /**
-   * 写入 varint
-   */
-  writeVarint(buffer: number[], value: number): void {
-    let v = value >>> 0
-    while (v > 0x7f) {
-      buffer.push((v & 0x7f) | 0x80)
-      v >>>= 7
-    }
-    buffer.push(v)
-  },
-
-  /**
-   * 写入字符串字段（field_number << 3 | 2）
-   */
-  writeString(buffer: number[], fieldNumber: number, value: string): void {
-    const tag = (fieldNumber << 3) | 2
-    buffer.push(tag)
-    const bytes = new TextEncoder().encode(value)
-    this.writeVarint(buffer, bytes.length)
-    bytes.forEach(b => buffer.push(b))
-  },
-
-  /**
-   * 写入 int32 字段（field_number << 3 | 0）
-   */
-  writeInt32(buffer: number[], fieldNumber: number, value: number): void {
-    const tag = (fieldNumber << 3) | 0
-    buffer.push(tag)
-    this.writeVarint(buffer, value)
-  },
-
-  /**
-   * 写入 bool 字段
-   */
-  writeBool(buffer: number[], fieldNumber: number, value: boolean): void {
-    if (value) {
-      const tag = (fieldNumber << 3) | 0
-      buffer.push(tag)
-      buffer.push(1)
-    }
-  },
-
-  /**
-   * 写入嵌套消息字段
-   */
-  writeMessage(buffer: number[], fieldNumber: number, messageBytes: number[]): void {
-    const tag = (fieldNumber << 3) | 2
-    buffer.push(tag)
-    this.writeVarint(buffer, messageBytes.length)
-    messageBytes.forEach(b => buffer.push(b))
-  }
-}
+// ========== Protobuf 编解码（使用官方库）==========
 
 /**
  * 编码 JetBrainsOpenFileRequest
  */
 function encodeOpenFileRequest(request: OpenFileRequest): Uint8Array {
-  const buffer: number[] = []
-  ProtoEncoder.writeString(buffer, 1, request.filePath)
-  if (request.line !== undefined) ProtoEncoder.writeInt32(buffer, 2, request.line)
-  if (request.column !== undefined) ProtoEncoder.writeInt32(buffer, 3, request.column)
-  if (request.startOffset !== undefined) ProtoEncoder.writeInt32(buffer, 4, request.startOffset)
-  if (request.endOffset !== undefined) ProtoEncoder.writeInt32(buffer, 5, request.endOffset)
-  return new Uint8Array(buffer)
+  const proto = create(JetBrainsOpenFileRequestSchema, {
+    filePath: request.filePath,
+    line: request.line,
+    column: request.column,
+    startOffset: request.startOffset,
+    endOffset: request.endOffset
+  })
+  return toBinary(JetBrainsOpenFileRequestSchema, proto)
 }
 
 /**
  * 编码 JetBrainsShowDiffRequest
  */
 function encodeShowDiffRequest(request: ShowDiffRequest): Uint8Array {
-  const buffer: number[] = []
-  ProtoEncoder.writeString(buffer, 1, request.filePath)
-  ProtoEncoder.writeString(buffer, 2, request.oldContent)
-  ProtoEncoder.writeString(buffer, 3, request.newContent)
-  if (request.title) ProtoEncoder.writeString(buffer, 4, request.title)
-  return new Uint8Array(buffer)
-}
-
-/**
- * 编码单个 EditOperation
- */
-function encodeEditOperation(edit: EditOperation): number[] {
-  const buffer: number[] = []
-  ProtoEncoder.writeString(buffer, 1, edit.oldString)
-  ProtoEncoder.writeString(buffer, 2, edit.newString)
-  if (edit.replaceAll) ProtoEncoder.writeBool(buffer, 3, edit.replaceAll)
-  return buffer
+  const proto = create(JetBrainsShowDiffRequestSchema, {
+    filePath: request.filePath,
+    oldContent: request.oldContent,
+    newContent: request.newContent,
+    title: request.title
+  })
+  return toBinary(JetBrainsShowDiffRequestSchema, proto)
 }
 
 /**
  * 编码 JetBrainsShowMultiEditDiffRequest
  */
 function encodeShowMultiEditDiffRequest(request: ShowMultiEditDiffRequest): Uint8Array {
-  const buffer: number[] = []
-  ProtoEncoder.writeString(buffer, 1, request.filePath)
-  // repeated edits = 2
-  request.edits.forEach(edit => {
-    const editBytes = encodeEditOperation(edit)
-    ProtoEncoder.writeMessage(buffer, 2, editBytes)
+  const proto = create(JetBrainsShowMultiEditDiffRequestSchema, {
+    filePath: request.filePath,
+    edits: request.edits.map(edit => create(JetBrainsEditOperationSchema, {
+      oldString: edit.oldString,
+      newString: edit.newString,
+      replaceAll: edit.replaceAll
+    })),
+    currentContent: request.currentContent
   })
-  if (request.currentContent) ProtoEncoder.writeString(buffer, 3, request.currentContent)
-  return new Uint8Array(buffer)
+  return toBinary(JetBrainsShowMultiEditDiffRequestSchema, proto)
 }
 
 /**
  * 编码 JetBrainsShowEditPreviewRequest
  */
 function encodeShowEditPreviewRequest(request: ShowEditPreviewRequest): Uint8Array {
-  const buffer: number[] = []
-  ProtoEncoder.writeString(buffer, 1, request.filePath)
-  // repeated edits = 2
-  request.edits.forEach(edit => {
-    const editBytes = encodeEditOperation(edit)
-    ProtoEncoder.writeMessage(buffer, 2, editBytes)
+  const proto = create(JetBrainsShowEditPreviewRequestSchema, {
+    filePath: request.filePath,
+    edits: request.edits.map(edit => create(JetBrainsEditOperationSchema, {
+      oldString: edit.oldString,
+      newString: edit.newString,
+      replaceAll: edit.replaceAll
+    })),
+    title: request.title
   })
-  if (request.title) ProtoEncoder.writeString(buffer, 3, request.title)
-  return new Uint8Array(buffer)
+  return toBinary(JetBrainsShowEditPreviewRequestSchema, proto)
 }
 
 /**
  * 编码 JetBrainsShowMarkdownRequest
  */
 function encodeShowMarkdownRequest(request: ShowMarkdownRequest): Uint8Array {
-  const buffer: number[] = []
-  ProtoEncoder.writeString(buffer, 1, request.content)
-  if (request.title) ProtoEncoder.writeString(buffer, 2, request.title)
-  return new Uint8Array(buffer)
+  const proto = create(JetBrainsShowMarkdownRequestSchema, {
+    content: request.content,
+    title: request.title
+  })
+  return toBinary(JetBrainsShowMarkdownRequestSchema, proto)
 }
 
 /**
  * 编码 JetBrainsSetLocaleRequest
  */
 function encodeSetLocaleRequest(locale: string): Uint8Array {
-  const buffer: number[] = []
-  ProtoEncoder.writeString(buffer, 1, locale)
-  return new Uint8Array(buffer)
+  const proto = create(JetBrainsSetLocaleRequestSchema, { locale })
+  return toBinary(JetBrainsSetLocaleRequestSchema, proto)
 }
 
 /**
  * 解码 JetBrainsOperationResponse
  */
 function decodeOperationResponse(data: Uint8Array): { success: boolean; error?: string } {
-  let success = false
-  let error: string | undefined
-
-  let offset = 0
-  while (offset < data.length) {
-    const tag = data[offset++]
-    const fieldNumber = tag >> 3
-    const wireType = tag & 0x7
-
-    if (wireType === 0) {
-      // varint
-      let value = 0
-      let shift = 0
-      while (offset < data.length) {
-        const byte = data[offset++]
-        value |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) break
-        shift += 7
-      }
-      if (fieldNumber === 1) success = value !== 0
-    } else if (wireType === 2) {
-      // length-delimited
-      let length = 0
-      let shift = 0
-      while (offset < data.length) {
-        const byte = data[offset++]
-        length |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) break
-        shift += 7
-      }
-      const stringBytes = data.slice(offset, offset + length)
-      offset += length
-      if (fieldNumber === 2) error = new TextDecoder().decode(stringBytes)
-    }
-  }
-
-  return { success, error }
+  const proto = fromBinary(JetBrainsOperationResponseSchema, data)
+  return { success: proto.success, error: proto.error || undefined }
 }
 
 /**
- * 解码 IdeThemeProto
+ * 解码 JetBrainsGetThemeResponse -> IdeTheme
  */
 function decodeThemeResponse(data: Uint8Array): IdeTheme | null {
-  // 解码 JetBrainsGetThemeResponse，其中 theme = 1
-  let offset = 0
-  while (offset < data.length) {
-    const tag = data[offset++]
-    const fieldNumber = tag >> 3
-    const wireType = tag & 0x7
+  const proto = fromBinary(JetBrainsGetThemeResponseSchema, data)
+  if (!proto.theme) return null
 
-    if (wireType === 2 && fieldNumber === 1) {
-      // 嵌套消息
-      let length = 0
-      let shift = 0
-      while (offset < data.length) {
-        const byte = data[offset++]
-        length |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) break
-        shift += 7
-      }
-      const themeBytes = data.slice(offset, offset + length)
-      return decodeIdeTheme(themeBytes)
-    }
+  const theme = proto.theme
+  return {
+    background: theme.background,
+    foreground: theme.foreground,
+    borderColor: theme.borderColor,
+    panelBackground: theme.panelBackground,
+    textFieldBackground: theme.textFieldBackground,
+    selectionBackground: theme.selectionBackground,
+    selectionForeground: theme.selectionForeground,
+    linkColor: theme.linkColor,
+    errorColor: theme.errorColor,
+    warningColor: theme.warningColor,
+    successColor: theme.successColor,
+    separatorColor: theme.separatorColor,
+    hoverBackground: theme.hoverBackground,
+    accentColor: theme.accentColor,
+    infoBackground: theme.infoBackground,
+    codeBackground: theme.codeBackground,
+    secondaryForeground: theme.secondaryForeground,
+    fontFamily: theme.fontFamily,
+    fontSize: theme.fontSize,
+    editorFontFamily: theme.editorFontFamily,
+    editorFontSize: theme.editorFontSize
   }
-  return null
-}
-
-/**
- * 解码 IdeThemeProto 内部
- */
-function decodeIdeTheme(data: Uint8Array): IdeTheme {
-  const theme: any = {}
-  const fieldNames: Record<number, string> = {
-    1: 'background', 2: 'foreground', 3: 'borderColor', 4: 'panelBackground',
-    5: 'textFieldBackground', 6: 'selectionBackground', 7: 'selectionForeground',
-    8: 'linkColor', 9: 'errorColor', 10: 'warningColor', 11: 'successColor',
-    12: 'separatorColor', 13: 'hoverBackground', 14: 'accentColor',
-    15: 'infoBackground', 16: 'codeBackground', 17: 'secondaryForeground',
-    18: 'fontFamily', 19: 'fontSize', 20: 'editorFontFamily', 21: 'editorFontSize'
-  }
-
-  let offset = 0
-  while (offset < data.length) {
-    const tag = data[offset++]
-    const fieldNumber = tag >> 3
-    const wireType = tag & 0x7
-
-    if (wireType === 0) {
-      // varint (fontSize, editorFontSize)
-      let value = 0
-      let shift = 0
-      while (offset < data.length) {
-        const byte = data[offset++]
-        value |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) break
-        shift += 7
-      }
-      const name = fieldNames[fieldNumber]
-      if (name) theme[name] = value
-    } else if (wireType === 2) {
-      // length-delimited (string)
-      let length = 0
-      let shift = 0
-      while (offset < data.length) {
-        const byte = data[offset++]
-        length |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) break
-        shift += 7
-      }
-      const stringBytes = data.slice(offset, offset + length)
-      offset += length
-      const name = fieldNames[fieldNumber]
-      if (name) theme[name] = new TextDecoder().decode(stringBytes)
-    }
-  }
-
-  return theme as IdeTheme
 }
 
 /**
  * 解码 JetBrainsGetLocaleResponse
  */
 function decodeLocaleResponse(data: Uint8Array): string {
-  let offset = 0
-  while (offset < data.length) {
-    const tag = data[offset++]
-    const fieldNumber = tag >> 3
-    const wireType = tag & 0x7
-
-    if (wireType === 2 && fieldNumber === 1) {
-      let length = 0
-      let shift = 0
-      while (offset < data.length) {
-        const byte = data[offset++]
-        length |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) break
-        shift += 7
-      }
-      const stringBytes = data.slice(offset, offset + length)
-      return new TextDecoder().decode(stringBytes)
-    }
-  }
-  return 'en-US'
+  const proto = fromBinary(JetBrainsGetLocaleResponseSchema, data)
+  return proto.locale || 'en-US'
 }
 
 /**
  * 解码 JetBrainsGetProjectPathResponse
  */
 function decodeProjectPathResponse(data: Uint8Array): string {
-  let offset = 0
-  while (offset < data.length) {
-    const tag = data[offset++]
-    const fieldNumber = tag >> 3
-    const wireType = tag & 0x7
+  const proto = fromBinary(JetBrainsGetProjectPathResponseSchema, data)
+  return proto.projectPath || ''
+}
 
-    if (wireType === 2 && fieldNumber === 1) {
-      let length = 0
-      let shift = 0
-      while (offset < data.length) {
-        const byte = data[offset++]
-        length |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) break
-        shift += 7
-      }
-      const stringBytes = data.slice(offset, offset + length)
-      return new TextDecoder().decode(stringBytes)
-    }
+/**
+ * 解码 ActiveFileChangedNotify（用于 getActiveFile 响应）
+ */
+function decodeActiveFileResponse(data: Uint8Array): ActiveFileInfo | null {
+  const proto = fromBinary(ActiveFileChangedNotifySchema, data)
+
+  if (!proto.hasActiveFile) {
+    return null
   }
-  return ''
+
+  return {
+    path: proto.path || '',
+    relativePath: proto.relativePath || '',
+    name: proto.name || '',
+    line: proto.line || undefined,
+    column: proto.column || undefined,
+    hasSelection: proto.hasSelection,
+    startLine: proto.startLine || undefined,
+    startColumn: proto.startColumn || undefined,
+    endLine: proto.endLine || undefined,
+    endColumn: proto.endColumn || undefined,
+    selectedContent: proto.selectedContent || undefined
+  }
 }
 
 /**
  * 解码 GetIdeSettingsResponse
- *
- * Proto 定义：
- * message GetIdeSettingsResponse {
- *   IdeSettings settings = 1;
- * }
- * message IdeSettings {
- *   string default_model_id = 1;
- *   string default_model_name = 2;
- *   bool default_bypass_permissions = 3;
- *   bool enable_user_interaction_mcp = 4;
- *   bool enable_jetbrains_mcp = 5;
- *   bool include_partial_messages = 6;
- *   string default_thinking_level = 7;  // 旧字段，向后兼容
- *   int32 default_thinking_tokens = 8;
- *   string default_thinking_level_id = 9;  // 新字段
- *   repeated ThinkingLevelConfig thinking_levels = 10;  // 新字段
- * }
  */
 function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
   // 默认思考级别列表
@@ -367,238 +210,61 @@ function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
     { id: 'ultra', name: 'Ultra', tokens: 8096, isCustom: false }
   ]
 
-  const settings: Partial<IdeSettings> = {
-    defaultModelId: '',
-    defaultModelName: '',
-    defaultBypassPermissions: false,
-    enableUserInteractionMcp: true,
-    enableJetbrainsMcp: true,
-    includePartialMessages: true,
-    defaultThinkingLevel: 'ULTRA',
-    defaultThinkingTokens: 8096,
-    defaultThinkingLevelId: 'ultra',
-    thinkingLevels: defaultThinkingLevels
-  }
+  const proto = fromBinary(GetIdeSettingsResponseSchema, data)
+  const s = proto.settings
 
-  // 内部解析 IdeSettings 消息
-  function parseIdeSettings(settingsBytes: Uint8Array) {
-    let offset = 0
-    while (offset < settingsBytes.length) {
-      const tag = settingsBytes[offset++]
-      const fieldNumber = tag >> 3
-      const wireType = tag & 0x7
-
-      if (wireType === 0) {
-        // varint (bool or int32)
-        let value = 0
-        let shift = 0
-        while (offset < settingsBytes.length) {
-          const byte = settingsBytes[offset++]
-          value |= (byte & 0x7f) << shift
-          if ((byte & 0x80) === 0) break
-          shift += 7
-        }
-        if (fieldNumber === 3) settings.defaultBypassPermissions = value !== 0
-        if (fieldNumber === 4) settings.enableUserInteractionMcp = value !== 0
-        if (fieldNumber === 5) settings.enableJetbrainsMcp = value !== 0
-        if (fieldNumber === 6) settings.includePartialMessages = value !== 0
-        if (fieldNumber === 8) settings.defaultThinkingTokens = value
-      } else if (wireType === 2) {
-        // length-delimited (string or nested message)
-        let length = 0
-        let shift = 0
-        while (offset < settingsBytes.length) {
-          const byte = settingsBytes[offset++]
-          length |= (byte & 0x7f) << shift
-          if ((byte & 0x80) === 0) break
-          shift += 7
-        }
-        const contentBytes = settingsBytes.slice(offset, offset + length)
-        offset += length
-
-        if (fieldNumber === 10) {
-          // ThinkingLevelConfig message (repeated)
-          const level = parseThinkingLevelConfig(contentBytes)
-          if (level) {
-            // 如果是第一次遇到思考级别，清空默认列表
-            if (settings.thinkingLevels === defaultThinkingLevels) {
-              settings.thinkingLevels = []
-            }
-            settings.thinkingLevels.push(level)
-          }
-        } else {
-          // string fields
-          const str = new TextDecoder().decode(contentBytes)
-          if (fieldNumber === 1) settings.defaultModelId = str
-          if (fieldNumber === 2) settings.defaultModelName = str
-          if (fieldNumber === 7) settings.defaultThinkingLevel = str
-          if (fieldNumber === 9) settings.defaultThinkingLevelId = str
-        }
-      }
+  if (!s) {
+    return {
+      defaultModelId: '',
+      defaultModelName: '',
+      defaultBypassPermissions: false,
+      enableUserInteractionMcp: true,
+      enableJetbrainsMcp: true,
+      includePartialMessages: true,
+      defaultThinkingLevel: 'ULTRA',
+      defaultThinkingTokens: 8096,
+      defaultThinkingLevelId: 'ultra',
+      thinkingLevels: defaultThinkingLevels
     }
   }
 
-  // 解析 ThinkingLevelConfig 消息
-  function parseThinkingLevelConfig(bytes: Uint8Array): ThinkingLevelConfig | null {
-    const config: Partial<ThinkingLevelConfig> = {
-      id: '',
-      name: '',
-      tokens: 0,
-      isCustom: false
-    }
-    let offset = 0
-    while (offset < bytes.length) {
-      const tag = bytes[offset++]
-      const fieldNumber = tag >> 3
-      const wireType = tag & 0x7
-
-      if (wireType === 0) {
-        // varint (int32 or bool)
-        let value = 0
-        let shift = 0
-        while (offset < bytes.length) {
-          const byte = bytes[offset++]
-          value |= (byte & 0x7f) << shift
-          if ((byte & 0x80) === 0) break
-          shift += 7
-        }
-        if (fieldNumber === 3) config.tokens = value
-        if (fieldNumber === 4) config.isCustom = value !== 0
-      } else if (wireType === 2) {
-        // length-delimited (string)
-        let length = 0
-        let shift = 0
-        while (offset < bytes.length) {
-          const byte = bytes[offset++]
-          length |= (byte & 0x7f) << shift
-          if ((byte & 0x80) === 0) break
-          shift += 7
-        }
-        const str = new TextDecoder().decode(bytes.slice(offset, offset + length))
-        offset += length
-        if (fieldNumber === 1) config.id = str
-        if (fieldNumber === 2) config.name = str
-      }
-    }
-    return config as ThinkingLevelConfig
+  return {
+    defaultModelId: s.defaultModelId || '',
+    defaultModelName: s.defaultModelName || '',
+    defaultBypassPermissions: s.defaultBypassPermissions,
+    enableUserInteractionMcp: s.enableUserInteractionMcp,
+    enableJetbrainsMcp: s.enableJetbrainsMcp,
+    includePartialMessages: s.includePartialMessages,
+    defaultThinkingLevel: s.defaultThinkingLevel || 'ULTRA',
+    defaultThinkingTokens: s.defaultThinkingTokens || 8096,
+    defaultThinkingLevelId: s.defaultThinkingLevelId || 'ultra',
+    thinkingLevels: s.thinkingLevels.length > 0
+      ? s.thinkingLevels.map(level => ({
+          id: level.id,
+          name: level.name,
+          tokens: level.tokens,
+          isCustom: level.isCustom
+        }))
+      : defaultThinkingLevels
   }
-
-  // 解析外层 GetIdeSettingsResponse
-  let offset = 0
-  while (offset < data.length) {
-    const tag = data[offset++]
-    const fieldNumber = tag >> 3
-    const wireType = tag & 0x7
-
-    if (wireType === 2 && fieldNumber === 1) {
-      // nested message (IdeSettings)
-      let length = 0
-      let shift = 0
-      while (offset < data.length) {
-        const byte = data[offset++]
-        length |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) break
-        shift += 7
-      }
-      const settingsBytes = data.slice(offset, offset + length)
-      offset += length
-      parseIdeSettings(settingsBytes)
-    }
-  }
-
-  return settings as IdeSettings
-}
-
-/**
- * 编码单个 SessionSummary
- */
-function encodeSessionSummary(session: SessionSummary): number[] {
-  const buffer: number[] = []
-  ProtoEncoder.writeString(buffer, 1, session.id)
-  ProtoEncoder.writeString(buffer, 2, session.title)
-  if (session.sessionId) ProtoEncoder.writeString(buffer, 3, session.sessionId)
-  ProtoEncoder.writeBool(buffer, 4, session.isGenerating)
-  ProtoEncoder.writeBool(buffer, 5, session.isConnected)
-  ProtoEncoder.writeBool(buffer, 6, session.isConnecting)
-  return buffer
 }
 
 /**
  * 编码 JetBrainsSessionState
  */
 function encodeSessionState(state: SessionState): Uint8Array {
-  const buffer: number[] = []
-  // repeated sessions = 1
-  state.sessions.forEach(session => {
-    const sessionBytes = encodeSessionSummary(session)
-    ProtoEncoder.writeMessage(buffer, 1, sessionBytes)
+  const proto = create(JetBrainsSessionStateSchema, {
+    sessions: state.sessions.map(session => create(JetBrainsSessionSummarySchema, {
+      id: session.id,
+      title: session.title,
+      sessionId: session.sessionId || undefined,
+      isGenerating: session.isGenerating,
+      isConnected: session.isConnected,
+      isConnecting: session.isConnecting
+    })),
+    activeSessionId: state.activeSessionId || undefined
   })
-  if (state.activeSessionId) ProtoEncoder.writeString(buffer, 2, state.activeSessionId)
-  return new Uint8Array(buffer)
-}
-
-/**
- * 解码 SessionCommand（从 Protobuf 字节）
- */
-function decodeSessionCommandProto(data: Uint8Array): SessionCommand {
-  const typeMap: Record<number, SessionCommand['type']> = {
-    1: 'switch',
-    2: 'create',
-    3: 'close',
-    4: 'rename',
-    5: 'toggleHistory',
-    6: 'setLocale',
-    7: 'delete',
-    8: 'reset'
-  }
-
-  let type: SessionCommand['type'] = 'switch'
-  let sessionId: string | undefined
-  let newName: string | undefined
-  let locale: string | undefined
-
-  let offset = 0
-  while (offset < data.length) {
-    const tag = data[offset++]
-    const fieldNumber = tag >> 3
-    const wireType = tag & 0x7
-
-    if (wireType === 0) {
-      // varint
-      let value = 0
-      let shift = 0
-      while (offset < data.length) {
-        const byte = data[offset++]
-        value |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) break
-        shift += 7
-      }
-      if (fieldNumber === 1) {
-        type = typeMap[value] || 'switch'
-      }
-    } else if (wireType === 2) {
-      // length-delimited
-      let length = 0
-      let shift = 0
-      while (offset < data.length) {
-        const byte = data[offset++]
-        length |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) break
-        shift += 7
-      }
-      const stringBytes = data.slice(offset, offset + length)
-      offset += length
-      const stringValue = new TextDecoder().decode(stringBytes)
-
-      switch (fieldNumber) {
-        case 2: sessionId = stringValue; break
-        case 3: newName = stringValue; break
-        case 4: locale = stringValue; break
-      }
-    }
-  }
-
-  return { type, sessionId, newName, locale }
+  return toBinary(JetBrainsSessionStateSchema, proto)
 }
 
 // ========== 类型定义 ==========
@@ -1051,6 +717,21 @@ class JetBrainsRSocketService {
   }
 
   /**
+   * 获取当前活跃文件
+   */
+  async getActiveFile(): Promise<ActiveFileInfo | null> {
+    if (!this.client) return null
+
+    try {
+      const response = await this.client.requestResponse('jetbrains.getActiveFile', new Uint8Array())
+      return decodeActiveFileResponse(response)
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to get active file:', error)
+      return null
+    }
+  }
+
+  /**
    * 上报会话状态到后端
    */
   async reportSessionState(state: SessionState): Promise<boolean> {
@@ -1113,39 +794,6 @@ class JetBrainsRSocketService {
     return () => {
       const index = this.activeFileChangeHandlers.indexOf(handler)
       if (index >= 0) this.activeFileChangeHandlers.splice(index, 1)
-    }
-  }
-
-  /**
-   * 解码会话命令（从 Protobuf 字节）
-   * 保留以备将来使用
-   */
-  private _decodeSessionCommand(data: any): SessionCommand {
-    // 如果是 Uint8Array，使用 Protobuf 解码
-    if (data instanceof Uint8Array) {
-      return decodeSessionCommandProto(data)
-    }
-    // 如果是 ArrayBuffer 或类似对象，转换为 Uint8Array
-    if (data && typeof data === 'object' && !(data instanceof Array)) {
-      const bytes = new Uint8Array(Object.values(data))
-      return decodeSessionCommandProto(bytes)
-    }
-    // 回退到简单解析
-    const typeMap: Record<number, SessionCommand['type']> = {
-      1: 'switch',
-      2: 'create',
-      3: 'close',
-      4: 'rename',
-      5: 'toggleHistory',
-      6: 'setLocale',
-      7: 'delete',
-      8: 'reset'
-    }
-    return {
-      type: typeMap[data?.type] || 'switch',
-      sessionId: data?.sessionId,
-      newName: data?.newName,
-      locale: data?.locale
     }
   }
 }
