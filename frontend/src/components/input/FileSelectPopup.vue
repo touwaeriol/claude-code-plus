@@ -26,7 +26,6 @@
           v-for="(file, index) in files"
           :key="file.absolutePath || file.relativePath"
           :class="['file-item', { selected: index === selectedIndex }]"
-          :title="file.absolutePath || file.relativePath"
           @click="selectFile(file)"
           @mouseenter="selectedIndex = index"
         >
@@ -38,6 +37,11 @@
         <div v-if="files.length === 0 && showSearchInput" class="no-results">
 No results
         </div>
+      </div>
+
+      <!-- 底部路径显示栏 -->
+      <div v-if="files.length > 0 && selectedFile" class="file-path-bar">
+        {{ selectedFile.absolutePath || selectedFile.relativePath }}
       </div>
     </div>
   </Teleport>
@@ -73,6 +77,14 @@ const shouldShow = computed(() => {
   if (!props.visible) return false
   if (props.showSearchInput) return true
   return props.files.length > 0
+})
+
+// 当前选中的文件
+const selectedFile = computed(() => {
+  if (selectedIndex.value >= 0 && selectedIndex.value < props.files.length) {
+    return props.files[selectedIndex.value]
+  }
+  return null
 })
 
 // 计算弹窗位置
@@ -316,5 +328,17 @@ onUnmounted(() => {
   text-align: center;
   font-size: 13px;
   color: var(--theme-text-secondary, #6a737d);
+}
+
+.file-path-bar {
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--theme-text-secondary, #6a737d);
+  background: var(--theme-hover-background, #f6f8fa);
+  border-top: 1px solid var(--theme-border, #e1e4e8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
 }
 </style>
