@@ -3,11 +3,11 @@
  *
  * 负责：
  * 1. 检测是否在 IDE 环境中运行
- * 2. 检测后端是否支持 JetBrains 集成
+ * 2. 检测后端是否支持 JetBrains 集成（通过 ide.hasIdeEnvironment API）
  * 3. 提供 IDE 操作 API（打开文件、显示 Diff 等）
  *
  * 通信方式：
- * - HTTP: 能力检测（/api/jetbrains/capabilities）
+ * - HTTP: 能力检测（ide.hasIdeEnvironment）
  * - RSocket: 所有 IDE 操作和双向通信（/jetbrains-rsocket）
  */
 
@@ -74,15 +74,17 @@ export function isIdeEnvironment(): boolean {
 
 /**
  * 检测后端是否支持 JetBrains 集成
+ * 使用 ide.hasIdeEnvironment API 检测后端是否是 IDEA 启动的
  */
 export async function checkJetBrainsCapabilities(): Promise<JetBrainsCapabilities> {
   try {
     const baseUrl = resolveServerHttpUrl()
-    const response = await fetch(`${baseUrl}/api/jetbrains/capabilities`, {
-      method: 'GET',
+    const response = await fetch(`${baseUrl}/api/`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json'
-      }
+      },
+      body: JSON.stringify({ action: 'ide.hasIdeEnvironment' })
     })
 
     if (!response.ok) {
@@ -91,10 +93,11 @@ export async function checkJetBrainsCapabilities(): Promise<JetBrainsCapabilitie
     }
 
     const data = await response.json()
-    console.log('[JetBrainsApi] Capabilities:', data)
+    const hasIde = data.data?.hasIde ?? false
+    console.log('[JetBrainsApi] Backend has IDE environment:', hasIde)
     return {
-      supported: data.supported ?? false,
-      version: data.version ?? ''
+      supported: hasIde,
+      version: hasIde ? '1.0' : ''
     }
   } catch (error) {
     console.warn('[JetBrainsApi] Failed to check capabilities:', error)
@@ -104,21 +107,24 @@ export async function checkJetBrainsCapabilities(): Promise<JetBrainsCapabilitie
 
 /**
  * 检测是否应该启用 JetBrains 集成
- * 条件：IDE 环境 + 后端支持
+ *
+ * 两种情况下启用：
+ * 1. 前端在 IDE 插件中运行（__IDEA_MODE__）
+ * 2. 后端是 IDEA 启动的（通过 /api/jetbrains/capabilities 检测）
+ *
+ * 这允许浏览器模式下也能使用 IDE 集成功能（当后端是 IDEA 启动时）
  */
 export async function shouldEnableJetBrainsIntegration(): Promise<boolean> {
-  if (!isIdeEnvironment()) {
-    console.log('[JetBrainsApi] Not in IDE environment')
-    return false
-  }
-
+  // 检测后端是否支持 JetBrains 集成
   const capabilities = await checkJetBrainsCapabilities()
   if (!capabilities.supported) {
     console.log('[JetBrainsApi] Backend does not support JetBrains integration')
     return false
   }
 
-  console.log('[JetBrainsApi] JetBrains integration enabled')
+  // 后端支持即可启用（无论前端是否在 IDE 插件中）
+  const inIde = isIdeEnvironment()
+  console.log(`[JetBrainsApi] JetBrains integration enabled (inIde: ${inIde}, backend supported: true)`)
   return true
 }
 

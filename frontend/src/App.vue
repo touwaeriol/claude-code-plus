@@ -79,6 +79,7 @@ import { useEnvironment } from '@/composables/useEnvironment'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { i18n, normalizeLocale } from '@/i18n'
 import { jetbrainsBridge } from '@/services/jetbrainsApi'
+import { aiAgentService } from '@/services/aiAgentService'
 
 const bridgeReady = ref(false)
 const showDebug = ref(false) // 默认隐藏调试面板
@@ -118,24 +119,44 @@ onMounted(async () => {
     themeSource.value = themeService.hasIde() ? 'IDE' : 'Web (系统)'
     console.log('Theme service initialized')
 
-    // IDEA 环境 + 主题同步开启时，同步 IDEA 语言设置
-    if (themeService.hasIde()) {
-      try {
-        const ideLocale = await jetbrainsBridge.getLocale()
-        if (ideLocale) {
-          const normalizedLocale = normalizeLocale(ideLocale)
-          i18n.global.locale.value = normalizedLocale
-          console.log(`🌐 Locale synced from IDE: ${ideLocale} -> ${normalizedLocale}`)
-        }
-      } catch (error) {
-        console.error('🌐 Failed to sync IDE locale:', error)
-      }
+    // 检测是否在 IDE 环境中（通过后端 API）
+    const hasIdeEnv = await aiAgentService.hasIdeEnvironment()
+    console.log(`🖥️ IDE environment detected: ${hasIdeEnv}`)
 
-      // 加载 IDE 设置并注册监听器
-      console.log('Loading IDE settings...')
-      await settingsStore.loadIdeSettings()
-      settingsStore.initIdeSettingsListener()
-      console.log('IDE settings initialized')
+    // IDE 环境：连接 jetbrains-rsocket 同步设置
+    if (hasIdeEnv) {
+      // 先初始化 jetbrainsBridge（建立 RSocket 连接）
+      const bridgeInitialized = await jetbrainsBridge.init()
+      console.log(`🔌 JetBrains bridge initialized: ${bridgeInitialized}`)
+
+      if (bridgeInitialized) {
+        try {
+          const ideLocale = await jetbrainsBridge.getLocale()
+          if (ideLocale) {
+            const normalizedLocale = normalizeLocale(ideLocale)
+            i18n.global.locale.value = normalizedLocale
+            console.log(`🌐 Locale synced from IDE: ${ideLocale} -> ${normalizedLocale}`)
+          }
+        } catch (error) {
+          console.error('🌐 Failed to sync IDE locale:', error)
+        }
+
+        // 加载 IDE 设置并注册监听器
+        console.log('Loading IDE settings...')
+        await settingsStore.loadIdeSettings()
+        settingsStore.initIdeSettingsListener()
+        console.log('IDE settings initialized')
+      } else {
+        // RSocket 连接失败，回退到 HTTP API
+        console.warn('⚠️ JetBrains bridge init failed, falling back to HTTP API')
+        await settingsStore.loadDefaultSettings()
+        console.log('Default settings loaded via HTTP API (fallback)')
+      }
+    } else {
+      // 浏览器模式：通过 HTTP API 加载默认设置
+      console.log('Loading default settings via HTTP API...')
+      await settingsStore.loadDefaultSettings()
+      console.log('Default settings loaded')
     }
 
     // 监听主题变化
