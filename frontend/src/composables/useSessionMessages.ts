@@ -947,6 +947,14 @@ export function useSessionMessages(
       const hasToolUse = message.content.some((block: ContentBlock) => block.type === 'tool_use')
       const hasText = message.content.some((block: ContentBlock) => block.type === 'text')
 
+      // 压缩摘要消息：直接添加到消息列表
+      if ((message as any).isCompactSummary === true) {
+        log.info('[useSessionMessages] 添加压缩摘要消息')
+        addMessage(message)
+        touchMessages()
+        return
+      }
+
       // tool_result 消息：只更新工具状态
       if (hasToolResult) {
         processToolResults(message.content)
