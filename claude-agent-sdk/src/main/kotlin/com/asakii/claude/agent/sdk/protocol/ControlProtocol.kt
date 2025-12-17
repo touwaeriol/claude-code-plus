@@ -598,14 +598,6 @@ class ControlProtocol(
     }
     
     /**
-     * Send control request to CLI and wait for response.
-     */
-    suspend fun sendControlRequest(request: ControlRequest): ControlResponse {
-        val requestJson = json.encodeToJsonElement(request)
-        return sendControlRequestInternal(requestJson as JsonObject)
-    }
-    
-    /**
      * Internal method for sending control request with JsonObject.
      * @param request The control request to send
      * @param timeoutMs Timeout in milliseconds (default: 60000ms = 60 seconds, matching Python SDK)
@@ -655,8 +647,11 @@ class ControlProtocol(
      * Send interrupt request to CLI.
      */
     suspend fun interrupt() {
-        val interruptRequest = InterruptRequest()
-        val response = sendControlRequest(interruptRequest)
+        // 手动构建 JSON，避免 kotlinx.serialization 添加 type 字段
+        val request = buildJsonObject {
+            put("subtype", "interrupt")
+        }
+        val response = sendControlRequestInternal(request)
 
         if (response.subtype == "error") {
             throw ControlProtocolException("Interrupt failed: ${response.error}")
@@ -669,8 +664,11 @@ class ControlProtocol(
      * without blocking for user input.
      */
     suspend fun runInBackground() {
-        val request = RunInBackgroundRequest()
-        val response = sendControlRequest(request)
+        // 手动构建 JSON，避免 kotlinx.serialization 添加 type 字段
+        val request = buildJsonObject {
+            put("subtype", "run_in_background")
+        }
+        val response = sendControlRequestInternal(request)
 
         if (response.subtype == "error") {
             throw ControlProtocolException("Run in background failed: ${response.error}")
@@ -688,13 +686,132 @@ class ControlProtocol(
      *   - positive value: Set the limit (e.g., 8000, 16000)
      */
     suspend fun setMaxThinkingTokens(maxThinkingTokens: Int?) {
-        val request = SetMaxThinkingTokensRequest(maxThinkingTokens = maxThinkingTokens)
-        val response = sendControlRequest(request)
+        // 手动构建 JSON，避免 kotlinx.serialization 添加 type 字段
+        val request = buildJsonObject {
+            put("subtype", "set_max_thinking_tokens")
+            put("max_thinking_tokens", maxThinkingTokens)
+        }
+        val response = sendControlRequestInternal(request)
 
         if (response.subtype == "error") {
             throw ControlProtocolException("Set max thinking tokens failed: ${response.error}")
         }
         logger.info("✅ [ControlProtocol] 设置 maxThinkingTokens = $maxThinkingTokens")
+    }
+
+    /**
+     * Set model for the current session.
+     * This allows dynamic model switching without reconnecting.
+     *
+     * @param model The model to use, or "default" to use the default model
+     */
+    suspend fun setModel(model: String) {
+        // 手动构建 JSON，避免 kotlinx.serialization 添加 type 字段
+        val request = buildJsonObject {
+            put("subtype", "set_model")
+            put("model", model)
+        }
+        val response = sendControlRequestInternal(request)
+
+        if (response.subtype == "error") {
+            throw ControlProtocolException("Set model failed: ${response.error}")
+        }
+        logger.info("✅ [ControlProtocol] 设置 model = $model")
+    }
+
+    /**
+     * Set permission mode for the current session.
+     */
+    suspend fun setPermissionMode(mode: String) {
+        val request = buildJsonObject {
+            put("subtype", "set_permission_mode")
+            put("mode", mode)
+        }
+        val response = sendControlRequestInternal(request)
+
+        if (response.subtype == "error") {
+            throw ControlProtocolException("Set permission mode failed: ${response.error}")
+        }
+        logger.info("✅ [ControlProtocol] 设置 permissionMode = $mode")
+    }
+
+    /**
+     * Get MCP servers status.
+     * Returns the status of all connected MCP servers.
+     *
+     * @return List of MCP server status info
+     */
+    suspend fun getMcpStatus(): List<McpServerStatusInfo> {
+        // 手动构建 JSON，避免 kotlinx.serialization 添加 type 字段
+        val request = buildJsonObject {
+            put("subtype", "mcp_status")
+        }
+        val response = sendControlRequestInternal(request)
+
+        if (response.subtype == "error") {
+            throw ControlProtocolException("Get MCP status failed: ${response.error}")
+        }
+
+        val mcpServers = response.response?.jsonObject?.get("mcpServers")?.jsonArray
+            ?: return emptyList()
+
+        return mcpServers.map { serverJson ->
+            val obj = serverJson.jsonObject
+            McpServerStatusInfo(
+                name = obj["name"]?.jsonPrimitive?.content ?: "",
+                status = obj["status"]?.jsonPrimitive?.content ?: "",
+                serverInfo = obj["serverInfo"]
+            )
+        }
+    }
+
+    /**
+     * Dynamically set MCP servers for the current session.
+     * This allows adding/removing MCP servers without reconnecting.
+     *
+     * **IMPORTANT: This is a FULL REPLACEMENT, not incremental update!**
+     * - Servers in the map will be added or updated
+     * - Servers NOT in the map will be REMOVED
+     * - To add a server without removing others, first call getMcpStatus() to get
+     *   current servers, then include them in the new map
+     *
+     * @param servers Map of server name to server configuration (replaces all servers)
+     * @return Response with added, removed servers and any errors
+     */
+    suspend fun setMcpServers(servers: Map<String, McpStdioServerDto>): McpSetServersResponse {
+        // 手动构建 JSON，避免 kotlinx.serialization 添加 type 字段
+        val request = buildJsonObject {
+            put("subtype", "mcp_set_servers")
+            putJsonObject("servers") {
+                servers.forEach { (name, config) ->
+                    putJsonObject(name) {
+                        put("command", config.command)
+                        putJsonArray("args") {
+                            config.args.forEach { add(it) }
+                        }
+                        putJsonObject("env") {
+                            config.env.forEach { (k, v) -> put(k, v) }
+                        }
+                    }
+                }
+            }
+        }
+        val response = sendControlRequestInternal(request)
+
+        if (response.subtype == "error") {
+            throw ControlProtocolException("Set MCP servers failed: ${response.error}")
+        }
+
+        val responseObj = response.response?.jsonObject
+            ?: return McpSetServersResponse(emptyList(), emptyList(), emptyMap())
+
+        return McpSetServersResponse(
+            added = responseObj["added"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+            removed = responseObj["removed"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+            errors = responseObj["errors"]?.jsonObject?.entries?.associate {
+                it.key to (it.value.jsonPrimitive.contentOrNull ?: "")
+            } ?: emptyMap()
+        )
     }
 
     /**

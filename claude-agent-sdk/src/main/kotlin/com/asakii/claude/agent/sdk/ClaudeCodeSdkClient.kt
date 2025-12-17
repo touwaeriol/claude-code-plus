@@ -356,6 +356,18 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
     }
 
     /**
+     * Get MCP servers status.
+     *
+     * Returns the status of all connected MCP servers including their tools.
+     *
+     * @return List of MCP server status info
+     */
+    suspend fun getMcpStatus(): List<McpServerStatusInfo> {
+        ensureConnected()
+        return controlProtocol!!.getMcpStatus()
+    }
+
+    /**
      * Change permission mode during conversation.
      *
      * This allows dynamically switching between permission modes without reconnecting.
@@ -387,8 +399,7 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
             val modeString = mode.toCliString()
             logger.info("🔐 设置权限模式: $mode ($modeString)")
 
-            val request = SetPermissionModeRequest(mode = modeString)
-            controlProtocol!!.sendControlRequest(request)
+            controlProtocol!!.setPermissionMode(modeString)
 
             logger.info("✅ 权限模式已更新为: $mode")
         }
@@ -439,10 +450,8 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
         pendingModelUpdate?.cancel()
         pendingModelUpdate = deferred
 
-        val request = SetModelRequest(model = model)
-
         try {
-            controlProtocol!!.sendControlRequest(request)
+            controlProtocol!!.setModel(model ?: "default")
         } catch (e: Exception) {
             pendingModelUpdate = null
             deferred.completeExceptionally(e)
