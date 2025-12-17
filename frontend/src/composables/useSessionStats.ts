@@ -182,13 +182,17 @@ export function useSessionStats() {
     cacheCreationTokens: number = 0,
     cacheReadTokens: number = 0
   ): void {
+    // 本次请求新增的上行 tokens = 非缓存 input + 新写入缓存
+    // 不包括 cacheReadTokens（历史缓存内容）
+    const newInputTokens = inputTokens + cacheCreationTokens
+
     if (requestTracker.value) {
-      requestTracker.value.inputTokens += inputTokens
+      requestTracker.value.inputTokens += newInputTokens
       requestTracker.value.outputTokens += outputTokens
     }
 
     // 累加到累计统计
-    cumulativeStats.totalInputTokens += inputTokens
+    cumulativeStats.totalInputTokens += newInputTokens
     cumulativeStats.totalOutputTokens += outputTokens
 
     // 计算总缓存（保留兼容）
@@ -203,7 +207,7 @@ export function useSessionStats() {
       cacheReadTokens
     }
 
-    log.debug(`[useSessionStats] 添加 Token 使用: input=${inputTokens}, output=${outputTokens}, cacheCreation=${cacheCreationTokens}, cacheRead=${cacheReadTokens}`)
+    log.debug(`[useSessionStats] 添加 Token 使用: newInput=${newInputTokens} (input=${inputTokens} + cacheCreation=${cacheCreationTokens}), output=${outputTokens}, cacheRead=${cacheReadTokens}`)
   }
 
   /**
