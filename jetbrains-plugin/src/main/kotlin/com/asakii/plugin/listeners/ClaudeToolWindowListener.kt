@@ -8,17 +8,21 @@ import com.intellij.openapi.wm.ToolWindow
 import com.asakii.plugin.services.ClaudeCodePlusBackgroundService
 import com.asakii.plugin.types.SessionState
 
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.util.Disposer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.firstOrNull
 
 /**
- * Claude 工具窗口监听器
- * 
+ * Claude 工具窗口监听器（动态插件兼容版本）
+ *
  * 监听工具窗口的显示/隐藏事件，维护会话状态的连续性。
  * 当工具窗口隐藏时，后台服务继续执行；
  * 当工具窗口重新显示时，自动恢复最新状态。
+ *
+ * 实现 Disposable 接口并注册到项目，支持动态加载/卸载。
  */
-class ClaudeToolWindowListener(private val project: Project) : ToolWindowManagerListener {
+class ClaudeToolWindowListener(private val project: Project) : ToolWindowManagerListener, Disposable {
     
     companion object {
         private val logger = Logger.getInstance(ClaudeToolWindowListener::class.java)
@@ -45,6 +49,8 @@ class ClaudeToolWindowListener(private val project: Project) : ToolWindowManager
     private val activeSessionIds = mutableSetOf<String>()
     
     init {
+        // 注册到项目的 Disposable 层级，确保插件卸载时正确清理
+        Disposer.register(project, this)
         logger.info("🎯 ClaudeToolWindowListener 已初始化，项目: ${project.basePath}")
     }
     
@@ -235,9 +241,9 @@ class ClaudeToolWindowListener(private val project: Project) : ToolWindowManager
     fun isToolWindowCurrentlyVisible(): Boolean = isToolWindowVisible
     
     /**
-     * 清理资源
+     * 清理资源（Disposable 接口实现）
      */
-    fun dispose() {
+    override fun dispose() {
         logger.info("🧹 清理 ClaudeToolWindowListener")
         listenerScope.cancel("Listener disposed")
         activeSessionIds.clear()

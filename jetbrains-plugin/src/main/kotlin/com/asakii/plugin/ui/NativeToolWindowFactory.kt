@@ -25,6 +25,7 @@ import com.intellij.ui.components.JBPanel
 import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.jcef.JBCefApp
 import com.intellij.ui.jcef.JBCefBrowser
+import com.asakii.plugin.services.JcefDebugPortInitializer
 import com.intellij.util.ui.JBUI
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -92,6 +93,9 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
             toolWindowEx?.setTitleActions(titleActions)
             return
         }
+
+        // 在创建 JCEF 浏览器之前初始化调试端口
+        JcefDebugPortInitializer.ensureInitialized()
 
         // 使用 Builder 模式显式禁用 OSR，避免 IDEA 2025.x 中上下文菜单和 DevTools 被禁用
         val browser = JBCefBrowser.createBuilder()
@@ -349,8 +353,7 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
                     logger.warn("⚠️ Remote debugging port not available")
                     com.intellij.openapi.ui.Messages.showWarningDialog(
                         project,
-                        "远程调试端口不可用。\n\n" +
-                        "请尝试在 Registry 中设置 ide.browser.jcef.debug.port 为一个有效端口（如 9222）。",
+                        "远程调试端口不可用。\n\n请重启 IDE 后再试。",
                         "DevTools"
                     )
                 }

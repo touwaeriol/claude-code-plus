@@ -1,11 +1,29 @@
 package com.asakii.plugin.config
 
-import java.io.File
+import com.intellij.openapi.diagnostic.Logger
 
 /**
- * 插件配置
+ * 插件配置（动态插件兼容版本）
+ *
+ * 使用内部状态替代 System.setProperty，支持动态加载/卸载。
  */
 object PluginConfig {
+
+    private val logger = Logger.getInstance(PluginConfig::class.java)
+
+    /**
+     * Claude 命令是否可用
+     */
+    @Volatile
+    var isClaudeAvailable: Boolean = false
+        private set
+
+    /**
+     * Claude 命令检查结果
+     */
+    @Volatile
+    var claudeCheckResult: String = ""
+        private set
 
     /**
      * 检查 claude 命令是否可用
@@ -36,54 +54,18 @@ object PluginConfig {
             Pair(false, "无法执行 claude 命令: ${e.message}")
         }
     }
-    
-    /**
-     * 查找项目根目录
-     */
-    private fun findProjectRoot(): String? {
-        // 从当前类的位置向上查找
-        val classLocation = PluginConfig::class.java.protectionDomain.codeSource?.location?.path
-        if (classLocation != null) {
-            var currentDir = File(classLocation).parentFile
-            repeat(10) {
-                if (currentDir == null) return@repeat
-                
-                // 检查是否包含 settings.gradle.kts
-                if (File(currentDir, "settings.gradle.kts").exists() ||
-                    File(currentDir, "settings.gradle").exists()) {
-                    return currentDir.absolutePath
-                }
-                
-                // 检查是否包含 cli-wrapper 目录
-                if (File(currentDir, "cli-wrapper").isDirectory) {
-                    return currentDir.absolutePath
-                }
-                
-                currentDir = currentDir.parentFile
-            }
-        }
-        
-        return null
-    }
-    
+
     /**
      * 设置环境并检查 claude 命令可用性
+     * 不再修改全局系统属性，改用内部状态
      */
     fun setupEnvironment() {
-        // 检查 claude 命令是否可用
         val (isAvailable, message) = checkClaudeCommand()
 
-        // 设置系统属性，供 ClaudeCliWrapper 使用
-        System.setProperty("claude.command.available", isAvailable.toString())
-        System.setProperty("claude.command.check.result", message)
+        // 使用内部状态替代 System.setProperty
+        isClaudeAvailable = isAvailable
+        claudeCheckResult = message
 
-        println("[PluginConfig] Claude 命令检查: $message")
-
-        // 开发模式下，尝试设置项目根目录
-        val projectRoot = findProjectRoot()
-        if (projectRoot != null) {
-            System.setProperty("claude.project.root", projectRoot)
-            println("[PluginConfig] 项目根目录: $projectRoot")
-        }
+        logger.info("Claude 命令检查: $message")
     }
 }

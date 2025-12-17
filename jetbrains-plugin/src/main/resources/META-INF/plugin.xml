@@ -93,9 +93,5 @@
     
     <!-- Actions section removed: legacy Swing actions no longer available -->
 
-    <extensions defaultExtensionNs="com.intellij">
-        <!-- JCEF Debug Port Initializer - must run before JCEF is initialized -->
-        <applicationInitializedListener
-            implementation="com.asakii.plugin.services.JcefDebugPortInitializer"/>
-    </extensions>
+    <!-- JCEF Debug Port Initializer 已改为懒加载模式，支持动态插件 -->
 </idea-plugin>
