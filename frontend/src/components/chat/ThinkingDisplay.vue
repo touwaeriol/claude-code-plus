@@ -57,7 +57,7 @@ function startCollapseTimer() {
   }
   collapseTimer = setTimeout(() => {
     delayedCollapseReady.value = true
-  }, 500)
+  }, 3000)
 }
 
 // 鼠标进入：清除计时器，暂停自动折叠

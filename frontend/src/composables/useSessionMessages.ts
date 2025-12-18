@@ -631,6 +631,7 @@ export function useSessionMessages(
               ) as ThinkingContent | undefined
               if (displayItem) {
                 displayItem.signature = sigDelta.signature
+                triggerDisplayItemsUpdate()
               }
             }
           }
@@ -673,6 +674,15 @@ export function useSessionMessages(
 
         // 强制触发 Vue 响应式更新
         triggerDisplayItemsUpdate()
+      } else if (block.type === 'thinking') {
+        // 思考块完成，标记为完成状态
+        const displayItem = displayItems.find(
+          item => item.id === `${message.id}-thinking-${event.index}` && item.displayType === 'thinking'
+        ) as ThinkingContent | undefined
+        if (displayItem && !displayItem.signature) {
+          displayItem.signature = 'complete'
+          triggerDisplayItemsUpdate()
+        }
       }
     }
   }

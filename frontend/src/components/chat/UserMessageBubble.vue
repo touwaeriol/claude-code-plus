@@ -492,9 +492,10 @@ const imageBlocks = computed(() => {
   return content.filter(block => block.type === 'image') as ImageBlock[]
 })
 
-// 判断是否为长消息（超过 200 字符或有多张图片）
+// 判断是否为长消息（文本超过 3 行）
 const isLongMessage = computed(() => {
-  return messageText.value.length > 200 || imageBlocks.value.length > 2
+  const textLines = messageText.value ? messageText.value.split('\n').length : 0
+  return textLines > 3
 })
 
 // 发送时的上下文大小（从前一条 AI 回复的 stats 中获取）
