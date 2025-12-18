@@ -1,134 +1,17 @@
 <template>
-  <!-- 回放消息（isReplay=true）：左对齐，使用 markdown 渲染 -->
-  <div v-if="props.message.isReplay" class="replay-user-message" :class="props.message.style">
-    <!-- 当前打开文件标记（历史消息中解析） -->
-    <div
-      v-if="hasCurrentOpenFile"
-      class="history-file-tag"
-      :title="currentOpenFileFullPath"
-      @click="handleOpenFileClick"
-    >
-      <span class="tag-file-name">{{ currentOpenFileName }}</span>
-      <span v-if="currentOpenFileLineRange" class="tag-line-range">{{ currentOpenFileLineRange }}</span>
-    </div>
-    <!-- 消息内容（如果有） -->
-    <MarkdownRenderer v-if="messageText" :content="messageText" />
-  </div>
-
-  <!-- 用户发送的消息（isReplay=false/undefined）：右对齐，带气泡、可编辑 -->
+  <!-- 统一的用户消息容器 -->
   <div
-    v-else
-    class="user-message-row"
-    :class="{ 'is-editing': isEditing }"
+    class="user-message-container"
+    :class="{
+      'is-replay': props.message.isReplay,
+      'is-editing': isEditing,
+      [props.message.style || '']: props.message.isReplay && props.message.style
+    }"
     @mouseenter="showEditButton = true"
     @mouseleave="showEditButton = false"
   >
-    <!-- 显示模式 -->
-    <template v-if="!isEditing">
-      <!-- 左侧占位元素，填充空白区域使整行可交互 -->
-      <div class="row-spacer"></div>
-      <div class="message-wrapper">
-        <!-- Edit button (shown on hover when uuid exists and not streaming, adjacent to bubble) -->
-        <button
-          v-show="showEditButton && props.message.uuid && !props.message.isStreaming"
-          class="edit-button"
-          title="Edit and resend message"
-          @click="enterEditMode"
-        >
-          <span class="edit-icon">✏️</span>
-        </button>
-
-        <!-- 消息气泡 -->
-        <div class="user-message-bubble">
-          <!-- 气泡容器 - 长消息时可点击展开 -->
-          <div
-            class="bubble-content"
-            :class="{ clickable: isLongMessage }"
-            @click="handleBubbleClick"
-          >
-            <!-- 上下文标签区域（当前打开文件 + 文件引用）- 始终显示 -->
-            <div v-if="hasCurrentOpenFile || contextFileRefs.length > 0" class="context-tags">
-              <!-- 当前打开文件标记 -->
-              <span
-                v-if="hasCurrentOpenFile"
-                class="bubble-file-tag"
-                :title="currentOpenFileFullPath"
-                @click.stop="handleOpenFileClick"
-              >
-                <span class="tag-file-name">{{ currentOpenFileName }}</span>
-                <span v-if="currentOpenFileLineRange" class="tag-line-range">{{ currentOpenFileLineRange }}</span>
-              </span>
-              <!-- 文件引用标签 -->
-              <span
-                v-for="(fileRef, index) in contextFileRefs"
-                :key="`file-${index}`"
-                class="bubble-file-tag file-ref"
-                :title="fileRef.fullPath || fileRef.uri"
-                @click.stop="handleFileRefClick(fileRef)"
-              >
-                <span class="tag-prefix">@</span>
-                <span class="tag-file-name">{{ getFileRefName(fileRef) }}</span>
-              </span>
-            </div>
-
-            <!-- 展开时：显示完整内容 -->
-            <template v-if="!isCollapsed || !isLongMessage">
-              <!-- 上下文图片（在文字上方） -->
-              <div v-if="contextImagesAsBlocks.length > 0" class="context-images">
-                <img
-                  v-for="(image, index) in contextImagesAsBlocks"
-                  :key="`ctx-${index}`"
-                  :src="getImageSrc(image)"
-                  :alt="`Context image ${index + 1}`"
-                  class="context-thumb"
-                  @click.stop="openImagePreview(image)"
-                />
-              </div>
-
-              <!-- 文本内容（支持链接渲染） -->
-              <div
-                v-if="messageText"
-                class="message-text"
-                @click="handleMessageClick"
-                v-html="renderedText"
-              ></div>
-
-              <!-- 内嵌图片（用户输入的图片） -->
-              <div v-if="imageBlocks.length > 0" class="inline-images">
-                <img
-                  v-for="(image, index) in imageBlocks"
-                  :key="`img-${index}`"
-                  :src="getImageSrc(image)"
-                  :alt="`Image ${index + 1}`"
-                  class="inline-thumb"
-                  @click.stop="openImagePreview(image)"
-                />
-              </div>
-            </template>
-
-            <!-- 折叠时：显示预览文本 -->
-            <template v-else>
-              <span class="preview-text">{{ previewText }}</span>
-            </template>
-
-            <!-- 折叠/展开指示器 - 长消息时在底部显示 -->
-            <div v-if="isLongMessage" class="expand-indicator">
-              <span class="expand-hint">{{ isCollapsed ? t('common.expand') : t('common.collapse') }}</span>
-              <span class="expand-arrow">{{ isCollapsed ? '▾' : '▴' }}</span>
-            </div>
-          </div>
-
-          <!-- 上下文大小指示器（发送时的快照） -->
-          <ContextUsageIndicator
-            v-if="contextTokens > 0"
-            :session-token-usage="{ inputTokens: contextTokens, outputTokens: 0 }"
-          />
-        </div>
-      </div>
-    </template>
-
     <!-- 编辑模式：内嵌 ChatInput -->
-    <div v-else ref="editorContainerRef" class="inline-editor-container">
+    <div v-if="isEditing" ref="editorContainerRef" class="inline-editor-container">
       <ChatInput
         ref="chatInputRef"
         :inline="true"
@@ -142,6 +25,116 @@
         @context-remove="handleContextRemove"
       />
     </div>
+
+    <!-- 显示模式 -->
+    <template v-else>
+      <!-- 非回放消息的左侧占位 -->
+      <div v-if="!props.message.isReplay" class="row-spacer"></div>
+
+      <div class="message-wrapper">
+        <!-- 编辑按钮（hover 时显示） -->
+        <button
+          v-if="!props.message.isReplay"
+          v-show="showEditButton && props.message.uuid && !props.message.isStreaming"
+          class="edit-button"
+          title="Edit and resend message"
+          @click="enterEditMode"
+        >
+          <span class="edit-icon">✏️</span>
+        </button>
+
+        <!-- 消息内容区域 -->
+        <div
+          class="message-content"
+          :class="{
+            'bubble-style': !props.message.isReplay,
+            clickable: isLongMessage
+          }"
+          @click="handleContentClick"
+        >
+          <!-- 上下文标签区域 -->
+          <div v-if="hasCurrentOpenFile || contextFileRefs.length > 0" class="context-tags">
+            <span
+              v-if="hasCurrentOpenFile"
+              class="file-tag"
+              :title="currentOpenFileFullPath"
+              @click.stop="handleOpenFileClick"
+            >
+              <span class="tag-file-name">{{ currentOpenFileName }}</span>
+              <span v-if="currentOpenFileLineRange" class="tag-line-range">{{ currentOpenFileLineRange }}</span>
+            </span>
+            <span
+              v-for="(fileRef, index) in contextFileRefs"
+              :key="`file-${index}`"
+              class="file-tag file-ref"
+              :title="fileRef.fullPath || fileRef.uri"
+              @click.stop="handleFileRefClick(fileRef)"
+            >
+              <span class="tag-prefix">@</span>
+              <span class="tag-file-name">{{ getFileRefName(fileRef) }}</span>
+            </span>
+          </div>
+
+          <!-- 折叠状态：显示预览 -->
+          <template v-if="isCollapsed && isLongMessage">
+            <span class="preview-text">{{ previewText }}</span>
+            <div class="expand-indicator">
+              <span class="expand-hint">{{ t('common.expand') }}</span>
+              <span class="expand-arrow">▾</span>
+            </div>
+          </template>
+
+          <!-- 展开状态：显示完整内容 -->
+          <template v-else>
+            <!-- 上下文图片 -->
+            <div v-if="contextImagesAsBlocks.length > 0" class="context-images">
+              <img
+                v-for="(image, index) in contextImagesAsBlocks"
+                :key="`ctx-${index}`"
+                :src="getImageSrc(image)"
+                :alt="`Context image ${index + 1}`"
+                class="context-thumb"
+                @click.stop="openImagePreview(image)"
+              />
+            </div>
+
+            <!-- 文本内容 -->
+            <div
+              v-if="messageText"
+              class="message-text"
+              :class="{ 'use-markdown': props.message.isReplay }"
+            >
+              <MarkdownRenderer v-if="props.message.isReplay" :content="messageText" />
+              <span v-else v-html="renderedText" @click="handleMessageClick"></span>
+            </div>
+
+            <!-- 内嵌图片 -->
+            <div v-if="imageBlocks.length > 0" class="inline-images">
+              <img
+                v-for="(image, index) in imageBlocks"
+                :key="`img-${index}`"
+                :src="getImageSrc(image)"
+                :alt="`Image ${index + 1}`"
+                class="inline-thumb"
+                @click.stop="openImagePreview(image)"
+              />
+            </div>
+
+            <!-- 折叠按钮（长消息展开时显示） -->
+            <div v-if="isLongMessage" class="expand-indicator">
+              <span class="expand-hint">{{ t('common.collapse') }}</span>
+              <span class="expand-arrow">▴</span>
+            </div>
+          </template>
+        </div>
+
+        <!-- 上下文大小指示器（非回放消息） -->
+        <ContextUsageIndicator
+          v-if="!props.message.isReplay && contextTokens > 0"
+          :session-token-usage="{ inputTokens: contextTokens, outputTokens: 0 }"
+        />
+      </div>
+    </template>
   </div>
 
   <!-- 图片预览模态框 -->
@@ -487,8 +480,8 @@ function handleOpenFileClick() {
   })
 }
 
-// 处理气泡点击（边缘区域）
-function handleBubbleClick() {
+// 处理内容区域点击（统一的展开/折叠）
+function handleContentClick() {
   if (isLongMessage.value) {
     toggleCollapse()
   }
@@ -602,8 +595,8 @@ function closeImagePreview() {
 </script>
 
 <style scoped>
-/* 消息行容器 */
-.user-message-row {
+/* ===== 统一的用户消息容器 ===== */
+.user-message-container {
   display: flex;
   align-items: flex-start;
   padding: 4px 12px;
@@ -611,22 +604,37 @@ function closeImagePreview() {
   box-sizing: border-box;
 }
 
-/* 左侧占位元素 - 填充空白使整行可交互 */
+/* 回放消息：左对齐 */
+.user-message-container.is-replay {
+  justify-content: flex-start;
+}
+
+/* 非回放消息：右对齐 */
+.user-message-container:not(.is-replay) {
+  justify-content: flex-end;
+}
+
+/* 左侧占位元素 */
 .row-spacer {
   flex: 1;
   min-width: 0;
 }
 
-/* 消息包装器 - 编辑按钮+气泡作为整体 */
+/* 消息包装器 */
 .message-wrapper {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   max-width: 95%;
-  flex-shrink: 0;
 }
 
-/* 编辑按钮 - flex 项，紧贴气泡左侧 */
+/* 回放消息的 wrapper 样式 */
+.user-message-container.is-replay .message-wrapper {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* ===== 编辑按钮 ===== */
 .edit-button {
   flex-shrink: 0;
   opacity: 0;
@@ -638,7 +646,7 @@ function closeImagePreview() {
   border-radius: 4px;
 }
 
-.user-message-row:hover .edit-button {
+.user-message-container:hover .edit-button {
   opacity: 1;
 }
 
@@ -650,72 +658,91 @@ function closeImagePreview() {
   font-size: 14px;
 }
 
-/* 内嵌编辑器容器 */
+/* ===== 内嵌编辑器 ===== */
 .inline-editor-container {
   width: 100%;
   border-radius: 8px;
   overflow: hidden;
 }
 
-/* 编辑模式下的行样式 */
-.user-message-row.is-editing {
+.user-message-container.is-editing {
   justify-content: stretch;
 }
 
-.user-message-bubble {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+/* ===== 消息内容区域 ===== */
+.message-content {
   max-width: 100%;
-}
-
-.timestamp {
-  font-size: 11px;
-  color: var(--theme-secondary-foreground);
-  padding: 0 8px;
-}
-
-.bubble-content {
-  background: var(--theme-selection-background);
-  border-radius: 12px;
   padding: 10px 14px;
-  max-width: 100%;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
   transition: all 0.2s ease;
 }
 
-/* 预览文本样式（折叠时显示） */
+/* 气泡样式（非回放消息） */
+.message-content.bubble-style {
+  background: var(--theme-selection-background);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* 回放消息的内容样式 */
+.user-message-container.is-replay .message-content {
+  background: transparent;
+  padding: 4px 8px;
+}
+
+/* 可点击展开 */
+.message-content.clickable {
+  cursor: pointer;
+}
+
+.message-content.clickable:hover {
+  background: var(--theme-hover-background);
+}
+
+.message-content.bubble-style.clickable:hover {
+  background: color-mix(in srgb, var(--theme-selection-background) 90%, white 10%);
+}
+
+/* ===== 预览文本（折叠时） ===== */
 .preview-text {
   font-size: 13px;
   line-height: 1.4;
-  color: var(--theme-selection-foreground);
-  opacity: 0.9;
+  color: var(--theme-foreground);
+  opacity: 0.8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   display: block;
+  max-width: 100%;
 }
 
+.message-content.bubble-style .preview-text {
+  color: var(--theme-selection-foreground);
+}
+
+/* ===== 消息文本 ===== */
 .message-text {
   font-size: 13px;
   line-height: 1.4;
-  color: var(--theme-selection-foreground);
   white-space: pre-wrap;
   word-break: break-word;
-  margin-bottom: 6px;
   user-select: text;
   -webkit-user-select: text;
 }
 
-/* 用户消息内的文本选中样式 - 使用对比色 */
-.bubble-content ::selection {
-  background: var(--theme-accent, #0366d6);
-  color: #ffffff;
+.message-content.bubble-style .message-text {
+  color: var(--theme-selection-foreground);
 }
 
-.message-text:last-child {
-  margin-bottom: 0;
+/* markdown 渲染时的样式 */
+.message-text.use-markdown {
+  white-space: normal;
+}
+
+/* 文本选中样式 */
+.message-content ::selection {
+  background: var(--theme-accent, #0366d6);
+  color: #ffffff;
 }
 
 /* 链接样式 */
@@ -729,14 +756,107 @@ function closeImagePreview() {
   text-decoration: underline;
 }
 
-/* 文件路径链接 */
 .message-text :deep(.file-link) {
   background: var(--theme-hover-background);
   padding: 1px 6px;
   border-radius: 3px;
 }
 
-/* 上下文图片 - 横向排列 */
+/* ===== 展开/折叠指示器 ===== */
+.expand-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 8px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--theme-accent);
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.message-content.clickable:hover .expand-indicator {
+  opacity: 1;
+}
+
+.message-content.bubble-style .expand-indicator {
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--theme-selection-foreground);
+}
+
+.expand-hint {
+  font-size: 11px;
+}
+
+.expand-arrow {
+  font-size: 12px;
+}
+
+/* ===== 上下文标签 ===== */
+.context-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.file-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  background: rgba(3, 102, 214, 0.08);
+  border: 1px solid var(--theme-accent, #0366d6);
+  border-radius: 3px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.file-tag:hover {
+  background: rgba(3, 102, 214, 0.15);
+}
+
+.file-tag .tag-file-name {
+  color: var(--theme-accent, #0366d6);
+  font-weight: 500;
+  font-family: var(--editor-font-family, monospace);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tag .tag-line-range {
+  color: var(--theme-accent, #0366d6);
+  font-weight: 600;
+  font-family: var(--editor-font-family, monospace);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.file-tag .tag-prefix {
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+/* 气泡内的文件标签样式 */
+.message-content.bubble-style .file-tag {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.message-content.bubble-style .file-tag:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.message-content.bubble-style .file-tag .tag-file-name,
+.message-content.bubble-style .file-tag .tag-line-range {
+  color: inherit;
+}
+
+/* ===== 图片 ===== */
 .context-images {
   display: flex;
   flex-wrap: wrap;
@@ -744,7 +864,6 @@ function closeImagePreview() {
   margin-bottom: 8px;
 }
 
-/* 上下文缩略图 */
 .context-thumb {
   width: 32px;
   height: 32px;
@@ -759,7 +878,6 @@ function closeImagePreview() {
   transform: scale(1.05);
 }
 
-/* 内嵌图片 - 横向排列 */
 .inline-images {
   display: flex;
   flex-wrap: wrap;
@@ -780,157 +898,15 @@ function closeImagePreview() {
   transform: scale(1.02);
 }
 
-
-/* 长消息可点击展开 */
-.bubble-content.clickable {
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.bubble-content.clickable:hover {
-  background: color-mix(in srgb, var(--theme-selection-background) 90%, white 10%);
-}
-
-/* 展开/折叠指示器 */
-.expand-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 6px 10px;
-  margin-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
-  font-size: 12px;
-  color: var(--theme-selection-foreground);
-  opacity: 0.7;
-  transition: all 0.2s ease;
-  position: relative;
-  z-index: 2;
-}
-
-.bubble-content.clickable:hover .expand-indicator {
-  opacity: 1;
-}
-
-.expand-hint {
-  font-size: 11px;
-}
-
-.expand-arrow {
-  font-size: 12px;
-}
-
-/* 回放消息（isReplay=true）：靠左，无气泡，md 渲染 */
-.replay-user-message {
-  padding: 4px 12px;
-  text-align: left;
-}
-
-/* hint 样式：使用次要文本颜色 */
-.replay-user-message.hint {
+/* ===== 特殊样式 ===== */
+/* hint 样式 */
+.user-message-container.hint .message-content {
   color: var(--theme-secondary-foreground);
 }
 
-/* error 样式：使用错误颜色 */
-.replay-user-message.error {
+/* error 样式 */
+.user-message-container.error .message-content {
   color: var(--theme-error);
 }
-
-/* 历史消息中的文件标记 - 紧凑样式 */
-.history-file-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 1px 6px;
-  margin-bottom: 4px;
-  background: rgba(3, 102, 214, 0.08);
-  border: 1px solid var(--theme-accent, #0366d6);
-  border-radius: 3px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.history-file-tag:hover {
-  background: rgba(3, 102, 214, 0.15);
-}
-
-.history-file-tag .tag-icon {
-  font-size: 10px;
-  color: var(--theme-accent, #0366d6);
-  flex-shrink: 0;
-}
-
-.history-file-tag .tag-file-name {
-  color: var(--theme-accent, #0366d6);
-  font-weight: 500;
-  font-family: var(--editor-font-family, monospace);
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.history-file-tag .tag-line-range {
-  color: var(--theme-accent, #0366d6);
-  font-weight: 600;
-  font-family: var(--editor-font-family, monospace);
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-/* 上下文标签区域 - 横向排列 */
-.context-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 8px;
-}
-
-/* 气泡消息中的文件标记 - 紧凑样式 */
-.bubble-file-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 1px 6px;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 3px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.bubble-file-tag:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-.bubble-file-tag .tag-icon {
-  font-size: 10px;
-  flex-shrink: 0;
-}
-
-.bubble-file-tag .tag-file-name {
-  font-weight: 500;
-  font-family: var(--editor-font-family, monospace);
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bubble-file-tag .tag-line-range {
-  font-weight: 600;
-  font-family: var(--editor-font-family, monospace);
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-/* 文件引用的 @ 前缀 */
-.bubble-file-tag .tag-prefix {
-  font-weight: 600;
-  opacity: 0.7;
-}
-
 </style>
 
