@@ -347,15 +347,17 @@ class FileProblemsTool(private val project: Project) {
                     // 克隆 visitor 以确保线程安全
                     val clonedVisitor = visitor.clone()
 
-                    // 运行分析
+                    // 运行分析 - 确保回调也在 ReadAction 中执行
                     clonedVisitor.analyze(psiFile, true, holder) {
-                        // 访问所有元素
-                        psiFile.accept(object : PsiRecursiveElementVisitor() {
-                            override fun visitElement(element: com.intellij.psi.PsiElement) {
-                                clonedVisitor.visit(element)
-                                super.visitElement(element)
-                            }
-                        })
+                        ReadAction.run<Exception> {
+                            // 访问所有元素
+                            psiFile.accept(object : PsiRecursiveElementVisitor() {
+                                override fun visitElement(element: com.intellij.psi.PsiElement) {
+                                    clonedVisitor.visit(element)
+                                    super.visitElement(element)
+                                }
+                            })
+                        }
                     }
                 } catch (e: Exception) {
                     logger.debug { "⚠️ HighlightVisitor ${visitor.javaClass.simpleName} failed: ${e.message}" }
