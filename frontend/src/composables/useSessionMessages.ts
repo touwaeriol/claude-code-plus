@@ -674,16 +674,8 @@ export function useSessionMessages(
 
         // 强制触发 Vue 响应式更新
         triggerDisplayItemsUpdate()
-      } else if (block.type === 'thinking') {
-        // 思考块完成，标记为完成状态
-        const displayItem = displayItems.find(
-          item => item.id === `${message.id}-thinking-${event.index}` && item.displayType === 'thinking'
-        ) as ThinkingContent | undefined
-        if (displayItem && !displayItem.signature) {
-          displayItem.signature = 'complete'
-          triggerDisplayItemsUpdate()
-        }
       }
+      // thinking 块的完成状态由 syncThinkingSignatures 在收到完整消息时处理
     }
   }
 
@@ -883,14 +875,15 @@ export function useSessionMessages(
 
     let hasUpdate = false
     message.content.forEach((block, blockIdx) => {
-      if (block.type === 'thinking' && (block as any).signature) {
+      if (block.type === 'thinking') {
         const displayId = `${message.id}-thinking-${blockIdx}`
         const displayItem = displayItems.find(
           item => item.id === displayId && item.displayType === 'thinking'
         ) as ThinkingContent | undefined
 
         if (displayItem && !displayItem.signature) {
-          displayItem.signature = (block as any).signature
+          // 优先使用 SDK 返回的 signature，否则标记为 complete
+          displayItem.signature = (block as any).signature || 'complete'
           hasUpdate = true
           log.debug(`[useSessionMessages] 同步 signature 到 thinking displayItem: ${displayId}`)
         }
