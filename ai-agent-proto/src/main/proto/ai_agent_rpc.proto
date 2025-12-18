@@ -800,3 +800,15 @@ message TruncateHistoryResult {
   int32 remaining_lines = 2;  // 截断后剩余的行数
   optional string error = 3;  // 错误信息（如果失败）
 }
+
+// MCP 服务器状态信息
+message McpServerStatus {
+  string name = 1;
+  string status = 2;  // "connected" | "failed" | "sdk"
+  optional string server_info = 3;  // JSON 格式的服务器详细信息
+}
+
+// MCP 状态查询结果
+message McpStatusResult {
+  repeated McpServerStatus servers = 1;
+}

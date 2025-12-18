@@ -71,6 +71,7 @@
 
     <!-- 图片预览弹窗 -->
     <div v-if="previewImage" class="image-preview-overlay" @click="closeImagePreview">
+      <button class="preview-close-btn" @click="closeImagePreview">×</button>
       <img :src="previewImage" class="preview-image" alt="预览图片" @click.stop />
     </div>
   </div>
@@ -372,6 +373,29 @@ function getOrderedPreviewItems(msg: PendingMessage): PreviewItem[] {
   object-fit: contain;
   border-radius: 4px;
   cursor: default;
+}
+
+.preview-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, background 0.15s;
+}
+
+.preview-close-btn:hover {
+  transform: scale(1.1);
+  background: #fff;
 }
 
 </style>

@@ -21,6 +21,13 @@ dependencies {
     api(project(":ai-agent-rpc-api")) // Use api to expose types to downstream
     implementation(project(":ai-agent-proto")) // Protobuf 生成的类型
 
+    // MCP Java SDK (用于 Streamable HTTP 端点)
+    implementation("io.modelcontextprotocol.sdk:mcp:0.17.0")
+
+    // 嵌入式 Jetty (用于 MCP Streamable HTTP Servlet)
+    implementation("org.eclipse.jetty.ee10:jetty-ee10-servlet:12.0.16")
+    implementation("org.eclipse.jetty:jetty-server:12.0.16")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${rootProject.extra["coroutinesVersion"]}")
 
@@ -45,7 +52,7 @@ dependencies {
     implementation("io.rsocket.kotlin:ktor-server-rsocket:$rsocketVersion")
 
     // JSON Schema 校验
-    implementation("com.networknt:json-schema-validator:1.5.4")
+    implementation("com.networknt:json-schema-validator:3.0.0")
 
     // Logging
     implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")

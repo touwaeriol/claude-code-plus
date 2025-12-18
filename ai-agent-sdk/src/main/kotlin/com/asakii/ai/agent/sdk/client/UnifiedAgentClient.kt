@@ -93,6 +93,11 @@ interface UnifiedAgentClient {
      * @return 当前权限模式，如果不支持则返回 null
      */
     fun getCurrentPermissionMode(): AiPermissionMode?
+
+    /**
+     * 获取 MCP 服务器状态
+     */
+    suspend fun getMcpStatus(): List<com.asakii.claude.agent.sdk.types.McpServerStatusInfo> = emptyList()
 }
 
 /**

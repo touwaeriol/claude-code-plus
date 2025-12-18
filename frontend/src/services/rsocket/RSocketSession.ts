@@ -422,6 +422,21 @@ export class RSocketSession {
     }
 
     /**
+     * 获取 MCP 服务器状态
+     */
+    async getMcpStatus(): Promise<{ servers: Array<{ name: string; status: string; serverInfo?: string }> }> {
+        if (!this._isConnected || !this.client) {
+            throw new Error('Session not connected')
+        }
+
+        console.log('[RSocket] ← agent.getMcpStatus 发送')
+        const responseData = await this.client.requestResponse('agent.getMcpStatus', new Uint8Array())
+        const result = ProtoCodec.decodeMcpStatusResult(responseData)
+        console.log('[RSocket] → agent.getMcpStatus 结果:', JSON.stringify(result, null, 2))
+        return result
+    }
+
+    /**
      * 订阅消息事件
      */
     onMessage(handler: MessageHandler): () => void {

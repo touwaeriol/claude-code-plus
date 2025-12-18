@@ -131,4 +131,15 @@ interface AiAgentRpcService {
         messageUuid: String,
         projectPath: String
     ): RpcTruncateHistoryResult
+
+
+    /**
+     * 获取 MCP 服务器状态
+     *
+     * 返回所有已连接的 MCP 服务器的详细状态信息，包括服务器名称、连接状态和服务器信息。
+     *
+     * @return MCP 服务器状态列表
+     */
+    suspend fun getMcpStatus(): RpcMcpStatusResult
+
 }

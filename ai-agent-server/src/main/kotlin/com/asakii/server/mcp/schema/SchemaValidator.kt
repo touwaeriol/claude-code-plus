@@ -1,11 +1,12 @@
 package com.asakii.server.mcp.schema
 
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.networknt.schema.JsonSchemaFactory
-import com.networknt.schema.SpecVersion
-import com.networknt.schema.ValidationMessage
+import com.networknt.schema.InputFormat
+import com.networknt.schema.SchemaRegistry
+import com.networknt.schema.dialect.Dialects
+import com.networknt.schema.Error
 import mu.KotlinLogging
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 
 private val logger = KotlinLogging.logger {}
 
@@ -71,8 +72,8 @@ sealed class ValidationResult {
  */
 object SchemaValidator {
 
-    private val objectMapper = ObjectMapper()
-    private val schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7)
+    private val json = Json { ignoreUnknownKeys = true }
+    private val schemaRegistry = SchemaRegistry.withDialect(Dialects.getDraft7())
 
     /**
      * 校验参数
@@ -113,14 +114,14 @@ object SchemaValidator {
 
         // 1. 使用 JSON Schema 库校验
         try {
-            val schemaNode = objectMapper.valueToTree<JsonNode>(schema)
-            val jsonSchema = schemaFactory.getSchema(schemaNode)
-            val dataNode = objectMapper.valueToTree<JsonNode>(arguments)
+            val schemaJson = json.encodeToString(schema)
+            val jsonSchema = schemaRegistry.getSchema(schemaJson, InputFormat.JSON)
+            val dataJson = json.encodeToString(arguments)
 
-            val validationMessages = jsonSchema.validate(dataNode)
+            val validationErrors = jsonSchema.validate(dataJson, InputFormat.JSON)
 
-            for (msg in validationMessages) {
-                errors.add(convertToValidationError(msg, schema))
+            validationErrors.forEach { error ->
+                errors.add(convertToValidationError(error, schema))
             }
         } catch (e: Exception) {
             logger.error(e) { "JSON Schema validation failed" }
@@ -141,26 +142,26 @@ object SchemaValidator {
     }
 
     /**
-     * 将 JSON Schema 库的 ValidationMessage 转换为我们的 ValidationError
+     * 将 JSON Schema 库的 Error 转换为我们的 ValidationError
      */
     private fun convertToValidationError(
-        msg: ValidationMessage,
+        error: Error,
         schema: Map<String, Any>
     ): ValidationError {
         // 从 instanceLocation 提取参数名
-        val path = msg.instanceLocation?.toString() ?: msg.evaluationPath?.toString() ?: ""
+        val path = error.instanceLocation?.toString() ?: ""
         val paramName = when {
-            path == "$" || path.isEmpty() -> extractParamFromMessage(msg.message)
+            path == "$" || path.isEmpty() -> extractParamFromMessage(error.message ?: "")
             path.startsWith("$.") -> path.removePrefix("$.")
             path.startsWith("/") -> path.removePrefix("/").replace("/", ".")
             else -> path
         }
 
         // 生成人类可读的错误信息
-        val message = formatErrorMessage(msg, paramName)
+        val message = formatErrorMessage(error, paramName)
 
         // 生成提示信息
-        val hint = generateHint(paramName, msg.type, schema)
+        val hint = generateHint(paramName, error.keyword ?: "", schema)
 
         return ValidationError(
             parameter = paramName.ifEmpty { "(unknown)" },
@@ -180,9 +181,9 @@ object SchemaValidator {
     /**
      * 格式化错误信息为人类可读的形式
      */
-    private fun formatErrorMessage(msg: ValidationMessage, paramName: String): String {
-        val originalMessage = msg.message ?: "Validation failed"
-        val type = msg.type ?: ""
+    private fun formatErrorMessage(error: Error, paramName: String): String {
+        val originalMessage = error.message ?: "Validation failed"
+        val type = error.keyword ?: ""
 
         return when {
             type.contains("required") -> "Missing required parameter"

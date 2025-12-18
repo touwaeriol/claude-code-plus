@@ -6,6 +6,7 @@ import com.asakii.rpc.api.RpcMessage as RpcMessageApi
 import com.asakii.rpc.proto.*
 import com.asakii.server.mcp.DefaultJetBrainsMcpServerProvider
 import com.asakii.server.mcp.JetBrainsMcpServerProvider
+import com.asakii.server.mcp.McpHttpServer
 import com.asakii.server.rpc.AiAgentRpcServiceImpl
 import com.asakii.server.rpc.ClientCaller
 import com.asakii.server.rsocket.ProtoConverter.toProto
@@ -62,7 +63,7 @@ class RSocketHandler(
     private val clientRequester: RSocket,  // 必须在构造时传入，确保每个连接独立
     private val connectionId: String = java.util.UUID.randomUUID().toString(),  // 连接唯一标识
     private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider,  // JetBrains MCP Server Provider
-    private val serviceConfigProvider: () -> com.asakii.server.config.AiAgentServiceConfig = { com.asakii.server.config.AiAgentServiceConfig() }  // 服务配置提供者（每次 connect 时获取最新配置）
+    private val serviceConfigProvider: () -> com.asakii.server.config.AiAgentServiceConfig = { com.asakii.server.config.AiAgentServiceConfig() }  // 服务配置提供者
 ) {
     // 使用 ws.log 专用 logger
     private val wsLog = KotlinLogging.logger(StandaloneLogging.WS_LOGGER)
@@ -83,15 +84,23 @@ class RSocketHandler(
         // 反向调用支持
         val callIdCounter = AtomicInteger(0)
 
-        // 创建 ClientCaller（初始时 requester 可能为空）
+        // 创建 ClientCaller（用于 MCP 工具调用前端）
         val clientCaller = createClientCaller(callIdCounter)
 
-        // 为每个连接创建独立的 RPC 服务（传递 JetBrains MCP Server Provider 和服务配置提供者）
+        // 启动统一的 MCP HTTP 服务器（一个端口，两个端点）
+        val mcpServer = McpHttpServer(
+            clientCaller = clientCaller,
+            jetBrainsToolProvider = jetBrainsMcpServerProvider.getToolProvider()
+        )
+        val mcpPort = mcpServer.start()
+        wsLog.info("🔌 [RSocket] [$connectionId] MCP Server started on port $mcpPort (user_interaction + ${if (mcpServer.hasJetBrains()) "jetbrains" else "no jetbrains"})")
+
+        // 为每个连接创建独立的 RPC 服务
         val rpcService: AiAgentRpcService = AiAgentRpcServiceImpl(
             ideTools = ideTools,
             clientCaller = clientCaller,
-            jetBrainsMcpServerProvider = jetBrainsMcpServerProvider,
-            serviceConfigProvider = serviceConfigProvider
+            serviceConfigProvider = serviceConfigProvider,
+            mcpServer = mcpServer
         )
 
         val handler = RSocketRequestHandler {
@@ -114,6 +123,7 @@ class RSocketHandler(
                     "agent.getHistory" -> handleGetHistory(rpcService)
                     "agent.truncateHistory" -> handleTruncateHistory(dataBytes, rpcService)
                     "agent.hasIdeEnvironment" -> handleHasIdeEnvironment()
+                    "agent.getMcpStatus" -> handleGetMcpStatus(rpcService)
                     else -> throw IllegalArgumentException("Unknown route: $route")
                 }
 
@@ -138,7 +148,7 @@ class RSocketHandler(
             }
         }
 
-        // 监听连接关闭，自动清理 SDK 资源（非阻塞）
+        // 监听连接关闭，自动清理 SDK 和 MCP 资源（非阻塞）
         handler.coroutineContext[Job]?.invokeOnCompletion { cause ->
             wsLog.info("🔌 [RSocket] [$connectionId] 连接关闭，自动清理资源 (cause: ${cause?.message ?: "正常关闭"})")
             // 使用独立的协程作用域进行异步清理，避免阻塞回调
@@ -150,6 +160,13 @@ class RSocketHandler(
                     wsLog.info("✅ [RSocket] [$connectionId] SDK 资源已清理")
                 } catch (e: Exception) {
                     wsLog.warn("⚠️ [RSocket] [$connectionId] 清理 SDK 资源时出错: ${e.message}")
+                }
+                // 停止 MCP 服务器
+                try {
+                    mcpServer.stop()
+                    wsLog.info("✅ [RSocket] [$connectionId] MCP Server 已停止")
+                } catch (e: Exception) {
+                    wsLog.warn("⚠️ [RSocket] [$connectionId] 停止 MCP Server 时出错: ${e.message}")
                 }
             }
         }
@@ -242,6 +259,24 @@ class RSocketHandler(
         val response = HasIdeEnvironmentResponse.newBuilder()
             .setHasIde(hasIde)
             .build()
+        return buildPayload { data(response.toByteArray()) }
+    }
+
+    private suspend fun handleGetMcpStatus(rpcService: AiAgentRpcService): Payload {
+        wsLog.info("🔌 [RSocket] getMcpStatus request")
+        val result = rpcService.getMcpStatus()
+        wsLog.info("📤 [RSocket] getMcpStatus result: ${result.servers.size} servers")
+        val response = McpStatusResult.newBuilder().apply {
+            result.servers.forEach { server ->
+                addServers(McpServerStatus.newBuilder()
+                    .setName(server.name)
+                    .setStatus(server.status)
+                    .apply {
+                        server.serverInfo?.get("raw")?.toString()?.let { setServerInfo(it) }
+                    }
+                    .build())
+            }
+        }.build()
         return buildPayload { data(response.toByteArray()) }
     }
 

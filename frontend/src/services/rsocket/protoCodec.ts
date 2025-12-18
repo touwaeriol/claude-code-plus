@@ -16,6 +16,7 @@ import {
   GetHistoryMetadataRequestSchema,
   TruncateHistoryRequestSchema,
   TruncateHistoryResultSchema,
+  McpStatusResultSchema,
   StatusResultSchema,
   SetModelResultSchema,
   SetPermissionModeResultSchema,
@@ -342,6 +343,20 @@ export const ProtoCodec = {
   decodeStatusResult(data: Uint8Array): { status: RpcSessionStatus } {
     const proto = fromBinary(StatusResultSchema, data)
     return { status: mapSessionStatusFromProto(proto.status) }
+  },
+
+  /**
+   * 解码 McpStatusResult
+   */
+  decodeMcpStatusResult(data: Uint8Array): { servers: Array<{ name: string; status: string; serverInfo?: string }> } {
+    const proto = fromBinary(McpStatusResultSchema, data)
+    return {
+      servers: proto.servers.map(s => ({
+        name: s.name,
+        status: s.status,
+        serverInfo: s.serverInfo || undefined
+      }))
+    }
   },
 
   /**

@@ -5,6 +5,10 @@ import cn.hutool.cache.impl.TimedCache
 import cn.hutool.crypto.digest.DigestUtil
 import com.asakii.claude.agent.sdk.exceptions.*
 import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
+import com.asakii.claude.agent.sdk.types.McpHttpServerConfig
+import com.asakii.claude.agent.sdk.types.McpServerConfig
+import com.asakii.claude.agent.sdk.types.McpSSEServerConfig
+import com.asakii.claude.agent.sdk.types.McpStdioServerConfig
 import com.asakii.claude.agent.sdk.types.PermissionMode
 import com.asakii.claude.agent.sdk.types.SystemPromptPreset
 import kotlinx.coroutines.Dispatchers
@@ -99,62 +103,19 @@ class SubprocessTransport(
             json
         }
     }
-    
+
     override suspend fun connect() = withContext(Dispatchers.IO) {
         try {
             val command = buildCommand()
-            logger.info("🚀 构建Claude CLI命令: ${command.joinToString(" ")}")
+            logger.info("🔧 构建的命令: ${command.joinToString(" ")}")
 
-            // 直接执行命令，不使用 shell 包装
-            // 根据业界最佳实践：直接执行比通过 shell 更安全、stdin/stdout 管道更可靠
-            // 参考: https://www.baeldung.com/java-lang-processbuilder-api
-            logger.info("⚡ 直接执行命令（不使用 shell）")
+            val processBuilder = ProcessBuilder(command)
+            processBuilder.directory(options.cwd?.toFile() ?: java.io.File(System.getProperty("user.dir")))
 
-            // 记录 CLI 启动命令到日志
-            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            logger.info("🚀 Claude CLI 启动命令:")
-            logger.info("   直接执行: ${command.joinToString(" ")}")
-            logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-            val processBuilder = ProcessBuilder(command).apply {
-                // Set working directory if provided
-                options.cwd?.let {
-                    logger.info("📂 设置工作目录: $it")
-                    directory(it.toFile())
-                }
-
-                // 打印 JVM 继承的环境变量（用于调试）
-                val systemEnv = System.getenv()
-                logger.info("🌐 JVM 环境变量 (共 ${systemEnv.size} 个):")
-                systemEnv.entries.sortedBy { it.key }.forEach { (key, value) ->
-                    // 敏感信息脱敏
-                    val displayValue = if (key.contains("KEY", ignoreCase = true) ||
-                                           key.contains("SECRET", ignoreCase = true) ||
-                                           key.contains("TOKEN", ignoreCase = true) ||
-                                           key.contains("PASSWORD", ignoreCase = true)) {
-                        "***"
-                    } else if (value.length > 100) {
-                        "${value.take(100)}..."
-                    } else {
-                        value
-                    }
-                    logger.info("   $key=$displayValue")
-                }
-
-                // Set environment variables (user-provided env)
-                if (options.env.isNotEmpty()) {
-                    logger.info("🌐 设置自定义环境变量: ${options.env.size} 个变量")
-                    environment().putAll(options.env)
-                }
-
-                // Set environment entrypoint
-                environment()["CLAUDE_CODE_ENTRYPOINT"] = "sdk-kt-client"
-                logger.info("🏷️ 设置环境入口点: sdk-kt-client")
-
-                // Disable Ink UI to prevent "Raw mode is not supported" error
-                environment()["CI"] = "true"
-                environment()["FORCE_COLOR"] = "0"
-                logger.info("🎨 禁用 Ink UI (CI=true, FORCE_COLOR=0)")
+            // 设置环境变量
+            val env = processBuilder.environment()
+            options.env.forEach { (key, value) ->
+                env[key] = value
             }
 
             logger.info("⚡ 启动Claude CLI进程...")
@@ -541,46 +502,38 @@ class SubprocessTransport(
             options.mcpServers.forEach { (name, config) ->
                 when (config) {
                     is Map<*, *> -> {
+                        // 直接传递 Map 配置（支持 http, stdio, sse 等类型）
                         @Suppress("UNCHECKED_CAST")
                         val configMap = config as Map<String, Any?>
-                        if (configMap["type"] == "sdk") {
-                            // SDK 服务器：去掉 instance 字段，保留其他
-                            val sdkConfig = configMap.filterKeys { it != "instance" }
-                            serversForCli[name] = sdkConfig
-                            logger.info("📦 添加 SDK MCP 服务器配置: $name -> $sdkConfig")
-                        } else {
-                            // 外部服务器：直接传递
-                            serversForCli[name] = configMap
-                            logger.info("📦 添加外部 MCP 服务器配置: $name")
+                        serversForCli[name] = configMap
+                        logger.info("📦 添加 MCP 服务器配置: $name -> type=${configMap["type"]}")
+                    }
+                    is McpServerConfig -> {
+                        // McpServerConfig 子类：转换为 Map
+                        val serverConfig = when (config) {
+                            is McpStdioServerConfig -> mapOf(
+                                "type" to config.type,
+                                "command" to config.command,
+                                "args" to config.args,
+                                "env" to config.env
+                            )
+                            is McpSSEServerConfig -> mapOf(
+                                "type" to config.type,
+                                "url" to config.url,
+                                "headers" to config.headers
+                            )
+                            is McpHttpServerConfig -> mapOf(
+                                "type" to config.type,
+                                "url" to config.url,
+                                "headers" to config.headers
+                            )
                         }
+                        serversForCli[name] = serverConfig
+                        logger.info("📦 添加 MCP 服务器配置: $name -> type=${config.type}")
                     }
                     else -> {
-                        // 其他类型（如 McpServer 实例），转换为 SDK 配置
-                        if (config is com.asakii.claude.agent.sdk.mcp.McpServer) {
-                            val serverConfig = mutableMapOf<String, Any?>(
-                                "type" to "sdk",
-                                "name" to config.name
-                            )
-                            // 添加超时配置
-                            // timeout > 0: 指定超时时间（毫秒）
-                            // timeout <= 0 或 null: 显式传递 -1 表示无限超时
-                            val timeout = config.timeout
-                            if (timeout != null && timeout > 0) {
-                                serverConfig["timeout"] = timeout
-                            } else {
-                                // 显式传递 -1 表示无限超时，确保 CLI 不使用默认超时
-                                serverConfig["timeout"] = -1
-                            }
-                            serversForCli[name] = serverConfig
-                            logger.info("📦 添加 MCP 服务器实例配置: $name -> type=sdk, timeout=${timeout ?: "infinite"}")
-                        } else {
-                            serversForCli[name] = mapOf(
-                                "type" to "sdk",
-                                "name" to name,
-                                "timeout" to -1  // 默认无限超时
-                            )
-                            logger.info("📦 添加 MCP 服务器实例配置: $name -> type=sdk, timeout=infinite")
-                        }
+                        // 不支持的类型，跳过并警告
+                        logger.warn("⚠️ 不支持的 MCP 服务器配置类型: $name -> ${config::class.simpleName}，请使用 Map 或 McpServerConfig")
                     }
                 }
             }
@@ -628,7 +581,12 @@ class SubprocessTransport(
                 }.toString()
 
                 // 创建临时文件存储 MCP 配置 JSON
-                val tempFile = Files.createTempFile("claude_mcp_config_", ".json")
+                // 路径格式: 临时目录/claude-code-plus/claude_mcp_config_日期_uuid.json
+                val tempDir = Path.of(System.getProperty("java.io.tmpdir"), "claude-code-plus")
+                Files.createDirectories(tempDir)
+                val timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy_MM_dd_HH"))
+                val uuid = java.util.UUID.randomUUID().toString().substring(0, 8)
+                val tempFile = tempDir.resolve("claude_mcp_config_${timestamp}_${uuid}.json")
                 Files.writeString(tempFile, mcpConfigJson)
                 tempFiles.add(tempFile)
 

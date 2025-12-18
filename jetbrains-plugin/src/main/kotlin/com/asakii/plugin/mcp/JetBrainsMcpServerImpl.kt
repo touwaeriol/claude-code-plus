@@ -1,5 +1,6 @@
 package com.asakii.plugin.mcp
 
+import com.asakii.claude.agent.sdk.mcp.ContentItem
 import com.asakii.claude.agent.sdk.mcp.McpServer
 import com.asakii.claude.agent.sdk.mcp.McpServerBase
 import com.asakii.claude.agent.sdk.mcp.ToolDefinition
@@ -8,7 +9,11 @@ import com.asakii.claude.agent.sdk.mcp.annotations.McpServerConfig
 import com.asakii.plugin.mcp.tools.*
 import com.asakii.plugin.utils.ResourceLoader
 import com.asakii.server.mcp.JetBrainsMcpServerProvider
+import com.asakii.server.mcp.McpToolDefinition
+import com.asakii.server.mcp.McpToolProvider
+import com.asakii.server.mcp.McpToolResult
 import com.asakii.server.mcp.schema.ToolSchemaLoader
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.intellij.openapi.project.Project
 import mu.KotlinLogging
 
@@ -122,16 +127,101 @@ IMPORTANT: When a project build/compile fails or a file is known to have syntax 
 
 /**
  * JetBrains MCP 服务器提供者实现
- * 
+ *
  * 在 jetbrains-plugin 模块中实现，提供对 IDEA Platform API 的访问。
  */
 class JetBrainsMcpServerProviderImpl(private val project: Project) : JetBrainsMcpServerProvider {
 
-    private val _server: McpServer by lazy {
+    private val _server: JetBrainsMcpServerImpl by lazy {
         JetBrainsMcpServerImpl(project)
     }
 
-    override fun getServer(): McpServer = _server
+    override fun getToolProvider(): McpToolProvider = JetBrainsMcpToolProvider(_server, project)
+}
+
+/**
+ * JetBrains MCP 工具提供者适配器
+ *
+ * 将 JetBrainsMcpServerImpl 的工具适配为 McpToolProvider 接口
+ */
+private class JetBrainsMcpToolProvider(
+    private val server: JetBrainsMcpServerImpl,
+    private val project: Project
+) : McpToolProvider {
+
+    private val directoryTreeTool by lazy { DirectoryTreeTool(project) }
+    private val fileProblemsTool by lazy { FileProblemsTool(project) }
+    private val fileIndexTool by lazy { FileIndexTool(project) }
+    private val codeSearchTool by lazy { CodeSearchTool(project) }
+    private val findUsagesTool by lazy { FindUsagesTool(project) }
+    private val renameTool by lazy { RenameTool(project) }
+
+    private val objectMapper = ObjectMapper()
+
+    override fun getTools(): List<McpToolDefinition> = listOf(
+        McpToolDefinition(
+            name = "DirectoryTree",
+            description = "Browse project directory structure with filtering options",
+            inputSchema = objectMapper.writeValueAsString(directoryTreeTool.getInputSchema())
+        ),
+        McpToolDefinition(
+            name = "FileProblems",
+            description = "Get static analysis results for a file (syntax errors, code errors, warnings, suggestions)",
+            inputSchema = objectMapper.writeValueAsString(fileProblemsTool.getInputSchema())
+        ),
+        McpToolDefinition(
+            name = "FileIndex",
+            description = "Search files, classes, and symbols using IDE index (supports scope filtering)",
+            inputSchema = objectMapper.writeValueAsString(fileIndexTool.getInputSchema())
+        ),
+        McpToolDefinition(
+            name = "CodeSearch",
+            description = "Search code content across project files (like Find in Files)",
+            inputSchema = objectMapper.writeValueAsString(codeSearchTool.getInputSchema())
+        ),
+        McpToolDefinition(
+            name = "FindUsages",
+            description = "Find all references/usages of a symbol (class, method, field, variable) in the project",
+            inputSchema = objectMapper.writeValueAsString(findUsagesTool.getInputSchema())
+        ),
+        McpToolDefinition(
+            name = "Rename",
+            description = "Safely rename a symbol and automatically update all references (like Refactor > Rename)",
+            inputSchema = objectMapper.writeValueAsString(renameTool.getInputSchema())
+        )
+    )
+
+    override suspend fun callTool(name: String, arguments: Map<String, Any>): McpToolResult {
+        return try {
+            val result = when (name) {
+                "DirectoryTree" -> directoryTreeTool.execute(arguments)
+                "FileProblems" -> fileProblemsTool.execute(arguments)
+                "FileIndex" -> fileIndexTool.execute(arguments)
+                "CodeSearch" -> codeSearchTool.execute(arguments)
+                "FindUsages" -> findUsagesTool.execute(arguments)
+                "Rename" -> renameTool.execute(arguments)
+                else -> ToolResult.error("Unknown tool: $name")
+            }
+            when (result) {
+                is ToolResult.Success -> {
+                    val content = result.content.joinToString("\n") { item ->
+                        when (item) {
+                            is ContentItem.Text -> item.text
+                            is ContentItem.Json -> objectMapper.writeValueAsString(item.data)
+                            else -> item.toString()
+                        }
+                    }
+                    McpToolResult(content = content, isError = false)
+                }
+                is ToolResult.Error -> McpToolResult(content = result.error, isError = true)
+                is ToolResult -> McpToolResult(content = result.toString(), isError = result.isError)
+                else -> McpToolResult(content = result.toString(), isError = false)
+            }
+        } catch (e: Exception) {
+            logger.error(e) { "Tool execution failed: $name" }
+            McpToolResult(content = "Error: ${e.message}", isError = true)
+        }
+    }
 }
 
 /**

@@ -222,6 +222,10 @@ export function useSessionTab(initialOrder: number = 0) {
         lastError: null as string | null
     })
 
+    // MCP 服务器状态（从 system_init 消息实时更新）
+    const mcpServers = ref<Array<{ name: string; status: string }>>([])
+
+
     // ========== 连接设置（连接时确定，切换需要重连）==========
     const modelId = ref<string | null>(null)
     const thinkingLevel = ref<ThinkingLevel>(8096)  // 默认 Ultra
@@ -662,6 +666,14 @@ export function useSessionTab(initialOrder: number = 0) {
         if (message.model && message.model !== modelId.value) {
             log.info(`[Tab ${tabId}] 📦 system_init 模型: ${message.model}`)
             modelId.value = message.model
+        }
+
+        // 更新 MCP 服务器状态（实时显示）
+        if (message.mcpServers) {
+            mcpServers.value = message.mcpServers.map(s => ({ name: s.name, status: s.status }))
+            log.info(`[Tab ${tabId}] 📦 system_init MCP servers: ${mcpServers.value.length}`)
+            // 打印完整的 MCP 服务器信息到控制台
+            console.log('🔌 MCP Servers:', JSON.stringify(message.mcpServers, null, 2))
         }
 
         log.debug(`[Tab ${tabId}] 📦 system_init: cwd=${message.cwd}, permissionMode=${message.permissionMode}, tools=${message.tools?.length || 0}`)
@@ -1726,6 +1738,9 @@ export function useSessionTab(initialOrder: number = 0) {
         permissionMode,
         skipPermissions,
         resumeFromSessionId,
+
+        // MCP 服务器状态
+        mcpServers,
 
         // UI 状态
         uiState,

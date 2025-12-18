@@ -64,6 +64,8 @@ data class McpSSEServerConfig(
 
 /**
  * MCP HTTP server configuration.
+ * Used for connecting to MCP servers exposed via HTTP (including SSE-based servers).
+ * Claude CLI uses "http" type to connect to MCP servers exposed via mcp{} Ktor plugin.
  */
 @Serializable
 data class McpHttpServerConfig(
@@ -242,6 +244,28 @@ data class McpMessageRequest(
     val message: JsonElement
 ) : ControlRequest
 
+@Serializable
+data class McpStatusRequest(
+    override val subtype: String = "mcp_status"
+) : ControlRequest
+
+@Serializable
+data class McpSetServersRequest(
+    override val subtype: String = "mcp_set_servers",
+    val servers: Map<String, McpStdioServerDto>
+) : ControlRequest
+
+/**
+ * MCP stdio server configuration DTO for mcp_set_servers request.
+ * This is the format expected by CLI's mcp_set_servers control command.
+ */
+@Serializable
+data class McpStdioServerDto(
+    val command: String,
+    val args: List<String> = emptyList(),
+    val env: Map<String, String> = emptyMap()
+)
+
 /**
  * Control response types.
  */
@@ -251,4 +275,24 @@ data class ControlResponse(
     val requestId: String,
     val response: JsonElement? = null,
     val error: String? = null
+)
+
+/**
+ * MCP server status info returned by mcp_status control request.
+ */
+@Serializable
+data class McpServerStatusInfo(
+    val name: String,
+    val status: String,  // "connected" | "failed" | "sdk"
+    val serverInfo: JsonElement? = null
+)
+
+/**
+ * Response from mcp_set_servers request.
+ */
+@Serializable
+data class McpSetServersResponse(
+    val added: List<String>,
+    val removed: List<String>,
+    val errors: Map<String, String>
 )

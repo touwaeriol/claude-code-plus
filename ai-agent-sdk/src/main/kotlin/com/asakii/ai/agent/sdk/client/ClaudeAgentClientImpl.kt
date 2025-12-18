@@ -228,6 +228,11 @@ class ClaudeAgentClientImpl(
 
     override fun getCurrentPermissionMode(): AiPermissionMode = currentPermissionMode
 
+    /**
+     * 获取 MCP 服务器状态
+     */
+    override suspend fun getMcpStatus() = client?.getMcpStatus() ?: emptyList()
+
     private fun checkCapability(supported: Boolean, method: String) {
         if (!supported) {
             throw UnsupportedOperationException(

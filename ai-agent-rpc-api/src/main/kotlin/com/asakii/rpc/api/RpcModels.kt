@@ -654,3 +654,19 @@ data class RpcTruncateHistoryResult(
     val remainingLines: Int,    // 截断后剩余的行数
     val error: String? = null   // 错误信息（如果失败）
 )
+
+/**
+ * MCP 服务器状态信息
+ */
+data class RpcMcpServerStatus(
+    val name: String,
+    val status: String,  // "connected" | "failed" | "sdk"
+    val serverInfo: Map<String, Any>? = null  // 服务器详细信息（包含工具列表等）
+)
+
+/**
+ * MCP 状态查询结果
+ */
+data class RpcMcpStatusResult(
+    val servers: List<RpcMcpServerStatus>
+)

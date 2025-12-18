@@ -87,13 +87,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--theme-secondary-foreground);
-  opacity: 0.3;
+  background: color-mix(in srgb, var(--theme-secondary-foreground) 40%, transparent);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  opacity: 0.5;
+  background: color-mix(in srgb, var(--theme-secondary-foreground) 60%, transparent);
 }
 
 /* 选中文本样式 */

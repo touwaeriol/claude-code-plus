@@ -194,8 +194,6 @@ class HttpApiServer(
 
             // 路由配置
             routing {
-                val serverPort = configuredPort
-
                 // RSocket RPC 路由 (Protobuf over RSocket)
                 // 重要：每个连接创建完全独立的 handler，绝不共享任何状态！
                 rSocket("rsocket") {
@@ -493,7 +491,7 @@ class HttpApiServer(
                             val rpcService = com.asakii.server.rpc.AiAgentRpcServiceImpl(
                                 ideTools = ideTools,
                                 clientCaller = null,
-                                jetBrainsMcpServerProvider = jetBrainsMcpServerProvider
+                                
                             )
                             val result = rpcService.getHistorySessions(maxResults, offset)
 
@@ -549,7 +547,7 @@ class HttpApiServer(
                             val rpcService = AiAgentRpcServiceImpl(
                                 ideTools = ideTools,
                                 clientCaller = null,
-                                jetBrainsMcpServerProvider = jetBrainsMcpServerProvider
+                                
                             )
                             val meta = rpcService.getHistoryMetadata(sessionId, projectPath).toProto()
 
@@ -574,7 +572,7 @@ class HttpApiServer(
                             val rpcService = AiAgentRpcServiceImpl(
                                 ideTools = ideTools,
                                 clientCaller = null,
-                                jetBrainsMcpServerProvider = jetBrainsMcpServerProvider
+                                
                             )
                             val result = rpcService.loadHistory(
                                 req.sessionId,
@@ -779,7 +777,7 @@ class HttpApiServer(
 
                 // 健康检查
                 get("/health") {
-                    call.respondText("""{"status":"ok","port":$serverPort}""", ContentType.Application.Json)
+                    call.respondText("""{"status":"ok","port":$configuredPort}""", ContentType.Application.Json)
                 }
 
                 // 动态处理 index.html，根据 URL 参数注入环境变量（仅在生产模式下）
@@ -833,11 +831,11 @@ class HttpApiServer(
                             </head>
                             <body>
                                 <h1>🔧 Development Mode</h1>
-                                <p>Backend server is running on port $serverPort</p>
+                                <p>Backend server is running on port $configuredPort</p>
                                 <p>Please start the frontend development server separately:</p>
                                 <pre>cd frontend && npm run dev</pre>
-                                <p>WebSocket endpoint: ws://localhost:$serverPort/ws</p>
-                                <p>API endpoint: http://localhost:$serverPort/api/</p>
+                                <p>RSocket endpoint: ws://localhost:$configuredPort/rsocket</p>
+                                <p>API endpoint: http://localhost:$configuredPort/api/</p>
                             </body>
                             </html>
                             """.trimIndent(),

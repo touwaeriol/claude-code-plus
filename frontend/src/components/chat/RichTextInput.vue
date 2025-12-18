@@ -11,11 +11,11 @@
     />
     <!-- 浮动删除按钮 -->
     <button
-      v-if="hoveredImage"
+      v-if="hoveredImage || hoveredFileRef"
       ref="deleteBtnRef"
       class="floating-delete-btn"
       :style="deleteBtnStyle"
-      @click="deleteHoveredImage"
+      @click="deleteHoveredElement"
     >
       ×
     </button>
@@ -117,6 +117,7 @@ const isFocused = ref(false)
 
 // 浮动删除按钮状态
 const hoveredImage = ref<HTMLImageElement | null>(null)
+const hoveredFileRef = ref<HTMLElement | null>(null)
 const deleteBtnPosition = ref({ top: 0, left: 0 })
 
 const deleteBtnStyle = computed(() => ({
@@ -124,11 +125,16 @@ const deleteBtnStyle = computed(() => ({
   left: `${deleteBtnPosition.value.left}px`,
 }))
 
-// 处理图片 hover
+// 处理图片/文件引用 hover
 function handleImageHover(event: MouseEvent) {
   const target = event.target as HTMLElement
   if (target.tagName === 'IMG' && target.classList.contains('inline-image')) {
     hoveredImage.value = target as HTMLImageElement
+    hoveredFileRef.value = null
+    updateDeleteBtnPosition()
+  } else if (target.classList.contains('file-reference')) {
+    hoveredFileRef.value = target
+    hoveredImage.value = null
     updateDeleteBtnPosition()
   }
 }
@@ -140,12 +146,14 @@ function handleImageLeave(event: MouseEvent) {
     return
   }
   hoveredImage.value = null
+  hoveredFileRef.value = null
 }
 
 function updateDeleteBtnPosition() {
-  if (!hoveredImage.value) return
-  const rect = hoveredImage.value.getBoundingClientRect()
-  const wrapperRect = hoveredImage.value.closest('.rich-text-input-wrapper')?.getBoundingClientRect()
+  const target = hoveredImage.value || hoveredFileRef.value
+  if (!target) return
+  const rect = target.getBoundingClientRect()
+  const wrapperRect = target.closest('.rich-text-input-wrapper')?.getBoundingClientRect()
   if (wrapperRect) {
     deleteBtnPosition.value = {
       top: rect.top - wrapperRect.top - 4,
@@ -154,21 +162,43 @@ function updateDeleteBtnPosition() {
   }
 }
 
-function deleteHoveredImage() {
-  if (!hoveredImage.value || !editor.value) return
-  const src = hoveredImage.value.getAttribute('src')
-  if (src) {
-    let deleted = false
-    editor.value.state.doc.descendants((node, pos) => {
-      if (!deleted && node.type.name === 'image' && node.attrs.src === src) {
-        editor.value?.chain().focus().deleteRange({ from: pos, to: pos + node.nodeSize }).run()
-        deleted = true
-        return false
-      }
-      return true
-    })
+function deleteHoveredElement() {
+  if (!editor.value) return
+
+  // 删除图片
+  if (hoveredImage.value) {
+    const src = hoveredImage.value.getAttribute('src')
+    if (src) {
+      let deleted = false
+      editor.value.state.doc.descendants((node, pos) => {
+        if (!deleted && node.type.name === 'image' && node.attrs.src === src) {
+          editor.value?.chain().focus().deleteRange({ from: pos, to: pos + node.nodeSize }).run()
+          deleted = true
+          return false
+        }
+        return true
+      })
+    }
+    hoveredImage.value = null
+    return
   }
-  hoveredImage.value = null
+
+  // 删除文件引用
+  if (hoveredFileRef.value) {
+    const path = hoveredFileRef.value.getAttribute('data-file-ref')
+    if (path) {
+      let deleted = false
+      editor.value.state.doc.descendants((node, pos) => {
+        if (!deleted && node.type.name === 'fileReference' && node.attrs.path === path) {
+          editor.value?.chain().focus().deleteRange({ from: pos, to: pos + node.nodeSize }).run()
+          deleted = true
+          return false
+        }
+        return true
+      })
+    }
+    hoveredFileRef.value = null
+  }
 }
 
 // Tiptap editor

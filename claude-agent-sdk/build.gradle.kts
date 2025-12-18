@@ -49,7 +49,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-rpc-krpc-ktor-client:0.10.1") // kRPC over Ktor client
 
     // 官方 MCP Kotlin SDK
-    implementation("io.modelcontextprotocol:kotlin-sdk:0.8.0")
+    implementation("io.modelcontextprotocol:kotlin-sdk:0.8.1")
 
     // Hutool 缓存和加密工具
     implementation("cn.hutool:hutool-cache:5.8.25")

@@ -1,5 +1,5 @@
 特别提醒：请使用简体中文进行交流
-特别提醒：git commit 不使用中文，而是使用英文
+特别提醒：git commit、changelog 不使用中文，而是使用英文
 
 # Claude Code Plus - 架构说明
 
@@ -320,11 +320,6 @@ override fun openFile(request: FrontendRequest): FrontendResponse {
 使用mcp 访问 5174 即可测试相关功能
 如果 相关端口被占用，停止占用端口的进程，而不是使用新端口
 
-可以在项目根路径的 .log 下查看日志：
-[sdk.log](.log/sdk.log) 是后端使用sdk的日志
-[server.log](.log/server.log) 是整个后端发的日志
-[server.log](.log/server.log) 是后端写入 websocket 的日志
-前端日志通过 mcp 操作浏览器，查看控制台日志来
 
 ---
 

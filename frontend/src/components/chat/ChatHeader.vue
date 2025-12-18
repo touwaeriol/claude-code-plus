@@ -34,22 +34,66 @@
           <path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
       </button>
+      <button
+        class="icon-btn server-btn"
+        type="button"
+        title="MCP Servers"
+        @click="showMcpStatus = true"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="2" width="20" height="8" rx="2"/>
+          <rect x="2" y="14" width="20" height="8" rx="2"/>
+          <circle cx="6" cy="6" r="1" fill="currentColor"/>
+          <circle cx="6" cy="18" r="1" fill="currentColor"/>
+        </svg>
+      </button>
       <ThemeSwitcher />
       <LanguageSwitcher />
     </div>
+
+    <!-- MCP 状态弹窗 -->
+    <McpStatusPopup
+      :visible="showMcpStatus"
+      :servers="currentMcpServers"
+      :is-connected="isCurrentConnected"
+      @close="handleCloseMcpPopup"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useToastStore } from '@/stores/toastStore'
 import { ConnectionStatus } from '@/types/display'
 import SessionTabs, { type SessionTabInfo } from './SessionTabs.vue'
 import ThemeSwitcher from '@/components/toolbar/ThemeSwitcher.vue'
 import LanguageSwitcher from '@/components/toolbar/LanguageSwitcher.vue'
+import McpStatusPopup from '@/components/toolbar/McpStatusPopup.vue'
 
-// No props needed
+// MCP 状态弹窗
+const showMcpStatus = ref(false)
+const fetchedMcpServers = ref<Array<{ name: string; status: string }> | null>(null)
+
+// 打开弹窗时调用 getMcpStatus API
+watch(showMcpStatus, async (visible) => {
+  if (visible && sessionStore.currentTab?.session?.isConnected) {
+    // 立即清空，避免显示旧数据
+    fetchedMcpServers.value = []
+    try {
+      const result = await sessionStore.currentTab.session.getMcpStatus()
+      fetchedMcpServers.value = result.servers
+      console.log('🔌 getMcpStatus result:', result)
+    } catch (err) {
+      console.error('[ChatHeader] getMcpStatus failed:', err)
+    }
+  }
+})
+
+function handleCloseMcpPopup() {
+  showMcpStatus.value = false
+  fetchedMcpServers.value = null
+}
 
 const emit = defineEmits<{
   (e: 'toggle-history'): void
@@ -60,6 +104,16 @@ const toastStore = useToastStore()
 
 const activeTabs = computed(() => sessionStore.activeTabs)
 const currentTabId = computed(() => sessionStore.currentTabId)
+
+// 当前 Tab 的 MCP 服务器状态（优先使用 API 获取的数据）
+const currentMcpServers = computed(() => {
+  // null 表示还没获取过，空数组表示获取到了但没有服务器
+  if (fetchedMcpServers.value !== null) {
+    return fetchedMcpServers.value
+  }
+  return sessionStore.currentTab?.mcpServers.value ?? []
+})
+const isCurrentConnected = computed(() => sessionStore.currentTab?.connectionState.status === ConnectionStatus.CONNECTED)
 
 // 转换为 SessionTabInfo 格式
 const sessionTabList = computed<SessionTabInfo[]>(() => {
