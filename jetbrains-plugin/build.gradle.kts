@@ -139,7 +139,7 @@ intellijPlatform {
                 create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1.5")
                 create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
                 // 2025.3+ 使用统一的 IntellijIdea 类型
-                create(IntelliJPlatformType.IntellijIdea, "2025.3")
+                create(IntelliJPlatformType.IntellijIdea, "2025.3.1")
             }
         }
     }
