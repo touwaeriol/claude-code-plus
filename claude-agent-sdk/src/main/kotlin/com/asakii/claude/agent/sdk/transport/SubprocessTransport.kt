@@ -4,6 +4,7 @@ import cn.hutool.cache.CacheUtil
 import cn.hutool.cache.impl.TimedCache
 import cn.hutool.crypto.digest.DigestUtil
 import com.asakii.claude.agent.sdk.exceptions.*
+import com.asakii.claude.agent.sdk.mcp.McpServer
 import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
 import com.asakii.claude.agent.sdk.types.McpHttpServerConfig
 import com.asakii.claude.agent.sdk.types.McpServerConfig
@@ -531,9 +532,15 @@ class SubprocessTransport(
                         serversForCli[name] = serverConfig
                         logger.info("📦 添加 MCP 服务器配置: $name -> type=${config.type}")
                     }
+                    is McpServer -> {
+                        // SDK MCP 服务器：使用 type="sdk" 告诉 CLI 通过控制协议处理
+                        // CLI 会发送 mcp_message 控制请求，由 ControlProtocol.handleMcpMessage 处理
+                        serversForCli[name] = mapOf("type" to "sdk", "name" to name)
+                        logger.info("📦 添加 SDK MCP 服务器: $name -> type=sdk (${config::class.simpleName})")
+                    }
                     else -> {
                         // 不支持的类型，跳过并警告
-                        logger.warn("⚠️ 不支持的 MCP 服务器配置类型: $name -> ${config::class.simpleName}，请使用 Map 或 McpServerConfig")
+                        logger.warn("⚠️ 不支持的 MCP 服务器配置类型: $name -> ${config::class.simpleName}，请使用 Map、McpServerConfig 或 McpServer")
                     }
                 }
             }
