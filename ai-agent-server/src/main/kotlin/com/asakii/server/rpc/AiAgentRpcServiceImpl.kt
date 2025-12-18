@@ -2,7 +2,7 @@
 
 import com.asakii.ai.agent.sdk.AiAgentProvider
 import com.asakii.ai.agent.sdk.capabilities.AgentCapabilities
-import com.asakii.ai.agent.sdk.capabilities.AiPermissionMode
+import com.asakii.ai.agent.sdk.capabilities.AiPermissionMode as SdkPermissionMode
 import com.asakii.ai.agent.sdk.client.AgentMessageInput
 import com.asakii.ai.agent.sdk.client.UnifiedAgentClient
 import com.asakii.ai.agent.sdk.client.UnifiedAgentClientFactory
@@ -14,6 +14,7 @@ import com.asakii.claude.agent.sdk.exceptions.ClientNotConnectedException
 import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
 import com.asakii.server.rsocket.RSocketErrorCodes
 import io.rsocket.kotlin.RSocketError
+import com.asakii.claude.agent.sdk.types.PermissionMode
 import com.asakii.claude.agent.sdk.types.PermissionResultAllow
 import com.asakii.claude.agent.sdk.types.PermissionResultDeny
 import com.asakii.claude.agent.sdk.types.PermissionUpdate as SdkPermissionUpdate
@@ -21,7 +22,6 @@ import com.asakii.claude.agent.sdk.types.PermissionUpdateDestination as SdkPermi
 import com.asakii.claude.agent.sdk.types.PermissionUpdateType as SdkPermissionUpdateType
 import com.asakii.claude.agent.sdk.types.PermissionBehavior as SdkPermissionBehavior
 import com.asakii.claude.agent.sdk.types.PermissionRuleValue as SdkPermissionRuleValue
-import com.asakii.claude.agent.sdk.types.PermissionMode as SdkPermissionMode
 import com.asakii.claude.agent.sdk.types.CanUseTool
 import com.asakii.claude.agent.sdk.types.ToolType
 import com.asakii.claude.agent.sdk.utils.ClaudeSessionScanner
@@ -37,6 +37,16 @@ import com.asakii.rpc.proto.PermissionUpdateType as ProtoPermissionUpdateType
 import com.asakii.rpc.proto.PermissionUpdateDestination as ProtoPermissionUpdateDestination
 import com.asakii.rpc.proto.PermissionMode as ProtoPermissionMode
 import com.asakii.server.config.AiAgentServiceConfig
+import com.asakii.server.mcp.PermissionResponse
+import com.asakii.server.mcp.PermissionUpdate as McpPermissionUpdate
+import com.asakii.server.mcp.PermissionUpdateDestination
+import com.asakii.server.mcp.PermissionUpdateType as McpPermissionUpdateType
+import com.asakii.server.mcp.PermissionBehavior as McpPermissionBehavior
+import com.asakii.server.mcp.PermissionMode as McpPermissionMode
+import com.asakii.server.mcp.PermissionRuleValue as McpPermissionRuleValue
+import com.asakii.server.mcp.UserInteractionMcpServer
+import com.asakii.server.mcp.JetBrainsMcpServerProvider
+import com.asakii.server.mcp.DefaultJetBrainsMcpServerProvider
 import com.asakii.server.logging.StandaloneLogging
 import com.asakii.server.logging.asyncInfo
 import com.asakii.server.settings.ClaudeSettingsLoader
@@ -73,9 +83,9 @@ import com.asakii.server.history.HistoryJsonlLoader
 class AiAgentRpcServiceImpl(
     private val ideTools: IdeTools,
     private val clientCaller: ClientCaller? = null,
+    private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider,
     private val serviceConfigProvider: () -> AiAgentServiceConfig = { AiAgentServiceConfig() },
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    private val mcpServer: com.asakii.server.mcp.McpHttpServer? = null  // 统一的 MCP HTTP 服务器
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : AiAgentRpcService {
 
     // 使用 server.log 专用 logger（SDK 日志）
@@ -96,6 +106,60 @@ class AiAgentRpcServiceImpl(
 
     // 🔧 追踪当前 query 的完成状态，用于 interrupt 同步等待
     private var queryCompletion: CompletableDeferred<Unit>? = null
+
+    // 用户交互 MCP Server（仅包含 AskUserQuestion，权限走 canUseTool 回调）
+    private val userInteractionServer = UserInteractionMcpServer().apply {
+        clientCaller?.let { setClientCaller(it) }
+    }
+
+    /**
+     * 将 MCP 权限更新转换为 SDK 权限更新
+     */
+    private fun McpPermissionUpdate.toSdkPermissionUpdate(): SdkPermissionUpdate {
+        return SdkPermissionUpdate(
+            type = when (this.type) {
+                McpPermissionUpdateType.ADD_RULES -> SdkPermissionUpdateType.ADD_RULES
+                McpPermissionUpdateType.REPLACE_RULES -> SdkPermissionUpdateType.REPLACE_RULES
+                McpPermissionUpdateType.REMOVE_RULES -> SdkPermissionUpdateType.REMOVE_RULES
+                McpPermissionUpdateType.SET_MODE -> SdkPermissionUpdateType.SET_MODE
+                McpPermissionUpdateType.ADD_DIRECTORIES -> SdkPermissionUpdateType.ADD_DIRECTORIES
+                McpPermissionUpdateType.REMOVE_DIRECTORIES -> SdkPermissionUpdateType.REMOVE_DIRECTORIES
+            },
+            rules = this.rules?.map { rule ->
+                SdkPermissionRuleValue(
+                    toolName = rule.toolName,
+                    ruleContent = rule.ruleContent
+                )
+            },
+            behavior = this.behavior?.let { b ->
+                when (b) {
+                    McpPermissionBehavior.ALLOW -> SdkPermissionBehavior.ALLOW
+                    McpPermissionBehavior.DENY -> SdkPermissionBehavior.DENY
+                    McpPermissionBehavior.ASK -> SdkPermissionBehavior.ASK
+                }
+            },
+            mode = this.mode?.let { m ->
+                when (m) {
+                    McpPermissionMode.DEFAULT -> PermissionMode.DEFAULT
+                    McpPermissionMode.ACCEPT_EDITS -> PermissionMode.ACCEPT_EDITS
+                    McpPermissionMode.PLAN -> PermissionMode.PLAN
+                    McpPermissionMode.BYPASS_PERMISSIONS -> PermissionMode.BYPASS_PERMISSIONS
+                    McpPermissionMode.DONT_ASK -> PermissionMode.DONT_ASK
+                }
+            },
+            directories = this.directories,
+            destination = this.destination?.let { d ->
+                when (d) {
+                    PermissionUpdateDestination.USER_SETTINGS -> SdkPermissionUpdateDestination.USER_SETTINGS
+                    PermissionUpdateDestination.PROJECT_SETTINGS -> SdkPermissionUpdateDestination.PROJECT_SETTINGS
+                    PermissionUpdateDestination.LOCAL_SETTINGS -> SdkPermissionUpdateDestination.LOCAL_SETTINGS
+                    PermissionUpdateDestination.SESSION -> SdkPermissionUpdateDestination.SESSION
+                }
+            }
+        )
+    }
+    
+    // 鍚屾鎺у埗鐢卞墠绔礋璐ｏ紝鍚庣鐩存帴杞彂缁?SDK
 
     // 连接超时时间（毫秒）- Claude CLI 启动可能需要一些时间
     private val connectTimeoutMs = 30_000L
@@ -460,30 +524,6 @@ class AiAgentRpcServiceImpl(
         }
     }
 
-    override suspend fun getMcpStatus(): RpcMcpStatusResult {
-        sdkLog.info("🔌 [SDK] 获取 MCP 服务器状态")
-        return try {
-            val activeClient = client ?: return RpcMcpStatusResult(servers = emptyList())
-            val mcpStatusList = activeClient.getMcpStatus()
-            sdkLog.info("🔌 [SDK] 从 SDK 收到 MCP 状态: ${mcpStatusList.size} 个服务器")
-            mcpStatusList.forEachIndexed { idx, info ->
-                sdkLog.info("🔌 [SDK]   [$idx] name=${info.name}, status=${info.status}, serverInfo=${info.serverInfo}")
-            }
-            val servers = mcpStatusList.map { info ->
-                RpcMcpServerStatus(
-                    name = info.name,
-                    status = info.status,
-                    serverInfo = info.serverInfo?.toString()?.let { mapOf("raw" to it) }
-                )
-            }
-            sdkLog.info("✅ [SDK] MCP 状态获取成功: ${servers.size} 个服务器")
-            RpcMcpStatusResult(servers = servers)
-        } catch (e: Exception) {
-            sdkLog.error("❌ [SDK] 获取 MCP 状态失败: ${e.message}", e)
-            RpcMcpStatusResult(servers = emptyList())
-        }
-    }
-
     private suspend fun disconnectInternal() {
         try {
             client?.disconnect()
@@ -535,7 +575,7 @@ class AiAgentRpcServiceImpl(
 
                 val permissionMode = options.permissionMode?.toSdkPermissionMode()
             ?: defaults.permissionMode?.let { it.toPermissionModeOrNull() }
-            ?: SdkPermissionMode.DEFAULT
+            ?: PermissionMode.DEFAULT
 
         val metadataThinkingEnabled = metadata["thinkingEnabled"]?.toBooleanStrictOrNull()
         val thinkingEnabled = options.thinkingEnabled ?: metadataThinkingEnabled ?: true
@@ -548,26 +588,25 @@ class AiAgentRpcServiceImpl(
             "output-format" to "stream-json"
         )
 
-        // 注册 MCP Server（使用统一的 HTTP 端口，两个端点）
+        // 注册 MCP Server（根据配置决定是否启用）
         val mcpServers = mutableMapOf<String, Any>()
 
-        // 添加内置 MCP Server（一个端口，两个端点）
-        if (mcpServer != null) {
-            // UserInteraction MCP
-            mcpServers["user_interaction"] = mapOf(
-                "type" to "http",
-                "url" to mcpServer.getUserInteractionUrl()
-            )
-            sdkLog.info("✅ [buildClaudeOverrides] 已添加 UserInteraction MCP (${mcpServer.getUserInteractionUrl()})")
+        // 添加用户交互 MCP Server（如果启用）
+        if (defaults.enableUserInteractionMcp) {
+            mcpServers["user_interaction"] = userInteractionServer
+            sdkLog.info("✅ [buildClaudeOverrides] 已添加 User Interaction MCP Server")
+        } else {
+            sdkLog.info("⏭️ [buildClaudeOverrides] User Interaction MCP Server 已禁用")
+        }
 
-            // JetBrains MCP（如果有）
-            if (mcpServer.hasJetBrains()) {
-                mcpServers["jetbrains"] = mapOf(
-                    "type" to "http",
-                    "url" to mcpServer.getJetBrainsUrl()
-                )
-                sdkLog.info("✅ [buildClaudeOverrides] 已添加 JetBrains MCP (${mcpServer.getJetBrainsUrl()})")
+        // 添加 JetBrains MCP Server（如果启用且可用）
+        if (defaults.enableJetBrainsMcp) {
+            jetBrainsMcpServerProvider.getServer()?.let { jetbrainsMcp ->
+                mcpServers["jetbrains"] = jetbrainsMcp
+                sdkLog.info("✅ [buildClaudeOverrides] 已添加 JetBrains MCP Server")
             }
+        } else {
+            sdkLog.info("⏭️ [buildClaudeOverrides] JetBrains MCP Server 已禁用")
         }
 
         // 添加从配置文件加载的 MCP 服务器
@@ -645,24 +684,29 @@ class AiAgentRpcServiceImpl(
                     // 调用前端并解析 Protobuf 响应
                     val protoResponse = caller.callRequestPermission(protoRequest)
 
-                    if (protoResponse.approved) {
+                    // 转换 Protobuf 响应为本地类型
+                    val response = PermissionResponse(
+                        approved = protoResponse.approved,
+                        permissionUpdates = protoResponse.permissionUpdatesList.map { it.toMcpPermissionUpdate() },
+                        denyReason = if (protoResponse.hasDenyReason()) protoResponse.denyReason else null
+                    )
+                    if (response.approved) {
                         // 转换权限更新为 SDK 格式
-                        val sdkPermissionUpdates = protoResponse.permissionUpdatesList.map { update ->
-                            val sdkUpdate = update.toSdkPermissionUpdateFromProto()
-                            sdkLog.info("📝 [canUseTool] 权限更新: type=${sdkUpdate.type}, destination=${sdkUpdate.destination}")
+                        val sdkPermissionUpdates = response.permissionUpdates?.map { update ->
+                            sdkLog.info("📝 [canUseTool] 权限更新: type=${update.type}, destination=${update.destination}")
                             // 非会话级权限更新需要持久化（TODO: 实现持久化服务）
-                            if (sdkUpdate.destination != SdkPermissionUpdateDestination.SESSION) {
-                                sdkLog.info("⚠️ [canUseTool] 非会话级权限更新暂未实现持久化: ${sdkUpdate.destination}")
+                            if (update.destination != PermissionUpdateDestination.SESSION) {
+                                sdkLog.info("⚠️ [canUseTool] 非会话级权限更新暂未实现持久化: ${update.destination}")
                             }
-                            sdkUpdate
+                            update.toSdkPermissionUpdate()
                         }
-                        sdkLog.info("✅ [canUseTool] 用户已授权: toolName=$toolName, toolUseId=$toolUseId, permissionUpdates=${sdkPermissionUpdates.size}")
+                        sdkLog.info("✅ [canUseTool] 用户已授权: toolName=$toolName, toolUseId=$toolUseId, permissionUpdates=${sdkPermissionUpdates?.size ?: 0}")
                         PermissionResultAllow(
                             updatedInput = input,
-                            updatedPermissions = sdkPermissionUpdates.takeIf { it.isNotEmpty() }
+                            updatedPermissions = sdkPermissionUpdates
                         )
                     } else {
-                        val reason = if (protoResponse.hasDenyReason()) protoResponse.denyReason else "用户拒绝授权"
+                        val reason = response.denyReason ?: "用户拒绝授权"
                         sdkLog.info("❌ [canUseTool] 用户拒绝授权: toolName=$toolName, toolUseId=$toolUseId, reason=$reason")
                         PermissionResultDeny(message = reason)
                     }
@@ -718,33 +762,16 @@ class AiAgentRpcServiceImpl(
      * 遍历所有注册的 MCP 服务器，调用其 getSystemPromptAppendix() 方法，
      * 将所有非空的追加内容合并为一个字符串。
      *
-     * @param mcpServers MCP 服务器映射（名称 -> 服务器实例或配置）
+     * @param mcpServers MCP 服务器映射（名称 -> 服务器实例）
      * @return 合并后的系统提示词追加内容
      */
     private fun buildMcpSystemPromptAppendix(mcpServers: Map<String, Any>): String {
-        val appendices = mutableListOf<String>()
-
-        // 为内置 MCP 服务器加载提示词
-        if (mcpServers.containsKey("user_interaction")) {
-            com.asakii.server.mcp.McpHttpServer.getUserInteractionInstructions()
-                .takeIf { it.isNotBlank() }
-                ?.let { appendices.add(it) }
-        }
-        if (mcpServers.containsKey("jetbrains")) {
-            com.asakii.server.mcp.McpHttpServer.getJetBrainsInstructions()
-                .takeIf { it.isNotBlank() }
-                ?.let { appendices.add(it) }
-        }
-
-        // 处理 McpServer 实例（如果有）
-        mcpServers.values
+        return mcpServers.values
             .filterIsInstance<com.asakii.claude.agent.sdk.mcp.McpServer>()
             .mapNotNull { server ->
                 server.getSystemPromptAppendix()?.takeIf { it.isNotBlank() }
             }
-            .forEach { appendices.add(it) }
-
-        return appendices.joinToString("\n\n")
+            .joinToString("\n\n")
     }
 
     /**
@@ -753,29 +780,11 @@ class AiAgentRpcServiceImpl(
      * 遍历所有注册的 MCP 服务器，调用其 getAllowedTools() 方法，
      * 将工具名称转换为完整格式（mcp__{serverName}__{toolName}）后合并。
      *
-     * @param mcpServers MCP 服务器映射（名称 -> 服务器实例或配置）
+     * @param mcpServers MCP 服务器映射（名称 -> 服务器实例）
      * @return 需要自动允许的工具列表（完整格式）
      */
     private fun buildMcpAllowedTools(mcpServers: Map<String, Any>): List<String> {
-        val allowedTools = mutableListOf<String>()
-
-        // 为内置 MCP 服务器添加允许的工具
-        if (mcpServers.containsKey("user_interaction")) {
-            allowedTools.add("mcp__user_interaction__AskUserQuestion")
-        }
-        if (mcpServers.containsKey("jetbrains")) {
-            allowedTools.addAll(listOf(
-                "mcp__jetbrains__DirectoryTree",
-                "mcp__jetbrains__FileProblems",
-                "mcp__jetbrains__FileIndex",
-                "mcp__jetbrains__CodeSearch",
-                "mcp__jetbrains__FindUsages",
-                "mcp__jetbrains__Rename"
-            ))
-        }
-
-        // 处理 McpServer 实例（如果有）
-        mcpServers.entries
+        return mcpServers.entries
             .mapNotNull { (serverName, server) ->
                 (server as? com.asakii.claude.agent.sdk.mcp.McpServer)?.let { mcpServer ->
                     mcpServer.getAllowedTools().map { toolName ->
@@ -784,9 +793,6 @@ class AiAgentRpcServiceImpl(
                 }
             }
             .flatten()
-            .forEach { allowedTools.add(it) }
-
-        return allowedTools
     }
 
     private fun buildCodexOverrides(
@@ -1114,12 +1120,12 @@ class AiAgentRpcServiceImpl(
         ContentStatus.FAILED -> RpcContentStatus.FAILED
     }
 
-    private fun RpcPermissionMode.toSdkPermissionMode(): SdkPermissionMode = when (this) {
-        RpcPermissionMode.DEFAULT -> SdkPermissionMode.DEFAULT
-        RpcPermissionMode.BYPASS_PERMISSIONS -> SdkPermissionMode.BYPASS_PERMISSIONS
-        RpcPermissionMode.ACCEPT_EDITS -> SdkPermissionMode.ACCEPT_EDITS
-        RpcPermissionMode.PLAN -> SdkPermissionMode.PLAN
-        RpcPermissionMode.DONT_ASK -> SdkPermissionMode.DONT_ASK
+    private fun RpcPermissionMode.toSdkPermissionMode(): PermissionMode = when (this) {
+        RpcPermissionMode.DEFAULT -> PermissionMode.DEFAULT
+        RpcPermissionMode.BYPASS_PERMISSIONS -> PermissionMode.BYPASS_PERMISSIONS
+        RpcPermissionMode.ACCEPT_EDITS -> PermissionMode.ACCEPT_EDITS
+        RpcPermissionMode.PLAN -> PermissionMode.PLAN
+        RpcPermissionMode.DONT_ASK -> PermissionMode.DONT_ASK
     }
 
     private fun RpcSandboxMode.toSdkSandboxMode(): SandboxMode = when (this) {
@@ -1139,12 +1145,12 @@ class AiAgentRpcServiceImpl(
         AiAgentProvider.CODEX -> RpcProvider.CODEX
     }
 
-    private fun String.toPermissionModeOrNull(): SdkPermissionMode? = when (this) {
-        "bypassPermissions" -> SdkPermissionMode.BYPASS_PERMISSIONS
-        "acceptEdits" -> SdkPermissionMode.ACCEPT_EDITS
-        "plan" -> SdkPermissionMode.PLAN
-        "dontAsk" -> SdkPermissionMode.DONT_ASK
-        else -> SdkPermissionMode.DEFAULT
+    private fun String.toPermissionModeOrNull(): PermissionMode? = when (this) {
+        "bypassPermissions" -> PermissionMode.BYPASS_PERMISSIONS
+        "acceptEdits" -> PermissionMode.ACCEPT_EDITS
+        "plan" -> PermissionMode.PLAN
+        "dontAsk" -> PermissionMode.DONT_ASK
+        else -> PermissionMode.DEFAULT
     }
 
     /**
@@ -1187,22 +1193,22 @@ class AiAgentRpcServiceImpl(
     /**
      * 灏?SDK PermissionMode 杞崲涓?RPC RpcPermissionMode
      */
-    private fun AiPermissionMode.toRpcPermissionMode(): RpcPermissionMode = when (this) {
-        AiPermissionMode.DEFAULT -> RpcPermissionMode.DEFAULT
-        AiPermissionMode.ACCEPT_EDITS -> RpcPermissionMode.ACCEPT_EDITS
-        AiPermissionMode.BYPASS_PERMISSIONS -> RpcPermissionMode.BYPASS_PERMISSIONS
-        AiPermissionMode.PLAN -> RpcPermissionMode.PLAN
-        AiPermissionMode.DONT_ASK -> RpcPermissionMode.DONT_ASK
+    private fun SdkPermissionMode.toRpcPermissionMode(): RpcPermissionMode = when (this) {
+        SdkPermissionMode.DEFAULT -> RpcPermissionMode.DEFAULT
+        SdkPermissionMode.ACCEPT_EDITS -> RpcPermissionMode.ACCEPT_EDITS
+        SdkPermissionMode.BYPASS_PERMISSIONS -> RpcPermissionMode.BYPASS_PERMISSIONS
+        SdkPermissionMode.PLAN -> RpcPermissionMode.PLAN
+        SdkPermissionMode.DONT_ASK -> RpcPermissionMode.DONT_ASK
     }
 
     /**
      * 灏?RPC RpcPermissionMode 杞崲涓?SDK PermissionMode锛堢敤浜?setPermissionMode锛?     */
-    private fun RpcPermissionMode.toSdkPermissionModeInternal(): AiPermissionMode = when (this) {
-        RpcPermissionMode.DEFAULT -> AiPermissionMode.DEFAULT
-        RpcPermissionMode.ACCEPT_EDITS -> AiPermissionMode.ACCEPT_EDITS
-        RpcPermissionMode.BYPASS_PERMISSIONS -> AiPermissionMode.BYPASS_PERMISSIONS
-        RpcPermissionMode.PLAN -> AiPermissionMode.PLAN
-        RpcPermissionMode.DONT_ASK -> AiPermissionMode.DONT_ASK
+    private fun RpcPermissionMode.toSdkPermissionModeInternal(): SdkPermissionMode = when (this) {
+        RpcPermissionMode.DEFAULT -> SdkPermissionMode.DEFAULT
+        RpcPermissionMode.ACCEPT_EDITS -> SdkPermissionMode.ACCEPT_EDITS
+        RpcPermissionMode.BYPASS_PERMISSIONS -> SdkPermissionMode.BYPASS_PERMISSIONS
+        RpcPermissionMode.PLAN -> SdkPermissionMode.PLAN
+        RpcPermissionMode.DONT_ASK -> SdkPermissionMode.DONT_ASK
     }
 
     // ==================== 日志格式化函数 ====================
@@ -1248,6 +1254,24 @@ class AiAgentRpcServiceImpl(
                 is ErrorContent -> "Error(${block.message})"
             }
         }
+    }
+
+    /**
+     * 获取 MCP 服务器状态
+     */
+    override suspend fun getMcpStatus(): RpcMcpStatusResult {
+        val currentClient = client ?: return RpcMcpStatusResult(servers = emptyList())
+
+        val statusList = currentClient.getMcpStatus()
+        return RpcMcpStatusResult(
+            servers = statusList.map { info ->
+                RpcMcpServerStatus(
+                    name = info.name,
+                    status = info.status,
+                    serverInfo = info.serverInfo
+                )
+            }
+        )
     }
 }
 
@@ -1301,45 +1325,45 @@ private fun SdkPermissionUpdate.toProtoPermissionUpdate(): ProtoPermissionUpdate
 }
 
 /**
- * 将 Protobuf PermissionUpdate 转换为 SDK PermissionUpdate
+ * 将 Protobuf PermissionUpdate 转换为 MCP PermissionUpdate
  */
-private fun ProtoPermissionUpdate.toSdkPermissionUpdateFromProto(): SdkPermissionUpdate {
-    return SdkPermissionUpdate(
+private fun ProtoPermissionUpdate.toMcpPermissionUpdate(): McpPermissionUpdate {
+    return McpPermissionUpdate(
         type = when (type) {
-            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_ADD_RULES -> SdkPermissionUpdateType.ADD_RULES
-            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_REPLACE_RULES -> SdkPermissionUpdateType.REPLACE_RULES
-            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_REMOVE_RULES -> SdkPermissionUpdateType.REMOVE_RULES
-            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_SET_MODE -> SdkPermissionUpdateType.SET_MODE
-            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_ADD_DIRECTORIES -> SdkPermissionUpdateType.ADD_DIRECTORIES
-            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_REMOVE_DIRECTORIES -> SdkPermissionUpdateType.REMOVE_DIRECTORIES
-            else -> SdkPermissionUpdateType.ADD_RULES
+            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_ADD_RULES -> McpPermissionUpdateType.ADD_RULES
+            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_REPLACE_RULES -> McpPermissionUpdateType.REPLACE_RULES
+            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_REMOVE_RULES -> McpPermissionUpdateType.REMOVE_RULES
+            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_SET_MODE -> McpPermissionUpdateType.SET_MODE
+            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_ADD_DIRECTORIES -> McpPermissionUpdateType.ADD_DIRECTORIES
+            ProtoPermissionUpdateType.PERMISSION_UPDATE_TYPE_REMOVE_DIRECTORIES -> McpPermissionUpdateType.REMOVE_DIRECTORIES
+            else -> McpPermissionUpdateType.ADD_RULES
         },
         rules = rulesList.map { rule ->
-            SdkPermissionRuleValue(
+            McpPermissionRuleValue(
                 toolName = rule.toolName,
                 ruleContent = if (rule.hasRuleContent()) rule.ruleContent else null
             )
         }.takeIf { it.isNotEmpty() },
         behavior = when (behavior) {
-            ProtoPermissionBehavior.PERMISSION_BEHAVIOR_ALLOW -> SdkPermissionBehavior.ALLOW
-            ProtoPermissionBehavior.PERMISSION_BEHAVIOR_DENY -> SdkPermissionBehavior.DENY
-            ProtoPermissionBehavior.PERMISSION_BEHAVIOR_ASK -> SdkPermissionBehavior.ASK
+            ProtoPermissionBehavior.PERMISSION_BEHAVIOR_ALLOW -> McpPermissionBehavior.ALLOW
+            ProtoPermissionBehavior.PERMISSION_BEHAVIOR_DENY -> McpPermissionBehavior.DENY
+            ProtoPermissionBehavior.PERMISSION_BEHAVIOR_ASK -> McpPermissionBehavior.ASK
             else -> null
         },
         mode = when (mode) {
-            ProtoPermissionMode.PERMISSION_MODE_DEFAULT -> com.asakii.claude.agent.sdk.types.PermissionMode.DEFAULT
-            ProtoPermissionMode.PERMISSION_MODE_ACCEPT_EDITS -> com.asakii.claude.agent.sdk.types.PermissionMode.ACCEPT_EDITS
-            ProtoPermissionMode.PERMISSION_MODE_PLAN -> com.asakii.claude.agent.sdk.types.PermissionMode.PLAN
-            ProtoPermissionMode.PERMISSION_MODE_BYPASS_PERMISSIONS -> com.asakii.claude.agent.sdk.types.PermissionMode.BYPASS_PERMISSIONS
-            ProtoPermissionMode.PERMISSION_MODE_DONT_ASK -> com.asakii.claude.agent.sdk.types.PermissionMode.DONT_ASK
+            ProtoPermissionMode.PERMISSION_MODE_DEFAULT -> McpPermissionMode.DEFAULT
+            ProtoPermissionMode.PERMISSION_MODE_ACCEPT_EDITS -> McpPermissionMode.ACCEPT_EDITS
+            ProtoPermissionMode.PERMISSION_MODE_PLAN -> McpPermissionMode.PLAN
+            ProtoPermissionMode.PERMISSION_MODE_BYPASS_PERMISSIONS -> McpPermissionMode.BYPASS_PERMISSIONS
+            ProtoPermissionMode.PERMISSION_MODE_DONT_ASK -> McpPermissionMode.DONT_ASK
             else -> null
         },
         directories = directoriesList.takeIf { it.isNotEmpty() },
         destination = when (destination) {
-            ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_USER_SETTINGS -> SdkPermissionUpdateDestination.USER_SETTINGS
-            ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_PROJECT_SETTINGS -> SdkPermissionUpdateDestination.PROJECT_SETTINGS
-            ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_LOCAL_SETTINGS -> SdkPermissionUpdateDestination.LOCAL_SETTINGS
-            ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_SESSION -> SdkPermissionUpdateDestination.SESSION
+            ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_USER_SETTINGS -> PermissionUpdateDestination.USER_SETTINGS
+            ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_PROJECT_SETTINGS -> PermissionUpdateDestination.PROJECT_SETTINGS
+            ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_LOCAL_SETTINGS -> PermissionUpdateDestination.LOCAL_SETTINGS
+            ProtoPermissionUpdateDestination.PERMISSION_UPDATE_DESTINATION_SESSION -> PermissionUpdateDestination.SESSION
             else -> null
         }
     )

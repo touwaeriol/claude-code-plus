@@ -658,10 +658,11 @@ data class RpcTruncateHistoryResult(
 /**
  * MCP 服务器状态信息
  */
+@Serializable
 data class RpcMcpServerStatus(
     val name: String,
     val status: String,  // "connected" | "failed" | "sdk"
-    val serverInfo: Map<String, Any>? = null  // 服务器详细信息（包含工具列表等）
+    val serverInfo: JsonElement? = null  // 服务器详细信息（包含工具列表等）
 )
 
 /**
