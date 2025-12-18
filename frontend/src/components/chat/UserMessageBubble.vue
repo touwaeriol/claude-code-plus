@@ -40,9 +40,13 @@
 
         <!-- 消息气泡 -->
         <div class="user-message-bubble">
-          <!-- 单一气泡容器 -->
-          <div class="bubble-content" :class="{ collapsed: isCollapsed && isLongMessage }">
-            <!-- 上下文标签区域（当前打开文件 + 文件引用） -->
+          <!-- 气泡容器 - 长消息时可点击展开 -->
+          <div
+            class="bubble-content"
+            :class="{ clickable: isLongMessage }"
+            @click="handleBubbleClick"
+          >
+            <!-- 上下文标签区域（当前打开文件 + 文件引用）- 始终显示 -->
             <div v-if="hasCurrentOpenFile || contextFileRefs.length > 0" class="context-tags">
               <!-- 当前打开文件标记 -->
               <span
@@ -66,46 +70,52 @@
                 <span class="tag-file-name">{{ getFileRefName(fileRef) }}</span>
               </span>
             </div>
-            <!-- 上下文图片（在文字上方） -->
-            <div v-if="contextImagesAsBlocks.length > 0" class="context-images">
-              <img
-                v-for="(image, index) in contextImagesAsBlocks"
-                :key="`ctx-${index}`"
-                :src="getImageSrc(image)"
-                :alt="`Context image ${index + 1}`"
-                class="context-thumb"
-                @click="openImagePreview(image)"
-              />
+
+            <!-- 展开时：显示完整内容 -->
+            <template v-if="!isCollapsed || !isLongMessage">
+              <!-- 上下文图片（在文字上方） -->
+              <div v-if="contextImagesAsBlocks.length > 0" class="context-images">
+                <img
+                  v-for="(image, index) in contextImagesAsBlocks"
+                  :key="`ctx-${index}`"
+                  :src="getImageSrc(image)"
+                  :alt="`Context image ${index + 1}`"
+                  class="context-thumb"
+                  @click.stop="openImagePreview(image)"
+                />
+              </div>
+
+              <!-- 文本内容（支持链接渲染） -->
+              <div
+                v-if="messageText"
+                class="message-text"
+                @click="handleMessageClick"
+                v-html="renderedText"
+              ></div>
+
+              <!-- 内嵌图片（用户输入的图片） -->
+              <div v-if="imageBlocks.length > 0" class="inline-images">
+                <img
+                  v-for="(image, index) in imageBlocks"
+                  :key="`img-${index}`"
+                  :src="getImageSrc(image)"
+                  :alt="`Image ${index + 1}`"
+                  class="inline-thumb"
+                  @click.stop="openImagePreview(image)"
+                />
+              </div>
+            </template>
+
+            <!-- 折叠时：显示预览文本 -->
+            <template v-else>
+              <span class="preview-text">{{ previewText }}</span>
+            </template>
+
+            <!-- 折叠/展开指示器 - 长消息时在底部显示 -->
+            <div v-if="isLongMessage" class="expand-indicator">
+              <span class="expand-hint">{{ isCollapsed ? t('common.expand') : t('common.collapse') }}</span>
+              <span class="expand-arrow">{{ isCollapsed ? '▾' : '▴' }}</span>
             </div>
-
-            <!-- 文本内容（支持链接渲染） -->
-            <div
-              v-if="messageText"
-              class="message-text"
-              @click="handleMessageClick"
-              v-html="renderedText"
-            ></div>
-
-            <!-- 内嵌图片（用户输入的图片） -->
-            <div v-if="imageBlocks.length > 0" class="inline-images">
-              <img
-                v-for="(image, index) in imageBlocks"
-                :key="`img-${index}`"
-                :src="getImageSrc(image)"
-                :alt="`Image ${index + 1}`"
-                class="inline-thumb"
-                @click="openImagePreview(image)"
-              />
-            </div>
-
-            <!-- 折叠/展开按钮 - 放在内容底部 -->
-            <button
-              v-if="isLongMessage"
-              class="toggle-button"
-              @click.stop="toggleCollapse"
-            >
-              {{ isCollapsed ? t('common.expand') : t('common.collapse') }} {{ isCollapsed ? '▾' : '▴' }}
-            </button>
           </div>
 
           <!-- 上下文大小指示器（发送时的快照） -->
@@ -377,6 +387,16 @@ const renderedText = computed(() => {
   return result.html
 })
 
+// 预览文本（折叠时显示，截取前 100 个字符）
+const previewText = computed(() => {
+  const text = messageText.value
+  if (!text) return ''
+  if (text.length > 100) {
+    return text.substring(0, 100) + '...'
+  }
+  return text
+})
+
 // 获取当前打开文件标记（优先从 props 获取，其次从消息文本解析）
 const currentOpenFile = computed((): ParsedCurrentOpenFile | undefined => {
   // 优先使用 props 中的 currentOpenFile（历史消息中解析的）
@@ -467,18 +487,32 @@ function handleOpenFileClick() {
   })
 }
 
+// 处理气泡点击（边缘区域）
+function handleBubbleClick() {
+  if (isLongMessage.value) {
+    toggleCollapse()
+  }
+}
+
 // 处理消息文本中的链接点击
 function handleMessageClick(event: MouseEvent) {
+  // 阻止冒泡到 bubble-content，避免重复触发 toggleCollapse
+  event.stopPropagation()
+
   const linkInfo = getLinkFromEvent(event)
-  if (!linkInfo) return
+  if (linkInfo) {
+    // 点击的是链接，打开链接
+    event.preventDefault()
 
-  event.preventDefault()
-
-  // 打开链接
-  handleLinkClick(linkInfo.href, linkInfo.type, (filePath) => {
-    // 文件路径：调用 IDE 打开文件
-    ideaBridge.query('ide.openFile', { filePath })
-  })
+    // 打开链接
+    handleLinkClick(linkInfo.href, linkInfo.type, (filePath) => {
+      // 文件路径：调用 IDE 打开文件
+      ideaBridge.query('ide.openFile', { filePath })
+    })
+  } else if (isLongMessage.value) {
+    // 点击的不是链接，如果是长消息则切换展开状态
+    toggleCollapse()
+  }
 }
 
 // 提取用户输入的图片内容（内嵌图片，在 content 中的图片）
@@ -651,22 +685,16 @@ function closeImagePreview() {
   transition: all 0.2s ease;
 }
 
-.bubble-content.collapsed {
-  max-height: 150px;
+/* 预览文本样式（折叠时显示） */
+.preview-text {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--theme-selection-foreground);
+  opacity: 0.9;
+  white-space: nowrap;
   overflow: hidden;
-  position: relative;
-}
-
-.bubble-content.collapsed::before {
-  content: '';
-  position: absolute;
-  bottom: 28px;  /* 按钮高度 + 一点间距 */
-  left: 0;
-  right: 0;
-  height: 40px;
-  background: linear-gradient(to bottom, transparent, var(--theme-selection-background));
-  pointer-events: none;
-  z-index: 1;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 .message-text {
@@ -753,26 +781,43 @@ function closeImagePreview() {
 }
 
 
-.toggle-button {
-  display: block;
-  width: 100%;
+/* 长消息可点击展开 */
+.bubble-content.clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bubble-content.clickable:hover {
+  background: color-mix(in srgb, var(--theme-selection-background) 90%, white 10%);
+}
+
+/* 展开/折叠指示器 */
+.expand-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   padding: 6px 10px;
   margin-top: 8px;
-  background: transparent;
-  border: none;
   border-top: 1px solid rgba(255, 255, 255, 0.15);
   font-size: 12px;
   color: var(--theme-selection-foreground);
-  opacity: 0.8;
-  cursor: pointer;
+  opacity: 0.7;
   transition: all 0.2s ease;
   position: relative;
   z-index: 2;
 }
 
-.toggle-button:hover {
+.bubble-content.clickable:hover .expand-indicator {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.08);
+}
+
+.expand-hint {
+  font-size: 11px;
+}
+
+.expand-arrow {
+  font-size: 12px;
 }
 
 /* 回放消息（isReplay=true）：靠左，无气泡，md 渲染 */

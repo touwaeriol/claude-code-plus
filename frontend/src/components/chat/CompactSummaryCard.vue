@@ -1,5 +1,7 @@
 <template>
-  <div class="compact-summary-card" :class="{ expanded: isExpanded }">
+  <!-- 外层容器使用 padding 而非 margin，避免 DynamicScroller 高度计算问题 -->
+  <div class="compact-summary-wrapper">
+    <div class="compact-summary-card" :class="{ expanded: isExpanded }">
     <!-- 头部：图标 + 标题 + 展开按钮 -->
     <div class="card-header" @click="toggleExpand">
       <div class="header-left">
@@ -28,6 +30,7 @@
         <span class="token-value">{{ formatTokens(preTokens) }}</span>
       </div>
       <span class="preview-text">{{ previewText }}</span>
+    </div>
     </div>
   </div>
 </template>
@@ -115,8 +118,12 @@ const renderedContent = computed(() => {
 </script>
 
 <style scoped>
+/* 外层容器使用 padding，DynamicScroller 能正确计算高度 */
+.compact-summary-wrapper {
+  padding: 12px 16px;
+}
+
 .compact-summary-card {
-  margin: 12px 16px;
   border-radius: 12px;
   background: linear-gradient(135deg,
     var(--theme-info-background, rgba(59, 130, 246, 0.1)) 0%,
