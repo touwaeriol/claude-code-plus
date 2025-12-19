@@ -78,9 +78,11 @@ object IdeaFileSyncHooks {
         return hookBuilder {
             // PRE_TOOL_USE: 保存 IDEA 文件到磁盘
             onPreToolUse(FileSyncTool.preMatcher) { toolCall ->
-                logger.info { "📥 [PRE] ${toolCall.toolName}: 保存 IDEA 文件到磁盘" }
-                platformService.saveAllDocuments()
-                logger.info { "✅ [PRE] ${toolCall.toolName}: 文件保存完成" }
+                val filePath = extractFilePath(toolCall)
+                if (filePath != null) {
+                    logger.info { "📥 [PRE] ${toolCall.toolName}: 保存文件到磁盘: $filePath" }
+                    platformService.saveDocument(filePath)
+                }
                 allow()
             }
 

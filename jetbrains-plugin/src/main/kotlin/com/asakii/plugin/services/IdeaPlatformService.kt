@@ -453,29 +453,45 @@ class IdeaPlatformService(private val project: Project) {
 
     /**
 
-     * 保存所有 IDEA 文档到磁盘
+     * 保存指定文件的文档到磁盘
 
      *
 
-     * 确保 IDEA 中编辑的内容写入磁盘，供外部工具（如 Claude）读取
+     * @param filePath 文件路径
+
+     * @return true 表示保存成功或文件无需保存
 
      */
 
-    fun saveAllDocuments() {
+    fun saveDocument(filePath: String): Boolean {
 
-        try {
+        return try {
 
-            ApplicationManager.getApplication().invokeAndWait {
+            val virtualFile = findVirtualFile(filePath) ?: return true // 文件不存在，无需保存
 
-                FileDocumentManager.getInstance().saveAllDocuments()
+            val document = FileDocumentManager.getInstance().getDocument(virtualFile) ?: return true
+
+
+
+            if (FileDocumentManager.getInstance().isDocumentUnsaved(document)) {
+
+                ApplicationManager.getApplication().invokeAndWait {
+
+                    FileDocumentManager.getInstance().saveDocument(document)
+
+                }
+
+                logger.info("已保存文档: $filePath")
 
             }
 
-            logger.info("已保存所有文档到磁盘")
+            true
 
         } catch (e: Exception) {
 
-            logger.warn("保存文档失败", e)
+            logger.warn("保存文档失败: $filePath", e)
+
+            false
 
         }
 
