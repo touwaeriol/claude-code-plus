@@ -68,6 +68,21 @@ Read、Write、Edit操作の詳細情報を含むClaudeのツール使用を表�
 
 ![ユーザー質問ダイアログ](docs/screenshots/user-question-dialog.png)
 
+### キーボードショートカット
+豊富なキーボードショートカットで効率的に操作。
+
+![キーボードショートカット](docs/screenshots/keyboard-shortcuts.png)
+
+### タスク進捗ビュー
+Claudeのタスク実行進捗をリアルタイムで表示。
+
+![タスク進捗ビュー](docs/screenshots/task-progress-view.png)
+
+### MCP設定
+Model Context Protocolをサポートし、Claudeの機能を拡張。
+
+![MCP設定](docs/screenshots/mcp-config.png)
+
 ## 📦 インストール
 
 ### 方法1: JetBrains Marketplace（推奨）

@@ -68,6 +68,21 @@ Claude 向用户询问问题的交互式对话框，支持模型选择和功能�
 
 ![用户问答对话框](docs/screenshots/user-question-dialog.png)
 
+### 快捷键支持
+丰富的快捷键让操作更高效。
+
+![快捷键支持](docs/screenshots/keyboard-shortcuts.png)
+
+### 任务进度视图
+实时查看 Claude 的任务执行进度。
+
+![任务进度视图](docs/screenshots/task-progress-view.png)
+
+### MCP 配置
+支持 Model Context Protocol，扩展 Claude 的能力。
+
+![MCP 配置](docs/screenshots/mcp-config.png)
+
 ## 📦 安装
 
 ### 方式一：JetBrains 插件市场（推荐）

@@ -68,6 +68,21 @@ Read, Write, Edit 작업에 대한 상세 정보를 포함한 Claude의 도구 �
 
 ![사용자 질문 대화상자](docs/screenshots/user-question-dialog.png)
 
+### 키보드 단축키
+풍부한 키보드 단축키로 효율적인 작업.
+
+![키보드 단축키](docs/screenshots/keyboard-shortcuts.png)
+
+### 작업 진행 보기
+Claude의 작업 실행 진행 상황을 실시간으로 표시.
+
+![작업 진행 보기](docs/screenshots/task-progress-view.png)
+
+### MCP 설정
+Model Context Protocol을 지원하여 Claude의 기능 확장.
+
+![MCP 설정](docs/screenshots/mcp-config.png)
+
 ## 📦 설치
 
 ### 방법 1: JetBrains Marketplace (권장)

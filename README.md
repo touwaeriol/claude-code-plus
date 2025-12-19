@@ -69,6 +69,21 @@ Interactive dialog for Claude to ask clarifying questions with model selection a
 
 ![User Question Dialog](docs/screenshots/user-question-dialog.png)
 
+### Keyboard Shortcuts
+Rich keyboard shortcuts for efficient operations.
+
+![Keyboard Shortcuts](docs/screenshots/keyboard-shortcuts.png)
+
+### Task Progress View
+Real-time view of Claude's task execution progress.
+
+![Task Progress View](docs/screenshots/task-progress-view.png)
+
+### MCP Configuration
+Support Model Context Protocol to extend Claude's capabilities.
+
+![MCP Configuration](docs/screenshots/mcp-config.png)
+
 ## 📦 Installation
 
 ### Option 1: JetBrains Marketplace (Recommended)
