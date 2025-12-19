@@ -37,6 +37,8 @@ import com.asakii.server.history.HistoryJsonlLoader
 import com.asakii.server.rpc.AiAgentRpcServiceImpl
 import com.asakii.server.mcp.JetBrainsMcpServerProvider
 import com.asakii.server.mcp.DefaultJetBrainsMcpServerProvider
+import com.asakii.server.mcp.TerminalMcpServerProvider
+import com.asakii.server.mcp.DefaultTerminalMcpServerProvider
 import com.asakii.server.rsocket.ProtoConverter.toProto
 import io.rsocket.kotlin.ktor.server.RSocketSupport
 import io.rsocket.kotlin.ktor.server.rSocket
@@ -126,6 +128,7 @@ class HttpApiServer(
     private val jetbrainsApi: JetBrainsApi = DefaultJetBrainsApi,  // 默认不支持 JetBrains 集成
     private val jetbrainsRSocketHandler: JetBrainsRSocketHandlerProvider? = null,  // JetBrains RSocket 处理器
     private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider,  // JetBrains MCP Server Provider
+    private val terminalMcpServerProvider: TerminalMcpServerProvider = DefaultTerminalMcpServerProvider,  // Terminal MCP Server Provider
     private val serviceConfigProvider: () -> com.asakii.server.config.AiAgentServiceConfig = { com.asakii.server.config.AiAgentServiceConfig() }  // 服务配置提供者（每次 connect 时调用获取最新配置）
 ) : com.asakii.bridge.EventBridge {
     private val json = Json {
@@ -211,6 +214,7 @@ class HttpApiServer(
                         clientRequester = requester,
                         connectionId = connectionId,
                         jetBrainsMcpServerProvider = jetBrainsMcpServerProvider,
+                        terminalMcpServerProvider = terminalMcpServerProvider,
                         serviceConfigProvider = { currentConfig }
                     )
 
@@ -480,11 +484,12 @@ class HttpApiServer(
 
                             logger.info { "📋 [HTTP] 获取历史会话列表 (offset=$offset, maxResults=$maxResults)" }
 
-                            // 直接调用 RPC 服务实现（复用逻辑，传递 JetBrains MCP Server Provider）
+                            // 直接调用 RPC 服务实现（复用逻辑，传递 MCP Server Providers）
                             val rpcService = com.asakii.server.rpc.AiAgentRpcServiceImpl(
                                 ideTools = ideTools,
                                 clientCaller = null,
-                                jetBrainsMcpServerProvider = jetBrainsMcpServerProvider
+                                jetBrainsMcpServerProvider = jetBrainsMcpServerProvider,
+                                terminalMcpServerProvider = terminalMcpServerProvider
                             )
                             val result = rpcService.getHistorySessions(maxResults, offset)
 
@@ -540,7 +545,8 @@ class HttpApiServer(
                             val rpcService = AiAgentRpcServiceImpl(
                                 ideTools = ideTools,
                                 clientCaller = null,
-                                jetBrainsMcpServerProvider = jetBrainsMcpServerProvider
+                                jetBrainsMcpServerProvider = jetBrainsMcpServerProvider,
+                                terminalMcpServerProvider = terminalMcpServerProvider
                             )
                             val meta = rpcService.getHistoryMetadata(sessionId, projectPath).toProto()
 
@@ -565,7 +571,8 @@ class HttpApiServer(
                             val rpcService = AiAgentRpcServiceImpl(
                                 ideTools = ideTools,
                                 clientCaller = null,
-                                jetBrainsMcpServerProvider = jetBrainsMcpServerProvider
+                                jetBrainsMcpServerProvider = jetBrainsMcpServerProvider,
+                                terminalMcpServerProvider = terminalMcpServerProvider
                             )
                             val result = rpcService.loadHistory(
                                 req.sessionId,

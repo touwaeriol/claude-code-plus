@@ -47,6 +47,8 @@ import com.asakii.server.mcp.PermissionRuleValue as McpPermissionRuleValue
 import com.asakii.server.mcp.UserInteractionMcpServer
 import com.asakii.server.mcp.JetBrainsMcpServerProvider
 import com.asakii.server.mcp.DefaultJetBrainsMcpServerProvider
+import com.asakii.server.mcp.TerminalMcpServerProvider
+import com.asakii.server.mcp.DefaultTerminalMcpServerProvider
 import com.asakii.server.logging.StandaloneLogging
 import com.asakii.server.logging.asyncInfo
 import com.asakii.server.settings.ClaudeSettingsLoader
@@ -84,6 +86,7 @@ class AiAgentRpcServiceImpl(
     private val ideTools: IdeTools,
     private val clientCaller: ClientCaller? = null,
     private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider,
+    private val terminalMcpServerProvider: TerminalMcpServerProvider = DefaultTerminalMcpServerProvider,
     private val serviceConfigProvider: () -> AiAgentServiceConfig = { AiAgentServiceConfig() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : AiAgentRpcService {
@@ -608,6 +611,16 @@ class AiAgentRpcServiceImpl(
             sdkLog.info("⏭️ [buildClaudeOverrides] JetBrains MCP Server 已禁用")
         }
 
+        // 添加 Terminal MCP Server（如果启用且可用）
+        if (defaults.enableTerminalMcp) {
+            terminalMcpServerProvider.getServer()?.let { terminalMcp ->
+                mcpServers["terminal"] = terminalMcp
+                sdkLog.info("✅ [buildClaudeOverrides] 已添加 Terminal MCP Server")
+            }
+        } else {
+            sdkLog.info("⏭️ [buildClaudeOverrides] Terminal MCP Server 已禁用")
+        }
+
         // 添加从配置文件加载的 MCP 服务器
         for (mcpConfig in defaults.mcpServersConfig) {
             if (!mcpConfig.enabled) continue
@@ -674,6 +687,19 @@ class AiAgentRpcServiceImpl(
                 customPrompt
             }
             sdkLog.info("📝 [buildClaudeOverrides] 已追加 ${customInstructions.size} 个自定义 MCP 系统提示词")
+        }
+
+        // 收集需要禁用的内置工具
+        val disallowedTools = buildDisallowedBuiltinTools().toMutableList()
+
+        // 如果启用了 User Interaction MCP，禁用内置的 AskUserQuestion
+        if (defaults.enableUserInteractionMcp) {
+            disallowedTools.add("AskUserQuestion")
+            sdkLog.info("🚫 [buildClaudeOverrides] User Interaction MCP 已启用，禁用内置 AskUserQuestion")
+        }
+
+        if (disallowedTools.isNotEmpty()) {
+            sdkLog.info("🚫 [buildClaudeOverrides] 禁用内置工具: $disallowedTools")
         }
 
         // canUseTool 回调：通过 RPC 调用前端获取用户授权（带 tool_use_id 和 permissionSuggestions）
@@ -755,6 +781,8 @@ class AiAgentRpcServiceImpl(
             extraArgs = extraArgs,
             // 动态收集所有 MCP 服务器声明的需要自动允许的工具
             allowedTools = buildMcpAllowedTools(mcpServers),
+            // 禁用的内置工具（如启用 Terminal MCP 时禁用 Bash）
+            disallowedTools = disallowedTools,
             mcpServers = mcpServers,
             // 自定义子代理定义（如 JetBrains 专用的代码探索代理）
             agents = agents.ifEmpty { null },
@@ -806,6 +834,28 @@ class AiAgentRpcServiceImpl(
                 }
             }
             .flatten()
+    }
+
+    /**
+     * 收集需要禁用的内置工具
+     *
+     * 遍历所有 MCP 服务器提供者，收集其声明的需要禁用的内置工具列表。
+     * 例如：
+     * - Terminal MCP 启用时可以禁用内置的 Bash 工具
+     * - JetBrains MCP 启用时可以禁用内置的 Glob 和 Grep 工具
+     *
+     * @return 需要禁用的内置工具名称列表
+     */
+    private fun buildDisallowedBuiltinTools(): List<String> {
+        val disallowedTools = mutableListOf<String>()
+
+        // 从 JetBrains MCP 提供者获取需要禁用的工具（Glob, Grep）
+        disallowedTools.addAll(jetBrainsMcpServerProvider.getDisallowedBuiltinTools())
+
+        // 从 Terminal MCP 提供者获取需要禁用的工具（Bash）
+        disallowedTools.addAll(terminalMcpServerProvider.getDisallowedBuiltinTools())
+
+        return disallowedTools.distinct()
     }
 
     private fun buildCodexOverrides(

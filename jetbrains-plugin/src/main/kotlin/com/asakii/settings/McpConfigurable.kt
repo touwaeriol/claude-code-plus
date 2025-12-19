@@ -245,14 +245,17 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
         val userInteractionEntry = builtInServers.find { it.name == "User Interaction MCP" }
         val jetbrainsEntry = builtInServers.find { it.name == "JetBrains IDE MCP" }
         val context7Entry = builtInServers.find { it.name == "Context7 MCP" }
+        val terminalEntry = builtInServers.find { it.name == "Terminal MCP" }
 
         if (userInteractionEntry?.enabled != settings.enableUserInteractionMcp ||
             jetbrainsEntry?.enabled != settings.enableJetBrainsMcp ||
             context7Entry?.enabled != settings.enableContext7Mcp ||
+            terminalEntry?.enabled != settings.enableTerminalMcp ||
             context7Entry?.apiKey != settings.context7ApiKey ||
             userInteractionEntry?.instructions != settings.userInteractionInstructions ||
             jetbrainsEntry?.instructions != settings.jetbrainsInstructions ||
-            context7Entry?.instructions != settings.context7Instructions
+            context7Entry?.instructions != settings.context7Instructions ||
+            terminalEntry?.instructions != settings.terminalInstructions
         ) {
             return true
         }
@@ -287,14 +290,17 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
         val userInteractionEntry = builtInServers.find { it.name == "User Interaction MCP" }
         val jetbrainsEntry = builtInServers.find { it.name == "JetBrains IDE MCP" }
         val context7Entry = builtInServers.find { it.name == "Context7 MCP" }
+        val terminalEntry = builtInServers.find { it.name == "Terminal MCP" }
 
         settings.enableUserInteractionMcp = userInteractionEntry?.enabled ?: true
         settings.enableJetBrainsMcp = jetbrainsEntry?.enabled ?: true
         settings.enableContext7Mcp = context7Entry?.enabled ?: false
+        settings.enableTerminalMcp = terminalEntry?.enabled ?: false
         settings.context7ApiKey = context7Entry?.apiKey ?: ""
         settings.userInteractionInstructions = userInteractionEntry?.instructions ?: ""
         settings.jetbrainsInstructions = jetbrainsEntry?.instructions ?: ""
         settings.context7Instructions = context7Entry?.instructions ?: ""
+        settings.terminalInstructions = terminalEntry?.instructions ?: ""
 
         // 保存自定义服务器配置
         val globalServers = customServers.filter { it.level == McpServerLevel.GLOBAL }
@@ -359,7 +365,8 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             level = McpServerLevel.BUILTIN,
             configSummary = "Allows Claude to ask questions",
             isBuiltIn = true,
-            instructions = settings.userInteractionInstructions
+            instructions = settings.userInteractionInstructions,
+            defaultInstructions = McpDefaults.USER_INTERACTION_INSTRUCTIONS
         ))
         builtInServers.add(McpServerEntry(
             name = "JetBrains IDE MCP",
@@ -367,7 +374,9 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             level = McpServerLevel.BUILTIN,
             configSummary = "Code search, file indexing",
             isBuiltIn = true,
-            instructions = settings.jetbrainsInstructions
+            instructions = settings.jetbrainsInstructions,
+            defaultInstructions = McpDefaults.JETBRAINS_INSTRUCTIONS,
+            disabledTools = listOf("Glob", "Grep")
         ))
         builtInServers.add(McpServerEntry(
             name = "Context7 MCP",
@@ -376,7 +385,19 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             configSummary = "Library documentation",
             isBuiltIn = true,
             instructions = settings.context7Instructions,
-            apiKey = settings.context7ApiKey
+            apiKey = settings.context7ApiKey,
+            defaultInstructions = McpDefaults.CONTEXT7_INSTRUCTIONS
+        ))
+        builtInServers.add(McpServerEntry(
+            name = "Terminal MCP",
+            enabled = settings.enableTerminalMcp,
+            level = McpServerLevel.BUILTIN,
+            configSummary = "IDEA integrated terminal",
+            isBuiltIn = true,
+            instructions = settings.terminalInstructions,
+            defaultInstructions = McpDefaults.TERMINAL_INSTRUCTIONS,
+            disabledTools = if (settings.terminalDisableBuiltinBash) listOf("Bash") else emptyList(),
+            hasDisableToolsToggle = true
         ))
 
         // 加载自定义服务器
@@ -599,11 +620,23 @@ data class McpServerEntry(
     val isBuiltIn: Boolean = false,
     val jsonConfig: String = "",
     val instructions: String = "",
-    val apiKey: String = ""
+    val apiKey: String = "",
+    /** 启用此 MCP 时禁用的内置工具列表 */
+    val disabledTools: List<String> = emptyList(),
+    /** 默认系统提示词（内置 MCP 使用，只读） */
+    val defaultInstructions: String = "",
+    /** 是否有关联的禁用工具开关（如 Terminal MCP 的 terminalDisableBuiltinBash） */
+    val hasDisableToolsToggle: Boolean = false
 )
 
 /**
  * 内置 MCP 服务器编辑对话框
+ *
+ * 显示：
+ * - 启用开关
+ * - 默认系统提示词（只读，可折叠）
+ * - 禁用工具信息
+ * - 自定义追加提示词
  */
 class BuiltInMcpServerDialog(
     private val project: Project?,
@@ -611,7 +644,10 @@ class BuiltInMcpServerDialog(
 ) : DialogWrapper(project) {
 
     private val enableCheckbox = JBCheckBox("Enable", entry.enabled)
-    private val instructionsArea = JBTextArea(entry.instructions, 4, 50).apply {
+    private val instructionsArea = JBTextArea(
+        entry.instructions.ifBlank { entry.defaultInstructions },
+        3, 50
+    ).apply {
         font = Font(Font.MONOSPACED, Font.PLAIN, 12)
         lineWrap = true
         wrapStyleWord = true
@@ -650,23 +686,36 @@ class BuiltInMcpServerDialog(
             contentPanel.add(Box.createVerticalStrut(8))
         }
 
-        // Appended System Prompt
-        val promptLabel = JBLabel("Appended System Prompt (optional):").apply {
+        // 禁用工具信息（如果有）
+        if (entry.disabledTools.isNotEmpty()) {
+            val disabledToolsText = entry.disabledTools.joinToString(", ")
+            val disabledToolsPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+                background = JBColor(0xE8F4FD, 0x1E3A4C)
+                border = JBUI.Borders.empty(6, 8)
+                add(JBLabel("<html><font color='#1976D2'>ℹ️ Disables built-in tools when enabled: <b>$disabledToolsText</b></font></html>"))
+            }
+            contentPanel.add(disabledToolsPanel)
+            contentPanel.add(Box.createVerticalStrut(8))
+        }
+
+        // 系统提示词
+        val customPromptLabel = JBLabel("Appended System Prompt:").apply {
             alignmentX = JPanel.LEFT_ALIGNMENT
         }
-        contentPanel.add(promptLabel)
+        contentPanel.add(customPromptLabel)
         contentPanel.add(Box.createVerticalStrut(4))
 
-        val scrollPane = JBScrollPane(instructionsArea).apply {
+        val customScrollPane = JBScrollPane(instructionsArea).apply {
             alignmentX = JPanel.LEFT_ALIGNMENT
-            preferredSize = Dimension(500, 80)
+            preferredSize = Dimension(500, 150)
         }
-        contentPanel.add(scrollPane)
+        contentPanel.add(customScrollPane)
         contentPanel.add(Box.createVerticalStrut(8))
 
         // Reset 按钮
         val resetButton = JButton("Reset to Default").apply {
-            addActionListener { instructionsArea.text = "" }
+            addActionListener { instructionsArea.text = entry.defaultInstructions }
         }
         val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
             alignmentX = JPanel.LEFT_ALIGNMENT
@@ -675,14 +724,20 @@ class BuiltInMcpServerDialog(
         contentPanel.add(buttonPanel)
 
         panel.add(contentPanel, BorderLayout.CENTER)
-        panel.preferredSize = Dimension(550, panel.preferredSize.height)
+        panel.preferredSize = Dimension(580, panel.preferredSize.height)
         return panel
     }
 
     fun getServerEntry(): McpServerEntry {
+        // 如果内容与默认值相同，存储空字符串（表示使用默认值）
+        val customInstructions = if (instructionsArea.text.trim() == entry.defaultInstructions.trim()) {
+            ""
+        } else {
+            instructionsArea.text
+        }
         return entry.copy(
             enabled = enableCheckbox.isSelected,
-            instructions = instructionsArea.text,
+            instructions = customInstructions,
             apiKey = if (entry.name == "Context7 MCP") apiKeyField.text else entry.apiKey
         )
     }
