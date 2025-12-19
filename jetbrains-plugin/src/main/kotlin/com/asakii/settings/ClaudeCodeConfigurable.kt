@@ -198,8 +198,9 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         panel.add(createDescription("  default = Ask for each action | bypassPermissions = Auto-approve all actions"))
 
         includePartialMessagesCheckbox = JBCheckBox("Include partial messages in stream").apply {
-            toolTipText = "Include partial/streaming messages in the response"
+            toolTipText = "Include partial/streaming messages in the response (always enabled)"
             isSelected = true
+            isEnabled = false  // 禁止用户修改，始终保持开启
             alignmentX = JPanel.LEFT_ALIGNMENT
         }
         panel.add(includePartialMessagesCheckbox)
@@ -273,10 +274,14 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         thinkTokensSpinner = JSpinner(SpinnerNumberModel(2048, 1, 128000, 256)).apply {
             toolTipText = "Token budget for Think level"
             preferredSize = Dimension(80, preferredSize.height)
+            // 去掉数字的分组分隔符（逗号）
+            editor = JSpinner.NumberEditor(this, "#")
         }
         ultraTokensSpinner = JSpinner(SpinnerNumberModel(8096, 1, 128000, 256)).apply {
             toolTipText = "Token budget for Ultra level"
             preferredSize = Dimension(80, preferredSize.height)
+            // 去掉数字的分组分隔符（逗号）
+            editor = JSpinner.NumberEditor(this, "#")
         }
         thinkTokensSpinner?.addChangeListener { updateThinkingLevelCombo() }
         ultraTokensSpinner?.addChangeListener { updateThinkingLevelCombo() }
@@ -489,6 +494,8 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
             preferredSize = Dimension(600, 90)
             alignmentX = JPanel.LEFT_ALIGNMENT
             border = BorderFactory.createLineBorder(JBUI.CurrentTheme.CustomFrameDecorations.separatorForeground())
+            // 禁用水平滚动，强制工具标签换行
+            horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
         }
         exploreContentPanel!!.add(toolsScrollPane)
         exploreContentPanel!!.add(Box.createVerticalStrut(6))
