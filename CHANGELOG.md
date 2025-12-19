@@ -4,16 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [1.1.0] - 2025-12-19
 
+### Added
+- Add copy button to UserMessageBubble and CompactSummaryCard components
+- Implement height-based overflow detection for auto-collapse in user messages
+- Add gradient fade effect when message content is collapsed
+
 ### Changed
 - Update Java version to 21
 - Centralize file sync operations in IdeaPlatformService
 - Migrate TextFieldWithBrowseButton to Kotlin UI DSL 2.0 API
+- Move expand/collapse button to top-right corner for better UX
 
 ### Fixed
 - Resolve IDEA 2024.2-2025.2 compatibility issues (CefBrowser.openDevTools NoSuchMethodError)
 - Resolve WebStorm compatibility by using reflection for Java PSI classes
 - Improve IntelliJ API compatibility for Diff editor and file chooser
 - Use reflection for cross-version IntelliJ Diff API compatibility
+- Suppress deprecated API warning for IDEA 2024.2 compatibility
+- Wait for smart mode before MCP searching to ensure index freshness
 
 ### Performance
 - Optimize patchCli task to skip when enhanced CLI is up-to-date
@@ -23,6 +31,7 @@ All notable changes to this project will be documented in this file.
 - Add java-library plugin to ai-agent-proto for proper OrBuilder exposure
 - Remove cleanCli dependency from clean task to preserve committed CLI files
 - Explicitly declare protobuf-java as api dependency for OrBuilder interfaces
+- Add comprehensive IDE verification matrix for CI
 
 ### Docs
 - Add new screenshots to all README versions
