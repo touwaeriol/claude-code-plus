@@ -796,7 +796,7 @@ class McpServerDialog(
 
         val instructionsScrollPane = JBScrollPane(instructionsArea).apply {
             alignmentX = JPanel.LEFT_ALIGNMENT
-            preferredSize = Dimension(500, 40)
+            preferredSize = Dimension(500, 60)
         }
         contentPanel.add(instructionsScrollPane)
         contentPanel.add(Box.createVerticalStrut(15))
