@@ -315,6 +315,15 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
 
         // 说明
         panel.add(createDescription("Configure custom agents that extend Claude's capabilities."))
+        panel.add(Box.createVerticalStrut(4))
+
+        // 通知：仅对插件生效
+        val noticePanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+            alignmentX = JPanel.LEFT_ALIGNMENT
+            val noticeLabel = JBLabel("<html><font color='gray'>${ClaudeCodePlusBundle.message("agents.settings.notice")}</font></html>")
+            add(noticeLabel)
+        }
+        panel.add(noticePanel)
         panel.add(Box.createVerticalStrut(6))
 
         // ExploreWithJetbrains Agent - 可折叠卡片

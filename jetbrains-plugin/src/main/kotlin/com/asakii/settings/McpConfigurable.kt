@@ -52,9 +52,15 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
     override fun createComponent(): JComponent {
         mainPanel = JPanel(BorderLayout())
 
-        // 顶部说明
-        val descPanel = JPanel(BorderLayout()).apply {
+        // 顶部区域（说明 + 通知）
+        val topPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
             border = JBUI.Borders.empty(0, 0, 10, 0)
+        }
+
+        // 说明
+        val descPanel = JPanel(BorderLayout()).apply {
+            alignmentX = JPanel.LEFT_ALIGNMENT
             val label = JBLabel("""
                 <html>
                 Configure MCP (Model Context Protocol) servers.
@@ -63,7 +69,18 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             """.trimIndent())
             add(label, BorderLayout.WEST)
         }
-        mainPanel!!.add(descPanel, BorderLayout.NORTH)
+        topPanel.add(descPanel)
+        topPanel.add(Box.createVerticalStrut(8))
+
+        // 通知：仅对插件生效
+        val noticePanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+            alignmentX = JPanel.LEFT_ALIGNMENT
+            val noticeLabel = JBLabel("<html><font color='gray'>${ClaudeCodePlusBundle.message("mcp.settings.notice")}</font></html>")
+            add(noticeLabel)
+        }
+        topPanel.add(noticePanel)
+
+        mainPanel!!.add(topPanel, BorderLayout.NORTH)
 
         // 创建表格
         tableModel = McpServerTableModel()
