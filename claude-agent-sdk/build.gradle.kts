@@ -495,10 +495,8 @@ val copyCliVersionProps = tasks.register<Copy>("copyCliVersionProps") {
     into(file("src/main/resources"))
 }
 
-// clean 任务依赖 cleanCli
-tasks.named("clean") {
-    dependsOn(cleanCli)
-}
+// 注意: clean 任务不再自动清理 CLI 文件
+// 如需清理 CLI 文件（如升级 CLI 版本时），请手动运行: ./gradlew cleanCli
 
 // ========== CLI 补丁系统 (AST 转换) ==========
 
