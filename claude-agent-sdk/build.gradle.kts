@@ -560,9 +560,22 @@ val patchCli = tasks.register("patchCli") {
     inputs.file(propsFilePath)
     inputs.file(patchScriptPath)
     inputs.dir(patchesDirPath)
-    outputs.dir(bundledDirPath)
 
-    onlyIf { File(patchScriptPath).exists() }
+    // 动态计算输出文件路径
+    val propsForOutput = Properties()
+    if (File(propsFilePath).exists()) {
+        File(propsFilePath).inputStream().use { propsForOutput.load(it) }
+    }
+    val cliVerForOutput = propsForOutput.getProperty("cli.version") ?: "unknown"
+    val enhancedFilePath = "$bundledDirPath/claude-cli-$cliVerForOutput-enhanced.js"
+    outputs.file(enhancedFilePath)
+
+    // 仅当补丁脚本存在且增强文件不存在或需要更新时运行
+    onlyIf {
+        val patchExists = File(patchScriptPath).exists()
+        val enhancedExists = File(enhancedFilePath).exists()
+        patchExists && (!enhancedExists || !inputs.files.isEmpty)
+    }
 
     doLast {
         val propsFile = File(propsFilePath)
