@@ -37,7 +37,7 @@ export type { SessionTabInstance } from '@/composables/useSessionTab'
  */
   const DEFAULT_SESSION_SETTINGS = {
   modelId: MODEL_CAPABILITIES[BaseModel.OPUS_45].modelId,
-  thinkingLevel: 8192, // High (8K) - 默认思考等级
+  thinkingLevel: 8096, // Ultra - 默认思考等级（与 IDEA 设置保持一致）
   permissionMode: 'default' as RpcPermissionMode,
   skipPermissions: false
 }

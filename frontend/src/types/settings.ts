@@ -72,7 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   continueConversation: false,
   maxTokens: null,
   thinkingEnabled: MODEL_CAPABILITIES[BaseModel.OPUS_45].defaultThinkingEnabled,  // 根据模型默认值
-  maxThinkingTokens: 8000,
+  maxThinkingTokens: 8096,
   temperature: null,
   verbose: false,
   apiKey: null,

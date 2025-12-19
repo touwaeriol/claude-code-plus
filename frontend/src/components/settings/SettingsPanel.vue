@@ -198,7 +198,7 @@
               @blur="handleMaxThinkingTokensChange"
             />
             <p class="setting-description">
-              设置模型的思考令牌预算。默认 8000。
+              设置模型的思考令牌预算。默认 8096。
             </p>
           </div>
 
