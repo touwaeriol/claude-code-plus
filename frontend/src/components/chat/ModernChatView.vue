@@ -411,18 +411,12 @@ const currentChromeInstalled = computed(() => {
 })
 
 // Chrome 扩展开关切换
+// 注意：状态变更后，sendMessage 会自动检测并在下次发送前重连
 function handleChromeToggle(enabled: boolean) {
   console.log('[ModernChatView] Chrome toggle:', enabled)
   const currentTab = sessionStore.currentTab
   if (currentTab) {
     currentTab.uiState.chromeEnabled = enabled
-    // 如果已连接且设置变更，提示需要重连
-    if (currentTab.isConnected.value) {
-      const connectedEnabled = currentTab.connectedChromeEnabled.value
-      if (connectedEnabled !== undefined && enabled !== connectedEnabled) {
-        showToast('Chrome setting changed. Reconnect to apply.', 3000)
-      }
-    }
   }
 }
 
