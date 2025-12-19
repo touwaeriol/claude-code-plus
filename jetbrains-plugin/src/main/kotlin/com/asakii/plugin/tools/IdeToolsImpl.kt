@@ -5,6 +5,13 @@ package com.asakii.plugin.tools
 import com.asakii.claude.agent.sdk.types.AgentDefinition
 import com.asakii.plugin.utils.ResourceLoader
 import com.asakii.rpc.api.*
+import com.asakii.settings.AgentSettingsService
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import com.asakii.rpc.api.ActiveFileInfo
 import com.asakii.server.tools.IdeToolsDefault
 import com.intellij.diff.DiffContentFactory
@@ -398,15 +405,50 @@ class IdeToolsImpl(
 
     override fun getAgentDefinitions(): Map<String, AgentDefinition> {
         return try {
-            // AgentDefinition 类型由 SDK 统一提供，无需转换
             logger.info("🔍 [getAgentDefinitions] 开始加载自定义代理...")
-            val agents = ResourceLoader.loadAllAgentDefinitions()
-            if (agents.isNotEmpty()) {
-                logger.info("📦 Loaded ${agents.size} custom agents: ${agents.keys.joinToString()}")
-            } else {
-                logger.warning("⚠️ [getAgentDefinitions] 未加载到任何自定义代理，请检查 agents/agents.json 资源文件")
+
+            // 从 AgentSettingsService 读取用户配置
+            val settingsService = AgentSettingsService.getInstance()
+            val customAgentsJson = settingsService.customAgents
+
+            if (customAgentsJson.isBlank() || customAgentsJson == "{}") {
+                logger.info("ℹ️ [getAgentDefinitions] 用户未配置自定义代理")
+                return emptyMap()
             }
-            agents
+
+            val json = Json { ignoreUnknownKeys = true }
+            val agentsConfig = json.parseToJsonElement(customAgentsJson).jsonObject
+            val agents = agentsConfig["agents"]?.jsonObject ?: agentsConfig
+
+            val result = mutableMapOf<String, AgentDefinition>()
+
+            for ((name, value) in agents) {
+                try {
+                    val agentObj = value.jsonObject
+                    val description = agentObj["description"]?.jsonPrimitive?.contentOrNull ?: ""
+                    val prompt = agentObj["prompt"]?.jsonPrimitive?.contentOrNull ?: ""
+                    val tools = agentObj["tools"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                    val model = agentObj["model"]?.jsonPrimitive?.contentOrNull
+
+                    result[name] = AgentDefinition(
+                        description = description,
+                        prompt = prompt,
+                        tools = tools,
+                        model = model
+                    )
+                    logger.info("✅ Loaded agent: $name (tools: ${tools?.size ?: 0})")
+                } catch (e: Exception) {
+                    logger.warning("⚠️ Failed to parse agent '$name': ${e.message}")
+                }
+            }
+
+            if (result.isNotEmpty()) {
+                logger.info("📦 Loaded ${result.size} custom agents from settings: ${result.keys.joinToString()}")
+            } else {
+                logger.warning("⚠️ [getAgentDefinitions] 未加载到任何自定义代理")
+            }
+
+            result
         } catch (e: Exception) {
             logger.warning("Failed to load agent definitions: ${e.message}")
             emptyMap()
