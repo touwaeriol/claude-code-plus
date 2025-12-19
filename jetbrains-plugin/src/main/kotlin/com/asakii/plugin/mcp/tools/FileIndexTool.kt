@@ -9,7 +9,6 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.PsiShortNamesCache
 import com.intellij.openapi.roots.TestSourcesFilter
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ide.scratch.ScratchUtil
@@ -127,90 +126,108 @@ class FileIndexTool(private val project: Project) {
                     }
                     
                     SearchIndexType.Classes -> {
-                        // 类搜索 - 使用 IDEA 原生匹配器排序
-                        val matcher = NameUtil.buildMatcher("*$query").build()
-                        val cache = PsiShortNamesCache.getInstance(project)
-                        val allClassNames = cache.allClassNames
+                        // 类搜索 - 需要 Java 插件支持
+                        val cache = JavaPluginHelper.getShortNamesCache(project)
+                        if (cache == null) {
+                            results.add(IndexSearchResult(
+                                name = "Classes search",
+                                type = "Info",
+                                description = "Classes search requires Java plugin. Not available in WebStorm/PyCharm."
+                            ))
+                            totalFound = 1
+                        } else {
+                            val matcher = NameUtil.buildMatcher("*$query").build()
+                            val allClassNames = JavaPluginHelper.getAllClassNames(cache)
 
-                        // 过滤并按匹配度排序
-                        val sortedNames = allClassNames
-                            .filter { matcher.matches(it) }
-                            .sortedByDescending { matcher.matchingDegree(it) }
+                            // 过滤并按匹配度排序
+                            val sortedNames = allClassNames
+                                .filter { matcher.matches(it) }
+                                .sortedByDescending { matcher.matchingDegree(it) }
 
-                        // 收集结果（按排序后的顺序）
-                        val classSearchScope = if (includeLibraries) GlobalSearchScope.allScope(project) else baseScope
-                        val filteredResults = sortedNames.flatMap { name ->
-                            cache.getClassesByName(name, classSearchScope).mapNotNull { psiClass ->
-                                val file = psiClass.containingFile?.virtualFile
-                                if (file != null && baseScope.contains(file)) {
-                                    IndexSearchResult(
-                                        name = name,
-                                        path = file.path.removePrefix(project.basePath ?: "").removePrefix("/"),
-                                        type = "Class",
-                                        description = getElementDescription(psiClass)
-                                    )
-                                } else null
-                            }
-                        }.distinctBy { "${it.name}:${it.path}" }
-                        totalFound = filteredResults.size
-                        results.addAll(filteredResults.drop(offset).take(maxResults))
+                            // 收集结果（按排序后的顺序）
+                            val classSearchScope = if (includeLibraries) GlobalSearchScope.allScope(project) else baseScope
+                            val filteredResults = sortedNames.flatMap { name ->
+                                JavaPluginHelper.getClassesByName(cache, name, classSearchScope).mapNotNull { psiClass ->
+                                    val file = psiClass.containingFile?.virtualFile
+                                    if (file != null && baseScope.contains(file)) {
+                                        IndexSearchResult(
+                                            name = name,
+                                            path = file.path.removePrefix(project.basePath ?: "").removePrefix("/"),
+                                            type = "Class",
+                                            description = getElementDescription(psiClass)
+                                        )
+                                    } else null
+                                }
+                            }.distinctBy { "${it.name}:${it.path}" }
+                            totalFound = filteredResults.size
+                            results.addAll(filteredResults.drop(offset).take(maxResults))
+                        }
                     }
 
                     SearchIndexType.Symbols -> {
-                        // 符号搜索 - 使用 IDEA 原生匹配器排序
-                        val matcher = NameUtil.buildMatcher("*$query").build()
-                        val cache = PsiShortNamesCache.getInstance(project)
-                        val symbolSearchScope = if (includeLibraries) GlobalSearchScope.allScope(project) else baseScope
+                        // 符号搜索 - 需要 Java 插件支持
+                        val cache = JavaPluginHelper.getShortNamesCache(project)
+                        if (cache == null) {
+                            results.add(IndexSearchResult(
+                                name = "Symbols search",
+                                type = "Info",
+                                description = "Symbols search requires Java plugin. Not available in WebStorm/PyCharm."
+                            ))
+                            totalFound = 1
+                        } else {
+                            val matcher = NameUtil.buildMatcher("*$query").build()
+                            val symbolSearchScope = if (includeLibraries) GlobalSearchScope.allScope(project) else baseScope
 
-                        // 搜索方法 - 按匹配度排序
-                        val allMethodNames = cache.allMethodNames
-                        val sortedMethodNames = allMethodNames
-                            .filter { matcher.matches(it) }
-                            .sortedByDescending { matcher.matchingDegree(it) }
+                            // 搜索方法 - 按匹配度排序
+                            val allMethodNames = JavaPluginHelper.getAllMethodNames(cache)
+                            val sortedMethodNames = allMethodNames
+                                .filter { matcher.matches(it) }
+                                .sortedByDescending { matcher.matchingDegree(it) }
 
-                        val methodResults = sortedMethodNames.flatMap { name ->
-                            cache.getMethodsByName(name, symbolSearchScope).mapNotNull { method ->
-                                val file = method.containingFile?.virtualFile
-                                if (file != null && baseScope.contains(file)) {
-                                    IndexSearchResult(
-                                        name = name,
-                                        path = file.path.removePrefix(project.basePath ?: "").removePrefix("/"),
-                                        type = "Method",
-                                        description = getElementDescription(method),
-                                        line = getElementLine(method)
-                                    )
-                                } else null
+                            val methodResults = sortedMethodNames.flatMap { name ->
+                                JavaPluginHelper.getMethodsByName(cache, name, symbolSearchScope).mapNotNull { method ->
+                                    val file = method.containingFile?.virtualFile
+                                    if (file != null && baseScope.contains(file)) {
+                                        IndexSearchResult(
+                                            name = name,
+                                            path = file.path.removePrefix(project.basePath ?: "").removePrefix("/"),
+                                            type = "Method",
+                                            description = getElementDescription(method),
+                                            line = getElementLine(method)
+                                        )
+                                    } else null
+                                }
                             }
-                        }
 
-                        // 搜索字段 - 按匹配度排序
-                        val allFieldNames = cache.allFieldNames
-                        val sortedFieldNames = allFieldNames
-                            .filter { matcher.matches(it) }
-                            .sortedByDescending { matcher.matchingDegree(it) }
+                            // 搜索字段 - 按匹配度排序
+                            val allFieldNames = JavaPluginHelper.getAllFieldNames(cache)
+                            val sortedFieldNames = allFieldNames
+                                .filter { matcher.matches(it) }
+                                .sortedByDescending { matcher.matchingDegree(it) }
 
-                        val fieldResults = sortedFieldNames.flatMap { name ->
-                            cache.getFieldsByName(name, symbolSearchScope).mapNotNull { field ->
-                                val file = field.containingFile?.virtualFile
-                                if (file != null && baseScope.contains(file)) {
-                                    IndexSearchResult(
-                                        name = name,
-                                        path = file.path.removePrefix(project.basePath ?: "").removePrefix("/"),
-                                        type = "Field",
-                                        description = getElementDescription(field),
-                                        line = getElementLine(field)
-                                    )
-                                } else null
+                            val fieldResults = sortedFieldNames.flatMap { name ->
+                                JavaPluginHelper.getFieldsByName(cache, name, symbolSearchScope).mapNotNull { field ->
+                                    val file = field.containingFile?.virtualFile
+                                    if (file != null && baseScope.contains(file)) {
+                                        IndexSearchResult(
+                                            name = name,
+                                            path = file.path.removePrefix(project.basePath ?: "").removePrefix("/"),
+                                            type = "Field",
+                                            description = getElementDescription(field),
+                                            line = getElementLine(field)
+                                        )
+                                    } else null
+                                }
                             }
-                        }
 
-                        // 合并结果并按匹配度重新排序
-                        val allSymbolResults = (methodResults + fieldResults)
-                        val sortedResults = allSymbolResults
-                            .sortedByDescending { matcher.matchingDegree(it.name) }
-                            .distinctBy { "${it.name}:${it.path}:${it.line}" }
-                        totalFound = sortedResults.size
-                        results.addAll(sortedResults.drop(offset).take(maxResults))
+                            // 合并结果并按匹配度重新排序
+                            val allSymbolResults = (methodResults + fieldResults)
+                            val sortedResults = allSymbolResults
+                                .sortedByDescending { matcher.matchingDegree(it.name) }
+                                .distinctBy { "${it.name}:${it.path}:${it.line}" }
+                            totalFound = sortedResults.size
+                            results.addAll(sortedResults.drop(offset).take(maxResults))
+                        }
                     }
                     
                     SearchIndexType.Actions -> {

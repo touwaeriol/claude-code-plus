@@ -1,5 +1,6 @@
 package com.asakii.plugin.mcp.tools
 
+import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.search.GlobalSearchScope
 import cn.hutool.core.util.ClassUtil
@@ -29,6 +30,8 @@ object JavaPluginHelper {
     private object ClassNames {
         const val PSI_CLASS = "com.intellij.psi.PsiClass"
         const val PSI_METHOD = "com.intellij.psi.PsiMethod"
+        const val PSI_FIELD = "com.intellij.psi.PsiField"
+        const val PSI_SHORT_NAMES_CACHE = "com.intellij.psi.search.PsiShortNamesCache"
         const val CLASS_INHERITORS_SEARCH = "com.intellij.psi.search.searches.ClassInheritorsSearch"
         const val OVERRIDING_METHODS_SEARCH = "com.intellij.psi.search.searches.OverridingMethodsSearch"
     }
@@ -134,6 +137,112 @@ object JavaPluginHelper {
 
             val query = method.invoke(null, psiMethod, scope, deep)
             iterableToList(query)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    // ===== PsiShortNamesCache API =====
+
+    /**
+     * 获取 PsiShortNamesCache 实例（反射调用）
+     *
+     * @param project 项目
+     * @return PsiShortNamesCache 实例，Java 插件不可用时返回 null
+     */
+    fun getShortNamesCache(project: Project): Any? {
+        if (!isAvailable) return null
+        return try {
+            val cacheClass = loadClass(ClassNames.PSI_SHORT_NAMES_CACHE) ?: return null
+            val getInstance = cacheClass.getMethod("getInstance", Project::class.java)
+            getInstance.invoke(null, project)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 获取所有类名（反射调用）
+     */
+    fun getAllClassNames(cache: Any?): Array<String> {
+        if (cache == null) return emptyArray()
+        return try {
+            val method = cache.javaClass.getMethod("getAllClassNames")
+            @Suppress("UNCHECKED_CAST")
+            method.invoke(cache) as? Array<String> ?: emptyArray()
+        } catch (e: Exception) {
+            emptyArray()
+        }
+    }
+
+    /**
+     * 根据名称获取类（反射调用）
+     */
+    fun getClassesByName(cache: Any?, name: String, scope: GlobalSearchScope): List<PsiElement> {
+        if (cache == null) return emptyList()
+        return try {
+            val method = cache.javaClass.getMethod("getClassesByName", String::class.java, GlobalSearchScope::class.java)
+            val result = method.invoke(cache, name, scope)
+            @Suppress("UNCHECKED_CAST")
+            (result as? Array<*>)?.filterIsInstance<PsiElement>() ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 获取所有方法名（反射调用）
+     */
+    fun getAllMethodNames(cache: Any?): Array<String> {
+        if (cache == null) return emptyArray()
+        return try {
+            val method = cache.javaClass.getMethod("getAllMethodNames")
+            @Suppress("UNCHECKED_CAST")
+            method.invoke(cache) as? Array<String> ?: emptyArray()
+        } catch (e: Exception) {
+            emptyArray()
+        }
+    }
+
+    /**
+     * 根据名称获取方法（反射调用）
+     */
+    fun getMethodsByName(cache: Any?, name: String, scope: GlobalSearchScope): List<PsiElement> {
+        if (cache == null) return emptyList()
+        return try {
+            val method = cache.javaClass.getMethod("getMethodsByName", String::class.java, GlobalSearchScope::class.java)
+            val result = method.invoke(cache, name, scope)
+            @Suppress("UNCHECKED_CAST")
+            (result as? Array<*>)?.filterIsInstance<PsiElement>() ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 获取所有字段名（反射调用）
+     */
+    fun getAllFieldNames(cache: Any?): Array<String> {
+        if (cache == null) return emptyArray()
+        return try {
+            val method = cache.javaClass.getMethod("getAllFieldNames")
+            @Suppress("UNCHECKED_CAST")
+            method.invoke(cache) as? Array<String> ?: emptyArray()
+        } catch (e: Exception) {
+            emptyArray()
+        }
+    }
+
+    /**
+     * 根据名称获取字段（反射调用）
+     */
+    fun getFieldsByName(cache: Any?, name: String, scope: GlobalSearchScope): List<PsiElement> {
+        if (cache == null) return emptyList()
+        return try {
+            val method = cache.javaClass.getMethod("getFieldsByName", String::class.java, GlobalSearchScope::class.java)
+            val result = method.invoke(cache, name, scope)
+            @Suppress("UNCHECKED_CAST")
+            (result as? Array<*>)?.filterIsInstance<PsiElement>() ?: emptyList()
         } catch (e: Exception) {
             emptyList()
         }
