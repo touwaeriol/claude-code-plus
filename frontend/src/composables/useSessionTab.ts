@@ -35,6 +35,7 @@ import {useSessionTools, type SessionToolsInstance} from './useSessionTools'
 import {useSessionStats, type SessionStatsInstance} from './useSessionStats'
 import {useSessionPermissions, type SessionPermissionsInstance} from './useSessionPermissions'
 import {useSessionMessages, type SessionMessagesInstance} from './useSessionMessages'
+import type {ActiveFileInfo} from '@/services/jetbrainsRSocket'
 import {loggers} from '@/utils/logger'
 import type {PendingPermissionRequest, PendingUserQuestion, PermissionResponse} from '@/types/permission'
 import {HISTORY_LAZY_LOAD_SIZE, HISTORY_PAGE_SIZE} from '@/constants/messageWindow'
@@ -1218,13 +1219,13 @@ export function useSessionTab(initialOrder: number = 0) {
      * @param options.isSlashCommand - 是否是斜杠命令（斜杠命令不发送 contexts）
      */
     async function sendMessage(
-        message: { contexts: any[]; contents: ContentBlock[] },
+        message: { contexts: any[]; contents: ContentBlock[]; ideContext?: ActiveFileInfo | null },
         options?: { isSlashCommand?: boolean }
     ): Promise<void> {
-        // 如果是斜杠命令，清空 contexts
+        // 如果是斜杠命令，清空 contexts 和 ideContext
         if (options?.isSlashCommand) {
-            log.info(`[Tab ${tabId}] 检测到斜杠命令，忽略 contexts`)
-            message = {...message, contexts: []}
+            log.info(`[Tab ${tabId}] 检测到斜杠命令，忽略 contexts 和 ideContext`)
+            message = {...message, contexts: [], ideContext: null}
         }
         // 检测 /rename 命令
         const textContent = message.contents.find(c => c.type === 'text') as { text?: string } | undefined
@@ -1416,13 +1417,13 @@ export function useSessionTab(initialOrder: number = 0) {
      * @param options - 发送选项
      */
     async function forceSendMessage(
-        message: { contexts: any[]; contents: ContentBlock[] },
+        message: { contexts: any[]; contents: ContentBlock[]; ideContext?: ActiveFileInfo | null },
         options?: { isSlashCommand?: boolean }
     ): Promise<void> {
-        // 如果是斜杠命令，清空 contexts
+        // 如果是斜杠命令，清空 contexts 和 ideContext
         if (options?.isSlashCommand) {
-            log.info(`[Tab ${tabId}] 检测到斜杠命令，忽略 contexts`)
-            message = {...message, contexts: []}
+            log.info(`[Tab ${tabId}] 检测到斜杠命令，忽略 contexts 和 ideContext`)
+            message = {...message, contexts: [], ideContext: null}
         }
 
         // 如果正在生成，需要打断

@@ -9,6 +9,7 @@ import type { DisplayItem, ToolCall, ConnectionStatus, ContextReference } from '
 import type { RSocketSession } from '@/services/rsocket'
 import type { RpcCapabilities, RpcPermissionMode } from '@/types/rpc'
 import type { PendingUserQuestion, PendingPermissionRequest, SessionPermissionRule } from './permission'
+import type { ActiveFileInfo } from '@/services/jetbrainsRSocket'
 
 /**
  * 请求追踪信息
@@ -125,7 +126,8 @@ export interface SerializableSessionData {
 export interface PendingMessage {
   id: string                        // 唯一标识（用于删除/编辑）
   contexts: ContextReference[]      // 上下文栏引用（文件、图片）
-  contents: ContentBlock[]          // 输入框内容（文本块、图片块）
+  contents: ContentBlock[]          // 输入框内容（文本块、图片块，不含 IDE 上下文 XML）
+  ideContext?: ActiveFileInfo | null  // IDE 上下文（当前打开的文件信息，结构化数据）
   mergedContent?: ContentBlock[]    // 合并后的内容（避免重复计算）
   createdAt: number                 // 创建时间
 }

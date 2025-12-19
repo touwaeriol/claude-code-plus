@@ -82,7 +82,7 @@ import { ref, computed } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useI18n } from '@/composables/useI18n'
 import type { PendingMessage } from '@/types/session'
-import { hasCurrentOpenFileTag, parseCurrentOpenFileTag, removeCurrentOpenFileTag } from '@/utils/xmlTagParser'
+// XML 解析工具已不再需要，IDE 上下文现在直接从 msg.ideContext 读取
 
 const { t } = useI18n()
 const sessionStore = useSessionStore()
@@ -129,37 +129,31 @@ interface PreviewItem {
 
 /**
  * 按原始顺序生成预览项
- * 顺序：current-open-file 标签 → contexts（文件标签、图片）→ contents（文本、图片）
+ * 顺序：IDE 上下文 → contexts（文件标签、图片）→ contents（文本、图片）
+ *
+ * 重构后：直接从 msg.ideContext 读取 IDE 上下文，不再解析 XML
  */
 function getOrderedPreviewItems(msg: PendingMessage): PreviewItem[] {
   const items: PreviewItem[] = []
 
-  // 1. 先处理 current-open-file 标签（从 contents 中提取，放在最前面）
-  let currentOpenFileText = ''
-  for (const block of msg.contents) {
-    if (block.type === 'text' && 'text' in block) {
-      const text = (block as any).text as string
-      if (hasCurrentOpenFileTag(text)) {
-        const parsed = parseCurrentOpenFileTag(text)
-        if (parsed) {
-          const fileName = getFileName(parsed.path)
-          if (parsed.startLine && parsed.endLine) {
-            const startCol = parsed.startColumn || 1
-            const endCol = parsed.endColumn || 1
-            currentOpenFileText = `[${fileName}:${parsed.startLine}:${startCol}-${parsed.endLine}:${endCol}]`
-          } else if (parsed.line) {
-            const col = parsed.column || 1
-            currentOpenFileText = `[${fileName}:${parsed.line}:${col}]`
-          } else {
-            currentOpenFileText = `[${fileName}]`
-          }
-        }
-        break
-      }
+  // 1. 处理 IDE 上下文（直接从 ideContext 读取，不再解析 XML）
+  if (msg.ideContext) {
+    const file = msg.ideContext
+    const fileName = getFileName(file.relativePath)
+
+    if (file.hasSelection && file.startLine && file.endLine) {
+      // 有选区：显示行号范围
+      const startCol = file.startColumn || 1
+      const endCol = file.endColumn || 1
+      items.push({ type: 'text', text: `[${fileName}:${file.startLine}:${startCol}-${file.endLine}:${endCol}]` })
+    } else if (file.line) {
+      // 有光标位置
+      const col = file.column || 1
+      items.push({ type: 'text', text: `[${fileName}:${file.line}:${col}]` })
+    } else {
+      // 只有文件名
+      items.push({ type: 'text', text: `[${fileName}]` })
     }
-  }
-  if (currentOpenFileText) {
-    items.push({ type: 'text', text: currentOpenFileText })
   }
 
   // 2. contexts（文件标签、图片）- 按原始顺序
@@ -175,16 +169,12 @@ function getOrderedPreviewItems(msg: PendingMessage): PreviewItem[] {
     }
   }
 
-  // 3. contents（文本、图片）- 按原始顺序
+  // 3. contents（文本、图片）- 直接显示，不再有 XML 需要过滤
   for (const block of msg.contents) {
     if (block.type === 'text' && 'text' in block) {
-      let text = (block as any).text as string
-      // 移除 current-open-file 标签（已在上面单独处理）
-      if (hasCurrentOpenFileTag(text)) {
-        text = removeCurrentOpenFileTag(text)
-      }
-      if (text.trim()) {
-        items.push({ type: 'text', text: text.trim() })
+      const text = ((block as any).text as string).trim()
+      if (text) {
+        items.push({ type: 'text', text })
       }
     } else if (block.type === 'image' && 'source' in block) {
       const source = (block as any).source

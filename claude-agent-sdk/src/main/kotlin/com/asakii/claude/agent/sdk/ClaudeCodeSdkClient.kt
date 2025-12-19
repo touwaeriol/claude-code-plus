@@ -351,8 +351,14 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
      * ```
      */
     suspend fun runInBackground() {
-        ensureConnected()
-        controlProtocol!!.runInBackground()
+        runCommand {
+            ensureConnected()
+            logger.info("⏸️  将当前任务移到后台运行")
+
+            controlProtocol!!.runInBackground()
+
+            logger.info("✅ 任务已移到后台")
+        }
     }
 
     /**

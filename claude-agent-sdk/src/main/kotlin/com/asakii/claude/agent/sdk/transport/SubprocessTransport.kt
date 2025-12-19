@@ -140,10 +140,10 @@ class SubprocessTransport(
                 throw CLIConnectionException("Claude CLI process exited immediately with code $exitCode. stderr: $stderrContent")
             }
 
-            // Setup I/O streams
-            writer = BufferedWriter(OutputStreamWriter(process!!.outputStream))
-            reader = BufferedReader(InputStreamReader(process!!.inputStream))
-            errorReader = BufferedReader(InputStreamReader(process!!.errorStream))
+            // Setup I/O streams - 显式指定 UTF-8 编码，避免 Windows 默认编码问题
+            writer = BufferedWriter(OutputStreamWriter(process!!.outputStream, Charsets.UTF_8))
+            reader = BufferedReader(InputStreamReader(process!!.inputStream, Charsets.UTF_8))
+            errorReader = BufferedReader(InputStreamReader(process!!.errorStream, Charsets.UTF_8))
             logger.info("📡 I/O流设置完成（包含stderr）")
 
             isConnectedFlag = true

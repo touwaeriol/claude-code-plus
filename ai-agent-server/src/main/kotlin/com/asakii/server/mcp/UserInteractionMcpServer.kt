@@ -202,97 +202,41 @@ class UserInteractionMcpServer : McpServerBase() {
      * 告知 AI 如何正确使用 AskUserQuestion 工具与用户进行交互
      */
     override fun getSystemPromptAppendix(): String {
-        return Companion.loadResourceText("/prompts/user-interaction-mcp-instructions.md")
-            ?: "When you need clarification from the user, use the `mcp__user_interaction__AskUserQuestion` tool to ask questions."
+        return DEFAULT_INSTRUCTIONS
     }
 
     companion object {
-        /** AskUserQuestion 工具的 JSON Schema 定义（从资源文件加载） */
-        val ASK_USER_QUESTION_SCHEMA: Map<String, Any> by lazy {
-            loadToolSchema("AskUserQuestion")
-        }
-
         /**
-         * 从资源文件加载工具 Schema
+         * 默认系统提示词
          */
-        private fun loadToolSchema(toolName: String): Map<String, Any> {
-            val resourcePath = "/mcp/schemas/tools.json"
-            val content = UserInteractionMcpServer::class.java.getResourceAsStream(resourcePath)
-                ?.bufferedReader()
-                ?.readText()
-                ?: run {
-                    mcpLogger.warn { "⚠️ 无法加载资源文件: $resourcePath，使用默认 Schema" }
-                    return getDefaultSchema()
-                }
+        const val DEFAULT_INSTRUCTIONS = "When you need clarification from the user, especially when presenting multiple options or choices, use the `mcp__user_interaction__AskUserQuestion` tool to ask questions. The user's response will be returned to you through this tool."
 
-            return try {
-                val json = Json { ignoreUnknownKeys = true }
-                val toolsMap = json.decodeFromString<Map<String, JsonObject>>(content)
-                val toolSchema = toolsMap[toolName]
-                    ?: run {
-                        mcpLogger.warn { "⚠️ 工具 Schema 未找到: $toolName，使用默认 Schema" }
-                        return getDefaultSchema()
-                    }
-                jsonObjectToMap(toolSchema)
-            } catch (e: Exception) {
-                mcpLogger.error { "❌ 解析工具 Schema 失败: ${e.message}" }
-                getDefaultSchema()
-            }
-        }
-
-        /**
-         * 将 JsonObject 递归转换为 Map<String, Any>
-         */
-        private fun jsonObjectToMap(jsonObject: JsonObject): Map<String, Any> {
-            return jsonObject.mapValues { (_, value) -> jsonElementToAny(value) }
-        }
-
-        /**
-         * 将 JsonElement 递归转换为 Any
-         */
-        private fun jsonElementToAny(element: JsonElement): Any {
-            return when (element) {
-                is JsonPrimitive -> when {
-                    element.isString -> element.content
-                    element.booleanOrNull != null -> element.boolean
-                    element.intOrNull != null -> element.int
-                    element.longOrNull != null -> element.long
-                    element.doubleOrNull != null -> element.double
-                    else -> element.content
-                }
-                is JsonArray -> element.map { jsonElementToAny(it) }
-                is JsonObject -> jsonObjectToMap(element)
-                is JsonNull -> ""
-            }
-        }
-
-        /**
-         * 默认 Schema（当资源文件加载失败时使用）
-         */
-        private fun getDefaultSchema(): Map<String, Any> = mapOf(
+        /** AskUserQuestion tool JSON Schema definition */
+        val ASK_USER_QUESTION_SCHEMA: Map<String, Any> = mapOf(
             "type" to "object",
+            "description" to "Ask the user questions and get their choices. Use this tool to interact with users when input or confirmation is needed.",
             "properties" to mapOf(
                 "questions" to mapOf(
                     "type" to "array",
-                    "description" to "问题列表",
+                    "description" to "List of questions",
                     "items" to mapOf(
                         "type" to "object",
                         "properties" to mapOf(
-                            "question" to mapOf("type" to "string", "description" to "问题内容"),
-                            "header" to mapOf("type" to "string", "description" to "问题标题/分类标签"),
+                            "question" to mapOf("type" to "string", "description" to "Question content"),
+                            "header" to mapOf("type" to "string", "description" to "Question header/category label"),
                             "options" to mapOf(
                                 "type" to "array",
-                                "description" to "选项列表",
+                                "description" to "List of options",
                                 "items" to mapOf(
                                     "type" to "object",
                                     "properties" to mapOf(
-                                        "label" to mapOf("type" to "string", "description" to "选项显示文本"),
-                                        "description" to mapOf("type" to "string", "description" to "选项描述(可选)")
+                                        "label" to mapOf("type" to "string", "description" to "Option display text"),
+                                        "description" to mapOf("type" to "string", "description" to "Option description (optional)")
                                     ),
                                     "required" to listOf("label")
                                 )
                             ),
-                            "multiSelect" to mapOf("type" to "boolean", "description" to "是否允许多选,默认 false")
+                            "multiSelect" to mapOf("type" to "boolean", "description" to "Allow multiple selections, default false")
                         ),
                         "required" to listOf("question", "header", "options")
                     )
@@ -300,16 +244,6 @@ class UserInteractionMcpServer : McpServerBase() {
             ),
             "required" to listOf("questions")
         )
-
-        /**
-         * 从资源文件加载文本内容
-         */
-        private fun loadResourceText(resourcePath: String): String? {
-            return UserInteractionMcpServer::class.java.getResourceAsStream(resourcePath)
-                ?.bufferedReader()
-                ?.readText()
-                ?.trim()
-        }
     }
 
     /**

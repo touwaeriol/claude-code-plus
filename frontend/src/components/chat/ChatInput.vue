@@ -73,9 +73,9 @@
         </div>
       </el-tooltip>
 
-      <!-- Context Tags (上下文标签) - 只显示前三个 -->
+      <!-- Context Tags (上下文标签) - 全部显示，自然换行 -->
       <el-tooltip
-        v-for="(context, index) in visibleContexts"
+        v-for="(context, index) in contexts"
         :key="`context-${index}`"
         :content="getContextFullPath(context)"
         placement="top"
@@ -106,18 +106,6 @@
           >
             ×
           </button>
-        </div>
-      </el-tooltip>
-
-      <!-- 更多 Context 提示 -->
-      <el-tooltip
-        v-if="hiddenContextsCount > 0"
-        :content="t('chat.moreContexts', { count: hiddenContextsCount })"
-        placement="bottom"
-        :show-after="300"
-      >
-        <div class="context-more-hint">
-          +{{ hiddenContextsCount }}
         </div>
       </el-tooltip>
     </div>
@@ -439,6 +427,7 @@ import { AiModel, type PermissionMode, type EnhancedMessage, type TokenUsage as 
 import type { ContextReference } from '@/types/display'
 import type { ContentBlock } from '@/types/message'
 import { jetbrainsRSocket, type ActiveFileInfo } from '@/services/jetbrainsRSocket'
+export type { ActiveFileInfo }  // 重新导出供父组件使用
 import AtSymbolFilePopup from '@/components/input/AtSymbolFilePopup.vue'
 import FileSelectPopup from '@/components/input/FileSelectPopup.vue'
 import SlashCommandPopup from '@/components/input/SlashCommandPopup.vue'
@@ -504,6 +493,8 @@ interface Props {
 interface SendOptions {
   /** 是否是斜杠命令（斜杠命令不发送 contexts） */
   isSlashCommand?: boolean
+  /** IDE 上下文（当前打开的文件信息，结构化数据，发送后端时才转换为 XML） */
+  ideContext?: ActiveFileInfo | null
 }
 
 interface Emits {
@@ -742,15 +733,6 @@ const canSend = computed(() => {
   return hasContent && props.enabled
 })
 
-// 只显示前三个 context
-const visibleContexts = computed(() => {
-  return props.contexts.slice(0, 3)
-})
-
-// 隐藏的 context 数量
-const hiddenContextsCount = computed(() => {
-  return Math.max(0, props.contexts.length - 3)
-})
 
 const placeholderText = computed(() => {
   return props.placeholderText || ''
@@ -810,86 +792,8 @@ function dismissActiveFile() {
   activeFileDismissed.value = true
 }
 
-/**
- * XML 转义辅助函数
- */
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
-/**
- * 生成 <current-open-file/> 格式的标记文本
- * 用于发送消息时标识当前打开的文件
- * 支持不同文件类型：text, diff, image, binary
- */
-function generateActiveFileTag(): string | null {
-  if (!shouldShowActiveFile.value || !currentActiveFile.value) {
-    return null
-  }
-  const file = currentActiveFile.value
-  const fileType = file.fileType || 'text'
-
-  // 处理 Diff 视图
-  if (fileType === 'diff') {
-    let tag = `<current-open-file path="${file.relativePath}" file-type="diff"`
-    if (file.diffTitle) {
-      tag += ` diff-title="${escapeXml(file.diffTitle)}"`
-    }
-    // Diff 内容通过子元素传递，避免属性值过长
-    tag += '>'
-    if (file.diffOldContent !== undefined && file.diffOldContent !== null) {
-      tag += `\n<diff-old-content><![CDATA[${file.diffOldContent}]]></diff-old-content>`
-    }
-    if (file.diffNewContent !== undefined && file.diffNewContent !== null) {
-      tag += `\n<diff-new-content><![CDATA[${file.diffNewContent}]]></diff-new-content>`
-    }
-    tag += '\n</current-open-file>'
-    return tag
-  }
-
-  // 处理图片和二进制文件：只传递路径
-  if (fileType === 'image' || fileType === 'binary') {
-    return `<current-open-file path="${file.relativePath}" file-type="${fileType}"/>`
-  }
-
-  // 处理普通文本文件（保持原有逻辑）
-  if (file.hasSelection && file.startLine && file.startColumn && file.endLine && file.endColumn) {
-    // 有选区
-    let tag = `<current-open-file path="${file.relativePath}" start-line="${file.startLine}" start-column="${file.startColumn}" end-line="${file.endLine}" end-column="${file.endColumn}"`
-    // 如果有选中的文本内容，添加 selected-content 属性
-    if (file.selectedContent) {
-      tag += ` selected-content="${escapeXml(file.selectedContent)}"`
-    }
-    tag += '/>'
-    return tag
-  } else if (file.line && file.column) {
-    // 只有光标位置
-    return `<current-open-file path="${file.relativePath}" line="${file.line}" column="${file.column}"/>`
-  } else {
-    // 只有文件路径
-    return `<current-open-file path="${file.relativePath}"/>`
-  }
-}
-
-/**
- * 在内容块数组开头插入活跃文件标记
- */
-function prependActiveFileTag(contents: ContentBlock[]): ContentBlock[] {
-  const tag = generateActiveFileTag()
-  if (!tag) {
-    return contents
-  }
-  // 创建文本块，包含活跃文件标记
-  const activeFileBlock: ContentBlock = {
-    type: 'text',
-    text: tag
-  }
-  return [activeFileBlock, ...contents]
-}
+// XML 转换逻辑已移至 userMessageBuilder.ts 的 ideContextToContentBlocks 函数
+// ChatInput 现在传递结构化的 ideContext，由 useSessionMessages 在发送时转换为 XML
 
 // Watch props changes
 // Model selection is now driven by settingsStore (UiModelOption)，不再直接依赖 props.selectedModel
@@ -940,7 +844,7 @@ async function handleRichTextSubmit(_content: { text: string; images: { id: stri
   if (!props.enabled) return
 
   // 使用新方法提取有序内容块
-  let contents = richTextInputRef.value?.extractContentBlocks() || []
+  const contents = richTextInputRef.value?.extractContentBlocks() || []
 
   if (contents.length === 0) return
 
@@ -951,13 +855,13 @@ async function handleRichTextSubmit(_content: { text: string; images: { id: stri
   // 关闭斜杠命令弹窗
   dismissSlashCommandPopup()
 
-  // 如果不是斜杠命令，在内容开头添加当前打开文件标记
-  if (!isSlashCommand) {
-    contents = prependActiveFileTag(contents)
-  }
+  // 获取 IDE 上下文（当前打开的文件，结构化数据）
+  // 斜杠命令不需要 IDE 上下文
+  const ideContext = (!isSlashCommand && shouldShowActiveFile.value) ? currentActiveFile.value : null
 
   // 发送消息（父组件的 enqueueMessage 会自动处理队列逻辑）
-  emit('send', contents, { isSlashCommand })
+  // 注意：不再转换 XML，传递结构化的 ideContext
+  emit('send', contents, { isSlashCommand, ideContext })
 
   // 清理
   richTextInputRef.value?.clear()
@@ -1179,7 +1083,7 @@ async function handleSend() {
   if (!canSend.value) return
 
   // 使用新方法提取有序内容块
-  let contents = richTextInputRef.value?.extractContentBlocks() || []
+  const contents = richTextInputRef.value?.extractContentBlocks() || []
 
   if (contents.length > 0) {
     // 检测是否是斜杠命令
@@ -1189,13 +1093,12 @@ async function handleSend() {
     // 关闭斜杠命令弹窗
     dismissSlashCommandPopup()
 
-    // 如果不是斜杠命令，在内容开头添加当前打开文件标记
-    if (!isSlashCommand) {
-      contents = prependActiveFileTag(contents)
-    }
+    // 获取 IDE 上下文（当前打开的文件，结构化数据）
+    // 斜杠命令不需要 IDE 上下文
+    const ideContext = (!isSlashCommand && shouldShowActiveFile.value) ? currentActiveFile.value : null
 
-    // 先展示到 UI，连接状态由 Tab 层处理
-    emit('send', contents, { isSlashCommand })
+    // 发送消息（父组件会处理队列逻辑和 XML 转换）
+    emit('send', contents, { isSlashCommand, ideContext })
 
     // 清理输入框
     richTextInputRef.value?.clear()
@@ -1206,14 +1109,15 @@ async function handleSend() {
 
 async function handleForceSend() {
   // 使用新方法提取有序内容块
-  let contents = richTextInputRef.value?.extractContentBlocks() || []
+  const contents = richTextInputRef.value?.extractContentBlocks() || []
 
   if (contents.length === 0 || !props.isGenerating) return
 
-  // 在内容开头添加当前打开文件标记
-  contents = prependActiveFileTag(contents)
+  // 获取 IDE 上下文（当前打开的文件，结构化数据）
+  const ideContext = shouldShowActiveFile.value ? currentActiveFile.value : null
 
-  emit('force-send', contents)
+  // 发送消息（父组件会处理 XML 转换）
+  emit('force-send', contents, { ideContext })
 
   // 清理
   richTextInputRef.value?.clear()
@@ -1991,7 +1895,7 @@ onUnmounted(() => {
 
 .cursor-selector.model-selector {
   width: auto;
-  min-width: 70px;
+  min-width: 100px;
 }
 
 /* 移除边框和背景，使用纯文字样式 */

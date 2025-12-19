@@ -168,7 +168,7 @@ import { useEnvironment } from '@/composables/useEnvironment'
 import { setupIdeSessionBridge, onIdeHostCommand } from '@/bridges/ideSessionBridge'
 import { aiAgentService } from '@/services/aiAgentService'
 import MessageList from './MessageList.vue'
-import ChatInput from './ChatInput.vue'
+import ChatInput, { type ActiveFileInfo } from './ChatInput.vue'
 import ChatHeader from './ChatHeader.vue'
 import SessionListOverlay from './SessionListOverlay.vue'
 import PendingMessageQueue from './PendingMessageQueue.vue'
@@ -487,6 +487,7 @@ watch(() => props.sessionId, async (newSessionId) => {
 // 发送选项接口
 interface SendOptions {
   isSlashCommand?: boolean
+  ideContext?: ActiveFileInfo | null  // IDE 上下文（当前打开的文件信息）
 }
 
 // 事件处理器
@@ -523,7 +524,8 @@ async function handleSendMessage(contents?: ContentBlock[], options?: SendOption
     console.log('Sending message via currentTab', options?.isSlashCommand ? '(no contexts for slash command)' : `(${currentContexts.length} contexts)`)
     sessionStore.currentTab.sendMessage({
       contexts: currentContexts,
-      contents: safeContents
+      contents: safeContents,
+      ideContext: options?.ideContext  // 传递结构化的 IDE 上下文
     }, { isSlashCommand: options?.isSlashCommand })
   } catch (error) {
     console.error('Failed to send message:', error)
@@ -544,7 +546,8 @@ async function handleForceSend(contents?: ContentBlock[], options?: SendOptions)
   // 使用 forceSendMessage：打断 + 立即发送（跳过队列）
   await sessionStore.currentTab?.forceSendMessage({
     contexts: currentContexts,
-    contents: safeContents
+    contents: safeContents,
+    ideContext: options?.ideContext  // 传递结构化的 IDE 上下文
   }, { isSlashCommand: options?.isSlashCommand })
 
   // 发送后清空当前 Tab 的上下文

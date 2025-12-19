@@ -68,11 +68,16 @@ data class ThinkingLevelConfig(
 class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State> {
 
     data class State(
-        // MCP 服务器启用配置（放在最前面）
+        // MCP 服务器启用配置
         var enableUserInteractionMcp: Boolean = true,  // 用户交互 MCP（AskUserQuestion 工具）
         var enableJetBrainsMcp: Boolean = true,        // JetBrains IDE MCP（IDE 索引工具）
         var enableContext7Mcp: Boolean = false,        // Context7 MCP（获取最新库文档）
         var context7ApiKey: String = "",               // Context7 API Key（可选）
+
+        // MCP 系统提示词（自定义，空字符串表示使用默认值）
+        var userInteractionInstructions: String = "",
+        var jetbrainsInstructions: String = "",
+        var context7Instructions: String = "",
 
         // 默认启用 ByPass 权限（前端自动应用）
         var defaultBypassPermissions: Boolean = false,
@@ -97,7 +102,10 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var permissionMode: String = "default",
 
         // 是否包含部分消息
-        var includePartialMessages: Boolean = true
+        var includePartialMessages: Boolean = true,
+
+        // Agent 配置（JSON 序列化）
+        var customAgents: String = "{}"
     )
 
     private var state = State()
@@ -151,6 +159,36 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     var context7ApiKey: String
         get() = state.context7ApiKey
         set(value) { state.context7ApiKey = value }
+
+    // MCP 系统提示词属性（空字符串表示使用默认值）
+    var userInteractionInstructions: String
+        get() = state.userInteractionInstructions
+        set(value) { state.userInteractionInstructions = value }
+
+    var jetbrainsInstructions: String
+        get() = state.jetbrainsInstructions
+        set(value) { state.jetbrainsInstructions = value }
+
+    var context7Instructions: String
+        get() = state.context7Instructions
+        set(value) { state.context7Instructions = value }
+
+    /** 获取生效的 User Interaction MCP 提示词（自定义或默认） */
+    val effectiveUserInteractionInstructions: String
+        get() = state.userInteractionInstructions.ifBlank { McpDefaults.USER_INTERACTION_INSTRUCTIONS }
+
+    /** 获取生效的 JetBrains MCP 提示词（自定义或默认） */
+    val effectiveJetbrainsInstructions: String
+        get() = state.jetbrainsInstructions.ifBlank { McpDefaults.JETBRAINS_INSTRUCTIONS }
+
+    /** 获取生效的 Context7 MCP 提示词（自定义或默认） */
+    val effectiveContext7Instructions: String
+        get() = state.context7Instructions.ifBlank { McpDefaults.CONTEXT7_INSTRUCTIONS }
+
+    // Agent 配置
+    var customAgents: String
+        get() = state.customAgents
+        set(value) { state.customAgents = value }
 
     var defaultBypassPermissions: Boolean
         get() = state.defaultBypassPermissions

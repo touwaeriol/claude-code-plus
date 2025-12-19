@@ -52,8 +52,9 @@
           }"
           @click="handleContentClick"
         >
-          <!-- 上下文标签区域 -->
-          <div v-if="hasCurrentOpenFile || contextFileRefs.length > 0" class="context-tags">
+          <!-- 上下文标签区域（当前打开的文件 + 文件/图片上下文按添加顺序混合显示） -->
+          <div v-if="hasCurrentOpenFile || allContextRefs.length > 0" class="context-tags">
+            <!-- 当前打开的文件（始终在最前面） -->
             <span
               v-if="hasCurrentOpenFile"
               class="file-tag"
@@ -63,16 +64,27 @@
               <span class="tag-file-name">{{ currentOpenFileName }}</span>
               <span v-if="currentOpenFileLineRange" class="tag-line-range">{{ currentOpenFileLineRange }}</span>
             </span>
-            <span
-              v-for="(fileRef, index) in contextFileRefs"
-              :key="`file-${index}`"
-              class="file-tag file-ref"
-              :title="fileRef.fullPath || fileRef.uri"
-              @click.stop="handleFileRefClick(fileRef)"
-            >
-              <span class="tag-prefix">@</span>
-              <span class="tag-file-name">{{ getFileRefName(fileRef) }}</span>
-            </span>
+            <!-- 文件和图片上下文按原始顺序显示 -->
+            <template v-for="(ctx, index) in allContextRefs" :key="`ctx-${index}`">
+              <!-- 文件引用 -->
+              <span
+                v-if="ctx.type === 'file'"
+                class="file-tag file-ref"
+                :title="ctx.fullPath || ctx.uri"
+                @click.stop="handleFileRefClick(ctx)"
+              >
+                <span class="tag-prefix">@</span>
+                <span class="tag-file-name">{{ getFileRefName(ctx) }}</span>
+              </span>
+              <!-- 图片 -->
+              <img
+                v-else-if="ctx.type === 'image' && ctx.base64Data"
+                :src="getContextImageSrc(ctx)"
+                :alt="`Context image ${index + 1}`"
+                class="context-thumb-inline"
+                @click.stop="openContextImagePreview(ctx)"
+              />
+            </template>
           </div>
 
           <!-- 折叠状态：显示预览 -->
@@ -86,18 +98,6 @@
 
           <!-- 展开状态：显示完整内容 -->
           <template v-else>
-            <!-- 上下文图片 -->
-            <div v-if="contextImagesAsBlocks.length > 0" class="context-images">
-              <img
-                v-for="(image, index) in contextImagesAsBlocks"
-                :key="`ctx-${index}`"
-                :src="getImageSrc(image)"
-                :alt="`Context image ${index + 1}`"
-                class="context-thumb"
-                @click.stop="openImagePreview(image)"
-              />
-            </div>
-
             <!-- 文本内容 -->
             <div
               v-if="messageText"
@@ -152,8 +152,8 @@ import { onClickOutside } from '@vueuse/core'
 import { useI18n } from '@/composables/useI18n'
 import type { ImageBlock, ContentBlock } from '@/types/message'
 import type { ContextReference } from '@/types/display'
-import type { ParsedCurrentOpenFile } from '@/utils/xmlTagParser'
-import { hasCurrentOpenFileTag, parseCurrentOpenFileTag, removeCurrentOpenFileTag } from '@/utils/xmlTagParser'
+import type { ParsedCurrentOpenFile, ParsedOpenFileReminder, ParsedSelectLinesReminder } from '@/utils/xmlTagParser'
+import { hasCurrentOpenFileTag, parseCurrentOpenFileTag, removeCurrentOpenFileTag, isSystemReminderTag } from '@/utils/xmlTagParser'
 import { isFileReference } from '@/utils/userMessageBuilder'
 import { linkifyText, getLinkFromEvent, handleLinkClick } from '@/utils/linkify'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
@@ -284,18 +284,12 @@ function handleContextRemove(context: ContextReference) {
   }
 }
 
-// 从 DisplayItem.contexts 中提取图片上下文（ContextReference 类型）
-const contextImageRefs = computed(() => {
+// 所有上下文引用（保持原始顺序，包含文件和图片）
+const allContextRefs = computed(() => {
   const ctxs = props.message.contexts
   if (!ctxs || !Array.isArray(ctxs)) return []
-  return ctxs.filter(ctx => ctx.type === 'image' && ctx.base64Data)
-})
-
-// 从 DisplayItem.contexts 中提取文件引用（ContextReference 类型）
-const contextFileRefs = computed(() => {
-  const ctxs = props.message.contexts
-  if (!ctxs || !Array.isArray(ctxs)) return []
-  return ctxs.filter(ctx => ctx.type === 'file')
+  // 过滤出文件和图片类型，保持原始顺序
+  return ctxs.filter(ctx => ctx.type === 'file' || (ctx.type === 'image' && ctx.base64Data))
 })
 
 // 获取文件引用的显示名称
@@ -312,39 +306,52 @@ function handleFileRefClick(fileRef: ContextReference) {
   }
 }
 
-// 将 ContextReference 转换为 ImageBlock 格式（用于复用 getImageSrc 等函数）
-const contextImagesAsBlocks = computed((): ImageBlock[] => {
-  return contextImageRefs.value.map(ctx => ({
-    type: 'image' as const,
-    source: {
-      type: 'base64' as const,
-      media_type: ctx.mimeType || 'image/png',
-      data: ctx.base64Data || ''
-    }
-  }))
-})
+// 获取上下文图片的 src（针对 ContextReference 类型）
+function getContextImageSrc(ctx: ContextReference): string {
+  if (ctx.type === 'image' && ctx.base64Data) {
+    const mimeType = ctx.mimeType || 'image/png'
+    return `data:${mimeType};base64,${ctx.base64Data}`
+  }
+  return ''
+}
 
-// 提取用户输入的文本内容（排除文件引用，移除 current-open-file 标签）
+// 打开上下文图片预览（针对 ContextReference 类型）
+function openContextImagePreview(ctx: ContextReference) {
+  const src = getContextImageSrc(ctx)
+  if (src) {
+    previewImageSrc.value = src
+    previewImageAlt.value = ctx.name || 'Context image'
+    previewVisible.value = true
+  }
+}
+
+
+// 提取用户输入的文本内容（排除文件引用、system-reminder 标签）
 const messageText = computed(() => {
   const content = props.message.content
   if (!content || !Array.isArray(content)) {
     return ''
   }
 
-  // 从用户输入内容块中提取文本（排除文件引用）
+  // 从用户输入内容块中提取文本（排除文件引用和系统提醒标签）
   return content
     .filter(block => {
       if (block.type === 'text' && 'text' in block) {
         const text = (block as any).text?.trim() || ''
         // 排除文件引用格式的文本
-        return !isFileReference(text)
+        if (isFileReference(text)) return false
+        // 排除 system-reminder 标签（新格式）
+        if (isSystemReminderTag(text)) return false
+        // 排除 diff 内容标签
+        if (text.startsWith('<diff-old-content>') || text.startsWith('<diff-new-content>')) return false
+        return true
       }
       return false
     })
     .map(block => {
       if (block.type === 'text' && 'text' in block) {
         let text = (block as any).text
-        // 移除 current-open-file 标签（它会在文件标记区域单独显示）
+        // 移除 current-open-file 标签（旧格式，它会在文件标记区域单独显示）
         if (hasCurrentOpenFileTag(text)) {
           text = removeCurrentOpenFileTag(text)
         }
@@ -390,13 +397,33 @@ const previewText = computed(() => {
   return text
 })
 
-// 获取当前打开文件标记（优先从 props 获取，其次从消息文本解析）
+// 获取当前打开文件标记（支持新旧两种格式）
 const currentOpenFile = computed((): ParsedCurrentOpenFile | undefined => {
-  // 优先使用 props 中的 currentOpenFile（历史消息中解析的）
+  // 1. 优先使用新格式的 openFile（从 parseUserMessage 解析的）
+  if (props.message.openFile) {
+    const openFile = props.message.openFile as ParsedOpenFileReminder
+    // 转换为 ParsedCurrentOpenFile 格式
+    const result: ParsedCurrentOpenFile = {
+      path: openFile.path
+    }
+    // 如果有 selectedLines，合并选区信息
+    if (props.message.selectedLines) {
+      const sel = props.message.selectedLines as ParsedSelectLinesReminder
+      result.startLine = sel.start
+      result.endLine = sel.end
+      result.startColumn = sel.startColumn
+      result.endColumn = sel.endColumn
+      result.selectedContent = sel.content
+    }
+    return result
+  }
+
+  // 2. 兼容旧格式：从 props 中的 currentOpenFile（历史消息中解析的）
   if (props.message.currentOpenFile) {
     return props.message.currentOpenFile as ParsedCurrentOpenFile
   }
-  // 否则从消息文本中解析
+
+  // 3. 从消息文本中解析（旧格式）
   return parsedCurrentOpenFile.value
 })
 
@@ -856,26 +883,20 @@ function closeImagePreview() {
   color: inherit;
 }
 
-/* ===== 图片 ===== */
-.context-images {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.context-thumb {
-  width: 32px;
-  height: 32px;
+/* ===== 内联上下文图片（与文件标签混合显示） ===== */
+.context-thumb-inline {
+  width: 24px;
+  height: 24px;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
   border: 1px solid var(--theme-border);
   transition: transform 0.2s;
+  vertical-align: middle;
 }
 
-.context-thumb:hover {
-  transform: scale(1.05);
+.context-thumb-inline:hover {
+  transform: scale(1.1);
 }
 
 .inline-images {

@@ -263,6 +263,7 @@ class JetBrainsRSocketHandler(
                 .setDefaultThinkingTokens(settings.defaultThinkingTokens)
                 .setDefaultThinkingLevelId(settings.defaultThinkingLevelId)
                 .addAllThinkingLevels(thinkingLevelsProto)
+                .setPermissionMode(settings.permissionMode)
                 .build()
 
             val response = GetIdeSettingsResponse.newBuilder()
@@ -498,6 +499,16 @@ class JetBrainsRSocketHandler(
         }
 
         try {
+            // 转换思考级别列表为 Proto 格式
+            val thinkingLevelsProto = settings.getAllThinkingLevels().map { level: com.asakii.settings.ThinkingLevelConfig ->
+                com.asakii.rpc.proto.ThinkingLevelConfig.newBuilder()
+                    .setId(level.id)
+                    .setName(level.name)
+                    .setTokens(level.tokens)
+                    .setIsCustom(level.isCustom)
+                    .build()
+            }
+
             // 构建 IdeSettings
             val ideSettings = IdeSettings.newBuilder()
                 .setDefaultModelId(settings.defaultModelId)
@@ -508,6 +519,9 @@ class JetBrainsRSocketHandler(
                 .setIncludePartialMessages(settings.includePartialMessages)
                 .setDefaultThinkingLevel(settings.defaultThinkingLevel)
                 .setDefaultThinkingTokens(settings.defaultThinkingTokens)
+                .setDefaultThinkingLevelId(settings.defaultThinkingLevelId)
+                .addAllThinkingLevels(thinkingLevelsProto)
+                .setPermissionMode(settings.permissionMode)
                 .build()
 
             // 构建 IdeSettingsChangedNotify

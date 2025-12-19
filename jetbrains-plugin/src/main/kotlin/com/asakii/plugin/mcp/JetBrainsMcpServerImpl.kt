@@ -5,6 +5,8 @@ import com.asakii.claude.agent.sdk.mcp.McpServerBase
 import com.asakii.claude.agent.sdk.mcp.annotations.McpServerConfig
 import com.asakii.plugin.mcp.tools.*
 import com.asakii.server.mcp.JetBrainsMcpServerProvider
+import com.asakii.settings.AgentSettingsService
+import com.asakii.settings.McpDefaults
 import com.intellij.openapi.project.Project
 import kotlinx.serialization.json.*
 import mu.KotlinLogging
@@ -33,7 +35,7 @@ class JetBrainsMcpServerImpl(private val project: Project) : McpServerBase() {
     private lateinit var renameTool: RenameTool
 
     override fun getSystemPromptAppendix(): String {
-        return MCP_INSTRUCTIONS
+        return AgentSettingsService.getInstance().effectiveJetbrainsInstructions
     }
 
     /**
@@ -50,49 +52,20 @@ class JetBrainsMcpServerImpl(private val project: Project) : McpServerBase() {
     )
 
     companion object {
-        private const val SCHEMA_PATH = "/mcp/schemas/tools.json"
-        private const val INSTRUCTIONS_PATH = "/prompts/jetbrains-mcp-instructions.md"
-
-        private const val DEFAULT_MCP_INSTRUCTIONS = """You have access to JetBrains IDE tools that leverage the IDE's powerful indexing and analysis capabilities:
-
-- `mcp__jetbrains__DirectoryTree`: Browse project directory structure with filtering options
-- `mcp__jetbrains__FileProblems`: Get static analysis results (errors, warnings) for a file
-- `mcp__jetbrains__FileIndex`: Search files, classes, and symbols using IDE index
-- `mcp__jetbrains__CodeSearch`: Search code content across project files (like Find in Files)
-
-These tools are faster and more accurate than file system operations because they use IDE's pre-built indexes.
-
-IMPORTANT: After completing code modifications, you MUST use `mcp__jetbrains__FileProblems` to perform static analysis validation on the modified files to minimize syntax errors.
-
-IMPORTANT: When a project build/compile fails or a file is known to have syntax errors, use `mcp__jetbrains__FileProblems` with `includeWarnings: true` to quickly retrieve static analysis results and pinpoint issues. This is much faster than re-running the full build command."""
-
         /**
-         * 预加载的工具 Schema（在类加载时立即加载，不使用 lazy）
+         * 预加载的工具 Schema（使用 McpDefaults 中的静态定义）
          */
         val TOOL_SCHEMAS: Map<String, Map<String, Any>> = loadAllSchemas()
 
         /**
-         * 预加载的 MCP 指令提示词
-         */
-        val MCP_INSTRUCTIONS: String = loadInstructionsText()
-
-        /**
-         * 从资源文件加载所有工具 Schema
+         * 从 McpDefaults 加载所有工具 Schema
          */
         private fun loadAllSchemas(): Map<String, Map<String, Any>> {
-            logger.info { "📂 [JetBrainsMcpServer] Loading schemas from: $SCHEMA_PATH" }
-
-            val content = JetBrainsMcpServerImpl::class.java.getResourceAsStream(SCHEMA_PATH)
-                ?.bufferedReader()
-                ?.readText()
-                ?: run {
-                    logger.warn { "⚠️ [JetBrainsMcpServer] Cannot load resource: $SCHEMA_PATH, using empty schemas" }
-                    return emptyMap()
-                }
+            logger.info { "📂 [JetBrainsMcpServer] Loading schemas from McpDefaults" }
 
             return try {
                 val json = Json { ignoreUnknownKeys = true }
-                val toolsMap = json.decodeFromString<Map<String, JsonObject>>(content)
+                val toolsMap = json.decodeFromString<Map<String, JsonObject>>(McpDefaults.JETBRAINS_TOOLS_SCHEMA)
                 val result = toolsMap.mapValues { (_, jsonObj) -> jsonObjectToMap(jsonObj) }
                 logger.info { "✅ [JetBrainsMcpServer] Loaded ${result.size} tool schemas: ${result.keys}" }
                 result
@@ -100,22 +73,6 @@ IMPORTANT: When a project build/compile fails or a file is known to have syntax 
                 logger.error(e) { "❌ [JetBrainsMcpServer] Failed to parse schemas: ${e.message}" }
                 emptyMap()
             }
-        }
-
-        /**
-         * 加载 MCP 指令提示词
-         */
-        private fun loadInstructionsText(): String {
-            logger.info { "📂 [JetBrainsMcpServer] Loading instructions from: $INSTRUCTIONS_PATH" }
-
-            return JetBrainsMcpServerImpl::class.java.getResourceAsStream(INSTRUCTIONS_PATH)
-                ?.bufferedReader()
-                ?.readText()
-                ?.trim()
-                ?: run {
-                    logger.warn { "⚠️ [JetBrainsMcpServer] Cannot load resource: $INSTRUCTIONS_PATH, using default" }
-                    DEFAULT_MCP_INSTRUCTIONS
-                }
         }
 
         /**

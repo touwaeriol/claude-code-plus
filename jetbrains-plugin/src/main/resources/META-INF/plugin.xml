@@ -69,6 +69,20 @@
             id="com.asakii.settings"
             displayName="Claude Code Plus"/>
 
+        <!-- MCP Settings (child of Claude Code Plus) -->
+        <applicationConfigurable
+            parentId="com.asakii.settings"
+            instance="com.asakii.settings.McpConfigurable"
+            id="com.asakii.settings.mcp"
+            displayName="MCP"/>
+
+        <!-- Claude Code Settings (child of Claude Code Plus) -->
+        <applicationConfigurable
+            parentId="com.asakii.settings"
+            instance="com.asakii.settings.ClaudeCodeConfigurable"
+            id="com.asakii.settings.claudecode"
+            displayName="Claude Code"/>
+
         <applicationService
             serviceImplementation="com.asakii.plugin.services.ClaudeCodePlusBackgroundService"/>
 

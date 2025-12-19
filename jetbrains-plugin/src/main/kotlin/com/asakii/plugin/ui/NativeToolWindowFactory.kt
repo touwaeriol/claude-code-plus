@@ -76,11 +76,12 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
             // Settings button
             object : AnAction(
                 "Settings",
-                "Open Claude Code Plus Settings",
+                "Open Claude Code Settings",
                 AllIcons.General.Settings
             ) {
                 override fun actionPerformed(e: AnActionEvent) {
-                    ShowSettingsUtil.getInstance().showSettingsDialog(project, "com.asakii.settings")
+                    // 直接打开 Claude Code 配置页（跳过父级欢迎页）
+                    ShowSettingsUtil.getInstance().showSettingsDialog(project, "com.asakii.settings.claudecode")
                 }
             }
         )

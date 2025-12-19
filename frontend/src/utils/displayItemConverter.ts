@@ -235,7 +235,7 @@ export function convertMessageToDisplayItems(
       }
 
       // 如果有内容或上下文，创建用户消息
-      if (parsed.userContent.length > 0 || contexts.length > 0 || parsed.currentOpenFile) {
+      if (parsed.userContent.length > 0 || contexts.length > 0 || parsed.currentOpenFile || parsed.openFile) {
         const userMessage: UserMessage = {
           displayType: 'userMessage',
           id: message.id,
@@ -245,7 +245,9 @@ export function convertMessageToDisplayItems(
           timestamp: message.timestamp,
           isReplay: true,
           style: 'hint',
-          currentOpenFile: parsed.currentOpenFile
+          currentOpenFile: parsed.currentOpenFile,
+          openFile: parsed.openFile,
+          selectedLines: parsed.selectedLines
         }
         displayItems.push(userMessage)
       }
@@ -265,7 +267,7 @@ export function convertMessageToDisplayItems(
         })
       }
     }
-    if (parsed.userContent.length > 0 || contexts.length > 0 || parsed.currentOpenFile) {
+    if (parsed.userContent.length > 0 || contexts.length > 0 || parsed.currentOpenFile || parsed.openFile) {
       const userMessage: UserMessage = {
         displayType: 'userMessage',
         id: message.id,
@@ -273,7 +275,9 @@ export function convertMessageToDisplayItems(
         contexts: contexts.length > 0 ? contexts : undefined,
         content: parsed.userContent as any,
         timestamp: message.timestamp,
-        currentOpenFile: parsed.currentOpenFile
+        currentOpenFile: parsed.currentOpenFile,
+        openFile: parsed.openFile,
+        selectedLines: parsed.selectedLines
       }
       displayItems.push(userMessage)
     }
@@ -432,7 +436,7 @@ export function convertToDisplayItems(
         ]
 
         // 如果有内容或上下文，创建用户消息
-        if (parsed.userContent.length > 0 || contexts.length > 0 || parsed.currentOpenFile) {
+        if (parsed.userContent.length > 0 || contexts.length > 0 || parsed.currentOpenFile || parsed.openFile) {
           const userMessage: UserMessage = {
             displayType: 'userMessage',
             id: message.id,
@@ -442,7 +446,9 @@ export function convertToDisplayItems(
             timestamp: message.timestamp,
             isReplay: true,
             style: 'hint',
-            currentOpenFile: parsed.currentOpenFile
+            currentOpenFile: parsed.currentOpenFile,
+            openFile: parsed.openFile,
+            selectedLines: parsed.selectedLines
           }
           displayItems.push(userMessage)
         }
@@ -468,7 +474,9 @@ export function convertToDisplayItems(
         contexts: contexts.length > 0 ? contexts : undefined,
         content: content.length > 0 ? (content as any) : [],
         timestamp: message.timestamp,
-        currentOpenFile: parsed.currentOpenFile
+        currentOpenFile: parsed.currentOpenFile,
+        openFile: parsed.openFile,
+        selectedLines: parsed.selectedLines
       }
       displayItems.push(userMessage)
 

@@ -11,7 +11,7 @@
 
 import type { ContentBlock } from './message'
 import { CLAUDE_TOOL_TYPE, OTHER_TOOL_TYPE, type ToolType } from '@/constants/toolTypes'
-import type { ParsedCurrentOpenFile } from '@/utils/xmlTagParser'
+import type { ParsedCurrentOpenFile, ParsedOpenFileReminder, ParsedSelectLinesReminder } from '@/utils/xmlTagParser'
 
 // ============ 基础类型 ============
 
@@ -98,8 +98,12 @@ export interface UserMessage extends BaseDisplayItem {
   style?: 'hint' | 'error'
   /** 是否是回放消息（后端返回的历史/命令结果消息）：true=左对齐，false/undefined=右对齐 */
   isReplay?: boolean
-  /** 当前打开文件标记（从历史消息中解析） */
+  /** 当前打开文件标记（从历史消息中解析，旧格式） */
   currentOpenFile?: ParsedCurrentOpenFile
+  /** 打开的文件（新格式 system-reminder） */
+  openFile?: ParsedOpenFileReminder
+  /** 选中的行（新格式 system-reminder） */
+  selectedLines?: ParsedSelectLinesReminder
 }
 
 /**

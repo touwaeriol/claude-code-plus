@@ -15,10 +15,11 @@
 import { ref, reactive, computed } from 'vue'
 import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock, ToolUseContent } from '@/types/message'
 import type { PendingMessage } from '@/types/session'
+import type { ActiveFileInfo } from '@/services/jetbrainsRSocket'
 import type { DisplayItem, AssistantText, ThinkingContent, UserMessage, ToolCall } from '@/types/display'
 import { isUserMessage as isDisplayUserMessage } from '@/types/display'
 import { convertMessageToDisplayItems, createToolCall } from '@/utils/displayItemConverter'
-import { buildUserMessageContent } from '@/utils/userMessageBuilder'
+import { buildUserMessageContent, ideContextToContentBlocks } from '@/utils/userMessageBuilder'
 import { mapRpcContentBlock } from '@/utils/rpcMappers'
 import type { RpcStreamEvent, RpcResultMessage } from '@/types/rpc'
 import { loggers } from '@/utils/logger'
@@ -1019,7 +1020,7 @@ export function useSessionMessages(
    * @param message 消息内容
    * @returns userMessage 和 mergedContent，用于后续发送
    */
-  function addMessageToUI(message: { contexts: any[]; contents: ContentBlock[] }): {
+  function addMessageToUI(message: { contexts: any[]; contents: ContentBlock[]; ideContext?: ActiveFileInfo | null }): {
     userMessage: Message
     mergedContent: ContentBlock[]
   } {
@@ -1031,12 +1032,16 @@ export function useSessionMessages(
         })
       : []
 
-    // 合并: contexts 内容块 + 用户输入内容块
-    const mergedContent = [...contextBlocks, ...message.contents]
+    // 将 ideContext 转换为 XML ContentBlock（发送后端时使用）
+    const ideContextBlocks = ideContextToContentBlocks(message.ideContext)
+
+    // 合并: contexts 内容块 + 用户输入内容块 + IDE 上下文 XML
+    const mergedContent = [...contextBlocks, ...message.contents, ...ideContextBlocks]
 
     log.debug('[useSessionMessages] addMessageToUI:', {
       contexts: message.contexts.length,
       contents: message.contents.length,
+      ideContext: !!message.ideContext,
       merged: mergedContent.length
     })
 
@@ -1061,7 +1066,7 @@ export function useSessionMessages(
    * 只将消息加入队列（不添加到 UI）
    * 用于生成中发送的消息
    */
-  function addToQueue(message: { contexts: any[]; contents: ContentBlock[] }): void {
+  function addToQueue(message: { contexts: any[]; contents: ContentBlock[]; ideContext?: ActiveFileInfo | null }): void {
     // 将 contexts 转换为 ContentBlock 格式
     const contextBlocks = message.contexts.length > 0
       ? buildUserMessageContent({
@@ -1070,8 +1075,11 @@ export function useSessionMessages(
         })
       : []
 
-    // 合并: contexts 内容块 + 用户输入内容块
-    const mergedContent = [...contextBlocks, ...message.contents]
+    // 将 ideContext 转换为 XML ContentBlock（发送后端时使用）
+    const ideContextBlocks = ideContextToContentBlocks(message.ideContext)
+
+    // 合并: contexts 内容块 + 用户输入内容块 + IDE 上下文 XML
+    const mergedContent = [...contextBlocks, ...message.contents, ...ideContextBlocks]
 
     const id = `user-${Date.now()}`
     log.info(`[useSessionMessages] 消息加入队列（不添加到 UI）: ${id}`)
@@ -1080,7 +1088,8 @@ export function useSessionMessages(
       id,
       contexts: message.contexts,
       contents: message.contents,
-      mergedContent,
+      ideContext: message.ideContext,  // 保存结构化的 IDE 上下文（用于队列显示）
+      mergedContent,  // 包含 XML 的完整内容（用于发送后端）
       createdAt: Date.now()
     })
   }
@@ -1089,7 +1098,7 @@ export function useSessionMessages(
    * 将消息插入队列最前面（用于强制发送场景）
    * 不添加到 UI，等待 result 返回后自动发送
    */
-  function prependToQueue(message: { contexts: any[]; contents: ContentBlock[] }): void {
+  function prependToQueue(message: { contexts: any[]; contents: ContentBlock[]; ideContext?: ActiveFileInfo | null }): void {
     // 将 contexts 转换为 ContentBlock 格式
     const contextBlocks = message.contexts.length > 0
       ? buildUserMessageContent({
@@ -1098,8 +1107,11 @@ export function useSessionMessages(
         })
       : []
 
-    // 合并: contexts 内容块 + 用户输入内容块
-    const mergedContent = [...contextBlocks, ...message.contents]
+    // 将 ideContext 转换为 XML ContentBlock（发送后端时使用）
+    const ideContextBlocks = ideContextToContentBlocks(message.ideContext)
+
+    // 合并: contexts 内容块 + 用户输入内容块 + IDE 上下文 XML
+    const mergedContent = [...contextBlocks, ...message.contents, ...ideContextBlocks]
 
     const id = `user-${Date.now()}`
     log.info(`[useSessionMessages] 消息插入队列最前面: ${id}`)
@@ -1108,7 +1120,8 @@ export function useSessionMessages(
       id,
       contexts: message.contexts,
       contents: message.contents,
-      mergedContent,
+      ideContext: message.ideContext,  // 保存结构化的 IDE 上下文（用于队列显示）
+      mergedContent,  // 包含 XML 的完整内容（用于发送后端）
       createdAt: Date.now()
     })
   }

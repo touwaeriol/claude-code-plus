@@ -1,5 +1,6 @@
 package com.asakii.server.mcp.schema
 
+import com.asakii.server.mcp.UserInteractionMcpServer
 import kotlinx.serialization.json.*
 import mu.KotlinLogging
 
@@ -8,12 +9,10 @@ private val logger = KotlinLogging.logger {}
 /**
  * 工具 Schema 加载器
  *
- * 从 resources/mcp/schemas/tools.json 加载工具的 JSON Schema 定义。
+ * 提供工具的 JSON Schema 定义。
  * 支持通过 registerSchemaSource 注册额外的 Schema 来源。
  */
 object ToolSchemaLoader {
-
-    private const val DEFAULT_SCHEMA_PATH = "/mcp/schemas/tools.json"
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -56,8 +55,8 @@ object ToolSchemaLoader {
 
         val schemas = mutableMapOf<String, Map<String, Any>>()
 
-        // 1. 加载默认 Schema
-        schemas.putAll(loadDefaultSchemas())
+        // 1. 加载内置 Schema
+        schemas.putAll(loadBuiltInSchemas())
 
         // 2. 加载额外来源的 Schema
         for (source in additionalSources) {
@@ -69,6 +68,7 @@ object ToolSchemaLoader {
         }
 
         cachedSchemas = schemas
+        logger.info { "Loaded ${schemas.size} tool schemas" }
         return schemas
     }
 
@@ -80,36 +80,22 @@ object ToolSchemaLoader {
     }
 
     /**
-     * 从类路径加载 Schema
+     * 加载内置工具 Schema
      */
-    fun loadFromClasspath(clazz: Class<*>, resourcePath: String): Map<String, Map<String, Any>> {
-        return try {
-            val content = clazz.getResourceAsStream(resourcePath)
-                ?.bufferedReader()
-                ?.readText()
-                ?: run {
-                    logger.warn { "Schema file not found: $resourcePath" }
-                    return emptyMap()
-                }
-
-            parseSchemaJson(content)
-        } catch (e: Exception) {
-            logger.error(e) { "Failed to load schemas from: $resourcePath" }
-            emptyMap()
-        }
+    private fun loadBuiltInSchemas(): Map<String, Map<String, Any>> {
+        return mapOf(
+            "AskUserQuestion" to UserInteractionMcpServer.ASK_USER_QUESTION_SCHEMA
+        )
     }
 
-    private fun loadDefaultSchemas(): Map<String, Map<String, Any>> {
-        return loadFromClasspath(ToolSchemaLoader::class.java, DEFAULT_SCHEMA_PATH)
-    }
-
-    private fun parseSchemaJson(content: String): Map<String, Map<String, Any>> {
+    /**
+     * 从 JSON 字符串解析 Schema
+     */
+    fun parseSchemaJson(content: String): Map<String, Map<String, Any>> {
         return try {
             val jsonObject = json.parseToJsonElement(content).jsonObject
             jsonObject.mapValues { (_, value) ->
                 jsonElementToMap(value.jsonObject)
-            }.also {
-                logger.info { "Loaded ${it.size} tool schemas" }
             }
         } catch (e: Exception) {
             logger.error(e) { "Failed to parse schema JSON" }

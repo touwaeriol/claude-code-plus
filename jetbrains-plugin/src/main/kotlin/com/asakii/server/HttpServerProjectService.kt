@@ -12,6 +12,7 @@ import com.asakii.server.logging.StandaloneLogging
 import com.asakii.plugin.tools.IdeToolsImpl
 import com.asakii.rpc.api.JetBrainsApi
 import com.asakii.settings.AgentSettingsService
+import com.asakii.settings.McpDefaults
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
@@ -28,10 +29,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import java.net.JarURLConnection
 import java.nio.file.Files
 import java.nio.file.Path
@@ -289,111 +286,44 @@ class HttpServerProjectService(private val project: Project) : Disposable {
 
     /**
      * 加载 MCP 系统提示词
-     * 根据启用的 MCP 服务器加载对应的指令文件
+     * 根据启用的 MCP 服务器加载对应的指令（从设置中获取，支持自定义）
      */
     private fun loadMcpInstructions(settings: AgentSettingsService): String? {
         val instructions = mutableListOf<String>()
 
+        // Context7 MCP 指令
         if (settings.enableContext7Mcp) {
-            loadResourceFile("prompts/context7-mcp-instructions.md")?.let {
-                instructions.add(it)
-                logger.info("📝 Loaded Context7 MCP instructions")
-            }
+            instructions.add(settings.effectiveContext7Instructions)
+            logger.info("📝 Loaded Context7 MCP instructions")
         }
 
         return instructions.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
     }
 
     /**
-     * 从资源文件加载内容
-     */
-    private fun loadResourceFile(path: String): String? {
-        return try {
-            javaClass.classLoader.getResourceAsStream(path)?.bufferedReader()?.use { it.readText() }
-        } catch (e: Exception) {
-            logger.warning("⚠️ Failed to load resource file: $path - ${e.message}")
-            null
-        }
-    }
-
-    /**
      * 加载 MCP 服务器配置
-     * 从资源文件 mcp/mcp-servers.json 读取配置，根据用户设置决定启用哪些 MCP
+     * 根据用户设置决定启用哪些 MCP，使用 McpDefaults 中的配置
      */
     private fun loadMcpServersConfig(settings: AgentSettingsService): List<McpServerConfig> {
         val configs = mutableListOf<McpServerConfig>()
 
-        try {
-            val jsonContent = loadResourceFile("mcp/mcp-servers.json") ?: return emptyList()
-            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-            val serversJson = json.parseToJsonElement(jsonContent).jsonObject["servers"]?.jsonObject ?: return emptyList()
-
-            for ((name, serverJson) in serversJson) {
-                val server = serverJson.jsonObject
-                val enabledSetting = server["enabledSetting"]?.jsonPrimitive?.contentOrNull ?: continue
-
-                // 根据设置判断是否启用
-                val enabled = when (enabledSetting) {
-                    "enableContext7Mcp" -> settings.enableContext7Mcp
-                    else -> false
-                }
-
-                if (!enabled) {
-                    logger.info("⏭️ MCP Server '$name' is disabled")
-                    continue
-                }
-
-                val type = server["type"]?.jsonPrimitive?.contentOrNull ?: continue
-                val description = server["description"]?.jsonPrimitive?.contentOrNull
-
-                val config = when (type) {
-                    "http" -> {
-                        val url = server["url"]?.jsonPrimitive?.contentOrNull ?: continue
-                        val apiKeySetting = server["apiKeySetting"]?.jsonPrimitive?.contentOrNull
-                        val apiKeyHeader = server["apiKeyHeader"]?.jsonPrimitive?.contentOrNull
-
-                        // 构建 headers（如果有 API Key）
-                        val headers = if (apiKeySetting != null && apiKeyHeader != null) {
-                            val apiKey = when (apiKeySetting) {
-                                "context7ApiKey" -> settings.context7ApiKey.takeIf { it.isNotBlank() }
-                                else -> null
-                            }
-                            apiKey?.let { mapOf(apiKeyHeader to it) }
-                        } else null
-
-                        McpServerConfig(
-                            name = name,
-                            type = type,
-                            enabled = true,
-                            url = url,
-                            headers = headers,
-                            description = description
-                        )
-                    }
-                    "stdio" -> {
-                        val command = server["command"]?.jsonPrimitive?.contentOrNull ?: continue
-                        val args = server["args"]?.jsonArray?.map { it.jsonPrimitive.content }
-
-                        McpServerConfig(
-                            name = name,
-                            type = type,
-                            enabled = true,
-                            command = command,
-                            args = args,
-                            description = description
-                        )
-                    }
-                    else -> {
-                        logger.warning("⚠️ Unknown MCP server type: $type for '$name'")
-                        continue
-                    }
-                }
-
-                configs.add(config)
-                logger.info("✅ Loaded MCP Server config: $name (type=$type)")
+        // Context7 MCP
+        if (settings.enableContext7Mcp) {
+            val headers = settings.context7ApiKey.takeIf { it.isNotBlank() }?.let {
+                mapOf(McpDefaults.Context7Server.API_KEY_HEADER to it)
             }
-        } catch (e: Exception) {
-            logger.warning("⚠️ Failed to load MCP servers config: ${e.message}")
+
+            configs.add(McpServerConfig(
+                name = "context7",
+                type = "http",
+                enabled = true,
+                url = McpDefaults.Context7Server.URL,
+                headers = headers,
+                description = McpDefaults.Context7Server.DESCRIPTION
+            ))
+            logger.info("✅ Loaded MCP Server config: context7 (type=http)")
+        } else {
+            logger.info("⏭️ MCP Server 'context7' is disabled")
         }
 
         return configs
