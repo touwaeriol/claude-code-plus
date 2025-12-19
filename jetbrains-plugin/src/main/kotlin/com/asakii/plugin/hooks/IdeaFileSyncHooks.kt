@@ -6,8 +6,6 @@ import com.asakii.claude.agent.sdk.types.HookEvent
 import com.asakii.claude.agent.sdk.types.HookMatcher
 import com.asakii.claude.agent.sdk.types.ToolType
 import com.asakii.plugin.services.IdeaPlatformService
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import mu.KotlinLogging
 
@@ -80,50 +78,22 @@ object IdeaFileSyncHooks {
         return hookBuilder {
             // PRE_TOOL_USE: 保存 IDEA 文件到磁盘
             onPreToolUse(FileSyncTool.preMatcher) { toolCall ->
-                saveAllDocuments(toolCall.toolName)
+                logger.info { "📥 [PRE] ${toolCall.toolName}: 保存 IDEA 文件到磁盘" }
+                platformService.saveAllDocuments()
+                logger.info { "✅ [PRE] ${toolCall.toolName}: 文件保存完成" }
                 allow()
             }
 
             // POST_TOOL_USE: 刷新磁盘文件到 IDEA
             onPostToolUse(FileSyncTool.postMatcher) { toolCall ->
-                refreshFile(toolCall, platformService)
+                val filePath = extractFilePath(toolCall)
+                if (filePath != null) {
+                    logger.info { "📤 [POST] ${toolCall.toolName}: 刷新文件到 IDEA: $filePath" }
+                    platformService.refreshFile(filePath)
+                    logger.info { "✅ [POST] ${toolCall.toolName}: 已刷新文件" }
+                }
                 allow()
             }
-        }
-    }
-
-    /**
-     * 保存所有 IDEA 文档到磁盘
-     */
-    private fun saveAllDocuments(toolName: String) {
-        logger.info { "📥 [PRE] $toolName: 保存 IDEA 文件到磁盘" }
-        try {
-            ApplicationManager.getApplication().invokeAndWait {
-                FileDocumentManager.getInstance().saveAllDocuments()
-            }
-            logger.info { "✅ [PRE] $toolName: 文件保存完成" }
-        } catch (e: Exception) {
-            logger.warn(e) { "⚠️ [PRE] $toolName: 保存文件失败" }
-        }
-    }
-
-    /**
-     * 刷新指定文件到 IDEA
-     */
-    private fun refreshFile(toolCall: HookBuilder.ToolCall, platformService: IdeaPlatformService) {
-        val toolName = toolCall.toolName
-        logger.info { "📤 [POST] $toolName: 刷新磁盘文件到 IDEA" }
-
-        try {
-            val filePath = extractFilePath(toolCall)
-            if (filePath != null) {
-                platformService.refreshFile(filePath)
-                logger.info { "✅ [POST] $toolName: 已刷新文件 $filePath" }
-            } else {
-                logger.debug { "⚠️ [POST] $toolName: 未找到文件路径参数" }
-            }
-        } catch (e: Exception) {
-            logger.warn(e) { "⚠️ [POST] $toolName: 刷新文件失败" }
         }
     }
 

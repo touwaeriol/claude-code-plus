@@ -451,6 +451,38 @@ class IdeaPlatformService(private val project: Project) {
 
 
 
+    /**
+
+     * 保存所有 IDEA 文档到磁盘
+
+     *
+
+     * 确保 IDEA 中编辑的内容写入磁盘，供外部工具（如 Claude）读取
+
+     */
+
+    fun saveAllDocuments() {
+
+        try {
+
+            ApplicationManager.getApplication().invokeAndWait {
+
+                FileDocumentManager.getInstance().saveAllDocuments()
+
+            }
+
+            logger.info("已保存所有文档到磁盘")
+
+        } catch (e: Exception) {
+
+            logger.warn("保存文档失败", e)
+
+        }
+
+    }
+
+
+
     // ====== 通知操作 ======
 
 
