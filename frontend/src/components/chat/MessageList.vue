@@ -493,19 +493,6 @@ function addScrollListeners() {
   }
 }
 
-// 监听 displayMessages 变化，当从空变为有内容时添加事件监听器
-watch(
-  () => displayMessages.value.length,
-  (newLen, oldLen) => {
-    if (newLen > 0 && oldLen === 0) {
-      // 消息从无到有，需要等待 DynamicScroller 渲染后添加事件监听器
-      nextTick(() => {
-        addScrollListeners()
-      })
-    }
-  }
-)
-
 onMounted(() => {
   if (props.isStreaming) {
     startTimer()
@@ -592,6 +579,19 @@ const displayMessages = computed(() => props.displayItems || props.messages || [
 
 // 使用新的 DisplayItemRenderer 还是旧的 MessageDisplay
 const messageComponent = computed(() => props.displayItems ? DisplayItemRenderer : MessageDisplay)
+
+// 监听 displayMessages 变化，当从空变为有内容时添加事件监听器
+watch(
+  () => displayMessages.value.length,
+  (newLen, oldLen) => {
+    if (newLen > 0 && oldLen === 0) {
+      // 消息从无到有，需要等待 DynamicScroller 渲染后添加事件监听器
+      nextTick(() => {
+        addScrollListeners()
+      })
+    }
+  }
+)
 
 // 监听消息变化 - 基于双模式的滚动处理
 watch(() => displayMessages.value.length, async (newCount, oldCount) => {
