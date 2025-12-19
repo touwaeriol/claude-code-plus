@@ -2,16 +2,22 @@
   <!-- 外层容器使用 padding 而非 margin，避免 DynamicScroller 高度计算问题 -->
   <div class="compact-summary-wrapper">
     <div class="compact-summary-card" :class="{ expanded: isExpanded }">
-    <!-- 头部：图标 + 标题 + 展开按钮 -->
-    <div class="card-header" @click="toggleExpand">
-      <div class="header-left">
+    <!-- 头部：图标 + 标题 + 操作按钮 -->
+    <div class="card-header">
+      <div class="header-left" @click="toggleExpand">
         <span class="icon">{{ isExpanded ? '📖' : '📦' }}</span>
         <span class="title">{{ $t('compact.contextRestored') }}</span>
         <span class="subtitle">{{ $t('compact.sessionSummary') }}</span>
       </div>
-      <button class="expand-button">
-        {{ isExpanded ? $t('compact.collapse') + ' ▴' : $t('compact.expand') + ' ▾' }}
-      </button>
+      <div class="header-buttons">
+        <button class="action-button" :title="$t('common.copy')" @click.stop="handleCopy">
+          <span v-if="copied">✓</span>
+          <span v-else>📋</span>
+        </button>
+        <button class="expand-button" @click="toggleExpand">
+          {{ isExpanded ? $t('compact.collapse') + ' ▴' : $t('compact.expand') + ' ▾' }}
+        </button>
+      </div>
     </div>
 
     <!-- 摘要内容（可展开） -->
@@ -53,9 +59,25 @@ const props = defineProps<Props>()
 // 展开状态（默认折叠）
 const isExpanded = ref(false)
 
+// 复制状态
+const copied = ref(false)
+
 // 切换展开/折叠
 function toggleExpand() {
   isExpanded.value = !isExpanded.value
+}
+
+// 复制内容
+async function handleCopy() {
+  try {
+    await navigator.clipboard.writeText(textContent.value)
+    copied.value = true
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
+  } catch (e) {
+    console.error('Failed to copy:', e)
+  }
 }
 
 // 提取文本内容
@@ -146,18 +168,41 @@ const renderedContent = computed(() => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  cursor: pointer;
   user-select: none;
-}
-
-.card-header:hover {
-  background: var(--theme-hover-background);
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
+  flex: 1;
+}
+
+.header-left:hover {
+  opacity: 0.8;
+}
+
+.header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.action-button {
+  background: transparent;
+  border: 1px solid var(--theme-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--theme-secondary-foreground);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-button:hover {
+  background: var(--theme-hover-background);
+  border-color: var(--theme-foreground);
 }
 
 .icon {

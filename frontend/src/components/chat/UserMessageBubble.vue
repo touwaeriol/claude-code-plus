@@ -47,57 +47,65 @@
         <div
           class="message-content"
           :class="{
-            'bubble-style': !props.message.isReplay,
-            clickable: isLongMessage
+            'bubble-style': !props.message.isReplay
           }"
-          @click="handleContentClick"
         >
-          <!-- 上下文标签区域（当前打开的文件 + 文件/图片上下文按添加顺序混合显示） -->
-          <div v-if="hasCurrentOpenFile || allContextRefs.length > 0" class="context-tags">
-            <!-- 当前打开的文件（始终在最前面） -->
-            <span
-              v-if="hasCurrentOpenFile"
-              class="file-tag"
-              :title="currentOpenFileFullPath"
-              @click.stop="handleOpenFileClick"
-            >
-              <span class="tag-file-name">{{ currentOpenFileName }}</span>
-              <span v-if="currentOpenFileLineRange" class="tag-line-range">{{ currentOpenFileLineRange }}</span>
-            </span>
-            <!-- 文件和图片上下文按原始顺序显示 -->
-            <template v-for="(ctx, index) in allContextRefs" :key="`ctx-${index}`">
-              <!-- 文件引用 -->
+          <!-- 头部：上下文标签 + 操作按钮 -->
+          <div class="content-header">
+            <!-- 上下文标签区域（当前打开的文件 + 文件/图片上下文按添加顺序混合显示） -->
+            <div v-if="hasCurrentOpenFile || allContextRefs.length > 0" class="context-tags">
+              <!-- 当前打开的文件（始终在最前面） -->
               <span
-                v-if="ctx.type === 'file'"
-                class="file-tag file-ref"
-                :title="ctx.fullPath || ctx.uri"
-                @click.stop="handleFileRefClick(ctx)"
+                v-if="hasCurrentOpenFile"
+                class="file-tag"
+                :title="currentOpenFileFullPath"
+                @click.stop="handleOpenFileClick"
               >
-                <span class="tag-prefix">@</span>
-                <span class="tag-file-name">{{ getFileRefName(ctx) }}</span>
+                <span class="tag-file-name">{{ currentOpenFileName }}</span>
+                <span v-if="currentOpenFileLineRange" class="tag-line-range">{{ currentOpenFileLineRange }}</span>
               </span>
-              <!-- 图片 -->
-              <img
-                v-else-if="ctx.type === 'image' && ctx.base64Data"
-                :src="getContextImageSrc(ctx)"
-                :alt="`Context image ${index + 1}`"
-                class="context-thumb-inline"
-                @click.stop="openContextImagePreview(ctx)"
-              />
-            </template>
+              <!-- 文件和图片上下文按原始顺序显示 -->
+              <template v-for="(ctx, index) in allContextRefs" :key="`ctx-${index}`">
+                <!-- 文件引用 -->
+                <span
+                  v-if="ctx.type === 'file'"
+                  class="file-tag file-ref"
+                  :title="ctx.fullPath || ctx.uri"
+                  @click.stop="handleFileRefClick(ctx)"
+                >
+                  <span class="tag-prefix">@</span>
+                  <span class="tag-file-name">{{ getFileRefName(ctx) }}</span>
+                </span>
+                <!-- 图片 -->
+                <img
+                  v-else-if="ctx.type === 'image' && ctx.base64Data"
+                  :src="getContextImageSrc(ctx)"
+                  :alt="`Context image ${index + 1}`"
+                  class="context-thumb-inline"
+                  @click.stop="openContextImagePreview(ctx)"
+                />
+              </template>
+            </div>
+            <div v-else class="header-spacer"></div>
+
+            <!-- 操作按钮（右上角） -->
+            <div class="action-buttons">
+              <button class="action-btn" :title="t('common.copy')" @click.stop="handleCopy">
+                <span v-if="copied">✓</span>
+                <span v-else>📋</span>
+              </button>
+              <button v-if="isOverflowing" class="action-btn" @click.stop="toggleCollapse">
+                {{ isCollapsed ? t('common.expand') + ' ▾' : t('common.collapse') + ' ▴' }}
+              </button>
+            </div>
           </div>
 
-          <!-- 折叠状态：显示预览 -->
-          <template v-if="isCollapsed && isLongMessage">
-            <span class="preview-text">{{ previewText }}</span>
-            <div class="expand-indicator">
-              <span class="expand-hint">{{ t('common.expand') }}</span>
-              <span class="expand-arrow">▾</span>
-            </div>
-          </template>
-
-          <!-- 展开状态：显示完整内容 -->
-          <template v-else>
+          <!-- 消息内容（根据折叠状态限制高度） -->
+          <div
+            ref="contentRef"
+            class="message-body"
+            :class="{ collapsed: isCollapsed && isOverflowing }"
+          >
             <!-- 文本内容 -->
             <div
               v-if="messageText"
@@ -119,13 +127,7 @@
                 @click.stop="openImagePreview(image)"
               />
             </div>
-
-            <!-- 折叠按钮（长消息展开时显示） -->
-            <div v-if="isLongMessage" class="expand-indicator">
-              <span class="expand-hint">{{ t('common.collapse') }}</span>
-              <span class="expand-arrow">▴</span>
-            </div>
-          </template>
+          </div>
         </div>
 
         <!-- 上下文大小指示器（非回放消息） -->
@@ -147,7 +149,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useI18n } from '@/composables/useI18n'
 import type { ImageBlock, ContentBlock } from '@/types/message'
@@ -183,8 +185,53 @@ const props = defineProps<Props>()
 // i18n
 const { t } = useI18n()
 
+// 内容容器引用
+const contentRef = ref<HTMLDivElement>()
+
 // 折叠状态
 const isCollapsed = ref(true)
+
+// 是否内容溢出（需要折叠）
+const isOverflowing = ref(false)
+
+// 检测内容是否溢出
+function checkOverflow() {
+  nextTick(() => {
+    if (contentRef.value) {
+      const el = contentRef.value
+      // 临时移除折叠样式来测量实际高度
+      const originalMaxHeight = el.style.maxHeight
+      el.style.maxHeight = 'none'
+      const fullHeight = el.scrollHeight
+      el.style.maxHeight = originalMaxHeight
+      // 折叠高度约为 3 行（line-height 1.4 * font-size 13px * 3 ≈ 55px）
+      const maxCollapsedHeight = 55
+      isOverflowing.value = fullHeight > maxCollapsedHeight
+    }
+  })
+}
+
+// 组件挂载时检测溢出
+onMounted(checkOverflow)
+
+// 监听消息内容变化
+watch(() => props.message.content, checkOverflow, { deep: true })
+
+// 复制状态
+const copied = ref(false)
+
+// 复制消息内容
+async function handleCopy() {
+  try {
+    await navigator.clipboard.writeText(messageText.value)
+    copied.value = true
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
+  } catch (e) {
+    console.error('Failed to copy:', e)
+  }
+}
 
 // 编辑模式状态
 const isEditing = ref(false)
@@ -546,10 +593,23 @@ const imageBlocks = computed(() => {
   return content.filter(block => block.type === 'image') as ImageBlock[]
 })
 
-// 判断是否为长消息（文本超过 3 行）
+// 判断是否为长消息（检查原始 content 的文本长度）
 const isLongMessage = computed(() => {
-  const textLines = messageText.value ? messageText.value.split('\n').length : 0
-  return textLines > 3
+  const content = props.message.content
+  if (!content || !Array.isArray(content)) return false
+
+  // 计算所有文本块的总长度和总行数
+  let totalLength = 0
+  let totalLines = 0
+  for (const block of content) {
+    if (block.type === 'text' && 'text' in block) {
+      const text = (block as any).text || ''
+      totalLength += text.length
+      totalLines += text.split('\n').length
+    }
+  }
+
+  return totalLines > 3 || totalLength > 150
 })
 
 // 发送时的上下文大小（从前一条 AI 回复的 stats 中获取）
@@ -717,6 +777,34 @@ function closeImagePreview() {
   padding: 4px 8px;
 }
 
+/* ===== 消息主体 ===== */
+.message-body {
+  overflow: hidden;
+  transition: max-height 0.2s ease;
+}
+
+.message-body.collapsed {
+  /* 约 3 行高度：line-height 1.4 * font-size 13px * 3 行 ≈ 55px */
+  max-height: calc(1.4em * 3);
+  position: relative;
+}
+
+/* 折叠时的渐变遮罩 */
+.message-body.collapsed::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1.5em;
+  background: linear-gradient(transparent, var(--theme-background));
+  pointer-events: none;
+}
+
+.message-content.bubble-style .message-body.collapsed::after {
+  background: linear-gradient(transparent, var(--theme-selection-background));
+}
+
 /* 可点击展开 */
 .message-content.clickable {
   cursor: pointer;
@@ -789,35 +877,52 @@ function closeImagePreview() {
   border-radius: 3px;
 }
 
-/* ===== 展开/折叠指示器 ===== */
-.expand-indicator {
+/* ===== 头部区域 ===== */
+.content-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+/* ===== 操作按钮 ===== */
+.action-buttons {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 4px;
-  padding: 4px 8px;
-  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.action-btn {
+  background: transparent;
+  border: 1px solid var(--theme-border);
+  border-radius: 4px;
+  padding: 2px 8px;
   font-size: 11px;
-  color: var(--theme-accent);
-  opacity: 0.7;
-  transition: opacity 0.2s;
+  color: var(--theme-secondary-foreground);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
 }
 
-.message-content.clickable:hover .expand-indicator {
-  opacity: 1;
+.action-btn:hover {
+  background: var(--theme-hover-background);
+  border-color: var(--theme-foreground);
 }
 
-.message-content.bubble-style .expand-indicator {
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
+.message-content.bubble-style .action-btn {
+  border-color: rgba(255, 255, 255, 0.3);
   color: var(--theme-selection-foreground);
 }
 
-.expand-hint {
-  font-size: 11px;
-}
-
-.expand-arrow {
-  font-size: 12px;
+.message-content.bubble-style .action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 /* ===== 上下文标签 ===== */
@@ -825,7 +930,8 @@ function closeImagePreview() {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-bottom: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .file-tag {
