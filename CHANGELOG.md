@@ -8,12 +8,43 @@ All notable changes to this project will be documented in this file.
 - Add copy button to UserMessageBubble and CompactSummaryCard components
 - Implement height-based overflow detection for auto-collapse in user messages
 - Add gradient fade effect when message content is collapsed
+- Upgrade CLI to 2.0.71 with run_in_background support for Bash commands
+- Add Rename MCP tool for safe symbol refactoring across the project
+- Add active file tracking with RSocket push notifications
+- Add Node.js detection and fix CLI parameter passing
+- Add session delete API and dynamic service config
+- Add Chrome remote debugging for JCEF DevTools
+- Add scroll boost for JCEF browser
+- Add Context7 MCP server and improve custom agent loading
+- Add file path bar to file search popup
+- Implement configurable thinking levels with custom support
+- Add streaming indicator with bouncing dots animation
+- Add support for different editor types in active file detection
+- Internationalization support for MCP and Agents config
+- Full support for custom MCP server instructions
+- Enforce JetBrains tools over Glob/Grep in system prompt
+- AgentSettingsService for persistent plugin configuration
+- IDE settings sync between backend and frontend
+- Session list with delete button and better layout
+- Tool window with refresh, settings buttons and JCEF fixes
 
 ### Changed
 - Update Java version to 21
 - Centralize file sync operations in IdeaPlatformService
 - Migrate TextFieldWithBrowseButton to Kotlin UI DSL 2.0 API
 - Move expand/collapse button to top-right corner for better UX
+- Redesign MCP configuration with list-based UI (3-level to 2-level hierarchy)
+- Remove dontAsk permission mode from frontend and backend
+- Remove sequential-thinking MCP integration
+- Compact tool cards and status indicators
+- Use type-safe theme color APIs instead of hardcoded values
+- Replace hand-written protobuf decoders with official library
+- Use Element Plus tooltip for context tags
+- Use CSS variables for editor font family across components
+- Optimize MCP prompts and remove Chinese descriptions
+- Improve streaming indicator and simplify session tabs
+- Improve file tag display with compact design
+- Enable dynamic plugin support
 
 ### Fixed
 - Resolve IDEA 2024.2-2025.2 compatibility issues (CefBrowser.openDevTools NoSuchMethodError)
@@ -22,20 +53,47 @@ All notable changes to this project will be documented in this file.
 - Use reflection for cross-version IntelliJ Diff API compatibility
 - Suppress deprecated API warning for IDEA 2024.2 compatibility
 - Wait for smart mode before MCP searching to ensure index freshness
+- Resolve JSON parsing and BOM issues in control requests
+- Trigger IDEA index refresh after file modifications
+- Wrap HighlightVisitor callback in ReadAction for thread safety
+- RSocket disconnect non-blocking for faster tab close
+- RSocket timeout and force reconnect for interrupt request
+- Resolve macOS CLI startup timeout issue
+- Use JDialog for DevTools to ensure Windows compatibility
+- Use login shell and file references for Claude CLI execution
+- Resolve dynamic/static import mixing warnings in Vite build
+- Sync skipPermissions setting to current session tab
+- Improve scroll behavior detection for user interaction
+- Improve message collapse behavior and fix DynamicScroller overlap
+- Handle thinking block completion via syncThinkingSignatures
+- Thinking auto-collapse and user message expand logic
+- Display compact summary card after compaction
+- Parse file references and current-open-file in replay messages
+- Isolate streaming timer and active file dismiss state per tab
+- Handle token usage for both streaming and non-streaming modes
+- Include cacheCreationTokens in input token calculation
+- Preserve original order of content items in pending message queue
+- Preserve input and attachments on session reset
+- Ensure IDE settings loaded before creating new session
+- Fix clicks blocked by context menu overlay
+- Fix shallowRef reactivity issue in isGenerating state
 
 ### Performance
 - Optimize patchCli task to skip when enhanced CLI is up-to-date
 - Save only target file instead of all documents (faster file sync)
+- Replace blocking calls with non-blocking coroutines
 
 ### Build
 - Add java-library plugin to ai-agent-proto for proper OrBuilder exposure
 - Remove cleanCli dependency from clean task to preserve committed CLI files
 - Explicitly declare protobuf-java as api dependency for OrBuilder interfaces
 - Add comprehensive IDE verification matrix for CI
+- Bump IntelliJ Platform version to 2025.3.1
 
 ### Docs
 - Add new screenshots to all README versions
 - Add Claude Code Plus usage guide for promotion
+- Clarify Rename tool usage requires line location
 
 ## [1.0.9] - 2025-12-16
 
