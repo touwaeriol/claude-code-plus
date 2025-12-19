@@ -115,6 +115,15 @@ export type ConnectOptions = Message<"aiagent.rpc.ConnectOptions"> & {
    * @generated from field: optional bool replay_user_messages = 30;
    */
   replayUserMessages?: boolean;
+
+  /**
+   * Chrome 扩展配置
+   *
+   * 是否启用 Chrome 扩展（需要重连生效）
+   *
+   * @generated from field: optional bool chrome_enabled = 40;
+   */
+  chromeEnabled?: boolean;
 };
 
 /**

@@ -83,6 +83,9 @@ message ConnectOptions {
 
   // 会话恢复相关配置
   optional bool replay_user_messages = 30;  // 恢复会话时重放用户消息
+
+  // Chrome 扩展配置
+  optional bool chrome_enabled = 40;  // 是否启用 Chrome 扩展（需要重连生效）
 }
 
 // 对应 RpcCapabilities

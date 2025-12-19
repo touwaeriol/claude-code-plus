@@ -131,7 +131,8 @@ export const ProtoCodec = {
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
       sandboxMode: options.sandboxMode ? mapSandboxModeToProto(options.sandboxMode) : undefined,
-      replayUserMessages: options.replayUserMessages
+      replayUserMessages: options.replayUserMessages,
+      chromeEnabled: options.chromeEnabled
     })
 
     return toBinary(ConnectOptionsSchema, proto)
