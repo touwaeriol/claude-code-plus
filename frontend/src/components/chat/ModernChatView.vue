@@ -3,7 +3,11 @@
     <!-- 会话标签栏 -->
     <ChatHeader
       class="chat-header-bar"
+      :chrome-status="currentChromeStatus"
+      :chrome-enabled="currentChromeEnabled"
+      :connected-chrome-enabled="currentConnectedChromeEnabled"
       @toggle-history="toggleHistoryOverlay"
+      @chrome-toggle="handleChromeToggle"
     />
 
     <!-- 聊天界面内容 -->
@@ -64,9 +68,9 @@
         :show-model-selector="true"
         :show-permission-controls="true"
         :show-send-button="true"
-        :show-chrome-status="true"
-        :chrome-status="chromeStatus"
-        :chrome-status-loading="chromeStatusLoading"
+        :show-chrome-toggle="true"
+        :chrome-enabled="currentChromeEnabled"
+        :chrome-installed="currentChromeInstalled"
         class="input-area"
         @send="handleSendMessage"
         @force-send="handleForceSend"
@@ -74,8 +78,7 @@
         @context-add="handleAddContext"
         @context-remove="handleRemoveContext"
         @auto-cleanup-change="handleAutoCleanupChange"
-        @chrome-status-click="handleChromeStatusClick"
-        @enable-chrome="handleEnableChrome"
+        @chrome-toggle="handleChromeToggle"
       />
     </div>
 
@@ -390,49 +393,37 @@ const pendingTasks = ref<PendingTask[]>([])
 const debugExpanded = ref(false)
 const chatInputRef = ref<InstanceType<typeof ChatInput>>()
 
-// Chrome 扩展状态
-interface ChromeStatusData {
-  installed: boolean
-  enabled: boolean
-  connected: boolean
-  mcpServerStatus?: string
-  extensionVersion?: string
-}
-const chromeStatus = ref<ChromeStatusData | null>(null)
-const chromeStatusLoading = ref(false)
+// Chrome 扩展状态计算属性
+const currentChromeStatus = computed(() => {
+  return sessionStore.currentTab?.chromeStatus.value ?? null
+})
 
-// 查询 Chrome 状态
-async function queryChromeStatus() {
-  const session = sessionStore.currentSession
-  if (!session) return
+const currentChromeEnabled = computed(() => {
+  return sessionStore.currentTab?.uiState.chromeEnabled ?? false
+})
 
-  chromeStatusLoading.value = true
-  try {
-    const status = await session.getChromeStatus()
-    chromeStatus.value = status
-    console.log('[ModernChatView] Chrome status:', status)
-  } catch (error) {
-    console.warn('[ModernChatView] Failed to query Chrome status:', error)
-    chromeStatus.value = null
-  } finally {
-    chromeStatusLoading.value = false
-  }
-}
+const currentConnectedChromeEnabled = computed(() => {
+  return sessionStore.currentTab?.connectedChromeEnabled.value
+})
 
-// Chrome 状态点击处理
-function handleChromeStatusClick(status: ChromeStatusData | null) {
-  console.log('[ModernChatView] Chrome status clicked:', status)
-  // 未安装时导航到商店由组件内部处理
-}
+const currentChromeInstalled = computed(() => {
+  return sessionStore.currentTab?.chromeStatus.value?.installed ?? false
+})
 
-// 启用 Chrome 扩展（保存到 Tab 状态，下次连接时生效）
-function handleEnableChrome() {
-  console.log('[ModernChatView] Enable Chrome requested')
+// Chrome 扩展开关切换
+function handleChromeToggle(enabled: boolean) {
+  console.log('[ModernChatView] Chrome toggle:', enabled)
   const currentTab = sessionStore.currentTab
   if (currentTab) {
-    currentTab.uiState.chromeEnabled = true
+    currentTab.uiState.chromeEnabled = enabled
+    // 如果已连接且设置变更，提示需要重连
+    if (currentTab.isConnected.value) {
+      const connectedEnabled = currentTab.connectedChromeEnabled.value
+      if (connectedEnabled !== undefined && enabled !== connectedEnabled) {
+        showToast('Chrome setting changed. Reconnect to apply.', 3000)
+      }
+    }
   }
-  showToast('Chrome 扩展将在下次连接时启用', 3000)
 }
 
 // 生命周期钩子
@@ -489,9 +480,7 @@ onMounted(async () => {
       ])
 
       console.log('Default tab created:', tab.tabId)
-
-      // 查询 Chrome 扩展状态
-      queryChromeStatus()
+      // Chrome 状态由 Tab 连接成功后自动查询（在 useSessionTab.ts 中）
     }
   } catch (error) {
     console.error('Failed to initialize session:', error)

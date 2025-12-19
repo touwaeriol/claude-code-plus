@@ -105,7 +105,10 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var includePartialMessages: Boolean = true,
 
         // Agent 配置（JSON 序列化）
-        var customAgents: String = "{}"
+        var customAgents: String = "{}",
+
+        // 默认启用 Chrome 扩展
+        var defaultChromeEnabled: Boolean = false
     )
 
     private var state = State()
@@ -217,6 +220,10 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     var includePartialMessages: Boolean
         get() = state.includePartialMessages
         set(value) { state.includePartialMessages = value }
+
+    var defaultChromeEnabled: Boolean
+        get() = state.defaultChromeEnabled
+        set(value) { state.defaultChromeEnabled = value }
 
     var defaultThinkingLevelId: String
         get() {

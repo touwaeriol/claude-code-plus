@@ -275,13 +275,14 @@
             @toggle="handleSkipPermissionsChange"
           />
 
-          <!-- Chrome 扩展状态 -->
-          <ChromeStatusIndicator
-            v-if="showChromeStatus"
-            :status="chromeStatus"
-            :loading="chromeStatusLoading"
-            @click="handleChromeStatusClick"
-            @enable-chrome="handleEnableChrome"
+          <!-- Chrome 扩展开关 -->
+          <StatusToggle
+            v-if="showChromeToggle"
+            label="Chrome"
+            :enabled="chromeEnabled"
+            :disabled="!enabled || !chromeInstalled"
+            :tooltip="chromeToggleTooltip"
+            @toggle="handleChromeToggle"
           />
         </div>
       </div>
@@ -439,7 +440,6 @@ import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 import RichTextInput from './RichTextInput.vue'
 import ThinkingToggle from './ThinkingToggle.vue'
 import StatusToggle from './StatusToggle.vue'
-import ChromeStatusIndicator, { type ChromeStatus } from './ChromeStatusIndicator.vue'
 import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
 import { isInAtQuery } from '@/utils/atSymbolDetector'
 import { useSessionStore } from '@/stores/sessionStore'
@@ -481,14 +481,14 @@ interface Props {
   showModelSelector?: boolean
   showPermissionControls?: boolean
   showSendButton?: boolean
-  showChromeStatus?: boolean  // 是否显示 Chrome 扩展状态
+  showChromeToggle?: boolean  // 是否显示 Chrome 扩展开关
   tokenUsage?: TokenUsage
   placeholderText?: string
   messageHistory?: EnhancedMessage[]  // 消息历史（用于Token计算）
   sessionTokenUsage?: EnhancedTokenUsage | null  // 会话级Token使用量
-  // Chrome 状态（由父组件传入，在 connect 后查询）
-  chromeStatus?: ChromeStatus | null
-  chromeStatusLoading?: boolean
+  // Chrome 扩展控制（由父组件传入）
+  chromeEnabled?: boolean       // 是否启用 Chrome 扩展
+  chromeInstalled?: boolean     // Chrome 扩展是否已安装
   // 内嵌编辑模式相关
   inline?: boolean           // 是否为内嵌模式（用于编辑消息）
   editDisabled?: boolean     // 是否禁用发送（当前阶段用于编辑模式）
@@ -514,8 +514,7 @@ interface Emits {
   (e: 'skip-permissions-change', skip: boolean): void
   (e: 'cancel'): void  // 取消编辑（仅 inline 模式）
   (e: 'update:modelValue', value: string): void  // v-model 支持
-  (e: 'chrome-status-click', status: ChromeStatus | null): void  // Chrome 状态点击
-  (e: 'enable-chrome'): void  // 启用 Chrome 扩展
+  (e: 'chrome-toggle', enabled: boolean): void  // Chrome 扩展开关切换
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -530,9 +529,9 @@ const props = withDefaults(defineProps<Props>(), {
   showModelSelector: true,
   showPermissionControls: true,
   showSendButton: true,
-  showChromeStatus: false,
-  chromeStatus: null,
-  chromeStatusLoading: false,
+  showChromeToggle: true,
+  chromeEnabled: false,
+  chromeInstalled: false,
   placeholderText: '',
   inline: false,
   editDisabled: false,
@@ -582,13 +581,18 @@ function handleClearError() {
   sessionStore.clearCurrentError()
 }
 
-// Chrome 状态处理
-function handleChromeStatusClick(status: ChromeStatus | null) {
-  emit('chrome-status-click', status)
-}
+// Chrome 扩展开关处理
+const chromeToggleTooltip = computed(() => {
+  if (!props.chromeInstalled) {
+    return 'Chrome extension not installed'
+  }
+  return props.chromeEnabled
+    ? 'Chrome extension enabled (--chrome)'
+    : 'Chrome extension disabled (--no-chrome)'
+})
 
-function handleEnableChrome() {
-  emit('enable-chrome')
+function handleChromeToggle(enabled: boolean) {
+  emit('chrome-toggle', enabled)
 }
 
 // Refs

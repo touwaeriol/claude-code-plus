@@ -135,6 +135,11 @@ export const useSettingsStore = defineStore('settings', () => {
       console.log('🔒 [IdeSettings] 权限模式:', newIdeSettings.permissionMode)
     }
 
+    // 6. 记录 Chrome 默认启用状态（实际应用在 Tab 创建时）
+    if (newIdeSettings.defaultChromeEnabled !== undefined) {
+      console.log('🌐 [IdeSettings] Chrome 默认启用:', newIdeSettings.defaultChromeEnabled)
+    }
+
     // 如果有更新，合并到设置中
     if (Object.keys(updates).length > 0) {
       settings.value = {

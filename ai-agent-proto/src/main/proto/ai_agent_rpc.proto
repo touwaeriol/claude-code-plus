@@ -723,6 +723,7 @@ message IdeSettings {
   string default_thinking_level_id = 9;  // 默认思考级别 ID（如 "off", "think", "ultra", "custom_xxx"）
   repeated ThinkingLevelConfig thinking_levels = 10;  // 所有可用的思考级别
   string permission_mode = 11;           // 权限模式（default, acceptEdits, plan, bypassPermissions）
+  bool default_chrome_enabled = 12;      // 默认启用 Chrome 扩展
 }
 
 // 思考级别配置

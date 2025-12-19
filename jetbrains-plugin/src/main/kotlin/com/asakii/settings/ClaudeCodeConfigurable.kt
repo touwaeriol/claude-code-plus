@@ -130,6 +130,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
     private var ultraTokensSpinner: JSpinner? = null
     private var permissionModeCombo: ComboBox<String>? = null
     private var includePartialMessagesCheckbox: JBCheckBox? = null
+    private var defaultChromeEnabledCheckbox: JBCheckBox? = null
 
     // Agents Tab 组件
     private var exploreEnabledCheckbox: JBCheckBox? = null
@@ -308,6 +309,20 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
             add(ultraTokensSpinner)
         }
         panel.add(tokensRow)
+        panel.add(Box.createVerticalStrut(8))
+
+        // === Chrome Extension 设置 ===
+        panel.add(createSeparator())
+        panel.add(createSectionTitle("Chrome Extension"))
+        panel.add(createDescription("Configure Chrome extension integration for web browsing."))
+
+        defaultChromeEnabledCheckbox = JBCheckBox("Enable Chrome extension by default").apply {
+            toolTipText = "When enabled, new sessions will use --chrome flag to enable Chrome extension"
+            alignmentX = JPanel.LEFT_ALIGNMENT
+        }
+        panel.add(defaultChromeEnabledCheckbox)
+        panel.add(createDescription("  └ Allows Claude to interact with web pages through Chrome extension"))
+        panel.add(Box.createVerticalStrut(8))
 
         panel.add(Box.createVerticalGlue())
 
@@ -676,7 +691,8 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
             (thinkTokensSpinner?.value as? Int ?: 2048) != settings.thinkTokens ||
             (ultraTokensSpinner?.value as? Int ?: 8096) != settings.ultraTokens ||
             permissionModeCombo?.selectedItem != settings.permissionMode ||
-            defaultBypassPermissionsCheckbox?.isSelected != settings.defaultBypassPermissions
+            defaultBypassPermissionsCheckbox?.isSelected != settings.defaultBypassPermissions ||
+            defaultChromeEnabledCheckbox?.isSelected != settings.defaultChromeEnabled
 
         // Agents Tab
         val currentConfig = parseAgentsConfig(settings.customAgents)
@@ -715,6 +731,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         settings.permissionMode = permissionModeCombo?.selectedItem as? String ?: "default"
         settings.includePartialMessages = true
         settings.defaultBypassPermissions = defaultBypassPermissionsCheckbox?.isSelected ?: false
+        settings.defaultChromeEnabled = defaultChromeEnabledCheckbox?.isSelected ?: false
 
         // Agents Tab
         val selectedModel = exploreModelCombo?.selectedItem as? String ?: "(inherit)"
@@ -745,6 +762,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         permissionModeCombo?.selectedItem = settings.permissionMode
         includePartialMessagesCheckbox?.isSelected = true
         defaultBypassPermissionsCheckbox?.isSelected = settings.defaultBypassPermissions
+        defaultChromeEnabledCheckbox?.isSelected = settings.defaultChromeEnabled
 
         // Agents Tab
         val currentConfig = parseAgentsConfig(settings.customAgents)
@@ -784,6 +802,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         permissionModeCombo = null
         includePartialMessagesCheckbox = null
         defaultBypassPermissionsCheckbox = null
+        defaultChromeEnabledCheckbox = null
         exploreEnabledCheckbox = null
         exploreModelCombo = null
         exploreDescriptionArea = null
