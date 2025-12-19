@@ -267,7 +267,7 @@ data class State(
 
 | 组件 | 用途 |
 |------|------|
-| `JBTabbedPane` | 主选项卡（Built-in/Custom）和内部选项卡（User/Local/Project）|
+| `JBTable` | MCP 服务器列表（Built-in + Custom，支持 Global/Project 两级）|
 | `JBCheckBox` | 启用/禁用 MCP 服务器 |
 | `JBTextField` | API Key 输入 |
 | `JBTextArea` | 系统提示词和 JSON 配置输入 |

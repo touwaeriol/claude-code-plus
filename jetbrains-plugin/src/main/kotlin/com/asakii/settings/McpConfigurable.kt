@@ -241,10 +241,9 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
         }
 
         // 检查自定义服务器配置
-        val savedGlobalServers = parseCustomServers(mcpSettings.getUserConfig(), McpServerLevel.GLOBAL)
-        val savedLocalServers = parseCustomServers(mcpSettings.getLocalConfig(), McpServerLevel.LOCAL)
+        val savedGlobalServers = parseCustomServers(mcpSettings.getGlobalConfig(), McpServerLevel.GLOBAL)
         val savedProjectServers = parseCustomServers(mcpSettings.getProjectConfig(project), McpServerLevel.PROJECT)
-        val savedCustomServers = savedGlobalServers + savedLocalServers + savedProjectServers
+        val savedCustomServers = savedGlobalServers + savedProjectServers
 
         if (customServers.size != savedCustomServers.size) return true
 
@@ -282,11 +281,9 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
 
         // 保存自定义服务器配置
         val globalServers = customServers.filter { it.level == McpServerLevel.GLOBAL }
-        val localServers = customServers.filter { it.level == McpServerLevel.LOCAL }
         val projectServers = customServers.filter { it.level == McpServerLevel.PROJECT }
 
-        mcpSettings.setUserConfig(buildMcpServersJson(globalServers))
-        mcpSettings.setLocalConfig(buildMcpServersJson(localServers))
+        mcpSettings.setGlobalConfig(buildMcpServersJson(globalServers))
         mcpSettings.setProjectConfig(project, buildMcpServersJson(projectServers))
 
         // 通知监听器
@@ -367,8 +364,7 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
 
         // 加载自定义服务器
         customServers.clear()
-        customServers.addAll(parseCustomServers(mcpSettings.getUserConfig(), McpServerLevel.GLOBAL))
-        customServers.addAll(parseCustomServers(mcpSettings.getLocalConfig(), McpServerLevel.LOCAL))
+        customServers.addAll(parseCustomServers(mcpSettings.getGlobalConfig(), McpServerLevel.GLOBAL))
         customServers.addAll(parseCustomServers(mcpSettings.getProjectConfig(project), McpServerLevel.PROJECT))
 
         refreshTable()
@@ -559,7 +555,6 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             val text = when (level) {
                 McpServerLevel.BUILTIN -> "Built-in"
                 McpServerLevel.GLOBAL -> "Global"
-                McpServerLevel.LOCAL -> "Local"
                 McpServerLevel.PROJECT -> "Project"
             }
             return super.getTableCellRendererComponent(table, text, isSelected, hasFocus, row, column)
@@ -572,8 +567,7 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
  */
 enum class McpServerLevel {
     BUILTIN,  // 内置
-    GLOBAL,   // 全局（User）
-    LOCAL,    // 本地
+    GLOBAL,   // 全局
     PROJECT   // 项目
 }
 
@@ -600,12 +594,12 @@ class BuiltInMcpServerDialog(
 ) : DialogWrapper(project) {
 
     private val enableCheckbox = JBCheckBox("Enable", entry.enabled)
-    private val instructionsArea = JBTextArea(entry.instructions, 6, 60).apply {
+    private val instructionsArea = JBTextArea(entry.instructions, 4, 50).apply {
         font = Font(Font.MONOSPACED, Font.PLAIN, 12)
         lineWrap = true
         wrapStyleWord = true
     }
-    private val apiKeyField = JBTextField(entry.apiKey, 30)
+    private val apiKeyField = JBTextField(entry.apiKey, 25)
 
     init {
         title = "Edit ${entry.name}"
@@ -615,7 +609,6 @@ class BuiltInMcpServerDialog(
     override fun createCenterPanel(): JComponent {
         val panel = JPanel(BorderLayout())
         panel.border = JBUI.Borders.empty(10)
-        panel.preferredSize = Dimension(600, 350)
 
         val contentPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
@@ -627,7 +620,7 @@ class BuiltInMcpServerDialog(
             add(enableCheckbox)
         }
         contentPanel.add(enablePanel)
-        contentPanel.add(Box.createVerticalStrut(10))
+        contentPanel.add(Box.createVerticalStrut(8))
 
         // Context7 的 API Key
         if (entry.name == "Context7 MCP") {
@@ -637,22 +630,22 @@ class BuiltInMcpServerDialog(
                 add(apiKeyField)
             }
             contentPanel.add(apiKeyPanel)
-            contentPanel.add(Box.createVerticalStrut(10))
+            contentPanel.add(Box.createVerticalStrut(8))
         }
 
         // Appended System Prompt
-        val promptLabel = JBLabel("Appended System Prompt (leave empty for default):").apply {
+        val promptLabel = JBLabel("Appended System Prompt (optional):").apply {
             alignmentX = JPanel.LEFT_ALIGNMENT
         }
         contentPanel.add(promptLabel)
-        contentPanel.add(Box.createVerticalStrut(5))
+        contentPanel.add(Box.createVerticalStrut(4))
 
         val scrollPane = JBScrollPane(instructionsArea).apply {
             alignmentX = JPanel.LEFT_ALIGNMENT
-            preferredSize = Dimension(560, 200)
+            preferredSize = Dimension(500, 80)
         }
         contentPanel.add(scrollPane)
-        contentPanel.add(Box.createVerticalStrut(10))
+        contentPanel.add(Box.createVerticalStrut(8))
 
         // Reset 按钮
         val resetButton = JButton("Reset to Default").apply {
@@ -665,6 +658,7 @@ class BuiltInMcpServerDialog(
         contentPanel.add(buttonPanel)
 
         panel.add(contentPanel, BorderLayout.CENTER)
+        panel.preferredSize = Dimension(550, panel.preferredSize.height)
         return panel
     }
 
@@ -686,12 +680,11 @@ class McpServerDialog(
 ) : DialogWrapper(project) {
 
     private val enableCheckbox = JBCheckBox("Enable", entry?.enabled ?: true)
-    private val jsonArea = JBTextArea(10, 60).apply {
+    private val jsonArea = JBTextArea(3, 50).apply {
         font = Font(Font.MONOSPACED, Font.PLAIN, 12)
-        // 编辑时显示已有配置，新建时留空（通过 hint 提示格式）
         text = entry?.jsonConfig ?: ""
     }
-    private val instructionsArea = JBTextArea(entry?.instructions ?: "", 4, 60).apply {
+    private val instructionsArea = JBTextArea(entry?.instructions ?: "", 2, 50).apply {
         font = Font(Font.MONOSPACED, Font.PLAIN, 12)
         lineWrap = true
         wrapStyleWord = true
@@ -710,7 +703,6 @@ class McpServerDialog(
     override fun createCenterPanel(): JComponent {
         val panel = JPanel(BorderLayout())
         panel.border = JBUI.Borders.empty(10)
-        panel.preferredSize = Dimension(600, 550)
 
         val contentPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
@@ -753,38 +745,44 @@ class McpServerDialog(
         }
         jsonPanel.add(topPanel, BorderLayout.NORTH)
 
-        val jsonScrollPane = JBScrollPane(jsonArea).apply {
-            preferredSize = Dimension(560, 180)
+        // 为 JSON 区域添加 placeholder
+        val placeholderText = """{"server-name": {"command": "...", "args": [...]}}"""
+        val placeholderColor = JBColor(0x999999, 0x666666)
+
+        // 自定义绘制 placeholder
+        val jsonAreaWithPlaceholder = object : JPanel(BorderLayout()) {
+            init {
+                add(jsonArea, BorderLayout.CENTER)
+                jsonArea.isOpaque = false
+            }
+
+            override fun paintComponent(g: Graphics) {
+                super.paintComponent(g)
+                if (jsonArea.text.isEmpty() && !jsonArea.isFocusOwner) {
+                    val g2 = g as Graphics2D
+                    g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+                    g2.color = placeholderColor
+                    g2.font = jsonArea.font
+                    val fm = g2.fontMetrics
+                    g2.drawString(placeholderText, jsonArea.insets.left + 2, fm.ascent + jsonArea.insets.top + 2)
+                }
+            }
+        }
+        jsonArea.addFocusListener(object : java.awt.event.FocusAdapter() {
+            override fun focusGained(e: java.awt.event.FocusEvent?) { jsonAreaWithPlaceholder.repaint() }
+            override fun focusLost(e: java.awt.event.FocusEvent?) { jsonAreaWithPlaceholder.repaint() }
+        })
+
+        val jsonScrollPane = JBScrollPane(jsonAreaWithPlaceholder).apply {
+            preferredSize = Dimension(500, 60)
         }
         jsonPanel.add(jsonScrollPane, BorderLayout.CENTER)
 
-        // 示例格式提示面板
-        val hintPanel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            border = JBUI.Borders.emptyTop(5)
+        // 简洁的格式提示
+        val hintLabel = JBLabel("<html><font color='gray' size='-1'>HTTP: {\"name\": {\"type\": \"http\", \"url\": \"https://...\"}}</font></html>").apply {
+            border = JBUI.Borders.emptyTop(4)
         }
-
-        val hintText = JBLabel("<html><font color='gray' size='-1'>Example format (stdio):</font></html>")
-        hintPanel.add(hintText)
-
-        val exampleArea = JBTextArea("""{"my-server": {"command": "npx", "args": ["-y", "mcp-server"]}}""").apply {
-            font = Font(Font.MONOSPACED, Font.PLAIN, 11)
-            isEditable = false
-            lineWrap = true
-            wrapStyleWord = true
-            background = JBColor(0xF5F5F5, 0x3C3F41)
-            foreground = JBColor(0x808080, 0xA0A0A0)
-            border = JBUI.Borders.empty(4)
-            rows = 1
-        }
-        hintPanel.add(exampleArea)
-
-        val hint2 = JBLabel("<html><font color='gray' size='-1'>For HTTP: {\"server\": {\"type\": \"http\", \"url\": \"https://...\"}}</font></html>").apply {
-            border = JBUI.Borders.emptyTop(3)
-        }
-        hintPanel.add(hint2)
-
-        jsonPanel.add(hintPanel, BorderLayout.SOUTH)
+        jsonPanel.add(hintLabel, BorderLayout.SOUTH)
 
         contentPanel.add(jsonPanel)
         contentPanel.add(Box.createVerticalStrut(15))
@@ -798,7 +796,7 @@ class McpServerDialog(
 
         val instructionsScrollPane = JBScrollPane(instructionsArea).apply {
             alignmentX = JPanel.LEFT_ALIGNMENT
-            preferredSize = Dimension(560, 80)
+            preferredSize = Dimension(500, 40)
         }
         contentPanel.add(instructionsScrollPane)
         contentPanel.add(Box.createVerticalStrut(15))
@@ -829,6 +827,7 @@ class McpServerDialog(
         contentPanel.add(warningPanel)
 
         panel.add(contentPanel, BorderLayout.CENTER)
+        panel.preferredSize = Dimension(550, panel.preferredSize.height)
 
         return panel
     }
