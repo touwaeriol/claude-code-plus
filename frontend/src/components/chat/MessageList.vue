@@ -405,8 +405,9 @@ watch(
 watch(
   () => props.outputTokens,
   () => {
-    // 只在流式响应中、follow 模式时才自动滚动
-    if (props.isStreaming && scrollState.value.mode === 'follow') {
+    // 只在流式响应中、follow 模式、且用户没有在交互时才自动滚动
+    // 检查 isUserInteracting 防止用户拖动滚动条时界面晃动
+    if (props.isStreaming && scrollState.value.mode === 'follow' && !isUserInteracting.value) {
       scrollToBottomSilent()
     }
   }
@@ -417,8 +418,9 @@ watch(
 watch(
   () => props.contentVersion,
   () => {
-    // 只在流式响应中、follow 模式时才自动滚动
-    if (props.isStreaming && scrollState.value.mode === 'follow') {
+    // 只在流式响应中、follow 模式、且用户没有在交互时才自动滚动
+    // 检查 isUserInteracting 防止用户拖动滚动条时界面晃动
+    if (props.isStreaming && scrollState.value.mode === 'follow' && !isUserInteracting.value) {
       scrollToBottomSilent()
     }
   }
@@ -426,6 +428,7 @@ watch(
 
 // 监听用户滚轮事件 - 向上滚动切换到 browse 模式
 function handleWheel(e: WheelEvent) {
+  console.log(`🖱️ [Wheel] deltaY=${e.deltaY}, mode=${scrollState.value.mode}, streaming=${props.isStreaming}`)
   // deltaY < 0 表示向上滚动
   if (e.deltaY < 0 && scrollState.value.mode === 'follow') {
     // 切换到 browse 模式，保存当前锚点
@@ -525,15 +528,35 @@ onUnmounted(() => {
   window.removeEventListener('touchend', handleTouchEnd)
 })
 
-// 监听 tab 切换，恢复滚动位置
+// 监听 tab 切换，保存旧 tab 滚动位置并恢复新 tab 位置
 watch(
   () => sessionStore.currentTabId,
   async (newTabId, oldTabId) => {
     if (!newTabId || newTabId === oldTabId) return
 
+    // ✅ 切换前：保存旧 tab 的滚动位置（在 DOM 更新之前同步执行）
+    if (oldTabId) {
+      const oldTab = sessionStore.tabs.find(t => t.tabId === oldTabId)
+      if (oldTab) {
+        const oldScrollState = oldTab.uiState.scrollState
+        // 如果旧 tab 是 browse 模式，立即计算并保存锚点
+        if (oldScrollState.mode === 'browse') {
+          const anchor = computeScrollAnchor()
+          if (anchor) {
+            oldTab.saveUiState({
+              scrollState: { ...oldScrollState, anchor }
+            })
+            console.log(`💾 [Scroll] Saved anchor for old tab ${oldTabId}: item=${anchor.itemId}`)
+          }
+        }
+        // 如果是 follow 模式，无需保存（切换回来时自动滚到底部）
+      }
+    }
+
     // 标记 tab 切换中，阻止其他滚动逻辑
     isTabSwitching.value = true
 
+    // 获取新 tab 的滚动状态
     const savedScrollState = sessionStore.currentTab?.uiState.scrollState
 
     // 等待 Vue 渲染 + 浏览器重绘
@@ -559,7 +582,7 @@ watch(
 
     await nextTick()
     isTabSwitching.value = false
-    console.log(`🔄 [Scroll] Tab switched, mode=${savedScrollState?.mode ?? 'follow'}`)
+    console.log(`🔄 [Scroll] Tab switched to ${newTabId}, mode=${savedScrollState?.mode ?? 'follow'}`)
   }
 )
 
@@ -682,6 +705,11 @@ function handleScroll() {
   const scrollTop = el.scrollTop
   const scrollHeight = el.scrollHeight
   const clientHeight = el.clientHeight
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+
+  // 调试日志：每次滚动都打印关键信息
+  const debugScrollingUp = scrollTop < lastScrollTop.value
+  console.log(`📜 [Scroll] top=${scrollTop.toFixed(0)}, last=${lastScrollTop.value.toFixed(0)}, bottom=${distanceFromBottom.toFixed(0)}, up=${debugScrollingUp}, mode=${scrollState.value.mode}, streaming=${props.isStreaming}, interact=${isUserInteracting.value}`)
 
   // 顶部分页 - 触发加载更多历史
   const shouldTrigger = scrollTop < HISTORY_TRIGGER_THRESHOLD &&
@@ -704,11 +732,13 @@ function handleScroll() {
     }
   }
 
-  lastScrollTop.value = scrollTop
-
   // 判断是否在底部（允许 50px 的误差）
-  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
   const nearBottom = distanceFromBottom < 50
+  // 判断滚动方向（必须在更新 lastScrollTop 之前计算！）
+  const isScrollingUp = scrollTop < lastScrollTop.value
+
+  // 更新 lastScrollTop
+  lastScrollTop.value = scrollTop
 
   // 到达底部时自动切换回 follow 模式
   if (nearBottom && scrollState.value.mode === 'browse') {
@@ -718,9 +748,10 @@ function handleScroll() {
     // 离开底部且当前是 follow 模式
     // 判断是否应该切换到 browse 模式：
     // 1. 用户正在交互（拖动滚动条/触摸滚动）→ 切换
-    // 2. 非 streaming 状态 → 切换（兜底，处理其他边缘情况）
-    // 3. streaming 期间的程序性滚动 → 不切换（由 wheel 事件处理用户主动滚动）
-    if (isUserInteracting.value || !props.isStreaming) {
+    // 2. 向上滚动（scrollTop 变小）→ 切换（兜底 wheel 事件在某些环境下不触发）
+    // 3. 非 streaming 状态 → 切换（兜底，处理其他边缘情况）
+    // 4. streaming 期间的程序性滚动（向下且非用户交互）→ 不切换
+    if (isUserInteracting.value || isScrollingUp || !props.isStreaming) {
       const anchor = computeScrollAnchor()
       scrollState.value = {
         mode: 'browse',
@@ -728,7 +759,8 @@ function handleScroll() {
         newMessageCount: 0,
         isNearBottom: false
       }
-      console.log(`🔄 [Scroll] Switched to browse mode (${isUserInteracting.value ? 'user dragging' : 'left bottom'})`)
+      const reason = isUserInteracting.value ? 'user dragging' : isScrollingUp ? 'scroll up' : 'left bottom'
+      console.log(`🔄 [Scroll] Switched to browse mode (${reason})`)
     }
   } else if (!nearBottom && scrollState.value.mode === 'browse') {
     // browse 模式下，防抖保存锚点
