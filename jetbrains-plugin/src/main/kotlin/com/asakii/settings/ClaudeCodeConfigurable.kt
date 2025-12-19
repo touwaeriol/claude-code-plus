@@ -1,6 +1,6 @@
 package com.asakii.settings
 
-import com.intellij.openapi.fileChooser.FileChooserDescriptor
+import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.SearchableConfigurable
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
@@ -10,6 +10,7 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
+import com.intellij.ui.dsl.builder.*
 import com.intellij.util.ui.JBUI
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -211,31 +212,34 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         panel.add(createSectionTitle("Runtime Settings"))
         panel.add(createDescription("Core configuration for Claude Code integration."))
 
-        // Node.js 路径（加宽输入框）
-        nodePathField = TextFieldWithBrowseButton().apply {
-            val descriptor = FileChooserDescriptor(true, false, false, false, false, false)
-            // 使用兼容所有 IntelliJ 版本的旧版 API（4参数版本）
-            @Suppress("DEPRECATION")
-            addBrowseFolderListener("Select Node.js Executable", "Choose the path to node executable", null, descriptor)
-            toolTipText = "Leave empty to auto-detect from system PATH"
-            preferredSize = Dimension(450, preferredSize.height)
-
-            val textField = this.textField
-            if (textField is JBTextField) {
-                // 设置初始占位符，避免阻塞 UI
-                textField.emptyText.text = "Detecting Node.js..."
-                // 在后台线程检测 Node.js，避免阻塞 UI
-                com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
-                    val nodeInfo = AgentSettingsService.detectNodeInfo()
-                    com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
-                        textField.emptyText.text = nodeInfo?.let {
-                            if (it.version != null) "${it.path} (${it.version})" else it.path
-                        } ?: "Auto-detect from system PATH (Node.js not found)"
+        // Node.js 路径（使用 Kotlin UI DSL 2.0 兼容的 API）
+        val nodePathPanel = panel {
+            row("Node.js path:") {
+                val descriptor = FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor()
+                    .withTitle("Select Node.js Executable")
+                    .withDescription("Choose the path to node executable")
+                textFieldWithBrowseButton(descriptor, null, null)
+                    .applyToComponent {
+                        toolTipText = "Leave empty to auto-detect from system PATH"
+                        preferredSize = Dimension(450, preferredSize.height)
+                        // 设置初始占位符，避免阻塞 UI
+                        (textField as? JBTextField)?.let { tf ->
+                            tf.emptyText.text = "Detecting Node.js..."
+                            // 在后台线程检测 Node.js，避免阻塞 UI
+                            com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+                                val nodeInfo = AgentSettingsService.detectNodeInfo()
+                                com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                                    tf.emptyText.text = nodeInfo?.let {
+                                        if (it.version != null) "${it.path} (${it.version})" else it.path
+                                    } ?: "Auto-detect from system PATH (Node.js not found)"
+                                }
+                            }
+                        }
+                        nodePathField = this
                     }
-                }
             }
-        }
-        panel.add(createLabeledRow("Node.js path:", nodePathField!!))
+        }.apply { alignmentX = JPanel.LEFT_ALIGNMENT }
+        panel.add(nodePathPanel)
         panel.add(createDescription("  Path to Node.js executable. Leave empty to auto-detect from system PATH."))
 
         // 默认模型

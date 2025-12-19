@@ -303,27 +303,20 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
      */
     private fun openDevToolsInDialog(project: Project, browser: JBCefBrowser) {
         try {
-            // 方案1: 使用 JBCefBrowser 封装的 openDevtools 方法
+            // 使用 JBCefBrowser 封装的 openDevtools 方法（跨版本兼容）
             browser.openDevtools()
             logger.info("✅ DevTools window opened via JBCefBrowser.openDevtools()")
         } catch (e: Exception) {
             logger.warn("⚠️ JBCefBrowser.openDevtools() failed: ${e.message}")
-            try {
-                // 方案2: 直接调用 CefBrowser.openDevTools
-                browser.cefBrowser.openDevTools(null)
-                logger.info("✅ DevTools window opened via CefBrowser.openDevTools()")
-            } catch (e2: Exception) {
-                logger.error("❌ All DevTools methods failed: ${e2.message}", e2)
-                // 方案3: 提示用户在外部浏览器中打开
-                val serverUrl = HttpServerProjectService.getInstance(project).serverUrl
-                if (serverUrl != null) {
-                    com.intellij.openapi.ui.Messages.showInfoMessage(
-                        project,
-                        "DevTools 无法在 IDE 内打开 (Windows JCEF 兼容性问题)。\n\n" +
-                        "请在外部浏览器中打开以下地址，使用浏览器的 DevTools (F12)：\n$serverUrl",
-                        "DevTools"
-                    )
-                }
+            // 提示用户在外部浏览器中打开
+            val serverUrl = HttpServerProjectService.getInstance(project).serverUrl
+            if (serverUrl != null) {
+                com.intellij.openapi.ui.Messages.showInfoMessage(
+                    project,
+                    "DevTools 无法在 IDE 内打开 (Windows JCEF 兼容性问题)。\n\n" +
+                    "请在外部浏览器中打开以下地址，使用浏览器的 DevTools (F12)：\n$serverUrl",
+                    "DevTools"
+                )
             }
         }
     }
