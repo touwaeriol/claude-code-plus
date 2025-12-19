@@ -12,7 +12,8 @@ version = "1.0-SNAPSHOT"
 val protobufVersion = "3.25.3"
 
 dependencies {
-    // Protobuf 运行时
+    // Protobuf 运行时 (显式声明 protobuf-java 以确保 OrBuilder 接口可被下游模块访问)
+    api("com.google.protobuf:protobuf-java:$protobufVersion")
     api("com.google.protobuf:protobuf-kotlin:$protobufVersion")
     api("com.google.protobuf:protobuf-java-util:$protobufVersion")
 
