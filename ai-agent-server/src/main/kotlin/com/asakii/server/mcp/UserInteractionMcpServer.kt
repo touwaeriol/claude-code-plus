@@ -362,6 +362,7 @@ class UserInteractionMcpServer : McpServerBase() {
      */
     private fun jsonElementToAnyForValidation(element: JsonElement): Any {
         return when (element) {
+            is JsonNull -> ""
             is JsonPrimitive -> when {
                 element.isString -> element.content
                 element.booleanOrNull != null -> element.boolean
@@ -372,7 +373,6 @@ class UserInteractionMcpServer : McpServerBase() {
             }
             is JsonArray -> element.map { jsonElementToAnyForValidation(it) }
             is JsonObject -> jsonObjectToMap(element)
-            is JsonNull -> ""
         }
     }
 
