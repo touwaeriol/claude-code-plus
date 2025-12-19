@@ -593,8 +593,9 @@ class ControlProtocol(
                 error?.let { put("error", it) }
             }
         }
-        
-        transport.write(responseMessage.toString())
+
+        // ✅ 使用 Json.encodeToString 而不是 toString()，避免 BOM 问题
+        transport.write(json.encodeToString(responseMessage))
     }
     
     /**
@@ -617,7 +618,8 @@ class ControlProtocol(
         }
         
         try {
-            transport.write(requestMessage.toString())
+            // ✅ 使用 Json.encodeToString 而不是 toString()，避免 BOM 问题
+            transport.write(json.encodeToString(requestMessage))
             return withTimeout(timeoutMs) {
                 deferred.await()
             }

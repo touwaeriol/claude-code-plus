@@ -244,12 +244,10 @@ class HttpApiServer(
                     // 通用 RPC 端点（用于前端测试连接和通用调用）
                     post("/") {
                         try {
-                            val requestBody = call.receiveText()
-                            logger.info { "📥 Received request: $requestBody" }
-
-                            // 简单解析 JSON (避免序列化问题)
-                            val actionMatch = """"action"\s*:\s*"([^"]+)"""".toRegex().find(requestBody)
-                            val action = actionMatch?.groupValues?.get(1) ?: ""
+                            // ✅ 使用 Ktor 的自动反序列化而不是手工正则表达式
+                            val request = call.receive<FrontendRequest>()
+                            val action = request.action
+                            logger.info { "📥 Received request: action=$action" }
 
                             when (action) {
                                 "test.ping" -> {
@@ -266,13 +264,10 @@ class HttpApiServer(
                                 // 注：ide.openFile, ide.showDiff, ide.getLocale, ide.setLocale
                                 // 已迁移到 RSocket (/jetbrains-rsocket)
                                 "ide.searchFiles" -> {
-                                    // 解析请求数据
-                                    val dataMatch = """"data"\s*:\s*\{([^}]+)\}""".toRegex().find(requestBody)
-                                    val queryMatch = """"query"\s*:\s*"([^"]+)"""".toRegex().find(dataMatch?.value ?: "")
-                                    val maxResultsMatch = """"maxResults"\s*:\s*(\d+)""".toRegex().find(dataMatch?.value ?: "")
-
-                                    val query = queryMatch?.groupValues?.get(1) ?: ""
-                                    val maxResults = maxResultsMatch?.groupValues?.get(1)?.toIntOrNull() ?: 20
+                                    // ✅ 直接从反序列化对象获取数据
+                                    val dataObj = request.data?.jsonObject
+                                    val query = dataObj?.get("query")?.jsonPrimitive?.contentOrNull ?: ""
+                                    val maxResults = dataObj?.get("maxResults")?.jsonPrimitive?.intOrNull ?: 20
 
                                     val result = ideTools.searchFiles(query, maxResults)
                                     val response = result.fold(
@@ -286,15 +281,11 @@ class HttpApiServer(
                                     call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
                                 "ide.getFileContent" -> {
-                                    // 解析请求数据
-                                    val dataMatch = """"data"\s*:\s*\{([^}]+)\}""".toRegex().find(requestBody)
-                                    val filePathMatch = """"filePath"\s*:\s*"([^"]+)"""".toRegex().find(dataMatch?.value ?: "")
-                                    val lineStartMatch = """"lineStart"\s*:\s*(\d+)""".toRegex().find(dataMatch?.value ?: "")
-                                    val lineEndMatch = """"lineEnd"\s*:\s*(\d+)""".toRegex().find(dataMatch?.value ?: "")
-
-                                    val filePath = filePathMatch?.groupValues?.get(1) ?: ""
-                                    val lineStart = lineStartMatch?.groupValues?.get(1)?.toIntOrNull()
-                                    val lineEnd = lineEndMatch?.groupValues?.get(1)?.toIntOrNull()
+                                    // ✅ 直接从反序列化对象获取数据
+                                    val dataObj = request.data?.jsonObject
+                                    val filePath = dataObj?.get("filePath")?.jsonPrimitive?.contentOrNull ?: ""
+                                    val lineStart = dataObj?.get("lineStart")?.jsonPrimitive?.intOrNull
+                                    val lineEnd = dataObj?.get("lineEnd")?.jsonPrimitive?.intOrNull
 
                                     val result = ideTools.getFileContent(filePath, lineStart, lineEnd)
                                     val response = result.fold(
