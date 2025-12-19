@@ -3,6 +3,7 @@ import com.google.protobuf.gradle.*
 plugins {
     kotlin("jvm")
     id("com.google.protobuf") version "0.9.4"
+    `java-library`
     `maven-publish`
 }
 
@@ -42,8 +43,14 @@ sourceSets {
         proto {
             srcDir("src/main/proto")
         }
-        java {
-            srcDirs(
+    }
+}
+
+// 将生成的 Java 代码添加到编译路径
+java {
+    sourceSets {
+        main {
+            java.srcDirs(
                 "build/generated/source/proto/main/java",
                 "build/generated/source/proto/main/kotlin"
             )
