@@ -3,13 +3,9 @@ package com.asakii.plugin.tools
 import com.asakii.claude.agent.sdk.types.AgentDefinition
 import com.asakii.plugin.utils.ResourceLoader
 import com.asakii.rpc.api.*
+import com.asakii.settings.AgentDefaults
 import com.asakii.settings.AgentSettingsService
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.*
 import com.asakii.rpc.api.ActiveFileInfo
 import com.asakii.server.tools.IdeToolsDefault
 import com.intellij.diff.DiffContentFactory
@@ -409,8 +405,9 @@ class IdeToolsImpl(
             val customAgentsJson = settingsService.customAgents
 
             if (customAgentsJson.isBlank() || customAgentsJson == "{}") {
-                logger.info("ℹ️ [getAgentDefinitions] 用户未配置自定义代理")
-                return emptyMap()
+                // 没有用户配置时，使用默认的 ExploreWithJetbrains 代理
+                logger.info("ℹ️ [getAgentDefinitions] 用户未配置自定义代理，使用默认配置")
+                return getDefaultAgentDefinitions()
             }
 
             val json = Json { ignoreUnknownKeys = true }
@@ -422,10 +419,19 @@ class IdeToolsImpl(
             for ((name, value) in agents) {
                 try {
                     val agentObj = value.jsonObject
+
+                    // 检查是否启用（默认启用）
+                    val enabled = agentObj["enabled"]?.jsonPrimitive?.booleanOrNull ?: true
+                    if (!enabled) {
+                        logger.info("⏭️ Skipping disabled agent: $name")
+                        continue
+                    }
+
                     val description = agentObj["description"]?.jsonPrimitive?.contentOrNull ?: ""
                     val prompt = agentObj["prompt"]?.jsonPrimitive?.contentOrNull ?: ""
                     val tools = agentObj["tools"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
-                    val model = agentObj["model"]?.jsonPrimitive?.contentOrNull
+                    // 空字符串视为 null（使用默认模型）
+                    val model = agentObj["model"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
 
                     result[name] = AgentDefinition(
                         description = description,
@@ -433,7 +439,7 @@ class IdeToolsImpl(
                         tools = tools,
                         model = model
                     )
-                    logger.info("✅ Loaded agent: $name (tools: ${tools?.size ?: 0})")
+                    logger.info("✅ Loaded agent: $name (tools: ${tools?.size ?: 0}, model: ${model ?: "inherit"})")
                 } catch (e: Exception) {
                     logger.warning("⚠️ Failed to parse agent '$name': ${e.message}")
                 }
@@ -448,8 +454,24 @@ class IdeToolsImpl(
             result
         } catch (e: Exception) {
             logger.warning("Failed to load agent definitions: ${e.message}")
-            emptyMap()
+            getDefaultAgentDefinitions()
         }
+    }
+
+    /**
+     * 获取默认的代理定义
+     * 当用户未配置或配置解析失败时使用
+     */
+    private fun getDefaultAgentDefinitions(): Map<String, AgentDefinition> {
+        val defaultAgent = AgentDefaults.EXPLORE_WITH_JETBRAINS
+        val agentDef = AgentDefinition(
+            description = defaultAgent.description,
+            prompt = defaultAgent.prompt,
+            tools = defaultAgent.tools,
+            model = null // 使用默认模型
+        )
+        logger.info("📦 Using default agent: ${defaultAgent.name}")
+        return mapOf(defaultAgent.name to agentDef)
     }
 
     override fun getActiveEditorFile(): ActiveFileInfo? {
