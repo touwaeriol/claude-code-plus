@@ -129,6 +129,12 @@ export const useSettingsStore = defineStore('settings', () => {
       console.log('📡 [IdeSettings] Include Partial Messages:', newIdeSettings.includePartialMessages)
     }
 
+    // 5. 应用权限模式设置
+    if (newIdeSettings.permissionMode) {
+      updates.permissionMode = newIdeSettings.permissionMode as PermissionMode
+      console.log('🔒 [IdeSettings] 权限模式:', newIdeSettings.permissionMode)
+    }
+
     // 如果有更新，合并到设置中
     if (Object.keys(updates).length > 0) {
       settings.value = {

@@ -224,7 +224,8 @@ function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
       defaultThinkingLevel: 'ULTRA',
       defaultThinkingTokens: 8096,
       defaultThinkingLevelId: 'ultra',
-      thinkingLevels: defaultThinkingLevels
+      thinkingLevels: defaultThinkingLevels,
+      permissionMode: 'default'
     }
   }
 
@@ -245,7 +246,8 @@ function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
           tokens: level.tokens,
           isCustom: level.isCustom
         }))
-      : defaultThinkingLevels
+      : defaultThinkingLevels,
+    permissionMode: s.permissionMode || 'default'
   }
 }
 
@@ -374,6 +376,8 @@ export interface IdeSettings {
   thinkingLevels: ThinkingLevelConfig[]  // 所有可用的思考级别
   // 旧字段，保留向后兼容
   defaultThinkingLevel?: string  // 思考等级枚举名称（如 "HIGH", "MEDIUM", "OFF"）
+  // 权限模式
+  permissionMode?: string  // 权限模式（default, acceptEdits, plan, bypassPermissions, dontAsk）
 }
 
 // 思考级别配置
@@ -474,7 +478,8 @@ class JetBrainsRSocketService {
           defaultThinkingLevel: settingsData.defaultThinkingLevel || 'ULTRA',
           defaultThinkingTokens: settingsData.defaultThinkingTokens ?? 8096,
           defaultThinkingLevelId: settingsData.defaultThinkingLevelId || 'ultra',
-          thinkingLevels: settingsData.thinkingLevels || defaultThinkingLevels
+          thinkingLevels: settingsData.thinkingLevels || defaultThinkingLevels,
+          permissionMode: settingsData.permissionMode || 'default'
         }
         console.log('[JetBrainsRSocket] 设置变更:', settings)
         this.settingsChangeHandlers.forEach(h => h(settings))
