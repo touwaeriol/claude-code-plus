@@ -374,9 +374,10 @@ You have access to JetBrains IDE tools that leverage the IDE's powerful indexing
 - `mcp__jetbrains__FindUsages`: Find all references/usages of a symbol (class, method, field, variable) in the project
 - `mcp__jetbrains__Rename`: Safely rename a symbol and automatically update all references (like Refactor > Rename)
 
-IMPORTANT: Prefer JetBrains tools over file system tools (faster and more reliable due to IDE's pre-built indexes):
-- Use `mcp__jetbrains__CodeSearch` instead of `Grep` for searching code content
-- Use `mcp__jetbrains__FileIndex` instead of `Glob` for finding files, classes, and symbols
+CRITICAL: You MUST use JetBrains tools instead of Glob/Grep. DO NOT use Glob or Grep unless JetBrains tools fail or are unavailable:
+- ALWAYS use `mcp__jetbrains__CodeSearch` instead of `Grep` for searching code content
+- ALWAYS use `mcp__jetbrains__FileIndex` instead of `Glob` for finding files, classes, and symbols
+- Only fall back to Glob/Grep if JetBrains tools return errors or cannot handle the specific query
 
 IMPORTANT: After completing code modifications, you MUST use `mcp__jetbrains__FileProblems` to perform static analysis validation on the modified files to minimize syntax errors.
 
