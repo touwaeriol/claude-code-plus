@@ -214,9 +214,9 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         // Node.js 路径（加宽输入框）
         nodePathField = TextFieldWithBrowseButton().apply {
             val descriptor = FileChooserDescriptor(true, false, false, false, false, false)
-                .withTitle("Select Node.js Executable")
-                .withDescription("Choose the path to node executable")
-            addBrowseFolderListener(null, descriptor)
+            // 使用兼容所有 IntelliJ 版本的旧版 API（4参数版本）
+            @Suppress("DEPRECATION")
+            addBrowseFolderListener("Select Node.js Executable", "Choose the path to node executable", null, descriptor)
             toolTipText = "Leave empty to auto-detect from system PATH"
             preferredSize = Dimension(450, preferredSize.height)
 
