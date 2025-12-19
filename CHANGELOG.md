@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2025-12-19
+
+### Changed
+- Update Java version to 21
+- Centralize file sync operations in IdeaPlatformService
+- Migrate TextFieldWithBrowseButton to Kotlin UI DSL 2.0 API
+
+### Fixed
+- Resolve IDEA 2024.2-2025.2 compatibility issues (CefBrowser.openDevTools NoSuchMethodError)
+- Resolve WebStorm compatibility by using reflection for Java PSI classes
+- Improve IntelliJ API compatibility for Diff editor and file chooser
+- Use reflection for cross-version IntelliJ Diff API compatibility
+
+### Performance
+- Optimize patchCli task to skip when enhanced CLI is up-to-date
+- Save only target file instead of all documents (faster file sync)
+
+### Build
+- Add java-library plugin to ai-agent-proto for proper OrBuilder exposure
+- Remove cleanCli dependency from clean task to preserve committed CLI files
+- Explicitly declare protobuf-java as api dependency for OrBuilder interfaces
+
+### Docs
+- Add new screenshots to all README versions
+- Add Claude Code Plus usage guide for promotion
+
 ## [1.0.9] - 2025-12-16
 
 ### Added
