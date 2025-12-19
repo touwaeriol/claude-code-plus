@@ -1,5 +1,3 @@
-@file:Suppress("DEPRECATION")  // TODO: 迁移到 DiffEditorViewerFileEditors (需要 IntelliJ 2023.3+)
-
 package com.asakii.plugin.tools
 
 import com.asakii.claude.agent.sdk.types.AgentDefinition
@@ -17,9 +15,9 @@ import com.asakii.server.tools.IdeToolsDefault
 import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffManager
 import com.intellij.diff.contents.DocumentContent
-import com.intellij.diff.editor.DiffRequestProcessorEditor
 import com.intellij.diff.requests.ContentDiffRequest
 import com.intellij.diff.requests.SimpleDiffRequest
+import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.l10n.LocalizationUtil
 import com.intellij.openapi.application.ApplicationManager
@@ -45,7 +43,6 @@ import java.util.logging.Logger
  * - 继承 IdeToolsDefault 的通用实现（文件搜索、内容读取等）
  * - 覆盖需要 IDEA Platform API 的方法（openFile、showDiff、getTheme 等）
  */
-@Suppress("DEPRECATION")  // TODO: 迁移到 DiffEditorViewerFileEditors (需要 IntelliJ 2023.3+)
 class IdeToolsImpl(
     private val project: Project
 ) : IdeToolsDefault(project.basePath) {
@@ -466,9 +463,8 @@ class IdeToolsImpl(
                     val selectedFile = fileEditorManager.selectedFiles.firstOrNull()
                     val projectPath = project.basePath ?: ""
 
-                    // 检查是否是 Diff 编辑器
-                    @Suppress("DEPRECATION")  // TODO: 迁移到 DiffEditorViewerFileEditors
-                    if (selectedFileEditor is DiffRequestProcessorEditor) {
+                    // 检查是否是 Diff 编辑器（使用反射兼容不同版本的 IntelliJ）
+                    if (selectedFileEditor != null && isDiffEditor(selectedFileEditor)) {
                         result = handleDiffEditor(selectedFileEditor, projectPath)
                         return@runReadAction
                     }
@@ -515,16 +511,28 @@ class IdeToolsImpl(
     }
 
     /**
-     * 处理 Diff 编辑器,获取 Diff 内容
-     * 支持所有 ContentDiffRequest 类型,包括 SimpleDiffRequest、LocalChangeListDiffRequest 等
-     * TODO: 迁移到 DiffEditorViewerFileEditors (需要 IntelliJ 2023.3+)
+     * 检查 FileEditor 是否是 Diff 编辑器
+     * 使用反射兼容不同版本的 IntelliJ：
+     * - 2024.2 及之前：DiffRequestProcessorEditor
+     * - 2024.3+：DiffEditorViewerFileEditor
      */
-    @Suppress("DEPRECATION")
-    private fun handleDiffEditor(diffEditor: DiffRequestProcessorEditor, projectPath: String): ActiveFileInfo? {
+    private fun isDiffEditor(editor: FileEditor): Boolean {
+        val className = editor.javaClass.name
+        return className.contains("DiffRequestProcessorEditor") ||
+               className.contains("DiffEditorViewerFileEditor") ||
+               className.contains("DiffFileEditorBase")
+    }
+
+    /**
+     * 处理 Diff 编辑器,获取 Diff 内容
+     * 使用反射兼容不同版本的 IntelliJ API：
+     * - 2024.2 及之前：DiffRequestProcessorEditor.getProcessor().activeRequest
+     * - 2024.3+：DiffEditorViewerFileEditor.editorViewer
+     */
+    private fun handleDiffEditor(diffEditor: FileEditor, projectPath: String): ActiveFileInfo? {
         return try {
-            @Suppress("DEPRECATION")
-            val processor = diffEditor.processor
-            val request = processor.activeRequest
+            // 尝试获取 DiffRequest（兼容不同版本的 API）
+            val request = getActiveRequest(diffEditor)
 
             // 支持所有 ContentDiffRequest 类型（SimpleDiffRequest 是其子类）
             if (request is ContentDiffRequest) {
@@ -574,6 +582,68 @@ class IdeToolsImpl(
             }
         } catch (e: Exception) {
             logger.warning("Failed to handle diff editor: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * 使用反射获取 Diff 编辑器的 activeRequest
+     * 兼容不同版本的 IntelliJ API
+     */
+    private fun getActiveRequest(diffEditor: FileEditor): com.intellij.diff.requests.DiffRequest? {
+        return try {
+            // 方式1：尝试旧版 API (DiffRequestProcessorEditor.getProcessor().activeRequest)
+            // 仅在 IntelliJ 2024.2 及之前版本可用
+            val processorMethod = diffEditor.javaClass.methods.find { it.name == "getProcessor" }
+            if (processorMethod != null) {
+                val processor = processorMethod.invoke(diffEditor)
+                if (processor != null) {
+                    val activeRequestMethod = processor.javaClass.methods.find { it.name == "getActiveRequest" }
+                    if (activeRequestMethod != null) {
+                        return activeRequestMethod.invoke(processor) as? com.intellij.diff.requests.DiffRequest
+                    }
+                }
+            }
+
+            // 方式2：尝试新版 API (DiffEditorViewerFileEditor.editorViewer)
+            // 在 IntelliJ 2024.3+ 可用
+            val editorViewerField = diffEditor.javaClass.declaredFields.find { it.name == "editorViewer" }
+                ?: diffEditor.javaClass.methods.find { it.name == "getEditorViewer" }?.let { method ->
+                    return@let null // 使用方法而不是字段
+                }
+
+            if (editorViewerField != null) {
+                editorViewerField.isAccessible = true
+                val editorViewer = editorViewerField.get(diffEditor)
+                if (editorViewer != null) {
+                    // 尝试从 editorViewer 获取 request
+                    val requestMethod = editorViewer.javaClass.methods.find {
+                        it.name == "getRequest" || it.name == "getActiveRequest"
+                    }
+                    if (requestMethod != null) {
+                        return requestMethod.invoke(editorViewer) as? com.intellij.diff.requests.DiffRequest
+                    }
+                }
+            }
+
+            // 方式3：尝试通过 getEditorViewer 方法
+            val getEditorViewerMethod = diffEditor.javaClass.methods.find { it.name == "getEditorViewer" }
+            if (getEditorViewerMethod != null) {
+                val editorViewer = getEditorViewerMethod.invoke(diffEditor)
+                if (editorViewer != null) {
+                    val requestMethod = editorViewer.javaClass.methods.find {
+                        it.name == "getRequest" || it.name == "getActiveRequest"
+                    }
+                    if (requestMethod != null) {
+                        return requestMethod.invoke(editorViewer) as? com.intellij.diff.requests.DiffRequest
+                    }
+                }
+            }
+
+            logger.info("⚠️ Could not find activeRequest via reflection for: ${diffEditor.javaClass.name}")
+            null
+        } catch (e: Exception) {
+            logger.warning("Failed to get activeRequest via reflection: ${e.message}")
             null
         }
     }
