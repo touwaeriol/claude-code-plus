@@ -212,31 +212,38 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         panel.add(createSectionTitle("Runtime Settings"))
         panel.add(createDescription("Core configuration for Claude Code integration."))
 
-        // Node.js 路径（使用 Kotlin UI DSL 2.0 兼容的 API）
+        // Node.js 路径（使用兼容 IDEA 2024.2+ 的方式）
+        val descriptor = FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor()
+            .withTitle("Select Node.js Executable")
+            .withDescription("Choose the path to node executable")
+        nodePathField = TextFieldWithBrowseButton().apply {
+            addBrowseFolderListener(
+                "Select Node.js Executable",
+                "Choose the path to node executable",
+                null,
+                descriptor
+            )
+            toolTipText = "Leave empty to auto-detect from system PATH"
+            preferredSize = Dimension(450, preferredSize.height)
+            // 设置初始占位符，避免阻塞 UI
+            (textField as? JBTextField)?.let { tf ->
+                tf.emptyText.text = "Detecting Node.js..."
+                // 在后台线程检测 Node.js，避免阻塞 UI
+                com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+                    val nodeInfo = AgentSettingsService.detectNodeInfo()
+                    com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                        tf.emptyText.text = nodeInfo?.let {
+                            if (it.version != null) "${it.path} (${it.version})" else it.path
+                        } ?: "Auto-detect from system PATH (Node.js not found)"
+                    }
+                }
+            }
+        }
         val nodePathPanel = panel {
             row("Node.js path:") {
-                val descriptor = FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor()
-                    .withTitle("Select Node.js Executable")
-                    .withDescription("Choose the path to node executable")
-                textFieldWithBrowseButton(descriptor, null, null)
-                    .applyToComponent {
-                        toolTipText = "Leave empty to auto-detect from system PATH"
-                        preferredSize = Dimension(450, preferredSize.height)
-                        // 设置初始占位符，避免阻塞 UI
-                        (textField as? JBTextField)?.let { tf ->
-                            tf.emptyText.text = "Detecting Node.js..."
-                            // 在后台线程检测 Node.js，避免阻塞 UI
-                            com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
-                                val nodeInfo = AgentSettingsService.detectNodeInfo()
-                                com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
-                                    tf.emptyText.text = nodeInfo?.let {
-                                        if (it.version != null) "${it.path} (${it.version})" else it.path
-                                    } ?: "Auto-detect from system PATH (Node.js not found)"
-                                }
-                            }
-                        }
-                        nodePathField = this
-                    }
+                cell(nodePathField!!)
+                    .resizableColumn()
+                    .align(Align.FILL)
             }
         }.apply { alignmentX = JPanel.LEFT_ALIGNMENT }
         panel.add(nodePathPanel)
