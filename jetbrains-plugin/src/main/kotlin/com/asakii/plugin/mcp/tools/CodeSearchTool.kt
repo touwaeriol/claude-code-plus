@@ -9,6 +9,7 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -93,6 +94,9 @@ class CodeSearchTool(private val project: Project) {
         val filesWithMatches = mutableSetOf<String>()
 
         val projectPath = project.basePath ?: return ToolResult.error("Project base path not found")
+
+        // 等待索引完成，确保能搜索到最新的文件内容
+        DumbService.getInstance(project).waitForSmartMode()
 
         try {
             // 1. 配置 FindModel

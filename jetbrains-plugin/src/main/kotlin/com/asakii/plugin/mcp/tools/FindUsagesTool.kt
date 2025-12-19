@@ -6,6 +6,7 @@ import com.asakii.server.mcp.schema.ToolSchemaLoader
 import com.asakii.server.mcp.schema.ValidationError
 import com.asakii.server.mcp.schema.ValidationResult
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.psi.*
@@ -124,6 +125,9 @@ class FindUsagesTool(private val project: Project) {
         } else {
             project.basePath?.let { File(it, filePath).absolutePath } ?: filePath
         }
+
+        // 等待索引完成，确保能搜索到最新的文件内容
+        DumbService.getInstance(project).waitForSmartMode()
 
         val usages = mutableListOf<UsageLocation>()
         var foundElement: PsiElement? = null

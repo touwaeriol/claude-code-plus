@@ -3,6 +3,7 @@ package com.asakii.plugin.mcp.tools
 import com.asakii.claude.agent.sdk.mcp.ToolResult
 import com.asakii.server.mcp.schema.ToolSchemaLoader
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
@@ -82,6 +83,9 @@ class FileIndexTool(private val project: Project) {
         if (query.isBlank()) {
             return ToolResult.error("Search keyword cannot be empty")
         }
+
+        // 等待索引完成，确保能搜索到最新的文件内容
+        DumbService.getInstance(project).waitForSmartMode()
 
         val results = mutableListOf<IndexSearchResult>()
         var totalFound = 0
