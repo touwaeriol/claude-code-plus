@@ -4,13 +4,9 @@
 
 import com.intellij.diff.DiffContentFactory
 
-import com.intellij.diff.DiffDialogHints
-
 import com.intellij.diff.DiffManager
 
 import com.intellij.diff.requests.SimpleDiffRequest
-
-import com.intellij.openapi.wm.IdeFocusManager
 
 import com.intellij.notification.NotificationGroupManager
 
@@ -26,6 +22,8 @@ import com.intellij.openapi.editor.Editor
 
 import com.intellij.openapi.editor.ScrollType
 
+import com.intellij.openapi.fileEditor.FileDocumentManager
+
 import com.intellij.openapi.fileEditor.FileEditorManager
 
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
@@ -35,6 +33,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 
 import com.intellij.openapi.vfs.VirtualFile
+
+import com.intellij.util.FileContentUtil
 
 import java.io.File
 
@@ -375,7 +375,15 @@ class IdeaPlatformService(private val project: Project) {
 
     /**
 
-     * 刷新文件系统
+     * 刷新文件系统，确保 IDEA 能立刻看到文件变化
+
+     *
+
+     * - 新创建的文件会立刻出现在文件列表
+
+     * - 修改的文件内容会立刻更新
+
+     * - 已打开的文件会重新加载
 
      *
 
@@ -397,27 +405,39 @@ class IdeaPlatformService(private val project: Project) {
 
 
 
-        // 刷新父目录
-
-        val parentFile = file.parentFile
-
-        if (parentFile?.exists() == true) {
-
-            val parentVirtualFile = LocalFileSystem.getInstance()
-
-                .findFileByPath(parentFile.absolutePath)
-
-            parentVirtualFile?.refresh(false, true)
-
-        }
-
-
-
-        // 查找文件
-
         return try {
 
-            LocalFileSystem.getInstance().findFileByPath(file.canonicalPath)
+            // 使用 refreshAndFindFileByPath 刷新并获取文件
+
+            // 这会同时刷新父目录（新文件出现）和文件内容（编辑更新）
+
+            val virtualFile = LocalFileSystem.getInstance()
+
+                .refreshAndFindFileByPath(file.canonicalPath)
+
+
+
+            // 如果文件已经在编辑器中打开，需要重新加载 Document 并刷新索引
+
+            virtualFile?.let { vf ->
+
+                ApplicationManager.getApplication().invokeLater {
+
+                    // 重新加载编辑器中的文档
+
+                    FileDocumentManager.getInstance().reloadFiles(vf)
+
+                    // 强制重新解析文件，触发 IDEA 索引更新
+
+                    FileContentUtil.reparseFiles(project, listOf(vf), true)
+
+                }
+
+            }
+
+
+
+            virtualFile
 
         } catch (e: Exception) {
 
