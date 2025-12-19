@@ -313,6 +313,7 @@ function debouncedSaveAnchor() {
 
 const lastScrollTop = ref(0)       // 上次滚动位置，用于检测滚动方向
 const isTabSwitching = ref(false)  // Tab 切换中，阻止其他滚动逻辑
+const isUserInteracting = ref(false)  // 用户正在交互（拖动滚动条/触摸滚动）
 const historyLoadInProgress = ref(false)
 const historyLoadRequested = ref(false)
 const historyScrollHeightBefore = ref(0)
@@ -435,19 +436,57 @@ function handleWheel(e: WheelEvent) {
       newMessageCount: 0,
       isNearBottom: false
     }
-    console.log('🔄 [Scroll] Switched to browse mode')
+    console.log('🔄 [Scroll] Switched to browse mode (wheel up)')
   }
 }
 
-// 添加 wheel 事件监听器（需要在 DynamicScroller 渲染后调用）
-let wheelListenerAdded = false
-function addWheelListener() {
-  if (wheelListenerAdded) return
+// 用户交互检测（滚动条拖动/触摸滚动）
+function handlePointerDown(e: PointerEvent) {
+  const el = scrollerRef.value?.$el as HTMLElement | undefined
+  if (!el) return
+
+  // 检测是否点击在滚动条区域（元素右侧约 20px）
+  const rect = el.getBoundingClientRect()
+  const isOnScrollbar = e.clientX > rect.right - 20
+
+  if (isOnScrollbar) {
+    isUserInteracting.value = true
+    console.log('🔄 [Scroll] User started dragging scrollbar')
+  }
+}
+
+function handlePointerUp() {
+  if (isUserInteracting.value) {
+    isUserInteracting.value = false
+    console.log('🔄 [Scroll] User stopped dragging scrollbar')
+  }
+}
+
+function handleTouchStart() {
+  isUserInteracting.value = true
+}
+
+function handleTouchEnd() {
+  // 延迟重置，因为惯性滚动可能还在继续
+  setTimeout(() => {
+    isUserInteracting.value = false
+  }, 150)
+}
+
+// 添加用户交互事件监听器（需要在 DynamicScroller 渲染后调用）
+let scrollListenersAdded = false
+function addScrollListeners() {
+  if (scrollListenersAdded) return
   const el = scrollerRef.value?.$el as HTMLElement | undefined
   if (el) {
     el.addEventListener('wheel', handleWheel, { passive: true })
-    wheelListenerAdded = true
-    console.log('🔄 [Scroll] Wheel listener added')
+    el.addEventListener('pointerdown', handlePointerDown, { passive: true })
+    el.addEventListener('touchstart', handleTouchStart, { passive: true })
+    // 全局监听 pointerup 和 touchend，因为用户可能在元素外释放
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('touchend', handleTouchEnd)
+    scrollListenersAdded = true
+    console.log('🔄 [Scroll] User interaction listeners added')
   }
 }
 
@@ -458,7 +497,7 @@ watch(
     if (newLen > 0 && oldLen === 0) {
       // 消息从无到有，需要等待 DynamicScroller 渲染后添加事件监听器
       nextTick(() => {
-        addWheelListener()
+        addScrollListeners()
       })
     }
   }
@@ -470,7 +509,7 @@ onMounted(() => {
   }
   // 延迟添加事件监听，确保 scrollerRef 已挂载
   nextTick(() => {
-    addWheelListener()
+    addScrollListeners()
   })
 })
 
@@ -479,7 +518,11 @@ onUnmounted(() => {
   const el = scrollerRef.value?.$el as HTMLElement | undefined
   if (el) {
     el.removeEventListener('wheel', handleWheel)
+    el.removeEventListener('pointerdown', handlePointerDown)
+    el.removeEventListener('touchstart', handleTouchStart)
   }
+  window.removeEventListener('pointerup', handlePointerUp)
+  window.removeEventListener('touchend', handleTouchEnd)
 })
 
 // 监听 tab 切换，恢复滚动位置
@@ -672,16 +715,21 @@ function handleScroll() {
     scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0, isNearBottom: true }
     console.log('🔄 [Scroll] Switched to follow mode (reached bottom)')
   } else if (!nearBottom && scrollState.value.mode === 'follow') {
-    // 离开底部且当前是 follow 模式，切换到 browse 模式
-    // 这样即使 wheel 事件没有触发（如滚动条拖动），也能显示"回到底部"按钮
-    const anchor = computeScrollAnchor()
-    scrollState.value = {
-      mode: 'browse',
-      anchor,
-      newMessageCount: 0,
-      isNearBottom: false
+    // 离开底部且当前是 follow 模式
+    // 判断是否应该切换到 browse 模式：
+    // 1. 用户正在交互（拖动滚动条/触摸滚动）→ 切换
+    // 2. 非 streaming 状态 → 切换（兜底，处理其他边缘情况）
+    // 3. streaming 期间的程序性滚动 → 不切换（由 wheel 事件处理用户主动滚动）
+    if (isUserInteracting.value || !props.isStreaming) {
+      const anchor = computeScrollAnchor()
+      scrollState.value = {
+        mode: 'browse',
+        anchor,
+        newMessageCount: 0,
+        isNearBottom: false
+      }
+      console.log(`🔄 [Scroll] Switched to browse mode (${isUserInteracting.value ? 'user dragging' : 'left bottom'})`)
     }
-    console.log('🔄 [Scroll] Switched to browse mode (left bottom)')
   } else if (!nearBottom && scrollState.value.mode === 'browse') {
     // browse 模式下，防抖保存锚点
     debouncedSaveAnchor()
