@@ -19,7 +19,7 @@ dependencies {
     implementation(project(":ai-agent-sdk"))
     implementation(project(":claude-agent-sdk"))  // 添加 claude-agent-sdk 依赖以访问 ClaudeSessionScanner
     api(project(":ai-agent-rpc-api")) // Use api to expose types to downstream
-    implementation(project(":ai-agent-proto")) // Protobuf 生成的类型
+    api(project(":ai-agent-proto")) // Protobuf 生成的类型 (使用 api 以暴露 OrBuilder 接口)
 
     // MCP Java SDK (用于 Streamable HTTP 端点)
     implementation("io.modelcontextprotocol.sdk:mcp:0.17.0")
