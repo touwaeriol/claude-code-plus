@@ -13,6 +13,12 @@ import com.asakii.plugin.tools.IdeToolsImpl
 import com.asakii.rpc.api.JetBrainsApi
 import com.asakii.settings.AgentSettingsService
 import com.asakii.settings.McpDefaults
+import com.asakii.settings.McpSettingsService
+import com.intellij.openapi.components.service
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
@@ -324,6 +330,92 @@ class HttpServerProjectService(private val project: Project) : Disposable {
             logger.info("✅ Loaded MCP Server config: context7 (type=http)")
         } else {
             logger.info("⏭️ MCP Server 'context7' is disabled")
+        }
+
+        // 加载自定义 MCP 服务器
+        val mcpSettings = service<McpSettingsService>()
+        val customConfigs = loadCustomMcpServers(mcpSettings)
+        configs.addAll(customConfigs)
+        if (customConfigs.isNotEmpty()) {
+            logger.info("✅ Loaded ${customConfigs.size} custom MCP server(s)")
+        }
+
+        return configs
+    }
+
+    /**
+     * 加载自定义 MCP 服务器配置
+     * 从两个级别读取配置：Global、Project
+     *
+     * 存储格式：
+     * {
+     *   "server-name": {
+     *     "config": { "command": "...", "args": [...] },  // 纯净的 MCP 配置
+     *     "enabled": true,                                 // 元数据
+     *     "instructions": "..."                            // 元数据
+     *   }
+     * }
+     */
+    private fun loadCustomMcpServers(mcpSettings: McpSettingsService): List<McpServerConfig> {
+        val configs = mutableListOf<McpServerConfig>()
+        val json = Json { ignoreUnknownKeys = true }
+
+        // 合并两个级别的配置（Global、Project）
+        val allConfigs = listOf(
+            mcpSettings.getGlobalConfig(),
+            mcpSettings.getProjectConfig(project)
+        )
+
+        for (jsonStr in allConfigs) {
+            if (jsonStr.isBlank()) continue
+
+            try {
+                val parsed = json.parseToJsonElement(jsonStr).jsonObject
+
+                for ((serverName, entry) in parsed.entries) {
+                    val entryObj = entry.jsonObject
+
+                    // 读取启用状态
+                    val enabled = entryObj["enabled"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true
+                    if (!enabled) {
+                        logger.info("⏭️ Custom MCP Server '$serverName' is disabled")
+                        continue
+                    }
+
+                    // 读取纯净的 MCP 配置
+                    val mcpConfig = entryObj["config"]?.jsonObject ?: entryObj  // 兼容旧格式
+
+                    // 读取配置字段
+                    val serverType = mcpConfig["type"]?.jsonPrimitive?.content ?: "stdio"
+                    val command = mcpConfig["command"]?.jsonPrimitive?.content
+                    val url = mcpConfig["url"]?.jsonPrimitive?.content
+                    val args = mcpConfig["args"]?.jsonArray?.map { it.jsonPrimitive.content }
+                    val env = mcpConfig["env"]?.jsonObject?.entries?.associate {
+                        it.key to it.value.jsonPrimitive.content
+                    }
+                    val headers = mcpConfig["headers"]?.jsonObject?.entries?.associate {
+                        it.key to it.value.jsonPrimitive.content
+                    }
+
+                    // 读取元数据
+                    val instructions = entryObj["instructions"]?.jsonPrimitive?.content
+
+                    configs.add(McpServerConfig(
+                        name = serverName,
+                        type = serverType,
+                        enabled = true,
+                        command = command,
+                        args = args,
+                        env = env,
+                        url = url,
+                        headers = headers,
+                        instructions = instructions
+                    ))
+                    logger.info("✅ Loaded custom MCP Server: $serverName (type=$serverType)")
+                }
+            } catch (e: Exception) {
+                logger.warning("⚠️ Failed to parse custom MCP config: ${e.message}")
+            }
         }
 
         return configs

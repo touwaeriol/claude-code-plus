@@ -653,14 +653,28 @@ class AiAgentRpcServiceImpl(
         // 使用 appendSystemPromptFile 追加，不会替换 Claude Code 默认提示词
         var mcpSystemPromptAppendix = buildMcpSystemPromptAppendix(mcpServers)
 
-        // 追加由 plugin 模块加载的 MCP 指令（Context7、Playwright 等）
+        // 追加由 plugin 模块加载的 MCP 指令（Context7 等内置服务器）
         defaults.mcpInstructions?.takeIf { it.isNotBlank() }?.let { instructions ->
             mcpSystemPromptAppendix = if (mcpSystemPromptAppendix.isNotBlank()) {
                 "$mcpSystemPromptAppendix\n\n$instructions"
             } else {
                 instructions
             }
-            sdkLog.info("📝 [buildClaudeOverrides] 已追加 MCP 系统提示词")
+            sdkLog.info("📝 [buildClaudeOverrides] 已追加内置 MCP 系统提示词")
+        }
+
+        // 追加自定义 MCP 服务器的 instructions
+        val customInstructions = defaults.mcpServersConfig
+            .filter { it.enabled && !it.instructions.isNullOrBlank() }
+            .map { it.instructions!! }
+        if (customInstructions.isNotEmpty()) {
+            val customPrompt = customInstructions.joinToString("\n\n")
+            mcpSystemPromptAppendix = if (mcpSystemPromptAppendix.isNotBlank()) {
+                "$mcpSystemPromptAppendix\n\n$customPrompt"
+            } else {
+                customPrompt
+            }
+            sdkLog.info("📝 [buildClaudeOverrides] 已追加 ${customInstructions.size} 个自定义 MCP 系统提示词")
         }
 
         // canUseTool 回调：通过 RPC 调用前端获取用户授权（带 tool_use_id 和 permissionSuggestions）

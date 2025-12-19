@@ -62,7 +62,9 @@ data class McpServerConfig(
     val args: List<String>? = null,
     val env: Map<String, String>? = null,
     // 描述
-    val description: String? = null
+    val description: String? = null,
+    // 自定义系统提示词（仅用于自定义 MCP 服务器）
+    val instructions: String? = null
 )
 
 /**
