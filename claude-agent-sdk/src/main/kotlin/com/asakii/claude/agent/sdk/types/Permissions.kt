@@ -12,8 +12,7 @@ enum class PermissionMode {
     @SerialName("default") DEFAULT,
     @SerialName("acceptEdits") ACCEPT_EDITS,
     @SerialName("plan") PLAN,
-    @SerialName("bypassPermissions") BYPASS_PERMISSIONS,
-    @SerialName("dontAsk") DONT_ASK
+    @SerialName("bypassPermissions") BYPASS_PERMISSIONS
 }
 
 /**

@@ -436,7 +436,6 @@ class SubprocessTransport(
                 PermissionMode.ACCEPT_EDITS -> "acceptEdits"
                 PermissionMode.PLAN -> "plan"
                 PermissionMode.BYPASS_PERMISSIONS -> "bypassPermissions"
-                PermissionMode.DONT_ASK -> "dontAsk"
             }
             command.addAll(listOf("--permission-mode", permissionModeValue))
         }

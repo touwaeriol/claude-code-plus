@@ -377,7 +377,7 @@ export interface IdeSettings {
   // 旧字段，保留向后兼容
   defaultThinkingLevel?: string  // 思考等级枚举名称（如 "HIGH", "MEDIUM", "OFF"）
   // 权限模式
-  permissionMode?: string  // 权限模式（default, acceptEdits, plan, bypassPermissions, dontAsk）
+  permissionMode?: string  // 权限模式（default, acceptEdits, plan, bypassPermissions）
 }
 
 // 思考级别配置

@@ -9,8 +9,7 @@ export enum PermissionMode {
   DEFAULT = 'default',           // 默认模式 - 需要用户确认
   ACCEPT_EDITS = 'accept_edits', // 自动接受编辑
   PLAN = 'plan',                 // 计划模式
-  BYPASS_PERMISSIONS = 'bypass', // 绕过权限检查
-  DONT_ASK = 'dontAsk'           // 不询问模式
+  BYPASS_PERMISSIONS = 'bypass'  // 绕过权限检查
 }
 
 import { BaseModel, UiModelOption, MODEL_CAPABILITIES } from '@/constants/models'

@@ -1163,7 +1163,6 @@ class AiAgentRpcServiceImpl(
         "bypassPermissions" -> PermissionMode.BYPASS_PERMISSIONS
         "acceptEdits" -> PermissionMode.ACCEPT_EDITS
         "plan" -> PermissionMode.PLAN
-        "dontAsk" -> PermissionMode.DONT_ASK
         else -> PermissionMode.DEFAULT
     }
 

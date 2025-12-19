@@ -64,10 +64,7 @@ enum class RpcPermissionMode {
     ACCEPT_EDITS,
 
     @SerialName("plan")
-    PLAN,
-
-    @SerialName("dontAsk")
-    DONT_ASK
+    PLAN
 }
 
 /**

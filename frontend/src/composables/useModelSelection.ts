@@ -28,15 +28,14 @@ const DEFAULT_THINKING_LEVELS: ThinkingLevelConfig[] = [
 ]
 
 // 权限模式列表
-const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']
+const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan']
 
 // 模式图标映射
 const MODE_ICONS: Record<string, string> = {
   'default': '?',
   'acceptEdits': '✎',
   'bypassPermissions': '∞',
-  'plan': '☰',
-  'dontAsk': '🔇'
+  'plan': '☰'
 }
 
 export interface UseModelSelectionOptions {

@@ -288,8 +288,7 @@ export default {
       plan: 'プランモード',
       bypassPermissions: '権限をバイパス',
       bypass: 'バイパス',
-      bypassTooltip: 'すべての権限確認をスキップして直接実行',
-      dontAsk: '再度確認しない'
+      bypassTooltip: 'すべての権限確認をスキップして直接実行'
     }
   }
   ,

@@ -190,7 +190,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         panel.add(createDescription("  └ Skip confirmation dialogs for file edits and bash commands. Use with caution."))
 
         permissionModeCombo = ComboBox(DefaultComboBoxModel(arrayOf(
-            "default", "acceptEdits", "plan", "bypassPermissions", "dontAsk"
+            "default", "acceptEdits", "plan", "bypassPermissions"
         ))).apply {
             toolTipText = "Default permission mode for new sessions"
         }

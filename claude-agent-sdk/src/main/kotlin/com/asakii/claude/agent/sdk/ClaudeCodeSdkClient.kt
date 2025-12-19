@@ -419,7 +419,6 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
         PermissionMode.ACCEPT_EDITS -> "acceptEdits"
         PermissionMode.BYPASS_PERMISSIONS -> "bypassPermissions"
         PermissionMode.PLAN -> "plan"
-        PermissionMode.DONT_ASK -> "dontAsk"
     }
 
     /**

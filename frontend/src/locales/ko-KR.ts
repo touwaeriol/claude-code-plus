@@ -288,8 +288,7 @@ export default {
       plan: '계획 모드',
       bypassPermissions: '권한 우회',
       bypass: '우회',
-      bypassTooltip: '모든 권한 확인을 건너뛰고 직접 실행',
-      dontAsk: '다시 묻지 않음'
+      bypassTooltip: '모든 권한 확인을 건너뛰고 직접 실행'
     }
   }
   ,

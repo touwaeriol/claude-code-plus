@@ -479,7 +479,6 @@ function mapPermissionModeToProto(mode: RpcPermissionMode): PermissionMode {
     case 'bypassPermissions': return PermissionMode.BYPASS_PERMISSIONS
     case 'acceptEdits': return PermissionMode.ACCEPT_EDITS
     case 'plan': return PermissionMode.PLAN
-    case 'dontAsk': return PermissionMode.DONT_ASK
     default: return PermissionMode.DEFAULT
   }
 }
@@ -490,7 +489,6 @@ function mapPermissionModeFromProto(mode: PermissionMode): RpcPermissionMode {
     case PermissionMode.BYPASS_PERMISSIONS: return 'bypassPermissions'
     case PermissionMode.ACCEPT_EDITS: return 'acceptEdits'
     case PermissionMode.PLAN: return 'plan'
-    case PermissionMode.DONT_ASK: return 'dontAsk'
     default: return 'default'
   }
 }

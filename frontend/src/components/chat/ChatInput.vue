@@ -217,12 +217,6 @@
                 <span>Plan</span>
               </span>
             </el-option>
-            <el-option value="dontAsk" label="Don't Ask">
-              <span class="mode-option-label">
-                <span class="mode-icon">🔇</span>
-                <span>Don't Ask</span>
-              </span>
-            </el-option>
           </el-select>
 
           <!-- 模型选择器 - 新架构（只有 3 个选项） -->

@@ -314,8 +314,7 @@ export default {
       plan: 'plan mode',
       bypassPermissions: 'bypass permissions',
       bypass: 'Bypass',
-      bypassTooltip: 'Skip all permission confirmations and execute directly',
-      dontAsk: "don't ask"
+      bypassTooltip: 'Skip all permission confirmations and execute directly'
     },
     editPreviewTitle: 'Edit Preview',
     multiEditPreviewTitle: 'Multi-Edit Preview',

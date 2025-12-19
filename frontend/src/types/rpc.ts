@@ -16,7 +16,7 @@ export type RpcSessionStatus = 'connected' | 'disconnected' | 'interrupted' | 'm
 export type RpcContentStatus = 'in_progress' | 'completed' | 'failed'
 
 /** 权限模式枚举 */
-export type RpcPermissionMode = 'default' | 'bypassPermissions' | 'acceptEdits' | 'plan' | 'dontAsk'
+export type RpcPermissionMode = 'default' | 'bypassPermissions' | 'acceptEdits' | 'plan'
 
 // ============================================================================
 // RPC 消息类型 - 对应 Claude SDK Message

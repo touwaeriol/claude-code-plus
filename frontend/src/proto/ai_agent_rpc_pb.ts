@@ -2519,7 +2519,7 @@ export type IdeSettings = Message<"aiagent.rpc.IdeSettings"> & {
   thinkingLevels: ThinkingLevelConfig[];
 
   /**
-   * 权限模式（default, acceptEdits, plan, bypassPermissions, dontAsk）
+   * 权限模式（default, acceptEdits, plan, bypassPermissions）
    *
    * @generated from field: string permission_mode = 11;
    */

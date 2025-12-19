@@ -43,7 +43,7 @@ enum PermissionMode {
   PERMISSION_MODE_BYPASS_PERMISSIONS = 2;   // bypassPermissions
   PERMISSION_MODE_ACCEPT_EDITS = 3;         // acceptEdits
   PERMISSION_MODE_PLAN = 4;                 // plan
-  PERMISSION_MODE_DONT_ASK = 5;             // dontAsk
+  PERMISSION_MODE_DONT_ASK = 5;             // deprecated: dontAsk (no longer used)
 }
 
 // 对应 RpcSandboxMode
@@ -720,7 +720,7 @@ message IdeSettings {
   int32 default_thinking_tokens = 8;     // 默认思考 token 数量
   string default_thinking_level_id = 9;  // 默认思考级别 ID（如 "off", "think", "ultra", "custom_xxx"）
   repeated ThinkingLevelConfig thinking_levels = 10;  // 所有可用的思考级别
-  string permission_mode = 11;           // 权限模式（default, acceptEdits, plan, bypassPermissions, dontAsk）
+  string permission_mode = 11;           // 权限模式（default, acceptEdits, plan, bypassPermissions）
 }
 
 // 思考级别配置
