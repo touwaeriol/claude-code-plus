@@ -214,9 +214,10 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
 
         // Node.js 路径（使用兼容 IDEA 2024.2+ 的方式）
         val descriptor = FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor()
-            .withTitle("Select Node.js Executable")
-            .withDescription("Choose the path to node executable")
         nodePathField = TextFieldWithBrowseButton().apply {
+            // 使用带 4 参数的 API 以兼容 IDEA 2024.2
+            // 新的 2 参数 API addBrowseFolderListener(Project, FileChooserDescriptor) 在 2024.3 才引入
+            @Suppress("DEPRECATION")
             addBrowseFolderListener(
                 "Select Node.js Executable",
                 "Choose the path to node executable",
