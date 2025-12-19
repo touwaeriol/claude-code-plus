@@ -49,9 +49,7 @@ enum class PermissionMode {
     @kotlinx.serialization.SerialName("plan")
     PLAN,
     @kotlinx.serialization.SerialName("bypassPermissions")
-    BYPASS_PERMISSIONS,
-    @kotlinx.serialization.SerialName("dontAsk")
-    DONT_ASK
+    BYPASS_PERMISSIONS
 }
 
 /**

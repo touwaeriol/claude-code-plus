@@ -131,7 +131,6 @@ object ProtoConverter {
         RpcPermissionModeApi.BYPASS_PERMISSIONS -> PermissionMode.PERMISSION_MODE_BYPASS_PERMISSIONS
         RpcPermissionModeApi.ACCEPT_EDITS -> PermissionMode.PERMISSION_MODE_ACCEPT_EDITS
         RpcPermissionModeApi.PLAN -> PermissionMode.PERMISSION_MODE_PLAN
-        RpcPermissionModeApi.DONT_ASK -> PermissionMode.PERMISSION_MODE_DONT_ASK
     }
 
     fun PermissionMode.toRpc(): RpcPermissionModeApi = when (this) {
@@ -139,7 +138,6 @@ object ProtoConverter {
         PermissionMode.PERMISSION_MODE_BYPASS_PERMISSIONS -> RpcPermissionModeApi.BYPASS_PERMISSIONS
         PermissionMode.PERMISSION_MODE_ACCEPT_EDITS -> RpcPermissionModeApi.ACCEPT_EDITS
         PermissionMode.PERMISSION_MODE_PLAN -> RpcPermissionModeApi.PLAN
-        PermissionMode.PERMISSION_MODE_DONT_ASK -> RpcPermissionModeApi.DONT_ASK
         PermissionMode.PERMISSION_MODE_UNSPECIFIED, PermissionMode.UNRECOGNIZED -> RpcPermissionModeApi.DEFAULT
     }
 

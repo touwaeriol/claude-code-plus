@@ -95,7 +95,6 @@ enum PermissionMode {
   PERMISSION_MODE_BYPASS_PERMISSIONS = 2;   // bypassPermissions
   PERMISSION_MODE_ACCEPT_EDITS = 3;         // acceptEdits
   PERMISSION_MODE_PLAN = 4;                 // plan
-  PERMISSION_MODE_DONT_ASK = 5;             // dontAsk
 }
 
 // 对应 RpcSandboxMode

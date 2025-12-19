@@ -144,7 +144,6 @@ class AiAgentRpcServiceImpl(
                     McpPermissionMode.ACCEPT_EDITS -> PermissionMode.ACCEPT_EDITS
                     McpPermissionMode.PLAN -> PermissionMode.PLAN
                     McpPermissionMode.BYPASS_PERMISSIONS -> PermissionMode.BYPASS_PERMISSIONS
-                    McpPermissionMode.DONT_ASK -> PermissionMode.DONT_ASK
                 }
             },
             directories = this.directories,
@@ -1139,7 +1138,6 @@ class AiAgentRpcServiceImpl(
         RpcPermissionMode.BYPASS_PERMISSIONS -> PermissionMode.BYPASS_PERMISSIONS
         RpcPermissionMode.ACCEPT_EDITS -> PermissionMode.ACCEPT_EDITS
         RpcPermissionMode.PLAN -> PermissionMode.PLAN
-        RpcPermissionMode.DONT_ASK -> PermissionMode.DONT_ASK
     }
 
     private fun RpcSandboxMode.toSdkSandboxMode(): SandboxMode = when (this) {
@@ -1211,7 +1209,6 @@ class AiAgentRpcServiceImpl(
         SdkPermissionMode.ACCEPT_EDITS -> RpcPermissionMode.ACCEPT_EDITS
         SdkPermissionMode.BYPASS_PERMISSIONS -> RpcPermissionMode.BYPASS_PERMISSIONS
         SdkPermissionMode.PLAN -> RpcPermissionMode.PLAN
-        SdkPermissionMode.DONT_ASK -> RpcPermissionMode.DONT_ASK
     }
 
     /**
@@ -1221,7 +1218,6 @@ class AiAgentRpcServiceImpl(
         RpcPermissionMode.ACCEPT_EDITS -> SdkPermissionMode.ACCEPT_EDITS
         RpcPermissionMode.BYPASS_PERMISSIONS -> SdkPermissionMode.BYPASS_PERMISSIONS
         RpcPermissionMode.PLAN -> SdkPermissionMode.PLAN
-        RpcPermissionMode.DONT_ASK -> SdkPermissionMode.DONT_ASK
     }
 
     // ==================== 日志格式化函数 ====================
@@ -1322,7 +1318,6 @@ private fun SdkPermissionUpdate.toProtoPermissionUpdate(): ProtoPermissionUpdate
                 com.asakii.claude.agent.sdk.types.PermissionMode.ACCEPT_EDITS -> ProtoPermissionMode.PERMISSION_MODE_ACCEPT_EDITS
                 com.asakii.claude.agent.sdk.types.PermissionMode.PLAN -> ProtoPermissionMode.PERMISSION_MODE_PLAN
                 com.asakii.claude.agent.sdk.types.PermissionMode.BYPASS_PERMISSIONS -> ProtoPermissionMode.PERMISSION_MODE_BYPASS_PERMISSIONS
-                com.asakii.claude.agent.sdk.types.PermissionMode.DONT_ASK -> ProtoPermissionMode.PERMISSION_MODE_DONT_ASK
             }
         }
         this@toProtoPermissionUpdate.directories?.forEach { addDirectories(it) }
@@ -1368,7 +1363,6 @@ private fun ProtoPermissionUpdate.toMcpPermissionUpdate(): McpPermissionUpdate {
             ProtoPermissionMode.PERMISSION_MODE_ACCEPT_EDITS -> McpPermissionMode.ACCEPT_EDITS
             ProtoPermissionMode.PERMISSION_MODE_PLAN -> McpPermissionMode.PLAN
             ProtoPermissionMode.PERMISSION_MODE_BYPASS_PERMISSIONS -> McpPermissionMode.BYPASS_PERMISSIONS
-            ProtoPermissionMode.PERMISSION_MODE_DONT_ASK -> McpPermissionMode.DONT_ASK
             else -> null
         },
         directories = directoriesList.takeIf { it.isNotEmpty() },

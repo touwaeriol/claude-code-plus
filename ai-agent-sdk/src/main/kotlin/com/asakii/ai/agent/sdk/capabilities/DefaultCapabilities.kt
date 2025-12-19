@@ -18,8 +18,7 @@ object ClaudeCapabilities : AgentCapabilities {
         AiPermissionMode.DEFAULT,
         AiPermissionMode.ACCEPT_EDITS,
         AiPermissionMode.BYPASS_PERMISSIONS,
-        AiPermissionMode.PLAN,
-        AiPermissionMode.DONT_ASK
+        AiPermissionMode.PLAN
     )
     override val canSkipPermissions = true
     override val canSendRichContent = true

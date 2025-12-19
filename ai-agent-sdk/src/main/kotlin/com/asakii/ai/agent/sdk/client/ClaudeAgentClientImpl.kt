@@ -249,7 +249,6 @@ class ClaudeAgentClientImpl(
         AiPermissionMode.ACCEPT_EDITS -> ClaudePermissionMode.ACCEPT_EDITS
         AiPermissionMode.BYPASS_PERMISSIONS -> ClaudePermissionMode.BYPASS_PERMISSIONS
         AiPermissionMode.PLAN -> ClaudePermissionMode.PLAN
-        AiPermissionMode.DONT_ASK -> ClaudePermissionMode.DONT_ASK
     }
 }
 

@@ -3125,12 +3125,6 @@ export enum PermissionMode {
    */
   PLAN = 4,
 
-  /**
-   * dontAsk
-   *
-   * @generated from enum value: PERMISSION_MODE_DONT_ASK = 5;
-   */
-  DONT_ASK = 5,
 }
 
 /**

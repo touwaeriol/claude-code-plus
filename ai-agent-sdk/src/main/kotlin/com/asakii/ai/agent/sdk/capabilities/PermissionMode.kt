@@ -25,10 +25,5 @@ enum class AiPermissionMode {
     /**
      * 计划模式：只分析不执行，用于预览操作
      */
-    PLAN,
-
-    /**
-     * 不询问模式：静默执行，不显示确认对话框
-     */
-    DONT_ASK
+    PLAN
 }

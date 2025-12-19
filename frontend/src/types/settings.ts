@@ -87,8 +87,7 @@ export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
   [PermissionMode.DEFAULT]: '默认 - 需要确认',
   [PermissionMode.ACCEPT_EDITS]: '自动接受编辑',
   [PermissionMode.PLAN]: '计划模式',
-  [PermissionMode.BYPASS_PERMISSIONS]: '绕过权限检查',
-  [PermissionMode.DONT_ASK]: '不询问模式'
+  [PermissionMode.BYPASS_PERMISSIONS]: '绕过权限检查'
 }
 
 /**
@@ -119,6 +118,5 @@ export const PERMISSION_MODE_DESCRIPTIONS: Record<PermissionMode, string> = {
   [PermissionMode.DEFAULT]: '每个工具调用都需要用户确认',
   [PermissionMode.ACCEPT_EDITS]: '自动接受文件编辑操作',
   [PermissionMode.PLAN]: '先制定计划,再执行操作',
-  [PermissionMode.BYPASS_PERMISSIONS]: '自动执行所有操作(谨慎使用)',
-  [PermissionMode.DONT_ASK]: '不询问直接执行'
+  [PermissionMode.BYPASS_PERMISSIONS]: '自动执行所有操作(谨慎使用)'
 }
