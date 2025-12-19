@@ -64,6 +64,9 @@
         :show-model-selector="true"
         :show-permission-controls="true"
         :show-send-button="true"
+        :show-chrome-status="true"
+        :chrome-status="chromeStatus"
+        :chrome-status-loading="chromeStatusLoading"
         class="input-area"
         @send="handleSendMessage"
         @force-send="handleForceSend"
@@ -71,6 +74,8 @@
         @context-add="handleAddContext"
         @context-remove="handleRemoveContext"
         @auto-cleanup-change="handleAutoCleanupChange"
+        @chrome-status-click="handleChromeStatusClick"
+        @enable-chrome="handleEnableChrome"
       />
     </div>
 
@@ -385,6 +390,51 @@ const pendingTasks = ref<PendingTask[]>([])
 const debugExpanded = ref(false)
 const chatInputRef = ref<InstanceType<typeof ChatInput>>()
 
+// Chrome 扩展状态
+interface ChromeStatusData {
+  installed: boolean
+  enabled: boolean
+  connected: boolean
+  mcpServerStatus?: string
+  extensionVersion?: string
+}
+const chromeStatus = ref<ChromeStatusData | null>(null)
+const chromeStatusLoading = ref(false)
+
+// 查询 Chrome 状态
+async function queryChromeStatus() {
+  const session = sessionStore.currentSession
+  if (!session) return
+
+  chromeStatusLoading.value = true
+  try {
+    const status = await session.getChromeStatus()
+    chromeStatus.value = status
+    console.log('[ModernChatView] Chrome status:', status)
+  } catch (error) {
+    console.warn('[ModernChatView] Failed to query Chrome status:', error)
+    chromeStatus.value = null
+  } finally {
+    chromeStatusLoading.value = false
+  }
+}
+
+// Chrome 状态点击处理
+function handleChromeStatusClick(status: ChromeStatusData | null) {
+  console.log('[ModernChatView] Chrome status clicked:', status)
+  // 未安装时导航到商店由组件内部处理
+}
+
+// 启用 Chrome 扩展（保存到 Tab 状态，下次连接时生效）
+function handleEnableChrome() {
+  console.log('[ModernChatView] Enable Chrome requested')
+  const currentTab = sessionStore.currentTab
+  if (currentTab) {
+    currentTab.uiState.chromeEnabled = true
+  }
+  showToast('Chrome 扩展将在下次连接时启用', 3000)
+}
+
 // 生命周期钩子
 onMounted(async () => {
   console.log('ModernChatView mounted')
@@ -439,6 +489,9 @@ onMounted(async () => {
       ])
 
       console.log('Default tab created:', tab.tabId)
+
+      // 查询 Chrome 扩展状态
+      queryChromeStatus()
     }
   } catch (error) {
     console.error('Failed to initialize session:', error)

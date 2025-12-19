@@ -142,4 +142,14 @@ interface AiAgentRpcService {
      */
     suspend fun getMcpStatus(): RpcMcpStatusResult
 
+    /**
+     * 获取 Chrome 扩展状态
+     *
+     * 查询 Chrome 扩展的安装状态、启用状态和连接状态。
+     * 需要 CLI 支持 chrome_status 控制请求。
+     *
+     * @return Chrome 扩展状态信息
+     */
+    suspend fun getChromeStatus(): RpcChromeStatusResult
+
 }

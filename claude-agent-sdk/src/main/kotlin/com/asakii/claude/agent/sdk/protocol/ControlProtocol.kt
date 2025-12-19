@@ -768,6 +768,43 @@ class ControlProtocol(
     }
 
     /**
+     * Get Chrome extension status.
+     * Returns information about the Chrome extension connection state.
+     *
+     * This uses the chrome_status control command (added by SDK patch).
+     * If the patch is not applied, this will throw an exception.
+     *
+     * @return ChromeStatus with installed, enabled, connected states
+     */
+    suspend fun getChromeStatus(): ChromeStatus {
+        val request = buildJsonObject {
+            put("subtype", "chrome_status")
+        }
+        val response = sendControlRequestInternal(request)
+
+        if (response.subtype == "error") {
+            throw ControlProtocolException("Get Chrome status failed: ${response.error}")
+        }
+
+        val responseObj = response.response?.jsonObject
+            ?: return ChromeStatus(
+                installed = false,
+                enabled = false,
+                connected = false,
+                mcpServerStatus = null,
+                extensionVersion = null
+            )
+
+        return ChromeStatus(
+            installed = responseObj["installed"]?.jsonPrimitive?.booleanOrNull ?: false,
+            enabled = responseObj["enabled"]?.jsonPrimitive?.booleanOrNull ?: false,
+            connected = responseObj["connected"]?.jsonPrimitive?.booleanOrNull ?: false,
+            mcpServerStatus = responseObj["mcpServerStatus"]?.jsonPrimitive?.contentOrNull,
+            extensionVersion = responseObj["extensionVersion"]?.jsonPrimitive?.contentOrNull
+        )
+    }
+
+    /**
      * Dynamically set MCP servers for the current session.
      * This allows adding/removing MCP servers without reconnecting.
      *

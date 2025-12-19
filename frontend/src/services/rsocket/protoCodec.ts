@@ -17,6 +17,7 @@ import {
   TruncateHistoryRequestSchema,
   TruncateHistoryResultSchema,
   McpStatusResultSchema,
+  ChromeStatusResultSchema,
   StatusResultSchema,
   SetModelResultSchema,
   SetPermissionModeResultSchema,
@@ -356,6 +357,26 @@ export const ProtoCodec = {
         status: s.status,
         serverInfo: s.serverInfo || undefined
       }))
+    }
+  },
+
+  /**
+   * 解码 ChromeStatusResult
+   */
+  decodeChromeStatusResult(data: Uint8Array): {
+    installed: boolean
+    enabled: boolean
+    connected: boolean
+    mcpServerStatus?: string
+    extensionVersion?: string
+  } {
+    const proto = fromBinary(ChromeStatusResultSchema, data)
+    return {
+      installed: proto.installed,
+      enabled: proto.enabled,
+      connected: proto.connected,
+      mcpServerStatus: proto.mcpServerStatus || undefined,
+      extensionVersion: proto.extensionVersion || undefined
     }
   },
 

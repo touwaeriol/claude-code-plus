@@ -668,3 +668,14 @@ data class RpcMcpServerStatus(
 data class RpcMcpStatusResult(
     val servers: List<RpcMcpServerStatus>
 )
+
+/**
+ * Chrome 扩展状态查询结果
+ */
+data class RpcChromeStatusResult(
+    val installed: Boolean,           // 扩展是否已安装
+    val enabled: Boolean,             // 是否在配置中启用
+    val connected: Boolean,           // MCP 服务器是否已连接
+    val mcpServerStatus: String? = null,   // MCP 服务器状态字符串
+    val extensionVersion: String? = null   // 扩展版本号
+)

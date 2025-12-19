@@ -437,6 +437,27 @@ export class RSocketSession {
     }
 
     /**
+     * 获取 Chrome 扩展状态
+     */
+    async getChromeStatus(): Promise<{
+        installed: boolean
+        enabled: boolean
+        connected: boolean
+        mcpServerStatus?: string
+        extensionVersion?: string
+    }> {
+        if (!this._isConnected || !this.client) {
+            throw new Error('Session not connected')
+        }
+
+        console.log('[RSocket] ← agent.getChromeStatus 发送')
+        const responseData = await this.client.requestResponse('agent.getChromeStatus', new Uint8Array())
+        const result = ProtoCodec.decodeChromeStatusResult(responseData)
+        console.log('[RSocket] → agent.getChromeStatus 结果:', JSON.stringify(result, null, 2))
+        return result
+    }
+
+    /**
      * 订阅消息事件
      */
     onMessage(handler: MessageHandler): () => void {

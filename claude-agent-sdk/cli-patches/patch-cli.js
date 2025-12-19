@@ -138,9 +138,9 @@ console.log('🔍 验证补丁结果...');
 
 const verifications = [
   { pattern: 'run_in_background', desc: '控制命令' },
-  { pattern: 'process.stdin.unshift', desc: '注入 Ctrl+B 到 stdin 缓冲区' },
-  { pattern: 'process.stdin.emit', desc: '触发 readable 事件' },
-  { pattern: '\\x02', desc: 'Ctrl+B ASCII 码' }
+  { pattern: '__sdkBackgroundResolver', desc: '子代理 background resolver' },
+  { pattern: '__sdkBashBackgroundCallback', desc: 'Bash 后台回调', optional: true },
+  { pattern: 'chrome_status', desc: 'Chrome 状态控制命令', optional: true },
 ];
 
 let verifyPassed = 0;

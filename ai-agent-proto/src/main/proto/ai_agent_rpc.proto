@@ -812,3 +812,12 @@ message McpServerStatus {
 message McpStatusResult {
   repeated McpServerStatus servers = 1;
 }
+
+// Chrome 扩展状态查询结果
+message ChromeStatusResult {
+  bool installed = 1;           // 扩展是否已安装
+  bool enabled = 2;             // 是否在配置中启用
+  bool connected = 3;           // MCP 服务器是否已连接
+  optional string mcp_server_status = 4;   // MCP 服务器状态字符串
+  optional string extension_version = 5;   // 扩展版本号
+}

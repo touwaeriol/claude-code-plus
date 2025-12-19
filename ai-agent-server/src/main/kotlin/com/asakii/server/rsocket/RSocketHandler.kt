@@ -115,6 +115,7 @@ class RSocketHandler(
                     "agent.truncateHistory" -> handleTruncateHistory(dataBytes, rpcService)
                     "agent.hasIdeEnvironment" -> handleHasIdeEnvironment()
                     "agent.getMcpStatus" -> handleGetMcpStatus(rpcService)
+                    "agent.getChromeStatus" -> handleGetChromeStatus(rpcService)
                     else -> throw IllegalArgumentException("Unknown route: $route")
                 }
 
@@ -260,6 +261,20 @@ class RSocketHandler(
                     }
                     .build())
             }
+        }.build()
+        return buildPayload { data(response.toByteArray()) }
+    }
+
+    private suspend fun handleGetChromeStatus(rpcService: AiAgentRpcService): Payload {
+        wsLog.info("🔌 [RSocket] getChromeStatus request")
+        val result = rpcService.getChromeStatus()
+        wsLog.info("📤 [RSocket] getChromeStatus result: installed=${result.installed}, enabled=${result.enabled}, connected=${result.connected}")
+        val response = ChromeStatusResult.newBuilder().apply {
+            installed = result.installed
+            enabled = result.enabled
+            connected = result.connected
+            result.mcpServerStatus?.let { mcpServerStatus = it }
+            result.extensionVersion?.let { extensionVersion = it }
         }.build()
         return buildPayload { data(response.toByteArray()) }
     }

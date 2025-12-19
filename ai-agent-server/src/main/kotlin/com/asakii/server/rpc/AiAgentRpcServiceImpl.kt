@@ -1282,6 +1282,43 @@ class AiAgentRpcServiceImpl(
             }
         )
     }
+
+    /**
+     * 获取 Chrome 扩展状态
+     */
+    override suspend fun getChromeStatus(): RpcChromeStatusResult {
+        val currentClient = client
+        if (currentClient !is com.asakii.claude.agent.sdk.ClaudeCodeSdkClient) {
+            // 非 Claude 客户端，返回默认值
+            return RpcChromeStatusResult(
+                installed = false,
+                enabled = false,
+                connected = false,
+                mcpServerStatus = null,
+                extensionVersion = null
+            )
+        }
+
+        return try {
+            val status = currentClient.getChromeStatus()
+            RpcChromeStatusResult(
+                installed = status.installed,
+                enabled = status.enabled,
+                connected = status.connected,
+                mcpServerStatus = status.mcpServerStatus,
+                extensionVersion = status.extensionVersion
+            )
+        } catch (e: Exception) {
+            sdkLog.warn("Failed to get Chrome status: ${e.message}")
+            RpcChromeStatusResult(
+                installed = false,
+                enabled = false,
+                connected = false,
+                mcpServerStatus = null,
+                extensionVersion = null
+            )
+        }
+    }
 }
 
 // ==================== Protobuf 转换扩展函数 ====================

@@ -374,6 +374,19 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
     }
 
     /**
+     * Get Chrome extension status.
+     *
+     * Queries the Chrome extension installation, enablement, and connection status.
+     * Requires CLI support for chrome_status control request.
+     *
+     * @return Chrome extension status info
+     */
+    suspend fun getChromeStatus(): ChromeStatus {
+        ensureConnected()
+        return controlProtocol!!.getChromeStatus()
+    }
+
+    /**
      * Change permission mode during conversation.
      *
      * This allows dynamically switching between permission modes without reconnecting.
