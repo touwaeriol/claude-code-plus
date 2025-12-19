@@ -216,7 +216,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
             val descriptor = FileChooserDescriptor(true, false, false, false, false, false)
                 .withTitle("Select Node.js Executable")
                 .withDescription("Choose the path to node executable")
-            addBrowseFolderListener("Select Node.js Executable", "Choose the path to node executable", null, descriptor)
+            addBrowseFolderListener(null, descriptor)
             toolTipText = "Leave empty to auto-detect from system PATH"
             preferredSize = Dimension(450, preferredSize.height)
 
