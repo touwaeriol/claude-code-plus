@@ -425,7 +425,7 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
 {
   "Terminal": {
     "type": "object",
-    "description": "Execute commands in IDEA's integrated terminal. Creates new terminal sessions or reuses existing ones. Supports foreground and background execution.",
+    "description": "Execute commands in IDEA's integrated terminal. Creates new terminal sessions or reuses existing ones. By default (background=false), waits for command completion and returns output directly. Use background=true for long-running commands.",
     "properties": {
       "command": {
         "type": "string",
@@ -447,7 +447,7 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
       },
       "background": {
         "type": "boolean",
-        "description": "Run command in background. Use TerminalRead to check output later",
+        "description": "If false (default): waits for command to finish and returns output. If true: returns immediately, use TerminalRead to check output later",
         "default": false
       }
     },
@@ -503,16 +503,16 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
 
   "TerminalKill": {
     "type": "object",
-    "description": "Terminate terminal session(s). Supports batch deletion.",
+    "description": "Close and destroy terminal session(s) completely. The terminal tab will be removed from IDEA. Use TerminalInterrupt to stop a running command without closing the session.",
     "properties": {
       "session_ids": {
         "type": "array",
         "items": { "type": "string" },
-        "description": "Session IDs to terminate"
+        "description": "Session IDs to close"
       },
       "all": {
         "type": "boolean",
-        "description": "Terminate all sessions (ignores session_ids)",
+        "description": "Close all sessions (ignores session_ids)",
         "default": false
       }
     },
@@ -544,7 +544,7 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
 
   "TerminalInterrupt": {
     "type": "object",
-    "description": "Interrupt the currently running command in a terminal session (sends Ctrl+C signal).",
+    "description": "Stop the currently running command by sending Ctrl+C signal. The terminal session remains open and can be reused for new commands. Use TerminalKill to close the session entirely.",
     "properties": {
       "session_id": {
         "type": "string",
