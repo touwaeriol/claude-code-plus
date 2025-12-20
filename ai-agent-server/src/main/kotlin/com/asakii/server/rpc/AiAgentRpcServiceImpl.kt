@@ -49,6 +49,8 @@ import com.asakii.server.mcp.JetBrainsMcpServerProvider
 import com.asakii.server.mcp.DefaultJetBrainsMcpServerProvider
 import com.asakii.server.mcp.TerminalMcpServerProvider
 import com.asakii.server.mcp.DefaultTerminalMcpServerProvider
+import com.asakii.server.mcp.GitMcpServerProvider
+import com.asakii.server.mcp.DefaultGitMcpServerProvider
 import com.asakii.server.logging.StandaloneLogging
 import com.asakii.server.logging.asyncInfo
 import com.asakii.server.settings.ClaudeSettingsLoader
@@ -87,6 +89,7 @@ class AiAgentRpcServiceImpl(
     private val clientCaller: ClientCaller? = null,
     private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider,
     private val terminalMcpServerProvider: TerminalMcpServerProvider = DefaultTerminalMcpServerProvider,
+    private val gitMcpServerProvider: GitMcpServerProvider = DefaultGitMcpServerProvider,
     private val serviceConfigProvider: () -> AiAgentServiceConfig = { AiAgentServiceConfig() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : AiAgentRpcService {
@@ -620,6 +623,16 @@ class AiAgentRpcServiceImpl(
             }
         } else {
             sdkLog.info("⏭️ [buildClaudeOverrides] Terminal MCP Server 已禁用")
+        }
+
+        // 添加 Git MCP Server（如果启用且可用）
+        if (defaults.enableGitMcp) {
+            gitMcpServerProvider.getServer()?.let { gitMcp ->
+                mcpServers["jetbrains_git"] = gitMcp
+                sdkLog.info("✅ [buildClaudeOverrides] 已添加 Git MCP Server")
+            }
+        } else {
+            sdkLog.info("⏭️ [buildClaudeOverrides] Git MCP Server 已禁用")
         }
 
         // 添加从配置文件加载的 MCP 服务器
@@ -1369,6 +1382,50 @@ class AiAgentRpcServiceImpl(
                 extensionVersion = null
             )
         }
+    }
+
+    /**
+     * 获取可用模型列表（内置 + 自定义）
+     */
+    override suspend fun getAvailableModels(): RpcAvailableModelsResult {
+        val config = serviceConfigProvider()
+
+        // 内置模型
+        val builtInModels = listOf(
+            RpcModelInfo(
+                id = "OPUS_45",
+                displayName = "Opus 4.5",
+                modelId = "claude-opus-4-5-20250929",
+                isBuiltIn = true
+            ),
+            RpcModelInfo(
+                id = "SONNET_45",
+                displayName = "Sonnet 4.5",
+                modelId = "claude-sonnet-4-5-20250929",
+                isBuiltIn = true
+            ),
+            RpcModelInfo(
+                id = "HAIKU_45",
+                displayName = "Haiku 4.5",
+                modelId = "claude-haiku-4-5-20250929",
+                isBuiltIn = true
+            )
+        )
+
+        // 自定义模型
+        val customModels = config.customModels.map { model ->
+            RpcModelInfo(
+                id = model.id,
+                displayName = model.displayName,
+                modelId = model.modelId,
+                isBuiltIn = false
+            )
+        }
+
+        return RpcAvailableModelsResult(
+            models = builtInModels + customModels,
+            defaultModelId = config.defaultModel
+        )
     }
 }
 

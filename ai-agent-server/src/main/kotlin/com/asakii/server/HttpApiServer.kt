@@ -39,6 +39,8 @@ import com.asakii.server.mcp.JetBrainsMcpServerProvider
 import com.asakii.server.mcp.DefaultJetBrainsMcpServerProvider
 import com.asakii.server.mcp.TerminalMcpServerProvider
 import com.asakii.server.mcp.DefaultTerminalMcpServerProvider
+import com.asakii.server.mcp.GitMcpServerProvider
+import com.asakii.server.mcp.DefaultGitMcpServerProvider
 import com.asakii.server.rsocket.ProtoConverter.toProto
 import io.rsocket.kotlin.ktor.server.RSocketSupport
 import io.rsocket.kotlin.ktor.server.rSocket
@@ -129,6 +131,7 @@ class HttpApiServer(
     private val jetbrainsRSocketHandler: JetBrainsRSocketHandlerProvider? = null,  // JetBrains RSocket 处理器
     private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider,  // JetBrains MCP Server Provider
     private val terminalMcpServerProvider: TerminalMcpServerProvider = DefaultTerminalMcpServerProvider,  // Terminal MCP Server Provider
+    private val gitMcpServerProvider: GitMcpServerProvider = DefaultGitMcpServerProvider,  // Git MCP Server Provider
     private val serviceConfigProvider: () -> com.asakii.server.config.AiAgentServiceConfig = { com.asakii.server.config.AiAgentServiceConfig() }  // 服务配置提供者（每次 connect 时调用获取最新配置）
 ) : com.asakii.bridge.EventBridge {
     private val json = Json {
@@ -215,6 +218,7 @@ class HttpApiServer(
                         connectionId = connectionId,
                         jetBrainsMcpServerProvider = jetBrainsMcpServerProvider,
                         terminalMcpServerProvider = terminalMcpServerProvider,
+                        gitMcpServerProvider = gitMcpServerProvider,
                         serviceConfigProvider = { currentConfig }
                     )
 
@@ -359,6 +363,55 @@ class HttpApiServer(
                                     )
                                     call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
+                                "models.getAvailable" -> {
+                                    // 获取可用模型列表（内置模型 + 自定义模型）
+                                    val config = serviceConfigProvider()
+
+                                    // 内置模型列表
+                                    val builtInModels = listOf(
+                                        mapOf(
+                                            "id" to JsonPrimitive("OPUS_45"),
+                                            "displayName" to JsonPrimitive("Opus 4.5"),
+                                            "modelId" to JsonPrimitive("claude-opus-4-5-20251101"),
+                                            "isBuiltIn" to JsonPrimitive(true)
+                                        ),
+                                        mapOf(
+                                            "id" to JsonPrimitive("SONNET_45"),
+                                            "displayName" to JsonPrimitive("Sonnet 4.5"),
+                                            "modelId" to JsonPrimitive("claude-sonnet-4-5-20250929"),
+                                            "isBuiltIn" to JsonPrimitive(true)
+                                        ),
+                                        mapOf(
+                                            "id" to JsonPrimitive("HAIKU_45"),
+                                            "displayName" to JsonPrimitive("Haiku 4.5"),
+                                            "modelId" to JsonPrimitive("claude-haiku-4-5-20251001"),
+                                            "isBuiltIn" to JsonPrimitive(true)
+                                        )
+                                    )
+
+                                    // 自定义模型列表
+                                    val customModels = config.customModels.map { model ->
+                                        mapOf(
+                                            "id" to JsonPrimitive(model.id),
+                                            "displayName" to JsonPrimitive(model.displayName),
+                                            "modelId" to JsonPrimitive(model.modelId),
+                                            "isBuiltIn" to JsonPrimitive(false)
+                                        )
+                                    }
+
+                                    val allModels = builtInModels + customModels
+
+                                    val response = FrontendResponse(
+                                        success = true,
+                                        data = mapOf(
+                                            "models" to JsonArray(allModels.map { model ->
+                                                JsonObject(model)
+                                            }),
+                                            "defaultModelId" to JsonPrimitive(config.defaultModel)
+                                        )
+                                    )
+                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
+                                }
                                 else -> {
                                     call.respondText(
                                         """{"success":false,"error":"Unknown action: $action"}""",
@@ -489,7 +542,8 @@ class HttpApiServer(
                                 ideTools = ideTools,
                                 clientCaller = null,
                                 jetBrainsMcpServerProvider = jetBrainsMcpServerProvider,
-                                terminalMcpServerProvider = terminalMcpServerProvider
+                                terminalMcpServerProvider = terminalMcpServerProvider,
+                                gitMcpServerProvider = gitMcpServerProvider
                             )
                             val result = rpcService.getHistorySessions(maxResults, offset)
 
@@ -546,7 +600,8 @@ class HttpApiServer(
                                 ideTools = ideTools,
                                 clientCaller = null,
                                 jetBrainsMcpServerProvider = jetBrainsMcpServerProvider,
-                                terminalMcpServerProvider = terminalMcpServerProvider
+                                terminalMcpServerProvider = terminalMcpServerProvider,
+                                gitMcpServerProvider = gitMcpServerProvider
                             )
                             val meta = rpcService.getHistoryMetadata(sessionId, projectPath).toProto()
 
@@ -572,7 +627,8 @@ class HttpApiServer(
                                 ideTools = ideTools,
                                 clientCaller = null,
                                 jetBrainsMcpServerProvider = jetBrainsMcpServerProvider,
-                                terminalMcpServerProvider = terminalMcpServerProvider
+                                terminalMcpServerProvider = terminalMcpServerProvider,
+                                gitMcpServerProvider = gitMcpServerProvider
                             )
                             val result = rpcService.loadHistory(
                                 req.sessionId,

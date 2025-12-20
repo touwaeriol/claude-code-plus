@@ -3,7 +3,16 @@ import { defineStore } from 'pinia'
 import { ideaBridge } from '@/services/ideaBridge'
 import { jetbrainsRSocket, type IdeSettings } from '@/services/jetbrainsRSocket'
 import { DEFAULT_SETTINGS, type Settings, PermissionMode } from '@/types/settings'
-import { BaseModel, MODEL_CAPABILITIES, migrateModelSettings, findBaseModelByModelId } from '@/constants/models'
+import {
+  BaseModel,
+  MODEL_CAPABILITIES,
+  migrateModelSettings,
+  findBaseModelByModelId,
+  updateAllModels,
+  getAllModels,
+  getModelById,
+  type ModelInfo
+} from '@/constants/models'
 
 /**
  * HTTP 获取的默认设置（用于浏览器模式）
@@ -74,17 +83,73 @@ export const useSettingsStore = defineStore('settings', () => {
   async function loadIdeSettings() {
     try {
       console.log('⚙️ Loading IDE settings from JetBrains...')
-      const result = await jetbrainsRSocket.getSettings()
 
-      if (result) {
-        ideSettings.value = result
-        console.log('✅ IDE settings loaded:', result)
-        applyIdeSettings(result)
+      // 同时加载 IDE 设置和可用模型列表
+      const [settingsResult, modelsResult] = await Promise.all([
+        jetbrainsRSocket.getSettings(),
+        loadAvailableModels()
+      ])
+
+      if (settingsResult) {
+        ideSettings.value = settingsResult
+        console.log('✅ IDE settings loaded:', settingsResult)
+        applyIdeSettings(settingsResult)
       } else {
         console.warn('⚠️ Failed to load IDE settings')
       }
     } catch (error) {
       console.error('❌ Error loading IDE settings:', error)
+    }
+  }
+
+  /**
+   * 从后端加载可用模型列表（内置 + 自定义）
+   */
+  async function loadAvailableModels(): Promise<boolean> {
+    try {
+      console.log('📦 Loading available models from backend...')
+      const response = await ideaBridge.query('models.getAvailable')
+
+      if (response.success && response.data) {
+        const { models, defaultModelId } = response.data as {
+          models: ModelInfo[]
+          defaultModelId: string
+        }
+        updateAllModels(models, defaultModelId)
+        console.log('✅ Available models loaded:', models.length, 'models, default:', defaultModelId)
+
+        // 检查当前选中的模型是否仍存在，如果被删除则切换到默认模型
+        const currentModel = settings.value.model
+        const modelExists = models.some(m => m.id === currentModel)
+        if (!modelExists && currentModel) {
+          console.log('⚠️ Current model not found in available models, switching to default:', defaultModelId)
+          // 查找默认模型
+          const defaultModel = models.find(m => m.id === defaultModelId)
+          if (defaultModel) {
+            if (defaultModel.isBuiltIn && defaultModel.id in BaseModel) {
+              settings.value.model = defaultModel.id as BaseModel
+            } else {
+              settings.value.model = defaultModel.id as any
+            }
+          } else if (models.length > 0) {
+            // 回退到第一个可用模型
+            const firstModel = models[0]
+            if (firstModel.isBuiltIn && firstModel.id in BaseModel) {
+              settings.value.model = firstModel.id as BaseModel
+            } else {
+              settings.value.model = firstModel.id as any
+            }
+          }
+        }
+
+        return true
+      } else {
+        console.warn('⚠️ Failed to load available models')
+        return false
+      }
+    } catch (error) {
+      console.error('❌ Error loading available models:', error)
+      return false
     }
   }
 
@@ -95,14 +160,28 @@ export const useSettingsStore = defineStore('settings', () => {
   function applyIdeSettings(newIdeSettings: IdeSettings) {
     const updates: Partial<Settings> = {}
 
-    // 1. 应用默认模型设置
+    // 1. 应用默认模型设置（支持内置和自定义模型）
     if (newIdeSettings.defaultModelId) {
-      const baseModel = findBaseModelByModelId(newIdeSettings.defaultModelId)
-      if (baseModel) {
-        updates.model = baseModel
-        console.log('🎯 [IdeSettings] 应用默认模型:', baseModel)
+      // 首先尝试作为模型 ID（如 "OPUS_45" 或 "custom_xxx"）查找
+      const modelInfo = getModelById(newIdeSettings.defaultModelId)
+      if (modelInfo) {
+        // 如果是内置模型，使用 BaseModel 枚举值
+        if (modelInfo.isBuiltIn && modelInfo.id in BaseModel) {
+          updates.model = modelInfo.id as BaseModel
+        } else {
+          // 自定义模型：使用模型 ID
+          updates.model = modelInfo.id as any
+        }
+        console.log('🎯 [IdeSettings] 应用默认模型:', modelInfo.displayName, `(${modelInfo.id})`)
       } else {
-        console.warn('⚠️ [IdeSettings] 未知的模型 ID:', newIdeSettings.defaultModelId)
+        // 回退：尝试通过 modelId 查找
+        const baseModel = findBaseModelByModelId(newIdeSettings.defaultModelId)
+        if (baseModel) {
+          updates.model = baseModel
+          console.log('🎯 [IdeSettings] 应用默认模型 (by modelId):', baseModel)
+        } else {
+          console.warn('⚠️ [IdeSettings] 未知的模型 ID:', newIdeSettings.defaultModelId)
+        }
       }
     }
 
@@ -333,6 +412,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showPanel,
     loadSettings,
     loadIdeSettings,
+    loadAvailableModels,
     loadDefaultSettings,
     initIdeSettingsListener,
     cleanupIdeSettingsListener,

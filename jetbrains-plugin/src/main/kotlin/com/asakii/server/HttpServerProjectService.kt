@@ -5,9 +5,11 @@ import com.asakii.plugin.bridge.JetBrainsRSocketHandler
 import com.asakii.plugin.hooks.IdeaFileSyncHooks
 import com.asakii.plugin.mcp.JetBrainsMcpServerProviderImpl
 import com.asakii.plugin.mcp.TerminalMcpServerProviderImpl
+import com.asakii.plugin.mcp.GitMcpServerProviderImpl
 import com.asakii.server.config.AiAgentServiceConfig
 import com.asakii.server.config.ClaudeDefaults
 import com.asakii.server.config.CodexDefaults
+import com.asakii.server.config.CustomModelInfo
 import com.asakii.server.config.McpServerConfig
 import com.asakii.server.logging.StandaloneLogging
 import com.asakii.plugin.tools.IdeToolsImpl
@@ -148,6 +150,7 @@ class HttpServerProjectService(private val project: Project) : Disposable {
             // 创建 MCP Server Providers
             val jetBrainsMcpServerProvider = JetBrainsMcpServerProviderImpl(project)
             val terminalMcpServerProvider = TerminalMcpServerProviderImpl(project)
+            val gitMcpServerProvider = GitMcpServerProviderImpl(project)
 
             // 创建服务配置提供者（每次 connect 时调用，获取最新的用户设置）
             val serviceConfigProvider: () -> AiAgentServiceConfig = {
@@ -159,7 +162,7 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                 val fileSyncHooks = IdeaFileSyncHooks.create(project)
 
                 AiAgentServiceConfig(
-                    defaultModel = settings.defaultModelId,
+                    defaultModel = settings.defaultModel,  // 使用模型 ID（内置或自定义）
                     claude = ClaudeDefaults(
                         nodePath = settings.nodePath.takeIf { it.isNotBlank() },
                         permissionMode = settings.permissionMode.takeIf { it.isNotBlank() && it != "default" },
@@ -169,6 +172,7 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                         enableContext7Mcp = settings.enableContext7Mcp,
                         context7ApiKey = settings.context7ApiKey.takeIf { it.isNotBlank() },
                         enableTerminalMcp = settings.enableTerminalMcp,
+                        enableGitMcp = settings.enableGitMcp,
                         mcpServersConfig = loadMcpServersConfig(settings),
                         mcpInstructions = loadMcpInstructions(settings),
                         dangerouslySkipPermissions = settings.defaultBypassPermissions,
@@ -176,14 +180,21 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                         defaultThinkingTokens = settings.defaultThinkingTokens,
                         ideaFileSyncHooks = fileSyncHooks
                     ),
-                    codex = CodexDefaults()  // Codex 配置已移除，使用默认值
+                    codex = CodexDefaults(),  // Codex 配置已移除，使用默认值
+                    customModels = settings.getCustomModels().map { model ->
+                        CustomModelInfo(
+                            id = model.id,
+                            displayName = model.displayName,
+                            modelId = model.modelId
+                        )
+                    }
                 )
             }
 
             // 启动 Ktor HTTP 服务器
             // 开发模式：使用环境变量指定端口（默认 8765）
             // 生产模式：随机端口（支持多项目）
-            val server = HttpApiServer(ideTools, scope, frontendDir, jetbrainsApi, jetbrainsRSocketHandler, jetBrainsMcpServerProvider, terminalMcpServerProvider, serviceConfigProvider)
+            val server = HttpApiServer(ideTools, scope, frontendDir, jetbrainsApi, jetbrainsRSocketHandler, jetBrainsMcpServerProvider, terminalMcpServerProvider, gitMcpServerProvider, serviceConfigProvider)
             val devPort = System.getenv("CLAUDE_DEV_PORT")?.toIntOrNull()
             val url = server.start(preferredPort = devPort)
             httpServer = server

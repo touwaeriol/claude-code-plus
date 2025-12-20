@@ -56,6 +56,30 @@ data class ThinkingLevelConfig(
 )
 
 /**
+ * 自定义模型配置
+ *
+ * 用于存储用户自定义的模型信息
+ */
+@Serializable
+data class CustomModelConfig(
+    val id: String,        // 唯一标识（如 "custom_xxx"）
+    val displayName: String,  // 显示名称（如 "My Custom Model"）
+    val modelId: String       // 模型 ID（如 "claude-sonnet-4-5-20250929"）
+)
+
+/**
+ * 统一的模型信息类
+ *
+ * 用于统一表示内置模型和自定义模型
+ */
+data class ModelInfo(
+    val id: String,           // 内置模型用枚举名（如 "OPUS_45"），自定义用 "custom_xxx"
+    val displayName: String,  // 显示名称
+    val modelId: String,      // 实际模型 ID
+    val isBuiltIn: Boolean    // 是否为内置模型
+)
+
+/**
  * AI Agent 配置持久化服务（应用级别）
  *
  * 包含所有 AI Agent 相关的配置项，对应 AiAgentServiceConfig。
@@ -75,12 +99,14 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var context7ApiKey: String = "",               // Context7 API Key（可选）
         var enableTerminalMcp: Boolean = true,         // Terminal MCP（IDEA 内置终端）
         var terminalDisableBuiltinBash: Boolean = true, // 启用 Terminal MCP 时禁用内置 Bash
+        var enableGitMcp: Boolean = false,             // Git MCP（VCS 集成，默认禁用）
 
         // MCP 系统提示词（自定义，空字符串表示使用默认值）
         var userInteractionInstructions: String = "",
         var jetbrainsInstructions: String = "",
         var context7Instructions: String = "",
         var terminalInstructions: String = "",
+        var gitInstructions: String = "",
 
         // 默认启用 ByPass 权限（前端自动应用）
         var defaultBypassPermissions: Boolean = false,
@@ -111,7 +137,10 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var customAgents: String = "{}",
 
         // 默认启用 Chrome 扩展
-        var defaultChromeEnabled: Boolean = false
+        var defaultChromeEnabled: Boolean = false,
+
+        // 自定义模型列表（JSON 序列化）
+        var customModels: String = "[]"
     )
 
     private var state = State()
@@ -191,6 +220,14 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         get() = state.terminalInstructions
         set(value) { state.terminalInstructions = value }
 
+    var enableGitMcp: Boolean
+        get() = state.enableGitMcp
+        set(value) { state.enableGitMcp = value }
+
+    var gitInstructions: String
+        get() = state.gitInstructions
+        set(value) { state.gitInstructions = value }
+
     /** 获取生效的 User Interaction MCP 提示词（自定义或默认） */
     val effectiveUserInteractionInstructions: String
         get() = state.userInteractionInstructions.ifBlank { McpDefaults.USER_INTERACTION_INSTRUCTIONS }
@@ -206,6 +243,10 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     /** 获取生效的 Terminal MCP 提示词（自定义或默认） */
     val effectiveTerminalInstructions: String
         get() = state.terminalInstructions.ifBlank { McpDefaults.TERMINAL_INSTRUCTIONS }
+
+    /** 获取生效的 Git MCP 提示词（自定义或默认） */
+    val effectiveGitInstructions: String
+        get() = state.gitInstructions.ifBlank { McpDefaults.GIT_INSTRUCTIONS }
 
     // Agent 配置
     var customAgents: String
@@ -243,6 +284,104 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     var defaultChromeEnabled: Boolean
         get() = state.defaultChromeEnabled
         set(value) { state.defaultChromeEnabled = value }
+
+    var customModelsJson: String
+        get() = state.customModels
+        set(value) { state.customModels = value }
+
+    /**
+     * 获取自定义模型列表
+     */
+    fun getCustomModels(): List<CustomModelConfig> {
+        return try {
+            json.decodeFromString<List<CustomModelConfig>>(state.customModels)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 设置自定义模型列表
+     */
+    fun setCustomModels(models: List<CustomModelConfig>) {
+        state.customModels = json.encodeToString(models)
+    }
+
+    /**
+     * 添加自定义模型
+     */
+    fun addCustomModel(displayName: String, modelId: String): CustomModelConfig {
+        val models = getCustomModels().toMutableList()
+        val id = "custom_${System.currentTimeMillis()}"
+        val newModel = CustomModelConfig(id, displayName, modelId)
+        models.add(newModel)
+        setCustomModels(models)
+        return newModel
+    }
+
+    /**
+     * 更新自定义模型
+     */
+    fun updateCustomModel(id: String, displayName: String, modelId: String): CustomModelConfig? {
+        val models = getCustomModels().toMutableList()
+        val index = models.indexOfFirst { it.id == id }
+        if (index >= 0) {
+            val updated = CustomModelConfig(id, displayName, modelId)
+            models[index] = updated
+            setCustomModels(models)
+            return updated
+        }
+        return null
+    }
+
+    /**
+     * 删除自定义模型
+     */
+    fun removeCustomModel(id: String) {
+        val models = getCustomModels().toMutableList()
+        models.removeIf { it.id == id }
+        setCustomModels(models)
+        // 如果删除的是当前默认模型，切换到 OPUS_45
+        if (state.defaultModel == id) {
+            state.defaultModel = DefaultModel.OPUS_45.name
+        }
+    }
+
+    /**
+     * 获取所有可用模型（内置 + 自定义）
+     *
+     * 返回统一的模型信息列表，包含 id, displayName, modelId
+     */
+    fun getAllAvailableModels(): List<ModelInfo> {
+        val builtIn = DefaultModel.entries.map {
+            ModelInfo(it.name, it.displayName, it.modelId, isBuiltIn = true)
+        }
+        val custom = getCustomModels().map {
+            ModelInfo(it.id, it.displayName, it.modelId, isBuiltIn = false)
+        }
+        return builtIn + custom
+    }
+
+    /**
+     * 根据 ID 获取模型信息
+     */
+    fun getModelById(id: String): ModelInfo? {
+        // 先检查内置模型
+        DefaultModel.fromName(id)?.let {
+            return ModelInfo(it.name, it.displayName, it.modelId, isBuiltIn = true)
+        }
+        // 再检查自定义模型
+        getCustomModels().find { it.id == id }?.let {
+            return ModelInfo(it.id, it.displayName, it.modelId, isBuiltIn = false)
+        }
+        return null
+    }
+
+    /**
+     * 获取当前默认模型的实际 modelId（支持自定义模型）
+     */
+    val effectiveDefaultModelId: String
+        get() = getModelById(state.defaultModel)?.modelId ?: DefaultModel.OPUS_45.modelId
 
     var defaultThinkingLevelId: String
         get() {

@@ -161,4 +161,13 @@ interface AiAgentRpcService {
      */
     suspend fun getChromeStatus(): RpcChromeStatusResult
 
+    /**
+     * 获取可用模型列表
+     *
+     * 返回所有可用的模型（内置模型 + 自定义模型），用于前端模型选择器。
+     *
+     * @return 可用模型列表和当前默认模型
+     */
+    suspend fun getAvailableModels(): RpcAvailableModelsResult
+
 }

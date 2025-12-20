@@ -5,16 +5,26 @@ import com.asakii.claude.agent.sdk.types.HookEvent
 import com.asakii.claude.agent.sdk.types.HookMatcher
 
 /**
+ * 自定义模型配置（服务端传输用）
+ */
+data class CustomModelInfo(
+    val id: String,        // 唯一标识（如 "custom_xxx"）
+    val displayName: String,  // 显示名称
+    val modelId: String       // 实际模型 ID
+)
+
+/**
  * AI Agent 服务配置
  *
  * 所有配置项由外部传入（如 IDEA 设置），不再从环境变量读取。
  */
 data class AiAgentServiceConfig(
     val defaultProvider: AiAgentProvider = AiAgentProvider.CLAUDE,
-    val defaultModel: String? = null,
+    val defaultModel: String = "OPUS_45",  // 默认模型 ID（内置或自定义）
     val defaultSystemPrompt: String? = null,
     val claude: ClaudeDefaults = ClaudeDefaults(),
-    val codex: CodexDefaults = CodexDefaults()
+    val codex: CodexDefaults = CodexDefaults(),
+    val customModels: List<CustomModelInfo> = emptyList()  // 用户自定义模型列表
 )
 
 /**
@@ -35,6 +45,7 @@ data class ClaudeDefaults(
     val enableContext7Mcp: Boolean = false,
     val context7ApiKey: String? = null,
     val enableTerminalMcp: Boolean = false,
+    val enableGitMcp: Boolean = false,
     // MCP 服务器配置（从资源文件加载，由 plugin 模块传入）
     val mcpServersConfig: List<McpServerConfig> = emptyList(),
     // MCP 系统提示词（由 plugin 模块加载并传入）
