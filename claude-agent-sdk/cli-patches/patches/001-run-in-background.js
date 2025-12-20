@@ -360,103 +360,44 @@ module.exports = {
         // 1. 发送响应
         // 2. 获取 target_id（可选，用于指定特定 Agent）
         // 3. 如果有 target_id，从 Map 获取对应的 resolver
-        // 4. 否则使用最新的 resolver
-        const handlerBlock = t.blockStatement([
-          // 1. 先发送成功响应
-          t.expressionStatement(
-            t.callExpression(
-              t.identifier(responderName),
-              [t.cloneNode(requestVar)]
-            )
-          ),
-          // 2. 获取 target_id
-          t.variableDeclaration('var', [
-            t.variableDeclarator(
-              t.identifier('__targetId'),
-              t.memberExpression(
-                t.memberExpression(
-                  t.cloneNode(requestVar),
-                  t.identifier('request')
-                ),
-                t.identifier('target_id')
-              )
-            )
-          ]),
-          // 3. 根据 target_id 决定调用哪个 resolver
-          // if (__targetId && global.__sdkBackgroundResolvers) {
-          //   var __resolver = global.__sdkBackgroundResolvers.get(__targetId);
-          //   if (__resolver) { __resolver(); global.__sdkBackgroundResolvers.delete(__targetId); }
-          // } else {
-          //   global.__sdkBackgroundResolver && global.__sdkBackgroundResolver();
-          // }
-          t.ifStatement(
-            t.logicalExpression(
-              '&&',
-              t.identifier('__targetId'),
-              t.memberExpression(
-                t.identifier('global'),
-                t.identifier('__sdkBackgroundResolvers')
-              )
-            ),
+        // 4. 如果没有 target_id 但 Map 非空，取第一个 resolver（支持多代理逐个后台）
+        // 5. 否则回退到兼容模式
+
+        // 生成 IIFE 内部代码字符串，因为需要复杂的逻辑
+        // 直接用 AST 构建太复杂，使用 template
+        const handlerCode = `
+          ${responderName}(${requestVar.name});
+          var __targetId = ${requestVar.name}.request.target_id;
+          var __resolvers = global.__sdkBackgroundResolvers;
+          var __resolver = null;
+          var __resolvedId = null;
+
+          if (__targetId && __resolvers) {
             // 有 target_id: 从 Map 获取指定 resolver
-            t.blockStatement([
-              t.variableDeclaration('var', [
-                t.variableDeclarator(
-                  t.identifier('__resolver'),
-                  t.callExpression(
-                    t.memberExpression(
-                      t.memberExpression(
-                        t.identifier('global'),
-                        t.identifier('__sdkBackgroundResolvers')
-                      ),
-                      t.identifier('get')
-                    ),
-                    [t.identifier('__targetId')]
-                  )
-                )
-              ]),
-              t.ifStatement(
-                t.identifier('__resolver'),
-                t.blockStatement([
-                  t.expressionStatement(
-                    t.callExpression(t.identifier('__resolver'), [])
-                  ),
-                  t.expressionStatement(
-                    t.callExpression(
-                      t.memberExpression(
-                        t.memberExpression(
-                          t.identifier('global'),
-                          t.identifier('__sdkBackgroundResolvers')
-                        ),
-                        t.identifier('delete')
-                      ),
-                      [t.identifier('__targetId')]
-                    )
-                  )
-                ])
-              )
-            ]),
-            // 无 target_id: 使用最新的 resolver（兼容模式）
-            t.blockStatement([
-              t.expressionStatement(
-                t.logicalExpression(
-                  '&&',
-                  t.memberExpression(
-                    t.identifier('global'),
-                    t.identifier('__sdkBackgroundResolver')
-                  ),
-                  t.callExpression(
-                    t.memberExpression(
-                      t.identifier('global'),
-                      t.identifier('__sdkBackgroundResolver')
-                    ),
-                    []
-                  )
-                )
-              )
-            ])
-          )
-        ]);
+            __resolver = __resolvers.get(__targetId);
+            __resolvedId = __targetId;
+          } else if (__resolvers && __resolvers.size > 0) {
+            // 无 target_id 但 Map 非空: 取第一个 resolver（支持多代理逐个后台）
+            var __firstKey = __resolvers.keys().next().value;
+            __resolver = __resolvers.get(__firstKey);
+            __resolvedId = __firstKey;
+          }
+
+          if (__resolver) {
+            __resolver();
+            __resolvers && __resolvers.delete(__resolvedId);
+          } else if (global.__sdkBackgroundResolver) {
+            // 兼容模式：使用旧的单一 resolver
+            global.__sdkBackgroundResolver();
+          }
+        `;
+
+        // 解析代码字符串为 AST
+        const handlerAst = require('@babel/parser').parse(handlerCode, {
+          sourceType: 'script',
+          allowReturnOutsideFunction: true
+        });
+        const handlerBlock = t.blockStatement(handlerAst.program.body);
 
         // 创建新的 if-else
         const newIfStatement = t.ifStatement(

@@ -140,7 +140,7 @@ const verifications = [
   { pattern: 'agent_run_to_background', desc: 'Agent 后台控制命令 (v5)' },
   { pattern: '__sdkBackgroundResolver', desc: '子代理 background resolver (兼容)' },
   { pattern: '__sdkBackgroundResolvers', desc: '多任务 resolver Map (v4+)' },
-  { pattern: 'chrome_status', desc: 'Chrome 状态控制命令', optional: true },
+  { pattern: 'get_chrome_status', desc: 'Chrome 状态控制命令' },
   { pattern: '__parentUuid', desc: 'SDK parentUuid 支持 (编辑重发)' },
 ];
 
@@ -151,6 +151,9 @@ for (const v of verifications) {
   if (output.code.includes(v.pattern)) {
     console.log(`   ✅ ${v.desc}: 已找到 '${v.pattern}'`);
     verifyPassed++;
+  } else if (v.optional) {
+    console.log(`   ⏭️  ${v.desc}: 未找到 '${v.pattern}' (可选，跳过)`);
+    // 可选验证不计入失败
   } else {
     console.log(`   ❌ ${v.desc}: 未找到 '${v.pattern}'`);
     verifyFailed++;
