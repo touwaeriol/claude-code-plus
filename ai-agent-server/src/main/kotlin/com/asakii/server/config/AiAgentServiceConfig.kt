@@ -34,6 +34,7 @@ data class ClaudeDefaults(
     val enableJetBrainsMcp: Boolean = true,
     val enableContext7Mcp: Boolean = false,
     val context7ApiKey: String? = null,
+    val enableTerminalMcp: Boolean = false,
     // MCP 服务器配置（从资源文件加载，由 plugin 模块传入）
     val mcpServersConfig: List<McpServerConfig> = emptyList(),
     // MCP 系统提示词（由 plugin 模块加载并传入）
@@ -75,6 +76,7 @@ data class CodexDefaults(
     val apiKey: String? = null,
     val sandboxMode: String? = null
 )
+
 
 
 

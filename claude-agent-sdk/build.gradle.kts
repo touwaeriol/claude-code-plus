@@ -655,8 +655,8 @@ val verifyPatches = tasks.register("verifyPatches") {
         println("========================================")
 
         val checks = listOf(
-            "__backgroundSignalResolver" to "模块级变量",
-            "run_in_background" to "控制命令"
+            "run_in_background" to "控制命令",
+            "__sdkBackgroundResolver" to "全局 background resolver"
         )
 
         var passed = 0

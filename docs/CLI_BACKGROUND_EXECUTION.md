@@ -13,16 +13,21 @@ Claude Code CLI 支持两种后台执行方式：
 | `&` 前缀 | 任务启动前 | 在消息开头加 `&` | 从一开始就以后台模式启动任务 |
 | Ctrl+B | 任务运行中 | 按下 Ctrl+B | 将正在运行的任务移到后台 |
 
-### ⚠️ 重要：两种不同的后台执行机制
+### ⚠️ 重要：后台执行机制架构变更 (v5)
 
-CLI 中存在**两种不同的后台执行机制**，分别用于不同类型的工具：
+**v5 补丁重大变更**: 移除 Bash 后台支持，只保留 Agent (Task tool) 后台功能。
 
-| 工具类型 | Ctrl+B 回调 | 机制 | 变量 |
-|----------|-------------|------|------|
-| **子代理 (Task tool)** | `g()` - resolver | 解锁 `Promise.race` | `__backgroundSignalResolver` |
-| **Bash 命令** | `M()` - setter | 设置 `H = taskId` | `__bashBackgroundCallback` |
+| 工具类型 | 后台支持 | 控制命令 | 说明 |
+|----------|----------|----------|------|
+| **子代理 (Task tool)** | ✅ SDK 支持 | `agent_run_to_background` | 通过 Map 存储 resolver，支持按 agentId 指定 |
+| **Bash 命令** | ❌ 已移除 | - | 将通过 JetBrains MCP 自定义 Bash 工具实现 |
 
-这两种机制必须同时支持，才能实现完整的 SDK 后台执行功能。
+**为什么移除 Bash 后台支持？**
+
+技术分析发现 CLI 中 `tool_use_id` 存在参数传递断层（详见 9.5.1 节），无法实现按 ID 精确控制。因此决定：
+1. 移除补丁中的 Bash 后台代码，简化补丁复杂度
+2. 未来通过 JetBrains MCP 实现自定义 Bash 工具，完全控制后台逻辑
+3. Windows 使用 Git Bash，其他平台使用系统 bash
 
 ---
 
@@ -629,7 +634,8 @@ transport.write("\u0002")
 | `rewind_files` | 回退文件到指定消息状态 | 2.0.71 新增 |
 | `mcp_set_servers` | 动态设置 MCP 服务器 | 2.0.71 新增 |
 | `can_use_tool` | 工具使用权限查询 | 2.0.71 新增 |
-| `run_in_background` | **补丁添加**: 移至后台 | 补丁 |
+| `agent_run_to_background` | **补丁添加 (v5)**: Agent 移至后台 | 补丁 |
+| `chrome_status` | **补丁添加**: 获取 Chrome 扩展状态 | 补丁 |
 
 #### 关键代码位置 (2.0.71)
 
@@ -904,7 +910,7 @@ transport.write("\u0002")
 
 ---
 
-##### 10. `run_in_background` - 移至后台 (补丁添加)
+##### 10. `agent_run_to_background` - Agent 移至后台 (补丁 v5 添加)
 
 **请求**:
 ```json
@@ -912,14 +918,64 @@ transport.write("\u0002")
   "type": "control_request",
   "request_id": "req_1",
   "request": {
-    "subtype": "run_in_background"
+    "subtype": "agent_run_to_background",
+    "target_id": "agent-abc123"  // 可选：指定 agentId，省略则后台最新 Agent
   }
 }
 ```
 
 **响应**: 成功响应 (无额外数据)
 
-**说明**: 此命令通过补丁添加，模拟 Ctrl+B 按键触发后台执行。
+**说明**:
+- 此命令通过 v5 补丁添加，仅支持 Agent (Task tool) 后台执行
+- `target_id` 参数可选，用于指定要后台的特定 Agent
+- 省略 `target_id` 时将后台最新的 Agent（兼容模式）
+- Bash 后台支持已移除，将通过 JetBrains MCP 自定义实现
+
+---
+
+##### 11. `chrome_status` - 获取 Chrome 扩展状态 (补丁添加)
+
+**请求**:
+```json
+{
+  "type": "control_request",
+  "request_id": "req_1",
+  "request": {
+    "subtype": "chrome_status"
+  }
+}
+```
+
+**响应**:
+```json
+{
+  "type": "control_response",
+  "response": {
+    "subtype": "success",
+    "request_id": "req_1",
+    "response": {
+      "installed": true,
+      "enabled": true,
+      "connected": false,
+      "mcpServerStatus": null,
+      "extensionVersion": null
+    }
+  }
+}
+```
+
+**响应字段说明**:
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `installed` | boolean | 扩展是否已安装（NativeMessagingHost 文件存在） |
+| `enabled` | boolean | 是否默认启用 Chrome 集成 |
+| `connected` | boolean | MCP 服务器是否已连接 |
+| `mcpServerStatus` | string? | MCP 状态: `"connected"` / `"failed"` / `"pending"` / `"needs-auth"` / `null` |
+| `extensionVersion` | string? | 扩展版本（如果已连接） |
+
+**说明**: 此命令通过补丁添加，允许 SDK 查询 Chrome 扩展的连接状态。详见 [CLI_CHROME_STATUS.md](./CLI_CHROME_STATUS.md)。
 
 ---
 
@@ -967,46 +1023,72 @@ transport.write("\u0002")
 
 本节详细说明 `001-run-in-background.js` 补丁的实现原理。
 
-### 8.1 补丁架构
+### 8.1 补丁架构 (v3 - 2024-12-19 更新)
+
+> **v3 重大更新**: 在 v2 基础上添加 Bash 命令后台执行支持。
+>
+> **v2 更新**: 不再使用 `process.stdin.unshift` 注入方式，改为直接暴露 resolver 函数到全局作用域。
+>
+> **原因**: 在 SDK 模式下，stdin 用于 JSON 消息通信，注入 `\x02` 会污染 JSON 流导致解析错误：
+> ```
+> Error parsing streaming input line: {"type":"control_request"...}
+> : SyntaxError: Unexpected token '', "{"type":""... is not valid JSON
+> ```
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                        AST 补丁应用流程                                   │
+│                     AST 补丁应用流程 (v3)                                 │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│  Step 1: 添加模块级变量                                                   │
+│  Step 1: 找到并暴露子代理 background resolver                             │
 │  ┌───────────────────────────────────────────────────────────────────┐ │
-│  │  let __backgroundSignalResolver = null;  // 子代理后台信号          │ │
-│  │  let __bashBackgroundCallback = null;    // Bash 后台回调           │ │
+│  │  // CLI 内部 Promise.race 模式:                                    │ │
+│  │  g = new Promise(qA => { m = qA; });  // g 是后台信号 Promise      │ │
+│  │  s = () => { m(); };                   // s 是 resolver            │ │
+│  │  // s 被传给 setToolJSX 的 onBackground 回调                        │ │
+│  │                                                                    │ │
+│  │  // 补丁插入:                                                       │ │
+│  │  global.__sdkBackgroundResolver = s;                               │ │
 │  └───────────────────────────────────────────────────────────────────┘ │
 │                                                                         │
-│  Step 2: 暴露子代理 resolver                                             │
+│  Step 2: 找到并暴露 Bash 后台回调 (v3 新增)                               │
 │  ┌───────────────────────────────────────────────────────────────────┐ │
-│  │  // 在 Promise.race 定义处                                         │ │
-│  │  let g = () => { x() };                                            │ │
-│  │  __backgroundSignalResolver = g;  // ← 插入                        │ │
+│  │  // CLI 内部 Bash 后台机制:                                         │ │
+│  │  function M() { N("tengu_bash_command_backgrounded"); }            │ │
+│  │                                                                    │ │
+│  │  // 补丁插入:                                                       │ │
+│  │  global.__sdkBashBackgroundCallback = M;                           │ │
 │  └───────────────────────────────────────────────────────────────────┘ │
 │                                                                         │
 │  Step 3: 添加 run_in_background 控制命令处理                             │
 │  ┌───────────────────────────────────────────────────────────────────┐ │
-│  │  if (k.request.subtype === "run_in_background") {                  │ │
-│  │    __backgroundSignalResolver?.();    // 触发子代理后台             │ │
-│  │    __backgroundSignalResolver = null;                              │ │
-│  │    __bashBackgroundCallback?.();      // 触发 Bash 后台             │ │
-│  │    __bashBackgroundCallback = null;                                │ │
-│  │    g(k);  // 发送响应                                               │ │
+│  │  // 在 if (*.request.subtype === "interrupt") 之前插入:            │ │
+│  │  if (d.request.subtype === "run_in_background") {                  │ │
+│  │    s(d);  // 先发送成功响应                                         │ │
+│  │    global.__sdkBackgroundResolver &&                               │ │
+│  │      global.__sdkBackgroundResolver();  // 触发子代理后台           │ │
+│  │    global.__sdkBashBackgroundCallback &&                           │ │
+│  │      global.__sdkBashBackgroundCallback();  // 触发 Bash 后台       │ │
 │  │  }                                                                 │ │
-│  └───────────────────────────────────────────────────────────────────┘ │
-│                                                                         │
-│  Step 4: 暴露 Bash 后台回调                                              │
-│  ┌───────────────────────────────────────────────────────────────────┐ │
-│  │  // 在 Bash 工具的 createElement(S81, {onBackground: M}) 调用前     │ │
-│  │  __bashBackgroundCallback = M;  // ← 插入                          │ │
-│  │  G({jsx: createElement(S81, {onBackground: M}), ...});             │ │
 │  └───────────────────────────────────────────────────────────────────┘ │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 8.1.1 v1 vs v2 vs v3 vs v4 vs v5 补丁对比
+
+| 特性 | v1 (已废弃) | v2 (已废弃) | v3 (已废弃) | v4 (已废弃) | v5 (当前) |
+|------|-------------|-------------|-------------|-------------|-----------|
+| 触发方式 | 注入 `\x02` 到 stdin | 直接调用 resolver | 调用两个回调 | Map + 类型路由 | Map 仅 Agent |
+| 控制命令 | - | `run_in_background` | `run_in_background` | `run_in_background` | `agent_run_to_background` |
+| SDK 兼容性 | ❌ 污染 JSON 流 | ✅ 无副作用 | ✅ 无副作用 | ✅ 无副作用 | ✅ 无副作用 |
+| 子代理支持 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Bash 支持 | ❌ | ❌ | ✅ | ✅ | ❌ (移除) |
+| 多任务支持 | ❌ | ❌ | ❌ 只能操作最新 | ✅ 按 agentId 指定 | ✅ 按 agentId 指定 |
+| 自动清理 | ❌ | ❌ | ❌ | ✅ finally 自动清理 | ✅ finally 自动清理 |
+| 原理 | 模拟键盘输入 | 调用 Promise resolver | 调用两种回调 | Map 存储 + 类型路由 | Map 存储 (Agent only) |
+
+**v5 变更说明**: 移除 Bash 后台支持，简化补丁。Bash 后台将通过 JetBrains MCP 自定义工具实现。
 
 ### 8.2 两种后台机制的详细对比
 
@@ -1083,31 +1165,43 @@ while (true) {
 4. 循环中 `if (H)` 检测到 `H` 有值
 5. 返回带有 `backgroundTaskId` 的结果
 
-### 8.3 AST 匹配策略
+### 8.3 AST 匹配策略 (v2)
 
-#### Step 2: 子代理 resolver 暴露
+#### Step 1: 找到 background resolver 定义
 
-**匹配模式**: 在 `SequenceExpression` 中查找：
-- 赋值表达式，右侧是箭头函数
-- 箭头函数体是单个函数调用（无参数）
-- 后续表达式是布尔值赋值
+**匹配模式**: 在 `VariableDeclarator` 中查找满足以下所有条件的模式：
+
+1. 变量初始化为无参数箭头函数: `varName = () => { ... }`
+2. 箭头函数体只有一条语句: 调用另一个标识符（无参数）
+3. 被调用的标识符是 `new Promise` 回调中赋值的 resolver
+4. 该变量被用作 `onBackground` 属性的值
 
 ```javascript
-// 匹配: x, m = new Promise(...), g = () => { x() }, t = false
-//                                ↑ 这里匹配并插入暴露代码
+// CLI 内部代码模式:
+g = new Promise(qA => { m = qA; });   // m 是 Promise resolver
+s = () => { m(); };                    // s 调用 m
+// ...
+setToolJSX({ onBackground: s, ... }); // s 传给 onBackground
+
+// 补丁在 s = () => { m(); }; 后插入:
+global.__sdkBackgroundResolver = s;
 ```
 
-#### Step 4: Bash 后台回调暴露
+#### Step 2: 添加控制命令处理
 
-**匹配模式**: 查找 `CallExpression`：
-- `callee` 是 `*.createElement`
-- 第一个参数是标识符 (S81)
-- 第二个参数是对象，包含 `onBackground` 属性
-- 同一对象包含 `shouldHidePromptInput` 或 `showSpinner`（确认是 Bash 工具）
+**匹配模式**: 查找 `IfStatement`：
+- 条件: `*.request.subtype === "interrupt"`
+- 在此 if 语句之前插入新的 if-else 分支
 
 ```javascript
-// 匹配: createElement(S81, {onBackground: M, shouldHidePromptInput: false, ...})
-//       ↑ 在此调用前插入 __bashBackgroundCallback = M
+// 原始代码:
+if (d.request.subtype === "interrupt") { ... }
+
+// 修改为:
+if (d.request.subtype === "run_in_background") {
+  global.__sdkBackgroundResolver && global.__sdkBackgroundResolver();
+  s(d);  // 发送成功响应
+} else if (d.request.subtype === "interrupt") { ... }
 ```
 
 ### 8.4 补丁文件结构
@@ -1131,37 +1225,389 @@ cd claude-agent-sdk/cli-patches
 npm install
 
 # 验证补丁 (dry-run)
-node patch-cli.js --dry-run claude-cli-2.0.71.js
+node patch-cli.js --dry-run claude-cli-2.0.73.js
 
 # 应用补丁
-node patch-cli.js claude-cli-2.0.71.js ../src/main/resources/bundled/claude-cli-2.0.71-enhanced.js
+node patch-cli.js claude-cli-2.0.73.js ../src/main/resources/bundled/claude-cli-2.0.73-enhanced.js
+```
+
+或使用 Gradle 任务：
+
+```bash
+# 下载 CLI + 安装依赖 + 应用补丁
+./gradlew :claude-agent-sdk:patchCli --console=plain
+
+# 验证补丁
+./gradlew :claude-agent-sdk:verifyPatches --console=plain
 ```
 
 ### 8.6 版本兼容性测试
 
-| CLI 版本 | 补丁状态 | 测试日期 |
-|----------|----------|----------|
-| 2.0.69 | ✅ 兼容 | 2024-12 |
-| 2.0.71 | ✅ 兼容 | 2024-12-18 |
+| CLI 版本 | 补丁版本 | 补丁状态 | 测试日期 |
+|----------|----------|----------|----------|
+| 2.0.69 | v1 | ⚠️ 已废弃 | 2024-12 |
+| 2.0.71 | v1 | ⚠️ 已废弃 | 2024-12-18 |
+| 2.0.73 | v2 | ⚠️ 已废弃 | 2024-12-19 |
+| 2.0.73 | v3 | ⚠️ 已废弃 | 2024-12-19 |
+| 2.0.73 | v4 | ⚠️ 已废弃 | 2024-12-20 |
+| 2.0.73 | v5 | ✅ 兼容 | 2024-12-20 |
 
-补丁采用 AST 模式匹配，查找 `if(*.request.subtype==="interrupt")` 结构，因此对变量名混淆不敏感，具有较好的版本兼容性。
+补丁采用 AST 模式匹配，具有较好的版本兼容性：
+- **Step 1**: 查找 `s = () => { m(); }` 模式，通过上下文验证（new Promise、onBackground）确保准确性
+- **Step 2**: 使用 Map 注册 resolver，支持多任务指定
+- **Step 3**: 在 finally 块中添加自动清理代码
+- **Step 4**: 查找 `if(*.request.subtype==="interrupt")` 结构插入 `agent_run_to_background` 分支
+
+> **v5 变更**: 移除了 Step 4 (Bash 回调暴露) 和 target_type 路由逻辑。
 
 ### 8.7 验证检查项
 
 补丁应用后，验证以下内容存在于增强版 CLI 中：
 
-| 检查项 | 模式 | 说明 |
-|--------|------|------|
-| 控制命令 | `run_in_background` | 新增的 subtype |
-| 注入缓冲区 | `process.stdin.unshift` | 将 Ctrl+B 注入 stdin 缓冲区 |
-| 触发事件 | `process.stdin.emit` | 触发 readable 事件 |
-| ASCII 码 | `\x02` | Ctrl+B 的 ASCII 码 |
+| 检查项 | 模式 | 说明 | 必需 |
+|--------|------|------|------|
+| 控制命令 | `agent_run_to_background` | v5 新增的 Agent 后台命令 | ✅ |
+| 子代理 resolver | `__sdkBackgroundResolver` | 暴露到全局的 Task tool resolver (兼容) | ✅ |
+| resolver Map | `__sdkBackgroundResolvers` | Map 存储多任务 resolver (v4+) | ✅ |
+| Chrome 状态 | `chrome_status` | Chrome 扩展状态查询 | ⚠️ 可选 |
 
-> **注意**: CLI 2.0.71 使用 Ink 框架的 `readable` 事件处理输入，补丁通过 `stdin.unshift('\x02')` 将 Ctrl+B 注入缓冲区，然后 `emit('readable')` 触发处理。这种方式与 CLI 原生行为一致。
+> **v5 更新**: 移除 Bash 后台支持。支持多任务指定后台执行。通过 `global.__sdkBackgroundResolvers` Map 存储每个 Agent 任务的 resolver（以 agentId 为 key），SDK 可以通过 `target_id` 参数指定要放入后台的特定 Agent。任务完成或异常时会自动清理 Map。
+>
+> **Bash 后台**: 已从补丁中移除。将通过 JetBrains MCP 自定义 Bash 工具实现，提供更完整的控制能力。
+
+### 8.8 v4 补丁新特性
+
+#### 8.8.1 Map 存储机制
+
+v4 使用 `Map` 替代单一全局变量，支持多任务管理：
+
+```javascript
+// v3 (旧): 单一全局变量，只能操作最新任务
+global.__sdkBackgroundResolver = s;
+
+// v4 (新): Map 存储，支持按 agentId 指定任务
+if (!global.__sdkBackgroundResolvers) global.__sdkBackgroundResolvers = new Map();
+global.__sdkBackgroundResolvers.set(j, s);  // j = agentId, s = resolver
+global.__sdkBackgroundResolver = s;          // 兼容 v3
+```
+
+#### 8.8.2 自动清理机制
+
+在 `finally` 块中自动清理已完成/异常的任务：
+
+```javascript
+try {
+  // ... 任务执行代码 ...
+} finally {
+  // 自动从 Map 中移除该任务的 resolver
+  global.__sdkBackgroundResolvers && global.__sdkBackgroundResolvers.delete(j);
+}
+```
+
+#### 8.8.3 Target 类型路由
+
+SDK 可以通过 `target_type` 和 `target_id` 参数精确控制：
+
+```javascript
+// run_in_background 处理逻辑
+var __targetType = request.target_type;
+var __targetId = request.target_id;
+
+if (__targetType === "agent") {
+  if (__targetId && global.__sdkBackgroundResolvers) {
+    // 按 agentId 指定特定任务
+    var __resolver = global.__sdkBackgroundResolvers.get(__targetId);
+    if (__resolver) {
+      __resolver();
+      global.__sdkBackgroundResolvers.delete(__targetId);
+    }
+  } else {
+    // 无 target_id，使用最新的 resolver (兼容模式)
+    global.__sdkBackgroundResolver && global.__sdkBackgroundResolver();
+  }
+} else if (__targetType === "bash") {
+  // 只触发 Bash 后台
+  global.__sdkBashBackgroundCallback && global.__sdkBashBackgroundCallback();
+} else {
+  // 无 target_type: 兼容模式，同时调用两者
+  global.__sdkBackgroundResolver && global.__sdkBackgroundResolver();
+  global.__sdkBashBackgroundCallback && global.__sdkBashBackgroundCallback();
+}
+```
+
+#### 8.8.4 SDK API 使用示例 (v5 更新)
+
+```kotlin
+// Kotlin SDK 使用示例 (v5 API)
+
+// 1. 放入特定 agent 到后台（需要从 Task tool result 获取 agentId）
+sdk.agentRunToBackground(targetId = "agent-abc123")
+
+// 2. 放入最新的 agent 到后台（兼容模式）
+sdk.agentRunToBackground()
+
+// 注意: Bash 后台支持已移除。
+// 如需 Bash 后台执行，请使用 JetBrains MCP 自定义 Bash 工具。
+```
+
+**v5 API 变更**:
+- `runInBackground()` → `agentRunToBackground()`
+- 移除 `targetType` 参数（只支持 Agent）
+- 保留 `targetId` 参数用于指定特定 Agent
+
+#### 8.8.5 获取 agentId
+
+`agentId` 可以从 Task tool 的 result 中获取：
+
+```json
+{
+  "type": "result",
+  "subtype": "tool_result",
+  "tool_use_id": "toolu_abc123",
+  "result": "Task completed...",
+  "agentId": "agent-xyz789"  // ← 这个 ID 用于 target_id
+}
+```
 
 ---
 
-## 9. 参考文档
+## 9. 多任务后台执行机制分析
+
+### 9.1 核心问题
+
+当有多个 Bash 命令或子代理同时在前台执行时，Ctrl+B 是如何将"最新的"任务移到后台的？
+
+### 9.2 关键发现
+
+通过 AST 分析发现以下关键机制：
+
+#### 9.2.1 每个任务有独立的后台 Promise
+
+```javascript
+// 每个 Task tool 调用都创建自己的后台 Promise
+let m, g = new Promise((qA) => { m = qA });   // g 是后台信号 Promise
+let s = () => { m() };                         // s 是 resolver
+
+// Promise.race 竞争
+let zA = await Promise.race([
+  qA.then($A => ({type: "message", result: $A})),  // 正常消息
+  g.then(() => ({type: "background"}))              // 后台信号
+]);
+```
+
+每个 Task 调用都有：
+- 自己的 Promise `g`
+- 自己的 resolver `s`
+- 自己的 `Promise.race` 循环
+
+#### 9.2.2 setToolJSX 的覆盖机制
+
+```javascript
+// 延时后显示后台选项
+if (!p && qA >= Y47 && J.setToolJSX) {
+  p = true;
+  clearInterval(d);
+  J.setToolJSX({
+    jsx: ZL0.createElement(gH1, {onBackground: s}),  // s 是当前任务的 resolver
+    shouldHidePromptInput: false,
+    shouldContinueAnimation: true,
+    showSpinner: true
+  });
+}
+```
+
+`setToolJSX` 的行为：
+- 每次调用都会**覆盖**之前设置的 JSX
+- 最新的任务会将自己的 `onBackground` 回调设置到 UI
+- Ctrl+B 总是触发当前显示的 `onBackground`
+
+### 9.3 多任务后台执行流程
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  多任务后台执行时序                                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. Task A 启动                                                              │
+│     ┌────────────────────────────────────────────────────────────────────┐  │
+│     │ g_A = new Promise(...)                                              │  │
+│     │ s_A = () => { resolver_A() }                                        │  │
+│     │ setToolJSX({ onBackground: s_A })   ← 设置 A 的回调                  │  │
+│     │ global.__sdkBackgroundResolver = s_A  ← 暴露 A 的 resolver           │  │
+│     │ Promise.race([messages, g_A]) ← 阻塞等待                             │  │
+│     └────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  2. Task B 启动 (Task A 仍在运行)                                             │
+│     ┌────────────────────────────────────────────────────────────────────┐  │
+│     │ g_B = new Promise(...)                                              │  │
+│     │ s_B = () => { resolver_B() }                                        │  │
+│     │ setToolJSX({ onBackground: s_B })   ← 覆盖！现在显示 B 的回调         │  │
+│     │ global.__sdkBackgroundResolver = s_B  ← 覆盖！现在指向 B             │  │
+│     │ Promise.race([messages, g_B]) ← 阻塞等待                             │  │
+│     └────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  3. 用户按 Ctrl+B                                                            │
+│     ┌────────────────────────────────────────────────────────────────────┐  │
+│     │ s_B() 被调用 ← 因为 setToolJSX 显示的是 B 的回调                      │  │
+│     │ g_B 被 resolve                                                       │  │
+│     │ B 的 Promise.race 返回 {type: "background"}                          │  │
+│     │ B 创建 LocalAgentTask，进入后台                                       │  │
+│     │ B 的前台循环返回                                                      │  │
+│     └────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  4. Task A 继续显示                                                          │
+│     ┌────────────────────────────────────────────────────────────────────┐  │
+│     │ A 的 Promise.race 仍在等待                                           │  │
+│     │ A 重新设置 setToolJSX({ onBackground: s_A })  ← A 的回调浮上来       │  │
+│     │ global.__sdkBackgroundResolver = s_A  ← 现在指向 A                   │  │
+│     └────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  5. 用户再次按 Ctrl+B                                                        │
+│     ┌────────────────────────────────────────────────────────────────────┐  │
+│     │ s_A() 被调用                                                         │  │
+│     │ A 进入后台                                                           │  │
+│     └────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 9.4 全局 Resolver 的限制
+
+`global.__sdkBackgroundResolver` 是一个**单一的全局变量**：
+
+```javascript
+// 每次新任务启动时覆盖
+global.__sdkBackgroundResolver = s;  // 总是指向最新任务的 resolver
+```
+
+这意味着：
+- SDK 的 `run_in_background` 控制命令只能影响**最新的任务**
+- 如果同时有多个任务，无法通过 SDK 选择性地将特定任务移到后台
+- 这与用户交互式 Ctrl+B 的行为一致
+
+### 9.5 Bash 命令的后台机制
+
+Bash 命令使用不同的后台机制：
+
+```javascript
+// Bash 后台回调
+function M() {
+  N("tengu_bash_command_backgrounded");  // 触发后台
+}
+
+// 设置全局回调
+global.__sdkBashBackgroundCallback = M;
+```
+
+Bash 命令：
+- 使用轮询检查 `backgroundTaskId` 而非 Promise.race
+- 回调 `M()` 会设置 `backgroundTaskId`，循环检测到后返回
+
+### 9.5.1 Bash 多任务技术分析
+
+#### tool_use_id 的可用性
+
+通过深入分析 CLI 代码，发现 `tool_use_id` 在不同层级的可用性：
+
+| 层级 | tool_use_id 可用性 | 说明 |
+|------|-------------------|------|
+| **SDK/前端** | ✅ 可用 | Claude API 的 `tool_use` 消息包含 `id` 字段 |
+| **CLI 工具执行框架** | ✅ 可用 | `YI1` 函数中 `A.id` 是 tool_use_id |
+| **Bash call 函数** | ❌ 不直接可用 | 参数中不包含 tool_use_id |
+| **w87 生成器函数** | ❌ 不可用 | 参数只有 `{input, abortController, setAppState, setToolJSX, preventCwdChanges}` |
+| **M() 后台回调** | ❌ 不可用 | 在 w87 内部定义的闭包，无法访问 tool_use_id |
+
+#### 代码结构分析
+
+```javascript
+// 工具执行框架 (YI1 函数)
+async function*YI1(A, Q, B, G) {
+  // A = tool_use 对象，有 A.id (tool_use_id)
+  // ...
+  let j = await A.call(D, {...G}, Z, Y, progressCallback);
+  // D = 输入参数, {...G} = 上下文, Z = 工具名, Y = 工具对象
+}
+
+// Bash 工具 call 函数
+async call(A, Q, B, G, Z) {
+  // A = 输入参数
+  // Q = 上下文 (abortController, setAppState, setToolJSX, etc.)
+  // B, G = 工具名和工具对象
+  // Z = 进度回调
+  // ❌ 没有 tool_use_id 参数！
+
+  let qA = w87({input: A, abortController, setAppState, setToolJSX, preventCwdChanges});
+  // ❌ w87 也没有接收 tool_use_id
+}
+
+// w87 生成器函数
+async function*w87({input, abortController, setAppState, setToolJSX, preventCwdChanges}) {
+  // M() 在这里定义
+  function M() {
+    N("tengu_bash_command_backgrounded");
+  }
+  // M 是闭包，只能访问 w87 的参数和局部变量
+  // ❌ 无法访问 tool_use_id
+}
+```
+
+#### 实现 Bash 多任务的技术障碍
+
+1. **参数传递断层**：`tool_use_id` 在 `YI1` 函数中可用，但没有传递给 Bash 的 `call` 函数
+2. **w87 封装**：后台回调 `M()` 在 `w87` 内部定义，无法直接修改其访问的变量
+3. **侵入性问题**：要传递 `tool_use_id` 需要修改多处代码，违反"最小侵入性"原则
+
+#### 当前方案
+
+由于技术限制，Bash 多任务采用以下方案：
+
+```javascript
+// 补丁暴露单一回调
+global.__sdkBashBackgroundCallback = M;
+
+// SDK 调用
+sdk.runInBackground(targetType = BackgroundTargetType.BASH)
+// 触发最新的 Bash 后台
+```
+
+**限制**：
+- 只能后台"最新的"Bash 命令
+- 与用户交互式 Ctrl+B 行为一致
+- 如果同时有多个 Bash 运行，无法通过 tool_use_id 指定
+
+**SDK 层面跟踪**：
+- SDK 可以通过时序知道哪个 Bash 被后台了
+- 前端记录 `tool_use_id -> bash_state` 的映射
+- 当收到后台成功响应时，更新最新 Bash 的状态
+
+### 9.6 分析结论 (v5 更新)
+
+| 特性 | 子代理 (Task tool) | Bash 命令 |
+|------|-------------------|-----------|
+| 后台机制 | Promise.race | 轮询检查 backgroundTaskId |
+| v5 补丁支持 | ✅ SDK 支持 | ❌ 已移除 |
+| 控制命令 | `agent_run_to_background` | - |
+| 全局变量 | `__sdkBackgroundResolvers` (Map) | - |
+| 多任务支持 | ✅ 按 agentId 指定 | - |
+| 未来方案 | - | JetBrains MCP 自定义工具 |
+
+**重要结论**：
+1. CLI 不维护任务栈或队列来管理多个前台任务
+2. **子代理 (Task)**: v5 补丁通过 Map 实现多任务精确控制
+3. **Bash**: v5 移除补丁支持，将通过 JetBrains MCP 自定义 Bash 工具实现
+4. 多任务依次放入后台是通过 UI 显示的"浮动"机制实现的
+
+**v5 补丁能力总结**：
+
+| 能力 | 支持 | API |
+|------|------|-----|
+| 后台最新 Agent | ✅ | `agentRunToBackground()` |
+| 按 ID 后台指定 Agent | ✅ | `agentRunToBackground(agentId)` |
+| Bash 后台 | ❌ | 通过 MCP 自定义实现 |
+
+---
+
+## 10. 参考文档
 
 - [SDK 数据流架构](./DATA_FLOW_ARCHITECTURE.md)
 - [SDK 数据模型](./sdk-data-models.md)

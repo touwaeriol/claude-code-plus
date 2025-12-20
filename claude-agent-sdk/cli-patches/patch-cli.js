@@ -137,10 +137,11 @@ console.log();
 console.log('🔍 验证补丁结果...');
 
 const verifications = [
-  { pattern: 'run_in_background', desc: '控制命令' },
-  { pattern: '__sdkBackgroundResolver', desc: '子代理 background resolver' },
-  { pattern: '__sdkBashBackgroundCallback', desc: 'Bash 后台回调', optional: true },
+  { pattern: 'agent_run_to_background', desc: 'Agent 后台控制命令 (v5)' },
+  { pattern: '__sdkBackgroundResolver', desc: '子代理 background resolver (兼容)' },
+  { pattern: '__sdkBackgroundResolvers', desc: '多任务 resolver Map (v4+)' },
   { pattern: 'chrome_status', desc: 'Chrome 状态控制命令', optional: true },
+  { pattern: '__parentUuid', desc: 'SDK parentUuid 支持 (编辑重发)' },
 ];
 
 let verifyPassed = 0;

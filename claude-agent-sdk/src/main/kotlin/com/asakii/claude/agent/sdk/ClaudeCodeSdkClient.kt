@@ -337,6 +337,9 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
      * This allows the current task to continue running without blocking for user input.
      * The task will complete in the background and results will still be emitted via receiveResponse().
      *
+     * Note: Bash background support has been removed. For background Bash execution,
+     * use the Terminal MCP via JetBrains plugin instead.
+     *
      * Example:
      * ```kotlin
      * val client = ClaudeCodeSdkClient(options)
@@ -348,14 +351,18 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
      * client.runInBackground()
      *
      * // Task continues in background, results still flow via receiveResponse()
+     *
+     * // Background a specific agent by ID
+     * client.runInBackground(targetId = "abc-123")
      * ```
      */
-    suspend fun runInBackground() {
+    suspend fun runInBackground(targetId: String? = null) {
         runCommand {
             ensureConnected()
-            logger.info("⏸️  将当前任务移到后台运行")
+            val targetInfo = targetId?.let { "(agent:$it)" } ?: ""
+            logger.info("⏸️  将当前任务移到后台运行 $targetInfo")
 
-            controlProtocol!!.runInBackground()
+            controlProtocol!!.agentRunToBackground(targetId)
 
             logger.info("✅ 任务已移到后台")
         }

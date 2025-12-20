@@ -73,11 +73,14 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var enableJetBrainsMcp: Boolean = true,        // JetBrains IDE MCP（IDE 索引工具）
         var enableContext7Mcp: Boolean = false,        // Context7 MCP（获取最新库文档）
         var context7ApiKey: String = "",               // Context7 API Key（可选）
+        var enableTerminalMcp: Boolean = true,         // Terminal MCP（IDEA 内置终端）
+        var terminalDisableBuiltinBash: Boolean = true, // 启用 Terminal MCP 时禁用内置 Bash
 
         // MCP 系统提示词（自定义，空字符串表示使用默认值）
         var userInteractionInstructions: String = "",
         var jetbrainsInstructions: String = "",
         var context7Instructions: String = "",
+        var terminalInstructions: String = "",
 
         // 默认启用 ByPass 权限（前端自动应用）
         var defaultBypassPermissions: Boolean = false,
@@ -176,6 +179,18 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         get() = state.context7Instructions
         set(value) { state.context7Instructions = value }
 
+    var enableTerminalMcp: Boolean
+        get() = state.enableTerminalMcp
+        set(value) { state.enableTerminalMcp = value }
+
+    var terminalDisableBuiltinBash: Boolean
+        get() = state.terminalDisableBuiltinBash
+        set(value) { state.terminalDisableBuiltinBash = value }
+
+    var terminalInstructions: String
+        get() = state.terminalInstructions
+        set(value) { state.terminalInstructions = value }
+
     /** 获取生效的 User Interaction MCP 提示词（自定义或默认） */
     val effectiveUserInteractionInstructions: String
         get() = state.userInteractionInstructions.ifBlank { McpDefaults.USER_INTERACTION_INSTRUCTIONS }
@@ -187,6 +202,10 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     /** 获取生效的 Context7 MCP 提示词（自定义或默认） */
     val effectiveContext7Instructions: String
         get() = state.context7Instructions.ifBlank { McpDefaults.CONTEXT7_INSTRUCTIONS }
+
+    /** 获取生效的 Terminal MCP 提示词（自定义或默认） */
+    val effectiveTerminalInstructions: String
+        get() = state.terminalInstructions.ifBlank { McpDefaults.TERMINAL_INSTRUCTIONS }
 
     // Agent 配置
     var customAgents: String

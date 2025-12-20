@@ -33,6 +33,9 @@ dependencies {
         // 🔧 添加 Java 插件依赖，用于 ClassInheritorsSearch、OverridingMethodsSearch 等 API
         bundledPlugin("com.intellij.java")
 
+        // 🆕 添加 Terminal 插件依赖，用于 Terminal MCP 工具
+        bundledPlugin("org.jetbrains.plugins.terminal")
+
         // UI 框架说明：
         // 本项目使用 Swing + IntelliJ JB UI 组件（官方推荐方案）
         // 可选使用 Kotlin UI DSL (com.intellij.ui.dsl.builder.*) - 已内置在 IntelliJ Platform 中，无需额外依赖

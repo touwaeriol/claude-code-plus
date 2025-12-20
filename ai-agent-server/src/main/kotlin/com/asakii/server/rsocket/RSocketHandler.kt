@@ -6,6 +6,8 @@ import com.asakii.rpc.api.RpcMessage as RpcMessageApi
 import com.asakii.rpc.proto.*
 import com.asakii.server.mcp.DefaultJetBrainsMcpServerProvider
 import com.asakii.server.mcp.JetBrainsMcpServerProvider
+import com.asakii.server.mcp.DefaultTerminalMcpServerProvider
+import com.asakii.server.mcp.TerminalMcpServerProvider
 import com.asakii.server.rpc.AiAgentRpcServiceImpl
 import com.asakii.server.rpc.ClientCaller
 import com.asakii.server.rsocket.ProtoConverter.toProto
@@ -62,6 +64,7 @@ class RSocketHandler(
     private val clientRequester: RSocket,  // 必须在构造时传入，确保每个连接独立
     private val connectionId: String = java.util.UUID.randomUUID().toString(),  // 连接唯一标识
     private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider,  // JetBrains MCP Server Provider
+    private val terminalMcpServerProvider: TerminalMcpServerProvider = DefaultTerminalMcpServerProvider,  // Terminal MCP Server Provider
     private val serviceConfigProvider: () -> com.asakii.server.config.AiAgentServiceConfig = { com.asakii.server.config.AiAgentServiceConfig() }  // 服务配置提供者（每次 connect 时获取最新配置）
 ) {
     // 使用 ws.log 专用 logger
@@ -86,11 +89,12 @@ class RSocketHandler(
         // 创建 ClientCaller（初始时 requester 可能为空）
         val clientCaller = createClientCaller(callIdCounter)
 
-        // 为每个连接创建独立的 RPC 服务（传递 JetBrains MCP Server Provider 和服务配置提供者）
+        // 为每个连接创建独立的 RPC 服务（传递 MCP Server Providers 和服务配置提供者）
         val rpcService: AiAgentRpcService = AiAgentRpcServiceImpl(
             ideTools = ideTools,
             clientCaller = clientCaller,
             jetBrainsMcpServerProvider = jetBrainsMcpServerProvider,
+            terminalMcpServerProvider = terminalMcpServerProvider,
             serviceConfigProvider = serviceConfigProvider
         )
 

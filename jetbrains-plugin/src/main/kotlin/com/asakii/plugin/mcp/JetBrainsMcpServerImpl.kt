@@ -185,7 +185,7 @@ class JetBrainsMcpServerImpl(private val project: Project) : McpServerBase() {
 
 /**
  * JetBrains MCP 服务器提供者实现
- * 
+ *
  * 在 jetbrains-plugin 模块中实现，提供对 IDEA Platform API 的访问。
  */
 class JetBrainsMcpServerProviderImpl(private val project: Project) : JetBrainsMcpServerProvider {
@@ -200,6 +200,22 @@ class JetBrainsMcpServerProviderImpl(private val project: Project) : JetBrainsMc
     override fun getServer(): McpServer {
         logger.info { "📤 JetBrainsMcpServerProvider.getServer() called" }
         return _server
+    }
+
+    /**
+     * 获取需要禁用的内置工具列表
+     *
+     * 当 JetBrains MCP 启用时，禁用内置的 Glob 和 Grep 工具，
+     * 因为 JetBrains MCP 的 CodeSearch 和 FileIndex 工具提供更强大的功能。
+     */
+    override fun getDisallowedBuiltinTools(): List<String> {
+        val settings = AgentSettingsService.getInstance()
+        // 只有当 JetBrains MCP 启用时才禁用 Glob 和 Grep
+        return if (settings.enableJetBrainsMcp) {
+            listOf("Glob", "Grep")
+        } else {
+            emptyList()
+        }
     }
 }
 

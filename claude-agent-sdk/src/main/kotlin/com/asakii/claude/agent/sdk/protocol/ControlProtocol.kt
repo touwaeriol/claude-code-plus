@@ -661,21 +661,31 @@ class ControlProtocol(
     }
 
     /**
-     * Send run_in_background request to CLI.
-     * This allows the current task to continue running in the background
+     * Send agent_run_to_background request to CLI.
+     * This allows the current Task tool (subagent) to continue running in the background
      * without blocking for user input.
+     *
+     * Note: Bash background support has been removed. For background Bash execution,
+     * use the custom Bash tool via JetBrains MCP instead.
+     *
+     * @param targetId Optional target ID:
+     *   - agentId from Task tool result to background a specific agent
+     *   - null: Background the latest agent (compatibility mode)
      */
-    suspend fun runInBackground() {
+    suspend fun agentRunToBackground(targetId: String? = null) {
         // 手动构建 JSON，避免 kotlinx.serialization 添加 type 字段
         val request = buildJsonObject {
-            put("subtype", "run_in_background")
+            put("subtype", "agent_run_to_background")
+            targetId?.let { put("target_id", it) }
         }
         val response = sendControlRequestInternal(request)
 
         if (response.subtype == "error") {
-            throw ControlProtocolException("Run in background failed: ${response.error}")
+            throw ControlProtocolException("Agent run to background failed: ${response.error}")
         }
-        logger.info("✅ [ControlProtocol] 任务已切换到后台运行")
+
+        val targetInfo = targetId ?: "latest"
+        logger.info("✅ [ControlProtocol] Agent 已切换到后台运行 (target: $targetInfo)")
     }
 
     /**
