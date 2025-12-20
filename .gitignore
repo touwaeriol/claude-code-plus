@@ -175,6 +175,9 @@ jetbrains-plugin/src/main/resources/frontend/
 /add_*.sh
 /fix_*.sh
 
+# CLI analysis scripts (temporary debug files)
+claude-agent-sdk/cli-patches/analyze-*.js
+
 
 
 # runIde log
