@@ -207,6 +207,8 @@ object ClaudeSessionScanner {
      * 支持两种格式：
      * 1. message.content = "string"
      * 2. message.content = [{"type": "text", "text": "..."}]
+     *
+     * 注意：会跳过 <system-reminder> 等系统标签，找到真正的用户输入内容
      */
     private fun extractMessageContent(json: JsonObject): String? {
         val message = json["message"]?.jsonObject ?: return null
@@ -214,19 +216,40 @@ object ClaudeSessionScanner {
 
         return when {
             // 格式 1：content 是字符串
-            content is JsonPrimitive && content.isString -> content.content
+            content is JsonPrimitive && content.isString -> {
+                val text = content.content
+                // 跳过系统标签
+                if (isSystemTag(text)) null else text
+            }
 
             // 格式 2：content 是数组
             content is JsonArray -> {
-                content.firstOrNull()?.let { item ->
+                // 遍历数组，找到第一个非系统标签的文本内容
+                for (item in content) {
                     if (item is JsonObject) {
-                        item["text"]?.jsonPrimitive?.contentOrNull
-                    } else null
+                        val text = item["text"]?.jsonPrimitive?.contentOrNull
+                        if (text != null && !isSystemTag(text)) {
+                            return text
+                        }
+                    }
                 }
+                null
             }
 
             else -> null
         }
+    }
+
+    /**
+     * 检查文本是否是系统标签（如 <system-reminder>, @file://, </system-reminder>）
+     */
+    private fun isSystemTag(text: String): Boolean {
+        val trimmed = text.trim()
+        return trimmed.startsWith("<system-reminder") ||
+               trimmed.startsWith("</system-reminder") ||
+               trimmed.startsWith("@file://") ||
+               trimmed.startsWith("<current-open-file") ||
+               trimmed.startsWith("<diff-")
     }
 
     /**

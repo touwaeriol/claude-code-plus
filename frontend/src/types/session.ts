@@ -128,7 +128,8 @@ export interface PendingMessage {
   contexts: ContextReference[]      // 上下文栏引用（文件、图片）
   contents: ContentBlock[]          // 输入框内容（文本块、图片块，不含 IDE 上下文 XML）
   ideContext?: ActiveFileInfo | null  // IDE 上下文（当前打开的文件信息，结构化数据）
-  mergedContent?: ContentBlock[]    // 合并后的内容（避免重复计算）
+  uiContent?: ContentBlock[]        // UI 展示用的内容（contexts 在前）
+  mergedContent?: ContentBlock[]    // 发送后端用的内容（用户内容在前，符合 Claude Code CLI 格式）
   createdAt: number                 // 创建时间
 }
 
