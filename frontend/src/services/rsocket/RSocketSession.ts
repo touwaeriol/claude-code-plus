@@ -444,7 +444,7 @@ export class RSocketSession {
         enabled: boolean
         connected: boolean
         mcpServerStatus?: string
-        extensionVersion?: string
+        serverInfo?: Record<string, unknown>
     }> {
         if (!this._isConnected || !this.client) {
             throw new Error('Session not connected')

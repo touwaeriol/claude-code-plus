@@ -561,6 +561,7 @@ function handleDeleteSession(sessionId: string) {
   font-size: 14px;
   font-weight: 500;
   color: var(--theme-foreground, #111);
+  user-select: text; /* 允许选择复制会话名称 */
 }
 
 .session-name span:first-child {
@@ -581,6 +582,7 @@ function handleDeleteSession(sessionId: string) {
   display: flex;
   align-items: center;
   gap: 6px;
+  user-select: text; /* 允许选择复制元信息 */
 }
 
 /* 选中状态 - 保留用于可能的未来需求 */

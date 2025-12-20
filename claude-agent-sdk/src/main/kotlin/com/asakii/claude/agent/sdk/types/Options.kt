@@ -298,20 +298,29 @@ data class McpSetServersResponse(
 )
 
 /**
- * Chrome extension status returned by chrome_status control request.
+ * Chrome extension status - matches official /chrome command display format.
  *
- * This requires the chrome_status patch to be applied to the CLI.
+ * Data sources:
+ * 1. installed - Local file system check (Chrome Extensions directory)
+ * 2. enabled/connected/mcpServerStatus - From mcp_status control command
+ * 3. serverInfo - Full MCP server info (contains name, version, etc.)
+ *
+ * Official /chrome display format:
+ * ```
+ * Status: Connected/Disabled     ← connected field
+ * Extension: Installed/Not detected  ← installed field
+ * ```
  */
 @Serializable
 data class ChromeStatus(
-    /** Whether the Chrome extension is installed (NativeMessagingHost file exists) */
+    /** Whether the Chrome extension is installed (checks NativeMessagingHost config file) */
     val installed: Boolean,
-    /** Whether Chrome integration is enabled by default in config */
+    /** Whether Chrome integration is enabled by default (k1().claudeInChromeDefaultEnabled) */
     val enabled: Boolean,
     /** Whether the MCP server "claude-in-chrome" is currently connected */
     val connected: Boolean,
-    /** MCP server status: "connected" | "failed" | "pending" | "needs-auth" | null */
+    /** MCP server status: "connected" | "failed" | "pending" | "needs-auth" | "disabled" | null */
     val mcpServerStatus: String? = null,
-    /** Chrome extension version (if connected) */
+    /** Extension version (e.g., "1.0.36") when connected */
     val extensionVersion: String? = null
 )

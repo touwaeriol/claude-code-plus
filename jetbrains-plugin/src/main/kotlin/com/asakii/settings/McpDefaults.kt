@@ -564,6 +564,94 @@ Use IDEA's integrated terminal for command execution instead of the built-in Bas
 - Windows: git-bash (default), powershell, cmd, wsl
 - Unix: bash (default), zsh, fish, sh
     """.trimIndent()
+
+    /**
+     * Git MCP 工具 Schema（JSON 格式）
+     */
+    val GIT_TOOLS_SCHEMA = """
+{
+  "GetVcsChanges": {
+    "type": "object",
+    "description": "Get uncommitted VCS changes in the current project. Returns file paths, change types, and optionally diff content.",
+    "properties": {
+      "selectedOnly": {
+        "type": "boolean",
+        "description": "Only return files selected in the Commit panel. If false or panel not open, returns all changes.",
+        "default": false
+      },
+      "includeDiff": {
+        "type": "boolean",
+        "description": "Include diff content for each changed file",
+        "default": true
+      },
+      "maxFiles": {
+        "type": "integer",
+        "description": "Maximum number of files to return",
+        "default": 50,
+        "minimum": 1
+      },
+      "maxDiffLines": {
+        "type": "integer",
+        "description": "Maximum diff lines per file (to avoid token overflow)",
+        "default": 100,
+        "minimum": 1
+      }
+    },
+    "required": []
+  },
+
+  "GetCommitMessage": {
+    "type": "object",
+    "description": "Get the current content of the Commit message input field in IDEA.",
+    "properties": {},
+    "required": []
+  },
+
+  "SetCommitMessage": {
+    "type": "object",
+    "description": "Set or append to the Commit message input field in IDEA.",
+    "properties": {
+      "message": {
+        "type": "string",
+        "description": "The commit message to set"
+      },
+      "mode": {
+        "type": "string",
+        "enum": ["replace", "append"],
+        "description": "replace: overwrite existing message; append: add to existing message",
+        "default": "replace"
+      }
+    },
+    "required": ["message"]
+  },
+
+  "GetVcsStatus": {
+    "type": "object",
+    "description": "Get VCS status overview: current branch, number of changes, staged files count, etc.",
+    "properties": {},
+    "required": []
+  }
+}
+    """.trimIndent()
+
+    /**
+     * Git MCP 默认提示词
+     */
+    val GIT_INSTRUCTIONS = """
+### Git MCP
+
+Tools for interacting with IDEA's VCS/Git integration:
+
+- `mcp__jetbrains_git__GetVcsChanges`: Get uncommitted changes (supports selectedOnly for Commit panel selection)
+- `mcp__jetbrains_git__GetCommitMessage`: Get current commit message from input field
+- `mcp__jetbrains_git__SetCommitMessage`: Set or append commit message
+- `mcp__jetbrains_git__GetVcsStatus`: Get VCS status (branch, changes count, etc.)
+
+**Usage:**
+1. Get changes: `GetVcsChanges(selectedOnly=true, includeDiff=true)`
+2. Read message: `GetCommitMessage()`
+3. Set message: `SetCommitMessage(message="feat: add feature", mode="replace")`
+    """.trimIndent()
 }
 
 /**
@@ -613,9 +701,19 @@ object KnownTools {
     )
 
     /**
+     * Git MCP 工具
+     */
+    val GIT_MCP = listOf(
+        "mcp__jetbrains_git__GetVcsChanges",    // 获取变更
+        "mcp__jetbrains_git__GetCommitMessage", // 获取 commit message
+        "mcp__jetbrains_git__SetCommitMessage", // 设置 commit message
+        "mcp__jetbrains_git__GetVcsStatus"      // 获取 VCS 状态
+    )
+
+    /**
      * 所有已知工具
      */
-    val ALL = CLAUDE_BUILT_IN + JETBRAINS_MCP + TERMINAL_MCP
+    val ALL = CLAUDE_BUILT_IN + JETBRAINS_MCP + TERMINAL_MCP + GIT_MCP
 }
 
 /**
