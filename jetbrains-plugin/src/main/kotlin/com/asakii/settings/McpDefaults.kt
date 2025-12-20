@@ -503,20 +503,16 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
 
   "TerminalKill": {
     "type": "object",
-    "description": "Terminate terminal session(s). Supports single, multiple, or all sessions.",
+    "description": "Terminate terminal session(s). Supports batch deletion.",
     "properties": {
-      "session_id": {
-        "type": "string",
-        "description": "Single session ID to terminate"
-      },
       "session_ids": {
         "type": "array",
         "items": { "type": "string" },
-        "description": "Multiple session IDs to terminate"
+        "description": "Session IDs to terminate"
       },
       "all": {
         "type": "boolean",
-        "description": "Terminate all sessions",
+        "description": "Terminate all sessions (ignores session_ids)",
         "default": false
       }
     },
@@ -583,9 +579,8 @@ Use IDEA's integrated terminal for command execution instead of the built-in Bas
 3. Read output: `TerminalRead(session_id="terminal-1")`
 4. Search output: `TerminalRead(session_id="terminal-1", search="error|warning")`
 5. Stop running command: `TerminalInterrupt(session_id="terminal-1")`
-6. Close single session: `TerminalKill(session_id="terminal-1")`
-7. Close multiple sessions: `TerminalKill(session_ids=["terminal-1", "terminal-2"])`
-8. Close all sessions: `TerminalKill(all=true)`
+6. Close session(s): `TerminalKill(session_ids=["terminal-1", "terminal-2"])`
+7. Close all sessions: `TerminalKill(all=true)`
 
 **Shell Types:**
 - Windows: git-bash (default), powershell, cmd, wsl
