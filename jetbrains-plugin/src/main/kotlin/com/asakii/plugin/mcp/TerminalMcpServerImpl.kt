@@ -37,6 +37,7 @@ class TerminalMcpServerImpl(private val project: Project) : McpServerBase(), Dis
     private lateinit var terminalKillTool: TerminalKillTool
     private lateinit var terminalTypesTool: TerminalTypesTool
     private lateinit var terminalRenameTool: TerminalRenameTool
+    private lateinit var terminalInterruptTool: TerminalInterruptTool
 
     override fun getSystemPromptAppendix(): String {
         return AgentSettingsService.getInstance().effectiveTerminalInstructions
@@ -51,7 +52,8 @@ class TerminalMcpServerImpl(private val project: Project) : McpServerBase(), Dis
         "TerminalList",
         "TerminalKill",
         "TerminalTypes",
-        "TerminalRename"
+        "TerminalRename",
+        "TerminalInterrupt"
     )
 
     /**
@@ -136,6 +138,7 @@ class TerminalMcpServerImpl(private val project: Project) : McpServerBase(), Dis
             terminalKillTool = TerminalKillTool(sessionManager)
             terminalTypesTool = TerminalTypesTool(sessionManager)
             terminalRenameTool = TerminalRenameTool(sessionManager)
+            terminalInterruptTool = TerminalInterruptTool(sessionManager)
             logger.info { "All Terminal tool instances created" }
 
             // 注册工具
@@ -163,7 +166,11 @@ class TerminalMcpServerImpl(private val project: Project) : McpServerBase(), Dis
                 terminalRenameTool.execute(arguments)
             }
 
-            logger.info { "Terminal MCP Server initialized, registered 6 tools" }
+            registerToolFromSchema("TerminalInterrupt", getToolSchema("TerminalInterrupt")) { arguments ->
+                terminalInterruptTool.execute(arguments)
+            }
+
+            logger.info { "Terminal MCP Server initialized, registered 7 tools" }
         } catch (e: Exception) {
             logger.error(e) { "Failed to initialize Terminal MCP Server: ${e.message}" }
             throw e

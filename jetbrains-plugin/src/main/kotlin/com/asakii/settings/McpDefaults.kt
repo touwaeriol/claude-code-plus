@@ -534,6 +534,18 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
       }
     },
     "required": ["session_id", "new_name"]
+  },
+
+  "TerminalInterrupt": {
+    "type": "object",
+    "description": "Interrupt the currently running command in a terminal session (sends Ctrl+C signal).",
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "Session ID to interrupt (required)"
+      }
+    },
+    "required": ["session_id"]
   }
 }
     """.trimIndent()
@@ -550,7 +562,8 @@ Use IDEA's integrated terminal for command execution instead of the built-in Bas
 - `mcp__terminal__Terminal`: Execute commands (supports session reuse and background execution)
 - `mcp__terminal__TerminalRead`: Read session output (supports regex search)
 - `mcp__terminal__TerminalList`: List all terminal sessions
-- `mcp__terminal__TerminalKill`: Terminate a session
+- `mcp__terminal__TerminalKill`: Terminate a session (close terminal)
+- `mcp__terminal__TerminalInterrupt`: Interrupt running command (Ctrl+C)
 - `mcp__terminal__TerminalTypes`: Get available shell types
 - `mcp__terminal__TerminalRename`: Rename a session
 
@@ -559,6 +572,7 @@ Use IDEA's integrated terminal for command execution instead of the built-in Bas
 2. Reuse session: `Terminal(command="npm test", session_id="terminal-1")`
 3. Read output: `TerminalRead(session_id="terminal-1")`
 4. Search output: `TerminalRead(session_id="terminal-1", search="error|warning")`
+5. Stop running command: `TerminalInterrupt(session_id="terminal-1")`
 
 **Shell Types:**
 - Windows: git-bash (default), powershell, cmd, wsl

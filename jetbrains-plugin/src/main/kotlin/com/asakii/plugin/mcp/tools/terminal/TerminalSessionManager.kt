@@ -389,6 +389,49 @@ class TerminalSessionManager(private val project: Project) {
     }
 
     /**
+     * 中断当前正在执行的命令（发送 Ctrl+C）
+     */
+    fun interruptCommand(sessionId: String): InterruptResult {
+        val session = getSession(sessionId) ?: return InterruptResult(
+            success = false,
+            sessionId = sessionId,
+            error = "Session not found: $sessionId"
+        )
+
+        return try {
+            val wasRunning = session.hasRunningCommands()
+
+            ApplicationManager.getApplication().invokeAndWait {
+                // 发送 Ctrl+C (ASCII 3, ETX)
+                session.widget.terminalStarter?.sendBytes("\u0003".toByteArray(), false)
+            }
+
+            // 等待命令停止
+            Thread.sleep(100)
+            val isStillRunning = session.hasRunningCommands()
+
+            InterruptResult(
+                success = true,
+                sessionId = sessionId,
+                wasRunning = wasRunning,
+                isStillRunning = isStillRunning,
+                message = when {
+                    !wasRunning -> "No command was running"
+                    !isStillRunning -> "Command interrupted successfully"
+                    else -> "Interrupt signal sent, command may still be stopping"
+                }
+            )
+        } catch (e: Exception) {
+            logger.error(e) { "Failed to interrupt command in session $sessionId" }
+            InterruptResult(
+                success = false,
+                sessionId = sessionId,
+                error = e.message ?: "Unknown error"
+            )
+        }
+    }
+
+    /**
      * 终止会话
      */
     fun killSession(sessionId: String): Boolean {
@@ -498,6 +541,18 @@ data class ExecuteResult(
     val truncated: Boolean = false,
     val totalLines: Int? = null,
     val totalChars: Int? = null,
+    val error: String? = null
+)
+
+/**
+ * 命令中断结果
+ */
+data class InterruptResult(
+    val success: Boolean,
+    val sessionId: String,
+    val wasRunning: Boolean = false,
+    val isStillRunning: Boolean = false,
+    val message: String? = null,
     val error: String? = null
 )
 
