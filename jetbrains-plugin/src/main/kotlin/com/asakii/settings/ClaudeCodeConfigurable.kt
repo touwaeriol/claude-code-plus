@@ -10,6 +10,7 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
+import com.intellij.ui.table.JBTable
 import com.intellij.util.ui.JBUI
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -19,12 +20,16 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import java.io.File
 import javax.swing.*
+import javax.swing.table.DefaultTableModel
 import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.Font
+import java.awt.GridBagConstraints
+import java.awt.GridBagLayout
+import java.awt.Insets
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 
@@ -94,9 +99,9 @@ data class AgentConfigItem(
 )
 
 /**
- * 模型下拉框渲染器
+ * 模型下拉框渲染器 - 支持 ModelInfo（包含内置和自定义模型）
  */
-class DefaultModelRenderer : DefaultListCellRenderer() {
+class ModelInfoRenderer : DefaultListCellRenderer() {
     override fun getListCellRendererComponent(
         list: JList<*>?,
         value: Any?,
@@ -105,8 +110,18 @@ class DefaultModelRenderer : DefaultListCellRenderer() {
         cellHasFocus: Boolean
     ): Component {
         val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
-        if (value is DefaultModel) {
-            text = value.displayName
+        when (value) {
+            is ModelInfo -> {
+                text = if (value.isBuiltIn) {
+                    value.displayName
+                } else {
+                    "${value.displayName} (custom)"
+                }
+                toolTipText = value.modelId
+            }
+            is DefaultModel -> {
+                text = value.displayName
+            }
         }
         return component
     }
@@ -127,13 +142,20 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
     // General Tab 组件
     private var defaultBypassPermissionsCheckbox: JBCheckBox? = null
     private var nodePathField: TextFieldWithBrowseButton? = null
-    private var defaultModelCombo: ComboBox<DefaultModel>? = null
+    private var defaultModelCombo: ComboBox<ModelInfo>? = null
     private var defaultThinkingLevelCombo: ComboBox<ThinkingLevelConfig>? = null
     private var thinkTokensSpinner: JSpinner? = null
     private var ultraTokensSpinner: JSpinner? = null
     private var permissionModeCombo: ComboBox<String>? = null
     private var includePartialMessagesCheckbox: JBCheckBox? = null
     private var defaultChromeEnabledCheckbox: JBCheckBox? = null
+
+    // Custom Models 组件
+    private var customModelsTable: JBTable? = null
+    private var customModelsTableModel: DefaultTableModel? = null
+    private var addModelButton: JButton? = null
+    private var editModelButton: JButton? = null
+    private var removeModelButton: JButton? = null
 
     // Agents Tab 组件
     private var exploreEnabledCheckbox: JBCheckBox? = null
@@ -253,13 +275,103 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         panel.add(createLabeledRow("Node.js path:", nodePathField!!))
         panel.add(createDescription("  Path to Node.js executable. Leave empty to auto-detect from system PATH."))
 
-        // 默认模型
-        defaultModelCombo = ComboBox(DefaultComboBoxModel(DefaultModel.entries.toTypedArray())).apply {
-            renderer = DefaultModelRenderer()
+        // 默认模型（从 ModelInfo 列表中选择，包含内置和自定义模型）
+        defaultModelCombo = ComboBox<ModelInfo>().apply {
+            renderer = ModelInfoRenderer()
             toolTipText = "Default model for new sessions"
         }
+        refreshModelCombo()
         panel.add(createLabeledRow("Default model:", defaultModelCombo!!))
         panel.add(createDescription("  Opus 4.5 = Most capable | Sonnet 4.5 = Balanced | Haiku 4.5 = Fastest"))
+        panel.add(Box.createVerticalStrut(8))
+
+        // === 自定义模型配置 ===
+        panel.add(createSeparator())
+        panel.add(createSectionTitle("Custom Models"))
+        panel.add(createDescription("Add custom models with display name and model ID."))
+        panel.add(Box.createVerticalStrut(4))
+
+        // 创建表格模型（不允许直接编辑单元格）
+        customModelsTableModel = object : DefaultTableModel(arrayOf("Display Name", "Model ID"), 0) {
+            override fun isCellEditable(row: Int, column: Int) = false
+        }
+        customModelsTable = JBTable(customModelsTableModel).apply {
+            setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
+            tableHeader.reorderingAllowed = false
+            // 调整列宽
+            columnModel.getColumn(0).preferredWidth = 150
+            columnModel.getColumn(1).preferredWidth = 300
+        }
+
+        // 表格滚动面板
+        val tableScrollPane = JBScrollPane(customModelsTable).apply {
+            preferredSize = Dimension(500, 100)
+            minimumSize = Dimension(400, 80)
+        }
+
+        // 按钮面板
+        addModelButton = JButton("Add").apply {
+            toolTipText = "Add a new custom model"
+        }
+        editModelButton = JButton("Edit").apply {
+            toolTipText = "Edit selected custom model"
+            isEnabled = false
+        }
+        removeModelButton = JButton("Remove").apply {
+            toolTipText = "Remove selected custom model"
+            isEnabled = false
+        }
+
+        // 表格选择监听 - 启用/禁用编辑和删除按钮
+        customModelsTable!!.selectionModel.addListSelectionListener {
+            val hasSelection = customModelsTable!!.selectedRow >= 0
+            editModelButton?.isEnabled = hasSelection
+            removeModelButton?.isEnabled = hasSelection
+        }
+
+        // 添加按钮事件
+        addModelButton!!.addActionListener {
+            showCustomModelDialog(null, null) { displayName, modelId ->
+                customModelsTableModel?.addRow(arrayOf(displayName, modelId))
+                refreshModelCombo()
+            }
+        }
+
+        // 编辑按钮事件
+        editModelButton!!.addActionListener {
+            val selectedRow = customModelsTable!!.selectedRow
+            if (selectedRow >= 0) {
+                val currentName = customModelsTableModel?.getValueAt(selectedRow, 0) as? String ?: ""
+                val currentModelId = customModelsTableModel?.getValueAt(selectedRow, 1) as? String ?: ""
+                showCustomModelDialog(currentName, currentModelId) { displayName, modelId ->
+                    customModelsTableModel?.setValueAt(displayName, selectedRow, 0)
+                    customModelsTableModel?.setValueAt(modelId, selectedRow, 1)
+                    refreshModelCombo()
+                }
+            }
+        }
+
+        // 删除按钮事件
+        removeModelButton!!.addActionListener {
+            val selectedRow = customModelsTable!!.selectedRow
+            if (selectedRow >= 0) {
+                customModelsTableModel?.removeRow(selectedRow)
+                refreshModelCombo()
+            }
+        }
+
+        val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0))
+        buttonPanel.add(addModelButton)
+        buttonPanel.add(editModelButton)
+        buttonPanel.add(removeModelButton)
+
+        // 组合表格和按钮
+        val customModelsPanel = JPanel(BorderLayout(0, 4)).apply {
+            alignmentX = JPanel.LEFT_ALIGNMENT
+            add(tableScrollPane, BorderLayout.CENTER)
+            add(buttonPanel, BorderLayout.SOUTH)
+        }
+        panel.add(customModelsPanel)
         panel.add(Box.createVerticalStrut(8))
 
         // === 思考配置（合并在一起）===
@@ -668,6 +780,135 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
      */
     private fun getTools(): List<String> = exploreToolsList.toList()
 
+    /**
+     * 刷新模型下拉框（包含内置模型和自定义模型）
+     */
+    private fun refreshModelCombo() {
+        val currentSelection = defaultModelCombo?.selectedItem as? ModelInfo
+
+        // 获取内置模型
+        val builtInModels = DefaultModel.entries.map { model ->
+            ModelInfo(
+                id = model.name,
+                displayName = model.displayName,
+                modelId = model.modelId,
+                isBuiltIn = true
+            )
+        }
+
+        // 获取表格中的自定义模型
+        val customModels = getCustomModelsFromTable()
+
+        val allModels = builtInModels + customModels
+        defaultModelCombo?.model = DefaultComboBoxModel(allModels.toTypedArray())
+
+        // 恢复之前的选择
+        if (currentSelection != null) {
+            val matchingModel = allModels.find { it.id == currentSelection.id }
+            if (matchingModel != null) {
+                defaultModelCombo?.selectedItem = matchingModel
+            }
+        }
+    }
+
+    /**
+     * 从表格获取自定义模型列表
+     */
+    private fun getCustomModelsFromTable(): List<ModelInfo> {
+        val tableModel = customModelsTableModel ?: return emptyList()
+        val result = mutableListOf<ModelInfo>()
+        for (i in 0 until tableModel.rowCount) {
+            val displayName = tableModel.getValueAt(i, 0) as? String ?: continue
+            val modelId = tableModel.getValueAt(i, 1) as? String ?: continue
+            result.add(ModelInfo(
+                id = "custom_${modelId.hashCode().toUInt()}",
+                displayName = displayName,
+                modelId = modelId,
+                isBuiltIn = false
+            ))
+        }
+        return result
+    }
+
+    /**
+     * 显示添加/编辑自定义模型对话框
+     */
+    private fun showCustomModelDialog(
+        currentDisplayName: String?,
+        currentModelId: String?,
+        onSave: (displayName: String, modelId: String) -> Unit
+    ) {
+        val isEdit = currentDisplayName != null
+
+        // 创建对话框面板
+        val dialogPanel = JPanel(GridBagLayout())
+        val gbc = GridBagConstraints().apply {
+            insets = Insets(4, 4, 4, 4)
+            anchor = GridBagConstraints.WEST
+        }
+
+        // Display Name 输入
+        gbc.gridx = 0
+        gbc.gridy = 0
+        dialogPanel.add(JBLabel("Display Name:"), gbc)
+
+        val displayNameField = JBTextField(20).apply {
+            text = currentDisplayName ?: ""
+            toolTipText = "Name shown in the model selector (e.g., 'My Custom Model')"
+        }
+        gbc.gridx = 1
+        gbc.fill = GridBagConstraints.HORIZONTAL
+        gbc.weightx = 1.0
+        dialogPanel.add(displayNameField, gbc)
+
+        // Model ID 输入
+        gbc.gridx = 0
+        gbc.gridy = 1
+        gbc.fill = GridBagConstraints.NONE
+        gbc.weightx = 0.0
+        dialogPanel.add(JBLabel("Model ID:"), gbc)
+
+        val modelIdField = JBTextField(30).apply {
+            text = currentModelId ?: ""
+            toolTipText = "Claude model ID (e.g., 'claude-sonnet-4-5-20250929')"
+        }
+        gbc.gridx = 1
+        gbc.fill = GridBagConstraints.HORIZONTAL
+        gbc.weightx = 1.0
+        dialogPanel.add(modelIdField, gbc)
+
+        // 说明
+        gbc.gridx = 0
+        gbc.gridy = 2
+        gbc.gridwidth = 2
+        gbc.fill = GridBagConstraints.HORIZONTAL
+        dialogPanel.add(JBLabel("<html><font color='gray' size='-1'>Model ID examples: claude-sonnet-4-5-20250929, claude-3-5-sonnet-20241022</font></html>"), gbc)
+
+        val result = JOptionPane.showConfirmDialog(
+            mainPanel,
+            dialogPanel,
+            if (isEdit) "Edit Custom Model" else "Add Custom Model",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE
+        )
+
+        if (result == JOptionPane.OK_OPTION) {
+            val displayName = displayNameField.text.trim()
+            val modelId = modelIdField.text.trim()
+
+            if (displayName.isNotEmpty() && modelId.isNotEmpty()) {
+                onSave(displayName, modelId)
+            } else {
+                JOptionPane.showMessageDialog(
+                    mainPanel,
+                    "Both Display Name and Model ID are required.",
+                    "Validation Error",
+                    JOptionPane.WARNING_MESSAGE
+                )
+            }
+        }
+    }
+
     // UI 辅助方法
     private fun createSectionTitle(text: String): JComponent {
         return JBLabel("<html><b>$text</b></html>").apply {
@@ -714,10 +955,24 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
     override fun isModified(): Boolean {
         val settings = AgentSettingsService.getInstance()
 
+        // General Tab - 默认模型检查
+        val selectedModel = defaultModelCombo?.selectedItem as? ModelInfo
+        val savedDefaultModel = settings.defaultModel
+        // 检查选中的模型 ID 是否与保存的一致
+        val modelModified = selectedModel?.id != savedDefaultModel
+
+        // 检查自定义模型列表是否修改
+        val tableCustomModels = getCustomModelsFromTable().map {
+            CustomModelConfig(it.id, it.displayName, it.modelId)
+        }
+        val savedCustomModels = settings.getCustomModels()
+        val customModelsModified = tableCustomModels != savedCustomModels
+
         // General Tab
         val generalModified =
             nodePathField?.text != settings.nodePath ||
-            (defaultModelCombo?.selectedItem as? DefaultModel)?.name != settings.defaultModel ||
+            modelModified ||
+            customModelsModified ||
             (defaultThinkingLevelCombo?.selectedItem as? ThinkingLevelConfig)?.id != settings.defaultThinkingLevelId ||
             (thinkTokensSpinner?.value as? Int ?: 2048) != settings.thinkTokens ||
             (ultraTokensSpinner?.value as? Int ?: 8096) != settings.ultraTokens ||
@@ -755,7 +1010,17 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
 
         // General Tab
         settings.nodePath = nodePathField?.text ?: ""
-        settings.defaultModel = (defaultModelCombo?.selectedItem as? DefaultModel)?.name ?: DefaultModel.OPUS_45.name
+
+        // 保存选中的模型（使用 ModelInfo 的 id）
+        val selectedModel = defaultModelCombo?.selectedItem as? ModelInfo
+        settings.defaultModel = selectedModel?.id ?: DefaultModel.OPUS_45.name
+
+        // 保存自定义模型列表
+        val customModels = getCustomModelsFromTable().map {
+            CustomModelConfig(it.id, it.displayName, it.modelId)
+        }
+        settings.setCustomModels(customModels)
+
         settings.defaultThinkingLevelId = (defaultThinkingLevelCombo?.selectedItem as? ThinkingLevelConfig)?.id ?: "ultra"
         settings.thinkTokens = thinkTokensSpinner?.value as? Int ?: 2048
         settings.ultraTokens = ultraTokensSpinner?.value as? Int ?: 8096
@@ -769,13 +1034,13 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         syncChromeEnabledToClaudeJson(chromeEnabled)
 
         // Agents Tab
-        val selectedModel = exploreModelCombo?.selectedItem as? String ?: "(inherit)"
+        val selectedAgentModel = exploreModelCombo?.selectedItem as? String ?: "(inherit)"
         val exploreConfig = AgentConfigItem(
             enabled = exploreEnabledCheckbox?.isSelected ?: true,
             description = exploreDescriptionArea?.text ?: "",
             prompt = explorePromptArea?.text ?: "",
             tools = getTools(),
-            model = if (selectedModel == "(inherit)") "" else selectedModel,
+            model = if (selectedAgentModel == "(inherit)") "" else selectedAgentModel,
             selectionHint = exploreSelectionHintArea?.text ?: ""
         )
         settings.customAgents = json.encodeToString(AgentsConfigData(agents = mapOf("ExploreWithJetbrains" to exploreConfig)))
@@ -788,7 +1053,25 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
 
         // General Tab
         nodePathField?.text = settings.nodePath
-        defaultModelCombo?.selectedItem = DefaultModel.fromName(settings.defaultModel) ?: DefaultModel.OPUS_45
+
+        // 加载自定义模型到表格
+        customModelsTableModel?.rowCount = 0  // 清空表格
+        settings.getCustomModels().forEach { model ->
+            customModelsTableModel?.addRow(arrayOf(model.displayName, model.modelId))
+        }
+
+        // 刷新模型下拉框并选择当前默认模型
+        refreshModelCombo()
+        val savedDefaultModel = settings.defaultModel
+        val allModels = settings.getAllAvailableModels()
+        val matchingModel = allModels.find { it.id == savedDefaultModel }
+        if (matchingModel != null) {
+            defaultModelCombo?.selectedItem = matchingModel
+        } else {
+            // 如果找不到匹配的模型，选择第一个内置模型
+            defaultModelCombo?.selectedItem = allModels.firstOrNull { it.isBuiltIn }
+        }
+
         thinkTokensSpinner?.value = settings.thinkTokens
         ultraTokensSpinner?.value = settings.ultraTokens
         updateThinkingLevelCombo()
@@ -875,6 +1158,13 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         includePartialMessagesCheckbox = null
         defaultBypassPermissionsCheckbox = null
         defaultChromeEnabledCheckbox = null
+        // Custom Models
+        customModelsTable = null
+        customModelsTableModel = null
+        addModelButton = null
+        editModelButton = null
+        removeModelButton = null
+        // Agents Tab
         exploreEnabledCheckbox = null
         exploreModelCombo = null
         exploreDescriptionArea = null

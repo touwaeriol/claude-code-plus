@@ -43,6 +43,8 @@
     <depends>com.intellij.modules.platform</depends>
     <!-- Java plugin dependency for PsiClass, PsiMethod, ClassInheritorsSearch, etc. -->
     <depends optional="true" config-file="plugin-withJava.xml">com.intellij.java</depends>
+    <!-- Git plugin dependency for Git MCP (VCS integration) -->
+    <depends optional="true">Git4Idea</depends>
 
     <idea-version since-build="242.0" until-build="253.*"/>
     
@@ -103,9 +105,26 @@
         <notificationGroup id="Claude Code Plus Notifications"
                           displayType="BALLOON"
                           isLogByDefault="true"/>
+
+        <!-- VCS Checkin Handler for Git MCP -->
+        <checkinHandlerFactory
+            implementation="com.asakii.plugin.vcs.ClaudeCheckinHandlerFactory"/>
+
+        <!-- Generate Commit Message Service -->
+        <projectService
+            serviceImplementation="com.asakii.plugin.vcs.GenerateCommitMessageService"/>
     </extensions>
-    
-    <!-- Actions section removed: legacy Swing actions no longer available -->
+
+    <actions>
+        <!-- Generate Commit Message Action - adds button to commit message toolbar -->
+        <action id="com.asakii.plugin.vcs.GenerateCommitMessageAction"
+                class="com.asakii.plugin.vcs.GenerateCommitMessageAction"
+                text="Generate Commit Message"
+                description="Use Claude AI to generate commit message"
+                icon="/icons/claude-ai.svg">
+            <add-to-group group-id="Vcs.MessageActionGroup" anchor="first"/>
+        </action>
+    </actions>
 
     <!-- JCEF Debug Port Initializer 已改为懒加载模式，支持动态插件 -->
 </idea-plugin>
