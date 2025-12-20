@@ -416,6 +416,9 @@ class IdeToolsImpl(
 
             val result = mutableMapOf<String, AgentDefinition>()
 
+            // 检查 JetBrains MCP 是否启用
+            val jetBrainsMcpEnabled = settingsService.enableJetBrainsMcp
+
             for ((name, value) in agents) {
                 try {
                     val agentObj = value.jsonObject
@@ -424,6 +427,12 @@ class IdeToolsImpl(
                     val enabled = agentObj["enabled"]?.jsonPrimitive?.booleanOrNull ?: true
                     if (!enabled) {
                         logger.info("⏭️ Skipping disabled agent: $name")
+                        continue
+                    }
+
+                    // ExploreWithJetbrains agent 依赖 JetBrains MCP
+                    if (name == "ExploreWithJetbrains" && !jetBrainsMcpEnabled) {
+                        logger.info("⏭️ Skipping ExploreWithJetbrains: JetBrains MCP is disabled")
                         continue
                     }
 
@@ -461,8 +470,17 @@ class IdeToolsImpl(
     /**
      * 获取默认的代理定义
      * 当用户未配置或配置解析失败时使用
+     *
+     * 注意：ExploreWithJetbrains agent 只在 JetBrains MCP 启用时才可用
      */
     private fun getDefaultAgentDefinitions(): Map<String, AgentDefinition> {
+        // 检查 JetBrains MCP 是否启用
+        val settings = AgentSettingsService.getInstance()
+        if (!settings.enableJetBrainsMcp) {
+            logger.info("⏭️ JetBrains MCP is disabled, ExploreWithJetbrains agent not available")
+            return emptyMap()
+        }
+
         val defaultAgent = AgentDefaults.EXPLORE_WITH_JETBRAINS
         val agentDef = AgentDefinition(
             description = defaultAgent.description,

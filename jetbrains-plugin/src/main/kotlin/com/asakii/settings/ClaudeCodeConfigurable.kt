@@ -10,11 +10,14 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
-import com.intellij.ui.dsl.builder.*
 import com.intellij.util.ui.JBUI
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import java.io.File
 import javax.swing.*
 import java.awt.BorderLayout
 import java.awt.Component
@@ -148,6 +151,12 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         ignoreUnknownKeys = true
     }
 
+    // JSON parser for .claude.json file (preserves unknown keys)
+    private val claudeJsonParser = Json {
+        prettyPrint = true
+        ignoreUnknownKeys = true
+    }
+
     override fun getId(): String = "com.asakii.settings.claudecode"
 
     override fun getDisplayName(): String = "Claude Code"
@@ -241,14 +250,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
                 }
             }
         }
-        val nodePathPanel = panel {
-            row("Node.js path:") {
-                cell(nodePathField!!)
-                    .resizableColumn()
-                    .align(Align.FILL)
-            }
-        }.apply { alignmentX = JPanel.LEFT_ALIGNMENT }
-        panel.add(nodePathPanel)
+        panel.add(createLabeledRow("Node.js path:", nodePathField!!))
         panel.add(createDescription("  Path to Node.js executable. Leave empty to auto-detect from system PATH."))
 
         // 默认模型
@@ -390,9 +392,38 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
             isSelected = true
         }
         val agentNameLabel = JBLabel("<html><b>ExploreWithJetbrains</b></html>")
+
+        // 检查 JetBrains MCP 是否启用，如果禁用则显示警告
+        val jetbrainsMcpWarningLabel = JBLabel("<html><font color='#FF6B6B'>(Requires JetBrains MCP)</font></html>").apply {
+            font = font.deriveFont(11f)
+            isVisible = false // 默认隐藏
+        }
+
+        // 更新 JetBrains MCP 依赖状态
+        fun updateJetBrainsMcpDependency() {
+            val jetBrainsMcpEnabled = AgentSettingsService.getInstance().enableJetBrainsMcp
+            exploreEnabledCheckbox?.isEnabled = jetBrainsMcpEnabled
+            exploreModelCombo?.isEnabled = jetBrainsMcpEnabled && (exploreEnabledCheckbox?.isSelected == true)
+            jetbrainsMcpWarningLabel.isVisible = !jetBrainsMcpEnabled
+            if (!jetBrainsMcpEnabled) {
+                exploreEnabledCheckbox?.toolTipText = "Enable JetBrains MCP in MCP settings to use this agent"
+            } else {
+                exploreEnabledCheckbox?.toolTipText = "Enable/disable this agent"
+            }
+        }
+
+        // 初始化时更新状态
+        updateJetBrainsMcpDependency()
+
+        // 监听 checkbox 变化，联动更新 model combo 的启用状态
+        exploreEnabledCheckbox!!.addActionListener {
+            val jetBrainsMcpEnabled = AgentSettingsService.getInstance().enableJetBrainsMcp
+            exploreModelCombo?.isEnabled = jetBrainsMcpEnabled && exploreEnabledCheckbox!!.isSelected
+        }
         leftHeaderPanel.add(expandArrow)
         leftHeaderPanel.add(exploreEnabledCheckbox)
         leftHeaderPanel.add(agentNameLabel)
+        leftHeaderPanel.add(jetbrainsMcpWarningLabel)
         headerPanel.add(leftHeaderPanel, BorderLayout.WEST)
 
         // 右侧：模型选择
@@ -731,7 +762,11 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         settings.permissionMode = permissionModeCombo?.selectedItem as? String ?: "default"
         settings.includePartialMessages = true
         settings.defaultBypassPermissions = defaultBypassPermissionsCheckbox?.isSelected ?: false
-        settings.defaultChromeEnabled = defaultChromeEnabledCheckbox?.isSelected ?: false
+
+        // Chrome Extension - save to both IDEA settings and ~/.claude.json
+        val chromeEnabled = defaultChromeEnabledCheckbox?.isSelected ?: false
+        settings.defaultChromeEnabled = chromeEnabled
+        syncChromeEnabledToClaudeJson(chromeEnabled)
 
         // Agents Tab
         val selectedModel = exploreModelCombo?.selectedItem as? String ?: "(inherit)"
@@ -790,6 +825,43 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
             else json.decodeFromString<AgentsConfigData>(jsonStr)
         } catch (e: Exception) {
             AgentsConfigData()
+        }
+    }
+
+    /**
+     * Sync Chrome enabled setting to ~/.claude.json
+     * This modifies the "claudeInChromeDefaultEnabled" property in the user's Claude config file.
+     */
+    private fun syncChromeEnabledToClaudeJson(enabled: Boolean) {
+        try {
+            val userHome = System.getProperty("user.home")
+            val claudeJsonFile = File(userHome, ".claude.json")
+
+            // Read existing content or create empty object
+            val existingContent = if (claudeJsonFile.exists()) {
+                claudeJsonFile.readText()
+            } else {
+                "{}"
+            }
+
+            // Parse existing JSON
+            val existingJson = try {
+                claudeJsonParser.parseToJsonElement(existingContent).jsonObject
+            } catch (e: Exception) {
+                JsonObject(emptyMap())
+            }
+
+            // Create new JSON with updated property
+            val updatedMap = existingJson.toMutableMap()
+            updatedMap["claudeInChromeDefaultEnabled"] = JsonPrimitive(enabled)
+            val updatedJson = JsonObject(updatedMap)
+
+            // Write back to file
+            claudeJsonFile.writeText(claudeJsonParser.encodeToString(JsonObject.serializer(), updatedJson))
+
+            println("✅ Synced claudeInChromeDefaultEnabled=$enabled to ${claudeJsonFile.absolutePath}")
+        } catch (e: Exception) {
+            println("❌ Failed to sync Chrome setting to .claude.json: ${e.message}")
         }
     }
 

@@ -283,7 +283,18 @@
             :disabled="!enabled || !chromeInstalled"
             :tooltip="chromeToggleTooltip"
             @toggle="handleChromeToggle"
-          />
+          >
+            <template #icon>
+              <!-- Chrome 图标 - 朴素线条风格 -->
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="4" />
+                <path d="M21.17 8H12" />
+                <path d="M3.95 6.06L8.54 14" />
+                <path d="M10.88 21.94L15.46 14" />
+              </svg>
+            </template>
+          </StatusToggle>
         </div>
       </div>
 

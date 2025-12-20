@@ -54,9 +54,13 @@
         title="Chrome Extension"
         @click="showChromeStatus = true"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-          <circle cx="12" cy="12" r="4" fill="currentColor"/>
+        <!-- Chrome 图标 - 朴素线条风格 -->
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="4" />
+          <path d="M21.17 8H12" />
+          <path d="M3.95 6.06L8.54 14" />
+          <path d="M10.88 21.94L15.46 14" />
         </svg>
         <span class="chrome-status-dot" :class="chromeStatusDotClass"></span>
       </button>
@@ -105,6 +109,18 @@ const props = defineProps<{
 
 // Chrome 状态弹窗
 const showChromeStatus = ref(false)
+
+// 打开 Chrome 弹窗时调用 getChromeStatus API
+watch(showChromeStatus, async (visible) => {
+  if (visible && sessionStore.currentTab?.session?.isConnected) {
+    try {
+      await sessionStore.currentTab.queryChromeStatus()
+      console.log('🔌 getChromeStatus triggered')
+    } catch (err) {
+      console.error('[ChatHeader] getChromeStatus failed:', err)
+    }
+  }
+})
 
 // MCP 状态弹窗
 const showMcpStatus = ref(false)

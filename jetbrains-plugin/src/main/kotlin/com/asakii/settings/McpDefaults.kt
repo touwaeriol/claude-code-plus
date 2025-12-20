@@ -417,6 +417,153 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
   - `topic`: Focus area (e.g., "hooks", "routing", "authentication")
   - `page`: Pagination (1-10) if context insufficient
     """.trimIndent()
+
+    /**
+     * Terminal MCP 工具 Schema（JSON 格式）
+     */
+    val TERMINAL_TOOLS_SCHEMA = """
+{
+  "Terminal": {
+    "type": "object",
+    "description": "Execute commands in IDEA's integrated terminal. Creates new terminal sessions or reuses existing ones. Supports foreground and background execution.",
+    "properties": {
+      "command": {
+        "type": "string",
+        "description": "The command to execute (required)"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "Session ID to reuse. If not provided, creates a new session"
+      },
+      "session_name": {
+        "type": "string",
+        "description": "Name for new terminal session (only used when creating new session)"
+      },
+      "shell_type": {
+        "type": "string",
+        "enum": ["git-bash", "powershell", "cmd", "wsl", "bash", "zsh", "fish", "sh", "auto"],
+        "description": "Shell type. Windows: git-bash (default), powershell, cmd, wsl. Unix: bash (default), zsh, fish, sh",
+        "default": "auto"
+      },
+      "background": {
+        "type": "boolean",
+        "description": "Run command in background. Use TerminalRead to check output later",
+        "default": false
+      }
+    },
+    "required": ["command"]
+  },
+
+  "TerminalRead": {
+    "type": "object",
+    "description": "Read output from a terminal session. Supports regex search with context lines.",
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "Session ID to read from (required)"
+      },
+      "max_lines": {
+        "type": "integer",
+        "description": "Maximum number of lines to return",
+        "default": 1000,
+        "minimum": 1
+      },
+      "search": {
+        "type": "string",
+        "description": "Regex pattern to search in output. Returns matching lines with context"
+      },
+      "context_lines": {
+        "type": "integer",
+        "description": "Number of context lines before and after each search match",
+        "default": 2,
+        "minimum": 0
+      }
+    },
+    "required": ["session_id"]
+  },
+
+  "TerminalList": {
+    "type": "object",
+    "description": "List all active terminal sessions.",
+    "properties": {
+      "include_output_preview": {
+        "type": "boolean",
+        "description": "Include a preview of recent output for each session",
+        "default": false
+      },
+      "preview_lines": {
+        "type": "integer",
+        "description": "Number of lines for output preview",
+        "default": 5,
+        "minimum": 1
+      }
+    },
+    "required": []
+  },
+
+  "TerminalKill": {
+    "type": "object",
+    "description": "Terminate a terminal session.",
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "Session ID to terminate (required)"
+      }
+    },
+    "required": ["session_id"]
+  },
+
+  "TerminalTypes": {
+    "type": "object",
+    "description": "Get available shell types for the current platform.",
+    "properties": {},
+    "required": []
+  },
+
+  "TerminalRename": {
+    "type": "object",
+    "description": "Rename a terminal session.",
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "Session ID to rename (required)"
+      },
+      "new_name": {
+        "type": "string",
+        "description": "New name for the session (required)"
+      }
+    },
+    "required": ["session_id", "new_name"]
+  }
+}
+    """.trimIndent()
+
+    /**
+     * Terminal MCP 默认提示词
+     */
+    val TERMINAL_INSTRUCTIONS = """
+### Terminal MCP
+
+Use IDEA's integrated terminal for command execution instead of the built-in Bash tool.
+
+**Tools:**
+- `mcp__terminal__Terminal`: Execute commands (supports session reuse and background execution)
+- `mcp__terminal__TerminalRead`: Read session output (supports regex search)
+- `mcp__terminal__TerminalList`: List all terminal sessions
+- `mcp__terminal__TerminalKill`: Terminate a session
+- `mcp__terminal__TerminalTypes`: Get available shell types
+- `mcp__terminal__TerminalRename`: Rename a session
+
+**Usage:**
+1. Execute command: `Terminal(command="npm install")`
+2. Reuse session: `Terminal(command="npm test", session_id="terminal-1")`
+3. Read output: `TerminalRead(session_id="terminal-1")`
+4. Search output: `TerminalRead(session_id="terminal-1", search="error|warning")`
+
+**Shell Types:**
+- Windows: git-bash (default), powershell, cmd, wsl
+- Unix: bash (default), zsh, fish, sh
+    """.trimIndent()
 }
 
 /**
@@ -454,9 +601,21 @@ object KnownTools {
     )
 
     /**
+     * Terminal MCP 工具
+     */
+    val TERMINAL_MCP = listOf(
+        "mcp__terminal__Terminal",        // 执行命令
+        "mcp__terminal__TerminalRead",    // 读取输出
+        "mcp__terminal__TerminalList",    // 列出会话
+        "mcp__terminal__TerminalKill",    // 终止会话
+        "mcp__terminal__TerminalTypes",   // Shell 类型
+        "mcp__terminal__TerminalRename"   // 重命名会话
+    )
+
+    /**
      * 所有已知工具
      */
-    val ALL = CLAUDE_BUILT_IN + JETBRAINS_MCP
+    val ALL = CLAUDE_BUILT_IN + JETBRAINS_MCP + TERMINAL_MCP
 }
 
 /**
@@ -502,11 +661,9 @@ You are a code exploration expert, skilled at leveraging JetBrains IDE's powerfu
   - Categories: syntax errors, code errors, warnings, suggestions
   - Leverages IDE's real-time analysis capability
 
-### Fallback to Standard Tools
+### Standard Tools
 
 - **Read**: Read full file content (when viewing specific code)
-- **Grep**: When complex regex matching needed or JetBrains tools don't apply
-- **Glob**: When complex file pattern matching needed
 
 ## Workflow
 
@@ -527,7 +684,7 @@ You are a code exploration expert, skilled at leveraging JetBrains IDE's powerfu
 - If too many results, provide overview first then detail key parts
         """.trimIndent(),
         tools = listOf(
-            "Read", "Grep", "Glob",
+            "Read",
             "mcp__jetbrains__FileIndex",
             "mcp__jetbrains__CodeSearch",
             "mcp__jetbrains__DirectoryTree",

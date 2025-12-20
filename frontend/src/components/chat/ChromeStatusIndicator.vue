@@ -5,15 +5,14 @@
     :title="tooltip"
     @click="handleClick"
   >
-    <!-- Chrome 图标 -->
+    <!-- Chrome 图标 - 朴素线条风格 -->
     <span class="chrome-icon">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
-        <circle cx="12" cy="12" r="4" fill="currentColor"/>
-        <path d="M12 2 L12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M12 16 L12 22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M2 12 L8 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M16 12 L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="4" />
+        <path d="M21.17 8H12" />
+        <path d="M3.95 6.06L8.54 14" />
+        <path d="M10.88 21.94L15.46 14" />
       </svg>
     </span>
     <span class="status-label">Chrome</span>
