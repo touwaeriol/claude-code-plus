@@ -98,6 +98,19 @@ interface UnifiedAgentClient {
      * 获取 MCP 服务器状态
      */
     suspend fun getMcpStatus(): List<com.asakii.claude.agent.sdk.types.McpServerStatusInfo> = emptyList()
+
+    /**
+     * 获取 Chrome 扩展状态（仅 Claude 客户端支持）
+     * @return Chrome 状态，默认返回未安装状态
+     */
+    suspend fun getChromeStatus(): com.asakii.claude.agent.sdk.types.ChromeStatus =
+        com.asakii.claude.agent.sdk.types.ChromeStatus(
+            installed = false,
+            enabled = false,
+            connected = false,
+            mcpServerStatus = null,
+            extensionVersion = null
+        )
 }
 
 /**

@@ -233,6 +233,18 @@ class ClaudeAgentClientImpl(
      */
     override suspend fun getMcpStatus() = client?.getMcpStatus() ?: emptyList()
 
+    /**
+     * 获取 Chrome 扩展状态
+     */
+    override suspend fun getChromeStatus() = client?.getChromeStatus()
+        ?: com.asakii.claude.agent.sdk.types.ChromeStatus(
+            installed = false,
+            enabled = false,
+            connected = false,
+            mcpServerStatus = null,
+            extensionVersion = null
+        )
+
     private fun checkCapability(supported: Boolean, method: String) {
         if (!supported) {
             throw UnsupportedOperationException(
