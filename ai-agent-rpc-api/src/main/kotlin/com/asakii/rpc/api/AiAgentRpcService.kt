@@ -91,17 +91,26 @@ interface AiAgentRpcService {
 
     /**
      * 加载指定会话历史（从本地存储 jsonl）
+     *
+     * 使用消息树算法（复刻官方 CLI 的 Nm 函数）：
+     * 1. 使用 parentUuid 构建消息树
+     * 2. 如果提供了 leafUuid，使用它定位到特定分支
+     * 3. 否则自动选择时间戳最新的分支
+     * 4. 从叶节点回溯到根节点，重建线性对话历史
+     *
      * @param sessionId 会话 ID（可空则使用当前 sessionId）
      * @param projectPath 项目路径（空则使用 ideTools.getProjectPath）
      * @param offset 跳过前 offset 条消息
      * @param limit 限制最多返回条数（<=0 表示全部）
+     * @param leafUuid 可选的叶节点 UUID，用于恢复到特定分支
      * @return 历史加载结果（包含消息列表和分页信息）
      */
     fun loadHistory(
         sessionId: String? = null,
         projectPath: String? = null,
         offset: Int = 0,
-        limit: Int = 0
+        limit: Int = 0,
+        leafUuid: String? = null
     ): RpcHistoryResult
 
     /**

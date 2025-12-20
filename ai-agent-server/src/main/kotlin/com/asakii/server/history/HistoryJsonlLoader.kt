@@ -24,6 +24,11 @@ import kotlin.io.path.useLines
 /**
  * 将 JSONL 会话文件转换为 RpcMessage 流（强类型）。
  *
+ * 核心算法（复刻官方 Claude CLI）：
+ * 1. 使用 parentUuid 构建消息树结构
+ * 2. 自动选择最新分支（时间戳最新的叶节点）
+ * 3. 从叶节点回溯到根节点，重建线性对话历史
+ *
  * 性能优化：
  * 1. 文件元数据缓存 - 避免重复扫描文件获取行数
  * 2. 从尾部高效加载 - 使用 RandomAccessFile 从尾部向前读取
@@ -31,6 +36,215 @@ import kotlin.io.path.useLines
 object HistoryJsonlLoader {
     private val log = KotlinLogging.logger {}
     private val parser = Json { ignoreUnknownKeys = true }
+
+    // ========== 消息树数据结构（复刻官方 CLI） ==========
+
+    /**
+     * JSONL 条目，包含消息树相关字段
+     * 用于构建消息树并选择正确的分支
+     */
+    private data class JsonlEntry(
+        val uuid: String,
+        val parentUuid: String?,
+        val type: String,
+        val timestamp: String?,
+        val json: JsonObject  // 原始 JSON，用于后续转换
+    )
+
+    // ========== 消息树算法（复刻官方 CLI） ==========
+
+    /**
+     * 解析 JSONL 文件，构建消息树
+     * 只收集实际的消息（user, assistant），忽略系统消息
+     *
+     * @param file JSONL 历史文件
+     * @return uuid -> JsonlEntry 的映射
+     */
+    private fun parseMessageTree(file: File): Map<String, JsonlEntry> {
+        val messages = mutableMapOf<String, JsonlEntry>()
+
+        file.bufferedReader().use { reader ->
+            while (true) {
+                val line = reader.readLine() ?: break
+                if (line.isBlank()) continue
+
+                try {
+                    val json = parser.parseToJsonElement(line).jsonObject
+                    val type = json["type"]?.jsonPrimitive?.contentOrNull ?: continue
+
+                    // 只收集实际的消息（user, assistant）
+                    if (type == "user" || type == "assistant") {
+                        val uuid = json["uuid"]?.jsonPrimitive?.contentOrNull ?: continue
+                        val parentUuid = json["parentUuid"]?.jsonPrimitive?.contentOrNull
+                        val timestamp = json["timestamp"]?.jsonPrimitive?.contentOrNull
+
+                        messages[uuid] = JsonlEntry(uuid, parentUuid, type, timestamp, json)
+                    }
+                } catch (e: Exception) {
+                    log.debug("[History] 解析消息树行失败: ${e.message}")
+                }
+            }
+        }
+
+        log.debug("[History] 消息树构建完成: ${messages.size} 条消息")
+        return messages
+    }
+
+    /**
+     * 找到所有叶节点（没有子节点的消息）
+     * 叶节点 = 没有被任何消息作为 parentUuid 引用的消息
+     *
+     * @param messages uuid -> JsonlEntry 的映射
+     * @return 叶节点列表
+     */
+    private fun findLeafNodes(messages: Map<String, JsonlEntry>): List<JsonlEntry> {
+        // 收集所有被引用为 parentUuid 的 uuid
+        val referencedAsParent = messages.values
+            .mapNotNull { it.parentUuid }
+            .toSet()
+
+        // 叶节点 = uuid 不在 referencedAsParent 中的消息
+        val leafNodes = messages.values.filter { it.uuid !in referencedAsParent }
+        log.debug("[History] 找到 ${leafNodes.size} 个叶节点")
+        return leafNodes
+    }
+
+    /**
+     * 选择时间戳最新的叶节点
+     * 如果有多个分支，选择最新更新的那个
+     *
+     * @param leafNodes 叶节点列表
+     * @return 最新的叶节点，如果列表为空返回 null
+     */
+    private fun selectLatestLeaf(leafNodes: List<JsonlEntry>): JsonlEntry? {
+        if (leafNodes.isEmpty()) return null
+
+        return leafNodes.maxByOrNull { entry ->
+            entry.timestamp?.let {
+                try {
+                    java.time.Instant.parse(it).toEpochMilli()
+                } catch (e: Exception) {
+                    0L
+                }
+            } ?: 0L
+        }
+    }
+
+    /**
+     * 从叶节点回溯到根节点，构建线性路径
+     * 这是官方 CLI 的核心算法，通过 parentUuid 链重建对话历史
+     *
+     * @param messages uuid -> JsonlEntry 的映射
+     * @param leaf 叶节点（最新的消息）
+     * @return 从根到叶的线性路径（按时间顺序，最早的在前）
+     */
+    private fun buildPathFromLeaf(
+        messages: Map<String, JsonlEntry>,
+        leaf: JsonlEntry
+    ): List<JsonlEntry> {
+        val path = mutableListOf<JsonlEntry>()
+        var current: JsonlEntry? = leaf
+
+        while (current != null) {
+            path.add(0, current)  // 头部插入，保证从根到叶的顺序
+            current = current.parentUuid?.let { messages[it] }
+        }
+
+        log.debug("[History] 构建路径完成: ${path.size} 条消息")
+        return path
+    }
+
+    /**
+     * 使用消息树算法加载历史消息（复刻官方 CLI）
+     *
+     * 算法流程（与 CLI 的 Nm 函数一致）：
+     * 1. 解析 JSONL 文件，构建 uuid -> message 的 Map
+     * 2. 如果有 leafUuid，使用它定位分支
+     * 3. 否则找到所有叶节点，选择时间戳最新的叶节点
+     * 4. 从叶节点回溯到根节点，重建线性对话历史
+     *
+     * @param file JSONL 历史文件
+     * @param leafUuid 可选的叶节点 UUID，用于恢复到特定分支
+     * @return 线性对话历史（只包含指定分支或最新分支）
+     */
+    private fun loadWithMessageTree(file: File, leafUuid: String? = null): List<UiStreamEvent> {
+        // Step 1: 构建消息树
+        val messages = parseMessageTree(file)
+        if (messages.isEmpty()) {
+            log.debug("[History] 消息树为空")
+            return emptyList()
+        }
+
+        // Step 2: 如果有 leafUuid，尝试使用它定位分支（与 CLI 一致）
+        val targetLeaf: JsonlEntry? = if (!leafUuid.isNullOrBlank()) {
+            val found = messages[leafUuid]
+            if (found != null) {
+                log.info("[History] 使用指定的 leafUuid: $leafUuid")
+                found
+            } else {
+                log.warn("[History] 指定的 leafUuid 不存在: $leafUuid，回退到自动选择")
+                null
+            }
+        } else {
+            null
+        }
+
+        // Step 3: 如果没有指定 leafUuid 或找不到，自动选择最新分支
+        val selectedLeaf = targetLeaf ?: run {
+            val leafNodes = findLeafNodes(messages)
+            if (leafNodes.isEmpty()) {
+                log.warn("[History] 未找到叶节点，回退到线性读取")
+                return loadLinear(file)
+            }
+
+            val latestLeaf = selectLatestLeaf(leafNodes)
+            if (latestLeaf == null) {
+                log.warn("[History] 无法选择最新叶节点，回退到线性读取")
+                return loadLinear(file)
+            }
+            log.info("[History] 自动选择最新分支: uuid=${latestLeaf.uuid}, timestamp=${latestLeaf.timestamp}")
+            latestLeaf
+        }
+
+        // Step 4: 回溯构建线性路径
+        val path = buildPathFromLeaf(messages, selectedLeaf)
+
+        // 转换为 UiStreamEvent
+        return path.mapNotNull { entry ->
+            toUiStreamEvent(entry.json)
+        }
+    }
+
+    /**
+     * 线性读取历史消息（回退方案）
+     * 用于早期没有 uuid 的历史文件
+     */
+    private fun loadLinear(file: File): List<UiStreamEvent> {
+        val result = mutableListOf<UiStreamEvent>()
+
+        file.bufferedReader().use { reader ->
+            while (true) {
+                val line = reader.readLine() ?: break
+                if (line.isBlank()) continue
+
+                try {
+                    val obj = parser.parseToJsonElement(line).jsonObject
+                    val messageType = obj["type"]?.jsonPrimitive?.contentOrNull
+
+                    if (!shouldDisplay(messageType)) continue
+
+                    val uiEvent = toUiStreamEvent(obj)
+                    if (uiEvent != null) {
+                        result.add(uiEvent)
+                    }
+                } catch (e: Exception) {
+                    log.debug("[History] 线性读取解析行失败: ${e.message}")
+                }
+            }
+        }
+
+        return result
+    }
 
     /**
      * 文件元数据缓存
@@ -253,16 +467,28 @@ object HistoryJsonlLoader {
     }
 
     /**
+     * 加载历史消息（使用消息树算法，复刻官方 CLI 的 Nm 函数）
+     *
+     * 核心算法：
+     * 1. 使用 parentUuid 构建消息树
+     * 2. 如果提供了 leafUuid，使用它定位到特定分支
+     * 3. 否则找到叶节点，选择时间戳最新的分支
+     * 4. 从叶节点回溯到根节点，重建线性对话历史
+     *
+     * 这确保了当用户编辑重发消息时，只返回最新分支的消息，而不是所有分支。
+     *
      * @param sessionId 目标会话 ID（必填）
      * @param projectPath 项目路径（必填）
-     * @param offset 跳过条数（< 0 表示从尾部加载，例如 -1 表示加载最后的消息）
+     * @param offset 跳过条数（目前仅在 offset < 0 && limit > 0 时使用尾部加载）
      * @param limit 限制条数（<=0 表示全部）
+     * @param leafUuid 可选的叶节点 UUID，用于恢复到特定分支（与 CLI 的 Nm 函数一致）
      */
     fun loadHistoryMessages(
         sessionId: String?,
         projectPath: String?,
         offset: Int = 0,
-        limit: Int = 0
+        limit: Int = 0,
+        leafUuid: String? = null
     ): List<UiStreamEvent> {
         if (sessionId.isNullOrBlank() || projectPath.isNullOrBlank()) {
             log.warn("[History] sessionId/projectPath 缺失，跳过加载")
@@ -277,50 +503,26 @@ object HistoryJsonlLoader {
             return emptyList()
         }
 
-        log.info("[History] 加载 JSONL: session=$sessionId file=${historyFile.absolutePath} offset=$offset limit=$limit")
+        log.info("[History] 加载 JSONL: session=$sessionId file=${historyFile.absolutePath} offset=$offset limit=$limit leafUuid=$leafUuid")
 
-        // 如果 offset < 0，表示从尾部加载，使用高效的尾部读取算法
-        if (offset < 0 && limit > 0) {
-            val startTime = System.currentTimeMillis()
-            val result = loadFromTailEfficient(historyFile, limit)
-            val elapsed = System.currentTimeMillis() - startTime
-            log.info("[History] 完成（从尾部高效加载）: loaded=${result.size} 耗时=${elapsed}ms")
-            return result
+        val startTime = System.currentTimeMillis()
+
+        // 🆕 使用消息树算法（复刻官方 CLI 的 Nm 函数）
+        val result = loadWithMessageTree(historyFile, leafUuid)
+
+        val elapsed = System.currentTimeMillis() - startTime
+        log.info("[History] 完成（消息树算法）: loaded=${result.size} 耗时=${elapsed}ms")
+
+        // 应用 offset 和 limit
+        val finalResult = if (offset < 0 && limit > 0) {
+            // 从尾部取 limit 条
+            result.takeLast(limit)
+        } else {
+            result.drop(offset.coerceAtLeast(0))
+                .let { if (limit > 0) it.take(limit) else it }
         }
 
-        // 原有逻辑：从头部开始加载
-        val result = mutableListOf<UiStreamEvent>()
-        var skipped = 0
-
-        historyFile.bufferedReader().use { reader ->
-            while (true) {
-                if (limit > 0 && result.size >= limit) break
-                val line = reader.readLine() ?: break
-                if (line.isBlank()) continue
-
-                try {
-                    val obj = parser.parseToJsonElement(line).jsonObject
-                    val messageType = obj["type"]?.jsonPrimitive?.contentOrNull
-
-                    // 直接过滤掉不需要显示的消息类型
-                    if (!shouldDisplay(messageType)) {
-                        continue
-                    }
-
-                    val uiEvent = toUiStreamEvent(obj) ?: continue
-                    if (skipped < offset) {
-                        skipped++
-                        continue
-                    }
-                    result.add(uiEvent)
-                } catch (e: Exception) {
-                    log.warn("[History] 解析行失败: ${e.message}")
-                }
-            }
-        }
-
-        log.info("[History] 完成: loaded=${result.size} skipped=$skipped")
-        return result
+        return finalResult
     }
 
     /**

@@ -456,7 +456,8 @@ class AiAgentRpcServiceImpl(
         sessionId: String?,
         projectPath: String?,
         offset: Int,
-        limit: Int
+        limit: Int,
+        leafUuid: String?
     ): RpcHistoryResult {
         val targetSession = sessionId ?: lastConnectOptions?.sessionId ?: this@AiAgentRpcServiceImpl.sessionId
         val project = projectPath?.takeIf { it.isNotBlank() } ?: ideTools.getProjectPath()
@@ -464,8 +465,8 @@ class AiAgentRpcServiceImpl(
         // 获取可用的总消息数（快照）
         val availableCount = HistoryJsonlLoader.countLines(targetSession, project)
 
-        // 加载历史消息（List<UiStreamEvent>）
-        val historyEvents = HistoryJsonlLoader.loadHistoryMessages(targetSession, project, offset, limit)
+        // 加载历史消息（List<UiStreamEvent>），使用消息树算法（复刻 CLI 的 Nm 函数）
+        val historyEvents = HistoryJsonlLoader.loadHistoryMessages(targetSession, project, offset, limit, leafUuid)
 
         // 复用 toRpcMessage() 转换成 RpcMessage
         val rpcMessages = historyEvents.map { uiEvent ->

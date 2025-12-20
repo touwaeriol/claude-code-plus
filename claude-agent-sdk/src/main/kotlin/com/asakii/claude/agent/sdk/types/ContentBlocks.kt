@@ -161,9 +161,15 @@ data class ToolResultInput(
  *   "type": "user",
  *   "message": {"role": "user", "content": [...]},
  *   "session_id": "default",
- *   "parent_tool_use_id": null
+ *   "parent_tool_use_id": null,
+ *   "parentUuid": null
  * }
  * ```
+ *
+ * @property parentUuid 编辑重发功能：指定新消息的父消息 UUID。
+ *   当用户编辑重发消息时，设置此字段为要替换的消息的父消息的 UUID，
+ *   CLI 会自动创建一个新的对话分支。
+ *   例如：用户编辑 m3（其 parentUuid 为 m2），应设置 parentUuid = "m2"。
  */
 @Serializable
 data class StreamJsonUserMessage(
@@ -172,7 +178,11 @@ data class StreamJsonUserMessage(
     @SerialName("session_id")
     val sessionId: String = "default",
     @SerialName("parent_tool_use_id")
-    val parentToolUseId: String? = null
+    val parentToolUseId: String? = null,
+    /**
+     * 编辑重发：指定父消息 UUID，用于创建新的对话分支
+     */
+    val parentUuid: String? = null
 )
 
 /**
