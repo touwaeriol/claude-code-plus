@@ -781,29 +781,27 @@ class ControlProtocol(
      * Get Chrome extension status.
      * Returns information about the Chrome extension connection state.
      *
-     * This uses the chrome_status control command (added by SDK patch).
-     * If the patch is not applied, this will throw an exception.
+     * Uses the `get_chrome_status` control command which calls internal CLI functions:
+     * - installed: a4A() - checks NativeMessagingHost config file
+     * - enabled: k1().claudeInChromeDefaultEnabled - user's default preference
+     * - connected: MCP server status == "connected"
+     * - mcpServerStatus: MCP server type (connected/failed/pending/etc.)
+     * - extensionVersion: serverInfo.version when connected
      *
      * @return ChromeStatus with installed, enabled, connected states
      */
     suspend fun getChromeStatus(): ChromeStatus {
         val request = buildJsonObject {
-            put("subtype", "chrome_status")
+            put("subtype", "get_chrome_status")
         }
         val response = sendControlRequestInternal(request)
 
         if (response.subtype == "error") {
-            throw ControlProtocolException("Get Chrome status failed: ${response.error}")
+            throw ControlProtocolException("get_chrome_status failed: ${response.error}")
         }
 
         val responseObj = response.response?.jsonObject
-            ?: return ChromeStatus(
-                installed = false,
-                enabled = false,
-                connected = false,
-                mcpServerStatus = null,
-                extensionVersion = null
-            )
+            ?: throw ControlProtocolException("get_chrome_status returned empty response")
 
         return ChromeStatus(
             installed = responseObj["installed"]?.jsonPrimitive?.booleanOrNull ?: false,

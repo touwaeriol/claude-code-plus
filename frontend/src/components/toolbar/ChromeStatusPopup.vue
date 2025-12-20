@@ -63,12 +63,21 @@
             </div>
           </div>
 
-          <!-- 安装按钮 -->
-          <div v-if="!status?.installed" class="install-section">
-            <button class="install-btn" @click="handleInstall">
-              <span class="install-icon">🌐</span>
+          <!-- 操作按钮 -->
+          <div class="action-section">
+            <!-- 安装按钮（未安装时显示） -->
+            <button v-if="!status?.installed" class="action-btn action-btn-primary" @click="handleInstall">
               Install Extension
             </button>
+            <!-- 已安装时显示管理和重连按钮 -->
+            <template v-else>
+              <button class="action-btn" @click="handleManagePermissions">
+                Manage Permissions
+              </button>
+              <button class="action-btn" @click="handleReconnect">
+                Reconnect Extension
+              </button>
+            </template>
           </div>
         </template>
       </div>
@@ -101,7 +110,12 @@ const emit = defineEmits<{
   (e: 'install'): void
 }>()
 
-const CHROME_WEBSTORE_URL = 'https://chromewebstore.google.com/detail/claude/fcoeoabgfenejglbffodgkkbkcdhcgfn'
+// Chrome 扩展相关 URL（与官方 CLI /chrome 命令一致）
+const CHROME_URLS = {
+  install: 'https://claude.ai/chrome',
+  managePermissions: 'https://clau.de/chrome/permissions',
+  reconnect: 'https://clau.de/chrome/reconnect'
+}
 
 // 是否需要重连（当前设置与连接时的设置不同）
 const needsReconnect = computed(() => {
@@ -123,8 +137,16 @@ function handleToggle(event: Event) {
 }
 
 function handleInstall() {
-  window.open(CHROME_WEBSTORE_URL, '_blank')
+  window.open(CHROME_URLS.install, '_blank')
   emit('install')
+}
+
+function handleManagePermissions() {
+  window.open(CHROME_URLS.managePermissions, '_blank')
+}
+
+function handleReconnect() {
+  window.open(CHROME_URLS.reconnect, '_blank')
 }
 
 function close() {
@@ -325,11 +347,14 @@ input:checked + .toggle-slider:before {
   margin-top: 4px;
 }
 
-.install-section {
+.action-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-top: 12px;
 }
 
-.install-btn {
+.action-btn {
   width: 100%;
   display: flex;
   align-items: center;
@@ -346,13 +371,19 @@ input:checked + .toggle-slider:before {
   transition: all 0.15s;
 }
 
-.install-btn:hover {
+.action-btn:hover {
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.06));
+  border-color: var(--theme-muted-foreground, #656d76);
+}
+
+.action-btn-primary {
   background: var(--theme-accent, #0366d6);
   border-color: var(--theme-accent, #0366d6);
   color: white;
 }
 
-.install-icon {
-  font-size: 14px;
+.action-btn-primary:hover {
+  background: var(--theme-accent-hover, #0256b9);
+  border-color: var(--theme-accent-hover, #0256b9);
 }
 </style>

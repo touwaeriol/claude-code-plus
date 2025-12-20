@@ -200,9 +200,50 @@ const options = [
 ];
 ```
 
+### 3.3 菜单选项实现分析
+
+经过源码分析，各选项的实现方式如下：
+
+```javascript
+// 相关 URL 常量
+const RJ7 = "https://claude.ai/chrome";           // 安装扩展
+const _J7 = "https://clau.de/chrome/permissions"; // 管理权限
+const jJ7 = "https://clau.de/chrome/reconnect";   // 重新连接
+
+function V(D) {
+  switch(D) {
+    case "install-extension":
+      E5(RJ7);  // 调用 openBrowser 打开 URL
+      break;
+    case "reconnect":
+      E5(jJ7);  // 调用 openBrowser 打开 URL
+      break;
+    case "manage-permissions":
+      E5(_J7);  // 调用 openBrowser 打开 URL
+      break;
+    case "toggle-default": {
+      // 直接更新配置
+      i0((F) => ({...F, claudeInChromeDefaultEnabled: !currentValue}));
+      break;
+    }
+  }
+}
+```
+
+| 选项 | 实现方式 | SDK 控制端点 |
+|------|----------|--------------|
+| Install extension | 打开浏览器访问 URL | ❌ 不需要 |
+| Reconnect extension | 打开浏览器访问 URL | ❌ 不需要 |
+| Manage permissions | 打开浏览器访问 URL | ❌ 不需要 |
+| Toggle default enabled | 调用 `i0()` 更新配置 | ⚠️ 可添加（需要补丁） |
+
+**结论**: 大多数选项只是简单地打开浏览器访问特定 URL，不涉及 CLI 内部逻辑。
+只有 "Toggle default enabled" 涉及配置更新，但当前通过 `get_chrome_status` 已可获取状态，
+如需修改配置可通过前端直接访问 `https://clau.de/chrome/reconnect` 来触发扩展重新连接。
+
 ---
 
-## 4. 扩展控制请求：`chrome_status`
+## 4. 扩展控制请求：`get_chrome_status`
 
 ### 4.1 请求格式
 
@@ -211,7 +252,7 @@ const options = [
   "type": "control_request",
   "request_id": "req_chrome_1",
   "request": {
-    "subtype": "chrome_status"
+    "subtype": "get_chrome_status"
   }
 }
 ```
@@ -295,7 +336,7 @@ const options = [
 // ControlProtocol.kt
 suspend fun getChromeStatus(): ChromeStatus {
     val request = buildJsonObject {
-        put("subtype", "chrome_status")
+        put("subtype", "get_chrome_status")
     }
 
     val response = sendControlRequestInternal(request)
