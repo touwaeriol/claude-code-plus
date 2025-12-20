@@ -99,6 +99,8 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var context7ApiKey: String = "",               // Context7 API Key（可选）
         var enableTerminalMcp: Boolean = true,         // Terminal MCP（IDEA 内置终端）
         var terminalDisableBuiltinBash: Boolean = true, // 启用 Terminal MCP 时禁用内置 Bash
+        var terminalMaxOutputLines: Int = 500,         // Terminal 输出最大行数
+        var terminalMaxOutputChars: Int = 50000,       // Terminal 输出最大字符数
         var enableGitMcp: Boolean = false,             // Git MCP（VCS 集成，默认禁用）
 
         // MCP 系统提示词（自定义，空字符串表示使用默认值）
@@ -215,6 +217,14 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     var terminalDisableBuiltinBash: Boolean
         get() = state.terminalDisableBuiltinBash
         set(value) { state.terminalDisableBuiltinBash = value }
+
+    var terminalMaxOutputLines: Int
+        get() = state.terminalMaxOutputLines
+        set(value) { state.terminalMaxOutputLines = value }
+
+    var terminalMaxOutputChars: Int
+        get() = state.terminalMaxOutputChars
+        set(value) { state.terminalMaxOutputChars = value }
 
     var terminalInstructions: String
         get() = state.terminalInstructions

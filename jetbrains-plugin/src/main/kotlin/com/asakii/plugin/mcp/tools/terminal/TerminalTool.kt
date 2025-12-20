@@ -60,11 +60,19 @@ class TerminalTool(private val sessionManager: TerminalSessionManager) {
                 put("session_id", result.sessionId)
                 result.sessionName?.let { put("session_name", it) }
                 put("background", result.background)
-                put("message", if (background) {
-                    "Command started in background. Use TerminalRead to check output."
+                if (result.background) {
+                    put("message", "Command started in background. Use TerminalRead to check output.")
                 } else {
-                    "Command executed. Use TerminalRead to get output."
-                })
+                    // 前台执行：直接返回输出
+                    result.output?.let { put("output", it) }
+                    // 如果输出被截断，添加提示信息
+                    if (result.truncated) {
+                        put("truncated", true)
+                        result.totalLines?.let { put("total_lines", it) }
+                        result.totalChars?.let { put("total_chars", it) }
+                        put("truncation_hint", "Output was truncated. Use TerminalRead with 'search' parameter to find specific content, or read with offset/limit for pagination.")
+                    }
+                }
             }
         } else {
             mapOf(

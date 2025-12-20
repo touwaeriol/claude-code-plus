@@ -255,7 +255,9 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             userInteractionEntry?.instructions != settings.userInteractionInstructions ||
             jetbrainsEntry?.instructions != settings.jetbrainsInstructions ||
             context7Entry?.instructions != settings.context7Instructions ||
-            terminalEntry?.instructions != settings.terminalInstructions
+            terminalEntry?.instructions != settings.terminalInstructions ||
+            terminalEntry?.terminalMaxOutputLines != settings.terminalMaxOutputLines ||
+            terminalEntry?.terminalMaxOutputChars != settings.terminalMaxOutputChars
         ) {
             return true
         }
@@ -301,6 +303,8 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
         settings.jetbrainsInstructions = jetbrainsEntry?.instructions ?: ""
         settings.context7Instructions = context7Entry?.instructions ?: ""
         settings.terminalInstructions = terminalEntry?.instructions ?: ""
+        settings.terminalMaxOutputLines = terminalEntry?.terminalMaxOutputLines ?: 500
+        settings.terminalMaxOutputChars = terminalEntry?.terminalMaxOutputChars ?: 50000
 
         // 保存自定义服务器配置
         val globalServers = customServers.filter { it.level == McpServerLevel.GLOBAL }
@@ -397,7 +401,9 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             instructions = settings.terminalInstructions,
             defaultInstructions = McpDefaults.TERMINAL_INSTRUCTIONS,
             disabledTools = if (settings.terminalDisableBuiltinBash) listOf("Bash") else emptyList(),
-            hasDisableToolsToggle = true
+            hasDisableToolsToggle = true,
+            terminalMaxOutputLines = settings.terminalMaxOutputLines,
+            terminalMaxOutputChars = settings.terminalMaxOutputChars
         ))
 
         // 加载自定义服务器
@@ -626,7 +632,11 @@ data class McpServerEntry(
     /** 默认系统提示词（内置 MCP 使用，只读） */
     val defaultInstructions: String = "",
     /** 是否有关联的禁用工具开关（如 Terminal MCP 的 terminalDisableBuiltinBash） */
-    val hasDisableToolsToggle: Boolean = false
+    val hasDisableToolsToggle: Boolean = false,
+    /** Terminal MCP: 输出最大行数 */
+    val terminalMaxOutputLines: Int = 500,
+    /** Terminal MCP: 输出最大字符数 */
+    val terminalMaxOutputChars: Int = 50000
 )
 
 /**
@@ -653,6 +663,10 @@ class BuiltInMcpServerDialog(
         wrapStyleWord = true
     }
     private val apiKeyField = JBTextField(entry.apiKey, 25)
+
+    // Terminal MCP 截断配置
+    private val maxOutputLinesField = JBTextField(entry.terminalMaxOutputLines.toString(), 8)
+    private val maxOutputCharsField = JBTextField(entry.terminalMaxOutputChars.toString(), 8)
 
     init {
         title = "Edit ${entry.name}"
@@ -699,6 +713,26 @@ class BuiltInMcpServerDialog(
             contentPanel.add(Box.createVerticalStrut(8))
         }
 
+        // Terminal MCP 的截断配置
+        if (entry.name == "Terminal MCP") {
+            val truncateLabel = JBLabel("Output Truncation:").apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+            }
+            contentPanel.add(truncateLabel)
+            contentPanel.add(Box.createVerticalStrut(4))
+
+            val truncatePanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+                add(JBLabel("Max lines:"))
+                add(maxOutputLinesField)
+                add(Box.createHorizontalStrut(16))
+                add(JBLabel("Max chars:"))
+                add(maxOutputCharsField)
+            }
+            contentPanel.add(truncatePanel)
+            contentPanel.add(Box.createVerticalStrut(8))
+        }
+
         // 系统提示词
         val customPromptLabel = JBLabel("Appended System Prompt:").apply {
             alignmentX = JPanel.LEFT_ALIGNMENT
@@ -738,7 +772,13 @@ class BuiltInMcpServerDialog(
         return entry.copy(
             enabled = enableCheckbox.isSelected,
             instructions = customInstructions,
-            apiKey = if (entry.name == "Context7 MCP") apiKeyField.text else entry.apiKey
+            apiKey = if (entry.name == "Context7 MCP") apiKeyField.text else entry.apiKey,
+            terminalMaxOutputLines = if (entry.name == "Terminal MCP") {
+                maxOutputLinesField.text.toIntOrNull() ?: 500
+            } else entry.terminalMaxOutputLines,
+            terminalMaxOutputChars = if (entry.name == "Terminal MCP") {
+                maxOutputCharsField.text.toIntOrNull() ?: 50000
+            } else entry.terminalMaxOutputChars
         )
     }
 }

@@ -1,13 +1,14 @@
 package com.asakii.plugin.mcp.tools.terminal
 
+import com.asakii.settings.AgentSettingsService
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.terminal.JBTerminalWidget
+import com.asakii.plugin.compat.TerminalCompat
 import mu.KotlinLogging
 import org.jetbrains.plugins.terminal.ShellTerminalWidget
 import org.jetbrains.plugins.terminal.TerminalToolWindowFactory
-import org.jetbrains.plugins.terminal.TerminalToolWindowManager
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -180,16 +181,13 @@ class TerminalSessionManager(private val project: Project) {
 
             ApplicationManager.getApplication().invokeAndWait {
                 try {
-                    val manager = TerminalToolWindowManager.getInstance(project)
                     val basePath = project.basePath ?: System.getProperty("user.home")
 
-                    // 使用 createLocalShellWidget 创建新终端
-                    val jbWidget = manager.createLocalShellWidget(basePath, sessionName)
+                    // 使用兼容层创建终端（处理不同版本的 API 差异）
+                    widget = TerminalCompat.createShellWidget(project, basePath, sessionName)
 
-                    if (jbWidget is ShellTerminalWidget) {
-                        widget = jbWidget
-                    } else {
-                        logger.warn { "Created widget is not ShellTerminalWidget: ${jbWidget?.javaClass?.name}" }
+                    if (widget == null) {
+                        logger.warn { "Failed to create ShellTerminalWidget" }
                     }
                 } catch (e: Exception) {
                     logger.error(e) { "Failed to create terminal widget" }
@@ -246,11 +244,17 @@ class TerminalSessionManager(private val project: Project) {
 
     /**
      * 执行命令
+     *
+     * @param sessionId 会话 ID，为空时创建新会话
+     * @param command 要执行的命令
+     * @param background 是否后台执行。false 时等待命令完成并返回输出
+     * @param timeoutMs 前台执行时的超时时间（毫秒），默认 5 分钟
      */
     fun executeCommand(
         sessionId: String?,
         command: String,
-        background: Boolean = false
+        background: Boolean = false,
+        timeoutMs: Long = 300_000
     ): ExecuteResult {
         val session = getOrCreateSession(sessionId) ?: return ExecuteResult(
             success = false,
@@ -266,12 +270,68 @@ class TerminalSessionManager(private val project: Project) {
                 session.widget.executeCommand(command)
             }
 
-            ExecuteResult(
-                success = true,
-                sessionId = session.id,
-                sessionName = session.name,
-                background = background
-            )
+            if (background) {
+                // 后台执行：立即返回
+                ExecuteResult(
+                    success = true,
+                    sessionId = session.id,
+                    sessionName = session.name,
+                    background = true
+                )
+            } else {
+                // 前台执行：等待命令完成
+                val startTime = System.currentTimeMillis()
+                val pollIntervalMs = 100L
+                val settings = AgentSettingsService.getInstance()
+                val maxOutputLines = settings.terminalMaxOutputLines
+                val maxOutputChars = settings.terminalMaxOutputChars
+
+                // 等待命令开始执行（给终端一点时间处理）
+                Thread.sleep(200)
+
+                // 轮询等待命令完成
+                while (session.hasRunningCommands()) {
+                    if (System.currentTimeMillis() - startTime > timeoutMs) {
+                        return ExecuteResult(
+                            success = false,
+                            sessionId = session.id,
+                            sessionName = session.name,
+                            background = false,
+                            error = "Command timed out after ${timeoutMs / 1000} seconds. Use TerminalRead to check output."
+                        )
+                    }
+                    Thread.sleep(pollIntervalMs)
+                }
+
+                // 命令完成，读取输出（可能截断）
+                val fullOutput = session.getOutput()
+                val lines = fullOutput.split("\n")
+                val totalLines = lines.size
+                val totalChars = fullOutput.length
+
+                val (output, truncated) = when {
+                    totalLines > maxOutputLines -> {
+                        // 行数超限：取最后 maxOutputLines 行
+                        lines.takeLast(maxOutputLines).joinToString("\n") to true
+                    }
+                    totalChars > maxOutputChars -> {
+                        // 字符数超限：取最后 maxOutputChars 字符
+                        fullOutput.takeLast(maxOutputChars) to true
+                    }
+                    else -> fullOutput to false
+                }
+
+                ExecuteResult(
+                    success = true,
+                    sessionId = session.id,
+                    sessionName = session.name,
+                    background = false,
+                    output = output,
+                    truncated = truncated,
+                    totalLines = totalLines,
+                    totalChars = totalChars
+                )
+            }
         } catch (e: Exception) {
             logger.error(e) { "Failed to execute command in session ${session.id}" }
             ExecuteResult(
@@ -434,6 +494,10 @@ data class ExecuteResult(
     val sessionId: String,
     val sessionName: String? = null,
     val background: Boolean = false,
+    val output: String? = null,
+    val truncated: Boolean = false,
+    val totalLines: Int? = null,
+    val totalChars: Int? = null,
     val error: String? = null
 )
 
