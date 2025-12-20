@@ -9,6 +9,63 @@ plugins {
 group = providers.gradleProperty("pluginGroup").get()
 version = providers.gradleProperty("pluginVersion").get()
 
+// ===== 多版本构建支持 =====
+// 通过 -PplatformMajor=241 指定目标平台版本
+// 241 = 2024.1, 242 = 2024.2, 243 = 2024.3, 251 = 2025.1, 252 = 2025.2, 253 = 2025.3
+val platformMajor = providers.gradleProperty("platformMajor").getOrElse("253").toInt()
+
+// 根据目标版本选择 IDE SDK 版本
+// 构建时用对应版本的 SDK 编译，确保 API 兼容
+val targetPlatformVersion = when (platformMajor) {
+    241 -> "2024.1.7"
+    242 -> "2024.2.6"
+    243 -> "2024.3.5"
+    251 -> "2025.1.5"
+    252 -> "2025.2.4"
+    else -> "2025.3.1"  // 253+
+}
+
+// ===== 兼容性代码目录配置 =====
+// 按 API 变化点划分，避免反射，实现编译时类型安全
+
+// 主兼容层目录 (VCS/Commit/Localization/JBCef API)
+// - 241-252: 使用旧 API (kotlin-compat-242)
+// - 253+: 使用新 API (kotlin-compat-253)
+val mainCompatDir = when {
+    platformMajor >= 253 -> "kotlin-compat-253"
+    else -> "kotlin-compat-242"
+}
+
+// Diff API 兼容层目录
+// - 241-242: 使用 DiffRequestProcessorEditor (kotlin-compat-diff-241)
+// - 243+: 使用 DiffEditorViewerFileEditor (kotlin-compat-diff-243)
+val diffCompatDir = when {
+    platformMajor >= 243 -> "kotlin-compat-diff-243"
+    else -> "kotlin-compat-diff-241"
+}
+
+// sinceBuild 和 untilBuild 根据目标版本设置
+val targetSinceBuild = platformMajor.toString()
+val targetUntilBuild = when {
+    platformMajor >= 253 -> "253.*"
+    platformMajor >= 252 -> "252.*"
+    platformMajor >= 251 -> "251.*"
+    platformMajor >= 243 -> "243.*"
+    platformMajor >= 242 -> "242.*"
+    else -> "241.*"
+}
+
+// 配置 sourceSets 包含版本特定代码
+sourceSets {
+    main {
+        kotlin {
+            srcDir("src/main/kotlin")           // 通用代码
+            srcDir("src/main/$mainCompatDir")   // 主兼容层 (VCS/Commit/Localization/JBCef)
+            srcDir("src/main/$diffCompatDir")   // Diff API 兼容层
+        }
+    }
+}
+
 
 
 dependencies {
@@ -26,15 +83,23 @@ dependencies {
 
     // IntelliJ Platform dependencies
     intellijPlatform {
-        // 🔧 使用具体的方法而不是通用的 create()，以支持 runIde 任务
-        // 从 2025.3 开始，IC/IU 合并为统一版本，使用 intellijIdea()
-        intellijIdea(providers.gradleProperty("platformVersion").get())
+        // 🔧 多版本构建支持：根据 platformMajor 选择对应的 SDK 版本
+        // 2025.3+ 使用 intellijIdea()，之前版本使用 intellijIdeaCommunity()
+        if (platformMajor >= 253) {
+            intellijIdea(targetPlatformVersion)
+        } else {
+            intellijIdeaCommunity(targetPlatformVersion)
+        }
 
-        // 🔧 添加 Java 插件依赖，用于 ClassInheritorsSearch、OverridingMethodsSearch 等 API
+        // 🔧 添加 Java 插件依赖 (编译时需要，运行时通过 plugin.xml optional="true" 可选)
+        // 这样可以在 IntelliJ IDEA 中使用完整功能，在 WebStorm/PyCharm 等非 Java IDE 中优雅降级
         bundledPlugin("com.intellij.java")
 
         // 🆕 添加 Terminal 插件依赖，用于 Terminal MCP 工具
         bundledPlugin("org.jetbrains.plugins.terminal")
+
+        // 🆕 添加 Git4Idea 插件依赖 (编译时需要，运行时通过 plugin.xml optional="true" 可选)
+        bundledPlugin("Git4Idea")
 
         // UI 框架说明：
         // 本项目使用 Swing + IntelliJ JB UI 组件（官方推荐方案）
@@ -51,9 +116,6 @@ dependencies {
 
     // 🔧 Kotlin serialization 运行时依赖
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${rootProject.extra["serializationVersion"]}")
-
-    // Hutool 反射工具 - 用于可选依赖的反射调用
-    implementation("cn.hutool:hutool-core:5.8.25")
 
     // Markdown 渲染支持
     implementation("org.commonmark:commonmark:0.21.0")
@@ -109,8 +171,9 @@ intellijPlatform {
         version.set(providers.gradleProperty("pluginVersion"))
 
         ideaVersion {
-            sinceBuild.set(providers.gradleProperty("pluginSinceBuild"))
-            untilBuild.set(providers.gradleProperty("pluginUntilBuild"))
+            // 使用根据 platformMajor 计算的版本范围
+            sinceBuild.set(targetSinceBuild)
+            untilBuild.set(targetUntilBuild)
         }
 
         // 从 CHANGELOG.md 读取变更日志
@@ -118,6 +181,7 @@ intellijPlatform {
     }
 
     // 插件兼容性验证配置 (2024.2 ~ 2025.3)
+    // 支持多种 JetBrains IDE: IntelliJ IDEA, WebStorm, GoLand, CLion, PyCharm
     // 支持通过命令行参数指定单个 IDE 版本（用于 CI 分批验证）
     // 用法: ./gradlew verifyPlugin -PverifyIdeType=IC -PverifyIdeVersion=2024.2.6
     pluginVerification {
@@ -131,11 +195,19 @@ intellijPlatform {
                     "IC" -> IntelliJPlatformType.IntellijIdeaCommunity
                     "IU" -> IntelliJPlatformType.IntellijIdeaUltimate
                     "II" -> IntelliJPlatformType.IntellijIdea  // 2025.3+ 统一版本
-                    else -> throw GradleException("Unknown IDE type: $verifyIdeType. Use IC, IU, or II")
+                    "WS" -> IntelliJPlatformType.WebStorm
+                    "GO" -> IntelliJPlatformType.GoLand
+                    "CL" -> IntelliJPlatformType.CLion
+                    "PC" -> IntelliJPlatformType.PyCharmCommunity
+                    "PY" -> IntelliJPlatformType.PyCharmProfessional
+                    "PS" -> IntelliJPlatformType.PhpStorm
+                    else -> throw GradleException("Unknown IDE type: $verifyIdeType. Use IC, IU, II, WS, GO, CL, PC, PY, or PS")
                 }
                 create(ideType, verifyIdeVersion)
             } else {
                 // 本地开发模式:验证所有关键版本
+
+                // ===== IntelliJ IDEA =====
                 // 2024.x 和 2025.1/2025.2 使用 IntellijIdeaCommunity
                 create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2.6")
                 create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.3.5")
@@ -143,6 +215,33 @@ intellijPlatform {
                 create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
                 // 2025.3+ 使用统一的 IntellijIdea 类型
                 create(IntelliJPlatformType.IntellijIdea, "2025.3.1")
+
+                // ===== WebStorm =====
+                // 注意：WebStorm 版本号与 IDEA 不同，使用较保守的版本
+                create(IntelliJPlatformType.WebStorm, "2024.2.4")
+                create(IntelliJPlatformType.WebStorm, "2024.3.3")
+                create(IntelliJPlatformType.WebStorm, "2025.1.2")
+
+                // ===== GoLand =====
+                // GoLand 的版本号与 IDEA 不同，例如 2024.2 最新是 2024.2.3
+                create(IntelliJPlatformType.GoLand, "2024.2.3")
+                create(IntelliJPlatformType.GoLand, "2024.3.3")
+                create(IntelliJPlatformType.GoLand, "2025.1.2")
+
+                // ===== CLion =====
+                create(IntelliJPlatformType.CLion, "2024.2.3")
+                create(IntelliJPlatformType.CLion, "2024.3.3")
+                create(IntelliJPlatformType.CLion, "2025.1.2")
+
+                // ===== PyCharm =====
+                create(IntelliJPlatformType.PyCharmCommunity, "2024.2.4")
+                create(IntelliJPlatformType.PyCharmCommunity, "2024.3.3")
+                create(IntelliJPlatformType.PyCharmCommunity, "2025.1.2")
+
+                // ===== PhpStorm =====
+                create(IntelliJPlatformType.PhpStorm, "2024.2.4")
+                create(IntelliJPlatformType.PhpStorm, "2024.3.3")
+                create(IntelliJPlatformType.PhpStorm, "2025.1.2")
             }
         }
     }

@@ -1,6 +1,18 @@
 <idea-plugin>
     <!--
         This file is loaded only when com.intellij.java plugin is available.
-        Java-specific extensions can be registered here.
+        Java-specific extensions are registered here.
+
+        These extensions override the default Noop implementations from plugin.xml,
+        providing full Java code analysis capabilities.
     -->
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Language Analysis Service - Java implementation -->
+        <!-- Overrides NoopLanguageAnalysisService when Java plugin is available -->
+        <projectService
+            serviceInterface="com.asakii.plugin.services.LanguageAnalysisService"
+            serviceImplementation="com.asakii.plugin.services.JavaLanguageAnalysisService"
+            overrides="true"/>
+    </extensions>
 </idea-plugin>

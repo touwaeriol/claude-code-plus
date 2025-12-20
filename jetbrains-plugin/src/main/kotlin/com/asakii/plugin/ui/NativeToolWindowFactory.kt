@@ -25,7 +25,6 @@ import com.intellij.ui.components.JBPanel
 import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.jcef.JBCefApp
 import com.intellij.ui.jcef.JBCefBrowser
-import com.asakii.plugin.services.JcefDebugPortInitializer
 import com.intellij.util.ui.JBUI
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -94,9 +93,6 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
             toolWindowEx?.setTitleActions(titleActions)
             return
         }
-
-        // 在创建 JCEF 浏览器之前初始化调试端口
-        JcefDebugPortInitializer.ensureInitialized()
 
         // 使用 Builder 模式显式禁用 OSR，避免 IDEA 2025.x 中上下文菜单和 DevTools 被禁用
         val browser = JBCefBrowser.createBuilder()
@@ -196,15 +192,6 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
             ) {
                 override fun actionPerformed(e: AnActionEvent) {
                     openDevToolsInDialog(project, browser)
-                }
-            })
-            add(object : AnAction(
-                "Open DevTools in Chrome",
-                "使用 Chrome 远程调试 (Windows JCEF 兼容性更好)",
-                AllIcons.Xml.Browsers.Chrome
-            ) {
-                override fun actionPerformed(e: AnActionEvent) {
-                    openDevToolsInChrome(project)
                 }
             })
         }
@@ -318,46 +305,6 @@ class NativeToolWindowFactory : ToolWindowFactory, DumbAware {
                     "DevTools"
                 )
             }
-        }
-    }
-
-    /**
-     * 使用 Chrome 远程调试打开 DevTools
-     * 通过 JCEF 内置的远程调试端口连接
-     */
-    private fun openDevToolsInChrome(project: Project) {
-        if (!JBCefApp.isSupported()) {
-            logger.warn("⚠️ JCEF is not supported")
-            com.intellij.openapi.ui.Messages.showWarningDialog(
-                project,
-                "JCEF 不受支持，无法使用远程调试。",
-                "DevTools"
-            )
-            return
-        }
-
-        try {
-            // 使用异步方法获取远程调试端口
-            JBCefApp.getInstance().getRemoteDebuggingPort { port ->
-                if (port != null && port > 0) {
-                    val debugUrl = "http://localhost:$port"
-                    logger.info("🔗 Opening Chrome DevTools at: $debugUrl")
-                    BrowserUtil.browse(debugUrl)
-                } else {
-                    logger.warn("⚠️ Remote debugging port not available")
-                    com.intellij.openapi.ui.Messages.showWarningDialog(
-                        project,
-                        "远程调试端口不可用。\n\n请重启 IDE 后再试。",
-                        "DevTools"
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            logger.error("❌ Failed to get remote debugging port: ${e.message}", e)
-            // 降级方案：使用默认端口
-            val defaultPort = 9222
-            logger.info("🔗 Trying default port: $defaultPort")
-            BrowserUtil.browse("http://localhost:$defaultPort")
         }
     }
 

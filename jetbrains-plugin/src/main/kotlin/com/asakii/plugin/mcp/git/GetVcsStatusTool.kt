@@ -1,8 +1,9 @@
 package com.asakii.plugin.mcp.git
 
+import com.asakii.plugin.compat.VcsCompat
+import com.asakii.plugin.services.GitBranchService
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vcs.ProjectLevelVcsManager
 import com.intellij.openapi.vcs.changes.Change
 import com.intellij.openapi.vcs.changes.ChangeListManager
 import kotlinx.serialization.json.*
@@ -14,6 +15,10 @@ private val logger = KotlinLogging.logger {}
  * 获取 VCS 状态工具
  *
  * 返回 VCS 状态概览：当前分支、变更数量等
+ *
+ * 使用 GitBranchService 获取 Git 分支信息（无需反射）：
+ * - 当 Git4Idea 已安装: 使用 GitBranchServiceImpl
+ * - 当 Git4Idea 未安装: 使用 NoopGitBranchService
  */
 class GetVcsStatusTool(private val project: Project) {
 
@@ -21,16 +26,16 @@ class GetVcsStatusTool(private val project: Project) {
         return ReadAction.compute<String, Throwable> {
             try {
                 val changeListManager = ChangeListManager.getInstance(project)
-                val vcsManager = ProjectLevelVcsManager.getInstance(project)
                 val changes = changeListManager.allChanges
 
-                // 获取活跃的 VCS
-                val activeVcss = vcsManager.allActiveVcss
+                // 获取活跃的 VCS (使用兼容层以支持不同 IDE 版本)
+                val activeVcss = VcsCompat.getAllActiveVcss(project)
                 val hasVcs = activeVcss.isNotEmpty()
                 val vcsType = activeVcss.firstOrNull()?.name
 
-                // 尝试获取当前分支（通过反射访问 Git4Idea）
-                val currentBranch = tryGetCurrentBranch()
+                // 使用 GitBranchService 获取当前分支（无反射，使用可选依赖模式）
+                val gitBranchService = GitBranchService.getInstance(project)
+                val currentBranch = gitBranchService.getCurrentBranchName()
 
                 buildJsonObject {
                     put("hasVcs", hasVcs)
@@ -65,39 +70,6 @@ class GetVcsStatusTool(private val project: Project) {
                     put("hasVcs", false)
                 }.toString()
             }
-        }
-    }
-
-    /**
-     * 尝试通过反射获取 Git 当前分支
-     * 这样可以在 Git4Idea 插件可用时获取分支信息，不可用时返回 null
-     */
-    private fun tryGetCurrentBranch(): String? {
-        return try {
-            // 通过反射获取 GitRepositoryManager
-            val gitRepoManagerClass = Class.forName("git4idea.repo.GitRepositoryManager")
-            val getInstanceMethod = gitRepoManagerClass.getMethod("getInstance", Project::class.java)
-            val gitRepoManager = getInstanceMethod.invoke(null, project)
-
-            // 获取 repositories
-            val getRepositoriesMethod = gitRepoManagerClass.getMethod("getRepositories")
-            val repositories = getRepositoriesMethod.invoke(gitRepoManager) as? List<*>
-
-            // 获取第一个仓库的当前分支
-            val repo = repositories?.firstOrNull() ?: return null
-            val getCurrentBranchMethod = repo.javaClass.getMethod("getCurrentBranch")
-            val branch = getCurrentBranchMethod.invoke(repo)
-
-            // 获取分支名称
-            if (branch != null) {
-                val getNameMethod = branch.javaClass.getMethod("getName")
-                getNameMethod.invoke(branch) as? String
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            logger.debug { "Git4Idea not available or error getting branch: ${e.message}" }
-            null
         }
     }
 }

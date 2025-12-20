@@ -14,6 +14,7 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.GlobalSearchScopes
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
+import com.asakii.plugin.services.LanguageAnalysisService
 import kotlinx.serialization.Serializable
 import java.io.File
 
@@ -223,22 +224,23 @@ class FindUsagesTool(private val project: Project) {
                 val allUsages = mutableListOf<Pair<PsiElement, String>>() // element to usage type
 
                 val elem = foundElement!!
+                val langService = LanguageAnalysisService.getInstance(project)
 
-                // 类相关的特殊搜索（使用反射，支持 Java 插件可选）
-                if (JavaPluginHelper.isPsiClass(elem)) {
+                // 类相关的特殊搜索（通过服务接口，支持 Java 插件可选）
+                if (langService.isClass(elem)) {
                     // 查找继承者
                     if (usageTypes.contains(UsageType.All) || usageTypes.contains(UsageType.Inheritance)) {
-                        JavaPluginHelper.searchClassInheritors(elem, scope, true).forEach { inheritor ->
+                        langService.findClassInheritors(elem, scope, true).forEach { inheritor ->
                             allUsages.add(inheritor to "Inheritance")
                         }
                     }
                 }
 
-                // 方法相关的特殊搜索（使用反射，支持 Java 插件可选）
-                if (JavaPluginHelper.isPsiMethod(elem)) {
+                // 方法相关的特殊搜索（通过服务接口，支持 Java 插件可选）
+                if (langService.isMethod(elem)) {
                     // 查找覆盖方法
                     if (usageTypes.contains(UsageType.All) || usageTypes.contains(UsageType.Override)) {
-                        JavaPluginHelper.searchOverridingMethods(elem, scope, true).forEach { overrider ->
+                        langService.findOverridingMethods(elem, scope, true).forEach { overrider ->
                             allUsages.add(overrider to "Override")
                         }
                     }
@@ -352,8 +354,10 @@ class FindUsagesTool(private val project: Project) {
             return UsageType.Import
         }
 
-        // 类相关（使用反射检查，支持 Java 插件可选）
-        if (JavaPluginHelper.isPsiClass(targetElement)) {
+        val langService = LanguageAnalysisService.getInstance(project)
+
+        // 类相关（通过服务接口检查，支持 Java 插件可选）
+        if (langService.isClass(targetElement)) {
             // 继承/实现
             if (parentClass.contains("Extends") || parentClass.contains("Implements") ||
                 parentClass.contains("SuperType") || parentClass.contains("ReferenceList")) {
@@ -370,8 +374,8 @@ class FindUsagesTool(private val project: Project) {
             return UsageType.TypeReference
         }
 
-        // 方法相关（使用反射检查，支持 Java 插件可选）
-        if (JavaPluginHelper.isPsiMethod(targetElement)) {
+        // 方法相关（通过服务接口检查，支持 Java 插件可选）
+        if (langService.isMethod(targetElement)) {
             // 方法引用 (::method)
             if (parentClass.contains("MethodReference") || parentClass.contains("CallableReference")) {
                 return UsageType.MethodReference

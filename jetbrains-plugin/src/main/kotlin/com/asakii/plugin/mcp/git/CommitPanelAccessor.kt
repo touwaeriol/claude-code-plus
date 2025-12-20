@@ -3,10 +3,9 @@ package com.asakii.plugin.mcp.git
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vcs.CheckinProjectPanel
 import com.intellij.openapi.vcs.changes.Change
 import com.intellij.openapi.vcs.changes.ChangeListManager
-import com.intellij.vcs.commit.AbstractCommitWorkflowHandler
-import com.intellij.vcs.commit.CommitMessageUi
 import mu.KotlinLogging
 import java.lang.ref.WeakReference
 
@@ -17,35 +16,28 @@ private val logger = KotlinLogging.logger {}
  *
  * 解决问题：MCP 工具在后台线程运行，无法直接访问 Commit UI 组件
  * 解决方案：通过 CheckinHandlerFactory 捕获面板引用，存储在此访问器中
+ *
+ * 使用 CheckinProjectPanel 的公开 API（getCommitMessage/setCommitMessage）
+ * 而不是通过反射访问内部类
  */
 class CommitPanelAccessor(private val project: Project) {
 
-    // 当前活跃的 Commit 面板（使用 WeakReference 避免内存泄漏）
+    // 当前活跃的 CheckinProjectPanel（使用 WeakReference 避免内存泄漏）
+    // CheckinProjectPanel 继承 CommitMessageI，提供 getCommitMessage/setCommitMessage 公开 API
     @Volatile
-    private var commitWorkflowHandler: WeakReference<AbstractCommitWorkflowHandler<*, *>>? = null
-
-    // CommitMessageUi 引用
-    @Volatile
-    private var commitMessageUi: WeakReference<CommitMessageUi>? = null
+    private var checkinPanel: WeakReference<CheckinProjectPanel>? = null
 
     // 当前选中的变更（由 CheckinHandler 更新）
     @Volatile
     private var selectedChanges: List<Change>? = null
 
     /**
-     * 设置当前的 CommitWorkflowHandler（由 CheckinHandlerFactory 调用）
+     * 设置当前的 CheckinProjectPanel（由 CheckinHandlerFactory 调用）
+     * 使用公开 API，无需反射
      */
-    fun setCommitWorkflowHandler(handler: AbstractCommitWorkflowHandler<*, *>) {
-        commitWorkflowHandler = WeakReference(handler)
-        logger.info { "CommitPanelAccessor: handler set for ${project.name}" }
-    }
-
-    /**
-     * 设置 CommitMessageUi（由 CheckinHandler 调用）
-     */
-    fun setCommitMessageUi(ui: CommitMessageUi) {
-        commitMessageUi = WeakReference(ui)
-        logger.info { "CommitPanelAccessor: commitMessageUi set" }
+    fun setCheckinPanel(panel: CheckinProjectPanel) {
+        checkinPanel = WeakReference(panel)
+        logger.info { "CommitPanelAccessor: panel set for ${project.name}" }
     }
 
     /**
@@ -60,8 +52,7 @@ class CommitPanelAccessor(private val project: Project) {
      * 清除引用（面板关闭时调用）
      */
     fun clear() {
-        commitWorkflowHandler = null
-        commitMessageUi = null
+        checkinPanel = null
         selectedChanges = null
         logger.info { "CommitPanelAccessor: cleared" }
     }
@@ -86,51 +77,39 @@ class CommitPanelAccessor(private val project: Project) {
 
     /**
      * 获取当前 commit message
+     * 使用 CheckinProjectPanel.getCommitMessage() 公开 API
      */
     fun getCommitMessage(): String? {
-        val ui = commitMessageUi?.get()
-        if (ui != null) {
-            return try {
-                ReadAction.compute<String, Throwable> { ui.text }
-            } catch (e: Exception) {
-                logger.warn(e) { "Failed to get commit message from ui" }
-                null
-            }
-        }
-
-        // 尝试从 handler 获取
-        val handler = commitWorkflowHandler?.get() ?: return null
+        val panel = checkinPanel?.get() ?: return null
         return try {
-            // AbstractCommitWorkflowHandler 有 getCommitMessage 方法
-            ReadAction.compute<String, Throwable> {
-                handler.javaClass.methods
-                    .find { it.name == "getCommitMessage" && it.parameterCount == 0 }
-                    ?.invoke(handler) as? String
-            }
+            ReadAction.compute<String, Throwable> { panel.commitMessage }
         } catch (e: Exception) {
-            logger.warn(e) { "Failed to get commit message from handler" }
+            logger.warn(e) { "Failed to get commit message" }
             null
         }
     }
 
     /**
      * 设置 commit message
+     * 使用 CheckinProjectPanel.setCommitMessage() 公开 API
+     *
      * @param message 要设置的消息
      * @param append 是否追加（true: 追加到现有消息后，false: 替换）
      */
     fun setCommitMessage(message: String, append: Boolean = false) {
-        val ui = commitMessageUi?.get()
-        if (ui == null) {
+        val panel = checkinPanel?.get()
+        if (panel == null) {
             logger.warn { "Cannot set commit message: no active commit panel" }
             return
         }
 
         ApplicationManager.getApplication().invokeLater {
             try {
-                if (append && ui.text.isNotBlank()) {
-                    ui.setText("${ui.text}\n\n$message")
+                val currentMessage = panel.commitMessage
+                if (append && currentMessage.isNotBlank()) {
+                    panel.setCommitMessage("$currentMessage\n\n$message")
                 } else {
-                    ui.setText(message)
+                    panel.setCommitMessage(message)
                 }
                 logger.info { "Commit message ${if (append) "appended" else "set"}" }
             } catch (e: Exception) {
@@ -143,7 +122,7 @@ class CommitPanelAccessor(private val project: Project) {
      * 检查 Commit 面板是否打开
      */
     fun isCommitPanelOpen(): Boolean {
-        return commitMessageUi?.get() != null || commitWorkflowHandler?.get() != null
+        return checkinPanel?.get() != null
     }
 
     companion object {

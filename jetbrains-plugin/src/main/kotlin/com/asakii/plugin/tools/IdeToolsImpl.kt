@@ -15,7 +15,8 @@ import com.intellij.diff.requests.ContentDiffRequest
 import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.ide.util.PropertiesComponent
-import com.intellij.l10n.LocalizationUtil
+import com.asakii.plugin.compat.DiffEditorCompat
+import com.asakii.plugin.compat.LocalizationCompat
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -377,7 +378,7 @@ class IdeToolsImpl(
         }
         
         return try {
-            val locale = LocalizationUtil.getLocale(true)
+            val locale = LocalizationCompat.getLocale()
             "${locale.language}-${locale.country}"
         } catch (e: Exception) {
             val locale = Locale.getDefault()
@@ -641,97 +642,13 @@ class IdeToolsImpl(
     }
 
     /**
-     * 使用反射获取 Diff 编辑器的 activeRequest
-     * 根据 IntelliJ 版本选择不同的 API：
-     * - 242 及之前 (2024.2-)：DiffRequestProcessorEditor.getProcessor().activeRequest
-     * - 243 及之后 (2024.3+)：DiffEditorViewerFileEditor.editorViewer
+     * 获取 Diff 编辑器的 activeRequest
+     * 使用 DiffEditorCompat 兼容层，无需反射
+     *
+     * @see com.asakii.plugin.compat.DiffEditorCompat
      */
     private fun getActiveRequest(diffEditor: FileEditor): com.intellij.diff.requests.DiffRequest? {
-        return try {
-            val buildNumber = getIdeaBuildNumber()
-
-            if (buildNumber < 243) {
-                // IntelliJ 2024.2 及之前版本：使用旧版 API
-                getActiveRequestLegacy(diffEditor)
-            } else {
-                // IntelliJ 2024.3 及之后版本：使用新版 API
-                getActiveRequestModern(diffEditor)
-            }
-        } catch (e: Exception) {
-            logger.warning("Failed to get activeRequest: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * 旧版 API (IntelliJ 2024.2 及之前)
-     * 使用 DiffRequestProcessorEditor.getProcessor().activeRequest
-     */
-    private fun getActiveRequestLegacy(diffEditor: FileEditor): com.intellij.diff.requests.DiffRequest? {
-        return try {
-            val processorMethod = diffEditor.javaClass.getMethod("getProcessor")
-            val processor = processorMethod.invoke(diffEditor)
-            if (processor != null) {
-                val activeRequestMethod = processor.javaClass.getMethod("getActiveRequest")
-                activeRequestMethod.invoke(processor) as? com.intellij.diff.requests.DiffRequest
-            } else {
-                null
-            }
-        } catch (e: NoSuchMethodException) {
-            logger.info("⚠️ getProcessor() not available in this version, trying modern API")
-            getActiveRequestModern(diffEditor)
-        } catch (e: Exception) {
-            logger.warning("Failed to get activeRequest via legacy API: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * 新版 API (IntelliJ 2024.3 及之后)
-     * 使用 DiffEditorViewerFileEditor.editorViewer
-     */
-    private fun getActiveRequestModern(diffEditor: FileEditor): com.intellij.diff.requests.DiffRequest? {
-        return try {
-            // 尝试获取 editorViewer 字段
-            val editorViewerField = try {
-                diffEditor.javaClass.getDeclaredField("editorViewer").apply { isAccessible = true }
-            } catch (e: NoSuchFieldException) {
-                null
-            }
-
-            val editorViewer = if (editorViewerField != null) {
-                editorViewerField.get(diffEditor)
-            } else {
-                // 尝试通过 getter 方法获取
-                try {
-                    val getterMethod = diffEditor.javaClass.getMethod("getEditorViewer")
-                    getterMethod.invoke(diffEditor)
-                } catch (e: NoSuchMethodException) {
-                    null
-                }
-            }
-
-            if (editorViewer != null) {
-                // 从 editorViewer 获取 request
-                val requestMethod = try {
-                    editorViewer.javaClass.getMethod("getRequest")
-                } catch (e: NoSuchMethodException) {
-                    try {
-                        editorViewer.javaClass.getMethod("getActiveRequest")
-                    } catch (e2: NoSuchMethodException) {
-                        null
-                    }
-                }
-
-                requestMethod?.invoke(editorViewer) as? com.intellij.diff.requests.DiffRequest
-            } else {
-                logger.info("⚠️ Could not find editorViewer for: ${diffEditor.javaClass.name}")
-                null
-            }
-        } catch (e: Exception) {
-            logger.warning("Failed to get activeRequest via modern API: ${e.message}")
-            null
-        }
+        return DiffEditorCompat.getActiveRequest(diffEditor)
     }
 
     /**

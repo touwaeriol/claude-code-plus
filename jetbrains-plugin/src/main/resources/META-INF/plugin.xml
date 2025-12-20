@@ -44,7 +44,7 @@
     <!-- Java plugin dependency for PsiClass, PsiMethod, ClassInheritorsSearch, etc. -->
     <depends optional="true" config-file="plugin-withJava.xml">com.intellij.java</depends>
     <!-- Git plugin dependency for Git MCP (VCS integration) -->
-    <depends optional="true">Git4Idea</depends>
+    <depends optional="true" config-file="plugin-withGit.xml">Git4Idea</depends>
 
     <idea-version since-build="242.0" until-build="253.*"/>
     
@@ -113,6 +113,20 @@
         <!-- Generate Commit Message Service -->
         <projectService
             serviceImplementation="com.asakii.plugin.vcs.GenerateCommitMessageService"/>
+
+        <!-- Language Analysis Service - Default implementation (Noop) -->
+        <!-- When Java plugin is available, plugin-withJava.xml will override with JavaLanguageAnalysisService -->
+        <projectService
+            serviceInterface="com.asakii.plugin.services.LanguageAnalysisService"
+            serviceImplementation="com.asakii.plugin.services.NoopLanguageAnalysisService"
+            overrides="false"/>
+
+        <!-- Git Branch Service - Default implementation (Noop) -->
+        <!-- When Git4Idea is available, plugin-withGit.xml will override with GitBranchServiceImpl -->
+        <projectService
+            serviceInterface="com.asakii.plugin.services.GitBranchService"
+            serviceImplementation="com.asakii.plugin.services.NoopGitBranchService"
+            overrides="false"/>
     </extensions>
 
     <actions>

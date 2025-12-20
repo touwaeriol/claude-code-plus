@@ -1,0 +1,16 @@
+<idea-plugin>
+    <!--
+    Git4Idea 可选依赖配置
+
+    当 Git4Idea 插件安装时，此文件会被加载。
+    GitBranchServiceImpl 会覆盖默认的 NoopGitBranchService，
+    提供完整的 Git 分支操作功能。
+    -->
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- 覆盖默认的 NoopGitBranchService -->
+        <projectService
+            serviceInterface="com.asakii.plugin.services.GitBranchService"
+            serviceImplementation="com.asakii.plugin.services.GitBranchServiceImpl"
+            overrides="true"/>
+    </extensions>
+</idea-plugin>

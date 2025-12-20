@@ -14,6 +14,7 @@ import com.intellij.openapi.roots.TestSourcesFilter
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ide.scratch.ScratchUtil
 import com.intellij.psi.codeStyle.NameUtil
+import com.asakii.plugin.services.LanguageAnalysisService
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -131,8 +132,9 @@ class FileIndexTool(private val project: Project) {
                     
                     SearchIndexType.Classes -> {
                         // 类搜索 - 需要 Java 插件支持
-                        val cache = JavaPluginHelper.getShortNamesCache(project)
-                        if (cache == null) {
+                        val langService = LanguageAnalysisService.getInstance(project)
+                        val cache = langService.getShortNamesCache()
+                        if (cache == null || !langService.isAvailable()) {
                             results.add(IndexSearchResult(
                                 name = "Classes search",
                                 type = "Info",
@@ -141,7 +143,7 @@ class FileIndexTool(private val project: Project) {
                             totalFound = 1
                         } else {
                             val matcher = NameUtil.buildMatcher("*$query").build()
-                            val allClassNames = JavaPluginHelper.getAllClassNames(cache)
+                            val allClassNames = langService.getAllClassNames(cache)
 
                             // 过滤并按匹配度排序
                             val sortedNames = allClassNames
@@ -151,7 +153,7 @@ class FileIndexTool(private val project: Project) {
                             // 收集结果（按排序后的顺序）
                             val classSearchScope = if (includeLibraries) GlobalSearchScope.allScope(project) else baseScope
                             val filteredResults = sortedNames.flatMap { name ->
-                                JavaPluginHelper.getClassesByName(cache, name, classSearchScope).mapNotNull { psiClass ->
+                                langService.getClassesByName(cache, name, classSearchScope).mapNotNull { psiClass ->
                                     val file = psiClass.containingFile?.virtualFile
                                     if (file != null && baseScope.contains(file)) {
                                         IndexSearchResult(
@@ -170,8 +172,9 @@ class FileIndexTool(private val project: Project) {
 
                     SearchIndexType.Symbols -> {
                         // 符号搜索 - 需要 Java 插件支持
-                        val cache = JavaPluginHelper.getShortNamesCache(project)
-                        if (cache == null) {
+                        val langService = LanguageAnalysisService.getInstance(project)
+                        val cache = langService.getShortNamesCache()
+                        if (cache == null || !langService.isAvailable()) {
                             results.add(IndexSearchResult(
                                 name = "Symbols search",
                                 type = "Info",
@@ -183,13 +186,13 @@ class FileIndexTool(private val project: Project) {
                             val symbolSearchScope = if (includeLibraries) GlobalSearchScope.allScope(project) else baseScope
 
                             // 搜索方法 - 按匹配度排序
-                            val allMethodNames = JavaPluginHelper.getAllMethodNames(cache)
+                            val allMethodNames = langService.getAllMethodNames(cache)
                             val sortedMethodNames = allMethodNames
                                 .filter { matcher.matches(it) }
                                 .sortedByDescending { matcher.matchingDegree(it) }
 
                             val methodResults = sortedMethodNames.flatMap { name ->
-                                JavaPluginHelper.getMethodsByName(cache, name, symbolSearchScope).mapNotNull { method ->
+                                langService.getMethodsByName(cache, name, symbolSearchScope).mapNotNull { method ->
                                     val file = method.containingFile?.virtualFile
                                     if (file != null && baseScope.contains(file)) {
                                         IndexSearchResult(
@@ -204,13 +207,13 @@ class FileIndexTool(private val project: Project) {
                             }
 
                             // 搜索字段 - 按匹配度排序
-                            val allFieldNames = JavaPluginHelper.getAllFieldNames(cache)
+                            val allFieldNames = langService.getAllFieldNames(cache)
                             val sortedFieldNames = allFieldNames
                                 .filter { matcher.matches(it) }
                                 .sortedByDescending { matcher.matchingDegree(it) }
 
                             val fieldResults = sortedFieldNames.flatMap { name ->
-                                JavaPluginHelper.getFieldsByName(cache, name, symbolSearchScope).mapNotNull { field ->
+                                langService.getFieldsByName(cache, name, symbolSearchScope).mapNotNull { field ->
                                     val file = field.containingFile?.virtualFile
                                     if (file != null && baseScope.contains(file)) {
                                         IndexSearchResult(

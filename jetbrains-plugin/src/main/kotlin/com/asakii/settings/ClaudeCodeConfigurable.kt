@@ -2,6 +2,7 @@ package com.asakii.settings
 
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.SearchableConfigurable
+import com.asakii.plugin.compat.BrowseButtonCompat
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBCheckBox
@@ -244,13 +245,12 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         panel.add(createSectionTitle("Runtime Settings"))
         panel.add(createDescription("Core configuration for Claude Code integration."))
 
-        // Node.js 路径（使用兼容 IDEA 2024.2+ 的方式）
+        // Node.js 路径（使用兼容层自动选择最佳 API）
         val descriptor = FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor()
         nodePathField = TextFieldWithBrowseButton().apply {
-            // 使用带 4 参数的 API 以兼容 IDEA 2024.2
-            // 新的 2 参数 API addBrowseFolderListener(Project, FileChooserDescriptor) 在 2024.3 才引入
-            @Suppress("DEPRECATION")
-            addBrowseFolderListener(
+            // 使用兼容层：2024.2 使用旧 API，2024.3+ 使用新 API
+            BrowseButtonCompat.addBrowseFolderListener(
+                this,
                 "Select Node.js Executable",
                 "Choose the path to node executable",
                 null,

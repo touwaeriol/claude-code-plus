@@ -6,7 +6,7 @@ import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffManager
 import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.ide.util.PropertiesComponent
-import com.intellij.l10n.LocalizationUtil
+import com.asakii.plugin.compat.LocalizationCompat
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -461,7 +461,7 @@ class JetBrainsApiImpl(private val ideaProject: Project) : JetBrainsApi {
             }
 
             return try {
-                val locale = LocalizationUtil.getLocale(true)
+                val locale = LocalizationCompat.getLocale()
                 "${locale.language}-${locale.country}"
             } catch (e: Exception) {
                 val locale = Locale.getDefault()
