@@ -172,7 +172,12 @@ data class ClaudeAgentOptions(
 
     // Legacy streaming (consider using includePartialMessages instead)
     val stream: Boolean = false,
-    val streamingCallback: ((String) -> Unit)? = null
+    val streamingCallback: ((String) -> Unit)? = null,
+
+    // Chrome integration
+    // When true, passes --chrome to CLI; when false, passes --no-chrome
+    // null means use CLI default (respects user config)
+    val chromeEnabled: Boolean? = null
 )
 
 /**

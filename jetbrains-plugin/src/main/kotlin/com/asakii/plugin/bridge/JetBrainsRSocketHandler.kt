@@ -252,8 +252,10 @@ class JetBrainsRSocketHandler(
                     .build()
             }
 
+            // 注意：发送 defaultModel (ID 如 "HAIKU_45")，而不是 defaultModelId (modelId 如 "claude-haiku-4-5-20251001")
+            // 前端 applyIdeSettings 期望接收的是模型 ID，以便正确查找模型信息
             val ideSettings = IdeSettings.newBuilder()
-                .setDefaultModelId(settings.defaultModelId)
+                .setDefaultModelId(settings.defaultModel)
                 .setDefaultModelName(settings.defaultModelEnum.displayName)
                 .setDefaultBypassPermissions(settings.defaultBypassPermissions)
                 .setEnableUserInteractionMcp(settings.enableUserInteractionMcp)
@@ -510,8 +512,10 @@ class JetBrainsRSocketHandler(
             }
 
             // 构建 IdeSettings
+            // 注意：发送 defaultModel (ID 如 "HAIKU_45")，而不是 defaultModelId (modelId 如 "claude-haiku-4-5-20251001")
+            // 前端 applyIdeSettings 期望接收的是模型 ID，以便正确查找模型信息
             val ideSettings = IdeSettings.newBuilder()
-                .setDefaultModelId(settings.defaultModelId)
+                .setDefaultModelId(settings.defaultModel)
                 .setDefaultModelName(settings.defaultModelEnum.displayName)
                 .setDefaultBypassPermissions(settings.defaultBypassPermissions)
                 .setEnableUserInteractionMcp(settings.enableUserInteractionMcp)

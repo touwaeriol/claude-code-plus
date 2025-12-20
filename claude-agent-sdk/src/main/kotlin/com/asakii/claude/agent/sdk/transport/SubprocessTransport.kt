@@ -603,6 +603,24 @@ class SubprocessTransport(
             }
         }
         
+        // Chrome integration
+        // --chrome: enable Chrome extension integration
+        // --no-chrome: disable Chrome extension integration
+        when (options.chromeEnabled) {
+            true -> {
+                command.add("--chrome")
+                logger.info("🌐 Chrome 集成已启用 (--chrome)")
+            }
+            false -> {
+                command.add("--no-chrome")
+                logger.info("🌐 Chrome 集成已禁用 (--no-chrome)")
+            }
+            null -> {
+                // null: use CLI default (respects user config)
+                logger.debug("🌐 Chrome 集成使用默认配置")
+            }
+        }
+
         // Extra arguments (排除已经显式处理的参数，避免重复)
         // 已处理的参数：output-format (第 275 行), print (第 278-280 行)
         val processedKeys = setOf("output-format", "print")

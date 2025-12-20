@@ -280,7 +280,7 @@
             v-if="showChromeToggle"
             label="Chrome"
             :enabled="chromeEnabled"
-            :disabled="!enabled || !chromeInstalled"
+            :disabled="!enabled"
             :tooltip="chromeToggleTooltip"
             @toggle="handleChromeToggle"
           >
@@ -594,12 +594,9 @@ function handleClearError() {
 
 // Chrome 扩展开关处理
 const chromeToggleTooltip = computed(() => {
-  if (!props.chromeInstalled) {
-    return 'Chrome extension not installed'
-  }
   return props.chromeEnabled
-    ? 'Chrome extension enabled (--chrome)'
-    : 'Chrome extension disabled (--no-chrome)'
+    ? 'Chrome enabled (--chrome)'
+    : 'Chrome disabled (--no-chrome)'
 })
 
 function handleChromeToggle(enabled: boolean) {
