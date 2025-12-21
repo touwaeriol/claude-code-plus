@@ -348,6 +348,16 @@ class HttpApiServer(
                                     )
                                     call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
+                                "ide.openUrl" -> {
+                                    val dataObj = request.data?.jsonObject
+                                    val url = dataObj?.get("url")?.jsonPrimitive?.contentOrNull ?: ""
+                                    val result = ideTools.openUrl(url)
+                                    val response = result.fold(
+                                        onSuccess = { FrontendResponse(success = true) },
+                                        onFailure = { FrontendResponse(success = false, error = it.message) }
+                                    )
+                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
+                                }
                                 "settings.getDefault" -> {
                                     // 获取默认配置（浏览器模式下使用，IDE 模式下使用 RSocket）
                                     val config = serviceConfigProvider()

@@ -304,6 +304,17 @@ export async function detectNode() {
   return getIdeaBridge().query('node.detect')
 }
 
+export async function openUrl(url: string) {
+  // IDE 模式：通过后端 BrowserUtil 打开系统浏览器
+  // 浏览器模式：回退到 window.open
+  if (getIdeaBridge().isInIde()) {
+    return getIdeaBridge().query('ide.openUrl', { url })
+  } else {
+    window.open(url, '_blank')
+    return { success: true }
+  }
+}
+
 // 为兼容性保留，也导出命名方式
 export const ideService = {
   openFile,
@@ -312,7 +323,8 @@ export const ideService = {
   getFileContent,
   getLocale,
   setLocale,
-  detectNode
+  detectNode,
+  openUrl
 }
 
 export const aiAgentBridgeService = {

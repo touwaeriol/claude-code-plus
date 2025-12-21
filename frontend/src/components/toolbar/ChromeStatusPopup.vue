@@ -87,6 +87,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { ideService } from '@/services/ideaBridge'
 
 export interface ChromeStatus {
   installed: boolean
@@ -137,16 +138,16 @@ function handleToggle(event: Event) {
 }
 
 function handleInstall() {
-  window.open(CHROME_URLS.install, '_blank')
+  ideService.openUrl(CHROME_URLS.install)
   emit('install')
 }
 
 function handleManagePermissions() {
-  window.open(CHROME_URLS.managePermissions, '_blank')
+  ideService.openUrl(CHROME_URLS.managePermissions)
 }
 
 function handleReconnect() {
-  window.open(CHROME_URLS.reconnect, '_blank')
+  ideService.openUrl(CHROME_URLS.reconnect)
 }
 
 function close() {
