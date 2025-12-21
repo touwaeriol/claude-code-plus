@@ -61,6 +61,14 @@ const TOOL_ICONS: Record<string, string> = {
   ReadMcpResource: '📖',
   ExitPlanMode: '✅',
   EnterPlanMode: '📝',
+  // Terminal MCP 工具
+  'mcp__terminal__Terminal': '💻',
+  'mcp__terminal__TerminalRead': '📤',
+  'mcp__terminal__TerminalList': '📋',
+  'mcp__terminal__TerminalKill': '🛑',
+  'mcp__terminal__TerminalInterrupt': '⏹️',
+  'mcp__terminal__TerminalTypes': '🔧',
+  'mcp__terminal__TerminalRename': '✏️',
   // 小写格式（兼容旧格式）
   read: '📄',
   write: '✏️',
@@ -110,6 +118,14 @@ const ACTION_TYPES: Record<string, string> = {
   ReadMcpResource: 'ReadMCP',
   ExitPlanMode: 'ExitPlan',
   EnterPlanMode: 'EnterPlan',
+  // Terminal MCP 工具
+  'mcp__terminal__Terminal': 'Terminal',
+  'mcp__terminal__TerminalRead': 'TerminalRead',
+  'mcp__terminal__TerminalList': 'TerminalList',
+  'mcp__terminal__TerminalKill': 'TerminalKill',
+  'mcp__terminal__TerminalInterrupt': 'TerminalInterrupt',
+  'mcp__terminal__TerminalTypes': 'TerminalTypes',
+  'mcp__terminal__TerminalRename': 'TerminalRename',
   // 小写格式（兼容旧格式）
   read: 'Read',
   write: 'Write',
@@ -323,6 +339,56 @@ export function extractToolDisplayInfo(
     case 'ReadMcpResource':
       primaryInfo = toolInput.uri || ''
       secondaryInfo = toolInput.server || ''
+      break
+
+    // Terminal MCP 工具
+    case 'mcp__terminal__Terminal': {
+      // 显示命令，session_id 作为次要信息
+      const cmd = toolInput.command || ''
+      primaryInfo = formatBashCommand(cmd)
+      secondaryInfo = toolInput.session_id ? `session: ${toolInput.session_id}` : ''
+      break
+    }
+
+    case 'mcp__terminal__TerminalRead':
+      // 显示 session_id
+      primaryInfo = toolInput.session_id || ''
+      secondaryInfo = toolInput.search ? `search: ${toolInput.search}` : ''
+      break
+
+    case 'mcp__terminal__TerminalList':
+      primaryInfo = 'List sessions'
+      secondaryInfo = ''
+      break
+
+    case 'mcp__terminal__TerminalKill': {
+      // 显示要关闭的 session_ids
+      const ids = toolInput.session_ids as string[] | undefined
+      if (toolInput.all) {
+        primaryInfo = 'all sessions'
+      } else if (ids && ids.length > 0) {
+        primaryInfo = ids.length === 1 ? ids[0] : `${ids.length} sessions`
+      } else {
+        primaryInfo = ''
+      }
+      secondaryInfo = ''
+      break
+    }
+
+    case 'mcp__terminal__TerminalInterrupt':
+      // 显示 session_id
+      primaryInfo = toolInput.session_id || ''
+      secondaryInfo = ''
+      break
+
+    case 'mcp__terminal__TerminalTypes':
+      primaryInfo = 'Get shell types'
+      secondaryInfo = ''
+      break
+
+    case 'mcp__terminal__TerminalRename':
+      primaryInfo = toolInput.session_id || ''
+      secondaryInfo = toolInput.new_name ? `→ ${toolInput.new_name}` : ''
       break
 
     default:
