@@ -116,7 +116,10 @@ data class RpcConnectOptions(
     val sandboxMode: RpcSandboxMode? = null,
 
     // === 会话恢复相关配置 ===
-    val replayUserMessages: Boolean? = null  // 恢复会话时重放用户消息
+    val replayUserMessages: Boolean? = null,  // 恢复会话时重放用户消息
+
+    // === Chrome 扩展配置 ===
+    val chromeEnabled: Boolean? = null  // 是否启用 Chrome 扩展（需要重连生效）
 )
 
 /**

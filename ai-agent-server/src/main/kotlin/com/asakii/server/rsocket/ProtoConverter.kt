@@ -175,7 +175,8 @@ object ProtoConverter {
         baseUrl = if (hasBaseUrl()) baseUrl else null,
         apiKey = if (hasApiKey()) apiKey else null,
         sandboxMode = if (hasSandboxMode()) sandboxMode.toRpc() else null,
-        replayUserMessages = if (hasReplayUserMessages()) replayUserMessages else null
+        replayUserMessages = if (hasReplayUserMessages()) replayUserMessages else null,
+        chromeEnabled = if (hasChromeEnabled()) chromeEnabled else null
     )
 
     // ==================== ConnectResult ====================

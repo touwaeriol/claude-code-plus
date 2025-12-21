@@ -16,8 +16,13 @@
           <div class="status-list">
             <div class="status-item">
               <span class="status-label">Installed</span>
-              <span class="status-value" :class="status?.installed ? 'value-success' : 'value-warning'">
-                {{ status?.installed ? 'Yes' : 'No' }}
+              <span class="status-value-group">
+                <span class="status-value" :class="status?.installed ? 'value-success' : 'value-warning'">
+                  {{ status?.installed ? 'Yes' : 'No' }}
+                </span>
+                <button class="install-link-btn" @click="handleInstall" title="Install Chrome Extension">
+                  Install
+                </button>
               </span>
             </div>
             <div v-if="status?.extensionVersion" class="status-item">
@@ -113,7 +118,7 @@ const emit = defineEmits<{
 
 // Chrome 扩展相关 URL（与官方 CLI /chrome 命令一致）
 const CHROME_URLS = {
-  install: 'https://claude.ai/chrome',
+  install: 'https://claude.com/chrome',
   managePermissions: 'https://clau.de/chrome/permissions',
   reconnect: 'https://clau.de/chrome/reconnect'
 }
@@ -250,6 +255,29 @@ function close() {
 .status-value {
   font-weight: 500;
   color: var(--theme-foreground, #24292e);
+}
+
+.status-value-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.install-link-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--theme-accent, #0366d6);
+  background: transparent;
+  border: 1px solid var(--theme-accent, #0366d6);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.install-link-btn:hover {
+  background: var(--theme-accent, #0366d6);
+  color: white;
 }
 
 .value-success {

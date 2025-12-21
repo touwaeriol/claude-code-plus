@@ -805,7 +805,9 @@ class AiAgentRpcServiceImpl(
             // Claude CLI settings.json 路径（用于加载环境变量等配置）
             settings = defaults.settings,
             // IDEA 文件同步 hooks（由 jetbrains-plugin 提供）
-            hooks = defaults.ideaFileSyncHooks
+            hooks = defaults.ideaFileSyncHooks,
+            // Chrome 扩展配置（从前端传递）
+            chromeEnabled = options.chromeEnabled
         )
 
         return ClaudeOverrides(options = claudeOptions)
