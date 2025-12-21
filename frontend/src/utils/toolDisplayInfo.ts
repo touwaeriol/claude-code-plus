@@ -9,6 +9,9 @@ import { i18n } from '@/i18n'
 // 获取翻译函数
 const t = (key: string, params?: Record<string, any>) => i18n.global.t(key, params)
 
+// 终端 SVG 图标
+const TERMINAL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>'
+
 export interface ToolDisplayInfo {
   /** 工具图标 */
   icon: string
@@ -61,14 +64,14 @@ const TOOL_ICONS: Record<string, string> = {
   ReadMcpResource: '📖',
   ExitPlanMode: '✅',
   EnterPlanMode: '📝',
-  // Terminal MCP 工具（统一使用终端图标）
-  'mcp__terminal__Terminal': '💻',
-  'mcp__terminal__TerminalRead': '💻',
-  'mcp__terminal__TerminalList': '💻',
-  'mcp__terminal__TerminalKill': '💻',
-  'mcp__terminal__TerminalInterrupt': '💻',
-  'mcp__terminal__TerminalTypes': '💻',
-  'mcp__terminal__TerminalRename': '💻',
+  // Terminal MCP 工具（统一使用终端 SVG 图标）
+  'mcp__terminal__Terminal': TERMINAL_SVG,
+  'mcp__terminal__TerminalRead': TERMINAL_SVG,
+  'mcp__terminal__TerminalList': TERMINAL_SVG,
+  'mcp__terminal__TerminalKill': TERMINAL_SVG,
+  'mcp__terminal__TerminalInterrupt': TERMINAL_SVG,
+  'mcp__terminal__TerminalTypes': TERMINAL_SVG,
+  'mcp__terminal__TerminalRename': TERMINAL_SVG,
   // 小写格式（兼容旧格式）
   read: '📄',
   write: '✏️',

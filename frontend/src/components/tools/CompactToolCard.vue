@@ -8,8 +8,13 @@
   >
     <!-- 单行布局 - 只在标题区域绑定点击事件 -->
     <div class="card-content" @click="handleClick">
-      <!-- 图标 -->
-      <span class="tool-icon">{{ displayInfo?.icon || '🔧' }}</span>
+      <!-- 图标（支持 emoji 或 SVG） -->
+      <span
+        v-if="isSvgIcon"
+        class="tool-icon"
+        v-html="displayInfo?.icon"
+      />
+      <span v-else class="tool-icon">{{ displayInfo?.icon || '🔧' }}</span>
 
       <!-- 操作类型 -->
       <span class="action-type">{{ displayInfo?.actionType || 'Unknown' }}</span>
@@ -141,6 +146,12 @@ const emit = defineEmits<{
 
 const isClickable = computed(() => {
   return props.clickable && (props.hasDetails || props.displayInfo.status !== 'pending')
+})
+
+// 判断图标是否为 SVG
+const isSvgIcon = computed(() => {
+  const icon = props.displayInfo?.icon
+  return icon && icon.trim().startsWith('<svg')
 })
 
 function handleClick() {
