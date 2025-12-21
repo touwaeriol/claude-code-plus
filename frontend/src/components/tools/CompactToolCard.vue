@@ -433,7 +433,7 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--theme-error) 5%, transparent);
   border-radius: 4px;
   font-size: var(--theme-editor-font-size, 12px);
-  font-family: var(--theme-editor-font-family);
+  font-family: var(--theme-editor-font-family), monospace;
   color: var(--theme-error);
   white-space: pre-wrap;
   word-break: break-word;
