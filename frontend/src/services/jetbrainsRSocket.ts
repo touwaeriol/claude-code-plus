@@ -225,7 +225,8 @@ function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
       defaultThinkingTokens: 8096,
       defaultThinkingLevelId: 'ultra',
       thinkingLevels: defaultThinkingLevels,
-      permissionMode: 'default'
+      permissionMode: 'default',
+      defaultChromeEnabled: false
     }
   }
 
@@ -247,7 +248,8 @@ function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
           isCustom: level.isCustom
         }))
       : defaultThinkingLevels,
-    permissionMode: s.permissionMode || 'default'
+    permissionMode: s.permissionMode || 'default',
+    defaultChromeEnabled: s.defaultChromeEnabled
   }
 }
 
