@@ -3,6 +3,16 @@
  * 参考 Augment Code 的图标设计，提供更统一、更直观的图标映射
  */
 
+// 终端工具统一使用的 SVG 图标（显示器+光标）
+// 原始 SVG 文件位置: src/assets/icons/terminal.svg
+import terminalIconRaw from '@/assets/icons/terminal.svg?raw'
+
+// 处理 SVG 使其适合内联显示
+const TERMINAL_ICON_SVG = terminalIconRaw
+  .replace(/<svg/, '<svg width="1em" height="1em"')
+  .replace(/fill="currentColor"/g, '')  // 移除原有 fill，在外层统一设置
+  .replace(/<svg/, '<svg fill="currentColor"')
+
 export interface ToolIconConfig {
   /** 图标字符（Emoji 或 Unicode） */
   icon: string
@@ -97,50 +107,81 @@ export const ENHANCED_TOOL_ICONS: Record<string, ToolIconConfig> = {
     description: '搜索未截断内容',
   },
 
-  // ==================== 命令执行 ====================
+  // ==================== 命令执行 / 终端 ====================
+  // 所有终端相关工具统一使用 TERMINAL_ICON_SVG
   'bash': {
-    icon: '💻',
+    icon: TERMINAL_ICON_SVG,
     description: '终端命令',
   },
   'Bash': {
-    icon: '💻',
+    icon: TERMINAL_ICON_SVG,
     description: '终端命令',
   },
   'launch-process': {
-    icon: '🚀',
+    icon: TERMINAL_ICON_SVG,
     description: '启动进程',
   },
   'bash-output': {
-    icon: '📤',
+    icon: TERMINAL_ICON_SVG,
     description: '命令输出',
   },
   'BashOutput': {
-    icon: '📤',
+    icon: TERMINAL_ICON_SVG,
     description: '命令输出',
   },
   'kill-shell': {
-    icon: '🛑',
+    icon: TERMINAL_ICON_SVG,
     description: '终止进程',
   },
   'KillShell': {
-    icon: '🛑',
+    icon: TERMINAL_ICON_SVG,
     description: '终止进程',
   },
   'kill-process': {
-    icon: '🛑',
+    icon: TERMINAL_ICON_SVG,
     description: '终止进程',
   },
   'read-process': {
-    icon: '📖',
+    icon: TERMINAL_ICON_SVG,
     description: '读取进程输出',
   },
   'write-process': {
-    icon: '✍️',
+    icon: TERMINAL_ICON_SVG,
     description: '写入进程输入',
   },
   'list-processes': {
-    icon: '📋',
+    icon: TERMINAL_ICON_SVG,
     description: '列出进程',
+  },
+
+  // ==================== Terminal MCP 工具 ====================
+  'mcp__terminal__Terminal': {
+    icon: TERMINAL_ICON_SVG,
+    description: '终端执行命令',
+  },
+  'mcp__terminal__TerminalRead': {
+    icon: TERMINAL_ICON_SVG,
+    description: '读取终端输出',
+  },
+  'mcp__terminal__TerminalList': {
+    icon: TERMINAL_ICON_SVG,
+    description: '列出终端会话',
+  },
+  'mcp__terminal__TerminalKill': {
+    icon: TERMINAL_ICON_SVG,
+    description: '终止终端会话',
+  },
+  'mcp__terminal__TerminalTypes': {
+    icon: TERMINAL_ICON_SVG,
+    description: '获取终端类型',
+  },
+  'mcp__terminal__TerminalRename': {
+    icon: TERMINAL_ICON_SVG,
+    description: '重命名终端',
+  },
+  'mcp__terminal__TerminalInterrupt': {
+    icon: TERMINAL_ICON_SVG,
+    description: '中断终端命令',
   },
 
   // ==================== 网络操作 ====================

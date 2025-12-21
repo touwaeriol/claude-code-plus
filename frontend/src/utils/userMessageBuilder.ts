@@ -52,12 +52,12 @@ export function parseUserMessage(content: ContentBlock[]): ParsedUserMessage {
  * 1. 用户内容（文本 + 图片）
  * 2. <system-reminder type="open-file" .../>
  * 3. <system-reminder type="select-lines" ...>...</system-reminder>
- * 4. <system-reminder type="attachment">
+ * 4. <system-reminder type="attachment-start"/>
  * 5.   contexts...
- * 6. </system-reminder>
+ * 6. <system-reminder type="attachment-end"/>
  */
 function parseUserMessageNewFormat(content: ContentBlock[]): ParsedUserMessage | null {
-  // 检测是否是新格式：从后往前找 </system-reminder> 结束标签
+  // 检测是否是新格式：从后往前找 system-reminder 标签
   let hasNewFormat = false
   for (let i = content.length - 1; i >= 0; i--) {
     const block = content[i]
@@ -100,14 +100,14 @@ function parseUserMessageNewFormat(content: ContentBlock[]): ParsedUserMessage |
       const reminder = parseSystemReminder(text)
       if (reminder) {
         switch (reminder.type) {
-          case 'attachment':
-            if (!reminder.isStart) {
-              // </system-reminder> 结束标签，开始收集 attachment
-              inAttachmentSection = true
-            } else {
-              // <system-reminder type="attachment"> 开始标签，结束收集
-              inAttachmentSection = false
-            }
+          case 'attachment-end':
+            // <system-reminder type="attachment-end"/> 标签，开始收集 attachment
+            inAttachmentSection = true
+            break
+
+          case 'attachment-start':
+            // <system-reminder type="attachment-start"/> 标签，结束收集
+            inAttachmentSection = false
             break
 
           case 'open-file':
@@ -271,7 +271,7 @@ export interface BuildUserMessageContentOptions {
  *
  * 新的结构（与 Claude Code CLI 对齐）：
  * 1. 用户输入内容在前（文本 + 图片）
- * 2. contexts 在后，用 <system-reminder type="attachment"> 包裹
+ * 2. contexts 在后，用 attachment-start 和 attachment-end 自闭合标签包裹
  *
  * 注意：open-file 和 select-lines 由 ChatInput.vue 的 appendSystemReminders 处理
  */
@@ -284,10 +284,10 @@ export function buildUserMessageContent(options: BuildUserMessageContentOptions)
     content.push({ type: 'text', text: options.text.trim() } as TextBlock)
   }
 
-  // 2. 然后添加 contexts（在后面），用 <system-reminder type="attachment"> 包裹
+  // 2. 然后添加 contexts（在后面），用自闭合标签标记开始和结束
   if (contexts.length > 0) {
     // 开始标签
-    content.push({ type: 'text', text: '<system-reminder type="attachment">' } as TextBlock)
+    content.push({ type: 'text', text: '<system-reminder type="attachment-start"/>' } as TextBlock)
 
     for (const context of contexts) {
       if (context.type === 'file') {
@@ -327,7 +327,7 @@ export function buildUserMessageContent(options: BuildUserMessageContentOptions)
     }
 
     // 结束标签
-    content.push({ type: 'text', text: '</system-reminder>' } as TextBlock)
+    content.push({ type: 'text', text: '<system-reminder type="attachment-end"/>' } as TextBlock)
   }
 
   return content
@@ -424,8 +424,8 @@ export function ideContextToContentBlocks(ideContext: ActiveFileInfo | null | un
     }
 
     if (file.selectedContent) {
-      // 有选中内容，使用非自闭合标签
-      selectLinesTag += `>${file.selectedContent}</system-reminder>`
+      // 有选中内容，使用非自闭合标签，内容需要 XML 转义
+      selectLinesTag += `>${escapeXml(file.selectedContent)}</system-reminder>`
     } else {
       // 无选中内容，使用自闭合标签
       selectLinesTag += '/>'

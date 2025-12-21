@@ -39,7 +39,11 @@ object StandaloneLogging {
     Files.createDirectories(logDir!!)
     println("📝 [StandaloneLogging] logDir created: ${logDir!!.toAbsolutePath()}")
 
-    val loggerContext = LoggerFactory.getILoggerFactory() as LoggerContext
+    val loggerContext = LoggerFactory.getILoggerFactory() as? LoggerContext
+        ?: run {
+            println("⚠️ [StandaloneLogging] LoggerFactory is not Logback LoggerContext, skipping configuration")
+            return
+        }
 
     // Bridge java.util.logging → SLF4J/logback so SDK CLI 输出也会写入 server.log
     try {

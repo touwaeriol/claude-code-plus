@@ -293,8 +293,33 @@ sealed class ContentItem {
     
     companion object {
         fun text(content: String) = Text(content)
-        fun json(data: Any) = Json(JsonPrimitive(data.toString()))
+        fun json(data: Any): Json = Json(anyToJsonElement(data))
         fun binary(data: ByteArray, mimeType: String) = Binary(data, mimeType)
+
+        /**
+         * 递归将任意对象转换为 JsonElement
+         */
+        private fun anyToJsonElement(value: Any?): JsonElement {
+            return when (value) {
+                null -> JsonNull
+                is JsonElement -> value
+                is String -> JsonPrimitive(value)
+                is Number -> JsonPrimitive(value)
+                is Boolean -> JsonPrimitive(value)
+                is Map<*, *> -> buildJsonObject {
+                    value.forEach { (k, v) ->
+                        put(k.toString(), anyToJsonElement(v))
+                    }
+                }
+                is List<*> -> buildJsonArray {
+                    value.forEach { add(anyToJsonElement(it)) }
+                }
+                is Array<*> -> buildJsonArray {
+                    value.forEach { add(anyToJsonElement(it)) }
+                }
+                else -> JsonPrimitive(value.toString())
+            }
+        }
     }
 }
 

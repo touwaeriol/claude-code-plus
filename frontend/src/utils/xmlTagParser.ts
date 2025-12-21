@@ -237,7 +237,7 @@ export function parseXmlTag(text: string): XmlTagInfo | null {
 /**
  * System Reminder 类型
  */
-export type SystemReminderType = 'open-file' | 'select-lines' | 'attachment'
+export type SystemReminderType = 'open-file' | 'select-lines' | 'attachment-start' | 'attachment-end'
 
 /**
  * 解析后的 open-file 系统提醒
@@ -266,12 +266,17 @@ export interface ParsedSelectLinesReminder {
 }
 
 /**
- * 解析后的 attachment 系统提醒（标记开始/结束）
+ * 解析后的 attachment-start 系统提醒
  */
-export interface ParsedAttachmentReminder {
-  type: 'attachment'
-  /** 是开始标签还是结束标签 */
-  isStart: boolean
+export interface ParsedAttachmentStartReminder {
+  type: 'attachment-start'
+}
+
+/**
+ * 解析后的 attachment-end 系统提醒
+ */
+export interface ParsedAttachmentEndReminder {
+  type: 'attachment-end'
 }
 
 /**
@@ -280,7 +285,8 @@ export interface ParsedAttachmentReminder {
 export type ParsedSystemReminder =
   | ParsedOpenFileReminder
   | ParsedSelectLinesReminder
-  | ParsedAttachmentReminder
+  | ParsedAttachmentStartReminder
+  | ParsedAttachmentEndReminder
 
 /**
  * 解析 system-reminder 标签（使用 parseXmlTag）
@@ -288,7 +294,8 @@ export type ParsedSystemReminder =
  * 支持的格式：
  * - <system-reminder type="open-file" path="xxx"/>
  * - <system-reminder type="select-lines" path="xxx" start="N" end="M">内容</system-reminder>
- * - <system-reminder type="attachment"> 或 </system-reminder>
+ * - <system-reminder type="attachment-start"/>
+ * - <system-reminder type="attachment-end"/>
  *
  * @param text 要解析的文本
  * @returns 解析结果，如果不是 system-reminder 标记则返回 null
@@ -298,12 +305,9 @@ export function parseSystemReminder(text: string): ParsedSystemReminder | null {
   if (!tagInfo) return null
   if (tagInfo.tagName !== 'system-reminder') return null
 
-  // 结束标签 </system-reminder>
+  // 结束标签 </system-reminder> 不再作为 attachment 结束标记
   if (tagInfo.isEndTag) {
-    return {
-      type: 'attachment',
-      isStart: false
-    }
+    return null
   }
 
   const reminderType = tagInfo.attributes['type'] as SystemReminderType
@@ -333,14 +337,20 @@ export function parseSystemReminder(text: string): ParsedSystemReminder | null {
         end: parseInt(end, 10),
         startColumn: tagInfo.attributes['start-column'] ? parseInt(tagInfo.attributes['start-column'], 10) : undefined,
         endColumn: tagInfo.attributes['end-column'] ? parseInt(tagInfo.attributes['end-column'], 10) : undefined,
+        // textContent 已经被 DOMParser 自动反转义
         content: tagInfo.textContent
       }
     }
 
-    case 'attachment': {
+    case 'attachment-start': {
       return {
-        type: 'attachment',
-        isStart: true
+        type: 'attachment-start'
+      }
+    }
+
+    case 'attachment-end': {
+      return {
+        type: 'attachment-end'
       }
     }
 
@@ -359,21 +369,21 @@ export function isSystemReminderTag(text: string): boolean {
 }
 
 /**
- * 检查文本是否是 system-reminder 开始标签（attachment 类型）
+ * 检查文本是否是 attachment-start 标签
  */
 export function isAttachmentStartTag(text: string): boolean {
   const tagInfo = parseXmlTag(text)
   if (!tagInfo || tagInfo.isEndTag) return false
-  return tagInfo.tagName === 'system-reminder' && tagInfo.attributes['type'] === 'attachment'
+  return tagInfo.tagName === 'system-reminder' && tagInfo.attributes['type'] === 'attachment-start'
 }
 
 /**
- * 检查文本是否是 system-reminder 结束标签
+ * 检查文本是否是 attachment-end 标签
  */
 export function isAttachmentEndTag(text: string): boolean {
   const tagInfo = parseXmlTag(text)
-  if (!tagInfo) return false
-  return tagInfo.tagName === 'system-reminder' && tagInfo.isEndTag
+  if (!tagInfo || tagInfo.isEndTag) return false
+  return tagInfo.tagName === 'system-reminder' && tagInfo.attributes['type'] === 'attachment-end'
 }
 
 /**

@@ -115,6 +115,14 @@ interface IdeTools {
      * @return FontData? 字体数据，如果字体不存在或无法读取则返回 null
      */
     fun getFontData(fontFamily: String): FontData? = null
+
+    /**
+     * 在系统默认浏览器中打开 URL
+     *
+     * @param url 要打开的 URL
+     * @return Result<Unit> 成功或失败
+     */
+    fun openUrl(url: String): Result<Unit>
 }
 
 /**

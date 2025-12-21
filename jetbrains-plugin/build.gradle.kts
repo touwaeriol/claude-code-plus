@@ -9,6 +9,12 @@ plugins {
 group = providers.gradleProperty("pluginGroup").get()
 version = providers.gradleProperty("pluginVersion").get()
 
+// ===== 动态构建目录支持（用于并行多版本构建）=====
+// 通过 -PcustomBuildDir=/path/to/dir 指定自定义构建目录
+providers.gradleProperty("customBuildDir").orNull?.let { customDir ->
+    layout.buildDirectory.set(file(customDir))
+}
+
 // ===== 多版本构建支持 =====
 // 通过 -PplatformMajor=241 指定目标平台版本
 // 241 = 2024.1, 242 = 2024.2, 243 = 2024.3, 251 = 2025.1, 252 = 2025.2, 253 = 2025.3
@@ -180,10 +186,10 @@ intellijPlatform {
         changeNotes.set(provider { extractLatestChangelog() })
     }
 
-    // 插件兼容性验证配置 (2024.2 ~ 2025.3)
+    // 插件兼容性验证配置 (2024.1 ~ 2025.3)
     // 支持多种 JetBrains IDE: IntelliJ IDEA, WebStorm, GoLand, CLion, PyCharm
     // 支持通过命令行参数指定单个 IDE 版本（用于 CI 分批验证）
-    // 用法: ./gradlew verifyPlugin -PverifyIdeType=IC -PverifyIdeVersion=2024.2.6
+    // 用法: ./gradlew verifyPlugin -PverifyIdeType=IC -PverifyIdeVersion=2024.1.7
     pluginVerification {
         ides {
             val verifyIdeType = providers.gradleProperty("verifyIdeType").orNull
@@ -209,36 +215,42 @@ intellijPlatform {
 
                 // ===== IntelliJ IDEA =====
                 // 2024.x 和 2025.1/2025.2 使用 IntellijIdeaCommunity
-                create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2.6")
-                create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.3.5")
-                create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1.5")
-                create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
+                create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.1.7")  // 241
+                create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2.6")  // 242
+                create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.3.5")  // 243
+                create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1.5")  // 251
+                create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")  // 252
                 // 2025.3+ 使用统一的 IntellijIdea 类型
-                create(IntelliJPlatformType.IntellijIdea, "2025.3.1")
+                create(IntelliJPlatformType.IntellijIdea, "2025.3.1")           // 253
 
                 // ===== WebStorm =====
                 // 注意：WebStorm 版本号与 IDEA 不同，使用较保守的版本
+                create(IntelliJPlatformType.WebStorm, "2024.1.7")
                 create(IntelliJPlatformType.WebStorm, "2024.2.4")
                 create(IntelliJPlatformType.WebStorm, "2024.3.3")
                 create(IntelliJPlatformType.WebStorm, "2025.1.2")
 
                 // ===== GoLand =====
                 // GoLand 的版本号与 IDEA 不同，例如 2024.2 最新是 2024.2.3
+                create(IntelliJPlatformType.GoLand, "2024.1.6")
                 create(IntelliJPlatformType.GoLand, "2024.2.3")
                 create(IntelliJPlatformType.GoLand, "2024.3.3")
                 create(IntelliJPlatformType.GoLand, "2025.1.2")
 
                 // ===== CLion =====
+                create(IntelliJPlatformType.CLion, "2024.1.6")
                 create(IntelliJPlatformType.CLion, "2024.2.3")
                 create(IntelliJPlatformType.CLion, "2024.3.3")
                 create(IntelliJPlatformType.CLion, "2025.1.2")
 
                 // ===== PyCharm =====
+                create(IntelliJPlatformType.PyCharmCommunity, "2024.1.7")
                 create(IntelliJPlatformType.PyCharmCommunity, "2024.2.4")
                 create(IntelliJPlatformType.PyCharmCommunity, "2024.3.3")
                 create(IntelliJPlatformType.PyCharmCommunity, "2025.1.2")
 
                 // ===== PhpStorm =====
+                create(IntelliJPlatformType.PhpStorm, "2024.1.6")
                 create(IntelliJPlatformType.PhpStorm, "2024.2.4")
                 create(IntelliJPlatformType.PhpStorm, "2024.3.3")
                 create(IntelliJPlatformType.PhpStorm, "2025.1.2")
@@ -556,20 +568,123 @@ tasks {
 }
 
 // ===== 多版本批量构建 =====
-// 使用项目根目录的脚本: build-all-versions.bat (Windows) / build-all-versions.sh (Unix)
-// 用法: 直接运行脚本，或通过 Gradle: gradlew buildAllVersions
+// 用法: gradlew :jetbrains-plugin:buildAllVersions
+// 优化: 前端只构建一次，然后并行构建各版本插件（每个版本独立构建目录）
 
-val buildAllVersions by tasks.registering(Exec::class) {
+// 主任务：构建所有版本
+val buildAllVersions by tasks.registering {
     group = "build"
-    description = "Build plugin for all supported platform versions (241-253). Run: ./build-all-versions.bat"
+    description = "Build plugin for all supported platform versions (241, 242, 243, 251, 252, 253)"
 
-    val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-    workingDir = rootProject.projectDir
+    // 先构建前端和下载 CLI（只执行一次）
+    dependsOn(buildFrontend)
+    dependsOn(":claude-agent-sdk:downloadCli")
 
-    commandLine = if (isWindows) {
-        listOf("cmd", "/c", "build-all-versions.bat")
-    } else {
-        listOf("bash", "build-all-versions.sh")
+    // 将需要的值在配置阶段捕获，避免配置缓存问题
+    val buildDir = layout.buildDirectory
+    val projectDir = rootProject.projectDir
+    val versionStr = project.version.toString()
+
+    doFirst {
+        println("====================================")
+        println("Building plugin for all platforms")
+        println("====================================")
+        println()
+        println("📦 Frontend built once, reusing for all platforms")
+        println("🚀 Building 6 versions in parallel...")
+    }
+
+    doLast {
+        // 在执行阶段定义所有变量，避免配置缓存序列化问题
+        val platforms = listOf("241", "242", "243", "251", "252", "253")
+        val isWin = System.getProperty("os.name").lowercase().contains("windows")
+        val gradlew = if (isWin) "gradlew.bat" else "./gradlew"
+
+        val distDir = buildDir.dir("distributions").get().asFile
+        val tempBuildDir = buildDir.dir("multi-version-temp").get().asFile
+
+        // 清理临时目录
+        if (tempBuildDir.exists()) {
+            tempBuildDir.deleteRecursively()
+        }
+        tempBuildDir.mkdirs()
+
+        // 并行启动所有构建进程
+        val processes = platforms.map { platform ->
+            val platformBuildDir = File(tempBuildDir, platform)
+            platformBuildDir.mkdirs()
+
+            println("[$platform] Starting build...")
+
+            val cmd = if (isWin) {
+                listOf("cmd", "/c", gradlew, ":jetbrains-plugin:buildPlugin",
+                    "-PplatformMajor=$platform",
+                    "-PcustomBuildDir=${platformBuildDir.absolutePath}",
+                    "-x", "buildFrontend",
+                    "-x", "buildFrontendWithVite",
+                    "-x", "copyFrontendFiles",
+                    "-x", "installFrontendDeps",
+                    "--no-daemon", "-q")
+            } else {
+                listOf(gradlew, ":jetbrains-plugin:buildPlugin",
+                    "-PplatformMajor=$platform",
+                    "-PcustomBuildDir=${platformBuildDir.absolutePath}",
+                    "-x", "buildFrontend",
+                    "-x", "buildFrontendWithVite",
+                    "-x", "copyFrontendFiles",
+                    "-x", "installFrontendDeps",
+                    "--no-daemon", "-q")
+            }
+
+            val processBuilder = ProcessBuilder(cmd)
+                .directory(projectDir)
+                .redirectErrorStream(true)
+
+            platform to processBuilder.start()
+        }
+
+        // 等待所有进程完成并收集结果
+        val results = processes.map { (platform, process) ->
+            val exitCode = process.waitFor()
+            val output = process.inputStream.bufferedReader().readText()
+
+            if (exitCode != 0) {
+                println("❌ [$platform] FAILED")
+                println(output)
+            }
+
+            platform to exitCode
+        }
+
+        // 检查是否有失败
+        val failed = results.filter { it.second != 0 }
+        if (failed.isNotEmpty()) {
+            throw GradleException("Build failed for platforms: ${failed.map { it.first }.joinToString(", ")}")
+        }
+
+        // 复制构建产物到最终目录
+        distDir.mkdirs()
+        platforms.forEach { platform ->
+            val platformDistDir = File(tempBuildDir, "$platform/distributions")
+            val srcFile = File(platformDistDir, "claude-code-plus-jetbrains-plugin-${versionStr}.zip")
+            val dstFile = File(distDir, "claude-code-plus-jetbrains-plugin-${versionStr}-${platform}.zip")
+
+            if (srcFile.exists()) {
+                srcFile.copyTo(dstFile, overwrite = true)
+                println("✅ [$platform] claude-code-plus-jetbrains-plugin-${versionStr}-${platform}.zip")
+            } else {
+                throw GradleException("[$platform] Output file not found: ${srcFile.absolutePath}")
+            }
+        }
+
+        // 清理临时目录
+        tempBuildDir.deleteRecursively()
+
+        println()
+        println("====================================")
+        println("All 6 versions built successfully!")
+        println("Output: jetbrains-plugin/build/distributions/")
+        println("====================================")
     }
 }
 

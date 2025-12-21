@@ -262,5 +262,25 @@ open class IdeToolsDefault(
         // 浏览器模式下没有活跃编辑器，返回 null
         return null
     }
+
+    override open fun openUrl(url: String): Result<Unit> {
+        logger.info { "[Default] Opening URL in browser: $url" }
+        return try {
+            if (java.awt.Desktop.isDesktopSupported()) {
+                val desktop = java.awt.Desktop.getDesktop()
+                if (desktop.isSupported(java.awt.Desktop.Action.BROWSE)) {
+                    desktop.browse(java.net.URI(url))
+                    Result.success(Unit)
+                } else {
+                    Result.failure(UnsupportedOperationException("Desktop browse action is not supported"))
+                }
+            } else {
+                Result.failure(UnsupportedOperationException("Desktop is not supported on this platform"))
+            }
+        } catch (e: Exception) {
+            logger.error { "Failed to open URL: ${e.message}" }
+            Result.failure(e)
+        }
+    }
 }
 

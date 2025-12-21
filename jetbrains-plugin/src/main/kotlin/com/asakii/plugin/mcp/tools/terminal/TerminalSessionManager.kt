@@ -4,10 +4,9 @@ import com.asakii.settings.AgentSettingsService
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindowManager
-import com.intellij.terminal.JBTerminalWidget
 import com.asakii.plugin.compat.TerminalCompat
+import com.asakii.plugin.compat.TerminalWidgetWrapper
 import mu.KotlinLogging
-import org.jetbrains.plugins.terminal.ShellTerminalWidget
 import org.jetbrains.plugins.terminal.TerminalToolWindowFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -21,7 +20,7 @@ data class TerminalSession(
     val id: String,
     val name: String,
     val shellType: String,
-    val widget: ShellTerminalWidget,
+    val widgetWrapper: TerminalWidgetWrapper,
     val createdAt: Long = System.currentTimeMillis(),
     var lastCommandAt: Long = System.currentTimeMillis(),
     var isBackground: Boolean = false
@@ -31,7 +30,7 @@ data class TerminalSession(
      */
     fun hasRunningCommands(): Boolean {
         return try {
-            widget.hasRunningCommands()
+            widgetWrapper.hasRunningCommands()
         } catch (e: Exception) {
             logger.warn(e) { "Failed to check running commands for session $id" }
             false
@@ -39,34 +38,11 @@ data class TerminalSession(
     }
 
     /**
-     * 获取终端输出内容
+     * 获取终端输出内容（使用 wrapper 的统一 API）
      */
     fun getOutput(maxLines: Int = 1000): String {
         return try {
-            val buffer = widget.terminalTextBuffer
-            val screenLines = buffer.screenLinesCount
-            val historyLines = buffer.historyLinesCount
-            val totalLines = screenLines + historyLines
-
-            val startLine = if (totalLines > maxLines) {
-                totalLines - maxLines
-            } else {
-                0
-            }
-
-            val sb = StringBuilder()
-            for (i in startLine until totalLines) {
-                val line = if (i < historyLines) {
-                    buffer.getLine(i - historyLines) // 历史行用负索引
-                } else {
-                    buffer.getLine(i - historyLines) // 屏幕行
-                }
-                sb.append(line.text.trimEnd())
-                if (i < totalLines - 1) {
-                    sb.append("\n")
-                }
-            }
-            sb.toString()
+            widgetWrapper.getOutput(maxLines)
         } catch (e: Exception) {
             logger.error(e) { "Failed to get output for session $id" }
             ""
@@ -177,26 +153,27 @@ class TerminalSessionManager(private val project: Project) {
             val sessionId = "terminal-${sessionCounter.incrementAndGet()}"
             val sessionName = name ?: "Claude Terminal ${sessionCounter.get()}"
 
-            var widget: ShellTerminalWidget? = null
+            var wrapper: TerminalWidgetWrapper? = null
 
             ApplicationManager.getApplication().invokeAndWait {
                 try {
                     val basePath = project.basePath ?: System.getProperty("user.home")
 
                     // 使用兼容层创建终端（处理不同版本的 API 差异）
-                    widget = TerminalCompat.createShellWidget(project, basePath, sessionName)
+                    // TerminalCompat.createShellWidget 直接返回 TerminalWidgetWrapper
+                    wrapper = TerminalCompat.createShellWidget(project, basePath, sessionName)
 
-                    if (widget == null) {
-                        logger.warn { "Failed to create ShellTerminalWidget" }
+                    if (wrapper == null) {
+                        logger.warn { "Failed to create TerminalWidgetWrapper" }
                     }
                 } catch (e: Exception) {
                     logger.error(e) { "Failed to create terminal widget" }
                 }
             }
 
-            widget?.let { w ->
+            wrapper?.let { w ->
                 val actualShellType = if (shellType == ShellType.AUTO) {
-                    detectShellType(w)
+                    detectShellType()
                 } else {
                     shellType
                 }
@@ -205,10 +182,10 @@ class TerminalSessionManager(private val project: Project) {
                     id = sessionId,
                     name = sessionName,
                     shellType = actualShellType.name,
-                    widget = w
+                    widgetWrapper = w
                 )
                 sessions[sessionId] = session
-                logger.info { "Created terminal session: $sessionId ($sessionName)" }
+                logger.info { "Created terminal session: $sessionId ($sessionName), widget type: ${w.widgetClassName}" }
                 session
             }
         } catch (e: Exception) {
@@ -267,7 +244,7 @@ class TerminalSessionManager(private val project: Project) {
             session.lastCommandAt = System.currentTimeMillis()
 
             ApplicationManager.getApplication().invokeAndWait {
-                session.widget.executeCommand(command)
+                session.widgetWrapper.executeCommand(command)
             }
 
             if (background) {
@@ -403,7 +380,7 @@ class TerminalSessionManager(private val project: Project) {
 
             ApplicationManager.getApplication().invokeAndWait {
                 // 发送 Ctrl+C (ASCII 3, ETX)
-                session.widget.terminalStarter?.sendBytes("\u0003".toByteArray(), false)
+                session.widgetWrapper.sendInterrupt()
             }
 
             // 等待命令停止
@@ -446,8 +423,7 @@ class TerminalSessionManager(private val project: Project) {
 
                     toolWindow?.contentManager?.let { contentManager ->
                         contentManager.contents.find { content ->
-                            content.component == session.widget ||
-                            (content.component as? JBTerminalWidget) == session.widget
+                            content.displayName == session.name
                         }?.let { content ->
                             contentManager.removeContent(content, true)
                         }
@@ -513,9 +489,9 @@ class TerminalSessionManager(private val project: Project) {
     }
 
     /**
-     * 检测 Shell 类型
+     * 检测 Shell 类型（基于操作系统）
      */
-    private fun detectShellType(widget: ShellTerminalWidget): ShellType {
+    private fun detectShellType(): ShellType {
         val isWindows = System.getProperty("os.name").lowercase().contains("windows")
         return if (isWindows) ShellType.GIT_BASH else ShellType.BASH
     }

@@ -16,15 +16,7 @@
     <img src="https://img.shields.io/github/v/release/touwaeriol/claude-code-plus" alt="GitHub Release">
   </a>
   <a href="https://github.com/touwaeriol/claude-code-plus/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/touwaeriol/claude-code-plus" alt="License">
-  </a>
-</p>
-
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README_zh-CN.md">简体中文</a> |
-  <a href="README_ja.md">日本語</a> |
-  <a href="README_ko.md">한국어</a>
+    <img src="https://img.shiel1">한국어</a>
 </p>
 
 ---

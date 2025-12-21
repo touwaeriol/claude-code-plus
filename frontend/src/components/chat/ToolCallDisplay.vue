@@ -104,6 +104,12 @@
       :tool-call="toolCall"
     />
 
+    <!-- Terminal MCP 工具使用专用展示组件 -->
+    <TerminalMcpToolDisplay
+      v-else-if="isTerminalMcpTool"
+      :tool-call="toolCall"
+    />
+
     <!-- MCP/未知/未识别的工具统一使用紧凑卡片 -->
     <GenericMcpToolDisplay
       v-else
@@ -152,6 +158,7 @@ import ReadMcpResourceToolDisplay from '@/components/tools/ReadMcpResourceToolDi
 // MCP 工具
 import GenericMcpToolDisplay from '@/components/tools/GenericMcpToolDisplay.vue'
 import JetBrainsMcpToolDisplay from '@/components/tools/JetBrainsMcpToolDisplay.vue'
+import TerminalMcpToolDisplay from '@/components/tools/TerminalMcpToolDisplay.vue'
 
 import { computed } from 'vue'
 
@@ -164,6 +171,11 @@ const props = defineProps<Props>()
 // 判断是否为 JetBrains MCP 工具
 const isJetBrainsMcpTool = computed(() => {
   return props.toolCall.toolName?.startsWith('mcp__jetbrains__')
+})
+
+// 判断是否为 Terminal MCP 工具
+const isTerminalMcpTool = computed(() => {
+  return props.toolCall.toolName?.startsWith('mcp__terminal__')
 })
 
 </script>

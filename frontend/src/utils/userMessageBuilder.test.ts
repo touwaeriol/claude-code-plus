@@ -54,10 +54,10 @@ describe('parseUserMessage', () => {
       const content: ContentBlock[] = [
         { type: 'text', text: '比较这两个文件' } as TextBlock,
         { type: 'text', text: '<system-reminder type="open-file" path="src/main.ts"/>' } as TextBlock,
-        { type: 'text', text: '<system-reminder type="attachment">' } as TextBlock,
+        { type: 'text', text: '<system-reminder type="attachment-start"/>' } as TextBlock,
         { type: 'text', text: '@file://src/file1.ts' } as TextBlock,
         { type: 'text', text: '@file://src/file2.ts' } as TextBlock,
-        { type: 'text', text: '</system-reminder>' } as TextBlock
+        { type: 'text', text: '<system-reminder type="attachment-end"/>' } as TextBlock
       ]
       const result = parseUserMessage(content)
 
@@ -81,9 +81,9 @@ describe('parseUserMessage', () => {
 
       const content: ContentBlock[] = [
         { type: 'text', text: '分析这张图片' } as TextBlock,
-        { type: 'text', text: '<system-reminder type="attachment">' } as TextBlock,
+        { type: 'text', text: '<system-reminder type="attachment-start"/>' } as TextBlock,
         imageBlock,
-        { type: 'text', text: '</system-reminder>' } as TextBlock
+        { type: 'text', text: '<system-reminder type="attachment-end"/>' } as TextBlock
       ]
       const result = parseUserMessage(content)
 
@@ -98,9 +98,9 @@ describe('parseUserMessage', () => {
         { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'xxx' } } as ImageBlock,
         { type: 'text', text: '<system-reminder type="open-file" path="src/app.ts"/>' } as TextBlock,
         { type: 'text', text: '<system-reminder type="select-lines" path="src/app.ts" start="1" end="10"/>' } as TextBlock,
-        { type: 'text', text: '<system-reminder type="attachment">' } as TextBlock,
+        { type: 'text', text: '<system-reminder type="attachment-start"/>' } as TextBlock,
         { type: 'text', text: '@file://src/utils.ts' } as TextBlock,
-        { type: 'text', text: '</system-reminder>' } as TextBlock
+        { type: 'text', text: '<system-reminder type="attachment-end"/>' } as TextBlock
       ]
       const result = parseUserMessage(content)
 
@@ -221,21 +221,21 @@ describe('buildUserMessageContent', () => {
       ]
     })
 
-    // 结构应该是：用户文本 + <system-reminder type="attachment"> + contexts + </system-reminder>
+    // 结构应该是：用户文本 + attachment-start + contexts + attachment-end
     expect(result.length).toBeGreaterThan(1)
 
     // 第一个是用户文本
     expect((result[0] as TextBlock).text).toBe('分析这些文件')
 
-    // 应该有 attachment 开始标签
+    // 应该有 attachment-start 标签
     const startTagIndex = result.findIndex(b =>
-      b.type === 'text' && (b as TextBlock).text === '<system-reminder type="attachment">'
+      b.type === 'text' && (b as TextBlock).text === '<system-reminder type="attachment-start"/>'
     )
     expect(startTagIndex).toBeGreaterThan(0)
 
-    // 应该有 attachment 结束标签
+    // 应该有 attachment-end 标签
     const endTagIndex = result.findIndex(b =>
-      b.type === 'text' && (b as TextBlock).text === '</system-reminder>'
+      b.type === 'text' && (b as TextBlock).text === '<system-reminder type="attachment-end"/>'
     )
     expect(endTagIndex).toBeGreaterThan(startTagIndex)
 

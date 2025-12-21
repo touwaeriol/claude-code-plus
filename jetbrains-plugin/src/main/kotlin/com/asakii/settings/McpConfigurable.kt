@@ -664,6 +664,12 @@ class BuiltInMcpServerDialog(
     }
     private val apiKeyField = JBTextField(entry.apiKey, 25)
 
+    // 禁用工具配置（标签选择）
+    private val defaultDisabledTools = entry.disabledTools.toList()
+    private val disabledToolsList = entry.disabledTools.toMutableList()
+    private var disabledToolsPanel: JPanel? = null
+    private val disabledToolInput = JBTextField(20)
+
     // Terminal MCP 截断配置
     private val maxOutputLinesField = JBTextField(entry.terminalMaxOutputLines.toString(), 8)
     private val maxOutputCharsField = JBTextField(entry.terminalMaxOutputChars.toString(), 8)
@@ -700,16 +706,82 @@ class BuiltInMcpServerDialog(
             contentPanel.add(Box.createVerticalStrut(8))
         }
 
-        // 禁用工具信息（如果有）
-        if (entry.disabledTools.isNotEmpty()) {
-            val disabledToolsText = entry.disabledTools.joinToString(", ")
-            val disabledToolsPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+        // 禁用工具配置（标签选择界面）
+        if (defaultDisabledTools.isNotEmpty()) {
+            val disabledToolsLabel = JBLabel("Disables built-in tools when enabled:").apply {
                 alignmentX = JPanel.LEFT_ALIGNMENT
-                background = JBColor(0xE8F4FD, 0x1E3A4C)
-                border = JBUI.Borders.empty(6, 8)
-                add(JBLabel("<html><font color='#1976D2'>ℹ️ Disables built-in tools when enabled: <b>$disabledToolsText</b></font></html>"))
+                foreground = JBColor(0x1976D2, 0x6BA3D6)
             }
-            contentPanel.add(disabledToolsPanel)
+            contentPanel.add(disabledToolsLabel)
+            contentPanel.add(Box.createVerticalStrut(4))
+
+            // 标签容器
+            val toolsContainer = JPanel(BorderLayout()).apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+            }
+
+            // 标签流式布局面板
+            disabledToolsPanel = JPanel(WrapLayout(FlowLayout.LEFT, 4, 4)).apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+            }
+
+            // 初始化已有的标签
+            disabledToolsList.forEach { addDisabledToolTag(it) }
+
+            // 添加工具的输入行
+            val addButton = JButton("+").apply {
+                preferredSize = Dimension(40, disabledToolInput.preferredSize.height)
+                toolTipText = "Add tool to disable"
+            }
+
+            val addToolAction = {
+                val toolName = disabledToolInput.text.trim()
+                if (toolName.isNotEmpty() && !disabledToolsList.contains(toolName)) {
+                    addDisabledToolTag(toolName)
+                    disabledToolInput.text = ""
+                }
+            }
+
+            addButton.addActionListener { addToolAction() }
+            disabledToolInput.addActionListener { addToolAction() }
+
+            val inputRow = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+                add(disabledToolInput)
+                add(addButton)
+                add(JBLabel("<html><font color='gray' size='-1'>Type tool name, then click + or press Enter</font></html>"))
+            }
+
+            toolsContainer.add(disabledToolsPanel!!, BorderLayout.CENTER)
+            toolsContainer.add(inputRow, BorderLayout.SOUTH)
+
+            val toolsScrollPane = JBScrollPane(toolsContainer).apply {
+                preferredSize = Dimension(500, 70)
+                alignmentX = JPanel.LEFT_ALIGNMENT
+                border = BorderFactory.createLineBorder(JBUI.CurrentTheme.CustomFrameDecorations.separatorForeground())
+                horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+            }
+            contentPanel.add(toolsScrollPane)
+            contentPanel.add(Box.createVerticalStrut(4))
+
+            // Reset 按钮
+            val resetToolsButton = JButton("Reset").apply {
+                toolTipText = "Reset to default: ${defaultDisabledTools.joinToString(", ")}"
+                addActionListener {
+                    disabledToolsList.clear()
+                    disabledToolsPanel?.removeAll()
+                    defaultDisabledTools.forEach { addDisabledToolTag(it) }
+                    disabledToolsPanel?.revalidate()
+                    disabledToolsPanel?.repaint()
+                }
+            }
+            val toolsButtonPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+                add(resetToolsButton)
+                add(Box.createHorizontalStrut(8))
+                add(JBLabel("<html><font color='#666666' size='2'>Leave empty to not disable any built-in tools</font></html>"))
+            }
+            contentPanel.add(toolsButtonPanel)
             contentPanel.add(Box.createVerticalStrut(8))
         }
 
@@ -762,6 +834,48 @@ class BuiltInMcpServerDialog(
         return panel
     }
 
+    /**
+     * 添加禁用工具标签
+     */
+    private fun addDisabledToolTag(toolName: String) {
+        if (!disabledToolsList.contains(toolName)) {
+            disabledToolsList.add(toolName)
+        }
+
+        val tagPanel = JPanel(FlowLayout(FlowLayout.LEFT, 2, 0)).apply {
+            border = BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(JBUI.CurrentTheme.ActionButton.hoverBorder(), 1, true),
+                JBUI.Borders.empty(2, 6, 2, 4)
+            )
+            background = JBUI.CurrentTheme.ActionButton.hoverBackground()
+            isOpaque = true
+        }
+
+        val label = JBLabel(toolName).apply {
+            font = font.deriveFont(11f)
+        }
+
+        val removeBtn = JBLabel("×").apply {
+            font = font.deriveFont(Font.BOLD, 12f)
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+            toolTipText = "Remove"
+        }
+        removeBtn.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent) {
+                disabledToolsList.remove(toolName)
+                disabledToolsPanel?.remove(tagPanel)
+                disabledToolsPanel?.revalidate()
+                disabledToolsPanel?.repaint()
+            }
+        })
+
+        tagPanel.add(label)
+        tagPanel.add(removeBtn)
+        disabledToolsPanel?.add(tagPanel)
+        disabledToolsPanel?.revalidate()
+        disabledToolsPanel?.repaint()
+    }
+
     fun getServerEntry(): McpServerEntry {
         // 如果内容与默认值相同，存储空字符串（表示使用默认值）
         val customInstructions = if (instructionsArea.text.trim() == entry.defaultInstructions.trim()) {
@@ -769,10 +883,12 @@ class BuiltInMcpServerDialog(
         } else {
             instructionsArea.text
         }
+
         return entry.copy(
             enabled = enableCheckbox.isSelected,
             instructions = customInstructions,
             apiKey = if (entry.name == "Context7 MCP") apiKeyField.text else entry.apiKey,
+            disabledTools = if (defaultDisabledTools.isNotEmpty()) disabledToolsList.toList() else entry.disabledTools,
             terminalMaxOutputLines = if (entry.name == "Terminal MCP") {
                 maxOutputLinesField.text.toIntOrNull() ?: 500
             } else entry.terminalMaxOutputLines,

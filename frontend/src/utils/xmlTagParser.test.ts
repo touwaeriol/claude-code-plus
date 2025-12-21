@@ -154,23 +154,47 @@ describe('parseSystemReminder', () => {
         expect(result.content).toContain('function foo()')
       }
     })
+
+    it('应该正确解析带 XML 转义内容的 select-lines 标签', () => {
+      // 内容在构建时已经被 XML 转义，DOMParser 可以正确解析
+      // 原始内容: <a href="README.md">English</a>
+      // 转义后: &lt;a href="README.md"&gt;English&lt;/a&gt;
+      const escapedContent = `<system-reminder type="select-lines" path="README.md" start="19" end="27" start-column="32" end-column="24">&lt;a href="README.md"&gt;English&lt;/a&gt; |
+&lt;a href="README_zh-CN.md"&gt;简体中文&lt;/a&gt;</system-reminder>`
+      const result = parseSystemReminder(escapedContent)
+      expect(result).not.toBeNull()
+      expect(result?.type).toBe('select-lines')
+      if (result?.type === 'select-lines') {
+        expect(result.path).toBe('README.md')
+        expect(result.start).toBe(19)
+        expect(result.end).toBe(27)
+        expect(result.startColumn).toBe(32)
+        expect(result.endColumn).toBe(24)
+        // DOMParser 的 textContent 会自动反转义
+        expect(result.content).toContain('<a href="README.md">English</a>')
+      }
+    })
   })
 
-  describe('attachment 类型', () => {
-    it('应该正确解析 attachment 开始标签', () => {
-      const result = parseSystemReminder('<system-reminder type="attachment">')
+  describe('attachment-start/end 类型', () => {
+    it('应该正确解析 attachment-start 标签', () => {
+      const result = parseSystemReminder('<system-reminder type="attachment-start"/>')
       expect(result).toEqual({
-        type: 'attachment',
-        isStart: true
+        type: 'attachment-start'
       })
     })
 
-    it('应该正确解析 attachment 结束标签', () => {
-      const result = parseSystemReminder('</system-reminder>')
+    it('应该正确解析 attachment-end 标签', () => {
+      const result = parseSystemReminder('<system-reminder type="attachment-end"/>')
       expect(result).toEqual({
-        type: 'attachment',
-        isStart: false
+        type: 'attachment-end'
       })
+    })
+
+    it('应该对 </system-reminder> 返回 null', () => {
+      // 结束标签不再作为 attachment 标记
+      const result = parseSystemReminder('</system-reminder>')
+      expect(result).toBeNull()
     })
   })
 
@@ -193,7 +217,8 @@ describe('parseSystemReminder', () => {
 describe('isSystemReminderTag', () => {
   it('应该识别 system-reminder 标签', () => {
     expect(isSystemReminderTag('<system-reminder type="open-file" path="test.ts"/>')).toBe(true)
-    expect(isSystemReminderTag('<system-reminder type="attachment">')).toBe(true)
+    expect(isSystemReminderTag('<system-reminder type="attachment-start"/>')).toBe(true)
+    expect(isSystemReminderTag('<system-reminder type="attachment-end"/>')).toBe(true)
     expect(isSystemReminderTag('</system-reminder>')).toBe(true)
   })
 
@@ -202,27 +227,35 @@ describe('isSystemReminderTag', () => {
     expect(isSystemReminderTag('@file://test.ts')).toBe(false)
     expect(isSystemReminderTag('hello world')).toBe(false)
   })
+
+  it('应该识别带 XML 转义内容的 select-lines 标签', () => {
+    // 内容在构建时已经被 XML 转义，DOMParser 可以正确解析
+    const escapedContent = `<system-reminder type="select-lines" path="README.md" start="19" end="27">&lt;a href="README.md"&gt;English&lt;/a&gt;</system-reminder>`
+    expect(isSystemReminderTag(escapedContent)).toBe(true)
+  })
 })
 
 describe('isAttachmentStartTag', () => {
-  it('应该识别 attachment 开始标签', () => {
-    expect(isAttachmentStartTag('<system-reminder type="attachment">')).toBe(true)
+  it('应该识别 attachment-start 标签', () => {
+    expect(isAttachmentStartTag('<system-reminder type="attachment-start"/>')).toBe(true)
   })
 
   it('应该拒绝其他标签', () => {
     expect(isAttachmentStartTag('</system-reminder>')).toBe(false)
     expect(isAttachmentStartTag('<system-reminder type="open-file" path="test.ts"/>')).toBe(false)
+    expect(isAttachmentStartTag('<system-reminder type="attachment-end"/>')).toBe(false)
   })
 })
 
 describe('isAttachmentEndTag', () => {
-  it('应该识别 attachment 结束标签', () => {
-    expect(isAttachmentEndTag('</system-reminder>')).toBe(true)
+  it('应该识别 attachment-end 标签', () => {
+    expect(isAttachmentEndTag('<system-reminder type="attachment-end"/>')).toBe(true)
   })
 
   it('应该拒绝其他标签', () => {
-    expect(isAttachmentEndTag('<system-reminder type="attachment">')).toBe(false)
+    expect(isAttachmentEndTag('<system-reminder type="attachment-start"/>')).toBe(false)
     expect(isAttachmentEndTag('<system-reminder type="open-file" path="test.ts"/>')).toBe(false)
+    expect(isAttachmentEndTag('</system-reminder>')).toBe(false)
   })
 })
 

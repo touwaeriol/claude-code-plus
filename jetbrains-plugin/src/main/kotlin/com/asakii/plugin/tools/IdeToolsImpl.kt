@@ -27,6 +27,7 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.ide.BrowserUtil
 import com.intellij.ui.JBColor
 import com.intellij.util.ui.UIUtil
 import java.awt.Color
@@ -975,6 +976,23 @@ class IdeToolsImpl(
         }
 
         return null
+    }
+
+    /**
+     * 在系统默认浏览器中打开 URL
+     *
+     * 使用 IntelliJ Platform 的 BrowserUtil 打开 URL，
+     * 这是在 IDEA 环境中打开浏览器的推荐方式
+     */
+    override fun openUrl(url: String): Result<Unit> {
+        logger.info("[IDEA] Opening URL in browser: $url")
+        return try {
+            BrowserUtil.browse(url)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            logger.warning("Failed to open URL: ${e.message}")
+            Result.failure(e)
+        }
     }
 }
 
