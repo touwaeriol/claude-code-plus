@@ -1,0 +1,19 @@
+# Claude Code Plus - Tool Demo
+
+This file was created by the Write tool.
+
+## Timestamp
+2025-12-21
+
+## Project Modules
+- toolwindow
+- jetbrains-plugin
+- claude-agent-sdk
+- codex-agent-sdk
+- ai-agent-sdk
+- ai-agent-rpc-api
+- ai-agent-proto
+- standalone-test
+- ai-agent-server
+
+## Demo Complete!

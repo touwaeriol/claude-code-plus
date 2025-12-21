@@ -61,14 +61,14 @@ const TOOL_ICONS: Record<string, string> = {
   ReadMcpResource: '📖',
   ExitPlanMode: '✅',
   EnterPlanMode: '📝',
-  // Terminal MCP 工具
+  // Terminal MCP 工具（统一使用终端图标）
   'mcp__terminal__Terminal': '💻',
-  'mcp__terminal__TerminalRead': '📤',
-  'mcp__terminal__TerminalList': '📋',
-  'mcp__terminal__TerminalKill': '🛑',
-  'mcp__terminal__TerminalInterrupt': '⏹️',
-  'mcp__terminal__TerminalTypes': '🔧',
-  'mcp__terminal__TerminalRename': '✏️',
+  'mcp__terminal__TerminalRead': '💻',
+  'mcp__terminal__TerminalList': '💻',
+  'mcp__terminal__TerminalKill': '💻',
+  'mcp__terminal__TerminalInterrupt': '💻',
+  'mcp__terminal__TerminalTypes': '💻',
+  'mcp__terminal__TerminalRename': '💻',
   // 小写格式（兼容旧格式）
   read: '📄',
   write: '✏️',
