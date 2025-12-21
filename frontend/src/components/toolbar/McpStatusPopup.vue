@@ -2,34 +2,111 @@
   <div v-if="visible" class="mcp-popup-overlay" @click.self="close">
     <div class="mcp-popup">
       <div class="popup-header">
-        <span class="popup-title">MCP Servers</span>
+        <template v-if="selectedServer">
+          <button class="back-btn" @click="goBack" title="Back">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <span class="popup-title">{{ selectedServer }}</span>
+        </template>
+        <span v-else class="popup-title">MCP Servers</span>
         <div class="popup-actions">
           <button class="close-btn" @click="close" title="Close">×</button>
         </div>
       </div>
       <div class="popup-content">
+        <!-- 未连接状态 -->
         <div v-if="!isConnected" class="empty-state">
           未连接
         </div>
-        <div v-else-if="servers.length === 0" class="empty-state">
-          No MCP servers configured
-        </div>
-        <div v-else class="server-list">
-          <div v-for="server in servers" :key="server.name" class="server-item">
-            <span class="status-dot" :class="getStatusClass(server.status)"></span>
-            <span class="server-name">{{ server.name }}</span>
-            <span class="server-status">{{ server.status }}</span>
+
+        <!-- 工具列表视图 -->
+        <template v-else-if="selectedServer">
+          <div v-if="loadingTools" class="loading-state">
+            加载中...
           </div>
-        </div>
+          <div v-else-if="tools.length === 0" class="empty-state">
+            No tools available
+          </div>
+          <div v-else class="tool-list">
+            <div
+              v-for="tool in tools"
+              :key="tool.name"
+              class="tool-item"
+              :class="{ expanded: expandedTool === tool.name }"
+              @click="toggleTool(tool.name)"
+            >
+              <div class="tool-header">
+                <span class="tool-name">{{ tool.name }}</span>
+                <svg
+                  class="expand-icon"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </div>
+              <div v-if="expandedTool === tool.name" class="tool-details">
+                <p class="tool-description">{{ tool.description || 'No description' }}</p>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 服务器列表视图 -->
+        <template v-else>
+          <div v-if="servers.length === 0" class="empty-state">
+            No MCP servers configured
+          </div>
+          <div v-else class="server-list">
+            <div
+              v-for="server in servers"
+              :key="server.name"
+              class="server-item"
+              :class="{ clickable: server.status === 'connected' }"
+              @click="selectServer(server)"
+            >
+              <span class="status-dot" :class="getStatusClass(server.status)"></span>
+              <span class="server-name">{{ server.name }}</span>
+              <span class="server-status">{{ server.status }}</span>
+              <svg
+                v-if="server.status === 'connected'"
+                class="arrow-icon"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue'
+import { useSessionStore } from '@/stores/sessionStore'
+
 interface McpServerStatus {
   name: string
   status: string
+}
+
+interface McpToolInfo {
+  name: string
+  description: string
+  inputSchema?: string
 }
 
 const props = defineProps<{
@@ -42,6 +119,21 @@ const emit = defineEmits<{
   (e: 'close'): void
 }>()
 
+const sessionStore = useSessionStore()
+const selectedServer = ref<string | null>(null)
+const tools = ref<McpToolInfo[]>([])
+const loadingTools = ref(false)
+const expandedTool = ref<string | null>(null)
+
+// 重置状态当弹窗关闭
+watch(() => props.visible, (visible) => {
+  if (!visible) {
+    selectedServer.value = null
+    tools.value = []
+    expandedTool.value = null
+  }
+})
+
 function getStatusClass(status: string): string {
   switch (status) {
     case 'connected': return 'status-connected'
@@ -49,6 +141,36 @@ function getStatusClass(status: string): string {
     case 'failed': return 'status-failed'
     default: return 'status-unknown'
   }
+}
+
+async function selectServer(server: McpServerStatus) {
+  if (server.status !== 'connected') return
+
+  selectedServer.value = server.name
+  loadingTools.value = true
+  tools.value = []
+
+  try {
+    const session = sessionStore.currentTab?.session
+    if (session?.isConnected) {
+      const result = await session.getMcpTools(server.name)
+      tools.value = result.tools
+    }
+  } catch (err) {
+    console.error('[McpStatusPopup] Failed to get tools:', err)
+  } finally {
+    loadingTools.value = false
+  }
+}
+
+function goBack() {
+  selectedServer.value = null
+  tools.value = []
+  expandedTool.value = null
+}
+
+function toggleTool(toolName: string) {
+  expandedTool.value = expandedTool.value === toolName ? null : toolName
 }
 
 function close() {
@@ -76,19 +198,20 @@ function close() {
   border: 1px solid var(--theme-border, #e1e4e8);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  min-width: 240px;
-  max-width: 320px;
+  min-width: 280px;
+  max-width: 360px;
 }
 
 .popup-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--theme-border, #e1e4e8);
 }
 
 .popup-title {
+  flex: 1;
   font-weight: 600;
   font-size: 13px;
   color: var(--theme-foreground, #24292e);
@@ -98,6 +221,24 @@ function close() {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.back-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--theme-muted-foreground, #656d76);
+  transition: background 0.15s;
+}
+
+.back-btn:hover {
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.06));
 }
 
 .close-btn {
@@ -122,11 +263,12 @@ function close() {
 
 .popup-content {
   padding: 8px;
-  max-height: 300px;
+  max-height: 400px;
   overflow-y: auto;
 }
 
-.empty-state {
+.empty-state,
+.loading-state {
   padding: 16px;
   text-align: center;
   font-size: 12px;
@@ -146,6 +288,15 @@ function close() {
   padding: 8px 10px;
   border-radius: 6px;
   background: var(--theme-background, #f6f8fa);
+  transition: background 0.15s;
+}
+
+.server-item.clickable {
+  cursor: pointer;
+}
+
+.server-item.clickable:hover {
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.08));
 }
 
 .status-dot {
@@ -187,5 +338,68 @@ function close() {
 .server-status {
   font-size: 11px;
   color: var(--theme-muted-foreground, #656d76);
+}
+
+.arrow-icon {
+  color: var(--theme-muted-foreground, #656d76);
+  flex-shrink: 0;
+}
+
+/* Tool list styles */
+.tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tool-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--theme-background, #f6f8fa);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.tool-item:hover {
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.08));
+}
+
+.tool-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--theme-foreground, #24292e);
+  font-family: monospace;
+}
+
+.expand-icon {
+  color: var(--theme-muted-foreground, #656d76);
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.tool-item.expanded .expand-icon {
+  transform: rotate(180deg);
+}
+
+.tool-details {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--theme-border, #e1e4e8);
+}
+
+.tool-description {
+  font-size: 11px;
+  color: var(--theme-muted-foreground, #656d76);
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>

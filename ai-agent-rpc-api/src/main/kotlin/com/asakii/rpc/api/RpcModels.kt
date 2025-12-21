@@ -116,10 +116,7 @@ data class RpcConnectOptions(
     val sandboxMode: RpcSandboxMode? = null,
 
     // === 会话恢复相关配置 ===
-    val replayUserMessages: Boolean? = null,  // 恢复会话时重放用户消息
-
-    // === Chrome 扩展配置 ===
-    val chromeEnabled: Boolean? = null  // 是否启用 Chrome 扩展（需要重连生效）
+    val replayUserMessages: Boolean? = null  // 恢复会话时重放用户消息
 )
 
 /**
@@ -673,14 +670,33 @@ data class RpcMcpStatusResult(
 )
 
 /**
- * Chrome 扩展状态查询结果
+ * MCP 服务器重连结果
  */
-data class RpcChromeStatusResult(
-    val installed: Boolean,           // 扩展是否已安装
-    val enabled: Boolean,             // 是否在配置中启用
-    val connected: Boolean,           // MCP 服务器是否已连接
-    val mcpServerStatus: String? = null,   // MCP 服务器状态字符串
-    val extensionVersion: String? = null   // 扩展版本号
+data class RpcReconnectMcpResult(
+    val success: Boolean,             // 重连是否成功
+    val serverName: String,           // 服务器名称
+    val status: String? = null,       // 重连后的状态
+    val toolsCount: Int = 0,          // 可用工具数量
+    val error: String? = null         // 错误信息
+)
+
+/**
+ * MCP 工具信息
+ */
+@Serializable
+data class RpcMcpToolInfo(
+    val name: String,                 // 工具名称（原始 MCP 工具名）
+    val description: String,          // 工具描述
+    val inputSchema: JsonElement? = null  // 输入参数 JSON Schema
+)
+
+/**
+ * MCP 工具列表查询结果
+ */
+data class RpcMcpToolsResult(
+    val serverName: String?,          // 服务器名称过滤条件
+    val tools: List<RpcMcpToolInfo>,  // 工具列表
+    val count: Int                    // 工具数量
 )
 
 // ============================================================================

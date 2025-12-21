@@ -47,23 +47,6 @@
           <circle cx="6" cy="18" r="1" fill="currentColor"/>
         </svg>
       </button>
-      <button
-        class="icon-btn chrome-btn"
-        :class="chromeStatusClass"
-        type="button"
-        title="Chrome Extension"
-        @click="showChromeStatus = true"
-      >
-        <!-- Chrome 图标 - 朴素线条风格 -->
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10" />
-          <circle cx="12" cy="12" r="4" />
-          <path d="M21.17 8H12" />
-          <path d="M3.95 6.06L8.54 14" />
-          <path d="M10.88 21.94L15.46 14" />
-        </svg>
-        <span class="chrome-status-dot" :class="chromeStatusDotClass"></span>
-      </button>
       <ThemeSwitcher />
       <LanguageSwitcher />
     </div>
@@ -76,16 +59,6 @@
       @close="handleCloseMcpPopup"
     />
 
-    <!-- Chrome 状态弹窗 -->
-    <ChromeStatusPopup
-      :visible="showChromeStatus"
-      :status="chromeStatus"
-      :is-connected="isCurrentConnected"
-      :chrome-enabled="chromeEnabled"
-      :connected-chrome-enabled="connectedChromeEnabled"
-      @close="showChromeStatus = false"
-      @toggle-enabled="emit('chrome-toggle', $event)"
-    />
   </div>
 </template>
 
@@ -98,29 +71,6 @@ import SessionTabs, { type SessionTabInfo } from './SessionTabs.vue'
 import ThemeSwitcher from '@/components/toolbar/ThemeSwitcher.vue'
 import LanguageSwitcher from '@/components/toolbar/LanguageSwitcher.vue'
 import McpStatusPopup from '@/components/toolbar/McpStatusPopup.vue'
-import ChromeStatusPopup, { type ChromeStatus } from '@/components/toolbar/ChromeStatusPopup.vue'
-
-// Props
-const props = defineProps<{
-  chromeStatus: ChromeStatus | null
-  chromeEnabled: boolean
-  connectedChromeEnabled?: boolean
-}>()
-
-// Chrome 状态弹窗
-const showChromeStatus = ref(false)
-
-// 打开 Chrome 弹窗时调用 getChromeStatus API
-watch(showChromeStatus, async (visible) => {
-  if (visible && sessionStore.currentTab?.session?.isConnected) {
-    try {
-      await sessionStore.currentTab.queryChromeStatus()
-      console.log('🔌 getChromeStatus triggered')
-    } catch (err) {
-      console.error('[ChatHeader] getChromeStatus failed:', err)
-    }
-  }
-})
 
 // MCP 状态弹窗
 const showMcpStatus = ref(false)
@@ -148,7 +98,6 @@ function handleCloseMcpPopup() {
 
 const emit = defineEmits<{
   (e: 'toggle-history'): void
-  (e: 'chrome-toggle', value: boolean): void
 }>()
 
 const sessionStore = useSessionStore()
@@ -166,22 +115,6 @@ const currentMcpServers = computed(() => {
   return sessionStore.currentTab?.mcpServers.value ?? []
 })
 const isCurrentConnected = computed(() => sessionStore.currentTab?.connectionState.status === ConnectionStatus.CONNECTED)
-
-// Chrome 状态相关计算属性
-const chromeStatusClass = computed(() => {
-  if (!props.chromeStatus) return ''
-  if (props.chromeStatus.connected) return 'chrome-connected'
-  if (props.chromeStatus.installed && props.chromeEnabled) return 'chrome-enabled'
-  return ''
-})
-
-const chromeStatusDotClass = computed(() => {
-  if (!props.chromeStatus) return 'dot-unknown'
-  if (props.chromeStatus.connected) return 'dot-connected'
-  if (props.chromeStatus.installed && props.chromeEnabled) return 'dot-enabled'
-  if (!props.chromeStatus.installed) return 'dot-not-installed'
-  return 'dot-unknown'
-})
 
 // 转换为 SessionTabInfo 格式
 const sessionTabList = computed<SessionTabInfo[]>(() => {
@@ -379,45 +312,5 @@ function handleRename(tabId: string, newName: string) {
 
 .new-session-btn svg {
   flex-shrink: 0;
-}
-
-/* Chrome 按钮样式 */
-.chrome-btn {
-  position: relative;
-}
-
-.chrome-btn.chrome-connected {
-  color: #28a745;
-}
-
-.chrome-btn.chrome-enabled {
-  color: #f59e0b;
-}
-
-.chrome-status-dot {
-  position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  border: 1px solid var(--theme-panel-background, #f6f8fa);
-}
-
-.chrome-status-dot.dot-connected {
-  background: #28a745;
-  box-shadow: 0 0 4px #28a745;
-}
-
-.chrome-status-dot.dot-enabled {
-  background: #f59e0b;
-}
-
-.chrome-status-dot.dot-not-installed {
-  background: #9ca3af;
-}
-
-.chrome-status-dot.dot-unknown {
-  background: #9ca3af;
 }
 </style>

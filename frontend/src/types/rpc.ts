@@ -519,9 +519,6 @@ export interface RpcConnectOptions {
 
   // === 会话恢复相关配置 ===
   replayUserMessages?: boolean  // 恢复会话时重放用户消息
-
-  // === Chrome 扩展配置 ===
-  chromeEnabled?: boolean  // 是否启用 Chrome 扩展（需要重连生效）
 }
 
 /** Agent 能力声明 */

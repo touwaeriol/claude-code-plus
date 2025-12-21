@@ -394,6 +394,35 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
     }
 
     /**
+     * Reconnect a specific MCP server.
+     *
+     * This calls the CLI internal reconnect function to re-establish the connection
+     * without doing a full server replacement. Useful when a server temporarily
+     * disconnects or needs to be refreshed.
+     *
+     * @param serverName The name of the MCP server to reconnect
+     * @return Response with success status, server info and any errors
+     */
+    suspend fun reconnectMcp(serverName: String): McpReconnectResponse {
+        ensureConnected()
+        return controlProtocol!!.reconnectMcp(serverName)
+    }
+
+    /**
+     * Get the list of tools for a specific MCP server or all servers.
+     *
+     * This reads from the CLI's internal tool registry (y.mcp.tools) and returns
+     * detailed tool information including name, description, and input schema.
+     *
+     * @param serverName Optional server name to filter tools. If null, returns all tools.
+     * @return Response with tool list and count
+     */
+    suspend fun getMcpTools(serverName: String? = null): McpToolsResponse {
+        ensureConnected()
+        return controlProtocol!!.getMcpTools(serverName)
+    }
+
+    /**
      * Change permission mode during conversation.
      *
      * This allows dynamically switching between permission modes without reconnecting.

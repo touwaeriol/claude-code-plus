@@ -723,7 +723,6 @@ message IdeSettings {
   string default_thinking_level_id = 9;  // 默认思考级别 ID（如 "off", "think", "ultra", "custom_xxx"）
   repeated ThinkingLevelConfig thinking_levels = 10;  // 所有可用的思考级别
   string permission_mode = 11;           // 权限模式（default, acceptEdits, plan, bypassPermissions）
-  bool default_chrome_enabled = 12;      // 默认启用 Chrome 扩展
 }
 
 // 思考级别配置
@@ -824,4 +823,37 @@ message ChromeStatusResult {
   bool connected = 3;           // MCP 服务器是否已连接
   optional string mcp_server_status = 4;   // MCP 服务器状态字符串
   optional string extension_version = 5;   // 扩展版本号
+}
+
+// MCP 服务器重连请求
+message ReconnectMcpRequest {
+  string server_name = 1;       // 要重连的服务器名称
+}
+
+// MCP 服务器重连结果
+message ReconnectMcpResult {
+  bool success = 1;             // 重连是否成功
+  string server_name = 2;       // 服务器名称
+  optional string status = 3;   // 重连后的状态
+  int32 tools_count = 4;        // 可用工具数量
+  optional string error = 5;    // 错误信息
+}
+
+// MCP 工具列表请求
+message GetMcpToolsRequest {
+  optional string server_name = 1;  // 服务器名称，空表示获取所有服务器的工具
+}
+
+// MCP 工具信息
+message McpToolInfo {
+  string name = 1;              // 工具名称（原始 MCP 工具名）
+  string description = 2;       // 工具描述
+  optional string input_schema = 3;  // 输入参数 JSON Schema（JSON 字符串）
+}
+
+// MCP 工具列表结果
+message GetMcpToolsResult {
+  optional string server_name = 1;  // 服务器名称过滤条件
+  repeated McpToolInfo tools = 2;   // 工具列表
+  int32 count = 3;                  // 工具数量
 }

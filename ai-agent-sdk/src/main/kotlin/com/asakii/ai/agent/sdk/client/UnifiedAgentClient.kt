@@ -111,6 +111,32 @@ interface UnifiedAgentClient {
             mcpServerStatus = null,
             extensionVersion = null
         )
+
+    /**
+     * 重连指定的 MCP 服务器（仅 Claude 客户端支持）
+     * @param serverName MCP 服务器名称
+     * @return 重连结果，默认返回失败状态
+     */
+    suspend fun reconnectMcp(serverName: String): com.asakii.claude.agent.sdk.types.McpReconnectResponse =
+        com.asakii.claude.agent.sdk.types.McpReconnectResponse(
+            success = false,
+            serverName = serverName,
+            status = null,
+            toolsCount = 0,
+            error = "Not supported by this client"
+        )
+
+    /**
+     * 获取指定 MCP 服务器的工具列表（仅 Claude 客户端支持）
+     * @param serverName 服务器名称，null 表示获取所有工具
+     * @return 工具列表，默认返回空列表
+     */
+    suspend fun getMcpTools(serverName: String? = null): com.asakii.claude.agent.sdk.types.McpToolsResponse =
+        com.asakii.claude.agent.sdk.types.McpToolsResponse(
+            serverName = serverName,
+            tools = emptyList(),
+            count = 0
+        )
 }
 
 /**

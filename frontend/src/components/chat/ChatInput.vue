@@ -275,26 +275,6 @@
             @toggle="handleSkipPermissionsChange"
           />
 
-          <!-- Chrome 扩展开关 -->
-          <StatusToggle
-            v-if="showChromeToggle"
-            label="Chrome"
-            :enabled="chromeEnabled"
-            :disabled="!enabled"
-            :tooltip="chromeToggleTooltip"
-            @toggle="handleChromeToggle"
-          >
-            <template #icon>
-              <!-- Chrome 图标 - 朴素线条风格 -->
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10" />
-                <circle cx="12" cy="12" r="4" />
-                <path d="M21.17 8H12" />
-                <path d="M3.95 6.06L8.54 14" />
-                <path d="M10.88 21.94L15.46 14" />
-              </svg>
-            </template>
-          </StatusToggle>
         </div>
       </div>
 
@@ -492,14 +472,10 @@ interface Props {
   showModelSelector?: boolean
   showPermissionControls?: boolean
   showSendButton?: boolean
-  showChromeToggle?: boolean  // 是否显示 Chrome 扩展开关
   tokenUsage?: TokenUsage
   placeholderText?: string
   messageHistory?: EnhancedMessage[]  // 消息历史（用于Token计算）
   sessionTokenUsage?: EnhancedTokenUsage | null  // 会话级Token使用量
-  // Chrome 扩展控制（由父组件传入）
-  chromeEnabled?: boolean       // 是否启用 Chrome 扩展
-  chromeInstalled?: boolean     // Chrome 扩展是否已安装
   // 内嵌编辑模式相关
   inline?: boolean           // 是否为内嵌模式（用于编辑消息）
   editDisabled?: boolean     // 是否禁用发送（当前阶段用于编辑模式）
@@ -525,7 +501,6 @@ interface Emits {
   (e: 'skip-permissions-change', skip: boolean): void
   (e: 'cancel'): void  // 取消编辑（仅 inline 模式）
   (e: 'update:modelValue', value: string): void  // v-model 支持
-  (e: 'chrome-toggle', enabled: boolean): void  // Chrome 扩展开关切换
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -540,9 +515,6 @@ const props = withDefaults(defineProps<Props>(), {
   showModelSelector: true,
   showPermissionControls: true,
   showSendButton: true,
-  showChromeToggle: true,
-  chromeEnabled: false,
-  chromeInstalled: false,
   placeholderText: '',
   inline: false,
   editDisabled: false,
@@ -590,17 +562,6 @@ const currentError = computed(() => sessionStore.currentLastError)
 // 清除错误
 function handleClearError() {
   sessionStore.clearCurrentError()
-}
-
-// Chrome 扩展开关处理
-const chromeToggleTooltip = computed(() => {
-  return props.chromeEnabled
-    ? 'Chrome enabled (--chrome)'
-    : 'Chrome disabled (--no-chrome)'
-})
-
-function handleChromeToggle(enabled: boolean) {
-  emit('chrome-toggle', enabled)
 }
 
 // Refs

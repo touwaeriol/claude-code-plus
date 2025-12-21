@@ -65,6 +65,9 @@ private object ConsoleIdeTools : IdeTools {
 
     override fun setLocale(locale: String): Result<Unit> = Result.success(Unit)
 
+    override fun openUrl(url: String): Result<Unit> =
+        Result.failure(UnsupportedOperationException("Standalone sample - openUrl not supported"))
+
     override fun detectNode(): NodeDetectionResult = NodeDetectionResult(
         found = false,
         error = "Standalone sample - Node.js detection not supported"

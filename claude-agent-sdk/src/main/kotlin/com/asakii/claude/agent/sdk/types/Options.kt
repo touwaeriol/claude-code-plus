@@ -303,6 +303,66 @@ data class McpSetServersResponse(
 )
 
 /**
+ * Response from mcp_reconnect request.
+ */
+@Serializable
+data class McpReconnectResponse(
+    /** Whether the reconnect was successful */
+    val success: Boolean,
+    /** The server name that was reconnected */
+    val serverName: String,
+    /** Server status after reconnect: "connected" | "failed" | "needs-auth" | etc. */
+    val status: String?,
+    /** Number of tools available after reconnect */
+    val toolsCount: Int,
+    /** Error message if reconnect failed */
+    val error: String? = null
+)
+
+/**
+ * MCP tool information.
+ */
+@Serializable
+data class McpToolInfo(
+    /** Tool name (original MCP tool name, e.g., "FileIndex") */
+    val name: String,
+    /** Tool description */
+    val description: String,
+    /** Input JSON Schema */
+    val inputSchema: JsonElement? = null
+)
+
+/**
+ * Response from mcp_tools request.
+ */
+@Serializable
+data class McpToolsResponse(
+    /** Server name filter (null if all servers) */
+    val serverName: String?,
+    /** List of tools */
+    val tools: List<McpToolInfo>,
+    /** Total count of tools */
+    val count: Int
+)
+
+/**
+ * Response from mcp_disable/mcp_enable request.
+ */
+@Serializable
+data class McpDisableEnableResponse(
+    /** Whether the operation was successful */
+    val success: Boolean,
+    /** The server name that was disabled/enabled */
+    val serverName: String,
+    /** Server status after operation: "disabled" | "connected" | "pending" | "failed" | etc. */
+    val status: String?,
+    /** Number of tools available (0 if disabled) */
+    val toolsCount: Int,
+    /** Error message if operation failed */
+    val error: String? = null
+)
+
+/**
  * Chrome extension status - matches official /chrome command display format.
  *
  * Data sources:

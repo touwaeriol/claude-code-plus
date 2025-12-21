@@ -225,8 +225,7 @@ function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
       defaultThinkingTokens: 8096,
       defaultThinkingLevelId: 'ultra',
       thinkingLevels: defaultThinkingLevels,
-      permissionMode: 'default',
-      defaultChromeEnabled: false
+      permissionMode: 'default'
     }
   }
 
@@ -248,8 +247,7 @@ function decodeSettingsResponse(data: Uint8Array): IdeSettings | null {
           isCustom: level.isCustom
         }))
       : defaultThinkingLevels,
-    permissionMode: s.permissionMode || 'default',
-    defaultChromeEnabled: s.defaultChromeEnabled
+    permissionMode: s.permissionMode || 'default'
   }
 }
 
@@ -380,8 +378,6 @@ export interface IdeSettings {
   defaultThinkingLevel?: string  // 思考等级枚举名称（如 "HIGH", "MEDIUM", "OFF"）
   // 权限模式
   permissionMode?: string  // 权限模式（default, acceptEdits, plan, bypassPermissions）
-  // Chrome 扩展
-  defaultChromeEnabled?: boolean  // 默认启用 Chrome 扩展
 }
 
 // 思考级别配置

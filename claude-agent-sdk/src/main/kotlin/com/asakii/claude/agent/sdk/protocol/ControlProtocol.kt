@@ -813,6 +813,170 @@ class ControlProtocol(
     }
 
     /**
+     * Reconnect a specific MCP server.
+     * This calls the CLI internal reconnect function (x2A) to re-establish
+     * the connection without doing a full server replacement.
+     *
+     * @param serverName The name of the MCP server to reconnect
+     * @return Response with success status, server info and any errors
+     */
+    suspend fun reconnectMcp(serverName: String): McpReconnectResponse {
+        val request = buildJsonObject {
+            put("subtype", "mcp_reconnect")
+            put("server_name", serverName)
+        }
+        val response = sendControlRequestInternal(request)
+
+        if (response.subtype == "error") {
+            throw ControlProtocolException("Reconnect MCP failed: ${response.error}")
+        }
+
+        val responseObj = response.response?.jsonObject
+            ?: return McpReconnectResponse(
+                success = false,
+                serverName = serverName,
+                status = null,
+                toolsCount = 0,
+                error = "Empty response"
+            )
+
+        return McpReconnectResponse(
+            success = responseObj["success"]?.jsonPrimitive?.booleanOrNull ?: false,
+            serverName = responseObj["server_name"]?.jsonPrimitive?.contentOrNull ?: serverName,
+            status = responseObj["status"]?.jsonPrimitive?.contentOrNull,
+            toolsCount = responseObj["tools_count"]?.jsonPrimitive?.intOrNull ?: 0,
+            error = responseObj["error"]?.jsonPrimitive?.contentOrNull
+        )
+    }
+
+    /**
+     * Get the list of tools for a specific MCP server or all servers.
+     * This reads from the CLI's internal tool registry (y.mcp.tools).
+     *
+     * @param serverName Optional server name to filter tools. If null, returns all tools.
+     * @return Response with tool list and count
+     */
+    suspend fun getMcpTools(serverName: String? = null): McpToolsResponse {
+        val request = buildJsonObject {
+            put("subtype", "mcp_tools")
+            serverName?.let { put("server_name", it) }
+        }
+        val response = sendControlRequestInternal(request)
+
+        if (response.subtype == "error") {
+            throw ControlProtocolException("Get MCP tools failed: ${response.error}")
+        }
+
+        val responseObj = response.response?.jsonObject
+            ?: return McpToolsResponse(
+                serverName = serverName,
+                tools = emptyList(),
+                count = 0
+            )
+
+        val toolsArray = responseObj["tools"]?.jsonArray ?: return McpToolsResponse(
+            serverName = serverName,
+            tools = emptyList(),
+            count = 0
+        )
+
+        val tools = toolsArray.mapNotNull { element ->
+            val toolObj = element.jsonObject
+            McpToolInfo(
+                name = toolObj["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null,
+                description = toolObj["description"]?.jsonPrimitive?.contentOrNull ?: "",
+                inputSchema = toolObj["inputSchema"]
+            )
+        }
+
+        return McpToolsResponse(
+            serverName = responseObj["server_name"]?.jsonPrimitive?.contentOrNull,
+            tools = tools,
+            count = responseObj["count"]?.jsonPrimitive?.intOrNull ?: tools.size
+        )
+    }
+
+    /**
+     * Disable a specific MCP server.
+     * This updates the user's disabledMcpServers configuration and disconnects the server.
+     *
+     * Internally calls:
+     * - CY0(serverName, false) - Add to disabledMcpServers list
+     * - gm(serverName, config) - Disconnect if currently connected
+     *
+     * @param serverName The name of the MCP server to disable
+     * @return Response with success status and server state
+     */
+    suspend fun disableMcp(serverName: String): McpDisableEnableResponse {
+        val request = buildJsonObject {
+            put("subtype", "mcp_disable")
+            put("server_name", serverName)
+        }
+        val response = sendControlRequestInternal(request)
+
+        if (response.subtype == "error") {
+            throw ControlProtocolException("Disable MCP failed: ${response.error}")
+        }
+
+        val responseObj = response.response?.jsonObject
+            ?: return McpDisableEnableResponse(
+                success = false,
+                serverName = serverName,
+                status = null,
+                toolsCount = 0,
+                error = "Empty response"
+            )
+
+        return McpDisableEnableResponse(
+            success = responseObj["success"]?.jsonPrimitive?.booleanOrNull ?: false,
+            serverName = responseObj["server_name"]?.jsonPrimitive?.contentOrNull ?: serverName,
+            status = responseObj["status"]?.jsonPrimitive?.contentOrNull,
+            toolsCount = responseObj["tools_count"]?.jsonPrimitive?.intOrNull ?: 0,
+            error = responseObj["error"]?.jsonPrimitive?.contentOrNull
+        )
+    }
+
+    /**
+     * Enable a specific MCP server.
+     * This removes the server from disabledMcpServers and reconnects it.
+     *
+     * Internally calls:
+     * - CY0(serverName, true) - Remove from disabledMcpServers list
+     * - x2A(serverName, config) - Reconnect the server
+     *
+     * @param serverName The name of the MCP server to enable
+     * @return Response with success status and server state
+     */
+    suspend fun enableMcp(serverName: String): McpDisableEnableResponse {
+        val request = buildJsonObject {
+            put("subtype", "mcp_enable")
+            put("server_name", serverName)
+        }
+        val response = sendControlRequestInternal(request)
+
+        if (response.subtype == "error") {
+            throw ControlProtocolException("Enable MCP failed: ${response.error}")
+        }
+
+        val responseObj = response.response?.jsonObject
+            ?: return McpDisableEnableResponse(
+                success = false,
+                serverName = serverName,
+                status = null,
+                toolsCount = 0,
+                error = "Empty response"
+            )
+
+        return McpDisableEnableResponse(
+            success = responseObj["success"]?.jsonPrimitive?.booleanOrNull ?: false,
+            serverName = responseObj["server_name"]?.jsonPrimitive?.contentOrNull ?: serverName,
+            status = responseObj["status"]?.jsonPrimitive?.contentOrNull,
+            toolsCount = responseObj["tools_count"]?.jsonPrimitive?.intOrNull ?: 0,
+            error = responseObj["error"]?.jsonPrimitive?.contentOrNull
+        )
+    }
+
+    /**
      * Dynamically set MCP servers for the current session.
      * This allows adding/removing MCP servers without reconnecting.
      *

@@ -805,9 +805,7 @@ class AiAgentRpcServiceImpl(
             // Claude CLI settings.json 路径（用于加载环境变量等配置）
             settings = defaults.settings,
             // IDEA 文件同步 hooks（由 jetbrains-plugin 提供）
-            hooks = defaults.ideaFileSyncHooks,
-            // Chrome 扩展配置（从前端传递）
-            chromeEnabled = options.chromeEnabled
+            hooks = defaults.ideaFileSyncHooks
         )
 
         return ClaudeOverrides(options = claudeOptions)
@@ -1350,34 +1348,67 @@ class AiAgentRpcServiceImpl(
     }
 
     /**
-     * 获取 Chrome 扩展状态
+     * 重连指定的 MCP 服务器
      */
-    override suspend fun getChromeStatus(): RpcChromeStatusResult {
-        val currentClient = client ?: return RpcChromeStatusResult(
-            installed = false,
-            enabled = false,
-            connected = false,
-            mcpServerStatus = null,
-            extensionVersion = null
+    override suspend fun reconnectMcp(serverName: String): RpcReconnectMcpResult {
+        val currentClient = client ?: return RpcReconnectMcpResult(
+            success = false,
+            serverName = serverName,
+            status = null,
+            toolsCount = 0,
+            error = "Client not connected"
         )
 
         return try {
-            val status = currentClient.getChromeStatus()
-            RpcChromeStatusResult(
-                installed = status.installed,
-                enabled = status.enabled,
-                connected = status.connected,
-                mcpServerStatus = status.mcpServerStatus,
-                extensionVersion = status.extensionVersion
+            val result = currentClient.reconnectMcp(serverName)
+            RpcReconnectMcpResult(
+                success = result.success,
+                serverName = result.serverName,
+                status = result.status,
+                toolsCount = result.toolsCount,
+                error = result.error
             )
         } catch (e: Exception) {
-            sdkLog.warn("Failed to get Chrome status: ${e.message}")
-            RpcChromeStatusResult(
-                installed = false,
-                enabled = false,
-                connected = false,
-                mcpServerStatus = null,
-                extensionVersion = null
+            sdkLog.warn("Failed to reconnect MCP server $serverName: ${e.message}")
+            RpcReconnectMcpResult(
+                success = false,
+                serverName = serverName,
+                status = null,
+                toolsCount = 0,
+                error = e.message ?: "Unknown error"
+            )
+        }
+    }
+
+    /**
+     * 获取指定 MCP 服务器的工具列表
+     */
+    override suspend fun getMcpTools(serverName: String?): RpcMcpToolsResult {
+        val currentClient = client ?: return RpcMcpToolsResult(
+            serverName = serverName,
+            tools = emptyList(),
+            count = 0
+        )
+
+        return try {
+            val result = currentClient.getMcpTools(serverName)
+            RpcMcpToolsResult(
+                serverName = result.serverName,
+                tools = result.tools.map { tool ->
+                    RpcMcpToolInfo(
+                        name = tool.name,
+                        description = tool.description,
+                        inputSchema = tool.inputSchema
+                    )
+                },
+                count = result.count
+            )
+        } catch (e: Exception) {
+            sdkLog.warn("Failed to get MCP tools for $serverName: ${e.message}")
+            RpcMcpToolsResult(
+                serverName = serverName,
+                tools = emptyList(),
+                count = 0
             )
         }
     }

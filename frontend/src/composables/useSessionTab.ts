@@ -100,8 +100,6 @@ export interface UIState {
     scrollState: ScrollState
     /** 是否手动关闭了当前打开的文件标签（每个 Tab 独立） */
     activeFileDismissed: boolean
-    /** 是否启用 Chrome 扩展（需要重连生效） */
-    chromeEnabled: boolean
 }
 
 /**
@@ -228,19 +226,6 @@ export function useSessionTab(initialOrder: number = 0) {
     // MCP 服务器状态（从 system_init 消息实时更新）
     const mcpServers = ref<Array<{ name: string; status: string }>>([])
 
-    // Chrome 扩展状态（连接后查询）
-    const chromeStatus = ref<{
-        installed: boolean
-        enabled: boolean
-        connected: boolean
-        mcpServerStatus?: string
-        extensionVersion?: string
-    } | null>(null)
-    const chromeStatusLoading = ref(false)
-
-    // 当前连接实际使用的 Chrome 状态（current，SDK 侧状态）
-    const connectedChromeEnabled = ref(false)
-
     // ========== 连接设置（连接时确定，切换需要重连）==========
     const modelId = ref<string | null>(null)
     const thinkingLevel = ref<ThinkingLevel>(8096)  // 默认 Ultra
@@ -333,16 +318,11 @@ export function useSessionTab(initialOrder: number = 0) {
     }
 
     // ========== UI 状态 ==========
-    // 从 settingsStore 获取默认 Chrome 启用状态
-    const settingsStore = useSettingsStore()
-    const defaultChromeEnabled = settingsStore.ideSettings?.defaultChromeEnabled ?? false
-
     const uiState = reactive<UIState>({
         inputText: '',
         contexts: [],
         scrollState: { ...DEFAULT_SCROLL_STATE },
-        activeFileDismissed: false,
-        chromeEnabled: defaultChromeEnabled
+        activeFileDismissed: false
     })
 
     // ========== 压缩状态 ==========
@@ -806,9 +786,7 @@ export function useSessionTab(initialOrder: number = 0) {
                 continueConversation: resolvedOptions.continueConversation,
                 resumeSessionId: resolvedOptions.resumeSessionId,
                 // 固定开启重放用户消息
-                replayUserMessages: true,
-                // Chrome 扩展状态
-                chromeEnabled: uiState.chromeEnabled
+                replayUserMessages: true
             }
 
             // 连接并获取 sessionId
@@ -830,12 +808,6 @@ export function useSessionTab(initialOrder: number = 0) {
             connectionState.capabilities = session.capabilities
             connectionState.status = ConnectionStatus.CONNECTED
             connectionState.lastError = null
-
-            // 记录连接时的 Chrome 状态
-            connectedChromeEnabled.value = uiState.chromeEnabled
-
-            // 连接后自动查询 Chrome 扩展状态
-            queryChromeStatus()
 
             // 连接成功，重置重连计数
             reconnectAttempts = 0
@@ -1275,14 +1247,6 @@ export function useSessionTab(initialOrder: number = 0) {
                 rename(newTitle)
                 log.info(`[Tab ${tabId}] 自动设置标题: ${newTitle}`)
             }
-        }
-
-        // Chrome 状态变更：需要重连
-        if (connectionState.status === ConnectionStatus.CONNECTED &&
-            uiState.chromeEnabled !== connectedChromeEnabled.value) {
-            log.info(`[Tab ${tabId}] Chrome 状态变更 (${connectedChromeEnabled.value} -> ${uiState.chromeEnabled})，需要重连`)
-            await disconnect()
-            await connect()
         }
 
         // 连接未就绪：先入队，等待连接后处理
@@ -1741,28 +1705,6 @@ export function useSessionTab(initialOrder: number = 0) {
         log.debug(`[Tab ${tabId}] 已重置`)
     }
 
-    /**
-     * 查询 Chrome 扩展状态
-     */
-    async function queryChromeStatus(): Promise<void> {
-        if (!rsocketSession.value?.isConnected) {
-            log.warn(`[Tab ${tabId}] queryChromeStatus: 未连接，跳过`)
-            return
-        }
-
-        chromeStatusLoading.value = true
-        try {
-            const result = await rsocketSession.value.getChromeStatus()
-            chromeStatus.value = result
-            log.info(`[Tab ${tabId}] Chrome 状态查询成功:`, result)
-        } catch (e) {
-            log.error(`[Tab ${tabId}] Chrome 状态查询失败:`, e)
-            chromeStatus.value = null
-        } finally {
-            chromeStatusLoading.value = false
-        }
-    }
-
     // ========== 导出 ==========
 
     return {
@@ -1799,12 +1741,6 @@ export function useSessionTab(initialOrder: number = 0) {
 
         // MCP 服务器状态
         mcpServers,
-
-        // Chrome 扩展状态
-        chromeStatus,
-        chromeStatusLoading,
-        connectedChromeEnabled,  // 连接时使用的 Chrome 启用状态
-        queryChromeStatus,
 
         // UI 状态
         uiState,

@@ -17,7 +17,10 @@ import {
   TruncateHistoryRequestSchema,
   TruncateHistoryResultSchema,
   McpStatusResultSchema,
-  ChromeStatusResultSchema,
+  ReconnectMcpRequestSchema,
+  ReconnectMcpResultSchema,
+  GetMcpToolsRequestSchema,
+  GetMcpToolsResultSchema,
   StatusResultSchema,
   SetModelResultSchema,
   SetPermissionModeResultSchema,
@@ -131,8 +134,7 @@ export const ProtoCodec = {
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
       sandboxMode: options.sandboxMode ? mapSandboxModeToProto(options.sandboxMode) : undefined,
-      replayUserMessages: options.replayUserMessages,
-      chromeEnabled: options.chromeEnabled
+      replayUserMessages: options.replayUserMessages
     })
 
     return toBinary(ConnectOptionsSchema, proto)
@@ -362,22 +364,62 @@ export const ProtoCodec = {
   },
 
   /**
-   * 解码 ChromeStatusResult
+   * 编码 ReconnectMcpRequest
    */
-  decodeChromeStatusResult(data: Uint8Array): {
-    installed: boolean
-    enabled: boolean
-    connected: boolean
-    mcpServerStatus?: string
-    extensionVersion?: string
+  encodeReconnectMcpRequest(serverName: string): Uint8Array {
+    const msg = create(ReconnectMcpRequestSchema, { serverName })
+    return toBinary(ReconnectMcpRequestSchema, msg)
+  },
+
+  /**
+   * 解码 ReconnectMcpResult
+   */
+  decodeReconnectMcpResult(data: Uint8Array): {
+    success: boolean
+    serverName: string
+    status?: string
+    toolsCount: number
+    error?: string
   } {
-    const proto = fromBinary(ChromeStatusResultSchema, data)
+    const proto = fromBinary(ReconnectMcpResultSchema, data)
     return {
-      installed: proto.installed,
-      enabled: proto.enabled,
-      connected: proto.connected,
-      mcpServerStatus: proto.mcpServerStatus || undefined,
-      extensionVersion: proto.extensionVersion || undefined
+      success: proto.success,
+      serverName: proto.serverName,
+      status: proto.status || undefined,
+      toolsCount: proto.toolsCount,
+      error: proto.error || undefined
+    }
+  },
+
+  /**
+   * 编码 GetMcpToolsRequest
+   */
+  encodeGetMcpToolsRequest(serverName?: string): Uint8Array {
+    const msg = create(GetMcpToolsRequestSchema, { serverName })
+    return toBinary(GetMcpToolsRequestSchema, msg)
+  },
+
+  /**
+   * 解码 GetMcpToolsResult
+   */
+  decodeGetMcpToolsResult(data: Uint8Array): {
+    serverName?: string
+    tools: Array<{
+      name: string
+      description: string
+      inputSchema?: string
+    }>
+    count: number
+  } {
+    const proto = fromBinary(GetMcpToolsResultSchema, data)
+    return {
+      serverName: proto.serverName || undefined,
+      tools: proto.tools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema || undefined
+      })),
+      count: proto.count
     }
   },
 

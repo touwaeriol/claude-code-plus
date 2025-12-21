@@ -3,11 +3,7 @@
     <!-- 会话标签栏 -->
     <ChatHeader
       class="chat-header-bar"
-      :chrome-status="currentChromeStatus"
-      :chrome-enabled="currentChromeEnabled"
-      :connected-chrome-enabled="currentConnectedChromeEnabled"
       @toggle-history="toggleHistoryOverlay"
-      @chrome-toggle="handleChromeToggle"
     />
 
     <!-- 聊天界面内容 -->
@@ -68,9 +64,6 @@
         :show-model-selector="true"
         :show-permission-controls="true"
         :show-send-button="true"
-        :show-chrome-toggle="true"
-        :chrome-enabled="currentChromeEnabled"
-        :chrome-installed="currentChromeInstalled"
         class="input-area"
         @send="handleSendMessage"
         @force-send="handleForceSend"
@@ -78,7 +71,6 @@
         @context-add="handleAddContext"
         @context-remove="handleRemoveContext"
         @auto-cleanup-change="handleAutoCleanupChange"
-        @chrome-toggle="handleChromeToggle"
       />
     </div>
 
@@ -392,33 +384,6 @@ const streamingContentVersion = computed(() => {
 const pendingTasks = ref<PendingTask[]>([])
 const debugExpanded = ref(false)
 const chatInputRef = ref<InstanceType<typeof ChatInput>>()
-
-// Chrome 扩展状态计算属性
-const currentChromeStatus = computed(() => {
-  return sessionStore.currentTab?.chromeStatus.value ?? null
-})
-
-const currentChromeEnabled = computed(() => {
-  return sessionStore.currentTab?.uiState.chromeEnabled ?? false
-})
-
-const currentConnectedChromeEnabled = computed(() => {
-  return sessionStore.currentTab?.connectedChromeEnabled.value
-})
-
-const currentChromeInstalled = computed(() => {
-  return sessionStore.currentTab?.chromeStatus.value?.installed ?? false
-})
-
-// Chrome 扩展开关切换
-// 注意：状态变更后，sendMessage 会自动检测并在下次发送前重连
-function handleChromeToggle(enabled: boolean) {
-  console.log('[ModernChatView] Chrome toggle:', enabled)
-  const currentTab = sessionStore.currentTab
-  if (currentTab) {
-    currentTab.uiState.chromeEnabled = enabled
-  }
-}
 
 // 生命周期钩子
 onMounted(async () => {

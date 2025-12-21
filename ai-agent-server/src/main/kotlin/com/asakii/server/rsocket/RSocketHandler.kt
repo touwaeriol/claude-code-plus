@@ -123,7 +123,8 @@ class RSocketHandler(
                     "agent.truncateHistory" -> handleTruncateHistory(dataBytes, rpcService)
                     "agent.hasIdeEnvironment" -> handleHasIdeEnvironment()
                     "agent.getMcpStatus" -> handleGetMcpStatus(rpcService)
-                    "agent.getChromeStatus" -> handleGetChromeStatus(rpcService)
+                    "agent.reconnectMcp" -> handleReconnectMcp(dataBytes, rpcService)
+                    "agent.getMcpTools" -> handleGetMcpTools(dataBytes, rpcService)
                     else -> throw IllegalArgumentException("Unknown route: $route")
                 }
 
@@ -273,16 +274,37 @@ class RSocketHandler(
         return buildPayload { data(response.toByteArray()) }
     }
 
-    private suspend fun handleGetChromeStatus(rpcService: AiAgentRpcService): Payload {
-        wsLog.info("🔌 [RSocket] getChromeStatus request")
-        val result = rpcService.getChromeStatus()
-        wsLog.info("📤 [RSocket] getChromeStatus result: installed=${result.installed}, enabled=${result.enabled}, connected=${result.connected}")
-        val response = ChromeStatusResult.newBuilder().apply {
-            installed = result.installed
-            enabled = result.enabled
-            connected = result.connected
-            result.mcpServerStatus?.let { mcpServerStatus = it }
-            result.extensionVersion?.let { extensionVersion = it }
+    private suspend fun handleReconnectMcp(dataBytes: ByteArray, rpcService: AiAgentRpcService): Payload {
+        val req = ReconnectMcpRequest.parseFrom(dataBytes)
+        wsLog.info("🔌 [RSocket] reconnectMcp request: serverName=${req.serverName}")
+        val result = rpcService.reconnectMcp(req.serverName)
+        wsLog.info("📤 [RSocket] reconnectMcp result: success=${result.success}, status=${result.status}, toolsCount=${result.toolsCount}")
+        val response = ReconnectMcpResult.newBuilder().apply {
+            success = result.success
+            serverName = result.serverName
+            result.status?.let { status = it }
+            toolsCount = result.toolsCount
+            result.error?.let { error = it }
+        }.build()
+        return buildPayload { data(response.toByteArray()) }
+    }
+
+    private suspend fun handleGetMcpTools(dataBytes: ByteArray, rpcService: AiAgentRpcService): Payload {
+        val req = GetMcpToolsRequest.parseFrom(dataBytes)
+        val serverName = if (req.hasServerName()) req.serverName else null
+        wsLog.info("🔧 [RSocket] getMcpTools request: serverName=$serverName")
+        val result = rpcService.getMcpTools(serverName)
+        wsLog.info("📤 [RSocket] getMcpTools result: ${result.count} tools")
+        val response = GetMcpToolsResult.newBuilder().apply {
+            result.serverName?.let { this.serverName = it }
+            result.tools.forEach { tool ->
+                addTools(McpToolInfo.newBuilder().apply {
+                    name = tool.name
+                    description = tool.description
+                    tool.inputSchema?.let { inputSchema = it.toString() }
+                }.build())
+            }
+            count = result.count
         }.build()
         return buildPayload { data(response.toByteArray()) }
     }

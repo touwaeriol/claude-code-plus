@@ -138,9 +138,6 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         // Agent 配置（JSON 序列化）
         var customAgents: String = "{}",
 
-        // 默认启用 Chrome 扩展
-        var defaultChromeEnabled: Boolean = false,
-
         // 自定义模型列表（JSON 序列化）
         var customModels: String = "[]"
     )
@@ -290,10 +287,6 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     var includePartialMessages: Boolean
         get() = state.includePartialMessages
         set(value) { state.includePartialMessages = value }
-
-    var defaultChromeEnabled: Boolean
-        get() = state.defaultChromeEnabled
-        set(value) { state.defaultChromeEnabled = value }
 
     var customModelsJson: String
         get() = state.customModels

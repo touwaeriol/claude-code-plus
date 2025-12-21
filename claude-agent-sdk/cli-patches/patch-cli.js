@@ -142,6 +142,8 @@ const verifications = [
   { pattern: '__sdkBackgroundResolvers', desc: '多任务 resolver Map (v4+)' },
   { pattern: 'get_chrome_status', desc: 'Chrome 状态控制命令' },
   { pattern: '__parentUuid', desc: 'SDK parentUuid 支持 (编辑重发)' },
+  { pattern: 'mcp_reconnect', desc: 'MCP 重连控制命令', optional: true },
+  { pattern: 'mcp_tools', desc: 'MCP 工具列表控制命令', optional: true },
 ];
 
 let verifyPassed = 0;

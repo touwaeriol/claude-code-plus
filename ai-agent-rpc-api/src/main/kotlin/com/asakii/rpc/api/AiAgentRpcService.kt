@@ -152,14 +152,26 @@ interface AiAgentRpcService {
     suspend fun getMcpStatus(): RpcMcpStatusResult
 
     /**
-     * 获取 Chrome 扩展状态
+     * 重连指定的 MCP 服务器
      *
-     * 查询 Chrome 扩展的安装状态、启用状态和连接状态。
-     * 需要 CLI 支持 chrome_status 控制请求。
+     * 调用 CLI 内部的重连函数重新建立 MCP 服务器连接，
+     * 无需进行完整的服务器替换。适用于服务器暂时断开或需要刷新的情况。
      *
-     * @return Chrome 扩展状态信息
+     * @param serverName MCP 服务器名称
+     * @return 重连结果
      */
-    suspend fun getChromeStatus(): RpcChromeStatusResult
+    suspend fun reconnectMcp(serverName: String): RpcReconnectMcpResult
+
+    /**
+     * 获取指定 MCP 服务器的工具列表
+     *
+     * 从 CLI 内部工具注册表读取指定服务器的工具信息，
+     * 包括工具名称、描述和输入参数 Schema。
+     *
+     * @param serverName 服务器名称，null 表示获取所有服务器的工具
+     * @return 工具列表和数量
+     */
+    suspend fun getMcpTools(serverName: String? = null): RpcMcpToolsResult
 
     /**
      * 获取可用模型列表

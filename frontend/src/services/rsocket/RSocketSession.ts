@@ -437,23 +437,48 @@ export class RSocketSession {
     }
 
     /**
-     * 获取 Chrome 扩展状态
+     * 重连指定的 MCP 服务器
      */
-    async getChromeStatus(): Promise<{
-        installed: boolean
-        enabled: boolean
-        connected: boolean
-        mcpServerStatus?: string
-        serverInfo?: Record<string, unknown>
+    async reconnectMcp(serverName: string): Promise<{
+        success: boolean
+        serverName: string
+        status?: string
+        toolsCount: number
+        error?: string
     }> {
         if (!this._isConnected || !this.client) {
             throw new Error('Session not connected')
         }
 
-        console.log('[RSocket] ← agent.getChromeStatus 发送')
-        const responseData = await this.client.requestResponse('agent.getChromeStatus', new Uint8Array())
-        const result = ProtoCodec.decodeChromeStatusResult(responseData)
-        console.log('[RSocket] → agent.getChromeStatus 结果:', JSON.stringify(result, null, 2))
+        console.log('[RSocket] ← agent.reconnectMcp 发送:', serverName)
+        const requestData = ProtoCodec.encodeReconnectMcpRequest(serverName)
+        const responseData = await this.client.requestResponse('agent.reconnectMcp', requestData)
+        const result = ProtoCodec.decodeReconnectMcpResult(responseData)
+        console.log('[RSocket] → agent.reconnectMcp 结果:', JSON.stringify(result, null, 2))
+        return result
+    }
+
+    /**
+     * 获取指定 MCP 服务器的工具列表
+     */
+    async getMcpTools(serverName?: string): Promise<{
+        serverName?: string
+        tools: Array<{
+            name: string
+            description: string
+            inputSchema?: string
+        }>
+        count: number
+    }> {
+        if (!this._isConnected || !this.client) {
+            throw new Error('Session not connected')
+        }
+
+        console.log('[RSocket] ← agent.getMcpTools 发送:', serverName || '(all)')
+        const requestData = ProtoCodec.encodeGetMcpToolsRequest(serverName)
+        const responseData = await this.client.requestResponse('agent.getMcpTools', requestData)
+        const result = ProtoCodec.decodeGetMcpToolsResult(responseData)
+        console.log('[RSocket] → agent.getMcpTools 结果:', result.count, 'tools')
         return result
     }
 

@@ -266,7 +266,6 @@ class JetBrainsRSocketHandler(
                 .setDefaultThinkingLevelId(settings.defaultThinkingLevelId)
                 .addAllThinkingLevels(thinkingLevelsProto)
                 .setPermissionMode(settings.permissionMode)
-                .setDefaultChromeEnabled(settings.defaultChromeEnabled)
                 .build()
 
             val response = GetIdeSettingsResponse.newBuilder()
@@ -527,7 +526,6 @@ class JetBrainsRSocketHandler(
                 .setDefaultThinkingLevelId(settings.defaultThinkingLevelId)
                 .addAllThinkingLevels(thinkingLevelsProto)
                 .setPermissionMode(settings.permissionMode)
-                .setDefaultChromeEnabled(settings.defaultChromeEnabled)
                 .build()
 
             // 构建 IdeSettingsChangedNotify

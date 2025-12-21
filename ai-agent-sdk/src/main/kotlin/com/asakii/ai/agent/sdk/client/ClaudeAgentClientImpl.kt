@@ -245,6 +245,28 @@ class ClaudeAgentClientImpl(
             extensionVersion = null
         )
 
+    /**
+     * 重连指定的 MCP 服务器
+     */
+    override suspend fun reconnectMcp(serverName: String) = client?.reconnectMcp(serverName)
+        ?: com.asakii.claude.agent.sdk.types.McpReconnectResponse(
+            success = false,
+            serverName = serverName,
+            status = null,
+            toolsCount = 0,
+            error = "Client not connected"
+        )
+
+    /**
+     * 获取指定 MCP 服务器的工具列表
+     */
+    override suspend fun getMcpTools(serverName: String?) = client?.getMcpTools(serverName)
+        ?: com.asakii.claude.agent.sdk.types.McpToolsResponse(
+            serverName = serverName,
+            tools = emptyList(),
+            count = 0
+        )
+
     private fun checkCapability(supported: Boolean, method: String) {
         if (!supported) {
             throw UnsupportedOperationException(
