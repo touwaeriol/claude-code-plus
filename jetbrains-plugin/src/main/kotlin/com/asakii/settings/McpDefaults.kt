@@ -568,10 +568,15 @@ Use IDEA's integrated terminal for command execution instead of the built-in Bas
 - `mcp__terminal__Terminal`: Execute commands (supports session reuse and background execution)
 - `mcp__terminal__TerminalRead`: Read session output (supports regex search)
 - `mcp__terminal__TerminalList`: List all terminal sessions
-- `mcp__terminal__TerminalKill`: Terminate session(s) - supports batch deletion
-- `mcp__terminal__TerminalInterrupt`: Interrupt running command (Ctrl+C)
+- `mcp__terminal__TerminalKill`: Close session(s) completely
+- `mcp__terminal__TerminalInterrupt`: Stop running command (Ctrl+C), keeps session open
 - `mcp__terminal__TerminalTypes`: Get available shell types
 - `mcp__terminal__TerminalRename`: Rename a session
+
+**Best Practices:**
+- **Reuse sessions**: Always reuse existing terminal sessions via `session_id` instead of creating new ones
+- **Multiple terminals**: Only create multiple sessions when you need to run commands concurrently (e.g., a dev server + tests)
+- **Cleanup**: Close sessions with `TerminalKill` when no longer needed to keep IDEA clean
 
 **Usage:**
 1. Execute command: `Terminal(command="npm install")`

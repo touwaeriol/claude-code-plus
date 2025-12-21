@@ -555,6 +555,24 @@ tasks {
     }
 }
 
+// ===== 多版本批量构建 =====
+// 使用项目根目录的脚本: build-all-versions.bat (Windows) / build-all-versions.sh (Unix)
+// 用法: 直接运行脚本，或通过 Gradle: gradlew buildAllVersions
+
+val buildAllVersions by tasks.registering(Exec::class) {
+    group = "build"
+    description = "Build plugin for all supported platform versions (241-253). Run: ./build-all-versions.bat"
+
+    val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+    workingDir = rootProject.projectDir
+
+    commandLine = if (isWindows) {
+        listOf("cmd", "/c", "build-all-versions.bat")
+    } else {
+        listOf("bash", "build-all-versions.sh")
+    }
+}
+
 // 🔧 对于插件模块，只排除运行时的 kotlinx-coroutines，保留编译时
 configurations {
     // 只排除运行时配置，保留编译时配置
