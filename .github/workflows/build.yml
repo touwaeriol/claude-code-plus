@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false  # 一个失败不影响其他版本
+      max-parallel: 4   # 限制同时运行的 jobs 数量，避免磁盘空间不足
       matrix:
         ide:
           # IntelliJ IDEA Community
