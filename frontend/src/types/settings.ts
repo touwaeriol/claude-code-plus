@@ -12,14 +12,15 @@ export enum PermissionMode {
   BYPASS_PERMISSIONS = 'bypass'  // 绕过权限检查
 }
 
-import { BaseModel, UiModelOption, MODEL_CAPABILITIES } from '@/constants/models'
+import { BaseModel, getDefaultModelId } from '@/constants/models'
 
 /**
  * 设置配置
  */
 export interface Settings {
-  // 模型配置（新架构：使用 BaseModel）
-  model: BaseModel
+  // 模型配置（支持内置和自定义模型）
+  // 使用 string 类型以支持动态模型列表
+  model: string
 
   // 权限模式
   permissionMode: PermissionMode
@@ -63,15 +64,16 @@ export interface Settings {
 
 /**
  * 默认设置
+ * 注意：model 使用 getDefaultModelId() 获取当前默认模型（可能是内置或自定义）
  */
 export const DEFAULT_SETTINGS: Settings = {
-  model: BaseModel.OPUS_45,
+  model: getDefaultModelId(),  // 动态获取默认模型 ID
   permissionMode: PermissionMode.DEFAULT,
   systemPrompt: null,  // 默认使用 claude_code 提示词
   maxTurns: 10,
   continueConversation: false,
   maxTokens: null,
-  thinkingEnabled: MODEL_CAPABILITIES[BaseModel.OPUS_45].defaultThinkingEnabled,  // 根据模型默认值
+  thinkingEnabled: true,  // 默认开启思考
   maxThinkingTokens: 8096,
   temperature: null,
   verbose: false,
@@ -91,24 +93,14 @@ export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
 }
 
 /**
- * 模型显示名称（新架构：使用 BaseModel）
+ * @deprecated 不再使用静态的模型标签映射
+ * 请使用 getModelDisplayName(modelId) 获取模型显示名称
+ * 这样可以支持动态加载的自定义模型
  */
 export const MODEL_LABELS: Record<BaseModel, string> = {
-  [BaseModel.OPUS_45]: MODEL_CAPABILITIES[BaseModel.OPUS_45].displayName,
-  [BaseModel.SONNET_45]: MODEL_CAPABILITIES[BaseModel.SONNET_45].displayName,
-  [BaseModel.HAIKU_45]: MODEL_CAPABILITIES[BaseModel.HAIKU_45].displayName,
-}
-
-/**
- * @deprecated 旧模型显示名称，使用 MODEL_LABELS 代替
- */
-export const LEGACY_MODEL_LABELS: Record<UiModelOption, string> = {
-  [UiModelOption.SONNET_45]: 'Sonnet 4.5',
-  [UiModelOption.SONNET_45_THINKING]: 'Sonnet 4.5 (Thinking)',
-  [UiModelOption.OPUS_45]: 'Opus 4.5',
-  [UiModelOption.OPUS_45_THINKING]: 'Opus 4.5 (Thinking)',
-  [UiModelOption.HAIKU_45]: 'Haiku 4.5',
-  [UiModelOption.HAIKU_45_THINKING]: 'Haiku 4.5 (Thinking)'
+  [BaseModel.OPUS_45]: 'Opus 4.5',
+  [BaseModel.SONNET_45]: 'Sonnet 4.5',
+  [BaseModel.HAIKU_45]: 'Haiku 4.5',
 }
 
 /**

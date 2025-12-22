@@ -5,11 +5,7 @@ import { jetbrainsRSocket, type IdeSettings } from '@/services/jetbrainsRSocket'
 import { DEFAULT_SETTINGS, type Settings, PermissionMode } from '@/types/settings'
 import {
   BaseModel,
-  MODEL_CAPABILITIES,
-  migrateModelSettings,
-  findBaseModelByModelId,
   updateAllModels,
-  getAllModels,
   getModelById,
   type ModelInfo
 } from '@/constants/models'
@@ -37,17 +33,8 @@ export const useSettingsStore = defineStore('settings', () => {
    * 迁移旧设置到新格式
    */
   function migrateSettings(rawSettings: any): Settings {
-    // 检查是否需要迁移模型设置
-    if (rawSettings.model && !(rawSettings.model in BaseModel)) {
-      console.log('🔄 [migrateSettings] 检测到旧模型格式，开始迁移:', rawSettings.model)
-      const migrated = migrateModelSettings(rawSettings.model)
-      return {
-        ...DEFAULT_SETTINGS,
-        ...rawSettings,
-        model: migrated.model,
-        thinkingEnabled: migrated.thinkingEnabled
-      }
-    }
+    // model 现在是 string 类型，支持内置和自定义模型
+    // 如果是旧的枚举格式，直接保留（因为枚举值如 'OPUS_45' 本身就是 string）
     return {
       ...DEFAULT_SETTINGS,
       ...rawSettings
@@ -123,22 +110,13 @@ export const useSettingsStore = defineStore('settings', () => {
         const modelExists = models.some(m => m.id === currentModel)
         if (!modelExists && currentModel) {
           console.log('⚠️ Current model not found in available models, switching to default:', defaultModelId)
-          // 查找默认模型
+          // 切换到默认模型（支持内置和自定义模型）
           const defaultModel = models.find(m => m.id === defaultModelId)
           if (defaultModel) {
-            if (defaultModel.isBuiltIn && defaultModel.id in BaseModel) {
-              settings.value.model = defaultModel.id as BaseModel
-            } else {
-              settings.value.model = defaultModel.id as any
-            }
+            settings.value.model = defaultModel.id
           } else if (models.length > 0) {
             // 回退到第一个可用模型
-            const firstModel = models[0]
-            if (firstModel.isBuiltIn && firstModel.id in BaseModel) {
-              settings.value.model = firstModel.id as BaseModel
-            } else {
-              settings.value.model = firstModel.id as any
-            }
+            settings.value.model = models[0].id
           }
         }
 
@@ -162,26 +140,13 @@ export const useSettingsStore = defineStore('settings', () => {
 
     // 1. 应用默认模型设置（支持内置和自定义模型）
     if (newIdeSettings.defaultModelId) {
-      // 首先尝试作为模型 ID（如 "OPUS_45" 或 "custom_xxx"）查找
+      // 直接使用模型 ID（支持内置和自定义模型）
       const modelInfo = getModelById(newIdeSettings.defaultModelId)
       if (modelInfo) {
-        // 如果是内置模型，使用 BaseModel 枚举值
-        if (modelInfo.isBuiltIn && modelInfo.id in BaseModel) {
-          updates.model = modelInfo.id as BaseModel
-        } else {
-          // 自定义模型：使用模型 ID
-          updates.model = modelInfo.id as any
-        }
+        updates.model = modelInfo.id
         console.log('🎯 [IdeSettings] 应用默认模型:', modelInfo.displayName, `(${modelInfo.id})`)
       } else {
-        // 回退：尝试通过 modelId 查找
-        const baseModel = findBaseModelByModelId(newIdeSettings.defaultModelId)
-        if (baseModel) {
-          updates.model = baseModel
-          console.log('🎯 [IdeSettings] 应用默认模型 (by modelId):', baseModel)
-        } else {
-          console.warn('⚠️ [IdeSettings] 未知的模型 ID:', newIdeSettings.defaultModelId)
-        }
+        console.warn('⚠️ [IdeSettings] 未知的模型 ID:', newIdeSettings.defaultModelId)
       }
     }
 
@@ -269,12 +234,13 @@ export const useSettingsStore = defineStore('settings', () => {
         const httpSettings = response.data as HttpDefaultSettings
         const updates: Partial<Settings> = {}
 
-        // 1. 应用默认模型设置
+        // 1. 应用默认模型设置（支持内置和自定义模型）
         if (httpSettings.defaultModelId) {
-          const baseModel = findBaseModelByModelId(httpSettings.defaultModelId)
-          if (baseModel) {
-            updates.model = baseModel
-            console.log('🎯 [DefaultSettings] 应用默认模型:', baseModel)
+          // 直接使用模型 ID（支持内置和自定义模型）
+          const modelInfo = getModelById(httpSettings.defaultModelId)
+          if (modelInfo) {
+            updates.model = modelInfo.id
+            console.log('🎯 [DefaultSettings] 应用默认模型:', modelInfo.displayName, `(${modelInfo.id})`)
           } else {
             console.warn('⚠️ [DefaultSettings] 未知的模型 ID:', httpSettings.defaultModelId)
           }

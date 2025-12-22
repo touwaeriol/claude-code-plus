@@ -18,7 +18,7 @@ import { ref, computed, shallowRef, watch } from 'vue'
 import { defineStore, storeToRefs } from 'pinia'
 import { i18n } from '@/i18n'
 import { useSessionTab, type SessionTabInstance, type TabConnectOptions } from '@/composables/useSessionTab'
-import { BaseModel, getModelCapability, MODEL_CAPABILITIES } from '@/constants/models'
+import { getModelCapability, getDefaultModelId } from '@/constants/models'
 import type { RpcPermissionMode } from '@/types/rpc'
 import { ConnectionStatus } from '@/types/display'
 import { loggers } from '@/utils/logger'
@@ -33,13 +33,17 @@ export { ConnectionStatus } from '@/types/display'
 export type { SessionTabInstance } from '@/composables/useSessionTab'
 
 /**
- * 默认会话设置
+ * 获取默认会话设置（动态获取，避免硬编码）
  */
-  const DEFAULT_SESSION_SETTINGS = {
-  modelId: MODEL_CAPABILITIES[BaseModel.OPUS_45].modelId,
-  thinkingLevel: 8096, // Ultra - 默认思考等级（与 IDEA 设置保持一致）
-  permissionMode: 'default' as RpcPermissionMode,
-  skipPermissions: false
+function getDefaultSessionSettings() {
+  const defaultModelId = getDefaultModelId()
+  const defaultModelCapability = getModelCapability(defaultModelId)
+  return {
+    modelId: defaultModelCapability.modelId,
+    thinkingLevel: 8096, // Ultra - 默认思考等级（与 IDEA 设置保持一致）
+    permissionMode: 'default' as RpcPermissionMode,
+    skipPermissions: false
+  }
 }
 
 /**
@@ -251,13 +255,14 @@ export const useSessionStore = defineStore('session', () => {
 
     // 获取连接设置（使用 IDEA 默认设置，而非从当前会话复制）
     const globalSettings = settingsStore.settings
+    const defaultSettings = getDefaultSessionSettings()
     // 使用 getModelCapability 支持内置和自定义模型
     const modelCapability = getModelCapability(globalSettings.model)
     const connectOptions: TabConnectOptions = options || {
-      model: modelCapability.modelId || DEFAULT_SESSION_SETTINGS.modelId,
-      thinkingLevel: globalSettings.maxThinkingTokens ?? DEFAULT_SESSION_SETTINGS.thinkingLevel,
-      permissionMode: (globalSettings.permissionMode as RpcPermissionMode) || DEFAULT_SESSION_SETTINGS.permissionMode,
-      skipPermissions: globalSettings.skipPermissions ?? DEFAULT_SESSION_SETTINGS.skipPermissions
+      model: modelCapability.modelId || defaultSettings.modelId,
+      thinkingLevel: globalSettings.maxThinkingTokens ?? defaultSettings.thinkingLevel,
+      permissionMode: (globalSettings.permissionMode as RpcPermissionMode) || defaultSettings.permissionMode,
+      skipPermissions: globalSettings.skipPermissions ?? defaultSettings.skipPermissions
     }
 
     log.info(`[SessionStore] 新 Tab 使用全局设置:`, connectOptions)
@@ -500,11 +505,12 @@ export const useSessionStore = defineStore('session', () => {
     tab.name.value = i18n.global.t('session.defaultName', { time: shortTime })
 
     // 5. 保留之前的设置，设置初始连接选项
+    const defaultSettings = getDefaultSessionSettings()
     const connectOptions: TabConnectOptions = {
-      model: tab.modelId.value || DEFAULT_SESSION_SETTINGS.modelId,
-      thinkingEnabled: tab.thinkingEnabled.value ?? DEFAULT_SESSION_SETTINGS.thinkingEnabled,
-      permissionMode: tab.permissionMode.value || DEFAULT_SESSION_SETTINGS.permissionMode,
-      skipPermissions: tab.skipPermissions.value ?? DEFAULT_SESSION_SETTINGS.skipPermissions
+      model: tab.modelId.value || defaultSettings.modelId,
+      thinkingLevel: tab.thinkingLevel.value ?? defaultSettings.thinkingLevel,
+      permissionMode: tab.permissionMode.value || defaultSettings.permissionMode,
+      skipPermissions: tab.skipPermissions.value ?? defaultSettings.skipPermissions
     }
     tab.setInitialConnectOptions(connectOptions)
 
