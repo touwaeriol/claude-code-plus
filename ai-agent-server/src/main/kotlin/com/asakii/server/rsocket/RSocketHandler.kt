@@ -27,7 +27,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.catch
@@ -506,9 +505,7 @@ class RSocketHandler(
                         metadata(metadataBuffer)
                     }
 
-                    val responsePayload = withTimeout(120_000) { // 用户交互可能需要更长时间
-                        requester.requestResponse(payload)
-                    }
+                    val responsePayload = requester.requestResponse(payload) // 永久等待用户响应
 
                     // 解析 ServerCallResponse
                     val responseBytes = responsePayload.data.readByteArray()
@@ -527,9 +524,6 @@ class RSocketHandler(
                     wsLog.info("📥 [RSocket] [$connectionId] ← AskUserQuestion 成功: callId=$callId, answers=${serverResponse.askUserQuestion.answersCount}")
                     return serverResponse.askUserQuestion
 
-                } catch (e: TimeoutCancellationException) {
-                    wsLog.warn("📥 [RSocket] [$connectionId] ← AskUserQuestion 超时: callId=$callId")
-                    throw RuntimeException("AskUserQuestion timeout")
                 } catch (e: Exception) {
                     wsLog.warn("📥 [RSocket] [$connectionId] ← AskUserQuestion 失败: callId=$callId, error=${e.message}")
                     throw RuntimeException("AskUserQuestion failed: ${e.message}")
@@ -556,9 +550,7 @@ class RSocketHandler(
                         metadata(metadataBuffer)
                     }
 
-                    val responsePayload = withTimeout(120_000) { // 用户交互可能需要更长时间
-                        requester.requestResponse(payload)
-                    }
+                    val responsePayload = requester.requestResponse(payload) // 永久等待用户响应
 
                     // 解析 ServerCallResponse
                     val responseBytes = responsePayload.data.readByteArray()
@@ -577,9 +569,6 @@ class RSocketHandler(
                     wsLog.info("📥 [RSocket] [$connectionId] ← RequestPermission 成功: callId=$callId, approved=${serverResponse.requestPermission.approved}")
                     return serverResponse.requestPermission
 
-                } catch (e: TimeoutCancellationException) {
-                    wsLog.warn("📥 [RSocket] [$connectionId] ← RequestPermission 超时: callId=$callId")
-                    throw RuntimeException("RequestPermission timeout")
                 } catch (e: Exception) {
                     wsLog.warn("📥 [RSocket] [$connectionId] ← RequestPermission 失败: callId=$callId, error=${e.message}")
                     throw RuntimeException("RequestPermission failed: ${e.message}")
