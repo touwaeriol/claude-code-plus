@@ -501,11 +501,12 @@ const result = await session.getMcpTools("jetbrains")
 ```
 
 **How it works internally:**
-1. Patch reads from CLI's internal tool registry (`y.mcp.tools`)
-2. Filters tools by `serverName` if provided
-3. Returns tool name (original MCP name), description, and inputSchema
+1. Patch calls `await X()` (getAppState) to get current application state
+2. Reads tools directly from `state.mcp.tools` - same as CLI internal `/mcp` command
+3. Filters tools by `serverName` if provided
+4. Returns tool name (original MCP name), description, and inputSchema
 
-**Note:** The CLI populates `y.mcp.tools` when MCP servers connect via real-time MCP protocol calls. This endpoint reads from that registry.
+**Implementation:** Uses CLI's internal state management (`getAppState().mcp.tools`), which is automatically kept in sync with all MCP server connections.
 
 ---
 

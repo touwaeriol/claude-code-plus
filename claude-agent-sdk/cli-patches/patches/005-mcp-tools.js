@@ -1,7 +1,8 @@
 /**
  * mcp_tools 补丁
  *
- * 添加 MCP 工具列表查询控制端点，从 y.mcp.tools 读取指定服务器的工具列表。
+ * 添加 MCP 工具列表查询控制端点。
+ * 直接使用 CLI 内部的 getAppState().mcp.tools 获取工具列表。
  *
  * 请求格式:
  * {
@@ -26,7 +27,7 @@
  *   count: number
  * }
  *
- * 内部读取: y.mcp.tools (MCP 工具注册表)
+ * 内部实现: 直接调用 getAppState().mcp.tools (与 CLI 内部 /mcp 命令一致)
  */
 
 module.exports = {
@@ -42,7 +43,6 @@ module.exports = {
 
     // ========================================
     // 找到控制请求处理位置并添加 mcp_tools 分支
-    // 在 mcp_reconnect 或 mcp_status 附近添加
     // ========================================
     traverse(ast, {
       IfStatement(path) {
@@ -104,11 +104,28 @@ module.exports = {
           }
         }
 
-        // 构建 mcp_tools 处理逻辑
-        const statements = [];
+        // 构建 mcp_tools 处理逻辑 - 使用 IIFE 因为需要 await
+        // (async () => {
+        //   let _state = await X();
+        //   let _serverName = d.request.server_name || null;
+        //   let _allTools = _state.mcp.tools;
+        //   let _filteredTools = _serverName ? _allTools.filter(...) : _allTools;
+        //   let _toolsResult = _filteredTools.map(...);
+        //   s(d, { server_name, tools, count });
+        // })()
 
-        // const _serverName = d.request.server_name || null;
-        statements.push(t.variableDeclaration('const', [
+        const iifeBody = [];
+
+        // let _state = await X();
+        iifeBody.push(t.variableDeclaration('let', [
+          t.variableDeclarator(
+            t.identifier('_state'),
+            t.awaitExpression(t.callExpression(t.identifier('X'), []))
+          )
+        ]));
+
+        // let _serverName = d.request.server_name || null;
+        iifeBody.push(t.variableDeclaration('let', [
           t.variableDeclarator(
             t.identifier('_serverName'),
             t.logicalExpression(
@@ -122,68 +139,47 @@ module.exports = {
           )
         ]));
 
-        // const _allTools = y?.mcp?.tools || [];
-        statements.push(t.variableDeclaration('const', [
+        // let _allTools = _state.mcp.tools;
+        iifeBody.push(t.variableDeclaration('let', [
           t.variableDeclarator(
             t.identifier('_allTools'),
-            t.logicalExpression(
-              '||',
-              t.optionalMemberExpression(
-                t.optionalMemberExpression(
-                  t.identifier('y'),
-                  t.identifier('mcp'),
-                  false,
-                  true
-                ),
-                t.identifier('tools'),
-                false,
-                true
-              ),
-              t.arrayExpression([])
+            t.memberExpression(
+              t.memberExpression(t.identifier('_state'), t.identifier('mcp')),
+              t.identifier('tools')
             )
           )
         ]));
 
-        // let _filteredTools = _allTools;
-        statements.push(t.variableDeclaration('let', [
+        // let _filteredTools = _serverName ? _allTools.filter(_t => _t.serverName === _serverName) : _allTools;
+        iifeBody.push(t.variableDeclaration('let', [
           t.variableDeclarator(
             t.identifier('_filteredTools'),
-            t.identifier('_allTools')
+            t.conditionalExpression(
+              t.identifier('_serverName'),
+              t.callExpression(
+                t.memberExpression(t.identifier('_allTools'), t.identifier('filter')),
+                [
+                  t.arrowFunctionExpression(
+                    [t.identifier('_t')],
+                    t.binaryExpression(
+                      '===',
+                      t.memberExpression(t.identifier('_t'), t.identifier('serverName')),
+                      t.identifier('_serverName')
+                    )
+                  )
+                ]
+              ),
+              t.identifier('_allTools')
+            )
           )
         ]));
 
-        // if (_serverName) { _filteredTools = _allTools.filter(t => t.serverName === _serverName); }
-        statements.push(t.ifStatement(
-          t.identifier('_serverName'),
-          t.blockStatement([
-            t.expressionStatement(
-              t.assignmentExpression(
-                '=',
-                t.identifier('_filteredTools'),
-                t.callExpression(
-                  t.memberExpression(t.identifier('_allTools'), t.identifier('filter')),
-                  [
-                    t.arrowFunctionExpression(
-                      [t.identifier('_t')],
-                      t.binaryExpression(
-                        '===',
-                        t.memberExpression(t.identifier('_t'), t.identifier('serverName')),
-                        t.identifier('_serverName')
-                      )
-                    )
-                  ]
-                )
-              )
-            )
-          ])
-        ));
-
-        // const _toolsResult = _filteredTools.map(t => ({
-        //   name: t.originalMcpToolName || t.name,
-        //   description: t.description || "",
-        //   inputSchema: t.inputJSONSchema || t.inputSchema || {}
+        // let _toolsResult = _filteredTools.map(_t => ({
+        //   name: _t.originalMcpToolName || _t.name,
+        //   description: _t.description || "",
+        //   inputSchema: _t.inputJSONSchema || _t.inputSchema || {}
         // }));
-        statements.push(t.variableDeclaration('const', [
+        iifeBody.push(t.variableDeclaration('let', [
           t.variableDeclarator(
             t.identifier('_toolsResult'),
             t.callExpression(
@@ -227,8 +223,8 @@ module.exports = {
           )
         ]));
 
-        // 响应: s(d, { server_name, tools, count });
-        statements.push(t.expressionStatement(
+        // s(d, { server_name: _serverName, tools: _toolsResult, count: _toolsResult.length });
+        iifeBody.push(t.expressionStatement(
           t.callExpression(
             t.identifier(responderName),
             [
@@ -245,8 +241,20 @@ module.exports = {
           )
         ));
 
+        // 创建 IIFE: (async () => { ... })()
+        const iife = t.callExpression(
+          t.arrowFunctionExpression(
+            [],
+            t.blockStatement(iifeBody),
+            true  // async
+          ),
+          []
+        );
+
         // 创建处理块
-        const handlerBlock = t.blockStatement(statements);
+        const handlerBlock = t.blockStatement([
+          t.expressionStatement(iife)
+        ]);
 
         // 创建新的 if 条件: *.request.subtype === "mcp_tools"
         const newCondition = t.binaryExpression(
@@ -270,7 +278,7 @@ module.exports = {
 
         path.replaceWith(newIfStatement);
         patchApplied = true;
-        details.push(`添加了 mcp_tools 控制命令处理 (responder: ${responderName})`);
+        details.push(`添加了 mcp_tools 控制命令处理，使用 getAppState().mcp.tools (responder: ${responderName})`);
         path.stop();
       }
     });
