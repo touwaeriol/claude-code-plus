@@ -43,27 +43,26 @@ data class TerminalSession(
     /**
      * 等待命令执行完成
      *
-     * 使用兼容层的最佳实现：
-     * - 2024.x ~ 2025.2: hasRunningCommands() + 输出稳定性检测
-     * - 2025.3+: isCommandRunning() + 输出稳定性检测
+     * 使用兼容层的实现（依赖 Shell Integration）：
+     * - 2024.x ~ 2025.2: hasRunningCommands() API
+     * - 2025.3+: isCommandRunning() API
+     *
+     * 如果 API 不可用，返回 ApiUnavailable
      *
      * @param timeoutMs 超时时间
      * @param initialDelayMs 初始等待时间
      * @param pollIntervalMs 轮询间隔
-     * @param stableThreshold 输出稳定阈值
      * @return 等待结果
      */
     fun waitForCommandCompletion(
         timeoutMs: Long = 300_000,
         initialDelayMs: Long = 300,
-        pollIntervalMs: Long = 100,
-        stableThreshold: Int = 5
+        pollIntervalMs: Long = 100
     ): CommandWaitResult {
         return widgetWrapper.waitForCommandCompletion(
             timeoutMs = timeoutMs,
             initialDelayMs = initialDelayMs,
-            pollIntervalMs = pollIntervalMs,
-            stableThreshold = stableThreshold
+            pollIntervalMs = pollIntervalMs
         )
     }
 
@@ -286,20 +285,32 @@ class TerminalSessionManager(private val project: Project) {
                     background = true
                 )
             } else {
-                // 前台执行：使用兼容层的最佳等待机制
+                // 前台执行：等待命令完成
                 val settings = AgentSettingsService.getInstance()
                 val maxOutputLines = settings.terminalMaxOutputLines
                 val maxOutputChars = settings.terminalMaxOutputChars
 
-                // 使用多重检测机制等待命令完成
+                // 等待命令完成（依赖 Shell Integration）
                 val waitResult = session.waitForCommandCompletion(
                     timeoutMs = timeoutMs,
                     initialDelayMs = 300,
-                    pollIntervalMs = 100,
-                    stableThreshold = 5
+                    pollIntervalMs = 100
                 )
 
                 when (waitResult) {
+                    is CommandWaitResult.ApiUnavailable -> {
+                        // Shell Integration 不可用，无法检测命令状态
+                        // 返回当前输出，并告知用户
+                        val fullOutput = session.getOutput()
+                        return ExecuteResult(
+                            success = false,
+                            sessionId = session.id,
+                            sessionName = session.name,
+                            background = false,
+                            output = fullOutput,
+                            error = "Cannot detect command completion (Shell Integration unavailable). Use background=true for long-running commands, or use TerminalRead to check output."
+                        )
+                    }
                     is CommandWaitResult.Timeout -> {
                         return ExecuteResult(
                             success = false,
