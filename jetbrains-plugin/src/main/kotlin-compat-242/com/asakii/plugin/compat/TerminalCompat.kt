@@ -9,6 +9,20 @@ import org.jetbrains.plugins.terminal.TerminalToolWindowManager
 private val logger = KotlinLogging.logger {}
 
 /**
+ * 命令完成等待结果
+ */
+sealed class CommandWaitResult {
+    /** 命令完成 */
+    object Completed : CommandWaitResult()
+    /** 超时 */
+    object Timeout : CommandWaitResult()
+    /** 被中断 */
+    object Interrupted : CommandWaitResult()
+    /** API 不可用，无法检测命令状态 */
+    object ApiUnavailable : CommandWaitResult()
+}
+
+/**
  * Terminal Widget 包装器接口
  * 提供跨版本的统一 API
  */
@@ -30,14 +44,70 @@ class TerminalWidgetWrapper(private val widget: ShellTerminalWidget) {
 
     /**
      * 检查是否有正在运行的命令
+     * 使用 ShellTerminalWidget.hasRunningCommands() API
+     *
+     * @return true 表示有命令正在运行，false 表示没有，null 表示 API 不可用
      */
-    fun hasRunningCommands(): Boolean {
+    fun hasRunningCommands(): Boolean? {
         return try {
             widget.hasRunningCommands()
         } catch (e: Exception) {
-            logger.warn(e) { "Failed to check running commands" }
-            false
+            logger.warn(e) { "Failed to check running commands, Shell Integration may not be available" }
+            null  // 返回 null 表示 API 不可用，需要使用备用方案
         }
+    }
+
+    /**
+     * 等待命令执行完成 (2024.x ~ 2025.2 版本实现)
+     *
+     * 使用 hasRunningCommands() API (依赖 Shell Integration)
+     * 如果 API 不可用，返回 ApiUnavailable，建议使用后台执行模式
+     *
+     * @param timeoutMs 超时时间（毫秒）
+     * @param initialDelayMs 初始等待时间，让命令开始执行
+     * @param pollIntervalMs 轮询间隔
+     * @return 等待结果
+     */
+    fun waitForCommandCompletion(
+        timeoutMs: Long = 300_000,
+        initialDelayMs: Long = 300,
+        pollIntervalMs: Long = 100
+    ): CommandWaitResult {
+        val startTime = System.currentTimeMillis()
+
+        // 初始等待，让命令开始执行
+        Thread.sleep(initialDelayMs)
+
+        while (System.currentTimeMillis() - startTime < timeoutMs) {
+            if (Thread.currentThread().isInterrupted) {
+                return CommandWaitResult.Interrupted
+            }
+
+            val isRunning = hasRunningCommands()
+            when (isRunning) {
+                false -> {
+                    // API 报告命令已完成，再确认一次
+                    Thread.sleep(pollIntervalMs)
+                    if (hasRunningCommands() == false) {
+                        logger.debug { "Command completed (detected by hasRunningCommands API)" }
+                        return CommandWaitResult.Completed
+                    }
+                }
+                null -> {
+                    // API 不可用，无法检测命令状态
+                    logger.warn { "hasRunningCommands API not available (Shell Integration may be disabled)" }
+                    return CommandWaitResult.ApiUnavailable
+                }
+                true -> {
+                    // 命令仍在运行，继续等待
+                }
+            }
+
+            Thread.sleep(pollIntervalMs)
+        }
+
+        logger.warn { "Command wait timeout after ${timeoutMs}ms" }
+        return CommandWaitResult.Timeout
     }
 
     /**

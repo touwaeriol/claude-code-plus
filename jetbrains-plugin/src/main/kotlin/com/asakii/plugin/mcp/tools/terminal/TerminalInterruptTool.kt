@@ -30,8 +30,8 @@ class TerminalInterruptTool(private val sessionManager: TerminalSessionManager) 
             buildMap {
                 put("success", true)
                 put("session_id", result.sessionId)
-                put("was_running", result.wasRunning)
-                put("is_still_running", result.isStillRunning)
+                result.wasRunning?.let { put("was_running", it) }
+                result.isStillRunning?.let { put("is_still_running", it) }
                 result.message?.let { put("message", it) }
             }
         } else {

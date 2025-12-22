@@ -39,8 +39,12 @@ class TerminalReadTool(private val sessionManager: TerminalSessionManager) {
             buildMap {
                 put("success", true)
                 put("session_id", result.sessionId)
-                put("is_running", result.isRunning)
-                put("status", if (result.isRunning) "running" else "idle")
+                result.isRunning?.let { put("is_running", it) }
+                put("status", when (result.isRunning) {
+                    true -> "running"
+                    false -> "idle"
+                    null -> "unknown"
+                })
 
                 if (result.searchMatches != null) {
                     // 搜索模式

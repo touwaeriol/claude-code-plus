@@ -4,6 +4,7 @@ import com.asakii.settings.AgentSettingsService
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindowManager
+import com.asakii.plugin.compat.CommandWaitResult
 import com.asakii.plugin.compat.TerminalCompat
 import com.asakii.plugin.compat.TerminalWidgetWrapper
 import mu.KotlinLogging
@@ -27,14 +28,43 @@ data class TerminalSession(
 ) {
     /**
      * 检查是否有正在运行的命令
+     *
+     * @return true 表示有命令正在运行，false 表示没有，null 表示 API 不可用
      */
-    fun hasRunningCommands(): Boolean {
+    fun hasRunningCommands(): Boolean? {
         return try {
             widgetWrapper.hasRunningCommands()
         } catch (e: Exception) {
             logger.warn(e) { "Failed to check running commands for session $id" }
-            false
+            null
         }
+    }
+
+    /**
+     * 等待命令执行完成
+     *
+     * 使用兼容层的最佳实现：
+     * - 2024.x ~ 2025.2: hasRunningCommands() + 输出稳定性检测
+     * - 2025.3+: isCommandRunning() + 输出稳定性检测
+     *
+     * @param timeoutMs 超时时间
+     * @param initialDelayMs 初始等待时间
+     * @param pollIntervalMs 轮询间隔
+     * @param stableThreshold 输出稳定阈值
+     * @return 等待结果
+     */
+    fun waitForCommandCompletion(
+        timeoutMs: Long = 300_000,
+        initialDelayMs: Long = 300,
+        pollIntervalMs: Long = 100,
+        stableThreshold: Int = 5
+    ): CommandWaitResult {
+        return widgetWrapper.waitForCommandCompletion(
+            timeoutMs = timeoutMs,
+            initialDelayMs = initialDelayMs,
+            pollIntervalMs = pollIntervalMs,
+            stableThreshold = stableThreshold
+        )
     }
 
     /**
@@ -256,19 +286,21 @@ class TerminalSessionManager(private val project: Project) {
                     background = true
                 )
             } else {
-                // 前台执行：等待命令完成
-                val startTime = System.currentTimeMillis()
-                val pollIntervalMs = 100L
+                // 前台执行：使用兼容层的最佳等待机制
                 val settings = AgentSettingsService.getInstance()
                 val maxOutputLines = settings.terminalMaxOutputLines
                 val maxOutputChars = settings.terminalMaxOutputChars
 
-                // 等待命令开始执行（给终端一点时间处理）
-                Thread.sleep(200)
+                // 使用多重检测机制等待命令完成
+                val waitResult = session.waitForCommandCompletion(
+                    timeoutMs = timeoutMs,
+                    initialDelayMs = 300,
+                    pollIntervalMs = 100,
+                    stableThreshold = 5
+                )
 
-                // 轮询等待命令完成
-                while (session.hasRunningCommands()) {
-                    if (System.currentTimeMillis() - startTime > timeoutMs) {
+                when (waitResult) {
+                    is CommandWaitResult.Timeout -> {
                         return ExecuteResult(
                             success = false,
                             sessionId = session.id,
@@ -277,37 +309,46 @@ class TerminalSessionManager(private val project: Project) {
                             error = "Command timed out after ${timeoutMs / 1000} seconds. Use TerminalRead to check output."
                         )
                     }
-                    Thread.sleep(pollIntervalMs)
-                }
-
-                // 命令完成，读取输出（可能截断）
-                val fullOutput = session.getOutput()
-                val lines = fullOutput.split("\n")
-                val totalLines = lines.size
-                val totalChars = fullOutput.length
-
-                val (output, truncated) = when {
-                    totalLines > maxOutputLines -> {
-                        // 行数超限：取最后 maxOutputLines 行
-                        lines.takeLast(maxOutputLines).joinToString("\n") to true
+                    is CommandWaitResult.Interrupted -> {
+                        return ExecuteResult(
+                            success = false,
+                            sessionId = session.id,
+                            sessionName = session.name,
+                            background = false,
+                            error = "Command wait was interrupted. Use TerminalRead to check output."
+                        )
                     }
-                    totalChars > maxOutputChars -> {
-                        // 字符数超限：取最后 maxOutputChars 字符
-                        fullOutput.takeLast(maxOutputChars) to true
-                    }
-                    else -> fullOutput to false
-                }
+                    is CommandWaitResult.Completed -> {
+                        // 命令完成，读取输出（可能截断）
+                        val fullOutput = session.getOutput()
+                        val lines = fullOutput.split("\n")
+                        val totalLines = lines.size
+                        val totalChars = fullOutput.length
 
-                ExecuteResult(
-                    success = true,
-                    sessionId = session.id,
-                    sessionName = session.name,
-                    background = false,
-                    output = output,
-                    truncated = truncated,
-                    totalLines = totalLines,
-                    totalChars = totalChars
-                )
+                        val (output, truncated) = when {
+                            totalLines > maxOutputLines -> {
+                                // 行数超限：取最后 maxOutputLines 行
+                                lines.takeLast(maxOutputLines).joinToString("\n") to true
+                            }
+                            totalChars > maxOutputChars -> {
+                                // 字符数超限：取最后 maxOutputChars 字符
+                                fullOutput.takeLast(maxOutputChars) to true
+                            }
+                            else -> fullOutput to false
+                        }
+
+                        ExecuteResult(
+                            success = true,
+                            sessionId = session.id,
+                            sessionName = session.name,
+                            background = false,
+                            output = output,
+                            truncated = truncated,
+                            totalLines = totalLines,
+                            totalChars = totalChars
+                        )
+                    }
+                }
             }
         } catch (e: Exception) {
             logger.error(e) { "Failed to execute command in session ${session.id}" }
@@ -393,8 +434,9 @@ class TerminalSessionManager(private val project: Project) {
                 wasRunning = wasRunning,
                 isStillRunning = isStillRunning,
                 message = when {
-                    !wasRunning -> "No command was running"
-                    !isStillRunning -> "Command interrupted successfully"
+                    wasRunning == null || isStillRunning == null -> "Interrupt signal sent (command status unknown)"
+                    wasRunning == false -> "No command was running"
+                    isStillRunning == false -> "Command interrupted successfully"
                     else -> "Interrupt signal sent, command may still be stopping"
                 }
             )
@@ -526,8 +568,8 @@ data class ExecuteResult(
 data class InterruptResult(
     val success: Boolean,
     val sessionId: String,
-    val wasRunning: Boolean = false,
-    val isStillRunning: Boolean = false,
+    val wasRunning: Boolean? = null,  // null 表示无法确定
+    val isStillRunning: Boolean? = null,  // null 表示无法确定
     val message: String? = null,
     val error: String? = null
 )
@@ -539,7 +581,7 @@ data class ReadResult(
     val success: Boolean,
     val sessionId: String,
     val output: String? = null,
-    val isRunning: Boolean = false,
+    val isRunning: Boolean? = null,  // null 表示无法确定
     val lineCount: Int = 0,
     val searchMatches: List<SearchMatch>? = null,
     val error: String? = null
