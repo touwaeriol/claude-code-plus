@@ -46,6 +46,9 @@ import {
   type SessionCommandNotify,
   type ThemeChangedNotify,
   type ActiveFileChangedNotify,
+  type IdeSettingsChangedNotify,
+  type IdeSettings,
+  type ThinkingLevelConfig as ProtoThinkingLevelConfig,
   SessionCommandType,
   type ContentBlock,
   type AskUserQuestionRequest,
@@ -1059,8 +1062,8 @@ function mapDeltaFromProto(proto: any): any {
 export interface DecodedServerCallRequest {
   callId: string
   method: string
-  params: AskUserQuestionParams | RequestPermissionParams | SessionCommandParams | ThemeChangedParams | ActiveFileChangedParams | unknown
-  paramsCase: 'askUserQuestion' | 'requestPermission' | 'sessionCommand' | 'themeChanged' | 'activeFileChanged' | 'paramsJson' | undefined
+  params: AskUserQuestionParams | RequestPermissionParams | SessionCommandParams | ThemeChangedParams | ActiveFileChangedParams | SettingsChangedParams | unknown
+  paramsCase: 'askUserQuestion' | 'requestPermission' | 'sessionCommand' | 'themeChanged' | 'activeFileChanged' | 'settingsChanged' | 'paramsJson' | undefined
 }
 
 /**
@@ -1194,6 +1197,9 @@ export function decodeServerCallRequest(data: Uint8Array): DecodedServerCallRequ
   } else if (proto.params.case === 'activeFileChanged') {
     paramsCase = 'activeFileChanged'
     params = mapActiveFileChangedFromProto(proto.params.value)
+  } else if (proto.params.case === 'settingsChanged') {
+    paramsCase = 'settingsChanged'
+    params = mapSettingsChangedFromProto(proto.params.value)
   } else if (proto.params.case === 'paramsJson') {
     paramsCase = 'paramsJson'
     try {
@@ -1289,6 +1295,65 @@ function mapActiveFileChangedFromProto(proto: ActiveFileChangedNotify): ActiveFi
     endLine: proto.endLine,
     endColumn: proto.endColumn,
     selectedContent: proto.selectedContent
+  }
+}
+
+/**
+ * 设置变更参数（从 IdeSettingsChangedNotify 解码）
+ */
+export interface SettingsChangedParams {
+  settings: {
+    defaultModelId: string
+    defaultModelName: string
+    defaultBypassPermissions: boolean
+    enableUserInteractionMcp: boolean
+    enableJetbrainsMcp: boolean
+    includePartialMessages: boolean
+    defaultThinkingLevel: string
+    defaultThinkingTokens: number
+    defaultThinkingLevelId: string
+    thinkingLevels: Array<{
+      id: string
+      name: string
+      tokens: number
+      isCustom: boolean
+    }>
+    permissionMode: string
+  }
+}
+
+/**
+ * 从 Proto 映射 IdeSettingsChangedNotify
+ */
+function mapSettingsChangedFromProto(proto: IdeSettingsChangedNotify): SettingsChangedParams {
+  const s = proto.settings as IdeSettings | undefined
+  const defaultThinkingLevels = [
+    { id: 'off', name: 'Off', tokens: 0, isCustom: false },
+    { id: 'think', name: 'Think', tokens: 2048, isCustom: false },
+    { id: 'ultra', name: 'Ultra', tokens: 8096, isCustom: false }
+  ]
+
+  return {
+    settings: {
+      defaultModelId: s?.defaultModelId || '',
+      defaultModelName: s?.defaultModelName || '',
+      defaultBypassPermissions: s?.defaultBypassPermissions ?? false,
+      enableUserInteractionMcp: s?.enableUserInteractionMcp ?? true,
+      enableJetbrainsMcp: s?.enableJetbrainsMcp ?? true,
+      includePartialMessages: s?.includePartialMessages ?? true,
+      defaultThinkingLevel: s?.defaultThinkingLevel || 'ULTRA',
+      defaultThinkingTokens: s?.defaultThinkingTokens ?? 8096,
+      defaultThinkingLevelId: s?.defaultThinkingLevelId || 'ultra',
+      thinkingLevels: s?.thinkingLevels && s.thinkingLevels.length > 0
+        ? s.thinkingLevels.map((level: ProtoThinkingLevelConfig) => ({
+            id: level.id,
+            name: level.name,
+            tokens: level.tokens,
+            isCustom: level.isCustom
+          }))
+        : defaultThinkingLevels,
+      permissionMode: s?.permissionMode || 'default'
+    }
   }
 }
 

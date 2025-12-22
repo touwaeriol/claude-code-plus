@@ -26,8 +26,13 @@
           <div v-if="loadingTools" class="loading-state">
             加载中...
           </div>
+          <div v-else-if="toolsError" class="error-state">
+            <span>{{ toolsError }}</span>
+            <button class="retry-btn" @click="selectServer({ name: selectedServer!, status: 'connected' })">重试</button>
+          </div>
           <div v-else-if="tools.length === 0" class="empty-state">
             No tools available
+            <button class="retry-btn" @click="selectServer({ name: selectedServer!, status: 'connected' })">刷新</button>
           </div>
           <div v-else class="tool-list">
             <div
@@ -74,6 +79,28 @@
               <span class="status-dot" :class="getStatusClass(server.status)"></span>
               <span class="server-name">{{ server.name }}</span>
               <span class="server-status">{{ server.status }}</span>
+              <!-- 重连按钮 -->
+              <button
+                class="reconnect-btn"
+                :class="{ loading: reconnecting === server.name }"
+                @click.stop="reconnectServer(server)"
+                :disabled="reconnecting !== null"
+                title="重连"
+              >
+                <svg
+                  v-if="reconnecting !== server.name"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M1 4v6h6M23 20v-6h-6"/>
+                  <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+                </svg>
+                <span v-else class="spinner"></span>
+              </button>
               <svg
                 v-if="server.status === 'connected'"
                 class="arrow-icon"
@@ -124,6 +151,8 @@ const selectedServer = ref<string | null>(null)
 const tools = ref<McpToolInfo[]>([])
 const loadingTools = ref(false)
 const expandedTool = ref<string | null>(null)
+const toolsError = ref<string | null>(null)
+const reconnecting = ref<string | null>(null)
 
 // 重置状态当弹窗关闭
 watch(() => props.visible, (visible) => {
@@ -131,6 +160,7 @@ watch(() => props.visible, (visible) => {
     selectedServer.value = null
     tools.value = []
     expandedTool.value = null
+    toolsError.value = null
   }
 })
 
@@ -144,22 +174,64 @@ function getStatusClass(status: string): string {
 }
 
 async function selectServer(server: McpServerStatus) {
-  if (server.status !== 'connected') return
+  console.log('[McpStatusPopup] selectServer:', server.name, 'status:', server.status)
+
+  // 允许 connected 状态的服务器查看工具
+  if (server.status !== 'connected') {
+    console.log('[McpStatusPopup] 服务器状态不是 connected，跳过')
+    return
+  }
 
   selectedServer.value = server.name
   loadingTools.value = true
   tools.value = []
+  toolsError.value = null
 
   try {
     const session = sessionStore.currentTab?.session
+    console.log('[McpStatusPopup] session:', session ? 'exists' : 'null', 'isConnected:', session?.isConnected)
+
     if (session?.isConnected) {
+      console.log('[McpStatusPopup] 调用 getMcpTools:', server.name)
       const result = await session.getMcpTools(server.name)
+      console.log('[McpStatusPopup] getMcpTools 结果:', result)
       tools.value = result.tools
+    } else {
+      toolsError.value = 'Session 未连接'
+      console.warn('[McpStatusPopup] Session 未连接，无法获取工具')
     }
   } catch (err) {
     console.error('[McpStatusPopup] Failed to get tools:', err)
+    toolsError.value = err instanceof Error ? err.message : '获取工具失败'
   } finally {
     loadingTools.value = false
+  }
+}
+
+async function reconnectServer(server: McpServerStatus) {
+  console.log('[McpStatusPopup] reconnectServer:', server.name)
+  reconnecting.value = server.name
+
+  try {
+    const session = sessionStore.currentTab?.session
+    if (!session?.isConnected) {
+      console.warn('[McpStatusPopup] Session 未连接，无法重连 MCP')
+      return
+    }
+
+    const result = await session.reconnectMcp(server.name)
+    console.log('[McpStatusPopup] reconnectMcp 结果:', result)
+
+    if (result.success) {
+      // 重连成功后，如果当前选中的是这个服务器，刷新工具列表
+      if (selectedServer.value === server.name) {
+        await selectServer({ ...server, status: 'connected' })
+      }
+    }
+  } catch (err) {
+    console.error('[McpStatusPopup] Failed to reconnect:', err)
+  } finally {
+    reconnecting.value = null
   }
 }
 
@@ -268,11 +340,35 @@ function close() {
 }
 
 .empty-state,
-.loading-state {
+.loading-state,
+.error-state {
   padding: 16px;
   text-align: center;
   font-size: 12px;
   color: var(--theme-muted-foreground, #656d76);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.error-state {
+  color: #dc3545;
+}
+
+.retry-btn {
+  padding: 4px 12px;
+  font-size: 11px;
+  border: 1px solid var(--theme-border, #e1e4e8);
+  background: var(--theme-background, #f6f8fa);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--theme-foreground, #24292e);
+  transition: background 0.15s;
+}
+
+.retry-btn:hover {
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.08));
 }
 
 .server-list {
@@ -343,6 +439,46 @@ function close() {
 .arrow-icon {
   color: var(--theme-muted-foreground, #656d76);
   flex-shrink: 0;
+}
+
+.reconnect-btn {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--theme-muted-foreground, #656d76);
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.reconnect-btn:hover:not(:disabled) {
+  background: var(--theme-hover-background, rgba(0, 0, 0, 0.08));
+  color: var(--theme-foreground, #24292e);
+}
+
+.reconnect-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.reconnect-btn .spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--theme-muted-foreground, #656d76);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Tool list styles */

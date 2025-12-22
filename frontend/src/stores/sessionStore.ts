@@ -18,7 +18,7 @@ import { ref, computed, shallowRef, watch } from 'vue'
 import { defineStore, storeToRefs } from 'pinia'
 import { i18n } from '@/i18n'
 import { useSessionTab, type SessionTabInstance, type TabConnectOptions } from '@/composables/useSessionTab'
-import { MODEL_CAPABILITIES, BaseModel } from '@/constants/models'
+import { BaseModel, getModelCapability } from '@/constants/models'
 import type { RpcPermissionMode } from '@/types/rpc'
 import { ConnectionStatus } from '@/types/display'
 import { loggers } from '@/utils/logger'
@@ -251,8 +251,10 @@ export const useSessionStore = defineStore('session', () => {
 
     // 获取连接设置（使用 IDEA 默认设置，而非从当前会话复制）
     const globalSettings = settingsStore.settings
+    // 使用 getModelCapability 支持内置和自定义模型
+    const modelCapability = getModelCapability(globalSettings.model)
     const connectOptions: TabConnectOptions = options || {
-      model: MODEL_CAPABILITIES[globalSettings.model]?.modelId || DEFAULT_SESSION_SETTINGS.modelId,
+      model: modelCapability.modelId || DEFAULT_SESSION_SETTINGS.modelId,
       thinkingLevel: globalSettings.maxThinkingTokens ?? DEFAULT_SESSION_SETTINGS.thinkingLevel,
       permissionMode: (globalSettings.permissionMode as RpcPermissionMode) || DEFAULT_SESSION_SETTINGS.permissionMode,
       skipPermissions: globalSettings.skipPermissions ?? DEFAULT_SESSION_SETTINGS.skipPermissions

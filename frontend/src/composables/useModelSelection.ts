@@ -10,10 +10,11 @@ import { ref, computed } from 'vue'
 import type { PermissionMode } from '@/types/enhancedMessage'
 import {
   BaseModel,
-  MODEL_CAPABILITIES,
-  AVAILABLE_MODELS,
-  canToggleThinking,
-  getEffectiveThinkingEnabled
+  getAllModels,
+  getModelById,
+  getModelCapability,
+  getModelDisplayName,
+  type ModelInfo
 } from '@/constants/models'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -58,17 +59,16 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
   // 思考开关等待状态
   const thinkingTogglePending = ref(false)
 
-  // 当前模型（直接绑定到 Tab 状态）
-  const currentModel = computed(() => {
+  // 当前模型（直接绑定到 Tab 状态，支持内置和自定义模型）
+  const currentModel = computed((): string => {
     const modelId = sessionStore.currentTab?.modelId.value
     if (!modelId) {
       return BaseModel.OPUS_45
     }
-    // 从 modelId 反查 BaseModel
-    const entry = Object.entries(MODEL_CAPABILITIES).find(
-      ([, cap]) => cap.modelId === modelId
-    )
-    return (entry?.[0] as BaseModel) ?? BaseModel.OPUS_45
+    // 从 modelId 反查模型 ID（支持内置和自定义）
+    const allModels = getAllModels()
+    const found = allModels.find(m => m.modelId === modelId)
+    return found?.id ?? BaseModel.OPUS_45
   })
 
   // 当前思考级别（直接绑定到 Tab 状态）
@@ -82,12 +82,13 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
 
   // 当前模型的思考模式
   const currentThinkingMode = computed(() => {
-    return MODEL_CAPABILITIES[currentModel.value].thinkingMode
+    const capability = getModelCapability(currentModel.value)
+    return capability.thinkingMode
   })
 
   // 思考开关是否可操作
   const canToggleThinkingComputed = computed(() => {
-    return canToggleThinking(currentModel.value)
+    return currentThinkingMode.value === 'optional'
   })
 
   // 当前思考是否启用（用于 UI 显示兼容）
@@ -100,14 +101,16 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
     return settingsStore.ideSettings?.thinkingLevels || DEFAULT_THINKING_LEVELS
   })
 
-  // 可用模型列表
-  const baseModelOptions = AVAILABLE_MODELS
+  // 可用模型列表（动态获取，支持自定义模型）
+  const baseModelOptions = computed((): ModelInfo[] => {
+    return getAllModels()
+  })
 
   /**
-   * 获取模型显示名称
+   * 获取模型显示名称（支持内置和自定义模型）
    */
-  function getBaseModelLabel(model: BaseModel): string {
-    return MODEL_CAPABILITIES[model]?.displayName ?? model
+  function getBaseModelLabel(modelId: string): string {
+    return getModelDisplayName(modelId)
   }
 
   /**
@@ -118,11 +121,11 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
   }
 
   /**
-   * 处理模型切换
+   * 处理模型切换（支持内置和自定义模型）
    * 直接调用 RPC/重连（立即生效于下一轮对话）
    */
-  async function handleBaseModelChange(model: BaseModel) {
-    const capability = MODEL_CAPABILITIES[model]
+  async function handleBaseModelChange(modelId: string) {
+    const capability = getModelCapability(modelId)
 
     // 根据模型能力自动设置思考级别
     let newThinkingLevel: ThinkingLevel

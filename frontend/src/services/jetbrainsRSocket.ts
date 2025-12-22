@@ -458,27 +458,24 @@ class JetBrainsRSocketService {
 
       this.client.registerHandler('onSettingsChanged', async (params: any) => {
         console.log('[JetBrainsRSocket] 收到设置变更推送 (Protobuf)')
-        // params.settings 包含 IdeSettings
+        // params 已由 protoCodec 解码，包含 { settings: IdeSettings }
         const settingsData = params.settings || params
-
-        // 默认思考级别列表
-        const defaultThinkingLevels: ThinkingLevelConfig[] = [
-          { id: 'off', name: 'Off', tokens: 0, isCustom: false },
-          { id: 'think', name: 'Think', tokens: 2048, isCustom: false },
-          { id: 'ultra', name: 'Ultra', tokens: 8096, isCustom: false }
-        ]
 
         const settings: IdeSettings = {
           defaultModelId: settingsData.defaultModelId || '',
           defaultModelName: settingsData.defaultModelName || '',
-          defaultBypassPermissions: settingsData.defaultBypassPermissions || false,
+          defaultBypassPermissions: settingsData.defaultBypassPermissions ?? false,
           enableUserInteractionMcp: settingsData.enableUserInteractionMcp ?? true,
           enableJetbrainsMcp: settingsData.enableJetbrainsMcp ?? true,
           includePartialMessages: settingsData.includePartialMessages ?? true,
           defaultThinkingLevel: settingsData.defaultThinkingLevel || 'ULTRA',
           defaultThinkingTokens: settingsData.defaultThinkingTokens ?? 8096,
           defaultThinkingLevelId: settingsData.defaultThinkingLevelId || 'ultra',
-          thinkingLevels: settingsData.thinkingLevels || defaultThinkingLevels,
+          thinkingLevels: settingsData.thinkingLevels || [
+            { id: 'off', name: 'Off', tokens: 0, isCustom: false },
+            { id: 'think', name: 'Think', tokens: 2048, isCustom: false },
+            { id: 'ultra', name: 'Ultra', tokens: 8096, isCustom: false }
+          ],
           permissionMode: settingsData.permissionMode || 'default'
         }
         console.log('[JetBrainsRSocket] 设置变更:', settings)

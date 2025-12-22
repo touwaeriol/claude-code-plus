@@ -246,12 +246,12 @@
           >
             <el-option
               v-for="model in baseModelOptions"
-              :key="model"
-              :value="model"
-              :label="getBaseModelLabel(model)"
+              :key="model.id"
+              :value="model.id"
+              :label="model.displayName"
             >
               <span class="model-option-label">
-                {{ getBaseModelLabel(model) }}
+                {{ model.displayName }}
               </span>
             </el-option>
           </el-select>
