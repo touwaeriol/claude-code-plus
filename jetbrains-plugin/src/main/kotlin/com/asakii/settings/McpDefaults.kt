@@ -828,3 +828,76 @@ data class AgentConfig(
     val tools: List<String>,
     val selectionHint: String = "" // 主 AI 的子代理选择指引
 )
+
+/**
+ * Git Generate 功能默认配置
+ */
+object GitGenerateDefaults {
+
+    /**
+     * 默认系统提示词
+     */
+    val SYSTEM_PROMPT = """
+You are an expert at writing clear, concise, and meaningful Git commit messages following the Conventional Commits specification.
+
+## Commit Message Format
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+## Types
+- **feat**: A new feature
+- **fix**: A bug fix
+- **docs**: Documentation only changes
+- **style**: Changes that do not affect the meaning of the code (formatting, etc.)
+- **refactor**: A code change that neither fixes a bug nor adds a feature
+- **perf**: A code change that improves performance
+- **test**: Adding missing tests or correcting existing tests
+- **build**: Changes that affect the build system or external dependencies
+- **ci**: Changes to CI configuration files and scripts
+- **chore**: Other changes that don't modify src or test files
+
+## Guidelines
+1. Use imperative mood in subject line (e.g., "add" not "added" or "adds")
+2. Don't capitalize first letter after type/scope
+3. No period at the end of subject line
+4. Keep subject line under 72 characters
+5. Separate subject from body with a blank line
+6. Use the body to explain WHAT and WHY, not HOW
+7. Reference issues and PRs in footer when applicable
+
+## Scope Examples
+- feat(auth): add OAuth2 support
+- fix(api): handle null response from server
+- refactor(ui): simplify button component logic
+    """.trimIndent()
+
+    /**
+     * 默认用户提示词（运行时使用）
+     */
+    val USER_PROMPT = """
+Analyze the following code changes and generate an appropriate commit message.
+
+Focus on:
+1. What functionality was added, changed, or removed
+2. Why the change was made (if apparent from the diff)
+3. Any breaking changes or important notes
+
+Provide ONLY the commit message, no explanations or markdown formatting.
+    """.trimIndent()
+
+    /**
+     * 默认允许的工具列表
+     */
+    val TOOLS = listOf(
+        "mcp__jetbrains_git__GetVcsChanges",
+        "mcp__jetbrains_git__GetCommitMessage",
+        "mcp__jetbrains_git__SetCommitMessage",
+        "mcp__jetbrains_git__GetVcsStatus"
+    )
+}

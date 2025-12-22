@@ -9,6 +9,9 @@ import com.asakii.ai.agent.sdk.model.UiResultMessage
 import com.asakii.ai.agent.sdk.model.UiError
 import com.asakii.ai.agent.sdk.model.UiToolStart
 import com.asakii.ai.agent.sdk.model.UiToolComplete
+import com.asakii.ai.agent.sdk.model.UiAssistantMessage
+import com.asakii.ai.agent.sdk.model.TextContent
+import com.asakii.ai.agent.sdk.model.ThinkingContent
 import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
 import com.asakii.plugin.mcp.GitMcpServerImpl
 import com.asakii.settings.AgentSettingsService
@@ -93,15 +96,54 @@ class GenerateCommitMessageService(private val project: Project) {
 
             var success = false
             var toolCallCount = 0
+            var shouldAbort = false
+            val steps = mutableListOf<String>()  // 记录步骤用于详情显示
+
+            // 更新详情显示
+            fun updateDetails(step: String) {
+                steps.add(step)
+                // indicator.text2 显示最近的步骤（最多显示最近2条）
+                indicator.text2 = steps.takeLast(2).joinToString(" → ")
+            }
 
             try {
                 withTimeout(120_000) {  // 2 minutes timeout for tool calls
                     client.sendMessage(AgentMessageInput(text = USER_PROMPT))
                     client.streamEvents().collect { event ->
+                        // 如果已经完成，跳过后续事件处理
+                        if (shouldAbort) return@collect
+
                         when (event) {
+                            is UiAssistantMessage -> {
+                                // 捕获 AI 的思考过程
+                                for (content in event.content) {
+                                    when (content) {
+                                        is ThinkingContent -> {
+                                            // 显示思考摘要（取前50字符）
+                                            val thinking = content.thinking.take(50).replace("\n", " ")
+                                            if (thinking.isNotBlank()) {
+                                                updateDetails("💭 $thinking...")
+                                                logger.debug { "Thinking: ${content.thinking.take(100)}" }
+                                            }
+                                        }
+                                        is TextContent -> {
+                                            // 显示文本摘要
+                                            val text = content.text.take(50).replace("\n", " ")
+                                            if (text.isNotBlank()) {
+                                                updateDetails("📝 $text...")
+                                                logger.debug { "Text: ${content.text.take(100)}" }
+                                            }
+                                        }
+                                        else -> {}
+                                    }
+                                }
+                            }
                             is UiToolStart -> {
                                 toolCallCount++
-                                indicator.text = "Calling ${event.toolName}..."
+                                // 简化工具名显示
+                                val shortName = event.toolName.replace("mcp__jetbrains_git__", "")
+                                indicator.text = "Calling $shortName..."
+                                updateDetails("🔧 $shortName")
                                 logger.info { "Tool call started: ${event.toolName}" }
                             }
                             is UiToolComplete -> {
@@ -112,17 +154,28 @@ class GenerateCommitMessageService(private val project: Project) {
                                     if (toolName.contains("SetCommitMessage", ignoreCase = true)) {
                                         success = true
                                         indicator.text = "Commit message set!"
+                                        updateDetails("✅ Message set")
+                                        logger.info { "SetCommitMessage completed successfully" }
+                                    } else if (toolName.contains("GetVcsChanges", ignoreCase = true)) {
+                                        updateDetails("✅ Changes loaded")
                                     }
                                 }
                             }
                             is UiResultMessage -> {
-                                logger.info { "Result: subtype=${event.subtype}, isError=${event.isError}" }
+                                logger.info { "Result: subtype=${event.subtype}, isError=${event.isError}, numTurns=${event.numTurns}" }
+                                // UiResultMessage 表示 query 完成，应该结束会话
                                 if (!event.isError && toolCallCount > 0) {
                                     success = true
                                 }
+                                // query 完成，标记退出
+                                shouldAbort = true
+                                indicator.text = if (success) "Done!" else "Completed"
+                                indicator.text2 = if (success) "Commit message generated" else "Check commit panel"
+                                logger.info { "Query completed, ending session" }
                             }
                             is UiError -> {
                                 logger.error { "Claude error: ${event.message}" }
+                                updateDetails("❌ Error")
                                 showNotification("Error: ${event.message}", NotificationType.ERROR)
                             }
                             else -> {

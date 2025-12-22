@@ -85,6 +85,13 @@
             id="com.asakii.settings.claudecode"
             displayName="Claude Code"/>
 
+        <!-- Git Generate Settings (child of Claude Code Plus) -->
+        <applicationConfigurable
+            parentId="com.asakii.settings"
+            instance="com.asakii.settings.GitGenerateConfigurable"
+            id="com.asakii.settings.gitgenerate"
+            displayName="Git Generate"/>
+
         <applicationService
             serviceImplementation="com.asakii.plugin.services.ClaudeCodePlusBackgroundService"/>
 

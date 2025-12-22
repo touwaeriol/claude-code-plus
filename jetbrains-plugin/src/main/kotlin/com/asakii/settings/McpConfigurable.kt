@@ -246,16 +246,19 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
         val jetbrainsEntry = builtInServers.find { it.name == "JetBrains IDE MCP" }
         val context7Entry = builtInServers.find { it.name == "Context7 MCP" }
         val terminalEntry = builtInServers.find { it.name == "Terminal MCP" }
+        val gitEntry = builtInServers.find { it.name == "JetBrains Git MCP" }
 
         if (userInteractionEntry?.enabled != settings.enableUserInteractionMcp ||
             jetbrainsEntry?.enabled != settings.enableJetBrainsMcp ||
             context7Entry?.enabled != settings.enableContext7Mcp ||
             terminalEntry?.enabled != settings.enableTerminalMcp ||
+            gitEntry?.enabled != settings.enableGitMcp ||
             context7Entry?.apiKey != settings.context7ApiKey ||
             userInteractionEntry?.instructions != settings.userInteractionInstructions ||
             jetbrainsEntry?.instructions != settings.jetbrainsInstructions ||
             context7Entry?.instructions != settings.context7Instructions ||
             terminalEntry?.instructions != settings.terminalInstructions ||
+            gitEntry?.instructions != settings.gitInstructions ||
             terminalEntry?.terminalMaxOutputLines != settings.terminalMaxOutputLines ||
             terminalEntry?.terminalMaxOutputChars != settings.terminalMaxOutputChars
         ) {
@@ -293,10 +296,13 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
         val jetbrainsEntry = builtInServers.find { it.name == "JetBrains IDE MCP" }
         val context7Entry = builtInServers.find { it.name == "Context7 MCP" }
         val terminalEntry = builtInServers.find { it.name == "Terminal MCP" }
+        val gitEntry = builtInServers.find { it.name == "JetBrains Git MCP" }
 
         settings.enableUserInteractionMcp = userInteractionEntry?.enabled ?: true
         settings.enableJetBrainsMcp = jetbrainsEntry?.enabled ?: true
         settings.enableContext7Mcp = context7Entry?.enabled ?: false
+        settings.enableGitMcp = gitEntry?.enabled ?: false
+        settings.gitInstructions = gitEntry?.instructions ?: ""
         settings.enableTerminalMcp = terminalEntry?.enabled ?: false
         settings.context7ApiKey = context7Entry?.apiKey ?: ""
         settings.userInteractionInstructions = userInteractionEntry?.instructions ?: ""
@@ -404,6 +410,15 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             hasDisableToolsToggle = true,
             terminalMaxOutputLines = settings.terminalMaxOutputLines,
             terminalMaxOutputChars = settings.terminalMaxOutputChars
+        ))
+        builtInServers.add(McpServerEntry(
+            name = "JetBrains Git MCP",
+            enabled = settings.enableGitMcp,
+            level = McpServerLevel.BUILTIN,
+            configSummary = "VCS integration and commit message generation",
+            isBuiltIn = true,
+            instructions = settings.gitInstructions,
+            defaultInstructions = McpDefaults.GIT_INSTRUCTIONS
         ))
 
         // 加载自定义服务器

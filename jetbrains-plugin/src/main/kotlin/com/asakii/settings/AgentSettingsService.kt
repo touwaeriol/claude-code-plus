@@ -110,6 +110,11 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var terminalInstructions: String = "",
         var gitInstructions: String = "",
 
+        // Git Generate 功能配置
+        var gitGenerateSystemPrompt: String = "",     // Git Generate 系统提示词
+        var gitGenerateUserPrompt: String = "",       // Git Generate 用户提示词（运行时）
+        var gitGenerateTools: String = "[]",          // Git Generate 允许的工具列表（JSON）
+
         // 默认启用 ByPass 权限（前端自动应用）
         var defaultBypassPermissions: Boolean = false,
 
@@ -234,6 +239,49 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     var gitInstructions: String
         get() = state.gitInstructions
         set(value) { state.gitInstructions = value }
+
+    // Git Generate 配置属性
+    var gitGenerateSystemPrompt: String
+        get() = state.gitGenerateSystemPrompt
+        set(value) { state.gitGenerateSystemPrompt = value }
+
+    var gitGenerateUserPrompt: String
+        get() = state.gitGenerateUserPrompt
+        set(value) { state.gitGenerateUserPrompt = value }
+
+    var gitGenerateToolsJson: String
+        get() = state.gitGenerateTools
+        set(value) { state.gitGenerateTools = value }
+
+    /**
+     * 获取 Git Generate 允许的工具列表
+     */
+    fun getGitGenerateTools(): List<String> {
+        return try {
+            json.decodeFromString<List<String>>(state.gitGenerateTools)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 设置 Git Generate 允许的工具列表
+     */
+    fun setGitGenerateTools(tools: List<String>) {
+        state.gitGenerateTools = json.encodeToString(tools)
+    }
+
+    /** 获取生效的 Git Generate 系统提示词（自定义或默认） */
+    val effectiveGitGenerateSystemPrompt: String
+        get() = state.gitGenerateSystemPrompt.ifBlank { GitGenerateDefaults.SYSTEM_PROMPT }
+
+    /** 获取生效的 Git Generate 用户提示词（自定义或默认） */
+    val effectiveGitGenerateUserPrompt: String
+        get() = state.gitGenerateUserPrompt.ifBlank { GitGenerateDefaults.USER_PROMPT }
+
+    /** 获取生效的 Git Generate 工具列表（自定义或默认） */
+    val effectiveGitGenerateTools: List<String>
+        get() = getGitGenerateTools().takeIf { it.isNotEmpty() } ?: GitGenerateDefaults.TOOLS
 
     /** 获取生效的 User Interaction MCP 提示词（自定义或默认） */
     val effectiveUserInteractionInstructions: String
