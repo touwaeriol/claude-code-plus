@@ -1,15 +1,14 @@
 package com.asakii.plugin.compat
 
-import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.terminal.frontend.toolwindow.TerminalToolWindowTab
 import com.intellij.terminal.frontend.toolwindow.TerminalToolWindowTabsManager
 import com.intellij.terminal.frontend.view.TerminalView
-import mu.KotlinLogging
 
-private val logger = KotlinLogging.logger {}
+private val logger = Logger.getInstance("com.asakii.plugin.compat.TerminalCompat")
 
 /**
  * 命令完成等待结果
@@ -46,9 +45,9 @@ class TerminalWidgetWrapper(
         try {
             // sendText 不会自动执行，需要追加换行符
             view.sendText(command + "\n")
-            logger.debug { "Command sent: $command" }
+            logger.debug("Command sent: $command")
         } catch (e: Exception) {
-            logger.error(e) { "Failed to execute command: $command" }
+            logger.error("Failed to execute command: $command", e)
         }
     }
 
@@ -85,7 +84,7 @@ class TerminalWidgetWrapper(
     ): CommandWaitResult {
         // TerminalView 的命令状态检测需要通过 shellIntegrationDeferred（协程 API）
         // 在同步上下文中无法直接使用，返回 ApiUnavailable
-        logger.warn { "waitForCommandCompletion: TerminalView API requires coroutine context, returning ApiUnavailable" }
+        logger.warn("waitForCommandCompletion: TerminalView API requires coroutine context, returning ApiUnavailable")
         return CommandWaitResult.ApiUnavailable
     }
 
@@ -96,9 +95,9 @@ class TerminalWidgetWrapper(
         try {
             // 发送 Ctrl+C 字符
             view.sendText("\u0003")
-            logger.debug { "Interrupt signal sent" }
+            logger.debug("Interrupt signal sent")
         } catch (e: Exception) {
-            logger.warn(e) { "Failed to send interrupt" }
+            logger.warn("Failed to send interrupt", e)
         }
     }
 
@@ -115,7 +114,7 @@ class TerminalWidgetWrapper(
             val endOffset = regularModel.endOffset
             regularModel.getText(startOffset, endOffset).toString()
         } catch (e: Exception) {
-            logger.warn(e) { "Failed to get terminal text" }
+            logger.warn("Failed to get terminal text", e)
             ""
         }
     }
@@ -272,18 +271,18 @@ object TerminalCompat {
         tabName: String,
         shellCommand: List<String>? = null
     ): TerminalWidgetWrapper? {
-        logger.info { "=== [253 TerminalCompat] createShellWidget ===" }
-        logger.info { "  project: ${project.name}" }
-        logger.info { "  workingDirectory: $workingDirectory" }
-        logger.info { "  tabName: $tabName" }
-        logger.info { "  shellCommand: $shellCommand" }
+        logger.info("=== [253 TerminalCompat] createShellWidget ===")
+        logger.info("  project: ${project.name}")
+        logger.info("  workingDirectory: $workingDirectory")
+        logger.info("  tabName: $tabName")
+        logger.info("  shellCommand: $shellCommand")
 
         @Suppress("removal")
         return try {
             // 注意：调用者已经确保在 EDT 上，不要再嵌套 invokeAndWait
             // 否则会导致死锁
             val tabsManager = TerminalToolWindowTabsManager.getInstance(project)
-            logger.info { "  TerminalToolWindowTabsManager class: ${tabsManager.javaClass.name}" }
+            logger.info("  TerminalToolWindowTabsManager class: ${tabsManager.javaClass.name}")
 
             // 使用新的公开 API 创建终端
             val tab = tabsManager.createTabBuilder()
@@ -294,26 +293,26 @@ object TerminalCompat {
                 .deferSessionStartUntilUiShown(true)
                 .createTab()
 
-            logger.info { "  Created terminal tab: ${tab.javaClass.name}" }
+            logger.info("  Created terminal tab: ${tab.javaClass.name}")
 
             // 激活终端工具窗口（253 新 API 不会自动激活）
             val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Terminal")
             if (toolWindow != null) {
                 toolWindow.show()
-                logger.info { "  Terminal ToolWindow activated" }
+                logger.info("  Terminal ToolWindow activated")
             } else {
-                logger.warn { "  Terminal ToolWindow not found" }
+                logger.warn("  Terminal ToolWindow not found")
             }
 
             val view = tab.view
-            logger.info { "  TerminalView class: ${view.javaClass.name}" }
+            logger.info("  TerminalView class: ${view.javaClass.name}")
 
             TerminalWidgetWrapper(view, tab)
         } catch (e: ProcessCanceledException) {
             // 必须重新抛出 ProcessCanceledException
             throw e
         } catch (e: Exception) {
-            logger.error(e) { "Failed to create terminal widget" }
+            logger.error("Failed to create terminal widget", e)
             null
         }
     }
