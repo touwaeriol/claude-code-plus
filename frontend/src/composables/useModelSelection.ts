@@ -59,8 +59,16 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
   // 思考开关等待状态
   const thinkingTogglePending = ref(false)
 
+  // 乐观更新：临时存储用户选择的模型（在 RPC 完成前立即更新 UI）
+  const optimisticModel = ref<string | null>(null)
+
   // 当前模型（直接绑定到 Tab 状态，支持内置和自定义模型）
   const currentModel = computed((): string => {
+    // 优先使用乐观更新的值（立即响应用户操作）
+    if (optimisticModel.value) {
+      return optimisticModel.value
+    }
+
     const modelId = sessionStore.currentTab?.modelId.value
     if (!modelId) {
       return BaseModel.OPUS_45
@@ -122,7 +130,7 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
 
   /**
    * 处理模型切换（支持内置和自定义模型）
-   * 直接调用 RPC/重连（立即生效于下一轮对话）
+   * 使用乐观更新：立即更新 UI，然后异步调用 RPC
    */
   async function handleBaseModelChange(modelId: string) {
     const capability = getModelCapability(modelId)
@@ -144,14 +152,27 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
 
     console.log(`🔄 [handleBaseModelChange] 切换模型: ${capability.displayName}, thinkingLevel=${newThinkingLevel}`)
 
-    // 直接调用 updateSettings，它会智能处理 RPC
+    // 🎯 乐观更新：立即设置选中状态（UI 立即响应）
+    optimisticModel.value = modelId
+
+    // 异步调用 RPC（不阻塞 UI）
     const tab = sessionStore.currentTab
     if (tab) {
-      await tab.updateSettings({
-        model: capability.modelId,
-        thinkingLevel: newThinkingLevel
-      })
-      console.log(`✅ [handleBaseModelChange] 模型切换完成`)
+      try {
+        await tab.updateSettings({
+          model: capability.modelId,
+          thinkingLevel: newThinkingLevel
+        })
+        console.log(`✅ [handleBaseModelChange] 模型切换完成`)
+      } catch (error) {
+        console.error(`❌ [handleBaseModelChange] 模型切换失败:`, error)
+      } finally {
+        // ✅ RPC 完成后，清除乐观更新（仅当值未被后续操作覆盖时）
+        // 防止旧请求清除新的乐观值
+        if (optimisticModel.value === modelId) {
+          optimisticModel.value = null
+        }
+      }
     }
   }
 
