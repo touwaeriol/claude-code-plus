@@ -2,6 +2,100 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2025-12-23
+
+### Added
+
+#### Terminal MCP Enhancements
+- Add `TerminalInterrupt` tool for stopping running commands (Ctrl+C signal)
+- Support batch deletion in `TerminalKill` for closing multiple sessions at once
+- Add foreground execution with output truncation support
+- Display `session_id` for Terminal MCP tools in collapsed state
+- Use SVG terminal icon for better visual consistency
+
+#### Chrome Extension Integration
+- Add Chrome extension status UI and settings panel
+- Add Chrome extension status indicator in bottom toolbar
+- Add install button to Chrome Extension status popup
+- Auto-reconnect when Chrome enabled state changes
+- Sync Chrome setting to `~/.claude.json` for CLI compatibility
+
+#### Git Integration
+- Add Git MCP server with VCS tools and Chrome detector
+- Add "Generate Commit Message" button with Claude AI integration
+- Improve selected files support and switch to Markdown output
+- Add Git Generate configuration with progress display
+- Add session persistence control for Git Generate feature
+
+#### Model Configuration
+- Add custom model configuration support
+- Make model configuration fully dynamic with custom model support
+
+#### MCP Improvements
+- Display MCP tool parameters in McpStatusPopup (matches CLI `/mcp` command)
+- Add MCP reconnect, tools, disable/enable control endpoints
+- Improve MCP settings and tool disabling functionality
+
+#### Frontend Enhancements
+- Add `ide.openUrl` API for opening URLs in system browser
+- Add leafUuid and parentUuid support for message tree (conversation branching)
+
+### Changed
+
+#### Multi-Version Compatibility
+- Eliminate reflection with multi-version compat layers and optional plugin deps
+- Use `createLocalShellWidget` for 242/243 Terminal API compatibility
+- Improve terminal tools and update compatibility layers for all supported versions
+
+#### Terminal Session Management
+- Improve terminal session management with better state handling
+- Remove output stability detection, add ApiUnavailable handling
+- Simplify TerminalKill API to use session_ids only
+
+#### Frontend Refactoring
+- Use self-closing attachment-start/end tags for better parsing
+- Apply IDE default settings to new sessions automatically
+- Align default thinking tokens with IDEA settings (8096)
+- Save scroll position before tab switch for better UX
+
+#### CLI Updates
+- Upgrade CLI to 2.0.73 with terminal MCP and AST analysis tools
+- Use `getAppState().mcp.tools` to match CLI internal `/mcp` command logic
+- Simplify CLI patches and update enhanced bundle
+
+### Fixed
+
+- Fix 242/243 build compatibility by using correct Terminal API (`createLocalShellWidget`)
+- Fix plugin-verifier: add `org.jetbrains.plugins.terminal` to externalPrefixes
+- Fix plugin-verifier: add externalPrefixes to suppress optional dependency warnings
+- Fix CI: pass platformMajor parameter to verify task for multi-version compatibility
+- Fix git-generate event timing and use system-prompt-file correctly
+- Fix missing `MODEL_CAPABILITIES` import in sessionStore
+- Fix RSocket: remove timeout for permission and user question requests
+- Fix missing `defaultChromeEnabled` field in decodeSettingsResponse
+- Add generic font fallback to fix CSS warning
+- Add `getChromeStatus` to UnifiedAgentClient interface to eliminate type check warning
+- Fix UI display and SDK message content order separation
+- Fix misc improvements to RSocket, MCP defaults, and session handling
+- Properly load custom agents with enabled check and defaults
+- Fix displayMessages watch timing after computed definition
+
+### Build
+
+- Add npm cache for faster frontend builds in CI
+- Expand verification matrix to cover all 6 versions for each IDE (30 jobs total)
+- Refactor verify jobs into groups with per-group IDE caching
+- Limit max-parallel to 4 to prevent disk space exhaustion
+- Enhance disk cleanup to free more space during CI builds
+- Fix IDE types and versions to match build.gradle.kts
+
+### Docs
+
+- Add best practices for terminal session reuse and cleanup
+- Improve Terminal MCP tool descriptions for clarity
+
+---
+
 ## [1.1.0] - 2025-12-19
 
 ### Added
