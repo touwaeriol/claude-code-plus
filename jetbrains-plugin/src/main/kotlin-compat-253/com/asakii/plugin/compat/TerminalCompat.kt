@@ -278,6 +278,7 @@ object TerminalCompat {
         logger.info { "  tabName: $tabName" }
         logger.info { "  shellCommand: $shellCommand" }
 
+        @Suppress("removal")
         return try {
             var result: TerminalWidgetWrapper? = null
 
