@@ -309,13 +309,21 @@ object TerminalCompat {
             val manager = TerminalToolWindowManager.getInstance(project)
             logger.debug { "TerminalToolWindowManager instance: ${manager.javaClass.name}" }
 
-            // 242 版本使用 createNewSession 支持 shellCommand
-            val widget = manager.createNewSession(workingDirectory, tabName, shellCommand, true, true)
-            logger.info { "createNewSession returned: ${widget.javaClass.name}" }
+            // 242 版本使用 createLocalShellWidget (不支持自定义 shell 命令)
+            // 如果指定了 shellCommand，记录警告
+            if (shellCommand != null) {
+                logger.warn { "Custom shell command not supported in 2024.2.x, using default shell" }
+            }
 
-            // 将 TerminalWidget 转换为 ShellTerminalWidget
-            val shellWidget = ShellTerminalWidget.toShellJediTermWidgetOrThrow(widget)
-            TerminalWidgetWrapper(shellWidget)
+            val widget = manager.createLocalShellWidget(workingDirectory, tabName)
+            logger.info { "createLocalShellWidget returned: ${widget?.javaClass?.name ?: "null"}" }
+
+            if (widget != null) {
+                TerminalWidgetWrapper(widget)
+            } else {
+                logger.error { "createLocalShellWidget returned null" }
+                null
+            }
         } catch (e: Exception) {
             logger.error(e) { "Failed to create terminal widget in TerminalCompat (242)" }
             null
