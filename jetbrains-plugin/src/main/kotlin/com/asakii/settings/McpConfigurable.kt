@@ -261,7 +261,8 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             terminalEntry?.instructions != settings.terminalInstructions ||
             gitEntry?.instructions != settings.gitInstructions ||
             terminalEntry?.terminalMaxOutputLines != settings.terminalMaxOutputLines ||
-            terminalEntry?.terminalMaxOutputChars != settings.terminalMaxOutputChars
+            terminalEntry?.terminalMaxOutputChars != settings.terminalMaxOutputChars ||
+            terminalEntry?.terminalReadTimeout != settings.terminalReadTimeout
         ) {
             return true
         }
@@ -314,6 +315,7 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
         settings.terminalMaxOutputChars = terminalEntry?.terminalMaxOutputChars ?: 50000
         settings.terminalDefaultShell = terminalEntry?.terminalDefaultShell ?: ""
         settings.terminalAvailableShells = terminalEntry?.terminalAvailableShells ?: ""
+        settings.terminalReadTimeout = terminalEntry?.terminalReadTimeout ?: 30
 
         // 保存自定义服务器配置
         val globalServers = customServers.filter { it.level == McpServerLevel.GLOBAL }
@@ -414,7 +416,8 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             terminalMaxOutputLines = settings.terminalMaxOutputLines,
             terminalMaxOutputChars = settings.terminalMaxOutputChars,
             terminalDefaultShell = settings.terminalDefaultShell,
-            terminalAvailableShells = settings.terminalAvailableShells
+            terminalAvailableShells = settings.terminalAvailableShells,
+            terminalReadTimeout = settings.terminalReadTimeout
         ))
         builtInServers.add(McpServerEntry(
             name = "JetBrains Git MCP",
@@ -660,7 +663,9 @@ data class McpServerEntry(
     /** Terminal MCP: 默认 shell（空字符串表示使用系统默认） */
     val terminalDefaultShell: String = "",
     /** Terminal MCP: 可用 shell 列表（逗号分隔） */
-    val terminalAvailableShells: String = ""
+    val terminalAvailableShells: String = "",
+    /** Terminal MCP: TerminalRead 默认超时时间（秒） */
+    val terminalReadTimeout: Int = 30
 )
 
 /**
@@ -697,6 +702,8 @@ class BuiltInMcpServerDialog(
     // Terminal MCP 截断配置
     private val maxOutputLinesField = JBTextField(entry.terminalMaxOutputLines.toString(), 8)
     private val maxOutputCharsField = JBTextField(entry.terminalMaxOutputChars.toString(), 8)
+    // Terminal MCP 超时配置
+    private val readTimeoutField = JBTextField(entry.terminalReadTimeout.toString(), 6)
 
     // Terminal MCP Shell 配置
     // 动态检测已安装的 shell
@@ -915,6 +922,24 @@ class BuiltInMcpServerDialog(
             }
             contentPanel.add(truncatePanel)
             contentPanel.add(Box.createVerticalStrut(8))
+
+            // 超时配置
+            val timeoutLabel = JBLabel("Read Timeout:").apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+            }
+            contentPanel.add(timeoutLabel)
+            contentPanel.add(Box.createVerticalStrut(4))
+
+            val timeoutPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+                add(JBLabel("Default timeout:"))
+                add(readTimeoutField)
+                add(JBLabel("seconds"))
+                add(Box.createHorizontalStrut(8))
+                add(JBLabel("<html><font color='gray' size='-1'>(when using wait=true)</font></html>"))
+            }
+            contentPanel.add(timeoutPanel)
+            contentPanel.add(Box.createVerticalStrut(8))
         }
 
         // 系统提示词
@@ -1023,7 +1048,10 @@ class BuiltInMcpServerDialog(
             terminalDefaultShell = if (entry.name == "Terminal MCP") {
                 defaultShellCombo.selectedItem as? String ?: ""
             } else entry.terminalDefaultShell,
-            terminalAvailableShells = availableShellsValue
+            terminalAvailableShells = availableShellsValue,
+            terminalReadTimeout = if (entry.name == "Terminal MCP") {
+                readTimeoutField.text.toIntOrNull() ?: 30
+            } else entry.terminalReadTimeout
         )
     }
 }

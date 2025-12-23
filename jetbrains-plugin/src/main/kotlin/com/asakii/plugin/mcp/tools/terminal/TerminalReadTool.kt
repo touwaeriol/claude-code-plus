@@ -1,5 +1,6 @@
 package com.asakii.plugin.mcp.tools.terminal
 
+import com.asakii.settings.AgentSettingsService
 import mu.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -35,7 +36,10 @@ class TerminalReadTool(private val sessionManager: TerminalSessionManager) {
         val contextLines = (arguments["context_lines"] as? Number)?.toInt() ?: 2
         // 默认不等待，可通过 wait=true 等待命令完成
         val waitForIdle = arguments["wait"] as? Boolean ?: false
-        val timeout = (arguments["timeout"] as? Number)?.toLong() ?: 30_000L
+        // 使用配置的默认超时时间（秒→毫秒）
+        val settings = AgentSettingsService.getInstance()
+        val defaultTimeoutMs = settings.terminalReadTimeoutMs
+        val timeout = (arguments["timeout"] as? Number)?.toLong() ?: defaultTimeoutMs
 
         logger.info { "Reading output from session: $sessionId (maxLines: $maxLines, search: $search, waitForIdle: $waitForIdle)" }
 

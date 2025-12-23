@@ -54,6 +54,17 @@ class TerminalMcpServerImpl(private val project: Project) : McpServerBase(), Dis
             appendLine("- Platform: $platform")
             appendLine("- Default Shell: $defaultShell")
             appendLine("- Available Shells: ${availableShells.joinToString(", ")}")
+            appendLine()
+            appendLine("**⚠️ Interactive Commands Warning:**")
+            appendLine("- Some commands enter interactive mode (e.g., `less`, `vim`, `git log`, `git show`)")
+            appendLine("- When using `wait=true`, these will cause timeout. Use `wait=false` for potentially interactive commands")
+            appendLine("- To exit interactive mode: use `TerminalInterrupt` to send Ctrl+C")
+            appendLine()
+            appendLine("**Best Practices to Avoid Interactive Mode:**")
+            appendLine("- Always use flags to disable pagers, interactive prompts, and editors")
+            appendLine("- Prefer non-interactive alternatives or redirect output when available")
+            appendLine("- Git example: use `git --no-pager <command>` (e.g., `git --no-pager log`, `git --no-pager diff`)")
+            appendLine("- Other examples: `less -F` (exit if one screen), `PAGER=cat` env var, `--no-edit` flags")
         }
 
         return baseInstructions + systemInfo
