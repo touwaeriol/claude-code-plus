@@ -181,7 +181,7 @@ fun extractLatestChangelog(): String {
 intellijPlatform {
     pluginConfiguration {
         name.set(providers.gradleProperty("pluginName"))
-        version.set(providers.gradleProperty("pluginVersion"))
+        version.set("$baseVersion.$platformMajor")
 
         ideaVersion {
             // 使用根据 platformMajor 计算的版本范围
