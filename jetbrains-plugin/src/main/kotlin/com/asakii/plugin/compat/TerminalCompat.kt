@@ -24,7 +24,7 @@ sealed class CommandWaitResult {
 }
 
 /**
- * Terminal Widget 包装器 - 适用于 2024.2 ~ 2025.2
+ * Terminal Widget 包装器
  *
  * 封装 ShellTerminalWidget，提供统一的跨版本 API
  */
@@ -180,12 +180,10 @@ data class DetectedShell(
 )
 
 /**
- * Terminal 兼容层 - 适用于 2024.2 ~ 2025.2
+ * Terminal 兼容层
  *
  * 使用 TerminalToolWindowManager.createLocalShellWidget() 创建终端
  * 返回的是 ShellTerminalWidget，有 executeCommand() 和 hasRunningCommands() 方法
- *
- * 注意：此 API 在 2025.3 中被标记为 deprecated，2025.3+ 应使用 kotlin-compat-253
  */
 object TerminalCompat {
 
@@ -284,7 +282,7 @@ object TerminalCompat {
     /**
      * 创建本地 Shell Widget
      *
-     * 使用 createLocalShellWidget API (2024.2 ~ 2025.2)
+     * 使用 createLocalShellWidget API
      * 通过临时修改 TerminalProjectOptionsProvider.shellPath 来支持自定义 shell
      *
      * @param project 项目
@@ -299,7 +297,7 @@ object TerminalCompat {
         tabName: String,
         shellCommand: List<String>? = null
     ): TerminalWidgetWrapper? {
-        logger.info { "=== [242 TerminalCompat] createShellWidget ===" }
+        logger.info { "=== [TerminalCompat] createShellWidget ===" }
         logger.info { "  project: ${project.name}" }
         logger.info { "  workingDirectory: $workingDirectory" }
         logger.info { "  tabName: $tabName" }

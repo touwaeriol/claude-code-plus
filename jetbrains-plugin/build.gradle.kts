@@ -40,9 +40,10 @@ val targetPlatformVersion = when (platformMajor) {
 // ===== 兼容性代码目录配置 =====
 // 按 API 变化点划分，避免反射，实现编译时类型安全
 
-// 主兼容层目录 (VCS/Commit/Localization/JBCef API)
-// - 241-252: 使用旧 API (kotlin-compat-242)
+// 主兼容层目录 (VCS/Localization/BrowseButton API)
+// - 242-252: 使用旧 API (kotlin-compat-242)
 // - 253+: 使用新 API (kotlin-compat-253)
+// 注：TerminalCompat 已统一移至主目录 kotlin/com/asakii/plugin/compat/
 val mainCompatDir = when {
     platformMajor >= 253 -> "kotlin-compat-253"
     else -> "kotlin-compat-242"

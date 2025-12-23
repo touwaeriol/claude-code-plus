@@ -2,17 +2,18 @@ package com.asakii.plugin.mcp.tools.terminal
 
 import com.asakii.settings.AgentSettingsService
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindowManager
 import com.asakii.plugin.compat.CommandWaitResult
 import com.asakii.plugin.compat.TerminalCompat
 import com.asakii.plugin.compat.TerminalWidgetWrapper
-import mu.KotlinLogging
 import org.jetbrains.plugins.terminal.TerminalToolWindowFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-private val logger = KotlinLogging.logger {}
+private val logger = Logger.getInstance("com.asakii.plugin.mcp.tools.terminal.TerminalSessionManager")
 
 /**
  * Terminal 会话信息
@@ -35,7 +36,7 @@ data class TerminalSession(
         return try {
             widgetWrapper.hasRunningCommands()
         } catch (e: Exception) {
-            logger.warn(e) { "Failed to check running commands for session $id" }
+            logger.warn("Failed to check running commands for session $id: ${e.message}")
             null
         }
     }
@@ -73,7 +74,7 @@ data class TerminalSession(
         return try {
             widgetWrapper.getOutput(maxLines)
         } catch (e: Exception) {
-            logger.error(e) { "Failed to get output for session $id" }
+            logger.error("Failed to get output for session $id", e)
             ""
         }
     }
@@ -123,7 +124,7 @@ data class SearchMatch(
  * 不再使用硬编码枚举。
  */
 object ShellResolver {
-    private val logger = KotlinLogging.logger {}
+    private val logger = Logger.getInstance("com.asakii.plugin.mcp.tools.terminal.ShellResolver")
 
     /**
      * 根据 shell 名称获取可执行路径
@@ -141,11 +142,11 @@ object ShellResolver {
         }
 
         if (matched != null) {
-            logger.debug { "Found shell '$shellName' at path: ${matched.path}" }
+            logger.info("Found shell '$shellName' at path: ${matched.path}")
             return matched.path
         }
 
-        logger.warn { "Shell '$shellName' not found in detected shells: ${detectedShells.map { it.name }}" }
+        logger.warn("Shell '$shellName' not found in detected shells: ${detectedShells.map { it.name }}")
         return null
     }
 
@@ -204,10 +205,10 @@ class TerminalSessionManager(private val project: Project) {
 
             // 获取 shell 命令（用于 IDEA Terminal API）
             val shellCommand = ShellResolver.getShellCommand(actualShellName)
-            logger.info { "=== [TerminalSessionManager] createSession ===" }
-            logger.info { "  requested shellName: $shellName" }
-            logger.info { "  actualShellName: $actualShellName" }
-            logger.info { "  shellCommand: $shellCommand" }
+            logger.info("=== [TerminalSessionManager] createSession ===")
+            logger.info("  requested shellName: $shellName")
+            logger.info("  actualShellName: $actualShellName")
+            logger.info("  shellCommand: $shellCommand")
 
             var wrapper: TerminalWidgetWrapper? = null
 
@@ -219,10 +220,12 @@ class TerminalSessionManager(private val project: Project) {
                     wrapper = TerminalCompat.createShellWidget(project, basePath, sessionName, shellCommand)
 
                     if (wrapper == null) {
-                        logger.warn { "Failed to create TerminalWidgetWrapper" }
+                        logger.warn("Failed to create TerminalWidgetWrapper")
                     }
+                } catch (e: ProcessCanceledException) {
+                    throw e
                 } catch (e: Exception) {
-                    logger.error(e) { "Failed to create terminal widget" }
+                    logger.error("Failed to create terminal widget", e)
                 }
             }
 
@@ -234,11 +237,13 @@ class TerminalSessionManager(private val project: Project) {
                     widgetWrapper = w
                 )
                 sessions[sessionId] = session
-                logger.info { "Created terminal session: $sessionId ($sessionName), shell=$actualShellName, widget type: ${w.widgetClassName}" }
+                logger.info("Created terminal session: $sessionId ($sessionName), shell=$actualShellName, widget type: ${w.widgetClassName}")
                 session
             }
+        } catch (e: ProcessCanceledException) {
+            throw e
         } catch (e: Exception) {
-            logger.error(e) { "Failed to create terminal session" }
+            logger.error("Failed to create terminal session", e)
             null
         }
     }
@@ -295,8 +300,10 @@ class TerminalSessionManager(private val project: Project) {
                 sessionName = session.name,
                 background = true  // 始终视为后台执行
             )
+        } catch (e: ProcessCanceledException) {
+            throw e
         } catch (e: Exception) {
-            logger.error(e) { "Failed to execute command in session ${session.id}" }
+            logger.error("Failed to execute command in session ${session.id}", e)
             ExecuteResult(
                 success = false,
                 sessionId = session.id,
@@ -420,8 +427,10 @@ class TerminalSessionManager(private val project: Project) {
                     }
                 }
             }
+        } catch (e: ProcessCanceledException) {
+            throw e
         } catch (e: Exception) {
-            logger.error(e) { "Failed to execute command in session ${session.id}" }
+            logger.error("Failed to execute command in session ${session.id}", e)
             ExecuteResult(
                 success = false,
                 sessionId = session.id,
@@ -502,7 +511,7 @@ class TerminalSessionManager(private val project: Project) {
                     }
                     is CommandWaitResult.Completed -> {
                         // 命令完成，继续读取
-                        logger.info { "Command completed, reading output..." }
+                        logger.info("Command completed, reading output...")
                     }
                 }
             }
@@ -527,8 +536,10 @@ class TerminalSessionManager(private val project: Project) {
                     lineCount = output.split("\n").size
                 )
             }
+        } catch (e: ProcessCanceledException) {
+            throw e
         } catch (e: Exception) {
-            logger.error(e) { "Failed to read output from session $sessionId" }
+            logger.error("Failed to read output from session $sessionId", e)
             ReadResult(
                 success = false,
                 sessionId = sessionId,
@@ -571,8 +582,10 @@ class TerminalSessionManager(private val project: Project) {
                     else -> "Interrupt signal sent, command may still be stopping"
                 }
             )
+        } catch (e: ProcessCanceledException) {
+            throw e
         } catch (e: Exception) {
-            logger.error(e) { "Failed to interrupt command in session $sessionId" }
+            logger.error("Failed to interrupt command in session $sessionId", e)
             InterruptResult(
                 success = false,
                 sessionId = sessionId,
@@ -601,14 +614,18 @@ class TerminalSessionManager(private val project: Project) {
                             contentManager.removeContent(content, true)
                         }
                     }
+                } catch (e: ProcessCanceledException) {
+                    throw e
                 } catch (e: Exception) {
-                    logger.warn(e) { "Failed to remove terminal content" }
+                    logger.warn("Failed to remove terminal content: ${e.message}")
                 }
             }
-            logger.info { "Killed terminal session: $sessionId" }
+            logger.info("Killed terminal session: $sessionId")
             true
+        } catch (e: ProcessCanceledException) {
+            throw e
         } catch (e: Exception) {
-            logger.error(e) { "Failed to kill session $sessionId" }
+            logger.error("Failed to kill session $sessionId", e)
             false
         }
     }
@@ -632,17 +649,21 @@ class TerminalSessionManager(private val project: Project) {
                             content.displayName = newName
                         }
                     }
+                } catch (e: ProcessCanceledException) {
+                    throw e
                 } catch (e: Exception) {
-                    logger.warn(e) { "Failed to rename terminal tab" }
+                    logger.warn("Failed to rename terminal tab: ${e.message}")
                 }
             }
 
             // 更新内部会话记录
             sessions[sessionId] = session.copy(name = newName)
-            logger.info { "Renamed terminal session $sessionId to: $newName" }
+            logger.info("Renamed terminal session $sessionId to: $newName")
             true
+        } catch (e: ProcessCanceledException) {
+            throw e
         } catch (e: Exception) {
-            logger.error(e) { "Failed to rename session $sessionId" }
+            logger.error("Failed to rename session $sessionId", e)
             false
         }
     }
@@ -687,7 +708,7 @@ class TerminalSessionManager(private val project: Project) {
     private fun getDefaultShellName(): String {
         val settings = AgentSettingsService.getInstance()
         val defaultShell = settings.getEffectiveDefaultShell()
-        logger.info { "Using default shell: $defaultShell" }
+        logger.info("Using default shell: $defaultShell")
         return defaultShell
     }
 
