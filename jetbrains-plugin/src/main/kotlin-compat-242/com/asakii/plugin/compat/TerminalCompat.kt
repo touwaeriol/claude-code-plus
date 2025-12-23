@@ -163,6 +163,14 @@ class TerminalWidgetWrapper(private val widget: ShellTerminalWidget) {
             ""
         }
     }
+
+    /**
+     * 获取终端输出文本（按行分割）
+     */
+    fun getOutputLines(maxLines: Int = 1000): List<String> {
+        val text = getOutput(maxLines)
+        return text.split("\n")
+    }
 }
 
 /**

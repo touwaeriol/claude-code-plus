@@ -17,47 +17,67 @@ jobs:
           # 2024.2 版本
           - type: IC
             version: "2024.2.6"
+            platformMajor: 242
           - type: WS
             version: "2024.2.4"
+            platformMajor: 242
           - type: GO
             version: "2024.2.3"
+            platformMajor: 242
           - type: CL
             version: "2024.2.3"
+            platformMajor: 242
           - type: PC
             version: "2024.2.4"
+            platformMajor: 242
           - type: PS
             version: "2024.2.4"
+            platformMajor: 242
           # 2024.3 版本
           - type: IC
             version: "2024.3.5"
+            platformMajor: 243
           - type: WS
             version: "2024.3.3"
+            platformMajor: 243
           - type: GO
             version: "2024.3.3"
+            platformMajor: 243
           - type: CL
             version: "2024.3.3"
+            platformMajor: 243
           - type: PC
             version: "2024.3.3"
+            platformMajor: 243
           - type: PS
             version: "2024.3.3"
+            platformMajor: 243
           # 2025.1 版本
           - type: IC
             version: "2025.1.5"
+            platformMajor: 251
           - type: WS
             version: "2025.1.2"
+            platformMajor: 251
           - type: GO
             version: "2025.1.2"
+            platformMajor: 251
           - type: CL
             version: "2025.1.2"
+            platformMajor: 251
           - type: PC
             version: "2025.1.2"
+            platformMajor: 251
           - type: PS
             version: "2025.1.2"
+            platformMajor: 251
           # 2025.2+ 版本
           - type: IC
             version: "2025.2.4"
+            platformMajor: 252
           - type: II
             version: "2025.3.1"
+            platformMajor: 253
 
     name: Verify ${{ matrix.ide.type }} ${{ matrix.ide.version }}
 
@@ -129,6 +149,7 @@ jobs:
           ./gradlew verifyPlugin \
             -PverifyIdeType=${{ matrix.ide.type }} \
             -PverifyIdeVersion=${{ matrix.ide.version }} \
+            -PplatformMajor=${{ matrix.ide.platformMajor }} \
             --no-daemon \
             --no-configuration-cache \
             --stacktrace
