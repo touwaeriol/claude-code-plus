@@ -26,6 +26,8 @@ class GitGenerateConfigurable : SearchableConfigurable {
     private var userPromptArea: JBTextArea? = null
     private var toolsPanel: JPanel? = null
     private var toolsList: MutableList<String> = mutableListOf()
+    private var showProgressCheckbox: JCheckBox? = null
+    private var saveSessionCheckbox: JCheckBox? = null
 
     override fun getId(): String = "claude-code-plus.git-generate"
 
@@ -49,6 +51,22 @@ class GitGenerateConfigurable : SearchableConfigurable {
             add(noticeLabel)
         }
         contentPanel.add(noticePanel)
+        contentPanel.add(Box.createVerticalStrut(16))
+
+        // Show Progress 复选框
+        showProgressCheckbox = JCheckBox("Show detailed progress during generation").apply {
+            alignmentX = JPanel.LEFT_ALIGNMENT
+            toolTipText = "When enabled, displays a dialog showing AI's tool calls and thinking process"
+        }
+        contentPanel.add(showProgressCheckbox)
+        contentPanel.add(Box.createVerticalStrut(8))
+
+        // Save Session 复选框
+        saveSessionCheckbox = JCheckBox("Save session to history").apply {
+            alignmentX = JPanel.LEFT_ALIGNMENT
+            toolTipText = "When enabled, the generation session will be saved and visible in Claude Code session history"
+        }
+        contentPanel.add(saveSessionCheckbox)
         contentPanel.add(Box.createVerticalStrut(16))
 
         // System Prompt 区域
@@ -263,7 +281,9 @@ class GitGenerateConfigurable : SearchableConfigurable {
 
         return systemPromptArea?.text != effectiveSystemPrompt ||
             userPromptArea?.text != effectiveUserPrompt ||
-            getTools() != effectiveTools
+            getTools() != effectiveTools ||
+            showProgressCheckbox?.isSelected != settings.gitGenerateShowProgress ||
+            saveSessionCheckbox?.isSelected != settings.gitGenerateSaveSession
     }
 
     override fun apply() {
@@ -283,6 +303,12 @@ class GitGenerateConfigurable : SearchableConfigurable {
             settings.setGitGenerateTools(currentTools)
         }
 
+        // 保存 Show Progress 设置
+        settings.gitGenerateShowProgress = showProgressCheckbox?.isSelected ?: true
+
+        // 保存 Save Session 设置
+        settings.gitGenerateSaveSession = saveSessionCheckbox?.isSelected ?: false
+
         settings.notifyChange()
     }
 
@@ -292,6 +318,8 @@ class GitGenerateConfigurable : SearchableConfigurable {
         systemPromptArea?.text = settings.gitGenerateSystemPrompt.ifBlank { GitGenerateDefaults.SYSTEM_PROMPT }
         userPromptArea?.text = settings.gitGenerateUserPrompt.ifBlank { GitGenerateDefaults.USER_PROMPT }
         setTools(settings.getGitGenerateTools().takeIf { it.isNotEmpty() } ?: GitGenerateDefaults.TOOLS)
+        showProgressCheckbox?.isSelected = settings.gitGenerateShowProgress
+        saveSessionCheckbox?.isSelected = settings.gitGenerateSaveSession
     }
 
     override fun disposeUIResources() {
@@ -299,6 +327,8 @@ class GitGenerateConfigurable : SearchableConfigurable {
         userPromptArea = null
         toolsPanel = null
         toolsList.clear()
+        showProgressCheckbox = null
+        saveSessionCheckbox = null
         mainPanel = null
     }
 }

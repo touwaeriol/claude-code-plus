@@ -6,35 +6,60 @@ on:
     tags: [ '**' ]
 
 jobs:
-  # 验证插件兼容性 - 按版本分组，每个 runner 处理 2 个 IDE，串行执行并清理
+  # 验证插件兼容性 - 每个 IDE 一个 job，可以缓存
   verify:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 3  # 同时 3 个 runner
+      max-parallel: 6
       matrix:
-        group:
-          # 基于 build.gradle.kts 中定义的正确版本号
-          # 2024.2 版本 - 分 2 组
-          - name: "2024.2 Group A"
-            ides: "IC:2024.2.6,WS:2024.2.4,GO:2024.2.3"
-          - name: "2024.2 Group B"
-            ides: "CL:2024.2.3,PC:2024.2.4,PS:2024.2.4"
-          # 2024.3 版本 - 分 2 组
-          - name: "2024.3 Group A"
-            ides: "IC:2024.3.5,WS:2024.3.3,GO:2024.3.3"
-          - name: "2024.3 Group B"
-            ides: "CL:2024.3.3,PC:2024.3.3,PS:2024.3.3"
-          # 2025.1 版本 - 分 2 组
-          - name: "2025.1 Group A"
-            ides: "IC:2025.1.5,WS:2025.1.2,GO:2025.1.2"
-          - name: "2025.1 Group B"
-            ides: "CL:2025.1.2,PC:2025.1.2,PS:2025.1.2"
+        ide:
+          # 2024.2 版本
+          - type: IC
+            version: "2024.2.6"
+          - type: WS
+            version: "2024.2.4"
+          - type: GO
+            version: "2024.2.3"
+          - type: CL
+            version: "2024.2.3"
+          - type: PC
+            version: "2024.2.4"
+          - type: PS
+            version: "2024.2.4"
+          # 2024.3 版本
+          - type: IC
+            version: "2024.3.5"
+          - type: WS
+            version: "2024.3.3"
+          - type: GO
+            version: "2024.3.3"
+          - type: CL
+            version: "2024.3.3"
+          - type: PC
+            version: "2024.3.3"
+          - type: PS
+            version: "2024.3.3"
+          # 2025.1 版本
+          - type: IC
+            version: "2025.1.5"
+          - type: WS
+            version: "2025.1.2"
+          - type: GO
+            version: "2025.1.2"
+          - type: CL
+            version: "2025.1.2"
+          - type: PC
+            version: "2025.1.2"
+          - type: PS
+            version: "2025.1.2"
           # 2025.2+ 版本
-          - name: "2025.2+ Group"
-            ides: "IC:2025.2.4,II:2025.3.1"
+          - type: IC
+            version: "2025.2.4"
+          - type: II
+            version: "2025.3.1"
 
-    name: Verify ${{ matrix.group.name }}
+    name: Verify ${{ matrix.ide.type }} ${{ matrix.ide.version }}
 
     steps:
       - name: Free disk space
@@ -88,50 +113,33 @@ jobs:
           restore-keys: |
             gradle-build-${{ runner.os }}-
 
-      - name: Cache IDE downloads for group
+      - name: Cache IDE ${{ matrix.ide.type }} ${{ matrix.ide.version }}
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/JetBrains
             ~/.gradle/caches/modules-2/files-2.1/com.jetbrains*
-          key: ide-cache-${{ matrix.group.name }}-v1
-          restore-keys: |
-            ide-cache-${{ matrix.group.name }}-
+          key: ide-${{ matrix.ide.type }}-${{ matrix.ide.version }}-v1
 
-      - name: Verify IDEs in group
+      - name: Verify ${{ matrix.ide.type }} ${{ matrix.ide.version }}
         run: |
           echo "=== Disk space before verification ==="
           df -h
 
-          # 解析 IDE 列表并逐个验证
-          IFS=',' read -ra IDE_LIST <<< "${{ matrix.group.ides }}"
-          for ide_entry in "${IDE_LIST[@]}"; do
-            IFS=':' read -r IDE_TYPE IDE_VERSION <<< "$ide_entry"
-            echo ""
-            echo "=========================================="
-            echo "Verifying: $IDE_TYPE $IDE_VERSION"
-            echo "=========================================="
+          ./gradlew verifyPlugin \
+            -PverifyIdeType=${{ matrix.ide.type }} \
+            -PverifyIdeVersion=${{ matrix.ide.version }} \
+            --no-daemon \
+            --no-configuration-cache \
+            --stacktrace
 
-            ./gradlew verifyPlugin \
-              -PverifyIdeType=$IDE_TYPE \
-              -PverifyIdeVersion=$IDE_VERSION \
-              --no-daemon \
-              --no-configuration-cache \
-              --stacktrace
-
-            echo "=== Disk space after $IDE_TYPE $IDE_VERSION ==="
-            df -h
-          done
-
-          echo ""
-          echo "=========================================="
-          echo "All IDEs in group verified successfully!"
-          echo "=========================================="
+          echo "=== Disk space after verification ==="
+          df -h
 
   # 构建插件
   build:
     runs-on: ubuntu-latest
-    needs: verify  # 验证通过后才构建
+    needs: verify
     outputs:
       artifact-name: ${{ steps.extract.outputs.artifact-name }}
 
@@ -227,4 +235,3 @@ jobs:
         with:
           files: ${{ steps.repackage.outputs.zip-path }}
           generate_release_notes: true
-

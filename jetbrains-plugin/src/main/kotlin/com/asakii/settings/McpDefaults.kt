@@ -838,7 +838,34 @@ object GitGenerateDefaults {
      * 默认系统提示词
      */
     val SYSTEM_PROMPT = """
-You are an expert at writing clear, concise, and meaningful Git commit messages following the Conventional Commits specification.
+You are a commit message generator integrated with JetBrains IDE.
+
+## Available Tools
+
+### Git MCP Tools
+- **mcp__jetbrains_git__GetVcsChanges**: Get uncommitted file changes with diff content
+- **mcp__jetbrains_git__SetCommitMessage**: Set the commit message in IDE's commit panel
+- **mcp__jetbrains_git__GetVcsStatus**: Get current VCS status
+- **mcp__jetbrains_git__GetCommitMessage**: Get current commit message from panel
+
+### File Reading
+- **Read**: Read file content to understand code context
+
+### JetBrains IDE Tools (for deeper context)
+- **mcp__jetbrains__FileIndex**: Search files, classes, symbols by name
+- **mcp__jetbrains__CodeSearch**: Search code content across project
+- **mcp__jetbrains__DirectoryTree**: Get directory structure
+- **mcp__jetbrains__FileProblems**: Get static analysis results
+
+## Workflow
+1. Call GetVcsChanges(selectedOnly=true, includeDiff=true) to get code changes
+2. If the diff is unclear or you need more context:
+   - Use Read tool to examine full file content
+   - Use CodeSearch to find related code
+   - Use FileIndex to locate relevant files
+3. Analyze changes and understand purpose/impact
+4. Generate commit message following conventional commits format
+5. **MUST** call SetCommitMessage to fill the message into IDE's commit panel
 
 ## Commit Message Format
 
@@ -875,6 +902,8 @@ You are an expert at writing clear, concise, and meaningful Git commit messages 
 - feat(auth): add OAuth2 support
 - fix(api): handle null response from server
 - refactor(ui): simplify button component logic
+
+IMPORTANT: You MUST call SetCommitMessage tool to set the result. Do NOT output the message as plain text.
     """.trimIndent()
 
     /**
@@ -888,16 +917,35 @@ Focus on:
 2. Why the change was made (if apparent from the diff)
 3. Any breaking changes or important notes
 
-Provide ONLY the commit message, no explanations or markdown formatting.
+Steps:
+1. Call GetVcsChanges(selectedOnly=true, includeDiff=true) to get changes
+2. If needed, use Read or CodeSearch to understand context better
+3. Generate an appropriate commit message
+4. Call SetCommitMessage to fill the commit panel
+
+Use tools only - do not output the commit message as text.
     """.trimIndent()
 
     /**
      * 默认允许的工具列表
+     *
+     * 包含:
+     * - Git MCP 工具: 获取变更、读写 commit message
+     * - Read: 读取文件全文，理解改动上下文
+     * - JetBrains MCP: 代码搜索、索引查询，深入理解代码结构
      */
     val TOOLS = listOf(
+        // Git MCP 工具
         "mcp__jetbrains_git__GetVcsChanges",
         "mcp__jetbrains_git__GetCommitMessage",
         "mcp__jetbrains_git__SetCommitMessage",
-        "mcp__jetbrains_git__GetVcsStatus"
+        "mcp__jetbrains_git__GetVcsStatus",
+        // 文件读取
+        "Read",
+        // JetBrains MCP 工具 - 理解代码上下文
+        "mcp__jetbrains__FileIndex",
+        "mcp__jetbrains__CodeSearch",
+        "mcp__jetbrains__DirectoryTree",
+        "mcp__jetbrains__FileProblems"
     )
 }

@@ -477,6 +477,11 @@ class SubprocessTransport(
             command.add("--replay-user-messages")
         }
 
+        // Disable session persistence (sessions will not be saved to disk)
+        if (options.noSessionPersistence) {
+            command.add("--no-session-persistence")
+        }
+
         // Max turns
         options.maxTurns?.let { turns ->
             command.addAll(listOf("--max-turns", turns.toString()))

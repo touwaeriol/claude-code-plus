@@ -114,6 +114,8 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var gitGenerateSystemPrompt: String = "",     // Git Generate 系统提示词
         var gitGenerateUserPrompt: String = "",       // Git Generate 用户提示词（运行时）
         var gitGenerateTools: String = "[]",          // Git Generate 允许的工具列表（JSON）
+        var gitGenerateShowProgress: Boolean = true,  // Git Generate 显示详细过程（默认开启）
+        var gitGenerateSaveSession: Boolean = false,  // Git Generate 是否保存会话到历史（默认不保存）
 
         // 默认启用 ByPass 权限（前端自动应用）
         var defaultBypassPermissions: Boolean = false,
@@ -282,6 +284,16 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     /** 获取生效的 Git Generate 工具列表（自定义或默认） */
     val effectiveGitGenerateTools: List<String>
         get() = getGitGenerateTools().takeIf { it.isNotEmpty() } ?: GitGenerateDefaults.TOOLS
+
+    /** Git Generate 是否显示详细过程 */
+    var gitGenerateShowProgress: Boolean
+        get() = state.gitGenerateShowProgress
+        set(value) { state.gitGenerateShowProgress = value }
+
+    /** Git Generate 是否保存会话到历史 */
+    var gitGenerateSaveSession: Boolean
+        get() = state.gitGenerateSaveSession
+        set(value) { state.gitGenerateSaveSession = value }
 
     /** 获取生效的 User Interaction MCP 提示词（自定义或默认） */
     val effectiveUserInteractionInstructions: String

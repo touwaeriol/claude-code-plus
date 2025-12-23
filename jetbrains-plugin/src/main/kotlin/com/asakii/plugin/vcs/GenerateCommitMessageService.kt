@@ -12,9 +12,11 @@ import com.asakii.ai.agent.sdk.model.UiToolComplete
 import com.asakii.ai.agent.sdk.model.UiAssistantMessage
 import com.asakii.ai.agent.sdk.model.TextContent
 import com.asakii.ai.agent.sdk.model.ThinkingContent
+import com.asakii.ai.agent.sdk.model.ToolUseContent
 import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
 import com.asakii.plugin.mcp.GitMcpServerImpl
 import com.asakii.settings.AgentSettingsService
+import com.asakii.settings.GitGenerateDefaults
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.components.Service
@@ -37,14 +39,14 @@ private val logger = KotlinLogging.logger {}
 class GenerateCommitMessageService(private val project: Project) {
 
     /**
-     * 生成 commit message
+     * 生成 commit message（简单模式，使用 ProgressIndicator）
      */
     fun generateCommitMessage(indicator: ProgressIndicator) {
         try {
             indicator.text = "Starting Claude..."
 
             runBlocking {
-                callClaudeWithMcp(indicator)
+                callClaudeWithMcp(indicator, null)
             }
 
         } catch (e: Exception) {
@@ -53,9 +55,34 @@ class GenerateCommitMessageService(private val project: Project) {
         }
     }
 
-    private suspend fun callClaudeWithMcp(indicator: ProgressIndicator) {
+    /**
+     * 生成 commit message（详细模式，使用进度对话框）
+     */
+    fun generateCommitMessageWithDialog(dialog: GitGenerateProgressDialog) {
+        try {
+            dialog.updateStatus("Starting Claude...")
+            dialog.appendLog("🚀 Starting commit message generation...")
+
+            runBlocking {
+                callClaudeWithMcp(null, dialog)
+            }
+
+        } catch (e: Exception) {
+            logger.error(e) { "Failed to generate commit message" }
+            dialog.appendError(e.message ?: "Unknown error")
+            dialog.markComplete(false)
+        }
+    }
+
+    private suspend fun callClaudeWithMcp(indicator: ProgressIndicator?, dialog: GitGenerateProgressDialog?) {
         val settings = AgentSettingsService.getInstance()
         val projectPath = project.basePath
+
+        // 辅助函数：更新状态
+        fun updateStatus(text: String) {
+            indicator?.text = text
+            dialog?.updateStatus(text)
+        }
 
         try {
             val client = UnifiedAgentClientFactory.create(AiAgentProvider.CLAUDE)
@@ -63,22 +90,27 @@ class GenerateCommitMessageService(private val project: Project) {
             // 创建 Git MCP 服务器实例
             val gitMcpServer = GitMcpServerImpl(project)
 
+            // 获取配置的提示词和工具列表
+            val configuredSystemPrompt = settings.gitGenerateSystemPrompt.ifBlank { GitGenerateDefaults.SYSTEM_PROMPT }
+            val configuredUserPrompt = settings.gitGenerateUserPrompt.ifBlank { GitGenerateDefaults.USER_PROMPT }
+            val configuredTools = settings.getGitGenerateTools().takeIf { it.isNotEmpty() } ?: GitGenerateDefaults.TOOLS
+
+            dialog?.appendLog("📋 Configured tools: ${configuredTools.size}")
+
             val claudeOptions = ClaudeAgentOptions(
                 nodePath = settings.nodePath.takeIf { it.isNotBlank() },
                 cwd = projectPath?.let { Paths.get(it) },
-                systemPrompt = SYSTEM_PROMPT,
+                systemPrompt = configuredSystemPrompt,
                 dangerouslySkipPermissions = true,
                 allowDangerouslySkipPermissions = true,
                 includePartialMessages = true,
-                // 限制可用工具
-                allowedTools = listOf(
-                    "mcp__jetbrains_git__GetVcsChanges",
-                    "mcp__jetbrains_git__SetCommitMessage",
-                    "Read"
-                ),
+                // 使用配置的工具列表
+                allowedTools = configuredTools,
                 // 注册 Git MCP 服务器
                 mcpServers = mapOf("jetbrains_git" to gitMcpServer),
-                extraArgs = mapOf("output-format" to "stream-json")
+                extraArgs = mapOf("output-format" to "stream-json"),
+                // 会话持久化控制：saveSession=false 时不保存会话
+                noSessionPersistence = !settings.gitGenerateSaveSession
             )
 
             val connectOptions = AiAgentConnectOptions(
@@ -87,52 +119,66 @@ class GenerateCommitMessageService(private val project: Project) {
                 claude = ClaudeOverrides(options = claudeOptions)
             )
 
-            indicator.text = "Connecting to Claude..."
+            updateStatus("Connecting to Claude...")
+            dialog?.appendLog("🔌 Connecting to Claude...")
+
             withTimeout(30_000) {
                 client.connect(connectOptions)
             }
 
-            indicator.text = "Analyzing changes..."
+            updateStatus("Analyzing changes...")
+            dialog?.appendLog("✅ Connected successfully")
+            dialog?.appendLog("")
 
             var success = false
             var toolCallCount = 0
             var shouldAbort = false
-            val steps = mutableListOf<String>()  // 记录步骤用于详情显示
+            val steps = mutableListOf<String>()
+            val currentToolParams = mutableMapOf<String, String>()  // 记录工具参数
 
-            // 更新详情显示
+            // 更新详情显示（仅用于 indicator 模式）
             fun updateDetails(step: String) {
                 steps.add(step)
-                // indicator.text2 显示最近的步骤（最多显示最近2条）
-                indicator.text2 = steps.takeLast(2).joinToString(" → ")
+                indicator?.text2 = steps.takeLast(2).joinToString(" → ")
             }
 
             try {
                 withTimeout(120_000) {  // 2 minutes timeout for tool calls
-                    client.sendMessage(AgentMessageInput(text = USER_PROMPT))
+                    client.sendMessage(AgentMessageInput(text = configuredUserPrompt))
                     client.streamEvents().collect { event ->
+                        // 检查对话框是否已取消
+                        if (dialog?.isCancelled() == true) {
+                            shouldAbort = true
+                            logger.info { "Generation cancelled by user" }
+                        }
+
                         // 如果已经完成，跳过后续事件处理
                         if (shouldAbort) return@collect
 
                         when (event) {
                             is UiAssistantMessage -> {
-                                // 捕获 AI 的思考过程
+                                // 捕获 AI 的思考过程和工具调用参数
                                 for (content in event.content) {
                                     when (content) {
                                         is ThinkingContent -> {
-                                            // 显示思考摘要（取前50字符）
                                             val thinking = content.thinking.take(50).replace("\n", " ")
                                             if (thinking.isNotBlank()) {
                                                 updateDetails("💭 $thinking...")
+                                                dialog?.appendThinking(content.thinking)
                                                 logger.debug { "Thinking: ${content.thinking.take(100)}" }
                                             }
                                         }
                                         is TextContent -> {
-                                            // 显示文本摘要
                                             val text = content.text.take(50).replace("\n", " ")
                                             if (text.isNotBlank()) {
                                                 updateDetails("📝 $text...")
+                                                dialog?.appendLog("📝 ${content.text}")
                                                 logger.debug { "Text: ${content.text.take(100)}" }
                                             }
+                                        }
+                                        is ToolUseContent -> {
+                                            // 记录工具调用参数，用于后续显示
+                                            currentToolParams[content.id] = content.input.toString()
                                         }
                                         else -> {}
                                     }
@@ -140,21 +186,36 @@ class GenerateCommitMessageService(private val project: Project) {
                             }
                             is UiToolStart -> {
                                 toolCallCount++
-                                // 简化工具名显示
                                 val shortName = event.toolName.replace("mcp__jetbrains_git__", "")
-                                indicator.text = "Calling $shortName..."
+                                updateStatus("Calling $shortName...")
                                 updateDetails("🔧 $shortName")
+
+                                // 在对话框中显示工具调用
+                                val params = currentToolParams[event.toolId]
+                                dialog?.appendToolStart(event.toolName, params)
+
                                 logger.info { "Tool call started: ${event.toolName}" }
                             }
                             is UiToolComplete -> {
                                 logger.info { "Tool call completed: ${event.toolId}" }
-                                // 检查是否是 SetCommitMessage 工具调用成功
-                                if (event.result.type == "tool_result") {
-                                    val toolName = event.toolId
+
+                                val isSuccess = event.result.type == "tool_result"
+                                val toolName = event.toolId
+
+                                // 提取结果内容（用于对话框显示）
+                                val resultContent = try {
+                                    event.result.content?.toString()?.take(500)
+                                } catch (e: Exception) { null }
+
+                                dialog?.appendToolComplete(toolName, isSuccess, resultContent)
+
+                                if (isSuccess) {
                                     if (toolName.contains("SetCommitMessage", ignoreCase = true)) {
                                         success = true
-                                        indicator.text = "Commit message set!"
+                                        updateStatus("Commit message set!")
                                         updateDetails("✅ Message set")
+                                        dialog?.appendLog("")
+                                        dialog?.appendLog("✅ Commit message has been set in the commit panel")
                                         logger.info { "SetCommitMessage completed successfully" }
                                     } else if (toolName.contains("GetVcsChanges", ignoreCase = true)) {
                                         updateDetails("✅ Changes loaded")
@@ -163,19 +224,19 @@ class GenerateCommitMessageService(private val project: Project) {
                             }
                             is UiResultMessage -> {
                                 logger.info { "Result: subtype=${event.subtype}, isError=${event.isError}, numTurns=${event.numTurns}" }
-                                // UiResultMessage 表示 query 完成，应该结束会话
                                 if (!event.isError && toolCallCount > 0) {
                                     success = true
                                 }
-                                // query 完成，标记退出
                                 shouldAbort = true
-                                indicator.text = if (success) "Done!" else "Completed"
-                                indicator.text2 = if (success) "Commit message generated" else "Check commit panel"
+                                updateStatus(if (success) "Done!" else "Completed")
+                                indicator?.text2 = if (success) "Commit message generated" else "Check commit panel"
+                                dialog?.markComplete(success)
                                 logger.info { "Query completed, ending session" }
                             }
                             is UiError -> {
                                 logger.error { "Claude error: ${event.message}" }
                                 updateDetails("❌ Error")
+                                dialog?.appendError(event.message)
                                 showNotification("Error: ${event.message}", NotificationType.ERROR)
                             }
                             else -> {
@@ -187,6 +248,8 @@ class GenerateCommitMessageService(private val project: Project) {
             } finally {
                 try {
                     client.disconnect()
+                    dialog?.appendLog("")
+                    dialog?.appendLog("🔌 Disconnected from Claude")
                 } catch (e: Exception) {
                     logger.debug { "Disconnect error: ${e.message}" }
                 }
@@ -196,11 +259,14 @@ class GenerateCommitMessageService(private val project: Project) {
                 showNotification("Commit message generated successfully", NotificationType.INFORMATION)
             } else if (toolCallCount == 0) {
                 showNotification("No tools were called. Please try again.", NotificationType.WARNING)
+                dialog?.appendLog("⚠️ No tools were called. Please try again.")
             }
 
         } catch (e: Exception) {
             logger.error(e) { "Claude call failed" }
             showNotification("Error: ${e.message}", NotificationType.ERROR)
+            dialog?.appendError(e.message ?: "Unknown error")
+            dialog?.markComplete(false)
         }
     }
 
@@ -211,41 +277,4 @@ class GenerateCommitMessageService(private val project: Project) {
             .notify(project)
     }
 
-    companion object {
-        private val SYSTEM_PROMPT = """
-You are a commit message generator integrated with JetBrains IDE.
-
-Available tools:
-- mcp__jetbrains_git__GetVcsChanges: Get uncommitted file changes with diff content
-- mcp__jetbrains_git__SetCommitMessage: Set the commit message in IDE's commit panel
-- Read: Read file content to understand code context and analyze changes in detail
-
-Your task:
-1. Call GetVcsChanges(selectedOnly=true, includeDiff=true) to get code changes
-2. If the diff is unclear or you need more context, use Read tool to examine the full file content
-3. Analyze the changes, understand the purpose and impact
-4. Generate a commit message following conventional commits format
-5. Call SetCommitMessage to fill the message into IDE's commit panel
-
-Commit message rules:
-- Format: type(scope): description
-- Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore
-- First line: max 50 characters, imperative mood (add, fix, update)
-- Body (optional): explain WHAT changed and WHY
-
-IMPORTANT: You MUST call SetCommitMessage tool to set the result. Do NOT output text directly.
-""".trimIndent()
-
-        private val USER_PROMPT = """
-Generate a commit message for the selected code changes.
-
-Steps:
-1. Call GetVcsChanges(selectedOnly=true, includeDiff=true) to get changes
-2. If needed, use Read tool to understand the code context better
-3. Analyze and generate an appropriate commit message
-4. Call SetCommitMessage to fill the commit panel
-
-Use tools only - do not output the commit message as text.
-""".trimIndent()
-    }
 }

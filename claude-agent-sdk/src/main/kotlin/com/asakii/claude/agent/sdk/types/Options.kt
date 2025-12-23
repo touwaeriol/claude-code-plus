@@ -119,6 +119,7 @@ data class ClaudeAgentOptions(
     val resume: String? = null,
     val forkSession: Boolean = false, // NEW: Fork session when resuming
     val replayUserMessages: Boolean = false, // NEW: Replay user messages when resuming session
+    val noSessionPersistence: Boolean = false, // Disable session persistence (--no-session-persistence)
     val maxTurns: Int? = null,
 
     // Streaming configuration
