@@ -14,6 +14,25 @@ jobs:
       max-parallel: 6
       matrix:
         ide:
+          # 2024.1 版本
+          - type: IC
+            version: "2024.1.7"
+            platformMajor: 241
+          - type: WS
+            version: "2024.1.7"
+            platformMajor: 241
+          - type: GO
+            version: "2024.1.6"
+            platformMajor: 241
+          - type: CL
+            version: "2024.1.6"
+            platformMajor: 241
+          - type: PC
+            version: "2024.1.7"
+            platformMajor: 241
+          - type: PS
+            version: "2024.1.6"
+            platformMajor: 241
           # 2024.2 版本
           - type: IC
             version: "2024.2.6"
@@ -71,11 +90,42 @@ jobs:
           - type: PS
             version: "2025.1.2"
             platformMajor: 251
-          # 2025.2+ 版本
+          # 2025.2 版本
           - type: IC
             version: "2025.2.4"
             platformMajor: 252
+          - type: WS
+            version: "2025.2.1"
+            platformMajor: 252
+          - type: GO
+            version: "2025.2.1"
+            platformMajor: 252
+          - type: CL
+            version: "2025.2.1"
+            platformMajor: 252
+          - type: PC
+            version: "2025.2.1"
+            platformMajor: 252
+          - type: PS
+            version: "2025.2.1"
+            platformMajor: 252
+          # 2025.3 版本
           - type: II
+            version: "2025.3.1"
+            platformMajor: 253
+          - type: WS
+            version: "2025.3.1"
+            platformMajor: 253
+          - type: GO
+            version: "2025.3.1"
+            platformMajor: 253
+          - type: CL
+            version: "2025.3.1"
+            platformMajor: 253
+          - type: PC
+            version: "2025.3.1"
+            platformMajor: 253
+          - type: PS
             version: "2025.3.1"
             platformMajor: 253
 

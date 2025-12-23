@@ -237,6 +237,8 @@ intellijPlatform {
                 create(IntelliJPlatformType.WebStorm, "2024.2.4")
                 create(IntelliJPlatformType.WebStorm, "2024.3.3")
                 create(IntelliJPlatformType.WebStorm, "2025.1.2")
+                create(IntelliJPlatformType.WebStorm, "2025.2.1")
+                create(IntelliJPlatformType.WebStorm, "2025.3.1")
 
                 // ===== GoLand =====
                 // GoLand 的版本号与 IDEA 不同，例如 2024.2 最新是 2024.2.3
@@ -244,24 +246,32 @@ intellijPlatform {
                 create(IntelliJPlatformType.GoLand, "2024.2.3")
                 create(IntelliJPlatformType.GoLand, "2024.3.3")
                 create(IntelliJPlatformType.GoLand, "2025.1.2")
+                create(IntelliJPlatformType.GoLand, "2025.2.1")
+                create(IntelliJPlatformType.GoLand, "2025.3.1")
 
                 // ===== CLion =====
                 create(IntelliJPlatformType.CLion, "2024.1.6")
                 create(IntelliJPlatformType.CLion, "2024.2.3")
                 create(IntelliJPlatformType.CLion, "2024.3.3")
                 create(IntelliJPlatformType.CLion, "2025.1.2")
+                create(IntelliJPlatformType.CLion, "2025.2.1")
+                create(IntelliJPlatformType.CLion, "2025.3.1")
 
                 // ===== PyCharm =====
                 create(IntelliJPlatformType.PyCharmCommunity, "2024.1.7")
                 create(IntelliJPlatformType.PyCharmCommunity, "2024.2.4")
                 create(IntelliJPlatformType.PyCharmCommunity, "2024.3.3")
                 create(IntelliJPlatformType.PyCharmCommunity, "2025.1.2")
+                create(IntelliJPlatformType.PyCharmCommunity, "2025.2.1")
+                create(IntelliJPlatformType.PyCharmCommunity, "2025.3.1")
 
                 // ===== PhpStorm =====
                 create(IntelliJPlatformType.PhpStorm, "2024.1.6")
                 create(IntelliJPlatformType.PhpStorm, "2024.2.4")
                 create(IntelliJPlatformType.PhpStorm, "2024.3.3")
                 create(IntelliJPlatformType.PhpStorm, "2025.1.2")
+                create(IntelliJPlatformType.PhpStorm, "2025.2.1")
+                create(IntelliJPlatformType.PhpStorm, "2025.3.1")
             }
         }
     }
