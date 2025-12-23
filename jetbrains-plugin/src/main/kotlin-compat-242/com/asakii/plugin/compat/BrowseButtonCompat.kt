@@ -5,9 +5,10 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 
 /**
- * 文件浏览按钮兼容层 - 适用于 2024.1 ~ 2024.2
+ * 文件浏览按钮兼容层 - 适用于 2024.2 ~ 2025.2
  *
- * 在这些版本中，使用 4 参数的 addBrowseFolderListener API
+ * 使用 4 参数的 addBrowseFolderListener API (title, description, project, descriptor)
+ * 此 API 在 2025.3 中被标记为 deprecated，但在旧版本中是唯一可用的 API
  */
 object BrowseButtonCompat {
 
@@ -27,7 +28,6 @@ object BrowseButtonCompat {
         project: Project?,
         descriptor: FileChooserDescriptor
     ) {
-        // 2024.2 及更早版本使用 4 参数 API
         @Suppress("DEPRECATION")
         textField.addBrowseFolderListener(title, description, project, descriptor)
     }

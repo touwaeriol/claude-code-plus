@@ -391,6 +391,93 @@ await ideService.myNewFeature({ foo: 'bar' })
 
 ---
 
+## 🔀 多版本兼容架构
+
+### 概述
+
+插件支持 IntelliJ Platform 2024.2 ~ 2025.3 (platformMajor: 242 ~ 253)，通过**编译时源码分离**实现跨版本兼容。
+
+### 目录结构
+
+```
+jetbrains-plugin/src/main/
+├── kotlin/                      # 通用代码（所有版本共享）
+├── kotlin-compat-242/           # 2024.2 ~ 2025.2 兼容层
+│   └── com/asakii/plugin/compat/
+│       ├── TerminalCompat.kt    # createLocalShellWidget API
+│       └── BrowseButtonCompat.kt # 4-param addBrowseFolderListener API
+├── kotlin-compat-253/           # 2025.3+ 兼容层
+│   └── com/asakii/plugin/compat/
+│       ├── TerminalCompat.kt    # createNewSession API
+│       └── BrowseButtonCompat.kt # 2-param addBrowseFolderListener API
+├── kotlin-compat-diff-242/      # Diff API (2024.2)
+└── kotlin-compat-diff-243/      # Diff API (2024.3+)
+```
+
+### 构建配置
+
+在 `build.gradle.kts` 中，根据目标平台版本选择对应的兼容层目录：
+
+```kotlin
+// 主兼容层目录选择
+val mainCompatDir = when {
+    platformMajor >= 253 -> "kotlin-compat-253"  // 2025.3+
+    else -> "kotlin-compat-242"                   // 2024.2 ~ 2025.2
+}
+
+// Diff API 兼容层目录选择
+val diffCompatDir = when {
+    platformMajor >= 243 -> "kotlin-compat-diff-243"  // 2024.3+
+    else -> "kotlin-compat-diff-242"                   // 2024.2
+}
+
+sourceSets {
+    main {
+        kotlin {
+            srcDir("src/main/kotlin")           // 通用代码
+            srcDir("src/main/$mainCompatDir")   // 主兼容层
+            srcDir("src/main/$diffCompatDir")   // Diff API 兼容层
+        }
+    }
+}
+```
+
+### 构建命令
+
+**构建所有版本** (生成 5 个平台特定的 zip 文件):
+```bash
+./gradlew :jetbrains-plugin:buildAllVersions
+```
+
+**构建特定版本**:
+```bash
+./gradlew :jetbrains-plugin:buildPlugin -PplatformMajor=253 -PplatformSpecific=true
+./gradlew :jetbrains-plugin:buildPlugin -PplatformMajor=242 -PplatformSpecific=true
+```
+
+**构建通用版本** (使用 242 SDK，声明兼容 242-253):
+```bash
+./gradlew :jetbrains-plugin:buildPlugin
+```
+
+### API 变更点
+
+| 版本 | Terminal API | BrowseButton API | Diff API |
+|------|-------------|------------------|----------|
+| 242 | `createLocalShellWidget()` | 4-param | `DiffRequestProcessorEditor` |
+| 243 | `createLocalShellWidget()` | 4-param | `DiffEditorViewerFileEditor` |
+| 251-252 | `createLocalShellWidget()` | 4-param | `DiffEditorViewerFileEditor` |
+| 253 | `createNewSession()` | 2-param | `DiffEditorViewerFileEditor` |
+
+### 添加新的兼容层
+
+1. 在对应目录创建文件 (如 `kotlin-compat-242/` 或 `kotlin-compat-253/`)
+2. 使用相同的包名和类名，提供统一的 API 签名
+3. 内部实现调用各版本特定的 IntelliJ API
+4. 使用 `@Suppress("DEPRECATION")` 抑制旧 API 警告
+
+---
+
 ## 📚 相关文档
 
 - [HTTP API 架构](docs/HTTP_API_ARCHITECTURE.md)

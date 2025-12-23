@@ -23,8 +23,9 @@ sealed class CommandWaitResult {
 }
 
 /**
- * Terminal Widget 包装器接口
- * 提供跨版本的统一 API
+ * Terminal Widget 包装器 - 适用于 2024.2 ~ 2025.2
+ *
+ * 封装 ShellTerminalWidget，提供统一的跨版本 API
  */
 class TerminalWidgetWrapper(private val widget: ShellTerminalWidget) {
 
@@ -36,7 +37,7 @@ class TerminalWidgetWrapper(private val widget: ShellTerminalWidget) {
 
     /**
      * 执行命令
-     * 在 2024.x ~ 2025.2 中使用 ShellTerminalWidget.executeCommand()
+     * 使用 ShellTerminalWidget.executeCommand()
      */
     fun executeCommand(command: String) {
         widget.executeCommand(command)
@@ -53,12 +54,12 @@ class TerminalWidgetWrapper(private val widget: ShellTerminalWidget) {
             widget.hasRunningCommands()
         } catch (e: Exception) {
             logger.warn(e) { "Failed to check running commands, Shell Integration may not be available" }
-            null  // 返回 null 表示 API 不可用，需要使用备用方案
+            null
         }
     }
 
     /**
-     * 等待命令执行完成 (2024.x ~ 2025.2 版本实现)
+     * 等待命令执行完成
      *
      * 使用 hasRunningCommands() API (依赖 Shell Integration)
      * 如果 API 不可用，返回 ApiUnavailable，建议使用后台执行模式
@@ -128,7 +129,7 @@ class TerminalWidgetWrapper(private val widget: ShellTerminalWidget) {
     val terminalStarter get() = widget.terminalStarter
 
     /**
-     * 获取终端输出内容（统一 API）
+     * 获取终端输出内容
      * @param maxLines 最大行数
      * @return 终端输出文本
      */
@@ -147,11 +148,7 @@ class TerminalWidgetWrapper(private val widget: ShellTerminalWidget) {
 
             val sb = StringBuilder()
             for (i in startLine until totalLines) {
-                val line = if (i < historyLines) {
-                    buffer.getLine(i - historyLines)
-                } else {
-                    buffer.getLine(i - historyLines)
-                }
+                val line = buffer.getLine(i - historyLines)
                 sb.append(line.text.trimEnd())
                 if (i < totalLines - 1) {
                     sb.append("\n")
@@ -182,21 +179,21 @@ data class DetectedShell(
 )
 
 /**
- * Terminal 兼容层 - 适用于 2024.1 ~ 2025.2
+ * Terminal 兼容层 - 适用于 2024.2 ~ 2025.2
  *
- * 在这些版本中，使用 TerminalToolWindowManager.createLocalShellWidget() 创建终端
- * 返回的是 ShellTerminalWidget，它有 executeCommand() 和 hasRunningCommands() 方法
+ * 使用 TerminalToolWindowManager.createLocalShellWidget() 创建终端
+ * 返回的是 ShellTerminalWidget，有 executeCommand() 和 hasRunningCommands() 方法
+ *
+ * 注意：此 API 在 2025.3 中被标记为 deprecated，2025.3+ 应使用 kotlin-compat-253
  */
 object TerminalCompat {
 
-    // Unix shell 检测配置（与 IDEA TerminalNewPredefinedSessionAction 保持一致）
+    // Unix shell 检测配置
     private val UNIX_BINARIES_DIRECTORIES = listOf("/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin")
     private val UNIX_SHELL_NAMES = listOf("bash", "zsh", "fish", "pwsh")
 
     /**
      * 检测系统中已安装的 shell 列表
-     *
-     * 复制自 IDEA 242 版本 TerminalNewPredefinedSessionAction.detectShells() 实现
      *
      * @return 检测到的 shell 列表
      */
@@ -208,10 +205,6 @@ object TerminalCompat {
         }
     }
 
-    /**
-     * 检测 Unix 系统中的 shell
-     * 实现逻辑与 IDEA TerminalNewPredefinedSessionAction.detectShells() 一致
-     */
     private fun detectUnixShells(): List<DetectedShell> {
         val shells = mutableListOf<DetectedShell>()
 
@@ -225,7 +218,6 @@ object TerminalCompat {
                 }
             }
 
-            // 如果同一 shell 在多个目录找到，添加目录后缀区分
             if (foundPaths.size > 1) {
                 for (path in foundPaths) {
                     val dir = java.io.File(path).parent
@@ -239,10 +231,6 @@ object TerminalCompat {
         return shells
     }
 
-    /**
-     * 检测 Windows 系统中的 shell
-     * 实现逻辑与 IDEA TerminalNewPredefinedSessionAction.detectShells() 一致
-     */
     private fun detectWindowsShells(): List<DetectedShell> {
         val shells = mutableListOf<DetectedShell>()
         val systemRoot = System.getenv("SystemRoot") ?: "C:\\Windows"
@@ -259,7 +247,7 @@ object TerminalCompat {
             shells.add(DetectedShell("Command Prompt", cmdPath))
         }
 
-        // PowerShell Core (pwsh)
+        // PowerShell Core
         val pwshPath = "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
         if (java.nio.file.Files.exists(java.nio.file.Path.of(pwshPath))) {
             shells.add(DetectedShell("PowerShell", pwshPath))
@@ -271,13 +259,13 @@ object TerminalCompat {
             shells.add(DetectedShell("Git Bash", gitBashPath))
         }
 
-        // WSL (Windows Subsystem for Linux)
+        // WSL
         val wslPath = "$systemRoot\\System32\\wsl.exe"
         if (java.nio.file.Files.exists(java.nio.file.Path.of(wslPath))) {
             shells.add(DetectedShell("WSL", wslPath))
         }
 
-        // Cmder (通过环境变量检测)
+        // Cmder
         val cmderRoot = System.getenv("CMDER_ROOT")
         if (!cmderRoot.isNullOrBlank()) {
             val cmderInitPath = "$cmderRoot\\vendor\\init.bat"
@@ -292,11 +280,14 @@ object TerminalCompat {
     /**
      * 创建本地 Shell Widget
      *
+     * 使用 createLocalShellWidget API (2024.2 ~ 2025.2)
+     * 注意：此 API 不支持自定义 shell 命令，将使用系统默认 shell
+     *
      * @param project 项目
      * @param workingDirectory 工作目录
      * @param tabName 标签名称
-     * @param shellCommand Shell 命令（如 listOf("C:\\Program Files\\Git\\bin\\bash.exe")）
-     * @return TerminalWidgetWrapper 或 null（如果创建失败）
+     * @param shellCommand Shell 命令（在此版本中不支持，将被忽略）
+     * @return TerminalWidgetWrapper 或 null
      */
     fun createShellWidget(
         project: Project,
@@ -304,28 +295,26 @@ object TerminalCompat {
         tabName: String,
         shellCommand: List<String>? = null
     ): TerminalWidgetWrapper? {
-        logger.info { "createShellWidget called: project=${project.name}, workingDirectory=$workingDirectory, tabName=$tabName, shellCommand=$shellCommand" }
+        logger.info { "createShellWidget: project=${project.name}, workingDirectory=$workingDirectory, tabName=$tabName" }
+
+        if (shellCommand != null) {
+            logger.warn { "Custom shell command not supported in 2024.2 ~ 2025.2, using default shell" }
+        }
+
         return try {
             val manager = TerminalToolWindowManager.getInstance(project)
-            logger.debug { "TerminalToolWindowManager instance: ${manager.javaClass.name}" }
-
-            // 242 版本使用 createLocalShellWidget (不支持自定义 shell 命令)
-            // 如果指定了 shellCommand，记录警告
-            if (shellCommand != null) {
-                logger.warn { "Custom shell command not supported in 2024.2.x, using default shell" }
-            }
-
+            @Suppress("DEPRECATION")
             val widget = manager.createLocalShellWidget(workingDirectory, tabName)
-            logger.info { "createLocalShellWidget returned: ${widget?.javaClass?.name ?: "null"}" }
 
             if (widget != null) {
+                logger.info { "Created terminal widget: ${widget.javaClass.name}" }
                 TerminalWidgetWrapper(widget)
             } else {
                 logger.error { "createLocalShellWidget returned null" }
                 null
             }
         } catch (e: Exception) {
-            logger.error(e) { "Failed to create terminal widget in TerminalCompat (242)" }
+            logger.error(e) { "Failed to create terminal widget" }
             null
         }
     }
