@@ -356,7 +356,12 @@ class SubprocessTransport(
         options.systemPrompt?.let { prompt ->
             when (prompt) {
                 is String -> {
-                    command.addAll(listOf("--system-prompt", prompt))
+                    // 使用 --system-prompt-file 避免 Windows 命令行长度限制问题
+                    // 参考: https://github.com/anthropics/claude-agent-sdk-python/issues/238
+                    val tempFile = getOrCreateSystemPromptFile(prompt)
+                    logger.info("📝 将 system-prompt 写入临时文件: $tempFile")
+                    command.add("--system-prompt-file")
+                    command.add(tempFile.toAbsolutePath().toString())
                 }
                 is SystemPromptPreset -> {
                     if (prompt.preset == "claude_code") {
@@ -956,7 +961,7 @@ class SubprocessTransport(
             logger.info("📁 创建系统提示词目录: $promptDir")
         }
 
-        val tempFile = promptDir.resolve("prompt-$digest.txt")
+        val tempFile = promptDir.resolve("prompt-$digest.md")
 
         // 写入内容
         Files.writeString(tempFile, content)

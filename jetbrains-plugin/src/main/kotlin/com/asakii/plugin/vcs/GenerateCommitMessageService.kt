@@ -12,7 +12,6 @@ import com.asakii.ai.agent.sdk.model.UiToolComplete
 import com.asakii.ai.agent.sdk.model.UiAssistantMessage
 import com.asakii.ai.agent.sdk.model.TextContent
 import com.asakii.ai.agent.sdk.model.ThinkingContent
-import com.asakii.ai.agent.sdk.model.ToolUseContent
 import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
 import com.asakii.plugin.mcp.GitMcpServerImpl
 import com.asakii.settings.AgentSettingsService
@@ -22,7 +21,10 @@ import com.intellij.notification.NotificationType
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.Project
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
@@ -39,14 +41,14 @@ private val logger = KotlinLogging.logger {}
 class GenerateCommitMessageService(private val project: Project) {
 
     /**
-     * 生成 commit message（简单模式，使用 ProgressIndicator）
+     * 生成 commit message（后台任务模式）
      */
     fun generateCommitMessage(indicator: ProgressIndicator) {
         try {
             indicator.text = "Starting Claude..."
 
             runBlocking {
-                callClaudeWithMcp(indicator, null)
+                callClaudeWithMcp(indicator)
             }
 
         } catch (e: Exception) {
@@ -55,34 +57,9 @@ class GenerateCommitMessageService(private val project: Project) {
         }
     }
 
-    /**
-     * 生成 commit message（详细模式，使用进度对话框）
-     */
-    fun generateCommitMessageWithDialog(dialog: GitGenerateProgressDialog) {
-        try {
-            dialog.updateStatus("Starting Claude...")
-            dialog.appendLog("🚀 Starting commit message generation...")
-
-            runBlocking {
-                callClaudeWithMcp(null, dialog)
-            }
-
-        } catch (e: Exception) {
-            logger.error(e) { "Failed to generate commit message" }
-            dialog.appendError(e.message ?: "Unknown error")
-            dialog.markComplete(false)
-        }
-    }
-
-    private suspend fun callClaudeWithMcp(indicator: ProgressIndicator?, dialog: GitGenerateProgressDialog?) {
+    private suspend fun callClaudeWithMcp(indicator: ProgressIndicator) {
         val settings = AgentSettingsService.getInstance()
         val projectPath = project.basePath
-
-        // 辅助函数：更新状态
-        fun updateStatus(text: String) {
-            indicator?.text = text
-            dialog?.updateStatus(text)
-        }
 
         try {
             val client = UnifiedAgentClientFactory.create(AiAgentProvider.CLAUDE)
@@ -95,7 +72,8 @@ class GenerateCommitMessageService(private val project: Project) {
             val configuredUserPrompt = settings.gitGenerateUserPrompt.ifBlank { GitGenerateDefaults.USER_PROMPT }
             val configuredTools = settings.getGitGenerateTools().takeIf { it.isNotEmpty() } ?: GitGenerateDefaults.TOOLS
 
-            dialog?.appendLog("📋 Configured tools: ${configuredTools.size}")
+            // 获取配置的模型（带 fallback）
+            val modelId = settings.effectiveGitGenerateModelId
 
             val claudeOptions = ClaudeAgentOptions(
                 nodePath = settings.nodePath.takeIf { it.isNotBlank() },
@@ -115,141 +93,137 @@ class GenerateCommitMessageService(private val project: Project) {
 
             val connectOptions = AiAgentConnectOptions(
                 provider = AiAgentProvider.CLAUDE,
-                model = settings.defaultModelId.takeIf { it.isNotBlank() },
+                model = modelId,
                 claude = ClaudeOverrides(options = claudeOptions)
             )
 
-            updateStatus("Connecting to Claude...")
-            dialog?.appendLog("🔌 Connecting to Claude...")
+            indicator.text = "Connecting to Claude..."
+            logger.info { "Connecting to Claude with model: $modelId" }
 
             withTimeout(30_000) {
                 client.connect(connectOptions)
             }
 
-            updateStatus("Analyzing changes...")
-            dialog?.appendLog("✅ Connected successfully")
-            dialog?.appendLog("")
+            indicator.text = "Analyzing changes..."
 
             var success = false
             var toolCallCount = 0
-            var shouldAbort = false
             val steps = mutableListOf<String>()
-            val currentToolParams = mutableMapOf<String, String>()  // 记录工具参数
+            val toolIdToName = mutableMapOf<String, String>()  // toolId -> toolName 映射
 
-            // 更新详情显示（仅用于 indicator 模式）
+            // 更新详情显示
             fun updateDetails(step: String) {
                 steps.add(step)
-                indicator?.text2 = steps.takeLast(2).joinToString(" → ")
+                indicator.text2 = steps.takeLast(2).joinToString(" → ")
             }
 
             try {
                 withTimeout(120_000) {  // 2 minutes timeout for tool calls
-                    client.sendMessage(AgentMessageInput(text = configuredUserPrompt))
-                    client.streamEvents().collect { event ->
-                        // 检查对话框是否已取消
-                        if (dialog?.isCancelled() == true) {
-                            shouldAbort = true
-                            logger.info { "Generation cancelled by user" }
-                        }
+                    // 重要：必须先启动 collector 再发送消息！
+                    // 因为 eventFlow 是 SharedFlow(replay=0)，如果先发送消息，
+                    // collector 订阅时之前的事件已经丢失了
+                    coroutineScope {
+                        val collectorReady = kotlinx.coroutines.CompletableDeferred<Unit>()
 
-                        // 如果已经完成，跳过后续事件处理
-                        if (shouldAbort) return@collect
+                        val collector = launch {
+                            collectorReady.complete(Unit)  // 标记 collector 已准备好
+                            try {
+                                client.streamEvents().collect { event ->
+                                    // 检查是否已取消
+                                    if (indicator.isCanceled) {
+                                        logger.info { "Generation cancelled by user" }
+                                        cancel()
+                                        return@collect
+                                    }
 
-                        when (event) {
-                            is UiAssistantMessage -> {
-                                // 捕获 AI 的思考过程和工具调用参数
-                                for (content in event.content) {
-                                    when (content) {
-                                        is ThinkingContent -> {
-                                            val thinking = content.thinking.take(50).replace("\n", " ")
-                                            if (thinking.isNotBlank()) {
-                                                updateDetails("💭 $thinking...")
-                                                dialog?.appendThinking(content.thinking)
-                                                logger.debug { "Thinking: ${content.thinking.take(100)}" }
+                                    when (event) {
+                                        is UiAssistantMessage -> {
+                                            // 捕获 AI 的思考过程和工具调用参数
+                                            for (content in event.content) {
+                                                when (content) {
+                                                    is ThinkingContent -> {
+                                                        val thinking = content.thinking.take(50).replace("\n", " ")
+                                                        if (thinking.isNotBlank()) {
+                                                            updateDetails("💭 $thinking...")
+                                                            logger.debug { "Thinking: ${content.thinking.take(100)}" }
+                                                        }
+                                                    }
+                                                    is TextContent -> {
+                                                        val text = content.text.take(50).replace("\n", " ")
+                                                        if (text.isNotBlank()) {
+                                                            indicator.text = text
+                                                            updateDetails("📝 $text...")
+                                                            logger.debug { "Text: ${content.text.take(100)}" }
+                                                        }
+                                                    }
+                                                    else -> {} // 忽略其他内容类型（如 ToolUseContent）
+                                                }
                                             }
                                         }
-                                        is TextContent -> {
-                                            val text = content.text.take(50).replace("\n", " ")
-                                            if (text.isNotBlank()) {
-                                                updateDetails("📝 $text...")
-                                                dialog?.appendLog("📝 ${content.text}")
-                                                logger.debug { "Text: ${content.text.take(100)}" }
+                                        is UiToolStart -> {
+                                            toolCallCount++
+                                            toolIdToName[event.toolId] = event.toolName  // 记录映射
+                                            val shortName = event.toolName.replace("mcp__jetbrains_git__", "")
+                                            indicator.text = "Calling $shortName..."
+                                            updateDetails("🔧 $shortName")
+                                            logger.info { "Tool call started: ${event.toolName} (toolId=${event.toolId})" }
+                                        }
+                                        is UiToolComplete -> {
+                                            val toolName = toolIdToName[event.toolId] ?: event.toolId
+                                            logger.info { "Tool call completed: $toolName (toolId=${event.toolId})" }
+
+                                            val isSuccess = event.result.type == "tool_result"
+
+                                            if (isSuccess) {
+                                                if (toolName.contains("SetCommitMessage", ignoreCase = true)) {
+                                                    success = true
+                                                    indicator.text = "Commit message set!"
+                                                    updateDetails("✅ Message set")
+                                                    logger.info { "SetCommitMessage completed successfully, ending collector" }
+                                                    cancel()  // SetCommitMessage 成功后主动结束
+                                                } else if (toolName.contains("GetVcsChanges", ignoreCase = true)) {
+                                                    updateDetails("✅ Changes loaded")
+                                                }
                                             }
                                         }
-                                        is ToolUseContent -> {
-                                            // 记录工具调用参数，用于后续显示
-                                            currentToolParams[content.id] = content.input.toString()
+                                        is UiResultMessage -> {
+                                            logger.info { "Result: subtype=${event.subtype}, isError=${event.isError}, numTurns=${event.numTurns}" }
+                                            if (!event.isError && toolCallCount > 0) {
+                                                success = true
+                                            }
+                                            indicator.text = if (success) "Done!" else "Completed"
+                                            indicator.text2 = if (success) "Commit message generated" else "Check commit panel"
+                                            logger.info { "Query completed, cancelling collector" }
+                                            cancel()  // 主动取消收集器
                                         }
-                                        else -> {}
+                                        is UiError -> {
+                                            logger.error { "Claude error: ${event.message}" }
+                                            updateDetails("❌ Error")
+                                            showNotification("Error: ${event.message}", NotificationType.ERROR)
+                                            cancel()  // 出错时也取消
+                                        }
+                                        else -> {
+                                            // 忽略其他事件
+                                        }
                                     }
                                 }
-                            }
-                            is UiToolStart -> {
-                                toolCallCount++
-                                val shortName = event.toolName.replace("mcp__jetbrains_git__", "")
-                                updateStatus("Calling $shortName...")
-                                updateDetails("🔧 $shortName")
-
-                                // 在对话框中显示工具调用
-                                val params = currentToolParams[event.toolId]
-                                dialog?.appendToolStart(event.toolName, params)
-
-                                logger.info { "Tool call started: ${event.toolName}" }
-                            }
-                            is UiToolComplete -> {
-                                logger.info { "Tool call completed: ${event.toolId}" }
-
-                                val isSuccess = event.result.type == "tool_result"
-                                val toolName = event.toolId
-
-                                // 提取结果内容（用于对话框显示）
-                                val resultContent = try {
-                                    event.result.content?.toString()?.take(500)
-                                } catch (e: Exception) { null }
-
-                                dialog?.appendToolComplete(toolName, isSuccess, resultContent)
-
-                                if (isSuccess) {
-                                    if (toolName.contains("SetCommitMessage", ignoreCase = true)) {
-                                        success = true
-                                        updateStatus("Commit message set!")
-                                        updateDetails("✅ Message set")
-                                        dialog?.appendLog("")
-                                        dialog?.appendLog("✅ Commit message has been set in the commit panel")
-                                        logger.info { "SetCommitMessage completed successfully" }
-                                    } else if (toolName.contains("GetVcsChanges", ignoreCase = true)) {
-                                        updateDetails("✅ Changes loaded")
-                                    }
-                                }
-                            }
-                            is UiResultMessage -> {
-                                logger.info { "Result: subtype=${event.subtype}, isError=${event.isError}, numTurns=${event.numTurns}" }
-                                if (!event.isError && toolCallCount > 0) {
-                                    success = true
-                                }
-                                shouldAbort = true
-                                updateStatus(if (success) "Done!" else "Completed")
-                                indicator?.text2 = if (success) "Commit message generated" else "Check commit panel"
-                                dialog?.markComplete(success)
-                                logger.info { "Query completed, ending session" }
-                            }
-                            is UiError -> {
-                                logger.error { "Claude error: ${event.message}" }
-                                updateDetails("❌ Error")
-                                dialog?.appendError(event.message)
-                                showNotification("Error: ${event.message}", NotificationType.ERROR)
-                            }
-                            else -> {
-                                // 忽略其他事件
+                            } catch (e: CancellationException) {
+                                logger.info { "Collector cancelled normally" }
+                                throw e  // 必须重新抛出 CancellationException
                             }
                         }
+
+                        // 等待 collector 准备好后再发送消息
+                        collectorReady.await()
+                        logger.info { "Collector ready, sending message..." }
+                        client.sendMessage(AgentMessageInput(text = configuredUserPrompt))
+
+                        collector.join()
                     }
                 }
             } finally {
                 try {
                     client.disconnect()
-                    dialog?.appendLog("")
-                    dialog?.appendLog("🔌 Disconnected from Claude")
                 } catch (e: Exception) {
                     logger.debug { "Disconnect error: ${e.message}" }
                 }
@@ -259,14 +233,11 @@ class GenerateCommitMessageService(private val project: Project) {
                 showNotification("Commit message generated successfully", NotificationType.INFORMATION)
             } else if (toolCallCount == 0) {
                 showNotification("No tools were called. Please try again.", NotificationType.WARNING)
-                dialog?.appendLog("⚠️ No tools were called. Please try again.")
             }
 
         } catch (e: Exception) {
             logger.error(e) { "Claude call failed" }
             showNotification("Error: ${e.message}", NotificationType.ERROR)
-            dialog?.appendError(e.message ?: "Unknown error")
-            dialog?.markComplete(false)
         }
     }
 
