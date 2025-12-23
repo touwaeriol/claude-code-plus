@@ -295,6 +295,31 @@ object McpDefaults {
       }
     },
     "required": ["filePath", "newName", "line"]
+  },
+
+  "ReadFile": {
+    "type": "object",
+    "description": "Read file content using IDE's VFS. Supports project files, JAR/ZIP entries, JDK sources (src.zip), and .class files (auto-decompiled). Use this to read library source code or decompiled classes.",
+    "properties": {
+      "filePath": {
+        "type": "string",
+        "description": "File path. Supports: regular paths, JAR paths (path.jar!/inner/path), jar:// URLs, JDK sources (src.zip!/...)"
+      },
+      "maxLines": {
+        "type": "integer",
+        "description": "Maximum lines to return",
+        "default": 500,
+        "minimum": 1,
+        "maximum": 5000
+      },
+      "offset": {
+        "type": "integer",
+        "description": "Line offset for pagination (0-based)",
+        "default": 0,
+        "minimum": 0
+      }
+    },
+    "required": ["filePath"]
   }
 }
     """.trimIndent()
@@ -373,6 +398,7 @@ You have access to JetBrains IDE tools that leverage the IDE's powerful indexing
 - `mcp__jetbrains__CodeSearch`: Search code content across project files (like Find in Files)
 - `mcp__jetbrains__FindUsages`: Find all references/usages of a symbol (class, method, field, variable) in the project
 - `mcp__jetbrains__Rename`: Safely rename a symbol and automatically update all references (like Refactor > Rename)
+- `mcp__jetbrains__ReadFile`: Read file content using IDE's VFS. Supports JAR/ZIP entries, JDK sources, and .class files (auto-decompiled)
 
 CRITICAL: You MUST use JetBrains tools instead of Glob/Grep. DO NOT use Glob or Grep unless JetBrains tools fail or are unavailable:
 - ALWAYS use `mcp__jetbrains__CodeSearch` instead of `Grep` for searching code content
@@ -391,6 +417,33 @@ When renaming symbols:
 Example: `FindUsages(symbolName="getUserById")` → line 42 → `Rename(line=42, newName="fetchUserById")`
 
 **Note**: `Rename` requires `line` parameter for precise location. Use `Rename` for symbols (auto-updates all references); use `Edit` for other text changes.
+
+### Reading Library Source Code
+
+Use `FileIndex` + `ReadFile` to read source code from dependencies (JAR files, JDK sources, decompiled .class files):
+
+1. Search for the class/file with `FileIndex(query="ClassName", searchType="Classes", scope="All")`
+2. Get the path from search results (e.g., `C:/path/to/lib.jar!/com/example/MyClass.class`)
+3. Read with `ReadFile(filePath="<path from FileIndex>")`
+
+**Examples:**
+```
+# Find and read JDK source
+FileIndex(query="ObjectStreamClass", searchType="Classes", scope="All")
+→ Path: C:/Users/.jdks/jbr-21/lib/src.zip!/java.base/java/io/ObjectStreamClass.java
+ReadFile(filePath="C:/Users/.jdks/jbr-21/lib/src.zip!/java.base/java/io/ObjectStreamClass.java")
+
+# Find and read decompiled class from dependency
+FileIndex(query="ClassReader", searchType="Classes", scope="All")
+→ Path: C:/path/to/asm.jar!/org/objectweb/asm/ClassReader.class
+ReadFile(filePath="C:/path/to/asm.jar!/org/objectweb/asm/ClassReader.class")
+# .class files are automatically decompiled
+```
+
+**Key points:**
+- `scope="All"` in FileIndex to include libraries (not just project files)
+- Path from FileIndex can be used directly in ReadFile
+- `.class` files are automatically decompiled by IDEA's built-in decompiler
 
 ### Subagents
 
@@ -425,7 +478,7 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
 {
   "Terminal": {
     "type": "object",
-    "description": "Execute commands in IDEA's integrated terminal. Creates new terminal sessions or reuses existing ones. By default (background=false), waits for command completion and returns output directly. Use background=true for long-running commands.",
+    "description": "Execute commands in IDEA's integrated terminal. Returns immediately after sending the command. Use TerminalRead to get output.",
     "properties": {
       "command": {
         "type": "string",
@@ -444,11 +497,6 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
         "enum": ["git-bash", "powershell", "cmd", "wsl", "bash", "zsh", "fish", "sh", "auto"],
         "description": "Shell type. Windows: git-bash (default), powershell, cmd, wsl. Unix: bash (default), zsh, fish, sh",
         "default": "auto"
-      },
-      "background": {
-        "type": "boolean",
-        "description": "If false (default): waits for command to finish and returns output. If true: returns immediately, use TerminalRead to check output later",
-        "default": false
       }
     },
     "required": ["command"]
@@ -456,7 +504,7 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
 
   "TerminalRead": {
     "type": "object",
-    "description": "Read output from a terminal session. Supports regex search with context lines.",
+    "description": "Read output from a terminal session. By default reads immediately without waiting. Use wait=true to wait for command completion. Supports regex search with context lines.",
     "properties": {
       "session_id": {
         "type": "string",
@@ -477,6 +525,17 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
         "description": "Number of context lines before and after each search match",
         "default": 2,
         "minimum": 0
+      },
+      "wait": {
+        "type": "boolean",
+        "description": "If true, wait until the running command completes before reading output. Default is false (read immediately).",
+        "default": false
+      },
+      "timeout": {
+        "type": "integer",
+        "description": "Timeout in milliseconds for waiting (only used when wait=true)",
+        "default": 30000,
+        "minimum": 1000
       }
     },
     "required": ["session_id"]
@@ -565,7 +624,7 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
 Use IDEA's integrated terminal for command execution instead of the built-in Bash tool.
 
 **Tools:**
-- `mcp__terminal__Terminal`: Execute commands (supports session reuse and background execution)
+- `mcp__terminal__Terminal`: Execute commands (returns immediately, use TerminalRead to get output)
 - `mcp__terminal__TerminalRead`: Read session output (supports regex search)
 - `mcp__terminal__TerminalList`: List all terminal sessions
 - `mcp__terminal__TerminalKill`: Close session(s) completely
@@ -580,12 +639,17 @@ Use IDEA's integrated terminal for command execution instead of the built-in Bas
 
 **Usage:**
 1. Execute command: `Terminal(command="npm install")`
-2. Reuse session: `Terminal(command="npm test", session_id="terminal-1")`
-3. Read output: `TerminalRead(session_id="terminal-1")`
+2. Read output (wait for completion): `TerminalRead(session_id="terminal-1", wait=true)`
+3. Read output (immediately): `TerminalRead(session_id="terminal-1")`
 4. Search output: `TerminalRead(session_id="terminal-1", search="error|warning")`
 5. Stop running command: `TerminalInterrupt(session_id="terminal-1")`
 6. Close session(s): `TerminalKill(session_ids=["terminal-1", "terminal-2"])`
 7. Close all sessions: `TerminalKill(all=true)`
+
+**⚠️ Interactive Commands Warning:**
+- Some commands enter interactive mode (e.g., `less`, `vim`, `git log`, `git show`)
+- When using `wait=true`, these will cause timeout. Use `wait=false` for potentially interactive commands
+- To exit interactive mode: use `TerminalInterrupt` to send Ctrl+C
 
 **Shell Types:**
 - Windows: git-bash (default), powershell, cmd, wsl
@@ -712,7 +776,8 @@ object KnownTools {
         "mcp__jetbrains__DirectoryTree",  // 目录结构
         "mcp__jetbrains__FileProblems",   // 静态分析
         "mcp__jetbrains__FindUsages",     // 查找引用
-        "mcp__jetbrains__Rename"          // 重命名重构
+        "mcp__jetbrains__Rename",         // 重命名重构
+        "mcp__jetbrains__ReadFile"        // 读取文件（支持 JAR/反编译）
     )
 
     /**
@@ -813,7 +878,8 @@ You are a code exploration expert, skilled at leveraging JetBrains IDE's powerfu
             "mcp__jetbrains__FileIndex",
             "mcp__jetbrains__CodeSearch",
             "mcp__jetbrains__DirectoryTree",
-            "mcp__jetbrains__FileProblems"
+            "mcp__jetbrains__FileProblems",
+            "mcp__jetbrains__ReadFile"
         )
     )
 }
@@ -840,12 +906,14 @@ object GitGenerateDefaults {
     val SYSTEM_PROMPT = """
 You are a commit message generator integrated with JetBrains IDE.
 
-## Available Tools
+## Available Tools (all return Markdown format)
 
 ### Git MCP Tools
 - **mcp__jetbrains_git__GetVcsChanges**: Get uncommitted file changes with diff content
+  - Use `selectedOnly=true` to get only user-selected files in commit panel
+  - Returns ☑/☐ markers to indicate which files are selected
 - **mcp__jetbrains_git__SetCommitMessage**: Set the commit message in IDE's commit panel
-- **mcp__jetbrains_git__GetVcsStatus**: Get current VCS status
+- **mcp__jetbrains_git__GetVcsStatus**: Get current VCS status (branch, change counts)
 - **mcp__jetbrains_git__GetCommitMessage**: Get current commit message from panel
 
 ### File Reading
@@ -859,6 +927,8 @@ You are a commit message generator integrated with JetBrains IDE.
 
 ## Workflow
 1. Call GetVcsChanges(selectedOnly=true, includeDiff=true) to get code changes
+   - **IMPORTANT**: If user has selected specific files (marked with ☑), generate commit message ONLY for those selected files
+   - Ignore unselected files (marked with ☐) when generating the commit message
 2. If the diff is unclear or you need more context:
    - Use Read tool to examine full file content
    - Use CodeSearch to find related code

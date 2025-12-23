@@ -3,7 +3,6 @@ package com.asakii.plugin.mcp.git
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vcs.changes.Change
-import kotlinx.serialization.json.*
 import mu.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -12,6 +11,7 @@ private val logger = KotlinLogging.logger {}
  * 获取 VCS 变更工具
  *
  * 返回未提交的文件变更列表，支持获取选中文件和 diff 内容
+ * 返回格式：Markdown
  */
 class GetVcsChangesTool(private val project: Project) {
 
@@ -23,42 +23,72 @@ class GetVcsChangesTool(private val project: Project) {
 
         val accessor = CommitPanelAccessor.getInstance(project)
 
-        // 获取变更列表
+        // 获取所有变更和选中的变更
+        val allChanges = accessor.getAllChanges()
+        val selectedChanges = accessor.getSelectedChanges()
+
+        // 根据 selectedOnly 参数决定返回哪些变更
         val changes: List<Change> = if (selectedOnly) {
-            accessor.getSelectedChanges() ?: accessor.getAllChanges()
+            selectedChanges ?: allChanges
         } else {
-            accessor.getAllChanges()
+            allChanges
         }.take(maxFiles)
 
-        val hasSelectedChanges = selectedOnly && accessor.getSelectedChanges() != null
+        val hasSelectedChanges = selectedChanges != null && selectedChanges.isNotEmpty()
+        val selectedPaths = selectedChanges?.map { getChangePath(it) }?.toSet() ?: emptySet()
 
-        val result = buildJsonObject {
-            put("commitPanelOpen", accessor.isCommitPanelOpen())
-            put("selectedOnly", hasSelectedChanges)
-            put("totalChanges", changes.size)
+        return buildString {
+            appendLine("# VCS Changes")
+            appendLine()
 
-            putJsonArray("changes") {
-                for (change in changes) {
-                    addJsonObject {
-                        val path = change.virtualFile?.path
-                            ?: change.afterRevision?.file?.path
-                            ?: change.beforeRevision?.file?.path
-                            ?: "unknown"
-                        put("path", path)
-                        put("type", change.type.name)  // NEW, MODIFICATION, DELETED, MOVED
+            // 状态信息
+            appendLine("## Status")
+            appendLine("- **Commit Panel Open**: ${if (accessor.isCommitPanelOpen()) "Yes" else "No"}")
+            appendLine("- **Total Changes**: ${allChanges.size}")
+            if (hasSelectedChanges) {
+                appendLine("- **Selected Changes**: ${selectedChanges!!.size}")
+            }
+            appendLine("- **Showing**: ${if (selectedOnly && hasSelectedChanges) "Selected only" else "All changes"}")
+            appendLine()
 
-                        if (includeDiff) {
-                            val diff = getDiff(change, maxDiffLines)
-                            if (diff != null) {
-                                put("diff", diff)
-                            }
-                        }
+            if (changes.isEmpty()) {
+                appendLine("*No changes found.*")
+                return@buildString
+            }
+
+            // 变更列表
+            appendLine("## Changes (${changes.size} files)")
+            appendLine()
+
+            for (change in changes) {
+                val path = getChangePath(change)
+                val isSelected = path in selectedPaths
+                val selectedMarker = if (hasSelectedChanges) {
+                    if (isSelected) "☑" else "☐"
+                } else ""
+
+                appendLine("### $selectedMarker `$path`")
+                appendLine("- **Type**: ${change.type.name}")
+
+                if (includeDiff) {
+                    val diff = getDiff(change, maxDiffLines)
+                    if (!diff.isNullOrBlank()) {
+                        appendLine()
+                        appendLine("```diff")
+                        appendLine(diff)
+                        appendLine("```")
                     }
                 }
+                appendLine()
             }
         }
+    }
 
-        return result.toString()
+    private fun getChangePath(change: Change): String {
+        return change.virtualFile?.path
+            ?: change.afterRevision?.file?.path
+            ?: change.beforeRevision?.file?.path
+            ?: "unknown"
     }
 
     private fun getDiff(change: Change, maxLines: Int): String? {
@@ -82,14 +112,14 @@ class GetVcsChangesTool(private val project: Project) {
                             if (!beforeContent.isNullOrEmpty()) {
                                 val beforeLines = beforeContent.lines().take(maxLines / 2)
                                 if (beforeLines.isNotEmpty()) {
-                                    appendLine("--- Before (${beforeLines.size} lines):")
+                                    appendLine("--- Before (${beforeLines.size} lines)")
                                     beforeLines.forEach { appendLine("- $it") }
                                 }
                             }
                             if (!afterContent.isNullOrEmpty()) {
                                 val afterLines = afterContent.lines().take(maxLines / 2)
                                 if (afterLines.isNotEmpty()) {
-                                    appendLine("+++ After (${afterLines.size} lines):")
+                                    appendLine("+++ After (${afterLines.size} lines)")
                                     afterLines.forEach { appendLine("+ $it") }
                                 }
                             }

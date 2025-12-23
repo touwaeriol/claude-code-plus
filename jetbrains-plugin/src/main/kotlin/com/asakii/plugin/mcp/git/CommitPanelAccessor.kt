@@ -68,11 +68,19 @@ class CommitPanelAccessor(private val project: Project) {
     }
 
     /**
-     * 获取选中的变更（如果 Commit 面板打开且有选中）
+     * 获取选中的变更（实时从 Commit 面板获取）
      * 如果没有选中或面板未打开，返回 null
      */
     fun getSelectedChanges(): List<Change>? {
-        return selectedChanges?.takeIf { it.isNotEmpty() }
+        val panel = checkinPanel?.get() ?: return selectedChanges?.takeIf { it.isNotEmpty() }
+        return try {
+            ReadAction.compute<List<Change>?, Throwable> {
+                panel.selectedChanges.toList().takeIf { it.isNotEmpty() }
+            }
+        } catch (e: Exception) {
+            logger.warn(e) { "Failed to get selected changes from panel, using cached value" }
+            selectedChanges?.takeIf { it.isNotEmpty() }
+        }
     }
 
     /**
