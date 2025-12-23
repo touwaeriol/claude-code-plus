@@ -40,7 +40,29 @@ class TerminalMcpServerImpl(private val project: Project) : McpServerBase(), Dis
     private lateinit var terminalInterruptTool: TerminalInterruptTool
 
     override fun getSystemPromptAppendix(): String {
-        return AgentSettingsService.getInstance().effectiveTerminalInstructions
+        val settings = AgentSettingsService.getInstance()
+        val baseInstructions = settings.effectiveTerminalInstructions
+
+        // 构建动态系统信息
+        val platform = if (settings.isWindows()) "Windows" else "Unix"
+        val defaultShell = settings.getEffectiveDefaultShell()
+        val availableShells = settings.getEffectiveAvailableShells()
+
+        val systemInfo = buildString {
+            appendLine()
+            appendLine("**Current System:**")
+            appendLine("- Platform: $platform")
+            appendLine("- Default Shell: $defaultShell")
+            appendLine("- Available Shells: ${availableShells.joinToString(", ")}")
+
+            // Windows 下的特殊提示
+            if (settings.isWindows() && settings.terminalPreferGitBashOnWindows) {
+                appendLine()
+                appendLine("**IMPORTANT**: On Windows, prefer using `git-bash` for Unix-style commands (grep, find, ls, cat, etc.). Use `powershell` or `cmd` only when Windows-specific commands are needed.")
+            }
+        }
+
+        return baseInstructions + systemInfo
     }
 
     /**
@@ -73,11 +95,11 @@ class TerminalMcpServerImpl(private val project: Project) : McpServerBase(), Dis
 
     companion object {
         /**
-         * 预加载的工具 Schema
+         * 基础工具 Schema（静态加载，不包含动态配置）
          */
-        val TOOL_SCHEMAS: Map<String, Map<String, Any>> = loadAllSchemas()
+        private val BASE_SCHEMAS: Map<String, Map<String, Any>> = loadBaseSchemas()
 
-        private fun loadAllSchemas(): Map<String, Map<String, Any>> {
+        private fun loadBaseSchemas(): Map<String, Map<String, Any>> {
             logger.info { "Loading Terminal tool schemas from McpDefaults" }
 
             return try {
@@ -90,6 +112,45 @@ class TerminalMcpServerImpl(private val project: Project) : McpServerBase(), Dis
                 logger.error(e) { "Failed to parse Terminal schemas: ${e.message}" }
                 emptyMap()
             }
+        }
+
+        /**
+         * 获取动态配置的工具 Schema
+         *
+         * 根据用户配置动态修改 Terminal 工具的 shell_type enum 和 default
+         */
+        fun getToolSchemas(): Map<String, Map<String, Any>> {
+            val settings = AgentSettingsService.getInstance()
+            val baseSchemas = BASE_SCHEMAS.toMutableMap()
+
+            // 动态修改 Terminal 工具的 shell_type
+            val terminalSchema = baseSchemas["Terminal"]?.toMutableMap() ?: return baseSchemas
+            @Suppress("UNCHECKED_CAST")
+            val properties = (terminalSchema["properties"] as? Map<String, Any>)?.toMutableMap() ?: return baseSchemas
+            @Suppress("UNCHECKED_CAST")
+            val shellTypeProperty = (properties["shell_type"] as? Map<String, Any>)?.toMutableMap() ?: return baseSchemas
+
+            // 获取配置的可用 shell 列表和默认值
+            val availableShells = settings.getEffectiveAvailableShells()
+            val defaultShell = settings.getEffectiveDefaultShell()
+
+            logger.info { "Dynamic shell config - available: $availableShells, default: $defaultShell" }
+
+            // 更新 enum 和 default
+            shellTypeProperty["enum"] = availableShells
+            shellTypeProperty["default"] = defaultShell
+
+            // 更新 description 以反映当前配置
+            val isWindows = settings.isWindows()
+            val platform = if (isWindows) "Windows" else "Unix"
+            shellTypeProperty["description"] = "Shell type. Platform: $platform. Available: ${availableShells.joinToString(", ")}. Default: $defaultShell"
+
+            // 重建 schema
+            properties["shell_type"] = shellTypeProperty
+            terminalSchema["properties"] = properties
+            baseSchemas["Terminal"] = terminalSchema
+
+            return baseSchemas
         }
 
         private fun jsonObjectToMap(jsonObject: JsonObject): Map<String, Any> {
@@ -113,11 +174,15 @@ class TerminalMcpServerImpl(private val project: Project) : McpServerBase(), Dis
         }
 
         fun getToolSchema(toolName: String): Map<String, Any> {
-            return TOOL_SCHEMAS[toolName] ?: run {
+            return getToolSchemas()[toolName] ?: run {
                 logger.warn { "Terminal tool schema not found: $toolName" }
                 emptyMap()
             }
         }
+
+        // 兼容旧代码的属性
+        val TOOL_SCHEMAS: Map<String, Map<String, Any>>
+            get() = getToolSchemas()
     }
 
     override suspend fun onInitialize() {

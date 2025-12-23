@@ -542,11 +542,26 @@ class TerminalSessionManager(private val project: Project) {
     }
 
     /**
-     * 检测 Shell 类型（基于操作系统）
+     * 检测 Shell 类型
+     *
+     * 优先使用用户配置的默认 shell，否则根据操作系统返回默认值
      */
     private fun detectShellType(): ShellType {
+        val settings = AgentSettingsService.getInstance()
+        val configuredDefault = settings.getEffectiveDefaultShell()
+
+        // 尝试将配置的默认 shell 转换为 ShellType
+        val shellType = ShellType.fromString(configuredDefault)
+        if (shellType != ShellType.AUTO) {
+            logger.info { "Using configured default shell: $configuredDefault -> $shellType" }
+            return shellType
+        }
+
+        // 配置为 auto 时，根据操作系统返回默认值
         val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-        return if (isWindows) ShellType.GIT_BASH else ShellType.BASH
+        val defaultType = if (isWindows) ShellType.GIT_BASH else ShellType.BASH
+        logger.info { "Using system default shell: $defaultType" }
+        return defaultType
     }
 
     /**

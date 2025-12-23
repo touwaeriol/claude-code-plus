@@ -101,6 +101,9 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var terminalDisableBuiltinBash: Boolean = true, // 启用 Terminal MCP 时禁用内置 Bash
         var terminalMaxOutputLines: Int = 500,         // Terminal 输出最大行数
         var terminalMaxOutputChars: Int = 50000,       // Terminal 输出最大字符数
+        var terminalDefaultShell: String = "auto",     // Terminal 默认 shell（auto = 系统检测）
+        var terminalAvailableShells: String = "",      // Terminal 可用 shell 列表（逗号分隔，空 = 全部）
+        var terminalPreferGitBashOnWindows: Boolean = true,  // Windows 下优先推荐 git-bash
         var enableGitMcp: Boolean = false,             // Git MCP（VCS 集成，默认禁用）
 
         // MCP 系统提示词（自定义，空字符串表示使用默认值）
@@ -233,6 +236,61 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     var terminalInstructions: String
         get() = state.terminalInstructions
         set(value) { state.terminalInstructions = value }
+
+    var terminalDefaultShell: String
+        get() = state.terminalDefaultShell
+        set(value) { state.terminalDefaultShell = value }
+
+    var terminalAvailableShells: String
+        get() = state.terminalAvailableShells
+        set(value) { state.terminalAvailableShells = value }
+
+    var terminalPreferGitBashOnWindows: Boolean
+        get() = state.terminalPreferGitBashOnWindows
+        set(value) { state.terminalPreferGitBashOnWindows = value }
+
+    /**
+     * 获取生效的默认 shell
+     *
+     * 如果配置为 "auto"，则根据操作系统返回默认值：
+     * - Windows: git-bash
+     * - Unix: bash
+     */
+    fun getEffectiveDefaultShell(): String {
+        val configured = state.terminalDefaultShell
+        if (configured.isNotBlank() && configured != "auto") {
+            return configured
+        }
+        // auto: 根据操作系统返回默认值
+        val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+        return if (isWindows) "git-bash" else "bash"
+    }
+
+    /**
+     * 获取生效的可用 shell 列表
+     *
+     * 如果配置为空，则返回当前操作系统的全部可用 shell
+     */
+    fun getEffectiveAvailableShells(): List<String> {
+        val configured = state.terminalAvailableShells.trim()
+        if (configured.isNotBlank()) {
+            return configured.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        }
+        // 返回当前系统的全部可用 shell
+        val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+        return if (isWindows) {
+            listOf("git-bash", "powershell", "cmd", "wsl", "auto")
+        } else {
+            listOf("bash", "zsh", "fish", "sh", "auto")
+        }
+    }
+
+    /**
+     * 检查当前是否为 Windows 系统
+     */
+    fun isWindows(): Boolean {
+        return System.getProperty("os.name").lowercase().contains("windows")
+    }
 
     var enableGitMcp: Boolean
         get() = state.enableGitMcp

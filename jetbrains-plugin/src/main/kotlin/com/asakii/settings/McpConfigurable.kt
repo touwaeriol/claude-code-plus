@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.ActionToolbarPosition
 import com.intellij.openapi.components.service
 import com.intellij.openapi.options.SearchableConfigurable
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
 import com.intellij.ui.JBColor
@@ -311,6 +312,9 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
         settings.terminalInstructions = terminalEntry?.instructions ?: ""
         settings.terminalMaxOutputLines = terminalEntry?.terminalMaxOutputLines ?: 500
         settings.terminalMaxOutputChars = terminalEntry?.terminalMaxOutputChars ?: 50000
+        settings.terminalDefaultShell = terminalEntry?.terminalDefaultShell ?: "auto"
+        settings.terminalAvailableShells = terminalEntry?.terminalAvailableShells ?: ""
+        settings.terminalPreferGitBashOnWindows = terminalEntry?.terminalPreferGitBashOnWindows ?: true
 
         // 保存自定义服务器配置
         val globalServers = customServers.filter { it.level == McpServerLevel.GLOBAL }
@@ -409,7 +413,10 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             disabledTools = if (settings.terminalDisableBuiltinBash) listOf("Bash") else emptyList(),
             hasDisableToolsToggle = true,
             terminalMaxOutputLines = settings.terminalMaxOutputLines,
-            terminalMaxOutputChars = settings.terminalMaxOutputChars
+            terminalMaxOutputChars = settings.terminalMaxOutputChars,
+            terminalDefaultShell = settings.terminalDefaultShell,
+            terminalAvailableShells = settings.terminalAvailableShells,
+            terminalPreferGitBashOnWindows = settings.terminalPreferGitBashOnWindows
         ))
         builtInServers.add(McpServerEntry(
             name = "JetBrains Git MCP",
@@ -651,7 +658,13 @@ data class McpServerEntry(
     /** Terminal MCP: 输出最大行数 */
     val terminalMaxOutputLines: Int = 500,
     /** Terminal MCP: 输出最大字符数 */
-    val terminalMaxOutputChars: Int = 50000
+    val terminalMaxOutputChars: Int = 50000,
+    /** Terminal MCP: 默认 shell */
+    val terminalDefaultShell: String = "auto",
+    /** Terminal MCP: 可用 shell 列表（逗号分隔） */
+    val terminalAvailableShells: String = "",
+    /** Terminal MCP: Windows 下优先推荐 git-bash */
+    val terminalPreferGitBashOnWindows: Boolean = true
 )
 
 /**
@@ -688,6 +701,22 @@ class BuiltInMcpServerDialog(
     // Terminal MCP 截断配置
     private val maxOutputLinesField = JBTextField(entry.terminalMaxOutputLines.toString(), 8)
     private val maxOutputCharsField = JBTextField(entry.terminalMaxOutputChars.toString(), 8)
+
+    // Terminal MCP Shell 配置
+    private val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+    private val allShellTypes = if (isWindows) {
+        listOf("auto", "git-bash", "powershell", "cmd", "wsl")
+    } else {
+        listOf("auto", "bash", "zsh", "fish", "sh")
+    }
+    private val defaultShellCombo = ComboBox(allShellTypes.toTypedArray()).apply {
+        selectedItem = entry.terminalDefaultShell.ifBlank { "auto" }
+    }
+    private val availableShellCheckboxes = mutableMapOf<String, JBCheckBox>()
+    private val preferGitBashCheckbox = JBCheckBox(
+        "Prefer Git Bash for Unix commands",
+        entry.terminalPreferGitBashOnWindows
+    )
 
     init {
         title = "Edit ${entry.name}"
@@ -800,6 +829,63 @@ class BuiltInMcpServerDialog(
             contentPanel.add(Box.createVerticalStrut(8))
         }
 
+        // Terminal MCP 的 Shell 配置
+        if (entry.name == "Terminal MCP") {
+            val shellConfigLabel = JBLabel("Shell Configuration:").apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+            }
+            contentPanel.add(shellConfigLabel)
+            contentPanel.add(Box.createVerticalStrut(4))
+
+            // 默认 Shell 下拉框
+            val defaultShellPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+                add(JBLabel("Default Shell:"))
+                add(defaultShellCombo)
+            }
+            contentPanel.add(defaultShellPanel)
+            contentPanel.add(Box.createVerticalStrut(4))
+
+            // 可用 Shell 复选框
+            val availableShellsLabel = JBLabel("Available Shells:").apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+                foreground = JBColor(0x666666, 0x999999)
+                font = font.deriveFont(11f)
+            }
+            contentPanel.add(availableShellsLabel)
+            contentPanel.add(Box.createVerticalStrut(2))
+
+            // 解析已配置的可用 shells
+            val configuredShells = entry.terminalAvailableShells.trim()
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+            val useAllShells = configuredShells.isEmpty()
+
+            val shellsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 2)).apply {
+                alignmentX = JPanel.LEFT_ALIGNMENT
+            }
+            for (shellType in allShellTypes) {
+                val isChecked = useAllShells || configuredShells.contains(shellType)
+                val checkbox = JBCheckBox(shellType, isChecked)
+                availableShellCheckboxes[shellType] = checkbox
+                shellsPanel.add(checkbox)
+            }
+            contentPanel.add(shellsPanel)
+            contentPanel.add(Box.createVerticalStrut(4))
+
+            // Windows 优先使用 Git Bash 开关
+            if (isWindows) {
+                val preferGitBashPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+                    alignmentX = JPanel.LEFT_ALIGNMENT
+                    add(preferGitBashCheckbox)
+                }
+                contentPanel.add(preferGitBashPanel)
+            }
+            contentPanel.add(Box.createVerticalStrut(8))
+        }
+
         // Terminal MCP 的截断配置
         if (entry.name == "Terminal MCP") {
             val truncateLabel = JBLabel("Output Truncation:").apply {
@@ -899,6 +985,19 @@ class BuiltInMcpServerDialog(
             instructionsArea.text
         }
 
+        // 获取选中的可用 shells
+        val selectedShells = if (entry.name == "Terminal MCP") {
+            availableShellCheckboxes
+                .filter { it.value.isSelected }
+                .keys
+                .toList()
+        } else emptyList()
+
+        // 如果全部选中，存储空字符串（表示使用全部）
+        val availableShellsValue = if (entry.name == "Terminal MCP") {
+            if (selectedShells.size == allShellTypes.size) "" else selectedShells.joinToString(",")
+        } else entry.terminalAvailableShells
+
         return entry.copy(
             enabled = enableCheckbox.isSelected,
             instructions = customInstructions,
@@ -909,7 +1008,14 @@ class BuiltInMcpServerDialog(
             } else entry.terminalMaxOutputLines,
             terminalMaxOutputChars = if (entry.name == "Terminal MCP") {
                 maxOutputCharsField.text.toIntOrNull() ?: 50000
-            } else entry.terminalMaxOutputChars
+            } else entry.terminalMaxOutputChars,
+            terminalDefaultShell = if (entry.name == "Terminal MCP") {
+                defaultShellCombo.selectedItem as? String ?: "auto"
+            } else entry.terminalDefaultShell,
+            terminalAvailableShells = availableShellsValue,
+            terminalPreferGitBashOnWindows = if (entry.name == "Terminal MCP") {
+                preferGitBashCheckbox.isSelected
+            } else entry.terminalPreferGitBashOnWindows
         )
     }
 }
