@@ -15,10 +15,20 @@ providers.gradleProperty("customBuildDir").orNull?.let { customDir ->
     layout.buildDirectory.set(file(customDir))
 }
 
+// ===== 通用构建 vs 平台特定构建 =====
+// 默认构建通用版本 (242-253)，使用 -PplatformSpecific=true 构建平台特定版本
+val platformSpecific = providers.gradleProperty("platformSpecific").getOrElse("false").toBoolean()
+
 // ===== 多版本构建支持 =====
 // 通过 -PplatformMajor=242 指定目标平台版本
 // 242 = 2024.2, 243 = 2024.3, 251 = 2025.1, 252 = 2025.2, 253 = 2025.3
-val platformMajor = providers.gradleProperty("platformMajor").getOrElse("253").toInt()
+// 通用构建时使用最低支持版本 (242) 以确保向后兼容
+val platformMajor = if (platformSpecific) {
+    providers.gradleProperty("platformMajor").getOrElse("253").toInt()
+} else {
+    // 通用构建：使用最低支持版本的 SDK 编译，确保 API 向后兼容
+    providers.gradleProperty("pluginSinceBuild").get().toInt()
+}
 
 // 根据目标版本选择 IDE SDK 版本
 // 构建时用对应版本的 SDK 编译，确保 API 兼容
@@ -49,14 +59,27 @@ val diffCompatDir = when {
     else -> "kotlin-compat-diff-242"
 }
 
-// sinceBuild 和 untilBuild 根据目标版本设置
-val targetSinceBuild = platformMajor.toString()
-val targetUntilBuild = when {
-    platformMajor >= 253 -> "253.*"
-    platformMajor >= 252 -> "252.*"
-    platformMajor >= 251 -> "251.*"
-    platformMajor >= 243 -> "243.*"
-    else -> "242.*"
+// sinceBuild 和 untilBuild 配置
+val targetSinceBuild = if (platformSpecific) {
+    // 平台特定构建：只支持该平台
+    platformMajor.toString()
+} else {
+    // 通用构建：支持所有平台 (242-253)
+    providers.gradleProperty("pluginSinceBuild").get()
+}
+
+val targetUntilBuild = if (platformSpecific) {
+    // 平台特定构建：只支持该平台的小版本
+    when {
+        platformMajor >= 253 -> "253.*"
+        platformMajor >= 252 -> "252.*"
+        platformMajor >= 251 -> "251.*"
+        platformMajor >= 243 -> "243.*"
+        else -> "242.*"
+    }
+} else {
+    // 通用构建：支持到最新平台
+    providers.gradleProperty("pluginUntilBuild").get()
 }
 
 // 配置 sourceSets 包含版本特定代码
