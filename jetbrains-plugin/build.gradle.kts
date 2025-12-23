@@ -7,7 +7,6 @@ plugins {
 }
 
 group = providers.gradleProperty("pluginGroup").get()
-version = providers.gradleProperty("pluginVersion").get()
 
 // ===== 动态构建目录支持（用于并行多版本构建）=====
 // 通过 -PcustomBuildDir=/path/to/dir 指定自定义构建目录
@@ -15,20 +14,18 @@ providers.gradleProperty("customBuildDir").orNull?.let { customDir ->
     layout.buildDirectory.set(file(customDir))
 }
 
-// ===== 通用构建 vs 平台特定构建 =====
-// 默认构建通用版本 (242-253)，使用 -PplatformSpecific=true 构建平台特定版本
-val platformSpecific = providers.gradleProperty("platformSpecific").getOrElse("false").toBoolean()
-
 // ===== 多版本构建支持 =====
 // 通过 -PplatformMajor=242 指定目标平台版本
 // 242 = 2024.2, 243 = 2024.3, 251 = 2025.1, 252 = 2025.2, 253 = 2025.3
-// 通用构建时使用最低支持版本 (242) 以确保向后兼容
-val platformMajor = if (platformSpecific) {
-    providers.gradleProperty("platformMajor").getOrElse("253").toInt()
-} else {
-    // 通用构建：使用最低支持版本的 SDK 编译，确保 API 向后兼容
-    providers.gradleProperty("pluginSinceBuild").get().toInt()
-}
+// 默认使用最新版本 (253)
+val platformMajor = providers.gradleProperty("platformMajor").getOrElse("253").toInt()
+
+// ===== 版本号配置 =====
+// 版本号始终带上平台后缀（如 1.2.1.253）
+// 使用点分隔符而非连字符，避免被 SemVer 识别为 pre-release
+// 这样可以上传多个版本到 Marketplace，IDE 会自动选择匹配的版本
+val baseVersion = providers.gradleProperty("pluginVersion").get()
+version = "$baseVersion.$platformMajor"
 
 // 根据目标版本选择 IDE SDK 版本
 // 构建时用对应版本的 SDK 编译，确保 API 兼容
@@ -60,26 +57,15 @@ val diffCompatDir = when {
 }
 
 // sinceBuild 和 untilBuild 配置
-val targetSinceBuild = if (platformSpecific) {
-    // 平台特定构建：只支持该平台
-    platformMajor.toString()
-} else {
-    // 通用构建：支持所有平台 (242-253)
-    providers.gradleProperty("pluginSinceBuild").get()
-}
+// 根据 platformMajor 确定版本范围
+val targetSinceBuild = platformMajor.toString()
 
-val targetUntilBuild = if (platformSpecific) {
-    // 平台特定构建：只支持该平台的小版本
-    when {
-        platformMajor >= 253 -> "253.*"
-        platformMajor >= 252 -> "252.*"
-        platformMajor >= 251 -> "251.*"
-        platformMajor >= 243 -> "243.*"
-        else -> "242.*"
-    }
-} else {
-    // 通用构建：支持到最新平台
-    providers.gradleProperty("pluginUntilBuild").get()
+val targetUntilBuild = when {
+    platformMajor >= 253 -> "253.*"
+    platformMajor >= 252 -> "252.*"
+    platformMajor >= 251 -> "251.*"
+    platformMajor >= 243 -> "243.*"
+    else -> "242.*"
 }
 
 // 配置 sourceSets 包含版本特定代码
@@ -617,7 +603,7 @@ val buildAllVersions by tasks.registering {
     // 将需要的值在配置阶段捕获，避免配置缓存问题
     val buildDir = layout.buildDirectory
     val projectDir = rootProject.projectDir
-    val versionStr = project.version.toString()
+    val versionStr = baseVersion  // 使用不带后缀的基础版本号
 
     doFirst {
         println("====================================")
@@ -700,12 +686,13 @@ val buildAllVersions by tasks.registering {
         distDir.mkdirs()
         platforms.forEach { platform ->
             val platformDistDir = File(tempBuildDir, "$platform/distributions")
-            val srcFile = File(platformDistDir, "claude-code-plus-jetbrains-plugin-${versionStr}.zip")
-            val dstFile = File(distDir, "claude-code-plus-jetbrains-plugin-${versionStr}-${platform}.zip")
+            // 子构建生成的 zip 已经带版本后缀（如 1.2.1.253）
+            val srcFile = File(platformDistDir, "claude-code-plus-jetbrains-plugin-${versionStr}.${platform}.zip")
+            val dstFile = File(distDir, "claude-code-plus-jetbrains-plugin-${versionStr}.${platform}.zip")
 
             if (srcFile.exists()) {
                 srcFile.copyTo(dstFile, overwrite = true)
-                println("✅ [$platform] claude-code-plus-jetbrains-plugin-${versionStr}-${platform}.zip")
+                println("✅ [$platform] claude-code-plus-jetbrains-plugin-${versionStr}.${platform}.zip")
             } else {
                 throw GradleException("[$platform] Output file not found: ${srcFile.absolutePath}")
             }
@@ -716,7 +703,7 @@ val buildAllVersions by tasks.registering {
 
         println()
         println("====================================")
-        println("All 6 versions built successfully!")
+        println("All 5 versions built successfully!")
         println("Output: jetbrains-plugin/build/distributions/")
         println("====================================")
     }
