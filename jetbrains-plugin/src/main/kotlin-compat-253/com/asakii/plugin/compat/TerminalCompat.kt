@@ -280,40 +280,35 @@ object TerminalCompat {
 
         @Suppress("removal")
         return try {
-            var result: TerminalWidgetWrapper? = null
+            // 注意：调用者已经确保在 EDT 上，不要再嵌套 invokeAndWait
+            // 否则会导致死锁
+            val tabsManager = TerminalToolWindowTabsManager.getInstance(project)
+            logger.info { "  TerminalToolWindowTabsManager class: ${tabsManager.javaClass.name}" }
 
-            // TerminalToolWindowTabsManager 需要在 EDT 上调用
-            ApplicationManager.getApplication().invokeAndWait {
-                val tabsManager = TerminalToolWindowTabsManager.getInstance(project)
-                logger.info { "  TerminalToolWindowTabsManager class: ${tabsManager.javaClass.name}" }
+            // 使用新的公开 API 创建终端
+            val tab = tabsManager.createTabBuilder()
+                .workingDirectory(workingDirectory)
+                .shellCommand(shellCommand)
+                .tabName(tabName)
+                .requestFocus(true)
+                .deferSessionStartUntilUiShown(true)
+                .createTab()
 
-                // 使用新的公开 API 创建终端
-                val tab = tabsManager.createTabBuilder()
-                    .workingDirectory(workingDirectory)
-                    .shellCommand(shellCommand)
-                    .tabName(tabName)
-                    .requestFocus(true)
-                    .deferSessionStartUntilUiShown(true)
-                    .createTab()
+            logger.info { "  Created terminal tab: ${tab.javaClass.name}" }
 
-                logger.info { "  Created terminal tab: ${tab.javaClass.name}" }
-
-                // 激活终端工具窗口（253 新 API 不会自动激活）
-                val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Terminal")
-                if (toolWindow != null) {
-                    toolWindow.show()
-                    logger.info { "  Terminal ToolWindow activated" }
-                } else {
-                    logger.warn { "  Terminal ToolWindow not found" }
-                }
-
-                val view = tab.view
-                logger.info { "  TerminalView class: ${view.javaClass.name}" }
-
-                result = TerminalWidgetWrapper(view, tab)
+            // 激活终端工具窗口（253 新 API 不会自动激活）
+            val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Terminal")
+            if (toolWindow != null) {
+                toolWindow.show()
+                logger.info { "  Terminal ToolWindow activated" }
+            } else {
+                logger.warn { "  Terminal ToolWindow not found" }
             }
 
-            result
+            val view = tab.view
+            logger.info { "  TerminalView class: ${view.javaClass.name}" }
+
+            TerminalWidgetWrapper(view, tab)
         } catch (e: ProcessCanceledException) {
             // 必须重新抛出 ProcessCanceledException
             throw e
