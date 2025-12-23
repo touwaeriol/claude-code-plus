@@ -103,7 +103,7 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var terminalMaxOutputChars: Int = 50000,       // Terminal 输出最大字符数
         var terminalDefaultShell: String = "",          // Terminal 默认 shell（空 = 使用系统默认）
         var terminalAvailableShells: String = "",      // Terminal 可用 shell 列表（逗号分隔，空 = 全部）
-        var terminalReadTimeout: Int = 30,             // TerminalRead 默认超时时间（秒）
+        var terminalReadTimeout: Int = 10,             // TerminalRead 默认超时时间（秒）
         var enableGitMcp: Boolean = false,             // Git MCP（VCS 集成，默认禁用）
 
         // MCP 系统提示词（自定义，空字符串表示使用默认值）

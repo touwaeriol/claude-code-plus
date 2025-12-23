@@ -426,32 +426,10 @@ Use `FileIndex` + `ReadFile` to read source code from dependencies (JAR files, J
 2. Get the path from search results (e.g., `C:/path/to/lib.jar!/com/example/MyClass.class`)
 3. Read with `ReadFile(filePath="<path from FileIndex>")`
 
-**Examples:**
-```
-# Find and read JDK source
-FileIndex(query="ObjectStreamClass", searchType="Classes", scope="All")
-→ Path: C:/Users/.jdks/jbr-21/lib/src.zip!/java.base/java/io/ObjectStreamClass.java
-ReadFile(filePath="C:/Users/.jdks/jbr-21/lib/src.zip!/java.base/java/io/ObjectStreamClass.java")
-
-# Find and read decompiled class from dependency
-FileIndex(query="ClassReader", searchType="Classes", scope="All")
-→ Path: C:/path/to/asm.jar!/org/objectweb/asm/ClassReader.class
-ReadFile(filePath="C:/path/to/asm.jar!/org/objectweb/asm/ClassReader.class")
-# .class files are automatically decompiled
-```
-
 **Key points:**
 - `scope="All"` in FileIndex to include libraries (not just project files)
 - Path from FileIndex can be used directly in ReadFile
 - `.class` files are automatically decompiled by IDEA's built-in decompiler
-
-### Subagents
-
-- `ExploreWithJetbrains`: Code exploration agent leveraging JetBrains IDE indexing capabilities. Use for fast file/class/symbol search and code structure analysis. Prefer this when exploring or understanding codebases. (Tools: Read, mcp__jetbrains__FileIndex, mcp__jetbrains__CodeSearch, mcp__jetbrains__DirectoryTree, mcp__jetbrains__FileProblems)
-
-This agent provides faster and more accurate results than default exploration because it uses IDE's pre-built indexes.
-
-IMPORTANT: For code exploration tasks, prefer `subagent_type="ExploreWithJetbrains"` over the default `Explore` agent. When invoking with Task tool, the `description` parameter is required.
     """.trimIndent()
 
     /**
@@ -643,15 +621,6 @@ Use IDEA's integrated terminal for command execution instead of the built-in Bas
 5. Stop running command: `TerminalInterrupt(session_id="terminal-1")`
 6. Close session(s): `TerminalKill(session_ids=["terminal-1", "terminal-2"])`
 7. Close all sessions: `TerminalKill(all=true)`
-
-**⚠️ Interactive Commands Warning:**
-- Some commands enter interactive mode (e.g., `less`, `vim`, `git log`, `git show`)
-- When using `wait=true`, these will cause timeout. Use `wait=false` for potentially interactive commands
-- To exit interactive mode: use `TerminalInterrupt` to send Ctrl+C
-
-**Shell Types:**
-- Windows: git-bash (default), powershell, cmd, wsl
-- Unix: bash (default), zsh, fish, sh
     """.trimIndent()
 
     /**

@@ -744,7 +744,8 @@ class BuiltInMcpServerDialog(
         val panel = JPanel(BorderLayout())
         panel.border = JBUI.Borders.empty(10)
 
-        val contentPanel = JPanel().apply {
+        // 顶部固定内容面板
+        val topPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
         }
 
@@ -753,8 +754,8 @@ class BuiltInMcpServerDialog(
             alignmentX = JPanel.LEFT_ALIGNMENT
             add(enableCheckbox)
         }
-        contentPanel.add(enablePanel)
-        contentPanel.add(Box.createVerticalStrut(8))
+        topPanel.add(enablePanel)
+        topPanel.add(Box.createVerticalStrut(8))
 
         // Context7 的 API Key
         if (entry.name == "Context7 MCP") {
@@ -763,8 +764,8 @@ class BuiltInMcpServerDialog(
                 add(JBLabel("API Key (optional):"))
                 add(apiKeyField)
             }
-            contentPanel.add(apiKeyPanel)
-            contentPanel.add(Box.createVerticalStrut(8))
+            topPanel.add(apiKeyPanel)
+            topPanel.add(Box.createVerticalStrut(8))
         }
 
         // 禁用工具配置（标签选择界面）
@@ -773,8 +774,8 @@ class BuiltInMcpServerDialog(
                 alignmentX = JPanel.LEFT_ALIGNMENT
                 foreground = JBColor(0x1976D2, 0x6BA3D6)
             }
-            contentPanel.add(disabledToolsLabel)
-            contentPanel.add(Box.createVerticalStrut(4))
+            topPanel.add(disabledToolsLabel)
+            topPanel.add(Box.createVerticalStrut(4))
 
             // 标签容器
             val toolsContainer = JPanel(BorderLayout()).apply {
@@ -822,8 +823,8 @@ class BuiltInMcpServerDialog(
                 border = BorderFactory.createLineBorder(JBUI.CurrentTheme.CustomFrameDecorations.separatorForeground())
                 horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
             }
-            contentPanel.add(toolsScrollPane)
-            contentPanel.add(Box.createVerticalStrut(4))
+            topPanel.add(toolsScrollPane)
+            topPanel.add(Box.createVerticalStrut(4))
 
             // Reset 按钮
             val resetToolsButton = JButton("Reset").apply {
@@ -842,8 +843,8 @@ class BuiltInMcpServerDialog(
                 add(Box.createHorizontalStrut(8))
                 add(JBLabel("<html><font color='#666666' size='2'>Leave empty to not disable any built-in tools</font></html>"))
             }
-            contentPanel.add(toolsButtonPanel)
-            contentPanel.add(Box.createVerticalStrut(8))
+            topPanel.add(toolsButtonPanel)
+            topPanel.add(Box.createVerticalStrut(8))
         }
 
         // Terminal MCP 的 Shell 配置
@@ -851,8 +852,8 @@ class BuiltInMcpServerDialog(
             val shellConfigLabel = JBLabel("Shell Configuration:").apply {
                 alignmentX = JPanel.LEFT_ALIGNMENT
             }
-            contentPanel.add(shellConfigLabel)
-            contentPanel.add(Box.createVerticalStrut(4))
+            topPanel.add(shellConfigLabel)
+            topPanel.add(Box.createVerticalStrut(4))
 
             // 默认 Shell 下拉框
             val defaultShellPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
@@ -860,8 +861,8 @@ class BuiltInMcpServerDialog(
                 add(JBLabel("Default Shell:"))
                 add(defaultShellCombo)
             }
-            contentPanel.add(defaultShellPanel)
-            contentPanel.add(Box.createVerticalStrut(4))
+            topPanel.add(defaultShellPanel)
+            topPanel.add(Box.createVerticalStrut(4))
 
             // 可用 Shell 复选框
             val availableShellsLabel = JBLabel("Available Shells:").apply {
@@ -869,8 +870,8 @@ class BuiltInMcpServerDialog(
                 foreground = JBColor(0x666666, 0x999999)
                 font = font.deriveFont(11f)
             }
-            contentPanel.add(availableShellsLabel)
-            contentPanel.add(Box.createVerticalStrut(2))
+            topPanel.add(availableShellsLabel)
+            topPanel.add(Box.createVerticalStrut(2))
 
             // 解析已配置的可用 shells
             val configuredShells = entry.terminalAvailableShells.trim()
@@ -892,7 +893,7 @@ class BuiltInMcpServerDialog(
                 availableShellCheckboxes[shellType] = checkbox
                 shellsPanel.add(checkbox)
             }
-            contentPanel.add(shellsPanel)
+            topPanel.add(shellsPanel)
 
             // 初始化 Default Shell 下拉框（基于已勾选的 Available Shells）
             updateDefaultShellCombo()
@@ -901,7 +902,7 @@ class BuiltInMcpServerDialog(
             if (savedDefaultShell.isNotBlank() && (defaultShellCombo.model as? DefaultComboBoxModel<*>)?.getIndexOf(savedDefaultShell) != -1) {
                 defaultShellCombo.selectedItem = savedDefaultShell
             }
-            contentPanel.add(Box.createVerticalStrut(8))
+            topPanel.add(Box.createVerticalStrut(8))
         }
 
         // Terminal MCP 的截断配置
@@ -909,8 +910,8 @@ class BuiltInMcpServerDialog(
             val truncateLabel = JBLabel("Output Truncation:").apply {
                 alignmentX = JPanel.LEFT_ALIGNMENT
             }
-            contentPanel.add(truncateLabel)
-            contentPanel.add(Box.createVerticalStrut(4))
+            topPanel.add(truncateLabel)
+            topPanel.add(Box.createVerticalStrut(4))
 
             val truncatePanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
                 alignmentX = JPanel.LEFT_ALIGNMENT
@@ -920,15 +921,15 @@ class BuiltInMcpServerDialog(
                 add(JBLabel("Max chars:"))
                 add(maxOutputCharsField)
             }
-            contentPanel.add(truncatePanel)
-            contentPanel.add(Box.createVerticalStrut(8))
+            topPanel.add(truncatePanel)
+            topPanel.add(Box.createVerticalStrut(8))
 
             // 超时配置
             val timeoutLabel = JBLabel("Read Timeout:").apply {
                 alignmentX = JPanel.LEFT_ALIGNMENT
             }
-            contentPanel.add(timeoutLabel)
-            contentPanel.add(Box.createVerticalStrut(4))
+            topPanel.add(timeoutLabel)
+            topPanel.add(Box.createVerticalStrut(4))
 
             val timeoutPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
                 alignmentX = JPanel.LEFT_ALIGNMENT
@@ -938,36 +939,36 @@ class BuiltInMcpServerDialog(
                 add(Box.createHorizontalStrut(8))
                 add(JBLabel("<html><font color='gray' size='-1'>(when using wait=true)</font></html>"))
             }
-            contentPanel.add(timeoutPanel)
-            contentPanel.add(Box.createVerticalStrut(8))
+            topPanel.add(timeoutPanel)
+            topPanel.add(Box.createVerticalStrut(8))
         }
 
-        // 系统提示词
+        // 系统提示词标签
         val customPromptLabel = JBLabel("Appended System Prompt:").apply {
             alignmentX = JPanel.LEFT_ALIGNMENT
         }
-        contentPanel.add(customPromptLabel)
-        contentPanel.add(Box.createVerticalStrut(4))
+        topPanel.add(customPromptLabel)
+        topPanel.add(Box.createVerticalStrut(4))
 
+        // 中间可伸缩的提示词区域
         val customScrollPane = JBScrollPane(instructionsArea).apply {
-            alignmentX = JPanel.LEFT_ALIGNMENT
+            minimumSize = Dimension(500, 100)
             preferredSize = Dimension(500, 150)
         }
-        contentPanel.add(customScrollPane)
-        contentPanel.add(Box.createVerticalStrut(8))
 
-        // Reset 按钮
+        // 底部 Reset 按钮
         val resetButton = JButton("Reset to Default").apply {
             addActionListener { instructionsArea.text = entry.defaultInstructions }
         }
         val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
-            alignmentX = JPanel.LEFT_ALIGNMENT
             add(resetButton)
         }
-        contentPanel.add(buttonPanel)
 
-        panel.add(contentPanel, BorderLayout.CENTER)
-        panel.preferredSize = Dimension(580, panel.preferredSize.height)
+        // 使用 BorderLayout 布局：顶部固定，中间伸缩，底部固定
+        panel.add(topPanel, BorderLayout.NORTH)
+        panel.add(customScrollPane, BorderLayout.CENTER)
+        panel.add(buttonPanel, BorderLayout.SOUTH)
+        panel.preferredSize = Dimension(580, 550)
         return panel
     }
 
