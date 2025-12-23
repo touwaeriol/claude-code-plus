@@ -18,7 +18,7 @@ import { ref, computed, shallowRef, watch } from 'vue'
 import { defineStore, storeToRefs } from 'pinia'
 import { i18n } from '@/i18n'
 import { useSessionTab, type SessionTabInstance, type TabConnectOptions } from '@/composables/useSessionTab'
-import { getModelCapability, getDefaultModelId } from '@/constants/models'
+import { getModelCapability, getDefaultModelId, onModelListChange, validateAndFallbackModel, type ModelInfo } from '@/constants/models'
 import type { RpcPermissionMode } from '@/types/rpc'
 import { ConnectionStatus } from '@/types/display'
 import { loggers } from '@/utils/logger'
@@ -623,6 +623,36 @@ export const useSessionStore = defineStore('session', () => {
     }
     return false
   }
+
+  // ========== 模型列表变化处理 ==========
+
+  /**
+   * 处理模型列表变化
+   * 当自定义模型被添加/删除时，检查并更新所有 Tab 的模型选择
+   */
+  function handleModelListChange(models: ModelInfo[], defaultModelId: string) {
+    log.info('[ModelListChange] 模型列表已更新:', models.length, '个模型, 默认:', defaultModelId)
+
+    // 遍历所有 Tab，检查模型是否仍然有效
+    tabs.value.forEach(tab => {
+      const currentModelId = tab.modelId.value
+      if (!currentModelId) return
+
+      // 检查当前模型是否在新列表中
+      const modelExists = models.some(m => m.modelId === currentModelId)
+      if (!modelExists) {
+        // 模型已被删除，切换到回退模型
+        const fallbackModel = validateAndFallbackModel(currentModelId)
+        log.warn(`[ModelListChange] Tab "${tab.tabId}" 的模型 "${currentModelId}" 已不可用，切换到 "${fallbackModel.displayName}"`)
+
+        // 更新 Tab 的模型 ID
+        tab.modelId.value = fallbackModel.modelId
+      }
+    })
+  }
+
+  // 注册模型列表变化回调
+  onModelListChange(handleModelListChange)
 
   // ========== 权限相关（通过当前 Tab） ==========
 

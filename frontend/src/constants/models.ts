@@ -106,6 +106,11 @@ const _allModels = ref<ModelInfo[]>([
 const _defaultModelId = ref<string>('OPUS_45')
 
 /**
+ * 模型列表变化回调列表
+ */
+const _modelListChangeCallbacks: Array<(models: ModelInfo[], defaultModelId: string) => void> = []
+
+/**
  * 获取所有可用模型
  */
 export function getAllModels(): ModelInfo[] {
@@ -126,6 +131,29 @@ export function updateAllModels(models: ModelInfo[], defaultModelId: string): vo
   _allModels.value = models
   _defaultModelId.value = defaultModelId
   console.log('[models] Updated available models:', models.length, 'default:', defaultModelId)
+
+  // 通知所有监听者模型列表已变化
+  _modelListChangeCallbacks.forEach(callback => {
+    try {
+      callback(models, defaultModelId)
+    } catch (e) {
+      console.error('[models] Error in model list change callback:', e)
+    }
+  })
+}
+
+/**
+ * 注册模型列表变化回调
+ * @returns 取消注册的函数
+ */
+export function onModelListChange(callback: (models: ModelInfo[], defaultModelId: string) => void): () => void {
+  _modelListChangeCallbacks.push(callback)
+  return () => {
+    const index = _modelListChangeCallbacks.indexOf(callback)
+    if (index >= 0) {
+      _modelListChangeCallbacks.splice(index, 1)
+    }
+  }
 }
 
 /**
@@ -133,6 +161,45 @@ export function updateAllModels(models: ModelInfo[], defaultModelId: string): vo
  */
 export function getModelById(id: string): ModelInfo | undefined {
   return _allModels.value.find(m => m.id === id)
+}
+
+/**
+ * 验证模型 ID（通过 modelId）是否有效，如果无效返回回退的模型
+ * @param modelId 实际的模型 ID（如 "claude-opus-4-5-20251101"）
+ * @returns 有效的模型信息，如果原模型无效则返回回退模型
+ */
+export function validateAndFallbackModel(modelId: string): ModelInfo {
+  const models = _allModels.value
+  const defaultId = _defaultModelId.value
+
+  // 检查模型是否存在
+  const existingModel = models.find(m => m.modelId === modelId)
+  if (existingModel) {
+    return existingModel
+  }
+
+  // 模型不存在，尝试回退到默认模型
+  console.warn(`[models] Model "${modelId}" not found, falling back...`)
+  const defaultModel = models.find(m => m.id === defaultId)
+  if (defaultModel) {
+    console.log(`[models] Falling back to default model: ${defaultModel.displayName}`)
+    return defaultModel
+  }
+
+  // 默认模型也不存在，回退到第一个可用模型
+  if (models.length > 0) {
+    console.log(`[models] Falling back to first available model: ${models[0].displayName}`)
+    return models[0]
+  }
+
+  // 没有任何可用模型，返回硬编码的内置模型
+  console.warn('[models] No models available, using hardcoded fallback')
+  return {
+    id: 'OPUS_45',
+    displayName: 'Opus 4.5',
+    modelId: 'claude-opus-4-5-20251101',
+    isBuiltIn: true
+  }
 }
 
 /**

@@ -192,9 +192,13 @@ export const useSettingsStore = defineStore('settings', () => {
   /**
    * 处理 IDE 设置变更（从后端推送）
    */
-  function handleIdeSettingsChange(newIdeSettings: IdeSettings) {
+  async function handleIdeSettingsChange(newIdeSettings: IdeSettings) {
     console.log('📥 [IdeSettings] 收到设置变更推送:', newIdeSettings)
     ideSettings.value = newIdeSettings
+
+    // 重新加载模型列表（自定义模型可能已添加/删除）
+    await loadAvailableModels()
+
     applyIdeSettings(newIdeSettings)
   }
 
