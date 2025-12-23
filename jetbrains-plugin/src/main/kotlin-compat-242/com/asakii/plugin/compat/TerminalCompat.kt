@@ -166,12 +166,120 @@ class TerminalWidgetWrapper(private val widget: ShellTerminalWidget) {
 }
 
 /**
+ * Shell 检测结果
+ */
+data class DetectedShell(
+    val name: String,
+    val path: String
+)
+
+/**
  * Terminal 兼容层 - 适用于 2024.1 ~ 2025.2
  *
  * 在这些版本中，使用 TerminalToolWindowManager.createLocalShellWidget() 创建终端
  * 返回的是 ShellTerminalWidget，它有 executeCommand() 和 hasRunningCommands() 方法
  */
 object TerminalCompat {
+
+    // Unix shell 检测配置（与 IDEA TerminalNewPredefinedSessionAction 保持一致）
+    private val UNIX_BINARIES_DIRECTORIES = listOf("/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin")
+    private val UNIX_SHELL_NAMES = listOf("bash", "zsh", "fish", "pwsh")
+
+    /**
+     * 检测系统中已安装的 shell 列表
+     *
+     * 复制自 IDEA 242 版本 TerminalNewPredefinedSessionAction.detectShells() 实现
+     *
+     * @return 检测到的 shell 列表
+     */
+    fun detectInstalledShells(): List<DetectedShell> {
+        return if (com.intellij.openapi.util.SystemInfo.isUnix) {
+            detectUnixShells()
+        } else {
+            detectWindowsShells()
+        }
+    }
+
+    /**
+     * 检测 Unix 系统中的 shell
+     * 实现逻辑与 IDEA TerminalNewPredefinedSessionAction.detectShells() 一致
+     */
+    private fun detectUnixShells(): List<DetectedShell> {
+        val shells = mutableListOf<DetectedShell>()
+
+        for (shellName in UNIX_SHELL_NAMES) {
+            val foundPaths = mutableListOf<String>()
+
+            for (dir in UNIX_BINARIES_DIRECTORIES) {
+                val shellPath = "$dir/$shellName"
+                if (java.nio.file.Files.exists(java.nio.file.Path.of(shellPath))) {
+                    foundPaths.add(shellPath)
+                }
+            }
+
+            // 如果同一 shell 在多个目录找到，添加目录后缀区分
+            if (foundPaths.size > 1) {
+                for (path in foundPaths) {
+                    val dir = java.io.File(path).parent
+                    shells.add(DetectedShell("$shellName ($dir)", path))
+                }
+            } else if (foundPaths.size == 1) {
+                shells.add(DetectedShell(shellName, foundPaths[0]))
+            }
+        }
+
+        return shells
+    }
+
+    /**
+     * 检测 Windows 系统中的 shell
+     * 实现逻辑与 IDEA TerminalNewPredefinedSessionAction.detectShells() 一致
+     */
+    private fun detectWindowsShells(): List<DetectedShell> {
+        val shells = mutableListOf<DetectedShell>()
+        val systemRoot = System.getenv("SystemRoot") ?: "C:\\Windows"
+
+        // Windows PowerShell
+        val windowsPowerShellPath = "$systemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+        if (java.nio.file.Files.exists(java.nio.file.Path.of(windowsPowerShellPath))) {
+            shells.add(DetectedShell("Windows PowerShell", windowsPowerShellPath))
+        }
+
+        // Command Prompt
+        val cmdPath = "$systemRoot\\System32\\cmd.exe"
+        if (java.nio.file.Files.exists(java.nio.file.Path.of(cmdPath))) {
+            shells.add(DetectedShell("Command Prompt", cmdPath))
+        }
+
+        // PowerShell Core (pwsh)
+        val pwshPath = "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+        if (java.nio.file.Files.exists(java.nio.file.Path.of(pwshPath))) {
+            shells.add(DetectedShell("PowerShell", pwshPath))
+        }
+
+        // Git Bash
+        val gitBashPath = "C:\\Program Files\\Git\\bin\\bash.exe"
+        if (java.nio.file.Files.exists(java.nio.file.Path.of(gitBashPath))) {
+            shells.add(DetectedShell("Git Bash", gitBashPath))
+        }
+
+        // WSL (Windows Subsystem for Linux)
+        val wslPath = "$systemRoot\\System32\\wsl.exe"
+        if (java.nio.file.Files.exists(java.nio.file.Path.of(wslPath))) {
+            shells.add(DetectedShell("WSL", wslPath))
+        }
+
+        // Cmder (通过环境变量检测)
+        val cmderRoot = System.getenv("CMDER_ROOT")
+        if (!cmderRoot.isNullOrBlank()) {
+            val cmderInitPath = "$cmderRoot\\vendor\\init.bat"
+            if (java.nio.file.Files.exists(java.nio.file.Path.of(cmderInitPath))) {
+                shells.add(DetectedShell("Cmder", cmderInitPath))
+            }
+        }
+
+        return shells
+    }
 
     /**
      * 创建本地 Shell Widget

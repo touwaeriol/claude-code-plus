@@ -312,9 +312,8 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
         settings.terminalInstructions = terminalEntry?.instructions ?: ""
         settings.terminalMaxOutputLines = terminalEntry?.terminalMaxOutputLines ?: 500
         settings.terminalMaxOutputChars = terminalEntry?.terminalMaxOutputChars ?: 50000
-        settings.terminalDefaultShell = terminalEntry?.terminalDefaultShell ?: "auto"
+        settings.terminalDefaultShell = terminalEntry?.terminalDefaultShell ?: ""
         settings.terminalAvailableShells = terminalEntry?.terminalAvailableShells ?: ""
-        settings.terminalPreferGitBashOnWindows = terminalEntry?.terminalPreferGitBashOnWindows ?: true
 
         // 保存自定义服务器配置
         val globalServers = customServers.filter { it.level == McpServerLevel.GLOBAL }
@@ -415,8 +414,7 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             terminalMaxOutputLines = settings.terminalMaxOutputLines,
             terminalMaxOutputChars = settings.terminalMaxOutputChars,
             terminalDefaultShell = settings.terminalDefaultShell,
-            terminalAvailableShells = settings.terminalAvailableShells,
-            terminalPreferGitBashOnWindows = settings.terminalPreferGitBashOnWindows
+            terminalAvailableShells = settings.terminalAvailableShells
         ))
         builtInServers.add(McpServerEntry(
             name = "JetBrains Git MCP",
@@ -659,12 +657,10 @@ data class McpServerEntry(
     val terminalMaxOutputLines: Int = 500,
     /** Terminal MCP: 输出最大字符数 */
     val terminalMaxOutputChars: Int = 50000,
-    /** Terminal MCP: 默认 shell */
-    val terminalDefaultShell: String = "auto",
+    /** Terminal MCP: 默认 shell（空字符串表示使用系统默认） */
+    val terminalDefaultShell: String = "",
     /** Terminal MCP: 可用 shell 列表（逗号分隔） */
-    val terminalAvailableShells: String = "",
-    /** Terminal MCP: Windows 下优先推荐 git-bash */
-    val terminalPreferGitBashOnWindows: Boolean = true
+    val terminalAvailableShells: String = ""
 )
 
 /**
@@ -703,20 +699,34 @@ class BuiltInMcpServerDialog(
     private val maxOutputCharsField = JBTextField(entry.terminalMaxOutputChars.toString(), 8)
 
     // Terminal MCP Shell 配置
-    private val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-    private val allShellTypes = if (isWindows) {
-        listOf("auto", "git-bash", "powershell", "cmd", "wsl")
-    } else {
-        listOf("auto", "bash", "zsh", "fish", "sh")
-    }
-    private val defaultShellCombo = ComboBox(allShellTypes.toTypedArray()).apply {
-        selectedItem = entry.terminalDefaultShell.ifBlank { "auto" }
-    }
+    // 动态检测已安装的 shell
+    private val allShellTypes = AgentSettingsService.getInstance().detectInstalledShells()
+    private val defaultShellCombo = ComboBox<String>()
     private val availableShellCheckboxes = mutableMapOf<String, JBCheckBox>()
-    private val preferGitBashCheckbox = JBCheckBox(
-        "Prefer Git Bash for Unix commands",
-        entry.terminalPreferGitBashOnWindows
-    )
+
+    /**
+     * 更新 Default Shell 下拉框的选项
+     * 只显示在 Available Shells 中勾选的 shell
+     */
+    private fun updateDefaultShellCombo() {
+        val currentSelection = defaultShellCombo.selectedItem as? String
+        val enabledShells = availableShellCheckboxes
+            .filter { it.value.isSelected }
+            .keys
+            .toList()
+
+        defaultShellCombo.removeAllItems()
+        for (shell in enabledShells) {
+            defaultShellCombo.addItem(shell)
+        }
+
+        // 恢复之前的选择，如果仍然可用
+        if (currentSelection != null && enabledShells.contains(currentSelection)) {
+            defaultShellCombo.selectedItem = currentSelection
+        } else if (enabledShells.isNotEmpty()) {
+            defaultShellCombo.selectedIndex = 0
+        }
+    }
 
     init {
         title = "Edit ${entry.name}"
@@ -868,20 +878,21 @@ class BuiltInMcpServerDialog(
             }
             for (shellType in allShellTypes) {
                 val isChecked = useAllShells || configuredShells.contains(shellType)
-                val checkbox = JBCheckBox(shellType, isChecked)
+                val checkbox = JBCheckBox(shellType, isChecked).apply {
+                    // 当 checkbox 状态改变时，更新 Default Shell 下拉框
+                    addActionListener { updateDefaultShellCombo() }
+                }
                 availableShellCheckboxes[shellType] = checkbox
                 shellsPanel.add(checkbox)
             }
             contentPanel.add(shellsPanel)
-            contentPanel.add(Box.createVerticalStrut(4))
 
-            // Windows 优先使用 Git Bash 开关
-            if (isWindows) {
-                val preferGitBashPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
-                    alignmentX = JPanel.LEFT_ALIGNMENT
-                    add(preferGitBashCheckbox)
-                }
-                contentPanel.add(preferGitBashPanel)
+            // 初始化 Default Shell 下拉框（基于已勾选的 Available Shells）
+            updateDefaultShellCombo()
+            // 恢复之前保存的默认 shell 选择
+            val savedDefaultShell = entry.terminalDefaultShell
+            if (savedDefaultShell.isNotBlank() && (defaultShellCombo.model as? DefaultComboBoxModel<*>)?.getIndexOf(savedDefaultShell) != -1) {
+                defaultShellCombo.selectedItem = savedDefaultShell
             }
             contentPanel.add(Box.createVerticalStrut(8))
         }
@@ -1010,12 +1021,9 @@ class BuiltInMcpServerDialog(
                 maxOutputCharsField.text.toIntOrNull() ?: 50000
             } else entry.terminalMaxOutputChars,
             terminalDefaultShell = if (entry.name == "Terminal MCP") {
-                defaultShellCombo.selectedItem as? String ?: "auto"
+                defaultShellCombo.selectedItem as? String ?: ""
             } else entry.terminalDefaultShell,
-            terminalAvailableShells = availableShellsValue,
-            terminalPreferGitBashOnWindows = if (entry.name == "Terminal MCP") {
-                preferGitBashCheckbox.isSelected
-            } else entry.terminalPreferGitBashOnWindows
+            terminalAvailableShells = availableShellsValue
         )
     }
 }

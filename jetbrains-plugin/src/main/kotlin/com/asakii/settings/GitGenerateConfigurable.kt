@@ -10,6 +10,7 @@ import java.awt.*
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.*
+import javax.swing.DefaultListCellRenderer
 
 /**
  * Git Generate 独立配置页面
@@ -26,8 +27,8 @@ class GitGenerateConfigurable : SearchableConfigurable {
     private var userPromptArea: JBTextArea? = null
     private var toolsPanel: JPanel? = null
     private var toolsList: MutableList<String> = mutableListOf()
-    private var showProgressCheckbox: JCheckBox? = null
     private var saveSessionCheckbox: JCheckBox? = null
+    private var modelCombo: ComboBox<ModelInfo>? = null
 
     override fun getId(): String = "claude-code-plus.git-generate"
 
@@ -53,12 +54,35 @@ class GitGenerateConfigurable : SearchableConfigurable {
         contentPanel.add(noticePanel)
         contentPanel.add(Box.createVerticalStrut(16))
 
-        // Show Progress 复选框
-        showProgressCheckbox = JCheckBox("Show detailed progress during generation").apply {
+        // Model 选择器
+        val modelPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
             alignmentX = JPanel.LEFT_ALIGNMENT
-            toolTipText = "When enabled, displays a dialog showing AI's tool calls and thinking process"
         }
-        contentPanel.add(showProgressCheckbox)
+        modelPanel.add(JBLabel("Model: "))
+
+        val settings = AgentSettingsService.getInstance()
+        val allModels = settings.getAllAvailableModels()
+        modelCombo = ComboBox(DefaultComboBoxModel(allModels.toTypedArray())).apply {
+            renderer = object : DefaultListCellRenderer() {
+                override fun getListCellRendererComponent(
+                    list: JList<*>?,
+                    value: Any?,
+                    index: Int,
+                    isSelected: Boolean,
+                    cellHasFocus: Boolean
+                ): java.awt.Component {
+                    val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                    if (value is ModelInfo) {
+                        text = value.displayName + if (!value.isBuiltIn) " (custom)" else ""
+                    }
+                    return component
+                }
+            }
+            preferredSize = Dimension(200, preferredSize.height)
+            toolTipText = "Select the model to use for commit message generation"
+        }
+        modelPanel.add(modelCombo)
+        contentPanel.add(modelPanel)
         contentPanel.add(Box.createVerticalStrut(8))
 
         // Save Session 复选框
@@ -279,10 +303,15 @@ class GitGenerateConfigurable : SearchableConfigurable {
         val effectiveUserPrompt = settings.gitGenerateUserPrompt.ifBlank { GitGenerateDefaults.USER_PROMPT }
         val effectiveTools = settings.getGitGenerateTools().takeIf { it.isNotEmpty() } ?: GitGenerateDefaults.TOOLS
 
+        // 检查模型是否修改
+        val selectedModel = modelCombo?.selectedItem as? ModelInfo
+        val currentModelId = selectedModel?.id ?: ""
+        val savedModelId = settings.gitGenerateModel
+
         return systemPromptArea?.text != effectiveSystemPrompt ||
             userPromptArea?.text != effectiveUserPrompt ||
             getTools() != effectiveTools ||
-            showProgressCheckbox?.isSelected != settings.gitGenerateShowProgress ||
+            currentModelId != savedModelId ||
             saveSessionCheckbox?.isSelected != settings.gitGenerateSaveSession
     }
 
@@ -303,8 +332,9 @@ class GitGenerateConfigurable : SearchableConfigurable {
             settings.setGitGenerateTools(currentTools)
         }
 
-        // 保存 Show Progress 设置
-        settings.gitGenerateShowProgress = showProgressCheckbox?.isSelected ?: true
+        // 保存模型设置
+        val selectedModel = modelCombo?.selectedItem as? ModelInfo
+        settings.gitGenerateModel = selectedModel?.id ?: ""
 
         // 保存 Save Session 设置
         settings.gitGenerateSaveSession = saveSessionCheckbox?.isSelected ?: false
@@ -318,8 +348,14 @@ class GitGenerateConfigurable : SearchableConfigurable {
         systemPromptArea?.text = settings.gitGenerateSystemPrompt.ifBlank { GitGenerateDefaults.SYSTEM_PROMPT }
         userPromptArea?.text = settings.gitGenerateUserPrompt.ifBlank { GitGenerateDefaults.USER_PROMPT }
         setTools(settings.getGitGenerateTools().takeIf { it.isNotEmpty() } ?: GitGenerateDefaults.TOOLS)
-        showProgressCheckbox?.isSelected = settings.gitGenerateShowProgress
         saveSessionCheckbox?.isSelected = settings.gitGenerateSaveSession
+
+        // 重置模型选择器
+        val savedModelId = settings.gitGenerateModel
+        val allModels = settings.getAllAvailableModels()
+        val selectedModel = allModels.find { it.id == savedModelId }
+            ?: allModels.firstOrNull { it.isBuiltIn }  // fallback 到第一个内置模型
+        modelCombo?.selectedItem = selectedModel
     }
 
     override fun disposeUIResources() {
@@ -327,8 +363,8 @@ class GitGenerateConfigurable : SearchableConfigurable {
         userPromptArea = null
         toolsPanel = null
         toolsList.clear()
-        showProgressCheckbox = null
         saveSessionCheckbox = null
+        modelCombo = null
         mainPanel = null
     }
 }

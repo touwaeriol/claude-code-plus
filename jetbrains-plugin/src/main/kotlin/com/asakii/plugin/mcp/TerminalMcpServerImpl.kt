@@ -54,12 +54,6 @@ class TerminalMcpServerImpl(private val project: Project) : McpServerBase(), Dis
             appendLine("- Platform: $platform")
             appendLine("- Default Shell: $defaultShell")
             appendLine("- Available Shells: ${availableShells.joinToString(", ")}")
-
-            // Windows 下的特殊提示
-            if (settings.isWindows() && settings.terminalPreferGitBashOnWindows) {
-                appendLine()
-                appendLine("**IMPORTANT**: On Windows, prefer using `git-bash` for Unix-style commands (grep, find, ls, cat, etc.). Use `powershell` or `cmd` only when Windows-specific commands are needed.")
-            }
         }
 
         return baseInstructions + systemInfo

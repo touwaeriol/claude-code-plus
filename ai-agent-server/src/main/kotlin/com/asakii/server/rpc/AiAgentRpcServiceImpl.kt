@@ -546,7 +546,7 @@ class AiAgentRpcServiceImpl(
         sdkLog.info("🔧 [buildConnectOptions] 获取最新配置: enableUserInteractionMcp=${serviceConfig.claude.enableUserInteractionMcp}, enableJetBrainsMcp=${serviceConfig.claude.enableJetBrainsMcp}")
 
         val provider = options.provider.toSdkProvider(serviceConfig.defaultProvider)
-        val model = options.model ?: serviceConfig.defaultModel
+        val model = options.model  // 前端负责发送正确的 API 模型 ID，不做回退
         val systemPrompt = options.systemPrompt ?: serviceConfig.defaultSystemPrompt
         val initialPrompt = options.initialPrompt
         val sessionHint = options.sessionId

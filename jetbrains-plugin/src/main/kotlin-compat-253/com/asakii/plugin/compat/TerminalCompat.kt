@@ -174,11 +174,31 @@ class TerminalWidgetWrapper(private val widget: TerminalWidget) {
 }
 
 /**
+ * Shell 检测结果
+ */
+data class DetectedShell(
+    val name: String,
+    val path: String
+)
+
+/**
  * Terminal 兼容层 - 适用于 2025.3+
  *
  * 完全使用 TerminalWidget 接口的新 API，无类型转换
  */
 object TerminalCompat {
+
+    /**
+     * 检测系统中已安装的 shell 列表
+     *
+     * 使用 TerminalShellsDetector.detectShells() API (2025.3+)
+     *
+     * @return 检测到的 shell 列表
+     */
+    fun detectInstalledShells(): List<DetectedShell> {
+        return org.jetbrains.plugins.terminal.TerminalShellsDetector.detectShells()
+            .map { DetectedShell(it.name, it.path) }
+    }
 
     /**
      * 创建本地 Shell Widget
