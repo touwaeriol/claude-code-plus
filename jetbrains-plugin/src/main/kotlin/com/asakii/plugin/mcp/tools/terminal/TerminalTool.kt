@@ -19,7 +19,7 @@ class TerminalTool(private val sessionManager: TerminalSessionManager) {
      *   - command: String - 要执行的命令（必需）
      *   - session_id: String? - 会话 ID，为空时创建新会话
      *   - session_name: String? - 新会话名称
-     *   - shell_type: String? - Shell 类型（git-bash, powershell, cmd, wsl, bash, zsh, fish）
+     *   - shell_type: String? - Shell 类型（如 git-bash, powershell），不传则使用配置的默认终端
      */
     fun execute(arguments: Map<String, Any>): Map<String, Any> {
         val command = arguments["command"] as? String
@@ -30,10 +30,10 @@ class TerminalTool(private val sessionManager: TerminalSessionManager) {
 
         val sessionId = arguments["session_id"] as? String
         val sessionName = arguments["session_name"] as? String
-        val shellType = (arguments["shell_type"] as? String)?.let { ShellType.fromString(it) }
-            ?: ShellType.AUTO
+        // shell_type 为 null 时，createSession 会使用配置的默认终端
+        val shellName = arguments["shell_type"] as? String
 
-        logger.info { "Executing command: $command (session: $sessionId)" }
+        logger.info { "Executing command: $command (session: $sessionId, shellName: $shellName)" }
 
         // 获取或创建会话
         val session = if (sessionId != null) {
@@ -43,7 +43,7 @@ class TerminalTool(private val sessionManager: TerminalSessionManager) {
                     "error" to "Session not found: $sessionId"
                 )
         } else {
-            sessionManager.createSession(sessionName, shellType)
+            sessionManager.createSession(sessionName, shellName)
                 ?: return mapOf(
                     "success" to false,
                     "error" to "Failed to create terminal session"

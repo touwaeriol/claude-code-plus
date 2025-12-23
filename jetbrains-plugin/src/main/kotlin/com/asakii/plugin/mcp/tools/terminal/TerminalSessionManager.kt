@@ -117,109 +117,60 @@ data class SearchMatch(
 )
 
 /**
- * Shell 类型
+ * Shell 解析器
+ *
+ * 使用 IDEA 检测到的 shell 列表，通过名称查找对应路径。
+ * 不再使用硬编码枚举。
  */
-enum class ShellType(val displayName: String, val command: String?) {
-    // Windows
-    GIT_BASH("Git Bash", "git-bash"),
-    POWERSHELL("PowerShell", "powershell"),
-    CMD("Command Prompt", "cmd"),
-    WSL("WSL", "wsl"),
-
-    // Unix
-    BASH("Bash", "bash"),
-    ZSH("Zsh", "zsh"),
-    FISH("Fish", "fish"),
-    SH("Shell", "sh"),
-
-    // 自动检测
-    AUTO("Auto", null);
+object ShellResolver {
+    private val logger = KotlinLogging.logger {}
 
     /**
-     * 获取 Shell 的可执行路径
-     * @return Shell 路径，如果是 AUTO 则返回 null
+     * 根据 shell 名称获取可执行路径
+     *
+     * @param shellName shell 名称（如 "git-bash", "powershell", "bash"）
+     * @return shell 路径，找不到时返回 null
      */
-    fun getShellPath(): String? {
-        if (this == AUTO) return null
+    fun getShellPath(shellName: String): String? {
+        val detectedShells = TerminalCompat.detectInstalledShells()
 
-        val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-        return if (isWindows) {
-            getWindowsShellPath()
-        } else {
-            getUnixShellPath()
+        // 尝试精确匹配
+        val matched = detectedShells.find { shell ->
+            normalizeShellName(shell.name).equals(shellName, ignoreCase = true) ||
+            shell.name.equals(shellName, ignoreCase = true)
         }
-    }
 
-    private fun getWindowsShellPath(): String? {
-        val systemRoot = System.getenv("SystemRoot") ?: "C:\\Windows"
-        return when (this) {
-            GIT_BASH -> {
-                // 尝试常见的 Git Bash 安装路径
-                val paths = listOf(
-                    "C:\\Program Files\\Git\\bin\\bash.exe",
-                    "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
-                    System.getenv("PROGRAMFILES")?.let { "$it\\Git\\bin\\bash.exe" }
-                ).filterNotNull()
-                paths.find { java.nio.file.Files.exists(java.nio.file.Path.of(it)) }
-            }
-            POWERSHELL -> {
-                // 优先使用 PowerShell Core，然后是 Windows PowerShell
-                val paths = listOf(
-                    "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-                    "$systemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
-                )
-                paths.find { java.nio.file.Files.exists(java.nio.file.Path.of(it)) }
-            }
-            CMD -> "$systemRoot\\System32\\cmd.exe"
-            WSL -> "$systemRoot\\System32\\wsl.exe"
-            else -> null
+        if (matched != null) {
+            logger.debug { "Found shell '$shellName' at path: ${matched.path}" }
+            return matched.path
         }
-    }
 
-    private fun getUnixShellPath(): String? {
-        val directories = listOf("/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin")
-        val shellName = when (this) {
-            BASH -> "bash"
-            ZSH -> "zsh"
-            FISH -> "fish"
-            SH -> "sh"
-            else -> return null
-        }
-        return directories.map { "$it/$shellName" }
-            .find { java.nio.file.Files.exists(java.nio.file.Path.of(it)) }
+        logger.warn { "Shell '$shellName' not found in detected shells: ${detectedShells.map { it.name }}" }
+        return null
     }
 
     /**
-     * 获取 Shell 命令列表（用于 IDEA Terminal API）
-     * @return Shell 命令列表，如果是 AUTO 则返回 null
+     * 获取 shell 命令列表（用于 IDEA Terminal API）
      */
-    fun getShellCommand(): List<String>? {
-        val path = getShellPath() ?: return null
+    fun getShellCommand(shellName: String): List<String>? {
+        val path = getShellPath(shellName) ?: return null
         return listOf(path)
     }
 
-    companion object {
-        fun fromString(value: String?): ShellType {
-            if (value.isNullOrBlank()) return AUTO
-            return entries.find {
-                it.name.equals(value, ignoreCase = true) ||
-                it.command.equals(value, ignoreCase = true) ||
-                it.displayName.equals(value, ignoreCase = true)
-            } ?: AUTO
-        }
-
-        fun getAvailableTypes(): List<ShellType> {
-            val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-            return if (isWindows) {
-                listOf(GIT_BASH, POWERSHELL, CMD, WSL, AUTO)
-            } else {
-                listOf(BASH, ZSH, FISH, SH, AUTO)
-            }
-        }
-
-        fun getDefaultType(): ShellType {
-            val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-            return if (isWindows) GIT_BASH else BASH
+    /**
+     * 标准化 shell 名称
+     */
+    private fun normalizeShellName(name: String): String {
+        val lowerName = name.lowercase()
+        return when {
+            lowerName.contains("git bash") -> "git-bash"
+            lowerName.contains("powershell") -> "powershell"
+            lowerName.contains("command prompt") || lowerName == "cmd" -> "cmd"
+            lowerName.contains("wsl") || lowerName.contains("ubuntu") || lowerName.contains("debian") -> "wsl"
+            lowerName.contains("zsh") -> "zsh"
+            lowerName.contains("fish") -> "fish"
+            lowerName.contains("bash") -> "bash"
+            else -> lowerName.replace(" ", "-")
         }
     }
 }
@@ -236,25 +187,27 @@ class TerminalSessionManager(private val project: Project) {
 
     /**
      * 创建新终端会话
+     *
+     * @param name 会话名称
+     * @param shellName shell 名称（如 "git-bash", "powershell"），为 null 时使用配置的默认终端
      */
     fun createSession(
         name: String? = null,
-        shellType: ShellType = ShellType.AUTO
+        shellName: String? = null
     ): TerminalSession? {
         return try {
             val sessionId = "terminal-${sessionCounter.incrementAndGet()}"
             val sessionName = name ?: "Claude Terminal ${sessionCounter.get()}"
 
-            // 确定实际使用的 shell 类型
-            val actualShellType = if (shellType == ShellType.AUTO) {
-                detectShellType()
-            } else {
-                shellType
-            }
+            // 确定实际使用的 shell 名称：传入的 > 配置的默认
+            val actualShellName = shellName ?: getDefaultShellName()
 
             // 获取 shell 命令（用于 IDEA Terminal API）
-            val shellCommand = actualShellType.getShellCommand()
-            logger.info { "Creating terminal with shellType=$actualShellType, shellCommand=$shellCommand" }
+            val shellCommand = ShellResolver.getShellCommand(actualShellName)
+            logger.info { "=== [TerminalSessionManager] createSession ===" }
+            logger.info { "  requested shellName: $shellName" }
+            logger.info { "  actualShellName: $actualShellName" }
+            logger.info { "  shellCommand: $shellCommand" }
 
             var wrapper: TerminalWidgetWrapper? = null
 
@@ -277,11 +230,11 @@ class TerminalSessionManager(private val project: Project) {
                 val session = TerminalSession(
                     id = sessionId,
                     name = sessionName,
-                    shellType = actualShellType.name,
+                    shellType = actualShellName,
                     widgetWrapper = w
                 )
                 sessions[sessionId] = session
-                logger.info { "Created terminal session: $sessionId ($sessionName), shell=${actualShellType.name}, widget type: ${w.widgetClassName}" }
+                logger.info { "Created terminal session: $sessionId ($sessionName), shell=$actualShellName, widget type: ${w.widgetClassName}" }
                 session
             }
         } catch (e: Exception) {
@@ -695,40 +648,47 @@ class TerminalSessionManager(private val project: Project) {
     }
 
     /**
-     * 获取可用的 Shell 类型
+     * 获取可用的 Shell 类型（使用 IDEA 检测）
      */
     fun getAvailableShellTypes(): List<ShellTypeInfo> {
-        return ShellType.getAvailableTypes().map { shellType ->
+        val settings = AgentSettingsService.getInstance()
+        val defaultShell = settings.getEffectiveDefaultShell()
+        val detectedShells = TerminalCompat.detectInstalledShells()
+
+        return detectedShells.map { shell ->
+            val normalizedName = settings.run {
+                // 复用 AgentSettingsService 的标准化逻辑
+                val lowerName = shell.name.lowercase()
+                when {
+                    lowerName.contains("git bash") -> "git-bash"
+                    lowerName.contains("powershell") -> "powershell"
+                    lowerName.contains("command prompt") || lowerName == "cmd" -> "cmd"
+                    lowerName.contains("wsl") -> "wsl"
+                    lowerName.contains("zsh") -> "zsh"
+                    lowerName.contains("fish") -> "fish"
+                    lowerName.contains("bash") -> "bash"
+                    else -> lowerName.replace(" ", "-")
+                }
+            }
             ShellTypeInfo(
-                name = shellType.name,
-                displayName = shellType.displayName,
-                command = shellType.command,
-                isDefault = shellType == ShellType.getDefaultType()
+                name = normalizedName,
+                displayName = shell.name,
+                command = normalizedName,
+                isDefault = normalizedName == defaultShell
             )
         }
     }
 
     /**
-     * 检测 Shell 类型
+     * 获取默认 Shell 名称
      *
-     * 优先使用用户配置的默认 shell，否则根据操作系统返回默认值
+     * 使用用户配置的默认 shell
      */
-    private fun detectShellType(): ShellType {
+    private fun getDefaultShellName(): String {
         val settings = AgentSettingsService.getInstance()
-        val configuredDefault = settings.getEffectiveDefaultShell()
-
-        // 尝试将配置的默认 shell 转换为 ShellType
-        val shellType = ShellType.fromString(configuredDefault)
-        if (shellType != ShellType.AUTO) {
-            logger.info { "Using configured default shell: $configuredDefault -> $shellType" }
-            return shellType
-        }
-
-        // 配置为 auto 时，根据操作系统返回默认值
-        val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-        val defaultType = if (isWindows) ShellType.GIT_BASH else ShellType.BASH
-        logger.info { "Using system default shell: $defaultType" }
-        return defaultType
+        val defaultShell = settings.getEffectiveDefaultShell()
+        logger.info { "Using default shell: $defaultShell" }
+        return defaultShell
     }
 
     /**

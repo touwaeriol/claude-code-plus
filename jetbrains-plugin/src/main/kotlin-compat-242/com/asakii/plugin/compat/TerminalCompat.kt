@@ -4,6 +4,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.terminal.JBTerminalWidget
 import mu.KotlinLogging
 import org.jetbrains.plugins.terminal.ShellTerminalWidget
+import org.jetbrains.plugins.terminal.TerminalProjectOptionsProvider
 import org.jetbrains.plugins.terminal.TerminalToolWindowManager
 
 private val logger = KotlinLogging.logger {}
@@ -188,6 +189,9 @@ data class DetectedShell(
  */
 object TerminalCompat {
 
+    // 用于同步 shell 路径修改的锁对象
+    private val shellPathLock = Any()
+
     // Unix shell 检测配置
     private val UNIX_BINARIES_DIRECTORIES = listOf("/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin")
     private val UNIX_SHELL_NAMES = listOf("bash", "zsh", "fish", "pwsh")
@@ -281,12 +285,12 @@ object TerminalCompat {
      * 创建本地 Shell Widget
      *
      * 使用 createLocalShellWidget API (2024.2 ~ 2025.2)
-     * 注意：此 API 不支持自定义 shell 命令，将使用系统默认 shell
+     * 通过临时修改 TerminalProjectOptionsProvider.shellPath 来支持自定义 shell
      *
      * @param project 项目
      * @param workingDirectory 工作目录
      * @param tabName 标签名称
-     * @param shellCommand Shell 命令（在此版本中不支持，将被忽略）
+     * @param shellCommand Shell 命令（如 listOf("C:\\Program Files\\Git\\bin\\bash.exe")）
      * @return TerminalWidgetWrapper 或 null
      */
     fun createShellWidget(
@@ -295,23 +299,57 @@ object TerminalCompat {
         tabName: String,
         shellCommand: List<String>? = null
     ): TerminalWidgetWrapper? {
-        logger.info { "createShellWidget: project=${project.name}, workingDirectory=$workingDirectory, tabName=$tabName" }
-
-        if (shellCommand != null) {
-            logger.warn { "Custom shell command not supported in 2024.2 ~ 2025.2, using default shell" }
-        }
+        logger.info { "=== [242 TerminalCompat] createShellWidget ===" }
+        logger.info { "  project: ${project.name}" }
+        logger.info { "  workingDirectory: $workingDirectory" }
+        logger.info { "  tabName: $tabName" }
+        logger.info { "  shellCommand: $shellCommand" }
 
         return try {
             val manager = TerminalToolWindowManager.getInstance(project)
-            @Suppress("DEPRECATION")
-            val widget = manager.createLocalShellWidget(workingDirectory, tabName)
+            val optionsProvider = TerminalProjectOptionsProvider.getInstance(project)
 
-            if (widget != null) {
-                logger.info { "Created terminal widget: ${widget.javaClass.name}" }
-                TerminalWidgetWrapper(widget)
+            // 如果指定了自定义 shell，临时修改 shellPath 设置
+            val customShellPath = shellCommand?.firstOrNull()
+            var originalShellPath: String? = null
+
+            if (customShellPath != null) {
+                // 使用锁来确保线程安全
+                synchronized(shellPathLock) {
+                    originalShellPath = optionsProvider.shellPath
+                    logger.info { "  Temporarily changing shellPath from '$originalShellPath' to '$customShellPath'" }
+                    optionsProvider.shellPath = customShellPath
+
+                    try {
+                        @Suppress("DEPRECATION")
+                        val widget = manager.createLocalShellWidget(workingDirectory, tabName)
+
+                        if (widget != null) {
+                            logger.info { "  Created terminal widget: ${widget.javaClass.name}" }
+                            return TerminalWidgetWrapper(widget)
+                        } else {
+                            logger.error { "  createLocalShellWidget returned null" }
+                            return null
+                        }
+                    } finally {
+                        // 恢复原来的 shellPath 设置
+                        logger.info { "  Restoring shellPath to '$originalShellPath'" }
+                        optionsProvider.shellPath = originalShellPath
+                    }
+                }
             } else {
-                logger.error { "createLocalShellWidget returned null" }
-                null
+                // 没有指定自定义 shell，使用默认设置
+                logger.info { "  Using default shell (no custom shellCommand specified)" }
+                @Suppress("DEPRECATION")
+                val widget = manager.createLocalShellWidget(workingDirectory, tabName)
+
+                if (widget != null) {
+                    logger.info { "  Created terminal widget: ${widget.javaClass.name}" }
+                    TerminalWidgetWrapper(widget)
+                } else {
+                    logger.error { "  createLocalShellWidget returned null" }
+                    null
+                }
             }
         } catch (e: Exception) {
             logger.error(e) { "Failed to create terminal widget" }

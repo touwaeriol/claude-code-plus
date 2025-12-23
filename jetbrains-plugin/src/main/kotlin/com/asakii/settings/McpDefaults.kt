@@ -494,9 +494,7 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
       },
       "shell_type": {
         "type": "string",
-        "enum": ["git-bash", "powershell", "cmd", "wsl", "bash", "zsh", "fish", "sh", "auto"],
-        "description": "Shell type. Windows: git-bash (default), powershell, cmd, wsl. Unix: bash (default), zsh, fish, sh",
-        "default": "auto"
+        "description": "Shell type (dynamically detected). If not specified, uses the configured default terminal."
       }
     },
     "required": ["command"]

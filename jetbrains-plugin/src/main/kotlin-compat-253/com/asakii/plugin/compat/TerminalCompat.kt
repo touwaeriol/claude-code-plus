@@ -215,14 +215,26 @@ object TerminalCompat {
         tabName: String,
         shellCommand: List<String>? = null
     ): TerminalWidgetWrapper? {
-        logger.info { "createShellWidget: project=${project.name}, workingDirectory=$workingDirectory, tabName=$tabName, shellCommand=$shellCommand" }
+        logger.info { "=== [253 TerminalCompat] createShellWidget ===" }
+        logger.info { "  project: ${project.name}" }
+        logger.info { "  workingDirectory: $workingDirectory" }
+        logger.info { "  tabName: $tabName" }
+        logger.info { "  shellCommand: $shellCommand" }
+        logger.info { "  shellCommand size: ${shellCommand?.size ?: "null"}" }
+        if (shellCommand != null) {
+            shellCommand.forEachIndexed { index, cmd ->
+                logger.info { "  shellCommand[$index]: $cmd" }
+            }
+        }
+
         return try {
             val manager = TerminalToolWindowManager.getInstance(project)
-            logger.debug { "TerminalToolWindowManager: ${manager.javaClass.name}" }
+            logger.info { "  TerminalToolWindowManager class: ${manager.javaClass.name}" }
 
             // 使用 createNewSession 以支持指定 shellCommand
+            logger.info { "  Calling createNewSession with shellCommand=$shellCommand" }
             val widget = manager.createNewSession(workingDirectory, tabName, shellCommand, true, true)
-            logger.info { "Created terminal widget: ${widget.javaClass.name}" }
+            logger.info { "  Created terminal widget: ${widget.javaClass.name}" }
 
             TerminalWidgetWrapper(widget)
         } catch (e: Exception) {
