@@ -191,12 +191,13 @@ intellijPlatform {
     // 支持通过命令行参数指定单个 IDE 版本（用于 CI 分批验证）
     // 用法: ./gradlew verifyPlugin -PverifyIdeType=IC -PverifyIdeVersion=2024.1.7
     pluginVerification {
-        // 忽略来自 optional dependency 的类（如 Java PSI 类）
+        // 忽略来自 optional dependency 的类（如 Java PSI 类、Terminal 插件类）
         // 这些类只在相应的插件存在时才会被使用，不会影响插件在其他 IDE 中的运行
         externalPrefixes.set(listOf(
-            "com.intellij.psi",           // Java PSI classes (used by JavaLanguageAnalysisService)
-            "com.intellij.lang.jvm",      // JVM language support
-            "com.intellij.codeInsight"    // Code insight features
+            "com.intellij.psi",                      // Java PSI classes (used by JavaLanguageAnalysisService)
+            "com.intellij.lang.jvm",                 // JVM language support
+            "com.intellij.codeInsight",              // Code insight features
+            "org.jetbrains.plugins.terminal"        // Terminal plugin classes (may not exist in 2024.1.x)
         ))
 
         ides {
