@@ -57,7 +57,42 @@
                 </svg>
               </div>
               <div v-if="expandedTool === tool.name" class="tool-details">
-                <p class="tool-description">{{ tool.description || 'No description' }}</p>
+                <!-- Full name -->
+                <div class="tool-info-row">
+                  <span class="info-label">Full name:</span>
+                  <code class="tool-full-name">mcp__{{ selectedServer }}__{{ tool.name }}</code>
+                </div>
+
+                <!-- Description -->
+                <div class="tool-info-row">
+                  <span class="info-label">Description:</span>
+                  <p class="tool-description">{{ tool.description || 'No description' }}</p>
+                </div>
+
+                <!-- Parameters -->
+                <div class="tool-params-section">
+                  <span class="info-label">Parameters:</span>
+                  <div v-if="getToolParameters(tool).length > 0" class="params-list">
+                    <div
+                      v-for="param in getToolParameters(tool)"
+                      :key="param.name"
+                      class="param-item"
+                    >
+                      <span class="param-name">{{ param.name }}</span>
+                      <span class="param-required" :class="{ required: param.required }">
+                        ({{ param.required ? 'required' : 'optional' }})
+                      </span>
+                      <span class="param-type">: {{ param.type }}</span>
+                      <span v-if="param.description" class="param-desc">
+                        - {{ param.description }}
+                      </span>
+                      <span v-if="param.default !== undefined" class="param-default">
+                        [default: {{ JSON.stringify(param.default) }}]
+                      </span>
+                    </div>
+                  </div>
+                  <div v-else class="no-params">No parameters defined</div>
+                </div>
               </div>
             </div>
           </div>
@@ -130,10 +165,29 @@ interface McpServerStatus {
   status: string
 }
 
+interface McpToolParameter {
+  type: string
+  description?: string
+  default?: any
+  enum?: string[]
+  minimum?: number
+  maximum?: number
+  minLength?: number
+  maxLength?: number
+  format?: string
+}
+
+interface McpToolInputSchema {
+  type: string
+  properties?: Record<string, McpToolParameter>
+  required?: string[]
+  additionalProperties?: boolean
+}
+
 interface McpToolInfo {
   name: string
   description: string
-  inputSchema?: string
+  inputSchema?: McpToolInputSchema
 }
 
 const props = defineProps<{
@@ -243,6 +297,34 @@ function goBack() {
 
 function toggleTool(toolName: string) {
   expandedTool.value = expandedTool.value === toolName ? null : toolName
+}
+
+interface ParsedParam {
+  name: string
+  type: string
+  required: boolean
+  description?: string
+  default?: any
+}
+
+function getToolParameters(tool: McpToolInfo): ParsedParam[] {
+  if (!tool.inputSchema?.properties) return []
+
+  const requiredSet = new Set(tool.inputSchema.required || [])
+
+  return Object.entries(tool.inputSchema.properties)
+    .map(([name, schema]) => ({
+      name,
+      type: schema.type || 'any',
+      required: requiredSet.has(name),
+      description: schema.description,
+      default: schema.default
+    }))
+    .sort((a, b) => {
+      // Required parameters first
+      if (a.required !== b.required) return a.required ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
 }
 
 function close() {
@@ -537,5 +619,95 @@ function close() {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Tool info rows */
+.tool-info-row {
+  margin-bottom: 8px;
+}
+
+.info-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--theme-muted-foreground, #656d76);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.tool-full-name {
+  font-size: 10px;
+  color: var(--theme-foreground, #24292e);
+  background: var(--theme-code-background, rgba(0, 0, 0, 0.05));
+  padding: 2px 6px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+/* Parameters section */
+.tool-params-section {
+  margin-top: 8px;
+}
+
+.params-list {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.param-item {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 4px 6px;
+  background: var(--theme-code-background, rgba(0, 0, 0, 0.03));
+  border-radius: 4px;
+  border-left: 2px solid var(--theme-border, #e1e4e8);
+}
+
+.param-name {
+  font-weight: 600;
+  color: var(--theme-foreground, #24292e);
+  font-family: monospace;
+}
+
+.param-required {
+  font-size: 10px;
+  color: var(--theme-muted-foreground, #656d76);
+}
+
+.param-required.required {
+  color: #d73a49;
+  font-weight: 500;
+}
+
+.param-type {
+  font-size: 10px;
+  color: #0366d6;
+  font-family: monospace;
+}
+
+.param-desc {
+  color: var(--theme-muted-foreground, #656d76);
+  display: block;
+  margin-top: 2px;
+  padding-left: 8px;
+}
+
+.param-default {
+  font-size: 10px;
+  color: #6f42c1;
+  font-family: monospace;
+  display: block;
+  margin-top: 2px;
+  padding-left: 8px;
+}
+
+.no-params {
+  font-size: 11px;
+  color: var(--theme-muted-foreground, #656d76);
+  font-style: italic;
+  margin-top: 4px;
 }
 </style>
