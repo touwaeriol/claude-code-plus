@@ -97,7 +97,7 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var enableJetBrainsMcp: Boolean = true,        // JetBrains IDE MCP（IDE 索引工具）
         var enableContext7Mcp: Boolean = false,        // Context7 MCP（获取最新库文档）
         var context7ApiKey: String = "",               // Context7 API Key（可选）
-        var enableTerminalMcp: Boolean = true,         // Terminal MCP（IDEA 内置终端）
+        var enableTerminalMcp: Boolean = false,        // Terminal MCP（IDEA 内置终端，默认禁用）
         var terminalDisableBuiltinBash: Boolean = true, // 启用 Terminal MCP 时禁用内置 Bash
         var terminalMaxOutputLines: Int = 500,         // Terminal 输出最大行数
         var terminalMaxOutputChars: Int = 50000,       // Terminal 输出最大字符数
