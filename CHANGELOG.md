@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.0] - 2025-12-23
+## [1.2.0] - 2025-12-24
 
 ### Added
 
@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 - Add foreground execution with output truncation support
 - Display `session_id` for Terminal MCP tools in collapsed state
 - Use SVG terminal icon for better visual consistency
+- Add configurable read timeout with `timeout` parameter (default 30s, max 600s)
+- Add interactive mode warnings in tool descriptions for potentially blocking commands
 
 #### Chrome Extension Integration
 - Add Chrome extension status UI and settings panel
@@ -46,11 +48,18 @@ All notable changes to this project will be documented in this file.
 - Eliminate reflection with multi-version compat layers and optional plugin deps
 - Use `createLocalShellWidget` for 242/243 Terminal API compatibility
 - Improve terminal tools and update compatibility layers for all supported versions
+- Support universal plugin build for all platforms (242-253)
 
 #### Terminal Session Management
+- Simplify shell type parameter handling: replace `ShellType` enum with direct string shell names
+- `createSession` accepts nullable `shellName`, uses `ShellResolver` for auto-detection
+- 242 compat: temp modify shellPath with thread-safe locking
 - Improve terminal session management with better state handling
 - Remove output stability detection, add ApiUnavailable handling
 - Simplify TerminalKill API to use session_ids only
+
+#### Settings UI
+- Improve MCP dialog UI scaling and simplify prompts
 
 #### Frontend Refactoring
 - Use self-closing attachment-start/end tags for better parsing
@@ -82,8 +91,11 @@ All notable changes to this project will be documented in this file.
 
 ### Build
 
+- Support multi-version plugin distribution with dot separator (e.g., `1.2.0.242`)
+- Use platform-suffixed version in pluginConfiguration for multi-version builds
+- Support universal plugin build for all platforms (242-253)
 - Add npm cache for faster frontend builds in CI
-- Expand verification matrix to cover all 6 versions for each IDE (30 jobs total)
+- Expand verification matrix to cover all 6 versions for each IDE (36 jobs total)
 - Refactor verify jobs into groups with per-group IDE caching
 - Limit max-parallel to 4 to prevent disk space exhaustion
 - Enhance disk cleanup to free more space during CI builds
@@ -91,6 +103,7 @@ All notable changes to this project will be documented in this file.
 
 ### Docs
 
+- Add multi-version compat architecture documentation in CLAUDE.md
 - Add best practices for terminal session reuse and cleanup
 - Improve Terminal MCP tool descriptions for clarity
 
