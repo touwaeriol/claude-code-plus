@@ -2,7 +2,7 @@
  * mcp_tools 补丁
  *
  * 添加 MCP 工具列表查询控制端点。
- * 直接使用 CLI 内部的 getAppState().mcp.tools 获取工具列表。
+ * 与 CLI 内部 /mcp 命令逻辑完全一致：直接使用 getAppState().mcp.tools
  *
  * 请求格式:
  * {
@@ -139,32 +139,61 @@ module.exports = {
           )
         ]));
 
-        // let _allTools = _state.mcp.tools;
+        // let _allTools = _state.mcp.tools || [];
+        // 与 CLI 内部 /mcp 命令逻辑完全一致：直接使用 getAppState().mcp.tools
         iifeBody.push(t.variableDeclaration('let', [
           t.variableDeclarator(
             t.identifier('_allTools'),
-            t.memberExpression(
-              t.memberExpression(t.identifier('_state'), t.identifier('mcp')),
-              t.identifier('tools')
+            t.logicalExpression(
+              '||',
+              t.memberExpression(
+                t.memberExpression(t.identifier('_state'), t.identifier('mcp')),
+                t.identifier('tools')
+              ),
+              t.arrayExpression([])
             )
           )
         ]));
 
-        // let _filteredTools = _serverName ? _allTools.filter(_t => _t.serverName === _serverName) : _allTools;
+        // let _prefix = _serverName ? `mcp__${_serverName}__` : null;
+        // let _filteredTools = _prefix ? _allTools.filter(_t => _t.name?.startsWith(_prefix)) : _allTools;
+        // 与 CLI 内部 VbA 函数逻辑一致：按工具名前缀 mcp__serverName__ 过滤
+        iifeBody.push(t.variableDeclaration('let', [
+          t.variableDeclarator(
+            t.identifier('_prefix'),
+            t.conditionalExpression(
+              t.identifier('_serverName'),
+              t.templateLiteral(
+                [
+                  t.templateElement({ raw: 'mcp__', cooked: 'mcp__' }, false),
+                  t.templateElement({ raw: '__', cooked: '__' }, true)
+                ],
+                [t.identifier('_serverName')]
+              ),
+              t.nullLiteral()
+            )
+          )
+        ]));
+
         iifeBody.push(t.variableDeclaration('let', [
           t.variableDeclarator(
             t.identifier('_filteredTools'),
             t.conditionalExpression(
-              t.identifier('_serverName'),
+              t.identifier('_prefix'),
               t.callExpression(
                 t.memberExpression(t.identifier('_allTools'), t.identifier('filter')),
                 [
                   t.arrowFunctionExpression(
                     [t.identifier('_t')],
-                    t.binaryExpression(
-                      '===',
-                      t.memberExpression(t.identifier('_t'), t.identifier('serverName')),
-                      t.identifier('_serverName')
+                    t.optionalCallExpression(
+                      t.optionalMemberExpression(
+                        t.memberExpression(t.identifier('_t'), t.identifier('name')),
+                        t.identifier('startsWith'),
+                        false,
+                        true
+                      ),
+                      [t.identifier('_prefix')],
+                      false
                     )
                   )
                 ]
