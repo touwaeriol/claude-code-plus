@@ -33,6 +33,7 @@ class JetBrainsMcpServerImpl(private val project: Project) : McpServerBase() {
     private lateinit var codeSearchTool: CodeSearchTool
     private lateinit var findUsagesTool: FindUsagesTool
     private lateinit var renameTool: RenameTool
+    private lateinit var readFileTool: ReadFileTool
 
     override fun getSystemPromptAppendix(): String {
         return AgentSettingsService.getInstance().effectiveJetbrainsInstructions
@@ -48,7 +49,8 @@ class JetBrainsMcpServerImpl(private val project: Project) : McpServerBase() {
         "FileIndex",
         "CodeSearch",
         "FindUsages",
-        "Rename"
+        "Rename",
+        "ReadFile"
     )
 
     companion object {
@@ -131,6 +133,7 @@ class JetBrainsMcpServerImpl(private val project: Project) : McpServerBase() {
             codeSearchTool = CodeSearchTool(project)
             findUsagesTool = FindUsagesTool(project)
             renameTool = RenameTool(project)
+            readFileTool = ReadFileTool(project)
             logger.info { "✅ All tool instances created" }
 
             // 注册目录树工具（使用预加载的 Schema）
@@ -175,7 +178,14 @@ class JetBrainsMcpServerImpl(private val project: Project) : McpServerBase() {
                 renameTool.execute(arguments)
             }
 
-            logger.info { "✅ JetBrains MCP Server initialized, registered 6 tools" }
+            // 注册文件读取工具
+            val readFileSchema = getToolSchema("ReadFile")
+            logger.info { "📝 ReadFile schema: ${readFileSchema.keys}" }
+            registerToolFromSchema("ReadFile", readFileSchema) { arguments ->
+                readFileTool.execute(arguments)
+            }
+
+            logger.info { "✅ JetBrains MCP Server initialized, registered 7 tools" }
         } catch (e: Exception) {
             logger.error(e) { "❌ Failed to initialize JetBrains MCP Server: ${e.message}" }
             throw e

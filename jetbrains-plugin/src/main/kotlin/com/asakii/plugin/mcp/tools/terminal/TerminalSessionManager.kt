@@ -135,6 +135,69 @@ enum class ShellType(val displayName: String, val command: String?) {
     // 自动检测
     AUTO("Auto", null);
 
+    /**
+     * 获取 Shell 的可执行路径
+     * @return Shell 路径，如果是 AUTO 则返回 null
+     */
+    fun getShellPath(): String? {
+        if (this == AUTO) return null
+
+        val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+        return if (isWindows) {
+            getWindowsShellPath()
+        } else {
+            getUnixShellPath()
+        }
+    }
+
+    private fun getWindowsShellPath(): String? {
+        val systemRoot = System.getenv("SystemRoot") ?: "C:\\Windows"
+        return when (this) {
+            GIT_BASH -> {
+                // 尝试常见的 Git Bash 安装路径
+                val paths = listOf(
+                    "C:\\Program Files\\Git\\bin\\bash.exe",
+                    "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+                    System.getenv("PROGRAMFILES")?.let { "$it\\Git\\bin\\bash.exe" }
+                ).filterNotNull()
+                paths.find { java.nio.file.Files.exists(java.nio.file.Path.of(it)) }
+            }
+            POWERSHELL -> {
+                // 优先使用 PowerShell Core，然后是 Windows PowerShell
+                val paths = listOf(
+                    "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+                    "$systemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+                )
+                paths.find { java.nio.file.Files.exists(java.nio.file.Path.of(it)) }
+            }
+            CMD -> "$systemRoot\\System32\\cmd.exe"
+            WSL -> "$systemRoot\\System32\\wsl.exe"
+            else -> null
+        }
+    }
+
+    private fun getUnixShellPath(): String? {
+        val directories = listOf("/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin")
+        val shellName = when (this) {
+            BASH -> "bash"
+            ZSH -> "zsh"
+            FISH -> "fish"
+            SH -> "sh"
+            else -> return null
+        }
+        return directories.map { "$it/$shellName" }
+            .find { java.nio.file.Files.exists(java.nio.file.Path.of(it)) }
+    }
+
+    /**
+     * 获取 Shell 命令列表（用于 IDEA Terminal API）
+     * @return Shell 命令列表，如果是 AUTO 则返回 null
+     */
+    fun getShellCommand(): List<String>? {
+        val path = getShellPath() ?: return null
+        return listOf(path)
+    }
+
     companion object {
         fun fromString(value: String?): ShellType {
             if (value.isNullOrBlank()) return AUTO
@@ -182,15 +245,25 @@ class TerminalSessionManager(private val project: Project) {
             val sessionId = "terminal-${sessionCounter.incrementAndGet()}"
             val sessionName = name ?: "Claude Terminal ${sessionCounter.get()}"
 
+            // 确定实际使用的 shell 类型
+            val actualShellType = if (shellType == ShellType.AUTO) {
+                detectShellType()
+            } else {
+                shellType
+            }
+
+            // 获取 shell 命令（用于 IDEA Terminal API）
+            val shellCommand = actualShellType.getShellCommand()
+            logger.info { "Creating terminal with shellType=$actualShellType, shellCommand=$shellCommand" }
+
             var wrapper: TerminalWidgetWrapper? = null
 
             ApplicationManager.getApplication().invokeAndWait {
                 try {
                     val basePath = project.basePath ?: System.getProperty("user.home")
 
-                    // 使用兼容层创建终端（处理不同版本的 API 差异）
-                    // TerminalCompat.createShellWidget 直接返回 TerminalWidgetWrapper
-                    wrapper = TerminalCompat.createShellWidget(project, basePath, sessionName)
+                    // 使用兼容层创建终端（传递 shellCommand 以指定 shell 类型）
+                    wrapper = TerminalCompat.createShellWidget(project, basePath, sessionName, shellCommand)
 
                     if (wrapper == null) {
                         logger.warn { "Failed to create TerminalWidgetWrapper" }
@@ -201,12 +274,6 @@ class TerminalSessionManager(private val project: Project) {
             }
 
             wrapper?.let { w ->
-                val actualShellType = if (shellType == ShellType.AUTO) {
-                    detectShellType()
-                } else {
-                    shellType
-                }
-
                 val session = TerminalSession(
                     id = sessionId,
                     name = sessionName,
@@ -214,7 +281,7 @@ class TerminalSessionManager(private val project: Project) {
                     widgetWrapper = w
                 )
                 sessions[sessionId] = session
-                logger.info { "Created terminal session: $sessionId ($sessionName), widget type: ${w.widgetClassName}" }
+                logger.info { "Created terminal session: $sessionId ($sessionName), shell=${actualShellType.name}, widget type: ${w.widgetClassName}" }
                 session
             }
         } catch (e: Exception) {
@@ -249,13 +316,52 @@ class TerminalSessionManager(private val project: Project) {
     }
 
     /**
-     * 执行命令
+     * 异步执行命令（立即返回，不等待完成）
+     *
+     * @param sessionId 会话 ID
+     * @param command 要执行的命令
+     * @return 执行结果（仅表示命令是否成功发送）
+     */
+    fun executeCommandAsync(sessionId: String, command: String): ExecuteResult {
+        val session = getSession(sessionId) ?: return ExecuteResult(
+            success = false,
+            sessionId = sessionId,
+            error = "Session not found: $sessionId"
+        )
+
+        return try {
+            session.lastCommandAt = System.currentTimeMillis()
+
+            ApplicationManager.getApplication().invokeAndWait {
+                session.widgetWrapper.executeCommand(command)
+            }
+
+            ExecuteResult(
+                success = true,
+                sessionId = session.id,
+                sessionName = session.name,
+                background = true  // 始终视为后台执行
+            )
+        } catch (e: Exception) {
+            logger.error(e) { "Failed to execute command in session ${session.id}" }
+            ExecuteResult(
+                success = false,
+                sessionId = session.id,
+                error = e.message ?: "Unknown error"
+            )
+        }
+    }
+
+    /**
+     * 执行命令（兼容旧 API，保留但不推荐使用）
      *
      * @param sessionId 会话 ID，为空时创建新会话
      * @param command 要执行的命令
      * @param background 是否后台执行。false 时等待命令完成并返回输出
      * @param timeoutMs 前台执行时的超时时间（毫秒），默认 5 分钟
+     * @deprecated 使用 executeCommandAsync 代替
      */
+    @Deprecated("Use executeCommandAsync instead", ReplaceWith("executeCommandAsync(sessionId, command)"))
     fun executeCommand(
         sessionId: String?,
         command: String,
@@ -373,12 +479,21 @@ class TerminalSessionManager(private val project: Project) {
 
     /**
      * 读取会话输出
+     *
+     * @param sessionId 会话 ID
+     * @param maxLines 最大行数
+     * @param search 搜索模式（正则表达式）
+     * @param contextLines 搜索结果上下文行数
+     * @param waitForIdle 是否等待命令执行完成
+     * @param timeoutMs 等待超时时间（毫秒）
      */
     fun readOutput(
         sessionId: String,
         maxLines: Int = 1000,
         search: String? = null,
-        contextLines: Int = 2
+        contextLines: Int = 2,
+        waitForIdle: Boolean = false,
+        timeoutMs: Long = 30_000
     ): ReadResult {
         val session = getSession(sessionId) ?: return ReadResult(
             success = false,
@@ -387,6 +502,58 @@ class TerminalSessionManager(private val project: Project) {
         )
 
         return try {
+            // 如果需要等待命令完成
+            if (waitForIdle) {
+                val waitResult = session.waitForCommandCompletion(
+                    timeoutMs = timeoutMs,
+                    initialDelayMs = 100,
+                    pollIntervalMs = 100
+                )
+
+                when (waitResult) {
+                    is CommandWaitResult.Timeout -> {
+                        // 超时但仍然返回当前输出
+                        val output = session.getOutput(maxLines)
+                        return ReadResult(
+                            success = true,
+                            sessionId = sessionId,
+                            output = output,
+                            isRunning = true,
+                            lineCount = output.split("\n").size,
+                            waitTimedOut = true,
+                            waitMessage = "Timed out waiting for command to complete after ${timeoutMs / 1000} seconds. Returning current output."
+                        )
+                    }
+                    is CommandWaitResult.ApiUnavailable -> {
+                        // API 不可用，返回当前输出并提示
+                        val output = session.getOutput(maxLines)
+                        return ReadResult(
+                            success = true,
+                            sessionId = sessionId,
+                            output = output,
+                            isRunning = null,
+                            lineCount = output.split("\n").size,
+                            waitMessage = "Cannot detect command completion (Shell Integration unavailable). Returning current output."
+                        )
+                    }
+                    is CommandWaitResult.Interrupted -> {
+                        val output = session.getOutput(maxLines)
+                        return ReadResult(
+                            success = true,
+                            sessionId = sessionId,
+                            output = output,
+                            isRunning = null,
+                            lineCount = output.split("\n").size,
+                            waitMessage = "Wait was interrupted. Returning current output."
+                        )
+                    }
+                    is CommandWaitResult.Completed -> {
+                        // 命令完成，继续读取
+                        logger.info { "Command completed, reading output..." }
+                    }
+                }
+            }
+
             val isRunning = session.hasRunningCommands()
 
             if (search != null) {
@@ -610,7 +777,9 @@ data class ReadResult(
     val isRunning: Boolean? = null,  // null 表示无法确定
     val lineCount: Int = 0,
     val searchMatches: List<SearchMatch>? = null,
-    val error: String? = null
+    val error: String? = null,
+    val waitTimedOut: Boolean = false,  // 等待是否超时
+    val waitMessage: String? = null     // 等待相关的消息
 )
 
 /**

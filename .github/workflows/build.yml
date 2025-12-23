@@ -14,25 +14,6 @@ jobs:
       max-parallel: 6
       matrix:
         ide:
-          # 2024.1 版本
-          - type: IC
-            version: "2024.1.7"
-            platformMajor: 241
-          - type: WS
-            version: "2024.1.7"
-            platformMajor: 241
-          - type: GO
-            version: "2024.1.6"
-            platformMajor: 241
-          - type: CL
-            version: "2024.1.6"
-            platformMajor: 241
-          - type: PC
-            version: "2024.1.7"
-            platformMajor: 241
-          - type: PS
-            version: "2024.1.6"
-            platformMajor: 241
           # 2024.2 版本
           - type: IC
             version: "2024.2.6"

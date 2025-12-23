@@ -206,19 +206,22 @@ object TerminalCompat {
      * @param project 项目
      * @param workingDirectory 工作目录
      * @param tabName 标签名称
+     * @param shellCommand Shell 命令（如 listOf("C:\\Program Files\\Git\\bin\\bash.exe")）
      * @return TerminalWidgetWrapper 或 null（如果创建失败）
      */
     fun createShellWidget(
         project: Project,
         workingDirectory: String,
-        tabName: String
+        tabName: String,
+        shellCommand: List<String>? = null
     ): TerminalWidgetWrapper? {
-        logger.info { "createShellWidget: project=${project.name}, workingDirectory=$workingDirectory, tabName=$tabName" }
+        logger.info { "createShellWidget: project=${project.name}, workingDirectory=$workingDirectory, tabName=$tabName, shellCommand=$shellCommand" }
         return try {
             val manager = TerminalToolWindowManager.getInstance(project)
             logger.debug { "TerminalToolWindowManager: ${manager.javaClass.name}" }
 
-            val widget = manager.createShellWidget(workingDirectory, tabName, true, true)
+            // 使用 createNewSession 以支持指定 shellCommand
+            val widget = manager.createNewSession(workingDirectory, tabName, shellCommand, true, true)
             logger.info { "Created terminal widget: ${widget.javaClass.name}" }
 
             TerminalWidgetWrapper(widget)

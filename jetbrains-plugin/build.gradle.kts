@@ -16,14 +16,13 @@ providers.gradleProperty("customBuildDir").orNull?.let { customDir ->
 }
 
 // ===== 多版本构建支持 =====
-// 通过 -PplatformMajor=241 指定目标平台版本
-// 241 = 2024.1, 242 = 2024.2, 243 = 2024.3, 251 = 2025.1, 252 = 2025.2, 253 = 2025.3
+// 通过 -PplatformMajor=242 指定目标平台版本
+// 242 = 2024.2, 243 = 2024.3, 251 = 2025.1, 252 = 2025.2, 253 = 2025.3
 val platformMajor = providers.gradleProperty("platformMajor").getOrElse("253").toInt()
 
 // 根据目标版本选择 IDE SDK 版本
 // 构建时用对应版本的 SDK 编译，确保 API 兼容
 val targetPlatformVersion = when (platformMajor) {
-    241 -> "2024.1.7"
     242 -> "2024.2.6"
     243 -> "2024.3.5"
     251 -> "2025.1.5"
@@ -43,11 +42,11 @@ val mainCompatDir = when {
 }
 
 // Diff API 兼容层目录
-// - 241-242: 使用 DiffRequestProcessorEditor (kotlin-compat-diff-241)
+// - 242: 使用 DiffRequestProcessorEditor (kotlin-compat-diff-242)
 // - 243+: 使用 DiffEditorViewerFileEditor (kotlin-compat-diff-243)
 val diffCompatDir = when {
     platformMajor >= 243 -> "kotlin-compat-diff-243"
-    else -> "kotlin-compat-diff-241"
+    else -> "kotlin-compat-diff-242"
 }
 
 // sinceBuild 和 untilBuild 根据目标版本设置
@@ -57,8 +56,7 @@ val targetUntilBuild = when {
     platformMajor >= 252 -> "252.*"
     platformMajor >= 251 -> "251.*"
     platformMajor >= 243 -> "243.*"
-    platformMajor >= 242 -> "242.*"
-    else -> "241.*"
+    else -> "242.*"
 }
 
 // 配置 sourceSets 包含版本特定代码
@@ -224,7 +222,6 @@ intellijPlatform {
 
                 // ===== IntelliJ IDEA =====
                 // 2024.x 和 2025.1/2025.2 使用 IntellijIdeaCommunity
-                create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.1.7")  // 241
                 create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2.6")  // 242
                 create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.3.5")  // 243
                 create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1.5")  // 251
@@ -234,7 +231,6 @@ intellijPlatform {
 
                 // ===== WebStorm =====
                 // 注意：WebStorm 版本号与 IDEA 不同，使用较保守的版本
-                create(IntelliJPlatformType.WebStorm, "2024.1.7")
                 create(IntelliJPlatformType.WebStorm, "2024.2.4")
                 create(IntelliJPlatformType.WebStorm, "2024.3.3")
                 create(IntelliJPlatformType.WebStorm, "2025.1.2")
@@ -243,7 +239,6 @@ intellijPlatform {
 
                 // ===== GoLand =====
                 // GoLand 的版本号与 IDEA 不同，例如 2024.2 最新是 2024.2.3
-                create(IntelliJPlatformType.GoLand, "2024.1.6")
                 create(IntelliJPlatformType.GoLand, "2024.2.3")
                 create(IntelliJPlatformType.GoLand, "2024.3.3")
                 create(IntelliJPlatformType.GoLand, "2025.1.2")
@@ -251,7 +246,6 @@ intellijPlatform {
                 create(IntelliJPlatformType.GoLand, "2025.3.1")
 
                 // ===== CLion =====
-                create(IntelliJPlatformType.CLion, "2024.1.6")
                 create(IntelliJPlatformType.CLion, "2024.2.3")
                 create(IntelliJPlatformType.CLion, "2024.3.3")
                 create(IntelliJPlatformType.CLion, "2025.1.2")
@@ -259,7 +253,6 @@ intellijPlatform {
                 create(IntelliJPlatformType.CLion, "2025.3.1")
 
                 // ===== PyCharm =====
-                create(IntelliJPlatformType.PyCharmCommunity, "2024.1.7")
                 create(IntelliJPlatformType.PyCharmCommunity, "2024.2.4")
                 create(IntelliJPlatformType.PyCharmCommunity, "2024.3.3")
                 create(IntelliJPlatformType.PyCharmCommunity, "2025.1.2")
@@ -267,7 +260,6 @@ intellijPlatform {
                 create(IntelliJPlatformType.PyCharmCommunity, "2025.3.1")
 
                 // ===== PhpStorm =====
-                create(IntelliJPlatformType.PhpStorm, "2024.1.6")
                 create(IntelliJPlatformType.PhpStorm, "2024.2.4")
                 create(IntelliJPlatformType.PhpStorm, "2024.3.3")
                 create(IntelliJPlatformType.PhpStorm, "2025.1.2")
@@ -593,7 +585,7 @@ tasks {
 // 主任务：构建所有版本
 val buildAllVersions by tasks.registering {
     group = "build"
-    description = "Build plugin for all supported platform versions (241, 242, 243, 251, 252, 253)"
+    description = "Build plugin for all supported platform versions (242, 243, 251, 252, 253)"
 
     // 先构建前端和下载 CLI（只执行一次）
     dependsOn(buildFrontend)
@@ -610,12 +602,12 @@ val buildAllVersions by tasks.registering {
         println("====================================")
         println()
         println("📦 Frontend built once, reusing for all platforms")
-        println("🚀 Building 6 versions in parallel...")
+        println("🚀 Building 5 versions in parallel...")
     }
 
     doLast {
         // 在执行阶段定义所有变量，避免配置缓存序列化问题
-        val platforms = listOf("241", "242", "243", "251", "252", "253")
+        val platforms = listOf("242", "243", "251", "252", "253")
         val isWin = System.getProperty("os.name").lowercase().contains("windows")
         val gradlew = if (isWin) "gradlew.bat" else "./gradlew"
 
