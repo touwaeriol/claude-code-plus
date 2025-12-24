@@ -101,8 +101,10 @@ import { computed, ref, watch, onUnmounted } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import type { ToolDisplayInfo } from '@/utils/toolDisplayInfo'
 import { toolShowInterceptor } from '@/services/toolShowInterceptor'
+import { useSessionStore } from '@/stores/sessionStore'
 
 const { t } = useI18n()
+const sessionStore = useSessionStore()
 
 // 后台运行提示相关
 const showBackgroundHint = ref(false)
@@ -171,6 +173,11 @@ function handleClick() {
       // 拦截成功，IDEA 已处理，不触发任何事件
       return
     }
+  }
+
+  // 展开时切换到浏览模式，防止自动滚动打断阅读
+  if (!props.isExpanded) {
+    sessionStore.switchToBrowseMode()
   }
 
   // 放行，触发 toggle 事件（展开/折叠）

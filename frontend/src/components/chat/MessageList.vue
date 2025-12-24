@@ -291,7 +291,7 @@ async function restoreScrollPosition(anchor: ScrollAnchor): Promise<void> {
 
   if (nearBottom) {
     // 恢复后发现在底部，切换到 follow 模式
-    scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0, isNearBottom: true }
+    scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0 }
   }
 
   console.log(`🔄 [Scroll] Restored to item ${anchor.itemId} (index=${index})`)
@@ -442,17 +442,34 @@ watch(
   }
 )
 
+// 监听滚动模式变化 - 切换到 follow 模式时自动滚动到底部
+// 解决问题：用户发送消息后，即使后续有意外的模式切换，也能确保滚动到底部
+watch(
+  () => scrollState.value.mode,
+  async (newMode, oldMode) => {
+    if (newMode === 'follow' && oldMode === 'browse') {
+      console.log('🔄 [Scroll] Mode changed to follow, scrolling to bottom')
+      await nextTick()
+      forceUpdateScroller()
+      await nextTick()
+      scrollToBottomSilent()
+    }
+  }
+)
+
 // 监听用户滚轮事件 - 向上滚动切换到 browse 模式
+// 注意：handleScroll 也会处理模式切换，但 wheel 事件响应更快
 function handleWheel(e: WheelEvent) {
-  // deltaY < 0 表示向上滚动
+  // Tab 切换中，不处理滚轮事件
+  if (isTabSwitching.value) return
+
+  // deltaY < 0 表示向上滚动，切换到 browse 模式
   if (e.deltaY < 0 && scrollState.value.mode === 'follow') {
-    // 切换到 browse 模式，保存当前锚点
     const anchor = computeScrollAnchor()
     scrollState.value = {
       mode: 'browse',
       anchor,
-      newMessageCount: 0,
-      isNearBottom: false
+      newMessageCount: 0
     }
     console.log('🔄 [Scroll] Switched to browse mode (wheel up)')
   }
@@ -574,11 +591,21 @@ watch(
     await nextTick()
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
 
-    if (savedScrollState?.mode === 'browse' && savedScrollState.anchor) {
-      // browse 模式：恢复锚点位置
-      await restoreScrollPosition(savedScrollState.anchor)
+    if (savedScrollState?.mode === 'browse') {
+      // browse 模式：尝试恢复锚点位置
+      if (savedScrollState.anchor) {
+        await restoreScrollPosition(savedScrollState.anchor)
+      } else {
+        // browse 模式但无锚点：保持当前滚动位置，不强制切换模式
+        // 这种情况发生在：用户刚退出跟随模式但还没滚动过
+        const el = scrollerRef.value?.$el as HTMLElement | undefined
+        if (el) {
+          lastScrollTop.value = el.scrollTop
+        }
+        console.log(`🔄 [Scroll] Browse mode without anchor, keeping current position`)
+      }
     } else {
-      // follow 模式或无锚点：滚动到底部
+      // follow 模式：滚动到底部
       // 使用可靠的滚动方法，因为虚拟列表可能还没完全渲染
       await scrollToBottomReliably()
       const el = scrollerRef.value?.$el as HTMLElement | undefined
@@ -587,7 +614,7 @@ watch(
       }
       // 确保状态为 follow
       if (sessionStore.currentTab) {
-        scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0, isNearBottom: true }
+        scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0 }
       }
     }
 
@@ -619,12 +646,14 @@ watch(
 
 // 监听消息变化 - 基于双模式的滚动处理
 watch(() => displayMessages.value.length, async (newCount, oldCount) => {
+  const added = newCount - oldCount
+  console.log(`📜 [Scroll] displayMessages.length changed: ${oldCount} -> ${newCount}, added=${added}, mode=${scrollState.value.mode}, isTabSwitching=${isTabSwitching.value}, historyLoadInProgress=${historyLoadInProgress.value}`)
+
   // Tab 切换中，不处理消息变化
   if (isTabSwitching.value) {
+    console.log('📜 [Scroll] Skipped: isTabSwitching')
     return
   }
-
-  const added = newCount - oldCount
 
   // 首次批量加载：跳到底部
   if (oldCount === 0 && newCount > 0) {
@@ -657,9 +686,11 @@ watch(() => displayMessages.value.length, async (newCount, oldCount) => {
       if (el) el.scrollTop = savedScrollTop
     } else {
       // follow 模式：自动滚动到底部
+      // 先更新虚拟列表，再滚动（顺序很重要！）
+      await nextTick()
+      forceUpdateScroller()
       await nextTick()
       scrollToBottomSilent()
-      forceUpdateScroller()
     }
   } else {
     // 消息数量没有增加（可能是更新），正常更新 scroller
@@ -714,14 +745,27 @@ watch(() => props.isLoading, async (newValue, oldValue) => {
       historyLoadInProgress.value = false
 
       // 确保是 follow 模式
-      scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0, isNearBottom: true }
+      scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0 }
     }
   }
 })
 
-// 处理滚动事件
+// 处理滚动事件（使用 requestAnimationFrame 节流）
+let scrollRAF: number | null = null
 function handleScroll() {
+  // 使用 RAF 节流，避免滚动时过度计算
+  if (scrollRAF) return
+  scrollRAF = requestAnimationFrame(() => {
+    scrollRAF = null
+    handleScrollCore()
+  })
+}
+
+function handleScrollCore() {
   if (!scrollerRef.value) return
+
+  // Tab 切换中，不处理滚动事件（防止模式被意外切换）
+  if (isTabSwitching.value) return
 
   const el = scrollerRef.value.$el as HTMLElement
   if (!el) return
@@ -762,29 +806,31 @@ function handleScroll() {
   // 更新 lastScrollTop
   lastScrollTop.value = scrollTop
 
-  // 到达底部时自动切换回 follow 模式
-  if (nearBottom && scrollState.value.mode === 'browse') {
-    scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0, isNearBottom: true }
-    console.log('🔄 [Scroll] Switched to follow mode (reached bottom)')
-  } else if (!nearBottom && scrollState.value.mode === 'follow') {
-    // 离开底部且当前是 follow 模式
-    // 只有在用户主动操作时才切换到 browse 模式：
-    // 1. 用户正在拖动滚动条 + 向上滚动 → 切换
-    // 2. wheel 事件已经在 handleWheel 中处理了
-    // 注意：移除了 !props.isStreaming 条件，因为它会导致非 streaming 状态下任何离开底部都切换
-    if (isUserInteracting.value && isScrollingUp && significantScroll) {
+  // 模式切换逻辑（简化版）：
+  // - 向上滚动 → 切换到 browse 模式
+  // - 向下滚动到底部 → 切换回 follow 模式
+
+  if (scrollState.value.mode === 'follow') {
+    // follow 模式下，向上滚动就切换到 browse
+    if (isScrollingUp && significantScroll) {
       const anchor = computeScrollAnchor()
       scrollState.value = {
         mode: 'browse',
         anchor,
-        newMessageCount: 0,
-        isNearBottom: false
+        newMessageCount: 0
       }
-      console.log('🔄 [Scroll] Switched to browse mode (user dragging up)')
+      console.log('🔄 [Scroll] Switched to browse mode (scrolling up)')
     }
-  } else if (!nearBottom && scrollState.value.mode === 'browse') {
-    // browse 模式下，防抖保存锚点
-    debouncedSaveAnchor()
+  } else {
+    // browse 模式下
+    if (nearBottom && !isScrollingUp) {
+      // 向下滚动到底部，切换回 follow
+      scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0 }
+      console.log('🔄 [Scroll] Switched to follow mode (reached bottom)')
+    } else if (!nearBottom) {
+      // 不在底部，保存锚点
+      debouncedSaveAnchor()
+    }
   }
 }
 
@@ -929,6 +975,9 @@ async function ensureScrollable(): Promise<void> {
   overflow-y: auto !important;
   overflow-x: hidden;
   padding: 4px 6px 4px 6px; /* 减少底部留白 */
+  /* 滚动优化 */
+  -webkit-overflow-scrolling: touch; /* iOS 惯性滚动 */
+  overscroll-behavior: contain; /* 防止滚动穿透 */
 }
 
 /* 修复 vue-virtual-scroller 的默认样式可能导致的内容截断 */

@@ -767,6 +767,39 @@ export const useSessionStore = defineStore('session', () => {
     await currentTab.value.loadMoreHistory()
   }
 
+  /**
+   * 切换到浏览模式
+   * 用于用户展开思考块、工具详情等交互时，防止自动滚动打断阅读
+   */
+  function switchToBrowseMode(): void {
+    if (!currentTab.value) return
+    const scrollState = currentTab.value.uiState.scrollState
+    if (scrollState.mode === 'follow') {
+      currentTab.value.saveUiState({
+        scrollState: {
+          ...scrollState,
+          mode: 'browse',
+          newMessageCount: 0
+        }
+      })
+    }
+  }
+
+  /**
+   * 切换到跟随模式
+   * 用于用户发送消息时，确保能看到 AI 的响应
+   */
+  function switchToFollowMode(): void {
+    if (!currentTab.value) return
+    currentTab.value.saveUiState({
+      scrollState: {
+        mode: 'follow',
+        anchor: null,
+        newMessageCount: 0
+      }
+    })
+  }
+
   // ========== 导出 ==========
 
   return {
@@ -837,6 +870,10 @@ export const useSessionStore = defineStore('session', () => {
     clearQueue,
 
     // 历史分页
-    loadMoreHistory
+    loadMoreHistory,
+
+    // 滚动控制
+    switchToBrowseMode,
+    switchToFollowMode
   }
 })

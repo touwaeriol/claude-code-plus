@@ -523,6 +523,8 @@ async function handleSendMessage(contents?: ContentBlock[], options?: SendOption
     }
 
     console.log('Sending message via currentTab', options?.isSlashCommand ? '(no contexts for slash command)' : `(${currentContexts.length} contexts)`)
+    // 发送消息时切换到跟随模式，确保用户能看到 AI 的响应
+    sessionStore.switchToFollowMode()
     sessionStore.currentTab.sendMessage({
       contexts: currentContexts,
       contents: safeContents,
@@ -543,6 +545,9 @@ async function handleForceSend(contents?: ContentBlock[], options?: SendOptions)
 
   // 如果是斜杠命令，不发送 contexts
   const currentContexts = options?.isSlashCommand ? [] : [...currentTabContexts.value]
+
+  // 发送消息时切换到跟随模式
+  sessionStore.switchToFollowMode()
 
   // 使用 forceSendMessage：打断 + 立即发送（跳过队列）
   await sessionStore.currentTab?.forceSendMessage({
@@ -576,6 +581,8 @@ async function handleForceSendPendingMessage(id: string) {
   // editQueueMessage 会从队列中移除并返回消息
   const msg = sessionStore.currentTab?.editQueueMessage(id)
   if (msg) {
+    // 发送消息时切换到跟随模式
+    sessionStore.switchToFollowMode()
     // 使用 forceSendMessage：打断 + 立即发送（跳过队列检查）
     await sessionStore.currentTab?.forceSendMessage({
       contexts: msg.contexts,

@@ -29,6 +29,7 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
 import type { ThinkingContent } from '@/types/display'
 import { useI18n } from '@/composables/useI18n'
+import { useSessionStore } from '@/stores/sessionStore'
 
 interface Props {
   thinking: ThinkingContent
@@ -36,6 +37,7 @@ interface Props {
 
 const props = defineProps<Props>()
 const { t } = useI18n()
+const sessionStore = useSessionStore()
 
 // 思考是否完成（有 signature 表示完成）
 const isComplete = computed(() => !!props.thinking.signature)
@@ -117,7 +119,12 @@ const isCollapsed = computed(() => {
 // 点击切换展开/折叠（仅在思考完成后有效）
 function handleClick() {
   if (isComplete.value) {
+    const wasCollapsed = isCollapsed.value
     isExpanded.value = !isExpanded.value
+    // 展开时切换到浏览模式，防止自动滚动打断阅读
+    if (wasCollapsed) {
+      sessionStore.switchToBrowseMode()
+    }
   }
 }
 </script>

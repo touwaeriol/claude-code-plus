@@ -76,8 +76,6 @@ export interface ScrollState {
     anchor: ScrollAnchor | null
     /** 新消息计数（browse 模式下累计） */
     newMessageCount: number
-    /** 是否在底部区域（50px 内） */
-    isNearBottom: boolean
 }
 
 /**
@@ -86,8 +84,7 @@ export interface ScrollState {
 export const DEFAULT_SCROLL_STATE: ScrollState = {
     mode: 'follow',
     anchor: null,
-    newMessageCount: 0,
-    isNearBottom: true
+    newMessageCount: 0
 }
 
 /**
