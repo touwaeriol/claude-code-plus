@@ -685,7 +685,7 @@ class BuiltInMcpServerDialog(
     private val enableCheckbox = JBCheckBox("Enable", entry.enabled)
     private val instructionsArea = JBTextArea(
         entry.instructions.ifBlank { entry.defaultInstructions },
-        3, 50
+        10, 50
     ).apply {
         font = Font(Font.MONOSPACED, Font.PLAIN, 12)
         lineWrap = true
@@ -897,10 +897,17 @@ class BuiltInMcpServerDialog(
 
             // 初始化 Default Shell 下拉框（基于已勾选的 Available Shells）
             updateDefaultShellCombo()
-            // 恢复之前保存的默认 shell 选择
+            // 恢复之前保存的默认 shell 选择，或使用系统推荐的默认值
             val savedDefaultShell = entry.terminalDefaultShell
-            if (savedDefaultShell.isNotBlank() && (defaultShellCombo.model as? DefaultComboBoxModel<*>)?.getIndexOf(savedDefaultShell) != -1) {
-                defaultShellCombo.selectedItem = savedDefaultShell
+            val effectiveDefaultShell = if (savedDefaultShell.isNotBlank()) {
+                savedDefaultShell
+            } else {
+                // 使用 getEffectiveDefaultShell() 获取系统推荐的默认 shell
+                // Windows 下会优先使用 git-bash（如果已安装）
+                AgentSettingsService.getInstance().getEffectiveDefaultShell()
+            }
+            if ((defaultShellCombo.model as? DefaultComboBoxModel<*>)?.getIndexOf(effectiveDefaultShell) != -1) {
+                defaultShellCombo.selectedItem = effectiveDefaultShell
             }
             topPanel.add(Box.createVerticalStrut(8))
         }
