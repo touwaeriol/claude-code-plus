@@ -19,6 +19,7 @@ All notable changes to this project will be documented in this file.
 
 - Handle Node.js and CLI not found errors with user-friendly messages in frontend
 - Improve RSocketSession error handling for environment configuration issues
+- Fix Terminal MCP default shell type not working by using LocalTerminalCustomizer extension point
 
 ---
 

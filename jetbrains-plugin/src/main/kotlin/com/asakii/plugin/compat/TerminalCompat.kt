@@ -1,10 +1,10 @@
 package com.asakii.plugin.compat
 
+import com.asakii.plugin.mcp.tools.terminal.ShellCommandOverride
 import com.intellij.openapi.project.Project
 import com.intellij.terminal.JBTerminalWidget
 import mu.KotlinLogging
 import org.jetbrains.plugins.terminal.ShellTerminalWidget
-import org.jetbrains.plugins.terminal.TerminalProjectOptionsProvider
 import org.jetbrains.plugins.terminal.TerminalToolWindowManager
 
 private val logger = KotlinLogging.logger {}
@@ -184,11 +184,11 @@ data class DetectedShell(
  *
  * 使用 TerminalToolWindowManager.createLocalShellWidget() 创建终端
  * 返回的是 ShellTerminalWidget，有 executeCommand() 和 hasRunningCommands() 方法
+ *
+ * 自定义 shell 通过 LocalTerminalCustomizer 扩展点实现，
+ * 使用 ShellCommandOverride 在创建终端时传递 shell 命令。
  */
 object TerminalCompat {
-
-    // 用于同步 shell 路径修改的锁对象
-    private val shellPathLock = Any()
 
     // Unix shell 检测配置
     private val UNIX_BINARIES_DIRECTORIES = listOf("/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin")
@@ -283,7 +283,8 @@ object TerminalCompat {
      * 创建本地 Shell Widget
      *
      * 使用 createLocalShellWidget API
-     * 通过临时修改 TerminalProjectOptionsProvider.shellPath 来支持自定义 shell
+     * 通过 LocalTerminalCustomizer 扩展点来支持自定义 shell
+     * （使用 ShellCommandOverride 在创建时传递 shell 命令）
      *
      * @param project 项目
      * @param workingDirectory 工作目录
@@ -305,39 +306,16 @@ object TerminalCompat {
 
         return try {
             val manager = TerminalToolWindowManager.getInstance(project)
-            val optionsProvider = TerminalProjectOptionsProvider.getInstance(project)
 
-            // 如果指定了自定义 shell，临时修改 shellPath 设置
-            val customShellPath = shellCommand?.firstOrNull()
-            var originalShellPath: String? = null
-
-            if (customShellPath != null) {
-                // 使用锁来确保线程安全
-                synchronized(shellPathLock) {
-                    originalShellPath = optionsProvider.shellPath
-                    logger.info { "  Temporarily changing shellPath from '$originalShellPath' to '$customShellPath'" }
-                    optionsProvider.shellPath = customShellPath
-
-                    try {
-                        @Suppress("DEPRECATION")
-                        val widget = manager.createLocalShellWidget(workingDirectory, tabName)
-
-                        if (widget != null) {
-                            logger.info { "  Created terminal widget: ${widget.javaClass.name}" }
-                            return TerminalWidgetWrapper(widget)
-                        } else {
-                            logger.error { "  createLocalShellWidget returned null" }
-                            return null
-                        }
-                    } finally {
-                        // 恢复原来的 shellPath 设置
-                        logger.info { "  Restoring shellPath to '$originalShellPath'" }
-                        optionsProvider.shellPath = originalShellPath
-                    }
-                }
+            // 如果指定了自定义 shell，通过 ShellCommandOverride 传递给 LocalTerminalCustomizer
+            if (shellCommand != null && shellCommand.isNotEmpty()) {
+                logger.info { "  Setting shell command override: $shellCommand" }
+                ShellCommandOverride.set(shellCommand)
             } else {
-                // 没有指定自定义 shell，使用默认设置
                 logger.info { "  Using default shell (no custom shellCommand specified)" }
+            }
+
+            try {
                 @Suppress("DEPRECATION")
                 val widget = manager.createLocalShellWidget(workingDirectory, tabName)
 
@@ -348,9 +326,13 @@ object TerminalCompat {
                     logger.error { "  createLocalShellWidget returned null" }
                     null
                 }
+            } finally {
+                // 确保清理 ThreadLocal，防止内存泄漏
+                ShellCommandOverride.clear()
             }
         } catch (e: Exception) {
             logger.error(e) { "Failed to create terminal widget" }
+            ShellCommandOverride.clear()
             null
         }
     }

@@ -136,6 +136,12 @@
             overrides="false"/>
     </extensions>
 
+    <!-- Terminal Plugin Extensions -->
+    <extensions defaultExtensionNs="org.jetbrains.plugins.terminal">
+        <localTerminalCustomizer
+            implementation="com.asakii.plugin.mcp.tools.terminal.TerminalShellCustomizer"/>
+    </extensions>
+
     <actions>
         <!-- Generate Commit Message Action - adds button to commit message toolbar -->
         <action id="com.asakii.plugin.vcs.GenerateCommitMessageAction"
