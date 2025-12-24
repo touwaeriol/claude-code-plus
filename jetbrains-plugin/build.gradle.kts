@@ -83,7 +83,13 @@ sourceSets {
 
 
 dependencies {
-    implementation(project(":ai-agent-server"))
+    // ai-agent-server 依赖，排除 Logback 以使用 IDEA 内置的 SLF4J 实现
+    // 这样 SLF4J 日志会自动写入 idea.log
+    implementation(project(":ai-agent-server")) {
+        exclude(group = "ch.qos.logback", module = "logback-classic")
+        exclude(group = "ch.qos.logback", module = "logback-core")
+        exclude(group = "org.slf4j", module = "jul-to-slf4j")
+    }
     implementation(project(":ai-agent-proto")) // Protobuf 生成的类型
     // 添加 ai-agent-sdk 依赖 (包含 AiAgentProvider 等核心类型)
     implementation(project(":ai-agent-sdk"))

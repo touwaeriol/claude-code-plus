@@ -17,12 +17,16 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * 仅供 StandaloneServer 使用的日志配置。
+ * 日志配置工具。
  *
  * 日志文件：
- * - <project>/.log/server.log：所有日志的完整记录（汇总）
- * - <project>/.log/sdk.log：Claude Agent SDK 相关日志（输入、CLI 原始输出）
- * - <project>/.log/ws.log：RSocket/WebSocket RPC 交互日志（请求、响应）
+ * - server.log：所有日志的完整记录（汇总）
+ * - sdk.log：Claude Agent SDK 相关日志（输入、CLI 原始输出）
+ * - ws.log：RSocket/WebSocket RPC 交互日志（请求、响应）
+ *
+ * 日志目录：
+ * - 开发模式 (runIde)：<project>/.log/
+ * - 生产模式 (安装为插件)：<IDEA_LOG_DIR>/claude-code-plus/
  */
 object StandaloneLogging {
 
@@ -31,11 +35,61 @@ object StandaloneLogging {
   const val WS_LOGGER = "com.asakii.ws"
 
   private var logDir: Path? = null
+  private var configured = false
 
+  /**
+   * 获取当前配置的日志目录
+   */
+  fun getLogDir(): Path? = logDir
+
+  /**
+   * 配置日志系统（使用项目根目录下的 .log 子目录）
+   * 适用于：StandaloneServer 独立运行、开发模式 (runIde)
+   *
+   * @param projectRoot 项目根目录
+   */
   fun configure(projectRoot: File) {
-    println("📝 [StandaloneLogging] projectRoot: ${projectRoot.absolutePath}")
+    configureWithDir(projectRoot.toPath().resolve(".log"))
+  }
 
-    logDir = projectRoot.toPath().resolve(".log")
+  /**
+   * 检测是否在 IDEA 插件环境中运行
+   * 插件环境中排除了 Logback，使用 IDEA 内置的 SLF4J 实现
+   */
+  fun isIdeaPluginEnvironment(): Boolean {
+    return try {
+      // 尝试加载 Logback 类，如果失败则说明在 IDEA 插件环境中
+      Class.forName("ch.qos.logback.classic.LoggerContext")
+      false
+    } catch (e: ClassNotFoundException) {
+      true
+    }
+  }
+
+  /**
+   * 配置日志系统（直接指定日志目录）
+   * 适用于：StandaloneServer 独立运行模式
+   *
+   * 注意：在 IDEA 插件环境中，Logback 被排除，SLF4J 会自动使用 IDEA 的日志实现，
+   * 日志会写入 idea.log，无需调用此方法。
+   *
+   * @param logDirectory 日志目录路径
+   */
+  fun configureWithDir(logDirectory: Path) {
+    if (configured) {
+      println("⚠️ [StandaloneLogging] Already configured, skipping. Current logDir: ${logDir?.toAbsolutePath()}")
+      return
+    }
+
+    // 检测是否在 IDEA 插件环境中
+    if (isIdeaPluginEnvironment()) {
+      println("📝 [StandaloneLogging] Running in IDEA plugin environment, using IDEA's built-in SLF4J implementation")
+      println("📝 [StandaloneLogging] Logs will be written to idea.log")
+      configured = true
+      return
+    }
+
+    logDir = logDirectory
     Files.createDirectories(logDir!!)
     println("📝 [StandaloneLogging] logDir created: ${logDir!!.toAbsolutePath()}")
 
@@ -108,6 +162,7 @@ object StandaloneLogging {
     rootLogger.addAppender(serverAppender)
     rootLogger.level = Level.INFO
 
+    configured = true
     println("📝 Logging configured.")
     println("   - Server logs (all): $serverLogFile")
     println("   - SDK logs: $sdkLogFile")

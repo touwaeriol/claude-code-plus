@@ -10,7 +10,9 @@ import com.asakii.ai.agent.sdk.connect.AiAgentConnectOptions
 import com.asakii.ai.agent.sdk.connect.ClaudeOverrides
 import com.asakii.ai.agent.sdk.connect.CodexOverrides
 import com.asakii.ai.agent.sdk.model.*
+import com.asakii.claude.agent.sdk.exceptions.CLINotFoundException
 import com.asakii.claude.agent.sdk.exceptions.ClientNotConnectedException
+import com.asakii.claude.agent.sdk.exceptions.NodeNotFoundException
 import com.asakii.claude.agent.sdk.types.ClaudeAgentOptions
 import com.asakii.server.rsocket.RSocketErrorCodes
 import io.rsocket.kotlin.RSocketError
@@ -187,6 +189,14 @@ class AiAgentRpcServiceImpl(
             withTimeout(connectTimeoutMs) {
                 newClient.connect(connectOptions)
             }
+        } catch (e: NodeNotFoundException) {
+            // Node.js 未找到或配置路径无效，转换为自定义 RSocket 错误码
+            sdkLog.error("❌ [SDK] Node.js 未找到: ${e.message}")
+            throw RSocketError.Custom(RSocketErrorCodes.NODE_NOT_FOUND, e.message ?: "Node.js not found")
+        } catch (e: CLINotFoundException) {
+            // Claude CLI 未找到，转换为自定义 RSocket 错误码
+            sdkLog.error("❌ [SDK] Claude CLI 未找到: ${e.message}")
+            throw RSocketError.Custom(RSocketErrorCodes.CLI_NOT_FOUND, e.message ?: "Claude CLI not found")
         } catch (e: TimeoutCancellationException) {
             sdkLog.error("❌ [SDK] 连接超时 (${connectTimeoutMs}ms)，请检查网络或 Claude CLI 状态")
             throw RuntimeException("连接超时：Claude CLI 未能在 ${connectTimeoutMs / 1000} 秒内启动", e)

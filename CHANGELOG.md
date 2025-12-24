@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2025-12-24
+
+### Added
+
+- Add `NodeNotFoundException` exception for better Node.js detection error handling
+- Add `NODE_NOT_FOUND` and `CLI_NOT_FOUND` RSocket error codes for frontend error handling
+
+### Changed
+
+- Improve logging configuration to auto-detect IDEA plugin environment
+- Exclude Logback dependencies in jetbrains-plugin to use IDEA's built-in SLF4J implementation
+- Logs now write to idea.log in production mode instead of separate log files
+
+### Fixed
+
+- Handle Node.js and CLI not found errors with user-friendly messages in frontend
+- Improve RSocketSession error handling for environment configuration issues
+
+---
+
+## [1.2.1] - 2025-12-24
+
+### Added
+
+- Implement optimistic UI update for model selection (faster perceived response)
+
+### Changed
+
+#### Terminal MCP (IntelliJ 2025.3 Compatibility)
+- Use public `TerminalToolWindowTabsManager` API for session management
+- Activate Terminal ToolWindow when creating new sessions
+- Use IntelliJ Logger instead of KotlinLogging in 253 TerminalCompat
+- Unify TerminalCompat into main kotlin directory structure
+
+### Fixed
+
+- Fix nested `invokeAndWait` to prevent deadlock in IntelliJ 2025.3
+- Sync custom models dynamically when IDE settings change
+
+---
+
 ## [1.2.0] - 2025-12-24
 
 ### Added

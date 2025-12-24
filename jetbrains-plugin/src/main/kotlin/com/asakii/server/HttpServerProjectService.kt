@@ -74,16 +74,25 @@ class HttpServerProjectService(private val project: Project) : Disposable {
 
     /**
      * 配置日志系统
-     * 将日志输出到项目的 .log 目录，支持滚动备份
+     * - 插件模式：Logback 被排除，SLF4J 自动使用 IDEA 内置实现，日志写入 idea.log
+     * - 开发模式 (runIde)：Logback 可用，配置日志到项目 .log 目录
      */
     private fun configureLogging() {
         try {
+            // 检测是否在 IDEA 插件环境中（Logback 被排除）
+            if (StandaloneLogging.isIdeaPluginEnvironment()) {
+                logger.info("📝 Using IDEA's built-in logging system, logs will be written to idea.log")
+                return
+            }
+
+            // 开发模式 (runIde)：Logback 可用，配置日志到项目目录
             val projectBasePath = project.basePath
             if (projectBasePath != null) {
-                StandaloneLogging.configure(java.io.File(projectBasePath))
-                logger.info("📝 Logging configured to: $projectBasePath/.log/")
+                val logDir = java.nio.file.Path.of(projectBasePath, ".log")
+                StandaloneLogging.configureWithDir(logDir)
+                logger.info("📝 Development mode: Logging configured to: $logDir")
             } else {
-                logger.warning("⚠️ Project base path is null, logging to .log directory skipped")
+                logger.warning("⚠️ Project base path is null, logging configuration skipped")
             }
         } catch (e: Exception) {
             logger.warning("⚠️ Failed to configure logging: ${e.message}")

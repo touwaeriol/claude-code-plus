@@ -136,3 +136,47 @@ class ClientNotConnectedException(
 class InterruptedException(
     message: String = "Operation was interrupted"
 ) : ClaudeCodeSdkException(message)
+
+/**
+ * Exception thrown when Node.js is not found or the configured path is invalid.
+ * This is a strict validation - if user configures a path, it must be valid.
+ */
+class NodeNotFoundException(
+    message: String,
+    val configuredPath: String? = null,
+    cause: Throwable? = null
+) : CLIConnectionException(message, cause) {
+    companion object {
+        /**
+         * Create exception for invalid user-configured path
+         */
+        fun invalidConfiguredPath(path: String): NodeNotFoundException {
+            return NodeNotFoundException(
+                message = """
+                    Node.js path is invalid: $path
+
+                    The configured Node.js executable does not exist or is not executable.
+                    Please check the path in Settings > Claude Code > Node.js path.
+                """.trimIndent(),
+                configuredPath = path
+            )
+        }
+
+        /**
+         * Create exception when Node.js cannot be auto-detected
+         */
+        fun notFound(): NodeNotFoundException {
+            return NodeNotFoundException(
+                message = """
+                    Node.js not found.
+
+                    Please either:
+                    1. Install Node.js and ensure it's in your system PATH
+                    2. Configure the Node.js path in Settings > Claude Code > Node.js path
+
+                    Download Node.js from: https://nodejs.org/
+                """.trimIndent()
+            )
+        }
+    }
+}

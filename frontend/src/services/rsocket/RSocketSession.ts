@@ -10,7 +10,7 @@
 
 import {RSocketClient, createRSocketClient, type DisconnectHandler} from './RSocketClient'
 import {ProtoCodec} from './protoCodec'
-import {isReconnectRequiredError} from './errorCodes'
+import {isReconnectRequiredError, isNodeNotFoundError, isCliNotFoundError, getErrorMessage} from './errorCodes'
 import {resolveServerWsUrl} from '@/utils/serverUrl'
 import {loggers} from '@/utils/logger'
 import type {
@@ -584,6 +584,44 @@ export class RSocketSession {
     }
 
     private handleError(error: Error): void {
+        // 检测是否是 Node.js 未找到错误（配置路径无效或系统未安装）
+        if (isNodeNotFoundError(error)) {
+            const friendlyMessage = getErrorMessage(error)
+            log.error('[RSocketSession] Node.js 未找到:', friendlyMessage)
+            // 通知订阅者，让 UI 显示弹窗提醒用户
+            this.errorHandlers.forEach(handler => {
+                try {
+                    // 包装为带有特殊标记的错误，方便 UI 层识别并显示弹窗
+                    const wrappedError = Object.assign(new Error(friendlyMessage), {
+                        code: (error as any).code,
+                        type: 'NODE_NOT_FOUND'
+                    })
+                    handler(wrappedError)
+                } catch (err) {
+                    log.error('[RSocketSession] 错误处理器执行失败:', err)
+                }
+            })
+            return
+        }
+
+        // 检测是否是 CLI 未找到错误
+        if (isCliNotFoundError(error)) {
+            const friendlyMessage = getErrorMessage(error)
+            log.error('[RSocketSession] Claude CLI 未找到:', friendlyMessage)
+            this.errorHandlers.forEach(handler => {
+                try {
+                    const wrappedError = Object.assign(new Error(friendlyMessage), {
+                        code: (error as any).code,
+                        type: 'CLI_NOT_FOUND'
+                    })
+                    handler(wrappedError)
+                } catch (err) {
+                    log.error('[RSocketSession] 错误处理器执行失败:', err)
+                }
+            })
+            return
+        }
+
         // 检测是否是需要重连的错误（如 NOT_CONNECTED）
         if (isReconnectRequiredError(error)) {
             log.warn('[RSocketSession] 检测到需要重连的错误，触发断开流程:', error.message)

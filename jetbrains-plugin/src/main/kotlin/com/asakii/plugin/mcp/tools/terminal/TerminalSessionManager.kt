@@ -295,7 +295,7 @@ class TerminalSessionManager(private val project: Project) {
             }
 
             ExecuteResult(
-                success = true,
+                 success = true,
                 sessionId = session.id,
                 sessionName = session.name,
                 background = true  // 始终视为后台执行
