@@ -565,7 +565,7 @@ val patchCli = tasks.register("patchCli") {
         File(propsFilePath).inputStream().use { propsForOutput.load(it) }
     }
     val cliVerForOutput = propsForOutput.getProperty("cli.version") ?: "unknown"
-    val enhancedFilePath = "$bundledDirPath/claude-cli-$cliVerForOutput-enhanced.js"
+    val enhancedFilePath = "$bundledDirPath/claude-cli-$cliVerForOutput-enhanced.mjs"
     outputs.file(enhancedFilePath)
 
     // 仅当补丁脚本存在且增强文件不存在或需要更新时运行
@@ -587,8 +587,8 @@ val patchCli = tasks.register("patchCli") {
 
         // 从 cli-patches 目录读取原始 CLI
         val cliJsFile = cliPatchesDir.resolve("claude-cli-$cliVer.js")
-        // 输出增强版到 bundled 目录
-        val enhancedFile = bundledDirFile.resolve("claude-cli-$cliVer-enhanced.js")
+        // 输出增强版到 bundled 目录（使用 .mjs 扩展名确保 Node.js 识别为 ES Module）
+        val enhancedFile = bundledDirFile.resolve("claude-cli-$cliVer-enhanced.mjs")
 
         if (!cliJsFile.exists()) {
             throw GradleException("CLI 文件不存在: ${cliJsFile.absolutePath}")
@@ -642,7 +642,7 @@ val verifyPatches = tasks.register("verifyPatches") {
         propsFile.inputStream().use { props.load(it) }
         val cliVer = props.getProperty("cli.version") ?: error("cli.version missing")
 
-        val enhancedFile = bundledDirFile.resolve("claude-cli-$cliVer-enhanced.js")
+        val enhancedFile = bundledDirFile.resolve("claude-cli-$cliVer-enhanced.mjs")
 
         if (!enhancedFile.exists()) {
             throw GradleException("增强版 CLI 不存在")

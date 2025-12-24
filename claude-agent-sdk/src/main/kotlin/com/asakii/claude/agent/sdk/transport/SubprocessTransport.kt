@@ -689,14 +689,26 @@ class SubprocessTransport(
 
     /**
      * 返回 Node.js 可执行文件路径
-     * 优先级：
-     * 1. 用户配置的路径（如果有）
+     *
+     * 严格模式：
+     * 1. 用户配置的路径（如果有）→ 验证有效性，无效则抛出异常（不回退）
      * 2. 自动检测到的路径（通过 login shell 查找）
-     * 3. 回退到 "node"（依赖系统 PATH）
+     * 3. 无法检测到 → 抛出异常
+     *
+     * @throws NodeNotFoundException 如果配置的路径无效或无法找到 Node.js
      */
     private fun findNodeExecutable(): String {
-        // 1. 用户配置的路径（最高优先级）
+        // 1. 用户配置的路径（最高优先级）- 严格验证，无效则报错
         options.nodePath?.takeIf { it.isNotBlank() }?.let { userPath ->
+            val file = java.io.File(userPath)
+            if (!file.exists()) {
+                logger.error("❌ 用户配置的 Node.js 路径不存在: $userPath")
+                throw NodeNotFoundException.invalidConfiguredPath(userPath)
+            }
+            if (!file.canExecute()) {
+                logger.error("❌ 用户配置的 Node.js 路径不可执行: $userPath")
+                throw NodeNotFoundException.invalidConfiguredPath(userPath)
+            }
             logger.info("✅ 使用用户配置的 Node.js 路径: $userPath")
             return userPath
         }
@@ -708,9 +720,9 @@ class SubprocessTransport(
             return detectedPath
         }
 
-        // 3. 回退到 "node"（依赖系统 PATH）
-        logger.info("⚠️ 未检测到 Node.js 路径，回退使用 'node' 命令（依赖系统 PATH）")
-        return "node"
+        // 3. 无法找到 Node.js → 抛出异常（不再回退到 "node"）
+        logger.error("❌ 未找到 Node.js，请在设置中配置路径或确保 Node.js 在系统 PATH 中")
+        throw NodeNotFoundException.notFound()
     }
 
     /**
@@ -749,8 +761,12 @@ class SubprocessTransport(
         return ""
     }
     /**
-     * 查找 SDK 绑定的 CLI (cli.js, 从 resources/bundled/ 目录)
+     * 查找 SDK 绑定的 CLI (cli.mjs, 从 resources/bundled/ 目录)
      * 优先使用增强版 CLI (带补丁)，如果不存在则回退到原始版本
+     *
+     * 注意：使用 .mjs 扩展名确保 Node.js 正确识别为 ES Module
+     * 官方 @anthropic-ai/claude-code 包通过 package.json 的 "type": "module" 声明
+     * 但提取到临时目录时没有 package.json，所以必须使用 .mjs 后缀
      */
     private fun findBundledCliJs(): String? {
         return try {
@@ -765,26 +781,34 @@ class SubprocessTransport(
                 return null
             }
 
-            // 查找增强版 CLI
-            val cliJsName = "claude-cli-$cliVersion-enhanced.js"
+            // 查找增强版 CLI（使用 .mjs 扩展名）
+            val cliJsName = "claude-cli-$cliVersion-enhanced.mjs"
             val resourcePath = "bundled/$cliJsName"
             logger.info("🔍 查找绑定的 CLI: $resourcePath")
             val resource = this::class.java.classLoader.getResource(resourcePath)
 
             if (resource != null) {
-                // 如果资源在 JAR 内，提取到临时文件
+                // 如果资源在 JAR 内，提取到基于内容摘要的目录
                 if (resource.protocol == "jar") {
-                    val tempFile = kotlin.io.path.createTempFile("claude-cli-", ".js").toFile()
-                    tempFile.deleteOnExit()
+                    // 先读取内容计算摘要
+                    val content = resource.openStream().use { it.readBytes() }
+                    val contentHash = DigestUtil.md5Hex(content).substring(0, 32)
 
-                    resource.openStream().use { input ->
-                        tempFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
+                    // 创建基于摘要的目录：{tempDir}/claude-code-plus/{hash}/
+                    val cacheDir = java.io.File(System.getProperty("java.io.tmpdir"), "claude-code-plus/$contentHash")
+                    val targetFile = java.io.File(cacheDir, cliJsName)
+
+                    // 如果文件已存在且大小匹配，直接复用
+                    if (targetFile.exists() && targetFile.length() == content.size.toLong()) {
+                        logger.info("📦 复用已缓存的 CLI: ${targetFile.absolutePath}")
+                        return targetFile.absolutePath
                     }
 
-                    logger.info("📦 从 JAR 提取 CLI: ${tempFile.absolutePath}")
-                    return tempFile.absolutePath
+                    // 否则提取到目录
+                    cacheDir.mkdirs()
+                    targetFile.writeBytes(content)
+                    logger.info("📦 从 JAR 提取 CLI: ${targetFile.absolutePath}")
+                    return targetFile.absolutePath
                 } else {
                     // 资源在文件系统中（开发模式）
                     val file = java.io.File(resource.toURI())

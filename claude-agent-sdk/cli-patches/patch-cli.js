@@ -22,8 +22,10 @@ const patches = require('./patches');
 // 命令行参数解析
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
-const inputFile = args.find(a => !a.startsWith('--') && a.endsWith('.js'));
-const outputFile = args.find((a, i) => !a.startsWith('--') && a.endsWith('.js') && args.indexOf(a) !== args.indexOf(inputFile));
+// 支持 .js 和 .mjs 扩展名（.mjs 用于确保 Node.js 识别为 ES Module）
+const isJsFile = (a) => !a.startsWith('--') && (a.endsWith('.js') || a.endsWith('.mjs'));
+const inputFile = args.find(a => isJsFile(a));
+const outputFile = args.find((a, i) => isJsFile(a) && args.indexOf(a) !== args.indexOf(inputFile));
 
 if (!inputFile) {
   console.error('用法: node patch-cli.js <input-cli.js> [output-cli.js]');
