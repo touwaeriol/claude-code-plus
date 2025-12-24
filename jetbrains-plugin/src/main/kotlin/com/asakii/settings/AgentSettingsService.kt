@@ -256,8 +256,8 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     /**
      * 获取生效的默认 shell
      *
-     * 如果未配置，则根据操作系统返回默认值：
-     * - Windows: git-bash
+     * 如果未配置，则根据操作系统和实际安装情况返回默认值：
+     * - Windows: 如果检测到 Git Bash 可用则使用 git-bash，否则使用 powershell
      * - Unix: bash
      */
     fun getEffectiveDefaultShell(): String {
@@ -265,9 +265,20 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         if (configured.isNotBlank()) {
             return configured
         }
-        // 未配置时，根据操作系统返回默认值
+        // 未配置时，根据操作系统和实际安装情况返回默认值
         val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-        return if (isWindows) "git-bash" else "bash"
+        return if (isWindows) {
+            // Windows：检查 Git Bash 是否可用
+            val installedShells = detectInstalledShells()
+            if (installedShells.contains("git-bash")) {
+                "git-bash"
+            } else {
+                // Git Bash 不可用时，fallback 到 powershell
+                "powershell"
+            }
+        } else {
+            "bash"
+        }
     }
 
     /**
