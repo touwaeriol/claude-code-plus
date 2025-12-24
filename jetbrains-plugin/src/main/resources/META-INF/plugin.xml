@@ -119,10 +119,6 @@
         <checkinHandlerFactory
             implementation="com.asakii.plugin.vcs.ClaudeCheckinHandlerFactory"/>
 
-        <!-- Terminal Shell Customizer for custom shell support in 242-252 -->
-        <localTerminalCustomizer
-            implementation="com.asakii.plugin.mcp.tools.terminal.TerminalShellCustomizer"/>
-
         <!-- Generate Commit Message Service -->
         <projectService
             serviceImplementation="com.asakii.plugin.vcs.GenerateCommitMessageService"/>
