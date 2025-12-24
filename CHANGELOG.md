@@ -2,15 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.2] - 2025-12-24
+## [1.2.2] - 2025-12-25
 
 ### Added
 
 - Add `NodeNotFoundException` exception for better Node.js detection error handling
 - Add `NODE_NOT_FOUND` and `CLI_NOT_FOUND` RSocket error codes for frontend error handling
+- Auto-detect git-bash availability on Windows and set as default shell if installed
 
 ### Changed
 
+- Improve Terminal MCP config dialog layout with larger instructions text area (10 rows)
 - Improve logging configuration to auto-detect IDEA plugin environment
 - Exclude Logback dependencies in jetbrains-plugin to use IDEA's built-in SLF4J implementation
 - Logs now write to idea.log in production mode instead of separate log files
@@ -20,6 +22,9 @@ All notable changes to this project will be documented in this file.
 - Handle Node.js and CLI not found errors with user-friendly messages in frontend
 - Improve RSocketSession error handling for environment configuration issues
 - Fix Terminal MCP default shell type not working by using LocalTerminalCustomizer extension point
+- Fix custom shell support in 242+ using TerminalTabState.myShellCommand
+- Add version-specific compat layers for Terminal API
+- Preserve browse scroll mode when switching chat tabs
 
 ---
 
