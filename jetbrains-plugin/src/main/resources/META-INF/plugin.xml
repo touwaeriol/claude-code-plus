@@ -41,6 +41,8 @@
     <!-- change-notes is auto-generated from CHANGELOG.md via build.gradle.kts -->
 
     <depends>com.intellij.modules.platform</depends>
+    <!-- Terminal plugin dependency for LocalTerminalCustomizer -->
+    <depends>org.jetbrains.plugins.terminal</depends>
     <!-- Java plugin dependency for PsiClass, PsiMethod, ClassInheritorsSearch, etc. -->
     <depends optional="true" config-file="plugin-withJava.xml">com.intellij.java</depends>
     <!-- Git plugin dependency for Git MCP (VCS integration) -->
@@ -117,6 +119,10 @@
         <checkinHandlerFactory
             implementation="com.asakii.plugin.vcs.ClaudeCheckinHandlerFactory"/>
 
+        <!-- Terminal Shell Customizer for custom shell support in 242-252 -->
+        <localTerminalCustomizer
+            implementation="com.asakii.plugin.mcp.tools.terminal.TerminalShellCustomizer"/>
+
         <!-- Generate Commit Message Service -->
         <projectService
             serviceImplementation="com.asakii.plugin.vcs.GenerateCommitMessageService"/>
@@ -134,12 +140,6 @@
             serviceInterface="com.asakii.plugin.services.GitBranchService"
             serviceImplementation="com.asakii.plugin.services.NoopGitBranchService"
             overrides="false"/>
-    </extensions>
-
-    <!-- Terminal Plugin Extensions -->
-    <extensions defaultExtensionNs="org.jetbrains.plugins.terminal">
-        <localTerminalCustomizer
-            implementation="com.asakii.plugin.mcp.tools.terminal.TerminalShellCustomizer"/>
     </extensions>
 
     <actions>

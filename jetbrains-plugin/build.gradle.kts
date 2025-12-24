@@ -43,10 +43,19 @@ val targetPlatformVersion = when (platformMajor) {
 // 主兼容层目录 (VCS/Localization/BrowseButton API)
 // - 242-252: 使用旧 API (kotlin-compat-242)
 // - 253+: 使用新 API (kotlin-compat-253)
-// 注：TerminalCompat 已统一移至主目录 kotlin/com/asakii/plugin/compat/
 val mainCompatDir = when {
     platformMajor >= 253 -> "kotlin-compat-253"
     else -> "kotlin-compat-242"
+}
+
+// Terminal 兼容层目录
+// - 242-243: 使用 createLocalShellWidget + LocalTerminalCustomizer (kotlin-compat-terminal-242-243)
+// - 251-252: 使用 createNewSession API (kotlin-compat-terminal-251-252)
+// - 253+: 使用 createNewSession API (kotlin-compat-terminal-253)
+val terminalCompatDir = when {
+    platformMajor >= 253 -> "kotlin-compat-terminal-253"
+    platformMajor >= 251 -> "kotlin-compat-terminal-251-252"
+    else -> "kotlin-compat-terminal-242-243"
 }
 
 // Diff API 兼容层目录
@@ -75,6 +84,7 @@ sourceSets {
         kotlin {
             srcDir("src/main/kotlin")           // 通用代码
             srcDir("src/main/$mainCompatDir")   // 主兼容层 (VCS/Commit/Localization/JBCef)
+            srcDir("src/main/$terminalCompatDir") // Terminal 兼容层
             srcDir("src/main/$diffCompatDir")   // Diff API 兼容层
         }
     }

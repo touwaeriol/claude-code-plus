@@ -1,11 +1,8 @@
 package com.asakii.plugin.compat
 
-import com.asakii.plugin.mcp.tools.terminal.ShellCommandOverride
-import com.intellij.openapi.project.Project
 import com.intellij.terminal.JBTerminalWidget
 import mu.KotlinLogging
 import org.jetbrains.plugins.terminal.ShellTerminalWidget
-import org.jetbrains.plugins.terminal.TerminalToolWindowManager
 
 private val logger = KotlinLogging.logger {}
 
@@ -182,11 +179,9 @@ data class DetectedShell(
 /**
  * Terminal 兼容层
  *
- * 使用 TerminalToolWindowManager.createLocalShellWidget() 创建终端
- * 返回的是 ShellTerminalWidget，有 executeCommand() 和 hasRunningCommands() 方法
- *
- * 自定义 shell 通过 LocalTerminalCustomizer 扩展点实现，
- * 使用 ShellCommandOverride 在创建终端时传递 shell 命令。
+ * createShellWidget 方法在兼容层中实现：
+ * - 242-252: 使用 createLocalShellWidget（不支持自定义 shell）
+ * - 253+: 使用 createNewSession（支持自定义 shell）
  */
 object TerminalCompat {
 
@@ -277,63 +272,5 @@ object TerminalCompat {
         }
 
         return shells
-    }
-
-    /**
-     * 创建本地 Shell Widget
-     *
-     * 使用 createLocalShellWidget API
-     * 通过 LocalTerminalCustomizer 扩展点来支持自定义 shell
-     * （使用 ShellCommandOverride 在创建时传递 shell 命令）
-     *
-     * @param project 项目
-     * @param workingDirectory 工作目录
-     * @param tabName 标签名称
-     * @param shellCommand Shell 命令（如 listOf("C:\\Program Files\\Git\\bin\\bash.exe")）
-     * @return TerminalWidgetWrapper 或 null
-     */
-    fun createShellWidget(
-        project: Project,
-        workingDirectory: String,
-        tabName: String,
-        shellCommand: List<String>? = null
-    ): TerminalWidgetWrapper? {
-        logger.info { "=== [TerminalCompat] createShellWidget ===" }
-        logger.info { "  project: ${project.name}" }
-        logger.info { "  workingDirectory: $workingDirectory" }
-        logger.info { "  tabName: $tabName" }
-        logger.info { "  shellCommand: $shellCommand" }
-
-        return try {
-            val manager = TerminalToolWindowManager.getInstance(project)
-
-            // 如果指定了自定义 shell，通过 ShellCommandOverride 传递给 LocalTerminalCustomizer
-            if (shellCommand != null && shellCommand.isNotEmpty()) {
-                logger.info { "  Setting shell command override: $shellCommand" }
-                ShellCommandOverride.set(shellCommand)
-            } else {
-                logger.info { "  Using default shell (no custom shellCommand specified)" }
-            }
-
-            try {
-                @Suppress("DEPRECATION")
-                val widget = manager.createLocalShellWidget(workingDirectory, tabName)
-
-                if (widget != null) {
-                    logger.info { "  Created terminal widget: ${widget.javaClass.name}" }
-                    TerminalWidgetWrapper(widget)
-                } else {
-                    logger.error { "  createLocalShellWidget returned null" }
-                    null
-                }
-            } finally {
-                // 确保清理 ThreadLocal，防止内存泄漏
-                ShellCommandOverride.clear()
-            }
-        } catch (e: Exception) {
-            logger.error(e) { "Failed to create terminal widget" }
-            ShellCommandOverride.clear()
-            null
-        }
     }
 }

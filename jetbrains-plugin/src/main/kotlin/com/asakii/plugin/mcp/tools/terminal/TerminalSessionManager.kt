@@ -9,6 +9,7 @@ import com.intellij.openapi.wm.ToolWindowManager
 import com.asakii.plugin.compat.CommandWaitResult
 import com.asakii.plugin.compat.TerminalCompat
 import com.asakii.plugin.compat.TerminalWidgetWrapper
+import com.asakii.plugin.compat.createShellWidget
 import org.jetbrains.plugins.terminal.TerminalToolWindowFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -217,7 +218,7 @@ class TerminalSessionManager(private val project: Project) {
                     val basePath = project.basePath ?: System.getProperty("user.home")
 
                     // 使用兼容层创建终端（传递 shellCommand 以指定 shell 类型）
-                    wrapper = TerminalCompat.createShellWidget(project, basePath, sessionName, shellCommand)
+                    wrapper = createShellWidget(project, basePath, sessionName, shellCommand)
 
                     if (wrapper == null) {
                         logger.warn("Failed to create TerminalWidgetWrapper")
