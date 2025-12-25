@@ -550,12 +550,16 @@ class TerminalSessionManager(private val project: Project) {
     }
 
     /**
-     * 中断当前正在执行的命令（发送 Ctrl+C）
+     * 中断当前正在执行的命令
+     *
+     * @param sessionId 会话 ID
+     * @param signal 信号类型: SIGINT (Ctrl+C), SIGQUIT (Ctrl+\), SIGTSTP (Ctrl+Z)
      */
-    fun interruptCommand(sessionId: String): InterruptResult {
+    fun interruptCommand(sessionId: String, signal: String = "SIGINT"): InterruptResult {
         val session = getSession(sessionId) ?: return InterruptResult(
             success = false,
             sessionId = sessionId,
+            signal = signal,
             error = "Session not found: $sessionId"
         )
 
@@ -563,33 +567,41 @@ class TerminalSessionManager(private val project: Project) {
             val wasRunning = session.hasRunningCommands()
 
             ApplicationManager.getApplication().invokeAndWait {
-                // 发送 Ctrl+C (ASCII 3, ETX)
-                session.widgetWrapper.sendInterrupt()
+                session.widgetWrapper.sendInterrupt(signal)
             }
 
             // 等待命令停止
             Thread.sleep(100)
             val isStillRunning = session.hasRunningCommands()
 
+            val signalDesc = when (signal.uppercase()) {
+                "SIGINT" -> "SIGINT (Ctrl+C)"
+                "SIGQUIT" -> "SIGQUIT (Ctrl+\\)"
+                "SIGTSTP" -> "SIGTSTP (Ctrl+Z)"
+                else -> signal
+            }
+
             InterruptResult(
                 success = true,
                 sessionId = sessionId,
+                signal = signal,
                 wasRunning = wasRunning,
                 isStillRunning = isStillRunning,
                 message = when {
-                    wasRunning == null || isStillRunning == null -> "Interrupt signal sent (command status unknown)"
+                    wasRunning == null || isStillRunning == null -> "$signalDesc sent (command status unknown)"
                     wasRunning == false -> "No command was running"
-                    isStillRunning == false -> "Command interrupted successfully"
-                    else -> "Interrupt signal sent, command may still be stopping"
+                    isStillRunning == false -> "Command stopped by $signalDesc"
+                    else -> "$signalDesc sent, command may still be stopping"
                 }
             )
         } catch (e: ProcessCanceledException) {
             throw e
         } catch (e: Exception) {
-            logger.error("Failed to interrupt command in session $sessionId", e)
+            logger.error("Failed to send $signal to session $sessionId", e)
             InterruptResult(
                 success = false,
                 sessionId = sessionId,
+                signal = signal,
                 error = e.message ?: "Unknown error"
             )
         }
@@ -743,6 +755,7 @@ data class ExecuteResult(
 data class InterruptResult(
     val success: Boolean,
     val sessionId: String,
+    val signal: String? = null,  // 发送的信号类型
     val wasRunning: Boolean? = null,  // null 表示无法确定
     val isStillRunning: Boolean? = null,  // null 表示无法确定
     val message: String? = null,

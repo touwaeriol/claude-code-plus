@@ -110,10 +110,21 @@ class TerminalWidgetWrapper(private val widget: ShellTerminalWidget) {
     }
 
     /**
-     * 发送 Ctrl+C 中断信号
+     * 发送终端控制信号
+     *
+     * @param signal 信号类型:
+     *   - SIGINT (Ctrl+C): 中断信号，默认值
+     *   - SIGQUIT (Ctrl+\): 强制退出信号
+     *   - SIGTSTP (Ctrl+Z): 暂停进程信号
      */
-    fun sendInterrupt() {
-        widget.terminalStarter?.sendBytes("\u0003".toByteArray(), false)
+    fun sendInterrupt(signal: String = "SIGINT") {
+        val bytes = when (signal.uppercase()) {
+            "SIGINT" -> "\u0003"   // Ctrl+C (ETX, ASCII 3)
+            "SIGQUIT" -> "\u001C"  // Ctrl+\ (FS, ASCII 28)
+            "SIGTSTP" -> "\u001A"  // Ctrl+Z (SUB, ASCII 26)
+            else -> "\u0003"       // 默认 SIGINT
+        }
+        widget.terminalStarter?.sendBytes(bytes.toByteArray(), false)
     }
 
     /**

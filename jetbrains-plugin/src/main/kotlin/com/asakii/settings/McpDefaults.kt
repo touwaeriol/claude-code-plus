@@ -579,11 +579,17 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
 
   "TerminalInterrupt": {
     "type": "object",
-    "description": "Stop the currently running command by sending Ctrl+C signal. The terminal session remains open and can be reused for new commands. Use TerminalKill to close the session entirely.",
+    "description": "Stop or pause the currently running command by sending a terminal signal. The terminal session remains open and can be reused for new commands. Use TerminalKill to close the session entirely.",
     "properties": {
       "session_id": {
         "type": "string",
         "description": "Session ID to interrupt (required)"
+      },
+      "signal": {
+        "type": "string",
+        "enum": ["SIGINT", "SIGQUIT", "SIGTSTP"],
+        "description": "Signal to send. SIGINT (Ctrl+C, default): interrupt. SIGQUIT (Ctrl+\\): force quit. SIGTSTP (Ctrl+Z): suspend/pause.",
+        "default": "SIGINT"
       }
     },
     "required": ["session_id"]
@@ -604,7 +610,7 @@ Use IDEA's integrated terminal for command execution instead of the built-in Bas
 - `mcp__terminal__TerminalRead`: Read session output (supports regex search)
 - `mcp__terminal__TerminalList`: List all terminal sessions
 - `mcp__terminal__TerminalKill`: Close session(s) completely
-- `mcp__terminal__TerminalInterrupt`: Stop running command (Ctrl+C), keeps session open
+- `mcp__terminal__TerminalInterrupt`: Stop/pause running command. Supports signals: SIGINT (Ctrl+C, default), SIGQUIT (Ctrl+\\, force quit), SIGTSTP (Ctrl+Z, suspend)
 - `mcp__terminal__TerminalTypes`: Get available shell types
 - `mcp__terminal__TerminalRename`: Rename a session
 
@@ -618,7 +624,7 @@ Use IDEA's integrated terminal for command execution instead of the built-in Bas
 2. Read output (wait for completion): `TerminalRead(session_id="terminal-1", wait=true)`
 3. Read output (immediately): `TerminalRead(session_id="terminal-1")`
 4. Search output: `TerminalRead(session_id="terminal-1", search="error|warning")`
-5. Stop running command: `TerminalInterrupt(session_id="terminal-1")`
+5. Stop running command: `TerminalInterrupt(session_id="terminal-1")` or `TerminalInterrupt(session_id="terminal-1", signal="SIGQUIT")`
 6. Close session(s): `TerminalKill(session_ids=["terminal-1", "terminal-2"])`
 7. Close all sessions: `TerminalKill(all=true)`
     """.trimIndent()

@@ -5,15 +5,25 @@ import mu.KotlinLogging
 private val logger = KotlinLogging.logger {}
 
 /**
- * TerminalInterrupt 工具 - 中断正在执行的命令（发送 Ctrl+C）
+ * TerminalInterrupt 工具 - 发送终端控制信号
+ *
+ * 支持的信号：
+ * - SIGINT (Ctrl+C): 中断信号，默认值
+ * - SIGQUIT (Ctrl+\): 强制退出信号
+ * - SIGTSTP (Ctrl+Z): 暂停进程信号
  */
 class TerminalInterruptTool(private val sessionManager: TerminalSessionManager) {
 
+    companion object {
+        val VALID_SIGNALS = setOf("SIGINT", "SIGQUIT", "SIGTSTP")
+    }
+
     /**
-     * 中断正在执行的命令
+     * 发送终端控制信号
      *
      * @param arguments 参数：
      *   - session_id: String - 会话 ID（必需）
+     *   - signal: String - 信号类型（可选，默认 SIGINT）
      */
     fun execute(arguments: Map<String, Any>): Map<String, Any> {
         val sessionId = arguments["session_id"] as? String
@@ -22,24 +32,37 @@ class TerminalInterruptTool(private val sessionManager: TerminalSessionManager) 
                 "error" to "Missing required parameter: session_id"
             )
 
-        logger.info { "Interrupting command in session: $sessionId" }
+        // 解析 signal 参数，默认 SIGINT
+        val signal = (arguments["signal"] as? String)?.uppercase() ?: "SIGINT"
 
-        val result = sessionManager.interruptCommand(sessionId)
+        // 验证 signal 值
+        if (signal !in VALID_SIGNALS) {
+            return mapOf(
+                "success" to false,
+                "error" to "Invalid signal: $signal. Valid values: ${VALID_SIGNALS.joinToString(", ")}"
+            )
+        }
+
+        logger.info { "Sending $signal to session: $sessionId" }
+
+        val result = sessionManager.interruptCommand(sessionId, signal)
 
         return if (result.success) {
             buildMap {
                 put("success", true)
                 put("session_id", result.sessionId)
+                result.signal?.let { put("signal", it) }
                 result.wasRunning?.let { put("was_running", it) }
                 result.isStillRunning?.let { put("is_still_running", it) }
                 result.message?.let { put("message", it) }
             }
         } else {
-            mapOf(
-                "success" to false,
-                "session_id" to result.sessionId,
-                "error" to (result.error ?: "Unknown error")
-            )
+            buildMap {
+                put("success", false)
+                put("session_id", result.sessionId)
+                result.signal?.let { put("signal", it) }
+                put("error", result.error ?: "Unknown error")
+            }
         }
     }
 }
