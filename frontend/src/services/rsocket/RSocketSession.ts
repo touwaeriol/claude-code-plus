@@ -141,7 +141,7 @@ export class RSocketSession {
         const data = ProtoCodec.encodeQueryRequest(message)
 
         // 使用 Request-Stream 获取流式响应
-        this.cancelStream = this.client.requestStream('agent.query', data, {
+        this._cancelStream = this.client.requestStream('agent.query', data, {
             onNext: (responseData) => {
                 try {
                     const rpcMessage = ProtoCodec.decodeRpcMessage(responseData)
@@ -162,7 +162,7 @@ export class RSocketSession {
                 log.debug('[RSocketSession] 流完成 (协议层信号)')
                 // RSocket 协议层的 onComplete 信号，表示流结束
                 // 无需解析消息内容来判断结束
-                this.cancelStream = null
+                this._cancelStream = null
             }
         })
     }
@@ -179,7 +179,7 @@ export class RSocketSession {
 
         const data = ProtoCodec.encodeQueryWithContentRequest(content)
 
-        this.cancelStream = this.client.requestStream('agent.queryWithContent', data, {
+        this._cancelStream = this.client.requestStream('agent.queryWithContent', data, {
             onNext: (responseData) => {
                 try {
                     const rpcMessage = ProtoCodec.decodeRpcMessage(responseData)
@@ -198,7 +198,7 @@ export class RSocketSession {
             },
             onComplete: () => {
                 log.debug('[RSocketSession] 流完成')
-                this.cancelStream = null
+                this._cancelStream = null
             }
         })
     }
@@ -220,9 +220,9 @@ export class RSocketSession {
         log.info('[RSocketSession] 中断请求')
 
         // ⚠️ 不要取消流！后端会通过流发送打断结果
-        // if (this.cancelStream) {
-        //   this.cancelStream()
-        //   this.cancelStream = null
+        // if (this._cancelStream) {
+        //   this._cancelStream()
+        //   this._cancelStream = null
         // }
 
         // 等待后端确认收到中断请求
@@ -541,7 +541,7 @@ export class RSocketSession {
         // 清理状态
         this._isConnected = false
         this._capabilities = null
-        this.cancelStream = null
+        this._cancelStream = null
         this.client = null
         this.pendingHandlers.clear()
 

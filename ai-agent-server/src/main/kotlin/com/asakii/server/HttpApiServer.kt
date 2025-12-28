@@ -42,6 +42,7 @@ import com.asakii.server.mcp.DefaultTerminalMcpServerProvider
 import com.asakii.server.mcp.GitMcpServerProvider
 import com.asakii.server.mcp.DefaultGitMcpServerProvider
 import com.asakii.server.rsocket.ProtoConverter.toProto
+import com.asakii.server.codex.CodexBackendProvider
 import io.rsocket.kotlin.ktor.server.RSocketSupport
 import io.rsocket.kotlin.ktor.server.rSocket
 import io.ktor.utils.io.*
@@ -51,6 +52,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -132,7 +134,8 @@ class HttpApiServer(
     private val jetBrainsMcpServerProvider: JetBrainsMcpServerProvider = DefaultJetBrainsMcpServerProvider,  // JetBrains MCP Server Provider
     private val terminalMcpServerProvider: TerminalMcpServerProvider = DefaultTerminalMcpServerProvider,  // Terminal MCP Server Provider
     private val gitMcpServerProvider: GitMcpServerProvider = DefaultGitMcpServerProvider,  // Git MCP Server Provider
-    private val serviceConfigProvider: () -> com.asakii.server.config.AiAgentServiceConfig = { com.asakii.server.config.AiAgentServiceConfig() }  // 服务配置提供者（每次 connect 时调用获取最新配置）
+    private val serviceConfigProvider: () -> com.asakii.server.config.AiAgentServiceConfig = { com.asakii.server.config.AiAgentServiceConfig() },  // 服务配置提供者（每次 connect 时调用获取最新配置）
+    private val codexBackendProvider: CodexBackendProvider? = null  // Codex 后端提供者（可选）
 ) : com.asakii.bridge.EventBridge {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -244,6 +247,152 @@ class HttpApiServer(
                         }
 
                         jetbrainsRSocketHandler.createHandler()
+                    }
+                }
+
+                // Codex 事件流 WebSocket 端点
+                if (codexBackendProvider != null) {
+                    webSocket("/codex-events") {
+                        val clientId = java.util.UUID.randomUUID().toString()
+                        logger.info { "🔌 [Codex WebSocket] 客户端连接: $clientId" }
+
+                        try {
+                            // 启动事件监听协程
+                            val eventJob = scope.launch {
+                                codexBackendProvider.events.collect { event ->
+                                    try {
+                                        val eventJson = when (event) {
+                                            is CodexBackendProvider.CodexEvent.ThreadCreated -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("thread_created"))
+                                                    put("threadId", JsonPrimitive(event.threadId))
+                                                    put("thread", json.encodeToJsonElement(event.thread))
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.ThreadResumed -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("thread_resumed"))
+                                                    put("threadId", JsonPrimitive(event.threadId))
+                                                    put("thread", json.encodeToJsonElement(event.thread))
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.ThreadArchived -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("thread_archived"))
+                                                    put("threadId", JsonPrimitive(event.threadId))
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.TurnStarted -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("turn_started"))
+                                                    put("threadId", JsonPrimitive(event.threadId))
+                                                    put("turnId", JsonPrimitive(event.turnId))
+                                                    put("turn", json.encodeToJsonElement(event.turn))
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.TurnCompleted -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("turn_completed"))
+                                                    put("threadId", JsonPrimitive(event.threadId))
+                                                    put("turnId", JsonPrimitive(event.turnId))
+                                                    put("turn", json.encodeToJsonElement(event.turn))
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.TurnInterrupted -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("turn_interrupted"))
+                                                    put("threadId", JsonPrimitive(event.threadId))
+                                                    put("turnId", JsonPrimitive(event.turnId))
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.TurnError -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("turn_error"))
+                                                    put("threadId", JsonPrimitive(event.threadId))
+                                                    put("turnId", JsonPrimitive(event.turnId))
+                                                    put("error", JsonPrimitive(event.error))
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.ItemStarted -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("item_started"))
+                                                    put("item", json.encodeToJsonElement(event.item))
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.ItemCompleted -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("item_completed"))
+                                                    put("item", json.encodeToJsonElement(event.item))
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.StreamingContent -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("streaming_content"))
+                                                    put("threadId", JsonPrimitive(event.threadId))
+                                                    put("itemId", JsonPrimitive(event.itemId))
+                                                    put("contentType", JsonPrimitive(event.contentType))
+                                                    put("content", JsonPrimitive(event.content))
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.CommandApprovalRequired -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("command_approval_required"))
+                                                    put("requestId", JsonPrimitive(event.requestId))
+                                                    put("threadId", JsonPrimitive(event.threadId))
+                                                    put("turnId", JsonPrimitive(event.turnId))
+                                                    put("command", JsonPrimitive(event.command))
+                                                    event.cwd?.let { put("cwd", JsonPrimitive(it)) }
+                                                    event.reason?.let { put("reason", JsonPrimitive(it)) }
+                                                    event.risk?.let { put("risk", JsonPrimitive(it)) }
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.FileChangeApprovalRequired -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("file_change_approval_required"))
+                                                    put("requestId", JsonPrimitive(event.requestId))
+                                                    put("threadId", JsonPrimitive(event.threadId))
+                                                    put("turnId", JsonPrimitive(event.turnId))
+                                                    put("changes", json.encodeToJsonElement(event.changes))
+                                                    event.reason?.let { put("reason", JsonPrimitive(it)) }
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.TokenUsage -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("token_usage"))
+                                                    put("threadId", JsonPrimitive(event.threadId))
+                                                    put("usage", json.encodeToJsonElement(event.usage))
+                                                }
+                                            }
+                                            is CodexBackendProvider.CodexEvent.Error -> {
+                                                buildJsonObject {
+                                                    put("type", JsonPrimitive("error"))
+                                                    put("message", JsonPrimitive(event.message))
+                                                }
+                                            }
+                                        }
+
+                                        send(io.ktor.websocket.Frame.Text(eventJson.toString()))
+                                    } catch (e: Exception) {
+                                        logger.error(e) { "❌ [Codex WebSocket] Failed to send event" }
+                                    }
+                                }
+                            }
+
+                            // 等待连接关闭
+                            for (frame in incoming) {
+                                // 接收客户端消息（暂时不处理，仅保持连接）
+                                if (frame is io.ktor.websocket.Frame.Text) {
+                                    val text = frame.data.decodeToString()
+                                    logger.debug { "📨 [Codex WebSocket] Received message: $text" }
+                                }
+                            }
+
+                            eventJob.cancel()
+                        } catch (e: Exception) {
+                            logger.error(e) { "❌ [Codex WebSocket] Connection error" }
+                        } finally {
+                            logger.info { "🔌 [Codex WebSocket] 客户端断开: $clientId" }
+                        }
                     }
                 }
 
@@ -733,6 +882,292 @@ class HttpApiServer(
                     get("/project-path") {
                         val projectPath = ideTools.getProjectPath()
                         call.respond(mapOf("projectPath" to projectPath))
+                    }
+
+                    // Codex 后端 API
+                    route("/codex") {
+                        // Thread 管理
+                        post("/thread/start") {
+                            try {
+                                if (codexBackendProvider == null) {
+                                    call.respond(
+                                        HttpStatusCode.ServiceUnavailable,
+                                        mapOf("success" to false, "error" to "Codex backend not available")
+                                    )
+                                    return@post
+                                }
+
+                                val requestBody = call.receive<JsonObject>()
+                                val model = requestBody["model"]?.jsonPrimitive?.contentOrNull
+                                val cwd = requestBody["cwd"]?.jsonPrimitive?.contentOrNull
+                                val approvalPolicy = requestBody["approvalPolicy"]?.jsonPrimitive?.contentOrNull
+                                val sandbox = requestBody["sandbox"]?.jsonPrimitive?.contentOrNull
+
+                                val config = CodexBackendProvider.ThreadConfig(
+                                    model = model,
+                                    cwd = cwd,
+                                    approvalPolicy = approvalPolicy,
+                                    sandbox = sandbox
+                                )
+
+                                val threadId = codexBackendProvider.createThread(config)
+                                call.respond(mapOf("success" to true, "threadId" to threadId))
+                            } catch (e: Exception) {
+                                logger.error(e) { "❌ [Codex] Failed to start thread" }
+                                call.respond(
+                                    HttpStatusCode.InternalServerError,
+                                    mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
+                                )
+                            }
+                        }
+
+                        post("/thread/resume") {
+                            try {
+                                if (codexBackendProvider == null) {
+                                    call.respond(
+                                        HttpStatusCode.ServiceUnavailable,
+                                        mapOf("success" to false, "error" to "Codex backend not available")
+                                    )
+                                    return@post
+                                }
+
+                                val requestBody = call.receive<JsonObject>()
+                                val threadId = requestBody["threadId"]?.jsonPrimitive?.content
+                                    ?: return@post call.respond(
+                                        HttpStatusCode.BadRequest,
+                                        mapOf("success" to false, "error" to "Missing threadId")
+                                    )
+
+                                codexBackendProvider.resumeThread(threadId)
+                                call.respond(mapOf("success" to true))
+                            } catch (e: Exception) {
+                                logger.error(e) { "❌ [Codex] Failed to resume thread" }
+                                call.respond(
+                                    HttpStatusCode.InternalServerError,
+                                    mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
+                                )
+                            }
+                        }
+
+                        post("/thread/archive") {
+                            try {
+                                if (codexBackendProvider == null) {
+                                    call.respond(
+                                        HttpStatusCode.ServiceUnavailable,
+                                        mapOf("success" to false, "error" to "Codex backend not available")
+                                    )
+                                    return@post
+                                }
+
+                                val requestBody = call.receive<JsonObject>()
+                                val threadId = requestBody["threadId"]?.jsonPrimitive?.content
+                                    ?: return@post call.respond(
+                                        HttpStatusCode.BadRequest,
+                                        mapOf("success" to false, "error" to "Missing threadId")
+                                    )
+
+                                codexBackendProvider.archiveThread(threadId)
+                                call.respond(mapOf("success" to true))
+                            } catch (e: Exception) {
+                                logger.error(e) { "❌ [Codex] Failed to archive thread" }
+                                call.respond(
+                                    HttpStatusCode.InternalServerError,
+                                    mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
+                                )
+                            }
+                        }
+
+                        // Turn 管理
+                        post("/turn/start") {
+                            try {
+                                if (codexBackendProvider == null) {
+                                    call.respond(
+                                        HttpStatusCode.ServiceUnavailable,
+                                        mapOf("success" to false, "error" to "Codex backend not available")
+                                    )
+                                    return@post
+                                }
+
+                                val requestBody = call.receive<JsonObject>()
+                                val threadId = requestBody["threadId"]?.jsonPrimitive?.content
+                                    ?: return@post call.respond(
+                                        HttpStatusCode.BadRequest,
+                                        mapOf("success" to false, "error" to "Missing threadId")
+                                    )
+                                val input = requestBody["input"]?.jsonPrimitive?.content
+                                    ?: return@post call.respond(
+                                        HttpStatusCode.BadRequest,
+                                        mapOf("success" to false, "error" to "Missing input")
+                                    )
+
+                                val turnId = codexBackendProvider.startTurn(threadId, input)
+                                call.respond(mapOf("success" to true, "turnId" to turnId))
+                            } catch (e: Exception) {
+                                logger.error(e) { "❌ [Codex] Failed to start turn" }
+                                call.respond(
+                                    HttpStatusCode.InternalServerError,
+                                    mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
+                                )
+                            }
+                        }
+
+                        post("/turn/interrupt") {
+                            try {
+                                if (codexBackendProvider == null) {
+                                    call.respond(
+                                        HttpStatusCode.ServiceUnavailable,
+                                        mapOf("success" to false, "error" to "Codex backend not available")
+                                    )
+                                    return@post
+                                }
+
+                                val requestBody = call.receive<JsonObject>()
+                                val threadId = requestBody["threadId"]?.jsonPrimitive?.content
+                                    ?: return@post call.respond(
+                                        HttpStatusCode.BadRequest,
+                                        mapOf("success" to false, "error" to "Missing threadId")
+                                    )
+
+                                codexBackendProvider.interruptTurn(threadId)
+                                call.respond(mapOf("success" to true))
+                            } catch (e: Exception) {
+                                logger.error(e) { "❌ [Codex] Failed to interrupt turn" }
+                                call.respond(
+                                    HttpStatusCode.InternalServerError,
+                                    mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
+                                )
+                            }
+                        }
+
+                        // 配置管理
+                        route("/config") {
+                            get {
+                                try {
+                                    if (codexBackendProvider == null) {
+                                        call.respond(
+                                            HttpStatusCode.ServiceUnavailable,
+                                            mapOf("success" to false, "error" to "Codex backend not available")
+                                        )
+                                        return@get
+                                    }
+
+                                    // 返回 Codex 配置信息
+                                    call.respond(
+                                        mapOf(
+                                            "success" to true,
+                                            "available" to true,
+                                            "version" to "1.0.0"
+                                        )
+                                    )
+                                } catch (e: Exception) {
+                                    logger.error(e) { "❌ [Codex] Failed to get config" }
+                                    call.respond(
+                                        HttpStatusCode.InternalServerError,
+                                        mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
+                                    )
+                                }
+                            }
+
+                            put {
+                                try {
+                                    if (codexBackendProvider == null) {
+                                        call.respond(
+                                            HttpStatusCode.ServiceUnavailable,
+                                            mapOf("success" to false, "error" to "Codex backend not available")
+                                        )
+                                        return@put
+                                    }
+
+                                    // 目前配置更新通过启动时传入，暂不支持运行时更新
+                                    call.respond(
+                                        mapOf("success" to true, "message" to "Config update not supported at runtime")
+                                    )
+                                } catch (e: Exception) {
+                                    logger.error(e) { "❌ [Codex] Failed to update config" }
+                                    call.respond(
+                                        HttpStatusCode.InternalServerError,
+                                        mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
+                                    )
+                                }
+                            }
+                        }
+
+                        // Thread 状态查询
+                        get("/thread/{threadId}/state") {
+                            try {
+                                if (codexBackendProvider == null) {
+                                    call.respond(
+                                        HttpStatusCode.ServiceUnavailable,
+                                        mapOf("success" to false, "error" to "Codex backend not available")
+                                    )
+                                    return@get
+                                }
+
+                                val threadId = call.parameters["threadId"]
+                                    ?: return@get call.respond(
+                                        HttpStatusCode.BadRequest,
+                                        mapOf("success" to false, "error" to "Missing threadId")
+                                    )
+
+                                val state = codexBackendProvider.getThreadState(threadId)
+                                if (state != null) {
+                                    call.respond(
+                                        mapOf(
+                                            "success" to true,
+                                            "state" to mapOf(
+                                                "threadId" to state.threadId,
+                                                "isActive" to state.isActive,
+                                                "currentTurnId" to state.currentTurnId,
+                                                "config" to mapOf(
+                                                    "model" to state.config.model,
+                                                    "cwd" to state.config.cwd,
+                                                    "approvalPolicy" to state.config.approvalPolicy,
+                                                    "sandbox" to state.config.sandbox
+                                                )
+                                            )
+                                        )
+                                    )
+                                } else {
+                                    call.respond(
+                                        HttpStatusCode.NotFound,
+                                        mapOf("success" to false, "error" to "Thread not found")
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                logger.error(e) { "❌ [Codex] Failed to get thread state" }
+                                call.respond(
+                                    HttpStatusCode.InternalServerError,
+                                    mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
+                                )
+                            }
+                        }
+                    }
+
+                    // 后端可用性检测
+                    get("/backend/available") {
+                        try {
+                            val backends = mutableMapOf<String, Boolean>()
+
+                            // Claude 后端始终可用（通过 RSocket）
+                            backends["claude"] = true
+
+                            // Codex 后端根据 provider 是否存在判断
+                            backends["codex"] = codexBackendProvider != null
+
+                            call.respond(
+                                mapOf(
+                                    "success" to true,
+                                    "backends" to backends,
+                                    "defaultBackend" to "claude"
+                                )
+                            )
+                        } catch (e: Exception) {
+                            logger.error(e) { "❌ Failed to check backend availability" }
+                            call.respond(
+                                HttpStatusCode.InternalServerError,
+                                mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
+                            )
+                        }
                     }
 
                     // 临时图片上传 API

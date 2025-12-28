@@ -32,7 +32,7 @@
               connecting: tab.connectionStatus === 'CONNECTING',
               error: tab.connectionStatus === 'ERROR'
             }"
-            :title="displaySessionId(tab) || t('chat.connectionStatus.disconnected')"
+            :title="getTabTooltip(tab)"
             @click="handleTabClick(tab)"
             @dblclick.stop="handleTabDblClick(tab)"
             @click.middle.prevent="handleCloseTab(tab.id)"
@@ -99,6 +99,9 @@
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import draggable from 'vuedraggable'
 import { useI18n } from '@/composables/useI18n'
+import type { BackendType } from '@/types/backend'
+import { BackendTypes } from '@/types/backend'
+import { getBackendDisplayName } from '@/services/backendCapabilities'
 
 export interface SessionTabInfo {
   id: string  // tabId
@@ -109,6 +112,7 @@ export interface SessionTabInfo {
   isConnected?: boolean
   connectionStatus?: 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'ERROR'
   error?: string | null
+  backendType?: BackendType  // 添加后端类型字段
 }
 
 const props = withDefaults(defineProps<{
@@ -256,6 +260,25 @@ function statusTitle(tab: SessionTabInfo): string {
 
 function displaySessionId(tab: SessionTabInfo): string | null {
   return tab.sessionId || tab.resumeFromSessionId || null
+}
+
+function getTabTooltip(tab: SessionTabInfo): string {
+  const parts: string[] = []
+
+  // 后端类型
+  const backendType = tab.backendType ?? BackendTypes.CLAUDE
+  parts.push(`后端: ${getBackendDisplayName(backendType)}`)
+
+  // 会话 ID
+  const sessionId = displaySessionId(tab)
+  if (sessionId) {
+    parts.push(`会话: ${sessionId}`)
+  }
+
+  // 连接状态
+  parts.push(`状态: ${statusTitle(tab)}`)
+
+  return parts.join(' | ')
 }
 </script>
 

@@ -165,9 +165,9 @@
       <!-- 左侧控件组 - Cursor 风格紧凑布局 -->
       <div class="toolbar-left">
         <div class="cursor-style-selectors">
-          <!-- 模式选择器 - Cursor 风格（带灰色背景） -->
+          <!-- Claude 权限模式选择器 - Cursor 风格（带灰色背景） -->
           <el-select
-            v-if="showPermissionControls"
+            v-if="showPermissionControls && backendType === 'claude'"
             v-model="selectedPermissionValue"
             class="cursor-selector mode-selector"
             :disabled="!enabled"
@@ -219,63 +219,78 @@
             </el-option>
           </el-select>
 
-          <!-- 模型选择器 - 新架构（只有 3 个选项） -->
-          <el-select
-            v-if="showModelSelector"
-            v-model="selectedModelValue"
-            class="cursor-selector model-selector"
-            :disabled="!enabled"
-            placement="top-start"
-            :teleported="true"
-            popper-class="chat-input-select-dropdown"
-            :popper-options="{
-              modifiers: [
-                {
-                  name: 'preventOverflow',
-                  options: { boundary: 'viewport' }
-                },
-                {
-                  name: 'flip',
-                  options: {
-                    fallbackPlacements: ['top-start', 'top'],
+          <!-- ========== Claude 后端控件组 ========== -->
+          <template v-if="showModelSelector && backendType === 'claude'">
+            <!-- Claude 模型选择器 -->
+            <el-select
+              v-model="selectedModelValue"
+              class="cursor-selector model-selector"
+              :disabled="!enabled"
+              placement="top-start"
+              :teleported="true"
+              popper-class="chat-input-select-dropdown"
+              :popper-options="{
+                modifiers: [
+                  {
+                    name: 'preventOverflow',
+                    options: { boundary: 'viewport' }
+                  },
+                  {
+                    name: 'flip',
+                    options: {
+                      fallbackPlacements: ['top-start', 'top'],
+                    }
                   }
-                }
-              ]
-            }"
-            @change="handleBaseModelChange"
-          >
-            <el-option
-              v-for="model in baseModelOptions"
-              :key="model.id"
-              :value="model.id"
-              :label="model.displayName"
+                ]
+              }"
+              @change="handleBaseModelChange"
             >
-              <span class="model-option-label">
-                {{ model.displayName }}
-              </span>
-            </el-option>
-          </el-select>
+              <el-option
+                v-for="model in claudeModelOptions"
+                :key="model.id"
+                :value="model.id"
+                :label="model.displayName"
+              >
+                <span class="model-option-label">
+                  {{ model.displayName }}
+                </span>
+              </el-option>
+            </el-select>
 
-          <!-- 思考级别选择器 - 独立组件 -->
-          <ThinkingToggle
-            v-if="showModelSelector"
-            :thinking-mode="currentThinkingMode"
-            :thinking-tokens="thinkingLevel"
-            :thinking-levels="thinkingLevels"
-            @change="handleThinkingLevelChange"
-          />
-
-          <!-- Skip Permissions 开关 -->
-          <StatusToggle
-            v-if="showPermissionControls"
-            :label="t('permission.mode.bypass')"
-            :enabled="skipPermissionsValue"
-            :disabled="!enabled"
-            :tooltip="t('permission.mode.bypassTooltip')"
-            @toggle="handleSkipPermissionsChange"
-          />
+            <!-- Claude 思考级别控件 -->
+            <ThinkingToggle
+              :thinking-mode="currentThinkingMode"
+              :thinking-tokens="thinkingLevel"
+              :thinking-levels="thinkingLevels"
+              @change="handleThinkingLevelChange"
+            />
+          </template>
 
         </div>
+
+        <!-- ========== Codex 工具栏（独立组件） ========== -->
+        <CodexToolbar
+          v-if="backendType === 'codex'"
+          :model="codexModel"
+          :approval-mode="codexApprovalMode"
+          :sandbox-mode="codexSandboxMode"
+          :reasoning-effort="codexReasoningEffort"
+          :disabled="!enabled"
+          @update:model="handleCodexModelChange"
+          @update:approval-mode="handleCodexApprovalModeChange"
+          @update:sandbox-mode="handleCodexSandboxModeChange"
+          @update:reasoning-effort="handleCodexReasoningEffortChange"
+        />
+
+        <!-- Skip Permissions 开关（Claude 和 Codex 共用） -->
+        <StatusToggle
+          v-if="showPermissionControls"
+          :label="t('permission.mode.bypass')"
+          :enabled="skipPermissionsValue"
+          :disabled="!enabled"
+          :tooltip="t('permission.mode.bypassTooltip')"
+          @toggle="handleSkipPermissionsChange"
+        />
       </div>
 
       <!-- 右侧按钮组 -->
@@ -341,6 +356,18 @@
           </svg>
         </button>
       </div>
+    </div>
+
+    <!-- Thinking Config Panel (思考配置面板) - Codex 后端使用 -->
+    <div
+      v-if="showThinkingConfig && backendType === 'codex'"
+      class="thinking-config-dropdown"
+    >
+      <ThinkingConfigPanel
+        :backend-type="backendType"
+        :model-value="currentThinkingConfig"
+        @update:model-value="handleThinkingConfigUpdate"
+      />
     </div>
 
     <!-- Send Button Context Menu (发送按钮右键菜单) -->
@@ -431,15 +458,25 @@ import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 import RichTextInput from './RichTextInput.vue'
 import ThinkingToggle from './ThinkingToggle.vue'
 import StatusToggle from './StatusToggle.vue'
+import ThinkingConfigPanel from '@/components/settings/ThinkingConfigPanel.vue'
+import CodexToolbar from './CodexToolbar.vue'
 import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
 import { isInAtQuery } from '@/utils/atSymbolDetector'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 // Composables
 import { useImageHandling } from '@/composables/useImageHandling'
 import { useDragAndDrop } from '@/composables/useDragAndDrop'
 import { useInputResize, INPUT_MAX_HEIGHT } from '@/composables/useInputResize'
 import { useModelSelection } from '@/composables/useModelSelection'
 import { useContextMenu } from '@/composables/useContextMenu'
+// Multi-backend types
+import type { BackendType } from '@/types/backend'
+import type { ThinkingConfig } from '@/types/thinking'
+import { isCodexThinking, getCodexEffortLevels } from '@/types/thinking'
+// Codex types
+import type { CodexApprovalMode, CodexSandboxMode, CodexReasoningEffort } from '@/types/codex'
+import { DEFAULT_CODEX_CONFIG } from '@/types/codex'
 
 interface PendingTask {
   id: string
@@ -483,6 +520,9 @@ interface Props {
   showToast?: (message: string, duration?: number) => void
   // v-model 支持：输入框文本（用于 Tab 切换时保持状态）
   modelValue?: string
+  // Multi-backend support
+  backendType?: BackendType  // 后端类型
+  thinkingConfig?: ThinkingConfig  // 思考配置
 }
 
 interface SendOptions {
@@ -501,6 +541,7 @@ interface Emits {
   (e: 'skip-permissions-change', skip: boolean): void
   (e: 'cancel'): void  // 取消编辑（仅 inline 模式）
   (e: 'update:modelValue', value: string): void  // v-model 支持
+  (e: 'update:thinkingConfig', value: ThinkingConfig): void  // 思考配置更新
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -518,7 +559,8 @@ const props = withDefaults(defineProps<Props>(), {
   placeholderText: '',
   inline: false,
   editDisabled: false,
-  modelValue: ''
+  modelValue: '',
+  backendType: 'claude'  // 默认为 Claude 后端
 })
 
 const emit = defineEmits<Emits>()
@@ -526,6 +568,7 @@ const emit = defineEmits<Emits>()
 // i18n & stores
 const { t } = useI18n()
 const sessionStore = useSessionStore()
+const settingsStore = useSettingsStore()
 
 // ========== 初始化 Composables ==========
 
@@ -540,6 +583,7 @@ const {
   selectedPermissionValue,
   skipPermissionsValue,
   baseModelOptions,
+  claudeModelOptions,  // Claude 模型列表
   getBaseModelLabel,
   getModeIcon,
   handleBaseModelChange,
@@ -555,6 +599,123 @@ const {
   initialSkipPermissions: props.skipPermissions,
   onSkipPermissionsChange: (skip) => emit('skip-permissions-change', skip)
 })
+
+// ========== Codex 配置（从 settingsStore 读取，因为 sessionStore 可能没有完整实现） ==========
+const codexModel = computed(() => {
+  return sessionStore.currentTab?.modelId?.value ?? settingsStore.settings.codexModel ?? DEFAULT_CODEX_CONFIG.model
+})
+
+const codexApprovalMode = computed(() => {
+  return (settingsStore.settings as any).codexApprovalMode ?? DEFAULT_CODEX_CONFIG.approvalMode
+})
+
+const codexSandboxMode = computed(() => {
+  return (settingsStore.settings as any).codexSandboxMode ?? DEFAULT_CODEX_CONFIG.sandboxMode
+})
+
+const codexReasoningEffort = computed(() => {
+  return (settingsStore.settings as any).codexReasoningEffort ?? DEFAULT_CODEX_CONFIG.reasoningEffort
+})
+
+// Codex 事件处理函数
+function handleCodexModelChange(model: string) {
+  console.log(`🔄 [Codex] 切换模型: ${model}`)
+  const tab = sessionStore.currentTab
+  if (tab) {
+    tab.updateSettings({ model })
+  }
+  settingsStore.saveSettings({ codexModel: model })
+}
+
+function handleCodexApprovalModeChange(mode: CodexApprovalMode) {
+  console.log(`🔄 [Codex] 切换审批模式: ${mode}`)
+  settingsStore.saveSettings({ codexApprovalMode: mode } as any)
+}
+
+function handleCodexSandboxModeChange(mode: CodexSandboxMode) {
+  console.log(`🔄 [Codex] 切换沙盒模式: ${mode}`)
+  settingsStore.saveSettings({ codexSandboxMode: mode } as any)
+}
+
+function handleCodexReasoningEffortChange(effort: CodexReasoningEffort) {
+  console.log(`🔄 [Codex] 切换推理深度: ${effort}`)
+  settingsStore.saveSettings({ codexReasoningEffort: effort } as any)
+}
+
+// ========== Multi-Backend Thinking Config ==========
+
+// Thinking config panel visibility
+const showThinkingConfig = ref(false)
+
+// Current thinking config (from props or default)
+const currentThinkingConfig = computed<ThinkingConfig>(() => {
+  if (props.thinkingConfig) {
+    return props.thinkingConfig
+  }
+  // Default config based on backend type
+  if (props.backendType === 'codex') {
+    return {
+      type: 'codex',
+      effort: 'medium',
+      summary: 'auto'
+    }
+  } else {
+    return {
+      type: 'claude',
+      enabled: true,
+      tokenBudget: 8096
+    }
+  }
+})
+
+// Codex thinking helpers
+const codexThinkingEnabled = computed(() => {
+  if (isCodexThinking(currentThinkingConfig.value)) {
+    return currentThinkingConfig.value.effort !== null
+  }
+  return false
+})
+
+const codexEffortLabel = computed(() => {
+  if (!isCodexThinking(currentThinkingConfig.value)) return 'OFF'
+  const effort = currentThinkingConfig.value.effort
+  if (effort === null) return 'OFF'
+
+  const levels = getCodexEffortLevels()
+  const level = levels.find(l => l.id === effort)
+  return level?.label || effort.toUpperCase()
+})
+
+const codexThinkingTooltip = computed(() => {
+  if (!isCodexThinking(currentThinkingConfig.value)) return '配置推理强度'
+  const effort = currentThinkingConfig.value.effort
+  if (effort === null) return '推理已关闭'
+
+  const levels = getCodexEffortLevels()
+  const level = levels.find(l => l.id === effort)
+  return level?.description || '配置推理强度'
+})
+
+function toggleThinkingConfigPanel() {
+  showThinkingConfig.value = !showThinkingConfig.value
+}
+
+function handleThinkingConfigUpdate(config: ThinkingConfig) {
+  emit('update:thinkingConfig', config)
+}
+
+// Close thinking config panel when clicking outside
+function handleGlobalThinkingConfigClick(event: MouseEvent) {
+  if (!showThinkingConfig.value) return
+
+  const target = event.target as HTMLElement
+  if (
+    !target.closest('.thinking-config-dropdown') &&
+    !target.closest('.thinking-config-btn')
+  ) {
+    showThinkingConfig.value = false
+  }
+}
 
 // 当前错误信息（从 sessionStore 读取）
 const currentError = computed(() => sessionStore.currentLastError)
@@ -979,6 +1140,11 @@ async function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     event.preventDefault()
     event.stopPropagation() // 防止全局监听器重复触发
+    // 如果思考配置面板打开，先关闭它
+    if (showThinkingConfig.value) {
+      showThinkingConfig.value = false
+      return
+    }
     // 如果正在生成，打断生成
     if (props.isGenerating) {
       emit('stop')
@@ -1003,12 +1169,13 @@ async function handleKeydown(event: KeyboardEvent) {
     return
   }
 
-  // Tab - 切换思考开关
+  // Tab - 切换思考开关（仅 Claude 后端）
   if (
     event.key === 'Tab' &&
     !event.shiftKey &&
     !event.ctrlKey &&
-    !event.metaKey
+    !event.metaKey &&
+    props.backendType === 'claude'
   ) {
     event.preventDefault()
     await toggleThinkingEnabled('keyboard')
@@ -1276,12 +1443,25 @@ function getTaskStatusText(status: string): string {
 }
 
 function formatTokenUsage(usage: TokenUsage): string {
+  // For Codex backend, token display might be different
+  if (props.backendType === 'codex') {
+    // Codex may not provide detailed token breakdown
+    return `${usage.totalTokens} tokens`
+  }
+  // Claude backend
   return `${usage.totalTokens} tokens`
 }
 
 function getTokenTooltip(): string {
   if (!props.tokenUsage) return ''
   const u = props.tokenUsage
+
+  // For Codex backend, tooltip might be simpler
+  if (props.backendType === 'codex') {
+    return `Total: ${u.totalTokens} tokens`
+  }
+
+  // Claude backend - detailed breakdown
   return t('chat.tokenTooltip', {
     input: u.inputTokens,
     output: u.outputTokens,
@@ -1392,6 +1572,9 @@ onMounted(() => {
   // 添加全局键盘监听
   document.addEventListener('keydown', handleGlobalKeydown)
 
+  // 添加全局点击监听（关闭思考配置面板）
+  document.addEventListener('mousedown', handleGlobalThinkingConfigClick)
+
   // 订阅活跃文件变更
   activeFileUnsubscribe = jetbrainsRSocket.onActiveFileChange((file) => {
     currentActiveFile.value = file
@@ -1415,6 +1598,8 @@ onUnmounted(() => {
   unbindSendContextMenuGlobalHandlers()
   // 移除全局键盘监听
   document.removeEventListener('keydown', handleGlobalKeydown)
+  // 移除全局点击监听
+  document.removeEventListener('mousedown', handleGlobalThinkingConfigClick)
   // 取消订阅活跃文件变更
   if (activeFileUnsubscribe) {
     activeFileUnsubscribe()
@@ -1964,6 +2149,66 @@ onUnmounted(() => {
   opacity: 0.5;
   cursor: not-allowed;
   background: var(--theme-panel-background, #f6f8fa);
+}
+
+/* ========== Codex Thinking Control ========== */
+.codex-thinking-control {
+  display: inline-flex;
+  align-items: center;
+}
+
+.thinking-config-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--theme-border, #e1e4e8);
+  border-radius: 4px;
+  background: var(--theme-background, #ffffff);
+  color: var(--theme-secondary-foreground, #6a737d);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.thinking-config-btn:hover {
+  background: var(--theme-hover-background, #f6f8fa);
+  border-color: var(--theme-accent, #0366d6);
+}
+
+.thinking-config-btn.active {
+  border-color: var(--theme-accent, #0366d6);
+  color: var(--theme-accent, #0366d6);
+  background: rgba(3, 102, 214, 0.08);
+}
+
+.thinking-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.thinking-label {
+  font-weight: 500;
+}
+
+.expand-icon {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+/* Thinking Config Dropdown */
+.thinking-config-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 10px;
+  margin-bottom: 8px;
+  min-width: 300px;
+  max-width: 400px;
+  background: var(--theme-background, #ffffff);
+  border: 1px solid var(--theme-border, #e1e4e8);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
 }
 
 

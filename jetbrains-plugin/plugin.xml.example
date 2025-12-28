@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<idea-plugin>
+    <!--
+        示例 plugin.xml 配置片段
+        展示如何注册 Codex 设置界面
+    -->
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!--
+            Codex 后端设置界面
+
+            - parentId="tools": 将设置项放在 Settings > Tools 下
+            - instance: 指向 CodexConfigurable 类
+            - displayName: 设置界面显示的名称
+        -->
+        <projectConfigurable
+            parentId="tools"
+            instance="com.asakii.plugin.settings.CodexConfigurable"
+            id="com.asakii.plugin.settings.CodexConfigurable"
+            displayName="Codex Backend"
+            nonDefaultProject="false"/>
+
+        <!--
+            如果希望放在其他位置，可以使用不同的 parentId:
+
+            - parentId="root": 顶级设置项
+            - parentId="tools": Settings > Tools
+            - parentId="editor": Settings > Editor
+            - parentId="project": Settings > Project
+
+            或者自定义父级配置:
+        -->
+
+        <!-- 可选：创建一个自定义的父级配置组 -->
+        <projectConfigurable
+            id="com.asakii.plugin.settings.AiBackends"
+            displayName="AI Backends"
+            nonDefaultProject="false">
+            <!-- 这里可以添加子配置项 -->
+        </projectConfigurable>
+
+        <!-- 将 Codex 设置放在自定义父级下 -->
+        <!--
+        <projectConfigurable
+            parentId="com.asakii.plugin.settings.AiBackends"
+            instance="com.asakii.plugin.settings.CodexConfigurable"
+            id="com.asakii.plugin.settings.CodexConfigurable"
+            displayName="Codex"/>
+        -->
+
+        <!--
+            注册 CodexSettings 服务（可选，如果使用 @Service 注解则自动注册）
+            由于 CodexSettings 使用了 @Service(Service.Level.PROJECT)，
+            不需要在这里显式注册
+        -->
+    </extensions>
+
+    <!--
+        Settings 界面路径示例：
+
+        默认配置 (parentId="tools"):
+        Settings/Preferences > Tools > Codex Backend
+
+        自定义父级配置:
+        Settings/Preferences > AI Backends > Codex
+    -->
+</idea-plugin>
