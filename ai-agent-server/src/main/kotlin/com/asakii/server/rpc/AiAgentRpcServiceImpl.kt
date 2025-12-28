@@ -77,6 +77,8 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.File
@@ -214,6 +216,9 @@ class AiAgentRpcServiceImpl(
         )
 
         sdkLog.info("✅ [SDK] 已连接: provider=${connectOptions.provider}, model=${connectOptions.model ?: "default"}")
+
+        // 设置当前 AI 会话 ID，用于终端默认会话关联
+        terminalMcpServerProvider.setCurrentAiSession(sessionId)
 
         val capabilities = newClient.getCapabilities().toRpcCapabilities()
         sdkLog.debug("✅ [SDK] 能力: canInterrupt=${capabilities.canInterrupt}, canThink=${capabilities.canThink}")
@@ -912,7 +917,8 @@ class AiAgentRpcServiceImpl(
 
         val threadOptions = ThreadOptions(
             model = model,
-            sandboxMode = sandboxMode
+            sandboxMode = sandboxMode,
+            skipGitRepoCheck = true
         )
 
         return CodexOverrides(

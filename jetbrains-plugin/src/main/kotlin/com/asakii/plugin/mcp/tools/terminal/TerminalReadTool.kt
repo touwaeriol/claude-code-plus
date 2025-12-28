@@ -17,7 +17,7 @@ class TerminalReadTool(private val sessionManager: TerminalSessionManager) {
      * 读取终端输出
      *
      * @param arguments 参数：
-     *   - session_id: String - 会话 ID（必需）
+     *   - session_id: String? - 会话 ID，不传则使用默认终端
      *   - max_lines: Int? - 最大行数（默认 1000）
      *   - search: String? - 搜索模式（正则表达式）
      *   - context_lines: Int? - 搜索结果上下文行数（默认 2）
@@ -25,10 +25,12 @@ class TerminalReadTool(private val sessionManager: TerminalSessionManager) {
      *   - timeout: Int? - 等待超时时间（毫秒，默认 30000）
      */
     fun execute(arguments: Map<String, Any>): Map<String, Any> {
+        // 如果未指定 session_id，使用默认终端
         val sessionId = arguments["session_id"] as? String
+            ?: sessionManager.getDefaultTerminalId()
             ?: return mapOf(
                 "success" to false,
-                "error" to "Missing required parameter: session_id"
+                "error" to "No session_id provided and no default terminal exists"
             )
 
         val maxLines = (arguments["max_lines"] as? Number)?.toInt() ?: 1000

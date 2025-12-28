@@ -17,7 +17,7 @@ class TerminalTool(private val sessionManager: TerminalSessionManager) {
      *
      * @param arguments 参数：
      *   - command: String - 要执行的命令（必需）
-     *   - session_id: String? - 会话 ID，为空时创建新会话
+     *   - session_id: String? - 会话 ID，为空时使用当前 AI 会话的默认终端
      *   - session_name: String? - 新会话名称
      *   - shell_type: String? - Shell 类型（如 git-bash, powershell），不传则使用配置的默认终端
      */
@@ -37,17 +37,24 @@ class TerminalTool(private val sessionManager: TerminalSessionManager) {
 
         // 获取或创建会话
         val session = if (sessionId != null) {
+            // 指定了 session_id，尝试获取该会话
             sessionManager.getSession(sessionId)
                 ?: return mapOf(
                     "success" to false,
                     "error" to "Session not found: $sessionId"
                 )
         } else {
-            sessionManager.createSession(sessionName, shellName)
-                ?: return mapOf(
-                    "success" to false,
-                    "error" to "Failed to create terminal session"
-                )
+            // 未指定 session_id，使用当前 AI 会话的默认终端
+            if (sessionName != null) {
+                // 如果指定了 session_name，创建新会话
+                sessionManager.createSession(sessionName, shellName)
+            } else {
+                // 使用默认终端
+                sessionManager.getOrCreateDefaultTerminal(shellName)
+            } ?: return mapOf(
+                "success" to false,
+                "error" to "Failed to create terminal session"
+            )
         }
 
         // 执行命令（始终立即返回，不等待）

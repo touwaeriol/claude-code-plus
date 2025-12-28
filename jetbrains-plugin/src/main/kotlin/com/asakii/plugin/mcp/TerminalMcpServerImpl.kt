@@ -55,6 +55,12 @@ class TerminalMcpServerImpl(private val project: Project) : McpServerBase(), Dis
             appendLine("- Default Shell: $defaultShell")
             appendLine("- Available Shells: ${availableShells.joinToString(", ")}")
             appendLine()
+            appendLine("**Default Terminal Behavior:**")
+            appendLine("- If `session_id` is not provided, the default terminal for the current AI session is used")
+            appendLine("- If the default terminal is busy (running a command), an overflow terminal is created automatically")
+            appendLine("- Subsequent calls will prefer the default terminal when it becomes idle")
+            appendLine("- If `TerminalRead` is called without `session_id`, it reads from the default terminal")
+            appendLine()
             appendLine("**⚠️ Interactive Commands Warning:**")
             appendLine("- Some commands enter interactive mode (e.g., `less`, `vim`, `git log`, `git show`)")
             appendLine("- When using `wait=true`, these will cause timeout. Use `wait=false` for potentially interactive commands")
@@ -272,5 +278,9 @@ class TerminalMcpServerProviderImpl(private val project: Project) : TerminalMcpS
 
     override fun getDisallowedBuiltinTools(): List<String> {
         return _server.getDisallowedBuiltinTools()
+    }
+
+    override fun setCurrentAiSession(aiSessionId: String?) {
+        _server.sessionManager.setCurrentAiSession(aiSessionId)
     }
 }

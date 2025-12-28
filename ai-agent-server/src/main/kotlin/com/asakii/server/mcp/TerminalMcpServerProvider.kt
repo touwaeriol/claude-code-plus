@@ -22,6 +22,12 @@ interface TerminalMcpServerProvider {
      * @return 需要禁用的工具名称列表
      */
     fun getDisallowedBuiltinTools(): List<String> = emptyList()
+
+    /**
+     * 设置当前 AI 会话 ID
+     * 用于终端会话与 AI 会话的关联，实现默认终端功能
+     */
+    fun setCurrentAiSession(aiSessionId: String?) {}
 }
 
 /**

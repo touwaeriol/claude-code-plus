@@ -187,6 +187,96 @@ class TerminalSessionManager(private val project: Project) {
     private val sessions = ConcurrentHashMap<String, TerminalSession>()
     private val sessionCounter = AtomicInteger(0)
 
+    // AI 会话 -> 默认终端 ID 的映射
+    private val aiSessionDefaultTerminals = ConcurrentHashMap<String, String>()
+
+    // AI 会话 -> 溢出终端列表（当默认终端忙时创建的额外终端）
+    private val aiSessionOverflowTerminals = ConcurrentHashMap<String, MutableList<String>>()
+
+    // 当前 AI 会话 ID
+    @Volatile
+    var currentAiSessionId: String? = null
+        private set
+
+    /**
+     * 设置当前 AI 会话 ID
+     */
+    fun setCurrentAiSession(aiSessionId: String?) {
+        currentAiSessionId = aiSessionId
+        logger.info("Set current AI session: $aiSessionId")
+    }
+
+    /**
+     * 获取当前 AI 会话的默认终端 ID
+     */
+    fun getDefaultTerminalId(): String? {
+        val aiSessionId = currentAiSessionId ?: return null
+        return aiSessionDefaultTerminals[aiSessionId]
+    }
+
+    /**
+     * 获取当前 AI 会话的默认终端，如果不存在或已被删除则创建新的
+     * 如果默认终端正在执行命令，则创建溢出终端
+     */
+    fun getOrCreateDefaultTerminal(shellName: String? = null): TerminalSession? {
+        val aiSessionId = currentAiSessionId ?: return createSession(null, shellName)
+
+        // 检查是否已有默认终端
+        val existingTerminalId = aiSessionDefaultTerminals[aiSessionId]
+        if (existingTerminalId != null) {
+            val existingSession = sessions[existingTerminalId]
+            if (existingSession != null) {
+                // 检查默认终端是否正在执行命令（null 视为空闲）
+                if (existingSession.hasRunningCommands() != true) {
+                    logger.info("Using existing default terminal for AI session $aiSessionId: $existingTerminalId")
+                    return existingSession
+                }
+                // 默认终端正在执行命令，尝试使用溢出终端
+                logger.info("Default terminal $existingTerminalId is busy, looking for available overflow terminal")
+                val availableOverflow = findAvailableOverflowTerminal(aiSessionId)
+                if (availableOverflow != null) {
+                    logger.info("Using available overflow terminal: ${availableOverflow.id}")
+                    return availableOverflow
+                }
+                // 没有可用的溢出终端，创建新的
+                val overflowSession = createSession("Overflow Terminal", shellName)
+                if (overflowSession != null) {
+                    aiSessionOverflowTerminals.getOrPut(aiSessionId) { mutableListOf() }.add(overflowSession.id)
+                    logger.info("Created overflow terminal for AI session $aiSessionId: ${overflowSession.id}")
+                }
+                return overflowSession
+            }
+            // 终端已被删除，移除映射
+            aiSessionDefaultTerminals.remove(aiSessionId)
+            logger.info("Default terminal $existingTerminalId was deleted, creating new one")
+        }
+
+        // 创建新的默认终端
+        val newSession = createSession("Default Terminal", shellName)
+        if (newSession != null) {
+            aiSessionDefaultTerminals[aiSessionId] = newSession.id
+            logger.info("Created default terminal for AI session $aiSessionId: ${newSession.id}")
+        }
+        return newSession
+    }
+
+    /**
+     * 查找可用的溢出终端（不在执行命令的）
+     */
+    private fun findAvailableOverflowTerminal(aiSessionId: String): TerminalSession? {
+        val overflowIds = aiSessionOverflowTerminals[aiSessionId] ?: return null
+        // 清理已删除的终端
+        overflowIds.removeAll { sessions[it] == null }
+        // 查找空闲的溢出终端
+        for (terminalId in overflowIds) {
+            val session = sessions[terminalId]
+            if (session != null && session.hasRunningCommands() != true) {
+                return session
+            }
+        }
+        return null
+    }
+
     /**
      * 创建新终端会话
      *

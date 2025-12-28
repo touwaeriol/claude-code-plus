@@ -456,7 +456,7 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
 {
   "Terminal": {
     "type": "object",
-    "description": "Execute commands in IDEA's integrated terminal. Returns immediately after sending the command. Use TerminalRead to get output.",
+    "description": "Execute commands in IDEA's integrated terminal. Returns immediately after sending the command. Use TerminalRead to get output. If session_id is not provided, uses the default terminal for the current AI session. If the default terminal is busy (running a command), a new overflow terminal is created automatically; subsequent calls will prefer the default terminal when it becomes idle.",
     "properties": {
       "command": {
         "type": "string",
@@ -464,11 +464,11 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
       },
       "session_id": {
         "type": "string",
-        "description": "Session ID to reuse. If not provided, creates a new session"
+        "description": "Session ID to reuse. If not provided, uses the default terminal (creates one if needed, or uses overflow terminal if default is busy)"
       },
       "session_name": {
         "type": "string",
-        "description": "Name for new terminal session (only used when creating new session)"
+        "description": "Name for new terminal session. If provided without session_id, creates a new named session instead of using default"
       },
       "shell_type": {
         "type": "string",
@@ -480,11 +480,11 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
 
   "TerminalRead": {
     "type": "object",
-    "description": "Read output from a terminal session. By default reads immediately without waiting. Use wait=true to wait for command completion. Supports regex search with context lines.",
+    "description": "Read output from a terminal session. By default reads immediately without waiting. Use wait=true to wait for command completion. Supports regex search with context lines. If session_id is not provided, reads from the default terminal.",
     "properties": {
       "session_id": {
         "type": "string",
-        "description": "Session ID to read from (required)"
+        "description": "Session ID to read from. If not provided, reads from the default terminal"
       },
       "max_lines": {
         "type": "integer",
@@ -514,7 +514,7 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
         "minimum": 1000
       }
     },
-    "required": ["session_id"]
+    "required": []
   },
 
   "TerminalList": {
