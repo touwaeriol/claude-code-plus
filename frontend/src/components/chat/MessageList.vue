@@ -535,6 +535,8 @@ onMounted(() => {
   })
   // 监听页面可见性变化，在失去焦点时立即保存锚点
   document.addEventListener('visibilitychange', handleVisibilityChange)
+  // 注册 Tab 切换前回调，确保在切换前保存滚动位置
+  sessionStore.registerBeforeTabSwitch(handleBeforeTabSwitch)
 })
 
 // 页面可见性变化处理
@@ -542,6 +544,15 @@ function handleVisibilityChange() {
   if (document.hidden) {
     // 页面即将隐藏，立即保存锚点
     saveAnchorImmediately()
+  }
+}
+
+// Tab 切换前回调：立即保存当前滚动位置
+function handleBeforeTabSwitch(oldTabId: string) {
+  // 确保是当前 tab 的回调
+  if (sessionStore.currentTabId === oldTabId) {
+    saveAnchorImmediately()
+    console.log(`💾 [Scroll] Saved anchor before tab switch from ${oldTabId}`)
   }
 }
 
@@ -556,6 +567,8 @@ onUnmounted(() => {
   window.removeEventListener('pointerup', handlePointerUp)
   window.removeEventListener('touchend', handleTouchEnd)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
+  // 注销 Tab 切换前回调
+  sessionStore.unregisterBeforeTabSwitch(handleBeforeTabSwitch)
 })
 
 // 监听 tab 切换，保存旧 tab 滚动位置并恢复新 tab 位置

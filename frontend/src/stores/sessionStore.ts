@@ -1,15 +1,16 @@
 /**
- * Session Store（简化版）
+ * Session Store（多后端支持版）
  *
- * 架构变化：从中心化管理变为 Tab 自治
+ * 架构变化：从中心化管理变为 Tab 自治 + 多后端支持
  * - 每个 Tab 管理自己的状态、连接、消息处理
+ * - 每个 Tab 可以选择不同的后端（Claude / Codex）
  * - Store 只负责 Tab 列表管理
  * - 切换 Tab 就是切换引用，不需要 ID 查找
  *
  * 使用方式：
  * ```typescript
  * const store = useSessionStore()
- * await store.createTab()
+ * await store.createTab('New Chat', { backendType: 'codex' })
  * store.currentTab?.sendMessage({ contexts: [], contents: [...] })
  * ```
  */
@@ -25,12 +26,22 @@ import { loggers } from '@/utils/logger'
 import { HISTORY_INITIAL_LOAD } from '@/constants/messageWindow'
 import { aiAgentService } from '@/services/aiAgentService'
 import { useSettingsStore } from '@/stores/settingsStore'
+import type { BackendType, BackendCapabilities } from '@/types/backend'
+import { getCapabilities, getAvailableBackends as getAvailableBackendsList } from '@/services/backendCapabilities'
 
 const log = loggers.session
 
 // 重新导出类型
 export { ConnectionStatus } from '@/types/display'
 export type { SessionTabInstance } from '@/composables/useSessionTab'
+
+/**
+ * 创建 Tab 的选项（扩展支持后端类型）
+ */
+export interface CreateTabOptions extends TabConnectOptions {
+  /** 后端类型（默认使用全局设置） */
+  backendType?: BackendType
+}
 
 /**
  * 获取默认会话设置（动态获取，避免硬编码）
@@ -47,12 +58,58 @@ function getDefaultSessionSettings() {
 }
 
 /**
+ * 获取特定后端类型的连接选项
+ */
+function getConnectOptionsForBackend(backendType: BackendType, settingsStore: ReturnType<typeof useSettingsStore>): TabConnectOptions {
+  const globalSettings = settingsStore.settings
+
+  if (backendType === 'claude') {
+    return {
+      model: globalSettings.claudeModel || 'claude-opus-4-5-20251101',
+      thinkingLevel: globalSettings.claudeThinkingTokens ?? 8096,
+      permissionMode: globalSettings.permissionMode,
+      skipPermissions: globalSettings.skipPermissions,
+    }
+  } else {
+    // Codex 后端
+    return {
+      model: globalSettings.codexModel || 'gpt-5.1-codex-max',
+      thinkingLevel: undefined, // Codex 使用 effort level，不是 token budget
+      reasoningEffort: globalSettings.codexReasoningEffort || 'medium',
+      permissionMode: globalSettings.permissionMode,
+      skipPermissions: globalSettings.skipPermissions,
+      sandboxMode: globalSettings.codexSandboxMode || 'workspace-write',
+    }
+  }
+}
+
+/**
+ * 从 sessionId 推断后端类型
+ *
+ * 规则：
+ * - Claude sessionId 格式：uuid-v4
+ * - Codex sessionId 格式：thread_xxxxx
+ */
+function inferBackendType(sessionId: string): BackendType | null {
+  if (!sessionId) return null
+
+  // Codex 使用 thread_ 前缀
+  if (sessionId.startsWith('thread_')) {
+    return 'codex'
+  }
+
+  // 默认为 Claude
+  return 'claude'
+}
+
+/**
  * Session Store
  *
  * 职责：
  * - 管理 Tab 列表（tabs）
  * - 管理当前 Tab（currentTab）
  * - 提供创建/切换/关闭 Tab 的方法
+ * - 支持多后端（Claude / Codex）
  */
 export const useSessionStore = defineStore('session', () => {
   // ========== Tab 列表管理 ==========
@@ -74,6 +131,11 @@ export const useSessionStore = defineStore('session', () => {
   const currentConnectionState = ref<ConnectionStatus>(ConnectionStatus.DISCONNECTED)
 
   /**
+   * 当前后端类型（独立 ref，解决 shallowRef 内部状态追踪问题）
+   */
+  const currentBackendState = ref<BackendType>('claude')
+
+  /**
    * displayItems 版本号（解决 shallowRef 内部 reactive 数组变化追踪问题）
    */
   const displayItemsVersion = ref(0)
@@ -82,6 +144,26 @@ export const useSessionStore = defineStore('session', () => {
    * 加载状态
    */
   const loading = ref(false)
+
+  /**
+   * Tab 切换前回调列表
+   * 用于在切换 Tab 前保存当前 Tab 的状态（如滚动位置）
+   */
+  const beforeTabSwitchCallbacks = new Set<(oldTabId: string) => void>()
+
+  /**
+   * 注册 Tab 切换前回调
+   */
+  function registerBeforeTabSwitch(callback: (oldTabId: string) => void): void {
+    beforeTabSwitchCallbacks.add(callback)
+  }
+
+  /**
+   * 注销 Tab 切换前回调
+   */
+  function unregisterBeforeTabSwitch(callback: (oldTabId: string) => void): void {
+    beforeTabSwitchCallbacks.delete(callback)
+  }
 
   // ========== 计算属性 ==========
 
@@ -223,15 +305,90 @@ export const useSessionStore = defineStore('session', () => {
     displayItemsVersion.value++
   }
 
+  // ========== 多后端支持 ==========
+
+  /**
+   * 当前后端类型
+   * 使用独立的 ref 而不是从 Tab 内部获取，解决 shallowRef 追踪问题
+   */
+  const currentBackendType = computed(() => currentBackendState.value)
+
+  /**
+   * 当前后端能力
+   */
+  const currentBackendCapabilities = computed<BackendCapabilities | null>(() =>
+    currentTab.value ? getCapabilities(currentTab.value.backendType.value) : null
+  )
+
+  /**
+   * 切换 Tab 的后端类型
+   *
+   * 支持在任何状态下切换后端：
+   * - 未连接：直接切换
+   * - 已连接：自动断开并重置会话，然后切换
+   *
+   * @param tabOrId - Tab 实例或 tabId
+   * @param newBackendType - 新的后端类型
+   */
+  async function switchTabBackend(tabOrId: SessionTabInstance | string, newBackendType: BackendType): Promise<void> {
+    const tab = typeof tabOrId === 'string'
+      ? tabs.value.find(t => t.tabId === tabOrId)
+      : tabOrId
+
+    if (!tab) {
+      throw new Error('Tab not found')
+    }
+
+    // 切换后端类型（setBackendType 内部会处理断开和重置）
+    await tab.setBackendType(newBackendType)
+
+    // 如果是当前 Tab，同步更新独立的后端类型 ref
+    if (currentTab.value?.tabId === tab.tabId) {
+      currentBackendState.value = newBackendType
+    }
+
+    // 更新连接选项
+    const connectOptions = getConnectOptionsForBackend(newBackendType, settingsStore)
+    tab.setInitialConnectOptions(connectOptions)
+
+    log.info(`[SessionStore] Tab ${tab.tabId} 后端已切换为 ${newBackendType}`)
+  }
+
+  /**
+   * 判断是否可以切换后端
+   *
+   * 现在支持在任何状态下切换后端，始终返回 true
+   *
+   * @param tabOrId - Tab 实例或 tabId
+   * @returns 是否可以切换（始终为 true）
+   */
+  function canSwitchBackend(tabOrId: SessionTabInstance | string): boolean {
+    const tab = typeof tabOrId === 'string'
+      ? tabs.value.find(t => t.tabId === tabOrId)
+      : tabOrId
+
+    // 现在支持在任何状态下切换后端
+    return tab !== undefined
+  }
+
+  /**
+   * 获取所有可用的后端类型列表
+   *
+   * @returns 可用的后端类型数组
+   */
+  function getAvailableBackends(): BackendType[] {
+    return getAvailableBackendsList()
+  }
+
   // ========== Tab 创建 ==========
 
   /**
-   * 创建新 Tab
+   * 创建新 Tab（支持多后端）
    *
    * @param name Tab 名称
-   * @param options 连接选项
+   * @param options 连接选项（包括后端类型）
    */
-  async function createTab(name?: string, options?: TabConnectOptions): Promise<SessionTabInstance> {
+  async function createTab(name?: string, options?: CreateTabOptions): Promise<SessionTabInstance> {
     // 计算新的 order
     const maxOrder = tabs.value.length > 0
       ? Math.max(...tabs.value.map(t => t.order.value))
@@ -239,6 +396,10 @@ export const useSessionStore = defineStore('session', () => {
 
     // 创建 Tab 实例
     const tab = useSessionTab(maxOrder + 1)
+
+    // 设置后端类型（默认从全局设置或参数读取）
+    const backendType = options?.backendType || settingsStore.settings.defaultBackendType || 'claude'
+    tab.setBackendType(backendType)
 
     // 设置名称
     const shortTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -251,21 +412,12 @@ export const useSessionStore = defineStore('session', () => {
     currentTab.value = tab
     currentConnectionState.value = ConnectionStatus.DISCONNECTED
 
-    log.info(`[SessionStore] 创建 Tab: ${tab.tabId}`)
+    log.info(`[SessionStore] 创建 Tab: ${tab.tabId}, 后端: ${backendType}`)
 
-    // 获取连接设置（使用 IDEA 默认设置，而非从当前会话复制）
-    const globalSettings = settingsStore.settings
-    const defaultSettings = getDefaultSessionSettings()
-    // 使用 getModelCapability 支持内置和自定义模型
-    const modelCapability = getModelCapability(globalSettings.model)
-    const connectOptions: TabConnectOptions = options || {
-      model: modelCapability.modelId || defaultSettings.modelId,
-      thinkingLevel: globalSettings.maxThinkingTokens ?? defaultSettings.thinkingLevel,
-      permissionMode: (globalSettings.permissionMode as RpcPermissionMode) || defaultSettings.permissionMode,
-      skipPermissions: globalSettings.skipPermissions ?? defaultSettings.skipPermissions
-    }
+    // 获取连接设置（根据后端类型）
+    const connectOptions: TabConnectOptions = options || getConnectOptionsForBackend(backendType, settingsStore)
 
-    log.info(`[SessionStore] 新 Tab 使用全局设置:`, connectOptions)
+    log.info(`[SessionStore] 新 Tab 使用设置:`, connectOptions)
 
     // 延迟连接：保存初始连接配置，等首次发送时再 connect
     tab.setInitialConnectOptions(connectOptions)
@@ -289,10 +441,13 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   /**
-   * 恢复会话
+   * 恢复会话（支持多后端）
    *
    * @param externalSessionId 后端会话 ID
    * @param name 会话名称
+   * @param projectPath 项目路径
+   * @param _messageCount 消息数量（未使用）
+   * @param backendType 后端类型（可选，会尝试自动推断）
    */
   const HISTORY_TAIL_LIMIT = HISTORY_INITIAL_LOAD
 
@@ -300,7 +455,8 @@ export const useSessionStore = defineStore('session', () => {
     externalSessionId: string,
     name?: string,
     projectPath?: string,
-    _messageCount?: number
+    _messageCount?: number,
+    backendType?: BackendType
   ): Promise<SessionTabInstance | null> {
     if (!externalSessionId) return null
 
@@ -326,14 +482,21 @@ export const useSessionStore = defineStore('session', () => {
       return existingTab
     }
 
+    // 推断或使用指定的后端类型
+    const resolvedBackendType = backendType || inferBackendType(externalSessionId) || 'claude'
+    log.info(`[SessionStore] 恢复会话 ${externalSessionId}，后端类型: ${resolvedBackendType}`)
+
     // 创建新 Tab 并恢复会话
     const resumeLabel = externalSessionId.slice(-8) || externalSessionId
     const tab = await createTab(name || `历史会话 ${resumeLabel}`, {
       continueConversation: true,
-      resumeSessionId: externalSessionId
+      resumeSessionId: externalSessionId,
+      backendType: resolvedBackendType
     })
+
     // 先把 sessionId 显示为历史 ID，方便悬停/复制（连接成功后会覆盖成新的 sessionId）
     tab.sessionId.value = externalSessionId
+
     // 设置项目路径（用于编辑重发等功能）
     if (projectPath) {
       tab.projectPath.value = projectPath
@@ -386,13 +549,24 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
 
-    // 保存当前 Tab 的 UI 状态（如果有）
-    // currentTab.value?.saveUiState({ ... })
+    // 切换前回调：保存当前 Tab 的 UI 状态（如滚动位置）
+    const oldTabId = currentTab.value?.tabId
+    if (oldTabId && oldTabId !== tab.tabId) {
+      beforeTabSwitchCallbacks.forEach(callback => {
+        try {
+          callback(oldTabId)
+        } catch (e) {
+          log.error(`[SessionStore] beforeTabSwitch callback error:`, e)
+        }
+      })
+    }
 
     // 切换
     currentTab.value = tab
     // 同步连接状态
     currentConnectionState.value = tab.connectionState.status
+    // 同步后端类型
+    currentBackendState.value = tab.backendType.value
     tab.touch()
 
     log.debug(`[SessionStore] 切换到 Tab: ${tab.tabId}`)
@@ -506,12 +680,8 @@ export const useSessionStore = defineStore('session', () => {
 
     // 5. 保留之前的设置，设置初始连接选项
     const defaultSettings = getDefaultSessionSettings()
-    const connectOptions: TabConnectOptions = {
-      model: tab.modelId.value || defaultSettings.modelId,
-      thinkingLevel: tab.thinkingLevel.value ?? defaultSettings.thinkingLevel,
-      permissionMode: tab.permissionMode.value || defaultSettings.permissionMode,
-      skipPermissions: tab.skipPermissions.value ?? defaultSettings.skipPermissions
-    }
+    const backendType = tab.backendType.value
+    const connectOptions: TabConnectOptions = getConnectOptionsForBackend(backendType, settingsStore)
     tab.setInitialConnectOptions(connectOptions)
 
     // 6. 同步连接状态
@@ -826,6 +996,13 @@ export const useSessionStore = defineStore('session', () => {
     clearCurrentError,
     notifyDisplayItemsChanged,
 
+    // 多后端支持
+    currentBackendType,
+    currentBackendCapabilities,
+    switchTabBackend,
+    canSwitchBackend,
+    getAvailableBackends,
+
     // Tab 操作
     createTab,
     createSession,
@@ -874,6 +1051,10 @@ export const useSessionStore = defineStore('session', () => {
 
     // 滚动控制
     switchToBrowseMode,
-    switchToFollowMode
+    switchToFollowMode,
+
+    // Tab 切换钩子
+    registerBeforeTabSwitch,
+    unregisterBeforeTabSwitch
   }
 })

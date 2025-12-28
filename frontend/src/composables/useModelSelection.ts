@@ -62,6 +62,15 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
   // 乐观更新：临时存储用户选择的模型（在 RPC 完成前立即更新 UI）
   const optimisticModel = ref<string | null>(null)
 
+  // 当前后端类型（从当前 Tab 读取，确保与 Header 显示一致）
+  // 优先使用当前 Tab 的后端类型，如果没有 Tab 则使用全局默认值
+  const currentBackendType = computed(() => {
+    const tabBackendType = sessionStore.currentTab?.backendType?.value
+    const globalDefault = settingsStore.currentBackendType
+    console.log('🔄 [currentBackendType] Tab:', tabBackendType, 'Global:', globalDefault)
+    return tabBackendType ?? globalDefault
+  })
+
   // 当前模型（直接绑定到 Tab 状态，支持内置和自定义模型）
   const currentModel = computed((): string => {
     // 优先使用乐观更新的值（立即响应用户操作）
@@ -69,7 +78,18 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
       return optimisticModel.value
     }
 
+    const backendType = currentBackendType.value
     const modelId = sessionStore.currentTab?.modelId.value
+
+    if (backendType === 'codex') {
+      // Codex 后端：modelId 即为模型 ID
+      if (!modelId) {
+        return settingsStore.settings.codexModel || 'gpt-5.2-codex'
+      }
+      return modelId
+    }
+
+    // Claude 后端
     if (!modelId) {
       return BaseModel.OPUS_45
     }
@@ -109,9 +129,38 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
     return settingsStore.ideSettings?.thinkingLevels || DEFAULT_THINKING_LEVELS
   })
 
-  // 可用模型列表（动态获取，支持自定义模型）
-  const baseModelOptions = computed((): ModelInfo[] => {
+  // ========== 分离的模型列表（根据后端类型） ==========
+
+  // Claude 模型列表（始终返回 Claude 模型）
+  const claudeModelOptions = computed((): ModelInfo[] => {
     return getAllModels()
+  })
+
+  // Codex 模型列表（始终返回 Codex 模型）
+  const codexModelOptions = computed((): ModelInfo[] => {
+    return settingsStore.getModelsForBackend('codex').map(m => ({
+      id: m.id,
+      displayName: m.displayName,
+      modelId: m.id,
+      isBuiltIn: true
+    }))
+  })
+
+  // 当前选中的 Codex 模型（用于 Codex 模型选择器）
+  const selectedCodexModel = computed({
+    get: () => {
+      const modelId = sessionStore.currentTab?.modelId.value
+      return modelId || settingsStore.settings.codexModel || 'gpt-5.1-codex-max'
+    },
+    set: (_val: string) => {
+      // setter 由 handleCodexModelChange 处理
+    }
+  })
+
+  // 兼容旧代码：baseModelOptions 根据后端类型动态返回
+  const baseModelOptions = computed((): ModelInfo[] => {
+    const backendType = currentBackendType.value
+    return backendType === 'codex' ? codexModelOptions.value : claudeModelOptions.value
   })
 
   /**
@@ -315,6 +364,10 @@ export function useModelSelection(options: UseModelSelectionOptions = {}) {
     skipPermissionsValue,
     // 常量
     baseModelOptions,
+    claudeModelOptions,  // Claude 模型列表
+    codexModelOptions,   // Codex 模型列表
+    selectedCodexModel,  // 当前选中的 Codex 模型
+    currentBackendType,  // 当前后端类型
     PERMISSION_MODES,
     // 方法
     getBaseModelLabel,

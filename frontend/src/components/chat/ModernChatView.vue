@@ -64,6 +64,7 @@
         :show-model-selector="true"
         :show-permission-controls="true"
         :show-send-button="true"
+        :backend-type="sessionStore.currentBackendType"
         class="input-area"
         @send="handleSendMessage"
         @force-send="handleForceSend"

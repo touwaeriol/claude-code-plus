@@ -20,6 +20,11 @@ import {RSocketSession} from '@/services/rsocket/RSocketSession'
 import type {ContentBlock, Message} from '@/types/message'
 import {ConnectionStatus} from '@/types/display'
 import type {RpcCapabilities, RpcPermissionMode, RpcMessage, RpcStreamEvent, RpcResultMessage} from '@/types/rpc'
+import type {BackendType, BackendConfig} from '@/types/backend'
+import type {ThinkingConfig} from '@/types/thinking'
+import type {BackendSession} from '@/services/backend'
+import {BackendSessionFactory} from '@/services/backend'
+import {getCapabilities, supportsFeature, type BackendFeature} from '@/services/backendCapabilities'
 import {
     isStreamEvent as isRpcStreamEvent,
     isResultMessage as isRpcResultMessage,
@@ -130,6 +135,7 @@ export type ThinkingLevel = number
  * 连接配置
  */
 export interface TabConnectOptions {
+    backendType?: BackendType
     model?: string
     thinkingLevel?: ThinkingLevel
     permissionMode?: RpcPermissionMode
@@ -222,6 +228,16 @@ export function useSessionTab(initialOrder: number = 0) {
 
     // MCP 服务器状态（从 system_init 消息实时更新）
     const mcpServers = ref<Array<{ name: string; status: string }>>([])
+
+    // ========== 多后端支持 ==========
+    // 后端类型（默认 Claude）
+    const backendType = ref<BackendType>('claude')
+
+    // 后端配置
+    const backendConfig = ref<BackendConfig | null>(null)
+
+    // 后端会话实例（新架构：通过 BackendSessionFactory 创建）
+    const backendSession = ref<BackendSession | null>(null)
 
     // ========== 连接设置（连接时确定，切换需要重连）==========
     const modelId = ref<string | null>(null)
@@ -783,7 +799,9 @@ export function useSessionTab(initialOrder: number = 0) {
                 continueConversation: resolvedOptions.continueConversation,
                 resumeSessionId: resolvedOptions.resumeSessionId,
                 // 固定开启重放用户消息
-                replayUserMessages: true
+                replayUserMessages: true,
+                // 统一协议：传递 provider 参数，后端根据此参数路由到对应的 AI Agent
+                provider: (resolvedOptions as any).provider || backendType.value
             }
 
             // 连接并获取 sessionId
@@ -1059,7 +1077,9 @@ export function useSessionTab(initialOrder: number = 0) {
                 // 从前端设置读取（已从 IDEA 同步）
                 dangerouslySkipPermissions: settingsStore.settings.skipPermissions,
                 continueConversation: options?.continueConversation,
-                resumeSessionId: options?.resumeSessionId
+                resumeSessionId: options?.resumeSessionId,
+                // 统一协议：传递 provider 参数
+                provider: backendType.value
             }
 
             // 使用 reconnectSession 复用 WebSocket
@@ -1176,6 +1196,8 @@ export function useSessionTab(initialOrder: number = 0) {
      * - 如果已连接，直接返回
      * - 如果正在连接，等待连接完成
      * - 如果断开，触发重连
+     *
+     * 统一使用 RSocket 连接，通过 provider 参数区分后端类型
      */
     async function ensureConnected(): Promise<void> {
         if (connectionState.status === ConnectionStatus.CONNECTED) {
@@ -1201,8 +1223,14 @@ export function useSessionTab(initialOrder: number = 0) {
             return
         }
 
-        log.info(`[Tab ${tabId}] 连接未建立，开始连接...`)
-        await connect(initialConnectOptions.value || {})
+        log.info(`[Tab ${tabId}] 连接未建立，开始连接 (provider=${backendType.value})...`)
+
+        // 统一使用 RSocket 连接，通过 provider 参数区分后端
+        const options = {
+            ...(initialConnectOptions.value || {}),
+            provider: backendType.value  // 关键：传递 provider 参数
+        }
+        await connect(options)
     }
 
     /**
@@ -1275,6 +1303,9 @@ export function useSessionTab(initialOrder: number = 0) {
 
     /**
      * 发送消息到后端（内部方法）
+     *
+     * 统一使用 RSocket 协议，通过 provider 参数区分后端类型
+     * 后端会根据 provider 路由到正确的 AI Agent (Claude 或 Codex)
      */
     async function sendMessageToBackend(
         userMessage: Message,
@@ -1282,21 +1313,21 @@ export function useSessionTab(initialOrder: number = 0) {
         originalMessage: { contexts: any[]; contents: ContentBlock[] }
     ): Promise<void> {
         try {
-            // 确保连接就绪
-            log.info(`[Tab ${tabId}] 确保连接就绪...`)
+            // 确保连接就绪（统一使用 RSocket，connect 时已传递 provider 参数）
+            log.info(`[Tab ${tabId}] 确保连接就绪 (provider=${backendType.value})...`)
             await ensureConnected()
 
+            // 设置生成状态
+            messagesHandler.startGenerating(userMessage.id)
+            log.info(`[Tab ${tabId}] 开始发送消息到后端 (provider=${backendType.value})...`)
+
+            // 统一使用 RSocketSession 发送消息
             if (!rsocketSession.value) {
                 throw new Error('会话未连接')
             }
 
-            // 设置生成状态
-            messagesHandler.startGenerating(userMessage.id)
-            log.info(`[Tab ${tabId}] 开始发送消息到后端...`)
-
-            // 直接调用 rsocketSession 发送
             await rsocketSession.value.sendMessageWithContent(mergedContent as any)
-            log.info(`[Tab ${tabId}] 消息发送完成`)
+            log.info(`[Tab ${tabId}] 消息发送完成 (provider=${backendType.value})`)
         } catch (err) {
             log.error(`[Tab ${tabId}] ❌ 发送消息失败:`, err)
             // 停止生成状态
@@ -1642,6 +1673,313 @@ export function useSessionTab(initialOrder: number = 0) {
         }
     }
 
+    // ========== 多后端方法 ==========
+
+    /**
+     * 设置后端类型 (provider)
+     *
+     * 统一使用 RSocket 协议，切换后端只需要：
+     * 1. 断开现有 RSocket 连接
+     * 2. 更新 backendType
+     * 3. 下次 connect 时会自动传递新的 provider 参数
+     */
+    async function setBackendType(type: BackendType): Promise<void> {
+        if (backendType.value === type) {
+            log.debug(`[Tab ${tabId}] 后端类型未变化: ${type}`)
+            return
+        }
+
+        log.info(`[Tab ${tabId}] 切换后端类型 (provider): ${backendType.value} -> ${type}`)
+
+        // 断开现有 RSocket 连接（统一协议，只需管理一个连接）
+        if (rsocketSession.value) {
+            log.info(`[Tab ${tabId}] 断开 RSocket 连接`)
+            rsocketSession.value.disconnect()
+            rsocketSession.value = null
+            sessionId.value = null
+        }
+
+        // 重置连接状态
+        connectionState.status = ConnectionStatus.DISCONNECTED
+        connectionState.lastError = null
+
+        // 设置新的后端类型（下次 connect 时会自动使用新的 provider）
+        backendType.value = type
+        log.info(`[Tab ${tabId}] 后端类型已切换: ${type}`)
+    }
+
+    /**
+     * 使用 BackendSession 连接（新架构）
+     *
+     * 根据 backendType 创建对应的会话实例
+     */
+    async function connectWithBackend(options: TabConnectOptions = {}): Promise<void> {
+        const resolvedOptions: TabConnectOptions = {...(initialConnectOptions.value || {}), ...options}
+
+        if (connectionState.status === ConnectionStatus.CONNECTING) {
+            log.warn(`[Tab ${tabId}] 正在连接中，请勿重复连接`)
+            return
+        }
+
+        // 如果已有后端会话，先断开
+        if (backendSession.value) {
+            log.info(`[Tab ${tabId}] 断开旧的后端会话`)
+            backendSession.value.disconnect()
+            backendSession.value = null
+        }
+
+        connectionState.status = ConnectionStatus.CONNECTING
+        connectionState.lastError = null
+
+        try {
+            const settingsStore = useSettingsStore()
+
+            // 根据后端类型获取配置
+            const config = settingsStore.getBackendConfig(backendType.value)
+            if (!config) {
+                throw new Error(`无法获取 ${backendType.value} 后端配置`)
+            }
+
+            // 使用工厂创建会话
+            const session = BackendSessionFactory.createSession(backendType.value, config)
+
+            // 订阅 BackendSession 事件
+            session.onEvent(handleBackendEvent)
+            session.onConnectionStatusChange(handleBackendConnectionStatus)
+
+            // 连接选项
+            const connectOptions = {
+                config,
+                continueConversation: resolvedOptions.continueConversation,
+                resumeSessionId: resolvedOptions.resumeSessionId,
+                projectPath: projectPath.value || undefined
+            }
+
+            // 连接
+            await session.connect(connectOptions)
+
+            // 保存会话实例
+            backendSession.value = session
+            backendConfig.value = config
+            sessionId.value = session.getSessionId()
+            connectionState.status = ConnectionStatus.CONNECTED
+            connectionState.lastError = null
+
+            log.info(`[Tab ${tabId}] BackendSession 连接成功: ${backendType.value}, sessionId=${sessionId.value}`)
+
+            // 连接成功，重置重连计数
+            reconnectAttempts = 0
+
+            // 更新设置
+            updateLastAppliedSettings()
+            pendingSettings.value = {}
+
+        } catch (error) {
+            connectionState.status = ConnectionStatus.ERROR
+            connectionState.lastError = error instanceof Error ? error.message : String(error)
+            log.error(`[Tab ${tabId}] BackendSession 连接失败:`, error)
+            throw error
+        }
+    }
+
+    /**
+     * 处理 BackendSession 事件
+     */
+    function handleBackendEvent(event: import('@/types/backend').BackendEvent): void {
+        const timestamp = Date.now()
+
+        switch (event.type) {
+            case 'text_delta':
+                // 映射到现有的消息处理
+                messagesHandler.handleStreamEvent({
+                    type: 'stream_event',
+                    uuid: event.itemId,
+                    event: {
+                        type: 'content_block_delta',
+                        index: 0,
+                        delta: { type: 'text_delta', text: event.text }
+                    }
+                } as any)
+                break
+
+            case 'thinking_delta':
+                messagesHandler.handleStreamEvent({
+                    type: 'stream_event',
+                    uuid: event.itemId,
+                    event: {
+                        type: 'content_block_delta',
+                        index: 0,
+                        delta: { type: 'thinking_delta', thinking: event.text }
+                    }
+                } as any)
+                break
+
+            case 'tool_started':
+                log.info(`[Tab ${tabId}] 工具开始: ${event.toolName}`)
+                // 可以在这里添加工具开始的 UI 更新
+                break
+
+            case 'tool_completed':
+                log.info(`[Tab ${tabId}] 工具完成: ${event.itemId}, success=${event.success}`)
+                break
+
+            case 'turn_completed':
+                messagesHandler.stopGenerating()
+                log.info(`[Tab ${tabId}] 轮次完成: ${event.turnId}, status=${event.status}`)
+                // 处理队列中的下一条消息
+                processNextQueuedMessage()
+                break
+
+            case 'approval_request':
+                log.info(`[Tab ${tabId}] 收到审批请求: ${event.approvalType}`)
+                // 为 Codex 添加审批请求处理
+                if (backendType.value === 'codex') {
+                    handleCodexApprovalRequest(event)
+                }
+                break
+
+            case 'error':
+                log.error(`[Tab ${tabId}] 后端错误: ${event.code} - ${event.message}`)
+                messagesHandler.addErrorMessage(`后端错误: ${event.message}`)
+                break
+        }
+
+        touch()
+    }
+
+    /**
+     * 处理 Codex 审批请求
+     */
+    function handleCodexApprovalRequest(event: import('@/types/backend').ApprovalRequestEvent): void {
+        const request: Omit<PendingPermissionRequest, 'createdAt'> = {
+            id: event.requestId,
+            sessionId: sessionId.value!,
+            toolName: event.approvalType === 'command' ? 'CommandExecution' : 'FileChange',
+            input: event.details as Record<string, unknown>,
+            resolve: (response) => {
+                // 发送审批响应到后端
+                if (backendSession.value) {
+                    backendSession.value.respondToApproval({
+                        requestId: event.requestId,
+                        approved: response.approved,
+                        reason: response.reason
+                    })
+                }
+            },
+            reject: (error) => {
+                log.error(`[Tab ${tabId}] 审批请求被拒绝:`, error)
+            }
+        }
+        permissions.addPermissionRequest(request)
+    }
+
+    /**
+     * 处理 BackendSession 连接状态变化
+     */
+    function handleBackendConnectionStatus(status: import('@/types/backend').BackendConnectionStatus): void {
+        switch (status) {
+            case 'connected':
+                connectionState.status = ConnectionStatus.CONNECTED
+                break
+            case 'connecting':
+                connectionState.status = ConnectionStatus.CONNECTING
+                break
+            case 'disconnected':
+                connectionState.status = ConnectionStatus.DISCONNECTED
+                break
+            case 'error':
+                connectionState.status = ConnectionStatus.ERROR
+                break
+        }
+        log.info(`[Tab ${tabId}] 后端连接状态: ${status}`)
+    }
+
+    /**
+     * 使用 BackendSession 发送消息
+     */
+    async function sendMessageWithBackend(
+        message: { contexts: any[]; contents: ContentBlock[]; ideContext?: ActiveFileInfo | null }
+    ): Promise<void> {
+        if (!backendSession.value) {
+            throw new Error('后端会话未连接')
+        }
+
+        // 转换消息格式
+        const userMessage: import('@/services/backend').UserMessage = {
+            contents: message.contents.map(c => {
+                if (c.type === 'text') {
+                    return { type: 'text' as const, text: (c as any).text }
+                } else if (c.type === 'image') {
+                    return { type: 'image' as const, data: (c as any).source?.data || '', mimeType: (c as any).source?.media_type }
+                }
+                return { type: 'text' as const, text: JSON.stringify(c) }
+            }),
+            contexts: message.contexts?.map(ctx => ({
+                type: 'file' as const,
+                path: ctx.path,
+                content: ctx.content
+            }))
+        }
+
+        messagesHandler.startGenerating(`msg-${Date.now()}`)
+        backendSession.value.sendMessage(userMessage)
+    }
+
+    /**
+     * 获取当前后端的能力信息
+     */
+    function getBackendCapabilities() {
+        return getCapabilities(backendType.value)
+    }
+
+    /**
+     * 检查后端是否支持特定功能
+     */
+    function isFeatureSupported(feature: BackendFeature): boolean {
+        return supportsFeature(backendType.value, feature)
+    }
+
+    /**
+     * 获取思考配置
+     */
+    function getThinkingConfig(): ThinkingConfig | null {
+        if (!backendConfig.value) {
+            return null
+        }
+
+        if (backendConfig.value.type === 'claude') {
+            return {
+                type: 'claude',
+                enabled: backendConfig.value.thinkingEnabled,
+                tokenBudget: backendConfig.value.thinkingTokenBudget
+            }
+        } else {
+            return {
+                type: 'codex',
+                effort: backendConfig.value.reasoningEffort,
+                summary: backendConfig.value.reasoningSummary
+            }
+        }
+    }
+
+    /**
+     * 设置思考配置
+     */
+    async function setThinkingConfig(config: ThinkingConfig): Promise<void> {
+        if (!backendSession.value) {
+            log.warn(`[Tab ${tabId}] 后端会话未连接，无法设置思考配置`)
+            return
+        }
+
+        try {
+            await backendSession.value.updateThinkingConfig(config)
+            log.info(`[Tab ${tabId}] 思考配置已更新:`, config)
+        } catch (error) {
+            log.error(`[Tab ${tabId}] 设置思考配置失败:`, error)
+            throw error
+        }
+    }
+
     // ========== 辅助方法 ==========
 
     /**
@@ -1739,6 +2077,11 @@ export function useSessionTab(initialOrder: number = 0) {
         // MCP 服务器状态
         mcpServers,
 
+        // 多后端支持
+        backendType,
+        backendConfig,
+        backendSession,
+
         // UI 状态
         uiState,
 
@@ -1807,9 +2150,22 @@ export function useSessionTab(initialOrder: number = 0) {
         loadHistory,
         loadMoreHistory,
 
+        // 多后端方法
+        setBackendType,
+        connectWithBackend,
+        sendMessageWithBackend,
+        getBackendCapabilities,
+        isFeatureSupported,
+        getThinkingConfig,
+        setThinkingConfig,
+
         // 会话实例访问（用于外部组件检查连接状态）
         get session() {
             return rsocketSession.value
+        },
+        // 后端会话访问（新架构）
+        get backendSessionInstance() {
+            return backendSession.value
         }
     }
 }

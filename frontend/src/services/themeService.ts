@@ -1,4 +1,4 @@
-import { jetbrainsBridge, isIdeEnvironment } from './jetbrainsApi'
+import { jetbrainsBridge } from './jetbrainsApi'
 
 /**
  * 主题颜色接口
@@ -414,7 +414,7 @@ export class ThemeService {
     setTimeout(async () => {
       try {
         // 订阅主题变化（无需再获取当前主题，已从 URL 获取）
-        this.unsubscribeTheme = jetbrainsBridge.onThemeChange((theme) => {
+        this._unsubscribeTheme = jetbrainsBridge.onThemeChange((theme) => {
           if (theme) {
             this.setTheme(theme as ThemeColors)
             console.log('🎨 [IDE] Theme updated via RSocket')
@@ -445,7 +445,7 @@ export class ThemeService {
       }
 
       // 订阅主题变化
-      this.unsubscribeTheme = jetbrainsBridge.onThemeChange((theme) => {
+      this._unsubscribeTheme = jetbrainsBridge.onThemeChange((theme) => {
         if (theme) {
           this.setTheme(theme as ThemeColors)
           console.log('🎨 [IDE] Theme updated via RSocket')
