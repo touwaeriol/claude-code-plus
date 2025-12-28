@@ -115,6 +115,7 @@ let backgroundHintTimer: ReturnType<typeof setTimeout> | null = null
  */
 export interface ToolCallData {
   toolType: string
+  toolUseId?: string
   input: Record<string, unknown>
   result?: {
     content?: string | unknown[]
@@ -165,6 +166,7 @@ function handleClick() {
   if (props.toolCall) {
     const intercepted = toolShowInterceptor.intercept({
       toolType: props.toolCall.toolType,
+      toolUseId: props.toolCall.toolUseId,
       input: props.toolCall.input,
       result: props.toolCall.result
     })

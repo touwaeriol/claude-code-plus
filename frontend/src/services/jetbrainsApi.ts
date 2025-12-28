@@ -61,6 +61,16 @@ export interface ShowMarkdownRequest {
   title?: string
 }
 
+/** 完整文件 Diff 请求（修改前后对比） */
+export interface ShowEditFullDiffRequest {
+  filePath: string
+  oldString: string
+  newString: string
+  replaceAll?: boolean
+  title?: string
+  originalContent?: string  // 缓存的原始文件内容（如果有）
+}
+
 // ========== 环境检测 ==========
 
 /**
@@ -202,6 +212,49 @@ class JetBrainsBridgeService {
   async showMarkdown(request: ShowMarkdownRequest): Promise<boolean> {
     if (!this.enabled) return false
     return jetbrainsRSocket.showMarkdown(request)
+  }
+
+  /**
+   * 显示完整文件 Diff（修改前后对比）
+   */
+  async showEditFullDiff(request: ShowEditFullDiffRequest): Promise<boolean> {
+    if (!this.enabled) return false
+    return jetbrainsRSocket.showEditFullDiff(request)
+  }
+
+  /**
+   * 获取缓存的原始文件内容（通过 HTTP API）
+   * @param toolUseId 工具调用 ID
+   * @returns 原始内容，如果不存在则返回 null
+   */
+  async getOriginalContent(toolUseId: string): Promise<string | null> {
+    try {
+      const baseUrl = resolveServerHttpUrl()
+      const response = await fetch(`${baseUrl}/api/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action: 'file.getOriginalContent',
+          data: { toolUseId }
+        })
+      })
+
+      if (!response.ok) {
+        console.warn('[JetBrainsApi] getOriginalContent failed:', response.status)
+        return null
+      }
+
+      const data = await response.json()
+      if (data.success && data.data?.found) {
+        return data.data.content
+      }
+      return null
+    } catch (error) {
+      console.warn('[JetBrainsApi] Failed to get original content:', error)
+      return null
+    }
   }
 
   /**

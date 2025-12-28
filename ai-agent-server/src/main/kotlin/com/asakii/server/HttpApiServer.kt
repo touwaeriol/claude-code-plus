@@ -348,6 +348,25 @@ class HttpApiServer(
                                     )
                                     call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
+                                "file.getOriginalContent" -> {
+                                    // 获取缓存的原始文件内容（用于显示 Edit Diff）
+                                    val dataObj = request.data?.jsonObject
+                                    val toolUseId = dataObj?.get("toolUseId")?.jsonPrimitive?.contentOrNull
+                                    if (toolUseId == null) {
+                                        val response = FrontendResponse(success = false, error = "Missing toolUseId")
+                                        call.respondText(json.encodeToString(response), ContentType.Application.Json)
+                                    } else {
+                                        val originalContent = com.asakii.server.services.FileContentCache.getOriginalContent(toolUseId)
+                                        val response = FrontendResponse(
+                                            success = true,
+                                            data = mapOf(
+                                                "found" to JsonPrimitive(originalContent != null),
+                                                "content" to JsonPrimitive(originalContent ?: "")
+                                            )
+                                        )
+                                        call.respondText(json.encodeToString(response), ContentType.Application.Json)
+                                    }
+                                }
                                 "ide.openUrl" -> {
                                     val dataObj = request.data?.jsonObject
                                     val url = dataObj?.get("url")?.jsonPrimitive?.contentOrNull ?: ""

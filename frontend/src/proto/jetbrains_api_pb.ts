@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file jetbrains_api.proto.
  */
 export const file_jetbrains_api: GenFile = /*@__PURE__*/
-  fileDesc("ChNqZXRicmFpbnNfYXBpLnByb3RvEhRjb20uYXNha2lpLnJwYy5wcm90byI7ChVKZXRCcmFpbnNDYXBhYmlsaXRpZXMSEQoJc3VwcG9ydGVkGAEgASgIEg8KB3ZlcnNpb24YAiABKAkikAQKDUlkZVRoZW1lUHJvdG8SEgoKYmFja2dyb3VuZBgBIAEoCRISCgpmb3JlZ3JvdW5kGAIgASgJEhQKDGJvcmRlcl9jb2xvchgDIAEoCRIYChBwYW5lbF9iYWNrZ3JvdW5kGAQgASgJEh0KFXRleHRfZmllbGRfYmFja2dyb3VuZBgFIAEoCRIcChRzZWxlY3Rpb25fYmFja2dyb3VuZBgGIAEoCRIcChRzZWxlY3Rpb25fZm9yZWdyb3VuZBgHIAEoCRISCgpsaW5rX2NvbG9yGAggASgJEhMKC2Vycm9yX2NvbG9yGAkgASgJEhUKDXdhcm5pbmdfY29sb3IYCiABKAkSFQoNc3VjY2Vzc19jb2xvchgLIAEoCRIXCg9zZXBhcmF0b3JfY29sb3IYDCABKAkSGAoQaG92ZXJfYmFja2dyb3VuZBgNIAEoCRIUCgxhY2NlbnRfY29sb3IYDiABKAkSFwoPaW5mb19iYWNrZ3JvdW5kGA8gASgJEhcKD2NvZGVfYmFja2dyb3VuZBgQIAEoCRIcChRzZWNvbmRhcnlfZm9yZWdyb3VuZBgRIAEoCRITCgtmb250X2ZhbWlseRgSIAEoCRIRCglmb250X3NpemUYEyABKAUSGgoSZWRpdG9yX2ZvbnRfZmFtaWx5GBQgASgJEhgKEGVkaXRvcl9mb250X3NpemUYFSABKAUivQEKGEpldEJyYWluc09wZW5GaWxlUmVxdWVzdBIRCglmaWxlX3BhdGgYASABKAkSEQoEbGluZRgCIAEoBUgAiAEBEhMKBmNvbHVtbhgDIAEoBUgBiAEBEhkKDHN0YXJ0X29mZnNldBgEIAEoBUgCiAEBEhcKCmVuZF9vZmZzZXQYBSABKAVIA4gBAUIHCgVfbGluZUIJCgdfY29sdW1uQg8KDV9zdGFydF9vZmZzZXRCDQoLX2VuZF9vZmZzZXQidQoYSmV0QnJhaW5zU2hvd0RpZmZSZXF1ZXN0EhEKCWZpbGVfcGF0aBgBIAEoCRITCgtvbGRfY29udGVudBgCIAEoCRITCgtuZXdfY29udGVudBgDIAEoCRISCgV0aXRsZRgEIAEoCUgAiAEBQggKBl90aXRsZSJVChZKZXRCcmFpbnNFZGl0T3BlcmF0aW9uEhIKCm9sZF9zdHJpbmcYASABKAkSEgoKbmV3X3N0cmluZxgCIAEoCRITCgtyZXBsYWNlX2FsbBgDIAEoCCKlAQohSmV0QnJhaW5zU2hvd011bHRpRWRpdERpZmZSZXF1ZXN0EhEKCWZpbGVfcGF0aBgBIAEoCRI7CgVlZGl0cxgCIAMoCzIsLmNvbS5hc2FraWkucnBjLnByb3RvLkpldEJyYWluc0VkaXRPcGVyYXRpb24SHAoPY3VycmVudF9jb250ZW50GAMgASgJSACIAQFCEgoQX2N1cnJlbnRfY29udGVudCKPAQofSmV0QnJhaW5zU2hvd0VkaXRQcmV2aWV3UmVxdWVzdBIRCglmaWxlX3BhdGgYASABKAkSOwoFZWRpdHMYAiADKAsyLC5jb20uYXNha2lpLnJwYy5wcm90by5KZXRCcmFpbnNFZGl0T3BlcmF0aW9uEhIKBXRpdGxlGAMgASgJSACIAQFCCAoGX3RpdGxlIk0KHEpldEJyYWluc1Nob3dNYXJrZG93blJlcXVlc3QSDwoHY29udGVudBgBIAEoCRISCgV0aXRsZRgCIAEoCUgAiAEBQggKBl90aXRsZSKgAQoXSmV0QnJhaW5zU2Vzc2lvblN1bW1hcnkSCgoCaWQYASABKAkSDQoFdGl0bGUYAiABKAkSFwoKc2Vzc2lvbl9pZBgDIAEoCUgAiAEBEhUKDWlzX2dlbmVyYXRpbmcYBCABKAgSFAoMaXNfY29ubmVjdGVkGAUgASgIEhUKDWlzX2Nvbm5lY3RpbmcYBiABKAhCDQoLX3Nlc3Npb25faWQijgEKFUpldEJyYWluc1Nlc3Npb25TdGF0ZRI/CghzZXNzaW9ucxgBIAMoCzItLmNvbS5hc2FraWkucnBjLnByb3RvLkpldEJyYWluc1Nlc3Npb25TdW1tYXJ5Eh4KEWFjdGl2ZV9zZXNzaW9uX2lkGAIgASgJSACIAQFCFAoSX2FjdGl2ZV9zZXNzaW9uX2lkIsYBChdKZXRCcmFpbnNTZXNzaW9uQ29tbWFuZBI/CgR0eXBlGAEgASgOMjEuY29tLmFzYWtpaS5ycGMucHJvdG8uSmV0QnJhaW5zU2Vzc2lvbkNvbW1hbmRUeXBlEhcKCnNlc3Npb25faWQYAiABKAlIAIgBARIVCghuZXdfbmFtZRgDIAEoCUgBiAEBEhMKBmxvY2FsZRgEIAEoCUgCiAEBQg0KC19zZXNzaW9uX2lkQgsKCV9uZXdfbmFtZUIJCgdfbG9jYWxlIksKGkpldEJyYWluc09wZXJhdGlvblJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSEgoFZXJyb3IYAiABKAlIAIgBAUIICgZfZXJyb3IiGgoYSmV0QnJhaW5zR2V0VGhlbWVSZXF1ZXN0Ik8KGUpldEJyYWluc0dldFRoZW1lUmVzcG9uc2USMgoFdGhlbWUYASABKAsyIy5jb20uYXNha2lpLnJwYy5wcm90by5JZGVUaGVtZVByb3RvIiAKHkpldEJyYWluc0dldFByb2plY3RQYXRoUmVxdWVzdCI3Ch9KZXRCcmFpbnNHZXRQcm9qZWN0UGF0aFJlc3BvbnNlEhQKDHByb2plY3RfcGF0aBgBIAEoCSIbChlKZXRCcmFpbnNHZXRMb2NhbGVSZXF1ZXN0IiwKGkpldEJyYWluc0dldExvY2FsZVJlc3BvbnNlEg4KBmxvY2FsZRgBIAEoCSIrChlKZXRCcmFpbnNTZXRMb2NhbGVSZXF1ZXN0Eg4KBmxvY2FsZRgBIAEoCSqoAgobSmV0QnJhaW5zU2Vzc2lvbkNvbW1hbmRUeXBlEh8KG1NFU1NJT05fQ09NTUFORF9VTlNQRUNJRklFRBAAEhoKFlNFU1NJT05fQ09NTUFORF9TV0lUQ0gQARIaChZTRVNTSU9OX0NPTU1BTkRfQ1JFQVRFEAISGQoVU0VTU0lPTl9DT01NQU5EX0NMT1NFEAMSGgoWU0VTU0lPTl9DT01NQU5EX1JFTkFNRRAEEiIKHlNFU1NJT05fQ09NTUFORF9UT0dHTEVfSElTVE9SWRAFEh4KGlNFU1NJT05fQ09NTUFORF9TRVRfTE9DQUxFEAYSGgoWU0VTU0lPTl9DT01NQU5EX0RFTEVURRAHEhkKFVNFU1NJT05fQ09NTUFORF9SRVNFVBAIQisKFGNvbS5hc2FraWkucnBjLnByb3RvQhFKZXRCcmFpbnNBcGlQcm90b1ABYgZwcm90bzM");
+  fileDesc("ChNqZXRicmFpbnNfYXBpLnByb3RvEhRjb20uYXNha2lpLnJwYy5wcm90byI7ChVKZXRCcmFpbnNDYXBhYmlsaXRpZXMSEQoJc3VwcG9ydGVkGAEgASgIEg8KB3ZlcnNpb24YAiABKAkikAQKDUlkZVRoZW1lUHJvdG8SEgoKYmFja2dyb3VuZBgBIAEoCRISCgpmb3JlZ3JvdW5kGAIgASgJEhQKDGJvcmRlcl9jb2xvchgDIAEoCRIYChBwYW5lbF9iYWNrZ3JvdW5kGAQgASgJEh0KFXRleHRfZmllbGRfYmFja2dyb3VuZBgFIAEoCRIcChRzZWxlY3Rpb25fYmFja2dyb3VuZBgGIAEoCRIcChRzZWxlY3Rpb25fZm9yZWdyb3VuZBgHIAEoCRISCgpsaW5rX2NvbG9yGAggASgJEhMKC2Vycm9yX2NvbG9yGAkgASgJEhUKDXdhcm5pbmdfY29sb3IYCiABKAkSFQoNc3VjY2Vzc19jb2xvchgLIAEoCRIXCg9zZXBhcmF0b3JfY29sb3IYDCABKAkSGAoQaG92ZXJfYmFja2dyb3VuZBgNIAEoCRIUCgxhY2NlbnRfY29sb3IYDiABKAkSFwoPaW5mb19iYWNrZ3JvdW5kGA8gASgJEhcKD2NvZGVfYmFja2dyb3VuZBgQIAEoCRIcChRzZWNvbmRhcnlfZm9yZWdyb3VuZBgRIAEoCRITCgtmb250X2ZhbWlseRgSIAEoCRIRCglmb250X3NpemUYEyABKAUSGgoSZWRpdG9yX2ZvbnRfZmFtaWx5GBQgASgJEhgKEGVkaXRvcl9mb250X3NpemUYFSABKAUivQEKGEpldEJyYWluc09wZW5GaWxlUmVxdWVzdBIRCglmaWxlX3BhdGgYASABKAkSEQoEbGluZRgCIAEoBUgAiAEBEhMKBmNvbHVtbhgDIAEoBUgBiAEBEhkKDHN0YXJ0X29mZnNldBgEIAEoBUgCiAEBEhcKCmVuZF9vZmZzZXQYBSABKAVIA4gBAUIHCgVfbGluZUIJCgdfY29sdW1uQg8KDV9zdGFydF9vZmZzZXRCDQoLX2VuZF9vZmZzZXQidQoYSmV0QnJhaW5zU2hvd0RpZmZSZXF1ZXN0EhEKCWZpbGVfcGF0aBgBIAEoCRITCgtvbGRfY29udGVudBgCIAEoCRITCgtuZXdfY29udGVudBgDIAEoCRISCgV0aXRsZRgEIAEoCUgAiAEBQggKBl90aXRsZSJVChZKZXRCcmFpbnNFZGl0T3BlcmF0aW9uEhIKCm9sZF9zdHJpbmcYASABKAkSEgoKbmV3X3N0cmluZxgCIAEoCRITCgtyZXBsYWNlX2FsbBgDIAEoCCKlAQohSmV0QnJhaW5zU2hvd011bHRpRWRpdERpZmZSZXF1ZXN0EhEKCWZpbGVfcGF0aBgBIAEoCRI7CgVlZGl0cxgCIAMoCzIsLmNvbS5hc2FraWkucnBjLnByb3RvLkpldEJyYWluc0VkaXRPcGVyYXRpb24SHAoPY3VycmVudF9jb250ZW50GAMgASgJSACIAQFCEgoQX2N1cnJlbnRfY29udGVudCKPAQofSmV0QnJhaW5zU2hvd0VkaXRQcmV2aWV3UmVxdWVzdBIRCglmaWxlX3BhdGgYASABKAkSOwoFZWRpdHMYAiADKAsyLC5jb20uYXNha2lpLnJwYy5wcm90by5KZXRCcmFpbnNFZGl0T3BlcmF0aW9uEhIKBXRpdGxlGAMgASgJSACIAQFCCAoGX3RpdGxlIk0KHEpldEJyYWluc1Nob3dNYXJrZG93blJlcXVlc3QSDwoHY29udGVudBgBIAEoCRISCgV0aXRsZRgCIAEoCUgAiAEBQggKBl90aXRsZSKQAQogSmV0QnJhaW5zU2hvd0VkaXRGdWxsRGlmZlJlcXVlc3QSEQoJZmlsZV9wYXRoGAEgASgJEhIKCm9sZF9zdHJpbmcYAiABKAkSEgoKbmV3X3N0cmluZxgDIAEoCRITCgtyZXBsYWNlX2FsbBgEIAEoCBISCgV0aXRsZRgFIAEoCUgAiAEBQggKBl90aXRsZSKgAQoXSmV0QnJhaW5zU2Vzc2lvblN1bW1hcnkSCgoCaWQYASABKAkSDQoFdGl0bGUYAiABKAkSFwoKc2Vzc2lvbl9pZBgDIAEoCUgAiAEBEhUKDWlzX2dlbmVyYXRpbmcYBCABKAgSFAoMaXNfY29ubmVjdGVkGAUgASgIEhUKDWlzX2Nvbm5lY3RpbmcYBiABKAhCDQoLX3Nlc3Npb25faWQijgEKFUpldEJyYWluc1Nlc3Npb25TdGF0ZRI/CghzZXNzaW9ucxgBIAMoCzItLmNvbS5hc2FraWkucnBjLnByb3RvLkpldEJyYWluc1Nlc3Npb25TdW1tYXJ5Eh4KEWFjdGl2ZV9zZXNzaW9uX2lkGAIgASgJSACIAQFCFAoSX2FjdGl2ZV9zZXNzaW9uX2lkIsYBChdKZXRCcmFpbnNTZXNzaW9uQ29tbWFuZBI/CgR0eXBlGAEgASgOMjEuY29tLmFzYWtpaS5ycGMucHJvdG8uSmV0QnJhaW5zU2Vzc2lvbkNvbW1hbmRUeXBlEhcKCnNlc3Npb25faWQYAiABKAlIAIgBARIVCghuZXdfbmFtZRgDIAEoCUgBiAEBEhMKBmxvY2FsZRgEIAEoCUgCiAEBQg0KC19zZXNzaW9uX2lkQgsKCV9uZXdfbmFtZUIJCgdfbG9jYWxlIksKGkpldEJyYWluc09wZXJhdGlvblJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSEgoFZXJyb3IYAiABKAlIAIgBAUIICgZfZXJyb3IiGgoYSmV0QnJhaW5zR2V0VGhlbWVSZXF1ZXN0Ik8KGUpldEJyYWluc0dldFRoZW1lUmVzcG9uc2USMgoFdGhlbWUYASABKAsyIy5jb20uYXNha2lpLnJwYy5wcm90by5JZGVUaGVtZVByb3RvIiAKHkpldEJyYWluc0dldFByb2plY3RQYXRoUmVxdWVzdCI3Ch9KZXRCcmFpbnNHZXRQcm9qZWN0UGF0aFJlc3BvbnNlEhQKDHByb2plY3RfcGF0aBgBIAEoCSIbChlKZXRCcmFpbnNHZXRMb2NhbGVSZXF1ZXN0IiwKGkpldEJyYWluc0dldExvY2FsZVJlc3BvbnNlEg4KBmxvY2FsZRgBIAEoCSIrChlKZXRCcmFpbnNTZXRMb2NhbGVSZXF1ZXN0Eg4KBmxvY2FsZRgBIAEoCSqoAgobSmV0QnJhaW5zU2Vzc2lvbkNvbW1hbmRUeXBlEh8KG1NFU1NJT05fQ09NTUFORF9VTlNQRUNJRklFRBAAEhoKFlNFU1NJT05fQ09NTUFORF9TV0lUQ0gQARIaChZTRVNTSU9OX0NPTU1BTkRfQ1JFQVRFEAISGQoVU0VTU0lPTl9DT01NQU5EX0NMT1NFEAMSGgoWU0VTU0lPTl9DT01NQU5EX1JFTkFNRRAEEiIKHlNFU1NJT05fQ09NTUFORF9UT0dHTEVfSElTVE9SWRAFEh4KGlNFU1NJT05fQ09NTUFORF9TRVRfTE9DQUxFEAYSGgoWU0VTU0lPTl9DT01NQU5EX0RFTEVURRAHEhkKFVNFU1NJT05fQ09NTUFORF9SRVNFVBAIQisKFGNvbS5hc2FraWkucnBjLnByb3RvQhFKZXRCcmFpbnNBcGlQcm90b1ABYgZwcm90bzM");
 
 /**
  * @generated from message com.asakii.rpc.proto.JetBrainsCapabilities
@@ -324,6 +324,43 @@ export const JetBrainsShowMarkdownRequestSchema: GenMessage<JetBrainsShowMarkdow
   messageDesc(file_jetbrains_api, 7);
 
 /**
+ * @generated from message com.asakii.rpc.proto.JetBrainsShowEditFullDiffRequest
+ */
+export type JetBrainsShowEditFullDiffRequest = Message<"com.asakii.rpc.proto.JetBrainsShowEditFullDiffRequest"> & {
+  /**
+   * @generated from field: string file_path = 1;
+   */
+  filePath: string;
+
+  /**
+   * @generated from field: string old_string = 2;
+   */
+  oldString: string;
+
+  /**
+   * @generated from field: string new_string = 3;
+   */
+  newString: string;
+
+  /**
+   * @generated from field: bool replace_all = 4;
+   */
+  replaceAll: boolean;
+
+  /**
+   * @generated from field: optional string title = 5;
+   */
+  title?: string;
+};
+
+/**
+ * Describes the message com.asakii.rpc.proto.JetBrainsShowEditFullDiffRequest.
+ * Use `create(JetBrainsShowEditFullDiffRequestSchema)` to create a new message.
+ */
+export const JetBrainsShowEditFullDiffRequestSchema: GenMessage<JetBrainsShowEditFullDiffRequest> = /*@__PURE__*/
+  messageDesc(file_jetbrains_api, 8);
+
+/**
  * @generated from message com.asakii.rpc.proto.JetBrainsSessionSummary
  */
 export type JetBrainsSessionSummary = Message<"com.asakii.rpc.proto.JetBrainsSessionSummary"> & {
@@ -367,7 +404,7 @@ export type JetBrainsSessionSummary = Message<"com.asakii.rpc.proto.JetBrainsSes
  * Use `create(JetBrainsSessionSummarySchema)` to create a new message.
  */
 export const JetBrainsSessionSummarySchema: GenMessage<JetBrainsSessionSummary> = /*@__PURE__*/
-  messageDesc(file_jetbrains_api, 8);
+  messageDesc(file_jetbrains_api, 9);
 
 /**
  * @generated from message com.asakii.rpc.proto.JetBrainsSessionState
@@ -389,7 +426,7 @@ export type JetBrainsSessionState = Message<"com.asakii.rpc.proto.JetBrainsSessi
  * Use `create(JetBrainsSessionStateSchema)` to create a new message.
  */
 export const JetBrainsSessionStateSchema: GenMessage<JetBrainsSessionState> = /*@__PURE__*/
-  messageDesc(file_jetbrains_api, 9);
+  messageDesc(file_jetbrains_api, 10);
 
 /**
  * @generated from message com.asakii.rpc.proto.JetBrainsSessionCommand
@@ -421,7 +458,7 @@ export type JetBrainsSessionCommand = Message<"com.asakii.rpc.proto.JetBrainsSes
  * Use `create(JetBrainsSessionCommandSchema)` to create a new message.
  */
 export const JetBrainsSessionCommandSchema: GenMessage<JetBrainsSessionCommand> = /*@__PURE__*/
-  messageDesc(file_jetbrains_api, 10);
+  messageDesc(file_jetbrains_api, 11);
 
 /**
  * @generated from message com.asakii.rpc.proto.JetBrainsOperationResponse
@@ -443,7 +480,7 @@ export type JetBrainsOperationResponse = Message<"com.asakii.rpc.proto.JetBrains
  * Use `create(JetBrainsOperationResponseSchema)` to create a new message.
  */
 export const JetBrainsOperationResponseSchema: GenMessage<JetBrainsOperationResponse> = /*@__PURE__*/
-  messageDesc(file_jetbrains_api, 11);
+  messageDesc(file_jetbrains_api, 12);
 
 /**
  * @generated from message com.asakii.rpc.proto.JetBrainsGetThemeRequest
@@ -456,7 +493,7 @@ export type JetBrainsGetThemeRequest = Message<"com.asakii.rpc.proto.JetBrainsGe
  * Use `create(JetBrainsGetThemeRequestSchema)` to create a new message.
  */
 export const JetBrainsGetThemeRequestSchema: GenMessage<JetBrainsGetThemeRequest> = /*@__PURE__*/
-  messageDesc(file_jetbrains_api, 12);
+  messageDesc(file_jetbrains_api, 13);
 
 /**
  * @generated from message com.asakii.rpc.proto.JetBrainsGetThemeResponse
@@ -473,7 +510,7 @@ export type JetBrainsGetThemeResponse = Message<"com.asakii.rpc.proto.JetBrainsG
  * Use `create(JetBrainsGetThemeResponseSchema)` to create a new message.
  */
 export const JetBrainsGetThemeResponseSchema: GenMessage<JetBrainsGetThemeResponse> = /*@__PURE__*/
-  messageDesc(file_jetbrains_api, 13);
+  messageDesc(file_jetbrains_api, 14);
 
 /**
  * @generated from message com.asakii.rpc.proto.JetBrainsGetProjectPathRequest
@@ -486,7 +523,7 @@ export type JetBrainsGetProjectPathRequest = Message<"com.asakii.rpc.proto.JetBr
  * Use `create(JetBrainsGetProjectPathRequestSchema)` to create a new message.
  */
 export const JetBrainsGetProjectPathRequestSchema: GenMessage<JetBrainsGetProjectPathRequest> = /*@__PURE__*/
-  messageDesc(file_jetbrains_api, 14);
+  messageDesc(file_jetbrains_api, 15);
 
 /**
  * @generated from message com.asakii.rpc.proto.JetBrainsGetProjectPathResponse
@@ -503,7 +540,7 @@ export type JetBrainsGetProjectPathResponse = Message<"com.asakii.rpc.proto.JetB
  * Use `create(JetBrainsGetProjectPathResponseSchema)` to create a new message.
  */
 export const JetBrainsGetProjectPathResponseSchema: GenMessage<JetBrainsGetProjectPathResponse> = /*@__PURE__*/
-  messageDesc(file_jetbrains_api, 15);
+  messageDesc(file_jetbrains_api, 16);
 
 /**
  * @generated from message com.asakii.rpc.proto.JetBrainsGetLocaleRequest
@@ -516,7 +553,7 @@ export type JetBrainsGetLocaleRequest = Message<"com.asakii.rpc.proto.JetBrainsG
  * Use `create(JetBrainsGetLocaleRequestSchema)` to create a new message.
  */
 export const JetBrainsGetLocaleRequestSchema: GenMessage<JetBrainsGetLocaleRequest> = /*@__PURE__*/
-  messageDesc(file_jetbrains_api, 16);
+  messageDesc(file_jetbrains_api, 17);
 
 /**
  * @generated from message com.asakii.rpc.proto.JetBrainsGetLocaleResponse
@@ -533,7 +570,7 @@ export type JetBrainsGetLocaleResponse = Message<"com.asakii.rpc.proto.JetBrains
  * Use `create(JetBrainsGetLocaleResponseSchema)` to create a new message.
  */
 export const JetBrainsGetLocaleResponseSchema: GenMessage<JetBrainsGetLocaleResponse> = /*@__PURE__*/
-  messageDesc(file_jetbrains_api, 17);
+  messageDesc(file_jetbrains_api, 18);
 
 /**
  * @generated from message com.asakii.rpc.proto.JetBrainsSetLocaleRequest
@@ -550,7 +587,7 @@ export type JetBrainsSetLocaleRequest = Message<"com.asakii.rpc.proto.JetBrainsS
  * Use `create(JetBrainsSetLocaleRequestSchema)` to create a new message.
  */
 export const JetBrainsSetLocaleRequestSchema: GenMessage<JetBrainsSetLocaleRequest> = /*@__PURE__*/
-  messageDesc(file_jetbrains_api, 18);
+  messageDesc(file_jetbrains_api, 19);
 
 /**
  * @generated from enum com.asakii.rpc.proto.JetBrainsSessionCommandType

@@ -236,6 +236,88 @@ class JetBrainsApiImpl(private val ideaProject: Project) : JetBrainsApi {
             }
         }
 
+        override fun showEditFullDiff(request: JetBrainsShowEditFullDiffRequest): Result<Unit> {
+            return try {
+                ApplicationManager.getApplication().invokeLater {
+                    val file = LocalFileSystem.getInstance().findFileByPath(request.filePath)
+                    file?.refresh(false, false)
+                    val currentContent = file?.let { String(it.contentsToByteArray(), Charsets.UTF_8) } ?: ""
+
+                    // 优先使用缓存的原始内容，否则通过反向替换计算
+                    val beforeContent = if (!request.originalContent.isNullOrEmpty()) {
+                        // 使用缓存的原始内容
+                        logger.info("✅ [JetBrainsApi.file] Using cached original content for diff")
+                        request.originalContent
+                    } else {
+                        // 回退：通过反向替换计算修改前的内容
+                        logger.info("⚠️ [JetBrainsApi.file] No cached content, using reverse replacement")
+                        if (request.replaceAll) {
+                            currentContent.replace(request.newString, request.oldString)
+                        } else {
+                            val index = currentContent.indexOf(request.newString)
+                            if (index >= 0) {
+                                buildString {
+                                    append(currentContent.substring(0, index))
+                                    append(request.oldString)
+                                    append(currentContent.substring(index + request.newString.length))
+                                }
+                            } else {
+                                // newString 不在文件中，可能文件已被修改，使用当前内容
+                                logger.warning("⚠️ [JetBrainsApi.file] newString not found in file, showing current content")
+                                currentContent
+                            }
+                        }
+                    }
+
+                    // 计算修改后的内容：在原始内容上应用 oldString → newString 替换
+                    val afterContent = if (!request.originalContent.isNullOrEmpty()) {
+                        // 有原始内容时，应用正向替换得到修改后的内容
+                        if (request.replaceAll) {
+                            beforeContent.replace(request.oldString, request.newString)
+                        } else {
+                            val index = beforeContent.indexOf(request.oldString)
+                            if (index >= 0) {
+                                buildString {
+                                    append(beforeContent.substring(0, index))
+                                    append(request.newString)
+                                    append(beforeContent.substring(index + request.oldString.length))
+                                }
+                            } else {
+                                // oldString 不在原始内容中，使用当前文件内容
+                                currentContent
+                            }
+                        }
+                    } else {
+                        // 没有原始内容时，使用当前文件内容作为修改后的内容
+                        currentContent
+                    }
+
+                    val fileName = File(request.filePath).name
+                    val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
+
+                    val leftContent = DiffContentFactory.getInstance()
+                        .create(ideaProject, beforeContent, fileType)
+                    val rightContent = DiffContentFactory.getInstance()
+                        .create(ideaProject, afterContent, fileType)
+
+                    val diffRequest = SimpleDiffRequest(
+                        request.title ?: "Edit: $fileName",
+                        leftContent,
+                        rightContent,
+                        "$fileName (before)",
+                        "$fileName (after)"
+                    )
+
+                    DiffManager.getInstance().showDiff(ideaProject, diffRequest)
+                    logger.info("✅ [JetBrainsApi.file] Showing edit full diff: ${request.filePath}")
+                }
+                Result.success(Unit)
+            } catch (e: Exception) {
+                logger.severe("❌ [JetBrainsApi.file] Failed to show edit full diff: ${e.message}")
+                Result.failure(e)
+            }
+        }
+
         override fun showMarkdown(request: JetBrainsShowMarkdownRequest): Result<Unit> {
             return try {
                 ApplicationManager.getApplication().invokeLater {
@@ -330,6 +412,8 @@ class JetBrainsApiImpl(private val ideaProject: Project) : JetBrainsApi {
                     }
                 }
                 result
+            } catch (e: com.intellij.openapi.progress.ProcessCanceledException) {
+                throw e  // 必须重新抛出
             } catch (e: Exception) {
                 logger.severe("❌ [JetBrainsApi.file] Failed to get active file: ${e.message}")
                 null

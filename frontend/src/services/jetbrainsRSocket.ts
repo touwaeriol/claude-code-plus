@@ -15,6 +15,7 @@ import {
   JetBrainsShowDiffRequestSchema,
   JetBrainsShowMultiEditDiffRequestSchema,
   JetBrainsShowEditPreviewRequestSchema,
+  JetBrainsShowEditFullDiffRequestSchema,
   JetBrainsShowMarkdownRequestSchema,
   JetBrainsEditOperationSchema,
   JetBrainsOperationResponseSchema,
@@ -34,6 +35,7 @@ import type {
   ShowDiffRequest,
   ShowMultiEditDiffRequest,
   ShowEditPreviewRequest,
+  ShowEditFullDiffRequest,
   ShowMarkdownRequest
 } from './jetbrainsApi'
 
@@ -107,6 +109,20 @@ function encodeShowMarkdownRequest(request: ShowMarkdownRequest): Uint8Array {
     title: request.title
   })
   return toBinary(JetBrainsShowMarkdownRequestSchema, proto)
+}
+
+/**
+ * 编码 JetBrainsShowEditFullDiffRequest
+ */
+function encodeShowEditFullDiffRequest(request: ShowEditFullDiffRequest): Uint8Array {
+  const proto = create(JetBrainsShowEditFullDiffRequestSchema, {
+    filePath: request.filePath,
+    oldString: request.oldString,
+    newString: request.newString,
+    replaceAll: request.replaceAll,
+    title: request.title
+  })
+  return toBinary(JetBrainsShowEditFullDiffRequestSchema, proto)
 }
 
 /**
@@ -637,6 +653,26 @@ class JetBrainsRSocketService {
       return result.success
     } catch (error) {
       console.error('[JetBrainsRSocket] Failed to show markdown:', error)
+      return false
+    }
+  }
+
+  /**
+   * 显示完整文件 Diff（修改前后对比）
+   */
+  async showEditFullDiff(request: ShowEditFullDiffRequest): Promise<boolean> {
+    if (!this.client) return false
+
+    try {
+      const data = encodeShowEditFullDiffRequest(request)
+      const response = await this.client.requestResponse('jetbrains.showEditFullDiff', data)
+      const result = decodeOperationResponse(response)
+      if (result.success) {
+        console.log('[JetBrainsRSocket] Showing edit full diff for:', request.filePath)
+      }
+      return result.success
+    } catch (error) {
+      console.error('[JetBrainsRSocket] Failed to show edit full diff:', error)
       return false
     }
   }

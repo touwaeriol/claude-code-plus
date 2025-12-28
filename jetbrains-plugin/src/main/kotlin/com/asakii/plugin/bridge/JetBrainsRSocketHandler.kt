@@ -33,6 +33,7 @@ import com.asakii.rpc.proto.JetBrainsShowDiffRequest as ProtoShowDiffRequest
 import com.asakii.rpc.proto.JetBrainsShowMultiEditDiffRequest as ProtoShowMultiEditDiffRequest
 import com.asakii.rpc.proto.JetBrainsShowEditPreviewRequest as ProtoShowEditPreviewRequest
 import com.asakii.rpc.proto.JetBrainsShowMarkdownRequest as ProtoShowMarkdownRequest
+import com.asakii.rpc.proto.JetBrainsShowEditFullDiffRequest as ProtoShowEditFullDiffRequest
 import com.asakii.rpc.proto.JetBrainsSetLocaleRequest as ProtoSetLocaleRequest
 import com.asakii.rpc.proto.JetBrainsSessionState as ProtoSessionState
 import com.asakii.rpc.proto.JetBrainsSessionCommand as ProtoSessionCommand
@@ -89,6 +90,7 @@ class JetBrainsRSocketHandler(
                     "jetbrains.showDiff" -> handleShowDiff(dataBytes)
                     "jetbrains.showMultiEditDiff" -> handleShowMultiEditDiff(dataBytes)
                     "jetbrains.showEditPreviewDiff" -> handleShowEditPreviewDiff(dataBytes)
+                    "jetbrains.showEditFullDiff" -> handleShowEditFullDiff(dataBytes)
                     "jetbrains.showMarkdown" -> handleShowMarkdown(dataBytes)
                     "jetbrains.getTheme" -> handleGetTheme()
                     "jetbrains.getActiveFile" -> handleGetActiveFile()
@@ -233,6 +235,28 @@ class JetBrainsRSocketHandler(
             buildOperationResponse(result.isSuccess, result.exceptionOrNull()?.message)
         } catch (e: Exception) {
             logger.error("❌ [JetBrains] showMarkdown failed: ${e.message}")
+            buildErrorResponse(e.message ?: "Unknown error")
+        }
+    }
+
+    private fun handleShowEditFullDiff(dataBytes: ByteArray): Payload {
+        return try {
+            val req = ProtoShowEditFullDiffRequest.parseFrom(dataBytes)
+            logger.info("📝 [JetBrains] showEditFullDiff: ${req.filePath}")
+
+            val request = com.asakii.rpc.api.JetBrainsShowEditFullDiffRequest(
+                filePath = req.filePath,
+                oldString = req.oldString,
+                newString = req.newString,
+                replaceAll = req.replaceAll,
+                title = if (req.hasTitle()) req.title else null,
+                originalContent = if (req.hasOriginalContent()) req.originalContent else null
+            )
+
+            val result = jetbrainsApi.file.showEditFullDiff(request)
+            buildOperationResponse(result.isSuccess, result.exceptionOrNull()?.message)
+        } catch (e: Exception) {
+            logger.error("❌ [JetBrains] showEditFullDiff failed: ${e.message}")
             buildErrorResponse(e.message ?: "Unknown error")
         }
     }

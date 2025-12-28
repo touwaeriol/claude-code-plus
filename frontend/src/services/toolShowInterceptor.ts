@@ -11,7 +11,8 @@ import {
   isIdeEnvironment,
   type OpenFileRequest,
   type ShowDiffRequest,
-  type ShowMultiEditDiffRequest
+  type ShowMultiEditDiffRequest,
+  type ShowEditFullDiffRequest
 } from './jetbrainsApi'
 
 // ====== 工具输入类型定义 ======
@@ -51,6 +52,7 @@ export interface MultiEditToolInput {
 
 export interface ToolShowContext<TInput = Record<string, unknown>> {
   toolType: string
+  toolUseId?: string
   input: TInput
   result?: {
     content?: string | unknown[]
@@ -62,6 +64,7 @@ export interface ToolShowApi {
   openFile: (payload: OpenFileRequest) => void
   showDiff: (payload: ShowDiffRequest) => void
   showMultiEditDiff: (payload: ShowMultiEditDiffRequest) => void
+  showEditFullDiff: (payload: ShowEditFullDiffRequest) => void
 }
 
 /**
@@ -71,7 +74,7 @@ export interface ToolShowApi {
 export type ToolShowHandler<TInput = Record<string, unknown>> = (
   context: ToolShowContext<TInput>,
   api: ToolShowApi
-) => void
+) => void | Promise<void>
 
 class ToolShowInterceptorService {
   private handlers = new Map<string, ToolShowHandler<unknown>>()
@@ -152,7 +155,8 @@ class ToolShowInterceptorService {
     const api: ToolShowApi = {
       openFile: (payload) => jetbrainsBridge.openFile(payload),
       showDiff: (payload) => jetbrainsBridge.showDiff(payload),
-      showMultiEditDiff: (payload) => jetbrainsBridge.showMultiEditDiff(payload)
+      showMultiEditDiff: (payload) => jetbrainsBridge.showMultiEditDiff(payload),
+      showEditFullDiff: (payload) => jetbrainsBridge.showEditFullDiff(payload)
     }
 
     try {
@@ -198,14 +202,23 @@ class ToolShowInterceptorService {
       })
     })
 
-    // Edit 工具：显示 Diff
-    this.register<EditToolInput>('Edit', (ctx, api) => {
+    // Edit 工具：显示完整文件 Diff（修改前后对比）
+    this.register<EditToolInput>('Edit', async (ctx, api) => {
       const filePath = ctx.input.file_path || ctx.input.path || ''
-      api.showDiff({
+
+      // 尝试获取缓存的原始内容
+      let originalContent: string | undefined
+      if (ctx.toolUseId) {
+        originalContent = await jetbrainsBridge.getOriginalContent(ctx.toolUseId) || undefined
+      }
+
+      api.showEditFullDiff({
         filePath,
-        oldContent: ctx.input.old_string || '',
-        newContent: ctx.input.new_string || '',
-        title: `Edit: ${filePath}`
+        oldString: ctx.input.old_string || '',
+        newString: ctx.input.new_string || '',
+        replaceAll: ctx.input.replace_all || false,
+        title: `Edit: ${filePath}`,
+        originalContent
       })
     })
 

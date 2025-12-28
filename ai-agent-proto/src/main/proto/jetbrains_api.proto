@@ -92,6 +92,17 @@ message JetBrainsShowMarkdownRequest {
   optional string title = 2;
 }
 
+// ========== 完整文件Diff（修改前后对比）==========
+
+message JetBrainsShowEditFullDiffRequest {
+  string file_path = 1;
+  string old_string = 2;
+  string new_string = 3;
+  bool replace_all = 4;
+  optional string title = 5;
+  optional string original_content = 6;  // 缓存的原始文件内容（如果有）
+}
+
 // ========== 会话状态（前端→后端）==========
 
 message JetBrainsSessionSummary {

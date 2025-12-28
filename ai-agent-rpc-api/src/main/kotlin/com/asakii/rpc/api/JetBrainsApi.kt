@@ -38,6 +38,9 @@ interface JetBrainsFileApi {
     /** 展示编辑预览 diff（从文件读取当前内容，应用编辑后显示 diff） */
     fun showEditPreviewDiff(request: JetBrainsShowEditPreviewRequest): Result<Unit>
 
+    /** 展示完整文件 diff（通过 labelId 从 Local History 获取修改前内容） */
+    fun showEditFullDiff(request: JetBrainsShowEditFullDiffRequest): Result<Unit>
+
     /** 展示 Markdown 内容（用于计划预览） */
     fun showMarkdown(request: JetBrainsShowMarkdownRequest): Result<Unit>
 
@@ -98,6 +101,7 @@ object DefaultJetBrainsApi : JetBrainsApi {
         override fun showDiff(request: JetBrainsShowDiffRequest) = Result.failure<Unit>(error)
         override fun showMultiEditDiff(request: JetBrainsShowMultiEditDiffRequest) = Result.failure<Unit>(error)
         override fun showEditPreviewDiff(request: JetBrainsShowEditPreviewRequest) = Result.failure<Unit>(error)
+        override fun showEditFullDiff(request: JetBrainsShowEditFullDiffRequest) = Result.failure<Unit>(error)
         override fun showMarkdown(request: JetBrainsShowMarkdownRequest) = Result.failure<Unit>(error)
         override fun getActiveFile(): ActiveFileInfo? = null
     }
@@ -172,6 +176,16 @@ data class JetBrainsShowEditPreviewRequest(
 data class JetBrainsShowMarkdownRequest(
     val content: String,
     val title: String? = null
+)
+
+/** 完整文件 diff 请求（展示修改前后的完整文件对比） */
+data class JetBrainsShowEditFullDiffRequest(
+    val filePath: String,
+    val oldString: String,
+    val newString: String,
+    val replaceAll: Boolean = false,
+    val title: String? = null,
+    val originalContent: String? = null  // 缓存的原始文件内容（如果有）
 )
 
 @Serializable

@@ -12,6 +12,14 @@ const t = (key: string, params?: Record<string, any>) => i18n.global.t(key, para
 // 终端 SVG 图标
 const TERMINAL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>'
 
+// JetBrains MCP 文件操作 SVG 图标
+// 文件读取图标（眼睛/查看）
+const FILE_READ_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>'
+// 文件写入图标（文件+加号）
+const FILE_WRITE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>'
+// 文件编辑图标（铅笔）
+const FILE_EDIT_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>'
+
 export interface ToolDisplayInfo {
   /** 工具图标 */
   icon: string
@@ -72,6 +80,10 @@ const TOOL_ICONS: Record<string, string> = {
   'mcp__terminal__TerminalInterrupt': TERMINAL_SVG,
   'mcp__terminal__TerminalTypes': TERMINAL_SVG,
   'mcp__terminal__TerminalRename': TERMINAL_SVG,
+  // JetBrains MCP 文件操作工具
+  'mcp__jetbrains__ReadFile': FILE_READ_SVG,
+  'mcp__jetbrains__WriteFile': FILE_WRITE_SVG,
+  'mcp__jetbrains__EditFile': FILE_EDIT_SVG,
   // 小写格式（兼容旧格式）
   read: '📄',
   write: '✏️',
@@ -129,6 +141,10 @@ const ACTION_TYPES: Record<string, string> = {
   'mcp__terminal__TerminalInterrupt': 'TerminalInterrupt',
   'mcp__terminal__TerminalTypes': 'TerminalTypes',
   'mcp__terminal__TerminalRename': 'TerminalRename',
+  // JetBrains MCP 文件操作工具
+  'mcp__jetbrains__ReadFile': 'ReadFile',
+  'mcp__jetbrains__WriteFile': 'WriteFile',
+  'mcp__jetbrains__EditFile': 'EditFile',
   // 小写格式（兼容旧格式）
   read: 'Read',
   write: 'Write',

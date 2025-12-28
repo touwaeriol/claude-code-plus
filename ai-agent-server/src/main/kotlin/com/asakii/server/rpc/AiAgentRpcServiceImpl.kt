@@ -48,6 +48,7 @@ import com.asakii.server.mcp.PermissionMode as McpPermissionMode
 import com.asakii.server.mcp.PermissionRuleValue as McpPermissionRuleValue
 import com.asakii.server.mcp.UserInteractionMcpServer
 import com.asakii.server.mcp.JetBrainsMcpServerProvider
+import com.asakii.server.services.FileContentCache
 import com.asakii.server.mcp.DefaultJetBrainsMcpServerProvider
 import com.asakii.server.mcp.TerminalMcpServerProvider
 import com.asakii.server.mcp.DefaultTerminalMcpServerProvider
@@ -729,6 +730,16 @@ class AiAgentRpcServiceImpl(
         // canUseTool 回调：通过 RPC 调用前端获取用户授权（带 tool_use_id 和 permissionSuggestions）
         val canUseToolCallback: CanUseTool = { toolName, input, toolUseId, context ->
             sdkLog.info("🔐 [canUseTool] 请求授权: toolName=$toolName, toolUseId=$toolUseId, suggestions=${context.suggestions.size}")
+
+            // 在 Edit/Write 工具执行前保存原始文件内容（用于后续显示 Diff）
+            if (toolUseId != null && (toolName == "Edit" || toolName == "Write")) {
+                val filePath = input["file_path"]?.jsonPrimitive?.contentOrNull
+                    ?: input["path"]?.jsonPrimitive?.contentOrNull
+                if (filePath != null) {
+                    FileContentCache.saveOriginalContent(toolUseId, filePath)
+                }
+            }
+
             val caller = clientCaller
             if (caller != null) {
                 try {
