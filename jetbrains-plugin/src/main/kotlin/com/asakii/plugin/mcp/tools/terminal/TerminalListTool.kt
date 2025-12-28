@@ -5,12 +5,12 @@ import mu.KotlinLogging
 private val logger = KotlinLogging.logger {}
 
 /**
- * TerminalList 工具 - 列出所有终端会话
+ * TerminalList 工具 - 列出当前 AI 会话的终端
  */
 class TerminalListTool(private val sessionManager: TerminalSessionManager) {
 
     /**
-     * 列出所有终端会话
+     * 列出当前 AI 会话的终端（默认终端 + 溢出终端）
      *
      * @param arguments 参数：
      *   - include_output_preview: Boolean? - 是否包含输出预览（默认 false）
@@ -20,9 +20,10 @@ class TerminalListTool(private val sessionManager: TerminalSessionManager) {
         val includePreview = arguments["include_output_preview"] as? Boolean ?: false
         val previewLines = (arguments["preview_lines"] as? Number)?.toInt() ?: 5
 
-        logger.info { "Listing terminal sessions (includePreview: $includePreview)" }
+        logger.info { "Listing terminal sessions for current AI session (includePreview: $includePreview)" }
 
-        val sessions = sessionManager.getAllSessions()
+        // 只获取当前 AI 会话的终端
+        val sessions = sessionManager.getCurrentSessionTerminals()
 
         val sessionList = sessions.map { session ->
             buildMap {

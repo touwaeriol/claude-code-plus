@@ -519,7 +519,7 @@ IMPORTANT: When working with third-party libraries, ALWAYS query Context7 first 
 
   "TerminalList": {
     "type": "object",
-    "description": "List all active terminal sessions.",
+    "description": "List terminal sessions for the current AI session only (default terminal and overflow terminals). Each AI session can only see its own terminals.",
     "properties": {
       "include_output_preview": {
         "type": "boolean",

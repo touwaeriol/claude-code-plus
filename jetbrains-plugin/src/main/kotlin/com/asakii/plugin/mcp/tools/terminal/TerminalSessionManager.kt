@@ -278,6 +278,27 @@ class TerminalSessionManager(private val project: Project) {
     }
 
     /**
+     * 获取当前 AI 会话的所有终端（默认终端 + 溢出终端）
+     * 如果没有当前 AI 会话，返回空列表
+     */
+    fun getCurrentSessionTerminals(): List<TerminalSession> {
+        val aiSessionId = currentAiSessionId ?: return emptyList()
+        val result = mutableListOf<TerminalSession>()
+
+        // 添加默认终端
+        aiSessionDefaultTerminals[aiSessionId]?.let { terminalId ->
+            sessions[terminalId]?.let { result.add(it) }
+        }
+
+        // 添加溢出终端
+        aiSessionOverflowTerminals[aiSessionId]?.forEach { terminalId ->
+            sessions[terminalId]?.let { result.add(it) }
+        }
+
+        return result
+    }
+
+    /**
      * 创建新终端会话
      *
      * @param name 会话名称
