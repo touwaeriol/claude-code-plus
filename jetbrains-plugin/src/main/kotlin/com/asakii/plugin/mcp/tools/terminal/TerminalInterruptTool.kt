@@ -7,6 +7,8 @@ private val logger = KotlinLogging.logger {}
 /**
  * TerminalInterrupt 工具 - 发送终端控制信号
  *
+ * 只能操作当前 AI 会话的终端。
+ *
  * 支持的信号：
  * - SIGINT (Ctrl+C): 中断信号，默认值
  * - SIGQUIT (Ctrl+\): 强制退出信号
@@ -31,6 +33,9 @@ class TerminalInterruptTool(private val sessionManager: TerminalSessionManager) 
                 "success" to false,
                 "error" to "Missing required parameter: session_id"
             )
+
+        // 验证会话所有权
+        sessionManager.validateSessionOwnership(sessionId)?.let { return it }
 
         // 解析 signal 参数，默认 SIGINT
         val signal = (arguments["signal"] as? String)?.uppercase() ?: "SIGINT"

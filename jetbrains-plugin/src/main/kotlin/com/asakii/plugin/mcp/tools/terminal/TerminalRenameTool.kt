@@ -6,6 +6,8 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * TerminalRename 工具 - 重命名终端会话
+ *
+ * 只能重命名当前 AI 会话的终端。
  */
 class TerminalRenameTool(private val sessionManager: TerminalSessionManager) {
 
@@ -28,6 +30,9 @@ class TerminalRenameTool(private val sessionManager: TerminalSessionManager) {
                 "success" to false,
                 "error" to "Missing required parameter: new_name"
             )
+
+        // 验证会话所有权
+        sessionManager.validateSessionOwnership(sessionId)?.let { return it }
 
         logger.info { "Renaming terminal session $sessionId to: $newName" }
 

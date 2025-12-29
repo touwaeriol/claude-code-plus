@@ -37,12 +37,9 @@ class TerminalTool(private val sessionManager: TerminalSessionManager) {
 
         // 获取或创建会话
         val session = if (sessionId != null) {
-            // 指定了 session_id，尝试获取该会话
-            sessionManager.getSession(sessionId)
-                ?: return mapOf(
-                    "success" to false,
-                    "error" to "Session not found: $sessionId"
-                )
+            // 指定了 session_id，验证所有权并获取会话
+            sessionManager.validateSessionOwnership(sessionId)?.let { return it }
+            sessionManager.getSession(sessionId)!!
         } else {
             // 未指定 session_id，使用当前 AI 会话的默认终端
             if (sessionName != null) {

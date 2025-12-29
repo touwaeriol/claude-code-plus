@@ -234,6 +234,29 @@ class TerminalSessionManager(private val project: Project) {
     }
 
     /**
+     * 检查终端是否属于当前 AI 会话
+     */
+    fun isSessionOwnedByCurrentAiSession(terminalId: String): Boolean {
+        val currentTerminalIds = getCurrentSessionTerminals().map { it.id }.toSet()
+        return terminalId in currentTerminalIds
+    }
+
+    /**
+     * 验证会话所有权，如果验证失败返回错误响应，否则返回 null
+     * 用于各工具统一的会话验证逻辑
+     */
+    fun validateSessionOwnership(sessionId: String): Map<String, Any>? {
+        return if (!isSessionOwnedByCurrentAiSession(sessionId)) {
+            mapOf(
+                "success" to false,
+                "error" to "Session not found or not owned by current AI session: $sessionId"
+            )
+        } else {
+            null
+        }
+    }
+
+    /**
      * 获取当前 AI 会话的默认终端，如果不存在或已被删除则创建新的
      * 如果默认终端正在执行命令，则创建溢出终端
      */

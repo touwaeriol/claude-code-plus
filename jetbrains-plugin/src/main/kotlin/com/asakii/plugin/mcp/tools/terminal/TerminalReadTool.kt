@@ -26,12 +26,16 @@ class TerminalReadTool(private val sessionManager: TerminalSessionManager) {
      */
     fun execute(arguments: Map<String, Any>): Map<String, Any> {
         // 如果未指定 session_id，使用默认终端
-        val sessionId = arguments["session_id"] as? String
+        val requestedSessionId = arguments["session_id"] as? String
+        val sessionId = requestedSessionId
             ?: sessionManager.getDefaultTerminalId()
             ?: return mapOf(
                 "success" to false,
                 "error" to "No session_id provided and no default terminal exists"
             )
+
+        // 验证会话所有权
+        sessionManager.validateSessionOwnership(sessionId)?.let { return it }
 
         val maxLines = (arguments["max_lines"] as? Number)?.toInt() ?: 1000
         val search = arguments["search"] as? String
