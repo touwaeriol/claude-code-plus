@@ -207,6 +207,25 @@ class TerminalSessionManager(private val project: Project) {
     }
 
     /**
+     * 终端关闭时的清理回调
+     * 从 sessions 和映射表中移除对应记录
+     */
+    private fun onTerminalClosed(terminalId: String) {
+        // 从 sessions 中移除
+        sessions.remove(terminalId)
+
+        // 从默认终端映射中移除
+        aiSessionDefaultTerminals.entries.removeIf { it.value == terminalId }
+
+        // 从溢出终端列表中移除
+        aiSessionOverflowTerminals.values.forEach { list ->
+            list.remove(terminalId)
+        }
+
+        logger.info("Cleaned up mappings for closed terminal: $terminalId")
+    }
+
+    /**
      * 获取当前 AI 会话的默认终端 ID
      */
     fun getDefaultTerminalId(): String? {
@@ -349,6 +368,13 @@ class TerminalSessionManager(private val project: Project) {
                     widgetWrapper = w
                 )
                 sessions[sessionId] = session
+
+                // 注册终端关闭回调，自动清理映射
+                w.addTerminationCallback {
+                    logger.info("Terminal $sessionId was closed, cleaning up mappings")
+                    onTerminalClosed(sessionId)
+                }
+
                 logger.info("Created terminal session: $sessionId ($sessionName), shell=$actualShellName, widget type: ${w.widgetClassName}")
                 session
             }

@@ -34,6 +34,21 @@ class TerminalWidgetWrapper(private val widget: ShellTerminalWidget) {
     val widgetClassName: String get() = widget.javaClass.name
 
     /**
+     * 注册终端关闭回调
+     * 当终端被关闭（dispose）时调用
+     */
+    fun addTerminationCallback(callback: Runnable) {
+        try {
+            // 使用 TerminalWidget 的 addTerminationCallback API
+            val terminalWidget = widget.asNewWidget()
+            terminalWidget.addTerminationCallback(callback, widget)
+            logger.info { "Registered termination callback for terminal" }
+        } catch (e: Exception) {
+            logger.warn(e) { "Failed to register termination callback" }
+        }
+    }
+
+    /**
      * 执行命令
      * 使用 ShellTerminalWidget.executeCommand()
      */
