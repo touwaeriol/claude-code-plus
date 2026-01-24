@@ -82,6 +82,7 @@ class HttpApiServer(
     private val frontendDir: Path? = null,  // 开发模式下可以为 null
     private val jetbrainsApi: JetBrainsApi = DefaultJetBrainsApi,  // 默认不支持 JetBrains 集成
     private val jetbrainsRSocketHandler: JetBrainsRSocketHandlerProvider? = null,  // JetBrains RSocket 处理器
+    private val mcpHttpGateway: McpHttpGateway? = null,  // 项目级 MCP HTTP 网关（仅 Codex 模式使用）
     private val mcpProviders: McpProviders = McpProviders.DEFAULT,  // All MCP Server Providers
     private val serviceConfigProvider: () -> com.asakii.server.config.AiAgentServiceConfig = { com.asakii.server.config.AiAgentServiceConfig() },  // 服务配置提供者（每次 connect 时调用获取最新配置）
     private val codexBackendProvider: CodexBackendProvider? = null  // Codex 后端提供者（可选）
@@ -175,6 +176,7 @@ class HttpApiServer(
                         ideTools = ideTools,
                         clientRequester = requester,
                         connectId = connectId,
+                        mcpHttpGateway = mcpHttpGateway,
                         mcpProviders = mcpProviders,
                         serviceConfigProvider = { currentConfig }
                     )

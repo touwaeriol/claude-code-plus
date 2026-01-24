@@ -33,42 +33,53 @@ private val logger = getLogger("McpHttpGateway")
 /**
  * MCP HTTP 网关
  *
- * 简化后的设计：
- * - 每个 serverName 对应一个 Transport（全局共享）
+ * 项目级实例设计：
+ * - 每个 IDEA 项目拥有独立的 McpHttpGateway 实例
+ * - 每个实例有独立的 Jetty 服务器和端口
+ * - 解决多项目同时打开时 MCP 路由错误的问题
+ *
+ * 实例内复用设计：
+ * - 在同一个网关实例中，每个 serverName 对应一个 Transport
  * - MCP SDK 自己管理 Transport 和 Session
  * - 我们只负责启动 HTTP 服务和路由请求
  * - connectId 通过 MCP SDK 的 TransportContext 传递给 callHandler，再转为协程上下文
  */
-object McpHttpGateway {
+class McpHttpGateway {
+    
+    companion object {
+        /** MCP 路由 header 名称 */
+        const val HEADER_CONNECT_ID = "X-MCP-Connect-Id"
+        
+        /**
+         * Jetty 默认 idleTimeout 只有 30s，SSE 长连接在空闲时会被断开，导致 session 频繁失效。
+         * 这里显式调大 idleTimeout，同时把 MCP keep-alive 调整为更短间隔，尽量避免中间层/容器超时。
+         * 
+         * 注意：Claude CLI 使用的 MCP 客户端在会话丢失时不会自动重连（不符合 MCP 规范），
+         * 所以必须确保会话尽可能不丢失。
+         * 
+         * 2025-01: 将 idleTimeout 从 30s 提高到 120s，keep-alive 从 15s 降到 10s，
+         * 以减少 "Streamable HTTP error" 频繁出现的问题。
+         * 
+         * @see <a href="https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/transports/">MCP Transport Spec</a>
+         */
+        private val JETTY_CONNECTOR_IDLE_TIMEOUT_MS = Duration.ofSeconds(120).toMillis()  // 120 秒
+        private val MCP_KEEP_ALIVE_INTERVAL = Duration.ofSeconds(10)  // 10 秒心跳
+    }
+    
     private data class Endpoint(
         val path: String,
         val server: McpSyncServer,
         val transport: HttpServletStreamableServerTransportProvider
     )
 
-    /**
-     * Jetty 默认 idleTimeout 只有 30s，SSE 长连接在空闲时会被断开，导致 session 频繁失效。
-     * 这里显式调大 idleTimeout，同时把 MCP keep-alive 调整为更短间隔，尽量避免中间层/容器超时。
-     * 
-     * 注意：Claude CLI 使用的 MCP 客户端在会话丢失时不会自动重连（不符合 MCP 规范），
-     * 所以必须确保会话尽可能不丢失。
-     * 
-     * @see <a href="https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/transports/">MCP Transport Spec</a>
-     */
-    private val JETTY_CONNECTOR_IDLE_TIMEOUT_MS = Duration.ofSeconds(30).toMillis()  // 30 秒
-    private val MCP_KEEP_ALIVE_INTERVAL = Duration.ofSeconds(15)  // 15 秒心跳
-
     private val json = JsonTools.kotlinJson
     private val jsonMapper = JsonTools.mcpJsonMapper
 
-    /** MCP 端点：key = serverName，全局共享 */
+    /** MCP 端点：key = serverName，实例内共享 */
     private val endpoints = ConcurrentHashMap<String, Endpoint>()
     private val lifecycleLock = Any()
     private var jettyServer: Server? = null
     private var actualPort: Int = 0
-
-    /** MCP 路由 header 名称 */
-    const val HEADER_CONNECT_ID = "X-MCP-Connect-Id"
 
     /**
      * 网关 Servlet
@@ -119,12 +130,50 @@ object McpHttpGateway {
             return actualPort
         }
     }
+    
+    /**
+     * 关闭 MCP HTTP 网关
+     * 
+     * 清理所有资源：
+     * - 关闭所有已注册的 MCP 服务器
+     * - 停止 Jetty HTTP 服务器
+     * - 清空端点映射
+     */
+    fun shutdown() {
+        synchronized(lifecycleLock) {
+            logger.info { "[MCP] Shutting down HTTP gateway (port=$actualPort, endpoints=${endpoints.size})" }
+            
+            // 关闭所有 MCP 服务器
+            endpoints.values.forEach { endpoint ->
+                try {
+                    endpoint.server.close()
+                } catch (e: Exception) {
+                    logger.warn { "[MCP] Error closing MCP server: ${e.message}" }
+                }
+            }
+            endpoints.clear()
+            
+            // 停止 Jetty 服务器
+            jettyServer?.let { server ->
+                try {
+                    server.stop()
+                    logger.info { "[MCP] Jetty server stopped" }
+                } catch (e: Exception) {
+                    logger.warn { "[MCP] Error stopping Jetty server: ${e.message}" }
+                }
+            }
+            jettyServer = null
+            actualPort = 0
+            
+            logger.info { "[MCP] HTTP gateway shutdown complete" }
+        }
+    }
 
     /**
      * 注册 MCP 服务器
      *
-     * 简化后的设计：
-     * - 每个 serverName 只注册一次
+     * 实例内复用设计：
+     * - 在同一个网关实例中，每个 serverName 只注册一次
      * - 已存在则复用，让 MCP SDK 管理 session
      *
      * @param serverName MCP 服务器名称
@@ -137,7 +186,7 @@ object McpHttpGateway {
     ): String {
         ensureStarted()
 
-        // 已存在则复用
+        // 已存在则复用（在同一个网关实例内）
         endpoints[serverName]?.let { existing ->
             logger.info { "[MCP] Reusing endpoint: $serverName" }
             return buildUrl(existing.path)

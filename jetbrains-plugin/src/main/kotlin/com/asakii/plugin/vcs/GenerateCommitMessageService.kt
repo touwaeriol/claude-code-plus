@@ -21,6 +21,7 @@ import com.asakii.codex.agent.sdk.ModelReasoningEffort
 import com.asakii.codex.agent.sdk.SandboxMode
 import com.asakii.codex.agent.sdk.ThreadOptions
 import com.asakii.plugin.mcp.GitMcpServerImpl
+import com.asakii.server.HttpServerProjectService
 import com.asakii.server.mcp.McpHttpGateway
 import com.asakii.settings.AgentSettingsService
 import com.asakii.settings.GitGenerateDefaults
@@ -94,7 +95,12 @@ class GenerateCommitMessageService(private val project: Project) {
                     val connectId = "git-generate-${UUID.randomUUID()}"
                     codexConnectId = connectId
 
-                    val mcpUrl = McpHttpGateway.registerServer(
+                    // 从 HttpServerProjectService 获取项目级 MCP HTTP 网关
+                    val mcpGateway = project.getService(HttpServerProjectService::class.java)
+                        .getMcpHttpGateway()
+                        ?: throw IllegalStateException("McpHttpGateway not initialized for project: ${project.name}")
+                    
+                    val mcpUrl = mcpGateway.registerServer(
                         "jetbrains_git",
                         gitMcpServer
                     )

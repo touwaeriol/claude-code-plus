@@ -59,6 +59,7 @@ import com.asakii.server.mcp.PermissionRuleValue as McpPermissionRuleValue
 import com.asakii.server.mcp.McpHttpGateway
 import com.asakii.server.mcp.UserInteractionMcpServer
 import com.asakii.server.mcp.McpProviders
+import com.asakii.server.mcp.McpServerWithConnectId
 import com.asakii.server.services.FileContentCache
 import com.asakii.logging.*
 import com.asakii.server.settings.ClaudeSettingsLoader
@@ -104,6 +105,7 @@ class AiAgentRpcServiceImpl(
     private val ideTools: IdeTools,
     private val clientCaller: ClientCaller? = null,
     private val mcpProviders: McpProviders = McpProviders.DEFAULT,
+    private val mcpHttpGateway: McpHttpGateway? = null,  // 项目级 MCP HTTP 网关（仅 Codex 模式使用）
     private val serviceConfigProvider: () -> AiAgentServiceConfig = { AiAgentServiceConfig() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val connectId: String  // 由 RSocketHandler 传入，与 RSocket 连接生命周期绑定
@@ -861,15 +863,29 @@ class AiAgentRpcServiceImpl(
         }
 
         // 注册 MCP 服务器的辅助函数
-        // MCP SDK 自己管理 Transport 和 Session，我们只需注册一次
-        // 通过 X-MCP-Connect-Id header 传递 connectId，使 MCP 工具能回调前端
+        // 根据 provider 选择注册方式：
+        // - Claude: SDK 模式，直接传递 McpServer 实例（通过 McpServerWithConnectId 包装 connectId）
+        // - Codex: HTTP 模式，注册到 McpHttpGateway（通过 X-MCP-Connect-Id header 传递 connectId）
         suspend fun registerMcpServer(name: String, server: McpServer, scope: String) {
-            val url = McpHttpGateway.registerServer(name, server)
-            claudeServers[name] = McpHttpServerConfig(
-                url = url,
-                headers = mapOf(McpHttpGateway.HEADER_CONNECT_ID to connectId)
-            )
-            sdkLog.info("✅ [MCP] HTTP endpoint registered (scope=$scope): $name -> $url (connectId=$connectId)")
+            when (provider) {
+                AiAgentProvider.CLAUDE -> {
+                    // SDK 模式：创建包装器注入 connectId，直接传给 SDK
+                    val wrappedServer = McpServerWithConnectId(server, connectId)
+                    claudeServers[name] = wrappedServer
+                    sdkLog.info("✅ [MCP] SDK mode registered (scope=$scope): $name (connectId=$connectId)")
+                }
+                AiAgentProvider.CODEX -> {
+                    // HTTP 模式：注册到网关，通过 header 传递 connectId
+                    val gateway = mcpHttpGateway
+                        ?: throw IllegalStateException("McpHttpGateway is required for Codex mode")
+                    val url = gateway.registerServer(name, server)
+                    claudeServers[name] = McpHttpServerConfig(
+                        url = url,
+                        headers = mapOf(McpHttpGateway.HEADER_CONNECT_ID to connectId)
+                    )
+                    sdkLog.info("✅ [MCP] HTTP endpoint registered (scope=$scope): $name -> $url (connectId=$connectId)")
+                }
+            }
         }
 
         // 注册 global 和 session MCP 服务器

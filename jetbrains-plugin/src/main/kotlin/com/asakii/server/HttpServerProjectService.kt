@@ -8,6 +8,7 @@ import com.asakii.plugin.mcp.JetBrainsMcpServerProviderImpl
 import com.asakii.plugin.mcp.JetBrainsFileMcpServerProviderImpl
 import com.asakii.plugin.mcp.TerminalMcpServerProviderImpl
 import com.asakii.plugin.mcp.GitMcpServerProviderImpl
+import com.asakii.server.mcp.McpHttpGateway
 import com.asakii.server.mcp.McpProviders
 import com.asakii.server.config.AiAgentServiceConfig
 import com.asakii.server.config.ClaudeDefaults
@@ -59,6 +60,7 @@ class HttpServerProjectService(private val project: Project) : Disposable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private var httpServer: HttpApiServer? = null
+    private var mcpHttpGateway: McpHttpGateway? = null  // 项目级 MCP HTTP 网关（仅 Codex 模式使用）
     private var extractedFrontendDir: Path? = null
     private var _jetbrainsApi: JetBrainsApi? = null
 
@@ -68,6 +70,9 @@ class HttpServerProjectService(private val project: Project) : Disposable {
     /** 获取 JetBrains API 实例（用于 title actions 等组件） */
     val jetbrainsApi: JetBrainsApi?
         get() = _jetbrainsApi
+    
+    /** 获取项目级 MCP HTTP 网关（用于 GenerateCommitMessageService 等组件） */
+    fun getMcpHttpGateway(): McpHttpGateway? = mcpHttpGateway
 
     init {
         // 首先配置日志系统
@@ -296,10 +301,14 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                 )
             }
 
+            // 创建项目级 MCP HTTP 网关（仅 Codex 模式使用）
+            val gateway = McpHttpGateway()
+            mcpHttpGateway = gateway
+            
             // 启动 Ktor HTTP 服务器
             // 开发模式：使用环境变量指定端口（默认 8765）
             // 生产模式：随机端口（支持多项目）
-            val server = HttpApiServer(ideTools, scope, frontendDir, jetbrainsApi, jetbrainsRSocketHandler, mcpProviders, serviceConfigProvider)
+            val server = HttpApiServer(ideTools, scope, frontendDir, jetbrainsApi, jetbrainsRSocketHandler, gateway, mcpProviders, serviceConfigProvider)
             val devPort = System.getenv("CLAUDE_DEV_PORT")?.toIntOrNull()
             val url = server.start(preferredPort = devPort)
             httpServer = server
@@ -399,6 +408,10 @@ class HttpServerProjectService(private val project: Project) : Disposable {
         logger.info { "🛑 Disposing HTTP Server Project Service" }
         httpServer?.stop()
         httpServer = null
+        
+        // 关闭 MCP HTTP 网关
+        mcpHttpGateway?.shutdown()
+        mcpHttpGateway = null
 
         // 清理临时目录
         extractedFrontendDir?.toFile()?.deleteRecursively()

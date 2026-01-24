@@ -4,6 +4,7 @@ import com.asakii.rpc.api.AiAgentRpcService
 import com.asakii.rpc.api.IdeTools
 import com.asakii.rpc.api.RpcMessage as RpcMessageApi
 import com.asakii.rpc.proto.*
+import com.asakii.server.mcp.McpHttpGateway
 import com.asakii.server.mcp.McpProviders
 import com.asakii.server.rpc.AiAgentRpcServiceImpl
 import com.asakii.server.rpc.ClientCaller
@@ -58,6 +59,7 @@ class RSocketHandler(
     private val ideTools: IdeTools,
     private val clientRequester: RSocket,  // 必须在构造时传入，确保每个连接独立
     private val connectId: String,  // 由 HttpApiServer 分配的永久连接标识，用于 MCP 路由
+    private val mcpHttpGateway: McpHttpGateway? = null,  // 项目级 MCP HTTP 网关（仅 Codex 模式使用）
     private val mcpProviders: McpProviders = McpProviders.DEFAULT,  // All MCP Server Providers
     private val serviceConfigProvider: () -> com.asakii.server.config.AiAgentServiceConfig = { com.asakii.server.config.AiAgentServiceConfig() }  // 服务配置提供者（每次 connect 时获取最新配置）
 ) {
@@ -88,6 +90,7 @@ class RSocketHandler(
             ideTools = ideTools,
             clientCaller = clientCaller,
             mcpProviders = mcpProviders,
+            mcpHttpGateway = mcpHttpGateway,
             serviceConfigProvider = serviceConfigProvider,
             connectId = connectId
         )
