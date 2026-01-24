@@ -16,6 +16,7 @@ import type {
 import type { BackendSession, SessionConnectOptions } from './BackendSession'
 import { getDefaultConfig } from '@/types/backend'
 import { resolveServerHttpUrl } from '@/utils/serverUrl'
+import { withServerToken } from '@/utils/serverAuth'
 
 // Import session implementations
 import { ClaudeSession } from './ClaudeSession'
@@ -83,6 +84,7 @@ export async function isBackendAvailable(type: BackendType): Promise<boolean> {
       const serverUrl = resolveServerHttpUrl()
       const response = await fetch(`${serverUrl}/api/health`, {
         method: 'GET',
+        headers: withServerToken(),
         signal: AbortSignal.timeout(3000), // 3 second timeout
       })
 
@@ -99,6 +101,7 @@ export async function isBackendAvailable(type: BackendType): Promise<boolean> {
       const serverUrl = resolveServerHttpUrl()
       const response = await fetch(`${serverUrl}/api/codex/health`, {
         method: 'GET',
+        headers: withServerToken(),
         signal: AbortSignal.timeout(3000),
       })
 

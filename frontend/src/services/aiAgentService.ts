@@ -10,6 +10,7 @@ import type {RSocketSession} from './rsocket/RSocketSession'
 import type {HistorySessionMetadata} from '@/types/session'
 import type {RpcMessage} from '@/types/rpc'
 import {resolveServerHttpUrl} from '@/utils/serverUrl'
+import { withServerToken } from '@/utils/serverAuth'
 
 // 重新导出类型以保持向后兼容
 export type {ConnectOptions} from './rsocket/RSocketSession'
@@ -246,9 +247,9 @@ export class AiAgentService {
 
             const response = await fetch(url, {
                 method: 'POST',
-                headers: {
+                headers: withServerToken({
                     'Content-Type': 'application/json'
-                },
+                }),
                 body: JSON.stringify({ action: 'ide.hasIdeEnvironment' })
             })
 

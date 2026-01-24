@@ -103,9 +103,7 @@ jobs:
           - type: CL
             version: "2025.3.1"
             platformMajor: 253
-          - type: PC
-            version: "2025.3.1"
-            platformMajor: 253
+          # PC (PyCharm Community) removed for 2025.3+: JetBrains unified PyCharm into a single edition
           - type: PS
             version: "2025.3.1"
             platformMajor: 253
