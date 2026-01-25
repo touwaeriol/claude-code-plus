@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.4] - 2026-01-26
+
+### Fixed
+- Increase JVM memory for Marketplace publish (4GB heap) to prevent OOM errors
+
 ## [2.0.3] - 2026-01-25
 
 ### Added
