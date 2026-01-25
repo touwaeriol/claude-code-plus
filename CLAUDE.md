@@ -753,6 +753,59 @@ sourceSets {
 }
 ```
 
+### 发布新版本流程
+
+发布新版本需要按以下步骤进行：
+
+#### Step 1: 更新版本号
+
+编辑 `gradle.properties`：
+```properties
+pluginVersion = 2.0.3  # 修改为新版本号
+```
+
+#### Step 2: 更新 CHANGELOG
+
+编辑 `CHANGELOG.md`，在文件开头添加新版本的变更记录（**使用英文**）：
+```markdown
+## [2.0.3] - 2026-01-26
+
+### Added
+- New feature description
+
+### Fixed
+- Bug fix description
+
+### Changed
+- Change description
+```
+
+#### Step 3: 提交版本变更
+
+```bash
+git add gradle.properties CHANGELOG.md
+git commit -m "chore: bump version to 2.0.3"
+```
+
+#### Step 4: 构建所有平台版本
+
+```bash
+./gradlew :jetbrains-plugin:buildAllVersions
+```
+
+#### Step 5: 发布到 JetBrains Marketplace
+
+```bash
+./gradlew :jetbrains-plugin:publishAllVersions
+```
+
+#### Step 6: 创建 Git Tag（可选）
+
+```bash
+git tag v2.0.3
+git push origin v2.0.3
+```
+
 ### 构建命令
 
 **构建所有版本** (生成 5 个平台特定的 zip 文件):

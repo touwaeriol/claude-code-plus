@@ -38,6 +38,9 @@ bin/
 runIde-console.log
 pty-logs/
 
+### Git Worktrees ###
+external/claude-code-plus1-vs-code/
+
 ### Codex Skill ###
 .codex-skill/
 
