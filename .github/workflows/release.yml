@@ -14,6 +14,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
 
       - name: Extract version from tag
         id: version
@@ -22,11 +46,7 @@ jobs:
       - name: Extract changelog for version
         id: changelog
         run: |
-          # Extract changelog content for this version
           VERSION="${{ steps.version.outputs.VERSION }}"
-          
-          # Use awk to extract the section for this version
-          # Matches from "## [VERSION]" until the next "## [" or end of file
           CHANGELOG=$(awk -v ver="$VERSION" '
             /^## \[/ {
               if (found) exit
@@ -38,12 +58,21 @@ jobs:
             found {print}
           ' CHANGELOG.md)
           
-          # Handle multi-line output
           echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Create Release
+      - name: Build all platform versions
+        run: ./gradlew :jetbrains-plugin:buildAllVersions
+
+      - name: Collect build artifacts
+        id: artifacts
+        run: |
+          mkdir -p release-artifacts
+          cp jetbrains-plugin/build/distributions/*.zip release-artifacts/
+          ls -la release-artifacts/
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: v${{ steps.version.outputs.VERSION }}
@@ -52,6 +81,22 @@ jobs:
             
             ${{ steps.changelog.outputs.CHANGELOG }}
             
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v${{ steps.version.outputs.VERSION }}...v${{ steps.version.outputs.VERSION }}
+            ## Downloads
+            
+            | Platform | File |
+            |----------|------|
+            | IntelliJ 2024.2 | `claude-code-plus-${{ steps.version.outputs.VERSION }}.242.zip` |
+            | IntelliJ 2024.3 | `claude-code-plus-${{ steps.version.outputs.VERSION }}.243.zip` |
+            | IntelliJ 2025.1 | `claude-code-plus-${{ steps.version.outputs.VERSION }}.251.zip` |
+            | IntelliJ 2025.2 | `claude-code-plus-${{ steps.version.outputs.VERSION }}.252.zip` |
+            | IntelliJ 2025.3 | `claude-code-plus-${{ steps.version.outputs.VERSION }}.253.zip` |
+            
+            **Full Changelog**: https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md
           draft: false
           prerelease: false
+          files: release-artifacts/*.zip
+
+      - name: Publish to JetBrains Marketplace
+        run: ./gradlew :jetbrains-plugin:publishAllVersions
+        env:
+          ORG_GRADLE_PROJECT_intellijPlatformPublishingToken: ${{ secrets.INTELLIJPLATFORMPUBLISHINGTOKEN }}
