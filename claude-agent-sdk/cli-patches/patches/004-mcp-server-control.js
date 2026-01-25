@@ -67,7 +67,7 @@ module.exports = {
   description: 'MCP server control (reconnect/disable/enable)',
   priority: 120,  // 在 chrome_status (110) 之后
   required: false,
-  disabled: false,
+  disabled: true,  // 官方 CLI 2.1.19 已原生支持 mcp_reconnect 和 mcp_toggle
 
   apply(ast, t, traverse, context) {
     const details = [];
