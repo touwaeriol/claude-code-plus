@@ -2,6 +2,7 @@ package com.asakii.plugin.services
 
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.guessProjectDir
 import git4idea.repo.GitRepositoryManager
 import com.asakii.logging.*
 
@@ -16,11 +17,29 @@ private val logger = getLogger("GitBranchServiceImpl")
 @Service(Service.Level.PROJECT)
 class GitBranchServiceImpl(private val project: Project) : GitBranchService {
 
+    /**
+     * 获取项目根目录对应的 Git 仓库
+     * 使用 getRepositoryForRoot 直接获取，无需遍历
+     */
+    private fun getProjectRootRepository(): git4idea.repo.GitRepository? {
+        val gitRepoManager = GitRepositoryManager.getInstance(project)
+        
+        // 直接通过项目根目录获取对应的仓库
+        val projectDir = project.guessProjectDir()
+        if (projectDir != null) {
+            val rootRepo = gitRepoManager.getRepositoryForRoot(projectDir)
+            if (rootRepo != null) {
+                return rootRepo
+            }
+        }
+        
+        // 回退：如果项目根目录没有 .git，返回第一个仓库
+        return gitRepoManager.repositories.firstOrNull()
+    }
+
     override fun getCurrentBranchName(): String? {
         return try {
-            val gitRepoManager = GitRepositoryManager.getInstance(project)
-            val repo = gitRepoManager.repositories.firstOrNull()
-            repo?.currentBranch?.name
+            getProjectRootRepository()?.currentBranch?.name
         } catch (e: Exception) {
             logger.debug { "Failed to get current branch: ${e.message}" }
             null
@@ -29,8 +48,7 @@ class GitBranchServiceImpl(private val project: Project) : GitBranchService {
 
     override fun getLocalBranches(): List<String> {
         return try {
-            val gitRepoManager = GitRepositoryManager.getInstance(project)
-            val repo = gitRepoManager.repositories.firstOrNull() ?: return emptyList()
+            val repo = getProjectRootRepository() ?: return emptyList()
             repo.branches.localBranches.map { it.name }
         } catch (e: Exception) {
             logger.debug { "Failed to get local branches: ${e.message}" }
@@ -40,8 +58,7 @@ class GitBranchServiceImpl(private val project: Project) : GitBranchService {
 
     override fun isGitAvailable(): Boolean {
         return try {
-            val gitRepoManager = GitRepositoryManager.getInstance(project)
-            gitRepoManager.repositories.isNotEmpty()
+            GitRepositoryManager.getInstance(project).repositories.isNotEmpty()
         } catch (e: Exception) {
             false
         }
