@@ -12,6 +12,19 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      - name: Free disk space
+        run: |
+          echo "=== Before cleanup ==="
+          df -h
+          # Remove unnecessary tools to free up space
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          echo "=== After cleanup ==="
+          df -h
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -63,7 +76,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Build all platform versions
-        run: ./gradlew :jetbrains-plugin:buildAllVersions
+        run: ./gradlew :jetbrains-plugin:buildAllVersions --no-daemon
 
       - name: Collect build artifacts
         id: artifacts
@@ -97,6 +110,6 @@ jobs:
           files: release-artifacts/*.zip
 
       - name: Publish to JetBrains Marketplace
-        run: ./gradlew :jetbrains-plugin:publishAllVersions
+        run: ./gradlew :jetbrains-plugin:publishAllVersions --no-daemon
         env:
           ORG_GRADLE_PROJECT_intellijPlatformPublishingToken: ${{ secrets.INTELLIJPLATFORMPUBLISHINGTOKEN }}
