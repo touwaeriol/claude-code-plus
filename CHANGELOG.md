@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.3] - 2026-01-25
+
+### Added
+- Enhanced release workflow with automated build and publish
+- Auto-build all 5 platform versions (242/243/251/252/253) on tag push
+- Auto-upload artifacts to GitHub Release
+- Auto-publish to JetBrains Marketplace
+
+### Fixed
+- Remove orphan submodule entry for vs-code worktree
+
+### Documentation
+- Add release workflow documentation to CLAUDE.md
+
 ## [2.0.2] - 2026-01-25
 
 ### Fixed
