@@ -771,6 +771,35 @@ sourceSets {
 ./gradlew :jetbrains-plugin:buildPlugin
 ```
 
+### 发布命令
+
+**发布所有版本到 JetBrains Marketplace** (推荐，发布 5 个平台特定版本):
+```bash
+./gradlew :jetbrains-plugin:publishAllVersions
+```
+
+**发布单个版本** (默认发布 253 版本):
+```bash
+./gradlew :jetbrains-plugin:publishPlugin
+```
+
+**发布特定平台版本**:
+```bash
+./gradlew :jetbrains-plugin:publishPlugin -PplatformMajor=242
+./gradlew :jetbrains-plugin:publishPlugin -PplatformMajor=243
+./gradlew :jetbrains-plugin:publishPlugin -PplatformMajor=251
+./gradlew :jetbrains-plugin:publishPlugin -PplatformMajor=252
+./gradlew :jetbrains-plugin:publishPlugin -PplatformMajor=253
+```
+
+**版本号规则**:
+- 版本号格式: `{baseVersion}.{platformMajor}`，例如 `2.0.2.253`
+- 每个平台版本独立发布，IDE 会自动选择匹配的版本
+
+**发布前提**:
+- 需要在环境变量或 `gradle.properties` 中配置 JetBrains Marketplace API Token
+- Token 配置项: `JETBRAINS_TOKEN` 或 `intellijPublishToken`
+
 ### API 变更点
 
 | 版本 | Terminal API | BrowseButton API | Diff API |
