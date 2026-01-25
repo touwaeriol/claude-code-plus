@@ -113,3 +113,4 @@ jobs:
         run: ./gradlew :jetbrains-plugin:publishAllVersions --no-daemon
         env:
           ORG_GRADLE_PROJECT_intellijPlatformPublishingToken: ${{ secrets.INTELLIJPLATFORMPUBLISHINGTOKEN }}
+          GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=512m"
