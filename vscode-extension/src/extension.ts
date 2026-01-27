@@ -7,7 +7,7 @@ import { HttpApiServer } from './server/HttpApiServer'
 import { initializeMcpServers, disposeMcpServers } from './ide/mcp'
 import { ChatPanel } from './webview/chatPanel'
 import { ChatViewProvider } from './webview/chatViewProvider'
-import { broadcastChatMessage } from './webview/chatWebviewNotifier'
+import { SettingsPanel } from './webview/settingsPanel'
 
 let server: HttpApiServer | undefined
 
@@ -116,13 +116,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('claudeCodePlus.openSettings', async () => {
-      // Reuse the same Vue UI for settings (same as IDEA): open the chat view and ask it to show the settings panel.
-      await vscode.commands.executeCommand('claudeCodePlus.openChat')
-
-      // Let the webview bootstrap/register before we post a command.
-      setTimeout(() => {
-        void broadcastChatMessage({ type: 'ccp-open-settings' })
-      }, 50)
+      // 在主编辑器区域打开独立设置面板（不依赖本地服务器）
+      SettingsPanel.show(context)
     })
   )
 
@@ -147,6 +142,7 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       ChatPanel.notifySettingsChanged()
+      SettingsPanel.notifySettingsChanged()
     })
   )
 

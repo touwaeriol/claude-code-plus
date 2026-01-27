@@ -10,20 +10,14 @@ import * as fs from 'fs/promises';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
 import { McpServerProvider, McpServerBase, createToolResult } from '../mcpServerRegistry';
+import { PathResolver } from '../../util/pathResolver';
 
 function getWorkspaceRoot(): string | undefined {
-    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    return PathResolver.getWorkspaceBasePath();
 }
 
 function resolvePath(filePath: string): string {
-    if (path.isAbsolute(filePath)) {
-        return filePath;
-    }
-    const root = getWorkspaceRoot();
-    if (!root) {
-        throw new Error('No workspace folder open');
-    }
-    return path.join(root, filePath);
+    return PathResolver.resolveMultiRoot(filePath);
 }
 
 function formatSize(bytes: number): string {
@@ -59,7 +53,7 @@ Use VS Code LSP tools for code exploration and refactoring:
     }
 
     getAllowedTools(): string[] {
-        return ['DirectoryTree', 'FileIndex', 'CodeSearch', 'FileProblems', 'FindUsages'];
+        return ['DirectoryTree', 'FileIndex', 'CodeSearch', 'FileProblems', 'FindUsages', 'Rename'];
     }
 
     async initialize(): Promise<void> {

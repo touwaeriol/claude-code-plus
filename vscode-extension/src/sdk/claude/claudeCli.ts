@@ -10,6 +10,8 @@ export type ClaudeCliSessionConfig = {
   permissionMode: 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
   includePartialMessages: boolean
   dangerouslySkipPermissions: boolean
+  /** Additional directories for multi-root workspace support */
+  addDirs?: string[]
 }
 
 export type ToolPermissionRequest = {
@@ -94,13 +96,18 @@ class ClaudeCliSession implements vscode.Disposable {
   ) {}
 
   matches(config: ClaudeCliSessionConfig): boolean {
+    const addDirsMatch = 
+      (this.config.addDirs ?? []).length === (config.addDirs ?? []).length &&
+      (this.config.addDirs ?? []).every((d, i) => d === (config.addDirs ?? [])[i])
+    
     return (
       config.sessionId === this.config.sessionId &&
       config.cwd === this.config.cwd &&
       config.model === this.config.model &&
       config.permissionMode === this.config.permissionMode &&
       config.includePartialMessages === this.config.includePartialMessages &&
-      config.dangerouslySkipPermissions === this.config.dangerouslySkipPermissions
+      config.dangerouslySkipPermissions === this.config.dangerouslySkipPermissions &&
+      addDirsMatch
     )
   }
 
@@ -512,6 +519,13 @@ function buildClaudeArgs(config: ClaudeCliSessionConfig): string[] {
 
   if (config.dangerouslySkipPermissions) {
     args.push('--dangerously-skip-permissions')
+  }
+
+  // Additional directories for multi-root workspace
+  if (config.addDirs && config.addDirs.length > 0) {
+    for (const dir of config.addDirs) {
+      args.push('--add-dir', dir)
+    }
   }
 
   return args

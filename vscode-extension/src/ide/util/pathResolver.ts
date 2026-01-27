@@ -46,6 +46,79 @@ export class PathResolver {
     }
 
     /**
+     * 获取所有工作区文件夹
+     */
+    static getAllWorkspaceFolders(): string[] {
+        const folders = vscode.workspace.workspaceFolders ?? [];
+        return folders.map(f => f.uri.fsPath);
+    }
+
+    /**
+     * 在多根工作区中解析路径
+     * 
+     * 对于相对路径，支持 "folderName/path" 格式来指定特定工作区
+     * 
+     * @param filePath 文件路径
+     * @returns 解析后的绝对路径
+     */
+    static resolveMultiRoot(filePath: string): string {
+        const normalizedPath = filePath.trim();
+
+        // 绝对路径直接返回
+        if (this.isAbsolutePath(normalizedPath)) {
+            return path.normalize(normalizedPath);
+        }
+
+        const folders = vscode.workspace.workspaceFolders ?? [];
+        if (folders.length === 0) {
+            return path.normalize(normalizedPath);
+        }
+
+        // 单工作区：直接使用第一个文件夹
+        if (folders.length === 1) {
+            return path.normalize(path.join(folders[0].uri.fsPath, normalizedPath));
+        }
+
+        // 多根工作区：检查是否以文件夹名称开头
+        const pathParts = normalizedPath.replace(/\\/g, '/').split('/').filter(Boolean);
+        if (pathParts.length >= 1) {
+            const folderName = pathParts[0];
+            const matchedFolder = folders.find(f => f.name === folderName);
+            if (matchedFolder) {
+                // 路径以工作区名称开头，使用该工作区并移除名称前缀
+                const subPath = pathParts.slice(1).join(path.sep);
+                return path.normalize(path.join(matchedFolder.uri.fsPath, subPath));
+            }
+        }
+
+        // 默认使用第一个工作区
+        return path.normalize(path.join(folders[0].uri.fsPath, normalizedPath));
+    }
+
+    /**
+     * 根据绝对路径查找所属的工作区文件夹
+     * 
+     * @param absolutePath 绝对路径
+     * @returns 工作区文件夹信息，如果不在任何工作区内则返回 undefined
+     */
+    static findWorkspaceFolder(absolutePath: string): { name: string; path: string; index: number } | undefined {
+        const folders = vscode.workspace.workspaceFolders ?? [];
+        const normalizedPath = path.normalize(absolutePath);
+
+        for (let i = 0; i < folders.length; i++) {
+            const folderPath = path.normalize(folders[i].uri.fsPath);
+            if (normalizedPath.startsWith(folderPath + path.sep) || normalizedPath === folderPath) {
+                return {
+                    name: folders[i].name,
+                    path: folderPath,
+                    index: i,
+                };
+            }
+        }
+        return undefined;
+    }
+
+    /**
      * 判断路径是否为绝对路径
      *
      * 支持：

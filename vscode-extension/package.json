@@ -168,6 +168,41 @@
           "type": "boolean",
           "default": true,
           "description": "Default Codex auto cleanup contexts"
+        },
+        "claudeCodePlus.agent.enableTerminalMcp": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Terminal MCP server (replaces built-in Bash tool)"
+        },
+        "claudeCodePlus.agent.enableGitMcp": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Git MCP server"
+        },
+        "claudeCodePlus.agent.enableJetBrainsMcp": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable IDE LSP MCP server (code search, file index)"
+        },
+        "claudeCodePlus.agent.enableJetBrainsFileMcp": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable IDE File MCP server (file operations)"
+        },
+        "claudeCodePlus.agent.terminalDisableBuiltinBash": {
+          "type": "boolean",
+          "default": true,
+          "description": "Disable built-in Bash tool when Terminal MCP is enabled"
+        },
+        "claudeCodePlus.agent.jetbrainsFileDisableBuiltinTools": {
+          "type": "boolean",
+          "default": true,
+          "description": "Disable built-in file tools when File MCP is enabled"
+        },
+        "claudeCodePlus.agent.jetbrainsFileDisabledTools": {
+          "type": "string",
+          "default": "Read,Write,Edit",
+          "description": "Comma-separated list of built-in tools to disable"
         }
       }
     }

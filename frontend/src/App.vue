@@ -3,33 +3,8 @@
     <!-- Toast 通知容器 -->
     <ToastContainer />
 
-    <!-- 初始化失败：不做回退，直接展示错误 -->
-    <div
-      v-if="initError"
-      class="init-status init-error"
-    >
-      <div class="init-title">
-        初始化失败
-      </div>
-      <pre class="init-message">{{ initError }}</pre>
-      <button
-        class="init-reload"
-        @click="reloadApp"
-      >
-        重新加载
-      </button>
-    </div>
-
-    <!-- 初始化中 -->
-    <div
-      v-else-if="!appReady"
-      class="init-status init-loading"
-    >
-      正在初始化...
-    </div>
-
     <!-- 测试模式：显示 TestDisplayItems -->
-    <TestDisplayItems v-else-if="showTest" />
+    <TestDisplayItems v-if="showTest" />
 
     <!-- 完整的 ModernChatView 组件 -->
     <ModernChatView
@@ -37,13 +12,6 @@
       :session-id="sessionId"
       :project-path="projectPath"
       class="main-chat-view"
-    />
-
-    <SettingsPanel
-      v-if="appReady && !showTest"
-      :show="settingsStore.showPanel"
-      @close="settingsStore.closePanel()"
-      @save="() => settingsStore.closePanel()"
     />
 
     <!-- 调试信息（可选） -->
@@ -105,17 +73,15 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import ModernChatView from '@/components/chat/ModernChatView.vue'
 import TestDisplayItems from '@/views/TestDisplayItems.vue'
 import ToastContainer from '@/components/toast/ToastContainer.vue'
-import SettingsPanel from '@/components/settings/SettingsPanel.vue'
 import { ideaBridge } from '@/services/ideaBridge'
 import { themeService } from '@/services/themeService'
 import { useEnvironment } from '@/composables/useEnvironment'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { i18n, normalizeLocale } from '@/i18n'
 import { ideaBridgeService } from '@/services/ideaApi'
-import { initToolShowInterceptor } from '@/services/toolShowInterceptor'
+import { aiAgentService } from '@/services/aiAgentService'
 
 const bridgeReady = ref(false)
-const appReady = ref(false)
-const initError = ref<string | null>(null)
 const showDebug = ref(false) // 默认隐藏调试面板
 const debugExpanded = ref(false)
 const currentMode = ref('unknown')
@@ -130,8 +96,6 @@ const projectPath = ref<string>('')
 
 const { detectEnvironment } = useEnvironment()
 const settingsStore = useSettingsStore()
-
-let hostMessageHandler: ((event: MessageEvent) => void) | null = null
 
 onMounted(async () => {
   console.log('App mounted - ModernChatView loaded')
@@ -155,53 +119,47 @@ onMounted(async () => {
     themeSource.value = themeService.hasIde() ? 'IDE' : 'Web (系统)'
     console.log('Theme service initialized')
 
-    if (mode === 'ide') {
-      const ok = await ideaBridgeService.init()
-      if (!ok) {
-        throw new Error('IDE 集成未启用（未注入 __IDE_MODE__ 或后端未实现 /ide-rsocket）')
+    // 检测是否在 IDE 环境中（通过后端 API）
+    const hasIdeEnv = await aiAgentService.hasIdeEnvironment()
+    console.log(`🖥️ IDE environment detected: ${hasIdeEnv}`)
+
+    // IDE 环境：连接 jetbrains-rsocket 同步设置
+    if (hasIdeEnv) {
+      // 先初始化 ideaBridgeService（建立 RSocket 连接）
+      const bridgeInitialized = await ideaBridgeService.init()
+      console.log(`🔌 JetBrains bridge initialized: ${bridgeInitialized}`)
+
+      if (bridgeInitialized) {
+        try {
+          const ideLocale = await ideaBridgeService.getLocale()
+          if (ideLocale) {
+            const normalizedLocale = normalizeLocale(ideLocale)
+            i18n.global.locale.value = normalizedLocale
+            console.log(`🌐 Locale synced from IDE: ${ideLocale} -> ${normalizedLocale}`)
+          }
+        } catch (error) {
+          console.error('🌐 Failed to sync IDE locale:', error)
+        }
+
+        // 加载 IDE 设置并注册监听器
+        console.log('Loading IDE settings...')
+        await settingsStore.loadIdeSettings()
+        settingsStore.initIdeSettingsListener()
+        console.log('IDE settings initialized')
+      } else {
+        // RSocket 连接失败，回退到 HTTP API
+        console.warn('⚠️ JetBrains bridge init failed, falling back to HTTP API')
+        await settingsStore.loadDefaultSettings()
+        console.log('Default settings loaded via HTTP API (fallback)')
       }
-
-      initToolShowInterceptor()
-
-      console.log('Loading IDE settings...')
-      await settingsStore.loadIdeSettings()
-      settingsStore.initIdeSettingsListener()
-      console.log('IDE settings initialized')
     } else {
-      console.log('Loading settings via HTTP API...')
-      await settingsStore.loadSettings()
-      console.log('HTTP settings loaded')
+      // 浏览器模式：通过 HTTP API 加载默认设置
+      console.log('Loading default settings via HTTP API...')
+      await settingsStore.loadDefaultSettings()
+      console.log('Default settings loaded')
     }
 
-    // VS Code webview host: settings changes + open settings panel
-    if (!hostMessageHandler) {
-      hostMessageHandler = (event: MessageEvent) => {
-        const payload = (event as any)?.data
-        if (!payload || typeof payload !== 'object') return
-
-        if (payload.type === 'ccp-settings-changed') {
-          console.log('?? [Host] Settings changed, reloading...')
-          void (async () => {
-            try {
-              if (currentMode.value === 'ide') {
-                await settingsStore.loadIdeSettings()
-              } else {
-                await settingsStore.loadSettings()
-              }
-            } catch (e) {
-              console.error('❌ [Host] Failed to reload settings:', e)
-            }
-          })()
-          return
-        }
-
-        if (payload.type === 'ccp-open-settings') {
-          settingsStore.openPanel()
-        }
-      }
-      window.addEventListener('message', hostMessageHandler)
-    }
-
+    // 监听主题变化
     themeService.onThemeChange(() => {
       themeSource.value = themeService.hasIde() ? 'IDE' : 'Web (系统)'
       console.log('Theme updated')
@@ -249,11 +207,9 @@ onMounted(async () => {
         console.error('#app 高度为 0 - 可能导致界面空白!')
       }
     }, 1000)
-
-    appReady.value = true
   } catch (error) {
     console.error('Failed to initialize:', error)
-    initError.value = error instanceof Error ? error.message : String(error)
+    themeSource.value = `错误: ${error}`
   }
 })
 
@@ -280,17 +236,7 @@ function toggleTheme() {
 onUnmounted(() => {
   // 清理 IDE 设置监听器
   settingsStore.cleanupIdeSettingsListener()
-
-  if (hostMessageHandler) {
-    window.removeEventListener('message', hostMessageHandler)
-    hostMessageHandler = null
-  }
 })
-
-function reloadApp() {
-  window.location.reload()
-}
-
 </script>
 
 <style scoped>
@@ -317,55 +263,6 @@ function reloadApp() {
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-/* 初始化状态（不做回退/兼容，失败直接提示） */
-.init-status {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-
-.init-error .init-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--theme-error);
-}
-
-.init-message {
-  max-width: 900px;
-  width: 100%;
-  max-height: 50vh;
-  overflow: auto;
-  padding: 12px 14px;
-  border: 1px solid var(--theme-border);
-  border-radius: 8px;
-  background: var(--theme-panel-background);
-  color: var(--theme-foreground);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-
-.init-reload {
-  padding: 8px 14px;
-  border: 1px solid var(--theme-accent);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--theme-accent);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.init-reload:hover {
-  background: var(--theme-accent);
-  color: var(--theme-selection-foreground);
 }
 
 /* 调试面板 */

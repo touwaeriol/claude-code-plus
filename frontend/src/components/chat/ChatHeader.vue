@@ -1,3 +1,4 @@
+
 <template>
   <div
     class="chat-header"
@@ -90,17 +91,6 @@
           <rect x="2" y="14" width="20" height="8" rx="2"/>
           <circle cx="6" cy="6" r="1" fill="currentColor"/>
           <circle cx="6" cy="18" r="1" fill="currentColor"/>
-        </svg>
-      </button>
-      <button
-        class="icon-btn"
-        type="button"
-        title="Settings"
-        @click="settingsStore.togglePanel()"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
-          <path d="M19.4 15a7.9 7.9 0 0 0 .1-1 7.9 7.9 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a8.2 8.2 0 0 0-1.7-1l-.4-2.6h-4l-.4 2.6a8.2 8.2 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7.9 7.9 0 0 0-.1 1 7.9 7.9 0 0 0 .1 1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.4 2.6h4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2-1.5z"/>
         </svg>
       </button>
       <ThemeSwitcher />

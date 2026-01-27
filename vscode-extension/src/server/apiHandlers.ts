@@ -26,6 +26,24 @@ export async function handleApiRequest(
       case 'ide.getProjectPath': {
         return { success: true, data: { projectPath: getWorkspaceRootFsPath() } }
       }
+      case 'ide.getWorkspaceInfo': {
+        const folders = vscode.workspace.workspaceFolders ?? []
+        return {
+          success: true,
+          data: {
+            hasWorkspace: folders.length > 0,
+            isMultiRoot: folders.length > 1,
+            workspaceFolders: folders.map((f, i) => ({
+              name: f.name,
+              path: f.uri.fsPath,
+              index: f.index,
+              isPrimary: i === 0,
+            })),
+            primaryFolder: folders[0]?.uri.fsPath ?? null,
+            additionalFolders: folders.slice(1).map(f => f.uri.fsPath),
+          },
+        }
+      }
       case 'node.detect': {
         return {
           success: true,

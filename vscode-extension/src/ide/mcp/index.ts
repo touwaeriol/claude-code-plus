@@ -5,6 +5,7 @@
  */
 
 import { mcpLogger } from '../../logging/logger';
+import { agentSettingsService } from '../settings';
 
 // Registry
 export { 
@@ -39,49 +40,64 @@ export { LspMcpServer, LspMcpServerProvider } from './lsp';
  * Initialize all MCP servers
  * 
  * Call this during extension activation to register all MCP servers.
+ * MCP servers are conditionally registered based on user settings.
  */
 export async function initializeMcpServers(): Promise<void> {
     const { mcpRegistry } = await import('./mcpServerRegistry');
+    const settings = agentSettingsService;
     
     mcpLogger.info('Initializing MCP servers...');
 
-    // Import and register each MCP server provider
-    // These will be enabled once subagents complete implementation
-
-    try {
-        // Git MCP
-        const { GitMcpServerProvider } = await import('./git');
-        mcpRegistry.registerProvider(new GitMcpServerProvider());
-        mcpLogger.info('Registered Git MCP server');
-    } catch (error) {
-        mcpLogger.warn('Git MCP server not available', error instanceof Error ? error : undefined);
+    // Git MCP - conditionally register based on settings
+    if (settings.enableGitMcp) {
+        try {
+            const { GitMcpServerProvider } = await import('./git');
+            mcpRegistry.registerProvider(new GitMcpServerProvider());
+            mcpLogger.info('Registered Git MCP server');
+        } catch (error) {
+            mcpLogger.warn('Git MCP server not available', error instanceof Error ? error : undefined);
+        }
+    } else {
+        mcpLogger.info('Git MCP server disabled by settings');
     }
 
-    try {
-        // Terminal MCP
-        const { TerminalMcpServerProvider } = await import('./terminal');
-        mcpRegistry.registerProvider(new TerminalMcpServerProvider());
-        mcpLogger.info('Registered Terminal MCP server');
-    } catch (error) {
-        mcpLogger.warn('Terminal MCP server not available', error instanceof Error ? error : undefined);
+    // Terminal MCP - conditionally register based on settings
+    if (settings.enableTerminalMcp) {
+        try {
+            const { TerminalMcpServerProvider } = await import('./terminal');
+            mcpRegistry.registerProvider(new TerminalMcpServerProvider());
+            mcpLogger.info('Registered Terminal MCP server');
+        } catch (error) {
+            mcpLogger.warn('Terminal MCP server not available', error instanceof Error ? error : undefined);
+        }
+    } else {
+        mcpLogger.info('Terminal MCP server disabled by settings');
     }
 
-    try {
-        // File MCP
-        const { FileMcpServerProvider } = await import('./file');
-        mcpRegistry.registerProvider(new FileMcpServerProvider());
-        mcpLogger.info('Registered File MCP server');
-    } catch (error) {
-        mcpLogger.warn('File MCP server not available', error instanceof Error ? error : undefined);
+    // File MCP - conditionally register based on settings (enableJetBrainsFileMcp)
+    if (settings.enableJetBrainsFileMcp) {
+        try {
+            const { FileMcpServerProvider } = await import('./file');
+            mcpRegistry.registerProvider(new FileMcpServerProvider());
+            mcpLogger.info('Registered File MCP server');
+        } catch (error) {
+            mcpLogger.warn('File MCP server not available', error instanceof Error ? error : undefined);
+        }
+    } else {
+        mcpLogger.info('File MCP server disabled by settings');
     }
 
-    try {
-        // LSP MCP
-        const { LspMcpServerProvider } = await import('./lsp');
-        mcpRegistry.registerProvider(new LspMcpServerProvider());
-        mcpLogger.info('Registered LSP MCP server');
-    } catch (error) {
-        mcpLogger.warn('LSP MCP server not available', error instanceof Error ? error : undefined);
+    // LSP MCP - conditionally register based on settings (enableJetBrainsMcp)
+    if (settings.enableJetBrainsMcp) {
+        try {
+            const { LspMcpServerProvider } = await import('./lsp');
+            mcpRegistry.registerProvider(new LspMcpServerProvider());
+            mcpLogger.info('Registered LSP MCP server');
+        } catch (error) {
+            mcpLogger.warn('LSP MCP server not available', error instanceof Error ? error : undefined);
+        }
+    } else {
+        mcpLogger.info('LSP MCP server disabled by settings');
     }
 
     // Initialize all registered servers

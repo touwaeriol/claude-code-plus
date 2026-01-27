@@ -355,7 +355,15 @@ export class TerminalMcpServerProvider implements McpServerProvider {
     }
 
     getDisallowedBuiltinTools(): string[] {
-        return []; // ['Bash'];
+        // Import settings dynamically to avoid circular dependencies
+        const { agentSettingsService } = require('../../settings');
+        const settings = agentSettingsService;
+        
+        // When Terminal MCP is enabled and configured to disable built-in Bash
+        if (settings.enableTerminalMcp && settings.terminalDisableBuiltinBash) {
+            return ['Bash'];
+        }
+        return [];
     }
 
     dispose(): void {

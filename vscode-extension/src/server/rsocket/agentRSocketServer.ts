@@ -25,6 +25,7 @@ import {
   DeltaSchema,
   GetMcpToolsRequestSchema,
   GetMcpToolsResultSchema,
+  HasIdeEnvironmentResponseSchema,
   HistorySchema,
   AskUserQuestionRequestSchema,
   McpStatusResultSchema,
@@ -45,6 +46,8 @@ import {
   ServerCallRequestSchema,
   ServerCallResponseSchema,
   TextBlockSchema,
+  ThinkingBlockSchema,
+  ThinkingDeltaSchema,
   SessionStatus,
   SetMaxThinkingTokensRequestSchema,
   SetMaxThinkingTokensResultSchema,
@@ -79,6 +82,9 @@ import { RSocketServer } from 'rsocket-core'
 import { WebsocketServerTransport } from 'rsocket-websocket-server'
 
 import { ClaudeCliSessionManager, type ToolPermissionResult } from '../../sdk/claude/claudeCli'
+import { CodexSession, type CodexSessionOptions } from '../../sdk/codex/session'
+import { CodexAppServerStreamAdapter } from '../../sdk/codex/adapter/streamAdapter'
+import type { AppServerEvent } from '../../sdk/codex/appServer/client'
 
 type WsServerCtor = new (...args: any[]) => any
 
@@ -255,6 +261,12 @@ function createResponder(
   const getWorkspaceRoot = (): string => {
     const folder = vscode.workspace.workspaceFolders?.[0]
     return folder?.uri.fsPath ?? ''
+  }
+
+  const getAdditionalDirs = (): string[] => {
+    const folders = vscode.workspace.workspaceFolders ?? []
+    if (folders.length <= 1) return []
+    return folders.slice(1).map(f => f.uri.fsPath)
   }
 
   let provider: Provider = Provider.CLAUDE
@@ -440,6 +452,12 @@ function createResponder(
             responderStream.onNext({ data: Buffer.from(toBinary(TruncateHistoryResultSchema, result)) }, true)
             break
           }
+          case 'agent.hasIdeEnvironment': {
+            // VS Code 扩展始终有 IDE 环境
+            const response = create(HasIdeEnvironmentResponseSchema, { hasIde: true })
+            responderStream.onNext({ data: Buffer.from(toBinary(HasIdeEnvironmentResponseSchema, response)) }, true)
+            break
+          }
           default: {
             log?.(`[rsocket] unsupported requestResponse route=${route || '(empty)'}`)
             responderStream.onError(new Error(`Unsupported route: ${route}`))
@@ -472,6 +490,94 @@ function createResponder(
       }
 
       const startProviderQueryStream = (userMessage: string) => {
+        // Codex Provider 实现
+        if (provider === Provider.CODEX) {
+          const codexSessionOptions: CodexSessionOptions = {
+            workingDirectory: getWorkspaceRoot(),
+            configOverrides: {},
+            permissionRequester: async (req) => {
+              // 调用前端权限请求
+              const call = create(ServerCallRequestSchema, {
+                callId: `srv-${req.toolUseId}`,
+                method: 'RequestPermission',
+                params: {
+                  case: 'requestPermission',
+                  value: create(RequestPermissionRequestSchema, {
+                    toolName: req.toolName,
+                    inputJson: Buffer.from(JSON.stringify(req.input ?? {}), 'utf8'),
+                    toolUseId: req.toolUseId,
+                  }),
+                },
+              })
+
+              try {
+                const { promise } = requestClientCall(remotePeer, call)
+                const responseBytes = await promise
+                const response = fromBinary(ServerCallResponseSchema, responseBytes)
+                const perm = response.result.case === 'requestPermission' ? response.result.value : undefined
+
+                return {
+                  approved: perm?.approved ?? false,
+                  denyReason: perm?.denyReason || undefined,
+                }
+              } catch (e) {
+                return {
+                  approved: false,
+                  denyReason: e instanceof Error ? e.message : String(e),
+                }
+              }
+            },
+          }
+
+          const codexSession = new CodexSession(codexSessionOptions)
+          const streamAdapter = new CodexAppServerStreamAdapter(() => sessionId || 'unknown')
+
+          let codexAborted = false
+
+          codexSession.on('event', (event: AppServerEvent) => {
+            if (codexAborted) return
+
+            const normalizedEvents = streamAdapter.convert(event)
+            for (const normalized of normalizedEvents) {
+              const rpcMsg = convertNormalizedEventToRpcMessage(normalized, provider, sessionId || 'unknown')
+              if (rpcMsg) {
+                safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, rpcMsg)) }, false)
+                if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), rpcMsg)
+              }
+            }
+          })
+
+          codexSession.on('error', (err: Error) => {
+            if (codexAborted) return
+            safeOnError(err)
+          })
+
+          const runCodexSession = async () => {
+            try {
+              await codexSession.connect()
+              await codexSession.sendMessage({ text: userMessage, sessionId: sessionId || undefined })
+            } catch (e) {
+              if (!codexAborted) {
+                safeOnError(e instanceof Error ? e : new Error(String(e)))
+              }
+            } finally {
+              if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+              safeOnComplete()
+            }
+          }
+
+          cancelStream = () => {
+            codexAborted = true
+            codexSession.interrupt().catch(() => {})
+            codexSession.disconnect().catch(() => {})
+          }
+          currentStreamCancel = cancelStream
+
+          runCodexSession()
+          return
+        }
+
+        // 其他非 Claude Provider 占位符
         if (provider !== Provider.CLAUDE) {
           const done = () => {
             if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
@@ -509,6 +615,10 @@ function createResponder(
         let didStartBlock = false
         let didStopBlock = false
         let didStopMessage = false
+
+        // Thinking block 状态追踪
+        let thinkingBlockIndex = -1
+        let didStartThinkingBlock = false
 
         const emitStreamEvent = (event: any) => {
           const streamEvent = create(StreamEventSchema, {
@@ -550,6 +660,21 @@ function createResponder(
           })
         }
 
+        const ensureThinkingBlockStart = () => {
+          ensureMessageStart()
+          if (didStartThinkingBlock) return
+          didStartThinkingBlock = true
+          thinkingBlockIndex = streamBlockIndex + 1
+
+          const block = create(ContentBlockSchema, {
+            block: { case: 'thinking', value: create(ThinkingBlockSchema, { thinking: '', signature: '' }) },
+          })
+          emitStreamEvent({
+            case: 'contentBlockStart',
+            value: create(ContentBlockStartEventSchema, { index: thinkingBlockIndex, contentBlock: block }),
+          })
+        }
+
         const ensureStreamStopped = () => {
           if (!didStartMessage || didStopMessage) return
 
@@ -558,6 +683,14 @@ function createResponder(
             emitStreamEvent({
               case: 'contentBlockStop',
               value: create(ContentBlockStopEventSchema, { index: streamBlockIndex }),
+            })
+          }
+
+          // 停止 thinking block
+          if (didStartThinkingBlock) {
+            emitStreamEvent({
+              case: 'contentBlockStop',
+              value: create(ContentBlockStopEventSchema, { index: thinkingBlockIndex }),
             })
           }
 
@@ -625,6 +758,7 @@ function createResponder(
               permissionMode: toClaudePermissionMode(permissionMode),
               includePartialMessages,
               dangerouslySkipPermissions: dangerouslySkipPermissions || defaultBypassPermissions,
+              addDirs: getAdditionalDirs(),
             })
 
             if (includePartialMessages && !abortRequested) {
@@ -653,6 +787,24 @@ function createResponder(
                         index: streamBlockIndex,
                         delta: create(DeltaSchema, {
                           delta: { case: 'textDelta', value: create(TextDeltaSchema, { text }) },
+                        }),
+                      }),
+                    })
+                    return
+                  }
+
+                  // thinking_delta 处理
+                  if (evType === 'content_block_delta' && ev?.delta?.type === 'thinking_delta') {
+                    const thinking = typeof ev.delta.thinking === 'string' ? ev.delta.thinking : ''
+                    if (!thinking) return
+
+                    ensureThinkingBlockStart()
+                    emitStreamEvent({
+                      case: 'contentBlockDelta',
+                      value: create(ContentBlockDeltaEventSchema, {
+                        index: thinkingBlockIndex,
+                        delta: create(DeltaSchema, {
+                          delta: { case: 'thinkingDelta', value: create(ThinkingDeltaSchema, { thinking }) },
                         }),
                       }),
                     })
@@ -1752,4 +1904,193 @@ function toClaudePermissionMode(mode: PermissionMode): 'default' | 'acceptEdits'
 
 function createCancellable(): { cancel(): void; onExtension(): void } {
   return { cancel: () => {}, onExtension: () => {} }
+}
+
+/**
+ * 将 NormalizedStreamEvent 转换为 RpcMessage
+ * 用于 Codex 事件流处理
+ */
+function convertNormalizedEventToRpcMessage(
+  event: import('../../sdk/codex/adapter/streamAdapter').NormalizedStreamEvent,
+  provider: Provider,
+  sessionId: string
+): RpcMessage | null {
+  const streamUuid = crypto.randomUUID()
+
+  const emitStreamEvent = (eventData: any): RpcMessage => {
+    const streamEvent = create(StreamEventSchema, {
+      uuid: streamUuid,
+      sessionId,
+      event: create(StreamEventDataSchema, { event: eventData }),
+    })
+    return create(RpcMessageSchema, {
+      provider,
+      message: { case: 'streamEvent', value: streamEvent },
+    } as any)
+  }
+
+  switch (event.type) {
+    case 'messageStarted': {
+      const info = create(MessageStartInfoSchema, {
+        id: event.messageId,
+        model: 'codex',
+        content: [],
+      })
+      return emitStreamEvent({
+        case: 'messageStart',
+        value: create(MessageStartEventSchema, { messageInfo: info }),
+      })
+    }
+
+    case 'turnStarted':
+      // turnStarted 不需要单独的 RPC 消息
+      return null
+
+    case 'contentStarted': {
+      let block
+      if (event.contentType === 'thinking') {
+        block = create(ContentBlockSchema, {
+          block: { case: 'thinking', value: create(ThinkingBlockSchema, { thinking: '', signature: '' }) },
+        })
+      } else if (event.contentType === 'tool_use' && event.content) {
+        const toolContent = event.content as { id?: string; name?: string; input?: unknown }
+        block = create(ContentBlockSchema, {
+          block: {
+            case: 'toolUse',
+            value: create(ToolUseBlockSchema, {
+              id: toolContent.id || '',
+              name: toolContent.name || event.toolName || '',
+              input: Buffer.from(JSON.stringify(toolContent.input ?? {}), 'utf8'),
+            }),
+          },
+        })
+      } else {
+        block = create(ContentBlockSchema, {
+          block: { case: 'text', value: create(TextBlockSchema, { text: '' }) },
+        })
+      }
+      return emitStreamEvent({
+        case: 'contentBlockStart',
+        value: create(ContentBlockStartEventSchema, { index: event.index, contentBlock: block }),
+      })
+    }
+
+    case 'contentDelta': {
+      let delta
+      if (event.delta.type === 'thinking' && event.delta.thinking) {
+        delta = create(DeltaSchema, {
+          delta: { case: 'thinkingDelta', value: create(ThinkingDeltaSchema, { thinking: event.delta.thinking }) },
+        })
+      } else if (event.delta.type === 'text' && event.delta.text) {
+        delta = create(DeltaSchema, {
+          delta: { case: 'textDelta', value: create(TextDeltaSchema, { text: event.delta.text }) },
+        })
+      } else {
+        return null
+      }
+      return emitStreamEvent({
+        case: 'contentBlockDelta',
+        value: create(ContentBlockDeltaEventSchema, { index: event.index, delta }),
+      })
+    }
+
+    case 'contentCompleted': {
+      return emitStreamEvent({
+        case: 'contentBlockStop',
+        value: create(ContentBlockStopEventSchema, { index: event.index }),
+      })
+    }
+
+    case 'turnCompleted': {
+      return emitStreamEvent({
+        case: 'messageStop',
+        value: create(MessageStopEventSchema, {}),
+      })
+    }
+
+    case 'turnFailed': {
+      // 错误时也发送 messageStop
+      return emitStreamEvent({
+        case: 'messageStop',
+        value: create(MessageStopEventSchema, {}),
+      })
+    }
+
+    case 'assistantMessage': {
+      // 构建完整的 AssistantMessage
+      const contentBlocks = (event.content as any[]).map((block) => {
+        if (block.type === 'text') {
+          return create(MessageContentSchema, {
+            content: { case: 'text', value: create(TextBlockSchema, { text: block.text || '' }) },
+          })
+        } else if (block.type === 'thinking') {
+          return create(MessageContentSchema, {
+            content: {
+              case: 'thinking',
+              value: create(ThinkingBlockSchema, { thinking: block.thinking || '', signature: '' }),
+            },
+          })
+        } else if (block.type === 'tool_use') {
+          return create(MessageContentSchema, {
+            content: {
+              case: 'toolUse',
+              value: create(ToolUseBlockSchema, {
+                id: block.id || '',
+                name: block.name || '',
+                input: Buffer.from(JSON.stringify(block.input ?? {}), 'utf8'),
+              }),
+            },
+          })
+        } else if (block.type === 'tool_result') {
+          return create(MessageContentSchema, {
+            content: {
+              case: 'toolResult',
+              value: create(ToolResultBlockSchema, {
+                toolUseId: block.tool_use_id || '',
+                content: block.content || '',
+                isError: block.is_error || false,
+              }),
+            },
+          })
+        }
+        // 默认返回文本块
+        return create(MessageContentSchema, {
+          content: { case: 'text', value: create(TextBlockSchema, { text: '' }) },
+        })
+      })
+
+      const assistantMsg = create(AssistantMessageSchema, {
+        id: event.id || '',
+        model: 'codex',
+        content: contentBlocks,
+        stopReason: 'end_turn',
+      })
+
+      return create(RpcMessageSchema, {
+        provider,
+        message: { case: 'assistantMessage', value: assistantMsg },
+      } as any)
+    }
+
+    case 'resultSummary': {
+      const result = create(ResultMessageSchema, {
+        subtype: event.subtype,
+        costUsd: 0,
+        durationMs: event.durationMs,
+        durationApiMs: event.durationMs,
+        isError: event.isError,
+        turnCount: 1,
+        sessionId: event.sessionId,
+        result: event.result || '',
+      })
+
+      return create(RpcMessageSchema, {
+        provider,
+        message: { case: 'result', value: result },
+      } as any)
+    }
+
+    default:
+      return null
+  }
 }

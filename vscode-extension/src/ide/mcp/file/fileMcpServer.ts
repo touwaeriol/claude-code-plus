@@ -10,19 +10,14 @@ import * as path from 'path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
 import { McpServerProvider, McpServerBase, createToolResult } from '../mcpServerRegistry';
+import { PathResolver } from '../../util/pathResolver';
 
 /**
  * Resolve file path (relative to workspace or absolute)
+ * Supports multi-root workspace: "folderName/path" format
  */
 function resolvePath(filePath: string): string {
-    if (path.isAbsolute(filePath)) {
-        return filePath;
-    }
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-        throw new Error('No workspace folder open');
-    }
-    return path.join(workspaceFolder.uri.fsPath, filePath);
+    return PathResolver.resolveMultiRoot(filePath);
 }
 
 /**
@@ -209,8 +204,21 @@ export class FileMcpServerProvider implements McpServerProvider {
     }
 
     getDisallowedBuiltinTools(): string[] {
-        // Optionally disable Claude CLI's built-in file tools
-        return []; // ['Read', 'Write', 'Edit'];
+        // Import settings dynamically to avoid circular dependencies
+        const { agentSettingsService } = require('../../settings');
+        const settings = agentSettingsService;
+        
+        // When File MCP is enabled and configured to disable built-in tools
+        if (settings.enableJetBrainsFileMcp && settings.jetbrainsFileDisableBuiltinTools) {
+            // Parse the disabled tools list from settings
+            const disabledTools = settings.jetbrainsFileDisabledTools;
+            if (disabledTools && typeof disabledTools === 'string') {
+                return disabledTools.split(',').map((t: string) => t.trim()).filter(Boolean);
+            }
+            // Default: disable Read, Write, Edit when File MCP replaces them
+            return ['Read', 'Write', 'Edit'];
+        }
+        return [];
     }
 
     dispose(): void {

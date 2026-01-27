@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
 import { McpServerProvider, McpServerBase, createToolResult } from '../mcpServerRegistry';
+import { PathResolver } from '../../util/pathResolver';
 import type { GitExtension, Repository, API, Status, Change } from '../../../types/git.d';
 
 /**
@@ -338,10 +339,8 @@ Follow the format: \`<type>(<scope>): <description>\`
                     // Stage selected files if any
                     if (selectedFiles.size > 0) {
                         const uris = Array.from(selectedFiles).map(p => {
-                            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-                            return workspaceFolder 
-                                ? vscode.Uri.joinPath(workspaceFolder.uri, p)
-                                : vscode.Uri.file(p);
+                            const absolutePath = PathResolver.resolveMultiRoot(p);
+                            return vscode.Uri.file(absolutePath);
                         });
                         await repo.add(uris);
                     }
