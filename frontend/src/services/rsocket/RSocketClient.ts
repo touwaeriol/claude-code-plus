@@ -10,6 +10,7 @@ import { RSocketConnector } from 'rsocket-core'
 import { WebsocketClientTransport } from 'rsocket-websocket-client'
 import type { RSocket, Payload, OnExtensionSubscriber, OnNextSubscriber, OnTerminalSubscriber } from 'rsocket-core'
 import { loggers } from '@/utils/logger'
+import { withServerTokenInUrl } from '@/utils/serverAuth'
 import {
   decodeServerCallRequest,
   encodeServerCallResponse,
@@ -125,7 +126,7 @@ export class RSocketClient {
 
   /**
    * 注册直接路由处理器（用于非 client.call 路由）
-   * @param route 路由名（如 'jetbrains.onSessionCommand'）
+   * @param route 路由名（如 'ide.onSessionCommand'）
    * @param handler 处理函数，接收原始字节数据
    * @returns 取消注册的函数
    */
@@ -501,6 +502,6 @@ export class RSocketClient {
  */
 export function createRSocketClient(wsUrl: string): RSocketClient {
   // 确保 URL 以 /rsocket 结尾
-  const url = wsUrl.endsWith('/rsocket') ? wsUrl : `${wsUrl}/rsocket`
+  const url = withServerTokenInUrl(wsUrl.endsWith('/rsocket') ? wsUrl : `${wsUrl}/rsocket`)
   return new RSocketClient({ url })
 }

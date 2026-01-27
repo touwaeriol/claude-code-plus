@@ -356,7 +356,7 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     fun getGitAutoApprovedTools(): List<String> {
         val custom = state.gitAutoApprovedTools
         return if (custom.isBlank()) {
-            McpAutoApprovedDefaults.JETBRAINS_GIT
+            McpAutoApprovedDefaults.IDE_GIT
         } else {
             custom.split(",").map { it.trim() }.filter { it.isNotEmpty() }
         }

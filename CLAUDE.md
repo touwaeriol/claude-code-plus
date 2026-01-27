@@ -17,7 +17,7 @@ Claude Code Plus 是一个 IntelliJ IDEA 插件，集成了 Claude AI 助手，�
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  Components:                           Services:                             │
 │  ├── TerminalBackgroundBar.vue         ├── RSocketSession.ts (Claude SDK)   │
-│  ├── FileRollbackBar.vue               ├── jetbrainsRSocket.ts (IDE 功能)    │
+│  ├── FileRollbackBar.vue               ├── ideaRSocket.ts (IDE 功能)         │
 │  ├── ChatInput.vue (Ctrl+B)            └── sessionStore.ts (状态管理)        │
 │  └── ...                                                                     │
 └────────────────────────┬───────────────────────────────┬────────────────────┘
@@ -27,10 +27,10 @@ Claude Code Plus 是一个 IntelliJ IDEA 插件，集成了 Claude AI 助手，�
 │     ai-agent-server (Kotlin)       │  │   jetbrains-plugin (Kotlin)          │
 │     RSocketHandler.kt              │  │   JetBrainsRSocketHandler.kt         │
 ├────────────────────────────────────┤  ├──────────────────────────────────────┤
-│ • agent.connect / query / interrupt│  │ • jetbrains.openFile / showDiff      │
-│ • agent.runToBackground            │  │ • jetbrains.terminalBackground       │
-│ • agent.setModel / setPermission   │  │ • jetbrains.batchRollback            │
-│ • agent.getMcpStatus / reconnectMcp│  │ • jetbrains.getBackgroundableTerminals│
+│ • agent.connect / query / interrupt│  │ • idea.openFile / showDiff           │
+│ • agent.runToBackground            │  │ • idea.terminalBackground            │
+│ • agent.setModel / setPermission   │  │ • idea.batchRollback                 │
+│ • agent.getMcpStatus / reconnectMcp│  │ • idea.getBackgroundableTerminals    │
 └────────────────────────┬───────────┘  └─────────────────────┬────────────────┘
                          │                                    │
                          ▼                                    ▼

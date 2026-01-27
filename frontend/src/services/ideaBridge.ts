@@ -49,15 +49,15 @@ class IdeaBridgeService {
     }
 
     const anyWindow = window as any
+    const isIdeMode = anyWindow.__IDE_MODE__ === true
 
     // IDEA 插件模式：后端注入 __serverUrl
-    if (anyWindow.__serverUrl) {
-      return anyWindow.__serverUrl as string
+    if (isIdeMode && !anyWindow.__serverUrl) {
+      throw new Error('IDE 模式缺少 window.__serverUrl 注入')
     }
 
-    // IDEA 模式但 __serverUrl 尚未注入：使用当前 origin（页面就是从后端加载的）
-    if (anyWindow.__IDEA_MODE__) {
-      return window.location.origin
+    if (anyWindow.__serverUrl) {
+      return anyWindow.__serverUrl as string
     }
 
     // 浏览器开发模式：前端跑在 Vite (通常 5173)，后端独立跑在 8765
@@ -74,9 +74,9 @@ class IdeaBridgeService {
     if (typeof window === 'undefined') {
       return 'browser' // 构建时默认值
     }
-    // 检测 IDEA 插件环境：__IDEA_MODE__ - 由后端 HTML 注入的标记
+    // 检测 IDE 宿主环境：__IDE_MODE__ - 由宿主注入的标记（IDEA / VS Code）
     const anyWindow = window as any
-    return anyWindow.__IDEA_MODE__ ? 'ide' : 'browser'
+    return anyWindow.__IDE_MODE__ ? 'ide' : 'browser'
   }
 
   private refreshMode(): 'ide' | 'browser' {
@@ -167,7 +167,25 @@ class IdeaBridgeService {
     await this.waitForReady()
 
     try {
-      const response = await fetch(`${this.getBaseUrl()}/api/`, {
+      let baseUrl = ''
+      try {
+        baseUrl = this.getBaseUrl()
+      } catch (error) {
+        console.error(`HTTP query failed for ${action}:`, error)
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      }
+
+      if (!baseUrl) {
+        return {
+          success: false,
+          error: 'IDE 模式缺少后端地址（__serverUrl 为空）'
+        }
+      }
+
+      const response = await fetch(`${baseUrl}/api/`, {
         method: 'POST',
         headers: withServerToken({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ action, data })
@@ -317,7 +335,7 @@ export async function openUrl(url: string) {
 }
 
 // 注：getFileHistoryContent 已迁移到 RSocket 实现
-// 参见 jetbrainsRSocket.ts 的 getFileHistoryContent 方法
+// 参见 ideaRSocket.ts 的 getFileHistoryContent 方法
 
 export const aiAgentBridgeService = {
   async connect(options?: any) {

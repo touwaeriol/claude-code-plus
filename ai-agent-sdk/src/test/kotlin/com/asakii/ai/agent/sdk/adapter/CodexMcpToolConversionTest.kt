@@ -34,7 +34,7 @@ class CodexMcpToolConversionTest {
         // 模拟 Codex 的 MCP 工具调用开始事件
         val mcpToolCall = ThreadItem.McpToolCall(
             id = "call_abc123",
-            server = "jetbrains-file",
+            server = "ide-file",
             tool = "ReadFile",
             status = McpToolCallStatus.InProgress,
             arguments = buildJsonObject {
@@ -82,7 +82,7 @@ class CodexMcpToolConversionTest {
         val toolUseContent = contentStarted?.content as? ToolUseContent
         assertNotNull(toolUseContent, "content 应该是 ToolUseContent")
         assertEquals("call_abc123", toolUseContent?.id, "tool_use.id 应该匹配")
-        assertEquals("mcp__jetbrains-file__ReadFile", toolUseContent?.name, "工具名称应该正确")
+        assertEquals("mcp__ide-file__ReadFile", toolUseContent?.name, "工具名称应该正确")
     }
 
     @Test
@@ -90,7 +90,7 @@ class CodexMcpToolConversionTest {
         // 模拟 Codex 的 MCP 工具调用完成事件
         val mcpToolCallInProgress = ThreadItem.McpToolCall(
             id = "call_abc123",
-            server = "jetbrains-file",
+            server = "ide-file",
             tool = "ReadFile",
             status = McpToolCallStatus.InProgress,
             arguments = buildJsonObject {
@@ -100,7 +100,7 @@ class CodexMcpToolConversionTest {
 
         val mcpToolCallCompleted = ThreadItem.McpToolCall(
             id = "call_abc123",
-            server = "jetbrains-file",
+            server = "ide-file",
             tool = "ReadFile",
             status = McpToolCallStatus.Completed,
             arguments = buildJsonObject {
@@ -165,7 +165,7 @@ class CodexMcpToolConversionTest {
     fun `test MCP tool call conversion - failed should surface result content when error is null`() {
         val mcpToolCallInProgress = ThreadItem.McpToolCall(
             id = "call_err_001",
-            server = "jetbrains-file",
+            server = "ide-file",
             tool = "WriteFile",
             status = McpToolCallStatus.InProgress,
             arguments = buildJsonObject {
@@ -176,7 +176,7 @@ class CodexMcpToolConversionTest {
 
         val mcpToolCallFailed = ThreadItem.McpToolCall(
             id = "call_err_001",
-            server = "jetbrains-file",
+            server = "ide-file",
             tool = "WriteFile",
             status = McpToolCallStatus.Failed,
             arguments = buildJsonObject {
@@ -224,7 +224,7 @@ class CodexMcpToolConversionTest {
         // 1. 模拟完整的 MCP 工具调用流程
         val mcpToolCallInProgress = ThreadItem.McpToolCall(
             id = toolCallId,
-            server = "jetbrains-lsp",
+            server = "ide-lsp",
             tool = "CodeSearch",
             status = McpToolCallStatus.InProgress,
             arguments = buildJsonObject {
@@ -234,7 +234,7 @@ class CodexMcpToolConversionTest {
 
         val mcpToolCallCompleted = ThreadItem.McpToolCall(
             id = toolCallId,
-            server = "jetbrains-lsp",
+            server = "ide-lsp",
             tool = "CodeSearch",
             status = McpToolCallStatus.Completed,
             arguments = buildJsonObject {

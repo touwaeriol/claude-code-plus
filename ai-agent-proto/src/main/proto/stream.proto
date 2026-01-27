@@ -1,0 +1,116 @@
+// stream.proto
+// 流式事件定义
+
+syntax = "proto3";
+package aiagent.rpc;
+
+option java_package = "com.asakii.rpc.proto";
+option java_multiple_files = true;
+
+import "common.proto";
+import "content.proto";
+
+// ============================================================================
+// 流式事件 - 对应 RpcStreamEvent 及相关类型
+// ============================================================================
+
+// 对应 RpcStreamEvent
+message StreamEvent {
+  string uuid = 1;
+  string session_id = 2;
+  StreamEventData event = 3;
+  optional string parent_tool_use_id = 4;
+}
+
+// 对应 RpcStreamEventData (sealed interface)
+message StreamEventData {
+  oneof event {
+    MessageStartEvent message_start = 1;
+    ContentBlockStartEvent content_block_start = 2;
+    ContentBlockDeltaEvent content_block_delta = 3;
+    ContentBlockStopEvent content_block_stop = 4;
+    MessageDeltaEvent message_delta = 5;
+    MessageStopEvent message_stop = 6;
+  }
+}
+
+// 对应 RpcMessageStartEvent
+message MessageStartEvent {
+  optional MessageStartInfo message_info = 1;
+}
+
+// 对应 RpcMessageStartInfo
+message MessageStartInfo {
+  optional string id = 1;
+  optional string model = 2;
+  repeated ContentBlock content = 3;
+}
+
+// 对应 RpcContentBlockStartEvent
+message ContentBlockStartEvent {
+  int32 index = 1;
+  ContentBlock content_block = 2;
+}
+
+// 对应 RpcContentBlockDeltaEvent
+message ContentBlockDeltaEvent {
+  int32 index = 1;
+  Delta delta = 2;
+}
+
+// 对应 RpcContentBlockStopEvent
+message ContentBlockStopEvent {
+  int32 index = 1;
+}
+
+// 对应 RpcMessageDeltaEvent
+message MessageDeltaEvent {
+  optional bytes delta_json = 1;  // JsonElement
+  optional Usage usage = 2;
+}
+
+// 对应 RpcMessageStopEvent
+message MessageStopEvent {}
+
+// ============================================================================
+// Delta 类型 - 对应 RpcDelta
+// ============================================================================
+
+// 对应 RpcDelta (sealed interface)
+message Delta {
+  oneof delta {
+    TextDelta text_delta = 1;
+    ThinkingDelta thinking_delta = 2;
+    InputJsonDelta input_json_delta = 3;
+  }
+}
+
+// 对应 RpcTextDelta
+message TextDelta {
+  string text = 1;
+}
+
+// 对应 RpcThinkingDelta
+message ThinkingDelta {
+  string thinking = 1;
+}
+
+// 对应 RpcInputJsonDelta
+message InputJsonDelta {
+  string partial_json = 1;
+}
+
+// ============================================================================
+// Usage 统计 - 对应 RpcUsage
+// ============================================================================
+
+// 对应 RpcUsage
+message Usage {
+  optional int32 input_tokens = 1;
+  optional int32 output_tokens = 2;
+  optional int32 cached_input_tokens = 3;  // 保留兼容，等于 cache_creation + cache_read
+  optional Provider provider = 4;
+  optional bytes raw_json = 5;  // JsonElement
+  optional int32 cache_creation_tokens = 6;  // 新创建到缓存的 tokens
+  optional int32 cache_read_tokens = 7;      // 从缓存读取的 tokens
+}

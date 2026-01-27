@@ -3,7 +3,7 @@
  * Manages IDEA's active file state (pushed from IDE)
  */
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { jetbrainsRSocket, type ActiveFileInfo } from '@/services/jetbrainsRSocket'
+import { ideaRSocket, type ActiveFileInfo } from '@/services/ideaRSocket'
 import { useSessionStore } from '@/stores/sessionStore'
 
 export { type ActiveFileInfo }
@@ -112,7 +112,7 @@ export function useActiveFile() {
    */
   function subscribe() {
     // Subscribe to active file changes
-    unsubscribe = jetbrainsRSocket.onActiveFileChange((file) => {
+    unsubscribe = ideaRSocket.onActiveFileChange((file) => {
       currentActiveFile.value = file
       // Reset disabled state when new file is pushed
       activeFileDisabled.value = false
@@ -120,7 +120,7 @@ export function useActiveFile() {
     })
 
     // Get current active file on init (handle case where IDE already has file open when frontend starts)
-    jetbrainsRSocket.getActiveFile().then((file) => {
+    ideaRSocket.getActiveFile().then((file) => {
       if (file) {
         currentActiveFile.value = file
         console.log('📂 [useActiveFile] Initial active file:', file.relativePath)

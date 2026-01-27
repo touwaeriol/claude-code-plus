@@ -101,7 +101,7 @@ class GenerateCommitMessageService(private val project: Project) {
                         ?: throw IllegalStateException("McpHttpGateway not initialized for project: ${project.name}")
                     
                     val mcpUrl = mcpGateway.registerServer(
-                        "jetbrains_git",
+                        "ide-git",
                         gitMcpServer
                     )
                     val codexPath = settings.codexPath.takeIf { it.isNotBlank() }
@@ -124,7 +124,7 @@ class GenerateCommitMessageService(private val project: Project) {
                         modelReasoningEffort = reasoningEffort,
                         approvalPolicy = ApprovalMode.NEVER,
                         developerInstructions = configuredSystemPrompt,
-                        mcpServers = mapOf("jetbrains_git" to mcpUrl),
+                        mcpServers = mapOf("ide-git" to mcpUrl),
                     )
                     AiAgentConnectOptions(
                         provider = AiAgentProvider.CODEX,
@@ -144,7 +144,7 @@ class GenerateCommitMessageService(private val project: Project) {
                         allowDangerouslySkipPermissions = true,
                         includePartialMessages = true,
                         allowedTools = configuredTools,
-                        mcpServers = mapOf<String, McpServerSpec>("jetbrains_git" to gitMcpServer),
+                        mcpServers = mapOf<String, McpServerSpec>("ide-git" to gitMcpServer),
                         extraArgs = mapOf("output-format" to "stream-json"),
                         noSessionPersistence = !settings.gitGenerateSaveSession,
                         maxThinkingTokens = settings.effectiveGitGenerateClaudeThinkingTokens
@@ -224,7 +224,7 @@ class GenerateCommitMessageService(private val project: Project) {
                                         is UiToolStart -> {
                                             toolCallCount++
                                             toolIdToName[event.toolId] = event.toolName  // 记录映射
-                                            val shortName = event.toolName.replace("mcp__jetbrains_git__", "")
+                                            val shortName = event.toolName.replace("mcp__ide-git__", "")
                                             indicator.text = "Calling $shortName..."
                                             updateDetails("🔧 $shortName")
                                             logger.info { "Tool call started: ${event.toolName} (toolId=${event.toolId})" }

@@ -2,7 +2,7 @@
  * Session Store - Terminal 后台运行辅助
  */
 
-import { jetbrainsRSocket, TerminalBackgroundStatus } from '@/services/jetbrainsRSocket'
+import { ideaRSocket, TerminalBackgroundStatus } from '@/services/ideaRSocket'
 
 export interface TerminalBackgroundResult {
   success: boolean
@@ -19,7 +19,7 @@ export interface TerminalBackgroundResult {
 export async function runTerminalBackground(toolUseId?: string): Promise<TerminalBackgroundResult> {
   try {
     // Get backgroundable terminals
-    const terminals = await jetbrainsRSocket.getBackgroundableTerminals()
+    const terminals = await ideaRSocket.getBackgroundableTerminals()
     
     // Filter by toolUseId if provided
     const items = toolUseId 
@@ -36,7 +36,7 @@ export async function runTerminalBackground(toolUseId?: string): Promise<Termina
       let hasError = false
       let errorMsg: string | undefined
 
-      jetbrainsRSocket.terminalBackground(
+      ideaRSocket.terminalBackground(
         items,
         (event) => {
           if (event.status === TerminalBackgroundStatus.SUCCESS) {

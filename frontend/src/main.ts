@@ -15,8 +15,6 @@ import App from './App.vue'
 import './styles/global.css'
 import { resolveServerHttpUrl } from '@/utils/serverUrl'
 import { i18n, getLocale } from '@/i18n'
-import { initJetBrainsIntegration } from '@/services/jetbrainsApi'
-import { initToolShowInterceptor } from '@/services/toolShowInterceptor'
 import { initScrollBoost } from '@/utils/scrollBoost'
 import { initBrowserSecurity, registerOpenFileCallback, setTranslateFunction } from '@/utils/browserSecurity'
 import { ideaBridge } from '@/services/ideaBridge'
@@ -69,9 +67,13 @@ if (typeof ResizeObserver !== 'undefined') {
   resizeObserver.observe(document.body)
 }
 
-if (!(window as any).__serverUrl) {
-  ;(window as any).__serverUrl = resolveServerHttpUrl()
-  console.log('🔧 Bootstrap: Backend URL resolved to', (window as any).__serverUrl)
+const anyWindow = window as any
+if (!anyWindow.__serverUrl && !anyWindow.__IDE_MODE__) {
+  anyWindow.__serverUrl = resolveServerHttpUrl()
+  console.log('🔧 Bootstrap: Backend URL resolved to', anyWindow.__serverUrl)
+}
+if (anyWindow.__IDE_MODE__ && !anyWindow.__serverUrl) {
+  console.error('❌ IDE 模式缺少 window.__serverUrl 注入')
 }
 
 function getElementPlusLocale(locale: string) {
@@ -92,12 +94,8 @@ async function initApp() {
   // 初始化滚动增强（根据 URL 参数 scrollMultiplier）
   initScrollBoost()
 
-  // 初始化 JetBrains IDE 集成
-  const jetbrainsEnabled = await initJetBrainsIntegration()
-  if (jetbrainsEnabled) {
-    // JetBrains 集成启用后，初始化工具展示拦截器
-    initToolShowInterceptor()
-  }
+  // IDE integration init is handled by App.vue. Don't block mount here (VS Code webview could go blank).
+  const ideIntegrationEnabled = false
 
   const app = createApp(App)
   const pinia = createPinia()
@@ -116,8 +114,8 @@ async function initApp() {
   setTranslateFunction((key: string) => i18n.global.t(key) as string)
 
   console.log('✅ Vue application mounted with locale:', locale)
-  if (jetbrainsEnabled) {
-    console.log('✅ JetBrains IDE integration enabled')
+  if (ideIntegrationEnabled) {
+    console.log('✅ IDE integration enabled')
   }
 }
 

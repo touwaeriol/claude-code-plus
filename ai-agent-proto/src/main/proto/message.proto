@@ -1,0 +1,107 @@
+// message.proto
+// RPC 消息类型定义
+
+syntax = "proto3";
+package aiagent.rpc;
+
+option java_package = "com.asakii.rpc.proto";
+option java_multiple_files = true;
+
+import "common.proto";
+import "content.proto";
+import "stream.proto";
+
+// ============================================================================
+// RPC 消息 - 对应 RpcMessage (sealed interface)
+// ============================================================================
+
+// 对应 RpcMessage
+message RpcMessage {
+  Provider provider = 1;
+
+  oneof message {
+    UserMessage user = 2;
+    AssistantMessage assistant = 3;
+    ResultMessage result = 4;
+    StreamEvent stream_event = 5;
+    ErrorMessage error = 6;
+    StatusSystemMessage status_system = 7;
+    CompactBoundaryMessage compact_boundary = 8;
+    SystemInitMessage system_init = 9;
+  }
+}
+
+// 对应 RpcUserMessage
+message UserMessage {
+  MessageContent message = 1;
+  optional string parent_tool_use_id = 2;
+  optional bool is_replay = 3;
+  optional string uuid = 4;  // 消息唯一标识符（用于编辑重发功能）
+}
+
+// 对应 RpcAssistantMessage
+message AssistantMessage {
+  MessageContent message = 1;
+  optional string id = 2;
+  // 父工具调用 ID（用于子代理消息路由）
+  // - 空: 主会话消息
+  // - 非空: 子代理消息，值为触发该子代理的 Task 工具调用 ID
+  optional string parent_tool_use_id = 3;
+  optional string uuid = 4;  // 消息唯一标识符（用于编辑重发功能）
+}
+
+// 对应 RpcResultMessage
+message ResultMessage {
+  string subtype = 1;
+  optional int64 duration_ms = 2;
+  optional int64 duration_api_ms = 3;
+  bool is_error = 4;
+  int32 num_turns = 5;
+  optional string session_id = 6;
+  optional double total_cost_usd = 7;
+  optional bytes usage_json = 8;  // JsonElement
+  optional string result = 9;
+}
+
+// 对应 RpcErrorMessage
+message ErrorMessage {
+  string error_message = 1;
+}
+
+// 对应 RpcStatusSystemMessage
+message StatusSystemMessage {
+  string subtype = 1;
+  optional string status = 2;
+  string session_id = 3;
+}
+
+// 对应 RpcCompactBoundaryMessage
+message CompactBoundaryMessage {
+  string subtype = 1;
+  string session_id = 2;
+  optional CompactMetadata compact_metadata = 3;
+}
+
+// 对应 RpcCompactMetadata
+message CompactMetadata {
+  optional string trigger = 1;
+  optional int32 pre_tokens = 2;
+}
+
+// 对应 RpcSystemInitMessage - 系统初始化消息
+// 每次 query 开始时 Claude CLI 发送，包含真正的 sessionId
+message SystemInitMessage {
+  string session_id = 1;
+  optional string cwd = 2;
+  optional string model = 3;
+  optional string permission_mode = 4;
+  optional string api_key_source = 5;
+  repeated string tools = 6;
+  repeated McpServerInfo mcp_servers = 7;
+}
+
+// 对应 RpcMcpServerInfo - MCP 服务器信息
+message McpServerInfo {
+  string name = 1;
+  string status = 2;
+}

@@ -1,0 +1,1755 @@
+import * as crypto from 'crypto'
+import { spawn } from 'child_process'
+import * as path from 'path'
+import * as vscode from 'vscode'
+
+import type { HistoryStore } from '../history/historyStore'
+import type { SnapshotStore } from '../rollback/snapshotStore'
+import type { TerminalTaskManager } from '../terminal/terminalTaskManager'
+import type { WsUpgradeRouter } from '../wsUpgradeRouter'
+import { isAllowedWebviewOrigin } from '../webviewOrigin'
+
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf'
+import {
+  AssistantMessageSchema,
+  CapabilitiesSchema,
+  ConnectOptionsSchema,
+  ConnectResultSchema,
+  BashBackgroundResultSchema,
+  BashRunToBackgroundRequestSchema,
+  ContentBlockDeltaEventSchema,
+  ContentBlockStartEventSchema,
+  ContentBlockStopEventSchema,
+  ContentBlockSchema,
+  ContentStatus,
+  DeltaSchema,
+  GetMcpToolsRequestSchema,
+  GetMcpToolsResultSchema,
+  HistorySchema,
+  AskUserQuestionRequestSchema,
+  McpStatusResultSchema,
+  MessageStartEventSchema,
+  MessageStopEventSchema,
+  MessageContentSchema,
+  MessageStartInfoSchema,
+  PermissionMode,
+  Provider,
+  QueryRequestSchema,
+  QueryWithContentRequestSchema,
+  ReconnectMcpRequestSchema,
+  ReconnectMcpResultSchema,
+  ResultMessageSchema,
+  RequestPermissionRequestSchema,
+  RpcMessageSchema,
+  RunToBackgroundRequestSchema,
+  ServerCallRequestSchema,
+  ServerCallResponseSchema,
+  TextBlockSchema,
+  SessionStatus,
+  SetMaxThinkingTokensRequestSchema,
+  SetMaxThinkingTokensResultSchema,
+  SetModelRequestSchema,
+  SetModelResultSchema,
+  SetPermissionModeRequestSchema,
+  SetPermissionModeResultSchema,
+  SetSandboxModeRequestSchema,
+  SetSandboxModeResultSchema,
+  StatusResultSchema,
+  StreamEventDataSchema,
+  StreamEventSchema,
+  TextDeltaSchema,
+  ToolResultBlockSchema,
+  ToolUseBlockSchema,
+  TruncateHistoryRequestSchema,
+  TruncateHistoryResultSchema,
+  UnifiedBackgroundResultSchema,
+  UserMessageSchema,
+  type RpcMessage,
+} from '@proto'
+
+import type {
+  OnExtensionSubscriber,
+  OnNextSubscriber,
+  OnTerminalSubscriber,
+  Payload,
+  RSocket,
+  SetupPayload,
+} from 'rsocket-core'
+import { RSocketServer } from 'rsocket-core'
+import { WebsocketServerTransport } from 'rsocket-websocket-server'
+
+import { ClaudeCliSessionManager, type ToolPermissionResult } from '../../sdk/claude/claudeCli'
+
+type WsServerCtor = new (...args: any[]) => any
+
+function resolveWsServerCtor(): WsServerCtor {
+  // rsocket-websocket-server bundles its own `ws`. If we instantiate the server with a
+  // different `ws` copy/version, createWebSocketStream() can break and close the socket (1006).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('rsocket-websocket-server/node_modules/ws').Server
+  } catch {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('ws').Server
+  }
+}
+
+const WsServer: WsServerCtor = resolveWsServerCtor()
+
+type Responder = Partial<RSocket>
+
+export class AgentRSocketServer implements vscode.Disposable {
+  private closeable: { close(error?: Error): void } | undefined
+  private readonly claudeCli: ClaudeCliSessionManager
+
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly token: string,
+    private readonly historyStore: HistoryStore,
+    private readonly snapshotStore: SnapshotStore,
+    private readonly terminalTaskManager: TerminalTaskManager,
+    private readonly wsUpgradeRouter: WsUpgradeRouter,
+    private readonly log?: (message: string) => void
+  ) {
+    this.claudeCli = new ClaudeCliSessionManager((msg) => this.log?.(msg))
+  }
+
+  async start(): Promise<void> {
+    if (this.closeable) return
+
+    const transport = new WebsocketServerTransport({
+      wsCreator: () =>
+        (() => {
+          const wss = new WsServer({
+            noServer: true,
+            path: '/rsocket',
+            verifyClient: (info: any, done: any) => {
+              try {
+                const req = info?.req
+                const remote = req?.socket?.remoteAddress ?? (req as any)?.connection?.remoteAddress
+                  const isLoopback =
+                    !remote ||
+                    remote === '127.0.0.1' ||
+                    remote === '::1' ||
+                    (typeof remote === 'string' && remote.endsWith('127.0.0.1'))
+                  if (!isLoopback) {
+                    this.log?.(`[rsocket/ws] reject: non-loopback remote=${String(remote)}`)
+                    return done(false, 401, 'Unauthorized')
+                  }
+
+                const origin = req?.headers?.origin
+                if (typeof origin === 'string' && !isAllowedWebviewOrigin(origin)) {
+                  this.log?.(`[rsocket/ws] reject: origin=${origin}`)
+                  return done(false, 401, 'Unauthorized')
+                }
+
+                const url = new URL(String(req?.url ?? ''), 'http://127.0.0.1')
+                const token = url.searchParams.get('token')
+                if (!token || token !== this.token) {
+                  this.log?.(`[rsocket/ws] reject: bad token url=${String(req?.url ?? '')} token=${String(token)}`)
+                  return done(false, 401, 'Unauthorized')
+                }
+
+                this.log?.(`[rsocket/ws] accept url=${String(req?.url ?? '')} origin=${String(origin ?? '')} remote=${String(remote)}`)
+                return done(true)
+              } catch (_error) {
+                this.log?.('[rsocket/ws] reject: exception in verifyClient')
+                return done(false, 401, 'Unauthorized')
+              }
+            },
+          } as any)
+
+          this.wsUpgradeRouter.register('/rsocket', wss as any)
+
+          wss.on('connection', (socket: any, req: any) => {
+            try {
+              if (socket?._socket) (socket._socket as any).__ccp_isWebSocket = true
+            } catch {
+              // ignore
+            }
+            const remote = req?.socket?.remoteAddress
+            const origin = req?.headers?.origin
+            this.log?.(
+              `[rsocket/ws] connection url=${String(req?.url ?? '')} origin=${String(origin ?? '')} remote=${String(remote)}`
+            )
+            socket.on('message', (data: any, isBinary: boolean) => {
+              const bytes = Buffer.isBuffer(data) ? data.length : typeof data?.byteLength === 'number' ? data.byteLength : 0
+              const head = Buffer.isBuffer(data) ? data.subarray(0, 12).toString('hex') : ''
+              this.log?.(`[rsocket/ws] message isBinary=${String(isBinary)} bytes=${String(bytes)} head=${head}`)
+            })
+            socket.on('close', (code: number, reason: Buffer) => {
+              const text = reason ? reason.toString('utf8') : ''
+              this.log?.(`[rsocket/ws] close code=${code} reason=${text}`)
+            })
+            socket.on('error', (err: any) => {
+              this.log?.(`[rsocket/ws] socket error: ${err instanceof Error ? err.message : String(err)}`)
+            })
+          })
+          wss.on('error', (err: any) => {
+            this.log?.(`[rsocket/ws] wss error: ${err instanceof Error ? err.stack || err.message : String(err)}`)
+          })
+          wss.on('close', () => {
+            this.log?.('[rsocket/ws] wss close')
+          })
+
+          // rsocket-websocket-server waits for the ws server "listening" event.
+          // When ws.Server is attached to an existing http.Server, it doesn't emit it,
+          // so we emit it manually once the event listeners are registered.
+          setImmediate(() => (wss as any).emit('listening'))
+          return wss
+        })(),
+    })
+
+    const server = new RSocketServer({
+      transport,
+      acceptor: {
+        accept: async (setupPayload: SetupPayload, remotePeer: RSocket): Promise<Responder> => {
+          this.log?.(
+            `[rsocket] accept setup dataMimeType=${setupPayload.dataMimeType} metadataMimeType=${setupPayload.metadataMimeType}`
+          )
+          try {
+            ;(remotePeer as any).onClose?.((err?: Error) => {
+              this.log?.(`[rsocket] peer closed ${err ? `error=${err.message}` : '(normal)'}`)
+            })
+          } catch {
+            // ignore
+          }
+          return createResponder(
+            this.context,
+            setupPayload,
+            remotePeer,
+            this.historyStore,
+            this.snapshotStore,
+            this.terminalTaskManager,
+            this.claudeCli,
+            (msg) => this.log?.(msg)
+          )
+        },
+      },
+    })
+
+    this.closeable = await server.bind()
+  }
+
+  dispose() {
+    this.closeable?.close()
+    this.closeable = undefined
+    this.claudeCli.dispose()
+  }
+}
+
+function createResponder(
+  context: vscode.ExtensionContext,
+  _setup: SetupPayload,
+  remotePeer: RSocket,
+  historyStore: HistoryStore,
+  snapshotStore: SnapshotStore,
+  terminalTaskManager: TerminalTaskManager,
+  claudeCli: ClaudeCliSessionManager,
+  log?: (message: string) => void
+): Responder {
+  let connectId: string | undefined
+  let sessionId: string | undefined
+  let currentStreamCancel: (() => void) | undefined
+
+  const getWorkspaceRoot = (): string => {
+    const folder = vscode.workspace.workspaceFolders?.[0]
+    return folder?.uri.fsPath ?? ''
+  }
+
+  let provider: Provider = Provider.CLAUDE
+  let model: string = 'claude-opus-4-5-20251101'
+  let permissionMode: PermissionMode = PermissionMode.DEFAULT
+  let includePartialMessages = true
+  let dangerouslySkipPermissions = false
+
+  return {
+    requestResponse: (payload, responderStream) => {
+      const route = extractRoute(payload)
+      log?.(`[rsocket] requestResponse route=${route || '(empty)'} dataBytes=${payload.data ? payload.data.byteLength : 0}`)
+      const data = payload.data ? new Uint8Array(payload.data) : new Uint8Array()
+
+      try {
+        switch (route) {
+          case 'agent.connect': {
+            const options = data.length > 0 ? fromBinary(ConnectOptionsSchema, data) : undefined
+
+            connectId = options?.connectId || connectId || crypto.randomUUID()
+            sessionId = options?.sessionId || crypto.randomUUID()
+            historyStore.ensureSession(sessionId, getWorkspaceRoot())
+
+            provider = options?.provider ?? provider
+            model = options?.model || model
+            permissionMode = options?.permissionMode ?? permissionMode
+            includePartialMessages = options?.includePartialMessages ?? includePartialMessages
+            dangerouslySkipPermissions = options?.dangerouslySkipPermissions ?? dangerouslySkipPermissions
+
+            const capabilities = create(CapabilitiesSchema, {
+              canInterrupt: true,
+              canSwitchModel: true,
+              canSwitchPermissionMode: true,
+              supportedPermissionModes: [
+                PermissionMode.DEFAULT,
+                PermissionMode.BYPASS_PERMISSIONS,
+                PermissionMode.ACCEPT_EDITS,
+                PermissionMode.PLAN,
+              ],
+              canSkipPermissions: true,
+              canSendRichContent: true,
+              canThink: true,
+              canResumeSession: false,
+              canRunInBackground: false,
+            })
+
+            const result = create(ConnectResultSchema, {
+              sessionId,
+              provider,
+              status: SessionStatus.CONNECTED,
+              model,
+              capabilities,
+              cwd: getWorkspaceRoot(),
+              connectId,
+            })
+
+            const bytes = toBinary(ConnectResultSchema, result)
+            // For requestResponse: `isComplete=true` already terminates the stream.
+            responderStream.onNext({ data: Buffer.from(bytes) }, true)
+            break
+          }
+          case 'agent.disconnect':
+          case 'agent.disposeSession': {
+            responderStream.onNext({ data: Buffer.from(encodeStatus(SessionStatus.DISCONNECTED)) }, true)
+            break
+          }
+          case 'agent.interrupt': {
+            currentStreamCancel?.()
+            currentStreamCancel = undefined
+            responderStream.onNext({ data: Buffer.from(encodeStatus(SessionStatus.INTERRUPTED)) }, true)
+            break
+          }
+          case 'agent.setModel': {
+            const req = data.length > 0 ? fromBinary(SetModelRequestSchema, data) : undefined
+            model = req?.model || model
+            const result = create(SetModelResultSchema, {
+              status: SessionStatus.MODEL_CHANGED,
+              model,
+            })
+            responderStream.onNext({ data: Buffer.from(toBinary(SetModelResultSchema, result)) }, true)
+            break
+          }
+          case 'agent.setPermissionMode': {
+            const req = data.length > 0 ? fromBinary(SetPermissionModeRequestSchema, data) : undefined
+            permissionMode = req?.mode ?? permissionMode
+            const result = create(SetPermissionModeResultSchema, {
+              mode: permissionMode,
+              success: true,
+            })
+            responderStream.onNext({ data: Buffer.from(toBinary(SetPermissionModeResultSchema, result)) }, true)
+            break
+          }
+          case 'agent.setSandboxMode': {
+            const req = data.length > 0 ? fromBinary(SetSandboxModeRequestSchema, data) : undefined
+            const result = create(SetSandboxModeResultSchema, {
+              mode: req?.mode ?? 0,
+              success: true,
+            })
+            responderStream.onNext({ data: Buffer.from(toBinary(SetSandboxModeResultSchema, result)) }, true)
+            break
+          }
+          case 'agent.setMaxThinkingTokens': {
+            const req = data.length > 0 ? fromBinary(SetMaxThinkingTokensRequestSchema, data) : undefined
+            const result = create(SetMaxThinkingTokensResultSchema, {
+              status: SessionStatus.CONNECTED,
+              maxThinkingTokens: req?.maxThinkingTokens,
+            })
+            responderStream.onNext({ data: Buffer.from(toBinary(SetMaxThinkingTokensResultSchema, result)) }, true)
+            break
+          }
+          case 'agent.runInBackground': {
+            // VS Code 版暂未实现真正的后台任务管理，这里仅返回 ACK，避免前端报错。
+            responderStream.onNext({ data: Buffer.from(encodeStatus(SessionStatus.CONNECTED)) }, true)
+            break
+          }
+          case 'agent.bashRunToBackground': {
+            const req = data.length > 0 ? fromBinary(BashRunToBackgroundRequestSchema, data) : undefined
+            const result = create(BashBackgroundResultSchema, {
+              success: false,
+              taskId: req?.taskId,
+              error: 'Not implemented in VS Code extension yet',
+            })
+            responderStream.onNext({ data: Buffer.from(toBinary(BashBackgroundResultSchema, result)) }, true)
+            break
+          }
+          case 'agent.runToBackground': {
+            const req = data.length > 0 ? fromBinary(RunToBackgroundRequestSchema, data) : undefined
+            const result = create(UnifiedBackgroundResultSchema, {
+              success: false,
+              isBash: undefined,
+              taskId: req?.taskId,
+              bashCount: 0,
+              agentCount: 0,
+              backgroundedBashIds: [],
+              backgroundedAgentIds: [],
+              error: 'Not implemented in VS Code extension yet',
+            })
+            responderStream.onNext({ data: Buffer.from(toBinary(UnifiedBackgroundResultSchema, result)) }, true)
+            break
+          }
+          case 'agent.getHistory': {
+            const sid = sessionId || ''
+            const history = create(HistorySchema, { messages: sid ? historyStore.getSessionMessages(sid) : [] })
+            responderStream.onNext({ data: Buffer.from(toBinary(HistorySchema, history)) }, true)
+            break
+          }
+          case 'agent.getMcpStatus': {
+            const result = create(McpStatusResultSchema, { servers: [] })
+            responderStream.onNext({ data: Buffer.from(toBinary(McpStatusResultSchema, result)) }, true)
+            break
+          }
+          case 'agent.reconnectMcp': {
+            const req = data.length > 0 ? fromBinary(ReconnectMcpRequestSchema, data) : undefined
+            const result = create(ReconnectMcpResultSchema, {
+              success: false,
+              serverName: req?.serverName || '',
+              status: 'unavailable',
+              toolsCount: 0,
+              error: 'Not implemented in VS Code extension yet',
+            })
+            responderStream.onNext({ data: Buffer.from(toBinary(ReconnectMcpResultSchema, result)) }, true)
+            break
+          }
+          case 'agent.getMcpTools': {
+            const req = data.length > 0 ? fromBinary(GetMcpToolsRequestSchema, data) : undefined
+            const result = create(GetMcpToolsResultSchema, {
+              serverName: req?.serverName,
+              tools: [],
+              count: 0,
+            })
+            responderStream.onNext({ data: Buffer.from(toBinary(GetMcpToolsResultSchema, result)) }, true)
+            break
+          }
+          case 'agent.truncateHistory': {
+            const req = data.length > 0 ? fromBinary(TruncateHistoryRequestSchema, data) : undefined
+            const sid = req?.sessionId || sessionId || ''
+            const uuid = req?.messageUuid || ''
+
+            const result = !sid || !uuid
+              ? create(TruncateHistoryResultSchema, { success: false, remainingLines: 0, error: 'Missing sessionId/messageUuid' })
+              : create(TruncateHistoryResultSchema, historyStore.truncateHistory(sid, uuid))
+
+            responderStream.onNext({ data: Buffer.from(toBinary(TruncateHistoryResultSchema, result)) }, true)
+            break
+          }
+          default: {
+            log?.(`[rsocket] unsupported requestResponse route=${route || '(empty)'}`)
+            responderStream.onError(new Error(`Unsupported route: ${route}`))
+          }
+        }
+      } catch (error) {
+        log?.(`[rsocket] requestResponse error route=${route || '(empty)'} err=${error instanceof Error ? error.message : String(error)}`)
+        responderStream.onError(error instanceof Error ? error : new Error(String(error)))
+      }
+
+      return createCancellable()
+    },
+
+    requestStream: (payload, _initialRequestN, responderStream) => {
+      const route = extractRoute(payload)
+      const data = payload.data ? new Uint8Array(payload.data) : new Uint8Array()
+      let cancelled = false
+      let cancelStream: (() => void) | undefined
+
+      const safeOnNext = (p: Payload, isComplete: boolean) => {
+        if (cancelled) return
+        responderStream.onNext(p, isComplete)
+      }
+      const safeOnComplete = () => {
+        responderStream.onComplete()
+      }
+      const safeOnError = (err: Error) => {
+        if (cancelled) return
+        responderStream.onError(err)
+      }
+
+      const startProviderQueryStream = (userMessage: string) => {
+        if (provider !== Provider.CLAUDE) {
+          const done = () => {
+            if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+            safeOnComplete()
+          }
+
+          cancelStream = streamText(
+            { provider, sessionId: sessionId || 'unknown' },
+            `VS Code backend for provider=${String(provider)} is not implemented yet.\n\nYou sent: ${userMessage}`,
+            safeOnNext,
+            done,
+            (msg) => {
+              if (!sessionId) return
+              historyStore.appendMessage(sessionId, getWorkspaceRoot(), msg)
+            }
+          )
+          currentStreamCancel = cancelStream
+          return
+        }
+
+        // Claude CLI streaming (real chat loop)
+        const queryStartedAt = Date.now()
+        let streamFinalized = false
+        let resultSent = false
+        let abortRequested = false
+        let innerCancel: (() => void) | undefined
+
+        // Translate Claude CLI stream-json events into RPC StreamEvent messages.
+        // The frontend expects message_start/content_block_start before any delta events.
+        const streamUuid = crypto.randomUUID()
+        const streamSessionId = sessionId || 'unknown'
+        const streamBlockIndex = 0
+
+        let didStartMessage = false
+        let didStartBlock = false
+        let didStopBlock = false
+        let didStopMessage = false
+
+        const emitStreamEvent = (event: any) => {
+          const streamEvent = create(StreamEventSchema, {
+            uuid: streamUuid,
+            sessionId: streamSessionId,
+            event: create(StreamEventDataSchema, { event }),
+          })
+          const rpcMsg = create(RpcMessageSchema, {
+            provider,
+            message: { case: 'streamEvent', value: streamEvent },
+          } as any)
+
+          safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, rpcMsg)) }, false)
+          if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), rpcMsg)
+        }
+
+        const ensureMessageStart = () => {
+          if (didStartMessage) return
+          didStartMessage = true
+
+          const info = create(MessageStartInfoSchema, { id: streamUuid, model, content: [] })
+          emitStreamEvent({
+            case: 'messageStart',
+            value: create(MessageStartEventSchema, { messageInfo: info }),
+          })
+        }
+
+        const ensureTextBlockStart = () => {
+          ensureMessageStart()
+          if (didStartBlock) return
+          didStartBlock = true
+
+          const block = create(ContentBlockSchema, {
+            block: { case: 'text', value: create(TextBlockSchema, { text: '' }) },
+          })
+          emitStreamEvent({
+            case: 'contentBlockStart',
+            value: create(ContentBlockStartEventSchema, { index: streamBlockIndex, contentBlock: block }),
+          })
+        }
+
+        const ensureStreamStopped = () => {
+          if (!didStartMessage || didStopMessage) return
+
+          if (didStartBlock && !didStopBlock) {
+            didStopBlock = true
+            emitStreamEvent({
+              case: 'contentBlockStop',
+              value: create(ContentBlockStopEventSchema, { index: streamBlockIndex }),
+            })
+          }
+
+          didStopMessage = true
+          emitStreamEvent({ case: 'messageStop', value: create(MessageStopEventSchema, {}) })
+        }
+
+        const emitResult = (subtype: string, isError: boolean, resultText?: string) => {
+          if (resultSent) return
+          resultSent = true
+
+          const durationMs = BigInt(Math.max(0, Date.now() - queryStartedAt))
+          const result = create(ResultMessageSchema, {
+            subtype,
+            durationMs,
+            isError,
+            numTurns: 1,
+            sessionId: sessionId || undefined,
+            result: resultText || undefined,
+          })
+
+          const rpcMsg = create(RpcMessageSchema, {
+            provider,
+            message: { case: 'result', value: result },
+          } as any)
+
+          safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, rpcMsg)) }, false)
+          if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), rpcMsg)
+        }
+
+        const finalizeStream = (subtype: string, isError: boolean, resultText?: string) => {
+          if (streamFinalized) return
+          streamFinalized = true
+
+          try {
+            if (includePartialMessages) ensureStreamStopped()
+          } catch {
+            // ignore best-effort shutdown
+          }
+
+          emitResult(subtype, isError, resultText)
+
+          if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+          safeOnComplete()
+        }
+
+        const cancelOp = () => {
+          abortRequested = true
+          innerCancel?.()
+          finalizeStream('interrupted', false)
+          cancelled = true
+        }
+        cancelStream = cancelOp
+        currentStreamCancel = cancelOp
+
+        void (async () => {
+          try {
+            const cfg = vscode.workspace.getConfiguration('claudeCodePlus')
+            const defaultBypassPermissions = Boolean(cfg.get('defaultBypassPermissions') ?? false)
+
+            const cliSession = await claudeCli.getOrCreate({
+              sessionId: sessionId || 'default',
+              cwd: getWorkspaceRoot(),
+              model,
+              permissionMode: toClaudePermissionMode(permissionMode),
+              includePartialMessages,
+              dangerouslySkipPermissions: dangerouslySkipPermissions || defaultBypassPermissions,
+            })
+
+            if (includePartialMessages && !abortRequested) {
+              // Prepare streaming placeholders so the frontend can accept deltas immediately.
+              ensureTextBlockStart()
+            }
+
+            const handle = cliSession.startQuery(userMessage, {
+              onJsonMessage: (rawMsg) => {
+                if (abortRequested) return
+                const msg: any = rawMsg
+                if (!msg || typeof msg !== 'object') return
+                if (msg.type === 'stream_event') {
+                  if (!includePartialMessages) return
+                  const ev = msg.event
+                  const evType = typeof ev?.type === 'string' ? ev.type : ''
+
+                  if (evType === 'content_block_delta' && ev?.delta?.type === 'text_delta') {
+                    const text = typeof ev.delta.text === 'string' ? ev.delta.text : ''
+                    if (!text) return
+
+                    ensureTextBlockStart()
+                    emitStreamEvent({
+                      case: 'contentBlockDelta',
+                      value: create(ContentBlockDeltaEventSchema, {
+                        index: streamBlockIndex,
+                        delta: create(DeltaSchema, {
+                          delta: { case: 'textDelta', value: create(TextDeltaSchema, { text }) },
+                        }),
+                      }),
+                    })
+                    return
+                  }
+
+                  if (evType === 'message_stop') {
+                    ensureStreamStopped()
+                  }
+                  return
+                }
+
+                // No partial messages: translate the final assistant message into a single assistant RpcMessage.
+                if (!includePartialMessages && msg.type === 'assistant') {
+                  const contentArr = Array.isArray(msg.message?.content)
+                    ? msg.message.content
+                    : Array.isArray(msg.content)
+                      ? msg.content
+                      : []
+                  const text = contentArr
+                    .filter((b: any) => b && typeof b === 'object' && b.type === 'text' && typeof b.text === 'string')
+                    .map((b: any) => b.text)
+                    .join('')
+                  if (!text) return
+
+                  const block = create(ContentBlockSchema, { block: { case: 'text', value: create(TextBlockSchema, { text }) } })
+                  const content = create(MessageContentSchema, { content: [block] })
+                  const assistant = create(AssistantMessageSchema, { message: content, uuid: crypto.randomUUID() })
+                  const assistantMsg = create(RpcMessageSchema, { provider, message: { case: 'assistant', value: assistant } } as any)
+
+                  safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, assistantMsg)) }, false)
+                  if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), assistantMsg)
+                }
+              },
+              requestPermission: async (req): Promise<ToolPermissionResult> => {
+                const toolUseId = req.toolUseId || crypto.randomUUID()
+                const request = create(RequestPermissionRequestSchema, {
+                  toolName: req.toolName,
+                  inputJson: Buffer.from(JSON.stringify(req.input ?? {}), 'utf8'),
+                  toolUseId,
+                  permissionSuggestions: [],
+                })
+                const call = create(ServerCallRequestSchema, {
+                  callId: `srv-${toolUseId}`,
+                  method: 'RequestPermission',
+                  params: { case: 'requestPermission', value: request },
+                })
+
+                const { promise } = requestClientCall(remotePeer, call)
+                const responseBytes = await promise
+                const response = fromBinary(ServerCallResponseSchema, responseBytes)
+                const perm = response.result.case === 'requestPermission' ? response.result.value : undefined
+
+                const approved = perm?.approved ?? false
+                const denyReason = perm?.denyReason || undefined
+
+                // If not approved, return early
+                if (!approved) {
+                  return { approved, denyReason }
+                }
+
+                // Check if this is a write file tool
+                const writeToolNames = [
+                  'Write',
+                  'Edit',
+                  'MultiEdit',
+                  'mcp__jetbrains-file__WriteFile',
+                  'mcp__jetbrains-file__EditFile',
+                ]
+                const isWriteTool = writeToolNames.includes(req.toolName)
+
+                if (!isWriteTool) {
+                  return { approved, denyReason }
+                }
+
+                // Extract filePath from input
+                const input = req.input as Record<string, unknown> | undefined
+                const filePath =
+                  (input?.file_path as string | undefined) ||
+                  (input?.filePath as string | undefined)
+
+                if (!filePath) {
+                  return { approved, denyReason }
+                }
+
+                // Save snapshot before the write operation
+                try {
+                  const uri = toWorkspaceFileUri(filePath)
+                  const canRollback = vscode.workspace.getWorkspaceFolder(uri) != null
+                  const historyTs = canRollback ? Date.now() : 0
+
+                  let isNewFile = false
+                  let isOverwrite = false
+
+                  if (canRollback) {
+                    try {
+                      const rawOld = await vscode.workspace.fs.readFile(uri)
+                      const original = Buffer.from(rawOld).toString('utf8')
+                      isOverwrite = true
+                      snapshotStore.save({ toolUseId, filePath: uri.fsPath, timestamp: historyTs, content: original })
+                    } catch {
+                      // File does not exist yet
+                      isNewFile = true
+                    }
+                  } else {
+                    // Not in workspace, check if file exists
+                    try {
+                      await vscode.workspace.fs.stat(uri)
+                      isOverwrite = true
+                    } catch {
+                      isNewFile = true
+                    }
+                  }
+
+                  return {
+                    approved,
+                    denyReason,
+                    snapshotMeta: {
+                      historyTs,
+                      canRollback,
+                      isNewFile,
+                      isOverwrite,
+                    },
+                  }
+                } catch (err) {
+                  // If snapshot fails, still allow the operation but without rollback support
+                  log?.(`[rsocket] Failed to save snapshot for ${filePath}: ${err}`)
+                  return { approved, denyReason }
+                }
+              },
+            })
+
+            innerCancel = handle.cancel
+            await handle.done
+            if (!abortRequested) finalizeStream('success', false)
+          } catch (err) {
+            if (abortRequested) return
+            const e = err instanceof Error ? err : new Error(String(err))
+            finalizeStream('error_during_execution', true, e.message)
+          }
+        })()
+      }
+
+      try {
+        switch (route) {
+          case 'agent.query': {
+            const req = data.length > 0 ? fromBinary(QueryRequestSchema, data) : undefined
+            const userMessage = req?.message || ''
+            currentStreamCancel?.()
+            currentStreamCancel = undefined
+
+            if (sessionId) {
+              historyStore.appendMessage(sessionId, getWorkspaceRoot(), createUserTextMessage(provider, userMessage))
+            }
+
+            const trimmed = userMessage.trim()
+
+            if (trimmed.startsWith('/perm')) {
+              const toolUseId = crypto.randomUUID()
+              const request = create(RequestPermissionRequestSchema, {
+                toolName: 'Bash',
+                inputJson: Buffer.from(JSON.stringify({ command: 'echo hello' }), 'utf8'),
+                toolUseId,
+                permissionSuggestions: [],
+              })
+              const call = create(ServerCallRequestSchema, {
+                callId: `srv-${toolUseId}`,
+                method: 'RequestPermission',
+                params: { case: 'requestPermission', value: request },
+              })
+
+              const { promise, cancel } = requestClientCall(remotePeer, call)
+              currentStreamCancel = cancel
+
+              promise
+                .then((responseBytes) => {
+                  if (cancelled) return
+
+                  const response = fromBinary(ServerCallResponseSchema, responseBytes)
+                  const perm = response.result.case === 'requestPermission' ? response.result.value : undefined
+                  const approved = perm?.approved ?? false
+                  const denyReason = perm?.denyReason ? `（原因：${perm.denyReason}）` : ''
+
+                  const done = () => {
+                    if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+                    safeOnComplete()
+                  }
+
+                  cancelStream = streamText(
+                    {
+                      provider,
+                      sessionId: sessionId || 'unknown',
+                    },
+                    approved ? `权限已批准：${toolUseId}` : `权限被拒绝：${toolUseId}${denyReason}`,
+                    safeOnNext,
+                    done,
+                    (msg) => {
+                      if (!sessionId) return
+                      historyStore.appendMessage(sessionId, getWorkspaceRoot(), msg)
+                    }
+                  )
+                  currentStreamCancel = cancelStream
+                })
+                .catch((err) => {
+                  if (cancelled) return
+                  if (err instanceof Error && err.message === 'client.call cancelled') {
+                    safeOnComplete()
+                    return
+                  }
+                  safeOnError(err instanceof Error ? err : new Error(String(err)))
+                })
+
+              break
+            }
+
+            if (trimmed.startsWith('/ask')) {
+              const callId = crypto.randomUUID()
+              const askReq = create(AskUserQuestionRequestSchema, {
+                questions: [
+                  {
+                    header: 'VS Code Mock',
+                    question: '请选择一个选项',
+                    multiSelect: false,
+                    options: [
+                      { label: '选项 A', description: 'A' },
+                      { label: '选项 B', description: 'B' },
+                    ],
+                  },
+                ],
+              })
+              const call = create(ServerCallRequestSchema, {
+                callId: `srv-${callId}`,
+                method: 'AskUserQuestion',
+                params: { case: 'askUserQuestion', value: askReq },
+              })
+
+              const { promise, cancel } = requestClientCall(remotePeer, call)
+              currentStreamCancel = cancel
+
+              promise
+                .then((responseBytes) => {
+                  if (cancelled) return
+
+                  const response = fromBinary(ServerCallResponseSchema, responseBytes)
+                  const answers =
+                    response.result.case === 'askUserQuestion'
+                      ? response.result.value.answers.map((a) => `${a.question} -> ${a.answer}`).join('\n')
+                      : '(no answers)'
+
+                  const done = () => {
+                    if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+                    safeOnComplete()
+                  }
+
+                  cancelStream = streamText(
+                    {
+                      provider,
+                      sessionId: sessionId || 'unknown',
+                    },
+                    `AskUserQuestion 已回答：\n${answers}`,
+                    safeOnNext,
+                    done,
+                    (msg) => {
+                      if (!sessionId) return
+                      historyStore.appendMessage(sessionId, getWorkspaceRoot(), msg)
+                    }
+                  )
+                  currentStreamCancel = cancelStream
+                })
+                .catch((err) => {
+                  if (cancelled) return
+                  if (err instanceof Error && err.message === 'client.call cancelled') {
+                    safeOnComplete()
+                    return
+                  }
+                  safeOnError(err instanceof Error ? err : new Error(String(err)))
+                })
+
+              break
+            }
+
+            if (trimmed.startsWith('/read')) {
+              const match = trimmed.match(/^\/read\s+(\S+)(?:\s+(\d+))?(?:\s+(\d+))?\s*$/)
+              if (!match) {
+                const done = () => {
+                  if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+                  safeOnComplete()
+                }
+                cancelStream = streamText(
+                  { provider, sessionId: sessionId || 'unknown' },
+                  '用法：/read <path> [startLine] [endLine]',
+                  safeOnNext,
+                  done
+                )
+                currentStreamCancel = cancelStream
+                break
+              }
+
+              const filePath = match[1]
+              const startLine = match[2] ? Number(match[2]) : undefined
+              const endLine = match[3] ? Number(match[3]) : undefined
+              const toolUseId = crypto.randomUUID()
+
+              const input: Record<string, unknown> = { filePath }
+              if (startLine && startLine > 0) input.offset = startLine
+              if (startLine && endLine && endLine >= startLine) input.maxLines = endLine - startLine + 1
+
+              const toolName = 'mcp__jetbrains-file__ReadFile'
+              const toolUseMsg = createAssistantToolUseMessage(provider, toolUseId, toolName, toolName, input)
+              safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolUseMsg)) }, false)
+              if (sessionId) {
+                historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolUseMsg)
+              }
+
+              let finished = false
+              const finishStream = () => {
+                if (finished) return
+                finished = true
+                if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+                safeOnComplete()
+              }
+
+              const cancelOp = () => {
+                cancelled = true
+                finishStream()
+              }
+              cancelStream = cancelOp
+              currentStreamCancel = cancelOp
+
+              void (async () => {
+                let isError = false
+                let resultContent: unknown = ''
+
+                try {
+                  const uri = toWorkspaceFileUri(filePath)
+                  const raw = await vscode.workspace.fs.readFile(uri)
+                  let text = Buffer.from(raw).toString('utf8')
+
+                  if (startLine || endLine) {
+                    const lines = text.split(/\r?\n/)
+                    const startIdx = Math.max((startLine ?? 1) - 1, 0)
+                    const endIdx = Math.min(endLine ?? lines.length, lines.length)
+                    text = lines.slice(startIdx, endIdx).join('\n')
+                  }
+
+                  resultContent = text
+                } catch (err) {
+                  isError = true
+                  resultContent = err instanceof Error ? err.message : String(err)
+                }
+
+                if (cancelled) {
+                  finishStream()
+                  return
+                }
+
+                const toolResultMsg = createUserToolResultMessage(provider, toolUseId, resultContent, isError)
+                safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolResultMsg)) }, false)
+                if (sessionId) {
+                  historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolResultMsg)
+                }
+
+                finishStream()
+              })()
+
+              break
+            }
+
+            if (trimmed.startsWith('/write')) {
+              const match = userMessage.match(/^\/write\s+(\S+)\s*([\s\S]*)$/)
+              if (!match) {
+                const done = () => {
+                  if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+                  safeOnComplete()
+                }
+                cancelStream = streamText(
+                  { provider, sessionId: sessionId || 'unknown' },
+                  '用法：/write <path> <content...>',
+                  safeOnNext,
+                  done
+                )
+                currentStreamCancel = cancelStream
+                break
+              }
+
+              const filePath = match[1]
+              const contentToWrite = (match[2] ?? '').replace(/^\s+/, '')
+              const toolUseId = crypto.randomUUID()
+              const input: Record<string, unknown> = { filePath, content: contentToWrite }
+              const toolName = 'mcp__jetbrains-file__WriteFile'
+
+              const toolUseMsg = createAssistantToolUseMessage(provider, toolUseId, toolName, toolName, input)
+              safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolUseMsg)) }, false)
+              if (sessionId) {
+                historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolUseMsg)
+              }
+
+              const request = create(RequestPermissionRequestSchema, {
+                toolName,
+                inputJson: Buffer.from(JSON.stringify(input), 'utf8'),
+                toolUseId,
+                permissionSuggestions: [],
+              })
+              const call = create(ServerCallRequestSchema, {
+                callId: `srv-${toolUseId}`,
+                method: 'RequestPermission',
+                params: { case: 'requestPermission', value: request },
+              })
+
+              const { promise, cancel } = requestClientCall(remotePeer, call)
+              cancelStream = cancel
+              currentStreamCancel = cancel
+
+              promise
+                .then(async (responseBytes) => {
+                  if (cancelled) return
+
+                  const response = fromBinary(ServerCallResponseSchema, responseBytes)
+                  const perm = response.result.case === 'requestPermission' ? response.result.value : undefined
+                  const approved = perm?.approved ?? false
+
+                  if (!approved) {
+                    const denyReason = perm?.denyReason ? `Denied: ${perm.denyReason}` : 'Denied'
+                    const toolResultMsg = createUserToolResultMessage(provider, toolUseId, denyReason, true)
+                    safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolResultMsg)) }, false)
+                    if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolResultMsg)
+
+                    if (currentStreamCancel === cancel) currentStreamCancel = undefined
+                    safeOnComplete()
+                    return
+                  }
+
+                  try {
+                    const uri = toWorkspaceFileUri(filePath)
+                    const canRollback = vscode.workspace.getWorkspaceFolder(uri) != null
+                    const historyTs = canRollback ? Date.now() : undefined
+
+                    let isNewFile = false
+                    let isOverwrite = false
+
+                    if (canRollback) {
+                      try {
+                        const rawOld = await vscode.workspace.fs.readFile(uri)
+                        const original = Buffer.from(rawOld).toString('utf8')
+                        isOverwrite = true
+                        snapshotStore.save({ toolUseId, filePath: uri.fsPath, timestamp: historyTs!, content: original })
+                      } catch {
+                        isNewFile = true
+                      }
+                    } else {
+                      try {
+                        await vscode.workspace.fs.stat(uri)
+                        isOverwrite = true
+                      } catch {
+                        isNewFile = true
+                      }
+                    }
+
+                    await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(uri.fsPath)))
+                    await vscode.workspace.fs.writeFile(uri, Buffer.from(contentToWrite, 'utf8'))
+
+                    const output: string[] = []
+                    if (historyTs !== undefined) output.push(`[jb:historyTs=${historyTs}]`)
+                    output.push(`[jb:isOverwrite=${isOverwrite}]`)
+                    output.push(`[jb:isNewFile=${isNewFile}]`)
+                    output.push(`[jb:canRollback=${canRollback}]`)
+                    output.push('')
+                    output.push(`${isNewFile ? 'Created' : 'Updated'} File: \`${filePath}\``)
+                    output.push(`Wrote ${contentToWrite.length} chars`)
+
+                    const toolResultMsg = createUserToolResultMessage(
+                      provider,
+                      toolUseId,
+                      output.join('\n'),
+                      false
+                    )
+                    safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolResultMsg)) }, false)
+                    if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolResultMsg)
+                  } catch (err) {
+                    const toolResultMsg = createUserToolResultMessage(
+                      provider,
+                      toolUseId,
+                      err instanceof Error ? err.message : String(err),
+                      true
+                    )
+                    safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolResultMsg)) }, false)
+                    if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolResultMsg)
+                  } finally {
+                    if (currentStreamCancel === cancel) currentStreamCancel = undefined
+                    safeOnComplete()
+                  }
+                })
+                .catch((err) => {
+                  if (cancelled) return
+                  if (err instanceof Error && err.message === 'client.call cancelled') {
+                    safeOnComplete()
+                    return
+                  }
+                  safeOnError(err instanceof Error ? err : new Error(String(err)))
+                })
+
+              break
+            }
+
+            if (trimmed.startsWith('/edit')) {
+              const match = userMessage.match(/^\/edit\s+(\S+)\s+([\s\S]+)$/)
+              if (!match) {
+                const done = () => {
+                  if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+                  safeOnComplete()
+                }
+                cancelStream = streamText(
+                  { provider, sessionId: sessionId || 'unknown' },
+                  '用法：/edit <path> {\"oldString\":\"...\",\"newString\":\"...\",\"replaceAll\":false}',
+                  safeOnNext,
+                  done
+                )
+                currentStreamCancel = cancelStream
+                break
+              }
+
+              const filePath = match[1]
+              const jsonPart = match[2].trim()
+              let args: Record<string, unknown>
+              try {
+                args = JSON.parse(jsonPart)
+              } catch {
+                const done = () => {
+                  if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+                  safeOnComplete()
+                }
+                cancelStream = streamText(
+                  { provider, sessionId: sessionId || 'unknown' },
+                  'edit 参数必须是 JSON，例如：/edit README.md {\"oldString\":\"foo\",\"newString\":\"bar\",\"replaceAll\":false}',
+                  safeOnNext,
+                  done
+                )
+                currentStreamCancel = cancelStream
+                break
+              }
+
+              const oldStr = String((args as any).oldString ?? (args as any).old_string ?? '')
+              const newStr = String((args as any).newString ?? (args as any).new_string ?? '')
+              const replaceAll = Boolean((args as any).replaceAll ?? (args as any).replace_all)
+
+              const toolUseId = crypto.randomUUID()
+              const toolName = 'mcp__jetbrains-file__EditFile'
+              const input: Record<string, unknown> = {
+                filePath,
+                oldString: oldStr,
+                newString: newStr,
+                replaceAll,
+              }
+
+              const toolUseMsg = createAssistantToolUseMessage(provider, toolUseId, toolName, toolName, input)
+              safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolUseMsg)) }, false)
+              if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolUseMsg)
+
+              const request = create(RequestPermissionRequestSchema, {
+                toolName,
+                inputJson: Buffer.from(JSON.stringify(input), 'utf8'),
+                toolUseId,
+                permissionSuggestions: [],
+              })
+              const call = create(ServerCallRequestSchema, {
+                callId: `srv-${toolUseId}`,
+                method: 'RequestPermission',
+                params: { case: 'requestPermission', value: request },
+              })
+
+              const { promise, cancel } = requestClientCall(remotePeer, call)
+              cancelStream = cancel
+              currentStreamCancel = cancel
+
+              promise
+                .then(async (responseBytes) => {
+                  if (cancelled) return
+
+                  const response = fromBinary(ServerCallResponseSchema, responseBytes)
+                  const perm = response.result.case === 'requestPermission' ? response.result.value : undefined
+                  const approved = perm?.approved ?? false
+
+                  if (!approved) {
+                    const denyReason = perm?.denyReason ? `Denied: ${perm.denyReason}` : 'Denied'
+                    const toolResultMsg = createUserToolResultMessage(provider, toolUseId, denyReason, true)
+                    safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolResultMsg)) }, false)
+                    if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolResultMsg)
+
+                    if (currentStreamCancel === cancel) currentStreamCancel = undefined
+                    safeOnComplete()
+                    return
+                  }
+
+                  try {
+                    const uri = toWorkspaceFileUri(filePath)
+                    const canRollback = vscode.workspace.getWorkspaceFolder(uri) != null
+                    const historyTs = Date.now()
+                    const raw = await vscode.workspace.fs.readFile(uri)
+                    const original = Buffer.from(raw).toString('utf8')
+                    snapshotStore.save({ toolUseId, filePath: uri.fsPath, timestamp: historyTs, content: original })
+
+                    let nextText = original
+                    if (replaceAll) {
+                      nextText = original.split(oldStr).join(newStr)
+                    } else {
+                      const idx = original.indexOf(oldStr)
+                      if (idx < 0) throw new Error('oldString not found')
+                      nextText = original.slice(0, idx) + newStr + original.slice(idx + oldStr.length)
+                    }
+
+                    await vscode.workspace.fs.writeFile(uri, Buffer.from(nextText, 'utf8'))
+
+                    const output: string[] = []
+                    output.push(`[jb:historyTs=${historyTs}]`)
+                    output.push(`[jb:canRollback=${canRollback}]`)
+                    output.push('')
+                    output.push(`Edited File: \`${filePath}\``)
+                    output.push(`Mode: ${replaceAll ? 'Replace All' : 'Replace First'}`)
+
+                    const toolResultMsg = createUserToolResultMessage(provider, toolUseId, output.join('\n'), false)
+                    safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolResultMsg)) }, false)
+                    if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolResultMsg)
+                  } catch (err) {
+                    const toolResultMsg = createUserToolResultMessage(
+                      provider,
+                      toolUseId,
+                      err instanceof Error ? err.message : String(err),
+                      true
+                    )
+                    safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolResultMsg)) }, false)
+                    if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolResultMsg)
+                  } finally {
+                    if (currentStreamCancel === cancel) currentStreamCancel = undefined
+                    safeOnComplete()
+                  }
+                })
+                .catch((err) => {
+                  if (cancelled) return
+                  if (err instanceof Error && err.message === 'client.call cancelled') {
+                    safeOnComplete()
+                    return
+                  }
+                  safeOnError(err instanceof Error ? err : new Error(String(err)))
+                })
+
+              break
+            }
+
+            if (trimmed.startsWith('/bash')) {
+              const match = userMessage.match(/^\/bash\s+([\s\S]+)$/)
+              if (!match) {
+                const done = () => {
+                  if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+                  safeOnComplete()
+                }
+                cancelStream = streamText(
+                  { provider, sessionId: sessionId || 'unknown' },
+                  '用法：/bash <command...>',
+                  safeOnNext,
+                  done
+                )
+                currentStreamCancel = cancelStream
+                break
+              }
+
+              const command = match[1].trim()
+              const cwd = getWorkspaceRoot()
+              const toolUseId = crypto.randomUUID()
+              const input: Record<string, unknown> = { command, cwd }
+
+              const toolUseMsg = createAssistantToolUseMessage(provider, toolUseId, 'Bash', 'Bash', input)
+              safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolUseMsg)) }, false)
+              if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolUseMsg)
+
+              const request = create(RequestPermissionRequestSchema, {
+                toolName: 'Bash',
+                inputJson: Buffer.from(JSON.stringify(input), 'utf8'),
+                toolUseId,
+                permissionSuggestions: [],
+              })
+              const call = create(ServerCallRequestSchema, {
+                callId: `srv-${toolUseId}`,
+                method: 'RequestPermission',
+                params: { case: 'requestPermission', value: request },
+              })
+
+              const { promise, cancel } = requestClientCall(remotePeer, call)
+              cancelStream = cancel
+              currentStreamCancel = cancel
+
+              promise
+                .then((responseBytes) => {
+                  if (cancelled) return
+
+                  const response = fromBinary(ServerCallResponseSchema, responseBytes)
+                  const perm = response.result.case === 'requestPermission' ? response.result.value : undefined
+                  const approved = perm?.approved ?? false
+
+                  if (!approved) {
+                    const denyReason = perm?.denyReason ? `Denied: ${perm.denyReason}` : 'Denied'
+                    const toolResultMsg = createUserToolResultMessage(provider, toolUseId, denyReason, true)
+                    safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolResultMsg)) }, false)
+                    if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolResultMsg)
+
+                    if (currentStreamCancel === cancel) currentStreamCancel = undefined
+                    safeOnComplete()
+                    return
+                  }
+
+                   const child = spawn(command, { cwd: cwd || undefined, shell: true, windowsHide: true })
+                   terminalTaskManager.recordTaskStart(sessionId || 'unknown', toolUseId, command)
+                   let stdout = ''
+                   let stderr = ''
+                   let finished = false
+
+                   const finish = (isError: boolean, contentValue: unknown) => {
+                     if (finished) return
+                     finished = true
+                     terminalTaskManager.recordTaskComplete(toolUseId)
+                     if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+                     cancelStream = undefined
+
+                    const toolResultMsg = createUserToolResultMessage(provider, toolUseId, contentValue, isError)
+                    safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolResultMsg)) }, false)
+                    if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolResultMsg)
+                    safeOnComplete()
+                  }
+
+                  const kill = () => {
+                    try {
+                      child.kill()
+                    } catch {
+                      // ignore
+                    }
+                  }
+
+                  const cancelRun = () => {
+                    cancelled = true
+                    kill()
+                    finish(true, 'Cancelled')
+                  }
+
+                  cancelStream = cancelRun
+                  currentStreamCancel = cancelRun
+
+                  child.stdout?.on('data', (d) => {
+                    stdout += d.toString()
+                  })
+                  child.stderr?.on('data', (d) => {
+                    stderr += d.toString()
+                  })
+
+                  child.on('error', (err) => {
+                    if (cancelled) return
+                    finish(true, err.message)
+                  })
+                  child.on('close', (code) => {
+                    if (cancelled) return
+                    const isError = code !== 0
+                    const contentValue = isError ? stderr || stdout || `exit code: ${code}` : stdout
+                    finish(isError, contentValue)
+                  })
+                })
+                .catch((err) => {
+                  if (cancelled) return
+                  if (err instanceof Error && err.message === 'client.call cancelled') {
+                    safeOnComplete()
+                    return
+                  }
+                  safeOnError(err instanceof Error ? err : new Error(String(err)))
+                })
+
+              break
+            }
+
+            startProviderQueryStream(userMessage)
+            break
+          }
+          case 'agent.queryWithContent': {
+            const req = data.length > 0 ? fromBinary(QueryWithContentRequestSchema, data) : undefined
+            const blocks = req?.content ?? []
+            const extracted = blocks
+              .filter((b) => b?.block?.case === 'text' && typeof (b as any).block?.value?.text === 'string')
+              .map((b: any) => b.block.value.text)
+              .join('')
+            const userMessage = extracted || `（rich content blocks=${blocks.length}）`
+            currentStreamCancel?.()
+            currentStreamCancel = undefined
+
+            if (sessionId) {
+              historyStore.appendMessage(sessionId, getWorkspaceRoot(), createUserTextMessage(provider, userMessage))
+            }
+
+            startProviderQueryStream(userMessage)
+            break
+          }
+          case 'agent.events': {
+            // 暂不推送全局事件：直接保持空流并结束
+            safeOnComplete()
+            break
+          }
+          default: {
+            safeOnError(new Error(`Unsupported route: ${route}`))
+          }
+        }
+      } catch (error) {
+        safeOnError(error instanceof Error ? error : new Error(String(error)))
+      }
+
+      return {
+        request: (_n: number) => {},
+        cancel: () => {
+          cancelled = true
+          cancelStream?.()
+          currentStreamCancel?.()
+          if (currentStreamCancel === cancelStream) currentStreamCancel = undefined
+        },
+        onExtension: () => {},
+      }
+    },
+  }
+}
+
+function streamText(
+  ctx: { provider: Provider; sessionId: string },
+  text: string,
+  onNext: (payload: Payload, isComplete: boolean) => void,
+  onComplete: () => void,
+  onRpcMessage?: (message: RpcMessage) => void
+): () => void {
+  const startedAt = Date.now()
+  const uuid = crypto.randomUUID()
+  const chunkSize = 240
+  const delayMs = 30
+
+  let offset = 0
+  let stopped = false
+  let timer: NodeJS.Timeout | undefined
+  let didStart = false
+
+  const emit = (event: any) => {
+    const streamEvent = create(StreamEventSchema, {
+      uuid,
+      sessionId: ctx.sessionId,
+      event: create(StreamEventDataSchema, { event }),
+    })
+
+    const msg = create(RpcMessageSchema, {
+      provider: ctx.provider,
+      message: { case: 'streamEvent', value: streamEvent },
+    } as any)
+    onRpcMessage?.(msg)
+
+    onNext({ data: Buffer.from(toBinary(RpcMessageSchema, msg)) }, false)
+  }
+
+  const ensureStarted = () => {
+    if (didStart) return
+    didStart = true
+
+    const info = create(MessageStartInfoSchema, { id: uuid, content: [] })
+    emit({ case: 'messageStart', value: create(MessageStartEventSchema, { messageInfo: info }) })
+
+    const block = create(ContentBlockSchema, { block: { case: 'text', value: create(TextBlockSchema, { text: '' }) } })
+    emit({ case: 'contentBlockStart', value: create(ContentBlockStartEventSchema, { index: 0, contentBlock: block }) })
+  }
+
+  const sendTextDelta = (chunk: string) => {
+    ensureStarted()
+    emit({
+      case: 'contentBlockDelta',
+      value: create(ContentBlockDeltaEventSchema, {
+        index: 0,
+        delta: create(DeltaSchema, {
+          delta: {
+            case: 'textDelta',
+            value: create(TextDeltaSchema, { text: chunk }),
+          },
+        }),
+      }),
+    })
+  }
+
+  const sendStop = () => {
+    ensureStarted()
+    emit({ case: 'contentBlockStop', value: create(ContentBlockStopEventSchema, { index: 0 }) })
+    emit({ case: 'messageStop', value: create(MessageStopEventSchema, {}) })
+  }
+
+  const sendResult = (subtype: string, isError: boolean, resultText?: string) => {
+    const durationMs = BigInt(Math.max(0, Date.now() - startedAt))
+    const result = create(ResultMessageSchema, {
+      subtype,
+      durationMs,
+      isError,
+      numTurns: 1,
+      sessionId: ctx.sessionId,
+      result: resultText || undefined,
+    })
+
+    const msg = create(RpcMessageSchema, { provider: ctx.provider, message: { case: 'result', value: result } } as any)
+    onRpcMessage?.(msg)
+    onNext({ data: Buffer.from(toBinary(RpcMessageSchema, msg)) }, false)
+  }
+
+  const finish = () => {
+    if (stopped) return
+    stopped = true
+    if (timer) clearTimeout(timer)
+    sendStop()
+    sendResult('success', false)
+    onComplete()
+  }
+
+  const pump = () => {
+    if (stopped) return
+    if (offset >= text.length) {
+      finish()
+      return
+    }
+    const chunk = text.slice(offset, offset + chunkSize)
+    offset += chunkSize
+    sendTextDelta(chunk)
+    timer = setTimeout(pump, delayMs)
+  }
+
+  pump()
+  return finish
+}
+
+function createUserTextMessage(provider: Provider, text: string): RpcMessage {
+  const block = create(ContentBlockSchema, { block: { case: 'text', value: create(TextBlockSchema, { text }) } })
+  const content = create(MessageContentSchema, { content: [block] })
+  const user = create(UserMessageSchema, { message: content, uuid: crypto.randomUUID() })
+  return create(RpcMessageSchema, { provider, message: { case: 'user', value: user } } as any)
+}
+
+function createAssistantToolUseMessage(
+  provider: Provider,
+  toolUseId: string,
+  toolName: string,
+  toolType: string,
+  input: Record<string, unknown>
+): RpcMessage {
+  const toolUse = create(ToolUseBlockSchema, {
+    id: toolUseId,
+    toolName,
+    toolType,
+    inputJson: Buffer.from(JSON.stringify(input), 'utf8'),
+    status: ContentStatus.IN_PROGRESS,
+  })
+  const block = create(ContentBlockSchema, { block: { case: 'toolUse', value: toolUse } })
+  const content = create(MessageContentSchema, { content: [block] })
+  const assistant = create(AssistantMessageSchema, { message: content, uuid: crypto.randomUUID() })
+  return create(RpcMessageSchema, { provider, message: { case: 'assistant', value: assistant } } as any)
+}
+
+function createUserToolResultMessage(
+  provider: Provider,
+  toolUseId: string,
+  contentValue: unknown,
+  isError: boolean
+): RpcMessage {
+  const toolResult = create(ToolResultBlockSchema, {
+    toolUseId,
+    contentJson: Buffer.from(JSON.stringify(contentValue ?? ''), 'utf8'),
+    isError,
+  })
+  const block = create(ContentBlockSchema, { block: { case: 'toolResult', value: toolResult } })
+  const content = create(MessageContentSchema, { content: [block] })
+  const user = create(UserMessageSchema, { message: content, uuid: crypto.randomUUID() })
+  return create(RpcMessageSchema, { provider, message: { case: 'user', value: user } } as any)
+}
+
+function extractRoute(payload: Payload): string {
+  if (!payload.metadata) return ''
+  const metadata = new Uint8Array(payload.metadata)
+  if (metadata.length === 0) return ''
+  const len = metadata[0] ?? 0
+  return Buffer.from(metadata.slice(1, 1 + len)).toString('utf8')
+}
+
+function toWorkspaceFileUri(filePath: string): vscode.Uri {
+  if (/^file:/i.test(filePath)) {
+    return vscode.Uri.parse(filePath)
+  }
+
+  if (path.isAbsolute(filePath)) {
+    return vscode.Uri.file(filePath)
+  }
+
+  const folders = vscode.workspace.workspaceFolders ?? []
+  if (folders.length === 0) return vscode.Uri.file(filePath)
+
+  if (folders.length === 1) {
+    return vscode.Uri.file(path.join(folders[0].uri.fsPath, filePath))
+  }
+
+  // Multi-root: allow "<workspaceFolderName>/<relativePath>" to disambiguate
+  const normalized = filePath.replace(/\\/g, '/')
+  const parts = normalized.split('/').filter(Boolean)
+  if (parts.length >= 2) {
+    const folderName = parts[0]
+    const folder = folders.find((f) => f.name === folderName)
+    if (folder) {
+      return vscode.Uri.file(path.join(folder.uri.fsPath, ...parts.slice(1)))
+    }
+  }
+
+  // Fallback: resolve against the first workspace folder
+  return vscode.Uri.file(path.join(folders[0].uri.fsPath, filePath))
+}
+
+function encodeRoute(route: string): Buffer {
+  const routeBytes = Buffer.from(route, 'utf8')
+  const metadata = Buffer.alloc(1 + routeBytes.length)
+  metadata[0] = routeBytes.length
+  routeBytes.copy(metadata, 1)
+  return metadata
+}
+
+function requestClientCall(
+  remotePeer: RSocket,
+  request: any,
+  timeoutMs: number = 5 * 60 * 1000
+): { promise: Promise<Uint8Array>; cancel: () => void } {
+  const payload: Payload = {
+    data: Buffer.from(toBinary(ServerCallRequestSchema, request)),
+    metadata: encodeRoute('client.call'),
+  }
+
+  let settled = false
+  let timer: NodeJS.Timeout | undefined
+  let cancel: () => void = () => {}
+
+  const promise = new Promise<Uint8Array>((resolve, reject) => {
+    const finish = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      if (timer) clearTimeout(timer)
+      fn()
+    }
+
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        finish(() => reject(new Error(`client.call timeout: ${timeoutMs}ms`)))
+      }, timeoutMs)
+    }
+
+    const stream = remotePeer.requestResponse(payload, {
+      onNext: (p) => {
+        const bytes = p.data ? new Uint8Array(p.data) : new Uint8Array()
+        finish(() => resolve(bytes))
+      },
+      onComplete: () => {
+        finish(() => resolve(new Uint8Array()))
+      },
+      onError: (err) => {
+        finish(() => reject(err))
+      },
+      onExtension: () => {},
+    })
+
+    cancel = () => {
+      finish(() => {
+        try {
+          stream.cancel()
+        } catch {
+          // ignore
+        }
+        reject(new Error('client.call cancelled'))
+      })
+    }
+  })
+
+  return { promise, cancel }
+}
+
+function encodeStatus(status: SessionStatus): Uint8Array {
+  const msg = create(StatusResultSchema, { status })
+  return toBinary(StatusResultSchema, msg)
+}
+
+function toClaudePermissionMode(mode: PermissionMode): 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' {
+  switch (mode) {
+    case PermissionMode.BYPASS_PERMISSIONS:
+      return 'bypassPermissions'
+    case PermissionMode.ACCEPT_EDITS:
+      return 'acceptEdits'
+    case PermissionMode.PLAN:
+      return 'plan'
+    case PermissionMode.DEFAULT:
+    default:
+      return 'default'
+  }
+}
+
+function createCancellable(): { cancel(): void; onExtension(): void } {
+  return { cancel: () => {}, onExtension: () => {} }
+}

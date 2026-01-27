@@ -52,7 +52,7 @@ const params = computed(() => props.toolCall.input || {})
 // 只有 Terminal 工具（执行命令）支持后台运行
 const supportsBackground = computed(() => {
   const toolName = props.toolCall.toolName || ''
-  // mcp__jetbrains-terminal__Terminal 支持后台运行
+  // mcp__ide-terminal__Terminal 支持后台运行
   // 排除 TerminalRead, TerminalList, TerminalKill 等
   return toolName.endsWith('__Terminal') && !toolName.includes('Read') && !toolName.includes('List')
 })

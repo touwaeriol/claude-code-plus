@@ -1,6 +1,6 @@
 import type { ContentBlock, TextBlock, ImageBlock } from '@/types/message'
 import type { ContextReference, OrderedContentBlock } from '@/types/display'
-import type { ActiveFileInfo } from '@/services/jetbrainsRSocket'
+import type { ActiveFileInfo } from '@/services/ideaRSocket'
 import {
   hasCurrentOpenFileTag,
   parseCurrentOpenFileTag,

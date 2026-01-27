@@ -26,7 +26,7 @@ private val logger = getLogger("JetBrainsFileMcpServerImpl")
  * - 支持通过协程上下文获取 toolUseId，用于文件历史记录
  */
 @McpServerConfig(
-    name = "jetbrains-file",
+    name = "ide-file",
     version = "1.0.0",
     description = "JetBrains file operations MCP server providing read, write, and edit capabilities"
 )

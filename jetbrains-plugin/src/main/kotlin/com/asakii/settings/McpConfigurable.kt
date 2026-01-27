@@ -722,7 +722,7 @@ class McpConfigurable(private val project: Project? = null) : SearchableConfigur
             defaultInstructions = McpDefaults.GIT_INSTRUCTIONS,
             toolTimeoutSec = settings.gitMcpTimeout,
             gitCommitLanguage = settings.gitCommitLanguage,
-            defaultAutoApprovedTools = McpAutoApprovedDefaults.JETBRAINS_GIT,
+            defaultAutoApprovedTools = McpAutoApprovedDefaults.IDE_GIT,
             codexAutoApprovedTools = settings.getGitAutoApprovedTools()
         ))
 

@@ -39,7 +39,7 @@ import {
   PermissionRuleValueSchema,
   type AskUserQuestionRequest,
   type RequestPermissionRequest
-} from '@/proto/ai_agent_rpc_pb'
+} from '@proto'
 import type {
   RpcConnectOptions,
   RpcConnectResult,
@@ -71,6 +71,7 @@ import {
   mapSessionCommandTypeFromProto,
   mapThemeChangedFromProto,
   mapActiveFileChangedFromProto,
+  mapTerminalTaskUpdateFromProto,
   mapOptionConfigFromProto,
   mapSettingsChangedFromProto,
   mapPermissionUpdateFromProto,
@@ -83,6 +84,7 @@ import {
   type SessionCommandParams,
   type ThemeChangedParams,
   type ActiveFileChangedParams,
+  type TerminalTaskUpdateParams,
   type SettingsChangedParams,
   type OptionConfigItem,
   type PermissionUpdateParams
@@ -94,6 +96,7 @@ export type {
   SessionCommandParams,
   ThemeChangedParams,
   ActiveFileChangedParams,
+  TerminalTaskUpdateParams,
   SettingsChangedParams,
   OptionConfigItem,
   PermissionUpdateParams
@@ -842,8 +845,25 @@ export const ProtoCodec = {
 export interface DecodedServerCallRequest {
   callId: string
   method: string
-  params: AskUserQuestionParams | RequestPermissionParams | SessionCommandParams | ThemeChangedParams | ActiveFileChangedParams | SettingsChangedParams | unknown
-  paramsCase: 'askUserQuestion' | 'requestPermission' | 'sessionCommand' | 'themeChanged' | 'activeFileChanged' | 'settingsChanged' | 'paramsJson' | undefined
+  params:
+    | AskUserQuestionParams
+    | RequestPermissionParams
+    | SessionCommandParams
+    | ThemeChangedParams
+    | ActiveFileChangedParams
+    | TerminalTaskUpdateParams
+    | SettingsChangedParams
+    | unknown
+  paramsCase:
+    | 'askUserQuestion'
+    | 'requestPermission'
+    | 'sessionCommand'
+    | 'themeChanged'
+    | 'activeFileChanged'
+    | 'terminalTaskUpdate'
+    | 'settingsChanged'
+    | 'paramsJson'
+    | undefined
 }
 
 /**
@@ -910,6 +930,9 @@ export function decodeServerCallRequest(data: Uint8Array): DecodedServerCallRequ
   } else if (proto.params.case === 'activeFileChanged') {
     paramsCase = 'activeFileChanged'
     params = mapActiveFileChangedFromProto(proto.params.value)
+  } else if (proto.params.case === 'terminalTaskUpdate') {
+    paramsCase = 'terminalTaskUpdate'
+    params = mapTerminalTaskUpdateFromProto(proto.params.value)
   } else if (proto.params.case === 'settingsChanged') {
     paramsCase = 'settingsChanged'
     params = mapSettingsChangedFromProto(proto.params.value)

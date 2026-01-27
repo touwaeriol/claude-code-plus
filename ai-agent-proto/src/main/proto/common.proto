@@ -1,0 +1,53 @@
+// common.proto
+// 基础枚举定义
+
+syntax = "proto3";
+package aiagent.rpc;
+
+option java_package = "com.asakii.rpc.proto";
+option java_multiple_files = true;
+
+// ============================================================================
+// 枚举定义 - 对应 RpcModels.kt 中的枚举
+// ============================================================================
+
+// 对应 RpcProvider
+enum Provider {
+  PROVIDER_UNSPECIFIED = 0;
+  PROVIDER_CLAUDE = 1;      // claude
+  PROVIDER_CODEX = 2;       // codex
+}
+
+// 对应 RpcSessionStatus
+enum SessionStatus {
+  SESSION_STATUS_UNSPECIFIED = 0;
+  SESSION_STATUS_CONNECTED = 1;      // connected
+  SESSION_STATUS_DISCONNECTED = 2;   // disconnected
+  SESSION_STATUS_INTERRUPTED = 3;    // interrupted
+  SESSION_STATUS_MODEL_CHANGED = 4;  // model_changed
+}
+
+// 对应 RpcContentStatus
+enum ContentStatus {
+  CONTENT_STATUS_UNSPECIFIED = 0;
+  CONTENT_STATUS_IN_PROGRESS = 1;  // in_progress
+  CONTENT_STATUS_COMPLETED = 2;    // completed
+  CONTENT_STATUS_FAILED = 3;       // failed
+}
+
+// 对应 RpcPermissionMode
+enum PermissionMode {
+  PERMISSION_MODE_UNSPECIFIED = 0;
+  PERMISSION_MODE_DEFAULT = 1;              // default
+  PERMISSION_MODE_BYPASS_PERMISSIONS = 2;   // bypassPermissions
+  PERMISSION_MODE_ACCEPT_EDITS = 3;         // acceptEdits
+  PERMISSION_MODE_PLAN = 4;                 // plan
+}
+
+// 对应 RpcSandboxMode
+enum SandboxMode {
+  SANDBOX_MODE_UNSPECIFIED = 0;
+  SANDBOX_MODE_READ_ONLY = 1;           // read-only
+  SANDBOX_MODE_WORKSPACE_WRITE = 2;     // workspace-write
+  SANDBOX_MODE_DANGER_FULL_ACCESS = 3;  // danger-full-access
+}

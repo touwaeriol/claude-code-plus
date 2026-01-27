@@ -1,0 +1,139 @@
+// content.proto
+// 内容块定义
+
+syntax = "proto3";
+package aiagent.rpc;
+
+option java_package = "com.asakii.rpc.proto";
+option java_multiple_files = true;
+
+import "common.proto";
+
+// ============================================================================
+// 内容块 - 对应 RpcContentBlock 及其子类型
+// ============================================================================
+
+// 对应 RpcContentBlock (sealed interface)
+message ContentBlock {
+  oneof block {
+    TextBlock text = 1;
+    ThinkingBlock thinking = 2;
+    ToolUseBlock tool_use = 3;
+    ToolResultBlock tool_result = 4;
+    ImageBlock image = 5;
+    CommandExecutionBlock command_execution = 6;
+    FileChangeBlock file_change = 7;
+    McpToolCallBlock mcp_tool_call = 8;
+    WebSearchBlock web_search = 9;
+    TodoListBlock todo_list = 10;
+    ErrorBlock error = 11;
+    UnknownBlock unknown = 12;
+  }
+}
+
+// 对应 RpcTextBlock
+message TextBlock {
+  string text = 1;
+}
+
+// 对应 RpcThinkingBlock
+message ThinkingBlock {
+  string thinking = 1;
+  optional string signature = 2;
+}
+
+// 对应 RpcToolUseBlock
+message ToolUseBlock {
+  string id = 1;
+  string tool_name = 2;
+  string tool_type = 3;
+  optional bytes input_json = 4;  // JsonElement 序列化为 JSON bytes
+  ContentStatus status = 5;
+}
+
+// 对应 RpcToolResultBlock
+message ToolResultBlock {
+  string tool_use_id = 1;
+  optional bytes content_json = 2;  // JsonElement 序列化为 JSON bytes
+  bool is_error = 3;
+  optional string agent_id = 4;     // 子代理 ID（仅 Task 工具使用）
+}
+
+// 对应 RpcImageBlock
+message ImageBlock {
+  ImageSource source = 1;
+}
+
+// 对应 RpcImageSource
+message ImageSource {
+  string type = 1;
+  string media_type = 2;
+  optional string data = 3;
+  optional string url = 4;
+}
+
+// 对应 RpcCommandExecutionBlock
+message CommandExecutionBlock {
+  string command = 1;
+  optional string output = 2;
+  optional int32 exit_code = 3;
+  ContentStatus status = 4;
+}
+
+// 对应 RpcFileChangeBlock
+message FileChangeBlock {
+  ContentStatus status = 1;
+  repeated FileChange changes = 2;
+}
+
+// 对应 RpcFileChange
+message FileChange {
+  string path = 1;
+  string kind = 2;
+}
+
+// 对应 RpcMcpToolCallBlock
+message McpToolCallBlock {
+  optional string server = 1;
+  optional string tool = 2;
+  optional bytes arguments_json = 3;  // JsonElement
+  optional bytes result_json = 4;      // JsonElement
+  ContentStatus status = 5;
+}
+
+// 对应 RpcWebSearchBlock
+message WebSearchBlock {
+  string query = 1;
+}
+
+// 对应 RpcTodoListBlock
+message TodoListBlock {
+  repeated TodoItem items = 1;
+}
+
+// 对应 RpcTodoItem
+message TodoItem {
+  string text = 1;
+  bool completed = 2;
+}
+
+// 对应 RpcErrorBlock
+message ErrorBlock {
+  string message = 1;
+}
+
+// 对应 RpcUnknownBlock
+message UnknownBlock {
+  string type = 1;
+  string data = 2;
+}
+
+// ============================================================================
+// 消息内容 - 对应 RpcMessageContent
+// ============================================================================
+
+// 对应 RpcMessageContent
+message MessageContent {
+  repeated ContentBlock content = 1;
+  optional string model = 2;
+}

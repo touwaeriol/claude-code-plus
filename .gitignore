@@ -30,6 +30,7 @@ bin/
 
 ### VS Code ###
 .vscode/
+vscode-extension/.vscode-dev/
 
 ### Mac OS ###
 .DS_Store

@@ -222,7 +222,7 @@ if (sessionManager.isBackground(toolUseId)) {
 
 #### 2.1 添加 RSocket 方法
 ```typescript
-// frontend/src/services/jetbrainsRSocket.ts
+// frontend/src/services/ideaRSocket.ts
 
 /**
  * 批量后台终端任务（流式返回结果）
@@ -342,7 +342,7 @@ export function useTerminalBackground() {
 ### 前端 (Vue/TypeScript)
 | 文件 | 修改类型 | 说明 |
 |------|---------|------|
-| `jetbrainsRSocket.ts` | 修改 | 添加 terminalBackground API |
+| `ideaRSocket.ts` | 修改 | 添加 terminalBackground API |
 | `TerminalToolDisplay.vue` | 新建 | Terminal MCP 工具显示组件 |
 | `McpToolDisplay.vue` | 修改 | 添加 Terminal 工具类型分发 |
 | `useTerminalBackground.ts` | 新建 | Ctrl+B 快捷键处理 |

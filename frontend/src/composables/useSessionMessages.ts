@@ -15,7 +15,7 @@
 import { ref, reactive, computed } from 'vue'
 import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock, ToolUseContent } from '@/types/message'
 import type { PendingMessage } from '@/types/session'
-import type { ActiveFileInfo } from '@/services/jetbrainsRSocket'
+import type { ActiveFileInfo } from '@/services/ideaRSocket'
 import type { DisplayItem, AssistantText, ThinkingContent, UserMessage, ToolCall } from '@/types/display'
 import { isUserMessage as isDisplayUserMessage } from '@/types/display'
 import { convertMessageToDisplayItems, createToolCall } from '@/utils/displayItemConverter'

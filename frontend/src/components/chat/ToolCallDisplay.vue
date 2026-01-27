@@ -21,9 +21,9 @@ const props = defineProps<Props>()
 
 const isJetBrainsMcpTool = computed(() => {
   const name = props.toolCall?.toolName || ''
-  // 匹配所有 jetbrains 相关的 MCP 工具：jetbrains-lsp、jetbrains-file、jetbrains_git 等
-  // 支持三种命名格式：mcp__jetbrains-xxx、mcp__jetbrains__xxx、mcp__jetbrains_xxx
-  return name.startsWith('mcp__jetbrains-') || name.startsWith('mcp__jetbrains_')
+  // 匹配所有 IDE 相关的 MCP 工具：ide-lsp、ide-file、ide-git 等
+  // 支持命名格式：mcp__ide-xxx
+  return name.startsWith('mcp__ide-')
 })
 
 const isTerminalMcpTool = computed(() => {

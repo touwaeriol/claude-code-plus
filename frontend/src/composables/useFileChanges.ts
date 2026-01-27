@@ -12,7 +12,7 @@
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import type { DisplayItem, ToolCall } from '@/types/display'
 import { ToolCallStatus } from '@/types/display'
-import { jetbrainsRSocket, RollbackStatus, type BatchRollbackItem, type BatchRollbackEvent } from '@/services/jetbrainsRSocket'
+import { ideaRSocket, RollbackStatus, type BatchRollbackItem, type BatchRollbackEvent } from '@/services/ideaRSocket'
 import { useToastStore } from '@/stores/toastStore'
 import { i18n } from '@/i18n'
 
@@ -22,8 +22,8 @@ import { i18n } from '@/i18n'
  * JetBrains MCP 文件编辑工具名称
  */
 const JETBRAINS_FILE_EDIT_TOOLS = [
-  'mcp__jetbrains-file__WriteFile',
-  'mcp__jetbrains-file__EditFile'
+  'mcp__ide-file__WriteFile',
+  'mcp__ide-file__EditFile'
 ] as const
 
 type JetBrainsFileEditToolName = typeof JETBRAINS_FILE_EDIT_TOOLS[number]
@@ -157,7 +157,7 @@ function generateSummary(toolCall: ToolCall): string {
   const input = toolCall.input as Record<string, any>
   const toolName = toolCall.toolName
   
-  if (toolName === 'mcp__jetbrains-file__EditFile') {
+  if (toolName === 'mcp__ide-file__EditFile') {
     const oldStr = input?.oldString || ''
     const newStr = input?.newString || ''
     const oldPreview = oldStr.length > 20 ? oldStr.slice(0, 20) + '...' : oldStr
@@ -165,7 +165,7 @@ function generateSummary(toolCall: ToolCall): string {
     return `"${oldPreview}" → "${newPreview}"`
   }
   
-  if (toolName === 'mcp__jetbrains-file__WriteFile') {
+  if (toolName === 'mcp__ide-file__WriteFile') {
     const content = input?.content || ''
     const lines = content.split('\n').length
     return `${lines} lines`
@@ -178,7 +178,7 @@ function generateSummary(toolCall: ToolCall): string {
  * 获取简短的工具名称
  */
 function getShortToolName(toolName: string): 'WriteFile' | 'EditFile' {
-  if (toolName === 'mcp__jetbrains-file__WriteFile') return 'WriteFile'
+  if (toolName === 'mcp__ide-file__WriteFile') return 'WriteFile'
   return 'EditFile'
 }
 
@@ -189,7 +189,7 @@ function calculateLineChanges(toolCall: ToolCall): { added: number; removed: num
   const input = toolCall.input as Record<string, any>
   const toolName = toolCall.toolName
   
-  if (toolName === 'mcp__jetbrains-file__EditFile') {
+  if (toolName === 'mcp__ide-file__EditFile') {
     const oldStr = input?.oldString || ''
     const newStr = input?.newString || ''
     const oldLines = oldStr.split('\n').length
@@ -206,7 +206,7 @@ function calculateLineChanges(toolCall: ToolCall): { added: number; removed: num
     return { added: 1, removed: 1 }
   }
   
-  if (toolName === 'mcp__jetbrains-file__WriteFile') {
+  if (toolName === 'mcp__ide-file__WriteFile') {
     const content = input?.content || ''
     const lines = content.split('\n').length
     // WriteFile 是覆盖写入，简化为全部是新增
@@ -398,7 +398,7 @@ export function useFileChanges(
       let failedCount = 0
       
       // 调用批量回滚 API（单个回滚也用这个，items.length = 1）
-      jetbrainsRSocket.batchRollback(
+      ideaRSocket.batchRollback(
         items,
         // onEvent: 每个文件的状态变化
         (event: BatchRollbackEvent) => {

@@ -493,8 +493,8 @@ import StatusToggle from './StatusToggle.vue'
 import ThinkingConfigPanel from '@/components/settings/ThinkingConfigPanel.vue'
 import CodexToolbar from './CodexToolbar.vue'
 import { fileSearchService, type IndexedFileInfo } from '@/services/fileSearchService'
-// jetbrainsBridge 保留供未来使用
-// import { jetbrainsBridge } from '@/services/jetbrainsApi'
+// ideaBridgeService 保留供未来使用
+// import { ideaBridgeService } from '@/services/ideaApi'
 // isInAtQuery 现在由 useAtSymbol composable 内部使用
 import { useSessionStore } from '@/stores/sessionStore'
 import { useSettingsStore } from '@/stores/settingsStore'

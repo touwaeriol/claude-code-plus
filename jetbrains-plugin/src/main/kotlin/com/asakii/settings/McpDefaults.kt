@@ -506,14 +506,14 @@ object McpDefaults {
      * 使用国际化资源加载
      */
     val JETBRAINS_INSTRUCTIONS: String
-        get() = McpInstructions.load(McpInstructions.JETBRAINS_LSP)
+        get() = McpInstructions.load(McpInstructions.IDE_LSP)
 
     /**
      * JetBrains File MCP 默认提示词
      * 使用国际化资源加载
      */
     val JETBRAINS_FILE_INSTRUCTIONS: String
-        get() = McpInstructions.load(McpInstructions.JETBRAINS_FILE)
+        get() = McpInstructions.load(McpInstructions.IDE_FILE)
 
     /**
      * Context7 MCP 默认提示词
@@ -686,7 +686,7 @@ object McpDefaults {
      * 使用国际化资源加载
      */
     val TERMINAL_INSTRUCTIONS: String
-        get() = McpInstructions.load(McpInstructions.JETBRAINS_TERMINAL)
+        get() = McpInstructions.load(McpInstructions.IDE_TERMINAL)
 
     /**
      * Git MCP 工具 Schema（JSON 格式）
@@ -830,7 +830,7 @@ object McpDefaults {
      * 使用国际化资源加载
      */
     val GIT_INSTRUCTIONS: String
-        get() = McpInstructions.load(McpInstructions.JETBRAINS_GIT)
+        get() = McpInstructions.load(McpInstructions.IDE_GIT)
 }
 
 /**
@@ -886,15 +886,15 @@ object KnownTools {
      * Git MCP 工具
      */
     val GIT_MCP = listOf(
-        "mcp__jetbrains_git__GetVcsChanges",    // 获取变更
-        "mcp__jetbrains_git__GetCommitMessage", // 获取 commit message
-        "mcp__jetbrains_git__SetCommitMessage", // 设置 commit message
-        "mcp__jetbrains_git__GetVcsStatus",     // 获取 VCS 状态
-        "mcp__jetbrains_git__SelectFiles",      // 选择文件
-        "mcp__jetbrains_git__DeselectFiles",    // 取消选择文件
-        "mcp__jetbrains_git__SelectAllFiles",   // 全选
-        "mcp__jetbrains_git__DeselectAllFiles", // 取消全选
-        "mcp__jetbrains_git__CommitChanges"     // 提交变更
+        "mcp__ide-git__GetVcsChanges",    // 获取变更
+        "mcp__ide-git__GetCommitMessage", // 获取 commit message
+        "mcp__ide-git__SetCommitMessage", // 设置 commit message
+        "mcp__ide-git__GetVcsStatus",     // 获取 VCS 状态
+        "mcp__ide-git__SelectFiles",      // 选择文件
+        "mcp__ide-git__DeselectFiles",    // 取消选择文件
+        "mcp__ide-git__SelectAllFiles",   // 全选
+        "mcp__ide-git__DeselectAllFiles", // 取消全选
+        "mcp__ide-git__CommitChanges"     // 提交变更
     )
 
     /**
@@ -1008,12 +1008,12 @@ You are a commit message generator integrated with JetBrains IDE.
 ### Git MCP Tools
 Tool identifiers may vary across providers. Always choose the tool that matches the server + tool name below.
 
-- **jetbrains_git / GetVcsChanges**: Get uncommitted file changes with diff content
+- **ide-git / GetVcsChanges**: Get uncommitted file changes with diff content
   - Use `selectedOnly=true` to get only user-selected files in commit panel
   - Returns ☑/☐ markers to indicate which files are selected
-- **jetbrains_git / SetCommitMessage**: Set the commit message in IDE's commit panel
-- **jetbrains_git / GetVcsStatus**: Get current VCS status (branch, change counts)
-- **jetbrains_git / GetCommitMessage**: Get current commit message from panel
+- **ide-git / SetCommitMessage**: Set the commit message in IDE's commit panel
+- **ide-git / GetVcsStatus**: Get current VCS status (branch, change counts)
+- **ide-git / GetCommitMessage**: Get current commit message from panel
 
 ### File Reading
 - **Read**: Read file content to understand code context
@@ -1105,10 +1105,10 @@ Use tools only - do not output the commit message as text.
      */
     val TOOLS = listOf(
         // Git MCP 工具
-        "mcp__jetbrains_git__GetVcsChanges",
-        "mcp__jetbrains_git__GetCommitMessage",
-        "mcp__jetbrains_git__SetCommitMessage",
-        "mcp__jetbrains_git__GetVcsStatus",
+        "mcp__ide-git__GetVcsChanges",
+        "mcp__ide-git__GetCommitMessage",
+        "mcp__ide-git__SetCommitMessage",
+        "mcp__ide-git__GetVcsStatus",
         // 文件读取
         "Read",
         // JetBrains MCP 工具 - 理解代码上下文
@@ -1167,7 +1167,7 @@ object McpAutoApprovedDefaults {
      * - CommitChanges: 提交代码，高风险，需要确认
      * - 其他: 查询/准备提交，安全
      */
-    val JETBRAINS_GIT = listOf(
+    val IDE_GIT = listOf(
         "GetVcsChanges",
         "GetCommitMessage",
         "SetCommitMessage",

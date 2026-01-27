@@ -141,7 +141,7 @@ data class ClaudeOptionItem(
 private val mcpLogger = getLogger("UserInteractionMcpServer")
 
 @McpServerConfig(
-    name = "user_interaction",
+    name = "user-interaction",
     version = "1.0.0",
     description = "用户交互工具服务器，提供向用户提问等功能"
 )
@@ -171,7 +171,7 @@ class UserInteractionMcpServer : McpServerBase() {
 
     companion object {
         val DEFAULT_INSTRUCTIONS = """
-When you need clarification from the user, especially when presenting multiple options or choices, use the MCP server `user_interaction` tool `AskUserQuestion` to ask questions.
+When you need clarification from the user, especially when presenting multiple options or choices, use the MCP server `user-interaction` tool `AskUserQuestion` to ask questions.
 Tool identifiers may differ across providers. Do not assume a fixed prefix or delimiter; select the tool that matches this server + tool pair.
 The user's response will be returned to you through the same tool.
         """.trimIndent()

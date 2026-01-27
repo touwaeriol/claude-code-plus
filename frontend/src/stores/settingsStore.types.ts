@@ -12,7 +12,7 @@ import type {
   ClaudeBackendConfig,
   CodexBackendConfig
 } from '@/types/backend'
-import type { IdeSettings as BaseIdeSettings, OptionConfig } from '@/services/jetbrainsRSocket'
+import type { IdeSettings as BaseIdeSettings, OptionConfig } from '@/services/ideaRSocket'
 
 /**
  * 多后端设置接口

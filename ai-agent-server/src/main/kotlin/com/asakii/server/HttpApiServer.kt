@@ -184,21 +184,25 @@ class HttpApiServer(
                     rsocketHandler.createHandler()
                 }
 
-                // JetBrains IDE 集成 RSocket 端点
+                // IDE integration RSocket endpoint: /ide-rsocket
                 if (jetbrainsRSocketHandler != null) {
-                    rSocket("jetbrains-rsocket") {
-                        val clientId = java.util.UUID.randomUUID().toString()
-                        logger.info { "🔌 [JetBrains RSocket] 客户端连接: $clientId" }
-                        jetbrainsRSocketHandler.setClientRequester(clientId, requester)
+                    fun registerIdeRSocketEndpoint(endpoint: String, logName: String) {
+                        rSocket(endpoint) {
+                            val clientId = java.util.UUID.randomUUID().toString()
+                            logger.info { "🔌 [$logName RSocket] 客户端连接: $clientId" }
+                            jetbrainsRSocketHandler.setClientRequester(clientId, requester)
 
-                        // 连接关闭时清理
-                        requester.coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion {
-                            logger.info { "🔌 [JetBrains RSocket] 客户端断开: $clientId" }
-                            jetbrainsRSocketHandler.removeClient(clientId)
+                            // 连接关闭时清理
+                            requester.coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion {
+                                logger.info { "🔌 [$logName RSocket] 客户端断开: $clientId" }
+                                jetbrainsRSocketHandler.removeClient(clientId)
+                            }
+
+                            jetbrainsRSocketHandler.createHandler()
                         }
-
-                        jetbrainsRSocketHandler.createHandler()
                     }
+
+                    registerIdeRSocketEndpoint("ide-rsocket", "IDE")
                 }
 
                 // Codex 事件流 WebSocket 端点
@@ -374,7 +378,7 @@ class HttpApiServer(
                                     call.respondText(json.encodeToString(response), ContentType.Application.Json)
                                 }
                                 // 注：ide.openFile, ide.showDiff, ide.getLocale, ide.setLocale
-                                // 已迁移到 RSocket (/jetbrains-rsocket)
+                                // 已迁移到 RSocket (/ide-rsocket)
                                 "ide.searchFiles" -> {
                                     // ✅ 直接从反序列化对象获取数据
                                     val dataObj = request.data?.jsonObject
@@ -1333,11 +1337,11 @@ class HttpApiServer(
                             val isIdeMode = call.request.queryParameters["ide"] == "true"
 
                             if (isIdeMode) {
-                                // IDEA 插件模式：标记环境 __IDEA_MODE__ = true
+                                // IDE 插件模式：标记环境 __IDE_MODE__ = true
                                 // 前端会检测此标记并通过 RSocket 与后端通信
                                 val injection = """
                                     <script>
-                                        window.__IDEA_MODE__ = true;
+                                        window.__IDE_MODE__ = true;
                                         console.log('✅ Environment: IDEA Plugin Mode');
                                     </script>
                                 """.trimIndent()

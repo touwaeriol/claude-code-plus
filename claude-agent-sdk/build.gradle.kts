@@ -617,6 +617,60 @@ val verifyPatches = tasks.register("verifyPatches") {
     }
 }
 
+// 复制增强 CLI 到 VS Code 扩展目录
+val copyToVsCodeExtension = tasks.register("copyToVsCodeExtension") {
+    group = "build"
+    description = "复制增强版 CLI 到 VS Code 扩展的 resources 目录"
+    dependsOn(patchCli)
+
+    // 将路径捕获到局部变量
+    val propsFilePath = file("cli-version.properties").absolutePath
+    val bundledDirPath = file("src/main/resources/bundled").absolutePath
+    val vscodeBundledPath = rootProject.file("vscode-extension/resources/bundled").absolutePath
+    val vscodePatchesPath = rootProject.file("vscode-extension/resources/cli-patches").absolutePath
+    val patchesDirPath = file("cli-patches/patches").absolutePath
+
+    doLast {
+        val propsFile = File(propsFilePath)
+        val bundledDir = File(bundledDirPath)
+        val vscodeBundledDir = File(vscodeBundledPath)
+        val vscodePatchesDir = File(vscodePatchesPath)
+        val patchesDir = File(patchesDirPath)
+
+        // 确保目标目录存在
+        vscodeBundledDir.mkdirs()
+        vscodePatchesDir.mkdirs()
+
+        val props = Properties()
+        propsFile.inputStream().use { props.load(it) }
+        val cliVer = props.getProperty("cli.version") ?: error("cli.version missing")
+
+        val enhancedFile = bundledDir.resolve("claude-cli-$cliVer-enhanced.mjs")
+        val targetFile = vscodeBundledDir.resolve("claude-cli-enhanced.mjs")
+
+        if (enhancedFile.exists()) {
+            enhancedFile.copyTo(targetFile, overwrite = true)
+            println("✅ 已复制增强 CLI 到: ${targetFile.absolutePath}")
+            println("   大小: ${targetFile.length() / 1024 / 1024} MB")
+        } else {
+            println("⚠️ 增强 CLI 不存在: ${enhancedFile.absolutePath}")
+        }
+
+        // 复制补丁文件（仅供参考/调试）
+        var patchCount = 0
+        patchesDir.listFiles()?.filter { it.extension == "js" }?.forEach { patch ->
+            patch.copyTo(vscodePatchesDir.resolve(patch.name), overwrite = true)
+            patchCount++
+        }
+        println("✅ 已复制 $patchCount 个补丁文件到: ${vscodePatchesDir.absolutePath}")
+    }
+}
+
+// patchCli 完成后自动复制到 VS Code 扩展
+patchCli.configure {
+    finalizedBy(copyToVsCodeExtension)
+}
+
 // 修改 processResources 依赖
 tasks.named("processResources") {
     dependsOn(downloadCli, copyCliVersionProps, patchCli)

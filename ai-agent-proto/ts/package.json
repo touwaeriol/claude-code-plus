@@ -1,0 +1,10 @@
+{
+  "name": "@asakii/ai-agent-proto",
+  "version": "1.0.0",
+  "description": "Shared protobuf TypeScript definitions for AI Agent",
+  "main": "index.ts",
+  "types": "index.ts",
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.2.3"
+  }
+}

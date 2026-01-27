@@ -31,7 +31,7 @@ import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Node, mergeAttributes } from '@tiptap/core'
-import { jetbrainsBridge } from '@/services/jetbrainsApi'
+import { ideaBridgeService } from '@/services/ideaApi'
 
 // 文件引用扩展 - 用于在编辑器中显示 @文件路径
 const FileReference = Node.create({
@@ -261,7 +261,7 @@ const editor = useEditor({
         const filePath = target.getAttribute('data-file-ref')
         if (filePath) {
           // 使用与 Read 工具相同的 API（RSocket）
-          jetbrainsBridge.openFile({ filePath })
+          ideaBridgeService.openFile({ filePath })
           return true
         }
       }

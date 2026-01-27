@@ -144,7 +144,7 @@ class BackendFormatTest {
 
         val toolCall = ThreadItem.McpToolCall(
             id = "tool-1",
-            server = "jetbrains-file",
+            server = "ide-file",
             tool = "ReadFile",
             status = McpToolCallStatus.InProgress,
             arguments = buildJsonObject {
@@ -167,7 +167,7 @@ class BackendFormatTest {
         assertEquals(listOf("tool_use", "text", "thinking"), types)
 
         val tool = assistant.content.first() as ToolUseContent
-        assertEquals("mcp__jetbrains-file__ReadFile", tool.name)
+        assertEquals("mcp__ide-file__ReadFile", tool.name)
         assertEquals("tool-1", tool.id)
     }
 

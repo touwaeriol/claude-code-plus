@@ -1,8 +1,10 @@
 /**
  * 服务器 URL 解析工具
  *
+ * 约束：
+ * - IDE 模式必须注入 window.__serverUrl，不做任何回退
  * - 浏览器开发模式（Vite）：后端固定跑在 http://localhost:8765
- * - IDE 插件模式：前端由 Ktor 随机端口服务，使用相同 origin
+ * - 生产浏览器模式：同源
  */
 
 const DEFAULT_HTTP_URL = 'http://localhost:8765'
@@ -17,8 +19,13 @@ export function resolveServerHttpUrl(): string {
   }
 
   const anyWindow = window as any
+  const isIdeMode = anyWindow.__IDE_MODE__ === true
 
-  // IDEA 插件模式：使用注入的 __serverUrl
+  // IDE 模式必须注入 __serverUrl
+  if (isIdeMode && !anyWindow.__serverUrl) {
+    throw new Error('IDE 模式缺少 window.__serverUrl 注入')
+  }
+
   if (anyWindow.__serverUrl) {
     return anyWindow.__serverUrl as string
   }
@@ -28,7 +35,7 @@ export function resolveServerHttpUrl(): string {
     return DEFAULT_HTTP_URL
   }
 
-  // 生产部署兜底：同源
+  // 浏览器部署：同源
   return window.location.origin
 }
 
@@ -41,8 +48,13 @@ export function resolveServerWsUrl(): string {
   }
 
   const anyWindow = window as any
+  const isIdeMode = anyWindow.__IDE_MODE__ === true
 
-  // IDEA 插件模式
+  // IDE 模式必须注入 __serverUrl
+  if (isIdeMode && !anyWindow.__serverUrl) {
+    throw new Error('IDE 模式缺少 window.__serverUrl 注入')
+  }
+
   if (anyWindow.__serverUrl) {
     const url = new URL(anyWindow.__serverUrl as string)
     const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -54,7 +66,7 @@ export function resolveServerWsUrl(): string {
     return DEFAULT_WS_URL
   }
 
-  // 生产同源
+  // 浏览器部署：同源
   const { protocol, host } = window.location
   const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:'
   return `${wsProtocol}//${host}`

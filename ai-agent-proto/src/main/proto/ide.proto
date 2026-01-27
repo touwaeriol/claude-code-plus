@@ -1,0 +1,208 @@
+// ide.proto
+// IDE 集成相关定义（JetBrains）
+
+syntax = "proto3";
+package aiagent.rpc;
+
+option java_package = "com.asakii.rpc.proto";
+option java_multiple_files = true;
+
+import "background.proto";
+import "permission.proto";
+
+// ============================================================================
+// AskUserQuestion
+// ============================================================================
+
+// 问题选项
+message QuestionOption {
+  string label = 1;
+  optional string description = 2;
+}
+
+// 问题项
+message QuestionItem {
+  string question = 1;
+  optional string header = 2;
+  repeated QuestionOption options = 3;
+  bool multi_select = 4;
+}
+
+// AskUserQuestion 请求
+message AskUserQuestionRequest {
+  repeated QuestionItem questions = 1;
+}
+
+// 用户回答项
+message UserAnswerItem {
+  string question = 1;
+  optional string header = 2;
+  string answer = 3;
+}
+
+// AskUserQuestion 响应
+message AskUserQuestionResponse {
+  repeated UserAnswerItem answers = 1;
+}
+
+// ============================================================================
+// 会话命令
+// ============================================================================
+
+// 会话命令类型（用于 ServerCallRequest）
+enum SessionCommandType {
+  SESSION_CMD_UNSPECIFIED = 0;
+  SESSION_CMD_SWITCH = 1;         // switchSession
+  SESSION_CMD_CREATE = 2;         // createSession
+  SESSION_CMD_CLOSE = 3;          // closeSession
+  SESSION_CMD_RENAME = 4;         // renameSession
+  SESSION_CMD_TOGGLE_HISTORY = 5; // toggleHistory
+  SESSION_CMD_SET_LOCALE = 6;     // setLocale
+  SESSION_CMD_DELETE = 7;         // deleteSession（删除历史会话）
+  SESSION_CMD_RESET = 8;          // resetSession（重置/清空当前会话）
+}
+
+// 会话命令通知（后端→前端推送）
+message SessionCommandNotify {
+  SessionCommandType type = 1;
+  optional string session_id = 2;
+  optional string new_name = 3;
+  optional string locale = 4;
+}
+
+// ============================================================================
+// 主题与设置
+// ============================================================================
+
+// 主题变更通知（后端→前端推送）
+message ThemeChangedNotify {
+  string background = 1;
+  string foreground = 2;
+  string border_color = 3;
+  string panel_background = 4;
+  string text_field_background = 5;
+  string selection_background = 6;
+  string selection_foreground = 7;
+  string link_color = 8;
+  string error_color = 9;
+  string warning_color = 10;
+  string success_color = 11;
+  string separator_color = 12;
+  string hover_background = 13;
+  string accent_color = 14;
+  string info_background = 15;
+  string code_background = 16;
+  string secondary_foreground = 17;
+  string font_family = 18;
+  int32 font_size = 19;
+  string editor_font_family = 20;
+  int32 editor_font_size = 21;
+}
+
+// 思考级别配置
+message ThinkingLevelConfig {
+  string id = 1;        // 唯一标识：off, think, ultra, custom_xxx
+  string name = 2;      // 显示名称
+  int32 tokens = 3;     // token 数量
+  bool is_custom = 4;   // 是否为自定义级别
+}
+
+// 通用选项配置（用于下拉列表）
+message OptionConfig {
+  string id = 1;           // 唯一标识
+  string label = 2;        // 显示名称
+  string description = 3;  // 描述（可选）
+  bool is_default = 4;     // 是否为默认值
+}
+
+// IDE 设置（用于前后端同步）
+message IdeSettings {
+  string default_model_id = 1;           // 默认模型 ID（如 "claude-opus-4-5-20251101"）
+  string default_model_name = 2;         // 默认模型显示名称（如 "Opus 4.5"）
+  bool default_bypass_permissions = 3;   // 默认启用 ByPass
+  bool enable_user_interaction_mcp = 4;  // 启用用户交互 MCP
+  bool enable_jetbrains_mcp = 5;         // 启用 JetBrains LSP MCP
+  bool include_partial_messages = 6;     // 在流中包含部分消息
+  // 思考配置
+  string default_thinking_level = 7;     // 默认思考等级（旧字段，向后兼容）
+  int32 default_thinking_tokens = 8;     // 默认思考 token 数量
+  string default_thinking_level_id = 9;  // 默认思考级别 ID（如 "off", "think", "ultra", "custom_xxx"）
+  repeated ThinkingLevelConfig thinking_levels = 10;  // 所有可用的思考级别
+  string permission_mode = 11;           // 权限模式（default, acceptEdits, plan, bypassPermissions）
+  string codex_default_model_id = 12;    // Codex default model id (e.g., "gpt-5.2-codex")
+  string codex_default_reasoning_effort = 13;  // Codex default reasoning effort (minimal/low/medium/high/xhigh)
+  string codex_default_reasoning_summary = 14; // Codex reasoning summary (auto/concise/detailed/none)
+  string codex_default_sandbox_mode = 15;      // Codex sandbox mode (read-only/workspace-write/danger-full-access)
+  bool claude_default_auto_cleanup_contexts = 16; // Claude default auto cleanup contexts
+  bool codex_default_auto_cleanup_contexts = 17;  // Codex default auto cleanup contexts
+  // 配置选项列表（用于前端下拉选择器）
+  repeated OptionConfig codex_reasoning_effort_options = 18;  // Codex 推理努力级别选项
+  repeated OptionConfig codex_reasoning_summary_options = 19; // Codex 推理总结模式选项
+  repeated OptionConfig codex_sandbox_mode_options = 20;      // Codex 沙盒模式选项
+  repeated OptionConfig permission_mode_options = 21;         // 权限模式选项
+}
+
+// 设置变更通知（后端→前端推送）
+message IdeSettingsChangedNotify {
+  IdeSettings settings = 1;
+}
+
+// 获取 IDE 设置响应
+message GetIdeSettingsResponse {
+  IdeSettings settings = 1;
+}
+
+// ============================================================================
+// 活跃文件
+// ============================================================================
+
+// 活跃文件变更通知（后端→前端推送）
+message ActiveFileChangedNotify {
+  bool has_active_file = 1;           // 是否有活跃文件（如果打开的是 diff 窗口等则为 false）
+  optional string path = 2;           // 文件绝对路径
+  optional string relative_path = 3;  // 相对于项目根目录的路径
+  optional string name = 4;           // 文件名
+  optional int32 line = 5;            // 当前光标所在行（1-based）
+  optional int32 column = 6;          // 当前光标所在列（1-based）
+  // 选区信息
+  bool has_selection = 7;             // 是否有选区
+  optional int32 start_line = 8;      // 选区起始行（1-based）
+  optional int32 start_column = 9;    // 选区起始列（1-based）
+  optional int32 end_line = 10;       // 选区结束行（1-based）
+  optional int32 end_column = 11;     // 选区结束列（1-based）
+  optional string selected_content = 12;  // 选中的文本内容
+}
+
+// ============================================================================
+// 服务端调用客户端
+// ============================================================================
+
+// 服务端调用客户端的通用请求（支持类型化参数）
+message ServerCallRequest {
+  string call_id = 1;       // 调用 ID，用于匹配响应
+  string method = 2;        // 方法名（如 'AskUserQuestion', 'onSessionCommand', 'onThemeChanged', 'onSettingsChanged'）
+  oneof params {
+    bytes params_json = 3;                          // 旧版兼容：JSON 序列化
+    AskUserQuestionRequest ask_user_question = 10;  // AskUserQuestion 请求
+    RequestPermissionRequest request_permission = 11; // RequestPermission 请求
+    // JetBrains IDE 集成
+    SessionCommandNotify session_command = 20;  // 会话命令通知
+    ThemeChangedNotify theme_changed = 21;      // 主题变更通知
+    IdeSettingsChangedNotify settings_changed = 22;  // IDE 设置变更通知
+    ActiveFileChangedNotify active_file_changed = 23;  // 活跃文件变更通知
+    TerminalTaskUpdateNotify terminal_task_update = 24;  // 终端任务更新通知
+  }
+}
+
+// 客户端响应服务端的调用（支持类型化响应）
+message ServerCallResponse {
+  string call_id = 1;       // 对应的调用 ID
+  bool success = 2;         // 是否成功
+  oneof result {
+    bytes result_json = 3;                          // 旧版兼容：JSON 序列化
+    AskUserQuestionResponse ask_user_question = 10; // AskUserQuestion 响应
+    RequestPermissionResponse request_permission = 11; // RequestPermission 响应
+    // JetBrains 相关响应通常不需要返回数据，使用 success=true 即可
+  }
+  optional string error = 4; // 错误信息（如果失败）
+}

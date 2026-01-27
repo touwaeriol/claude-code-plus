@@ -3,7 +3,7 @@ version: v2
 plugins:
   # 生成 TypeScript 代码（使用 @bufbuild/protobuf）
   - local: protoc-gen-es
-    out: src/proto
+    out: ../ai-agent-proto/ts
     opt:
       - target=ts
       - import_extension=none

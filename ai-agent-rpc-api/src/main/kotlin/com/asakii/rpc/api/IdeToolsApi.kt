@@ -103,7 +103,7 @@ interface IdeTools {
      * - ai-agent-server (IdeToolsDefault): 返回 false
      * - jetbrains-plugin (IdeToolsImpl): 返回 true
      *
-     * 前端根据此值决定是否连接 jetbrains-rsocket 获取 IDE 设置
+     * 前端根据此值决定是否连接 ide-rsocket 获取 IDE 设置
      * @return Boolean 是否在 IDE 环境中
      */
     fun hasIdeEnvironment(): Boolean = false

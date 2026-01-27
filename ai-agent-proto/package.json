@@ -1,0 +1,15 @@
+{
+  "name": "@asakii/ai-agent-proto-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Protobuf definitions and TypeScript generation for AI Agent",
+  "scripts": {
+    "proto:generate": "buf generate",
+    "proto:lint": "buf lint",
+    "proto:breaking": "buf breaking --against .git#branch=main"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1.50.0",
+    "@bufbuild/protoc-gen-es": "^2.2.3"
+  }
+}

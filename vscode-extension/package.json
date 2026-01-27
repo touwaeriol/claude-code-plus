@@ -1,0 +1,198 @@
+{
+  "name": "claude-code-plus",
+  "displayName": "Claude Code Plus",
+  "description": "Claude Code Plus for VS Code (experimental)",
+  "version": "0.1.0",
+  "publisher": "asakii",
+  "icon": "media/icon.svg",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:claudeCodePlus.chatView",
+    "onCommand:claudeCodePlus.openChat",
+    "onCommand:claudeCodePlus.openChatPanel",
+    "onCommand:claudeCodePlus.openSettings",
+    "onCommand:claudeCodePlus.setCodexApiKey"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeCodePlus.openChat",
+        "title": "Claude Code Plus: Open Chat",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "claudeCodePlus.openChatPanel",
+        "title": "Claude Code Plus: Open Chat (Panel)",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "claudeCodePlus.openSettings",
+        "title": "Claude Code Plus: Settings",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "claudeCodePlus.setCodexApiKey",
+        "title": "Claude Code Plus: Set Codex API Key",
+        "icon": "$(key)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "claudeCodePlus",
+          "title": "Claude Code Plus",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "claudeCodePlus": [
+        {
+          "type": "webview",
+          "id": "claudeCodePlus.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "claudeCodePlus.openChatPanel",
+          "when": "view == claudeCodePlus.chatView",
+          "group": "navigation"
+        },
+        {
+          "command": "claudeCodePlus.openSettings",
+          "when": "view == claudeCodePlus.chatView",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Claude Code Plus",
+      "properties": {
+        "claudeCodePlus.defaultBackendType": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex"
+          ],
+          "default": "claude",
+          "description": "Default backend type"
+        },
+        "claudeCodePlus.defaultBypassPermissions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Skip all permission confirmations by default (use with caution)"
+        },
+        "claudeCodePlus.includePartialMessages": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include partial messages in UI"
+        },
+        "claudeCodePlus.claude.defaultModelId": {
+          "type": "string",
+          "default": "claude-opus-4-5-20251101",
+          "description": "Default Claude model ID"
+        },
+        "claudeCodePlus.claude.defaultThinkingLevel": {
+          "type": "string",
+          "enum": [
+            "OFF",
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "VERY_HIGH",
+            "ULTRA"
+          ],
+          "default": "HIGH",
+          "description": "Default Claude thinking level"
+        },
+        "claudeCodePlus.claude.defaultThinkingTokens": {
+          "type": "number",
+          "default": 8192,
+          "description": "Default Claude thinking token budget"
+        },
+        "claudeCodePlus.claude.defaultAutoCleanupContexts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Default Claude auto cleanup contexts"
+        },
+        "claudeCodePlus.codex.defaultModelId": {
+          "type": "string",
+          "default": "gpt-5.2-codex",
+          "description": "Default Codex model ID"
+        },
+        "claudeCodePlus.codex.reasoningEffort": {
+          "type": "string",
+          "enum": [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "default": "medium",
+          "description": "Codex reasoning effort level"
+        },
+        "claudeCodePlus.codex.reasoningSummary": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "concise",
+            "detailed",
+            "none"
+          ],
+          "default": "auto",
+          "description": "Codex reasoning summary mode"
+        },
+        "claudeCodePlus.codex.sandboxMode": {
+          "type": "string",
+          "enum": [
+            "read-only",
+            "workspace-write",
+            "danger-full-access"
+          ],
+          "default": "workspace-write",
+          "description": "Codex sandbox mode"
+        },
+        "claudeCodePlus.codex.defaultAutoCleanupContexts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Default Codex auto cleanup contexts"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.mjs",
+    "compile:production": "node esbuild.mjs --production",
+    "compile:tsc": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "dev:sync-frontend": "node ./scripts/sync-frontend.mjs",
+    "dev:launch": "node ./scripts/launch-vscode-dev.mjs"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.2.3",
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "rsocket-core": "^1.0.0-alpha.3",
+    "rsocket-websocket-server": "^1.0.0-alpha.3",
+    "ws": "^8.18.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.5.10",
+    "esbuild": "^0.27.2",
+    "typescript": "^5.4.5"
+  }
+}

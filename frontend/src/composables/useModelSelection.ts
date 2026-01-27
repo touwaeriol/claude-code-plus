@@ -17,7 +17,7 @@ import {
 import { useSessionStore } from '@/stores/sessionStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { ThinkingLevel } from '@/composables/useSessionTab'
-import type { ThinkingLevelConfig } from '@/services/jetbrainsRSocket'
+import type { ThinkingLevelConfig } from '@/services/ideaRSocket'
 
 // 默认思考级别列表
 const DEFAULT_THINKING_LEVELS: ThinkingLevelConfig[] = [

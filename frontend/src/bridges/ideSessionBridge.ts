@@ -3,7 +3,7 @@ import localeService from '@/services/localeService'
 import type { useSessionStore } from '@/stores/sessionStore'
 import { useToastStore } from '@/stores/toastStore'
 import { ConnectionStatus } from '@/types/display'
-import { jetbrainsRSocket, type SessionCommand, type SessionState } from '@/services/jetbrainsRSocket'
+import { ideaRSocket, type SessionCommand, type SessionState } from '@/services/ideaRSocket'
 
 export interface HostCommand {
   type: string
@@ -50,13 +50,13 @@ function notifyHostCommand(command: HostCommand) {
  * 通过 RSocket 上报会话状态
  */
 async function postSessionState(state: SessionState): Promise<boolean> {
-  if (!jetbrainsRSocket.isConnected()) {
+  if (!ideaRSocket.isConnected()) {
     console.log('[IDE Bridge] RSocket not connected, skipping state report')
     return false
   }
 
   try {
-    return await jetbrainsRSocket.reportSessionState(state)
+    return await ideaRSocket.reportSessionState(state)
   } catch (error) {
     console.warn('[IDE Bridge] Failed to report session state:', error)
     return false
@@ -289,7 +289,7 @@ function startWatching(store: SessionStore) {
   _cachedSessionStore = store
 
   // 注册 RSocket 会话命令监听器
-  removeSessionCommandListener = jetbrainsRSocket.onSessionCommand(handleSessionCommand)
+  removeSessionCommandListener = ideaRSocket.onSessionCommand(handleSessionCommand)
 
   const source = () => buildSessionSnapshot(store)
 

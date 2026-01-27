@@ -72,18 +72,18 @@ const TOOL_ICONS: Record<string, string> = {
   ReadMcpResource: '📖',
   ExitPlanMode: '✅',
   EnterPlanMode: '📝',
-  // JetBrains Terminal MCP 工具（统一使用终端 SVG 图标）
-  'mcp__jetbrains-terminal__Terminal': TERMINAL_SVG,
-  'mcp__jetbrains-terminal__TerminalRead': TERMINAL_SVG,
-  'mcp__jetbrains-terminal__TerminalList': TERMINAL_SVG,
-  'mcp__jetbrains-terminal__TerminalKill': TERMINAL_SVG,
-  'mcp__jetbrains-terminal__TerminalInterrupt': TERMINAL_SVG,
-  'mcp__jetbrains-terminal__TerminalTypes': TERMINAL_SVG,
-  'mcp__jetbrains-terminal__TerminalRename': TERMINAL_SVG,
-  // JetBrains File MCP 文件操作工具
-  'mcp__jetbrains-file__ReadFile': FILE_READ_SVG,
-  'mcp__jetbrains-file__WriteFile': FILE_WRITE_SVG,
-  'mcp__jetbrains-file__EditFile': FILE_EDIT_SVG,
+  // IDE Terminal MCP 工具（统一使用终端 SVG 图标）
+  'mcp__ide-terminal__Terminal': TERMINAL_SVG,
+  'mcp__ide-terminal__TerminalRead': TERMINAL_SVG,
+  'mcp__ide-terminal__TerminalList': TERMINAL_SVG,
+  'mcp__ide-terminal__TerminalKill': TERMINAL_SVG,
+  'mcp__ide-terminal__TerminalInterrupt': TERMINAL_SVG,
+  'mcp__ide-terminal__TerminalTypes': TERMINAL_SVG,
+  'mcp__ide-terminal__TerminalRename': TERMINAL_SVG,
+  // IDE File MCP 文件操作工具
+  'mcp__ide-file__ReadFile': FILE_READ_SVG,
+  'mcp__ide-file__WriteFile': FILE_WRITE_SVG,
+  'mcp__ide-file__EditFile': FILE_EDIT_SVG,
   // 小写格式（兼容旧格式）
   read: '📄',
   write: '✏️',
@@ -133,18 +133,18 @@ const ACTION_TYPES: Record<string, string> = {
   ReadMcpResource: 'ReadMCP',
   ExitPlanMode: 'ExitPlan',
   EnterPlanMode: 'EnterPlan',
-  // JetBrains Terminal MCP 工具
-  'mcp__jetbrains-terminal__Terminal': 'Terminal',
-  'mcp__jetbrains-terminal__TerminalRead': 'TerminalRead',
-  'mcp__jetbrains-terminal__TerminalList': 'TerminalList',
-  'mcp__jetbrains-terminal__TerminalKill': 'TerminalKill',
-  'mcp__jetbrains-terminal__TerminalInterrupt': 'TerminalInterrupt',
-  'mcp__jetbrains-terminal__TerminalTypes': 'TerminalTypes',
-  'mcp__jetbrains-terminal__TerminalRename': 'TerminalRename',
-  // JetBrains File MCP 文件操作工具
-  'mcp__jetbrains-file__ReadFile': 'ReadFile',
-  'mcp__jetbrains-file__WriteFile': 'WriteFile',
-  'mcp__jetbrains-file__EditFile': 'EditFile',
+  // IDE Terminal MCP 工具
+  'mcp__ide-terminal__Terminal': 'Terminal',
+  'mcp__ide-terminal__TerminalRead': 'TerminalRead',
+  'mcp__ide-terminal__TerminalList': 'TerminalList',
+  'mcp__ide-terminal__TerminalKill': 'TerminalKill',
+  'mcp__ide-terminal__TerminalInterrupt': 'TerminalInterrupt',
+  'mcp__ide-terminal__TerminalTypes': 'TerminalTypes',
+  'mcp__ide-terminal__TerminalRename': 'TerminalRename',
+  // IDE File MCP 文件操作工具
+  'mcp__ide-file__ReadFile': 'ReadFile',
+  'mcp__ide-file__WriteFile': 'WriteFile',
+  'mcp__ide-file__EditFile': 'EditFile',
   // 小写格式（兼容旧格式）
   read: 'Read',
   write: 'Write',
@@ -411,8 +411,8 @@ export function extractToolDisplayInfo(
       secondaryInfo = toolInput.new_name ? `→ ${toolInput.new_name}` : ''
       break
 
-    // ====== JetBrains File MCP 工具（camelCase 参数）======
-    case 'mcp__jetbrains-file__ReadFile': {
+    // ====== IDE File MCP 工具（camelCase 参数）======
+    case 'mcp__ide-file__ReadFile': {
       // 文件读取：显示文件名:行号范围
       const fileName = extractFileName(toolInput.filePath || '')
       let lineInfo = ''
@@ -428,7 +428,7 @@ export function extractToolDisplayInfo(
       break
     }
 
-    case 'mcp__jetbrains-file__WriteFile': {
+    case 'mcp__ide-file__WriteFile': {
       // 文件写入：显示文件名 (行数)
       const fileName = extractFileName(toolInput.filePath || '')
       const content = toolInput.content || ''
@@ -443,7 +443,7 @@ export function extractToolDisplayInfo(
       break
     }
 
-    case 'mcp__jetbrains-file__EditFile': {
+    case 'mcp__ide-file__EditFile': {
       // 文件编辑：显示文件名
       const fileName = extractFileName(toolInput.filePath || '')
       primaryInfo = fileName

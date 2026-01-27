@@ -75,7 +75,8 @@ export default defineConfig(({ mode }) => {
   ],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
+      '@': resolve(__dirname, 'src'),
+      '@proto': resolve(__dirname, '../ai-agent-proto/ts')
     }
   },
   server: {

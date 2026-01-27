@@ -160,7 +160,7 @@
 import { ref, computed } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { ideaBridge, getFileContent } from '@/services/ideaBridge'
-import { jetbrainsRSocket } from '@/services/jetbrainsRSocket'
+import { ideaRSocket } from '@/services/ideaRSocket'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useToastStore } from '@/stores/toastStore'
 import type { FileChange, FileModification } from '@/composables/useFileChanges'
@@ -234,7 +234,7 @@ function toggleFileExpanded(filePath: string) {
 // 打开文件
 async function openFile(filePath: string) {
   try {
-    await jetbrainsRSocket.openFile({ filePath })
+    await ideaRSocket.openFile({ filePath })
   } catch (error) {
     console.error('Failed to open file:', error)
   }
@@ -246,13 +246,13 @@ async function handleViewDiff(mod: FileModification) {
   if (isIdeMode.value) {
     try {
       // 获取历史内容
-      const originalContent = await jetbrainsRSocket.getFileHistoryContent(mod.filePath, mod.historyTs)
+      const originalContent = await ideaRSocket.getFileHistoryContent(mod.filePath, mod.historyTs)
       if (originalContent !== null) {
         // 获取当前内容
         const response = await getFileContent(mod.filePath)
         const currentContent = (response?.data as { content?: string })?.content ?? ''
 
-        await jetbrainsRSocket.showDiff({
+        await ideaRSocket.showDiff({
           filePath: mod.filePath,
           oldContent: originalContent,
           newContent: currentContent,

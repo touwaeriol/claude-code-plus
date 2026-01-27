@@ -6,7 +6,7 @@
  */
 
 import { parseJbMeta } from './jbMetaParser'
-import { jetbrainsRSocket } from '@/services/jetbrainsRSocket'
+import { ideaRSocket } from '@/services/ideaRSocket'
 
 export interface DiffContent {
   /** 旧内容（修改前） */
@@ -48,9 +48,9 @@ export async function getEditDiffContent(
   const { meta } = parseJbMeta(result)
 
   // 尝试从 LocalHistory 获取历史内容（通过 RSocket）
-  if (meta.historyTs && jetbrainsRSocket.isConnected()) {
+  if (meta.historyTs && ideaRSocket.isConnected()) {
     try {
-      const content = await jetbrainsRSocket.getFileHistoryContent(params.file_path, meta.historyTs)
+      const content = await ideaRSocket.getFileHistoryContent(params.file_path, meta.historyTs)
       if (content) {
         // 成功获取历史内容，使用完整文件 Diff
         return {
@@ -91,9 +91,9 @@ export async function getWriteDiffContent(
   const { meta } = parseJbMeta(result)
 
   // 如果是覆写操作，尝试获取历史内容（通过 RSocket）
-  if (meta.isOverwrite && meta.historyTs && jetbrainsRSocket.isConnected()) {
+  if (meta.isOverwrite && meta.historyTs && ideaRSocket.isConnected()) {
     try {
-      const content = await jetbrainsRSocket.getFileHistoryContent(params.file_path, meta.historyTs)
+      const content = await ideaRSocket.getFileHistoryContent(params.file_path, meta.historyTs)
       if (content) {
         return {
           oldContent: content,

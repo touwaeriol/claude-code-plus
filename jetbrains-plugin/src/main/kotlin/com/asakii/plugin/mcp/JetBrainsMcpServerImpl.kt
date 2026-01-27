@@ -23,7 +23,7 @@ private val logger = getLogger("JetBrainsMcpServerImpl")
  * 注意：文件操作工具（Read/Write/Edit）已移至独立的 jetbrains-file MCP 服务器。
  */
 @McpServerConfig(
-    name = "jetbrains-lsp",
+    name = "ide-lsp",
     version = "1.0.0",
     description = "JetBrains IDE integration tool server, providing directory browsing, file problem detection, index search, code search and other features"
 )

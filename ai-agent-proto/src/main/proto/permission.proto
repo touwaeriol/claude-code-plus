@@ -1,0 +1,77 @@
+// permission.proto
+// 权限请求相关定义
+
+syntax = "proto3";
+package aiagent.rpc;
+
+option java_package = "com.asakii.rpc.proto";
+option java_multiple_files = true;
+
+import "common.proto";
+
+// ============================================================================
+// 权限枚举
+// ============================================================================
+
+// 权限行为
+enum PermissionBehavior {
+  PERMISSION_BEHAVIOR_UNSPECIFIED = 0;
+  PERMISSION_BEHAVIOR_ALLOW = 1;    // allow
+  PERMISSION_BEHAVIOR_DENY = 2;     // deny
+  PERMISSION_BEHAVIOR_ASK = 3;      // ask
+}
+
+// 权限更新类型
+enum PermissionUpdateType {
+  PERMISSION_UPDATE_TYPE_UNSPECIFIED = 0;
+  PERMISSION_UPDATE_TYPE_ADD_RULES = 1;           // addRules
+  PERMISSION_UPDATE_TYPE_REPLACE_RULES = 2;       // replaceRules
+  PERMISSION_UPDATE_TYPE_REMOVE_RULES = 3;        // removeRules
+  PERMISSION_UPDATE_TYPE_SET_MODE = 4;            // setMode
+  PERMISSION_UPDATE_TYPE_ADD_DIRECTORIES = 5;     // addDirectories
+  PERMISSION_UPDATE_TYPE_REMOVE_DIRECTORIES = 6;  // removeDirectories
+}
+
+// 权限更新目标
+enum PermissionUpdateDestination {
+  PERMISSION_UPDATE_DESTINATION_UNSPECIFIED = 0;
+  PERMISSION_UPDATE_DESTINATION_USER_SETTINGS = 1;      // userSettings
+  PERMISSION_UPDATE_DESTINATION_PROJECT_SETTINGS = 2;   // projectSettings
+  PERMISSION_UPDATE_DESTINATION_LOCAL_SETTINGS = 3;     // localSettings
+  PERMISSION_UPDATE_DESTINATION_SESSION = 4;            // session
+}
+
+// ============================================================================
+// 权限消息
+// ============================================================================
+
+// 权限规则值
+message PermissionRuleValue {
+  string tool_name = 1;
+  optional string rule_content = 2;
+}
+
+// 权限更新配置
+message PermissionUpdate {
+  PermissionUpdateType type = 1;
+  repeated PermissionRuleValue rules = 2;
+  optional PermissionBehavior behavior = 3;
+  optional PermissionMode mode = 4;
+  repeated string directories = 5;
+  optional PermissionUpdateDestination destination = 6;
+}
+
+// RequestPermission 请求
+message RequestPermissionRequest {
+  string tool_name = 1;
+  bytes input_json = 2;  // 工具输入参数（保持 JSON 以兼容动态结构）
+  optional string tool_use_id = 3;
+  repeated PermissionUpdate permission_suggestions = 4;
+}
+
+// RequestPermission 响应
+message RequestPermissionResponse {
+  bool approved = 1;
+  repeated PermissionUpdate permission_updates = 2;
+  optional string deny_reason = 3;
+}

@@ -47,7 +47,7 @@ import {useSessionPermissions, type SessionPermissionsInstance} from './useSessi
 import {useSessionMessages, type SessionMessagesInstance} from './useSessionMessages'
 import {useFileChanges, type FileChangesInstance} from './useFileChanges'
 import {useCodexRpcAdapter, type CodexRpcAdapterInstance} from './useCodexRpcAdapter'
-import type {ActiveFileInfo} from '@/services/jetbrainsRSocket'
+import type {ActiveFileInfo} from '@/services/ideaRSocket'
 import {loggers} from '@/utils/logger'
 import type {PendingPermissionRequest, PendingUserQuestion, PermissionResponse} from '@/types/permission'
 import {HISTORY_LAZY_LOAD_SIZE, HISTORY_PAGE_SIZE} from '@/constants/messageWindow'

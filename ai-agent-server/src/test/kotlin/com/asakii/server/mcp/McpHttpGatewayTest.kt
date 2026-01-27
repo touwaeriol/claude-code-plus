@@ -8,11 +8,11 @@ import kotlin.test.assertTrue
 class McpHttpGatewayTest {
     @Test
     fun buildServerUrl_hasNoQueryParams() {
-        val url = McpHttpGateway.buildServerUrl("jetbrains-file")
+        val url = McpHttpGateway.buildServerUrl("ide-file")
         val uri = URI(url)
 
         assertTrue(uri.query.isNullOrBlank())
-        assertTrue(url.contains("/mcp/jetbrains-file"))
-        assertEquals("/mcp/jetbrains-file", uri.path)
+        assertTrue(url.contains("/mcp/ide-file"))
+        assertEquals("/mcp/ide-file", uri.path)
     }
 }

@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { ideaBridge } from '@/services/ideaBridge'
-import { jetbrainsRSocket, type IdeSettings as BaseIdeSettings } from '@/services/jetbrainsRSocket'
+import { ideaRSocket, type IdeSettings as BaseIdeSettings } from '@/services/ideaRSocket'
 import type {
   BackendType,
   SandboxMode,
@@ -245,7 +245,7 @@ export const useSettingsStore = defineStore('settings', () => {
   /**
    * 加载设置
    */
-  async function loadSettings() {
+  async function loadSettings(): Promise<void> {
     loading.value = true
     try {
       console.log('⚙️ Loading settings...')
@@ -256,42 +256,42 @@ export const useSettingsStore = defineStore('settings', () => {
         settings.value = migrateSettings(response.data.settings)
         console.log('✅ Settings loaded:', settings.value)
       } else {
-        console.warn('⚠️ Failed to load settings, using defaults')
+        throw new Error(response.error || 'settings.get failed')
       }
     } catch (error) {
       console.error('❌ Error loading settings:', error)
+      throw error
     } finally {
       loading.value = false
     }
+
+    settingsReady.value = true
+    console.log('✅ Settings ready (HTTP settings.get)')
   }
 
   /**
    * 从 IDEA 加载 IDE 设置
    */
   async function loadIdeSettings() {
-    try {
-      console.log('⚙️ Loading IDE settings from JetBrains...')
+    console.log('⚙️ Loading IDE settings from IDE...')
 
-      // 同时加载 IDE 设置和可用模型列表
-      const [settingsResult] = await Promise.all([
-        jetbrainsRSocket.getSettings(),
-        loadAvailableModels()
-      ])
+    // 同时加载 IDE 设置和可用模型列表
+    const [settingsResult] = await Promise.all([
+      ideaRSocket.getSettings(),
+      loadAvailableModels()
+    ])
 
-      if (settingsResult) {
-        ideSettings.value = settingsResult as IdeSettings
-        console.log('✅ IDE settings loaded:', settingsResult)
-        applyIdeSettings(settingsResult as IdeSettings)
-      } else {
-        console.warn('⚠️ Failed to load IDE settings')
-      }
-    } catch (error) {
-      console.error('❌ Error loading IDE settings:', error)
-    } finally {
-      // 标记设置加载完成
-      settingsReady.value = true
-      console.log('✅ Settings ready (IDE mode)')
+    if (!settingsResult) {
+      throw new Error('ide.getSettings failed (empty result)')
     }
+
+    ideSettings.value = settingsResult as IdeSettings
+    console.log('✅ IDE settings loaded:', settingsResult)
+    applyIdeSettings(settingsResult as IdeSettings)
+
+    // 标记设置加载完成
+    settingsReady.value = true
+    console.log('✅ Settings ready (IDE mode)')
   }
 
   /**
@@ -505,7 +505,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (settingsChangeUnsubscribe) {
       settingsChangeUnsubscribe()
     }
-    settingsChangeUnsubscribe = jetbrainsRSocket.onSettingsChange(handleIdeSettingsChange)
+    settingsChangeUnsubscribe = ideaRSocket.onSettingsChange(handleIdeSettingsChange)
     console.log('👂 [IdeSettings] 已注册设置变更监听器')
   }
 
@@ -616,10 +616,11 @@ export const useSettingsStore = defineStore('settings', () => {
           console.log('✅ [DefaultSettings] 已应用默认设置:', updates)
         }
       } else {
-        console.warn('⚠️ Failed to load default settings from HTTP API')
+        throw new Error(response.error || 'settings.getDefault failed')
       }
     } catch (error) {
       console.error('❌ Error loading default settings:', error)
+      throw error
     } finally {
       // 标记设置加载完成
       settingsReady.value = true

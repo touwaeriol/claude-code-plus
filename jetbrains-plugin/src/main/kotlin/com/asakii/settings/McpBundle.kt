@@ -80,9 +80,19 @@ object McpInstructions {
 
     // 预定义的 MCP 名称常量
     const val USER_INTERACTION = "user-interaction"
-    const val JETBRAINS_LSP = "jetbrains-lsp"
-    const val JETBRAINS_FILE = "jetbrains-file"
-    const val JETBRAINS_TERMINAL = "jetbrains-terminal"
-    const val JETBRAINS_GIT = "jetbrains-git"
+    const val IDE_LSP = "ide-lsp"
+    const val IDE_FILE = "ide-file"
+    const val IDE_TERMINAL = "ide-terminal"
+    const val IDE_GIT = "ide-git"
     const val CONTEXT7 = "context7"
+    
+    // 向后兼容的别名（已废弃，将在后续版本移除）
+    @Deprecated("Use IDE_LSP instead", ReplaceWith("IDE_LSP"))
+    const val JETBRAINS_LSP = IDE_LSP
+    @Deprecated("Use IDE_FILE instead", ReplaceWith("IDE_FILE"))
+    const val JETBRAINS_FILE = IDE_FILE
+    @Deprecated("Use IDE_TERMINAL instead", ReplaceWith("IDE_TERMINAL"))
+    const val JETBRAINS_TERMINAL = IDE_TERMINAL
+    @Deprecated("Use IDE_GIT instead", ReplaceWith("IDE_GIT"))
+    const val JETBRAINS_GIT = IDE_GIT
 }

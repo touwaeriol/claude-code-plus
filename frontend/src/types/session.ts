@@ -9,7 +9,7 @@ import type { DisplayItem, ToolCall, ConnectionStatus, ContextReference } from '
 import type { RSocketSession } from '@/services/rsocket'
 import type { RpcCapabilities, RpcPermissionMode } from '@/types/rpc'
 import type { PendingUserQuestion, PendingPermissionRequest, SessionPermissionRule } from './permission'
-import type { ActiveFileInfo } from '@/services/jetbrainsRSocket'
+import type { ActiveFileInfo } from '@/services/ideaRSocket'
 
 /**
  * 请求追踪信息

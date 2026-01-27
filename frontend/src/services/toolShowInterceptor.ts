@@ -7,14 +7,14 @@
  */
 
 import {
-  jetbrainsBridge,
+  ideaBridgeService,
   isIdeEnvironment,
   type OpenFileRequest,
   type ShowDiffRequest,
   type ShowMultiEditDiffRequest,
   type ShowEditFullDiffRequest
-} from './jetbrainsApi'
-import { jetbrainsRSocket } from './jetbrainsRSocket'
+} from './ideaApi'
+import { ideaRSocket } from './ideaRSocket'
 import { parseJbMeta } from '@/utils/jbMetaParser'
 
 // ====== 工具输入类型定义 ======
@@ -108,7 +108,7 @@ class ToolShowInterceptorService {
    * 浏览器环境下不可用（看不到 IDEA 界面，直接展示卡片）
    */
   isAvailable(): boolean {
-    return isIdeEnvironment() && jetbrainsBridge.isEnabled()
+    return isIdeEnvironment() && ideaBridgeService.isEnabled()
   }
 
   /**
@@ -173,12 +173,12 @@ class ToolShowInterceptorService {
       return false // 没有注册 handler，放行
     }
 
-    // 创建 API 适配器，调用 jetbrainsBridge
+    // 创建 API 适配器，调用 ideaBridgeService
     const api: ToolShowApi = {
-      openFile: (payload) => jetbrainsBridge.openFile(payload),
-      showDiff: (payload) => jetbrainsBridge.showDiff(payload),
-      showMultiEditDiff: (payload) => jetbrainsBridge.showMultiEditDiff(payload),
-      showEditFullDiff: (payload) => jetbrainsBridge.showEditFullDiff(payload)
+      openFile: (payload) => ideaBridgeService.openFile(payload),
+      showDiff: (payload) => ideaBridgeService.showDiff(payload),
+      showMultiEditDiff: (payload) => ideaBridgeService.showMultiEditDiff(payload),
+      showEditFullDiff: (payload) => ideaBridgeService.showEditFullDiff(payload)
     }
 
     try {
@@ -205,12 +205,12 @@ class ToolShowInterceptorService {
   }
 
   private registerDefaultHandlers(): void {
-    // ====== JetBrains File MCP 工具（camelCase 参数）======
+    // ====== IDE File MCP 工具（camelCase 参数）======
     // 注：原生 Claude/Codex 工具（Read, Write, Edit, MultiEdit）不注册 hook
     // 浏览器环境下直接展开卡片显示内容，IDE 环境下也不调用 IDEA 打开文件
 
-    // JetBrains ReadFile 工具：打开文件
-    this.register<JetBrainsReadFileInput>('mcp__jetbrains-file__ReadFile', (ctx, api) => {
+    // IDE ReadFile 工具：打开文件
+    this.register<JetBrainsReadFileInput>('mcp__ide-file__ReadFile', (ctx, api) => {
       api.openFile({
         filePath: ctx.input.filePath || '',
         line: ctx.input.offset ? undefined : 1,
@@ -220,8 +220,8 @@ class ToolShowInterceptorService {
       })
     })
 
-    // JetBrains WriteFile 工具：显示 Diff（新建或覆写）
-    this.register<JetBrainsWriteFileInput>('mcp__jetbrains-file__WriteFile', async (ctx, api) => {
+    // IDE WriteFile 工具：显示 Diff（新建或覆写）
+    this.register<JetBrainsWriteFileInput>('mcp__ide-file__WriteFile', async (ctx, api) => {
       const filePath = ctx.input.filePath || ''
       const newContent = ctx.input.content || ''
 
@@ -231,9 +231,9 @@ class ToolShowInterceptorService {
       if (resultContent) {
         const { meta } = parseJbMeta(resultContent)
 
-        if (meta.isOverwrite && meta.historyTs && jetbrainsRSocket.isConnected()) {
+        if (meta.isOverwrite && meta.historyTs && ideaRSocket.isConnected()) {
           // 覆写文件：通过 RSocket 查询 LocalHistory 获取原始内容
-          oldContent = await jetbrainsRSocket.getFileHistoryContent(filePath, meta.historyTs) || ''
+          oldContent = await ideaRSocket.getFileHistoryContent(filePath, meta.historyTs) || ''
         }
         // 新建文件（isOverwrite=false）：oldContent 保持为空
       }
@@ -246,8 +246,8 @@ class ToolShowInterceptorService {
       })
     })
 
-    // JetBrains EditFile 工具：显示完整文件 Diff
-    this.register<JetBrainsEditFileInput>('mcp__jetbrains-file__EditFile', async (ctx, api) => {
+    // IDE EditFile 工具：显示完整文件 Diff
+    this.register<JetBrainsEditFileInput>('mcp__ide-file__EditFile', async (ctx, api) => {
       const filePath = ctx.input.filePath || ''
 
       // 从工具结果中解析 historyTs 元数据
@@ -255,9 +255,9 @@ class ToolShowInterceptorService {
       const resultContent = this.extractResultContent(ctx.result)
       if (resultContent) {
         const { meta } = parseJbMeta(resultContent)
-        if (meta.historyTs && jetbrainsRSocket.isConnected()) {
+        if (meta.historyTs && ideaRSocket.isConnected()) {
           // 通过 RSocket 查询 LocalHistory 获取历史内容
-          originalContent = await jetbrainsRSocket.getFileHistoryContent(filePath, meta.historyTs) || undefined
+          originalContent = await ideaRSocket.getFileHistoryContent(filePath, meta.historyTs) || undefined
         }
       }
 
@@ -301,7 +301,7 @@ export const toolShowInterceptor = new ToolShowInterceptorService()
  * 仅在 IDE 插件内且后端支持时初始化
  */
 export function initToolShowInterceptor(): void {
-  if (isIdeEnvironment() && jetbrainsBridge.isEnabled()) {
+  if (isIdeEnvironment() && ideaBridgeService.isEnabled()) {
     toolShowInterceptor.init()
     console.log('[ToolShowInterceptor] Initialized in IDE plugin mode')
   } else {

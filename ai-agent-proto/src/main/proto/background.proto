@@ -1,0 +1,65 @@
+// background.proto
+// 后台任务相关定义
+
+syntax = "proto3";
+package aiagent.rpc;
+
+option java_package = "com.asakii.rpc.proto";
+option java_multiple_files = true;
+
+// ============================================================================
+// Bash 后台运行 - 对应 RpcBashRunToBackgroundRequest, RpcBashBackgroundResult
+// ============================================================================
+
+// Bash 后台运行请求
+message BashRunToBackgroundRequest {
+  string task_id = 1;               // Bash 命令的 tool_use_id
+}
+
+// Bash 后台运行结果
+message BashBackgroundResult {
+  bool success = 1;                 // 操作是否成功
+  optional string task_id = 2;      // 后台任务 ID
+  optional string command = 3;      // 被后台化的命令
+  optional string error = 4;        // 错误信息
+}
+
+// ============================================================================
+// 统一后台运行 - 对应 RpcRunToBackgroundRequest, RpcUnifiedBackgroundResult
+// ============================================================================
+
+// 统一后台运行请求
+message RunToBackgroundRequest {
+  optional string task_id = 1;      // 可选的任务 ID，不传则后台化所有任务
+}
+
+// 统一后台运行结果
+message UnifiedBackgroundResult {
+  bool success = 1;                           // 操作是否成功
+  optional bool is_bash = 2;                  // 单任务模式：是否为 Bash
+  optional string task_id = 3;                // 单任务模式：任务 ID
+  optional string command = 4;                // 单 Bash 任务：命令
+  int32 bash_count = 5;                       // 批量模式：后台化的 Bash 数量
+  int32 agent_count = 6;                      // 批量模式：后台化的 Agent 数量
+  repeated string backgrounded_bash_ids = 7; // 批量模式：后台化的 Bash ID 列表
+  repeated string backgrounded_agent_ids = 8;// 批量模式：后台化的 Agent ID 列表
+  optional string error = 9;                  // 错误信息
+}
+
+// 终端任务动作类型
+enum TerminalTaskAction {
+  TERMINAL_TASK_STARTED = 0;      // 任务开始执行
+  TERMINAL_TASK_COMPLETED = 1;    // 任务完成
+  TERMINAL_TASK_BACKGROUNDED = 2; // 任务被后台化
+}
+
+// 终端任务更新通知（后端→前端推送）
+message TerminalTaskUpdateNotify {
+  string tool_use_id = 1;           // MCP 工具调用 ID
+  string session_id = 2;            // 终端会话 ID
+  TerminalTaskAction action = 3;    // 任务动作
+  string command = 4;               // 执行的命令
+  bool is_background = 5;           // 是否在后台执行
+  int64 start_time = 6;             // 开始时间戳（毫秒）
+  optional int64 elapsed_ms = 7;    // 已执行时长（毫秒）
+}

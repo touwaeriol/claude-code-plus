@@ -450,24 +450,9 @@ onMounted(async () => {
     if (!sessionStore.hasTabs) {
       console.log('No existing tabs, creating default...')
 
-      // 等待设置加载完成（无论 IDE 还是浏览器模式）
-      // 注意：实际的设置加载由 App.vue 负责
-      // 由于 Vue 组件挂载顺序（子组件先于父组件），需要等待 App.vue 完成初始化
+      // 约束：不做回退/等待。App.vue 必须在挂载此组件前完成设置初始化。
       if (!settingsStore.settingsReady) {
-        console.log('Waiting for settings to be ready (App.vue will load them)...')
-        // 等待 App.vue 完成设置加载（最多等待 10 秒，因为初始化包含多个网络请求）
-        const maxWaitMs = 10000
-        const intervalMs = 100
-        let waited = 0
-        while (!settingsStore.settingsReady && waited < maxWaitMs) {
-          await new Promise(resolve => setTimeout(resolve, intervalMs))
-          waited += intervalMs
-        }
-        if (settingsStore.settingsReady) {
-          console.log('Settings ready after', waited, 'ms, skipPermissions:', settingsStore.settings.skipPermissions)
-        } else {
-          console.warn('Settings not ready after', maxWaitMs, 'ms timeout, proceeding with defaults')
-        }
+        throw new Error('设置尚未初始化（App.vue 应先完成初始化）')
       }
 
       // 创建默认 Tab

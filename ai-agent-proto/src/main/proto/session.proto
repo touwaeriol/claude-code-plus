@@ -1,0 +1,145 @@
+// session.proto
+// 会话管理相关定义
+
+syntax = "proto3";
+package aiagent.rpc;
+
+option java_package = "com.asakii.rpc.proto";
+option java_multiple_files = true;
+
+import "common.proto";
+import "content.proto";
+
+// ============================================================================
+// Connect 相关 - 对应 RpcConnectOptions, RpcConnectResult, RpcCapabilities
+// ============================================================================
+
+// 对应 RpcConnectOptions
+message ConnectOptions {
+  // 通用配置
+  optional Provider provider = 1;
+  optional string model = 2;
+  optional string system_prompt = 3;
+  optional string initial_prompt = 4;
+  optional string session_id = 5;
+  optional string resume_session_id = 6;
+  map<string, string> metadata = 7;
+
+  // Claude 相关配置
+  optional PermissionMode permission_mode = 10;
+  optional bool dangerously_skip_permissions = 11;
+  optional bool allow_dangerously_skip_permissions = 12;
+  optional bool include_partial_messages = 13;
+  optional bool continue_conversation = 14;
+  optional bool thinking_enabled = 15;
+
+  // Codex 相关配置
+  optional string base_url = 20;
+  optional string api_key = 21;
+  optional SandboxMode sandbox_mode = 22;
+  optional string codex_reasoning_effort = 23;
+  optional string codex_reasoning_summary = 24;
+
+  // 会话恢复相关配置
+  optional bool replay_user_messages = 30;  // 恢复会话时重放用户消息
+
+  // Chrome 扩展配置
+  optional bool chrome_enabled = 40;  // 是否启用 Chrome 扩展（需要重连生效）
+
+  // 前端连接标识
+  optional string connect_id = 50;  // 前端生成的永久连接 ID，用于 MCP 路由（不随重连变化）
+}
+
+// 对应 RpcCapabilities
+message Capabilities {
+  bool can_interrupt = 1;
+  bool can_switch_model = 2;
+  bool can_switch_permission_mode = 3;
+  repeated PermissionMode supported_permission_modes = 4;
+  bool can_skip_permissions = 5;
+  bool can_send_rich_content = 6;
+  bool can_think = 7;
+  bool can_resume_session = 8;
+  bool can_run_in_background = 9;
+}
+
+// 对应 RpcConnectResult
+message ConnectResult {
+  string session_id = 1;
+  Provider provider = 2;
+  SessionStatus status = 3;
+  optional string model = 4;
+  optional Capabilities capabilities = 5;
+  optional string cwd = 6;
+  optional string connect_id = 7;  // 回显前端传递的 connectId（确认后端已接收）
+}
+
+// 对应 RpcSetPermissionModeResult
+message SetPermissionModeResult {
+  PermissionMode mode = 1;
+  bool success = 2;
+}
+
+// 对应 RpcStatusResult
+message StatusResult {
+  SessionStatus status = 1;
+}
+
+// 对应 RpcSetModelResult
+message SetModelResult {
+  SessionStatus status = 1;
+  string model = 2;
+}
+
+// 设置沙箱模式请求（仅 Codex 支持）
+message SetSandboxModeRequest {
+  SandboxMode mode = 1;
+}
+
+// 设置沙箱模式响应
+message SetSandboxModeResult {
+  SandboxMode mode = 1;
+  bool success = 2;
+}
+
+// 设置思考 token 上限请求
+message SetMaxThinkingTokensRequest {
+  optional int32 max_thinking_tokens = 1;  // null = 禁用, 0 = 禁用, 正数 = 设置上限
+}
+
+// 设置思考 token 上限响应
+message SetMaxThinkingTokensResult {
+  SessionStatus status = 1;
+  optional int32 max_thinking_tokens = 2;  // 设置后的值
+}
+
+// ============================================================================
+// RPC 请求/响应（RSocket 路由用）
+// ============================================================================
+
+// IDE 环境检测响应
+message HasIdeEnvironmentResponse {
+  bool has_ide = 1;
+}
+
+message QueryRequest {
+  string message = 1;
+}
+
+message QueryWithContentRequest {
+  repeated ContentBlock content = 1;
+}
+
+message SetModelRequest {
+  string model = 1;
+}
+
+message SetPermissionModeRequest {
+  PermissionMode mode = 1;
+}
+
+// 空请求
+message EmptyRequest {}
+
+// 空响应
+message EmptyResponse {}

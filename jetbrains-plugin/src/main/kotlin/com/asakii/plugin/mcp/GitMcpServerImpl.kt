@@ -29,7 +29,7 @@ private val logger = getLogger("GitMcpServerImpl")
  * Git MCP server implementation.
  */
 @McpServerConfig(
-    name = "jetbrains_git",
+    name = "ide-git",
     version = "1.0.0",
     description = "JetBrains IDE Git/VCS integration tools for commit message generation and VCS operations"
 )

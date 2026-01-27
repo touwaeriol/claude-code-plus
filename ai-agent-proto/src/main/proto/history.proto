@@ -1,0 +1,91 @@
+// history.proto
+// 历史会话相关定义
+
+syntax = "proto3";
+package aiagent.rpc;
+
+option java_package = "com.asakii.rpc.proto";
+option java_multiple_files = true;
+
+import "message.proto";
+
+// ============================================================================
+// 历史会话 - 对应 RpcHistory, RpcHistorySession
+// ============================================================================
+
+// 对应 RpcHistory
+message History {
+  repeated RpcMessage messages = 1;
+}
+
+// 对应 RpcHistorySession
+message HistorySession {
+  string session_id = 1;
+  string first_user_message = 2;
+  int64 timestamp = 3;
+  int32 message_count = 4;
+  string project_path = 5;
+  optional string custom_title = 6;  // 自定义标题（从 /rename 命令设置）
+}
+
+// 对应 RpcHistorySessionsResult
+message HistorySessionsResult {
+  repeated HistorySession sessions = 1;
+}
+
+// ============================================================================
+// 历史请求/响应
+// ============================================================================
+
+message GetHistorySessionsRequest {
+  int32 max_results = 1;
+  optional int32 offset = 2;
+}
+
+// 加载历史消息请求
+message LoadHistoryRequest {
+  optional string session_id = 1;
+  optional string project_path = 2;
+  int32 offset = 3;            // 起始行号（默认 0）
+  int32 limit = 4;             // 返回行数（默认 0 表示全部）
+}
+
+// 获取历史会话元数据请求
+message GetHistoryMetadataRequest {
+  optional string session_id = 1;
+  optional string project_path = 2;
+}
+
+// 历史会话元数据响应
+message HistoryMetadata {
+  int32 total_lines = 1;      // JSONL 文件总行数
+  string session_id = 2;       // 会话 ID
+  string project_path = 3;     // 项目路径
+  optional string custom_title = 4;  // 自定义标题（从 /rename 命令设置）
+}
+
+// 历史加载结果（分页查询响应）
+message HistoryResult {
+  repeated RpcMessage messages = 1;       // 消息列表
+  int32 offset = 2;                       // 当前请求的起始位置
+  int32 count = 3;                        // 实际返回的消息数
+  int32 available_count = 4;              // 当前文件中可用的总消息数（快照）
+}
+
+// ============================================================================
+// 历史截断（编辑重发功能）
+// ============================================================================
+
+// 截断历史请求
+message TruncateHistoryRequest {
+  string session_id = 1;      // 会话 ID
+  string message_uuid = 2;    // 要截断的消息 UUID（从该消息开始截断，包含该消息）
+  string project_path = 3;    // 项目路径（用于定位 JSONL 文件）
+}
+
+// 截断历史响应
+message TruncateHistoryResult {
+  bool success = 1;
+  int32 remaining_lines = 2;  // 截断后剩余的行数
+  optional string error = 3;  // 错误信息（如果失败）
+}

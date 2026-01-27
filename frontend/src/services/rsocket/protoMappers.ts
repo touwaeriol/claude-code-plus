@@ -20,15 +20,17 @@ import {
   PermissionUpdateType,
   PermissionUpdateDestination,
   SessionCommandType,
+  TerminalTaskAction,
   type ContentBlock,
   type SessionCommandNotify,
   type ThemeChangedNotify,
   type ActiveFileChangedNotify,
+  type TerminalTaskUpdateNotify,
   type IdeSettingsChangedNotify,
   type IdeSettings,
   type ThinkingLevelConfig as ProtoThinkingLevelConfig,
   type OptionConfig as ProtoOptionConfig
-} from '@/proto/ai_agent_rpc_pb'
+} from '@proto'
 import type {
   RpcPermissionMode,
   RpcContentBlock,
@@ -420,6 +422,8 @@ export function mapRpcMessageFromProto(proto: any): RpcMessage {
         type: 'stream_event',
         provider,
         uuid: eventProto.uuid,
+        session_id: eventProto.sessionId,
+        parentToolUseId: eventProto.parentToolUseId,
         event: mapStreamEventFromProto(eventProto)
       })
     }
@@ -497,9 +501,9 @@ export function mapStreamEventFromProto(proto: any): StreamEventData {
       return new MessageStartEvent({
         type: 'message_start',
         message: {
-          id: eventData.value.message?.id,
-          role: eventData.value.message?.role,
-          content: eventData.value.message?.content?.map(mapContentBlockFromProtoAsClass) || []
+          id: eventData.value.messageInfo?.id,
+          model: eventData.value.messageInfo?.model,
+          content: eventData.value.messageInfo?.content?.map(mapContentBlockFromProtoAsClass) || []
         }
       })
 
@@ -526,10 +530,16 @@ export function mapStreamEventFromProto(proto: any): StreamEventData {
     case 'messageDelta':
       return new MessageDeltaEvent({
         type: 'message_delta',
-        delta: {
-          stop_reason: eventData.value.delta?.stopReason,
-          stop_sequence: eventData.value.delta?.stopSequence
-        },
+        delta: (() => {
+          const raw = eventData.value.deltaJson
+          if (!raw || raw.length === 0) return undefined
+          try {
+            const jsonText = new TextDecoder().decode(raw)
+            return JSON.parse(jsonText)
+          } catch {
+            return undefined
+          }
+        })(),
         usage: eventData.value.usage
           ? {
               input_tokens: eventData.value.usage.inputTokens,
@@ -664,6 +674,30 @@ export function mapActiveFileChangedFromProto(proto: ActiveFileChangedNotify): A
     endLine: proto.endLine,
     endColumn: proto.endColumn,
     selectedContent: proto.selectedContent
+  }
+}
+
+// ==================== TerminalTaskUpdate 映射 ====================
+
+export interface TerminalTaskUpdateParams {
+  toolUseId: string
+  sessionId: string
+  action: TerminalTaskAction
+  command: string
+  isBackground: boolean
+  startTime: number
+  elapsedMs?: number
+}
+
+export function mapTerminalTaskUpdateFromProto(proto: TerminalTaskUpdateNotify): TerminalTaskUpdateParams {
+  return {
+    toolUseId: proto.toolUseId,
+    sessionId: proto.sessionId,
+    action: proto.action,
+    command: proto.command,
+    isBackground: proto.isBackground,
+    startTime: Number(proto.startTime),
+    elapsedMs: proto.elapsedMs !== undefined ? Number(proto.elapsedMs) : undefined
   }
 }
 

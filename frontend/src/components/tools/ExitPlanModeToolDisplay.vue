@@ -37,7 +37,7 @@ import type { GenericToolCall } from '@/types/display'
 import CompactToolCard from './CompactToolCard.vue'
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
 import { extractToolDisplayInfo } from '@/utils/toolDisplayInfo'
-import { jetbrainsBridge, isIdeEnvironment } from '@/services/jetbrainsApi'
+import { ideaBridgeService, isIdeEnvironment } from '@/services/ideaApi'
 import { useI18n } from '@/composables/useI18n'
 
 interface Props {
@@ -81,7 +81,7 @@ const hasDetails = computed(() => !!plan.value || !!hasResult.value || !!hasErro
 async function openPlanInIdea() {
   if (!plan.value) return
 
-  const success = await jetbrainsBridge.showMarkdown({
+  const success = await ideaBridgeService.showMarkdown({
     content: plan.value,
     title: t('permission.planPreviewTitle')
   })

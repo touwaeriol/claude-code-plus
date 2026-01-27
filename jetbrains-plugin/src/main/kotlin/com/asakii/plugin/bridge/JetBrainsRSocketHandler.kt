@@ -54,21 +54,21 @@ import kotlinx.coroutines.flow.flow
  * 2. 支持反向调用（pushThemeChange, pushSessionCommand 等）
  *
  * 路由表（前端 → 后端）：
- * - jetbrains.openFile: 打开文件
- * - jetbrains.showDiff: 显示 Diff
- * - jetbrains.showMultiEditDiff: 显示多编辑 Diff
- * - jetbrains.getTheme: 获取主题
- * - jetbrains.getActiveFile: 获取当前活跃文件
- * - jetbrains.getSettings: 获取 IDE 设置
- * - jetbrains.getLocale: 获取语言
- * - jetbrains.setLocale: 设置语言
- * - jetbrains.getProjectPath: 获取项目路径
- * - jetbrains.reportSessionState: 上报会话状态
+ * - ide.openFile: 打开文件
+ * - ide.showDiff: 显示 Diff
+ * - ide.showMultiEditDiff: 显示多编辑 Diff
+ * - ide.getTheme: 获取主题
+ * - ide.getActiveFile: 获取当前活跃文件
+ * - ide.getSettings: 获取 IDE 设置
+ * - ide.getLocale: 获取语言
+ * - ide.setLocale: 设置语言
+ * - ide.getProjectPath: 获取项目路径
+ * - ide.reportSessionState: 上报会话状态
  *
  * 反向调用路由（后端 → 前端）：
- * - jetbrains.onThemeChanged: 主题变化
- * - jetbrains.onSessionCommand: 会话命令
- * - jetbrains.onActiveFileChanged: 活跃文件变化
+ * - client.call(method=onThemeChanged): 主题变化
+ * - client.call(method=onSessionCommand): 会话命令
+ * - client.call(method=onActiveFileChanged): 活跃文件变化
  */
 class JetBrainsRSocketHandler(
     private val jetbrainsApi: JetBrainsApi,
@@ -98,23 +98,23 @@ class JetBrainsRSocketHandler(
                 logger.info { "📨 [JetBrains RSocket] ← $route" }
 
                 when (route) {
-                    "jetbrains.openFile" -> handleOpenFile(dataBytes)
-                    "jetbrains.showDiff" -> handleShowDiff(dataBytes)
-                    "jetbrains.showMultiEditDiff" -> handleShowMultiEditDiff(dataBytes)
-                    "jetbrains.showEditPreviewDiff" -> handleShowEditPreviewDiff(dataBytes)
-                    "jetbrains.showEditFullDiff" -> handleShowEditFullDiff(dataBytes)
-                    "jetbrains.showMarkdown" -> handleShowMarkdown(dataBytes)
-                    "jetbrains.getTheme" -> handleGetTheme()
-                    "jetbrains.getActiveFile" -> handleGetActiveFile()
-                    "jetbrains.getSettings" -> handleGetSettings()
-                    "jetbrains.getLocale" -> handleGetLocale()
-                    "jetbrains.setLocale" -> handleSetLocale(dataBytes)
-                    "jetbrains.getProjectPath" -> handleGetProjectPath()
-                    "jetbrains.reportSessionState" -> handleReportSessionState(dataBytes)
-                    "jetbrains.getOriginalContent" -> handleGetOriginalContent(dataBytes)
-                    "jetbrains.getFileHistoryContent" -> handleGetFileHistoryContent(dataBytes)
-                    "jetbrains.rollbackFile" -> handleRollbackFile(dataBytes)
-                    "jetbrains.getBackgroundableTerminals" -> handleGetBackgroundableTerminals(dataBytes)
+                    "ide.openFile" -> handleOpenFile(dataBytes)
+                    "ide.showDiff" -> handleShowDiff(dataBytes)
+                    "ide.showMultiEditDiff" -> handleShowMultiEditDiff(dataBytes)
+                    "ide.showEditPreviewDiff" -> handleShowEditPreviewDiff(dataBytes)
+                    "ide.showEditFullDiff" -> handleShowEditFullDiff(dataBytes)
+                    "ide.showMarkdown" -> handleShowMarkdown(dataBytes)
+                    "ide.getTheme" -> handleGetTheme()
+                    "ide.getActiveFile" -> handleGetActiveFile()
+                    "ide.getSettings" -> handleGetSettings()
+                    "ide.getLocale" -> handleGetLocale()
+                    "ide.setLocale" -> handleSetLocale(dataBytes)
+                    "ide.getProjectPath" -> handleGetProjectPath()
+                    "ide.reportSessionState" -> handleReportSessionState(dataBytes)
+                    "ide.getOriginalContent" -> handleGetOriginalContent(dataBytes)
+                    "ide.getFileHistoryContent" -> handleGetFileHistoryContent(dataBytes)
+                    "ide.rollbackFile" -> handleRollbackFile(dataBytes)
+                    "ide.getBackgroundableTerminals" -> handleGetBackgroundableTerminals(dataBytes)
                     else -> {
                         logger.warn { "⚠️ [JetBrains RSocket] Unknown route: $route" }
                         buildErrorResponse("Unknown route: $route")
@@ -129,8 +129,8 @@ class JetBrainsRSocketHandler(
                 logger.info { "📡 [JetBrains RSocket] ← Stream: $route" }
 
                 when (route) {
-                    "jetbrains.batchRollback" -> handleBatchRollback(dataBytes)
-                    "jetbrains.terminalBackground" -> handleTerminalBackground(dataBytes)
+                    "ide.batchRollback" -> handleBatchRollback(dataBytes)
+                    "ide.terminalBackground" -> handleTerminalBackground(dataBytes)
                     else -> {
                         logger.warn { "⚠️ [JetBrains RSocket] Unknown stream route: $route" }
                         flow { throw IllegalArgumentException("Unknown stream route: $route") }

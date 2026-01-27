@@ -840,26 +840,26 @@ class AiAgentRpcServiceImpl(
         userInteractionServer.setInstructionsByBackend(defaults.userInteractionInstructionsByBackend)
 
         if (defaults.enableUserInteractionMcp && isProviderAllowed(defaults.userInteractionMcpBackends)) {
-            sessionServers["user_interaction"] = userInteractionServer
+            sessionServers["user-interaction"] = userInteractionServer
         }
 
         if (defaults.enableJetBrainsMcp && isProviderAllowed(defaults.jetbrainsMcpBackends)) {
-            mcpProviders.jetBrains.getServer()?.let { globalServers["jetbrains-lsp"] = it }
+            mcpProviders.jetBrains.getServer()?.let { globalServers["ide-lsp"] = it }
         }
 
-        sdkLog.info("[MCP] jetbrains-file check: enabled=${defaults.enableJetBrainsFileMcp}, backends=${defaults.jetbrainsFileMcpBackends}, providerAllowed=${isProviderAllowed(defaults.jetbrainsFileMcpBackends)}")
+        sdkLog.info("[MCP] ide-file check: enabled=${defaults.enableJetBrainsFileMcp}, backends=${defaults.jetbrainsFileMcpBackends}, providerAllowed=${isProviderAllowed(defaults.jetbrainsFileMcpBackends)}")
         if (defaults.enableJetBrainsFileMcp && isProviderAllowed(defaults.jetbrainsFileMcpBackends)) {
             val server = mcpProviders.jetBrainsFile.getServer()
-            sdkLog.info("[MCP] jetbrains-file server: ${server?.let { "OK" } ?: "NULL"}")
-            server?.let { globalServers["jetbrains-file"] = it }
+            sdkLog.info("[MCP] ide-file server: ${server?.let { "OK" } ?: "NULL"}")
+            server?.let { globalServers["ide-file"] = it }
         }
 
         if (defaults.enableTerminalMcp && isProviderAllowed(defaults.terminalMcpBackends)) {
-            mcpProviders.terminal.getServerForSession(sessionId)?.let { sessionServers["jetbrains-terminal"] = it }
+            mcpProviders.terminal.getServerForSession(sessionId)?.let { sessionServers["ide-terminal"] = it }
         }
 
         if (defaults.enableGitMcp && isProviderAllowed(defaults.gitMcpBackends)) {
-            mcpProviders.git.getServer()?.let { globalServers["jetbrains_git"] = it }
+            mcpProviders.git.getServer()?.let { globalServers["ide-git"] = it }
         }
 
         // 注册 MCP 服务器的辅助函数
@@ -968,7 +968,7 @@ class AiAgentRpcServiceImpl(
 
         // 收集 Codex 禁用 features
         val codexDisabledFeatures = mutableListOf<String>()
-        if (claudeServers.containsKey("jetbrains-terminal")) {
+        if (claudeServers.containsKey("ide-terminal")) {
             codexDisabledFeatures.addAll(mcpProviders.terminal.getCodexDisabledFeatures())
         }
         if (codexDisabledFeatures.isNotEmpty()) {
@@ -1022,7 +1022,7 @@ class AiAgentRpcServiceImpl(
         val disallowedTools = buildDisallowedBuiltinTools(mcpSetup).toMutableList()
 
         // 如果启用了 User Interaction MCP，禁用内置的 AskUserQuestion
-        if (defaults.enableUserInteractionMcp && mcpSetup.claudeServers.containsKey("user_interaction")) {
+        if (defaults.enableUserInteractionMcp && mcpSetup.claudeServers.containsKey("user-interaction")) {
             disallowedTools.add("AskUserQuestion")
             sdkLog.info("🚫 [buildClaudeOverrides] User Interaction MCP 已启用，禁用内置 AskUserQuestion")
         }
@@ -1254,15 +1254,15 @@ class AiAgentRpcServiceImpl(
         val disallowedTools = mutableListOf<String>()
 
         // 从 MCP 提供者获取需要禁用的工具
-        if (mcpSetup.claudeServers.containsKey("jetbrains-lsp")) {
+        if (mcpSetup.claudeServers.containsKey("ide-lsp")) {
             disallowedTools.addAll(mcpProviders.jetBrains.getDisallowedBuiltinTools())
         }
 
-        if (mcpSetup.claudeServers.containsKey("jetbrains-file")) {
+        if (mcpSetup.claudeServers.containsKey("ide-file")) {
             disallowedTools.addAll(mcpProviders.jetBrainsFile.getDisallowedBuiltinTools())
         }
 
-        if (mcpSetup.claudeServers.containsKey("jetbrains-terminal")) {
+        if (mcpSetup.claudeServers.containsKey("ide-terminal")) {
             disallowedTools.addAll(mcpProviders.terminal.getDisallowedBuiltinTools())
         }
 

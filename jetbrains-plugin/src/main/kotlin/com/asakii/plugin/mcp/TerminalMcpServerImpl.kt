@@ -20,7 +20,7 @@ private val logger = getLogger("TerminalMcpServerImpl")
  * JetBrains Terminal MCP server implementation.
  */
 @McpServerConfig(
-    name = "jetbrains-terminal",
+    name = "ide-terminal",
     version = "1.0.0",
     description = "IDEA integrated terminal tool server, providing command execution, output reading and session management"
 )

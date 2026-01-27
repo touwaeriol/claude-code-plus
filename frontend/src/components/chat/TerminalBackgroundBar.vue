@@ -52,7 +52,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from '@/composables/useI18n'
-import { jetbrainsRSocket, TerminalBackgroundStatus, type BackgroundableTerminal, type TerminalTaskUpdate } from '@/services/jetbrainsRSocket'
+import { ideaRSocket, TerminalBackgroundStatus, type BackgroundableTerminal, type TerminalTaskUpdate } from '@/services/ideaRSocket'
 import { ideaBridge } from '@/services/ideaBridge'
 import { useToastStore } from '@/stores/toastStore'
 
@@ -122,7 +122,7 @@ async function fetchInitialTasks() {
   if (!ideaBridge.isInIde()) return
 
   try {
-    const terminals = await jetbrainsRSocket.getBackgroundableTerminals()
+    const terminals = await ideaRSocket.getBackgroundableTerminals()
     // 只显示超过阈值的任务
     backgroundableTasks.value = terminals.filter(
       task => task.elapsedMs >= DISPLAY_THRESHOLD
@@ -140,7 +140,7 @@ async function handleBackgroundTask(task: BackgroundableTerminal) {
   
   try {
     await new Promise<void>((resolve, reject) => {
-      jetbrainsRSocket.terminalBackground(
+      ideaRSocket.terminalBackground(
         [{ sessionId: task.sessionId, toolUseId: task.toolUseId }],
         (event) => {
           console.log('[TerminalBackgroundBar] 后台化事件:', event)
@@ -182,7 +182,7 @@ async function handleBackgroundAll() {
     await new Promise<void>((resolve, reject) => {
       const completedTasks = new Set<string>()
       
-      jetbrainsRSocket.terminalBackground(
+      ideaRSocket.terminalBackground(
         items,
         (event) => {
           console.log('[TerminalBackgroundBar] 批量后台化事件:', event)
@@ -242,7 +242,7 @@ onMounted(() => {
   fetchInitialTasks()
   
   // 订阅终端任务更新事件
-  unsubscribeTaskUpdate = jetbrainsRSocket.onTerminalTaskUpdate(handleTerminalTaskUpdate)
+  unsubscribeTaskUpdate = ideaRSocket.onTerminalTaskUpdate(handleTerminalTaskUpdate)
   
   // 启动定时器更新已运行时间
   elapsedTimer = setInterval(updateElapsedTime, 1000)

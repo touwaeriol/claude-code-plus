@@ -1,4 +1,4 @@
-import { jetbrainsBridge } from './jetbrainsApi'
+import { ideaBridgeService } from './ideaApi'
 
 /**
  * 主题颜色接口
@@ -98,6 +98,9 @@ export class ThemeService {
       return
     }
 
+    // VS Code Webview：监听扩展侧推送的主题/字体变化
+    this.bindVsCodeThemeBridge()
+
     // 🚀 优先从 URL 参数读取初始主题
     const initialTheme = this.getInitialThemeFromUrl()
     if (initialTheme) {
@@ -116,7 +119,7 @@ export class ThemeService {
 
     // 统一逻辑：浏览器和 IDEA 插件都使用 IDEA 主题
     // 只要后端支持 JetBrains 集成就使用 IDEA 主题
-    if (jetbrainsBridge.isEnabled()) {
+    if (ideaBridgeService.isEnabled()) {
       console.log('🎨 [Unified] Using IDEA theme (backend supports JetBrains)')
       await this.bindJetBrainsTheme()
       return
@@ -151,6 +154,32 @@ export class ThemeService {
     } catch (error) {
       console.warn('🎨 [URL] Failed to parse initial theme:', error)
       return null
+    }
+  }
+
+  /**
+   * VS Code Webview 主题桥接
+   *
+   * VS Code 扩展侧会通过 webview.postMessage 推送：
+   * `{ type: 'ccp-theme', theme: ThemeColors }`
+   */
+  private bindVsCodeThemeBridge() {
+    try {
+      window.addEventListener('message', (event: MessageEvent) => {
+        const payload = event?.data as any
+        if (!payload || typeof payload !== 'object') return
+        if (payload.type !== 'ccp-theme') return
+
+        const theme = payload.theme as ThemeColors | undefined
+        if (!theme || typeof theme !== 'object') return
+
+        this.hasIdeBridge = true
+        this.setTheme(theme)
+        // 字体可能随主题一起更新（例如 editor.fontFamily/fontSize）
+        void this.loadFontsFromBackend(theme)
+      })
+    } catch (error) {
+      console.warn('🎨 [VS Code] Failed to bind theme bridge:', error)
     }
   }
 
@@ -415,7 +444,7 @@ export class ThemeService {
     queueMicrotask(() => {
       try {
         // 订阅主题变化（无需再获取当前主题，已从 URL 获取）
-        this._unsubscribeTheme = jetbrainsBridge.onThemeChange((theme) => {
+        this._unsubscribeTheme = ideaBridgeService.onThemeChange((theme) => {
           if (theme) {
             this.setTheme(theme as ThemeColors)
             console.log('🎨 [IDE] Theme updated via RSocket')
@@ -436,7 +465,7 @@ export class ThemeService {
   private async bindJetBrainsTheme() {
     try {
       // 获取当前主题
-      const theme = await jetbrainsBridge.getTheme()
+      const theme = await ideaBridgeService.getTheme()
       if (theme) {
         this.setTheme(theme as ThemeColors)
         this.hasIdeBridge = true
@@ -446,7 +475,7 @@ export class ThemeService {
       }
 
       // 订阅主题变化
-      this._unsubscribeTheme = jetbrainsBridge.onThemeChange((theme) => {
+      this._unsubscribeTheme = ideaBridgeService.onThemeChange((theme) => {
         if (theme) {
           this.setTheme(theme as ThemeColors)
           console.log('🎨 [IDE] Theme updated via RSocket')
