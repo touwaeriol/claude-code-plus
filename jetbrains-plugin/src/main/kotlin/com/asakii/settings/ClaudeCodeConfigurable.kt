@@ -104,7 +104,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
     private var customModelsTable: JBTable? = null
     private var customModelsTableModel: DefaultTableModel? = null
 
-    // Agents Tab 组件
+    // Agents Tab 组件 - ExploreWithJetbrains
     private var exploreEnabledCheckbox: JBCheckBox? = null
     private var exploreModelCombo: ComboBox<String>? = null
     private var exploreDescriptionArea: JBTextArea? = null
@@ -112,6 +112,15 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
     private var exploreSelectionHintArea: JBTextArea? = null
     private var exploreToolsPanel: JPanel? = null
     private var exploreToolsList: MutableList<String> = mutableListOf()
+
+    // Agents Tab 组件 - CodeWithJetbrains
+    private var codeEnabledCheckbox: JBCheckBox? = null
+    private var codeModelCombo: ComboBox<String>? = null
+    private var codeDescriptionArea: JBTextArea? = null
+    private var codePromptArea: JBTextArea? = null
+    private var codeSelectionHintArea: JBTextArea? = null
+    private var codeToolsPanel: JPanel? = null
+    private var codeToolsList: MutableList<String> = mutableListOf()
 
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
@@ -264,7 +273,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
     }
 
     private fun createAgentsPanel(): JComponent {
-        // 初始化 Agent 组件
+        // 初始化 ExploreWithJetbrains 组件
         exploreEnabledCheckbox = JBCheckBox("Enable")
         exploreModelCombo = ComboBox(arrayOf("(inherit)", "opus", "sonnet", "haiku"))
         exploreDescriptionArea = JBTextArea(2, 60).apply {
@@ -281,25 +290,64 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         }
         exploreToolsPanel = JPanel(WrapLayout(FlowLayout.LEFT, 4, 4))
 
-        // 更新依赖状态
-        fun updateDependency() {
+        // 初始化 CodeWithJetbrains 组件
+        codeEnabledCheckbox = JBCheckBox("Enable")
+        codeModelCombo = ComboBox(arrayOf("(inherit)", "opus", "sonnet", "haiku"))
+        codeDescriptionArea = JBTextArea(2, 60).apply {
+            font = Font(Font.MONOSPACED, Font.PLAIN, 11)
+            lineWrap = true; wrapStyleWord = true
+        }
+        codePromptArea = JBTextArea(6, 60).apply {
+            font = Font(Font.MONOSPACED, Font.PLAIN, 11)
+            lineWrap = true; wrapStyleWord = true
+        }
+        codeSelectionHintArea = JBTextArea(3, 60).apply {
+            font = Font(Font.MONOSPACED, Font.PLAIN, 11)
+            lineWrap = true; wrapStyleWord = true
+        }
+        codeToolsPanel = JPanel(WrapLayout(FlowLayout.LEFT, 4, 4))
+
+        // 更新 ExploreWithJetbrains 依赖状态
+        fun updateExploreDependency() {
             val mcpEnabled = AgentSettingsService.getInstance().enableJetBrainsMcp
             exploreEnabledCheckbox?.isEnabled = mcpEnabled
             exploreModelCombo?.isEnabled = mcpEnabled && (exploreEnabledCheckbox?.isSelected == true)
         }
-        updateDependency()
-        exploreEnabledCheckbox!!.addActionListener { updateDependency() }
+        updateExploreDependency()
+        exploreEnabledCheckbox!!.addActionListener { updateExploreDependency() }
 
-        // 工具输入
-        val toolCombo = ComboBox(DefaultComboBoxModel(KnownTools.ALL.toTypedArray())).apply {
+        // 更新 CodeWithJetbrains 依赖状态
+        fun updateCodeDependency() {
+            val mcpEnabled = AgentSettingsService.getInstance().enableJetBrainsMcp
+            codeEnabledCheckbox?.isEnabled = mcpEnabled
+            codeModelCombo?.isEnabled = mcpEnabled && (codeEnabledCheckbox?.isSelected == true)
+        }
+        updateCodeDependency()
+        codeEnabledCheckbox!!.addActionListener { updateCodeDependency() }
+
+        // ExploreWithJetbrains 工具输入
+        val exploreToolCombo = ComboBox(DefaultComboBoxModel(KnownTools.ALL.toTypedArray())).apply {
             isEditable = true
         }
 
-        fun addTool() {
-            val name = (toolCombo.editor.item?.toString() ?: "").trim()
+        fun addExploreTool() {
+            val name = (exploreToolCombo.editor.item?.toString() ?: "").trim()
             if (name.isNotEmpty() && !exploreToolsList.contains(name)) {
-                addToolTag(name)
-                toolCombo.editor.item = ""
+                addToolTag(name, exploreToolsList, exploreToolsPanel!!)
+                exploreToolCombo.editor.item = ""
+            }
+        }
+
+        // CodeWithJetbrains 工具输入
+        val codeToolCombo = ComboBox(DefaultComboBoxModel(KnownTools.ALL.toTypedArray())).apply {
+            isEditable = true
+        }
+
+        fun addCodeTool() {
+            val name = (codeToolCombo.editor.item?.toString() ?: "").trim()
+            if (name.isNotEmpty() && !codeToolsList.contains(name)) {
+                addToolTag(name, codeToolsList, codeToolsPanel!!)
+                codeToolCombo.editor.item = ""
             }
         }
 
@@ -348,8 +396,8 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
 
                 row("Allowed Tools:") {}
                 row {
-                    cell(toolCombo).columns(COLUMNS_MEDIUM)
-                    button("+") { addTool() }
+                    cell(exploreToolCombo).columns(COLUMNS_MEDIUM)
+                    button("+") { addExploreTool() }
                     comment("Select or type, then click +")
                 }
                 row {
@@ -366,17 +414,78 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
                         exploreDescriptionArea?.text = AgentDefaults.EXPLORE_WITH_JETBRAINS.description
                         explorePromptArea?.text = AgentDefaults.EXPLORE_WITH_JETBRAINS.prompt
                         exploreSelectionHintArea?.text = AgentDefaults.EXPLORE_WITH_JETBRAINS.selectionHint
-                        setTools(AgentDefaults.EXPLORE_WITH_JETBRAINS.tools)
+                        setTools(AgentDefaults.EXPLORE_WITH_JETBRAINS.tools, exploreToolsList, exploreToolsPanel!!)
                         exploreModelCombo?.selectedItem = "(inherit)"
                     }
                 }
             }.apply { expanded = true }
+
+            collapsibleGroup("CodeWithJetbrains") {
+                row {
+                    cell(codeEnabledCheckbox!!)
+                    label("Model:").gap(RightGap.SMALL)
+                    cell(codeModelCombo!!).columns(COLUMNS_SHORT)
+                }
+                row {
+                    val mcpEnabled = AgentSettingsService.getInstance().enableJetBrainsMcp
+                    if (!mcpEnabled) {
+                        comment("Requires JetBrains MCP to be enabled").applyToComponent {
+                            foreground = JBColor(0xFF6B6B, 0xFF6B6B)
+                        }
+                    }
+                }
+
+                separator().topGap(TopGap.SMALL)
+
+                row("Description:") {}
+                row {
+                    scrollCell(codeDescriptionArea!!).align(Align.FILL).resizableColumn()
+                }
+
+                row("System Prompt:") {}
+                row {
+                    scrollCell(codePromptArea!!).align(Align.FILL).resizableColumn()
+                }.resizableRow()
+
+                row("Appended System Prompt:") {}
+                row { comment("Appended to CLI's system prompt. Tells AI when/how to use this agent.") }
+                row {
+                    scrollCell(codeSelectionHintArea!!).align(Align.FILL).resizableColumn()
+                }
+
+                separator().topGap(TopGap.SMALL)
+
+                row("Allowed Tools:") {}
+                row {
+                    cell(codeToolCombo).columns(COLUMNS_MEDIUM)
+                    button("+") { addCodeTool() }
+                    comment("Select or type, then click +")
+                }
+                row {
+                    cell(JBScrollPane(codeToolsPanel).apply {
+                        preferredSize = Dimension(600, 80)
+                        horizontalScrollBarPolicy = JBScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+                    }).align(AlignX.FILL)
+                }
+
+                separator().topGap(TopGap.SMALL)
+
+                row {
+                    button("Reset to Default") {
+                        codeDescriptionArea?.text = AgentDefaults.CODE_WITH_JETBRAINS.description
+                        codePromptArea?.text = AgentDefaults.CODE_WITH_JETBRAINS.prompt
+                        codeSelectionHintArea?.text = AgentDefaults.CODE_WITH_JETBRAINS.selectionHint
+                        setTools(AgentDefaults.CODE_WITH_JETBRAINS.tools, codeToolsList, codeToolsPanel!!)
+                        codeModelCombo?.selectedItem = "(inherit)"
+                    }
+                }
+            }.apply { expanded = false }
         }
     }
 
-    private fun addToolTag(toolName: String) {
-        if (exploreToolsList.contains(toolName)) return
-        exploreToolsList.add(toolName)
+    private fun addToolTag(toolName: String, toolsList: MutableList<String>, toolsPanel: JPanel) {
+        if (toolsList.contains(toolName)) return
+        toolsList.add(toolName)
 
         val tagPanel = JPanel(FlowLayout(FlowLayout.LEFT, 2, 0)).apply {
             border = BorderFactory.createCompoundBorder(
@@ -393,26 +502,27 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         }
         removeBtn.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
-                exploreToolsList.remove(toolName)
-                exploreToolsPanel?.remove(tagPanel)
-                exploreToolsPanel?.revalidate()
-                exploreToolsPanel?.repaint()
+                toolsList.remove(toolName)
+                toolsPanel.remove(tagPanel)
+                toolsPanel.revalidate()
+                toolsPanel.repaint()
             }
         })
         tagPanel.add(label)
         tagPanel.add(removeBtn)
-        exploreToolsPanel?.add(tagPanel)
-        exploreToolsPanel?.revalidate()
-        exploreToolsPanel?.repaint()
+        toolsPanel.add(tagPanel)
+        toolsPanel.revalidate()
+        toolsPanel.repaint()
     }
 
-    private fun setTools(tools: List<String>) {
-        exploreToolsList.clear()
-        exploreToolsPanel?.removeAll()
-        tools.forEach { addToolTag(it) }
+    private fun setTools(tools: List<String>, toolsList: MutableList<String>, toolsPanel: JPanel) {
+        toolsList.clear()
+        toolsPanel.removeAll()
+        tools.forEach { addToolTag(it, toolsList, toolsPanel) }
     }
 
-    private fun getTools(): List<String> = exploreToolsList.toList()
+    private fun getExploreTools(): List<String> = exploreToolsList.toList()
+    private fun getCodeTools(): List<String> = codeToolsList.toList()
 
     private fun refreshModelCombo() {
         val current = defaultModelCombo?.selectedItem as? ModelInfo
@@ -486,25 +596,46 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
             defaultAutoCleanupContextsCheckbox?.isSelected != settings.claudeDefaultAutoCleanupContexts
 
         val config = parseAgentsConfig(settings.customAgents)
+
+        // Check ExploreWithJetbrains modifications
         val explore = config.agents["ExploreWithJetbrains"]
-        val effectiveEnabled = explore?.enabled ?: true
-        val effectiveModel = explore?.model?.ifBlank { "(inherit)" } ?: "(inherit)"
-        val effectiveDesc = explore?.description?.ifBlank { AgentDefaults.EXPLORE_WITH_JETBRAINS.description }
+        val exploreEffectiveEnabled = explore?.enabled ?: true
+        val exploreEffectiveModel = explore?.model?.ifBlank { "(inherit)" } ?: "(inherit)"
+        val exploreEffectiveDesc = explore?.description?.ifBlank { AgentDefaults.EXPLORE_WITH_JETBRAINS.description }
             ?: AgentDefaults.EXPLORE_WITH_JETBRAINS.description
-        val effectivePrompt = explore?.prompt?.ifBlank { AgentDefaults.EXPLORE_WITH_JETBRAINS.prompt }
+        val exploreEffectivePrompt = explore?.prompt?.ifBlank { AgentDefaults.EXPLORE_WITH_JETBRAINS.prompt }
             ?: AgentDefaults.EXPLORE_WITH_JETBRAINS.prompt
-        val effectiveHint = explore?.selectionHint?.ifBlank { AgentDefaults.EXPLORE_WITH_JETBRAINS.selectionHint }
+        val exploreEffectiveHint = explore?.selectionHint?.ifBlank { AgentDefaults.EXPLORE_WITH_JETBRAINS.selectionHint }
             ?: AgentDefaults.EXPLORE_WITH_JETBRAINS.selectionHint
-        val effectiveTools = explore?.tools?.takeIf { it.isNotEmpty() } ?: AgentDefaults.EXPLORE_WITH_JETBRAINS.tools
+        val exploreEffectiveTools = explore?.tools?.takeIf { it.isNotEmpty() } ?: AgentDefaults.EXPLORE_WITH_JETBRAINS.tools
 
-        val agentsModified = exploreEnabledCheckbox?.isSelected != effectiveEnabled ||
-            exploreModelCombo?.selectedItem != effectiveModel ||
-            exploreDescriptionArea?.text != effectiveDesc ||
-            explorePromptArea?.text != effectivePrompt ||
-            exploreSelectionHintArea?.text != effectiveHint ||
-            getTools() != effectiveTools
+        val exploreModified = exploreEnabledCheckbox?.isSelected != exploreEffectiveEnabled ||
+            exploreModelCombo?.selectedItem != exploreEffectiveModel ||
+            exploreDescriptionArea?.text != exploreEffectiveDesc ||
+            explorePromptArea?.text != exploreEffectivePrompt ||
+            exploreSelectionHintArea?.text != exploreEffectiveHint ||
+            getExploreTools() != exploreEffectiveTools
 
-        return generalModified || agentsModified
+        // Check CodeWithJetbrains modifications
+        val code = config.agents["CodeWithJetbrains"]
+        val codeEffectiveEnabled = code?.enabled ?: true
+        val codeEffectiveModel = code?.model?.ifBlank { "(inherit)" } ?: "(inherit)"
+        val codeEffectiveDesc = code?.description?.ifBlank { AgentDefaults.CODE_WITH_JETBRAINS.description }
+            ?: AgentDefaults.CODE_WITH_JETBRAINS.description
+        val codeEffectivePrompt = code?.prompt?.ifBlank { AgentDefaults.CODE_WITH_JETBRAINS.prompt }
+            ?: AgentDefaults.CODE_WITH_JETBRAINS.prompt
+        val codeEffectiveHint = code?.selectionHint?.ifBlank { AgentDefaults.CODE_WITH_JETBRAINS.selectionHint }
+            ?: AgentDefaults.CODE_WITH_JETBRAINS.selectionHint
+        val codeEffectiveTools = code?.tools?.takeIf { it.isNotEmpty() } ?: AgentDefaults.CODE_WITH_JETBRAINS.tools
+
+        val codeModified = codeEnabledCheckbox?.isSelected != codeEffectiveEnabled ||
+            codeModelCombo?.selectedItem != codeEffectiveModel ||
+            codeDescriptionArea?.text != codeEffectiveDesc ||
+            codePromptArea?.text != codeEffectivePrompt ||
+            codeSelectionHintArea?.text != codeEffectiveHint ||
+            getCodeTools() != codeEffectiveTools
+
+        return generalModified || exploreModified || codeModified
     }
 
     override fun apply() {
@@ -530,16 +661,32 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         settings.defaultBypassPermissions = defaultBypassPermissionsCheckbox?.isSelected ?: false
         settings.claudeDefaultAutoCleanupContexts = defaultAutoCleanupContextsCheckbox?.isSelected ?: false
 
-        val agentModel = exploreModelCombo?.selectedItem as? String ?: "(inherit)"
+        // Save ExploreWithJetbrains config
+        val exploreAgentModel = exploreModelCombo?.selectedItem as? String ?: "(inherit)"
         val exploreConfig = AgentConfigItem(
             enabled = exploreEnabledCheckbox?.isSelected ?: true,
             description = exploreDescriptionArea?.text ?: "",
             prompt = explorePromptArea?.text ?: "",
-            tools = getTools(),
-            model = if (agentModel == "(inherit)") "" else agentModel,
+            tools = getExploreTools(),
+            model = if (exploreAgentModel == "(inherit)") "" else exploreAgentModel,
             selectionHint = exploreSelectionHintArea?.text ?: ""
         )
-        settings.customAgents = json.encodeToString(AgentsConfigData(mapOf("ExploreWithJetbrains" to exploreConfig)))
+
+        // Save CodeWithJetbrains config
+        val codeAgentModel = codeModelCombo?.selectedItem as? String ?: "(inherit)"
+        val codeConfig = AgentConfigItem(
+            enabled = codeEnabledCheckbox?.isSelected ?: true,
+            description = codeDescriptionArea?.text ?: "",
+            prompt = codePromptArea?.text ?: "",
+            tools = getCodeTools(),
+            model = if (codeAgentModel == "(inherit)") "" else codeAgentModel,
+            selectionHint = codeSelectionHintArea?.text ?: ""
+        )
+
+        settings.customAgents = json.encodeToString(AgentsConfigData(mapOf(
+            "ExploreWithJetbrains" to exploreConfig,
+            "CodeWithJetbrains" to codeConfig
+        )))
         settings.notifyChange()
     }
 
@@ -566,6 +713,8 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         defaultAutoCleanupContextsCheckbox?.isSelected = settings.claudeDefaultAutoCleanupContexts
 
         val config = parseAgentsConfig(settings.customAgents)
+
+        // Reset ExploreWithJetbrains
         val explore = config.agents["ExploreWithJetbrains"]
         if (explore != null && (explore.description.isNotBlank() || explore.prompt.isNotBlank())) {
             exploreEnabledCheckbox?.isSelected = explore.enabled
@@ -573,14 +722,32 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
             exploreDescriptionArea?.text = explore.description.ifBlank { AgentDefaults.EXPLORE_WITH_JETBRAINS.description }
             explorePromptArea?.text = explore.prompt.ifBlank { AgentDefaults.EXPLORE_WITH_JETBRAINS.prompt }
             exploreSelectionHintArea?.text = explore.selectionHint.ifBlank { AgentDefaults.EXPLORE_WITH_JETBRAINS.selectionHint }
-            setTools(explore.tools.takeIf { it.isNotEmpty() } ?: AgentDefaults.EXPLORE_WITH_JETBRAINS.tools)
+            setTools(explore.tools.takeIf { it.isNotEmpty() } ?: AgentDefaults.EXPLORE_WITH_JETBRAINS.tools, exploreToolsList, exploreToolsPanel!!)
         } else {
             exploreEnabledCheckbox?.isSelected = true
             exploreModelCombo?.selectedItem = "(inherit)"
             exploreDescriptionArea?.text = AgentDefaults.EXPLORE_WITH_JETBRAINS.description
             explorePromptArea?.text = AgentDefaults.EXPLORE_WITH_JETBRAINS.prompt
             exploreSelectionHintArea?.text = AgentDefaults.EXPLORE_WITH_JETBRAINS.selectionHint
-            setTools(AgentDefaults.EXPLORE_WITH_JETBRAINS.tools)
+            setTools(AgentDefaults.EXPLORE_WITH_JETBRAINS.tools, exploreToolsList, exploreToolsPanel!!)
+        }
+
+        // Reset CodeWithJetbrains
+        val code = config.agents["CodeWithJetbrains"]
+        if (code != null && (code.description.isNotBlank() || code.prompt.isNotBlank())) {
+            codeEnabledCheckbox?.isSelected = code.enabled
+            codeModelCombo?.selectedItem = code.model.ifBlank { "(inherit)" }
+            codeDescriptionArea?.text = code.description.ifBlank { AgentDefaults.CODE_WITH_JETBRAINS.description }
+            codePromptArea?.text = code.prompt.ifBlank { AgentDefaults.CODE_WITH_JETBRAINS.prompt }
+            codeSelectionHintArea?.text = code.selectionHint.ifBlank { AgentDefaults.CODE_WITH_JETBRAINS.selectionHint }
+            setTools(code.tools.takeIf { it.isNotEmpty() } ?: AgentDefaults.CODE_WITH_JETBRAINS.tools, codeToolsList, codeToolsPanel!!)
+        } else {
+            codeEnabledCheckbox?.isSelected = true
+            codeModelCombo?.selectedItem = "(inherit)"
+            codeDescriptionArea?.text = AgentDefaults.CODE_WITH_JETBRAINS.description
+            codePromptArea?.text = AgentDefaults.CODE_WITH_JETBRAINS.prompt
+            codeSelectionHintArea?.text = AgentDefaults.CODE_WITH_JETBRAINS.selectionHint
+            setTools(AgentDefaults.CODE_WITH_JETBRAINS.tools, codeToolsList, codeToolsPanel!!)
         }
     }
 
@@ -603,6 +770,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         defaultAutoCleanupContextsCheckbox = null
         customModelsTable = null
         customModelsTableModel = null
+        // ExploreWithJetbrains
         exploreEnabledCheckbox = null
         exploreModelCombo = null
         exploreDescriptionArea = null
@@ -610,6 +778,14 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         exploreSelectionHintArea = null
         exploreToolsPanel = null
         exploreToolsList.clear()
+        // CodeWithJetbrains
+        codeEnabledCheckbox = null
+        codeModelCombo = null
+        codeDescriptionArea = null
+        codePromptArea = null
+        codeSelectionHintArea = null
+        codeToolsPanel = null
+        codeToolsList.clear()
         mainPanel = null
     }
 }

@@ -12,7 +12,7 @@ claude-agent-sdk/cli-patches/
 │   ├── 001-run-in-background.js
 │   ├── 002-chrome-status.js
 │   ├── 003-parent-uuid.js
-│   ├── 004-mcp-server-control.js  # MCP 服务器控制（重连/禁用/启用）
+│   ├── 004-mcp-server-control.js  # [DISABLED] MCP 服务器控制 - 官方 2.1.19 已内置
 │   ├── 005-mcp-tools.js
 │   ├── 007-run-to-background.js
 │   ├── 008-get-capabilities.js
@@ -76,11 +76,23 @@ const reconnectFnName = context.foundVariables?.reconnectFn;
 
 ## MCP 相关补丁
 
-### 004-mcp-server-control.js
+### 004-mcp-server-control.js [DISABLED]
 
-**功能**: 添加 MCP 服务器控制端点（重连/禁用/启用）
+> **状态**: 自 CLI 2.1.19 起已禁用。官方 CLI 现已内置 `mcp_reconnect` 和 `mcp_toggle` 命令。
 
-**控制命令**: `mcp_reconnect`, `mcp_disable`, `mcp_enable`
+**原功能**: 添加 MCP 服务器控制端点（重连/禁用/启用）
+
+**原控制命令**: `mcp_reconnect`, `mcp_disable`, `mcp_enable`
+
+**官方实现差异** (2.1.19+):
+- 官方使用 `serverName` (camelCase)，原补丁使用 `server_name` (snake_case)
+- 官方使用统一的 `mcp_toggle` 命令配合 `enabled` 参数，替代独立的 `mcp_disable`/`mcp_enable`
+
+**SDK 适配**: `ControlProtocol.kt` 已更新使用官方 API 格式。
+
+---
+
+**以下为原补丁文档，仅供参考：**
 
 **发现的变量**:
 - `reconnectFn`: 重连函数名 (如 `x2A`)
@@ -95,6 +107,17 @@ const reconnectFnName = context.foundVariables?.reconnectFn;
 2. 在其中查找 `{configs:X,clients:Y,...}` 对象表达式
 3. 提取 X 作为 configs 变量名，Y 作为 clients 变量名
 4. 查找 `disabledMcpServers` 相关函数获取禁用/启用控制函数
+
+## CLI 2.1.19 变量映射
+
+| 用途 | 变量名 | 发现特征 |
+|------|--------|----------|
+| MCP 重连 (官方内置) | - | `mcp_reconnect` + `serverName` |
+| MCP 切换 (官方内置) | - | `mcp_toggle` + `serverName` + `enabled` |
+| Task 工具定义 | 待分析 | `="Task"` |
+| Skill 工具定义 | 待分析 | `="Skill"` |
+
+> **注意**: CLI 2.1.19 官方已内置 MCP 控制命令，无需补丁发现相关变量。
 
 ## CLI 2.1.17 变量映射
 
@@ -199,13 +222,30 @@ else if (requestVar.request.subtype === "get_capabilities") { ... }  // <- 插�
 cd claude-agent-sdk/cli-patches
 
 # 干运行模式（仅验证，不生成文件）
-node patch-cli.js --dry-run claude-cli-2.1.17.js
+node patch-cli.js --dry-run claude-cli-2.1.19.js
 
 # 应用补丁
-node patch-cli.js claude-cli-2.1.17.js patched-cli.js
+node patch-cli.js claude-cli-2.1.19.js patched-cli.js
 ```
 
 ## 变更历史
+
+### 2026-01-25 (CLI 2.1.19)
+
+- **升级**: CLI 版本从 2.1.17 升级到 2.1.19
+- **禁用**: `004-mcp-server-control.js` 补丁 - 官方 CLI 2.1.19 已内置 `mcp_reconnect` 和 `mcp_toggle` 命令
+- **更新**: `ControlProtocol.kt` 适配官方 API 格式：
+  - `server_name` → `serverName` (camelCase)
+  - `mcp_disable`/`mcp_enable` → 统一使用 `mcp_toggle` + `enabled` 参数
+
+**官方内置 MCP 控制命令**:
+```javascript
+// mcp_reconnect - 重连指定 MCP 服务器
+{ "subtype": "mcp_reconnect", "serverName": "server-name" }
+
+// mcp_toggle - 启用/禁用 MCP 服务器
+{ "subtype": "mcp_toggle", "serverName": "server-name", "enabled": true/false }
+```
 
 ### 2026-01-23 (CLI 2.1.17)
 
@@ -405,11 +445,11 @@ node syntax-validator.mjs [enhanced-cli-path]
 
 ### 补丁检查表
 
-| 补丁 | 检查方法 | 官方已修复标志 |
-|------|----------|---------------|
-| 009-skill-parent-tool-use-id | 检查 id2 和 Ts5 函数 | assistant 消息有 sourceToolUseID，输出使用动态值 |
-| 007-run-to-background | 检查控制端点 | 官方支持后台化 |
-| 004-mcp-server-control | 检查控制端点 | 官方支持 MCP 重连/禁用/启用 |
+| 补丁 | 检查方法 | 官方已修复标志 | 状态 |
+|------|----------|---------------|------|
+| 009-skill-parent-tool-use-id | 检查 id2 和 Ts5 函数 | assistant 消息有 sourceToolUseID，输出使用动态值 | 活跃 |
+| 007-run-to-background | 检查控制端点 | 官方支持后台化 | 活跃 |
+| 004-mcp-server-control | 检查控制端点 | 官方支持 MCP 重连/禁用/启用 | **已禁用 (2.1.19)** |
 
 ### 注意事项
 

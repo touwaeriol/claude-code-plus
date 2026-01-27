@@ -1,105 +1,111 @@
 {
   "taskToolDefinitions": [
     {
-      "varName": "gq",
-      "loc": "line 198",
-      "code": "gq=\"Task\""
+      "varName": "l5",
+      "loc": "line 248",
+      "code": "l5=\"Task\""
     }
   ],
   "parentToolUseIdAssignments": [],
   "parentToolUseIdReferences": [
     {
-      "loc": "line 2361",
+      "loc": "line 867",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
     },
     {
-      "loc": "line 3039",
+      "loc": "line 2985",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
     },
     {
-      "loc": "line 3039",
+      "loc": "line 2985",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
     },
     {
-      "loc": "line 3039",
+      "loc": "line 2985",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
     },
     {
-      "loc": "line 3039",
+      "loc": "line 2985",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
     },
     {
-      "loc": "line 3039",
+      "loc": "line 2985",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
     },
     {
-      "loc": "line 3039",
+      "loc": "line 2985",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
     },
     {
-      "loc": "line 3039",
+      "loc": "line 2985",
+      "code": "parent_tool_use_id:null",
+      "value": "null",
+      "isNonNull": false
+    },
+    {
+      "loc": "line 2985",
       "code": "parent_tool_use_id:A.parentToolUseID",
       "value": "A.parentToolUseID",
       "isNonNull": true
     },
     {
-      "loc": "line 3039",
+      "loc": "line 2985",
       "code": "parent_tool_use_id:A.parentToolUseID",
       "value": "A.parentToolUseID",
       "isNonNull": true
     },
     {
-      "loc": "line 3039",
+      "loc": "line 2985",
       "code": "parent_tool_use_id:A.parentToolUseID",
       "value": "A.parentToolUseID",
       "isNonNull": true
     },
     {
-      "loc": "line 3039",
+      "loc": "line 2985",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
     },
     {
-      "loc": "line 3471",
+      "loc": "line 3417",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
     },
     {
-      "loc": "line 4358",
+      "loc": "line 4435",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
     },
     {
-      "loc": "line 4358",
+      "loc": "line 4435",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
     },
     {
-      "loc": "line 6015",
+      "loc": "line 6056",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
     },
     {
-      "loc": "line 6019",
+      "loc": "line 6060",
       "code": "parent_tool_use_id:null",
       "value": "null",
       "isNonNull": false
@@ -107,18 +113,18 @@
   ],
   "skillReferences": [
     {
-      "varName": "NZ",
-      "loc": "line 2468",
-      "code": "NZ=\"Skill\""
+      "varName": "hZ",
+      "loc": "line 2183",
+      "code": "hZ=\"Skill\""
     }
   ],
   "sourceToolUseIDRefs": [
     {
-      "loc": "line 3612",
+      "loc": "line 3676",
       "code": "if(A.sourceToolUseID)return A.sourceToolUseID;"
     },
     {
-      "loc": "line 3612",
+      "loc": "line 3676",
       "code": "return A.sourceToolUseID;"
     }
   ]

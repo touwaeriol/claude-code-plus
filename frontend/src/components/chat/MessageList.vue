@@ -334,7 +334,9 @@ const historyLoadInProgress = ref(false)
 const historyLoadRequested = ref(false)
 const historyScrollHeightBefore = ref(0)
 const historyScrollTopBefore = ref(0)
-const hasLoadedHistory = ref(false)  // 标记是否已完成首次历史加载
+// 记录已完成首次历史加载的 tabId（MessageList 组件是单例，会复用在多个 tab 上）
+// 如果用一个全局 boolean，会导致切到新 tab 加载历史后不再自动滚到底部。
+const loadedHistoryTabIds = new Set<string>()
 
 // Streaming 计时器
 const elapsedTime = ref(0)
@@ -704,25 +706,37 @@ watch(() => props.isLoading, async (newValue, oldValue) => {
       historyLoadInProgress.value = false
       // 重置懒加载请求标志，允许下次加载
       historyLoadRequested.value = false
-    } else if (!hasLoadedHistory.value) {
-      // 首次加载历史会话完成：自动填满视口并可靠滚动到底部
-      hasLoadedHistory.value = true
+    } else {
+      const tabId = sessionStore.currentTabId
+      if (!tabId) return
 
-      await nextTick()
-      forceUpdateScroller()
+      if (!loadedHistoryTabIds.has(tabId)) {
+        // 首次加载该 tab 的历史会话完成：自动填满视口并可靠滚动到底部
+        loadedHistoryTabIds.add(tabId)
 
-      // 1. 先填满视口
-      await ensureScrollable()
+        await nextTick()
+        forceUpdateScroller()
 
-      // 2. 再可靠滚动
-      await scrollToBottomReliably()
+        // 1. 先填满视口
+        await ensureScrollable()
 
-      // 3. 重置懒加载标志，允许后续手动触发
-      historyLoadRequested.value = false
-      historyLoadInProgress.value = false
+        // 2. 再可靠滚动
+        await scrollToBottomReliably()
 
-      // 确保是 follow 模式
-      scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0 }
+        // 3. 重置懒加载标志，允许后续手动触发
+        historyLoadRequested.value = false
+        historyLoadInProgress.value = false
+
+        // 确保是 follow 模式
+        scrollState.value = { mode: 'follow', anchor: null, newMessageCount: 0 }
+      } else if (scrollState.value.mode === 'follow') {
+        // 非首次加载：保持在底部（比如重载会话/再次加载尾部历史）
+        await nextTick()
+        await scrollToBottomReliably()
+      }
+
+      const el = getScrollElement()
+      if (el) lastScrollTop.value = el.scrollTop
     }
   }
 })

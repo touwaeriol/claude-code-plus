@@ -50,7 +50,6 @@
           </div>
           <div class="session-meta">
             <span class="session-time">{{ formatTime(session.timestamp) }}</span>
-            <span class="session-count">{{ formatMessageCount(session.messageCount) }} messages</span>
           </div>
         </div>
 
@@ -149,30 +148,21 @@ const renamingSession = ref<Session | null>(null)
 const newName = ref('')
 const renameInputRef = ref<HTMLInputElement>()
 
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  if (hours < 24) return `${hours}h ago`
-  if (days < 7) return `${days}d ago`
-
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric'
-  })
+function normalizeTimestamp(timestamp: number): number {
+  // 兼容后端返回秒级时间戳（10 位）/毫秒级时间戳（13 位）
+  return timestamp < 1e12 ? timestamp * 1000 : timestamp
 }
 
-function formatMessageCount(messageCount?: number): string {
-  if (messageCount == null) return '—'
-  if (messageCount < 0) return '—'
-  return String(messageCount)
+function formatTime(timestamp: number): string {
+  const ts = normalizeTimestamp(timestamp)
+  const date = new Date(ts)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`
 }
 
 async function startRename(session: Session) {

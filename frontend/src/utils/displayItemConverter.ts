@@ -427,8 +427,8 @@ export function convertMessageToDisplayItems(
         const toolCall = createToolCall(block as ToolUseContent, pendingToolCalls)
         // 如果是 Skill 工具，从跨消息映射获取 skillContent
         const toolUse = block as ToolUseContent
-        const toolName = toolUse.toolName || (toolUse as any).name
-        if (toolName === 'Skill' && getSkillContent) {
+        const legacyToolName = (toolUse as any).name as string | undefined
+        if ((toolUse.toolName === 'Skill' || legacyToolName === 'Skill') && getSkillContent) {
           const skillContent = getSkillContent(toolUse.id)
           if (skillContent && isSkillToolCall(toolCall)) {
             toolCall.skillContent = skillContent

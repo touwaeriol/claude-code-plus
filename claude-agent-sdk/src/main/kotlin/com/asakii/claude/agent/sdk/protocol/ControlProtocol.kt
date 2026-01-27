@@ -1001,7 +1001,7 @@ class ControlProtocol(
     suspend fun reconnectMcp(serverName: String): McpReconnectResponse {
         val request = buildJsonObject {
             put("subtype", "mcp_reconnect")
-            put("server_name", serverName)
+            put("serverName", serverName)  // Official CLI 2.1.19 uses camelCase
         }
         val response = sendControlRequestInternal(request)
 
@@ -1078,17 +1078,16 @@ class ControlProtocol(
      * Disable a specific MCP server.
      * This updates the user's disabledMcpServers configuration and disconnects the server.
      *
-     * Internally calls:
-     * - CY0(serverName, false) - Add to disabledMcpServers list
-     * - gm(serverName, config) - Disconnect if currently connected
+     * Official CLI 2.1.19 uses mcp_toggle with enabled=false.
      *
      * @param serverName The name of the MCP server to disable
      * @return Response with success status and server state
      */
     suspend fun disableMcp(serverName: String): McpDisableEnableResponse {
         val request = buildJsonObject {
-            put("subtype", "mcp_disable")
-            put("server_name", serverName)
+            put("subtype", "mcp_toggle")
+            put("serverName", serverName)  // Official CLI 2.1.19 uses camelCase
+            put("enabled", false)
         }
         val response = sendControlRequestInternal(request)
 
@@ -1118,17 +1117,16 @@ class ControlProtocol(
      * Enable a specific MCP server.
      * This removes the server from disabledMcpServers and reconnects it.
      *
-     * Internally calls:
-     * - CY0(serverName, true) - Remove from disabledMcpServers list
-     * - x2A(serverName, config) - Reconnect the server
+     * Official CLI 2.1.19 uses mcp_toggle with enabled=true.
      *
      * @param serverName The name of the MCP server to enable
      * @return Response with success status and server state
      */
     suspend fun enableMcp(serverName: String): McpDisableEnableResponse {
         val request = buildJsonObject {
-            put("subtype", "mcp_enable")
-            put("server_name", serverName)
+            put("subtype", "mcp_toggle")
+            put("serverName", serverName)  // Official CLI 2.1.19 uses camelCase
+            put("enabled", true)
         }
         val response = sendControlRequestInternal(request)
 

@@ -1,4 +1,4 @@
-# Claude Code Plus
+ # Claude Code Plus
 
 <p align="center">
   <img src="jetbrains-plugin/src/main/resources/META-INF/pluginIcon.svg" width="80" alt="Claude Code Plus Logo">

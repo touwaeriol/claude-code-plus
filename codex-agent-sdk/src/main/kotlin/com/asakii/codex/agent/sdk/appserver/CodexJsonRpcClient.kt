@@ -26,6 +26,11 @@ class CodexJsonRpcClient(
     private val stdout: InputStream,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) : Closeable {
+    companion object {
+        @PublishedApi
+        internal const val DEFAULT_TIMEOUT_MS: Long = 30_000
+    }
+
     @PublishedApi
     internal val logger = getLogger("CodexJsonRpcClient")
 
@@ -140,44 +145,64 @@ class CodexJsonRpcClient(
     /**
      * 发送请求并等待响应
      */
-    suspend inline fun <reified T> request(method: String): T {
-        return request<T, JsonElement>(method, null)
+    suspend inline fun <reified T> request(method: String, timeoutMillis: Long = DEFAULT_TIMEOUT_MS): T {
+        return request<T, JsonElement>(method, null, timeoutMillis)
     }
 
     @OptIn(ExperimentalSerializationApi::class)
-    suspend inline fun <reified T, reified P> request(method: String, params: P? = null): T {
+    suspend inline fun <reified T, reified P> request(
+        method: String,
+        params: P? = null,
+        timeoutMillis: Long = DEFAULT_TIMEOUT_MS
+    ): T {
         val requestId = UUID.randomUUID().toString()
         val deferred = CompletableDeferred<JsonRpcResponse>()
         pendingRequests[requestId] = deferred
         logger.debug { "RPC request: method=$method id=$requestId" }
 
-        val request = buildJsonObject {
-            put("method", method)
-            put("id", requestId)
-            params?.let {
-                put("params", encodeToJsonElementSafely(it))
+        try {
+            val request = buildJsonObject {
+                put("method", method)
+                put("id", requestId)
+                params?.let {
+                    put("params", encodeToJsonElementSafely(it))
+                }
             }
-        }
 
-        sendLine(json.encodeToString(request))
+            sendLine(json.encodeToString(request))
 
-        val response = deferred.await()
+            val response = try {
+                if (timeoutMillis > 0) {
+                    withTimeout(timeoutMillis) { deferred.await() }
+                } else {
+                    deferred.await()
+                }
+            } catch (e: TimeoutCancellationException) {
+                throw CodexRpcException(-32603, "Request timeout: $method")
+            }
 
-        if (response.error != null) {
-            throw CodexRpcException(response.error.code, response.error.message)
-        }
+            if (response.error != null) {
+                throw CodexRpcException(response.error.code, response.error.message)
+            }
 
-        @Suppress("UNCHECKED_CAST")
-        return when {
-            T::class == Unit::class -> Unit as T
-            response.result != null -> json.decodeFromJsonElement<T>(response.result)
-            else -> throw CodexRpcException(-1, "Empty result")
+            @Suppress("UNCHECKED_CAST")
+            return when {
+                T::class == Unit::class -> Unit as T
+                response.result != null -> json.decodeFromJsonElement<T>(response.result)
+                else -> throw CodexRpcException(-1, "Empty result")
+            }
+        } finally {
+            pendingRequests.remove(requestId)
         }
     }
 
     @OptIn(ExperimentalSerializationApi::class)
-    suspend inline fun <reified P> requestUnit(method: String, params: P? = null) {
-        request<Unit, P>(method, params)
+    suspend inline fun <reified P> requestUnit(
+        method: String,
+        params: P? = null,
+        timeoutMillis: Long = DEFAULT_TIMEOUT_MS
+    ) {
+        request<Unit, P>(method, params, timeoutMillis)
     }
 
     /**

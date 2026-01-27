@@ -315,6 +315,12 @@ class IdeToolsImpl(
                         continue
                     }
 
+                    // CodeWithJetbrains agent 依赖 JetBrains MCP
+                    if (name == "CodeWithJetbrains" && !jetBrainsMcpEnabled) {
+                        logger.info { "⏭️ Skipping CodeWithJetbrains: JetBrains MCP is disabled" }
+                        continue
+                    }
+
                     val description = agentObj["description"]?.jsonPrimitive?.contentOrNull ?: ""
                     val prompt = agentObj["prompt"]?.jsonPrimitive?.contentOrNull ?: ""
                     val tools = agentObj["tools"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
@@ -350,25 +356,38 @@ class IdeToolsImpl(
      * 获取默认的代理定义
      * 当用户未配置或配置解析失败时使用
      *
-     * 注意：ExploreWithJetbrains agent 只在 JetBrains MCP 启用时才可用
+     * 注意：ExploreWithJetbrains 和 CodeWithJetbrains agent 只在 JetBrains MCP 启用时才可用
      */
     private fun getDefaultAgentDefinitions(): Map<String, AgentDefinition> {
         // 检查 JetBrains MCP 是否启用
         val settings = AgentSettingsService.getInstance()
         if (!settings.enableJetBrainsMcp) {
-            logger.info { "⏭️ JetBrains MCP is disabled, ExploreWithJetbrains agent not available" }
+            logger.info { "⏭️ JetBrains MCP is disabled, ExploreWithJetbrains and CodeWithJetbrains agents not available" }
             return emptyMap()
         }
 
-        val defaultAgent = AgentDefaults.EXPLORE_WITH_JETBRAINS
-        val agentDef = AgentDefinition(
-            description = defaultAgent.description,
-            prompt = defaultAgent.prompt,
-            tools = defaultAgent.tools,
+        val result = mutableMapOf<String, AgentDefinition>()
+
+        // ExploreWithJetbrains agent
+        val exploreAgent = AgentDefaults.EXPLORE_WITH_JETBRAINS
+        result[exploreAgent.name] = AgentDefinition(
+            description = exploreAgent.description,
+            prompt = exploreAgent.prompt,
+            tools = exploreAgent.tools,
             model = null // 使用默认模型
         )
-        logger.info { "📦 Using default agent: ${defaultAgent.name}" }
-        return mapOf(defaultAgent.name to agentDef)
+
+        // CodeWithJetbrains agent
+        val codeAgent = AgentDefaults.CODE_WITH_JETBRAINS
+        result[codeAgent.name] = AgentDefinition(
+            description = codeAgent.description,
+            prompt = codeAgent.prompt,
+            tools = codeAgent.tools,
+            model = null // 使用默认模型
+        )
+
+        logger.info { "📦 Using default agents: ${result.keys.joinToString()}" }
+        return result
     }
 
     override fun getActiveEditorFile(): ActiveFileInfo? {

@@ -22,7 +22,8 @@ dependencies {
     api(project(":ai-agent-proto")) // Protobuf 生成的类型 (使用 api 以暴露 OrBuilder 接口)
 
     // MCP Java SDK (用于 Streamable HTTP 端点)
-    implementation("io.modelcontextprotocol.sdk:mcp:0.10.0")
+    implementation("io.modelcontextprotocol.sdk:mcp-core:0.17.2")
+    implementation("io.modelcontextprotocol.sdk:mcp-json-jackson2:0.17.2")
 
     // 嵌入式 Jetty (用于 MCP Streamable HTTP Servlet)
     implementation("org.eclipse.jetty.ee10:jetty-ee10-servlet:12.0.16")

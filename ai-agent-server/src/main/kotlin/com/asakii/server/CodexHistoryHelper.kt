@@ -52,14 +52,10 @@ class CodexHistoryHelper(
             val fallbackProjectPath = ideTools.getProjectPath()
             RpcHistorySessionsResult(
                 sessions = threads.map { thread ->
-                    val resumedThread = try {
-                        client.resumeThread(thread.id)
-                    } catch (e: Exception) {
-                        logger.warn(e) { "⚠️ [HTTP] Failed to resume Codex thread for messageCount: ${thread.id}" }
-                        null
-                    }
-                    val messageCount = resumedThread?.let { CodexHistoryMapper.countMessages(it) } ?: -1
-                    val cwd = (resumedThread?.cwd ?: thread.cwd).takeIf { it.isNotBlank() } ?: fallbackProjectPath
+                    // 这里不主动 resumeThread：部分环境下 thread/resume 可能阻塞，导致历史列表请求卡死。
+                    // messageCount 在 UI 层允许为 -1（展示为 '—'），打开会话后再通过 metadata/load 获取真实数量即可。
+                    val messageCount = -1
+                    val cwd = thread.cwd.takeIf { it.isNotBlank() } ?: fallbackProjectPath
                     RpcHistorySession(
                         sessionId = thread.id,
                         firstUserMessage = thread.preview,

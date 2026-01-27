@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.4] - 2026-01-26
+
+### Fixed
+- Increase JVM memory for Marketplace publish (4GB heap) to prevent OOM errors
+
+## [2.0.3] - 2026-01-25
+
+### Added
+- Enhanced release workflow with automated build and publish
+- Auto-build all 5 platform versions (242/243/251/252/253) on tag push
+- Auto-upload artifacts to GitHub Release
+- Auto-publish to JetBrains Marketplace
+
+### Fixed
+- Remove orphan submodule entry for vs-code worktree
+
+### Documentation
+- Add release workflow documentation to CLAUDE.md
+
+## [2.0.2] - 2026-01-25
+
+### Fixed
+- Normalize timestamp handling for seconds/milliseconds compatibility in session management
+- Improve history loading and tool call rendering in chat
+- Convert McpHttpGateway from singleton to project-level instance for better isolation
+- Reduce streamable HTTP session churn in MCP
+
+### Changed
+- Upgrade MCP SDK to 0.17.2 with improved timeout configuration
+- Upgrade bundled Claude CLI to 2.1.17
+- Optimize GitHub Actions caching for faster builds
+- Reduce verify matrix to IntelliJ IDEA and WebStorm only
+
+### Removed
+- Remove PyCharm Community verification for 2025.3+
+- Remove unused withServerToken imports from frontend
+
 ## [2.0.1] - 2026-01-23
 
 ### Changed

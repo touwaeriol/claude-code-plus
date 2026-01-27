@@ -613,7 +613,7 @@ tasks {
 // 用法: gradlew :jetbrains-plugin:buildAllVersions
 // 优化: 前端只构建一次，然后并行构建各版本插件（每个版本独立构建目录）
 
-// 主任务：构建所有版本
+// 主任务：构建所有版本（串行执行，实时输出进度）
 val buildAllVersions by tasks.registering {
     group = "build"
     description = "Build plugin for all supported platform versions (242, 243, 251, 252, 253)"
@@ -633,7 +633,8 @@ val buildAllVersions by tasks.registering {
         println("====================================")
         println()
         println("📦 Frontend built once, reusing for all platforms")
-        println("🚀 Building 5 versions in parallel...")
+        println("🔄 Building 5 versions sequentially with live output...")
+        println()
     }
 
     doLast {
@@ -651,12 +652,16 @@ val buildAllVersions by tasks.registering {
         }
         tempBuildDir.mkdirs()
 
-        // 并行启动所有构建进程
-        val processes = platforms.map { platform ->
+        val failedPlatforms = mutableListOf<String>()
+
+        // 串行构建每个版本，实时输出进度
+        platforms.forEachIndexed { index, platform ->
             val platformBuildDir = File(tempBuildDir, platform)
             platformBuildDir.mkdirs()
 
-            println("[$platform] Starting build...")
+            println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            println("📌 [${index + 1}/5] Building platform $platform...")
+            println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
             val cmd = if (isWin) {
                 listOf("cmd", "/c", gradlew, ":jetbrains-plugin:buildPlugin",
@@ -666,7 +671,7 @@ val buildAllVersions by tasks.registering {
                     "-x", "buildFrontendWithVite",
                     "-x", "copyFrontendFiles",
                     "-x", "installFrontendDeps",
-                    "--no-daemon", "-q")
+                    "--no-daemon", "--console=plain")
             } else {
                 listOf(gradlew, ":jetbrains-plugin:buildPlugin",
                     "-PplatformMajor=$platform",
@@ -675,36 +680,42 @@ val buildAllVersions by tasks.registering {
                     "-x", "buildFrontendWithVite",
                     "-x", "copyFrontendFiles",
                     "-x", "installFrontendDeps",
-                    "--no-daemon", "-q")
+                    "--no-daemon", "--console=plain")
             }
 
             val processBuilder = ProcessBuilder(cmd)
                 .directory(projectDir)
                 .redirectErrorStream(true)
 
-            platform to processBuilder.start()
-        }
+            val process = processBuilder.start()
 
-        // 等待所有进程完成并收集结果
-        val results = processes.map { (platform, process) ->
-            val exitCode = process.waitFor()
-            val output = process.inputStream.bufferedReader().readText()
-
-            if (exitCode != 0) {
-                println("❌ [$platform] FAILED")
-                println(output)
+            // 实时读取并输出进度
+            val reader = process.inputStream.bufferedReader()
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                println("  [$platform] $line")
             }
 
-            platform to exitCode
+            val exitCode = process.waitFor()
+
+            if (exitCode != 0) {
+                println("❌ [$platform] BUILD FAILED (exit code: $exitCode)")
+                failedPlatforms.add(platform)
+            } else {
+                println("✅ [$platform] BUILD SUCCESS")
+            }
+            println()
         }
 
         // 检查是否有失败
-        val failed = results.filter { it.second != 0 }
-        if (failed.isNotEmpty()) {
-            throw GradleException("Build failed for platforms: ${failed.map { it.first }.joinToString(", ")}")
+        if (failedPlatforms.isNotEmpty()) {
+            throw GradleException("Build failed for platforms: ${failedPlatforms.joinToString(", ")}")
         }
 
         // 复制构建产物到最终目录
+        println("====================================")
+        println("📦 Collecting build artifacts...")
+        println("====================================")
         distDir.mkdirs()
         platforms.forEach { platform ->
             val platformDistDir = File(tempBuildDir, "$platform/distributions")
@@ -714,7 +725,7 @@ val buildAllVersions by tasks.registering {
 
             if (srcFile.exists()) {
                 srcFile.copyTo(dstFile, overwrite = true)
-                println("✅ [$platform] claude-code-plus-jetbrains-plugin-${versionStr}.${platform}.zip")
+                println("  ✅ [$platform] claude-code-plus-jetbrains-plugin-${versionStr}.${platform}.zip")
             } else {
                 throw GradleException("[$platform] Output file not found: ${srcFile.absolutePath}")
             }
