@@ -356,7 +356,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
-import { useSettingsStore, type McpServer } from '@/stores/settingsStore'
+import { useSettingsStore, type McpServer, getDefaultInstructions } from '@/stores/settingsStore'
 
 const settings = useSettingsStore()
 
@@ -375,16 +375,6 @@ const newDisabledTool = ref('')
 const newCodexDisabledFeature = ref('')
 const newAutoApprovedTool = ref('')
 const newExternalRule = ref('')
-
-// 默认提示词 (简化版)
-const defaultInstructions: Record<string, string> = {
-  'User Interaction': 'Use this tool to interact with users when input or confirmation is needed.',
-  'JetBrains LSP': 'Code exploration agent leveraging JetBrains IDE indexing capabilities.',
-  'JetBrains File': 'Read and write files using JetBrains IDE VFS.',
-  'Context7': 'Query up-to-date documentation and code examples from Context7.',
-  'Terminal': 'Execute commands in the integrated terminal.',
-  'Git': 'Git operations including commit, diff, and status.'
-}
 
 // 默认禁用工具
 const defaultDisabledTools: Record<string, string[]> = {
@@ -482,8 +472,8 @@ const openEditDialog = (row: McpServer) => {
   }
   
   // Instructions
-  serverForm.instructionsClaude = row.instructionsClaude || defaultInstructions[row.name] || ''
-  serverForm.instructionsCodex = row.instructionsCodex || defaultInstructions[row.name] || ''
+  serverForm.instructionsClaude = row.instructionsClaude || getDefaultInstructions(row.name)
+  serverForm.instructionsCodex = row.instructionsCodex || getDefaultInstructions(row.name)
   
   // Timeout
   serverForm.toolTimeoutSec = row.toolTimeoutSec || 60
@@ -593,11 +583,11 @@ const saveBackends = () => {
 
 // Instructions reset
 const resetClaudeInstructions = () => {
-  serverForm.instructionsClaude = defaultInstructions[serverForm.name] || ''
+  serverForm.instructionsClaude = getDefaultInstructions(serverForm.name)
 }
 
 const resetCodexInstructions = () => {
-  serverForm.instructionsCodex = defaultInstructions[serverForm.name] || ''
+  serverForm.instructionsCodex = getDefaultInstructions(serverForm.name)
 }
 
 // Disabled tools management
