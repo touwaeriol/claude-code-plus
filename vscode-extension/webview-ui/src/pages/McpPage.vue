@@ -378,9 +378,9 @@ const newExternalRule = ref('')
 
 // 默认禁用工具 (来自 JetBrains McpConfigurable.kt)
 // 注意：这些是当 hasDisableToolsToggle=true 并启用禁用选项时的默认值
-// JetBrains LSP 默认禁用 Glob 和 Grep (因为使用 IDE 索引)
+// 用于 "Reset to default" 功能
+// JetBrains LSP 的禁用工具 (Glob, Grep) 是隐式固定的，不在 UI 中显示，所以不在此 map 中
 const defaultDisabledTools: Record<string, string[]> = {
-  'JetBrains LSP': ['Glob', 'Grep'],
   'Terminal': ['Bash'],  // terminalDisableBuiltinBash=true 时
   'JetBrains File': ['Read', 'Write', 'Edit']  // jetbrainsFileDisableBuiltinTools=true 时
 }
@@ -459,19 +459,19 @@ const serverForm = reactive({
 })
 
 // 计算属性
+// hasDisableToolsToggle: 是否有禁用工具开关 (Terminal 和 JetBrains File)
+// JetBrains LSP 的禁用工具是隐式固定的 (Glob, Grep)，不通过 UI 控制
 const hasDisableToolsToggle = computed(() => 
   serverForm.name === 'Terminal' || serverForm.name === 'JetBrains File'
 )
 
-// 是否显示禁用工具选项 (hasDisableToolsToggle 或者有默认禁用工具)
-const showDisabledTools = computed(() =>
-  hasDisableToolsToggle.value || Object.keys(defaultDisabledTools).includes(serverForm.name)
-)
+// 是否显示禁用工具选项 - 只有 hasDisableToolsToggle 为 true 时才显示
+// JetBrains LSP 虽然有禁用工具，但不在 UI 中显示（与 JetBrains 一致）
+const showDisabledTools = computed(() => hasDisableToolsToggle.value)
 
-// 是否显示 Codex 禁用功能选项
-const showCodexDisabledFeatures = computed(() =>
-  Object.keys(defaultCodexDisabledFeatures).includes(serverForm.name)
-)
+// 是否显示 Codex 禁用功能选项 - 只有 hasDisableToolsToggle 为 true 时才显示
+// 因为 Codex 禁用功能与禁用工具开关联动
+const showCodexDisabledFeatures = computed(() => hasDisableToolsToggle.value)
 
 const hasAutoApprovedTools = computed(() =>
   Object.keys(defaultAutoApprovedTools).includes(serverForm.name)
@@ -517,10 +517,11 @@ const openEditDialog = (row: McpServer) => {
   // Timeout
   serverForm.toolTimeoutSec = row.toolTimeoutSec || 60
   
-  // Disabled Tools
+  // Disabled Tools - 使用服务器对象的 defaultAutoApprovedTools 作为后备
   serverForm.disabledTools = [...(row.disabledTools || [])]
   serverForm.codexDisabledFeatures = [...(row.codexDisabledFeatures || [])]
-  serverForm.codexAutoApprovedTools = [...(row.codexAutoApprovedTools || defaultAutoApprovedTools[row.name] || [])]
+  // 优先使用已设置的 codexAutoApprovedTools，其次使用服务器的 defaultAutoApprovedTools，最后使用静态 map
+  serverForm.codexAutoApprovedTools = [...(row.codexAutoApprovedTools || row.defaultAutoApprovedTools || defaultAutoApprovedTools[row.name] || [])]
   
   // Context7
   serverForm.apiKey = row.apiKey || ''
@@ -643,7 +644,9 @@ const removeDisabledTool = (index: number) => {
 }
 
 const resetDisabledTools = () => {
-  serverForm.disabledTools = [...(defaultDisabledTools[serverForm.name] || [])]
+  // 优先使用服务器对象中的 defaultDisabledTools，其次使用静态 map
+  const serverDefaults = editingServer.value?.defaultDisabledTools
+  serverForm.disabledTools = [...(serverDefaults || defaultDisabledTools[serverForm.name] || [])]
 }
 
 // Codex disabled features management
@@ -660,7 +663,9 @@ const removeCodexDisabledFeature = (index: number) => {
 }
 
 const resetCodexDisabledFeatures = () => {
-  serverForm.codexDisabledFeatures = [...(defaultCodexDisabledFeatures[serverForm.name] || [])]
+  // 优先使用服务器对象中的 defaultCodexDisabledFeatures，其次使用静态 map
+  const serverDefaults = editingServer.value?.defaultCodexDisabledFeatures
+  serverForm.codexDisabledFeatures = [...(serverDefaults || defaultCodexDisabledFeatures[serverForm.name] || [])]
 }
 
 // Auto-approved tools management
@@ -677,7 +682,9 @@ const removeAutoApprovedTool = (index: number) => {
 }
 
 const resetAutoApprovedTools = () => {
-  serverForm.codexAutoApprovedTools = [...(defaultAutoApprovedTools[serverForm.name] || [])]
+  // 优先使用服务器对象中的 defaultAutoApprovedTools，其次使用静态 map
+  const serverDefaults = editingServer.value?.defaultAutoApprovedTools
+  serverForm.codexAutoApprovedTools = [...(serverDefaults || defaultAutoApprovedTools[serverForm.name] || [])]
 }
 
 // External rules management

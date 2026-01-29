@@ -197,21 +197,33 @@ export interface GitGenerateSettings {
 export interface McpServer {
   name: string
   enabled: boolean
-  backends: string
-  level: string
+  backends: string  // 对应 JetBrains enabledBackends，格式: "All" | "Claude" | "Codex" | "Claude,Codex"
+  level: string     // 对应 JetBrains McpServerLevel: "BUILTIN" | "GLOBAL" | "PROJECT"
   isBuiltIn: boolean
-  configuration?: string
+  configuration?: string   // 对应 JetBrains configSummary
+  jsonConfig?: string      // JSON 配置（自定义 MCP 使用）
   // Instructions (System Prompts)
-  instructionsClaude?: string
-  instructionsCodex?: string
+  instructions?: string       // 通用提示词（非 Claude/Codex 特定）
+  instructionsClaude?: string // Claude 特定提示词
+  instructionsCodex?: string  // Codex 特定提示词
+  // Default Instructions (只读，内置 MCP 使用)
+  defaultInstructions?: string
   // Tool Timeout
   toolTimeoutSec?: number
+  // Disable Tools Toggle
+  hasDisableToolsToggle?: boolean  // 是否有禁用工具开关（如 Terminal 的 Bash）
   // Disabled Tools (for Claude Code)
   disabledTools?: string[]
+  // Default Disabled Tools (只读，内置 MCP 使用)
+  defaultDisabledTools?: string[]
   // Codex Disabled Features
   codexDisabledFeatures?: string[]
+  // Default Codex Disabled Features (只读，内置 MCP 使用)
+  defaultCodexDisabledFeatures?: string[]
   // Codex Auto-Approved Tools
   codexAutoApprovedTools?: string[]
+  // Default Auto-Approved Tools (只读，内置 MCP 使用)
+  defaultAutoApprovedTools?: string[]
   // Context7 specific
   apiKey?: string
   // Terminal MCP specific
@@ -274,12 +286,82 @@ export const useSettingsStore = defineStore('settings', () => {
   // MCP 设置
   const mcp = ref<McpSettings>({
     servers: [
-      { name: 'User Interaction', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 3600 },
-      { name: 'JetBrains LSP', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, disabledTools: ['Glob', 'Grep'] },
-      { name: 'JetBrains File', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, fileAllowExternal: true, fileExternalRules: '[]' },
-      { name: 'Context7', enabled: false, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, apiKey: '' },
-      { name: 'Terminal', enabled: false, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, terminalMaxOutputLines: 500, terminalMaxOutputChars: 50000, terminalReadTimeout: 30, terminalDefaultShell: '', terminalAvailableShells: '' },
-      { name: 'Git', enabled: false, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, gitCommitLanguage: 'en' }
+      { 
+        name: 'User Interaction', 
+        enabled: true, 
+        backends: 'All', 
+        level: 'Global', 
+        isBuiltIn: true, 
+        configuration: 'Built-in', 
+        toolTimeoutSec: 3600,
+        defaultAutoApprovedTools: ['AskUserQuestion']
+      },
+      { 
+        name: 'JetBrains LSP', 
+        enabled: true, 
+        backends: 'All', 
+        level: 'Global', 
+        isBuiltIn: true, 
+        configuration: 'Built-in', 
+        toolTimeoutSec: 60, 
+        // JetBrains LSP 固定禁用 Glob 和 Grep (因为使用 IDE 索引)
+        disabledTools: ['Glob', 'Grep'],
+        defaultAutoApprovedTools: ['DirectoryTree', 'FileProblems', 'FileIndex', 'CodeSearch', 'FindUsages', 'Rename']
+      },
+      { 
+        name: 'JetBrains File', 
+        enabled: true, 
+        backends: 'All', 
+        level: 'Global', 
+        isBuiltIn: true, 
+        configuration: 'Built-in', 
+        toolTimeoutSec: 60, 
+        hasDisableToolsToggle: true,
+        defaultDisabledTools: ['Read', 'Write', 'Edit'],
+        defaultCodexDisabledFeatures: ['apply_patch_freeform'],
+        defaultAutoApprovedTools: ['ReadFile'],
+        fileAllowExternal: true, 
+        fileExternalRules: '[]' 
+      },
+      { 
+        name: 'Context7', 
+        enabled: false, 
+        backends: 'All', 
+        level: 'Global', 
+        isBuiltIn: true, 
+        configuration: 'Built-in', 
+        toolTimeoutSec: 60, 
+        apiKey: '' 
+      },
+      { 
+        name: 'Terminal', 
+        enabled: false, 
+        backends: 'All', 
+        level: 'Global', 
+        isBuiltIn: true, 
+        configuration: 'Built-in', 
+        toolTimeoutSec: 60, 
+        hasDisableToolsToggle: true,
+        defaultDisabledTools: ['Bash'],
+        defaultCodexDisabledFeatures: ['shell_tool'],
+        defaultAutoApprovedTools: ['TerminalRead', 'TerminalList', 'TerminalKill', 'TerminalTypes', 'TerminalRename', 'TerminalInterrupt'],
+        terminalMaxOutputLines: 500, 
+        terminalMaxOutputChars: 50000, 
+        terminalReadTimeout: 30, 
+        terminalDefaultShell: '', 
+        terminalAvailableShells: '' 
+      },
+      { 
+        name: 'Git', 
+        enabled: false, 
+        backends: 'All', 
+        level: 'Global', 
+        isBuiltIn: true, 
+        configuration: 'Built-in', 
+        toolTimeoutSec: 60, 
+        defaultAutoApprovedTools: ['GetVcsChanges', 'GetCommitMessage', 'SetCommitMessage', 'GetVcsStatus', 'SelectFiles', 'DeselectFiles', 'SelectAllFiles', 'DeselectAllFiles'],
+        gitCommitLanguage: 'en' 
+      }
     ]
   })
 
