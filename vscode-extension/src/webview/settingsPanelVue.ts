@@ -126,6 +126,10 @@ export class SettingsPanel {
   private static async sendSettings(webview: vscode.Webview): Promise<void> {
     const config = vscode.workspace.getConfiguration('claudeCodePlus')
 
+    // Load MCP servers from config, with defaults
+    const savedMcpServers = config.get<unknown[]>('mcp.servers', [])
+    const mcpServers = savedMcpServers.length > 0 ? savedMcpServers : SettingsPanel.getDefaultMcpServers(config)
+
     const settings = {
       claude: {
         defaultBypassPermissions: config.get('defaultBypassPermissions', false),
@@ -134,7 +138,7 @@ export class SettingsPanel {
         includePartialMessages: config.get('includePartialMessages', true),
         nodePath: config.get('claude.nodePath', ''),
         defaultModelId: config.get('claude.defaultModelId', 'claude-opus-4-5-20251101'),
-        defaultThinkingLevel: config.get('claude.defaultThinkingLevel', 'HIGH'),
+        defaultThinkingLevel: config.get('claude.defaultThinkingLevel', 'ultra'),
         thinkTokens: config.get('claude.thinkTokens', 2048),
         ultraTokens: config.get('claude.ultraTokens', 8096),
         customModels: config.get('claude.customModels', []),
@@ -148,7 +152,7 @@ export class SettingsPanel {
         customModels: config.get('codex.customModels', []),
         reasoningEffort: config.get('codex.reasoningEffort', 'medium'),
         reasoningSummary: config.get('codex.reasoningSummary', 'auto'),
-        sandboxMode: config.get('codex.sandboxMode', 'auto'),
+        sandboxMode: config.get('codex.sandboxMode', 'workspace-write'),
       },
       gitGenerate: {
         enabled: config.get('gitGenerate.enabled', false),
@@ -159,15 +163,10 @@ export class SettingsPanel {
         saveSession: config.get('gitGenerate.saveSession', false),
         systemPrompt: config.get('gitGenerate.systemPrompt', ''),
         userPrompt: config.get('gitGenerate.userPrompt', ''),
+        tools: config.get('gitGenerate.tools', []),
       },
       mcp: {
-        servers: [
-          { name: 'JetBrains LSP', enabled: config.get('agent.enableJetBrainsMcp', true), backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in' },
-          { name: 'JetBrains File', enabled: config.get('agent.enableJetBrainsFileMcp', true), backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in' },
-          { name: 'Terminal', enabled: config.get('agent.enableTerminalMcp', true), backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in' },
-          { name: 'Git', enabled: config.get('agent.enableGitMcp', true), backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in' },
-          { name: 'User Interaction', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in' },
-        ],
+        servers: mcpServers,
       },
     }
 
@@ -175,12 +174,118 @@ export class SettingsPanel {
   }
 
   /**
+   * Get default MCP servers configuration
+   */
+  private static getDefaultMcpServers(config: vscode.WorkspaceConfiguration): unknown[] {
+    return [
+      { 
+        name: 'User Interaction', 
+        enabled: true, 
+        backends: 'All', 
+        level: 'Global', 
+        isBuiltIn: true, 
+        configuration: 'Built-in',
+        toolTimeoutSec: 3600,
+        defaultAutoApprovedTools: ['AskUserQuestion'],
+      },
+      { 
+        name: 'JetBrains LSP', 
+        enabled: config.get('agent.enableJetBrainsMcp', true), 
+        backends: 'All', 
+        level: 'Global', 
+        isBuiltIn: true, 
+        configuration: 'Built-in',
+        toolTimeoutSec: 60,
+        disabledTools: ['Glob', 'Grep'],
+        defaultAutoApprovedTools: ['DirectoryTree', 'FileProblems', 'FileIndex', 'CodeSearch', 'FindUsages', 'Rename'],
+      },
+      { 
+        name: 'JetBrains File', 
+        enabled: config.get('agent.enableJetBrainsFileMcp', true), 
+        backends: 'All', 
+        level: 'Global', 
+        isBuiltIn: true, 
+        configuration: 'Built-in',
+        toolTimeoutSec: 60,
+        hasDisableToolsToggle: true,
+        defaultDisabledTools: ['Read', 'Write', 'Edit'],
+        defaultCodexDisabledFeatures: ['apply_patch_freeform'],
+        defaultAutoApprovedTools: ['ReadFile'],
+        fileAllowExternal: true,
+        fileExternalRules: '[]',
+      },
+      { 
+        name: 'Context7', 
+        enabled: false, 
+        backends: 'All', 
+        level: 'Global', 
+        isBuiltIn: true, 
+        configuration: 'Built-in',
+        toolTimeoutSec: 60,
+        apiKey: '',
+      },
+      { 
+        name: 'Terminal', 
+        enabled: config.get('agent.enableTerminalMcp', true), 
+        backends: 'All', 
+        level: 'Global', 
+        isBuiltIn: true, 
+        configuration: 'Built-in',
+        toolTimeoutSec: 60,
+        hasDisableToolsToggle: true,
+        defaultDisabledTools: ['Bash'],
+        defaultCodexDisabledFeatures: ['shell_tool'],
+        defaultAutoApprovedTools: ['TerminalRead', 'TerminalList', 'TerminalKill', 'TerminalTypes', 'TerminalRename', 'TerminalInterrupt'],
+        terminalMaxOutputLines: 500,
+        terminalMaxOutputChars: 50000,
+        terminalReadTimeout: 10,
+        terminalDefaultShell: '',
+        terminalAvailableShells: '',
+        terminalDisableInteractive: false,
+      },
+      { 
+        name: 'Git', 
+        enabled: config.get('agent.enableGitMcp', true), 
+        backends: 'All', 
+        level: 'Global', 
+        isBuiltIn: true, 
+        configuration: 'Built-in',
+        toolTimeoutSec: 60,
+        defaultAutoApprovedTools: ['GetVcsChanges', 'GetCommitMessage', 'SetCommitMessage', 'GetVcsStatus', 'SelectFiles', 'DeselectFiles', 'SelectAllFiles', 'DeselectAllFiles'],
+        gitCommitLanguage: 'en',
+      },
+    ]
+  }
+
+  /**
    * Save a setting to VS Code configuration
+   * Handles both simple key-value pairs and complex nested objects
    */
   private static async saveSetting(key: string, value: unknown): Promise<void> {
     const config = vscode.workspace.getConfiguration('claudeCodePlus')
     
-    // Map the settings store keys to VS Code config keys
+    // Handle top-level settings categories (claude, codex, gitGenerate, mcp)
+    if (key === 'claude' && typeof value === 'object' && value !== null) {
+      await SettingsPanel.saveClaudeSettings(config, value as Record<string, unknown>)
+      return
+    }
+    
+    if (key === 'codex' && typeof value === 'object' && value !== null) {
+      await SettingsPanel.saveCodexSettings(config, value as Record<string, unknown>)
+      return
+    }
+    
+    if (key === 'gitGenerate' && typeof value === 'object' && value !== null) {
+      await SettingsPanel.saveGitGenerateSettings(config, value as Record<string, unknown>)
+      return
+    }
+    
+    if (key === 'mcp' && typeof value === 'object' && value !== null) {
+      await SettingsPanel.saveMcpSettings(config, value as Record<string, unknown>)
+      return
+    }
+    
+    // Map the settings store keys to VS Code config keys for simple values
     const keyMappings: Record<string, string> = {
       'claude.defaultBypassPermissions': 'defaultBypassPermissions',
       'claude.includePartialMessages': 'includePartialMessages',
@@ -190,6 +295,139 @@ export class SettingsPanel {
 
     const configKey = keyMappings[key] || key
     await config.update(configKey, value, vscode.ConfigurationTarget.Global)
+  }
+  
+  /**
+   * Save Claude settings
+   */
+  private static async saveClaudeSettings(config: vscode.WorkspaceConfiguration, claude: Record<string, unknown>): Promise<void> {
+    // Map frontend keys to VS Code config keys
+    if ('defaultBypassPermissions' in claude) {
+      await config.update('defaultBypassPermissions', claude.defaultBypassPermissions, vscode.ConfigurationTarget.Global)
+    }
+    if ('defaultAutoCleanupContexts' in claude) {
+      await config.update('claude.defaultAutoCleanupContexts', claude.defaultAutoCleanupContexts, vscode.ConfigurationTarget.Global)
+    }
+    if ('permissionMode' in claude) {
+      await config.update('claude.permissionMode', claude.permissionMode, vscode.ConfigurationTarget.Global)
+    }
+    if ('includePartialMessages' in claude) {
+      await config.update('includePartialMessages', claude.includePartialMessages, vscode.ConfigurationTarget.Global)
+    }
+    if ('nodePath' in claude) {
+      await config.update('claude.nodePath', claude.nodePath, vscode.ConfigurationTarget.Global)
+    }
+    if ('defaultModelId' in claude) {
+      await config.update('claude.defaultModelId', claude.defaultModelId, vscode.ConfigurationTarget.Global)
+    }
+    if ('defaultThinkingLevel' in claude) {
+      await config.update('claude.defaultThinkingLevel', claude.defaultThinkingLevel, vscode.ConfigurationTarget.Global)
+    }
+    if ('thinkTokens' in claude) {
+      await config.update('claude.thinkTokens', claude.thinkTokens, vscode.ConfigurationTarget.Global)
+    }
+    if ('ultraTokens' in claude) {
+      await config.update('claude.ultraTokens', claude.ultraTokens, vscode.ConfigurationTarget.Global)
+    }
+    if ('customModels' in claude) {
+      await config.update('claude.customModels', claude.customModels, vscode.ConfigurationTarget.Global)
+    }
+  }
+  
+  /**
+   * Save Codex settings
+   */
+  private static async saveCodexSettings(config: vscode.WorkspaceConfiguration, codex: Record<string, unknown>): Promise<void> {
+    if ('defaultBypassPermissions' in codex) {
+      await config.update('codex.defaultBypassPermissions', codex.defaultBypassPermissions, vscode.ConfigurationTarget.Global)
+    }
+    if ('defaultAutoCleanupContexts' in codex) {
+      await config.update('codex.defaultAutoCleanupContexts', codex.defaultAutoCleanupContexts, vscode.ConfigurationTarget.Global)
+    }
+    if ('codexPath' in codex) {
+      await config.update('codex.path', codex.codexPath, vscode.ConfigurationTarget.Global)
+    }
+    if ('webSearch' in codex) {
+      await config.update('codex.webSearchEnabled', codex.webSearch, vscode.ConfigurationTarget.Global)
+    }
+    if ('defaultModelId' in codex) {
+      await config.update('codex.defaultModelId', codex.defaultModelId, vscode.ConfigurationTarget.Global)
+    }
+    if ('customModels' in codex) {
+      await config.update('codex.customModels', codex.customModels, vscode.ConfigurationTarget.Global)
+    }
+    if ('reasoningEffort' in codex) {
+      await config.update('codex.reasoningEffort', codex.reasoningEffort, vscode.ConfigurationTarget.Global)
+    }
+    if ('reasoningSummary' in codex) {
+      await config.update('codex.reasoningSummary', codex.reasoningSummary, vscode.ConfigurationTarget.Global)
+    }
+    if ('sandboxMode' in codex) {
+      await config.update('codex.sandboxMode', codex.sandboxMode, vscode.ConfigurationTarget.Global)
+    }
+  }
+  
+  /**
+   * Save Git Generate settings
+   */
+  private static async saveGitGenerateSettings(config: vscode.WorkspaceConfiguration, gitGenerate: Record<string, unknown>): Promise<void> {
+    if ('enabled' in gitGenerate) {
+      await config.update('gitGenerate.enabled', gitGenerate.enabled, vscode.ConfigurationTarget.Global)
+    }
+    if ('backend' in gitGenerate) {
+      await config.update('gitGenerate.backend', gitGenerate.backend, vscode.ConfigurationTarget.Global)
+    }
+    if ('modelId' in gitGenerate) {
+      await config.update('gitGenerate.model', gitGenerate.modelId, vscode.ConfigurationTarget.Global)
+    }
+    if ('claudeThinkingLevel' in gitGenerate) {
+      await config.update('gitGenerate.claudeThinkingLevel', gitGenerate.claudeThinkingLevel, vscode.ConfigurationTarget.Global)
+    }
+    if ('codexReasoningEffort' in gitGenerate) {
+      await config.update('gitGenerate.codexReasoningEffort', gitGenerate.codexReasoningEffort, vscode.ConfigurationTarget.Global)
+    }
+    if ('saveSession' in gitGenerate) {
+      await config.update('gitGenerate.saveSession', gitGenerate.saveSession, vscode.ConfigurationTarget.Global)
+    }
+    if ('systemPrompt' in gitGenerate) {
+      await config.update('gitGenerate.systemPrompt', gitGenerate.systemPrompt, vscode.ConfigurationTarget.Global)
+    }
+    if ('userPrompt' in gitGenerate) {
+      await config.update('gitGenerate.userPrompt', gitGenerate.userPrompt, vscode.ConfigurationTarget.Global)
+    }
+    if ('tools' in gitGenerate) {
+      await config.update('gitGenerate.tools', gitGenerate.tools, vscode.ConfigurationTarget.Global)
+    }
+  }
+  
+  /**
+   * Save MCP settings
+   */
+  private static async saveMcpSettings(config: vscode.WorkspaceConfiguration, mcp: Record<string, unknown>): Promise<void> {
+    if ('servers' in mcp && Array.isArray(mcp.servers)) {
+      // Save entire MCP servers array
+      await config.update('mcp.servers', mcp.servers, vscode.ConfigurationTarget.Global)
+      
+      // Also update legacy individual enable flags for built-in servers
+      for (const server of mcp.servers as Array<{ name: string; enabled: boolean; isBuiltIn?: boolean }>) {
+        if (server.isBuiltIn) {
+          switch (server.name) {
+            case 'JetBrains LSP':
+              await config.update('agent.enableJetBrainsMcp', server.enabled, vscode.ConfigurationTarget.Global)
+              break
+            case 'JetBrains File':
+              await config.update('agent.enableJetBrainsFileMcp', server.enabled, vscode.ConfigurationTarget.Global)
+              break
+            case 'Terminal':
+              await config.update('agent.enableTerminalMcp', server.enabled, vscode.ConfigurationTarget.Global)
+              break
+            case 'Git':
+              await config.update('agent.enableGitMcp', server.enabled, vscode.ConfigurationTarget.Global)
+              break
+          }
+        }
+      }
+    }
   }
 
   /**

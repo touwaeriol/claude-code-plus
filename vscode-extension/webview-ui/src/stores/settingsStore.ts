@@ -246,6 +246,9 @@ export interface McpSettings {
 }
 
 export const useSettingsStore = defineStore('settings', () => {
+  // 标记是否正在加载设置（防止 watch 在初始化时触发保存）
+  const isLoading = ref(true)
+  
   // Claude Code 设置
   const claude = ref<ClaudeSettings>({
     defaultBypassPermissions: false,
@@ -411,28 +414,46 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  // 监听设置变化并自动保存
+  // 监听设置变化并自动保存（只在非加载状态时触发）
   watch(claude, (newVal) => {
-    saveSetting('claude', newVal)
+    if (!isLoading.value) {
+      saveSetting('claude', newVal)
+    }
   }, { deep: true })
 
   watch(codex, (newVal) => {
-    saveSetting('codex', newVal)
+    if (!isLoading.value) {
+      saveSetting('codex', newVal)
+    }
   }, { deep: true })
 
   watch(gitGenerate, (newVal) => {
-    saveSetting('gitGenerate', newVal)
+    if (!isLoading.value) {
+      saveSetting('gitGenerate', newVal)
+    }
   }, { deep: true })
 
   watch(mcp, (newVal) => {
-    saveSetting('mcp', newVal)
+    if (!isLoading.value) {
+      saveSetting('mcp', newVal)
+    }
   }, { deep: true })
+
+  // 设置加载完成后的回调
+  const onSettingsLoaded = () => {
+    // 短暂延迟后启用保存，避免初始化赋值触发保存
+    setTimeout(() => {
+      isLoading.value = false
+    }, 100)
+  }
 
   return {
     claude,
     codex,
     gitGenerate,
     mcp,
+    // 加载状态
+    isLoading,
     // 检测状态
     detectingNode,
     detectingCodex,
@@ -443,6 +464,7 @@ export const useSettingsStore = defineStore('settings', () => {
     detectExecutables,
     saveSetting,
     browseFile,
-    handleDetectionResult
+    handleDetectionResult,
+    onSettingsLoaded
   }
 })

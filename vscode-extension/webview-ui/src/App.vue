@@ -49,6 +49,8 @@ onMounted(() => {
         if (message.payload.mcp) {
           Object.assign(settings.mcp, message.payload.mcp)
         }
+        // 标记加载完成，启用自动保存
+        settings.onSettingsLoaded()
         break
         
       case 'nodeDetected':
