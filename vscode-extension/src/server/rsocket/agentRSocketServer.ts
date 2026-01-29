@@ -63,6 +63,7 @@ import {
   TextDeltaSchema,
   ToolResultBlockSchema,
   ToolUseBlockSchema,
+  InputJsonDeltaSchema,
   TruncateHistoryRequestSchema,
   TruncateHistoryResultSchema,
   UnifiedBackgroundResultSchema,
@@ -310,7 +311,7 @@ function createResponder(
               canSendRichContent: true,
               canThink: true,
               canResumeSession: false,
-              canRunInBackground: false,
+              canRunInBackground: true,
             })
 
             const result = create(ConnectResultSchema, {
@@ -378,33 +379,133 @@ function createResponder(
             break
           }
           case 'agent.runInBackground': {
-            // VS Code 版暂未实现真正的后台任务管理，这里仅返回 ACK，避免前端报错。
-            responderStream.onNext({ data: Buffer.from(encodeStatus(SessionStatus.CONNECTED)) }, true)
+            const sid = sessionId || 'default'
+            log?.(`[rsocket] runInBackground: sessionId=${sid}`)
+            
+            // Only Claude provider supports runInBackground
+            if (provider !== Provider.CLAUDE) {
+              responderStream.onNext({ data: Buffer.from(encodeStatus(SessionStatus.CONNECTED)) }, true)
+              break
+            }
+            
+            // Call the Claude CLI session manager to run all tasks in background (batch mode)
+            claudeCli.runToBackground(sid)
+              .then((bgResult) => {
+                log?.(`[rsocket] runInBackground result: success=${bgResult.success}, error=${bgResult.error || 'none'}`)
+                responderStream.onNext({ data: Buffer.from(encodeStatus(SessionStatus.CONNECTED)) }, true)
+              })
+              .catch((err) => {
+                log?.(`[rsocket] runInBackground error: ${err instanceof Error ? err.message : String(err)}`)
+                // Still return CONNECTED status even on error, as per JetBrains implementation
+                responderStream.onNext({ data: Buffer.from(encodeStatus(SessionStatus.CONNECTED)) }, true)
+              })
             break
           }
           case 'agent.bashRunToBackground': {
             const req = data.length > 0 ? fromBinary(BashRunToBackgroundRequestSchema, data) : undefined
-            const result = create(BashBackgroundResultSchema, {
-              success: false,
-              taskId: req?.taskId,
-              error: 'Not implemented in VS Code extension yet',
-            })
-            responderStream.onNext({ data: Buffer.from(toBinary(BashBackgroundResultSchema, result)) }, true)
+            const taskId = req?.taskId || ''
+            const sid = sessionId || 'default'
+            
+            log?.(`[rsocket] bashRunToBackground: sessionId=${sid}, taskId=${taskId}`)
+            
+            if (!taskId) {
+              const result = create(BashBackgroundResultSchema, {
+                success: false,
+                taskId: '',
+                error: 'taskId is required for bashRunToBackground',
+              })
+              responderStream.onNext({ data: Buffer.from(toBinary(BashBackgroundResultSchema, result)) }, true)
+              break
+            }
+            
+            // Only Claude provider supports bashRunToBackground
+            if (provider !== Provider.CLAUDE) {
+              const result = create(BashBackgroundResultSchema, {
+                success: false,
+                taskId,
+                error: `bashRunToBackground not supported for provider: ${String(provider)}`,
+              })
+              responderStream.onNext({ data: Buffer.from(toBinary(BashBackgroundResultSchema, result)) }, true)
+              break
+            }
+            
+            // Call the Claude CLI session manager to run the bash task in background
+            claudeCli.runToBackground(sid, taskId)
+              .then((bgResult) => {
+                log?.(`[rsocket] bashRunToBackground result: success=${bgResult.success}, error=${bgResult.error || 'none'}`)
+                const result = create(BashBackgroundResultSchema, {
+                  success: bgResult.success,
+                  taskId: bgResult.taskId,
+                  command: bgResult.command,
+                  error: bgResult.error,
+                })
+                responderStream.onNext({ data: Buffer.from(toBinary(BashBackgroundResultSchema, result)) }, true)
+              })
+              .catch((err) => {
+                log?.(`[rsocket] bashRunToBackground error: ${err instanceof Error ? err.message : String(err)}`)
+                const result = create(BashBackgroundResultSchema, {
+                  success: false,
+                  taskId,
+                  error: err instanceof Error ? err.message : String(err),
+                })
+                responderStream.onNext({ data: Buffer.from(toBinary(BashBackgroundResultSchema, result)) }, true)
+              })
             break
           }
           case 'agent.runToBackground': {
             const req = data.length > 0 ? fromBinary(RunToBackgroundRequestSchema, data) : undefined
-            const result = create(UnifiedBackgroundResultSchema, {
-              success: false,
-              isBash: undefined,
-              taskId: req?.taskId,
-              bashCount: 0,
-              agentCount: 0,
-              backgroundedBashIds: [],
-              backgroundedAgentIds: [],
-              error: 'Not implemented in VS Code extension yet',
-            })
-            responderStream.onNext({ data: Buffer.from(toBinary(UnifiedBackgroundResultSchema, result)) }, true)
+            const taskId = req?.taskId || undefined
+            const sid = sessionId || 'default'
+            
+            log?.(`[rsocket] runToBackground: sessionId=${sid}, taskId=${taskId || 'batch'}`)
+            
+            // Only Claude provider supports runToBackground
+            if (provider !== Provider.CLAUDE) {
+              const result = create(UnifiedBackgroundResultSchema, {
+                success: false,
+                isBash: undefined,
+                taskId,
+                bashCount: 0,
+                agentCount: 0,
+                backgroundedBashIds: [],
+                backgroundedAgentIds: [],
+                error: `runToBackground not supported for provider: ${String(provider)}`,
+              })
+              responderStream.onNext({ data: Buffer.from(toBinary(UnifiedBackgroundResultSchema, result)) }, true)
+              break
+            }
+            
+            // Call the Claude CLI session manager to run the task in background
+            claudeCli.runToBackground(sid, taskId)
+              .then((bgResult) => {
+                log?.(`[rsocket] runToBackground result: success=${bgResult.success}, error=${bgResult.error || 'none'}`)
+                const result = create(UnifiedBackgroundResultSchema, {
+                  success: bgResult.success,
+                  isBash: bgResult.isBash,
+                  taskId: bgResult.taskId,
+                  command: bgResult.command,
+                  bashCount: bgResult.bashCount ?? 0,
+                  agentCount: bgResult.agentCount ?? 0,
+                  backgroundedBashIds: bgResult.backgroundedBashIds ?? [],
+                  backgroundedAgentIds: bgResult.backgroundedAgentIds ?? [],
+                  error: bgResult.error,
+                })
+                responderStream.onNext({ data: Buffer.from(toBinary(UnifiedBackgroundResultSchema, result)) }, true)
+              })
+              .catch((err) => {
+                log?.(`[rsocket] runToBackground error: ${err instanceof Error ? err.message : String(err)}`)
+                const result = create(UnifiedBackgroundResultSchema, {
+                  success: false,
+                  isBash: undefined,
+                  taskId,
+                  bashCount: 0,
+                  agentCount: 0,
+                  backgroundedBashIds: [],
+                  backgroundedAgentIds: [],
+                  error: err instanceof Error ? err.message : String(err),
+                })
+                responderStream.onNext({ data: Buffer.from(toBinary(UnifiedBackgroundResultSchema, result)) }, true)
+              })
             break
           }
           case 'agent.getHistory': {
@@ -414,30 +515,81 @@ function createResponder(
             break
           }
           case 'agent.getMcpStatus': {
-            const result = create(McpStatusResultSchema, { servers: [] })
-            responderStream.onNext({ data: Buffer.from(toBinary(McpStatusResultSchema, result)) }, true)
+            // Get MCP status from the registry
+            void (async () => {
+              try {
+                const { mcpRegistry } = await import('../../ide/mcp/mcpServerRegistry')
+                const statusList = await mcpRegistry.getMcpStatus()
+                const result = create(McpStatusResultSchema, {
+                  servers: statusList.map(s => ({
+                    name: s.name,
+                    status: s.status,
+                    serverInfo: s.serverInfo,
+                  })),
+                })
+                responderStream.onNext({ data: Buffer.from(toBinary(McpStatusResultSchema, result)) }, true)
+              } catch (error) {
+                log?.(`[rsocket] getMcpStatus error: ${error instanceof Error ? error.message : String(error)}`)
+                const result = create(McpStatusResultSchema, { servers: [] })
+                responderStream.onNext({ data: Buffer.from(toBinary(McpStatusResultSchema, result)) }, true)
+              }
+            })()
             break
           }
           case 'agent.reconnectMcp': {
             const req = data.length > 0 ? fromBinary(ReconnectMcpRequestSchema, data) : undefined
-            const result = create(ReconnectMcpResultSchema, {
-              success: false,
-              serverName: req?.serverName || '',
-              status: 'unavailable',
-              toolsCount: 0,
-              error: 'Not implemented in VS Code extension yet',
-            })
-            responderStream.onNext({ data: Buffer.from(toBinary(ReconnectMcpResultSchema, result)) }, true)
+            void (async () => {
+              try {
+                const { mcpRegistry } = await import('../../ide/mcp/mcpServerRegistry')
+                const reconnectResult = await mcpRegistry.reconnectMcp(req?.serverName || '')
+                const result = create(ReconnectMcpResultSchema, {
+                  success: reconnectResult.success,
+                  serverName: reconnectResult.serverName,
+                  status: reconnectResult.status || 'unknown',
+                  toolsCount: reconnectResult.toolsCount,
+                  error: reconnectResult.error,
+                })
+                responderStream.onNext({ data: Buffer.from(toBinary(ReconnectMcpResultSchema, result)) }, true)
+              } catch (error) {
+                log?.(`[rsocket] reconnectMcp error: ${error instanceof Error ? error.message : String(error)}`)
+                const result = create(ReconnectMcpResultSchema, {
+                  success: false,
+                  serverName: req?.serverName || '',
+                  status: 'error',
+                  toolsCount: 0,
+                  error: error instanceof Error ? error.message : 'Unknown error',
+                })
+                responderStream.onNext({ data: Buffer.from(toBinary(ReconnectMcpResultSchema, result)) }, true)
+              }
+            })()
             break
           }
           case 'agent.getMcpTools': {
             const req = data.length > 0 ? fromBinary(GetMcpToolsRequestSchema, data) : undefined
-            const result = create(GetMcpToolsResultSchema, {
-              serverName: req?.serverName,
-              tools: [],
-              count: 0,
-            })
-            responderStream.onNext({ data: Buffer.from(toBinary(GetMcpToolsResultSchema, result)) }, true)
+            void (async () => {
+              try {
+                const { mcpRegistry } = await import('../../ide/mcp/mcpServerRegistry')
+                const toolsResult = await mcpRegistry.getMcpTools(req?.serverName || undefined)
+                const result = create(GetMcpToolsResultSchema, {
+                  serverName: toolsResult.serverName,
+                  tools: toolsResult.tools.map(t => ({
+                    name: t.name,
+                    description: t.description,
+                    inputSchema: t.inputSchema ? JSON.stringify(t.inputSchema) : undefined,
+                  })),
+                  count: toolsResult.count,
+                })
+                responderStream.onNext({ data: Buffer.from(toBinary(GetMcpToolsResultSchema, result)) }, true)
+              } catch (error) {
+                log?.(`[rsocket] getMcpTools error: ${error instanceof Error ? error.message : String(error)}`)
+                const result = create(GetMcpToolsResultSchema, {
+                  serverName: req?.serverName,
+                  tools: [],
+                  count: 0,
+                })
+                responderStream.onNext({ data: Buffer.from(toBinary(GetMcpToolsResultSchema, result)) }, true)
+              }
+            })()
             break
           }
           case 'agent.truncateHistory': {
@@ -533,6 +685,10 @@ function createResponder(
           const streamAdapter = new CodexAppServerStreamAdapter(() => sessionId || 'unknown')
 
           let codexAborted = false
+          let turnCompletedResolve: (() => void) | null = null
+          const turnCompletedPromise = new Promise<void>((resolve) => {
+            turnCompletedResolve = resolve
+          })
 
           codexSession.on('event', (event: AppServerEvent) => {
             if (codexAborted) return
@@ -544,18 +700,33 @@ function createResponder(
                 safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, rpcMsg)) }, false)
                 if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), rpcMsg)
               }
+
+              // 检测 turn 完成或失败
+              if (normalized.type === 'turnCompleted' || normalized.type === 'turnFailed' || normalized.type === 'resultSummary') {
+                if (turnCompletedResolve) {
+                  turnCompletedResolve()
+                  turnCompletedResolve = null
+                }
+              }
             }
           })
 
           codexSession.on('error', (err: Error) => {
             if (codexAborted) return
             safeOnError(err)
+            // 错误时也要resolve，避免永久等待
+            if (turnCompletedResolve) {
+              turnCompletedResolve()
+              turnCompletedResolve = null
+            }
           })
 
           const runCodexSession = async () => {
             try {
               await codexSession.connect()
               await codexSession.sendMessage({ text: userMessage, sessionId: sessionId || undefined })
+              // 等待 turn 完成
+              await turnCompletedPromise
             } catch (e) {
               if (!codexAborted) {
                 safeOnError(e instanceof Error ? e : new Error(String(e)))
@@ -568,6 +739,11 @@ function createResponder(
 
           cancelStream = () => {
             codexAborted = true
+            // 取消时也要resolve，避免永久等待
+            if (turnCompletedResolve) {
+              turnCompletedResolve()
+              turnCompletedResolve = null
+            }
             codexSession.interrupt().catch(() => {})
             codexSession.disconnect().catch(() => {})
           }
@@ -607,18 +783,18 @@ function createResponder(
 
         // Translate Claude CLI stream-json events into RPC StreamEvent messages.
         // The frontend expects message_start/content_block_start before any delta events.
+        // 
+        // 关键：使用Claude API返回的index字段，而不是自己计算！
+        // Claude API会确保thinking块（如果存在）的索引在text块之前。
         const streamUuid = crypto.randomUUID()
         const streamSessionId = sessionId || 'unknown'
-        const streamBlockIndex = 0
+        
+        // 块索引映射：从Claude API的原始索引到已发送的块索引
+        // key = Claude API的index, value = 我们发送的content_block_start的索引
+        const blockIndexMap = new Map<number, { type: 'text' | 'thinking' | 'tool', started: boolean, stopped: boolean }>()
 
         let didStartMessage = false
-        let didStartBlock = false
-        let didStopBlock = false
         let didStopMessage = false
-
-        // Thinking block 状态追踪
-        let thinkingBlockIndex = -1
-        let didStartThinkingBlock = false
 
         const emitStreamEvent = (event: any) => {
           const streamEvent = create(StreamEventSchema, {
@@ -646,52 +822,64 @@ function createResponder(
           })
         }
 
-        const ensureTextBlockStart = () => {
+        // 处理 content_block_start 事件，使用Claude API返回的原始索引
+        const handleContentBlockStart = (index: number, blockType: 'text' | 'thinking' | 'tool', blockData?: any) => {
           ensureMessageStart()
-          if (didStartBlock) return
-          didStartBlock = true
-
-          const block = create(ContentBlockSchema, {
-            block: { case: 'text', value: create(TextBlockSchema, { text: '' }) },
-          })
+          
+          // 检查是否已经为这个索引发送过start
+          if (blockIndexMap.has(index)) {
+            const existing = blockIndexMap.get(index)!
+            if (existing.started) return // 已经发送过了
+          }
+          
+          blockIndexMap.set(index, { type: blockType, started: true, stopped: false })
+          
+          let block: any
+          if (blockType === 'thinking') {
+            block = create(ContentBlockSchema, {
+              block: { case: 'thinking', value: create(ThinkingBlockSchema, { thinking: '', signature: '' }) },
+            })
+          } else if (blockType === 'text') {
+            block = create(ContentBlockSchema, {
+              block: { case: 'text', value: create(TextBlockSchema, { text: '' }) },
+            })
+          } else {
+            // tool type - 使用传入的blockData
+            block = blockData
+          }
+          
           emitStreamEvent({
             case: 'contentBlockStart',
-            value: create(ContentBlockStartEventSchema, { index: streamBlockIndex, contentBlock: block }),
+            value: create(ContentBlockStartEventSchema, { index, contentBlock: block }),
           })
         }
 
-        const ensureThinkingBlockStart = () => {
-          ensureMessageStart()
-          if (didStartThinkingBlock) return
-          didStartThinkingBlock = true
-          thinkingBlockIndex = streamBlockIndex + 1
+        // 确保某个索引的块已经start（用于delta事件到达时）
+        const ensureBlockStarted = (index: number, blockType: 'text' | 'thinking') => {
+          if (!blockIndexMap.has(index) || !blockIndexMap.get(index)!.started) {
+            handleContentBlockStart(index, blockType)
+          }
+        }
 
-          const block = create(ContentBlockSchema, {
-            block: { case: 'thinking', value: create(ThinkingBlockSchema, { thinking: '', signature: '' }) },
-          })
+        const handleContentBlockStop = (index: number) => {
+          const blockInfo = blockIndexMap.get(index)
+          if (!blockInfo || !blockInfo.started || blockInfo.stopped) return
+          
+          blockInfo.stopped = true
           emitStreamEvent({
-            case: 'contentBlockStart',
-            value: create(ContentBlockStartEventSchema, { index: thinkingBlockIndex, contentBlock: block }),
+            case: 'contentBlockStop',
+            value: create(ContentBlockStopEventSchema, { index }),
           })
         }
 
         const ensureStreamStopped = () => {
           if (!didStartMessage || didStopMessage) return
 
-          if (didStartBlock && !didStopBlock) {
-            didStopBlock = true
-            emitStreamEvent({
-              case: 'contentBlockStop',
-              value: create(ContentBlockStopEventSchema, { index: streamBlockIndex }),
-            })
-          }
-
-          // 停止 thinking block
-          if (didStartThinkingBlock) {
-            emitStreamEvent({
-              case: 'contentBlockStop',
-              value: create(ContentBlockStopEventSchema, { index: thinkingBlockIndex }),
-            })
+          // 停止所有已开始但未停止的块
+          for (const [index, blockInfo] of blockIndexMap.entries()) {
+            if (blockInfo.started && !blockInfo.stopped) {
+              handleContentBlockStop(index)
+            }
           }
 
           didStopMessage = true
@@ -762,8 +950,9 @@ function createResponder(
             })
 
             if (includePartialMessages && !abortRequested) {
-              // Prepare streaming placeholders so the frontend can accept deltas immediately.
-              ensureTextBlockStart()
+              // 不再预先发送content_block_start，而是等待Claude API的事件
+              // Claude API会按正确顺序发送thinking和text的content_block_start
+              ensureMessageStart()
             }
 
             const handle = cliSession.startQuery(userMessage, {
@@ -775,16 +964,52 @@ function createResponder(
                   if (!includePartialMessages) return
                   const ev = msg.event
                   const evType = typeof ev?.type === 'string' ? ev.type : ''
+                  const evIndex = typeof ev?.index === 'number' ? ev.index : 0
 
+                  // 处理 content_block_start 事件 - 使用Claude API返回的原始索引
+                  if (evType === 'content_block_start') {
+                    const contentBlock = ev.content_block
+                    const blockType = contentBlock?.type
+                    if (blockType === 'thinking') {
+                      handleContentBlockStart(evIndex, 'thinking')
+                    } else if (blockType === 'text') {
+                      handleContentBlockStart(evIndex, 'text')
+                    } else if (blockType === 'tool_use') {
+                      // 构建 tool_use block 并发送
+                      const toolBlock = create(ContentBlockSchema, {
+                        block: {
+                          case: 'toolUse',
+                          value: create(ToolUseBlockSchema, {
+                            id: contentBlock.id || '',
+                            toolName: contentBlock.name || '',
+                            toolType: contentBlock.name || '',
+                            inputJson: Buffer.from(JSON.stringify(contentBlock.input ?? {}), 'utf8'),
+                            status: ContentStatus.IN_PROGRESS,
+                          }),
+                        },
+                      })
+                      handleContentBlockStart(evIndex, 'tool', toolBlock)
+                    }
+                    return
+                  }
+
+                  // 处理 content_block_stop 事件
+                  if (evType === 'content_block_stop') {
+                    handleContentBlockStop(evIndex)
+                    return
+                  }
+
+                  // 处理 text_delta - 使用Claude API返回的index
                   if (evType === 'content_block_delta' && ev?.delta?.type === 'text_delta') {
                     const text = typeof ev.delta.text === 'string' ? ev.delta.text : ''
                     if (!text) return
 
-                    ensureTextBlockStart()
+                    // 确保该索引的块已经开始（如果收到delta但没收到start）
+                    ensureBlockStarted(evIndex, 'text')
                     emitStreamEvent({
                       case: 'contentBlockDelta',
                       value: create(ContentBlockDeltaEventSchema, {
-                        index: streamBlockIndex,
+                        index: evIndex,  // 使用Claude API的索引
                         delta: create(DeltaSchema, {
                           delta: { case: 'textDelta', value: create(TextDeltaSchema, { text }) },
                         }),
@@ -793,18 +1018,36 @@ function createResponder(
                     return
                   }
 
-                  // thinking_delta 处理
+                  // 处理 thinking_delta - 使用Claude API返回的index
                   if (evType === 'content_block_delta' && ev?.delta?.type === 'thinking_delta') {
                     const thinking = typeof ev.delta.thinking === 'string' ? ev.delta.thinking : ''
                     if (!thinking) return
 
-                    ensureThinkingBlockStart()
+                    // 确保该索引的块已经开始（如果收到delta但没收到start）
+                    ensureBlockStarted(evIndex, 'thinking')
                     emitStreamEvent({
                       case: 'contentBlockDelta',
                       value: create(ContentBlockDeltaEventSchema, {
-                        index: thinkingBlockIndex,
+                        index: evIndex,  // 使用Claude API的索引
                         delta: create(DeltaSchema, {
                           delta: { case: 'thinkingDelta', value: create(ThinkingDeltaSchema, { thinking }) },
+                        }),
+                      }),
+                    })
+                    return
+                  }
+
+                  // 处理 input_json_delta - 工具输入的流式更新
+                  if (evType === 'content_block_delta' && ev?.delta?.type === 'input_json_delta') {
+                    const partialJson = typeof ev.delta.partial_json === 'string' ? ev.delta.partial_json : ''
+                    if (!partialJson) return
+
+                    emitStreamEvent({
+                      case: 'contentBlockDelta',
+                      value: create(ContentBlockDeltaEventSchema, {
+                        index: evIndex,
+                        delta: create(DeltaSchema, {
+                          delta: { case: 'inputJsonDelta', value: create(InputJsonDeltaSchema, { partialJson }) },
                         }),
                       }),
                     })
@@ -1959,8 +2202,10 @@ function convertNormalizedEventToRpcMessage(
             case: 'toolUse',
             value: create(ToolUseBlockSchema, {
               id: toolContent.id || '',
-              name: toolContent.name || event.toolName || '',
-              input: Buffer.from(JSON.stringify(toolContent.input ?? {}), 'utf8'),
+              toolName: toolContent.name || event.toolName || '',
+              toolType: toolContent.name || event.toolName || '',
+              inputJson: Buffer.from(JSON.stringify(toolContent.input ?? {}), 'utf8'),
+              status: ContentStatus.IN_PROGRESS,
             }),
           },
         })
@@ -2036,8 +2281,10 @@ function convertNormalizedEventToRpcMessage(
               case: 'toolUse',
               value: create(ToolUseBlockSchema, {
                 id: block.id || '',
-                name: block.name || '',
-                input: Buffer.from(JSON.stringify(block.input ?? {}), 'utf8'),
+                toolName: block.name || '',
+                toolType: block.name || '',
+                inputJson: Buffer.from(JSON.stringify(block.input ?? {}), 'utf8'),
+                status: ContentStatus.IN_PROGRESS,
               }),
             },
           })
@@ -2047,7 +2294,7 @@ function convertNormalizedEventToRpcMessage(
               case: 'toolResult',
               value: create(ToolResultBlockSchema, {
                 toolUseId: block.tool_use_id || '',
-                content: block.content || '',
+                contentJson: Buffer.from(JSON.stringify(block.content ?? ''), 'utf8'),
                 isError: block.is_error || false,
               }),
             },
