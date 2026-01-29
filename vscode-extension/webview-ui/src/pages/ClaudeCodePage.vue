@@ -252,7 +252,8 @@ const permissionModeOptions = [
   { label: 'default', value: 'default' },
   { label: 'acceptEdits', value: 'acceptEdits' },
   { label: 'plan', value: 'plan' },
-  { label: 'bypassPermissions', value: 'bypassPermissions' }
+  { label: 'bypassPermissions', value: 'bypassPermissions' },
+  { label: 'dontAsk', value: 'dontAsk' }
 ]
 
 const knownTools = [

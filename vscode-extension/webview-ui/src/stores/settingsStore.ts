@@ -191,6 +191,7 @@ export interface GitGenerateSettings {
   saveSession: boolean
   systemPrompt: string
   userPrompt: string
+  tools?: string[]  // 允许的工具列表（空数组表示使用默认）
 }
 
 // MCP 设置
@@ -232,6 +233,7 @@ export interface McpServer {
   terminalReadTimeout?: number
   terminalDefaultShell?: string
   terminalAvailableShells?: string
+  terminalDisableInteractive?: boolean  // 禁用交互式终端
   // Git MCP specific
   gitCommitLanguage?: string
   // File MCP specific
@@ -280,7 +282,8 @@ export const useSettingsStore = defineStore('settings', () => {
     codexReasoningEffort: 'xhigh',
     saveSession: false,
     systemPrompt: '',
-    userPrompt: ''
+    userPrompt: '',
+    tools: []  // 空数组表示使用默认工具列表
   })
 
   // MCP 设置
@@ -347,9 +350,10 @@ export const useSettingsStore = defineStore('settings', () => {
         defaultAutoApprovedTools: ['TerminalRead', 'TerminalList', 'TerminalKill', 'TerminalTypes', 'TerminalRename', 'TerminalInterrupt'],
         terminalMaxOutputLines: 500, 
         terminalMaxOutputChars: 50000, 
-        terminalReadTimeout: 30, 
+        terminalReadTimeout: 10,  // 与 JetBrains 版本一致
         terminalDefaultShell: '', 
-        terminalAvailableShells: '' 
+        terminalAvailableShells: '',
+        terminalDisableInteractive: false  // 禁用交互式终端 
       },
       { 
         name: 'Git', 

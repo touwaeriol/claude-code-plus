@@ -83,6 +83,7 @@ import { RSocketServer } from 'rsocket-core'
 import { WebsocketServerTransport } from 'rsocket-websocket-server'
 
 import { ClaudeCliSessionManager, type ToolPermissionResult } from '../../sdk/claude/claudeCli'
+import { buildMcpConfig, writeSystemPromptAppendix, cleanupTempFiles, type McpServerSettings } from '../../sdk/claude/mcpConfigBuilder'
 import { CodexSession, type CodexSessionOptions } from '../../sdk/codex/session'
 import { CodexAppServerStreamAdapter } from '../../sdk/codex/adapter/streamAdapter'
 import type { AppServerEvent } from '../../sdk/codex/appServer/client'
@@ -268,6 +269,15 @@ function createResponder(
     const folders = vscode.workspace.workspaceFolders ?? []
     if (folders.length <= 1) return []
     return folders.slice(1).map(f => f.uri.fsPath)
+  }
+
+  /**
+   * 从 VS Code 设置中读取 MCP 服务器配置
+   */
+  const getMcpServersFromSettings = (): McpServerSettings[] => {
+    const cfg = vscode.workspace.getConfiguration('claudeCodePlus')
+    const mcpSettings = cfg.get<{ servers?: McpServerSettings[] }>('mcp')
+    return mcpSettings?.servers ?? []
   }
 
   let provider: Provider = Provider.CLAUDE
@@ -939,6 +949,19 @@ function createResponder(
             const cfg = vscode.workspace.getConfiguration('claudeCodePlus')
             const defaultBypassPermissions = Boolean(cfg.get('defaultBypassPermissions') ?? false)
 
+            // 构建 MCP 配置
+            const mcpServers = getMcpServersFromSettings()
+            const mcpResult = buildMcpConfig(mcpServers, 'claude')
+            
+            // 将 instructions 写入临时文件
+            let appendSystemPromptFilePath: string | undefined
+            if (mcpResult.systemPromptAppendix) {
+              appendSystemPromptFilePath = writeSystemPromptAppendix(mcpResult.systemPromptAppendix) ?? undefined
+              if (appendSystemPromptFilePath) {
+                mcpResult.tempFiles.push(appendSystemPromptFilePath)
+              }
+            }
+
             const cliSession = await claudeCli.getOrCreate({
               sessionId: sessionId || 'default',
               cwd: getWorkspaceRoot(),
@@ -947,7 +970,16 @@ function createResponder(
               includePartialMessages,
               dangerouslySkipPermissions: dangerouslySkipPermissions || defaultBypassPermissions,
               addDirs: getAdditionalDirs(),
+              mcpConfigFilePath: mcpResult.configFilePath ?? undefined,
+              appendSystemPromptFilePath,
             })
+
+            // 注册临时文件清理（会话结束时）
+            if (mcpResult.tempFiles.length > 0) {
+              cliSession.onClose(() => {
+                cleanupTempFiles(mcpResult.tempFiles)
+              })
+            }
 
             if (includePartialMessages && !abortRequested) {
               // 不再预先发送content_block_start，而是等待Claude API的事件
