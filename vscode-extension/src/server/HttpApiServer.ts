@@ -18,6 +18,7 @@ import { TerminalTaskManager } from '../ide/terminal/terminalTaskManager'
 import { WsUpgradeRouter } from './wsUpgradeRouter'
 import { isAllowedWebviewOrigin } from './webviewOrigin'
 import type { DiffContentProvider } from '../ide/diffContentProvider'
+import { McpHttpGateway, setMcpHttpGateway } from './mcp'
 import {
   GetHistoryMetadataRequestSchema,
   HistoryMetadataSchema,
@@ -35,6 +36,7 @@ export class HttpApiServer implements vscode.Disposable {
   private readonly historyStore = new HistoryStore()
   private readonly snapshotStore = new SnapshotStore()
   private readonly terminalTaskManager = new TerminalTaskManager()
+  private mcpHttpGateway: McpHttpGateway | undefined
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -141,6 +143,11 @@ export class HttpApiServer implements vscode.Disposable {
       (msg: string) => this.log(msg)
     )
     await this.ideRSocketServer.start()
+
+    // MCP HTTP Gateway (for built-in MCP servers)
+    this.mcpHttpGateway = new McpHttpGateway((msg: string) => this.log(msg))
+    await this.initializeMcpGateway()
+    setMcpHttpGateway(this.mcpHttpGateway)
   }
 
   getBaseUrl(): string {
@@ -152,14 +159,55 @@ export class HttpApiServer implements vscode.Disposable {
     return this.token
   }
 
+  /**
+   * Get the MCP HTTP Gateway instance
+   */
+  getMcpHttpGateway(): McpHttpGateway | undefined {
+    return this.mcpHttpGateway
+  }
+
+  /**
+   * Initialize MCP HTTP Gateway with built-in MCP servers
+   */
+  private async initializeMcpGateway(): Promise<void> {
+    if (!this.mcpHttpGateway) return
+
+    try {
+      // Import and register all built-in MCP servers
+      const { mcpRegistry } = await import('../ide/mcp/mcpServerRegistry')
+      
+      for (const provider of mcpRegistry.getAllProviders()) {
+        try {
+          const server = provider.getServer()
+          await this.mcpHttpGateway.registerServer(provider.name, server)
+          this.log(`[HttpApiServer] Registered MCP server: ${provider.name}`)
+        } catch (e) {
+          this.log(`[HttpApiServer] Failed to register MCP server ${provider.name}: ${e}`)
+        }
+      }
+
+      this.log(`[HttpApiServer] MCP Gateway initialized with ${this.mcpHttpGateway.getRegisteredServers().length} servers`)
+    } catch (e) {
+      this.log(`[HttpApiServer] Failed to initialize MCP Gateway: ${e}`)
+    }
+  }
+
   dispose() {
     try {
+      // Shutdown MCP Gateway
+      if (this.mcpHttpGateway) {
+        this.mcpHttpGateway.shutdown().catch(e => {
+          this.log(`[HttpApiServer] Error shutting down MCP Gateway: ${e}`)
+        })
+        setMcpHttpGateway(null)
+      }
       this.rsocketServer?.dispose()
       this.ideRSocketServer?.dispose()
       this.wsUpgradeRouter?.dispose()
       this.terminalTaskManager.dispose()
       this.server?.close()
     } finally {
+      this.mcpHttpGateway = undefined
       this.rsocketServer = undefined
       this.ideRSocketServer = undefined
       this.wsUpgradeRouter = undefined

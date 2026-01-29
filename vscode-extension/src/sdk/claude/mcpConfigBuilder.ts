@@ -86,13 +86,21 @@ function isBackendEnabled(backends: string, backend: 'claude' | 'codex'): boolea
  * 
  * @param servers MCP 服务器配置列表
  * @param backend 当前后端类型
+ * @param options 可选配置
+ * @param options.connectId 前端连接 ID（用于内置服务器回调）
+ * @param options.mcpGatewayPort MCP HTTP Gateway 端口（用于内置服务器）
  * @returns 配置结果，包含临时文件路径和 instructions
  */
 export function buildMcpConfig(
   servers: McpServerSettings[],
-  backend: 'claude' | 'codex'
+  backend: 'claude' | 'codex',
+  options?: {
+    connectId?: string
+    mcpGatewayPort?: number
+  }
 ): McpConfigResult {
   const tempFiles: string[] = []
+  const { connectId, mcpGatewayPort } = options || {}
   
   // 过滤启用且支持当前后端的服务器
   const enabledServers = servers.filter(s => {
@@ -108,14 +116,22 @@ export function buildMcpConfig(
   const mcpServers: Record<string, any> = {}
   
   for (const server of enabledServers) {
-    // 只有非内置服务器且有连接配置的才添加到 CLI 配置
-    // 内置服务器（Terminal, File, LSP, Git）通过 mcpRegistry 直接注册
+    // 内置服务器：通过 MCP HTTP Gateway 暴露
     if (server.isBuiltIn) {
-      // 内置服务器不需要通过 --mcp-config 传递
-      // 它们已经在 VS Code 扩展内部运行
+      if (mcpGatewayPort) {
+        // 为内置服务器生成 HTTP URL 配置
+        const url = `http://127.0.0.1:${mcpGatewayPort}/mcp/${server.name}`
+        mcpServers[server.name] = {
+          type: 'http',
+          url,
+          headers: connectId ? { 'x-mcp-connect-id': connectId } : {}
+        }
+      }
+      // 如果没有 mcpGatewayPort，则跳过内置服务器（向后兼容）
       continue
     }
     
+    // 外部服务器：使用用户配置
     if (server.type === 'http' && server.url) {
       mcpServers[server.name] = {
         type: 'http',

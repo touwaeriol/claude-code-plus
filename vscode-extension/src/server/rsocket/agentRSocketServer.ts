@@ -8,6 +8,7 @@ import type { SnapshotStore } from '../rollback/snapshotStore'
 import type { TerminalTaskManager } from '../terminal/terminalTaskManager'
 import type { WsUpgradeRouter } from '../wsUpgradeRouter'
 import { isAllowedWebviewOrigin } from '../webviewOrigin'
+import { ClientCaller, ClientCallerRegistry } from '../rpc'
 
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf'
 import {
@@ -28,6 +29,8 @@ import {
   HasIdeEnvironmentResponseSchema,
   HistorySchema,
   AskUserQuestionRequestSchema,
+  AskUserQuestionResponseSchema,
+  RequestPermissionResponseSchema,
   McpStatusResultSchema,
   MessageStartEventSchema,
   MessageStopEventSchema,
@@ -84,6 +87,7 @@ import { WebsocketServerTransport } from 'rsocket-websocket-server'
 
 import { ClaudeCliSessionManager, type ToolPermissionResult } from '../../sdk/claude/claudeCli'
 import { buildMcpConfig, writeSystemPromptAppendix, cleanupTempFiles, type McpServerSettings } from '../../sdk/claude/mcpConfigBuilder'
+import { getMcpHttpGateway } from '../mcp'
 import { CodexSession, type CodexSessionOptions } from '../../sdk/codex/session'
 import { CodexAppServerStreamAdapter } from '../../sdk/codex/adapter/streamAdapter'
 import type { AppServerEvent } from '../../sdk/codex/appServer/client'
@@ -218,6 +222,7 @@ export class AgentRSocketServer implements vscode.Disposable {
           try {
             ;(remotePeer as any).onClose?.((err?: Error) => {
               this.log?.(`[rsocket] peer closed ${err ? `error=${err.message}` : '(normal)'}`)
+              // 注意：connectId 在此时可能还未设置，清理由 responder 内部处理
             })
           } catch {
             // ignore
@@ -230,7 +235,14 @@ export class AgentRSocketServer implements vscode.Disposable {
             this.snapshotStore,
             this.terminalTaskManager,
             this.claudeCli,
-            (msg) => this.log?.(msg)
+            (msg) => this.log?.(msg),
+            // 传入 onDispose 回调，在连接关闭时清理
+            (cid) => {
+              if (cid) {
+                ClientCallerRegistry.unregister(cid)
+                this.log?.(`[rsocket] ClientCaller unregistered on peer close: connectId=${cid}`)
+              }
+            }
           )
         },
       },
@@ -254,11 +266,22 @@ function createResponder(
   snapshotStore: SnapshotStore,
   terminalTaskManager: TerminalTaskManager,
   claudeCli: ClaudeCliSessionManager,
-  log?: (message: string) => void
+  log?: (message: string) => void,
+  onDispose?: (connectId: string | undefined) => void
 ): Responder {
   let connectId: string | undefined
   let sessionId: string | undefined
   let currentStreamCancel: (() => void) | undefined
+
+  // 设置连接关闭时的清理回调
+  try {
+    ;(remotePeer as any).onClose?.((err?: Error) => {
+      log?.(`[rsocket] peer closed in responder ${err ? `error=${err.message}` : '(normal)'}`)
+      onDispose?.(connectId)
+    })
+  } catch {
+    // ignore
+  }
 
   const getWorkspaceRoot = (): string => {
     const folder = vscode.workspace.workspaceFolders?.[0]
@@ -286,6 +309,99 @@ function createResponder(
   let includePartialMessages = true
   let dangerouslySkipPermissions = false
 
+  /**
+   * 创建 ClientCaller（用于服务器向客户端发起请求）
+   * 
+   * 使用 Protobuf 序列化，通过 client.call 路由发送类型化请求。
+   * 与 JetBrains 版本的 RSocketHandler.createClientCaller 对应。
+   */
+  const createClientCaller = (): ClientCaller => {
+    let callIdCounter = 0
+
+    return {
+      async callAskUserQuestion(request) {
+        const callId = `srv-${++callIdCounter}`
+        log?.(`📤 [RSocket] [${connectId}] → AskUserQuestion: callId=${callId}, questions=${request.questions.length}`)
+
+        try {
+          // 构建 ServerCallRequest
+          const serverRequest = create(ServerCallRequestSchema, {
+            callId,
+            method: 'AskUserQuestion',
+            params: { case: 'askUserQuestion', value: request },
+          })
+
+          const { promise } = requestClientCall(remotePeer, serverRequest)
+          const responseBytes = await promise
+
+          // 解析 ServerCallResponse
+          const serverResponse = fromBinary(ServerCallResponseSchema, responseBytes)
+
+          if (!serverResponse.success) {
+            const errorMsg = serverResponse.error || 'Unknown error'
+            log?.(`📥 [RSocket] ← AskUserQuestion 失败: callId=${callId}, error=${errorMsg}`)
+            throw new Error(`AskUserQuestion failed: ${errorMsg}`)
+          }
+
+          if (serverResponse.result.case !== 'askUserQuestion') {
+            throw new Error('AskUserQuestion response missing askUserQuestion field')
+          }
+
+          const response = serverResponse.result.value
+          log?.(`📥 [RSocket] [${connectId}] ← AskUserQuestion 成功: callId=${callId}, answers=${response.answers.length}`)
+          return response
+
+        } catch (e) {
+          const errorMsg = e instanceof Error ? e.message : String(e)
+          log?.(`📥 [RSocket] [${connectId}] ← AskUserQuestion 失败: callId=${callId}, error=${errorMsg}`)
+          throw e
+        }
+      },
+
+      async callRequestPermission(request) {
+        const callId = `srv-${++callIdCounter}`
+        log?.(`📤 [RSocket] [${connectId}] → RequestPermission: callId=${callId}, toolName=${request.toolName}`)
+
+        try {
+          // 构建 ServerCallRequest
+          const serverRequest = create(ServerCallRequestSchema, {
+            callId,
+            method: 'RequestPermission',
+            params: { case: 'requestPermission', value: request },
+          })
+
+          const { promise } = requestClientCall(remotePeer, serverRequest)
+          const responseBytes = await promise
+
+          // 解析 ServerCallResponse
+          const serverResponse = fromBinary(ServerCallResponseSchema, responseBytes)
+
+          if (!serverResponse.success) {
+            const errorMsg = serverResponse.error || 'Unknown error'
+            log?.(`📥 [RSocket] ← RequestPermission 失败: callId=${callId}, error=${errorMsg}`)
+            throw new Error(`RequestPermission failed: ${errorMsg}`)
+          }
+
+          if (serverResponse.result.case !== 'requestPermission') {
+            throw new Error('RequestPermission response missing requestPermission field')
+          }
+
+          const response = serverResponse.result.value
+          log?.(`📥 [RSocket] [${connectId}] ← RequestPermission 成功: callId=${callId}, approved=${response.approved}`)
+          return response
+
+        } catch (e) {
+          const errorMsg = e instanceof Error ? e.message : String(e)
+          log?.(`📥 [RSocket] [${connectId}] ← RequestPermission 失败: callId=${callId}, error=${errorMsg}`)
+          throw e
+        }
+      }
+    }
+  }
+
+  // 创建 ClientCaller 实例
+  const clientCaller = createClientCaller()
+
   return {
     requestResponse: (payload, responderStream) => {
       const route = extractRoute(payload)
@@ -300,6 +416,9 @@ function createResponder(
             connectId = options?.connectId || connectId || crypto.randomUUID()
             sessionId = options?.sessionId || crypto.randomUUID()
             historyStore.ensureSession(sessionId, getWorkspaceRoot())
+
+            // 注册 ClientCaller 到 Registry
+            ClientCallerRegistry.register(connectId, clientCaller)
 
             provider = options?.provider ?? provider
             model = options?.model || model
@@ -341,6 +460,10 @@ function createResponder(
           }
           case 'agent.disconnect':
           case 'agent.disposeSession': {
+            // 从 Registry 注销 ClientCaller
+            if (connectId) {
+              ClientCallerRegistry.unregister(connectId)
+            }
             responderStream.onNext({ data: Buffer.from(encodeStatus(SessionStatus.DISCONNECTED)) }, true)
             break
           }
@@ -951,7 +1074,11 @@ function createResponder(
 
             // 构建 MCP 配置
             const mcpServers = getMcpServersFromSettings()
-            const mcpResult = buildMcpConfig(mcpServers, 'claude')
+            const mcpGateway = getMcpHttpGateway()
+            const mcpResult = buildMcpConfig(mcpServers, 'claude', {
+              connectId,
+              mcpGatewayPort: mcpGateway?.getPort()
+            })
             
             // 将 instructions 写入临时文件
             let appendSystemPromptFilePath: string | undefined

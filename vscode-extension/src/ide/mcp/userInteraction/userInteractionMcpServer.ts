@@ -2,13 +2,22 @@
  * User Interaction MCP Server for VS Code
  * 
  * Provides AskUserQuestion tool for Claude to interact with users.
- * Uses VS Code's native UI (QuickPick) for user interaction.
+ * Uses RSocket to communicate with frontend Vue component.
+ * 
+ * 与 JetBrains 版本的 UserInteractionMcpServer.kt 完全对应。
  */
 
-import * as vscode from 'vscode';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import * as z from 'zod';
+import { z } from 'zod';
 import { McpServerProvider, McpServerBase, createToolResult } from '../mcpServerRegistry';
+import { currentConnectId } from '../../../server/mcp/mcpCallContext';
+import { ClientCallerRegistry } from '../../../server/rpc';
+import { create } from '@bufbuild/protobuf';
+import {
+  AskUserQuestionRequestSchema,
+  type AskUserQuestionRequest,
+  type AskUserQuestionResponse,
+} from '@proto/ide_pb';
 
 // ========== Types ==========
 
@@ -53,7 +62,7 @@ const QuestionSchema = z.object({
     multiSelect: z.boolean().optional().default(false).describe('Allow multiple selections, default false')
 });
 
-const AskUserQuestionSchema = z.object({
+const AskUserQuestionInputSchema = z.object({
     questions: z.array(QuestionSchema).describe('List of questions')
 });
 
@@ -70,7 +79,8 @@ The user's response will be returned to you through the same tool.`;
 /**
  * User Interaction MCP Server Implementation
  * 
- * Uses VS Code's QuickPick and InputBox for user interaction.
+ * Uses RSocket to communicate with frontend Vue component (AskUserQuestionInteractive.vue).
+ * 与 JetBrains 版本架构完全一致。
  */
 export class UserInteractionMcpServer extends McpServerBase {
     
@@ -137,183 +147,92 @@ export class UserInteractionMcpServer extends McpServerBase {
                     }
                 }
             },
-            async (args: Record<string, unknown>) => {
-                return this.handleAskUserQuestion(args);
+            async (params: { questions: QuestionItem[] }) => {
+                return this.handleAskUserQuestion(params);
             }
         );
 
-        console.log('[UserInteraction MCP] Initialized with AskUserQuestion tool');
+        console.log('✅ [UserInteractionMcpServer] 初始化完成，已注册 AskUserQuestion 工具');
     }
 
     /**
-     * Handle AskUserQuestion tool call
+     * 处理 AskUserQuestion 工具调用
+     * 
+     * 通过 RSocket 调用前端 AskUserQuestionInteractive.vue 组件。
      */
-    private async handleAskUserQuestion(args: Record<string, unknown>): Promise<{
+    private async handleAskUserQuestion(params: { questions: QuestionItem[] }): Promise<{
         content: Array<{ type: 'text'; text: string }>;
         isError?: boolean;
     }> {
+        // 获取当前连接的 connectId
+        const connectId = currentConnectId();
+        const caller = connectId ? ClientCallerRegistry.get(connectId) : undefined;
+
+        if (!caller) {
+            console.warn(`⚠️ [AskUserQuestion] 无法获取 ClientCaller，connectId=${connectId}`);
+            return createToolResult(`无法获取前端连接，connectId=${connectId}`, true);
+        }
+
+        console.log(`📩 [AskUserQuestion] 收到工具调用，参数: ${JSON.stringify(params)}`);
+
         try {
-            // Parse and validate arguments
-            const parsed = AskUserQuestionSchema.safeParse(args);
+            // 验证参数
+            const parsed = AskUserQuestionInputSchema.safeParse(params);
             if (!parsed.success) {
-                const errorMsg = `参数格式错误: ${parsed.error.message}`;
-                console.error('[UserInteraction MCP]', errorMsg);
+                const errorMsg = `参数校验失败: ${parsed.error.message}`;
+                console.warn(`⚠️ [AskUserQuestion] ${errorMsg}`);
                 return createToolResult(errorMsg, true);
             }
 
             const { questions } = parsed.data;
-            
-            if (questions.length === 0) {
-                return createToolResult('No questions provided', true);
-            }
+            console.log(`📤 [AskUserQuestion] 解析后的参数: ${questions.length} 个问题`);
 
-            console.log(`[UserInteraction MCP] Received ${questions.length} question(s)`);
-
-            // Collect answers for all questions
-            const answers: UserAnswerItem[] = [];
-
-            for (const q of questions) {
-                const answer = await this.askSingleQuestion(q);
-                if (answer === null) {
-                    // User cancelled
-                    return createToolResult('用户取消了问题', true);
-                }
-                answers.push({
+            // 构建 Protobuf 请求
+            const protoRequest = create(AskUserQuestionRequestSchema, {
+                questions: questions.map(q => ({
                     question: q.question,
-                    header: q.header,
-                    answer
-                });
+                    header: q.header || '',
+                    multiSelect: q.multiSelect || false,
+                    options: (q.options || []).map(opt => ({
+                        label: opt.label,
+                        description: opt.description || ''
+                    }))
+                }))
+            });
+
+            // 通过 RSocket 调用前端
+            const protoResponse = await caller.callAskUserQuestion(protoRequest);
+
+            console.log(`📥 [AskUserQuestion] 收到前端响应: ${protoResponse.answers.length} 个回答`);
+
+            // 构建回答映射
+            const answersMap: Map<string, string> = new Map();
+            for (const answer of protoResponse.answers) {
+                answersMap.set(answer.question, answer.answer);
             }
 
-            // Format response as Markdown
-            const content = this.formatAnswersAsMarkdown(questions, answers);
-            console.log('[UserInteraction MCP] Answers collected successfully');
-            
-            return createToolResult(content);
+            // 生成 Markdown 格式的回复
+            let content = '## User Answers\n\n';
+            questions.forEach((q, index) => {
+                const answer = answersMap.get(q.question) || '(no answer)';
+                const header = q.header || `Question ${index + 1}`;
+                content += `### ${header}\n`;
+                content += `**Q:** ${q.question}\n`;
+                content += `**A:** ${answer}\n\n`;
+            });
 
-        } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            console.error('[UserInteraction MCP] Error:', errorMsg);
+            console.log(`✅ [AskUserQuestion] 完成，返回:\n${content.trim()}`);
+            return createToolResult(content.trim());
+
+        } catch (e) {
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            console.error(`❌ [AskUserQuestion] 处理失败: ${errorMsg}`);
             return createToolResult(`处理用户问题时发生错误: ${errorMsg}`, true);
         }
     }
-
-    /**
-     * Ask a single question using VS Code UI
-     */
-    private async askSingleQuestion(q: QuestionItem): Promise<string | null> {
-        const header = q.header || 'Question';
-        
-        // If no options provided, use InputBox
-        if (!q.options || q.options.length === 0) {
-            const result = await vscode.window.showInputBox({
-                title: header,
-                prompt: q.question,
-                placeHolder: 'Type your answer...',
-                ignoreFocusOut: true
-            });
-            return result ?? null;
-        }
-
-        // Convert options to QuickPickItems
-        const items: vscode.QuickPickItem[] = q.options.map(opt => ({
-            label: opt.label,
-            description: opt.description
-        }));
-
-        // Add "Other..." option for custom input
-        items.push({
-            label: '$(edit) Other...',
-            description: 'Enter a custom answer'
-        });
-
-        if (q.multiSelect) {
-            // Multi-select mode
-            const selected = await vscode.window.showQuickPick(items, {
-                title: `${header}: ${q.question}`,
-                placeHolder: 'Select one or more options (use space to toggle)',
-                canPickMany: true,
-                ignoreFocusOut: true
-            });
-
-            if (!selected || selected.length === 0) {
-                return null;
-            }
-
-            // Check if "Other..." was selected
-            const otherSelected = selected.some(s => s.label.includes('Other...'));
-            const regularSelections = selected
-                .filter(s => !s.label.includes('Other...'))
-                .map(s => s.label);
-
-            if (otherSelected) {
-                const customInput = await vscode.window.showInputBox({
-                    title: `${header}: Custom Answer`,
-                    prompt: 'Enter your custom answer',
-                    placeHolder: 'Type here...',
-                    ignoreFocusOut: true
-                });
-                if (customInput) {
-                    regularSelections.push(customInput);
-                }
-            }
-
-            return regularSelections.join(', ');
-
-        } else {
-            // Single-select mode
-            const selected = await vscode.window.showQuickPick(items, {
-                title: `${header}: ${q.question}`,
-                placeHolder: 'Select an option',
-                ignoreFocusOut: true
-            });
-
-            if (!selected) {
-                return null;
-            }
-
-            // Check if "Other..." was selected
-            if (selected.label.includes('Other...')) {
-                const customInput = await vscode.window.showInputBox({
-                    title: `${header}: Custom Answer`,
-                    prompt: 'Enter your custom answer',
-                    placeHolder: 'Type here...',
-                    ignoreFocusOut: true
-                });
-                return customInput ?? null;
-            }
-
-            return selected.label;
-        }
-    }
-
-    /**
-     * Format answers as Markdown
-     */
-    private formatAnswersAsMarkdown(questions: QuestionItem[], answers: UserAnswerItem[]): string {
-        const lines: string[] = ['## User Answers', ''];
-
-        for (let i = 0; i < questions.length; i++) {
-            const q = questions[i];
-            const a = answers.find(ans => ans.question === q.question);
-            const answer = a?.answer || '(no answer)';
-            const header = q.header || `Question ${i + 1}`;
-
-            lines.push(`### ${header}`);
-            lines.push(`**Q:** ${q.question}`);
-            lines.push(`**A:** ${answer}`);
-            lines.push('');
-        }
-
-        return lines.join('\n').trim();
-    }
-
-    dispose(): void {
-        console.log('[UserInteraction MCP] Disposed');
-    }
 }
 
-// ========== MCP Server Provider ==========
+// ========== Provider ==========
 
 /**
  * User Interaction MCP Server Provider
@@ -326,20 +245,19 @@ export class UserInteractionMcpServerProvider implements McpServerProvider {
         this.server = new UserInteractionMcpServer();
     }
 
+    async initialize(): Promise<void> {
+        await this.server.initialize();
+    }
+
     getServer(): McpServer {
         return this.server.getServer();
     }
 
     getDisallowedBuiltinTools(): string[] {
-        // No builtin tools to disable
         return [];
     }
 
-    async initialize(): Promise<void> {
-        await this.server.initialize();
-    }
-
     dispose(): void {
-        this.server.dispose();
+        // Cleanup if needed
     }
 }
