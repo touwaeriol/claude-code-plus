@@ -7,7 +7,7 @@ import { HttpApiServer } from './server/HttpApiServer'
 import { initializeMcpServers, disposeMcpServers } from './ide/mcp'
 import { ChatPanel } from './webview/chatPanel'
 import { ChatViewProvider } from './webview/chatViewProvider'
-import { SettingsPanel } from './webview/settingsPanel'
+import { SettingsPanel } from './webview/settingsPanelVue'
 
 let server: HttpApiServer | undefined
 

@@ -19,6 +19,26 @@ export interface McpServerProvider {
 }
 
 /**
+ * MCP Server Status Info
+ */
+export interface McpServerStatusInfo {
+    name: string;
+    status: 'connected' | 'disconnected' | 'error' | 'unknown';
+    serverInfo?: string;
+    toolsCount: number;
+}
+
+/**
+ * MCP Tool Info
+ */
+export interface McpToolInfo {
+    name: string;
+    description: string;
+    serverName: string;
+    inputSchema?: Record<string, unknown>;
+}
+
+/**
  * MCP Server Registry
  * 
  * Centralized management for all MCP servers in the VS Code extension.
@@ -94,6 +114,139 @@ export class McpServerRegistry {
             tools.push(...disallowed);
         }
         return [...new Set(tools)]; // Remove duplicates
+    }
+
+    /**
+     * Get status of all MCP servers
+     */
+    async getMcpStatus(): Promise<McpServerStatusInfo[]> {
+        const statusList: McpServerStatusInfo[] = [];
+        
+        for (const [name, provider] of this.providers) {
+            try {
+                const server = provider.getServer();
+                // MCP servers are always "connected" if registered
+                const tools = await this.getServerTools(name);
+                statusList.push({
+                    name,
+                    status: 'connected',
+                    serverInfo: `VS Code IDE MCP Server`,
+                    toolsCount: tools.length
+                });
+            } catch (error) {
+                statusList.push({
+                    name,
+                    status: 'error',
+                    serverInfo: error instanceof Error ? error.message : 'Unknown error',
+                    toolsCount: 0
+                });
+            }
+        }
+        
+        return statusList;
+    }
+
+    /**
+     * Get tools from a specific server
+     */
+    private async getServerTools(serverName: string): Promise<McpToolInfo[]> {
+        const provider = this.providers.get(serverName);
+        if (!provider) {
+            return [];
+        }
+        
+        try {
+            const server = provider.getServer();
+            // The MCP SDK server has a _registeredTools map that we can access
+            // through the server's internal state
+            const tools: McpToolInfo[] = [];
+            
+            // Access the server's registered tools through reflection
+            // The McpServer from @modelcontextprotocol/sdk stores tools internally
+            const serverAny = server as any;
+            if (serverAny._registeredTools && typeof serverAny._registeredTools === 'object') {
+                for (const [toolName, toolData] of Object.entries(serverAny._registeredTools)) {
+                    const data = toolData as { description?: string; inputSchema?: unknown };
+                    tools.push({
+                        name: toolName,
+                        description: data.description || '',
+                        serverName,
+                        inputSchema: data.inputSchema as Record<string, unknown> | undefined
+                    });
+                }
+            }
+            
+            return tools;
+        } catch (error) {
+            console.error(`[MCP Registry] Failed to get tools from ${serverName}:`, error);
+            return [];
+        }
+    }
+
+    /**
+     * Get all MCP tools, optionally filtered by server name
+     */
+    async getMcpTools(serverName?: string): Promise<{ serverName?: string; tools: McpToolInfo[]; count: number }> {
+        if (serverName) {
+            const tools = await this.getServerTools(serverName);
+            return { serverName, tools, count: tools.length };
+        }
+        
+        // Get tools from all servers
+        const allTools: McpToolInfo[] = [];
+        for (const [name] of this.providers) {
+            const serverTools = await this.getServerTools(name);
+            allTools.push(...serverTools);
+        }
+        
+        return { tools: allTools, count: allTools.length };
+    }
+
+    /**
+     * Reconnect a specific MCP server
+     * 
+     * For VS Code extension, this reinitializes the server.
+     */
+    async reconnectMcp(serverName: string): Promise<{
+        success: boolean;
+        serverName: string;
+        status?: string;
+        toolsCount: number;
+        error?: string;
+    }> {
+        const provider = this.providers.get(serverName);
+        if (!provider) {
+            return {
+                success: false,
+                serverName,
+                toolsCount: 0,
+                error: `Server '${serverName}' not found`
+            };
+        }
+        
+        try {
+            // For VS Code MCP servers, "reconnect" means re-fetching the server
+            // and ensuring it's ready
+            const server = provider.getServer();
+            const tools = await this.getServerTools(serverName);
+            
+            console.log(`[MCP Registry] Reconnected server: ${serverName}, tools: ${tools.length}`);
+            
+            return {
+                success: true,
+                serverName,
+                status: 'connected',
+                toolsCount: tools.length
+            };
+        } catch (error) {
+            console.error(`[MCP Registry] Failed to reconnect ${serverName}:`, error);
+            return {
+                success: false,
+                serverName,
+                toolsCount: 0,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            };
+        }
     }
 
     /**

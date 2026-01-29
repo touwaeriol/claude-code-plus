@@ -6,6 +6,12 @@
     <!-- 测试模式：显示 TestDisplayItems -->
     <TestDisplayItems v-if="showTest" />
 
+    <!-- 初始化中 -->
+    <div v-else-if="!appReady" class="app-loading">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading...</div>
+    </div>
+
     <!-- 完整的 ModernChatView 组件 -->
     <ModernChatView
       v-else
@@ -82,6 +88,7 @@ import { ideaBridgeService } from '@/services/ideaApi'
 import { aiAgentService } from '@/services/aiAgentService'
 
 const bridgeReady = ref(false)
+const appReady = ref(false)
 const showDebug = ref(false) // 默认隐藏调试面板
 const debugExpanded = ref(false)
 const currentMode = ref('unknown')
@@ -158,6 +165,10 @@ onMounted(async () => {
       await settingsStore.loadDefaultSettings()
       console.log('Default settings loaded')
     }
+
+    // 设置初始化完成，可以渲染 ModernChatView
+    appReady.value = true
+    console.log('App ready, settings initialized')
 
     // 监听主题变化
     themeService.onThemeChange(() => {
@@ -329,5 +340,32 @@ onUnmounted(() => {
   background: var(--theme-accent);
   color: var(--theme-selection-foreground);
   transform: translateY(-1px);
+}
+
+.app-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 16px;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--theme-border, #e1e4e8);
+  border-top-color: var(--theme-accent, #0366d6);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  color: var(--theme-text-secondary, #666);
+  font-size: 14px;
 }
 </style>

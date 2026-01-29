@@ -56,6 +56,38 @@ export class ClaudeCliSessionManager implements vscode.Disposable {
     return created
   }
 
+  /**
+   * Get an existing session by ID without creating a new one.
+   * Returns undefined if no session exists with the given ID.
+   */
+  getSession(sessionId: string): ClaudeCliSession | undefined {
+    return this.sessions.get(sessionId)
+  }
+
+  /**
+   * Run a task to background for a specific session.
+   * @param sessionId The session ID
+   * @param taskId Optional task ID to background a specific task
+   * @returns Promise with the background result
+   */
+  async runToBackground(sessionId: string, taskId?: string): Promise<{
+    success: boolean
+    isBash?: boolean
+    taskId?: string
+    command?: string
+    bashCount?: number
+    agentCount?: number
+    backgroundedBashIds?: string[]
+    backgroundedAgentIds?: string[]
+    error?: string
+  }> {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      return { success: false, error: `No session found with ID: ${sessionId}` }
+    }
+    return session.sendRunToBackground(taskId)
+  }
+
   dispose() {
     this.sessions.forEach(s => s.dispose());
     this.sessions.clear()
@@ -481,6 +513,150 @@ class ClaudeCliSession implements vscode.Disposable {
     } catch {
       // ignore
     }
+  }
+
+  /**
+   * Send a run_to_background control request to the CLI.
+   * This moves running tasks (Bash/Agent) to background execution.
+   * 
+   * @param taskId Optional task ID. If provided, backgrounds specific task.
+   *               If not provided, backgrounds all running tasks.
+   * @returns Promise resolving to the background result
+   */
+  async sendRunToBackground(taskId?: string): Promise<{
+    success: boolean
+    isBash?: boolean
+    taskId?: string
+    command?: string
+    bashCount?: number
+    agentCount?: number
+    backgroundedBashIds?: string[]
+    backgroundedAgentIds?: string[]
+    error?: string
+  }> {
+    if (!this.proc || !this.proc.stdin.writable) {
+      return { success: false, error: 'Claude CLI not writable' }
+    }
+
+    const requestId = `req_${crypto.randomUUID()}`
+    const request: Record<string, unknown> = { subtype: 'run_to_background' }
+    if (taskId) {
+      request.task_id = taskId
+    }
+
+    const payload = {
+      type: 'control_request',
+      request_id: requestId,
+      request,
+    }
+
+    return new Promise((resolve) => {
+      // Set up a one-time listener for the response
+      const timeout = setTimeout(() => {
+        this.log?.(`[claude] run_to_background timeout for request ${requestId}`)
+        resolve({ success: false, error: 'Request timeout' })
+      }, 10000) // 10 second timeout
+
+      const originalOnStdoutLine = this.onStdoutLine.bind(this)
+      
+      // Temporarily intercept stdout to catch the control_response
+      const interceptHandler = (line: string) => {
+        const trimmed = line.trim()
+        if (!trimmed) return
+
+        try {
+          const parsed = JSON.parse(trimmed)
+          if (parsed.type === 'control_response' && 
+              parsed.response?.request_id === requestId) {
+            clearTimeout(timeout)
+            
+            const response = parsed.response
+            if (response.subtype === 'error') {
+              resolve({ success: false, error: response.error || 'Unknown error' })
+              return
+            }
+
+            const responseData = response.response as Record<string, unknown> | undefined
+            const mode = responseData?.mode as string | undefined
+            const type = responseData?.type as string | undefined
+            const returnedTaskId = responseData?.task_id as string | undefined
+            const command = responseData?.command as string | undefined
+
+            // Handle batch mode
+            if (mode === 'all') {
+              this.log?.('[claude] Batch background completed')
+              resolve({ success: true })
+              return
+            }
+
+            // Handle single task mode
+            if (taskId) {
+              if (type === 'bash') {
+                this.log?.(`[claude] Bash backgrounded: task_id=${returnedTaskId}`)
+                resolve({
+                  success: true,
+                  isBash: true,
+                  taskId: returnedTaskId,
+                  command,
+                  bashCount: 1,
+                  backgroundedBashIds: returnedTaskId ? [returnedTaskId] : [],
+                })
+              } else if (type === 'agent') {
+                this.log?.(`[claude] Agent backgrounded: task_id=${returnedTaskId}`)
+                resolve({
+                  success: true,
+                  isBash: false,
+                  taskId: returnedTaskId,
+                  agentCount: 1,
+                  backgroundedAgentIds: returnedTaskId ? [returnedTaskId] : [],
+                })
+              } else {
+                const error = responseData?.error as string | undefined
+                resolve({
+                  success: false,
+                  taskId,
+                  error: error || 'Unknown task type',
+                })
+              }
+              return
+            }
+
+            // Default success
+            resolve({ success: (responseData?.success as boolean) ?? true })
+            return
+          }
+        } catch {
+          // Not a JSON line or not our response, continue normal processing
+        }
+        
+        // Call original handler for non-control-response messages
+        originalOnStdoutLine(line)
+      }
+
+      // Temporarily replace the line handler
+      if (this.stdoutRl) {
+        this.stdoutRl.removeAllListeners('line')
+        this.stdoutRl.on('line', interceptHandler)
+        
+        // Restore original handler after timeout or response
+        const cleanup = () => {
+          if (this.stdoutRl) {
+            this.stdoutRl.removeAllListeners('line')
+            this.stdoutRl.on('line', (line) => this.onStdoutLine(line))
+          }
+        }
+        
+        setTimeout(cleanup, 10100) // Cleanup slightly after timeout
+      }
+
+      try {
+        this.log?.(`[claude] Sending run_to_background: task_id=${taskId || 'batch'}`)
+        this.proc!.stdin.write(JSON.stringify(payload) + '\n', 'utf8')
+      } catch (e) {
+        clearTimeout(timeout)
+        resolve({ success: false, error: e instanceof Error ? e.message : String(e) })
+      }
+    })
   }
 }
 

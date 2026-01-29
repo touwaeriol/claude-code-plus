@@ -234,6 +234,39 @@ export class AiAgentService {
         return await session.truncateHistory(params)
     }
 
+    /**
+     * 检测是否在 IDE 环境中运行
+     * 
+     * 通过后端 API 检测是否有 IDE 集成功能（如 JetBrains 插件或 VS Code 扩展）。
+     * 
+     * @returns 是否在 IDE 环境中
+     */
+    async hasIdeEnvironment(): Promise<boolean> {
+        try {
+            const baseUrl = resolveServerHttpUrl()
+            const response = await fetch(`${baseUrl}/api/`, {
+                method: 'POST',
+                headers: withServerToken({
+                    'Content-Type': 'application/json'
+                }),
+                body: JSON.stringify({ action: 'ide.hasIdeEnvironment' })
+            })
+
+            if (!response.ok) {
+                console.warn('[aiAgentService] hasIdeEnvironment 请求失败:', response.status)
+                return false
+            }
+
+            const result = await response.json()
+            const hasIde = result?.data?.hasIde === true
+            console.log('🖥️ [aiAgentService] hasIdeEnvironment:', hasIde)
+            return hasIde
+        } catch (error) {
+            console.warn('[aiAgentService] hasIdeEnvironment 请求异常:', error)
+            return false
+        }
+    }
+
 }
 
 // 导出单例

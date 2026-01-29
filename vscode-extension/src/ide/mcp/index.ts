@@ -13,6 +13,8 @@ export {
     McpServerProvider, 
     McpServerConfig,
     McpServerBase,
+    McpServerStatusInfo,
+    McpToolInfo,
     mcpRegistry,
     createToolResult 
 } from './mcpServerRegistry';
