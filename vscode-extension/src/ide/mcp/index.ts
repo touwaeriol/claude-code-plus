@@ -38,6 +38,9 @@ export { FileMcpServer, FileMcpServerProvider } from './file';
 // LSP MCP
 export { LspMcpServer, LspMcpServerProvider } from './lsp';
 
+// User Interaction MCP
+export { UserInteractionMcpServer, UserInteractionMcpServerProvider } from './userInteraction';
+
 /**
  * Initialize all MCP servers
  * 
@@ -100,6 +103,21 @@ export async function initializeMcpServers(): Promise<void> {
         }
     } else {
         mcpLogger.info('LSP MCP server disabled by settings');
+    }
+
+    // User Interaction MCP - conditionally register based on settings
+    if (settings.enableUserInteractionMcp) {
+        try {
+            const { UserInteractionMcpServerProvider } = await import('./userInteraction');
+            const provider = new UserInteractionMcpServerProvider();
+            await provider.initialize();
+            mcpRegistry.registerProvider(provider);
+            mcpLogger.info('Registered User Interaction MCP server');
+        } catch (error) {
+            mcpLogger.warn('User Interaction MCP server not available', error instanceof Error ? error : undefined);
+        }
+    } else {
+        mcpLogger.info('User Interaction MCP server disabled by settings');
     }
 
     // Initialize all registered servers
