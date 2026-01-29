@@ -228,8 +228,8 @@
               style="font-family: monospace;"
             />
             
-            <!-- 禁用工具 (Terminal 和 File MCP) -->
-            <template v-if="hasDisableToolsToggle">
+            <!-- 禁用工具 (有默认禁用工具或 hasDisableToolsToggle 的 MCP) -->
+            <template v-if="showDisabledTools">
               <el-divider />
               <el-form-item label="Disabled Tools">
                 <div class="tags-input-container">
@@ -280,7 +280,7 @@
             />
             
             <!-- Codex 禁用功能 -->
-            <template v-if="hasDisableToolsToggle">
+            <template v-if="showCodexDisabledFeatures">
               <el-divider />
               <el-form-item label="Disabled Features">
                 <div class="tags-input-container">
@@ -376,25 +376,54 @@ const newCodexDisabledFeature = ref('')
 const newAutoApprovedTool = ref('')
 const newExternalRule = ref('')
 
-// 默认禁用工具
+// 默认禁用工具 (来自 JetBrains McpConfigurable.kt)
+// 注意：这些是当 hasDisableToolsToggle=true 并启用禁用选项时的默认值
+// JetBrains LSP 默认禁用 Glob 和 Grep (因为使用 IDE 索引)
 const defaultDisabledTools: Record<string, string[]> = {
-  'Terminal': ['Bash'],
-  'JetBrains File': ['Read', 'Write', 'Edit']
+  'JetBrains LSP': ['Glob', 'Grep'],
+  'Terminal': ['Bash'],  // terminalDisableBuiltinBash=true 时
+  'JetBrains File': ['Read', 'Write', 'Edit']  // jetbrainsFileDisableBuiltinTools=true 时
 }
 
-// 默认 Codex 禁用功能
+// 默认 Codex 禁用功能 (来自 JetBrains McpConfigurable.kt)
 const defaultCodexDisabledFeatures: Record<string, string[]> = {
-  'Terminal': ['shell_tool'],
-  'JetBrains File': ['apply_patch_freeform']
+  'Terminal': ['shell_tool'],  // terminalDisableBuiltinBash=true 时
+  'JetBrains File': ['apply_patch_freeform']  // jetbrainsFileDisableBuiltinTools=true 时
 }
 
-// 默认自动批准工具
+// 默认自动批准工具 (来自 JetBrains McpAutoApprovedDefaults)
+// 这些工具在 Codex 模式下无需用户确认即可执行
 const defaultAutoApprovedTools: Record<string, string[]> = {
-  'User Interaction': ['mcp__user_interaction__AskUserQuestion'],
-  'JetBrains LSP': ['mcp__jetbrains-lsp__DirectoryTree', 'mcp__jetbrains-lsp__FileIndex', 'mcp__jetbrains-lsp__CodeSearch'],
-  'JetBrains File': ['mcp__jetbrains-file__ReadFile'],
-  'Terminal': ['mcp__jetbrains-terminal__TerminalList', 'mcp__jetbrains-terminal__TerminalRead'],
-  'Git': ['mcp__jetbrains_git__GetVcsStatus', 'mcp__jetbrains_git__GetVcsChanges']
+  'User Interaction': ['AskUserQuestion'],
+  'JetBrains LSP': [
+    'DirectoryTree',
+    'FileProblems',
+    'FileIndex',
+    'CodeSearch',
+    'FindUsages',
+    'Rename'  // IDE 安全重构，有预览和撤销
+  ],
+  'JetBrains File': ['ReadFile'],
+  'Terminal': [
+    'TerminalRead',
+    'TerminalList',
+    'TerminalKill',
+    'TerminalTypes',
+    'TerminalRename',
+    'TerminalInterrupt'
+    // Terminal 不在列表中，执行命令需要用户确认
+  ],
+  'Git': [
+    'GetVcsChanges',
+    'GetCommitMessage',
+    'SetCommitMessage',
+    'GetVcsStatus',
+    'SelectFiles',
+    'DeselectFiles',
+    'SelectAllFiles',
+    'DeselectAllFiles'
+    // CommitChanges 不在列表中，提交代码需要用户确认
+  ]
 }
 
 const serverForm = reactive({
@@ -432,6 +461,16 @@ const serverForm = reactive({
 // 计算属性
 const hasDisableToolsToggle = computed(() => 
   serverForm.name === 'Terminal' || serverForm.name === 'JetBrains File'
+)
+
+// 是否显示禁用工具选项 (hasDisableToolsToggle 或者有默认禁用工具)
+const showDisabledTools = computed(() =>
+  hasDisableToolsToggle.value || Object.keys(defaultDisabledTools).includes(serverForm.name)
+)
+
+// 是否显示 Codex 禁用功能选项
+const showCodexDisabledFeatures = computed(() =>
+  Object.keys(defaultCodexDisabledFeatures).includes(serverForm.name)
 )
 
 const hasAutoApprovedTools = computed(() =>

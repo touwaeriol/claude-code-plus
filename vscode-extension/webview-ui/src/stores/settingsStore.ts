@@ -275,7 +275,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const mcp = ref<McpSettings>({
     servers: [
       { name: 'User Interaction', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 3600 },
-      { name: 'JetBrains LSP', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60 },
+      { name: 'JetBrains LSP', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, disabledTools: ['Glob', 'Grep'] },
       { name: 'JetBrains File', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, fileAllowExternal: true, fileExternalRules: '[]' },
       { name: 'Context7', enabled: false, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, apiKey: '' },
       { name: 'Terminal', enabled: false, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, terminalMaxOutputLines: 500, terminalMaxOutputChars: 50000, terminalReadTimeout: 30, terminalDefaultShell: '', terminalAvailableShells: '' },
