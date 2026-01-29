@@ -64,6 +64,30 @@ export interface McpServer {
   level: string
   isBuiltIn: boolean
   configuration?: string
+  // Instructions (System Prompts)
+  instructionsClaude?: string
+  instructionsCodex?: string
+  // Tool Timeout
+  toolTimeoutSec?: number
+  // Disabled Tools (for Claude Code)
+  disabledTools?: string[]
+  // Codex Disabled Features
+  codexDisabledFeatures?: string[]
+  // Codex Auto-Approved Tools
+  codexAutoApprovedTools?: string[]
+  // Context7 specific
+  apiKey?: string
+  // Terminal MCP specific
+  terminalMaxOutputLines?: number
+  terminalMaxOutputChars?: number
+  terminalReadTimeout?: number
+  terminalDefaultShell?: string
+  terminalAvailableShells?: string
+  // Git MCP specific
+  gitCommitLanguage?: string
+  // File MCP specific
+  fileAllowExternal?: boolean
+  fileExternalRules?: string
 }
 
 export interface McpSettings {
@@ -113,11 +137,12 @@ export const useSettingsStore = defineStore('settings', () => {
   // MCP 设置
   const mcp = ref<McpSettings>({
     servers: [
-      { name: 'JetBrains LSP', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in' },
-      { name: 'JetBrains File', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in' },
-      { name: 'Terminal', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in' },
-      { name: 'Git', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in' },
-      { name: 'User Interaction', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in' }
+      { name: 'User Interaction', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 3600 },
+      { name: 'JetBrains LSP', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60 },
+      { name: 'JetBrains File', enabled: true, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, fileAllowExternal: true, fileExternalRules: '[]' },
+      { name: 'Context7', enabled: false, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, apiKey: '' },
+      { name: 'Terminal', enabled: false, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, terminalMaxOutputLines: 500, terminalMaxOutputChars: 50000, terminalReadTimeout: 30, terminalDefaultShell: '', terminalAvailableShells: '' },
+      { name: 'Git', enabled: false, backends: 'All', level: 'Global', isBuiltIn: true, configuration: 'Built-in', toolTimeoutSec: 60, gitCommitLanguage: 'en' }
     ]
   })
 
