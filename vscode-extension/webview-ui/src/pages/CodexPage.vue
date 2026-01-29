@@ -106,23 +106,24 @@ const modelOptions = [
 ]
 
 const reasoningEffortOptions = [
-  { label: 'low', value: 'low' },
-  { label: 'medium', value: 'medium' },
-  { label: 'high', value: 'high' },
-  { label: 'xhigh', value: 'xhigh' }
+  { label: 'Minimal', value: 'minimal' },
+  { label: 'Low', value: 'low' },
+  { label: 'Medium', value: 'medium' },
+  { label: 'High', value: 'high' },
+  { label: 'Extra High', value: 'xhigh' }
 ]
 
 const reasoningSummaryOptions = [
-  { label: 'auto', value: 'auto' },
-  { label: 'concise', value: 'concise' },
-  { label: 'detailed', value: 'detailed' }
+  { label: 'Auto', value: 'auto' },
+  { label: 'Concise', value: 'concise' },
+  { label: 'Detailed', value: 'detailed' },
+  { label: 'None', value: 'none' }
 ]
 
 const sandboxModeOptions = [
-  { label: 'auto', value: 'auto' },
-  { label: 'off', value: 'off' },
-  { label: 'network-only', value: 'network-only' },
-  { label: 'full', value: 'full' }
+  { label: 'Read Only', value: 'read-only' },
+  { label: 'Workspace Write', value: 'workspace-write' },
+  { label: 'Full Access', value: 'danger-full-access' }
 ]
 
 // 方法

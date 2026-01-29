@@ -4,67 +4,93 @@
     
     <el-tabs v-model="activeTab">
       <el-tab-pane label="General" name="general">
-        <!-- Model Settings -->
-        <SettingsGroup title="Model Settings">
-          <SettingItem
-            type="select"
-            label="Default Model"
-            description="The default model to use for Claude conversations"
-            v-model="settings.claude.defaultModelId"
-            :options="modelOptions"
-          />
-          <SettingItem
-            type="select"
-            label="Thinking Level"
-            description="Controls how much thinking the model does before responding"
-            v-model="settings.claude.defaultThinkingLevel"
-            :options="thinkingLevelOptions"
-          />
-          <SettingItem
-            type="number"
-            label="Thinking Tokens"
-            description="Maximum number of tokens for model thinking (default: 8192)"
-            v-model="settings.claude.thinkTokens"
-            :min="0"
-            :max="128000"
-            :step="1024"
-          />
-        </SettingsGroup>
-
-        <!-- Permission Settings -->
-        <SettingsGroup title="Permission Settings">
+        <!-- Default Permissions -->
+        <SettingsGroup title="Default Permissions">
           <SettingItem
             type="checkbox"
-            label="Bypass Permissions"
-            description="Skip all permission confirmations (use with caution)"
+            label="Default bypass permissions"
+            description="Skip confirmation dialogs for file edits and bash commands."
             v-model="settings.claude.defaultBypassPermissions"
           />
           <SettingItem
             type="checkbox"
-            label="Auto Cleanup Contexts"
-            description="Automatically clean up old conversation contexts"
+            label="Default auto cleanup contexts"
+            description="Enabled contexts are cleared after send; disabled contexts stay."
             v-model="settings.claude.defaultAutoCleanupContexts"
           />
           <SettingItem
+            type="select"
+            label="Permission Mode"
+            description="default = Ask for each action | bypassPermissions = Auto-approve all"
+            v-model="settings.claude.permissionMode"
+            :options="permissionModeOptions"
+          />
+          <SettingItem
             type="checkbox"
-            label="Include Partial Messages"
+            label="Include partial messages in stream"
             description="Include partial messages in UI during streaming"
             v-model="settings.claude.includePartialMessages"
+            :disabled="true"
           />
         </SettingsGroup>
 
         <!-- Runtime Settings -->
         <SettingsGroup title="Runtime Settings">
           <PathInput
-            label="Node.js Path"
-            description="Custom Node.js executable path (optional)"
+            label="Node.js path"
+            description="Path to Node.js executable. Leave empty to auto-detect from system PATH."
             v-model="settings.claude.nodePath"
-            placeholder="Leave empty to use system Node.js"
+            placeholder="Auto-detect from system PATH"
             :detecting="settings.detectingNode"
             :detected-path="settings.detectedNode?.path"
             :detected-version="settings.detectedNode?.version"
             @browse="handleBrowseNodePath"
           />
+          <SettingItem
+            type="select"
+            label="Default model"
+            description="Opus 4.5 = Most capable | Sonnet 4.5 = Balanced | Haiku 4.5 = Fastest"
+            v-model="settings.claude.defaultModelId"
+            :options="modelOptions"
+          />
+        </SettingsGroup>
+
+        <!-- Custom Models -->
+        <CollapsibleGroup title="Custom Models" name="customModels">
+          <ModelTable
+            :models="settings.claude.customModels"
+            @add="handleAddModel"
+            @edit="handleEditModel"
+            @remove="handleRemoveModel"
+          />
+        </CollapsibleGroup>
+
+        <!-- Thinking Configuration -->
+        <SettingsGroup title="Thinking Configuration">
+          <SettingItem
+            type="select"
+            label="Default thinking"
+            v-model="settings.claude.defaultThinkingLevel"
+            :options="thinkingLevelOptions"
+          />
+          <div class="tokens-row">
+            <SettingItem
+              type="number"
+              label="Think tokens"
+              v-model="settings.claude.thinkTokens"
+              :min="1"
+              :max="128000"
+              :step="256"
+            />
+            <SettingItem
+              type="number"
+              label="Ultra tokens"
+              v-model="settings.claude.ultraTokens"
+              :min="1"
+              :max="128000"
+              :step="256"
+            />
+          </div>
         </SettingsGroup>
       </el-tab-pane>
       
@@ -203,6 +229,7 @@ import SettingsGroup from '@/components/SettingsGroup.vue'
 import CollapsibleGroup from '@/components/CollapsibleGroup.vue'
 import SettingItem from '@/components/SettingItem.vue'
 import PathInput from '@/components/PathInput.vue'
+import ModelTable from '@/components/ModelTable.vue'
 
 const settings = useSettingsStore()
 const activeTab = ref('general')
@@ -216,12 +243,16 @@ const modelOptions = [
 ]
 
 const thinkingLevelOptions = [
-  { label: 'Off', value: 'OFF' },
-  { label: 'Low', value: 'LOW' },
-  { label: 'Medium', value: 'MEDIUM' },
-  { label: 'High', value: 'HIGH' },
-  { label: 'Very High', value: 'VERY_HIGH' },
-  { label: 'Ultra', value: 'ULTRA' }
+  { label: 'Off', value: 'off' },
+  { label: 'Think', value: 'think' },
+  { label: 'Ultra', value: 'ultra' }
+]
+
+const permissionModeOptions = [
+  { label: 'default', value: 'default' },
+  { label: 'acceptEdits', value: 'acceptEdits' },
+  { label: 'plan', value: 'plan' },
+  { label: 'bypassPermissions', value: 'bypassPermissions' }
 ]
 
 const knownTools = [
@@ -255,6 +286,21 @@ const newCodeTool = ref('')
 // 方法
 const handleBrowseNodePath = () => {
   settings.browseFile('claude.nodePath')
+}
+
+const handleAddModel = () => {
+  // TODO: 打开添加模型对话框
+}
+
+const handleEditModel = (_model: { displayName: string; modelId: string }) => {
+  // TODO: 打开编辑模型对话框
+}
+
+const handleRemoveModel = (model: { displayName: string; modelId: string }) => {
+  const index = settings.claude.customModels.findIndex(m => m.modelId === model.modelId)
+  if (index !== -1) {
+    settings.claude.customModels.splice(index, 1)
+  }
 }
 
 const addExploreTool = () => {
@@ -341,5 +387,14 @@ const removeCodeTool = (tool: string) => {
 .setting-label {
   font-weight: 500;
   color: var(--vscode-foreground, #cccccc);
+}
+
+.tokens-row {
+  display: flex;
+  gap: 24px;
+}
+
+.tokens-row > * {
+  flex: 1;
 }
 </style>

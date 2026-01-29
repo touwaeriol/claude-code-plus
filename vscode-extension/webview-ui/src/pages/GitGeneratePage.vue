@@ -126,18 +126,16 @@ const currentModelOptions = computed(() => {
 
 const thinkingLevelOptions = [
   { label: 'Off', value: 'off' },
-  { label: 'Low', value: 'low' },
-  { label: 'Medium', value: 'medium' },
-  { label: 'High', value: 'high' },
-  { label: 'Very High', value: 'very_high' },
+  { label: 'Think', value: 'think' },
   { label: 'Ultra', value: 'ultra' }
 ]
 
 const reasoningEffortOptions = [
-  { label: 'low', value: 'low' },
-  { label: 'medium', value: 'medium' },
-  { label: 'high', value: 'high' },
-  { label: 'xhigh', value: 'xhigh' }
+  { label: 'Minimal', value: 'minimal' },
+  { label: 'Low', value: 'low' },
+  { label: 'Medium', value: 'medium' },
+  { label: 'High', value: 'high' },
+  { label: 'Extra High', value: 'xhigh' }
 ]
 
 // 方法

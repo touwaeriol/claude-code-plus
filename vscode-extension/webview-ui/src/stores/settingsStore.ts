@@ -79,7 +79,7 @@ export const useSettingsStore = defineStore('settings', () => {
     includePartialMessages: true,
     nodePath: '',
     defaultModelId: 'claude-opus-4-5-20251101',
-    defaultThinkingLevel: 'HIGH',
+    defaultThinkingLevel: 'ultra',
     thinkTokens: 2048,
     ultraTokens: 8096,
     customModels: []
@@ -95,7 +95,7 @@ export const useSettingsStore = defineStore('settings', () => {
     customModels: [],
     reasoningEffort: 'medium',
     reasoningSummary: 'auto',
-    sandboxMode: 'auto'
+    sandboxMode: 'workspace-write'
   })
 
   // Git Generate 设置
