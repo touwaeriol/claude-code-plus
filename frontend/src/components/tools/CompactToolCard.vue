@@ -9,11 +9,11 @@
   >
     <!-- 单行布局 - 只在标题区域绑定点击事件 -->
     <div class="card-content" @click="handleClick">
-      <!-- 图标（支持 emoji 或 SVG） -->
+      <!-- 图标（支持 emoji 或 SVG，已消毒防止 XSS） -->
       <span
         v-if="isSvgIcon"
         class="tool-icon"
-        v-html="displayInfo?.icon"
+        v-html="safeSvgIcon"
       />
       <span v-else class="tool-icon">{{ displayInfo?.icon || '🔧' }}</span>
 
@@ -103,6 +103,7 @@ import { useI18n } from '@/composables/useI18n'
 import type { ToolDisplayInfo } from '@/utils/toolDisplayInfo'
 import { toolShowInterceptor } from '@/services/toolShowInterceptor'
 import { useSessionStore } from '@/stores/sessionStore'
+import { sanitizeIconHtml } from '@/utils/safeHtml'
 
 const { t } = useI18n()
 const sessionStore = useSessionStore()
@@ -156,6 +157,13 @@ const isClickable = computed(() => {
 const isSvgIcon = computed(() => {
   const icon = props.displayInfo?.icon
   return icon && icon.trim().startsWith('<svg')
+})
+
+// 安全的 SVG 图标（已消毒防止 XSS）
+const safeSvgIcon = computed(() => {
+  const icon = props.displayInfo?.icon
+  if (!icon) return ''
+  return sanitizeIconHtml(icon)
 })
 
 function handleClick() {

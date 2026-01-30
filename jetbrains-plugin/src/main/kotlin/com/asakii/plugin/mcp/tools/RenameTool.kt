@@ -171,12 +171,15 @@ class RenameTool(private val project: Project) {
                 if (foundElement == null) {
                     throw IllegalArgumentException(buildNotFoundMessage(line, column, symbolType))
                 }
+                
+                // 使用本地变量避免 !! 断言
+                val element = foundElement ?: throw IllegalStateException("Element was null after validation")
 
-                foundElementType = getElementTypeDescription(foundElement!!)
-                originalName = (foundElement as? PsiNamedElement)?.name ?: "element"
+                foundElementType = getElementTypeDescription(element)
+                originalName = (element as? PsiNamedElement)?.name ?: "element"
 
                 // 统计引用数量和受影响的文件
-                val references = ReferencesSearch.search(foundElement!!, GlobalSearchScope.allScope(project)).findAll()
+                val references = ReferencesSearch.search(element, GlobalSearchScope.allScope(project)).findAll()
                 usagesCount = references.size + 1 // +1 for the definition itself
 
                 affectedFilesSet.add(psiFile.virtualFile.path)
@@ -186,9 +189,13 @@ class RenameTool(private val project: Project) {
             }
 
             // 执行重命名
+            // 使用本地变量避免 !! 断言
+            val elementToRename = foundElement 
+                ?: return ToolResult.error("Cannot perform rename: element was not found")
+            
             val renameSuccessful = WriteCommandAction.runWriteCommandAction<Boolean>(project) {
                 try {
-                    val processor = RenameProcessor(project, foundElement!!, newName, searchInComments, searchInStrings)
+                    val processor = RenameProcessor(project, elementToRename, newName, searchInComments, searchInStrings)
                     processor.run()
                     true
                 } catch (e: Exception) {

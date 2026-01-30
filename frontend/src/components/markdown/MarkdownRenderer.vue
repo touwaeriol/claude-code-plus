@@ -12,6 +12,7 @@ import {useI18n} from '@/composables/useI18n'
 import {markdownService} from '@/services/markdownService'
 import {highlightService} from '@/services/highlightService'
 import {handleLinkClickFromEvent} from '@/utils/browserSecurity'
+import {sanitizeMarkdownHtml} from '@/utils/safeHtml'
 
 const { t } = useI18n()
 
@@ -58,7 +59,8 @@ async function renderContent() {
     // 然后对代码块进行高亮处理
     html = await highlightCodeBlocks(html)
 
-    renderedHtml.value = html
+    // 使用 DOMPurify 消毒，防止 XSS 攻击
+    renderedHtml.value = sanitizeMarkdownHtml(html)
     lastRenderedContent = contentToRender
   } catch (error) {
     console.error('Failed to render markdown:', error)

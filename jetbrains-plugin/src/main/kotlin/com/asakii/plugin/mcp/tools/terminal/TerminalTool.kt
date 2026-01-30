@@ -63,7 +63,15 @@ class TerminalTool(private val sessionManager: TerminalSessionManager) {
                     error = "Session not found or not owned by current AI session: $sessionId"
                 )
             }
-            sessionManager.getSession(sessionId)!!
+            // 安全获取会话，避免 !! 断言
+            sessionManager.getSession(sessionId) 
+                ?: return TerminalResultFormatter.formatTerminalResult(
+                    success = false,
+                    sessionId = sessionId,
+                    sessionName = null,
+                    message = null,
+                    error = "Session not found after ownership validation: $sessionId"
+                )
         } else {
             // 未指定 session_id，使用当前 AI 会话的默认终端
             if (sessionName != null) {

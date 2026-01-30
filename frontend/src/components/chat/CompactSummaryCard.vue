@@ -44,6 +44,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from '@/composables/useI18n'
+import { sanitizeMarkdownHtml } from '@/utils/safeHtml'
 import type { ContentBlock } from '@/types/message'
 
 const { t: _t } = useI18n()
@@ -110,7 +111,7 @@ function formatTokens(tokens: number): string {
   return tokens.toString()
 }
 
-// 渲染后的内容（带格式）
+// 渲染后的内容（带格式，已消毒防止 XSS）
 const renderedContent = computed(() => {
   let html = textContent.value
 
@@ -135,7 +136,8 @@ const renderedContent = computed(() => {
   html = html.replace(/<br>- (.*?)(?=<br>|$)/g, '<br><li>$1</li>')
   html = html.replace(/<br>\d+\. (.*?)(?=<br>|$)/g, '<br><li>$1</li>')
 
-  return html
+  // 使用 DOMPurify 消毒，防止 XSS 攻击
+  return sanitizeMarkdownHtml(html)
 })
 </script>
 

@@ -42,13 +42,12 @@
         <el-table-column prop="configuration" label="Configuration" min-width="120" />
         <el-table-column label="Backends" width="100">
           <template #default="{ row }">
-            <el-tag 
-              size="small" 
+            <span 
+              class="backends-link"
               @click.stop="handleEditBackends(row)"
-              style="cursor: pointer;"
             >
-              {{ row.backends }}
-            </el-tag>
+              {{ row.backends || 'All' }}
+            </span>
           </template>
         </el-table-column>
         <el-table-column prop="level" label="Level" width="90" />
@@ -806,6 +805,16 @@ const saveServer = () => {
 
 .status-dot.disabled {
   background: var(--vscode-testing-iconSkipped, #9e9e9e);
+}
+
+.backends-link {
+  color: var(--vscode-textLink-foreground, #3794ff);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.backends-link:hover {
+  color: var(--vscode-textLink-activeForeground, #3794ff);
 }
 
 .warning-text {

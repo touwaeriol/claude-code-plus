@@ -1,17 +1,14 @@
 <template>
-  <div class="sidebar">
-    <div class="sidebar-header">
-      <span class="title">Settings</span>
-      <span class="subtitle">Claude Code Plus</span>
-    </div>
-    
+  <div class="navbar">
     <el-menu
       :default-active="activePage"
+      mode="horizontal"
+      :ellipsis="false"
       @select="handleSelect"
     >
       <el-menu-item index="claude">
         <el-icon><Promotion /></el-icon>
-        <span>Claude Code</span>
+        <span>Claude</span>
       </el-menu-item>
       <el-menu-item index="codex">
         <el-icon><Monitor /></el-icon>
@@ -19,7 +16,7 @@
       </el-menu-item>
       <el-menu-item index="git">
         <el-icon><Document /></el-icon>
-        <span>Git Generate</span>
+        <span>Git</span>
       </el-menu-item>
       <el-menu-item index="mcp">
         <el-icon><Connection /></el-icon>
@@ -47,34 +44,42 @@ const handleSelect = (index: string) => {
 </script>
 
 <style scoped>
-.sidebar {
-  width: 200px;
-  min-width: 200px;
-  background: var(--vscode-sideBar-background, #252526);
-  border-right: 1px solid var(--vscode-panel-border, #3c3c3c);
+.navbar {
   display: flex;
-  flex-direction: column;
-  overflow-y: auto;
+  align-items: center;
+  padding: 0 8px;
+  background: var(--vscode-sideBar-background, #252526);
+  border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
+  height: 40px;
 }
 
-.sidebar-header {
-  padding: 12px 16px;
+/* 横向菜单样式 */
+:deep(.el-menu) {
+  border-bottom: none;
+  background: transparent;
+  height: 40px;
 }
 
-.title {
-  display: block;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--vscode-sideBarSectionHeader-foreground, #bbbbbb);
-  opacity: 0.7;
-}
-
-.subtitle {
-  display: block;
+:deep(.el-menu--horizontal > .el-menu-item) {
+  height: 40px;
+  line-height: 40px;
   font-size: 13px;
-  font-weight: 500;
+  padding: 0 12px;
+  border-bottom: 2px solid transparent;
   color: var(--vscode-foreground, #cccccc);
-  margin-top: 4px;
+}
+
+:deep(.el-menu--horizontal > .el-menu-item:hover) {
+  background: var(--vscode-list-hoverBackground, #2a2d2e);
+}
+
+:deep(.el-menu--horizontal > .el-menu-item.is-active) {
+  border-bottom-color: var(--vscode-focusBorder, #007acc);
+  color: var(--vscode-foreground, #ffffff);
+}
+
+:deep(.el-menu-item .el-icon) {
+  margin-right: 4px;
+  font-size: 14px;
 }
 </style>

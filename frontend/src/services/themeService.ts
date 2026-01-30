@@ -1,4 +1,5 @@
 import { ideaBridgeService } from './ideaApi'
+import { withServerToken } from '@/utils/serverAuth'
 
 /**
  * 主题颜色接口
@@ -356,7 +357,8 @@ export class ThemeService {
 
       console.log(`🔤 [Font] Downloading IDEA builtin font: ${fontUrl}`)
 
-      const response = await fetch(fontUrl)
+      // VS Code 版后端要求携带 token（X-Claude-Code-Plus-Token）；JetBrains 版不强制，但带上也无害。
+      const response = await fetch(fontUrl, { headers: withServerToken() })
 
       if (!response.ok) {
         if (response.status === 404) {

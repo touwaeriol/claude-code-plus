@@ -171,7 +171,9 @@ class FindUsagesTool(private val project: Project) {
                     throw IllegalArgumentException(buildNotFoundMessage(symbolName, line, column, symbolType))
                 }
 
-                foundElementType = getElementTypeDescription(foundElement!!)
+                // 使用本地变量避免 !! 断言
+                val element = foundElement ?: throw IllegalStateException("Element was null after validation")
+                foundElementType = getElementTypeDescription(element)
 
                 // 获取定义位置
                 foundElement?.containingFile?.virtualFile?.let { file ->
@@ -190,7 +192,8 @@ class FindUsagesTool(private val project: Project) {
                 // 确定搜索范围
                 val scope = when (searchScopeStr) {
                     "Module" -> {
-                        val moduleName = scopeArg!!
+                        val moduleName = scopeArg 
+                            ?: throw IllegalArgumentException("Module scope requires 'scopeArg' parameter with module name")
                         val moduleManager = com.intellij.openapi.module.ModuleManager.getInstance(project)
                         val module = moduleManager.findModuleByName(moduleName)
                         if (module == null) {
@@ -205,7 +208,8 @@ class FindUsagesTool(private val project: Project) {
                         GlobalSearchScope.moduleScope(module)
                     }
                     "Directory" -> {
-                        val dirPath = scopeArg!!
+                        val dirPath = scopeArg 
+                            ?: throw IllegalArgumentException("Directory scope requires 'scopeArg' parameter with directory path")
                         val dirAbsPath = PathResolver.resolve(dirPath, project)
                         val dirFile = LocalFileSystem.getInstance().findFileByPath(dirAbsPath)
                         if (dirFile == null || !dirFile.isDirectory) {
@@ -225,7 +229,9 @@ class FindUsagesTool(private val project: Project) {
                 // 根据符号类型和使用类型过滤进行搜索
                 val allUsages = mutableListOf<Pair<PsiElement, String>>() // element to usage type
 
-                val elem = foundElement!!
+                // 使用本地变量避免 !! 断言
+                val elem = foundElement 
+                    ?: throw IllegalStateException("Element was lost after validation")
                 val langService = LanguageAnalysisService.getInstance(project)
 
                 // 类相关的特殊搜索（通过服务接口，支持 Java 插件可选）

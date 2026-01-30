@@ -357,6 +357,11 @@ class HttpApiServer(
 
                 // RESTful API 路由
                 route("/api") {
+                    // frontend/src/services/backend/BackendSessionFactory.ts expects { status: "ok" }
+                    get("/health") {
+                        call.respond(mapOf("status" to "ok"))
+                    }
+
                     // 通用 RPC 端点（用于前端测试连接和通用调用）
                     post("/") {
                         try {
@@ -487,6 +492,63 @@ class HttpApiServer(
                                 }
                                 // 注：ide.getFileHistoryContent 已迁移到 RSocket 实现
                                 // 参见 JetBrainsRSocketHandler.handleGetFileHistoryContent
+                                "settings.get" -> {
+                                    // 统一 settings.get 结构（用于浏览器/HTTP 模式的设置加载）
+                                    // VS Code 版会从宿主配置读取；JB 版这里基于 serviceConfigProvider() 生成最小可用 Settings。
+                                    val config = serviceConfigProvider()
+
+                                    val defaultBackendType = config.defaultProvider.name.lowercase()
+                                    val includePartialMessages = config.claude.includePartialMessages
+                                    val skipPermissions = config.claude.dangerouslySkipPermissions
+                                    val permissionMode = config.claude.permissionMode ?: "default"
+
+                                    val claudeModel = config.defaultModel
+                                    val claudeThinkingLevel = config.claude.defaultThinkingLevel
+                                    val claudeThinkingTokens = config.claude.defaultThinkingTokens
+                                    val claudeThinkingEnabled = claudeThinkingLevel.uppercase() != "OFF" && claudeThinkingTokens > 0
+
+                                    val codexModel = config.codex.defaultModelId ?: "gpt-5.2-codex"
+                                    val codexReasoningEffort = config.codex.defaultReasoningEffort ?: "medium"
+                                    val codexReasoningSummary = config.codex.defaultReasoningSummary ?: "auto"
+                                    val codexSandboxMode = config.codex.sandboxMode ?: "workspace-write"
+
+                                    val settingsJson = buildJsonObject {
+                                        put("defaultBackendType", JsonPrimitive(defaultBackendType))
+                                        put("permissionMode", JsonPrimitive(permissionMode))
+                                        put("skipPermissions", JsonPrimitive(skipPermissions))
+                                        put("includePartialMessages", JsonPrimitive(includePartialMessages))
+                                        put("maxTurns", JsonNull)
+
+                                        // 会话默认设置
+                                        put("claudeDefaultAutoCleanupContexts", JsonPrimitive(config.claude.defaultAutoCleanupContexts))
+                                        put("codexDefaultAutoCleanupContexts", JsonPrimitive(config.codex.defaultAutoCleanupContexts))
+
+                                        // Claude
+                                        put("claudeModel", JsonPrimitive(claudeModel))
+                                        put("claudeThinkingEnabled", JsonPrimitive(claudeThinkingEnabled))
+                                        put("claudeThinkingTokens", JsonPrimitive(claudeThinkingTokens))
+
+                                        // Codex
+                                        put("codexModel", JsonPrimitive(codexModel))
+                                        put("codexReasoningEffort", JsonPrimitive(codexReasoningEffort))
+                                        put("codexReasoningSummary", JsonPrimitive(codexReasoningSummary))
+                                        put("codexSandboxMode", JsonPrimitive(codexSandboxMode))
+                                        config.codex.apiKey?.let { put("codexApiKey", JsonPrimitive(it)) }
+
+                                        // 高级设置（保持与前端默认一致；不在此处做持久化）
+                                        put("systemPrompt", JsonNull)
+                                        put("continueConversation", JsonPrimitive(false))
+                                        put("maxTokens", JsonNull)
+                                        put("temperature", JsonNull)
+                                        put("verbose", JsonPrimitive(false))
+                                    }
+
+                                    val response = FrontendResponse(
+                                        success = true,
+                                        data = mapOf("settings" to settingsJson)
+                                    )
+                                    call.respondText(json.encodeToString(response), ContentType.Application.Json)
+                                }
                                 "settings.getDefault" -> {
                                     // 获取默认配置（浏览器模式下使用，IDE 模式下使用 RSocket）
                                     val config = serviceConfigProvider()
@@ -912,6 +974,12 @@ class HttpApiServer(
 
                     // Codex 后端 API
                     route("/codex") {
+                        // frontend/src/services/backend/BackendSessionFactory.ts expects { status: "ok" } / { status: "unavailable" }
+                        get("/health") {
+                            val status = if (codexBackendProvider?.running == true) "ok" else "unavailable"
+                            call.respond(mapOf("status" to status))
+                        }
+
                         // Thread 管理
                         post("/thread/start") {
                             try {

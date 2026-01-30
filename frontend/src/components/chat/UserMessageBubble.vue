@@ -115,7 +115,7 @@
                 :class="{ 'use-markdown': props.message.isReplay }"
               >
                 <MarkdownRenderer v-if="props.message.isReplay" :content="block.text" />
-                <span v-else v-html="linkifyText(block.text).html" @click="handleMessageClick"></span>
+                <span v-else v-html="getSafeLinkifiedHtml(block.text)" @click="handleMessageClick"></span>
               </div>
               <!-- 图片块 -->
               <img
@@ -156,6 +156,7 @@ import type { ContextReference, OrderedContentBlock } from '@/types/display'
 import type { ParsedCurrentOpenFile, ParsedOpenFileReminder, ParsedSelectLinesReminder } from '@/utils/xmlTagParser'
 import { hasCurrentOpenFileTag, parseCurrentOpenFileTag } from '@/utils/xmlTagParser'
 import { linkifyText, getLinkFromEvent, handleLinkClick } from '@/utils/linkify'
+import { sanitizeLinkHtml } from '@/utils/safeHtml'
 import ImagePreviewModal from '@/components/common/ImagePreviewModal.vue'
 import ChatInput from './ChatInput.vue'
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
@@ -407,12 +408,23 @@ const parsedCurrentOpenFile = computed((): ParsedCurrentOpenFile | undefined => 
   return undefined
 })
 
-// 渲染后的文本（带链接）- 保留以备将来使用
+// 渲染后的文本（带链接，已消毒防止 XSS）- 保留以备将来使用
 const _renderedText = computed(() => {
   if (!messageText.value) return ''
   const result = linkifyText(messageText.value)
-  return result.html
+  // 使用 DOMPurify 消毒，防止 XSS 攻击
+  return sanitizeLinkHtml(result.html)
 })
+
+/**
+ * 安全地渲染文本块为带链接的 HTML
+ * 使用 DOMPurify 消毒输出，防止 XSS 攻击
+ */
+function getSafeLinkifiedHtml(text: string): string {
+  if (!text) return ''
+  const result = linkifyText(text)
+  return sanitizeLinkHtml(result.html)
+}
 
 // 预览文本（折叠时显示，截取前 100 个字符）- 保留以备将来使用
 const _previewText = computed(() => {

@@ -273,10 +273,32 @@ function createResponder(
   let sessionId: string | undefined
   let currentStreamCancel: (() => void) | undefined
 
+  // Per-RSocket-connection global event subscribers. This mirrors the JetBrains backend where
+  // subscribeGlobalEvents() is scoped to the RSocket connection / service instance.
+  const globalEventSubscribers = new Set<OnTerminalSubscriber<Payload, Error>>()
+
+  const broadcastGlobalPayload = (p: Payload) => {
+    if (globalEventSubscribers.size === 0) return
+
+    // Avoid sharing the same Buffer instance across multiple streams.
+    const data = p.data ? Buffer.from(p.data as any) : undefined
+    const metadata = p.metadata ? Buffer.from(p.metadata as any) : undefined
+    const cloned: Payload = { data, metadata } as any
+
+    for (const sub of Array.from(globalEventSubscribers)) {
+      try {
+        sub.onNext(cloned, false)
+      } catch {
+        globalEventSubscribers.delete(sub)
+      }
+    }
+  }
+
   // 设置连接关闭时的清理回调
   try {
     ;(remotePeer as any).onClose?.((err?: Error) => {
       log?.(`[rsocket] peer closed in responder ${err ? `error=${err.message}` : '(normal)'}`)
+      globalEventSubscribers.clear()
       onDispose?.(connectId)
     })
   } catch {
@@ -765,6 +787,10 @@ function createResponder(
       const safeOnNext = (p: Payload, isComplete: boolean) => {
         if (cancelled) return
         responderStream.onNext(p, isComplete)
+        // Broadcast query/tool events to `agent.events` subscribers.
+        if (route !== 'agent.events') {
+          broadcastGlobalPayload(p)
+        }
       }
       const safeOnComplete = () => {
         responderStream.onComplete()
@@ -2004,8 +2030,12 @@ function createResponder(
             break
           }
           case 'agent.events': {
-            // 暂不推送全局事件：直接保持空流并结束
-            safeOnComplete()
+            // 全局事件流：必须保持长连接，不可立即 complete（前端会订阅并期望持续存在）。
+            // 这里订阅的是“连接级别”的全局事件（JetBrains 版同样如此）。
+            globalEventSubscribers.add(responderStream)
+            cancelStream = () => {
+              globalEventSubscribers.delete(responderStream)
+            }
             break
           }
           default: {

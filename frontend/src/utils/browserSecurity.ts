@@ -68,6 +68,13 @@ let initialized = false
 let currentContextMenu: HTMLElement | null = null
 let contextMenuTarget: HTMLElement | null = null
 
+// 保存事件监听器引用，用于清理（防止内存泄漏）
+let linkClickHandler: ((event: MouseEvent) => void) | null = null
+let hideContextMenuClickHandler: ((event: Event) => void) | null = null
+let hideContextMenuScrollHandler: ((event: Event) => void) | null = null
+let hideContextMenuResizeHandler: (() => void) | null = null
+let hideContextMenuBlurHandler: (() => void) | null = null
+
 const defaultTranslations: Record<string, Record<string, string>> = {
   'zh-CN': { 'contextMenu.copy': '复制', 'contextMenu.paste': '粘贴', 'contextMenu.cut': '剪切', 'contextMenu.selectAll': '全选' },
   'zh-TW': { 'contextMenu.copy': '複製', 'contextMenu.paste': '貼上', 'contextMenu.cut': '剪下', 'contextMenu.selectAll': '全選' },
@@ -107,11 +114,16 @@ export function initBrowserSecurity(options?: BrowserSecurityOptions): void {
     setupContextMenu()
   }
 
-  // 关闭菜单的事件
-  document.addEventListener('click', hideContextMenu, true)
-  document.addEventListener('scroll', hideContextMenu, true)
-  window.addEventListener('resize', hideContextMenu)
-  window.addEventListener('blur', hideContextMenu)
+  // 关闭菜单的事件（保存引用以便清理）
+  hideContextMenuClickHandler = hideContextMenu
+  hideContextMenuScrollHandler = hideContextMenu
+  hideContextMenuResizeHandler = hideContextMenu
+  hideContextMenuBlurHandler = hideContextMenu
+  
+  document.addEventListener('click', hideContextMenuClickHandler, true)
+  document.addEventListener('scroll', hideContextMenuScrollHandler, true)
+  window.addEventListener('resize', hideContextMenuResizeHandler)
+  window.addEventListener('blur', hideContextMenuBlurHandler)
 
   initialized = true
 }
@@ -138,6 +150,41 @@ export function registerContextMenuHandler(handler: ContextMenuHandler): void {
 
 export function unregisterContextMenuHandler(): void {
   customContextMenuHandler = null
+}
+
+/**
+ * 清理浏览器安全工具
+ * 移除所有事件监听器，防止内存泄漏
+ */
+export function cleanupBrowserSecurity(): void {
+  if (!initialized) return
+  
+  // 移除事件监听器
+  if (hideContextMenuClickHandler) {
+    document.removeEventListener('click', hideContextMenuClickHandler, true)
+  }
+  if (hideContextMenuScrollHandler) {
+    document.removeEventListener('scroll', hideContextMenuScrollHandler, true)
+  }
+  if (hideContextMenuResizeHandler) {
+    window.removeEventListener('resize', hideContextMenuResizeHandler)
+  }
+  if (hideContextMenuBlurHandler) {
+    window.removeEventListener('blur', hideContextMenuBlurHandler)
+  }
+  
+  // 隐藏并移除上下文菜单
+  hideContextMenu()
+  
+  // 重置状态
+  hideContextMenuClickHandler = null
+  hideContextMenuScrollHandler = null
+  hideContextMenuResizeHandler = null
+  hideContextMenuBlurHandler = null
+  linkClickHandler = null
+  initialized = false
+  
+  console.log('[BrowserSecurity] Cleanup completed')
 }
 
 // ════════════════════════════════════════════════════════════════════════════

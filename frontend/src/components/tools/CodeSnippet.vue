@@ -13,6 +13,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { highlightService } from '@/services/highlightService'
+import { sanitizeCodeHtml } from '@/utils/safeHtml'
 
 interface Props {
   code: string
@@ -38,10 +39,12 @@ async function highlight() {
 
   try {
     const html = await highlightService.highlight(props.code, props.language)
-    highlightedCode.value = html
+    // 使用 DOMPurify 消毒，防止 XSS 攻击
+    highlightedCode.value = sanitizeCodeHtml(html)
   } catch (error) {
     console.warn('Failed to highlight code:', error)
-    highlightedCode.value = `<pre><code>${escapeHtml(props.code)}</code></pre>`
+    // 使用 DOMPurify 消毒，防止 XSS 攻击
+    highlightedCode.value = sanitizeCodeHtml(`<pre><code>${escapeHtml(props.code)}</code></pre>`)
   }
 }
 

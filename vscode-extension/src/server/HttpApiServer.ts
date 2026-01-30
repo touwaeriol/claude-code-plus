@@ -4,7 +4,9 @@
 // - This server only exposes HTTP APIs + RSocket endpoints and relies on Webview CSP/localResourceRoots.
 
 import * as crypto from 'crypto'
+import * as fs from 'fs'
 import * as http from 'http'
+import * as path from 'path'
 import * as vscode from 'vscode'
 
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf'
@@ -19,6 +21,7 @@ import { WsUpgradeRouter } from './wsUpgradeRouter'
 import { isAllowedWebviewOrigin } from './webviewOrigin'
 import type { DiffContentProvider } from '../ide/diffContentProvider'
 import { McpHttpGateway, setMcpHttpGateway } from './mcp'
+import { CodexBackendProvider } from './codex/codexBackendProvider'
 import {
   GetHistoryMetadataRequestSchema,
   HistoryMetadataSchema,
@@ -37,6 +40,7 @@ export class HttpApiServer implements vscode.Disposable {
   private readonly snapshotStore = new SnapshotStore()
   private readonly terminalTaskManager = new TerminalTaskManager()
   private mcpHttpGateway: McpHttpGateway | undefined
+  private codexBackendProvider: CodexBackendProvider | undefined
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -201,6 +205,7 @@ export class HttpApiServer implements vscode.Disposable {
         })
         setMcpHttpGateway(null)
       }
+      this.codexBackendProvider?.stop()
       this.rsocketServer?.dispose()
       this.ideRSocketServer?.dispose()
       this.wsUpgradeRouter?.dispose()
@@ -211,8 +216,28 @@ export class HttpApiServer implements vscode.Disposable {
       this.rsocketServer = undefined
       this.ideRSocketServer = undefined
       this.wsUpgradeRouter = undefined
+      this.codexBackendProvider = undefined
       this.server = undefined
       this.baseUrl = undefined
+    }
+  }
+
+  private async ensureCodexBackendProvider(): Promise<CodexBackendProvider | null> {
+    if (this.codexBackendProvider?.running) return this.codexBackendProvider
+
+    if (!this.codexBackendProvider) {
+      const cwd = getWorkspaceRootFsPath() || process.cwd()
+      this.codexBackendProvider = new CodexBackendProvider(cwd, (msg) => this.log(msg))
+    }
+
+    try {
+      await this.codexBackendProvider.start()
+      return this.codexBackendProvider
+    } catch (e) {
+      this.log(`[HttpApiServer] Codex backend not available: ${e instanceof Error ? e.message : String(e)}`)
+      // Allow retry on the next call.
+      this.codexBackendProvider = undefined
+      return null
     }
   }
 
@@ -251,20 +276,282 @@ export class HttpApiServer implements vscode.Disposable {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/codex/health') {
-      // Codex backend is not implemented yet in VS Code extension
+      // JetBrains version: { status: 'ok' } / { status: 'unavailable' }
+      const provider = await this.ensureCodexBackendProvider()
       res.statusCode = 200
       res.setHeader('Content-Type', 'application/json; charset=utf-8')
-      res.end(JSON.stringify({ status: 'unavailable' }))
+      res.end(JSON.stringify({ status: provider?.running ? 'ok' : 'unavailable' }))
+      return
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/codex/thread/start') {
+      try {
+        const provider = await this.ensureCodexBackendProvider()
+        if (!provider) {
+          res.statusCode = 503
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ success: false, error: 'Codex backend not available' }))
+          return
+        }
+
+        const bodyText = await readBodyText(req)
+        const requestBody = bodyText ? (JSON.parse(bodyText) as any) : {}
+        const threadId = await provider.createThread({
+          model: requestBody.model ?? null,
+          cwd: requestBody.cwd ?? null,
+          approvalPolicy: requestBody.approvalPolicy ?? null,
+          sandbox: requestBody.sandbox ?? null,
+        })
+
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: true, threadId }))
+        return
+      } catch (error) {
+        res.statusCode = 500
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) }))
+        return
+      }
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/codex/thread/resume') {
+      try {
+        const provider = await this.ensureCodexBackendProvider()
+        if (!provider) {
+          res.statusCode = 503
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ success: false, error: 'Codex backend not available' }))
+          return
+        }
+
+        const bodyText = await readBodyText(req)
+        const requestBody = bodyText ? (JSON.parse(bodyText) as any) : {}
+        const threadId = requestBody.threadId as string | undefined
+        if (!threadId) {
+          res.statusCode = 400
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ success: false, error: 'Missing threadId' }))
+          return
+        }
+
+        await provider.resumeThread(threadId)
+
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: true }))
+        return
+      } catch (error) {
+        res.statusCode = 500
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) }))
+        return
+      }
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/codex/thread/archive') {
+      try {
+        const provider = await this.ensureCodexBackendProvider()
+        if (!provider) {
+          res.statusCode = 503
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ success: false, error: 'Codex backend not available' }))
+          return
+        }
+
+        const bodyText = await readBodyText(req)
+        const requestBody = bodyText ? (JSON.parse(bodyText) as any) : {}
+        const threadId = requestBody.threadId as string | undefined
+        if (!threadId) {
+          res.statusCode = 400
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ success: false, error: 'Missing threadId' }))
+          return
+        }
+
+        await provider.archiveThread(threadId)
+
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: true }))
+        return
+      } catch (error) {
+        res.statusCode = 500
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) }))
+        return
+      }
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/codex/turn/start') {
+      try {
+        const provider = await this.ensureCodexBackendProvider()
+        if (!provider) {
+          res.statusCode = 503
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ success: false, error: 'Codex backend not available' }))
+          return
+        }
+
+        const bodyText = await readBodyText(req)
+        const requestBody = bodyText ? (JSON.parse(bodyText) as any) : {}
+        const threadId = requestBody.threadId as string | undefined
+        if (!threadId) {
+          res.statusCode = 400
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ success: false, error: 'Missing threadId' }))
+          return
+        }
+        const input = requestBody.input as string | undefined
+        if (!input) {
+          res.statusCode = 400
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ success: false, error: 'Missing input' }))
+          return
+        }
+
+        const turnId = await provider.startTurn(threadId, input)
+
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: true, turnId }))
+        return
+      } catch (error) {
+        res.statusCode = 500
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) }))
+        return
+      }
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/codex/turn/interrupt') {
+      try {
+        const provider = await this.ensureCodexBackendProvider()
+        if (!provider) {
+          res.statusCode = 503
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ success: false, error: 'Codex backend not available' }))
+          return
+        }
+
+        const bodyText = await readBodyText(req)
+        const requestBody = bodyText ? (JSON.parse(bodyText) as any) : {}
+        const threadId = requestBody.threadId as string | undefined
+        if (!threadId) {
+          res.statusCode = 400
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ success: false, error: 'Missing threadId' }))
+          return
+        }
+
+        await provider.interruptTurn(threadId)
+
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: true }))
+        return
+      } catch (error) {
+        res.statusCode = 500
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) }))
+        return
+      }
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/codex/config') {
+      const provider = await this.ensureCodexBackendProvider()
+      if (!provider) {
+        res.statusCode = 503
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: 'Codex backend not available' }))
+        return
+      }
+
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.end(JSON.stringify({ success: true, available: true, version: '1.0.0' }))
+      return
+    }
+
+    if (req.method === 'PUT' && url.pathname === '/api/codex/config') {
+      const provider = await this.ensureCodexBackendProvider()
+      if (!provider) {
+        res.statusCode = 503
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: 'Codex backend not available' }))
+        return
+      }
+
+      // JetBrains version: configuration is passed via startup args; runtime update is a no-op.
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.end(JSON.stringify({ success: true, message: 'Config update not supported at runtime' }))
+      return
+    }
+
+    const threadStateMatch = url.pathname.match(/^\/api\/codex\/thread\/([^/]+)\/state$/)
+    if (req.method === 'GET' && threadStateMatch) {
+      const provider = await this.ensureCodexBackendProvider()
+      if (!provider) {
+        res.statusCode = 503
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: 'Codex backend not available' }))
+        return
+      }
+
+      let threadId = threadStateMatch[1] || ''
+      try {
+        threadId = decodeURIComponent(threadId)
+      } catch {
+        // keep raw
+      }
+
+      if (!threadId) {
+        res.statusCode = 400
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: 'Missing threadId' }))
+        return
+      }
+
+      const state = provider.getThreadState(threadId)
+      if (!state) {
+        res.statusCode = 404
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: 'Thread not found' }))
+        return
+      }
+
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.end(
+        JSON.stringify({
+          success: true,
+          state: {
+            threadId: state.threadId,
+            isActive: state.isActive,
+            currentTurnId: state.currentTurnId,
+            config: {
+              model: state.config.model ?? null,
+              cwd: state.config.cwd ?? null,
+              approvalPolicy: state.config.approvalPolicy ?? null,
+              sandbox: state.config.sandbox ?? null,
+            },
+          },
+        })
+      )
       return
     }
 
     if (req.method === 'GET' && url.pathname === '/api/history/sessions') {
       const offset = Number(url.searchParams.get('offset') ?? 0)
       const maxResults = Number(url.searchParams.get('maxResults') ?? 50)
+      const providerParam = String(url.searchParams.get('provider') ?? '').toLowerCase().trim()
+      const providerKey = providerParam === 'codex' ? 'codex' : 'claude'
 
       const sessions = this.historyStore.listSessions(
         Number.isFinite(offset) ? offset : 0,
-        Number.isFinite(maxResults) ? maxResults : 50
+        Number.isFinite(maxResults) ? maxResults : 50,
+        providerKey
       )
 
       res.statusCode = 200
@@ -280,12 +567,17 @@ export class HttpApiServer implements vscode.Disposable {
       const sessionId = parsed.sessionId || ''
       const offset = parsed.offset ?? 0
       const limit = parsed.limit ?? 200
+      const providerParam = String(url.searchParams.get('provider') ?? '').toLowerCase().trim()
+      const providerKey = providerParam === 'codex' ? 'codex' : 'claude'
 
       const loaded = sessionId
         ? this.historyStore.loadHistory(sessionId, offset, limit)
         : { messages: [], offset: offset ?? 0, count: 0, availableCount: 0 }
+      const loadedFiltered = sessionId
+        ? this.historyStore.loadHistory(sessionId, offset, limit, providerKey)
+        : loaded
 
-      const result = create(HistoryResultSchema, loaded)
+      const result = create(HistoryResultSchema, loadedFiltered)
 
       res.statusCode = 200
       res.setHeader('Content-Type', 'application/octet-stream')
@@ -299,8 +591,10 @@ export class HttpApiServer implements vscode.Disposable {
         raw.length > 0 ? fromBinary(GetHistoryMetadataRequestSchema, raw) : create(GetHistoryMetadataRequestSchema, {})
 
       const projectPath = parsed.projectPath || getWorkspaceRootFsPath()
+      const providerParam = String(url.searchParams.get('provider') ?? '').toLowerCase().trim()
+      const providerKey = providerParam === 'codex' ? 'codex' : 'claude'
 
-      const meta = this.historyStore.getMetadata(parsed.sessionId || '', projectPath)
+      const meta = this.historyStore.getMetadata(parsed.sessionId || '', projectPath, providerKey)
       const result = create(HistoryMetadataSchema, meta)
 
       res.statusCode = 200
@@ -311,7 +605,32 @@ export class HttpApiServer implements vscode.Disposable {
 
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/history/sessions/')) {
       const sessionId = decodeURIComponent(url.pathname.replace('/api/history/sessions/', ''))
-      if (sessionId) this.historyStore.deleteSession(sessionId)
+      const providerParam = String(url.searchParams.get('provider') ?? '').toLowerCase().trim()
+      const providerKey = providerParam === 'codex' ? 'codex' : 'claude'
+
+      if (!sessionId) {
+        res.statusCode = 400
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: 'Missing sessionId' }))
+        return
+      }
+
+      // Align with JetBrains semantics: provider mismatch should behave like "not found".
+      if (!this.historyStore.sessionHasProvider(sessionId, providerKey)) {
+        res.statusCode = 404
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: 'Session not found or delete failed' }))
+        return
+      }
+
+      const deleted = this.historyStore.deleteSession(sessionId)
+      if (!deleted) {
+        res.statusCode = 404
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ success: false, error: 'Session not found or delete failed' }))
+        return
+      }
+
       res.statusCode = 200
       res.setHeader('Content-Type', 'application/json; charset=utf-8')
       res.end(JSON.stringify({ success: true }))
@@ -336,6 +655,32 @@ export class HttpApiServer implements vscode.Disposable {
       return
     }
 
+    if (req.method === 'GET' && url.pathname.startsWith('/api/font/')) {
+      // Frontend expects a raw font payload (or 404).
+      // In JetBrains version the backend reads fonts from IDE JBR; in VS Code we best-effort load from system font dirs.
+      const rawName = url.pathname.slice('/api/font/'.length)
+      let fontFamily = rawName
+      try {
+        fontFamily = decodeURIComponent(rawName)
+      } catch {
+        // keep rawName
+      }
+
+      const found = loadSystemFontBytes(fontFamily)
+      if (!found) {
+        res.statusCode = 404
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ error: `Font not found: ${fontFamily}` }))
+        return
+      }
+
+      res.statusCode = 200
+      res.setHeader('Content-Type', found.contentType)
+      res.setHeader('Content-Disposition', `attachment; filename=\"${found.fileName}\"`)
+      res.end(found.bytes)
+      return
+    }
+
     res.statusCode = 404
     res.setHeader('Content-Type', 'text/plain; charset=utf-8')
     res.end('Not Found')
@@ -347,7 +692,7 @@ export class HttpApiServer implements vscode.Disposable {
       res.setHeader('Access-Control-Allow-Origin', origin)
       res.setHeader('Vary', 'Origin')
     }
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Claude-Code-Plus-Token')
 
     // Private Network Access preflight (Chrome)
@@ -397,4 +742,89 @@ function readBodyBuffer(req: http.IncomingMessage): Promise<Uint8Array> {
 function getWorkspaceRootFsPath(): string {
   const folder = vscode.workspace.workspaceFolders?.[0]
   return folder?.uri.fsPath ?? ''
+}
+
+function normalizeFontKey(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, '')
+}
+
+function getSystemFontDirs(): string[] {
+  const home = process.env.HOME || process.env.USERPROFILE || ''
+  if (process.platform === 'win32') {
+    return ['C:\\Windows\\Fonts']
+  }
+  if (process.platform === 'darwin') {
+    return [path.join(home, 'Library', 'Fonts'), '/Library/Fonts', '/System/Library/Fonts']
+  }
+  return [
+    path.join(home, '.fonts'),
+    path.join(home, '.local', 'share', 'fonts'),
+    '/usr/share/fonts',
+    '/usr/local/share/fonts',
+  ]
+}
+
+function guessFontCandidates(fontFamily: string): string[] {
+  const key = normalizeFontKey(fontFamily)
+  const mapping: Record<string, string[]> = {
+    // Keep roughly aligned with JetBrains FontHelper mappings.
+    jetbrainsmono: ['JetBrainsMono-Regular', 'JetBrainsMonoNL-Regular', 'JetBrainsMono[wght]'],
+    firacode: ['FiraCode-Regular', 'FiraCode[wdth,wght]'],
+    droidsans: ['DroidSans'],
+    droidsansmono: ['DroidSansMono'],
+    droidserif: ['DroidSerif-Regular'],
+    inconsolata: ['Inconsolata'],
+    inter: ['Inter-Regular', 'Inter[slnt,wght]'],
+  }
+
+  return mapping[key] ?? []
+}
+
+function detectFontContentType(ext: string): string {
+  switch (ext.toLowerCase()) {
+    case '.ttf':
+      return 'font/ttf'
+    case '.otf':
+      return 'font/otf'
+    case '.woff':
+      return 'font/woff'
+    case '.woff2':
+      return 'font/woff2'
+    default:
+      return 'application/octet-stream'
+  }
+}
+
+function loadSystemFontBytes(
+  fontFamily: string
+): { bytes: Buffer; contentType: string; fileName: string } | null {
+  const candidates = guessFontCandidates(fontFamily)
+  if (candidates.length === 0) return null
+
+  const exts = ['.ttf', '.otf', '.woff', '.woff2']
+  const dirs = getSystemFontDirs()
+
+  for (const dir of dirs) {
+    if (!dir) continue
+    try {
+      if (!fs.existsSync(dir)) continue
+    } catch {
+      continue
+    }
+
+    for (const base of candidates) {
+      for (const ext of exts) {
+        const filePath = path.join(dir, `${base}${ext}`)
+        try {
+          if (!fs.existsSync(filePath)) continue
+          const bytes = fs.readFileSync(filePath)
+          return { bytes, contentType: detectFontContentType(ext), fileName: `${base}${ext}` }
+        } catch {
+          // ignore and continue searching
+        }
+      }
+    }
+  }
+
+  return null
 }

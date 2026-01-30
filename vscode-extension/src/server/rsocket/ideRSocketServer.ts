@@ -931,6 +931,37 @@ function buildIdeSettings(context: vscode.ExtensionContext) {
   // The IdeSettings proto doesn't include sensitive fields (API keys). VS Code serves them via HTTP settings.get.
   void context
 
+  // Option lists (used by frontend dropdowns). Keep in sync with JetBrains AgentSettingsService defaults.
+  const permissionModeId = 'default'
+  const permissionModeOptions = [
+    { id: 'default', label: 'Default', description: 'Normal permission checks', isDefault: permissionModeId === 'default' },
+    { id: 'acceptEdits', label: 'Accept Edits', description: 'Auto-accept file edits', isDefault: permissionModeId === 'acceptEdits' },
+    { id: 'plan', label: 'Plan Mode', description: 'Plan before execution', isDefault: permissionModeId === 'plan' },
+    { id: 'bypassPermissions', label: 'Bypass', description: 'Skip all permission checks', isDefault: permissionModeId === 'bypassPermissions' },
+  ]
+
+  const codexReasoningEffortOptions = [
+    { id: 'none', label: 'None', description: 'No reasoning', isDefault: codexReasoningEffort === 'none' },
+    { id: 'minimal', label: 'Minimal', description: 'Minimal reasoning', isDefault: codexReasoningEffort === 'minimal' },
+    { id: 'low', label: 'Low', description: 'Low reasoning', isDefault: codexReasoningEffort === 'low' },
+    { id: 'medium', label: 'Medium', description: 'Balanced reasoning', isDefault: codexReasoningEffort === 'medium' },
+    { id: 'high', label: 'High', description: 'High reasoning', isDefault: codexReasoningEffort === 'high' },
+    { id: 'xhigh', label: 'Extra High', description: 'Extra high reasoning', isDefault: codexReasoningEffort === 'xhigh' },
+  ]
+
+  const codexReasoningSummaryOptions = [
+    { id: 'auto', label: 'Auto', description: 'Automatic summary', isDefault: codexReasoningSummary === 'auto' },
+    { id: 'concise', label: 'Concise', description: 'Brief summary', isDefault: codexReasoningSummary === 'concise' },
+    { id: 'detailed', label: 'Detailed', description: 'Full summary', isDefault: codexReasoningSummary === 'detailed' },
+    { id: 'none', label: 'None', description: 'No summary', isDefault: codexReasoningSummary === 'none' },
+  ]
+
+  const codexSandboxModeOptions = [
+    { id: 'read-only', label: 'Read Only', description: 'Read-only access', isDefault: codexSandboxMode === 'read-only' },
+    { id: 'workspace-write', label: 'Workspace Write', description: 'Write to workspace only', isDefault: codexSandboxMode === 'workspace-write' },
+    { id: 'danger-full-access', label: 'Full Access', description: 'Full file system access (dangerous)', isDefault: codexSandboxMode === 'danger-full-access' },
+  ]
+
   return create(IdeSettingsSchema, {
     defaultModelId: claudeDefaultModelId,
     defaultModelName: lookupClaudeModelName(claudeDefaultModelId),
@@ -942,21 +973,21 @@ function buildIdeSettings(context: vscode.ExtensionContext) {
     defaultThinkingTokens: claudeDefaultThinkingTokens,
     defaultThinkingLevelId,
     thinkingLevels: [
-      { id: 'off', name: 'Off', tokens: 0, isCustom: false },
+     { id: 'off', name: 'Off', tokens: 0, isCustom: false },
       { id: 'think', name: 'Think', tokens: 2048, isCustom: false },
       { id: 'ultra', name: 'Ultra', tokens: 8096, isCustom: false },
     ],
-    permissionMode: 'default',
+    permissionMode: permissionModeId,
     codexDefaultModelId,
     codexDefaultReasoningEffort: codexReasoningEffort,
     codexDefaultReasoningSummary: codexReasoningSummary,
     codexDefaultSandboxMode: codexSandboxMode,
     claudeDefaultAutoCleanupContexts,
     codexDefaultAutoCleanupContexts,
-    codexReasoningEffortOptions: [],
-    codexReasoningSummaryOptions: [],
-    codexSandboxModeOptions: [],
-    permissionModeOptions: [],
+    codexReasoningEffortOptions,
+    codexReasoningSummaryOptions,
+    codexSandboxModeOptions,
+    permissionModeOptions,
   })
 }
 
