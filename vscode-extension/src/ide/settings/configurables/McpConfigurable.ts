@@ -53,7 +53,8 @@ export interface McpServerConfig {
   args?: string[]
   env?: Record<string, string>
   url?: string
-  type?: 'stdio' | 'http'
+  headers?: Record<string, string>
+  type?: 'stdio' | 'http' | 'sse'
 }
 
 /** 自定义 MCP 服务器配置 */

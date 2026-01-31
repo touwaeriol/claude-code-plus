@@ -88,6 +88,9 @@ import { WebsocketServerTransport } from 'rsocket-websocket-server'
 import { ClaudeCliSessionManager, type ToolPermissionResult } from '../../sdk/claude/claudeCli'
 import { buildMcpConfig, writeSystemPromptAppendix, cleanupTempFiles, type McpServerSettings } from '../../sdk/claude/mcpConfigBuilder'
 import { getMcpHttpGateway } from '../mcp'
+import { McpConfigurable, type McpServerEntry, type CustomMcpServerConfig } from '../../ide/settings/configurables/McpConfigurable'
+import { toMcpServerName, CONTEXT7_CONFIG } from '../../ide/mcp/constants'
+import { getDefaultInstructions } from '../../ide/mcp/defaults/mcpInstructions'
 import { CodexSession, type CodexSessionOptions } from '../../sdk/codex/session'
 import { CodexAppServerStreamAdapter } from '../../sdk/codex/adapter/streamAdapter'
 import type { AppServerEvent } from '../../sdk/codex/appServer/client'
@@ -318,11 +321,124 @@ function createResponder(
 
   /**
    * 从 VS Code 设置中读取 MCP 服务器配置
+   * 
+   * 1. 读取所有内置 MCP 服务器配置（User Interaction, VS Code LSP, VS Code File, Context7, Terminal, Git）
+   * 2. 读取自定义 MCP 服务器配置
+   * 3. 转换为 McpServerSettings 格式供 buildMcpConfig() 使用
+   * 
+   * 修复说明：之前的实现试图从不存在的 claudeCodePlus.mcp.servers 读取配置，
+   * 现在正确地从 McpConfigurable 读取配置。
    */
   const getMcpServersFromSettings = (): McpServerSettings[] => {
-    const cfg = vscode.workspace.getConfiguration('claudeCodePlus')
-    const mcpSettings = cfg.get<{ servers?: McpServerSettings[] }>('mcp')
-    return mcpSettings?.servers ?? []
+    const settings: McpServerSettings[] = []
+    
+    try {
+      // 1. 读取内置服务器配置
+      const builtInServers = McpConfigurable.getAllBuiltInServers()
+      for (const entry of builtInServers) {
+        settings.push(convertBuiltInToSettings(entry))
+      }
+      
+      // 2. 读取自定义服务器配置
+      const customServers = McpConfigurable.getCustomServers()
+      for (const custom of customServers) {
+        settings.push(convertCustomToSettings(custom))
+      }
+      
+      log?.(`[MCP] Loaded ${settings.length} MCP servers (${builtInServers.length} built-in, ${customServers.length} custom)`)
+    } catch (e) {
+      log?.(`[MCP] Failed to load MCP servers from settings: ${e}`)
+    }
+    
+    return settings
+  }
+  
+  /**
+   * 将内置 MCP 服务器条目转换为 McpServerSettings
+   */
+  function convertBuiltInToSettings(entry: McpServerEntry): McpServerSettings {
+    // 将 UI 名称转换为 MCP 服务器名称
+    const mcpName = toMcpServerName(entry.name)
+    
+    // 格式化 backends：["all"] -> "All", ["claude", "codex"] -> "Claude,Codex"
+    const backends = formatBackendsArray(entry.enabledBackends)
+    
+    // 获取默认提示词
+    const defaultInstructions = getDefaultInstructions(mcpName)
+    
+    // 特殊处理 Context7：它是内置配置但使用外部 HTTP URL
+    if (entry.name === 'Context7') {
+      return {
+        name: mcpName,
+        enabled: entry.enabled,
+        backends,
+        level: entry.level,
+        isBuiltIn: false,  // Context7 作为外部 HTTP 服务器处理
+        type: 'http',
+        url: CONTEXT7_CONFIG.URL,
+        headers: entry.apiKey ? { [CONTEXT7_CONFIG.API_KEY_HEADER]: entry.apiKey } : undefined,
+        instructions: entry.instructions || undefined,
+        instructionsClaude: entry.instructionsClaude || undefined,
+        instructionsCodex: entry.instructionsCodex || undefined,
+        defaultInstructions,
+      }
+    }
+    
+    // 其他内置服务器通过 MCP HTTP Gateway 暴露
+    return {
+      name: mcpName,
+      enabled: entry.enabled,
+      backends,
+      level: entry.level,
+      isBuiltIn: true,
+      type: 'http',  // 内置服务器通过 MCP HTTP Gateway 暴露
+      instructions: entry.instructions || undefined,
+      instructionsClaude: entry.instructionsClaude || undefined,
+      instructionsCodex: entry.instructionsCodex || undefined,
+      defaultInstructions,
+    }
+  }
+  
+  /**
+   * 将自定义 MCP 服务器配置转换为 McpServerSettings
+   */
+  function convertCustomToSettings(custom: CustomMcpServerConfig): McpServerSettings {
+    const backends = formatBackendsArray(custom.backends)
+    
+    return {
+      name: custom.name,
+      enabled: custom.enabled,
+      backends,
+      level: 'project',
+      isBuiltIn: false,
+      type: custom.config.type || 'stdio',
+      url: custom.config.url,
+      headers: custom.config.headers,
+      command: custom.config.command,
+      args: custom.config.args,
+      env: custom.config.env,
+      instructions: custom.instructions || undefined,
+    }
+  }
+  
+  /**
+   * 格式化后端配置数组为字符串
+   * ["all"] -> "All"
+   * ["claude"] -> "Claude"
+   * ["codex"] -> "Codex"
+   * ["claude", "codex"] -> "Claude,Codex"
+   */
+  function formatBackendsArray(backends: string[]): string {
+    if (!backends || backends.length === 0) return 'All'
+    
+    const normalized = backends.map(b => b.toLowerCase())
+    if (normalized.includes('all')) return 'All'
+    
+    const parts: string[] = []
+    if (normalized.includes('claude')) parts.push('Claude')
+    if (normalized.includes('codex')) parts.push('Codex')
+    
+    return parts.length > 0 ? parts.join(',') : 'All'
   }
 
   let provider: Provider = Provider.CLAUDE

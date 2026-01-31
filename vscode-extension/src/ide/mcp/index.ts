@@ -120,6 +120,14 @@ export async function initializeMcpServers(): Promise<void> {
         mcpLogger.info('User Interaction MCP server disabled by settings');
     }
 
+    // Context7 MCP - External HTTP server, no local registration needed
+    // Configuration is passed through getMcpServersFromSettings() -> buildMcpConfig()
+    if (settings.enableContext7Mcp) {
+        mcpLogger.info('Context7 MCP enabled (external HTTP server, will be configured via --mcp-config)');
+    } else {
+        mcpLogger.info('Context7 MCP server disabled by settings');
+    }
+
     // Initialize all registered servers
     await mcpRegistry.initializeAll();
     
