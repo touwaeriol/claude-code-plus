@@ -71,12 +71,13 @@ const checks = [
   ['run_to_background', code.includes('"run_to_background"')],
   ['skill_parent_tool_use_id (sourceToolUseID)', code.includes('sourceToolUseID||null') || code.includes('sourceToolUseID || null')],
   ['mcp_reconnect', code.includes('"mcp_reconnect"')],
-  ['mcp_disable', code.includes('"mcp_disable"')],
-  ['mcp_enable', code.includes('"mcp_enable"')],
+  // mcp_disable/enable 已禁用（官方 2.1.19+ 内置 mcp_toggle），检查官方实现
+  ['mcp_toggle (官方内置)', code.includes('"mcp_toggle"')],
   ['mcp_tools', code.includes('"mcp_tools"')],
   ['get_chrome_status', code.includes('"get_chrome_status"')],
   ['get_capabilities', code.includes('"get_capabilities"')],
-  ['parentUuid (__parentUuid)', code.includes('__parentUuid')],
+  // v2 版本: 检测 H=A[0]?.parentUuid 模式 (最小侵入方案)
+  ['parentUuid (v2: H=...parentUuid)', code.includes('?.parentUuid||') || code.includes('__parentUuid')],
 ];
 
 let passed = 0;

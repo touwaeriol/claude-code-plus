@@ -84,6 +84,14 @@ export class ToolUseBlock extends ContentBlock {
     }
   }
 
+  /**
+   * 工具名称（兼容 toolName 别名）
+   * 返回 name 属性，提供与 ToolUseContent 接口的兼容性
+   */
+  get toolName(): string {
+    return this.name
+  }
+
   get isCompleted(): boolean {
     return this.status === 'completed'
   }

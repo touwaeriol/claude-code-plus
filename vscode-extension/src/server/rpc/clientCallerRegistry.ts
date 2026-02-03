@@ -74,6 +74,13 @@ class ClientCallerRegistryImpl {
   }
 
   /**
+   * 获取所有已注册的 ClientCaller (用于调试)
+   */
+  getAll(): Map<string, ClientCaller> {
+    return new Map(this.registry)
+  }
+
+  /**
    * 清空所有注册
    */
   clear(): void {

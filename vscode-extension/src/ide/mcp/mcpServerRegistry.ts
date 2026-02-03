@@ -14,6 +14,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 export interface McpServerProvider {
     name: string;
     getServer(): McpServer;
+    initialize?(): Promise<void>;
     getDisallowedBuiltinTools?(): string[];
     dispose?(): void;
 }

@@ -174,23 +174,37 @@ export class HttpApiServer implements vscode.Disposable {
    * Initialize MCP HTTP Gateway with built-in MCP servers
    */
   private async initializeMcpGateway(): Promise<void> {
+    this.log(`[HttpApiServer] initializeMcpGateway: starting, gateway=${this.mcpHttpGateway ? 'exists' : 'null'}`)
     if (!this.mcpHttpGateway) return
 
     try {
-      // Import and register all built-in MCP servers
+      // IMPORTANT: Import mcpRegistry directly from mcpServerRegistry module
+      // Using the same path as initializeMcpServers() to ensure singleton consistency
+      // The path '../ide/mcp' re-exports mcpRegistry, but esbuild may create separate chunks
+      // This direct import ensures we get the same instance
       const { mcpRegistry } = await import('../ide/mcp/mcpServerRegistry')
+      const providers = mcpRegistry.getAllProviders()
+      this.log(`[HttpApiServer] initializeMcpGateway: found ${providers.length} providers: [${providers.map(p => p.name).join(', ')}]`)
       
-      for (const provider of mcpRegistry.getAllProviders()) {
+      if (providers.length === 0) {
+        this.log(`[HttpApiServer] WARNING: No MCP providers registered! MCP Gateway will not start.`)
+        this.log(`[HttpApiServer] This may happen if: 1) All MCP servers are disabled in settings, 2) initializeMcpServers() failed`)
+      }
+      
+      for (const provider of providers) {
         try {
+          this.log(`[HttpApiServer] Registering MCP server: ${provider.name}`)
           const server = provider.getServer()
           await this.mcpHttpGateway.registerServer(provider.name, server)
-          this.log(`[HttpApiServer] Registered MCP server: ${provider.name}`)
+          this.log(`[HttpApiServer] Registered MCP server: ${provider.name}, gateway port now: ${this.mcpHttpGateway.getPort()}`)
         } catch (e) {
           this.log(`[HttpApiServer] Failed to register MCP server ${provider.name}: ${e}`)
         }
       }
 
-      this.log(`[HttpApiServer] MCP Gateway initialized with ${this.mcpHttpGateway.getRegisteredServers().length} servers`)
+      const registeredServers = this.mcpHttpGateway.getRegisteredServers()
+      const gatewayPort = this.mcpHttpGateway.getPort()
+      this.log(`[HttpApiServer] MCP Gateway initialized: servers=[${registeredServers.join(', ')}], port=${gatewayPort}, started=${this.mcpHttpGateway.isStarted()}`)
     } catch (e) {
       this.log(`[HttpApiServer] Failed to initialize MCP Gateway: ${e}`)
     }

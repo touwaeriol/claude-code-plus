@@ -66,7 +66,7 @@ Claude Code Plus 是一个 IntelliJ IDEA 插件，集成了 Claude AI 助手，�
 |----------|----------|------|
 | `001-run-in-background.js` | `agent_run_to_background`<br>`agents_run_all_to_background` | Agent 后台化 |
 | `002-chrome-status.js` | `get_chrome_status` | Chrome 扩展状态查询 |
-| `003-parent-uuid.js` | - | 支持消息编辑重发 (parentUuid) |
+| `003-parent-uuid.js` | - | **[DISABLED]** 支持消息编辑重发 (parentUuid)，CLI 2.1.27 结构变化 |
 | `004-mcp-server-control.js` | ~~`mcp_reconnect`<br>`mcp_disable`<br>`mcp_enable`~~ | **[DISABLED]** 官方 2.1.19 已内置 |
 | `005-mcp-tools.js` | `mcp_tools` | 查询 MCP 工具列表 |
 | `007-run-to-background.js` | `run_to_background` | **统一后台化** (Bash + Agent) |
@@ -996,9 +996,9 @@ traverse(ast, {
 3. **代码模式匹配**: 结合多个 visitor 检查特征
 4. **验证补丁结果**: 解析本件并检查目标代码模式
 
-### CLI 2.1.19 说明
+### CLI 2.1.27 说明
 
-> **当前版本**: CLI 2.1.19
+> **当前版本**: CLI 2.1.27
 > - 官方已内置 `mcp_reconnect` 和 `mcp_toggle` 命令
 > - 补丁 `004-mcp-server-control.js` 已禁用
 > - 详细变量映射见 `docs/CLI_PATCH_SYSTEM.md`

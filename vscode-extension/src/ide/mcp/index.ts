@@ -5,7 +5,7 @@
  */
 
 import { mcpLogger } from '../../logging/logger';
-import { agentSettingsService } from '../settings';
+import { McpConfigurable } from '../settings/configurables/McpConfigurable';
 
 // Registry
 export { 
@@ -46,18 +46,25 @@ export { UserInteractionMcpServer, UserInteractionMcpServerProvider } from './us
  * 
  * Call this during extension activation to register all MCP servers.
  * MCP servers are conditionally registered based on user settings.
+ * 
+ * IMPORTANT: Uses McpConfigurable to read settings from claudeCodePlus.mcp.*
+ * This ensures consistency with getMcpServersFromSettings() which also uses McpConfigurable.
  */
 export async function initializeMcpServers(): Promise<void> {
     const { mcpRegistry } = await import('./mcpServerRegistry');
-    const settings = agentSettingsService;
     
     mcpLogger.info('Initializing MCP servers...');
+    
+    // Log all MCP settings for debugging
+    mcpLogger.info(`MCP Settings: git=${McpConfigurable.getGitEnabled()}, terminal=${McpConfigurable.getTerminalEnabled()}, vscodeFile=${McpConfigurable.getVscodeFileEnabled()}, vscodeLsp=${McpConfigurable.getVscodeLspEnabled()}, userInteraction=${McpConfigurable.getUserInteractionEnabled()}, context7=${McpConfigurable.getContext7Enabled()}`);
 
     // Git MCP - conditionally register based on settings
-    if (settings.enableGitMcp) {
+    if (McpConfigurable.getGitEnabled()) {
         try {
             const { GitMcpServerProvider } = await import('./git');
-            mcpRegistry.registerProvider(new GitMcpServerProvider());
+            const provider = new GitMcpServerProvider();
+            await provider.initialize();
+            mcpRegistry.registerProvider(provider);
             mcpLogger.info('Registered Git MCP server');
         } catch (error) {
             mcpLogger.warn('Git MCP server not available', error instanceof Error ? error : undefined);
@@ -67,10 +74,12 @@ export async function initializeMcpServers(): Promise<void> {
     }
 
     // Terminal MCP - conditionally register based on settings
-    if (settings.enableTerminalMcp) {
+    if (McpConfigurable.getTerminalEnabled()) {
         try {
             const { TerminalMcpServerProvider } = await import('./terminal');
-            mcpRegistry.registerProvider(new TerminalMcpServerProvider());
+            const provider = new TerminalMcpServerProvider();
+            await provider.initialize();
+            mcpRegistry.registerProvider(provider);
             mcpLogger.info('Registered Terminal MCP server');
         } catch (error) {
             mcpLogger.warn('Terminal MCP server not available', error instanceof Error ? error : undefined);
@@ -79,11 +88,13 @@ export async function initializeMcpServers(): Promise<void> {
         mcpLogger.info('Terminal MCP server disabled by settings');
     }
 
-    // File MCP - conditionally register based on settings (enableJetBrainsFileMcp)
-    if (settings.enableJetBrainsFileMcp) {
+    // File MCP - conditionally register based on settings (VS Code File)
+    if (McpConfigurable.getVscodeFileEnabled()) {
         try {
             const { FileMcpServerProvider } = await import('./file');
-            mcpRegistry.registerProvider(new FileMcpServerProvider());
+            const provider = new FileMcpServerProvider();
+            await provider.initialize();
+            mcpRegistry.registerProvider(provider);
             mcpLogger.info('Registered File MCP server');
         } catch (error) {
             mcpLogger.warn('File MCP server not available', error instanceof Error ? error : undefined);
@@ -92,11 +103,13 @@ export async function initializeMcpServers(): Promise<void> {
         mcpLogger.info('File MCP server disabled by settings');
     }
 
-    // LSP MCP - conditionally register based on settings (enableJetBrainsMcp)
-    if (settings.enableJetBrainsMcp) {
+    // LSP MCP - conditionally register based on settings (VS Code LSP)
+    if (McpConfigurable.getVscodeLspEnabled()) {
         try {
             const { LspMcpServerProvider } = await import('./lsp');
-            mcpRegistry.registerProvider(new LspMcpServerProvider());
+            const provider = new LspMcpServerProvider();
+            await provider.initialize();
+            mcpRegistry.registerProvider(provider);
             mcpLogger.info('Registered LSP MCP server');
         } catch (error) {
             mcpLogger.warn('LSP MCP server not available', error instanceof Error ? error : undefined);
@@ -106,7 +119,7 @@ export async function initializeMcpServers(): Promise<void> {
     }
 
     // User Interaction MCP - conditionally register based on settings
-    if (settings.enableUserInteractionMcp) {
+    if (McpConfigurable.getUserInteractionEnabled()) {
         try {
             const { UserInteractionMcpServerProvider } = await import('./userInteraction');
             const provider = new UserInteractionMcpServerProvider();
@@ -122,7 +135,7 @@ export async function initializeMcpServers(): Promise<void> {
 
     // Context7 MCP - External HTTP server, no local registration needed
     // Configuration is passed through getMcpServersFromSettings() -> buildMcpConfig()
-    if (settings.enableContext7Mcp) {
+    if (McpConfigurable.getContext7Enabled()) {
         mcpLogger.info('Context7 MCP enabled (external HTTP server, will be configured via --mcp-config)');
     } else {
         mcpLogger.info('Context7 MCP server disabled by settings');
@@ -131,7 +144,8 @@ export async function initializeMcpServers(): Promise<void> {
     // Initialize all registered servers
     await mcpRegistry.initializeAll();
     
-    mcpLogger.info('All MCP servers initialized');
+    const registeredProviders = mcpRegistry.getAllProviders();
+    mcpLogger.info(`All MCP servers initialized. Registered providers: ${registeredProviders.length} [${registeredProviders.map(p => p.name).join(', ')}]`);
 }
 
 /**

@@ -7,17 +7,30 @@
  * 与 JetBrains 版本的 UserInteractionMcpServer.kt 完全对应。
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, RequestHandlerExtra } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { McpServerProvider, McpServerBase, createToolResult } from '../mcpServerRegistry';
-import { currentConnectId } from '../../../server/mcp/mcpCallContext';
 import { ClientCallerRegistry } from '../../../server/rpc';
 import { create } from '@bufbuild/protobuf';
+import { Logger } from '../../../logging/logger';
 import {
   AskUserQuestionRequestSchema,
   type AskUserQuestionRequest,
   type AskUserQuestionResponse,
 } from '@proto/ide_pb';
+
+// Custom AuthInfo type matching MCP SDK's AuthInfo with our extra field
+interface McpAuthInfo {
+    token: string;
+    clientId: string;
+    scopes: string[];
+    extra?: {
+        connectId?: string;
+    };
+}
+
+// Logger instance
+const logger = Logger.create('UserInteractionMcp');
 
 // ========== Types ==========
 
@@ -105,87 +118,70 @@ export class UserInteractionMcpServer extends McpServerBase {
         this.server.tool(
             'AskUserQuestion',
             DEFAULT_INSTRUCTIONS,
+            // IMPORTANT:
+            // McpServer.tool() expects a Zod "raw shape" as the params schema.
+            // Passing a plain JSON schema object here will be treated as "annotations",
+            // resulting in tool.inputSchema being EMPTY, which makes the model guess params.
             {
-                questions: {
-                    type: 'array',
-                    description: 'List of questions',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            question: {
-                                type: 'string',
-                                description: 'Question content'
-                            },
-                            header: {
-                                type: 'string',
-                                description: 'Question header/category label'
-                            },
-                            options: {
-                                type: 'array',
-                                description: 'List of options',
-                                items: {
-                                    type: 'object',
-                                    properties: {
-                                        label: {
-                                            type: 'string',
-                                            description: 'Option display text'
-                                        },
-                                        description: {
-                                            type: 'string',
-                                            description: 'Option description (optional)'
-                                        }
-                                    },
-                                    required: ['label']
-                                }
-                            },
-                            multiSelect: {
-                                type: 'boolean',
-                                description: 'Allow multiple selections, default false'
-                            }
-                        },
-                        required: ['question', 'header', 'options']
-                    }
-                }
+                questions: z.array(QuestionSchema).describe('List of questions')
             },
-            async (params: { questions: QuestionItem[] }) => {
-                return this.handleAskUserQuestion(params);
+            async (params: { questions: QuestionItem[] }, extra: RequestHandlerExtra) => {
+                // Get connectId from extra.authInfo.extra (passed from mcpHttpGateway via req.auth)
+                logger.info(`Tool handler called! extra = ${JSON.stringify(extra, (key, value) => {
+                    if (key === 'signal') return '[AbortSignal]';
+                    return value;
+                })}`);
+                const authInfo = extra.authInfo as McpAuthInfo | undefined;
+                logger.info(`authInfo = ${JSON.stringify(authInfo)}`);
+                // connectId is now in authInfo.extra.connectId (MCP SDK AuthInfo structure)
+                const connectId = authInfo?.extra?.connectId;
+                logger.info(`connectId = ${connectId}`);
+                return this.handleAskUserQuestion(params, connectId);
             }
         );
 
-        console.log('✅ [UserInteractionMcpServer] 初始化完成，已注册 AskUserQuestion 工具');
+        logger.info('初始化完成，已注册 AskUserQuestion 工具');
     }
 
     /**
      * 处理 AskUserQuestion 工具调用
      * 
      * 通过 RSocket 调用前端 AskUserQuestionInteractive.vue 组件。
+     * 
+     * @param params 问题参数
+     * @param connectId 连接ID，从 extra.authInfo 获取（由 mcpHttpGateway 通过 req.auth 传递）
      */
-    private async handleAskUserQuestion(params: { questions: QuestionItem[] }): Promise<{
+    private async handleAskUserQuestion(params: { questions: QuestionItem[] }, connectId?: string): Promise<{
         content: Array<{ type: 'text'; text: string }>;
         isError?: boolean;
     }> {
-        // 获取当前连接的 connectId
-        const connectId = currentConnectId();
+        logger.info(`收到 AskUserQuestion 调用, connectId=${connectId}`);
+        
+        // 列出所有已注册的 ClientCaller
+        const allCallers = ClientCallerRegistry.getAll();
+        logger.debug(`已注册的 ClientCaller: ${JSON.stringify(Array.from(allCallers.keys()))}`);
+        
         const caller = connectId ? ClientCallerRegistry.get(connectId) : undefined;
 
         if (!caller) {
-            console.warn(`⚠️ [AskUserQuestion] 无法获取 ClientCaller，connectId=${connectId}`);
-            return createToolResult(`无法获取前端连接，connectId=${connectId}`, true);
+            const errorMsg = `无法获取 ClientCaller，connectId=${connectId}, 已注册: [${Array.from(allCallers.keys()).join(', ')}]`;
+            logger.warn(errorMsg);
+            return createToolResult(errorMsg, true);
         }
 
-        console.log(`📩 [AskUserQuestion] 收到工具调用，参数: ${JSON.stringify(params)}`);
+        logger.info(`参数: ${JSON.stringify(params)}`);
 
         try {
             // 验证参数
             const parsed = AskUserQuestionInputSchema.safeParse(params);
             if (!parsed.success) {
                 const errorMsg = `参数校验失败: ${parsed.error.message}`;
-                console.warn(`⚠️ [AskUserQuestion] ${errorMsg}`);
+                logger.warn(errorMsg);
                 return createToolResult(errorMsg, true);
             }
 
             const { questions } = parsed.data;
-            console.log(`📤 [AskUserQuestion] 解析后的参数: ${questions.length} 个问题`);
+            logger.info(`解析后的参数: ${questions.length} 个问题`);
 
             // 构建 Protobuf 请求
             const protoRequest = create(AskUserQuestionRequestSchema, {
@@ -200,10 +196,12 @@ export class UserInteractionMcpServer extends McpServerBase {
                 }))
             });
 
+            logger.info('正在调用前端 callAskUserQuestion...');
+            
             // 通过 RSocket 调用前端
             const protoResponse = await caller.callAskUserQuestion(protoRequest);
 
-            console.log(`📥 [AskUserQuestion] 收到前端响应: ${protoResponse.answers.length} 个回答`);
+            logger.info(`收到前端响应: ${protoResponse.answers.length} 个回答`);
 
             // 构建回答映射
             const answersMap: Map<string, string> = new Map();
@@ -221,12 +219,12 @@ export class UserInteractionMcpServer extends McpServerBase {
                 content += `**A:** ${answer}\n\n`;
             });
 
-            console.log(`✅ [AskUserQuestion] 完成，返回:\n${content.trim()}`);
+            logger.info(`完成，返回:\n${content.trim()}`);
             return createToolResult(content.trim());
 
         } catch (e) {
             const errorMsg = e instanceof Error ? e.message : String(e);
-            console.error(`❌ [AskUserQuestion] 处理失败: ${errorMsg}`);
+            logger.error(`处理失败: ${errorMsg}`);
             return createToolResult(`处理用户问题时发生错误: ${errorMsg}`, true);
         }
     }

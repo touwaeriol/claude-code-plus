@@ -49,15 +49,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
   server = new HttpApiServer(context, { diffProvider }, devLogger)
   try {
+    // Initialize MCP servers FIRST (before server.start())
+    // This ensures mcpRegistry has providers when initializeMcpGateway() runs
+    logger.info('Initializing MCP servers...')
+    await initializeMcpServers()
+    logger.info('MCP servers initialized')
+    
+    // Now start the server - initializeMcpGateway() can access registered providers
     logger.info('Starting local server...')
     await server.start()
     logger.info(`Local server started: ${server.getBaseUrl()}`)
     context.subscriptions.push(server)
-    
-    // Initialize MCP servers
-    logger.info('Initializing MCP servers...')
-    await initializeMcpServers()
-    logger.info('MCP servers initialized')
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err))
     logger.error('Local server failed to start', error)

@@ -76,6 +76,42 @@ const reconnectFnName = context.foundVariables?.reconnectFn;
 
 ## MCP 相关补丁
 
+### 003-parent-uuid.js [DISABLED]
+
+> **状态**: 自 CLI 2.1.27 起已禁用。CLI 代码结构变化导致原补丁策略失效。
+
+**功能**: 支持 SDK 模式下的消息编辑重发功能
+
+**作用说明**:
+当用户在 UI 中编辑已发送的消息并重新发送时，需要告诉 CLI 这条新消息应该"替换"哪条旧消息。这通过 `parentUuid` 参数实现：
+- SDK 在用户消息中附带 `parentUuid` 字段，指向要替换的消息 UUID
+- 补丁让 CLI 读取这个字段，传递给 `insertMessageChain` 函数
+- 消息链会从 `parentUuid` 指定的位置"分叉"，实现编辑重发效果
+
+**CLI 代码变化**:
+
+| 版本 | insertMessageChain 第4参数 | 补丁策略 |
+|------|---------------------------|----------|
+| 2.1.19 及更早 | `void 0` (固定) | 直接替换为 `__parentUuid` |
+| 2.1.27+ | `H` (动态计算) | 需要在 H 计算后覆盖 |
+
+**2.1.27 禁用原因**:
+```javascript
+// CLI 2.1.19 - 第4参数是固定的 void 0
+await KP().insertMessageChain(q, !1, void 0, void 0, K);
+
+// CLI 2.1.27 - 第4参数是动态计算的 H
+let w = [], H;
+for (let O of K) if (z.has(O.uuid)) H = O.uuid; else w.push(O);
+await lD().insertMessageChain(w, !1, void 0, H, q);
+```
+
+官方 CLI 2.1.27 引入了消息去重逻辑，`H` 变量在 for 循环中动态计算。原补丁的 AST 匹配逻辑虽然支持标识符参数，但在实际应用时与新代码结构不兼容。
+
+**影响**: 编辑重发功能暂时不可用，用户只能发送新消息而无法编辑历史消息。
+
+---
+
 ### 004-mcp-server-control.js [DISABLED]
 
 > **状态**: 自 CLI 2.1.19 起已禁用。官方 CLI 现已内置 `mcp_reconnect` 和 `mcp_toggle` 命令。
@@ -107,6 +143,25 @@ const reconnectFnName = context.foundVariables?.reconnectFn;
 2. 在其中查找 `{configs:X,clients:Y,...}` 对象表达式
 3. 提取 X 作为 configs 变量名，Y 作为 clients 变量名
 4. 查找 `disabledMcpServers` 相关函数获取禁用/启用控制函数
+
+## CLI 2.1.27 变量映射
+
+| 用途 | 变量名 | 发现特征 |
+|------|--------|----------|
+| id2 消息追踪 | `BS4` | Skill 内部 sourceToolUseID |
+| Ts5 输出函数 | `ec4` | 消息输出核心函数 |
+| Agent Map | `kH6` | Task 后台 resolver Map |
+| Agent 后台化函数 | `Sq4` | 后台化单个 Agent |
+| 批量后台化 (iV1) | `yH6` | 批量后台化所有任务 |
+| Bash 后台化 (Me5) | `Fm9` | 后台化单个 Bash |
+| Agent 后台化 (R42) | `hq4` | 后台化单个 Agent (统一接口) |
+| Bash 判断 (wt) | `ObA` | 判断是否是 Bash |
+| Agent 判断 (Jr) | `Gp` | 判断是否是 Agent |
+| Chrome 扩展 | `aKq` | Chrome 扩展状态 |
+| MCP 配置 | `Is4` | MCP 配置对象 |
+| MCP 名称 | `gL` | MCP 服务器名称字段 |
+
+> **注意**: CLI 2.1.27 的 `parent_uuid` 补丁已禁用，因为 `insertMessageChain` 第4参数从 `void 0` 变为动态计算值。
 
 ## CLI 2.1.19 变量映射
 
@@ -229,6 +284,38 @@ node patch-cli.js claude-cli-2.1.19.js patched-cli.js
 ```
 
 ## 变更历史
+
+### 2026-01-31 (CLI 2.1.27)
+
+- **升级**: CLI 版本从 2.1.19 升级到 2.1.27
+- **禁用**: `003-parent-uuid.js` 补丁 - CLI 结构变化，`insertMessageChain` 函数第4参数从 `void 0` 变为动态计算值
+- **更新**: 变量映射表更新为 2.1.27 版本
+
+**补丁应用结果**:
+- ✅ `001-run-in-background.js` (agent_run_to_background)
+- ✅ `002-chrome-status.js` (get_chrome_status)
+- ⏭️ `003-parent-uuid.js` - 已禁用 (CLI 结构变化)
+- ⏭️ `004-mcp-server-control.js` - 已禁用 (官方 2.1.19 已内置)
+- ✅ `005-mcp-tools.js` (mcp_tools)
+- ✅ `007-run-to-background.js` (run_to_background)
+- ✅ `008-get-capabilities.js` (get_capabilities)
+- ✅ `009-skill-parent-tool-use-id.js` (Skill parent_tool_use_id)
+
+**2.1.27 关键变量映射**:
+| 功能 | 变量名 |
+|------|--------|
+| id2 消息追踪 | `BS4` |
+| Ts5 输出函数 | `ec4` |
+| Agent Map | `kH6` |
+| Agent 后台化函数 | `Sq4` |
+| 批量后台化 (iV1) | `yH6` |
+| Bash 后台化 (Me5) | `Fm9` |
+| Agent 后台化 (R42) | `hq4` |
+| Bash 判断 (wt) | `ObA` |
+| Agent 判断 (Jr) | `Gp` |
+| Chrome 扩展 | `aKq` |
+| MCP 配置 | `Is4` |
+| MCP 名称 | `gL` |
 
 ### 2026-01-25 (CLI 2.1.19)
 

@@ -347,6 +347,13 @@ export class TerminalMcpServerProvider implements McpServerProvider {
     name = 'ide-terminal';
     private server: TerminalMcpServer | null = null;
 
+    async initialize(): Promise<void> {
+        if (!this.server) {
+            this.server = new TerminalMcpServer();
+        }
+        await this.server.initialize();
+    }
+
     getServer(): McpServer {
         if (!this.server) {
             this.server = new TerminalMcpServer();

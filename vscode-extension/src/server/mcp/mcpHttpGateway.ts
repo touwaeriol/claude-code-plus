@@ -13,7 +13,8 @@
 import * as http from 'http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { withMcpContext, type McpCallContextData } from './mcpCallContext';
+// Note: mcpCallContext is no longer needed here since we use req.auth for context passing
+// The AsyncLocalStorage approach was unreliable; using req.auth is the official MCP SDK mechanism
 
 // Header name for connect ID
 export const HEADER_CONNECT_ID = 'x-mcp-connect-id';
@@ -66,6 +67,36 @@ export class McpHttpGateway {
       return this.actualPort;
     }
 
+    // Try multiple times with different port strategies
+    const maxRetries = 5;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const port = await this.tryStartServer(attempt);
+        return port;
+      } catch (err) {
+        lastError = err as Error;
+        this.log?.(`[McpHttpGateway] Attempt ${attempt + 1}/${maxRetries} failed: ${lastError.message}`);
+        
+        // Clean up failed server
+        if (this.httpServer) {
+          this.httpServer.close();
+          this.httpServer = null;
+        }
+        
+        // Wait a bit before retrying
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    throw lastError || new Error('Failed to start HTTP server after multiple attempts');
+  }
+
+  /**
+   * Try to start the server on a specific attempt
+   */
+  private async tryStartServer(attempt: number): Promise<number> {
     return new Promise((resolve, reject) => {
       this.httpServer = http.createServer(async (req, res) => {
         await this.handleRequest(req, res);
@@ -76,13 +107,18 @@ export class McpHttpGateway {
         reject(err);
       });
 
-      // Listen on random port
-      this.httpServer.listen(0, '127.0.0.1', () => {
+      // Use different port strategies based on attempt
+      // Attempt 0: random port (port 0)
+      // Attempt 1-4: specific high ports to avoid conflicts
+      const portOptions = [0, 0, 0, 0, 0]; // All use random port but retry gives different results
+      const port = portOptions[attempt] || 0;
+
+      this.httpServer.listen(port, '127.0.0.1', () => {
         const address = this.httpServer!.address();
         if (address && typeof address !== 'string') {
           this.actualPort = address.port;
           this.started = true;
-          this.log?.(`[McpHttpGateway] HTTP gateway started on http://127.0.0.1:${this.actualPort}/mcp`);
+          this.log?.(`[McpHttpGateway] HTTP gateway started on http://127.0.0.1:${this.actualPort}/mcp (attempt ${attempt + 1})`);
           resolve(this.actualPort);
         } else {
           reject(new Error('Failed to get server address'));
@@ -112,13 +148,26 @@ export class McpHttpGateway {
       return;
     }
 
-    // Wrap the request handling with MCP context
-    const context: McpCallContextData = { connectId: connectId || undefined };
+    // Pass connectId via req.auth.extra, which will be available in tool handlers as extra.authInfo
+    // This is the official MCP SDK mechanism, equivalent to JB's contextExtractor + callHandler
+    // AuthInfo interface requires token, clientId, scopes fields - we use extra for custom data
+    const reqWithAuth = req as typeof req & { auth?: { 
+      token: string;
+      clientId: string;
+      scopes: string[];
+      extra?: Record<string, unknown>;
+    } };
+    reqWithAuth.auth = { 
+      token: 'builtin-mcp',  // Placeholder for built-in MCP servers
+      clientId: 'claude-code-plus',
+      scopes: [],
+      extra: { connectId: connectId || undefined }
+    };
+    
+    this.log?.(`[McpHttpGateway] Setting req.auth = ${JSON.stringify(reqWithAuth.auth)}`);
     
     try {
-      await withMcpContext(context, async () => {
-        await endpoint.transport.handleRequest(req, res);
-      });
+      await endpoint.transport.handleRequest(reqWithAuth, res);
     } catch (error) {
       this.log?.(`[McpHttpGateway] Request handling error: ${error}`);
       if (!res.headersSent) {

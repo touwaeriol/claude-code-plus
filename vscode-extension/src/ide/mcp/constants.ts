@@ -21,6 +21,9 @@ export const MCP_SERVER_NAMES: Record<string, string> = {
   'User Interaction': 'user-interaction',
   'VS Code LSP': 'ide-lsp',
   'VS Code File': 'ide-file',
+  // 兼容 JetBrains 版本的命名
+  'JetBrains LSP': 'ide-lsp',
+  'JetBrains File': 'ide-file',
   'Context7': 'context7',
   'Terminal': 'ide-terminal',
   'Git': 'ide-git',

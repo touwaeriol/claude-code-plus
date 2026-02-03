@@ -553,6 +553,7 @@ function createResponder(
 
             connectId = options?.connectId || connectId || crypto.randomUUID()
             sessionId = options?.sessionId || crypto.randomUUID()
+            log?.(`[rsocket] agent.connect: connectId=${connectId}, sessionId=${sessionId}, fromOptions=${!!options?.connectId}`)
             historyStore.ensureSession(sessionId, getWorkspaceRoot())
 
             // 注册 ClientCaller 到 Registry
@@ -789,7 +790,7 @@ function createResponder(
             // Get MCP status from the registry
             void (async () => {
               try {
-                const { mcpRegistry } = await import('../../ide/mcp/mcpServerRegistry')
+                const { mcpRegistry } = await import('../../ide/mcp')
                 const statusList = await mcpRegistry.getMcpStatus()
                 const result = create(McpStatusResultSchema, {
                   servers: statusList.map(s => ({
@@ -811,7 +812,7 @@ function createResponder(
             const req = data.length > 0 ? fromBinary(ReconnectMcpRequestSchema, data) : undefined
             void (async () => {
               try {
-                const { mcpRegistry } = await import('../../ide/mcp/mcpServerRegistry')
+                const { mcpRegistry } = await import('../../ide/mcp')
                 const reconnectResult = await mcpRegistry.reconnectMcp(req?.serverName || '')
                 const result = create(ReconnectMcpResultSchema, {
                   success: reconnectResult.success,
@@ -839,7 +840,7 @@ function createResponder(
             const req = data.length > 0 ? fromBinary(GetMcpToolsRequestSchema, data) : undefined
             void (async () => {
               try {
-                const { mcpRegistry } = await import('../../ide/mcp/mcpServerRegistry')
+                const { mcpRegistry } = await import('../../ide/mcp')
                 const toolsResult = await mcpRegistry.getMcpTools(req?.serverName || undefined)
                 const result = create(GetMcpToolsResultSchema, {
                   serverName: toolsResult.serverName,
@@ -1217,9 +1218,20 @@ function createResponder(
             // 构建 MCP 配置
             const mcpServers = getMcpServersFromSettings()
             const mcpGateway = getMcpHttpGateway()
+            const gatewayPort = mcpGateway?.getPort()
+            const gatewayStarted = mcpGateway?.isStarted?.() ?? false
+            log?.(`[rsocket] agent.query: MCP Gateway status: instance=${mcpGateway ? 'exists' : 'null'}, started=${gatewayStarted}, port=${gatewayPort}`)
+            
+            // 警告：如果 Gateway 端口无效，内置 MCP 服务器将无法工作
+            if (!gatewayPort || gatewayPort === 0) {
+              log?.(`[rsocket] WARNING: MCP Gateway port is invalid (${gatewayPort}). Built-in MCP servers will NOT be configured!`)
+              log?.(`[rsocket] This may happen if: 1) MCP Gateway failed to start, 2) No MCP servers were registered`)
+            }
+            
+            log?.(`[rsocket] agent.query: building MCP config, connectId=${connectId}, mcpGatewayPort=${gatewayPort}, mcpServersCount=${mcpServers.length}`)
             const mcpResult = buildMcpConfig(mcpServers, 'claude', {
               connectId,
-              mcpGatewayPort: mcpGateway?.getPort()
+              mcpGatewayPort: gatewayPort
             })
             
             // 将 instructions 写入临时文件

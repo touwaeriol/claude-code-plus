@@ -402,6 +402,13 @@ export class LspMcpServerProvider implements McpServerProvider {
     name = 'ide-lsp';
     private server: LspMcpServer | null = null;
 
+    async initialize(): Promise<void> {
+        if (!this.server) {
+            this.server = new LspMcpServer();
+        }
+        await this.server.initialize();
+    }
+
     getServer(): McpServer {
         if (!this.server) {
             this.server = new LspMcpServer();

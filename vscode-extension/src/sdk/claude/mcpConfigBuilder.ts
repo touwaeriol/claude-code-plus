@@ -11,6 +11,8 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 import * as crypto from 'crypto'
+import { HEADER_CONNECT_ID } from '../../server/mcp/mcpHttpGateway'
+import { mcpLogger } from '../../logging/logger'
 
 /**
  * MCP 服务器设置（来自前端 settingsStore）
@@ -102,6 +104,18 @@ export function buildMcpConfig(
   const tempFiles: string[] = []
   const { connectId, mcpGatewayPort } = options || {}
   
+  mcpLogger.info(`[buildMcpConfig] CALLED: connectId=${connectId}, mcpGatewayPort=${mcpGatewayPort}, backend=${backend}`)
+  mcpLogger.info(`[buildMcpConfig] Input servers count: ${servers.length}`)
+  if (servers.length === 0) {
+    mcpLogger.warn(`[buildMcpConfig] WARNING: No servers provided!`)
+  }
+  servers.forEach((s, i) => {
+    mcpLogger.info(`[buildMcpConfig] Server[${i}]: name=${s.name}, enabled=${s.enabled}, isBuiltIn=${s.isBuiltIn}, type=${s.type}`)
+  })
+  if (!mcpGatewayPort || mcpGatewayPort <= 0) {
+    mcpLogger.warn(`[buildMcpConfig] WARNING: mcpGatewayPort is invalid (${mcpGatewayPort}), built-in servers will NOT work!`)
+  }
+  
   // 过滤启用且支持当前后端的服务器
   const enabledServers = servers.filter(s => {
     if (!s.enabled) return false
@@ -118,14 +132,18 @@ export function buildMcpConfig(
   for (const server of enabledServers) {
     // 内置服务器：通过 MCP HTTP Gateway 暴露
     if (server.isBuiltIn) {
-      if (mcpGatewayPort) {
+      mcpLogger.info(`Processing built-in server: ${server.name}, mcpGatewayPort=${mcpGatewayPort}`)
+      if (mcpGatewayPort && mcpGatewayPort > 0) {
         // 为内置服务器生成 HTTP URL 配置
         const url = `http://127.0.0.1:${mcpGatewayPort}/mcp/${server.name}`
+        mcpLogger.info(`Generating HTTP config for ${server.name}: url=${url}`)
         mcpServers[server.name] = {
           type: 'http',
           url,
-          headers: connectId ? { 'x-mcp-connect-id': connectId } : {}
+          headers: connectId ? { [HEADER_CONNECT_ID]: connectId } : {}
         }
+      } else {
+        mcpLogger.warn(`WARNING: Skipping built-in server '${server.name}' because mcpGatewayPort is invalid (${mcpGatewayPort})`)
       }
       // 如果没有 mcpGatewayPort，则跳过内置服务器（向后兼容）
       continue
@@ -162,6 +180,8 @@ export function buildMcpConfig(
     configFilePath = path.join(tempDir, fileName)
     
     const configJson = JSON.stringify({ mcpServers }, null, 2)
+    mcpLogger.info(`Writing config to ${configFilePath}:`)
+    mcpLogger.debug(configJson)
     fs.writeFileSync(configFilePath, configJson, 'utf8')
     tempFiles.push(configFilePath)
   }
@@ -228,7 +248,7 @@ export function cleanupTempFiles(files: string[]): void {
         fs.unlinkSync(filePath)
       } catch (e) {
         // 忽略清理错误
-        console.warn(`[MCP] Failed to cleanup temp file: ${filePath}`, e)
+        mcpLogger.warn(`Failed to cleanup temp file: ${filePath}`, e instanceof Error ? e : undefined)
       }
     }
   }

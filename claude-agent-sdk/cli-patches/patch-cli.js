@@ -142,7 +142,7 @@ const verifications = [
   { pattern: 'agent_run_to_background', desc: 'Agent 后台控制命令 (v6)', optional: true }, // CLI 2.1.4+ 内部结构变化，007补丁提供统一替代
   { pattern: 'run_to_background', desc: '统一后台控制命令 (v7)' }, // 007补丁，支持CLI 2.1.0+
   { pattern: 'get_chrome_status', desc: 'Chrome 状态控制命令' },
-  { pattern: '__parentUuid', desc: 'SDK parentUuid 支持 (编辑重发)' },
+  { pattern: '__parentUuid', desc: 'SDK parentUuid 支持 (编辑重发)', optional: true },
   { pattern: 'mcp_reconnect', desc: 'MCP 重连控制命令', optional: true },
   { pattern: 'mcp_tools', desc: 'MCP 工具列表控制命令', optional: true },
   { pattern: 'get_capabilities', desc: '功能状态查询控制命令', optional: true },

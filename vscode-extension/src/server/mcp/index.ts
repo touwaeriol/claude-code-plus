@@ -2,7 +2,13 @@
  * MCP Server Module Exports
  */
 
-export { withMcpContext, currentConnectId, type McpCallContextData } from './mcpCallContext';
+export { 
+  withMcpContext, 
+  currentConnectId, 
+  setGlobalConnectId,
+  getGlobalConnectId,
+  type McpCallContextData 
+} from './mcpCallContext';
 export { 
   McpHttpGateway, 
   getMcpHttpGateway, 

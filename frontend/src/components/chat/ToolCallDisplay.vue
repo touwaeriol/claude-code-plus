@@ -22,12 +22,15 @@ const props = defineProps<Props>()
 const isJetBrainsMcpTool = computed(() => {
   const name = props.toolCall?.toolName || ''
   // 匹配所有 IDE 相关的 MCP 工具：ide-lsp、ide-file、ide-git 等
-  // 支持命名格式：mcp__ide-xxx
-  return name.startsWith('mcp__ide-')
+  // 支持命名格式：mcp__ide-xxx（统一格式）
+  // 注意：ide-terminal 由 TerminalMcpToolDisplay 专门处理
+  return name.startsWith('mcp__ide-') && !name.startsWith('mcp__ide-terminal__')
 })
 
 const isTerminalMcpTool = computed(() => {
-  return props.toolCall?.toolName?.startsWith('mcp__terminal__') ?? false
+  const name = props.toolCall?.toolName || ''
+  // 支持两种格式：mcp__terminal__ (旧格式) 和 mcp__ide-terminal__ (新格式)
+  return name.startsWith('mcp__terminal__') || name.startsWith('mcp__ide-terminal__')
 })
 
 const isCodexToolType = computed(() => {

@@ -196,6 +196,13 @@ export class FileMcpServerProvider implements McpServerProvider {
     name = 'ide-file';
     private server: FileMcpServer | null = null;
 
+    async initialize(): Promise<void> {
+        if (!this.server) {
+            this.server = new FileMcpServer();
+        }
+        await this.server.initialize();
+    }
+
     getServer(): McpServer {
         if (!this.server) {
             this.server = new FileMcpServer();
