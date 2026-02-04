@@ -551,9 +551,22 @@ function createResponder(
           case 'agent.connect': {
             const options = data.length > 0 ? fromBinary(ConnectOptionsSchema, data) : undefined
 
-            connectId = options?.connectId || connectId || crypto.randomUUID()
+            // Align with JetBrains semantics: connectId is backend-assigned and collision-checked.
+            // Older clients may still send connectId; ignore it to avoid hijacking MCP routing.
+            if (options?.connectId) {
+              log?.(`[rsocket] agent.connect: ignoring options.connectId (backend-assigned), value=${options.connectId}`)
+            }
+
+            if (!connectId) {
+              let allocated = crypto.randomUUID()
+              while (ClientCallerRegistry.contains(allocated)) {
+                allocated = crypto.randomUUID()
+              }
+              connectId = allocated
+            }
+
             sessionId = options?.sessionId || crypto.randomUUID()
-            log?.(`[rsocket] agent.connect: connectId=${connectId}, sessionId=${sessionId}, fromOptions=${!!options?.connectId}`)
+            log?.(`[rsocket] agent.connect: connectId=${connectId}, sessionId=${sessionId}`)
             historyStore.ensureSession(sessionId, getWorkspaceRoot())
 
             // 注册 ClientCaller 到 Registry

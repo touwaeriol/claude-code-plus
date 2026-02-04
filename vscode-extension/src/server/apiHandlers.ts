@@ -16,6 +16,10 @@ export async function handleApiRequest(
 
   try {
     switch (action) {
+      case 'test.ping': {
+        // Align with JetBrains backend semantics: top-level { success, message }
+        return { success: true, message: 'pong' } as any
+      }
       case 'ide.ping': {
         return { success: true, data: { ok: true } }
       }
@@ -183,7 +187,7 @@ export async function handleApiRequest(
       case 'ide.searchFiles': {
         const query = String((data ?? {}).query ?? '').trim()
         const maxResults = toOptionalNumber((data ?? {}).maxResults) ?? 20
-        if (!query) return { success: true, data: { files: [] } }
+        if (!query) return { success: true, data: { files: '[]', filesV2: [] } }
 
         const candidateLimit = Math.min(Math.max(maxResults * 50, 200), 2000)
         const uris = await vscode.workspace.findFiles('**/*', '**/{node_modules,.git}/**', candidateLimit)
@@ -199,13 +203,14 @@ export async function handleApiRequest(
           .filter((x): x is { uri: vscode.Uri; rel: string; idx: number } => x !== null)
           .sort((a, b) => a.idx - b.idx || a.rel.length - b.rel.length)
 
+        const filePaths = scored.slice(0, maxResults).map(({ uri }) => uri.fsPath)
         return {
           success: true,
           data: {
-            files: scored.slice(0, maxResults).map(({ uri }) => ({
-              name: path.basename(uri.fsPath),
-              path: uri.fsPath,
-            })),
+            // JetBrains backend returns a JSON-stringified string array in data.files
+            files: JSON.stringify(filePaths),
+            // Back-compat for any VS Code-only callers (non-JB semantics)
+            filesV2: filePaths.map((p) => ({ name: path.basename(p), path: p })),
           },
         }
       }
@@ -292,33 +297,41 @@ export async function handleFileSearchRequest(
     // 空查询：返回项目根目录（第一工作区）的直接子项，便于 @ 提及时快速选文件
     if (!query) {
       const entries = await vscode.workspace.fs.readDirectory(folder.uri)
-      const sorted = entries
-        .slice()
-        .sort((a, b) => {
-          const aIsDir = a[1] === vscode.FileType.Directory
-          const bIsDir = b[1] === vscode.FileType.Directory
-          if (aIsDir !== bIsDir) return aIsDir ? -1 : 1
-          return a[0].localeCompare(b[0], undefined, { sensitivity: 'base' })
-        })
-        .slice(0, maxResults)
+      const fileEntries = entries.filter(
+        ([, type]) =>
+          (type & vscode.FileType.File) === vscode.FileType.File &&
+          (type & vscode.FileType.Directory) !== vscode.FileType.Directory
+      )
 
-      const files = await Promise.all(
-        sorted.map(async ([name, fileType]) => {
-          const uri = vscode.Uri.joinPath(folder.uri, name)
-          const stat = await vscode.workspace.fs.stat(uri)
-          const relativePath = vscode.workspace.asRelativePath(uri, false)
-          const ext = path.extname(name).replace(/^\./, '')
-          return {
-            name,
-            relativePath,
-            absolutePath: uri.fsPath,
-            fileType: fileType === vscode.FileType.Directory ? 'directory' : ext,
-            size: stat.size,
-            lastModified: stat.mtime,
-            isDirectory: fileType === vscode.FileType.Directory,
+      const candidates = await Promise.all(
+        fileEntries.map(async ([name]) => {
+          try {
+            const uri = vscode.Uri.joinPath(folder.uri, name)
+            const stat = await vscode.workspace.fs.stat(uri)
+            return { name, uri, stat }
+          } catch {
+            return null
           }
         })
       )
+
+      const sorted = candidates
+        .filter((x): x is { name: string; uri: vscode.Uri; stat: vscode.FileStat } => x !== null)
+        .sort((a, b) => b.stat.mtime - a.stat.mtime)
+        .slice(0, maxResults)
+
+      const files = sorted.map(({ name, uri, stat }) => {
+        const ext = path.extname(name).replace(/^\./, '')
+        return {
+          name,
+          relativePath: name,
+          absolutePath: uri.fsPath,
+          fileType: ext || 'unknown',
+          size: stat.size,
+          lastModified: stat.mtime,
+          isDirectory: false,
+        }
+      })
 
       return { success: true, data: files }
     }
@@ -339,7 +352,7 @@ export async function handleFileSearchRequest(
           name,
           relativePath,
           absolutePath: uri.fsPath,
-          fileType: ext,
+          fileType: ext || 'unknown',
           size: stat.size,
           lastModified: stat.mtime,
           isDirectory: stat.type === vscode.FileType.Directory,

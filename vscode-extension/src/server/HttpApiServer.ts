@@ -289,6 +289,63 @@ export class HttpApiServer implements vscode.Disposable {
       return
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/backend/available') {
+      // Align with JetBrains backend semantics.
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.end(
+        JSON.stringify({
+          success: true,
+          backends: {
+            claude: true,
+            codex: this.codexBackendProvider?.running === true,
+          },
+          defaultBackend: 'claude',
+        })
+      )
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/theme') {
+      // Align with JetBrains backend semantics: returns the raw theme object (not wrapped).
+      const response = await handleApiRequest({ action: 'ide.getTheme' }, { context: this.context, deps: this.deps })
+      if (!response.success) {
+        res.statusCode = 500
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ error: response.error ?? 'Failed to get theme' }))
+        return
+      }
+
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.end(JSON.stringify(response.data ?? {}))
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/theme/current') {
+      // Align with JetBrains backend semantics: { theme: <theme> } wrapper.
+      const response = await handleApiRequest({ action: 'ide.getTheme' }, { context: this.context, deps: this.deps })
+      if (!response.success) {
+        res.statusCode = 500
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ error: response.error ?? 'Failed to get theme' }))
+        return
+      }
+
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.end(JSON.stringify({ theme: response.data ?? {} }))
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/project-path') {
+      // Align with JetBrains backend semantics.
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.end(JSON.stringify({ projectPath: getWorkspaceRootFsPath() }))
+      return
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/codex/health') {
       // JetBrains version: { status: 'ok' } / { status: 'unavailable' }
       const provider = await this.ensureCodexBackendProvider()

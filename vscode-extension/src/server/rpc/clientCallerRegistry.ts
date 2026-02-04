@@ -27,6 +27,9 @@ class ClientCallerRegistryImpl {
    * @param caller ClientCaller 实例
    */
   register(connectId: string, caller: ClientCaller): void {
+    if (this.registry.has(connectId)) {
+      console.warn(`[ClientCallerRegistry] Duplicate connectId detected; overwriting: connectId=${connectId}`)
+    }
     this.registry.set(connectId, caller)
     console.log(`✅ [ClientCallerRegistry] 注册 ClientCaller: connectId=${connectId}`)
   }
