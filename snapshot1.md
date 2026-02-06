@@ -1,0 +1,90 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - 'generic "后端: Claude | 会话: 4a6c3343-845f-491b-ad1f-cbd6507cdcc3 | 状态: 已连接" [ref=e139]':
+      - generic "已连接" [ref=e140]
+      - generic [ref=e12]: 会话 23:07
+      - button "×" [ref=e13] [cursor=pointer]
+    - generic [ref=e14]:
+      - button "New Session" [ref=e15] [cursor=pointer]:
+        - img [ref=e16]
+      - generic [ref=e18] [cursor=pointer]:
+        - button [ref=e19]:
+          - img [ref=e20]
+        - img [ref=e23]
+      - button "📋" [ref=e25] [cursor=pointer]
+      - button "MCP Servers" [ref=e26] [cursor=pointer]:
+        - img [ref=e27]
+      - button "🖥️" [ref=e32] [cursor=pointer]:
+        - generic [ref=e33]: 🖥️
+      - button "简" [ref=e36] [cursor=pointer]:
+        - generic [ref=e37]: 简
+  - generic [ref=e38]:
+    - generic [ref=e42]:
+      - generic [ref=e43]:
+        - generic [ref=e44]: Enter
+        - generic [ref=e45]: 发送消息
+      - generic [ref=e46]:
+        - generic [ref=e47]: Shift
+        - text: +
+        - generic [ref=e48]: Enter
+        - generic [ref=e49]: 换行
+      - generic [ref=e50]:
+        - generic [ref=e51]: Esc
+        - generic [ref=e52]: 停止生成
+      - generic [ref=e53]:
+        - generic [ref=e54]: Tab
+        - generic [ref=e55]: 开关思考
+      - generic [ref=e56]:
+        - generic [ref=e57]: Shift
+        - text: +
+        - generic [ref=e58]: Tab
+        - generic [ref=e59]: 切换模式
+      - generic [ref=e60]:
+        - generic [ref=e61]: Ctrl
+        - text: +
+        - generic [ref=e62]: Enter
+        - generic [ref=e63]: 打断发送
+      - generic [ref=e64]:
+        - generic [ref=e65]: Ctrl
+        - text: +
+        - generic [ref=e66]: J
+        - generic [ref=e67]: 换行
+      - generic [ref=e68]:
+        - generic [ref=e69]: Ctrl
+        - text: +
+        - generic [ref=e70]: U
+        - generic [ref=e71]: 清空到行首
+    - generic [ref=e72]:
+      - button "@ 添加上下文" [ref=e76] [cursor=pointer]:
+        - generic [ref=e77]: "@ 添加上下文"
+      - paragraph [ref=e82]
+      - generic [ref=e83]:
+        - generic [ref=e84]:
+          - generic [ref=e85]:
+            - generic [ref=e86] [cursor=pointer]:
+              - img [ref=e88]
+              - generic [ref=e90]: Claude
+              - img [ref=e91]
+            - generic [ref=e94] [cursor=pointer]:
+              - generic [ref=e96]: "?"
+              - generic [ref=e98]: Default
+              - img [ref=e101]
+            - generic [ref=e104] [cursor=pointer]:
+              - generic [ref=e106]: Opus 4.5
+              - img [ref=e109]
+            - generic "选择思考级别" [ref=e111]:
+              - generic [ref=e112]: 🧠
+              - generic [ref=e114] [cursor=pointer]:
+                - generic:
+                  - combobox [ref=e116]
+                  - generic [ref=e117]: Ultra
+                - img [ref=e120]
+          - generic [ref=e123] [cursor=pointer]: 跳过
+        - generic [ref=e126]:
+          - 'generic "上下文: 0 tokens" [ref=e127]':
+            - generic [ref=e128]: "0"
+          - generic [ref=e130] [cursor=pointer]: 自动清理上下文
+          - button "上传图片" [ref=e133] [cursor=pointer]:
+            - img [ref=e134]
+          - button "发送消息 (Enter)" [disabled] [ref=e136]:
+            - img [ref=e137]
