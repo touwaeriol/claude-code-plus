@@ -125,6 +125,16 @@ class ClaudeCliSession implements vscode.Disposable {
   /** Tracks snapshot metadata by toolUseId for injecting [jb:*] markers into tool_result */
   private readonly snapshotMetaMap = new Map<string, NonNullable<ToolPermissionResult['snapshotMeta']>>()
 
+  // --- Tool-use execution (print/stream-json mode) ---
+  // In `--print --input-format=stream-json --output-format=stream-json` mode,
+  // Claude Code may emit tool_use blocks and wait for the client to provide a
+  // tool_result via stdin. We handle only the user-interaction MCP tool for now
+  // to support interactive question popups in the webview.
+  private readonly toolUseByIndex: Map<number, { id: string; name: string }> = new Map()
+  private readonly toolUseInputJsonById: Map<string, string> = new Map()
+  private readonly executedToolUseIds: Set<string> = new Set()
+  private toolExecQueue: Promise<void> = Promise.resolve()
+
   private activeQuery:
     | {
         generation: number
@@ -343,6 +353,10 @@ class ClaudeCliSession implements vscode.Disposable {
       return
     }
 
+    // If Claude emits tool_use blocks, it may wait for the client to send tool_result.
+    // We only auto-handle user-interaction's AskUserQuestion for now.
+    void this.maybeHandleToolUse(parsed)
+
     // Inject [jb:*] markers into tool_result content blocks
     this.injectSnapshotMetaIntoToolResults(parsed)
 
@@ -358,6 +372,165 @@ class ClaudeCliSession implements vscode.Disposable {
 
     const q = this.activeQuery
     if (q) q.onJsonMessage(parsed)
+  }
+
+  private async maybeHandleToolUse(parsed: any): Promise<void> {
+    try {
+      if (!parsed || typeof parsed !== 'object') return
+      if (parsed.type !== 'stream_event') return
+
+      const ev = parsed.event
+      if (!ev || typeof ev !== 'object') return
+
+      const evType = typeof ev.type === 'string' ? ev.type : ''
+      const index = typeof ev.index === 'number' ? ev.index : undefined
+
+      const getContentBlock = (): any => {
+        // stream-json uses snake_case `content_block`.
+        return (ev as any).content_block ?? (ev as any).contentBlock ?? (ev as any).rawContentBlock
+      }
+
+      const getDelta = (): any => {
+        // stream-json uses snake_case `delta`.
+        return (ev as any).delta ?? (ev as any).Delta
+      }
+
+      if (evType === 'content_block_start') {
+        const block = getContentBlock()
+        if (!block || typeof block !== 'object') return
+        if (block.type !== 'tool_use') return
+
+        const id = typeof block.id === 'string' ? block.id : ''
+        const name = typeof block.name === 'string' ? block.name : ''
+        if (!id || !name) return
+
+        if (typeof index === 'number') {
+          this.toolUseByIndex.set(index, { id, name })
+        }
+        if (!this.toolUseInputJsonById.has(id)) {
+          this.toolUseInputJsonById.set(id, '')
+        }
+        return
+      }
+
+      if (evType === 'content_block_delta') {
+        const delta = getDelta()
+        if (!delta || typeof delta !== 'object') return
+        if (delta.type !== 'input_json_delta') return
+
+        const partial =
+          typeof (delta as any).partial_json === 'string'
+            ? (delta as any).partial_json
+            : typeof (delta as any).partialJson === 'string'
+              ? (delta as any).partialJson
+              : ''
+        if (!partial) return
+
+        if (typeof index !== 'number') return
+        const toolUse = this.toolUseByIndex.get(index)
+        if (!toolUse) return
+
+        const prev = this.toolUseInputJsonById.get(toolUse.id) ?? ''
+        this.toolUseInputJsonById.set(toolUse.id, prev + partial)
+        return
+      }
+
+      if (evType !== 'content_block_stop') return
+      const block = getContentBlock()
+      if (!block || typeof block !== 'object') return
+      if (block.type !== 'tool_use') return
+
+      const toolUseId = typeof block.id === 'string' ? block.id : ''
+      const toolName = typeof block.name === 'string' ? block.name : ''
+      if (!toolUseId || !toolName) return
+      if (this.executedToolUseIds.has(toolUseId)) return
+
+      // Only handle this specific tool for now to avoid interfering with other
+      // tool execution behaviors of Claude CLI.
+      if (toolName !== 'mcp__user-interaction__AskUserQuestion') return
+
+      let input: Record<string, unknown> = {}
+      const rawInput = (block as any).input
+      if (rawInput && typeof rawInput === 'object') {
+        input = rawInput as Record<string, unknown>
+      }
+
+      // If input is empty, try to build it from input_json_delta accumulator.
+      if (Object.keys(input).length === 0) {
+        const json = (this.toolUseInputJsonById.get(toolUseId) ?? '').trim()
+        if (json) {
+          try {
+            const parsedJson = JSON.parse(json)
+            if (parsedJson && typeof parsedJson === 'object') {
+              input = parsedJson as Record<string, unknown>
+            }
+          } catch {
+            // ignore parse errors
+          }
+        }
+      }
+
+      this.executedToolUseIds.add(toolUseId)
+
+      // Queue tool execution to keep ordering and avoid concurrent tool prompts.
+      this.toolExecQueue = this.toolExecQueue.then(async () => {
+        await this.executeAskUserQuestionTool(toolUseId, input)
+      })
+
+      await this.toolExecQueue
+    } catch {
+      // ignore
+    }
+  }
+
+  private async executeAskUserQuestionTool(toolUseId: string, input: Record<string, unknown>): Promise<void> {
+    if (!this.proc || !this.proc.stdin.writable) return
+
+    // Guard: tool execution only makes sense while a query is active.
+    if (!this.activeQuery) return
+
+    this.log?.(`[claude] auto-run tool_use: tool_use_id=${toolUseId} tool=mcp__user-interaction__AskUserQuestion`)
+
+    let toolResultText = ''
+    let isError = false
+
+    try {
+      const server = await this.getBuiltinMcpServer('user-interaction')
+      if (!server) {
+        throw new Error("Built-in MCP server 'user-interaction' not found")
+      }
+
+      const result = await this.callServerTool(server, 'AskUserQuestion', input, toolUseId)
+      isError = Boolean(result?.isError)
+
+      const content = result?.content
+      if (typeof content === 'string') {
+        toolResultText = content
+      } else if (Array.isArray(content)) {
+        toolResultText = (content as any[])
+          .filter((item: any) => item && typeof item === 'object' && item.type === 'text')
+          .map((item: any) => String(item.text ?? ''))
+          .filter(Boolean)
+          .join('\n')
+      } else if (content != null) {
+        toolResultText = JSON.stringify(content)
+      }
+
+      if (!toolResultText) {
+        toolResultText = isError ? 'Tool returned empty error result' : 'OK'
+      }
+    } catch (e) {
+      isError = true
+      toolResultText = `Error: ${e instanceof Error ? e.message : String(e)}`
+    }
+
+    const msg = buildToolResultMessage(toolResultText, this.config.sessionId, toolUseId, isError)
+    try {
+      this.proc.stdin.write(JSON.stringify(msg) + '\n', 'utf8')
+      this.log?.(`[claude] tool_result sent: tool_use_id=${toolUseId} is_error=${String(isError)}`)
+    } catch {
+      // ignore
+    }
   }
 
   /**
@@ -896,6 +1069,25 @@ function buildUserMessage(text: string, sessionId: string) {
     type: 'user',
     message: { role: 'user', content: text },
     parent_tool_use_id: null,
+    session_id: sessionId,
+  }
+}
+
+function buildToolResultMessage(content: string, sessionId: string, toolUseId: string, isError: boolean) {
+  return {
+    type: 'user',
+    message: {
+      role: 'user',
+      content: [
+        {
+          type: 'tool_result',
+          tool_use_id: toolUseId,
+          content,
+          is_error: isError,
+        },
+      ],
+    },
+    parent_tool_use_id: toolUseId,
     session_id: sessionId,
   }
 }
