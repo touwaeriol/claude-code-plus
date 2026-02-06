@@ -848,11 +848,15 @@ async function handleDeleteSession(sessionId: string) {
 
 /* 悬浮层容器：权限请求 + 用户问题（底部与输入框底部对齐） */
 .floating-overlay-container {
-  position: absolute;
+  /*
+   * VS Code webview 里，绝对定位的 overlay 有时会被输入框/布局层级遮住。
+   * 这里改成 fixed + 更高 z-index，确保 AskUserQuestion / Permission 卡片一定可见可点。
+   */
+  position: fixed;
   left: 12px;
   right: 12px;
-  bottom: 0;
-  z-index: 100;
+  bottom: 12px;
+  z-index: 10000;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
