@@ -41,7 +41,7 @@ export interface LoggerConfig {
 
 export class Logger {
     private readonly tag: string
-    private readonly config: Required<LoggerConfig>
+    private readonly config: LoggerConfig
     
     private static globalConfig: LoggerConfig = {
         minLevel: 'info',
@@ -53,12 +53,7 @@ export class Logger {
 
     constructor(tag: string, config?: Partial<LoggerConfig>) {
         this.tag = tag
-        this.config = {
-            minLevel: config?.minLevel ?? Logger.globalConfig.minLevel ?? 'info',
-            outputChannel: config?.outputChannel ?? Logger.outputChannel,
-            logFilePath: config?.logFilePath ?? Logger.logFilePath,
-            console: config?.console ?? Logger.globalConfig.console ?? false,
-        } as Required<LoggerConfig>
+        this.config = config ?? {}
     }
 
     /**
@@ -103,7 +98,8 @@ export class Logger {
     }
 
     private shouldLog(level: LogLevel): boolean {
-        return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[this.config.minLevel]
+        const minLevel = this.config.minLevel ?? Logger.globalConfig.minLevel ?? 'info'
+        return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[minLevel]
     }
 
     private format(level: LogLevel, message: string): string {
@@ -119,22 +115,26 @@ export class Logger {
         const errorStack = error ? `\n${error.stack || error.message}` : ''
         const fullMessage = formattedMessage + errorStack
 
+        const outputChannel = this.config.outputChannel ?? Logger.outputChannel
+        const logFilePath = this.config.logFilePath ?? Logger.logFilePath
+        const toConsole = this.config.console ?? Logger.globalConfig.console ?? false
+
         // Output to VS Code Output Channel
-        if (this.config.outputChannel) {
-            this.config.outputChannel.appendLine(fullMessage)
+        if (outputChannel) {
+            outputChannel.appendLine(fullMessage)
         }
 
         // Output to file
-        if (this.config.logFilePath) {
+        if (logFilePath) {
             try {
-                fs.appendFileSync(this.config.logFilePath, fullMessage + '\n', 'utf8')
+                fs.appendFileSync(logFilePath, fullMessage + '\n', 'utf8')
             } catch {
                 // Ignore file write failures
             }
         }
 
         // Output to console in dev mode
-        if (this.config.console) {
+        if (toConsole) {
             switch (level) {
                 case 'debug':
                     console.debug(fullMessage)

@@ -1264,6 +1264,7 @@ function createResponder(
               includePartialMessages,
               dangerouslySkipPermissions: dangerouslySkipPermissions || defaultBypassPermissions,
               addDirs: getAdditionalDirs(),
+              connectId,
               mcpConfigFilePath: mcpResult.configFilePath ?? undefined,
               appendSystemPromptFilePath,
             })
