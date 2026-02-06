@@ -131,6 +131,7 @@ class ClaudeCliSession implements vscode.Disposable {
   // tool_result via stdin. We handle only the user-interaction MCP tool for now
   // to support interactive question popups in the webview.
   private readonly toolUseByIndex: Map<number, { id: string; name: string }> = new Map()
+  private readonly toolUseStartInputById: Map<string, Record<string, unknown>> = new Map()
   private readonly toolUseInputJsonById: Map<string, string> = new Map()
   private readonly executedToolUseIds: Set<string> = new Set()
   private toolExecQueue: Promise<void> = Promise.resolve()
@@ -404,6 +405,11 @@ class ClaudeCliSession implements vscode.Disposable {
         const name = typeof block.name === 'string' ? block.name : ''
         if (!id || !name) return
 
+        const rawInput = (block as any).input
+        if (rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput)) {
+          this.toolUseStartInputById.set(id, rawInput as Record<string, unknown>)
+        }
+
         if (typeof index === 'number') {
           this.toolUseByIndex.set(index, { id, name })
         }
@@ -436,23 +442,49 @@ class ClaudeCliSession implements vscode.Disposable {
       }
 
       if (evType !== 'content_block_stop') return
-      const block = getContentBlock()
-      if (!block || typeof block !== 'object') return
-      if (block.type !== 'tool_use') return
 
-      const toolUseId = typeof block.id === 'string' ? block.id : ''
-      const toolName = typeof block.name === 'string' ? block.name : ''
+      // Note:
+      // In Claude stream-json, `content_block_stop` usually does NOT include the
+      // full `content_block` (only `{type,index}`), so we must be able to
+      // resolve tool_use info by `index`.
+      let toolUseId = ''
+      let toolName = ''
+
+      const block = getContentBlock()
+      if (block && typeof block === 'object' && (block as any).type === 'tool_use') {
+        toolUseId = typeof (block as any).id === 'string' ? (block as any).id : ''
+        toolName = typeof (block as any).name === 'string' ? (block as any).name : ''
+      }
+
+      if ((!toolUseId || !toolName) && typeof index === 'number') {
+        const toolUse = this.toolUseByIndex.get(index)
+        if (toolUse) {
+          toolUseId = toolUse.id
+          toolName = toolUse.name
+        }
+      }
+
       if (!toolUseId || !toolName) return
       if (this.executedToolUseIds.has(toolUseId)) return
 
       // Only handle this specific tool for now to avoid interfering with other
       // tool execution behaviors of Claude CLI.
-      if (toolName !== 'mcp__user-interaction__AskUserQuestion') return
+      const isAskUserQuestionTool = (name: string): boolean => {
+        if (name === 'mcp__user-interaction__AskUserQuestion') return true
+        if (name === 'AskUserQuestion') return true
+
+        // Be tolerant of provider-specific prefixes/delimiters.
+        if (!name.endsWith('AskUserQuestion')) return false
+        const lower = name.toLowerCase()
+        return lower.includes('user-interaction') || lower.includes('user_interaction')
+      }
+
+      if (!isAskUserQuestionTool(toolName)) return
 
       let input: Record<string, unknown> = {}
-      const rawInput = (block as any).input
-      if (rawInput && typeof rawInput === 'object') {
-        input = rawInput as Record<string, unknown>
+      const startInput = this.toolUseStartInputById.get(toolUseId)
+      if (startInput && typeof startInput === 'object') {
+        input = startInput
       }
 
       // If input is empty, try to build it from input_json_delta accumulator.
@@ -470,11 +502,13 @@ class ClaudeCliSession implements vscode.Disposable {
         }
       }
 
+      const normalizedInput = this.normalizeAskUserQuestionInput(input)
+
       this.executedToolUseIds.add(toolUseId)
 
       // Queue tool execution to keep ordering and avoid concurrent tool prompts.
       this.toolExecQueue = this.toolExecQueue.then(async () => {
-        await this.executeAskUserQuestionTool(toolUseId, input)
+        await this.executeAskUserQuestionTool(toolUseId, toolName, normalizedInput)
       })
 
       await this.toolExecQueue
@@ -483,13 +517,102 @@ class ClaudeCliSession implements vscode.Disposable {
     }
   }
 
-  private async executeAskUserQuestionTool(toolUseId: string, input: Record<string, unknown>): Promise<void> {
+  private normalizeAskUserQuestionInput(input: Record<string, unknown>): { questions: any[] } {
+    const normalizeOptions = (raw: unknown): Array<{ label: string; description?: string }> => {
+      if (!Array.isArray(raw)) return []
+      const out: Array<{ label: string; description?: string }> = []
+      for (const item of raw) {
+        if (typeof item === 'string') {
+          out.push({ label: item })
+          continue
+        }
+        if (!item || typeof item !== 'object') continue
+        const label = typeof (item as any).label === 'string' ? (item as any).label : ''
+        if (!label) continue
+        const description = typeof (item as any).description === 'string' ? (item as any).description : undefined
+        out.push(description ? { label, description } : { label })
+      }
+      return out
+    }
+
+    const normalizeQuestion = (raw: unknown, idx: number): any | undefined => {
+      if (!raw) return undefined
+      if (typeof raw === 'string') {
+        return {
+          header: `Question ${idx + 1}`,
+          question: raw,
+          options: [],
+          multiSelect: false,
+        }
+      }
+
+      if (typeof raw !== 'object') return undefined
+      const question =
+        typeof (raw as any).question === 'string'
+          ? (raw as any).question
+          : typeof (raw as any).prompt === 'string'
+            ? (raw as any).prompt
+            : typeof (raw as any).text === 'string'
+              ? (raw as any).text
+              : ''
+      if (!question) return undefined
+
+      const header = typeof (raw as any).header === 'string' && (raw as any).header ? (raw as any).header : `Question ${idx + 1}`
+      const multiSelect = typeof (raw as any).multiSelect === 'boolean' ? (raw as any).multiSelect : false
+      const options = normalizeOptions((raw as any).options ?? (raw as any).choices)
+
+      return { header, question, options, multiSelect }
+    }
+
+    // Preferred shape: { questions: [...] }
+    if (Array.isArray((input as any).questions)) {
+      const questions = ((input as any).questions as unknown[])
+        .map((q, idx) => normalizeQuestion(q, idx))
+        .filter(Boolean)
+      if (questions.length > 0) return { questions }
+    }
+
+    // Common single-question shapes.
+    const singleQuestionText =
+      typeof (input as any).question === 'string'
+        ? (input as any).question
+        : typeof (input as any).prompt === 'string'
+          ? (input as any).prompt
+          : typeof (input as any).text === 'string'
+            ? (input as any).text
+            : ''
+
+    if (singleQuestionText) {
+      const header = typeof (input as any).header === 'string' && (input as any).header ? (input as any).header : 'Question'
+      const multiSelect = typeof (input as any).multiSelect === 'boolean' ? (input as any).multiSelect : false
+      const options = normalizeOptions((input as any).options ?? (input as any).choices)
+      return { questions: [{ header, question: singleQuestionText, options, multiSelect }] }
+    }
+
+    // Fallback: keep the flow unblocked by always producing a valid schema.
+    const fallbackText = (() => {
+      try {
+        const s = JSON.stringify(input)
+        return s && s !== '{}' ? s : 'Please provide your answer.'
+      } catch {
+        return 'Please provide your answer.'
+      }
+    })()
+
+    return { questions: [{ header: 'Question', question: fallbackText, options: [], multiSelect: false }] }
+  }
+
+  private async executeAskUserQuestionTool(
+    toolUseId: string,
+    toolName: string,
+    input: { questions: any[] }
+  ): Promise<void> {
     if (!this.proc || !this.proc.stdin.writable) return
 
     // Guard: tool execution only makes sense while a query is active.
     if (!this.activeQuery) return
 
-    this.log?.(`[claude] auto-run tool_use: tool_use_id=${toolUseId} tool=mcp__user-interaction__AskUserQuestion`)
+    this.log?.(`[claude] auto-run tool_use: tool_use_id=${toolUseId} tool=${toolName}`)
 
     let toolResultText = ''
     let isError = false
@@ -500,7 +623,7 @@ class ClaudeCliSession implements vscode.Disposable {
         throw new Error("Built-in MCP server 'user-interaction' not found")
       }
 
-      const result = await this.callServerTool(server, 'AskUserQuestion', input, toolUseId)
+      const result = await this.callServerTool(server, 'AskUserQuestion', input as any, toolUseId)
       isError = Boolean(result?.isError)
 
       const content = result?.content
@@ -531,6 +654,10 @@ class ClaudeCliSession implements vscode.Disposable {
     } catch {
       // ignore
     }
+
+    // Best-effort cleanup.
+    this.toolUseStartInputById.delete(toolUseId)
+    this.toolUseInputJsonById.delete(toolUseId)
   }
 
   /**
