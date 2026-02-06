@@ -100,22 +100,28 @@ async function main() {
   })
   await client.connect(transport)
 
-  const result = await client.callTool({
-    name: 'AskUserQuestion',
-    arguments: {
-      questions: [
-        {
-          header: 'Test',
-          question: '请选择 A 或 B（本地自测）',
-          options: [
-            { label: 'A', description: '选 A' },
-            { label: 'B', description: '选 B' },
-          ],
-          multiSelect: false,
-        },
-      ],
+  const result = await client.callTool(
+    {
+      name: 'AskUserQuestion',
+      arguments: {
+        questions: [
+          {
+            header: 'Test',
+            question: '请选择 A 或 B（本地自测）',
+            options: [
+              { label: 'A', description: '选 A' },
+              { label: 'B', description: '选 B' },
+            ],
+            multiSelect: false,
+          },
+        ],
+      },
     },
-  })
+    undefined,
+    {
+      timeout: 10 * 60 * 1000,
+    }
+  )
 
   // eslint-disable-next-line no-console
   console.log('[test-ask-user] result:', JSON.stringify(result, null, 2))
