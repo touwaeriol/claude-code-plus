@@ -155,6 +155,15 @@ class ClaudeCliSession implements vscode.Disposable {
     private readonly log?: (message: string) => void
   ) {}
 
+  private isAskUserQuestionToolName(name: string): boolean {
+    if (name === 'mcp__user-interaction__AskUserQuestion') return true
+    if (name === 'AskUserQuestion') return true
+
+    if (!name.endsWith('AskUserQuestion')) return false
+    const lower = name.toLowerCase()
+    return lower.includes('user-interaction') || lower.includes('user_interaction')
+  }
+
   matches(config: ClaudeCliSessionConfig): boolean {
     const addDirsMatch = 
       (this.config.addDirs ?? []).length === (config.addDirs ?? []).length &&
@@ -365,8 +374,17 @@ class ClaudeCliSession implements vscode.Disposable {
       const q = this.activeQuery
       if (q) {
         q.onJsonMessage(parsed)
-        q.resolve()
-        this.activeQuery = undefined
+
+        const currentGeneration = q.generation
+        void this.toolExecQueue
+          .catch(() => {
+            // ignore tool execution errors here; they should already be reflected in tool_result
+          })
+          .finally(() => {
+            if (this.activeQuery?.generation !== currentGeneration) return
+            q.resolve()
+            this.activeQuery = undefined
+          })
       }
       return
     }
@@ -469,17 +487,7 @@ class ClaudeCliSession implements vscode.Disposable {
 
       // Only handle this specific tool for now to avoid interfering with other
       // tool execution behaviors of Claude CLI.
-      const isAskUserQuestionTool = (name: string): boolean => {
-        if (name === 'mcp__user-interaction__AskUserQuestion') return true
-        if (name === 'AskUserQuestion') return true
-
-        // Be tolerant of provider-specific prefixes/delimiters.
-        if (!name.endsWith('AskUserQuestion')) return false
-        const lower = name.toLowerCase()
-        return lower.includes('user-interaction') || lower.includes('user_interaction')
-      }
-
-      if (!isAskUserQuestionTool(toolName)) return
+      if (!this.isAskUserQuestionToolName(toolName)) return
 
       let input: Record<string, unknown> = {}
       const startInput = this.toolUseStartInputById.get(toolUseId)
@@ -651,6 +659,11 @@ class ClaudeCliSession implements vscode.Disposable {
     try {
       this.proc.stdin.write(JSON.stringify(msg) + '\n', 'utf8')
       this.log?.(`[claude] tool_result sent: tool_use_id=${toolUseId} is_error=${String(isError)}`)
+
+      const q = this.activeQuery
+      if (q) {
+        q.onJsonMessage(msg)
+      }
     } catch {
       // ignore
     }
@@ -748,6 +761,17 @@ class ClaudeCliSession implements vscode.Disposable {
 
           if (!toolName) {
             await this.sendControlResponse(requestId, 'error', undefined, 'Missing tool_name')
+            return
+          }
+
+          if (this.isAskUserQuestionToolName(toolName)) {
+            this.log?.(`[claude] auto-allow can_use_tool for ${toolName}`)
+            await this.sendControlResponse(
+              requestId,
+              'success',
+              { behavior: 'allow', updatedInput: input ?? {} },
+              undefined
+            )
             return
           }
 

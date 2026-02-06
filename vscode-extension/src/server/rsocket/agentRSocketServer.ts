@@ -1086,6 +1086,7 @@ function createResponder(
         let didStopMessage = false
         let currentMessageId: string | undefined
         let messageSeq = 0
+        const deliveredToolResultSignatures = new Map<string, string>()
 
         const emitStreamEvent = (event: any) => {
           const streamEvent = create(StreamEventSchema, {
@@ -1100,6 +1101,26 @@ function createResponder(
 
           safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, rpcMsg)) }, false)
           if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), rpcMsg)
+        }
+
+        const emitToolResultToFrontend = (toolUseId: string, contentValue: unknown, isError: boolean) => {
+          if (!toolUseId) return
+
+          let normalizedContent = ''
+          try {
+            normalizedContent = JSON.stringify(contentValue ?? '')
+          } catch {
+            normalizedContent = String(contentValue ?? '')
+          }
+
+          const signature = `${isError ? '1' : '0'}:${normalizedContent}`
+          const lastSignature = deliveredToolResultSignatures.get(toolUseId)
+          if (lastSignature === signature) return
+          deliveredToolResultSignatures.set(toolUseId, signature)
+
+          const toolResultMsg = createUserToolResultMessage(provider, toolUseId, contentValue, isError)
+          safeOnNext({ data: Buffer.from(toBinary(RpcMessageSchema, toolResultMsg)) }, false)
+          if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), toolResultMsg)
         }
 
         const startNewMessage = (messageId?: string) => {
@@ -1401,8 +1422,69 @@ function createResponder(
                     return
                   }
 
+                  // 处理 tool_result delta（用于把工具结果回灌到前端工具卡）
+                  if (evType === 'content_block_delta' && ev?.delta?.type === 'tool_result') {
+                    const toolUseId =
+                      typeof ev?.delta?.tool_use_id === 'string'
+                        ? ev.delta.tool_use_id
+                        : typeof ev?.delta?.toolUseId === 'string'
+                          ? ev.delta.toolUseId
+                          : ''
+
+                    if (!toolUseId) return
+
+                    const contentValue =
+                      ev?.delta?.content !== undefined
+                        ? ev.delta.content
+                        : ev?.delta?.result !== undefined
+                          ? ev.delta.result
+                          : ''
+
+                    const isError =
+                      ev?.delta?.is_error === true ||
+                      ev?.delta?.isError === true
+
+                    emitToolResultToFrontend(toolUseId, contentValue, isError)
+                    return
+                  }
+
                   if (evType === 'message_stop') {
                     ensureStreamStopped()
+                  }
+                  return
+                }
+
+                // Claude CLI 可能直接产出 user/tool_result 消息（而非 stream_event delta）。
+                // 在 partial 模式下也要转发给前端，用于更新工具卡结果。
+                if (msg.type === 'user') {
+                  const contentArr = Array.isArray(msg.message?.content)
+                    ? msg.message.content
+                    : Array.isArray(msg.content)
+                      ? msg.content
+                      : []
+
+                  for (const block of contentArr) {
+                    if (!block || typeof block !== 'object' || block.type !== 'tool_result') continue
+
+                    const toolUseId =
+                      typeof (block as any).tool_use_id === 'string'
+                        ? (block as any).tool_use_id
+                        : typeof (block as any).toolUseId === 'string'
+                          ? (block as any).toolUseId
+                          : ''
+
+                    const contentValue =
+                      (block as any).content !== undefined
+                        ? (block as any).content
+                        : (block as any).result !== undefined
+                          ? (block as any).result
+                          : ''
+
+                    const isError =
+                      (block as any).is_error === true ||
+                      (block as any).isError === true
+
+                    emitToolResultToFrontend(toolUseId, contentValue, isError)
                   }
                   return
                 }

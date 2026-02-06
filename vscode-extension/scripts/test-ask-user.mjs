@@ -46,15 +46,21 @@ function parseLog(text) {
     connectId: null,
   }
 
-  const httpMatch = text.match(/\[HttpApiServer\]\s+http listening\s+(http:\/\/127\.0\.0\.1:(\d+))/)
+  const last = (iterable) => {
+    let value = null
+    for (const item of iterable) value = item
+    return value
+  }
+
+  const httpMatch = last(text.matchAll(/\[HttpApiServer\]\s+http listening\s+(http:\/\/127\.0\.0\.1:(\d+))/g))
   if (httpMatch) {
     result.httpBaseUrl = httpMatch[1]
   }
 
-  const mcpMatch = text.match(/\[McpHttpGateway\].*127\.0\.0\.1:(\d+)\/mcp/)
+  const mcpMatch = last(text.matchAll(/\[McpHttpGateway\].*127\.0\.0\.1:(\d+)\/mcp/g))
   if (mcpMatch) result.mcpGatewayPort = Number(mcpMatch[1])
 
-  const connectIdMatch = text.match(/\[rsocket\]\s+agent\.connect: connectId=([0-9a-f\-]+)/i)
+  const connectIdMatch = last(text.matchAll(/\[rsocket\]\s+agent\.connect: connectId=([0-9a-f\-]+)/gi))
   if (connectIdMatch) result.connectId = connectIdMatch[1]
 
   return result

@@ -1,7 +1,7 @@
 // Source: ai-agent-server/src/main/kotlin/com/asakii/server/HttpApiServer.kt
 // Differences:
-// - VS Code webview loads frontend assets directly (no static file server or HTML injection).
-// - This server only exposes HTTP APIs + RSocket endpoints and relies on Webview CSP/localResourceRoots.
+// - VS Code webview can load frontend assets directly, and this server now also supports browser HTTP access.
+// - HTTP APIs + RSocket remain available for webview/browser clients.
 
 import * as crypto from 'crypto'
 import * as fs from 'fs'
@@ -266,6 +266,10 @@ export class HttpApiServer implements vscode.Disposable {
 
     const base = this.baseUrl ?? 'http://127.0.0.1'
     const url = new URL(req.url ?? '/', base)
+
+    if (await this.tryServeFrontend(req, url, res)) {
+      return
+    }
 
     if (!this.isAuthorized(req, url.pathname)) {
       res.statusCode = 401
@@ -757,6 +761,106 @@ export class HttpApiServer implements vscode.Disposable {
     res.end('Not Found')
   }
 
+  private async tryServeFrontend(req: http.IncomingMessage, url: URL, res: http.ServerResponse): Promise<boolean> {
+    if (req.method !== 'GET') return false
+
+    const pathname = url.pathname
+    if (
+      pathname === '/health' ||
+      pathname.startsWith('/api/') ||
+      pathname.startsWith('/mcp/') ||
+      pathname.startsWith('/rsocket') ||
+      pathname.startsWith('/ide-rsocket')
+    ) {
+      return false
+    }
+
+    const distDir = path.resolve(this.context.extensionPath, 'media', 'dist')
+    const indexPath = path.join(distDir, 'index.html')
+    const hasDist = fs.existsSync(indexPath)
+
+    if (!hasDist) {
+      if (pathname === '/' || pathname === '/index.html') {
+        const serverPort = new URL(this.baseUrl ?? 'http://127.0.0.1:0').port || '0'
+        res.statusCode = 503
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        res.end(`<!DOCTYPE html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>Claude Code Plus - Dev Mode</title></head>
+  <body>
+    <h1>Development Mode</h1>
+    <p>Backend server is running on port ${serverPort}</p>
+    <p>Frontend dist not found. Build frontend first:</p>
+    <pre>cd frontend && npm run build</pre>
+  </body>
+</html>`)
+        return true
+      }
+      return false
+    }
+
+    if (pathname === '/' || pathname === '/index.html') {
+      const isIdeMode = url.searchParams.get('ide') === 'true'
+      const baseHtml = fs.readFileSync(indexPath, 'utf8')
+      const injection = [
+        '<script>',
+        `window.__serverUrl = ${JSON.stringify(this.baseUrl ?? '')};`,
+        `window.__serverToken = ${JSON.stringify(this.token)};`,
+        isIdeMode ? 'window.__IDE_MODE__ = true;' : '',
+        `console.log('✅ Environment: ${isIdeMode ? 'IDE Mode' : 'Browser Mode'}');`,
+        '</script>',
+      ]
+        .filter(Boolean)
+        .join('\n')
+      const html = baseHtml.includes('</head>') ? baseHtml.replace('</head>', `${injection}\n</head>`) : `${injection}\n${baseHtml}`
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.end(html)
+      return true
+    }
+
+    const safePath = safeDecodeUriComponent(pathname).replace(/^\/+/, '')
+    if (!safePath) return false
+
+    const fullPath = path.resolve(distDir, safePath)
+    const distRoot = `${distDir}${path.sep}`
+    if (fullPath !== distDir && !fullPath.startsWith(distRoot)) {
+      res.statusCode = 403
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+      res.end('Forbidden')
+      return true
+    }
+
+    if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+      res.statusCode = 200
+      res.setHeader('Content-Type', detectStaticContentType(path.extname(fullPath)))
+      res.end(fs.readFileSync(fullPath))
+      return true
+    }
+
+    if (!path.extname(safePath)) {
+      const isIdeMode = url.searchParams.get('ide') === 'true'
+      const baseHtml = fs.readFileSync(indexPath, 'utf8')
+      const injection = [
+        '<script>',
+        `window.__serverUrl = ${JSON.stringify(this.baseUrl ?? '')};`,
+        `window.__serverToken = ${JSON.stringify(this.token)};`,
+        isIdeMode ? 'window.__IDE_MODE__ = true;' : '',
+        `console.log('✅ Environment: ${isIdeMode ? 'IDE Mode' : 'Browser Mode'}');`,
+        '</script>',
+      ]
+        .filter(Boolean)
+        .join('\n')
+      const html = baseHtml.includes('</head>') ? baseHtml.replace('</head>', `${injection}\n</head>`) : `${injection}\n${baseHtml}`
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.end(html)
+      return true
+    }
+
+    return false
+  }
+
   private applyCors(req: http.IncomingMessage, res: http.ServerResponse) {
     const origin = req.headers.origin
     if (isAllowedWebviewOrigin(origin)) {
@@ -863,6 +967,50 @@ function detectFontContentType(ext: string): string {
       return 'font/woff2'
     default:
       return 'application/octet-stream'
+  }
+}
+
+function detectStaticContentType(ext: string): string {
+  switch (ext.toLowerCase()) {
+    case '.html':
+      return 'text/html; charset=utf-8'
+    case '.js':
+      return 'text/javascript; charset=utf-8'
+    case '.css':
+      return 'text/css; charset=utf-8'
+    case '.json':
+      return 'application/json; charset=utf-8'
+    case '.svg':
+      return 'image/svg+xml'
+    case '.png':
+      return 'image/png'
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg'
+    case '.gif':
+      return 'image/gif'
+    case '.ico':
+      return 'image/x-icon'
+    case '.webp':
+      return 'image/webp'
+    case '.map':
+      return 'application/json; charset=utf-8'
+    case '.woff':
+      return 'font/woff'
+    case '.woff2':
+      return 'font/woff2'
+    case '.ttf':
+      return 'font/ttf'
+    default:
+      return 'application/octet-stream'
+  }
+}
+
+function safeDecodeUriComponent(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
   }
 }
 

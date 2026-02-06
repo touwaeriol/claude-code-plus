@@ -44,23 +44,29 @@ function parseLog(text) {
     wsToken: null,
   }
 
-  const httpMatch = text.match(/\[HttpApiServer\]\s+http listening\s+(http:\/\/127\.0\.0\.1:(\d+))/)
+  const last = (iterable) => {
+    let value = null
+    for (const item of iterable) value = item
+    return value
+  }
+
+  const httpMatch = last(text.matchAll(/\[HttpApiServer\]\s+http listening\s+(http:\/\/127\.0\.0\.1:(\d+))/g))
   if (httpMatch) {
     result.httpBaseUrl = httpMatch[1]
   }
 
-  const mcpMatch = text.match(/\[McpHttpGateway\].*port now:\s+(\d+)/)
-  if (mcpMatch) {
-    result.mcpGatewayPort = Number(mcpMatch[1])
+  const mcpPortNowMatch = last(text.matchAll(/\[McpHttpGateway\].*port now:\s+(\d+)/g))
+  if (mcpPortNowMatch) {
+    result.mcpGatewayPort = Number(mcpPortNowMatch[1])
   } else {
-    const mcpStartedMatch = text.match(/\[McpHttpGateway\]\s+HTTP gateway started.*127\.0\.0\.1:(\d+)\/mcp/)
+    const mcpStartedMatch = last(text.matchAll(/\[McpHttpGateway\]\s+HTTP gateway started.*127\.0\.0\.1:(\d+)\/mcp/g))
     if (mcpStartedMatch) result.mcpGatewayPort = Number(mcpStartedMatch[1])
   }
 
-  const connectIdMatch = text.match(/\[rsocket\]\s+agent\.connect: connectId=([0-9a-f\-]+)/i)
+  const connectIdMatch = last(text.matchAll(/\[rsocket\]\s+agent\.connect: connectId=([0-9a-f\-]+)/gi))
   if (connectIdMatch) result.connectId = connectIdMatch[1]
 
-  const tokenMatch = text.match(/\/rsocket\?token=([0-9a-f\-]+)/i)
+  const tokenMatch = last(text.matchAll(/\/rsocket\?token=([0-9a-f\-]+)/gi))
   if (tokenMatch) result.wsToken = tokenMatch[1]
 
   return result
@@ -93,4 +99,3 @@ function main() {
 }
 
 main()
-

@@ -9,8 +9,19 @@ export function isAllowedWebviewOrigin(origin: unknown): origin is string {
   //   https://file+.vscode-resource.vscode-cdn.net
   try {
     const url = new URL(origin)
-    if (url.protocol !== 'https:') return false
+    const protocol = url.protocol.toLowerCase()
+    if (protocol !== 'https:' && protocol !== 'http:') return false
     const host = url.hostname.toLowerCase()
+    const isLoopbackHost =
+      host === '127.0.0.1' ||
+      host === 'localhost' ||
+      host === '::1' ||
+      host === '[::1]'
+
+    if (isLoopbackHost) {
+      return true
+    }
+
     return (
       host.endsWith('.vscode-webview.net') ||
       host.endsWith('.vscode-webview-test.com') ||
