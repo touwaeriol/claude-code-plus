@@ -30,12 +30,27 @@ async function main() {
   const extensionDevPath = process.cwd()
   const workspacePath = repoRoot
 
+  // Keep logs/extension state isolated so we can reliably find ports.
+  const userDataDir = resolvePath('.vscode-dev', 'user-data-test')
+  const extensionsDir = resolvePath('.vscode-dev', 'extensions-test')
+
   // 启动 Extension Development Host（独立进程，不等待退出）
-  spawn('code', ['--extensionDevelopmentPath', extensionDevPath, workspacePath], {
+  spawn(
+    'code',
+    [
+      '--new-window',
+      `--user-data-dir=${userDataDir}`,
+      `--extensions-dir=${extensionsDir}`,
+      '--extensionDevelopmentPath',
+      extensionDevPath,
+      workspacePath,
+    ],
+    {
     stdio: 'inherit',
     shell: true,
     detached: true,
-  })
+    }
+  )
 }
 
 main().catch((err) => {
@@ -43,4 +58,3 @@ main().catch((err) => {
   console.error(err)
   process.exit(1)
 })
-
