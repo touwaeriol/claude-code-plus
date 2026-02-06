@@ -1080,10 +1080,12 @@ function createResponder(
         
         // 块索引映射：从Claude API的原始索引到已发送的块索引
         // key = Claude API的index, value = 我们发送的content_block_start的索引
-        const blockIndexMap = new Map<number, { type: 'text' | 'thinking' | 'tool', started: boolean, stopped: boolean }>()
+        let blockIndexMap = new Map<number, { type: 'text' | 'thinking' | 'tool'; started: boolean; stopped: boolean }>()
 
         let didStartMessage = false
         let didStopMessage = false
+        let currentMessageId: string | undefined
+        let messageSeq = 0
 
         const emitStreamEvent = (event: any) => {
           const streamEvent = create(StreamEventSchema, {
@@ -1100,15 +1102,25 @@ function createResponder(
           if (sessionId) historyStore.appendMessage(sessionId, getWorkspaceRoot(), rpcMsg)
         }
 
-        const ensureMessageStart = () => {
-          if (didStartMessage) return
+        const startNewMessage = (messageId?: string) => {
+          // Reset per-message state
+          blockIndexMap = new Map()
           didStartMessage = true
+          didStopMessage = false
+          currentMessageId = messageId || `${streamUuid}-${++messageSeq}`
 
-          const info = create(MessageStartInfoSchema, { id: streamUuid, model, content: [] })
+          const info = create(MessageStartInfoSchema, { id: currentMessageId, model, content: [] })
           emitStreamEvent({
             case: 'messageStart',
             value: create(MessageStartEventSchema, { messageInfo: info }),
           })
+        }
+
+        const ensureMessageStart = () => {
+          // Fallback only: normally Claude CLI emits message_start.
+          if (!didStartMessage || didStopMessage) {
+            startNewMessage(undefined)
+          }
         }
 
         // 处理 content_block_start 事件，使用Claude API返回的原始索引
@@ -1292,6 +1304,14 @@ function createResponder(
                   const ev = msg.event
                   const evType = typeof ev?.type === 'string' ? ev.type : ''
                   const evIndex = typeof ev?.index === 'number' ? ev.index : 0
+
+                  // message_start may occur multiple times in a single query when tools are used.
+                  // We must propagate it so the frontend can create a new streaming message.
+                  if (evType === 'message_start') {
+                    const messageId = typeof (ev as any)?.message?.id === 'string' ? (ev as any).message.id : undefined
+                    startNewMessage(messageId)
+                    return
+                  }
 
                   // 处理 content_block_start 事件 - 使用Claude API返回的原始索引
                   if (evType === 'content_block_start') {
