@@ -211,9 +211,18 @@ export class McpHttpGateway {
 
     const endpointPath = `/mcp/${serverName}`;
 
-    // Create transport for this server
+    // Create transport for this server.
+    //
+    // IMPORTANT:
+    // Use stateless mode (sessionIdGenerator: undefined) so that:
+    // - External debugging clients (curl/node scripts) can connect repeatedly.
+    // - The endpoint doesn't get stuck in "Server already initialized" state
+    //   when multiple clients attempt to initialize.
+    //
+    // Claude CLI can still initialize normally; the server transport will simply
+    // not require Mcp-Session-Id headers on subsequent requests.
     const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => crypto.randomUUID(),
+      sessionIdGenerator: undefined,
     });
 
     // Connect the server to the transport
