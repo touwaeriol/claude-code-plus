@@ -33,9 +33,16 @@
         style="width: 100%"
         max-height="400"
       >
-        <el-table-column label="Status" width="70" align="center">
+        <el-table-column label="Enabled" width="110" align="center">
           <template #default="{ row }">
-            <span :class="['status-dot', row.enabled ? 'enabled' : 'disabled']" />
+            <el-switch
+              v-model="row.enabled"
+              size="small"
+              inline-prompt
+              active-text="On"
+              inactive-text="Off"
+              @click.stop
+            />
           </template>
         </el-table-column>
         <el-table-column prop="name" label="Name" min-width="150" />
@@ -753,6 +760,7 @@ const saveServer = () => {
 <style scoped>
 .mcp-page {
   max-width: 900px;
+  color: var(--vscode-foreground, #cccccc);
 }
 
 .page-title {
@@ -786,25 +794,75 @@ const saveServer = () => {
   margin-bottom: 16px;
 }
 
+.mcp-page :deep(.el-table) {
+  --el-table-bg-color: var(--vscode-editorWidget-background, #252526);
+  --el-table-tr-bg-color: var(--vscode-editorWidget-background, #252526);
+  --el-table-header-bg-color: var(--vscode-sideBarSectionHeader-background, #333333);
+  --el-table-row-hover-bg-color: var(--vscode-list-hoverBackground, #2a2d2e);
+  --el-table-text-color: var(--vscode-foreground, #cccccc);
+  --el-table-header-text-color: var(--vscode-foreground, #cccccc);
+  --el-table-border-color: var(--vscode-panel-border, #3c3c3c);
+}
+
+.mcp-page :deep(.el-table__body tr.current-row > td.el-table__cell) {
+  background: var(--vscode-list-activeSelectionBackground, #094771) !important;
+  color: var(--vscode-list-activeSelectionForeground, #ffffff) !important;
+}
+
+:global(body.vscode-high-contrast) .mcp-page :deep(.el-table__body tr.current-row > td.el-table__cell),
+:global(body.vscode-high-contrast-light) .mcp-page :deep(.el-table__body tr.current-row > td.el-table__cell) {
+  outline: 1px solid var(--vscode-focusBorder, #ffffff);
+  outline-offset: -1px;
+}
+
+@media (forced-colors: active) {
+  .mcp-page :deep(.el-table__body tr.current-row > td.el-table__cell) {
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+}
+
+.mcp-page :deep(.el-table__body tr.current-row .backends-link) {
+  color: var(--vscode-list-activeSelectionForeground, #ffffff) !important;
+}
+
+.mcp-page :deep(.el-table__body tr:hover > td.el-table__cell) {
+  background: var(--vscode-list-hoverBackground, #2a2d2e);
+}
+
+.mcp-page :deep(.el-switch) {
+  --el-switch-on-color: var(--vscode-testing-iconPassed, #4caf50);
+  --el-switch-off-color: var(--vscode-input-border, #3c3c3c);
+}
+
+.mcp-page :deep(.el-dialog) {
+  background: var(--vscode-editorWidget-background, #252526);
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, #3c3c3c));
+}
+
+.mcp-page :deep(.el-dialog__header) {
+  border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
+}
+
+.mcp-page :deep(.el-dialog__title) {
+  color: var(--vscode-foreground, #cccccc);
+}
+
+.mcp-page :deep(.el-dialog__body),
+.mcp-page :deep(.el-dialog__footer) {
+  color: var(--vscode-foreground, #cccccc);
+}
+
+.mcp-page :deep(.el-divider__text),
+.mcp-page :deep(.el-radio__label),
+.mcp-page :deep(.el-checkbox__label) {
+  color: var(--vscode-foreground, #cccccc);
+}
+
 .table-toolbar {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
-}
-
-.status-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.status-dot.enabled {
-  background: var(--vscode-testing-iconPassed, #4caf50);
-}
-
-.status-dot.disabled {
-  background: var(--vscode-testing-iconSkipped, #9e9e9e);
 }
 
 .backends-link {
@@ -819,7 +877,7 @@ const saveServer = () => {
 
 .warning-text {
   font-size: 13px;
-  color: #b07800;
+  color: var(--vscode-notificationsWarningIcon-foreground, #b07800);
   margin-top: 16px;
 }
 
