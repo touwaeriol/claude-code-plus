@@ -361,8 +361,14 @@ function createResponder(
     const mcpName = toMcpServerName(entry.name)
     
     // 格式化 backends：["all"] -> "All", ["claude", "codex"] -> "Claude,Codex"
-    const backends = formatBackendsArray(entry.enabledBackends)
-    
+    let backends = formatBackendsArray(entry.enabledBackends)
+
+    // User Interaction MCP: Claude 后端使用 canUseTool + updatedInput.answers，
+    // 不再通过 MCP 中转，因此强制限定为 Codex only
+    if (mcpName === 'user-interaction') {
+      backends = 'Codex'
+    }
+
     // 获取默认提示词
     const defaultInstructions = getDefaultInstructions(mcpName)
     
@@ -1298,6 +1304,7 @@ function createResponder(
               dangerouslySkipPermissions: dangerouslySkipPermissions || defaultBypassPermissions,
               addDirs: getAdditionalDirs(),
               connectId,
+              clientCaller,
               mcpConfigFilePath: mcpResult.configFilePath ?? undefined,
               appendSystemPromptFilePath,
             })

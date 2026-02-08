@@ -12,6 +12,7 @@ import { CODEX_TOOL_COMPONENTS } from '@/components/chat/tool-displays/codexRegi
 import GenericToolDisplay from '@/components/tools/GenericToolDisplay.vue'
 import JetBrainsMcpToolDisplay from '@/components/tools/JetBrainsMcpToolDisplay.vue'
 import TerminalMcpToolDisplay from '@/components/tools/TerminalMcpToolDisplay.vue'
+import AskUserQuestionDisplay from '@/components/tools/AskUserQuestionDisplay.vue'
 
 interface Props {
   toolCall: ToolCall
@@ -33,6 +34,14 @@ const isTerminalMcpTool = computed(() => {
   return name.startsWith('mcp__terminal__') || name.startsWith('mcp__ide-terminal__')
 })
 
+const isAskUserQuestionMcpTool = computed(() => {
+  const name = props.toolCall?.toolName || ''
+  // MCP 版本的 AskUserQuestion（Codex 后端仍通过 MCP 调用）
+  return name.endsWith('AskUserQuestion') && (
+    name.includes('user-interaction') || name.includes('user_interaction')
+  )
+})
+
 const isCodexToolType = computed(() => {
   return props.toolCall?.toolType?.startsWith('CODEX_') ?? false
 })
@@ -43,6 +52,9 @@ const resolvedComponent = computed(() => {
   }
   if (isTerminalMcpTool.value) {
     return TerminalMcpToolDisplay
+  }
+  if (isAskUserQuestionMcpTool.value) {
+    return AskUserQuestionDisplay
   }
 
   const registry = isCodexToolType.value ? CODEX_TOOL_COMPONENTS : CLAUDE_TOOL_COMPONENTS

@@ -26,6 +26,12 @@ export type ClaudeCliSessionConfig = {
   mcpConfigFilePath?: string
   /** System prompt appendix file path (contains MCP instructions) */
   appendSystemPromptFilePath?: string
+  /**
+   * ClientCaller for AskUserQuestion via canUseTool callback.
+   * When set, AskUserQuestion is handled via updatedInput.answers in canUseTool
+   * instead of MCP server interception.
+   */
+  clientCaller?: import('../../server/rpc/clientCaller').ClientCaller
 }
 
 export type ToolPermissionRequest = {
@@ -125,17 +131,6 @@ class ClaudeCliSession implements vscode.Disposable {
   /** Tracks snapshot metadata by toolUseId for injecting [jb:*] markers into tool_result */
   private readonly snapshotMetaMap = new Map<string, NonNullable<ToolPermissionResult['snapshotMeta']>>()
 
-  // --- Tool-use execution (print/stream-json mode) ---
-  // In `--print --input-format=stream-json --output-format=stream-json` mode,
-  // Claude Code may emit tool_use blocks and wait for the client to provide a
-  // tool_result via stdin. We handle only the user-interaction MCP tool for now
-  // to support interactive question popups in the webview.
-  private readonly toolUseByIndex: Map<number, { id: string; name: string }> = new Map()
-  private readonly toolUseStartInputById: Map<string, Record<string, unknown>> = new Map()
-  private readonly toolUseInputJsonById: Map<string, string> = new Map()
-  private readonly executedToolUseIds: Set<string> = new Set()
-  private toolExecQueue: Promise<void> = Promise.resolve()
-
   private activeQuery:
     | {
         generation: number
@@ -165,10 +160,10 @@ class ClaudeCliSession implements vscode.Disposable {
   }
 
   matches(config: ClaudeCliSessionConfig): boolean {
-    const addDirsMatch = 
+    const addDirsMatch =
       (this.config.addDirs ?? []).length === (config.addDirs ?? []).length &&
       (this.config.addDirs ?? []).every((d, i) => d === (config.addDirs ?? [])[i])
-    
+
     return (
       config.sessionId === this.config.sessionId &&
       config.cwd === this.config.cwd &&
@@ -177,6 +172,7 @@ class ClaudeCliSession implements vscode.Disposable {
       config.includePartialMessages === this.config.includePartialMessages &&
       config.dangerouslySkipPermissions === this.config.dangerouslySkipPermissions &&
       config.connectId === this.config.connectId &&
+      config.clientCaller === this.config.clientCaller &&
       addDirsMatch
     )
   }
@@ -363,10 +359,6 @@ class ClaudeCliSession implements vscode.Disposable {
       return
     }
 
-    // If Claude emits tool_use blocks, it may wait for the client to send tool_result.
-    // We only auto-handle user-interaction's AskUserQuestion for now.
-    void this.maybeHandleToolUse(parsed)
-
     // Inject [jb:*] markers into tool_result content blocks
     this.injectSnapshotMetaIntoToolResults(parsed)
 
@@ -374,155 +366,14 @@ class ClaudeCliSession implements vscode.Disposable {
       const q = this.activeQuery
       if (q) {
         q.onJsonMessage(parsed)
-
-        const currentGeneration = q.generation
-        void this.toolExecQueue
-          .catch(() => {
-            // ignore tool execution errors here; they should already be reflected in tool_result
-          })
-          .finally(() => {
-            if (this.activeQuery?.generation !== currentGeneration) return
-            q.resolve()
-            this.activeQuery = undefined
-          })
+        q.resolve()
+        this.activeQuery = undefined
       }
       return
     }
 
     const q = this.activeQuery
     if (q) q.onJsonMessage(parsed)
-  }
-
-  private async maybeHandleToolUse(parsed: any): Promise<void> {
-    try {
-      if (!parsed || typeof parsed !== 'object') return
-      if (parsed.type !== 'stream_event') return
-
-      const ev = parsed.event
-      if (!ev || typeof ev !== 'object') return
-
-      const evType = typeof ev.type === 'string' ? ev.type : ''
-      const index = typeof ev.index === 'number' ? ev.index : undefined
-
-      const getContentBlock = (): any => {
-        // stream-json uses snake_case `content_block`.
-        return (ev as any).content_block ?? (ev as any).contentBlock ?? (ev as any).rawContentBlock
-      }
-
-      const getDelta = (): any => {
-        // stream-json uses snake_case `delta`.
-        return (ev as any).delta ?? (ev as any).Delta
-      }
-
-      if (evType === 'content_block_start') {
-        const block = getContentBlock()
-        if (!block || typeof block !== 'object') return
-        if (block.type !== 'tool_use') return
-
-        const id = typeof block.id === 'string' ? block.id : ''
-        const name = typeof block.name === 'string' ? block.name : ''
-        if (!id || !name) return
-
-        const rawInput = (block as any).input
-        if (rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput)) {
-          this.toolUseStartInputById.set(id, rawInput as Record<string, unknown>)
-        }
-
-        if (typeof index === 'number') {
-          this.toolUseByIndex.set(index, { id, name })
-        }
-        if (!this.toolUseInputJsonById.has(id)) {
-          this.toolUseInputJsonById.set(id, '')
-        }
-        return
-      }
-
-      if (evType === 'content_block_delta') {
-        const delta = getDelta()
-        if (!delta || typeof delta !== 'object') return
-        if (delta.type !== 'input_json_delta') return
-
-        const partial =
-          typeof (delta as any).partial_json === 'string'
-            ? (delta as any).partial_json
-            : typeof (delta as any).partialJson === 'string'
-              ? (delta as any).partialJson
-              : ''
-        if (!partial) return
-
-        if (typeof index !== 'number') return
-        const toolUse = this.toolUseByIndex.get(index)
-        if (!toolUse) return
-
-        const prev = this.toolUseInputJsonById.get(toolUse.id) ?? ''
-        this.toolUseInputJsonById.set(toolUse.id, prev + partial)
-        return
-      }
-
-      if (evType !== 'content_block_stop') return
-
-      // Note:
-      // In Claude stream-json, `content_block_stop` usually does NOT include the
-      // full `content_block` (only `{type,index}`), so we must be able to
-      // resolve tool_use info by `index`.
-      let toolUseId = ''
-      let toolName = ''
-
-      const block = getContentBlock()
-      if (block && typeof block === 'object' && (block as any).type === 'tool_use') {
-        toolUseId = typeof (block as any).id === 'string' ? (block as any).id : ''
-        toolName = typeof (block as any).name === 'string' ? (block as any).name : ''
-      }
-
-      if ((!toolUseId || !toolName) && typeof index === 'number') {
-        const toolUse = this.toolUseByIndex.get(index)
-        if (toolUse) {
-          toolUseId = toolUse.id
-          toolName = toolUse.name
-        }
-      }
-
-      if (!toolUseId || !toolName) return
-      if (this.executedToolUseIds.has(toolUseId)) return
-
-      // Only handle this specific tool for now to avoid interfering with other
-      // tool execution behaviors of Claude CLI.
-      if (!this.isAskUserQuestionToolName(toolName)) return
-
-      let input: Record<string, unknown> = {}
-      const startInput = this.toolUseStartInputById.get(toolUseId)
-      if (startInput && typeof startInput === 'object') {
-        input = startInput
-      }
-
-      // If input is empty, try to build it from input_json_delta accumulator.
-      if (Object.keys(input).length === 0) {
-        const json = (this.toolUseInputJsonById.get(toolUseId) ?? '').trim()
-        if (json) {
-          try {
-            const parsedJson = JSON.parse(json)
-            if (parsedJson && typeof parsedJson === 'object') {
-              input = parsedJson as Record<string, unknown>
-            }
-          } catch {
-            // ignore parse errors
-          }
-        }
-      }
-
-      const normalizedInput = this.normalizeAskUserQuestionInput(input)
-
-      this.executedToolUseIds.add(toolUseId)
-
-      // Queue tool execution to keep ordering and avoid concurrent tool prompts.
-      this.toolExecQueue = this.toolExecQueue.then(async () => {
-        await this.executeAskUserQuestionTool(toolUseId, toolName, normalizedInput)
-      })
-
-      await this.toolExecQueue
-    } catch {
-      // ignore
-    }
   }
 
   private normalizeAskUserQuestionInput(input: Record<string, unknown>): { questions: any[] } {
@@ -610,67 +461,43 @@ class ClaudeCliSession implements vscode.Disposable {
     return { questions: [{ header: 'Question', question: fallbackText, options: [], multiSelect: false }] }
   }
 
-  private async executeAskUserQuestionTool(
-    toolUseId: string,
-    toolName: string,
-    input: { questions: any[] }
-  ): Promise<void> {
-    if (!this.proc || !this.proc.stdin.writable) return
+  /**
+   * Collect answers for AskUserQuestion by calling the frontend via ClientCaller.
+   * Returns an `answers` object mapping question text to answer text,
+   * suitable for injection into `updatedInput`.
+   */
+  private async collectAskUserQuestionAnswers(
+    caller: import('../../server/rpc/clientCaller').ClientCaller,
+    normalizedInput: { questions: any[] }
+  ): Promise<Record<string, string>> {
+    // Dynamically import protobuf helpers
+    const { create } = await import('@bufbuild/protobuf')
+    const { AskUserQuestionRequestSchema } = await import('@proto/ide_pb')
 
-    // Guard: tool execution only makes sense while a query is active.
-    if (!this.activeQuery) return
+    // Build Protobuf request
+    const protoRequest = create(AskUserQuestionRequestSchema, {
+      questions: normalizedInput.questions.map((q: any) => ({
+        question: q.question ?? '',
+        header: q.header ?? '',
+        multiSelect: q.multiSelect ?? false,
+        options: (q.options ?? []).map((opt: any) => ({
+          label: typeof opt === 'string' ? opt : (opt.label ?? ''),
+          description: typeof opt === 'string' ? '' : (opt.description ?? ''),
+        })),
+      })),
+    })
 
-    this.log?.(`[claude] auto-run tool_use: tool_use_id=${toolUseId} tool=${toolName}`)
+    this.log?.(`[claude] AskUserQuestion: sending ${normalizedInput.questions.length} questions to frontend`)
+    const protoResponse = await caller.callAskUserQuestion(protoRequest)
+    this.log?.(`[claude] AskUserQuestion: received ${protoResponse.answers.length} answers`)
 
-    let toolResultText = ''
-    let isError = false
-
-    try {
-      const server = await this.getBuiltinMcpServer('user-interaction')
-      if (!server) {
-        throw new Error("Built-in MCP server 'user-interaction' not found")
-      }
-
-      const result = await this.callServerTool(server, 'AskUserQuestion', input as any, toolUseId)
-      isError = Boolean(result?.isError)
-
-      const content = result?.content
-      if (typeof content === 'string') {
-        toolResultText = content
-      } else if (Array.isArray(content)) {
-        toolResultText = (content as any[])
-          .filter((item: any) => item && typeof item === 'object' && item.type === 'text')
-          .map((item: any) => String(item.text ?? ''))
-          .filter(Boolean)
-          .join('\n')
-      } else if (content != null) {
-        toolResultText = JSON.stringify(content)
-      }
-
-      if (!toolResultText) {
-        toolResultText = isError ? 'Tool returned empty error result' : 'OK'
-      }
-    } catch (e) {
-      isError = true
-      toolResultText = `Error: ${e instanceof Error ? e.message : String(e)}`
+    // Build answers map: { reason: "answer text", ... }
+    // The answers object uses a structure the CLI expects
+    const answers: Record<string, string> = { reason: 'User answered via UI' }
+    for (const answer of protoResponse.answers) {
+      answers[answer.question] = answer.answer
     }
-
-    const msg = buildToolResultMessage(toolResultText, this.config.sessionId, toolUseId, isError)
-    try {
-      this.proc.stdin.write(JSON.stringify(msg) + '\n', 'utf8')
-      this.log?.(`[claude] tool_result sent: tool_use_id=${toolUseId} is_error=${String(isError)}`)
-
-      const q = this.activeQuery
-      if (q) {
-        q.onJsonMessage(msg)
-      }
-    } catch {
-      // ignore
-    }
-
-    // Best-effort cleanup.
-    this.toolUseStartInputById.delete(toolUseId)
-    this.toolUseInputJsonById.delete(toolUseId)
+    return answers
   }
 
   /**
@@ -765,13 +592,40 @@ class ClaudeCliSession implements vscode.Disposable {
           }
 
           if (this.isAskUserQuestionToolName(toolName)) {
-            this.log?.(`[claude] auto-allow can_use_tool for ${toolName}`)
-            await this.sendControlResponse(
-              requestId,
-              'success',
-              { behavior: 'allow', updatedInput: input ?? {} },
-              undefined
-            )
+            this.log?.(`[claude] canUseTool: intercepting AskUserQuestion via updatedInput.answers`)
+            const caller = this.config.clientCaller
+            if (caller) {
+              try {
+                const normalizedInput = this.normalizeAskUserQuestionInput(input as Record<string, unknown>)
+                const answers = await this.collectAskUserQuestionAnswers(caller, normalizedInput)
+                const updatedInput = { ...(input as Record<string, unknown>), answers }
+                await this.sendControlResponse(
+                  requestId,
+                  'success',
+                  { behavior: 'allow', updatedInput },
+                  undefined
+                )
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err)
+                this.log?.(`[claude] AskUserQuestion collection failed: ${msg}`)
+                // Fallback: allow with original input so CLI handles it
+                await this.sendControlResponse(
+                  requestId,
+                  'success',
+                  { behavior: 'allow', updatedInput: input ?? {} },
+                  undefined
+                )
+              }
+            } else {
+              // No clientCaller available, auto-allow (legacy fallback)
+              this.log?.(`[claude] auto-allow can_use_tool for ${toolName} (no clientCaller)`)
+              await this.sendControlResponse(
+                requestId,
+                'success',
+                { behavior: 'allow', updatedInput: input ?? {} },
+                undefined
+              )
+            }
             return
           }
 
@@ -1220,25 +1074,6 @@ function buildUserMessage(text: string, sessionId: string) {
     type: 'user',
     message: { role: 'user', content: text },
     parent_tool_use_id: null,
-    session_id: sessionId,
-  }
-}
-
-function buildToolResultMessage(content: string, sessionId: string, toolUseId: string, isError: boolean) {
-  return {
-    type: 'user',
-    message: {
-      role: 'user',
-      content: [
-        {
-          type: 'tool_result',
-          tool_use_id: toolUseId,
-          content,
-          is_error: isError,
-        },
-      ],
-    },
-    parent_tool_use_id: toolUseId,
     session_id: sessionId,
   }
 }

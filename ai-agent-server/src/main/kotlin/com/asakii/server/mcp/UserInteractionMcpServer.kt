@@ -15,6 +15,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -236,6 +237,21 @@ The user's response will be returned to you through the same tool.
         this.timeoutMs = timeoutMs
     }
 
+    /**
+     * Normalize questions from raw canUseTool input (Map<String, JsonElement>).
+     * Used by canUseTool callback to extract questions from AskUserQuestion input.
+     */
+    fun normalizeQuestionsFromInput(input: Map<String, JsonElement>): List<QuestionItem> {
+        val jsonObj = JsonObject(input)
+        val normalized = normalizeQuestions(jsonObj)
+        return try {
+            Json.decodeFromJsonElement(AskUserQuestionParams.serializer(), normalized).questions
+        } catch (e: Exception) {
+            mcpLogger.warn { "⚠️ [normalizeQuestionsFromInput] 解析失败: ${e.message}" }
+            emptyList()
+        }
+    }
+
     override suspend fun callToolJson(toolName: String, arguments: JsonObject): ToolResult {
         return when (toolName) {
             "AskUserQuestion" -> handleAskUserQuestionJson(arguments)
@@ -333,7 +349,7 @@ The user's response will be returned to you through the same tool.
         }
     }
 
-    private fun normalizeQuestions(arguments: JsonObject): JsonObject {
+    internal fun normalizeQuestions(arguments: JsonObject): JsonObject {
         val rawQuestions = arguments["questions"]
         if (rawQuestions is JsonPrimitive && rawQuestions.isString) {
             val content = rawQuestions.content

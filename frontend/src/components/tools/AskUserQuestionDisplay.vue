@@ -14,16 +14,21 @@
             <span class="question-text">{{ q.question }}</span>
           </div>
           <div v-if="q.options && q.options.length > 0" class="options-list">
-            <div v-for="(opt, optIndex) in q.options" :key="optIndex" class="option-item">
+            <div
+              v-for="(opt, optIndex) in q.options"
+              :key="optIndex"
+              class="option-item"
+              :class="{ 'option-selected': isOptionSelected(q, opt) }"
+            >
               <span class="option-label">{{ opt.label || opt }}</span>
               <span v-if="opt.description" class="option-desc">{{ opt.description }}</span>
             </div>
           </div>
-        </div>
-        <!-- 结果区域 -->
-        <div v-if="hasResult" class="result-section">
-          <div class="section-title">Answer</div>
-          <pre class="result-content">{{ resultText }}</pre>
+          <!-- 结构化回答（每个问题独立展示） -->
+          <div v-if="getAnswer(q)" class="answer-inline">
+            <span class="answer-label">A:</span>
+            <span class="answer-text">{{ getAnswer(q) }}</span>
+          </div>
         </div>
       </div>
     </template>
@@ -57,8 +62,40 @@ interface AskUserQuestionInput {
 
 const questions = computed(() => (props.toolCall.input as AskUserQuestionInput)?.questions || [])
 
-// 结果文本
-const resultText = computed(() => {
+/**
+ * Parse answers from the result.
+ * Supports two formats:
+ * 1. MCP format: Markdown with "## User Answers" / "**A:** answer"
+ * 2. canUseTool format: answers are in input.answers (injected by updatedInput)
+ */
+const parsedAnswers = computed((): Record<string, string> => {
+  const answers: Record<string, string> = {}
+
+  // Try input.answers (canUseTool updatedInput format)
+  const inputAnswers = (props.toolCall.input as any)?.answers
+  if (inputAnswers && typeof inputAnswers === 'object') {
+    for (const [key, value] of Object.entries(inputAnswers)) {
+      if (key !== 'reason' && typeof value === 'string') {
+        answers[key] = value
+      }
+    }
+    if (Object.keys(answers).length > 0) return answers
+  }
+
+  // Try parsing result text (MCP Markdown format: "**A:** answer")
+  const resultText = getRawResultText()
+  if (resultText) {
+    const answerRegex = /\*\*Q:\*\*\s*(.+?)\n\*\*A:\*\*\s*(.+?)(?:\n|$)/g
+    let match
+    while ((match = answerRegex.exec(resultText)) !== null) {
+      answers[match[1].trim()] = match[2].trim()
+    }
+  }
+
+  return answers
+})
+
+function getRawResultText(): string {
   const r = props.toolCall.result
   if (!r || r.is_error) return ''
   if (typeof r.content === 'string') return r.content
@@ -68,14 +105,20 @@ const resultText = computed(() => {
       .map((item: any) => item.text)
       .join('\n')
   }
-  return JSON.stringify(r.content, null, 2)
-})
+  return ''
+}
 
-// 是否有结果
-const hasResult = computed(() => {
-  const r = props.toolCall.result
-  return r && !r.is_error && resultText.value
-})
+function getAnswer(q: { question: string }): string {
+  return parsedAnswers.value[q.question] || ''
+}
+
+function isOptionSelected(q: { question: string }, opt: { label: string } | string): boolean {
+  const answer = getAnswer(q)
+  if (!answer) return false
+  const label = typeof opt === 'string' ? opt : opt.label
+  // Check if this option's label appears in the answer
+  return answer.includes(label)
+}
 
 // 始终有参数可展示
 const hasDetails = computed(() => questions.value.length > 0)
@@ -130,6 +173,13 @@ const hasDetails = computed(() => questions.value.length > 0)
   background: var(--theme-background, #ffffff);
   border-radius: 4px;
   font-size: 12px;
+  border: 1px solid transparent;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.option-item.option-selected {
+  border-color: var(--theme-accent, #0366d6);
+  background: color-mix(in srgb, var(--theme-accent, #0366d6) 8%, transparent);
 }
 
 .option-label {
@@ -142,30 +192,23 @@ const hasDetails = computed(() => questions.value.length > 0)
   font-size: 11px;
 }
 
-.result-section {
-  border-top: 1px solid var(--theme-border, #e1e4e8);
-  padding-top: 8px;
-}
-
-.section-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--theme-secondary-foreground, #586069);
-  margin-bottom: 6px;
-  text-transform: uppercase;
-}
-
-.result-content {
-  margin: 0;
-  padding: 8px;
-  background: var(--theme-code-background, #f6f8fa);
-  border: 1px solid var(--theme-border, #e1e4e8);
+.answer-inline {
+  margin-top: 6px;
+  margin-left: 36px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--theme-success, #28a745) 10%, transparent);
   border-radius: 4px;
+  border-left: 3px solid var(--theme-success, #28a745);
   font-size: 12px;
-  font-family: var(--theme-editor-font-family);
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 200px;
-  overflow-y: auto;
+}
+
+.answer-label {
+  font-weight: 600;
+  color: var(--theme-success, #28a745);
+  margin-right: 4px;
+}
+
+.answer-text {
+  color: var(--theme-foreground, #24292e);
 }
 </style>

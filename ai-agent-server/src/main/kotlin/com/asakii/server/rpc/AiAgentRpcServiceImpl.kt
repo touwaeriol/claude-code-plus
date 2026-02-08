@@ -141,6 +141,17 @@ class AiAgentRpcServiceImpl(
 
     private companion object {
         private val GLOBAL_MCP_PROVIDER = AiAgentProvider.CLAUDE
+
+        /**
+         * Check if a tool name refers to AskUserQuestion (native or MCP variant).
+         */
+        fun isAskUserQuestionToolName(name: String): Boolean {
+            if (name == "AskUserQuestion") return true
+            if (name == "mcp__user-interaction__AskUserQuestion") return true
+            if (!name.endsWith("AskUserQuestion")) return false
+            val lower = name.lowercase()
+            return lower.contains("user-interaction") || lower.contains("user_interaction")
+        }
     }
 
     /**
@@ -839,7 +850,10 @@ class AiAgentRpcServiceImpl(
         userInteractionServer.setTimeoutMs(userInteractionTimeoutMs)
         userInteractionServer.setInstructionsByBackend(defaults.userInteractionInstructionsByBackend)
 
-        if (defaults.enableUserInteractionMcp && isProviderAllowed(defaults.userInteractionMcpBackends)) {
+        // User Interaction MCP: Claude 使用 canUseTool + updatedInput.answers，不需要 MCP 中转
+        // 仅为 Codex 等非 Claude provider 注册
+        if (defaults.enableUserInteractionMcp && isProviderAllowed(defaults.userInteractionMcpBackends)
+            && provider != AiAgentProvider.CLAUDE) {
             sessionServers["user-interaction"] = userInteractionServer
         }
 
@@ -1035,67 +1049,117 @@ class AiAgentRpcServiceImpl(
         val canUseToolCallback: CanUseTool = { toolName, input, toolUseId, context ->
             sdkLog.info("🔐 [canUseTool] 请求授权: toolName=$toolName, toolUseId=$toolUseId, suggestions=${context.suggestions.size}")
 
-            // 在 Edit/Write 工具执行前保存原始文件内容（用于后续显示 Diff）
-            if (toolUseId != null && (toolName == "Edit" || toolName == "Write")) {
-                val filePath = input["file_path"]?.jsonPrimitive?.contentOrNull
-                    ?: input["path"]?.jsonPrimitive?.contentOrNull
-                if (filePath != null) {
-                    FileContentCache.saveOriginalContent(toolUseId, filePath)
-                }
-            }
-
-            val caller = clientCaller
-            if (caller != null) {
-                try {
-                    // 构建 Protobuf 请求
-                    val protoRequest = RequestPermissionRequest.newBuilder().apply {
-                        this.toolName = toolName
-                        this.inputJson = com.google.protobuf.ByteString.copyFrom(
-                            Json.encodeToString(JsonObject.serializer(), JsonObject(input)).toByteArray(Charsets.UTF_8)
-                        )
-                        toolUseId?.let { this.toolUseId = it }
-                        context.suggestions.forEach { suggestion ->
-                            addPermissionSuggestions(suggestion.toProtoPermissionUpdate())
-                        }
-                    }.build()
-
-                    // 调用前端并解析 Protobuf 响应
-                    val protoResponse = caller.callRequestPermission(protoRequest)
-
-                    // 转换 Protobuf 响应为本地类型
-                    val response = PermissionResponse(
-                        approved = protoResponse.approved,
-                        permissionUpdates = protoResponse.permissionUpdatesList.map { it.toMcpPermissionUpdate() },
-                        denyReason = if (protoResponse.hasDenyReason()) protoResponse.denyReason else null
-                    )
-                    if (response.approved) {
-                        // 转换权限更新为 SDK 格式
-                        val sdkPermissionUpdates = response.permissionUpdates?.map { update ->
-                            sdkLog.info("📝 [canUseTool] 权限更新: type=${update.type}, destination=${update.destination}")
-                            // 非会话级权限更新需要持久化（TODO: 实现持久化服务）
-                            if (update.destination != PermissionUpdateDestination.SESSION) {
-                                sdkLog.info("⚠️ [canUseTool] 非会话级权限更新暂未实现持久化: ${update.destination}")
+            // AskUserQuestion 特殊处理：通过 canUseTool + updatedInput.answers 方式
+            if (isAskUserQuestionToolName(toolName)) {
+                sdkLog.info("📩 [canUseTool] 拦截 AskUserQuestion，通过 updatedInput.answers 返回")
+                val caller = clientCaller
+                if (caller != null) {
+                    try {
+                        val normalizedInput = userInteractionServer.normalizeQuestionsFromInput(input)
+                        val protoRequest = com.asakii.rpc.proto.AskUserQuestionRequest.newBuilder().apply {
+                            normalizedInput.forEach { q ->
+                                addQuestions(com.asakii.rpc.proto.QuestionItem.newBuilder().apply {
+                                    question = q.question
+                                    q.header?.let { header = it }
+                                    q.options?.forEach { opt ->
+                                        addOptions(com.asakii.rpc.proto.QuestionOption.newBuilder().apply {
+                                            label = opt.label
+                                            if (opt.description.isNotEmpty()) {
+                                                description = opt.description
+                                            }
+                                        }.build())
+                                    }
+                                    multiSelect = q.multiSelect
+                                }.build())
                             }
-                            update.toSdkPermissionUpdate()
+                        }.build()
+
+                        val protoResponse = caller.callAskUserQuestion(protoRequest)
+                        sdkLog.info("📥 [canUseTool] AskUserQuestion 收到 ${protoResponse.answersCount} 个回答")
+
+                        // 构建 updatedInput：原始 input + answers 字段
+                        val answersMap = buildJsonObject {
+                            put("reason", "User answered via UI")
+                            protoResponse.answersList.forEach { answer ->
+                                put(answer.question, answer.answer)
+                            }
                         }
-                        sdkLog.info("✅ [canUseTool] 用户已授权: toolName=$toolName, toolUseId=$toolUseId, permissionUpdates=${sdkPermissionUpdates?.size ?: 0}")
-                        PermissionResultAllow(
-                            updatedInput = input,
-                            updatedPermissions = sdkPermissionUpdates
-                        )
-                    } else {
-                        val reason = response.denyReason ?: "用户拒绝授权"
-                        sdkLog.info("❌ [canUseTool] 用户拒绝授权: toolName=$toolName, toolUseId=$toolUseId, reason=$reason")
-                        PermissionResultDeny(message = reason)
+                        val updatedInput = input.toMutableMap()
+                        updatedInput["answers"] = answersMap
+                        PermissionResultAllow(updatedInput = updatedInput)
+                    } catch (e: Exception) {
+                        sdkLog.warn("⚠️ [canUseTool] AskUserQuestion 收集答案失败: ${e.message}")
+                        // Fallback: allow with original input
+                        PermissionResultAllow(updatedInput = input)
                     }
-                } catch (e: Exception) {
-                    sdkLog.warn("⚠️ [canUseTool] 权限请求失败: toolName=$toolName, error=${e.message}")
-                    PermissionResultDeny(message = "权限请求失败: ${e.message}")
+                } else {
+                    sdkLog.info("⚠️ [canUseTool] AskUserQuestion 无 clientCaller，默认允许")
+                    PermissionResultAllow(updatedInput = input)
                 }
-            } else {
-                sdkLog.info("⚠️ [canUseTool] 无 clientCaller，默认允许: toolName=$toolName")
-                PermissionResultAllow(updatedInput = input)
             }
+            // 在 Edit/Write 工具执行前保存原始文件内容（用于后续显示 Diff）
+            else {
+                if (toolUseId != null && (toolName == "Edit" || toolName == "Write")) {
+                    val filePath = input["file_path"]?.jsonPrimitive?.contentOrNull
+                        ?: input["path"]?.jsonPrimitive?.contentOrNull
+                    if (filePath != null) {
+                        FileContentCache.saveOriginalContent(toolUseId, filePath)
+                    }
+                }
+
+                val caller = clientCaller
+                if (caller != null) {
+                    try {
+                        // 构建 Protobuf 请求
+                        val protoRequest = RequestPermissionRequest.newBuilder().apply {
+                            this.toolName = toolName
+                            this.inputJson = com.google.protobuf.ByteString.copyFrom(
+                                Json.encodeToString(JsonObject.serializer(), JsonObject(input)).toByteArray(Charsets.UTF_8)
+                            )
+                            toolUseId?.let { this.toolUseId = it }
+                            context.suggestions.forEach { suggestion ->
+                                addPermissionSuggestions(suggestion.toProtoPermissionUpdate())
+                            }
+                        }.build()
+
+                        // 调用前端并解析 Protobuf 响应
+                        val protoResponse = caller.callRequestPermission(protoRequest)
+
+                        // 转换 Protobuf 响应为本地类型
+                        val response = PermissionResponse(
+                            approved = protoResponse.approved,
+                            permissionUpdates = protoResponse.permissionUpdatesList.map { it.toMcpPermissionUpdate() },
+                            denyReason = if (protoResponse.hasDenyReason()) protoResponse.denyReason else null
+                        )
+                        if (response.approved) {
+                            // 转换权限更新为 SDK 格式
+                            val sdkPermissionUpdates = response.permissionUpdates?.map { update ->
+                                sdkLog.info("📝 [canUseTool] 权限更新: type=${update.type}, destination=${update.destination}")
+                                // 非会话级权限更新需要持久化（TODO: 实现持久化服务）
+                                if (update.destination != PermissionUpdateDestination.SESSION) {
+                                    sdkLog.info("⚠️ [canUseTool] 非会话级权限更新暂未实现持久化: ${update.destination}")
+                                }
+                                update.toSdkPermissionUpdate()
+                            }
+                            sdkLog.info("✅ [canUseTool] 用户已授权: toolName=$toolName, toolUseId=$toolUseId, permissionUpdates=${sdkPermissionUpdates?.size ?: 0}")
+                            PermissionResultAllow(
+                                updatedInput = input,
+                                updatedPermissions = sdkPermissionUpdates
+                            )
+                        } else {
+                            val reason = response.denyReason ?: "用户拒绝授权"
+                            sdkLog.info("❌ [canUseTool] 用户拒绝授权: toolName=$toolName, toolUseId=$toolUseId, reason=$reason")
+                            PermissionResultDeny(message = reason)
+                        }
+                    } catch (e: Exception) {
+                        sdkLog.warn("⚠️ [canUseTool] 权限请求失败: toolName=$toolName, error=${e.message}")
+                        PermissionResultDeny(message = "权限请求失败: ${e.message}")
+                    }
+                } else {
+                    sdkLog.info("⚠️ [canUseTool] 无 clientCaller，默认允许: toolName=$toolName")
+                    PermissionResultAllow(updatedInput = input)
+                }
+            } // end else (non-AskUserQuestion tools)
         }
 
         val claudeOptions = ClaudeAgentOptions(

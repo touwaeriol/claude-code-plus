@@ -4,7 +4,6 @@
   "description": "Claude Code Plus for VS Code (experimental)",
   "version": "0.1.0",
   "publisher": "asakii",
-  "icon": "media/icon.svg",
   "engines": {
     "vscode": "^1.90.0"
   },

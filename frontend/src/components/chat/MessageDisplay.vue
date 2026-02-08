@@ -96,11 +96,6 @@ const enhancedMessage = computed((): EnhancedMessage => {
       if (allTextContent) allTextContent += '\n\n'
       allTextContent += block.text
     } else if (block.type === 'tool_use' || block.type.endsWith('_tool_use')) {
-      // 过滤掉 AskUserQuestion MCP 工具，它由独立组件处理
-      // 注意：MCP 服务器名称是 user-interaction（使用连字符）
-      if (block.toolName === 'mcp__user-interaction__AskUserQuestion') {
-        return
-      }
       // 工具调用块：查找对应的结果
       // 支持两种格式：
       // 1. 通用格式: type="tool_use"
