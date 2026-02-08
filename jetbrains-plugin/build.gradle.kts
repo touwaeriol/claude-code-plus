@@ -16,8 +16,8 @@ providers.gradleProperty("customBuildDir").orNull?.let { customDir ->
 
 // ===== 多版本构建支持 =====
 // 通过 -PplatformMajor=242 指定目标平台版本
-// 242 = 2024.2, 243 = 2024.3, 251 = 2025.1, 252 = 2025.2, 253 = 2025.3
-// 默认使用最新版本 (253)
+// 242 = 2024.2, 243 = 2024.3, 251 = 2025.1, 252 = 2025.2, 253 = 2025.3, 261 = 2026.1
+// 默认使用最新稳定版本 (253)
 val platformMajor = providers.gradleProperty("platformMajor").getOrElse("253").toInt()
 
 // ===== 版本号配置 =====
@@ -34,6 +34,7 @@ val targetPlatformVersion = when (platformMajor) {
     243 -> "2024.3.5"
     251 -> "2025.1.5"
     252 -> "2025.2.4"
+    261 -> "261-EAP-SNAPSHOT"    // EAP (uses snapshot repository)
     else -> "2025.3.2"  // 253+
 }
 
@@ -71,6 +72,7 @@ val diffCompatDir = when {
 val targetSinceBuild = platformMajor.toString()
 
 val targetUntilBuild = when {
+    platformMajor >= 261 -> "261.*"
     platformMajor >= 253 -> "253.*"
     platformMajor >= 252 -> "252.*"
     platformMajor >= 251 -> "251.*"
@@ -115,7 +117,12 @@ dependencies {
     intellijPlatform {
         // 🔧 多版本构建支持：根据 platformMajor 选择对应的 SDK 版本
         // 2025.3+ 使用 intellijIdea()，之前版本使用 intellijIdeaCommunity()
-        if (platformMajor >= 253) {
+        // 261+ (EAP) 需要 useInstaller=false 从 snapshot 仓库获取
+        if (platformMajor >= 261) {
+            intellijIdea(targetPlatformVersion) {
+                useInstaller = false
+            }
+        } else if (platformMajor >= 253) {
             intellijIdea(targetPlatformVersion)
         } else {
             intellijIdeaCommunity(targetPlatformVersion)
@@ -616,7 +623,7 @@ tasks {
 // 主任务：构建所有版本（串行执行，实时输出进度）
 val buildAllVersions by tasks.registering {
     group = "build"
-    description = "Build plugin for all supported platform versions (242, 243, 251, 252, 253)"
+    description = "Build plugin for all supported platform versions (242, 243, 251, 252, 253, 261)"
 
     // 先构建前端和下载 CLI（只执行一次）
     dependsOn(buildFrontend)
@@ -633,13 +640,13 @@ val buildAllVersions by tasks.registering {
         println("====================================")
         println()
         println("📦 Frontend built once, reusing for all platforms")
-        println("🔄 Building 5 versions sequentially with live output...")
+        println("🔄 Building 6 versions sequentially with live output...")
         println()
     }
 
     doLast {
         // 在执行阶段定义所有变量，避免配置缓存序列化问题
-        val platforms = listOf("242", "243", "251", "252", "253")
+        val platforms = listOf("242", "243", "251", "252", "253", "261")
         val isWin = System.getProperty("os.name").lowercase().contains("windows")
         val gradlew = if (isWin) File(projectDir, "gradlew.bat").absolutePath else File(projectDir, "gradlew").absolutePath
 
@@ -736,7 +743,7 @@ val buildAllVersions by tasks.registering {
 
         println()
         println("====================================")
-        println("All 5 versions built successfully!")
+        println("All 6 versions built successfully!")
         println("Output: jetbrains-plugin/build/distributions/")
         println("====================================")
     }
@@ -747,7 +754,7 @@ val buildAllVersions by tasks.registering {
 // 前提: 需要在 ~/.gradle/gradle.properties 中配置 intellijPlatformPublishingToken
 val publishAllVersions by tasks.registering {
     group = "publishing"
-    description = "Publish plugin for all supported platform versions (242, 243, 251, 252, 253) to JetBrains Marketplace"
+    description = "Publish plugin for all supported platform versions (242, 243, 251, 252, 253, 261) to JetBrains Marketplace"
 
     // 将需要的值在配置阶段捕获
     val projectDir = rootProject.projectDir
@@ -760,7 +767,7 @@ val publishAllVersions by tasks.registering {
     }
 
     doLast {
-        val platforms = listOf("242", "243", "251", "252", "253")
+        val platforms = listOf("242", "243", "251", "252", "253", "261")
         val isWin = System.getProperty("os.name").lowercase().contains("windows")
         val gradlew = if (isWin) File(projectDir, "gradlew.bat").absolutePath else File(projectDir, "gradlew").absolutePath
 
