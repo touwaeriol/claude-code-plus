@@ -15,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 支持命令行参数指定文件
-const enhancedFile = process.argv[2] || '../src/main/resources/bundled/claude-cli-2.1.17-enhanced.mjs';
+const enhancedFile = process.argv[2] || '../src/main/resources/bundled/claude-cli-2.1.50-enhanced.mjs';
 const enhancedPath = path.isAbsolute(enhancedFile) ? enhancedFile : path.join(__dirname, enhancedFile);
 console.log('Reading enhanced CLI:', enhancedPath);
 const code = fs.readFileSync(enhancedPath, 'utf-8');

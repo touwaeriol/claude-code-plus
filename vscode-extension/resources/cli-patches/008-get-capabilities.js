@@ -58,13 +58,19 @@ module.exports = {
         if (!t.isStringLiteral(subtypeValue)) return;
 
         const subtype = subtypeValue.value;
-        // 在 mcp_status 或 mcp_set_servers 附近添加
-        if (subtype !== 'mcp_status' && subtype !== 'mcp_set_servers') return;
+        // 在 mcp 相关控制命令附近添加（包括被 005 补丁注入的 mcp_tools）
+        if (subtype !== 'mcp_status' && subtype !== 'mcp_set_servers' && subtype !== 'mcp_tools' && subtype !== 'mcp_reconnect') return;
 
         // 找到了控制请求处理位置
         const requestVar = obj.object;
-        if (!t.isIdentifier(requestVar)) return;
-        const requestVarName = requestVar.name;
+
+        // 获取请求变量名（支持 Identifier 和其他节点类型）
+        let requestVarNode;
+        if (t.isIdentifier(requestVar)) {
+          requestVarNode = t.identifier(requestVar.name);
+        } else {
+          requestVarNode = t.cloneNode(requestVar);
+        }
 
         // 从 context 获取 responder 函数名，或使用默认值
         let responderName = context.foundVariables?.responderName || 't';
@@ -132,12 +138,12 @@ module.exports = {
               t.unaryExpression('!', t.identifier('__isDisabled'))
             )
           ]),
-          // responder(OA, { capabilities: { background_tasks_enabled: __backgroundEnabled } });
+          // responder(requestVar, { capabilities: { background_tasks_enabled: __backgroundEnabled } });
           t.expressionStatement(
             t.callExpression(
               t.identifier(responderName),
               [
-                t.identifier(requestVarName),
+                t.cloneNode(requestVarNode),
                 t.objectExpression([
                   t.objectProperty(
                     t.identifier('capabilities'),
@@ -154,12 +160,12 @@ module.exports = {
           )
         ];
 
-        // 创建新的 if 语句: if (OA.request.subtype === "get_capabilities") { ... }
+        // 创建新的 if 语句: if (requestVar.request.subtype === "get_capabilities") { ... }
         const newIfStatement = t.ifStatement(
           t.binaryExpression(
             '===',
             t.memberExpression(
-              t.memberExpression(t.identifier(requestVarName), t.identifier('request')),
+              t.memberExpression(t.cloneNode(requestVarNode), t.identifier('request')),
               t.identifier('subtype')
             ),
             t.stringLiteral('get_capabilities')
@@ -178,19 +184,26 @@ module.exports = {
         if (currentIf.alternate === null) {
           currentIf.alternate = newIfStatement;
           patchApplied = true;
-          details.push(`添加 get_capabilities 作为 else if 分支 (responder: ${responderName}, requestVar: ${requestVarName})`);
+          details.push(`添加 get_capabilities 作为 else if 分支 (responder: ${responderName})`);
         } else if (t.isBlockStatement(currentIf.alternate)) {
           // 如果有 else 块，将其移到新 if 的 else 中
           newIfStatement.alternate = currentIf.alternate;
           currentIf.alternate = newIfStatement;
           patchApplied = true;
-          details.push(`添加 get_capabilities 在 else 块之前 (responder: ${responderName}, requestVar: ${requestVarName})`);
+          details.push(`添加 get_capabilities 在 else 块之前 (responder: ${responderName})`);
+        } else {
+          // alternate 是其他类型（如 ExpressionStatement: o(c, "Unsupported...")）
+          // 将原有 alternate 移到新 if 的 else 中，新 if 插入到链中
+          newIfStatement.alternate = currentIf.alternate;
+          currentIf.alternate = newIfStatement;
+          patchApplied = true;
+          details.push(`添加 get_capabilities 在 else 表达式之前 (responder: ${responderName})`);
         }
       }
     });
 
     if (!patchApplied) {
-      return { success: false, error: '未找到控制请求处理位置 (mcp_status/mcp_set_servers)' };
+      return { success: false, reason: '未找到控制请求处理位置 (mcp_status/mcp_set_servers/mcp_tools/mcp_reconnect)' };
     }
 
     return { success: true, details };

@@ -590,8 +590,10 @@ val verifyPatches = tasks.register("verifyPatches") {
         val checks = listOf(
             "run_to_background" to "统一后台控制命令",
             "agent_run_to_background" to "Agent后台控制命令",
-            "__parentUuid" to "parentUuid支持(编辑重发)",
-            "get_chrome_status" to "Chrome状态查询"
+            "get_chrome_status" to "Chrome状态查询",
+            "mcp_tools" to "MCP工具列表查询",
+            "get_capabilities" to "功能状态查询",
+            "sourceToolUseID" to "Skill parent_tool_use_id"
         )
 
         var passed = 0

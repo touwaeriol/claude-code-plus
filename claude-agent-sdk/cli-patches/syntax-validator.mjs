@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const args = process.argv.slice(2);
-const cliPath = args[0] || path.join(__dirname, '../src/main/resources/bundled/claude-cli-2.1.17-enhanced.mjs');
+const cliPath = args[0] || path.join(__dirname, '../src/main/resources/bundled/claude-cli-2.1.50-enhanced.mjs');
 
 console.log('=== Enhanced CLI Syntax Validator ===');
 console.log('File:', cliPath);
@@ -76,8 +76,8 @@ const checks = [
   ['mcp_tools', code.includes('"mcp_tools"')],
   ['get_chrome_status', code.includes('"get_chrome_status"')],
   ['get_capabilities', code.includes('"get_capabilities"')],
-  // v2 版本: 检测 H=A[0]?.parentUuid 模式 (最小侵入方案)
-  ['parentUuid (v2: H=...parentUuid)', code.includes('?.parentUuid||') || code.includes('__parentUuid')],
+  // 003 补丁已禁用 (CLI 2.1.50 原生支持 parentUuid)，检查官方实现
+  ['parentUuid (官方内置)', code.includes('parentUuid')],
 ];
 
 let passed = 0;

@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 支持命令行参数指定 CLI 文件
-const cliFile = process.argv[2] || 'claude-cli-2.1.17.js';
+const cliFile = process.argv[2] || 'claude-cli-2.1.50.js';
 const cliPath = path.isAbsolute(cliFile) ? cliFile : path.join(__dirname, cliFile);
 console.log('Reading CLI source:', cliPath);
 const code = fs.readFileSync(cliPath, 'utf-8');

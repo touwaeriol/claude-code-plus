@@ -144,6 +144,29 @@ await lD().insertMessageChain(w, !1, void 0, H, q);
 3. 提取 X 作为 configs 变量名，Y 作为 clients 变量名
 4. 查找 `disabledMcpServers` 相关函数获取禁用/启用控制函数
 
+## CLI 2.1.50 变量映射
+
+| 用途 | 变量名 | 发现特征 |
+|------|--------|----------|
+| id2 消息追踪 | `qHq` | Skill 内部 sourceToolUseID |
+| Ts5 输出函数 | `xT8` | 消息输出核心函数 |
+| Agent Map | `mP6` | Task 后台 resolver Map (函数 `X$4`) |
+| 批量后台化 (iV1) | `UX1` | 批量后台化所有任务 |
+| Bash 后台化 (Me5) | `Zt9` | 后台化单个 Bash |
+| Agent 后台化 (R42) | `M$4` | 后台化单个 Agent (统一接口) |
+| Bash 判断 (wt) | `tU8` | 判断是否是 Bash |
+| Agent 判断 (Jr) | `Lb` | 判断是否是 Agent |
+| Chrome 扩展 | `Y1z` | Chrome 扩展状态 |
+| MCP 配置 | `ti4` | MCP 配置对象 |
+| MCP 名称 | `ry` | MCP 服务器名称字段 |
+| getState | `X` | 获取应用状态 |
+| setState | `I` | 设置应用状态 |
+| success responder | `e` | 成功响应函数 |
+| error responder | `o` | 错误响应函数 |
+| control request var | `c` | 控制请求变量 |
+
+> **注意**: CLI 2.1.50 原生支持 `parentUuid`（6 处引用），补丁 `003-parent-uuid.js` 保持禁用。
+
 ## CLI 2.1.27 变量映射
 
 | 用途 | 变量名 | 发现特征 |
@@ -284,6 +307,30 @@ node patch-cli.js claude-cli-2.1.19.js patched-cli.js
 ```
 
 ## 变更历史
+
+### 2026-02-23 (CLI 2.1.50)
+
+- **升级**: CLI 版本从 2.1.27 升级到 2.1.50
+- **修复**: `005-mcp-tools.js` - 硬编码 `t.identifier('X')` 改为动态发现 `getAppState` 变量名
+- **修复**: `008-get-capabilities.js` - 添加 ExpressionStatement alternate 类型处理，修复 if-else 链尾部为 `o(c, "Unsupported...")` 表达式导致补丁失败的问题
+- **确认**: `003-parent-uuid.js` 保持禁用 - CLI 2.1.50 原生支持 parentUuid（6 处引用）
+- **确认**: `004-mcp-server-control.js` 保持禁用 - 官方 2.1.19+ 已内置 mcp_toggle/mcp_reconnect
+- **更新**: 语法验证器检查列表 - `parentUuid` 改为检查官方内置实现
+- **更新**: build.gradle.kts 验证列表 - 移除 `__parentUuid`，新增 `mcp_tools`/`get_capabilities`/`sourceToolUseID`
+
+**补丁应用结果**:
+- ✅ `001-run-in-background.js` (agent_run_to_background)
+- ✅ `002-chrome-status.js` (get_chrome_status)
+- ⏭️ `003-parent-uuid.js` - 已禁用 (CLI 原生支持 parentUuid)
+- ⏭️ `004-mcp-server-control.js` - 已禁用 (官方 2.1.19 已内置)
+- ✅ `005-mcp-tools.js` (mcp_tools) - 修复动态变量发现
+- ✅ `007-run-to-background.js` (run_to_background)
+- ✅ `008-get-capabilities.js` (get_capabilities) - 修复 ExpressionStatement 处理
+- ✅ `009-skill-parent-tool-use-id.js` (Skill parent_tool_use_id)
+
+**008 补丁修复细节**:
+- 根因: 005 补丁用 `path.replaceWith()` 包裹原始 IfStatement，导致 008 从 `mcp_tools` 入口遍历 alternate 链，链尾为 `ExpressionStatement`（`o(c, "Unsupported...")`）而非 null 或 BlockStatement
+- 修复: 在 008 的插入逻辑中添加 else 分支，处理 ExpressionStatement 类型的 alternate，将其移至新 IfStatement 的 alternate 中
 
 ### 2026-01-31 (CLI 2.1.27)
 

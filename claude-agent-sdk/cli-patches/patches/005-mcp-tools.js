@@ -71,6 +71,27 @@ module.exports = {
         // 找到了控制请求处理位置
         const requestVar = obj.object;
 
+        // 动态发现 getAppState 变量名（从父函数的解构参数中提取）
+        let getStateVar = 'X';  // 默认回退值
+        const parentFunc = path.findParent(p =>
+          t.isFunctionDeclaration(p.node) ||
+          t.isFunctionExpression(p.node) ||
+          t.isArrowFunctionExpression(p.node)
+        );
+        if (parentFunc && parentFunc.node.params) {
+          for (const param of parentFunc.node.params) {
+            if (t.isObjectPattern(param)) {
+              for (const prop of param.properties) {
+                if (t.isObjectProperty(prop) && t.isIdentifier(prop.key)) {
+                  if (prop.key.name === 'getAppState') {
+                    getStateVar = t.isIdentifier(prop.value) ? prop.value.name : 'getAppState';
+                  }
+                }
+              }
+            }
+          }
+        }
+
         // 找出响应函数名
         let responderName = 's';
         const consequent = path.node.consequent;
@@ -116,11 +137,11 @@ module.exports = {
 
         const iifeBody = [];
 
-        // let _state = await X();
+        // let _state = await getAppState();  (使用动态发现的变量名)
         iifeBody.push(t.variableDeclaration('let', [
           t.variableDeclarator(
             t.identifier('_state'),
-            t.awaitExpression(t.callExpression(t.identifier('X'), []))
+            t.awaitExpression(t.callExpression(t.identifier(getStateVar), []))
           )
         ]));
 
@@ -307,7 +328,7 @@ module.exports = {
 
         path.replaceWith(newIfStatement);
         patchApplied = true;
-        details.push(`添加了 mcp_tools 控制命令处理，使用 getAppState().mcp.tools (responder: ${responderName})`);
+        details.push(`添加了 mcp_tools 控制命令处理，使用 ${getStateVar}().mcp.tools (responder: ${responderName}, getAppState: ${getStateVar})`);
         path.stop();
       }
     });

@@ -27,6 +27,7 @@ module.exports = {
   description: 'Enable parentUuid support in SDK mode for edit/resend functionality',
   priority: 50,  // 在其他补丁之前执行
   required: false,  // non-required，CLI 代码结构可能会变化
+  disabled: true,  // CLI 2.1.50: parentUuid 已被官方内置(6次), insertMessageChain 已不存在
 
   apply(ast, t, traverse, context) {
     const details = [];
