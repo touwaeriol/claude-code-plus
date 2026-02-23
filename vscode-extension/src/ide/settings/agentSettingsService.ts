@@ -227,7 +227,9 @@ const DEFAULT_STATE: AgentSettingsState = {
 const BUILT_IN_CLAUDE_MODELS: ModelInfo[] = [
     { modelId: 'claude-opus-4-5-20251101', displayName: 'Opus 4.5', isBuiltIn: true },
     { modelId: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5', isBuiltIn: true },
-    { modelId: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5', isBuiltIn: true }
+    { modelId: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5', isBuiltIn: true },
+    { modelId: 'claude-opus-4-6', displayName: 'Opus 4.6', isBuiltIn: true },
+    { modelId: 'claude-sonnet-4-6', displayName: 'Sonnet 4.6', isBuiltIn: true },
 ];
 
 /**
@@ -247,7 +249,9 @@ const LEGACY_CLAUDE_MODEL_ALIASES: Record<string, string> = {
 const BUILT_IN_CODEX_MODELS: ModelInfo[] = [
     { modelId: 'gpt-5.1-codex-max', displayName: 'GPT-5.1-Codex-Max', isBuiltIn: true },
     { modelId: 'gpt-5.2-codex', displayName: 'GPT-5.2-Codex', isBuiltIn: true },
-    { modelId: 'gpt-5.2', displayName: 'GPT-5.2', isBuiltIn: true }
+    { modelId: 'gpt-5.2', displayName: 'GPT-5.2', isBuiltIn: true },
+    { modelId: 'gpt-5.3-codex', displayName: 'GPT-5.3-Codex', isBuiltIn: true },
+    { modelId: 'gpt-5.3-codex-spark', displayName: 'GPT-5.3-Codex-Spark', isBuiltIn: true },
 ];
 
 /**

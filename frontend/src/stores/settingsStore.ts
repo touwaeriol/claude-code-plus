@@ -11,7 +11,7 @@ import type {
 import { BackendTypes, DEFAULT_CLAUDE_CONFIG, DEFAULT_CODEX_CONFIG } from '@/types/backend'
 import type { ThinkingConfig } from '@/types/thinking'
 import { createClaudeThinkingConfig, createCodexThinkingConfig } from '@/types/thinking'
-import { CLAUDE_MODELS, CODEX_MODELS, type BackendModelInfo } from '@/services/backendCapabilities'
+import { CLAUDE_MODELS, CODEX_MODELS, updateModels, type BackendModelInfo } from '@/services/backendCapabilities'
 import { updateAllModels, type ModelInfo as ClaudeModelInfo } from '@/constants/models'
 
 // Import types from separate file
@@ -314,6 +314,10 @@ export const useSettingsStore = defineStore('settings', () => {
         // 更新模型列表
         claudeModels.value = claudeList
         codexModels.value = codexList
+
+        // 同步到 backendCapabilities，使 ModelSelector 等组件能感知自定义模型
+        updateModels('claude', claudeList)
+        updateModels('codex', codexList)
 
         // 触发 Codex 模型列表变化回调
         _notifyCodexModelListChange(codexList, defaultCodexModelId)

@@ -16,6 +16,8 @@ export function getCodexPageHtml(): string {
           <option value="o4-mini">o4-mini</option>
           <option value="gpt-4.1">gpt-4.1</option>
           <option value="codex-1">codex-1</option>
+          <option value="gpt-5.3-codex">GPT-5.3-Codex</option>
+          <option value="gpt-5.3-codex-spark">GPT-5.3-Codex-Spark</option>
         </select>
         <p class="description">The default model to use for Codex sessions</p>
       </div>

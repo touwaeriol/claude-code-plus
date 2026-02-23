@@ -15,6 +15,8 @@ export function getClaudeCodePageHtml(): string {
           <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
           <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
           <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+          <option value="claude-opus-4-6">Claude Opus 4.6</option>
+          <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
         </select>
         <p class="description">The default model to use for Claude conversations</p>
       </div>

@@ -591,6 +591,16 @@ class HttpApiServer(
                                             "displayName" to JsonPrimitive("Haiku 4.5"),
                                             "modelId" to JsonPrimitive("claude-haiku-4-5-20251001"),
                                             "isBuiltIn" to JsonPrimitive(true)
+                                        ),
+                                        mapOf(
+                                            "displayName" to JsonPrimitive("Opus 4.6"),
+                                            "modelId" to JsonPrimitive("claude-opus-4-6"),
+                                            "isBuiltIn" to JsonPrimitive(true)
+                                        ),
+                                        mapOf(
+                                            "displayName" to JsonPrimitive("Sonnet 4.6"),
+                                            "modelId" to JsonPrimitive("claude-sonnet-4-6"),
+                                            "isBuiltIn" to JsonPrimitive(true)
                                         )
                                     )
 
@@ -619,6 +629,18 @@ class HttpApiServer(
                                         mapOf(
                                             "displayName" to JsonPrimitive("GPT-5.2"),
                                             "modelId" to JsonPrimitive("gpt-5.2"),
+                                            "isBuiltIn" to JsonPrimitive(true),
+                                            "supportsThinking" to JsonPrimitive(true)
+                                        ),
+                                        mapOf(
+                                            "displayName" to JsonPrimitive("GPT-5.3-Codex"),
+                                            "modelId" to JsonPrimitive("gpt-5.3-codex"),
+                                            "isBuiltIn" to JsonPrimitive(true),
+                                            "supportsThinking" to JsonPrimitive(true)
+                                        ),
+                                        mapOf(
+                                            "displayName" to JsonPrimitive("GPT-5.3-Codex-Spark"),
+                                            "modelId" to JsonPrimitive("gpt-5.3-codex-spark"),
                                             "isBuiltIn" to JsonPrimitive(true),
                                             "supportsThinking" to JsonPrimitive(true)
                                         )

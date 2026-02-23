@@ -577,6 +577,22 @@ function getAvailableModels() {
       isDefault: false,
       isBuiltIn: true,
     },
+    {
+      modelId: 'claude-opus-4-6',
+      displayName: 'Claude Opus 4.6',
+      description: 'Next-gen most powerful model',
+      supportsThinking: true,
+      isDefault: false,
+      isBuiltIn: true,
+    },
+    {
+      modelId: 'claude-sonnet-4-6',
+      displayName: 'Claude Sonnet 4.6',
+      description: 'Next-gen balanced performance',
+      supportsThinking: true,
+      isDefault: false,
+      isBuiltIn: true,
+    },
   ]
 
   const codexModels = [
@@ -600,6 +616,22 @@ function getAvailableModels() {
       modelId: 'gpt-5.2',
       displayName: 'GPT-5.2',
       description: 'General Codex model',
+      supportsThinking: true,
+      isDefault: false,
+      isBuiltIn: true,
+    },
+    {
+      modelId: 'gpt-5.3-codex',
+      displayName: 'GPT-5.3-Codex',
+      description: 'Next-gen Codex model',
+      supportsThinking: true,
+      isDefault: false,
+      isBuiltIn: true,
+    },
+    {
+      modelId: 'gpt-5.3-codex-spark',
+      displayName: 'GPT-5.3-Codex-Spark',
+      description: 'Lightweight next-gen Codex model',
       supportsThinking: true,
       isDefault: false,
       isBuiltIn: true,

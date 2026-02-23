@@ -1005,6 +1005,10 @@ function lookupClaudeModelName(modelId: string): string {
       return 'Claude Sonnet 4.5'
     case 'claude-haiku-4-5-20251001':
       return 'Claude Haiku 4.5'
+    case 'claude-opus-4-6':
+      return 'Claude Opus 4.6'
+    case 'claude-sonnet-4-6':
+      return 'Claude Sonnet 4.6'
     default:
       return ''
   }

@@ -78,11 +78,9 @@ import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { BackendType, BackendModelInfo } from '@/types/backend'
 import {
-  getModels,
-  getModelByModelId,
   getBackendDisplayName,
-  isValidModel,
 } from '@/services/backendCapabilities'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 /**
  * ModelSelector Component - 多后端模型选择器
@@ -113,15 +111,16 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const settingsStore = useSettingsStore()
 
 /**
- * 获取当前后端可用的模型列表
+ * 获取当前后端可用的模型列表（使用 settingsStore 的响应式数据，包含自定义模型）
  */
 const _availableModels = computed<BackendModelInfo[]>(() => {
   if (!props.backendType) {
     return []
   }
-  return getModels(props.backendType)
+  return settingsStore.getModelsForBackend(props.backendType)
 })
 
 /**
@@ -130,9 +129,9 @@ const _availableModels = computed<BackendModelInfo[]>(() => {
 const allModels = computed(() => {
   const allBackendModels: Array<BackendModelInfo & { backendType: BackendType; unavailable?: boolean }> = []
 
-  // 添加当前后端的可用模型
+  // 添加当前后端的可用模型（使用 settingsStore 的响应式数据）
   if (props.backendType) {
-    const currentBackendModels = getModels(props.backendType)
+    const currentBackendModels = settingsStore.getModelsForBackend(props.backendType)
     allBackendModels.push(...currentBackendModels.map(m => ({
       ...m,
       backendType: props.backendType!,
@@ -143,7 +142,7 @@ const allModels = computed(() => {
   // 如果允许跨后端或需要显示不可用模型，添加其他后端的模型
   if (props.allowCrossBackend) {
     const otherBackendType: BackendType = props.backendType === 'claude' ? 'codex' : 'claude'
-    const otherBackendModels = getModels(otherBackendType)
+    const otherBackendModels = settingsStore.getModelsForBackend(otherBackendType)
     allBackendModels.push(...otherBackendModels.map(m => ({
       ...m,
       backendType: otherBackendType,
@@ -195,7 +194,9 @@ const currentModel = computed<BackendModelInfo | undefined>(() => {
   if (!props.backendType || !props.modelValue) {
     return undefined
   }
-  return getModelByModelId(props.backendType, props.modelValue)
+  // 使用 settingsStore 的响应式数据查找模型（包含自定义模型）
+  const models = settingsStore.getModelsForBackend(props.backendType)
+  return models.find(m => m.modelId === props.modelValue)
 })
 
 /**
@@ -207,8 +208,9 @@ const showBackendMismatchWarning = computed(() => {
     return false
   }
 
-  // 检查当前模型是否在当前后端的可用模型列表中
-  return !isValidModel(props.backendType, props.modelValue)
+  // 使用 settingsStore 的响应式数据检查（包含自定义模型）
+  const models = settingsStore.getModelsForBackend(props.backendType)
+  return !models.some(m => m.modelId === props.modelValue)
 })
 
 /**
@@ -239,12 +241,15 @@ function handleModelChange(event: Event) {
   const target = event.target as HTMLSelectElement
   const newModelId = target.value
 
-  // 检查是否是跨后端选择
-  if (props.backendType && !isValidModel(props.backendType, newModelId)) {
-    // 发出后端不匹配事件
-    const otherBackendType: BackendType = props.backendType === 'claude' ? 'codex' : 'claude'
-    emit('backend-mismatch', newModelId, otherBackendType)
-    return
+  // 检查是否是跨后端选择（使用 settingsStore 的响应式数据）
+  if (props.backendType) {
+    const models = settingsStore.getModelsForBackend(props.backendType)
+    if (!models.some(m => m.modelId === newModelId)) {
+      // 发出后端不匹配事件
+      const otherBackendType: BackendType = props.backendType === 'claude' ? 'codex' : 'claude'
+      emit('backend-mismatch', newModelId, otherBackendType)
+      return
+    }
   }
 
   emit('update:modelValue', newModelId)
@@ -260,10 +265,10 @@ watch(
       return
     }
 
-    // 检查当前选中的模型是否在新后端中可用
-    if (props.modelValue && !isValidModel(newBackendType, props.modelValue)) {
+    // 检查当前选中的模型是否在新后端中可用（使用 settingsStore 的响应式数据）
+    const models = settingsStore.getModelsForBackend(newBackendType)
+    if (props.modelValue && !models.some(m => m.modelId === props.modelValue)) {
       // 选择新后端的默认模型
-      const models = getModels(newBackendType)
       const defaultModel = models.find(m => m.isDefault) || models[0]
 
       if (defaultModel) {

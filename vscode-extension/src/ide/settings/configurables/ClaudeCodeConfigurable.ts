@@ -63,7 +63,9 @@ export const BUILT_IN_MODELS: ModelInfo[] = [
   { displayName: 'Claude Opus 4.5', modelId: 'claude-opus-4-5-20251101', isBuiltIn: true },
   { displayName: 'Claude Sonnet 4.5', modelId: 'claude-sonnet-4-5-20250929', isBuiltIn: true },
   { displayName: 'Claude Sonnet 4', modelId: 'claude-sonnet-4-20250514', isBuiltIn: true },
-  { displayName: 'Claude Haiku 4.5', modelId: 'claude-haiku-4-5-20251101', isBuiltIn: true }
+  { displayName: 'Claude Haiku 4.5', modelId: 'claude-haiku-4-5-20251101', isBuiltIn: true },
+  { displayName: 'Claude Opus 4.6', modelId: 'claude-opus-4-6', isBuiltIn: true },
+  { displayName: 'Claude Sonnet 4.6', modelId: 'claude-sonnet-4-6', isBuiltIn: true },
 ]
 
 /** 权限模式选项 */

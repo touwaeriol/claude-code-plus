@@ -2000,6 +2000,16 @@ class AiAgentRpcServiceImpl(
                 displayName = "Haiku 4.5",
                 modelId = "claude-haiku-4-5-20251001",
                 isBuiltIn = true
+            ),
+            RpcModelInfo(
+                displayName = "Opus 4.6",
+                modelId = "claude-opus-4-6",
+                isBuiltIn = true
+            ),
+            RpcModelInfo(
+                displayName = "Sonnet 4.6",
+                modelId = "claude-sonnet-4-6",
+                isBuiltIn = true
             )
         )
 

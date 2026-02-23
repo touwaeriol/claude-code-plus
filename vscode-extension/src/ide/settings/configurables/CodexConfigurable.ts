@@ -45,7 +45,9 @@ export const CODEX_BUILT_IN_MODELS: CodexModelInfo[] = [
   { displayName: 'GPT-5.2 Codex', modelId: 'gpt-5.2-codex', isBuiltIn: true },
   { displayName: 'GPT-5.2', modelId: 'gpt-5.2', isBuiltIn: true },
   { displayName: 'O3', modelId: 'o3', isBuiltIn: true },
-  { displayName: 'O4-mini', modelId: 'o4-mini', isBuiltIn: true }
+  { displayName: 'O4-mini', modelId: 'o4-mini', isBuiltIn: true },
+  { displayName: 'GPT-5.3-Codex', modelId: 'gpt-5.3-codex', isBuiltIn: true },
+  { displayName: 'GPT-5.3-Codex-Spark', modelId: 'gpt-5.3-codex-spark', isBuiltIn: true },
 ]
 
 /** Reasoning effort 选项 */

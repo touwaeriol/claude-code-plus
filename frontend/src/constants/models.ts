@@ -65,6 +65,20 @@ const MODEL_CAPABILITIES: Record<string, ModelCapability> = {
     defaultThinkingEnabled: false,
     description: 'Fast responses for simple tasks',
   },
+  'claude-opus-4-6': {
+    modelId: 'claude-opus-4-6',
+    displayName: 'Opus 4.6',
+    thinkingMode: 'optional',
+    defaultThinkingEnabled: true,
+    description: 'Next-gen most powerful model',
+  },
+  'claude-sonnet-4-6': {
+    modelId: 'claude-sonnet-4-6',
+    displayName: 'Sonnet 4.6',
+    thinkingMode: 'optional',
+    defaultThinkingEnabled: true,
+    description: 'Next-gen balanced performance',
+  },
 }
 
 // ==================== 动态模型列表支持 ====================
@@ -77,6 +91,8 @@ const _allModels = ref<ModelInfo[]>([
   { modelId: 'claude-opus-4-5-20251101', displayName: 'Opus 4.5', isBuiltIn: true },
   { modelId: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5', isBuiltIn: true },
   { modelId: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5', isBuiltIn: true },
+  { modelId: 'claude-opus-4-6', displayName: 'Opus 4.6', isBuiltIn: true },
+  { modelId: 'claude-sonnet-4-6', displayName: 'Sonnet 4.6', isBuiltIn: true },
 ])
 
 /**

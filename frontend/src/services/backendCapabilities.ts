@@ -50,6 +50,20 @@ export const CLAUDE_MODELS: BackendModelInfo[] = [
     supportsThinking: true,
     isDefault: false,
   },
+  {
+    modelId: 'claude-opus-4-6',
+    displayName: 'Claude Opus 4.6',
+    description: 'Next-gen most powerful model',
+    supportsThinking: true,
+    isDefault: false,
+  },
+  {
+    modelId: 'claude-sonnet-4-6',
+    displayName: 'Claude Sonnet 4.6',
+    description: 'Next-gen balanced performance',
+    supportsThinking: true,
+    isDefault: false,
+  },
 ]
 
 /**
@@ -111,6 +125,20 @@ export const CODEX_MODELS: BackendModelInfo[] = [
     modelId: 'gpt-5.2',
     displayName: 'GPT-5.2',
     description: 'General Codex model',
+    supportsThinking: true,
+    isDefault: false,
+  },
+  {
+    modelId: 'gpt-5.3-codex',
+    displayName: 'GPT-5.3-Codex',
+    description: 'Next-gen Codex model',
+    supportsThinking: true,
+    isDefault: false,
+  },
+  {
+    modelId: 'gpt-5.3-codex-spark',
+    displayName: 'GPT-5.3-Codex-Spark',
+    description: 'Lightweight next-gen Codex model',
     supportsThinking: true,
     isDefault: false,
   },
@@ -180,6 +208,16 @@ export function getAvailableBackends(): BackendType[] {
  */
 export function getModels(type: BackendType): BackendModelInfo[] {
   return getCapabilities(type).availableModels
+}
+
+/**
+ * Update available models for a backend type (used to sync custom models from backend)
+ */
+export function updateModels(type: BackendType, models: BackendModelInfo[]): void {
+  CAPABILITIES_MAP[type] = {
+    ...CAPABILITIES_MAP[type],
+    availableModels: models,
+  }
 }
 
 /**

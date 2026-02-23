@@ -164,6 +164,16 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
             modelId = "claude-haiku-4-5-20251001",
             displayName = "Haiku 4.5",
             isBuiltIn = true
+        ),
+        ModelInfo(
+            modelId = "claude-opus-4-6",
+            displayName = "Opus 4.6",
+            isBuiltIn = true
+        ),
+        ModelInfo(
+            modelId = "claude-sonnet-4-6",
+            displayName = "Sonnet 4.6",
+            isBuiltIn = true
         )
     )
 
@@ -1541,6 +1551,16 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
             ModelInfo(
                 modelId = "gpt-5.2",
                 displayName = "GPT-5.2",
+                isBuiltIn = true
+            ),
+            ModelInfo(
+                modelId = "gpt-5.3-codex",
+                displayName = "GPT-5.3-Codex",
+                isBuiltIn = true
+            ),
+            ModelInfo(
+                modelId = "gpt-5.3-codex-spark",
+                displayName = "GPT-5.3-Codex-Spark",
                 isBuiltIn = true
             )
         )
