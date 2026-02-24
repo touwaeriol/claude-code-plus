@@ -2,8 +2,8 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "2.3.0" apply false  // Kotlin 2.3 for IntelliJ 2026.1+ compatibility
-    kotlin("plugin.serialization") version "2.3.0" apply false
+    kotlin("jvm") apply false
+    kotlin("plugin.serialization") apply false
     id("org.jetbrains.dokka") version "1.9.20" apply false
     id("io.github.gradle-nexus.publish-plugin") version "2.0.0"
 }
@@ -13,7 +13,7 @@ group = "com.asakii"
 version = "1.0.8"
 
 // 集中管理依赖版本 - 与IntelliJ Platform 2025.1内置版本对齐
-extra["kotlinVersion"] = "2.3.0"  // Kotlin 2.3 for IntelliJ 2026.1+ metadata compatibility
+extra["kotlinVersion"] = providers.gradleProperty("kotlinVersion").get()
 extra["coroutinesVersion"] = "1.10.2"
 extra["serializationVersion"] = "1.8.0"  // 更新到IDE平台版本
 extra["commonsIoVersion"] = "2.15.1"

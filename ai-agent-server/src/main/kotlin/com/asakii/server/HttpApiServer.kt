@@ -1427,11 +1427,12 @@ class HttpApiServer(
                             val isIdeMode = call.request.queryParameters["ide"] == "true"
 
                             if (isIdeMode) {
-                                // IDE 插件模式：标记环境 __IDE_MODE__ = true
-                                // 前端会检测此标记并通过 RSocket 与后端通信
+                                // IDE 插件模式：注入 __IDE_MODE__ 和 __serverUrl
+                                // 前端 serverUrl.ts 要求 IDE 模式下必须有 window.__serverUrl
                                 val injection = """
                                     <script>
                                         window.__IDE_MODE__ = true;
+                                        window.__serverUrl = 'http://127.0.0.1:$serverPort';
                                         console.log('✅ Environment: IDEA Plugin Mode');
                                     </script>
                                 """.trimIndent()

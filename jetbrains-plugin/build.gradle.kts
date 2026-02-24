@@ -666,13 +666,19 @@ val buildAllVersions by tasks.registering {
             val platformBuildDir = File(tempBuildDir, platform)
             platformBuildDir.mkdirs()
 
+            // Select Kotlin version based on platform
+            // - 261+: Kotlin 2.3.0 (IDEA 2026.1 bundles Kotlin 2.3.x)
+            // - 242-253: Kotlin 2.1.20 (IDEA 2024.2~2025.3 bundles Kotlin 2.0.x~2.1.x)
+            val kotlinVer = if (platform.toInt() >= 261) "2.3.0" else "2.1.20"
+
             println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            println("📌 [${index + 1}/5] Building platform $platform...")
+            println("📌 [${index + 1}/${platforms.size}] Building platform $platform (Kotlin $kotlinVer)...")
             println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
             val cmd = if (isWin) {
                 listOf("cmd", "/c", gradlew, ":jetbrains-plugin:buildPlugin",
                     "-PplatformMajor=$platform",
+                    "-PkotlinVersion=$kotlinVer",
                     "-PcustomBuildDir=${platformBuildDir.absolutePath}",
                     "-x", "buildFrontend",
                     "-x", "buildFrontendWithVite",
@@ -682,6 +688,7 @@ val buildAllVersions by tasks.registering {
             } else {
                 listOf(gradlew, ":jetbrains-plugin:buildPlugin",
                     "-PplatformMajor=$platform",
+                    "-PkotlinVersion=$kotlinVer",
                     "-PcustomBuildDir=${platformBuildDir.absolutePath}",
                     "-x", "buildFrontend",
                     "-x", "buildFrontendWithVite",
@@ -775,15 +782,18 @@ val publishAllVersions by tasks.registering {
         val results = mutableListOf<Pair<String, Int>>()
 
         for (platform in platforms) {
-            println("📤 [$platform] Publishing...")
+            val kotlinVer = if (platform.toInt() >= 261) "2.3.0" else "2.1.20"
+            println("📤 [$platform] Publishing (Kotlin $kotlinVer)...")
 
             val cmd = if (isWin) {
                 listOf("cmd", "/c", gradlew, ":jetbrains-plugin:publishPlugin",
                     "-PplatformMajor=$platform",
+                    "-PkotlinVersion=$kotlinVer",
                     "--no-daemon")
             } else {
                 listOf(gradlew, ":jetbrains-plugin:publishPlugin",
                     "-PplatformMajor=$platform",
+                    "-PkotlinVersion=$kotlinVer",
                     "--no-daemon")
             }
 

@@ -8,6 +8,14 @@ pluginManagement {
         mavenCentral()
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
     }
+
+    // Dynamically resolve Kotlin plugin version from gradle property
+    // This allows buildAllVersions to pass different Kotlin versions per platform
+    val kotlinVersion: String by settings
+    plugins {
+        kotlin("jvm") version kotlinVersion
+        kotlin("plugin.serialization") version kotlinVersion
+    }
 }
 
 plugins {
