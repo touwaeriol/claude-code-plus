@@ -14,8 +14,6 @@ import com.asakii.ai.agent.sdk.model.UiError
 import com.asakii.ai.agent.sdk.model.UiStreamEvent
 import com.asakii.claude.agent.sdk.types.McpReconnectResponse
 import com.asakii.claude.agent.sdk.types.McpServerStatusInfo
-import com.asakii.claude.agent.sdk.types.McpToolInfo
-import com.asakii.claude.agent.sdk.types.McpToolsResponse
 import com.asakii.codex.agent.sdk.ApprovalMode
 import com.asakii.codex.agent.sdk.CodexClientOptions
 import com.asakii.codex.agent.sdk.SandboxMode
@@ -203,12 +201,6 @@ internal class CodexAgentClientImpl(
         }
     }
 
-    override suspend fun runInBackground() {
-        throw UnsupportedOperationException(
-            "runInBackground is not supported by ${provider.name}"
-        )
-    }
-
     override suspend fun disconnect() {
         activeCancellationJob?.cancelAndJoin()
         eventRelayJob?.cancelAndJoin()
@@ -280,22 +272,6 @@ internal class CodexAgentClientImpl(
                 serverInfo = status.toServerInfoJson()
             )
         }
-    }
-
-    override suspend fun getMcpTools(serverName: String?): McpToolsResponse {
-        val activeClient = client ?: return McpToolsResponse(serverName, emptyList(), 0)
-        val statuses = fetchMcpServerStatuses(activeClient)
-        val filtered = if (serverName == null) statuses else statuses.filter { it.name == serverName }
-        val tools = filtered.flatMap { status ->
-            status.tools.map { (toolName, tool) ->
-                McpToolInfo(
-                    name = tool.name ?: toolName,
-                    description = tool.description ?: "",
-                    inputSchema = tool.inputSchema
-                )
-            }
-        }
-        return McpToolsResponse(serverName, tools, tools.size)
     }
 
     override suspend fun reconnectMcp(serverName: String): McpReconnectResponse {

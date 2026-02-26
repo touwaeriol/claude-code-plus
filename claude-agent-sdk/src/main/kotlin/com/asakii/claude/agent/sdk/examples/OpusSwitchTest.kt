@@ -21,7 +21,7 @@ fun main() = runBlocking {
     println("=" * 70)
 
     val options1 = ClaudeAgentOptions(
-        model = "claude-sonnet-4-5-20250929",
+        model = "claude-sonnet-4-6",
         permissionMode = PermissionMode.DEFAULT,
         allowedTools = listOf("Read"),
         maxTurns = 2,
@@ -35,7 +35,7 @@ fun main() = runBlocking {
         client1.connect()
 
         // 初始查询
-        println("🤖 初始模型: Sonnet 4.5")
+        println("🤖 初始模型: Sonnet 4.6")
         println("❓ 询问当前模型\n")
 
         client1.query("你是什么模型？简短回答。")
@@ -129,7 +129,7 @@ fun main() = runBlocking {
     println("=" * 70)
 
     val options2 = ClaudeAgentOptions(
-        model = "claude-sonnet-4-5-20250929",
+        model = "claude-sonnet-4-6",
         permissionMode = PermissionMode.DEFAULT,
         allowedTools = listOf("Read"),
         maxTurns = 2,
@@ -143,7 +143,7 @@ fun main() = runBlocking {
         client2.connect()
 
         // 初始查询
-        println("🤖 初始模型: Sonnet 4.5")
+        println("🤖 初始模型: Sonnet 4.6")
         println("❓ 询问当前模型\n")
 
         client2.query("你是什么模型？简短回答。")

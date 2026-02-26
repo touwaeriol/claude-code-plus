@@ -126,7 +126,7 @@ describe('CodexSession', () => {
     it('should throw error for non-Codex config', () => {
       const claudeConfig = {
         type: 'claude' as const,
-        modelId: 'claude-sonnet-4-5-20251101',
+        modelId: 'claude-sonnet-4-6',
         permissionMode: 'default' as const,
         skipPermissions: false,
         maxTurns: 10,
@@ -401,19 +401,6 @@ describe('CodexSession', () => {
       const state = session.getState()
       expect(state.connectionStatus).toBe('connected')
       expect(state.sessionId).toBe('test-thread-id')
-    })
-  })
-
-  // =========================================================================
-  // Run In Background Tests
-  // =========================================================================
-
-  describe('Run In Background', () => {
-    it('should be a no-op for Codex', async () => {
-      await session.connect({ config: TEST_CODEX_CONFIG })
-
-      // Should not throw
-      await expect(session.runInBackground()).resolves.toBeUndefined()
     })
   })
 

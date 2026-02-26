@@ -3,7 +3,6 @@
  * Manages keyboard event handling for ChatInput component
  */
 import { onMounted, onUnmounted, nextTick, type Ref, type ComputedRef } from 'vue'
-import { useSessionStore } from '@/stores/sessionStore'
 import type { BackendType } from '@/types/backend'
 
 /**
@@ -51,8 +50,6 @@ export interface KeyboardShortcutsOptions {
  * Composable for handling keyboard shortcuts in ChatInput
  */
 export function useKeyboardShortcuts(options: KeyboardShortcutsOptions) {
-  const sessionStore = useSessionStore()
-  
   const {
     isGenerating,
     enabled,
@@ -69,22 +66,6 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions) {
     onStop,
     onCancel
   } = options
-
-  /**
-   * Handle Ctrl+B to run current task in background
-   */
-  async function handleRunInBackground() {
-    if (!isGenerating.value) {
-      return  // No active task, ignore
-    }
-
-    try {
-      await sessionStore.runInBackground()
-      console.log('✅ [KeyboardShortcuts] Background run request sent')
-    } catch (err) {
-      console.error('[KeyboardShortcuts] Background run request failed:', err)
-    }
-  }
 
   /**
    * Main keydown handler for input element
@@ -159,13 +140,6 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions) {
       return
     }
 
-    // Ctrl+B - run task in background
-    if (event.key === 'b' && event.ctrlKey && !event.shiftKey && !event.altKey) {
-      event.preventDefault()
-      handleRunInBackground()
-      return
-    }
-
     // Shift+Enter - insert newline (default behavior)
     if (event.key === 'Enter' && event.shiftKey) {
       // Default behavior already inserts newline, no extra handling needed
@@ -213,7 +187,6 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions) {
   })
 
   return {
-    handleKeydown,
-    handleRunInBackground
+    handleKeydown
   }
 }

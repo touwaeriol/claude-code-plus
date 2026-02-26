@@ -150,7 +150,7 @@ fun main(args: Array<String>) = runBlocking {
     // 5. 实例化 HttpApiServer
     // 配置默认设置（可通过环境变量或配置文件覆盖）
     val defaultConfig = com.asakii.server.config.AiAgentServiceConfig(
-        defaultModel = System.getenv("CLAUDE_DEFAULT_MODEL") ?: "claude-opus-4-5-20251101",
+        defaultModel = System.getenv("CLAUDE_DEFAULT_MODEL") ?: "claude-opus-4-6",
         claude = com.asakii.server.config.ClaudeDefaults(
             dangerouslySkipPermissions = System.getenv("CLAUDE_BYPASS_PERMISSIONS")?.toBoolean() ?: false,
             includePartialMessages = System.getenv("CLAUDE_INCLUDE_PARTIAL_MESSAGES")?.toBoolean() ?: true

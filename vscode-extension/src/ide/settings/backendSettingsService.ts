@@ -71,7 +71,7 @@ export interface BackendSettingsState {
 const DEFAULT_STATE: BackendSettingsState = {
     defaultBackend: BackendType.CLAUDE,
     claudeEnabled: true,
-    claudeModelId: 'claude-sonnet-4-5-20250929',
+    claudeModelId: 'claude-sonnet-4-6',
     claudeThinkingEnabled: true,
     claudeThinkingTokenBudget: 8096,
     claudeIncludePartialMessages: true,

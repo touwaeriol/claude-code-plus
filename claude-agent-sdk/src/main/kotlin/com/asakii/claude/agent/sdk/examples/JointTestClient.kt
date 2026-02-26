@@ -15,7 +15,7 @@ fun main() = runBlocking {
 
     val client = ClaudeCodeSdkClient(
         ClaudeAgentOptions(
-            model = "claude-sonnet-4-5-20250929",
+            model = "claude-sonnet-4-6",
             mcpServers = mapOf<String, McpServerSpec>(
                 "default" to com.asakii.claude.agent.sdk.types.McpHttpServerConfig(url = serverUrl)
             )

@@ -114,8 +114,7 @@ export function useActiveFile() {
     // Subscribe to active file changes
     unsubscribe = ideaRSocket.onActiveFileChange((file) => {
       currentActiveFile.value = file
-      // Reset disabled state when new file is pushed
-      activeFileDisabled.value = false
+      // Keep disabled state as-is when file changes — user must manually re-enable
       console.log('📂 [useActiveFile] Active file updated:', file?.relativePath || 'none')
     })
 

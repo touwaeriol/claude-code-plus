@@ -22,7 +22,7 @@ export interface ClaudeSettings {
 
 const DEFAULT_SETTINGS: ClaudeSettings = {
     apiKey: undefined,
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-sonnet-4-6',
     maxTokens: 4096,
     temperature: 0.7,
     maxTurns: 10,

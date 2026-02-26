@@ -2,7 +2,6 @@
 
 import com.asakii.ai.agent.sdk.AiAgentProvider
 import com.asakii.ai.agent.sdk.McpSystemPromptContext
-import com.asakii.ai.agent.sdk.capabilities.AgentCapabilities
 import com.asakii.ai.agent.sdk.capabilities.AiPermissionMode as SdkPermissionMode
 import com.asakii.ai.agent.sdk.client.AgentMessageInput
 import com.asakii.ai.agent.sdk.client.PermissionDecision
@@ -286,9 +285,6 @@ class AiAgentRpcServiceImpl(
         // 设置当前 AI 会话 ID，用于终端默认会话关联
         mcpProviders.terminal.setCurrentAiSession(sessionId)
 
-        val capabilities = newClient.getCapabilities().toRpcCapabilities()
-        sdkLog.debug { "✅ [SDK] 能力: canInterrupt=${capabilities.canInterrupt}, canThink=${capabilities.canThink}" }
-
         val projectCwd = ideTools.getProjectPath().takeIf { it.isNotBlank() }
 
         return RpcConnectResult(
@@ -297,7 +293,6 @@ class AiAgentRpcServiceImpl(
             provider = rpcProvider,
             model = connectOptions.model,
             status = RpcSessionStatus.CONNECTED,
-            capabilities = capabilities,
             cwd = projectCwd,
             // 返回后端分配的 connectId 供前端保存
             connectId = connectId
@@ -352,71 +347,6 @@ class AiAgentRpcServiceImpl(
         client?.interrupt()
         sdkLog.info { "✅ [SDK] interrupt 请求已提交" }
         return RpcStatusResult(status = RpcSessionStatus.INTERRUPTED)
-    }
-
-    override suspend fun runInBackground(): RpcStatusResult {
-        sdkLog.info { "🔄 [SDK] 将任务移到后台运行" }
-        val activeClient = client ?: error("AI Agent 尚未连接，请先调用 connect()")
-        activeClient.runInBackground()
-        sdkLog.info { "✅ [SDK] runInBackground 请求已提交" }
-        return RpcStatusResult(status = RpcSessionStatus.CONNECTED)
-    }
-
-    override suspend fun bashRunToBackground(taskId: String): RpcBashBackgroundResult {
-        sdkLog.info { "🔄 [SDK] 将 Bash 命令移到后台运行: taskId=$taskId" }
-        val activeClient = client ?: return RpcBashBackgroundResult(
-            success = false,
-            error = "AI Agent 尚未连接，请先调用 connect()"
-        )
-        return try {
-            val result = activeClient.bashRunToBackground(taskId)
-            sdkLog.info { "✅ [SDK] bashRunToBackground 成功: taskId=${result.taskId}, command=${result.command}" }
-            RpcBashBackgroundResult(
-                success = result.success,
-                taskId = result.taskId,
-                command = result.command
-            )
-        } catch (e: Exception) {
-            sdkLog.warn { "❌ [SDK] bashRunToBackground 失败: ${e.message}" }
-            RpcBashBackgroundResult(
-                success = false,
-                error = e.message ?: "Unknown error"
-            )
-        }
-    }
-
-    override suspend fun runToBackground(taskId: String?): RpcUnifiedBackgroundResult {
-        sdkLog.info { "🔄 [SDK] 统一后台运行: taskId=${taskId ?: "all"}" }
-        val activeClient = client ?: return RpcUnifiedBackgroundResult(
-            success = false,
-            error = "AI Agent 尚未连接，请先调用 connect()"
-        )
-        return try {
-            val result = activeClient.runToBackground(taskId)
-            if (taskId != null) {
-                val typeInfo = if (result.isBash == true) "Bash" else "Agent"
-                sdkLog.info { "✅ [SDK] runToBackground 成功: $typeInfo taskId=${result.taskId}" }
-            } else {
-                sdkLog.info { "✅ [SDK] runToBackground 批量成功: Bash=${result.bashCount}, Agent=${result.agentCount}" }
-            }
-            RpcUnifiedBackgroundResult(
-                success = result.success,
-                isBash = result.isBash,
-                taskId = result.taskId,
-                command = result.command,
-                bashCount = result.bashCount,
-                agentCount = result.agentCount,
-                backgroundedBashIds = result.backgroundedBashIds,
-                backgroundedAgentIds = result.backgroundedAgentIds,
-                error = result.error
-            )
-        } catch (e: Exception) {
-            sdkLog.warn { "❌ [SDK] runToBackground 失败: ${e.message}" }
-            RpcUnifiedBackgroundResult(
-                success = false,
-                error = e.message ?: "Unknown error"
-            )
-        }
     }
 
     override suspend fun setMaxThinkingTokens(maxThinkingTokens: Int?): RpcSetMaxThinkingTokensResult {
@@ -1805,31 +1735,6 @@ class AiAgentRpcServiceImpl(
     // ==================== 鑳藉姏鐩稿叧杞崲鍑芥暟 ====================
 
     /**
-     * 灏?SDK AgentCapabilities 杞崲涓?RPC RpcCapabilities
-     */
-    private fun AgentCapabilities.toRpcCapabilities(): RpcCapabilities = RpcCapabilities(
-        canInterrupt = canInterrupt,
-        canSwitchModel = canSwitchModel,
-        canSwitchPermissionMode = canSwitchPermissionMode,
-        supportedPermissionModes = supportedPermissionModes.map { it.toRpcPermissionMode() },
-        canSkipPermissions = canSkipPermissions,
-        canSendRichContent = canSendRichContent,
-        canThink = canThink,
-        canResumeSession = canResumeSession,
-        canRunInBackground = canRunInBackground
-    )
-
-    /**
-     * 灏?SDK PermissionMode 杞崲涓?RPC RpcPermissionMode
-     */
-    private fun SdkPermissionMode.toRpcPermissionMode(): RpcPermissionMode = when (this) {
-        SdkPermissionMode.DEFAULT -> RpcPermissionMode.DEFAULT
-        SdkPermissionMode.ACCEPT_EDITS -> RpcPermissionMode.ACCEPT_EDITS
-        SdkPermissionMode.BYPASS_PERMISSIONS -> RpcPermissionMode.BYPASS_PERMISSIONS
-        SdkPermissionMode.PLAN -> RpcPermissionMode.PLAN
-    }
-
-    /**
      * 灏?RPC RpcPermissionMode 杞崲涓?SDK PermissionMode锛堢敤浜?setPermissionMode锛?     */
     private fun RpcPermissionMode.toSdkPermissionModeInternal(): SdkPermissionMode = when (this) {
         RpcPermissionMode.DEFAULT -> SdkPermissionMode.DEFAULT
@@ -1944,41 +1849,6 @@ class AiAgentRpcServiceImpl(
     }
 
     /**
-     * 获取指定 MCP 服务器的工具列表
-     */
-    override suspend fun getMcpTools(serverName: String?): RpcMcpToolsResult {
-        val currentClient = client ?: return RpcMcpToolsResult(
-            serverName = serverName,
-            tools = emptyList(),
-            count = 0
-        )
-
-        sdkLog.info("[MCP] getMcpTools: provider=$currentProvider, serverName=${serverName ?: "(all)"}")
-        return try {
-            val result = currentClient.getMcpTools(serverName)
-            sdkLog.info("[MCP] getMcpTools: returned ${result.count} tool(s) (serverName=${result.serverName ?: "(all)"})")
-            RpcMcpToolsResult(
-                serverName = result.serverName,
-                tools = result.tools.map { tool ->
-                    RpcMcpToolInfo(
-                        name = tool.name,
-                        description = tool.description,
-                        inputSchema = tool.inputSchema
-                    )
-                },
-                count = result.count
-            )
-        } catch (e: Exception) {
-            sdkLog.warn("Failed to get MCP tools for $serverName: ${e.message}")
-            RpcMcpToolsResult(
-                serverName = serverName,
-                tools = emptyList(),
-                count = 0
-            )
-        }
-    }
-
-    /**
      * 获取可用模型列表（内置 + 自定义）
      */
     override suspend fun getAvailableModels(): RpcAvailableModelsResult {
@@ -1986,16 +1856,6 @@ class AiAgentRpcServiceImpl(
 
         // 内置模型
         val builtInModels = listOf(
-            RpcModelInfo(
-                displayName = "Opus 4.5",
-                modelId = "claude-opus-4-5-20251101",
-                isBuiltIn = true
-            ),
-            RpcModelInfo(
-                displayName = "Sonnet 4.5",
-                modelId = "claude-sonnet-4-5-20250929",
-                isBuiltIn = true
-            ),
             RpcModelInfo(
                 displayName = "Haiku 4.5",
                 modelId = "claude-haiku-4-5-20251001",

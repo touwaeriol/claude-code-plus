@@ -19,7 +19,7 @@ data class CustomModelInfo(
  */
 data class AiAgentServiceConfig(
     val defaultProvider: AiAgentProvider = AiAgentProvider.CLAUDE,
-    val defaultModel: String = "claude-opus-4-5-20251101",
+    val defaultModel: String = "claude-opus-4-6",
     val defaultSystemPrompt: String? = null,
     val claude: ClaudeDefaults = ClaudeDefaults(),
     val codex: CodexDefaults = CodexDefaults(),

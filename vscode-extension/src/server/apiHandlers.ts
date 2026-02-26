@@ -518,7 +518,7 @@ function getHttpDefaultSettings() {
   const defaultBypassPermissions = Boolean(cfg.get('defaultBypassPermissions') ?? false)
   const includePartialMessages = Boolean(cfg.get('includePartialMessages') ?? true)
 
-  const claudeDefaultModelId = String(cfg.get('claude.defaultModelId') ?? 'claude-opus-4-5-20251101')
+  const claudeDefaultModelId = String(cfg.get('claude.defaultModelId') ?? 'claude-opus-4-6')
   const claudeDefaultThinkingLevel = String(cfg.get('claude.defaultThinkingLevel') ?? 'HIGH').toUpperCase()
   const claudeDefaultThinkingTokens = toNumberOrDefault(cfg.get('claude.defaultThinkingTokens'), 8192)
   const claudeDefaultAutoCleanupContexts = Boolean(cfg.get('claude.defaultAutoCleanupContexts') ?? true)
@@ -554,22 +554,6 @@ function getHttpDefaultSettings() {
 function getAvailableModels() {
   const claudeModels = [
     {
-      modelId: 'claude-opus-4-5-20251101',
-      displayName: 'Claude Opus 4.5',
-      description: 'Most capable model for complex tasks',
-      supportsThinking: true,
-      isDefault: true,
-      isBuiltIn: true,
-    },
-    {
-      modelId: 'claude-sonnet-4-5-20250929',
-      displayName: 'Claude Sonnet 4.5',
-      description: 'Balanced performance and cost',
-      supportsThinking: true,
-      isDefault: false,
-      isBuiltIn: true,
-    },
-    {
       modelId: 'claude-haiku-4-5-20251001',
       displayName: 'Claude Haiku 4.5',
       description: 'Fast and efficient for simple tasks',
@@ -582,7 +566,7 @@ function getAvailableModels() {
       displayName: 'Claude Opus 4.6',
       description: 'Next-gen most powerful model',
       supportsThinking: true,
-      isDefault: false,
+      isDefault: true,
       isBuiltIn: true,
     },
     {
@@ -654,7 +638,7 @@ async function getPersistedSettings(context: vscode.ExtensionContext): Promise<R
   const includePartialMessages = Boolean(cfg.get('includePartialMessages') ?? true)
   const skipPermissions = Boolean(cfg.get('defaultBypassPermissions') ?? false)
 
-  const claudeModel = String(cfg.get('claude.defaultModelId') ?? 'claude-opus-4-5-20251101')
+  const claudeModel = String(cfg.get('claude.defaultModelId') ?? 'claude-opus-4-6')
   const claudeThinkingLevel = String(cfg.get('claude.defaultThinkingLevel') ?? 'HIGH').toUpperCase()
   const claudeThinkingTokens = toNumberOrDefault(cfg.get('claude.defaultThinkingTokens'), 8192)
   const claudeThinkingEnabled = claudeThinkingLevel !== 'OFF' && claudeThinkingTokens > 0

@@ -2,7 +2,7 @@
  * Subprocess transport implementation for Claude CLI communication.
  *
  * This module provides a subprocess-based transport that:
- * - Launches the enhanced Claude CLI (claude-cli-enhanced.mjs)
+ * - Launches the official Claude CLI (claude-cli.mjs)
  * - Communicates via stdin/stdout using JSON-RPC protocol
  * - Handles process lifecycle and error recovery
  *
@@ -728,7 +728,7 @@ export class SubprocessTransport implements Transport {
    * Find the Claude executable.
    * Priority:
    * 1. User-specified path (options.cliPath)
-   * 2. SDK bundled CLI (resources/bundled/claude-cli-enhanced.mjs)
+   * 2. SDK bundled CLI (resources/bundled/claude-cli.mjs)
    */
   private findClaudeExecutable(): string[] {
     // 1. User-specified path
@@ -748,7 +748,7 @@ export class SubprocessTransport implements Transport {
     throw new CLINotFoundError(
       'Could not find SDK bundled Claude CLI. Please ensure:\n' +
         '1. The extension is properly installed\n' +
-        '2. claude-cli-enhanced.mjs exists in resources/bundled/'
+        '2. claude-cli.mjs exists in resources/bundled/'
     )
   }
 
@@ -761,11 +761,11 @@ export class SubprocessTransport implements Transport {
       // This path will vary depending on how the extension is packaged
       const possiblePaths = [
         // Development path
-        path.join(__dirname, '../../../../resources/bundled/claude-cli-enhanced.mjs'),
+        path.join(__dirname, '../../../../resources/bundled/claude-cli.mjs'),
         // Packaged extension path
-        path.join(__dirname, '../../../resources/bundled/claude-cli-enhanced.mjs'),
+        path.join(__dirname, '../../../resources/bundled/claude-cli.mjs'),
         // Alternative paths
-        path.join(process.cwd(), 'resources/bundled/claude-cli-enhanced.mjs'),
+        path.join(process.cwd(), 'resources/bundled/claude-cli.mjs'),
       ]
 
       for (const cliPath of possiblePaths) {

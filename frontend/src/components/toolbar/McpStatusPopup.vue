@@ -268,10 +268,10 @@ async function fetchTools(serverName: string, options: { silent?: boolean } = {}
     console.log('[McpStatusPopup] session:', session ? 'exists' : 'null', 'isConnected:', session?.isConnected)
 
     if (session?.isConnected) {
-      console.log('[McpStatusPopup] getMcpTools:', serverName)
-      const result = await session.getMcpTools(serverName)
-      console.log('[McpStatusPopup] getMcpTools result:', result)
-      tools.value = result.tools
+      // getMcpTools was removed (CLI patch feature no longer available)
+      // Tools fetching is not supported without CLI patches
+      console.log('[McpStatusPopup] getMcpTools is no longer available (CLI patch removed)')
+      tools.value = []
     } else if (!silent) {
       toolsError.value = 'Session not connected'
       console.warn('[McpStatusPopup] Session not connected, cannot get tools')

@@ -184,52 +184,6 @@ export interface BackendSession {
    */
   interrupt(): Promise<void>
 
-  /**
-   * Run current task in background (Claude-specific)
-   *
-   * For backends that don't support this, it should be a no-op.
-   */
-  runInBackground(): Promise<void>
-
-  /**
-   * Run specific Bash command in background (Claude-specific)
-   *
-   * Similar to CLI's Ctrl+B but for individual Bash commands.
-   * Requires CLI with 007-bash-background.js patch.
-   *
-   * @param taskId Bash command's tool_use_id
-   * @returns Background result with success status
-   */
-  bashRunToBackground(taskId: string): Promise<{
-    success: boolean
-    taskId?: string
-    command?: string
-    error?: string
-  }>
-
-  /**
-   * Unified background execution method
-   *
-   * Auto-detects task type (Bash or Agent) and executes background operation.
-   * This is the recommended method, mirroring CLI's Ctrl+B behavior.
-   *
-   * @param taskId Optional task ID:
-   *   - With taskId: Background specific task (auto-detect type)
-   *   - Without taskId: Background all foreground tasks (Bash + Agent)
-   * @returns Unified background result
-   */
-  runToBackground(taskId?: string): Promise<{
-    success: boolean
-    isBash?: boolean
-    taskId?: string
-    command?: string
-    bashCount: number
-    agentCount: number
-    backgroundedBashIds: string[]
-    backgroundedAgentIds: string[]
-    error?: string
-  }>
-
   // ===========================================================================
   // Approval Handling
   // ===========================================================================
@@ -386,42 +340,6 @@ export abstract class BaseBackendSession implements BackendSession {
   // Messaging methods - to be implemented by subclasses
   abstract sendMessage(message: UserMessage): void
   abstract interrupt(): Promise<void>
-
-  async runInBackground(): Promise<void> {
-    // Default no-op, override in Claude implementation
-  }
-
-  async bashRunToBackground(_taskId: string): Promise<{
-    success: boolean
-    taskId?: string
-    command?: string
-    error?: string
-  }> {
-    // Default no-op, override in Claude implementation
-    return { success: false, error: 'Not supported by this backend' }
-  }
-
-  async runToBackground(_taskId?: string): Promise<{
-    success: boolean
-    isBash?: boolean
-    taskId?: string
-    command?: string
-    bashCount: number
-    agentCount: number
-    backgroundedBashIds: string[]
-    backgroundedAgentIds: string[]
-    error?: string
-  }> {
-    // Default no-op, override in Claude implementation
-    return {
-      success: false,
-      bashCount: 0,
-      agentCount: 0,
-      backgroundedBashIds: [],
-      backgroundedAgentIds: [],
-      error: 'Not supported by this backend'
-    }
-  }
 
   // Approval handling - to be implemented by subclasses
   abstract respondToApproval(response: ApprovalResponse): void

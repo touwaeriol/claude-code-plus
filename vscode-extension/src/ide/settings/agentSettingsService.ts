@@ -210,7 +210,7 @@ const DEFAULT_STATE: AgentSettingsState = {
     codexDefaultReasoningSummary: 'auto',
     codexDefaultSandboxMode: 'workspace-write',
     codexCustomModels: '[]',
-    defaultModel: 'claude-opus-4-5-20251101',
+    defaultModel: 'claude-opus-4-6',
     defaultThinkingLevelId: 'ultra',
     thinkTokens: 2048,
     ultraTokens: 8096,
@@ -225,8 +225,6 @@ const DEFAULT_STATE: AgentSettingsState = {
  * Built-in Claude models
  */
 const BUILT_IN_CLAUDE_MODELS: ModelInfo[] = [
-    { modelId: 'claude-opus-4-5-20251101', displayName: 'Opus 4.5', isBuiltIn: true },
-    { modelId: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5', isBuiltIn: true },
     { modelId: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5', isBuiltIn: true },
     { modelId: 'claude-opus-4-6', displayName: 'Opus 4.6', isBuiltIn: true },
     { modelId: 'claude-sonnet-4-6', displayName: 'Sonnet 4.6', isBuiltIn: true },
@@ -236,10 +234,7 @@ const BUILT_IN_CLAUDE_MODELS: ModelInfo[] = [
  * Legacy Claude model aliases for migration
  */
 const LEGACY_CLAUDE_MODEL_ALIASES: Record<string, string> = {
-    'OPUS_45': 'claude-opus-4-5-20251101',
-    'SONNET_45': 'claude-sonnet-4-5-20250929',
     'HAIKU_45': 'claude-haiku-4-5-20251001',
-    'claude-opus-4-5-20250929': 'claude-opus-4-5-20251101',
     'claude-haiku-4-5-20250929': 'claude-haiku-4-5-20251001'
 };
 

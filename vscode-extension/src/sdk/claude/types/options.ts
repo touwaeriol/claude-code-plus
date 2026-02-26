@@ -199,7 +199,6 @@ export interface ClaudeAgentOptions {
  */
 export type ControlRequest =
   | InterruptRequest
-  | RunInBackgroundRequest
   | PermissionRequest
   | InitializeRequest
   | SetPermissionModeRequest
@@ -212,10 +211,6 @@ export type ControlRequest =
 
 export interface InterruptRequest {
   subtype: 'interrupt';
-}
-
-export interface RunInBackgroundRequest {
-  subtype: 'run_in_background';
 }
 
 export interface PermissionRequest {
@@ -343,18 +338,6 @@ export interface McpToolInfo {
 }
 
 /**
- * Response from mcp_tools request.
- */
-export interface McpToolsResponse {
-  /** Server name filter (null if all servers) */
-  serverName?: string;
-  /** List of tools */
-  tools: McpToolInfo[];
-  /** Total count of tools */
-  count: number;
-}
-
-/**
  * Response from mcp_disable/mcp_enable request.
  */
 export interface McpDisableEnableResponse {
@@ -368,31 +351,4 @@ export interface McpDisableEnableResponse {
   toolsCount: number;
   /** Error message if operation failed */
   error?: string;
-}
-
-/**
- * Chrome extension status - matches official /chrome command display format.
- *
- * Data sources:
- * 1. installed - Local file system check (Chrome Extensions directory)
- * 2. enabled/connected/mcpServerStatus - From mcp_status control command
- * 3. serverInfo - Full MCP server info (contains name, version, etc.)
- *
- * Official /chrome display format:
- * ```
- * Status: Connected/Disabled     ← connected field
- * Extension: Installed/Not detected  ← installed field
- * ```
- */
-export interface ChromeStatus {
-  /** Whether the Chrome extension is installed (checks NativeMessagingHost config file) */
-  installed: boolean;
-  /** Whether Chrome integration is enabled by default (k1().claudeInChromeDefaultEnabled) */
-  enabled: boolean;
-  /** Whether the MCP server "claude-in-chrome" is currently connected */
-  connected: boolean;
-  /** MCP server status: "connected" | "failed" | "pending" | "needs-auth" | "disabled" | null */
-  mcpServerStatus?: string;
-  /** Extension version (e.g., "1.0.36") when connected */
-  extensionVersion?: string;
 }

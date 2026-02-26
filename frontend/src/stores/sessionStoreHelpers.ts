@@ -18,7 +18,7 @@ export function getConnectOptionsForBackend(
 
   if (backendType === 'claude') {
     return {
-      model: globalSettings.claudeModel || 'claude-opus-4-5-20251101',
+      model: globalSettings.claudeModel || 'claude-opus-4-6',
       thinkingLevel: globalSettings.claudeThinkingTokens ?? undefined,
       permissionMode: globalSettings.permissionMode as RpcPermissionMode,
       skipPermissions: globalSettings.skipPermissions,

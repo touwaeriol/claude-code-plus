@@ -29,7 +29,6 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import type { BackendType, BackendCapabilities } from '@/types/backend'
 import { getCapabilities, getAvailableBackends as getAvailableBackendsList } from '@/services/backendCapabilities'
 import { getConnectOptionsForBackend, getDefaultAutoCleanupContexts, inferBackendType } from './sessionStoreHelpers'
-import { runTerminalBackground } from './sessionStoreTerminal'
 
 const log = loggers.session
 
@@ -711,108 +710,6 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   /**
-   * 后台运行（通过当前 Tab）
-   */
-  async function runInBackground(): Promise<void> {
-    if (!currentTab.value) {
-      throw new Error('当前没有活跃的会话')
-    }
-    await currentTab.value.runInBackground()
-  }
-
-  /**
-   * Bash 后台运行（通过当前 Tab）
-   *
-   * @param taskId Bash 命令的 tool_use_id
-   * @returns 后台运行结果
-   */
-  async function bashRunToBackground(taskId: string): Promise<{
-    success: boolean
-    taskId?: string
-    command?: string
-    error?: string
-  }> {
-    if (!currentTab.value) {
-      return { success: false, error: '当前没有活跃的会话' }
-    }
-    return await currentTab.value.bashRunToBackground(taskId)
-  }
-
-  /**
-   * 统一后台运行（通过当前 Tab）
-   *
-   * 自动检测任务类型（Bash 或 Agent）并执行后台化。
-   * 批量模式下同时调用 Claude API 和 Terminal MCP API。
-   *
-   * @param taskId 可选的任务 ID：
-   *   - 传入 taskId: 后台化指定任务（自动检测类型）
-   *   - 不传 taskId: 后台化所有前台任务（Claude Bash/Agent + Terminal MCP）
-   * @param toolType 可选的工具类型（用于单任务模式判断调用哪个 API）
-   * @returns 统一后台运行结果
-   */
-  async function runToBackground(taskId?: string, toolType?: string): Promise<{
-    success: boolean
-    isBash?: boolean
-    taskId?: string
-    command?: string
-    bashCount: number
-    agentCount: number
-    backgroundedBashIds: string[]
-    backgroundedAgentIds: string[]
-    terminalCount?: number
-    backgroundedTerminalIds?: string[]
-    error?: string
-  }> {
-    if (!currentTab.value) {
-      return {
-        success: false,
-        bashCount: 0,
-        agentCount: 0,
-        backgroundedBashIds: [],
-        backgroundedAgentIds: [],
-        error: '当前没有活跃的会话'
-      }
-    }
-
-    // Single task mode with Terminal MCP tool
-    if (taskId && toolType?.startsWith('mcp__jetbrains-terminal__')) {
-      const terminalResult = await runTerminalBackground(taskId)
-      return {
-        success: terminalResult.success,
-        bashCount: 0,
-        agentCount: 0,
-        backgroundedBashIds: [],
-        backgroundedAgentIds: [],
-        terminalCount: terminalResult.count,
-        backgroundedTerminalIds: terminalResult.backgroundedIds,
-        error: terminalResult.error
-      }
-    }
-
-    // Single task mode with Claude tool (Bash/Task)
-    if (taskId) {
-      return await currentTab.value.runToBackground(taskId)
-    }
-
-    // Batch mode: call both Claude API and Terminal MCP API
-    const [claudeResult, terminalResult] = await Promise.all([
-      currentTab.value.runToBackground(),
-      runTerminalBackground()
-    ])
-
-    return {
-      success: claudeResult.success || terminalResult.success,
-      bashCount: claudeResult.bashCount,
-      agentCount: claudeResult.agentCount,
-      backgroundedBashIds: claudeResult.backgroundedBashIds,
-      backgroundedAgentIds: claudeResult.backgroundedAgentIds,
-      terminalCount: terminalResult.count,
-      backgroundedTerminalIds: terminalResult.backgroundedIds,
-      error: claudeResult.error || terminalResult.error
-    }
-  }
-
-  /**
    * 设置模型（通过当前 Tab）
    */
   async function setModel(model: string): Promise<void> {
@@ -1154,9 +1051,6 @@ export const useSessionStore = defineStore('session', () => {
     sendMessage,
     enqueueMessage,
     interrupt,
-    runInBackground,
-    bashRunToBackground,
-    runToBackground,
     setModel,
     setPermissionMode,
     setLocalPermissionMode,

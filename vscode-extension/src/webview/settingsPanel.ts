@@ -144,7 +144,7 @@ export class SettingsPanel {
 
     const settings: SettingsData = {
       claude: {
-        defaultModelId: config.get('claude.defaultModelId', 'claude-opus-4-5-20251101'),
+        defaultModelId: config.get('claude.defaultModelId', 'claude-opus-4-6'),
         defaultThinkingLevel: config.get('claude.defaultThinkingLevel', 'HIGH'),
         defaultThinkingTokens: config.get('claude.defaultThinkingTokens', 8192),
         nodePath: config.get('claude.nodePath', ''),

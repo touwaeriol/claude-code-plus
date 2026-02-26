@@ -54,7 +54,7 @@ data class OptionConfig(
 data class CustomModelConfig(
     val id: String,        // 唯一标识（如 "custom_xxx"）
     val displayName: String,  // 显示名称（如 "My Custom Model"）
-    val modelId: String       // 模型 ID（如 "claude-sonnet-4-5-20250929"）
+    val modelId: String       // 模型 ID（如 "claude-sonnet-4-6"）
 )
 
 /**

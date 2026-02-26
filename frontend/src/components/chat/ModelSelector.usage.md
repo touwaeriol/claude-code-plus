@@ -48,7 +48,7 @@ import ModelSelector from '@/components/chat/ModelSelector.vue'
 import type { BackendType } from '@/types/backend'
 
 const currentBackend = ref<BackendType>('claude')
-const selectedModel = ref('claude-sonnet-4-5-20251101')
+const selectedModel = ref('claude-sonnet-4-6')
 </script>
 ```
 
@@ -137,7 +137,7 @@ import { useSessionStore } from '@/stores/sessionStore'
 
 const sessionStore = useSessionStore()
 const newSessionBackend = ref<BackendType>('claude')
-const newSessionModel = ref('claude-sonnet-4-5-20251101')
+const newSessionModel = ref('claude-sonnet-4-6')
 const isCreating = ref(false)
 
 async function createSession() {
@@ -168,7 +168,7 @@ async function createSession() {
 ```typescript
 // 示例：从 Claude 切换到 Codex
 backendType.value = 'codex'
-// => selectedModel 自动从 'claude-sonnet-4-5-20251101' 切换到 'gpt-5.2-codex'
+// => selectedModel 自动从 'claude-sonnet-4-6' 切换到 'gpt-5.2-codex'
 ```
 
 ### 场景 2: 模型不可用
@@ -251,7 +251,7 @@ import ModelSelector from './ModelSelector.vue'
 test('should filter models by backend type', () => {
   const wrapper = mount(ModelSelector, {
     props: {
-      modelValue: 'claude-sonnet-4-5-20251101',
+      modelValue: 'claude-sonnet-4-6',
       backendType: 'claude',
     },
   })
@@ -263,7 +263,7 @@ test('should filter models by backend type', () => {
 test('should auto-switch model when backend changes', async () => {
   const wrapper = mount(ModelSelector, {
     props: {
-      modelValue: 'claude-sonnet-4-5-20251101',
+      modelValue: 'claude-sonnet-4-6',
       backendType: 'claude',
     },
   })

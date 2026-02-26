@@ -30,20 +30,6 @@ import {
  */
 export const CLAUDE_MODELS: BackendModelInfo[] = [
   {
-    modelId: 'claude-opus-4-5-20251101',
-    displayName: 'Claude Opus 4.5',
-    description: 'Most capable model for complex tasks',
-    supportsThinking: true,
-    isDefault: true,
-  },
-  {
-    modelId: 'claude-sonnet-4-5-20250929',
-    displayName: 'Claude Sonnet 4.5',
-    description: 'Balanced performance and cost',
-    supportsThinking: true,
-    isDefault: false,
-  },
-  {
     modelId: 'claude-haiku-4-5-20251001',
     displayName: 'Claude Haiku 4.5',
     description: 'Fast and efficient for simple tasks',
@@ -55,7 +41,7 @@ export const CLAUDE_MODELS: BackendModelInfo[] = [
     displayName: 'Claude Opus 4.6',
     description: 'Next-gen most powerful model',
     supportsThinking: true,
-    isDefault: false,
+    isDefault: true,
   },
   {
     modelId: 'claude-sonnet-4-6',

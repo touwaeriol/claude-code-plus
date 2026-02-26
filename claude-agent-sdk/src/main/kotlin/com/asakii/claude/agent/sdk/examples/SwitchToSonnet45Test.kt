@@ -6,15 +6,15 @@ import com.asakii.claude.agent.sdk.types.*
 import kotlinx.coroutines.runBlocking
 
 /**
- * 测试切换到 Claude Sonnet 4.5 模型
+ * 测试切换到 Claude Sonnet 4.6 模型
  *
  * 验证：
  * 1. 使用 Sonnet 4 启动
- * 2. 切换到 Sonnet 4.5
+ * 2. 切换到 Sonnet 4.6
  * 3. 询问 AI 当前模型
  */
 fun main() = runBlocking {
-    println("=== 切换到 Sonnet 4.5 测试 ===\n")
+    println("=== 切换到 Sonnet 4.6 测试 ===\n")
 
     val options = ClaudeAgentOptions(
         model = "claude-sonnet-4-20250514",
@@ -67,19 +67,19 @@ fun main() = runBlocking {
         val sonnet4Answer = sonnet4Response.toString().trim()
         println("\n📝 Sonnet 4 回答: \"$sonnet4Answer\"\n")
 
-        // ========== 第二阶段：切换到 Sonnet 4.5 ==========
+        // ========== 第二阶段：切换到 Sonnet 4.6 ==========
         println("=" * 60)
-        println("第二阶段：切换到 Sonnet 4.5")
+        println("第二阶段：切换到 Sonnet 4.6")
         println("=" * 60)
 
         println("\n🔄 执行模型切换...")
-        client.setModel("claude-sonnet-4-5-20250929")
+        client.setModel("claude-sonnet-4-6")
         println("✅ setModel() 调用完成")
 
         // 等待切换生效
         kotlinx.coroutines.delay(1000)
 
-        println("\n🤖 目标模型: claude-sonnet-4-5-20250929")
+        println("\n🤖 目标模型: claude-sonnet-4-6")
         println("❓ 询问：你现在是什么模型？\n")
 
         client.query("请再次告诉我你现在是什么 Claude 模型，只要模型名称。")
@@ -121,7 +121,7 @@ fun main() = runBlocking {
         }
 
         val sonnet45Answer = sonnet45Response.toString().trim()
-        println("\n📝 Sonnet 4.5 回答: \"$sonnet45Answer\"\n")
+        println("\n📝 Sonnet 4.6 回答: \"$sonnet45Answer\"\n")
 
         // ========== 结果对比 ==========
         println("=" * 60)
@@ -131,19 +131,19 @@ fun main() = runBlocking {
         println("\n🔵 切换前 (Sonnet 4):")
         println("   回答: \"$sonnet4Answer\"")
 
-        println("\n🟢 切换后 (Sonnet 4.5):")
+        println("\n🟢 切换后 (Sonnet 4.6):")
         println("   System Init: $systemInitModel")
         println("   回答: \"$sonnet45Answer\"")
 
         // 分析结果
         println("\n📊 分析:")
-        if (systemInitModel.contains("sonnet-4-5")) {
-            println("   ✅ System Init 确认已切换到 Sonnet 4.5")
+        if (systemInitModel.contains("sonnet-4-6")) {
+            println("   ✅ System Init 确认已切换到 Sonnet 4.6")
             println("   ✅ 模型切换成功！")
         } else if (systemInitModel.contains("sonnet-4")) {
             println("   ⚠️  System Init 显示: $systemInitModel")
-            if (systemInitModel.contains("20250929")) {
-                println("   ✅ 已切换到 Sonnet 4.5 (20250929)")
+            if (systemInitModel.contains("sonnet-4-6")) {
+                println("   ✅ 已切换到 Sonnet 4.6")
             } else {
                 println("   ❌ 可能未切换或切换失败")
             }
@@ -152,8 +152,8 @@ fun main() = runBlocking {
             println("   💡 请检查日志确认切换状态")
         }
 
-        if (sonnet45Answer.lowercase().contains("4.5") || sonnet45Answer.lowercase().contains("sonnet 4.5")) {
-            println("   ✅ AI 回答明确提到了 Sonnet 4.5")
+        if (sonnet45Answer.lowercase().contains("4.6") || sonnet45Answer.lowercase().contains("sonnet 4.6")) {
+            println("   ✅ AI 回答明确提到了 Sonnet 4.6")
         } else if (!sonnet45Answer.startsWith("API Error")) {
             println("   💡 AI 回答: $sonnet45Answer")
         }

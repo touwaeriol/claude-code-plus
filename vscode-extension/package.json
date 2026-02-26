@@ -98,7 +98,7 @@
         },
         "claudeCodePlus.claude.defaultModelId": {
           "type": "string",
-          "default": "claude-opus-4-5-20251101",
+          "default": "claude-opus-4-6",
           "description": "Default Claude model ID"
         },
         "claudeCodePlus.claude.defaultThinkingLevel": {

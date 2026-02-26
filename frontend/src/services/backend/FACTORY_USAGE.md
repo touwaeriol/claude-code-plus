@@ -26,7 +26,7 @@ import type { ClaudeBackendConfig } from '@/services/backend'
 
 const config: ClaudeBackendConfig = {
   type: 'claude',
-  modelId: 'claude-opus-4-5-20251101',
+  modelId: 'claude-opus-4-6',
   permissionMode: 'auto-approve',
   skipPermissions: true,
   thinkingEnabled: true,
@@ -45,7 +45,7 @@ import type { SessionConnectOptions } from '@/services/backend'
 const options: SessionConnectOptions = {
   config: {
     type: 'claude',
-    modelId: 'claude-sonnet-4-5-20251101',
+    modelId: 'claude-sonnet-4-6',
     permissionMode: 'default',
     skipPermissions: false,
     thinkingEnabled: true,

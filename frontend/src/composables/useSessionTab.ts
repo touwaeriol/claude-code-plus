@@ -18,9 +18,6 @@ import {aiAgentService} from '@/services/aiAgentService'
 import type {ConnectOptions} from '@/services/aiAgentService'
 import {
     RSocketSession,
-    createRunToBackgroundError,
-    type BashRunToBackgroundResult,
-    type RunToBackgroundResult
 } from '@/services/rsocket/RSocketSession'
 import type {ContentBlock, Message} from '@/types/message'
 import {ConnectionStatus} from '@/types/display'
@@ -1443,6 +1440,27 @@ export function useSessionTab(initialOrder: number = 0) {
                     sessionId: sessionId.value!,
                     questions: params.questions || [],
                     resolve: (answers) => {
+                        // 将回答写入对应 toolCall 的 result，以便 AskUserQuestionDisplay 展示
+                        try {
+                            const lines: string[] = []
+                            for (const a of answers) {
+                                if (a.question && a.answer) {
+                                    lines.push(`**Q:** ${a.question}`)
+                                    lines.push(`**A:** ${a.answer}`)
+                                }
+                            }
+                            if (lines.length > 0) {
+                                for (const tc of tools.pendingToolCalls.values()) {
+                                    if (tc.toolName === 'AskUserQuestion' && tc.status === 'RUNNING') {
+                                        tc.result = { content: lines.join('\n'), is_error: false }
+                                        log.info(`[Tab ${tabId}] 已写入 AskUserQuestion 回答到 toolCall ${tc.id} result`)
+                                        break
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            log.warn(`[Tab ${tabId}] 写入 AskUserQuestion 回答失败: ${e}`)
+                        }
                         // 返回 UserAnswerItem[] 格式（Protobuf encodeServerCallResponse 需要）
                         resolve(answers)
                     },
@@ -1712,86 +1730,6 @@ export function useSessionTab(initialOrder: number = 0) {
                 messagesHandler.stopGenerating()
                 messagesHandler.clearQueue()
             }
-        }
-    }
-
-    /**
-     * 将当前执行的任务切换到后台运行
-     *
-     * 这个功能允许用户继续其他操作，而当前任务在后台继续执行。
-     * 仅在有活跃任务正在执行时有效。
-     */
-    async function runInBackground(): Promise<void> {
-        if (!rsocketSession.value) {
-            throw new Error('会话未连接')
-        }
-
-        if (!messagesHandler.isGenerating.value) {
-            log.warn(`[Tab ${tabId}] 没有正在执行的任务，无法切换到后台`)
-            return
-        }
-
-        try {
-            await rsocketSession.value.runInBackground()
-            log.info(`[Tab ${tabId}] 后台运行请求已发送`)
-        } catch (err) {
-            log.error(`[Tab ${tabId}] 后台运行请求失败:`, err)
-            throw err
-        }
-    }
-
-    /**
-     * 将指定的 Bash 命令切换到后台运行
-     *
-     * 类似于官方 CLI 的 Ctrl+B 功能，但针对单个 Bash 命令。
-     * 需要 CLI 应用 007-bash-background.js 补丁。
-     *
-     * @param taskId Bash 命令的 tool_use_id
-     * @returns 后台运行结果
-     */
-    async function bashRunToBackground(taskId: string): Promise<BashRunToBackgroundResult> {
-        if (!rsocketSession.value) {
-            return { success: false, error: '会话未连接' }
-        }
-
-        try {
-            const result = await rsocketSession.value.bashRunToBackground(taskId)
-            log.info(`[Tab ${tabId}] Bash 后台运行结果: success=${result.success}, taskId=${result.taskId}`)
-            return result
-        } catch (err) {
-            log.error(`[Tab ${tabId}] Bash 后台运行请求失败:`, err)
-            return { success: false, error: String(err) }
-        }
-    }
-
-    /**
-     * 统一的后台运行方法
-     *
-     * 自动检测任务类型（Bash 或 Agent）并执行后台化。
-     * 这是推荐的后台化方法，模拟 CLI 的 Ctrl+B 行为。
-     *
-     * @param taskId 可选的任务 ID：
-     *   - 传入 taskId: 后台化指定任务（自动检测类型）
-     *   - 不传 taskId: 后台化所有前台任务（Bash + Agent）
-     * @returns 统一后台运行结果
-     */
-    async function runToBackground(taskId?: string): Promise<RunToBackgroundResult> {
-        if (!rsocketSession.value) {
-            return createRunToBackgroundError('会话未连接')
-        }
-
-        try {
-            const result = await rsocketSession.value.runToBackground(taskId)
-            if (taskId) {
-                const typeInfo = result.isBash ? 'Bash' : 'Agent'
-                log.info(`[Tab ${tabId}] ${typeInfo} 后台运行结果: success=${result.success}, taskId=${result.taskId}`)
-            } else {
-                log.info(`[Tab ${tabId}] 批量后台运行结果: success=${result.success}, bash=${result.bashCount}, agent=${result.agentCount}`)
-            }
-            return result
-        } catch (err) {
-            log.error(`[Tab ${tabId}] 后台运行请求失败:`, err)
-            return createRunToBackgroundError(String(err))
         }
     }
 
@@ -2519,9 +2457,6 @@ export function useSessionTab(initialOrder: number = 0) {
         sendTextMessageDirect,
         forceSendMessage,
         interrupt,
-        runInBackground,
-        bashRunToBackground,
-        runToBackground,
         editAndResendMessage,
 
         // 队列管理

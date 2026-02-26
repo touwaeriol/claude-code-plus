@@ -160,7 +160,7 @@ export interface TokenUsage {
  * System init message - sent at the start of each query from Claude CLI.
  * Contains session information that can be used for session resumption.
  *
- * Example: {"type":"system","subtype":"init","session_id":"...","model":"claude-opus-4-5-20251101",...}
+ * Example: {"type":"system","subtype":"init","session_id":"...","model":"claude-opus-4-6",...}
  */
 export interface SystemInitMessage {
   type: 'system';

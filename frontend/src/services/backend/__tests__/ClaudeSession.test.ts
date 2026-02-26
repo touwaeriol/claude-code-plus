@@ -19,7 +19,6 @@ const mockRSocketSession = {
   sendMessage: vi.fn(),
   sendMessageWithContent: vi.fn().mockResolvedValue(undefined),
   interrupt: vi.fn().mockResolvedValue(undefined),
-  runInBackground: vi.fn().mockResolvedValue(undefined),
   setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
   setModel: vi.fn().mockResolvedValue(undefined),
   onMessage: vi.fn(),
@@ -39,7 +38,7 @@ vi.mock('../rsocket/RSocketSession', () => ({
 
 const TEST_CLAUDE_CONFIG: ClaudeBackendConfig = {
   type: 'claude',
-  modelId: 'claude-sonnet-4-5-20251101',
+  modelId: 'claude-sonnet-4-6',
   permissionMode: 'default',
   skipPermissions: false,
   maxTurns: 10,
@@ -177,21 +176,6 @@ describe('ClaudeSession', () => {
     it('should call RSocket interrupt', async () => {
       await session.interrupt()
       expect(mockRSocketSession.interrupt).toHaveBeenCalled()
-    })
-  })
-
-  // =========================================================================
-  // Run In Background Tests
-  // =========================================================================
-
-  describe('Run In Background', () => {
-    beforeEach(async () => {
-      await session.connect({ config: TEST_CLAUDE_CONFIG })
-    })
-
-    it('should call RSocket runInBackground', async () => {
-      await session.runInBackground()
-      expect(mockRSocketSession.runInBackground).toHaveBeenCalled()
     })
   })
 

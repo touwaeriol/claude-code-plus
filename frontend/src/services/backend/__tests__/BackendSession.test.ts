@@ -276,17 +276,6 @@ describe('BaseBackendSession', () => {
   })
 
   // =========================================================================
-  // runInBackground Tests
-  // =========================================================================
-
-  describe('runInBackground', () => {
-    it('should be a no-op by default', async () => {
-      // Should not throw
-      await expect(session.runInBackground()).resolves.toBeUndefined()
-    })
-  })
-
-  // =========================================================================
   // Config Update Tests
   // =========================================================================
 
@@ -337,7 +326,6 @@ describe('BackendSession Interface Compliance', () => {
     expect(typeof session.isConnected).toBe('function')
     expect(typeof session.sendMessage).toBe('function')
     expect(typeof session.interrupt).toBe('function')
-    expect(typeof session.runInBackground).toBe('function')
     expect(typeof session.respondToApproval).toBe('function')
     expect(typeof session.updateConfig).toBe('function')
     expect(typeof session.updateThinkingConfig).toBe('function')

@@ -137,7 +137,7 @@ export class SettingsPanel {
         permissionMode: config.get('claude.permissionMode', 'default'),
         includePartialMessages: config.get('includePartialMessages', true),
         nodePath: config.get('claude.nodePath', ''),
-        defaultModelId: config.get('claude.defaultModelId', 'claude-opus-4-5-20251101'),
+        defaultModelId: config.get('claude.defaultModelId', 'claude-opus-4-6'),
         defaultThinkingLevel: config.get('claude.defaultThinkingLevel', 'ultra'),
         thinkTokens: config.get('claude.thinkTokens', 2048),
         ultraTokens: config.get('claude.ultraTokens', 8096),

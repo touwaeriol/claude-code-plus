@@ -73,7 +73,7 @@ export interface CustomModelConfig {
     id: string;
     /** Display name (e.g., "My Custom Model") */
     displayName: string;
-    /** Model ID (e.g., "claude-sonnet-4-5-20250929") */
+    /** Model ID (e.g., "claude-sonnet-4-6") */
     modelId: string;
 }
 

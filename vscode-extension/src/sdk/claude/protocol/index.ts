@@ -9,13 +9,8 @@
  * - ToolTypeParser: Converts generic tool uses to specific types
  * - McpMessageHandler: Handles MCP server messages
  * 
- * Control commands (from cli-patches):
- * - run_to_background: Unified background operation (007 patch)
- * - agent_run_to_background: Agent background operation
- * - mcp_reconnect, mcp_disable, mcp_enable: MCP control (004 patch)
- * - mcp_tools: Get MCP tool list (005 patch)
- * - get_capabilities: Get CLI capabilities (008 patch)
- * - get_chrome_status: Chrome extension status (002 patch)
+ * Control commands:
+ * - mcp_reconnect, mcp_disable, mcp_enable: MCP control (official CLI built-in)
  */
 
 // Export all models

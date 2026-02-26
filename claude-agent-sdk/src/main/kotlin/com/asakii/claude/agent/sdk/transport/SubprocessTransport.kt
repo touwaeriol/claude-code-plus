@@ -722,7 +722,6 @@ class SubprocessTransport(
     }
     /**
      * 查找 SDK 绑定的 CLI (cli.mjs, 从 resources/bundled/ 目录)
-     * 优先使用增强版 CLI (带补丁)，如果不存在则回退到原始版本
      *
      * 注意：使用 .mjs 扩展名确保 Node.js 正确识别为 ES Module
      * 官方 @anthropic-ai/claude-code 包通过 package.json 的 "type": "module" 声明
@@ -741,8 +740,8 @@ class SubprocessTransport(
                 return null
             }
 
-            // 查找增强版 CLI（使用 .mjs 扩展名）
-            val cliJsName = "claude-cli-$cliVersion-enhanced.mjs"
+            // 查找 CLI（使用 .mjs 扩展名）
+            val cliJsName = "claude-cli-$cliVersion.mjs"
             val resourcePath = "bundled/$cliJsName"
             logger.info { "🔍 查找绑定的 CLI: $resourcePath" }
             val resource = this::class.java.classLoader.getResource(resourcePath)

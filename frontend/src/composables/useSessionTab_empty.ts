@@ -634,18 +634,6 @@ export function useSessionTab(initialOrder: number = 0, initialBackendType: Back
         }
     }
 
-    async function runInBackground(): Promise<void> {
-        if (!backendSession.value) {
-            throw new Error('会话未连接')
-        }
-
-        if (!messagesHandler.isGenerating.value) {
-            return
-        }
-
-        await backendSession.value.runInBackground()
-    }
-
     // ========== 设置管理 ==========
 
     /**
@@ -857,7 +845,6 @@ export function useSessionTab(initialOrder: number = 0, initialBackendType: Back
         sendTextMessageDirect,
         forceSendMessage,
         interrupt,
-        runInBackground,
         editAndResendMessage,
 
         editQueueMessage: messagesHandler.editQueueMessage,

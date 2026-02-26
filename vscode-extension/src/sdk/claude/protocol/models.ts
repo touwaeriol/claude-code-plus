@@ -6,83 +6,6 @@
  */
 
 // ============================================================================
-// Background Operation Results
-// ============================================================================
-
-/**
- * Result of agents_run_all_to_background operation.
- */
-export interface AgentsBackgroundResult {
-  /** Number of agents that were backgrounded */
-  count: number;
-  /** List of agent IDs that were backgrounded */
-  backgroundedIds: string[];
-}
-
-/**
- * Result of bash_run_to_background operation.
- */
-export interface BashBackgroundResult {
-  /** Whether the operation succeeded */
-  success: boolean;
-  /** The background task ID (for tracking) */
-  taskId?: string;
-  /** The command that was backgrounded */
-  command?: string;
-}
-
-/**
- * Result of unified run_to_background operation.
- * 
- * This represents the result of backgrounding tasks, handling both Bash and Agent types.
- * 
- * When backgrounding a specific task (taskId provided):
- * - isBash: Whether the task was a Bash command (true) or Agent (false)
- * - success: Whether the operation succeeded
- * - taskId: The ID of the backgrounded task
- * - command: The Bash command (only for Bash tasks)
- * 
- * When backgrounding all tasks (taskId not provided):
- * - bashCount: Number of Bash commands backgrounded
- * - agentCount: Number of Agents backgrounded
- * - backgroundedBashIds: List of Bash task IDs that were backgrounded
- * - backgroundedAgentIds: List of Agent IDs that were backgrounded
- */
-export interface UnifiedBackgroundResult {
-  success: boolean;
-  /** For single task: whether it was Bash */
-  isBash?: boolean;
-  /** For single task: the task ID */
-  taskId?: string;
-  /** For single Bash task: the command */
-  command?: string;
-  /** For batch: number of Bash backgrounded */
-  bashCount?: number;
-  /** For batch: number of Agents backgrounded */
-  agentCount?: number;
-  /** For batch: Bash IDs */
-  backgroundedBashIds?: string[];
-  /** For batch: Agent IDs */
-  backgroundedAgentIds?: string[];
-  /** Error message if failed */
-  error?: string;
-}
-
-/**
- * CLI capabilities result.
- * 
- * Contains runtime capability flags queried from the CLI.
- * Use this to check if certain features are enabled/disabled.
- */
-export interface CliCapabilities {
-  /** 
-   * Whether background tasks are enabled.
-   * False when CLAUDE_CODE_DISABLE_BACKGROUND_TASKS env var is set to 'true' or '1'.
-   */
-  backgroundTasksEnabled: boolean;
-}
-
-// ============================================================================
 // Control Request/Response Types
 // ============================================================================
 
@@ -98,14 +21,6 @@ export interface ControlRequest {
  */
 export interface InterruptRequest extends ControlRequest {
   subtype: 'interrupt';
-}
-
-/**
- * Run in background request.
- */
-export interface RunInBackgroundRequest extends ControlRequest {
-  subtype: 'run_in_background';
-  task_id?: string;
 }
 
 /**
@@ -211,18 +126,6 @@ export interface McpToolInfo {
 }
 
 /**
- * Response from mcp_tools request.
- */
-export interface McpToolsResponse {
-  /** Server name filter (null if all servers) */
-  serverName?: string;
-  /** List of tools */
-  tools: McpToolInfo[];
-  /** Total count of tools */
-  count: number;
-}
-
-/**
  * Response from mcp_disable/mcp_enable request.
  */
 export interface McpDisableEnableResponse {
@@ -236,22 +139,6 @@ export interface McpDisableEnableResponse {
   toolsCount: number;
   /** Error message if operation failed */
   error?: string;
-}
-
-/**
- * Chrome extension status - matches official /chrome command display format.
- */
-export interface ChromeStatus {
-  /** Whether the Chrome extension is installed (checks NativeMessagingHost config file) */
-  installed: boolean;
-  /** Whether Chrome integration is enabled by default */
-  enabled: boolean;
-  /** Whether the MCP server "claude-in-chrome" is currently connected */
-  connected: boolean;
-  /** MCP server status: "connected" | "failed" | "pending" | "needs-auth" | "disabled" | null */
-  mcpServerStatus?: string;
-  /** Extension version (e.g., "1.0.36") when connected */
-  extensionVersion?: string;
 }
 
 // ============================================================================

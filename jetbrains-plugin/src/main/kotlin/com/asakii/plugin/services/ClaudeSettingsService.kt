@@ -19,7 +19,7 @@ class ClaudeSettingsService : PersistentStateComponent<ClaudeSettingsService.Sta
     @Serializable
     data class State(
         var apiKey: String? = null,
-        var model: String = "claude-sonnet-4-5-20250929",
+        var model: String = "claude-sonnet-4-6",
         var maxTokens: Int = 4096,
         var temperature: Double = 0.7,
         var maxTurns: Int = 10,

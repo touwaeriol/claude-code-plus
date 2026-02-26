@@ -16,16 +16,12 @@ import {
   CapabilitiesSchema,
   ConnectOptionsSchema,
   ConnectResultSchema,
-  BashBackgroundResultSchema,
-  BashRunToBackgroundRequestSchema,
   ContentBlockDeltaEventSchema,
   ContentBlockStartEventSchema,
   ContentBlockStopEventSchema,
   ContentBlockSchema,
   ContentStatus,
   DeltaSchema,
-  GetMcpToolsRequestSchema,
-  GetMcpToolsResultSchema,
   HasIdeEnvironmentResponseSchema,
   HistorySchema,
   AskUserQuestionRequestSchema,
@@ -45,7 +41,6 @@ import {
   ResultMessageSchema,
   RequestPermissionRequestSchema,
   RpcMessageSchema,
-  RunToBackgroundRequestSchema,
   ServerCallRequestSchema,
   ServerCallResponseSchema,
   TextBlockSchema,
@@ -69,7 +64,6 @@ import {
   InputJsonDeltaSchema,
   TruncateHistoryRequestSchema,
   TruncateHistoryResultSchema,
-  UnifiedBackgroundResultSchema,
   UserMessageSchema,
   type RpcMessage,
 } from '@proto'
@@ -448,7 +442,7 @@ function createResponder(
   }
 
   let provider: Provider = Provider.CLAUDE
-  let model: string = 'claude-opus-4-5-20251101'
+  let model: string = 'claude-opus-4-6'
   let permissionMode: PermissionMode = PermissionMode.DEFAULT
   let includePartialMessages = true
   let dangerouslySkipPermissions = false
@@ -669,136 +663,6 @@ function createResponder(
             responderStream.onNext({ data: Buffer.from(toBinary(SetMaxThinkingTokensResultSchema, result)) }, true)
             break
           }
-          case 'agent.runInBackground': {
-            const sid = sessionId || 'default'
-            log?.(`[rsocket] runInBackground: sessionId=${sid}`)
-            
-            // Only Claude provider supports runInBackground
-            if (provider !== Provider.CLAUDE) {
-              responderStream.onNext({ data: Buffer.from(encodeStatus(SessionStatus.CONNECTED)) }, true)
-              break
-            }
-            
-            // Call the Claude CLI session manager to run all tasks in background (batch mode)
-            claudeCli.runToBackground(sid)
-              .then((bgResult) => {
-                log?.(`[rsocket] runInBackground result: success=${bgResult.success}, error=${bgResult.error || 'none'}`)
-                responderStream.onNext({ data: Buffer.from(encodeStatus(SessionStatus.CONNECTED)) }, true)
-              })
-              .catch((err) => {
-                log?.(`[rsocket] runInBackground error: ${err instanceof Error ? err.message : String(err)}`)
-                // Still return CONNECTED status even on error, as per JetBrains implementation
-                responderStream.onNext({ data: Buffer.from(encodeStatus(SessionStatus.CONNECTED)) }, true)
-              })
-            break
-          }
-          case 'agent.bashRunToBackground': {
-            const req = data.length > 0 ? fromBinary(BashRunToBackgroundRequestSchema, data) : undefined
-            const taskId = req?.taskId || ''
-            const sid = sessionId || 'default'
-            
-            log?.(`[rsocket] bashRunToBackground: sessionId=${sid}, taskId=${taskId}`)
-            
-            if (!taskId) {
-              const result = create(BashBackgroundResultSchema, {
-                success: false,
-                taskId: '',
-                error: 'taskId is required for bashRunToBackground',
-              })
-              responderStream.onNext({ data: Buffer.from(toBinary(BashBackgroundResultSchema, result)) }, true)
-              break
-            }
-            
-            // Only Claude provider supports bashRunToBackground
-            if (provider !== Provider.CLAUDE) {
-              const result = create(BashBackgroundResultSchema, {
-                success: false,
-                taskId,
-                error: `bashRunToBackground not supported for provider: ${String(provider)}`,
-              })
-              responderStream.onNext({ data: Buffer.from(toBinary(BashBackgroundResultSchema, result)) }, true)
-              break
-            }
-            
-            // Call the Claude CLI session manager to run the bash task in background
-            claudeCli.runToBackground(sid, taskId)
-              .then((bgResult) => {
-                log?.(`[rsocket] bashRunToBackground result: success=${bgResult.success}, error=${bgResult.error || 'none'}`)
-                const result = create(BashBackgroundResultSchema, {
-                  success: bgResult.success,
-                  taskId: bgResult.taskId,
-                  command: bgResult.command,
-                  error: bgResult.error,
-                })
-                responderStream.onNext({ data: Buffer.from(toBinary(BashBackgroundResultSchema, result)) }, true)
-              })
-              .catch((err) => {
-                log?.(`[rsocket] bashRunToBackground error: ${err instanceof Error ? err.message : String(err)}`)
-                const result = create(BashBackgroundResultSchema, {
-                  success: false,
-                  taskId,
-                  error: err instanceof Error ? err.message : String(err),
-                })
-                responderStream.onNext({ data: Buffer.from(toBinary(BashBackgroundResultSchema, result)) }, true)
-              })
-            break
-          }
-          case 'agent.runToBackground': {
-            const req = data.length > 0 ? fromBinary(RunToBackgroundRequestSchema, data) : undefined
-            const taskId = req?.taskId || undefined
-            const sid = sessionId || 'default'
-            
-            log?.(`[rsocket] runToBackground: sessionId=${sid}, taskId=${taskId || 'batch'}`)
-            
-            // Only Claude provider supports runToBackground
-            if (provider !== Provider.CLAUDE) {
-              const result = create(UnifiedBackgroundResultSchema, {
-                success: false,
-                isBash: undefined,
-                taskId,
-                bashCount: 0,
-                agentCount: 0,
-                backgroundedBashIds: [],
-                backgroundedAgentIds: [],
-                error: `runToBackground not supported for provider: ${String(provider)}`,
-              })
-              responderStream.onNext({ data: Buffer.from(toBinary(UnifiedBackgroundResultSchema, result)) }, true)
-              break
-            }
-            
-            // Call the Claude CLI session manager to run the task in background
-            claudeCli.runToBackground(sid, taskId)
-              .then((bgResult) => {
-                log?.(`[rsocket] runToBackground result: success=${bgResult.success}, error=${bgResult.error || 'none'}`)
-                const result = create(UnifiedBackgroundResultSchema, {
-                  success: bgResult.success,
-                  isBash: bgResult.isBash,
-                  taskId: bgResult.taskId,
-                  command: bgResult.command,
-                  bashCount: bgResult.bashCount ?? 0,
-                  agentCount: bgResult.agentCount ?? 0,
-                  backgroundedBashIds: bgResult.backgroundedBashIds ?? [],
-                  backgroundedAgentIds: bgResult.backgroundedAgentIds ?? [],
-                  error: bgResult.error,
-                })
-                responderStream.onNext({ data: Buffer.from(toBinary(UnifiedBackgroundResultSchema, result)) }, true)
-              })
-              .catch((err) => {
-                log?.(`[rsocket] runToBackground error: ${err instanceof Error ? err.message : String(err)}`)
-                const result = create(UnifiedBackgroundResultSchema, {
-                  success: false,
-                  isBash: undefined,
-                  taskId,
-                  bashCount: 0,
-                  agentCount: 0,
-                  backgroundedBashIds: [],
-                  backgroundedAgentIds: [],
-                  error: err instanceof Error ? err.message : String(err),
-                })
-                responderStream.onNext({ data: Buffer.from(toBinary(UnifiedBackgroundResultSchema, result)) }, true)
-              })
-            break
-          }
           case 'agent.getHistory': {
             const sid = sessionId || ''
             const history = create(HistorySchema, { messages: sid ? historyStore.getSessionMessages(sid) : [] })
@@ -851,34 +715,6 @@ function createResponder(
                   error: error instanceof Error ? error.message : 'Unknown error',
                 })
                 responderStream.onNext({ data: Buffer.from(toBinary(ReconnectMcpResultSchema, result)) }, true)
-              }
-            })()
-            break
-          }
-          case 'agent.getMcpTools': {
-            const req = data.length > 0 ? fromBinary(GetMcpToolsRequestSchema, data) : undefined
-            void (async () => {
-              try {
-                const { mcpRegistry } = await import('../../ide/mcp')
-                const toolsResult = await mcpRegistry.getMcpTools(req?.serverName || undefined)
-                const result = create(GetMcpToolsResultSchema, {
-                  serverName: toolsResult.serverName,
-                  tools: toolsResult.tools.map(t => ({
-                    name: t.name,
-                    description: t.description,
-                    inputSchema: t.inputSchema ? JSON.stringify(t.inputSchema) : undefined,
-                  })),
-                  count: toolsResult.count,
-                })
-                responderStream.onNext({ data: Buffer.from(toBinary(GetMcpToolsResultSchema, result)) }, true)
-              } catch (error) {
-                log?.(`[rsocket] getMcpTools error: ${error instanceof Error ? error.message : String(error)}`)
-                const result = create(GetMcpToolsResultSchema, {
-                  serverName: req?.serverName,
-                  tools: [],
-                  count: 0,
-                })
-                responderStream.onNext({ data: Buffer.from(toBinary(GetMcpToolsResultSchema, result)) }, true)
               }
             })()
             break

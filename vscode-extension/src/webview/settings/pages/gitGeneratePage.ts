@@ -21,7 +21,6 @@ export function getGitGeneratePageHtml(): string {
         <label for="gitGenerate-model">Model</label>
         <select id="gitGenerate-model" data-key="gitGenerate.model">
           <option value="default">Default (use backend default)</option>
-          <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
           <option value="claude-haiku-3-5-20241022">Claude Haiku 3.5</option>
           <option value="o4-mini">o4-mini</option>
           <option value="gpt-4.1">gpt-4.1</option>

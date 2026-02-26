@@ -1,10 +1,7 @@
 package com.asakii.claude.agent.sdk
 
 import com.asakii.claude.agent.sdk.exceptions.ClientNotConnectedException
-import com.asakii.claude.agent.sdk.protocol.AgentsBackgroundResult
-import com.asakii.claude.agent.sdk.protocol.BashBackgroundResult
 import com.asakii.claude.agent.sdk.protocol.ControlProtocol
-import com.asakii.claude.agent.sdk.protocol.UnifiedBackgroundResult
 import com.asakii.claude.agent.sdk.transport.SubprocessTransport
 import com.asakii.claude.agent.sdk.transport.Transport
 import com.asakii.claude.agent.sdk.types.*
@@ -337,147 +334,6 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
     }
 
     /**
-     * Run the current task in the background.
-     *
-     * This allows the current task to continue running without blocking for user input.
-     * The task will complete in the background and results will still be emitted via receiveResponse().
-     *
-     * Note: Bash background support has been removed. For background Bash execution,
-     * use the Terminal MCP via JetBrains plugin instead.
-     *
-     * Example:
-     * ```kotlin
-     * val client = ClaudeCodeSdkClient(options)
-     * client.connect()
-     * client.query("Run tests and fix any failures")
-     *
-     * // After 5 seconds, move to background
-     * delay(5000)
-     * client.runInBackground()
-     *
-     * // Task continues in background, results still flow via receiveResponse()
-     *
-     * // Background a specific agent by ID
-     * client.runInBackground(targetId = "abc-123")
-     * ```
-     */
-    suspend fun runInBackground(targetId: String? = null) {
-        runCommand {
-            ensureConnected()
-            val targetInfo = targetId?.let { "(agent:$it)" } ?: ""
-            logger.info { "⏸️  将当前任务移到后台运行 $targetInfo" }
-
-            controlProtocol!!.agentRunToBackground(targetId)
-
-            logger.info { "✅ 任务已移到后台" }
-        }
-    }
-
-    /**
-     * Move ALL running tasks to background at once.
-     *
-     * This is equivalent to the unified Ctrl+B feature in CLI 2.1.0+.
-     * All currently running Task tools (subagents) will be backgrounded simultaneously.
-     *
-     * Example:
-     * ```kotlin
-     * // Background all running agents
-     * val result = client.runAllInBackground()
-     * println("Backgrounded ${result.count} agents: ${result.backgroundedIds}")
-     * ```
-     *
-     * @return AgentsBackgroundResult containing count and list of backgrounded agent IDs
-     */
-    suspend fun runAllInBackground(): AgentsBackgroundResult {
-        return runCommand {
-            ensureConnected()
-            logger.info { "⏸️  将所有运行中的任务移到后台..." }
-
-            val result = controlProtocol!!.agentsRunAllToBackground()
-
-            logger.info { "✅ ${result.count} 个任务已移到后台" }
-            result
-        }
-    }
-
-    /**
-     * Move a specific Bash command to background.
-     *
-     * This allows a running Bash command (identified by its tool_use_id) to continue
-     * running in the background without blocking.
-     *
-     * Note: This requires the bash_run_to_background patch to be applied to CLI.
-     *
-     * Example:
-     * ```kotlin
-     * // Background a specific Bash command
-     * val result = client.bashRunToBackground("toolu_01ABC123...")
-     * println("Bash backgrounded: ${result.command}")
-     * ```
-     *
-     * @param taskId The tool_use_id of the Bash command to background
-     * @return BashBackgroundResult containing success status and command info
-     */
-    suspend fun bashRunToBackground(taskId: String): BashBackgroundResult {
-        return runCommand {
-            ensureConnected()
-            logger.info { "⏸️  将 Bash 命令移到后台 (task_id: $taskId)" }
-
-            val result = controlProtocol!!.bashRunToBackground(taskId)
-
-            logger.info { "✅ Bash 命令已移到后台: ${result.command}" }
-            result
-        }
-    }
-
-    /**
-     * Unified method to move tasks to background.
-     *
-     * This method automatically detects the task type (Bash or Agent) and handles both.
-     * It's the recommended way to background tasks as it mirrors the CLI's Ctrl+B behavior.
-     *
-     * Behavior:
-     * - If taskId is provided: Background that specific task (auto-detect type)
-     * - If taskId is null: Background ALL foreground tasks (both Bash and Agents)
-     *
-     * Example:
-     * ```kotlin
-     * // Background a specific task (type auto-detected)
-     * val result = client.runToBackground("toolu_01ABC123...")
-     * println("Type: ${if (result.isBash == true) "Bash" else "Agent"}")
-     *
-     * // Background all tasks (Ctrl+B equivalent)
-     * val result = client.runToBackground()
-     * println("Backgrounded: ${result.bashCount} Bash, ${result.agentCount} Agents")
-     * ```
-     *
-     * @param taskId Optional task ID to background a specific task
-     * @return UnifiedBackgroundResult with details of what was backgrounded
-     */
-    suspend fun runToBackground(taskId: String? = null): UnifiedBackgroundResult {
-        return runCommand {
-            ensureConnected()
-            val targetInfo = taskId?.let { "task_id=$it" } ?: "all tasks"
-            logger.info { "⏸️  统一后台化: $targetInfo" }
-
-            val result = controlProtocol!!.runToBackground(taskId)
-
-            if (result.success) {
-                if (taskId != null) {
-                    val typeInfo = if (result.isBash == true) "Bash" else "Agent"
-                    logger.info { "✅ $typeInfo 已移到后台: ${result.taskId}" }
-                } else {
-                    logger.info { "✅ 批量后台完成: ${result.bashCount} Bash, ${result.agentCount} Agents" }
-                }
-            } else {
-                logger.warn { "⚠️ 后台化失败: ${result.error}" }
-            }
-
-            result
-        }
-    }
-
-    /**
      * Get MCP servers status.
      *
      * Returns the status of all connected MCP servers including their tools.
@@ -487,19 +343,6 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
     suspend fun getMcpStatus(): List<McpServerStatusInfo> {
         ensureConnected()
         return controlProtocol!!.getMcpStatus()
-    }
-
-    /**
-     * Get Chrome extension status.
-     *
-     * Queries the Chrome extension installation, enablement, and connection status.
-     * Requires CLI support for chrome_status control request.
-     *
-     * @return Chrome extension status info
-     */
-    suspend fun getChromeStatus(): ChromeStatus {
-        ensureConnected()
-        return controlProtocol!!.getChromeStatus()
     }
 
     /**
@@ -515,20 +358,6 @@ class ClaudeCodeSdkClient @JvmOverloads constructor(
     suspend fun reconnectMcp(serverName: String): McpReconnectResponse {
         ensureConnected()
         return controlProtocol!!.reconnectMcp(serverName)
-    }
-
-    /**
-     * Get the list of tools for a specific MCP server or all servers.
-     *
-     * This reads from the CLI's internal tool registry (y.mcp.tools) and returns
-     * detailed tool information including name, description, and input schema.
-     *
-     * @param serverName Optional server name to filter tools. If null, returns all tools.
-     * @return Response with tool list and count
-     */
-    suspend fun getMcpTools(serverName: String? = null): McpToolsResponse {
-        ensureConnected()
-        return controlProtocol!!.getMcpTools(serverName)
     }
 
     /**

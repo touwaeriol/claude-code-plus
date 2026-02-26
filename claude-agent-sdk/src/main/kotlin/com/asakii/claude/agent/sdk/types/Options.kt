@@ -339,19 +339,6 @@ data class McpToolInfo(
 )
 
 /**
- * Response from mcp_tools request.
- */
-@Serializable
-data class McpToolsResponse(
-    /** Server name filter (null if all servers) */
-    val serverName: String?,
-    /** List of tools */
-    val tools: List<McpToolInfo>,
-    /** Total count of tools */
-    val count: Int
-)
-
-/**
  * Response from mcp_disable/mcp_enable request.
  */
 @Serializable
@@ -368,30 +355,3 @@ data class McpDisableEnableResponse(
     val error: String? = null
 )
 
-/**
- * Chrome extension status - matches official /chrome command display format.
- *
- * Data sources:
- * 1. installed - Local file system check (Chrome Extensions directory)
- * 2. enabled/connected/mcpServerStatus - From mcp_status control command
- * 3. serverInfo - Full MCP server info (contains name, version, etc.)
- *
- * Official /chrome display format:
- * ```
- * Status: Connected/Disabled     ← connected field
- * Extension: Installed/Not detected  ← installed field
- * ```
- */
-@Serializable
-data class ChromeStatus(
-    /** Whether the Chrome extension is installed (checks NativeMessagingHost config file) */
-    val installed: Boolean,
-    /** Whether Chrome integration is enabled by default (k1().claudeInChromeDefaultEnabled) */
-    val enabled: Boolean,
-    /** Whether the MCP server "claude-in-chrome" is currently connected */
-    val connected: Boolean,
-    /** MCP server status: "connected" | "failed" | "pending" | "needs-auth" | "disabled" | null */
-    val mcpServerStatus: String? = null,
-    /** Extension version (e.g., "1.0.36") when connected */
-    val extensionVersion: String? = null
-)

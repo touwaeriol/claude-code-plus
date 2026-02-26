@@ -23,14 +23,8 @@ import type {
   ResultMessage,
   UserMessage,
   StreamEvent,
-  UnifiedBackgroundResult,
-  AgentsBackgroundResult,
-  BashBackgroundResult,
   McpServerStatusInfo,
   McpReconnectResponse,
-  McpToolsResponse,
-  ChromeStatus,
-  CliCapabilities,
 } from './protocol/models';
 
 /**
@@ -270,77 +264,6 @@ export class ClaudeCodeSdkClient extends EventEmitter implements vscode.Disposab
   }
 
   /**
-   * Run the current task in the background.
-   */
-  async runInBackground(targetId?: string): Promise<void> {
-    await this.runCommand(async () => {
-      this.ensureConnected();
-      const targetInfo = targetId ? `(agent:${targetId})` : '';
-      this.log(`⏸️ Moving current task to background ${targetInfo}`);
-
-      await this.controlProtocol!.agentRunToBackground(targetId);
-
-      this.log('✅ Task moved to background');
-    });
-  }
-
-  /**
-   * Move ALL running tasks to background at once.
-   */
-  async runAllInBackground(): Promise<AgentsBackgroundResult> {
-    return this.runCommand(async () => {
-      this.ensureConnected();
-      this.log('⏸️ Moving all running tasks to background...');
-
-      const result = await this.controlProtocol!.agentsRunAllToBackground();
-
-      this.log(`✅ ${result.count} tasks moved to background`);
-      return result;
-    });
-  }
-
-  /**
-   * Move a specific Bash command to background.
-   */
-  async bashRunToBackground(taskId: string): Promise<BashBackgroundResult> {
-    return this.runCommand(async () => {
-      this.ensureConnected();
-      this.log(`⏸️ Moving Bash command to background (task_id: ${taskId})`);
-
-      const result = await this.controlProtocol!.bashRunToBackground(taskId);
-
-      this.log(`✅ Bash command moved to background: ${result.command}`);
-      return result;
-    });
-  }
-
-  /**
-   * Unified method to move tasks to background (recommended).
-   */
-  async runToBackground(taskId?: string): Promise<UnifiedBackgroundResult> {
-    return this.runCommand(async () => {
-      this.ensureConnected();
-      const targetInfo = taskId ? `task_id=${taskId}` : 'all tasks';
-      this.log(`⏸️ Unified background: ${targetInfo}`);
-
-      const result = await this.controlProtocol!.runToBackground(taskId);
-
-      if (result.success) {
-        if (taskId) {
-          const typeInfo = result.isBash ? 'Bash' : 'Agent';
-          this.log(`✅ ${typeInfo} moved to background: ${result.taskId}`);
-        } else {
-          this.log(`✅ Batch background complete: ${result.bashCount} Bash, ${result.agentCount} Agents`);
-        }
-      } else {
-        this.log(`⚠️ Background failed: ${result.error}`);
-      }
-
-      return result;
-    });
-  }
-
-  /**
    * Get MCP servers status.
    */
   async getMcpStatus(): Promise<McpServerStatusInfo[]> {
@@ -349,35 +272,11 @@ export class ClaudeCodeSdkClient extends EventEmitter implements vscode.Disposab
   }
 
   /**
-   * Get Chrome extension status.
-   */
-  async getChromeStatus(): Promise<ChromeStatus> {
-    this.ensureConnected();
-    return this.controlProtocol!.getChromeStatus();
-  }
-
-  /**
    * Reconnect a specific MCP server.
    */
   async reconnectMcp(serverName: string): Promise<McpReconnectResponse> {
     this.ensureConnected();
     return this.controlProtocol!.reconnectMcp(serverName);
-  }
-
-  /**
-   * Get the list of tools for a specific MCP server or all servers.
-   */
-  async getMcpTools(serverName?: string): Promise<McpToolsResponse> {
-    this.ensureConnected();
-    return this.controlProtocol!.getMcpTools(serverName);
-  }
-
-  /**
-   * Get CLI capabilities.
-   */
-  async getCapabilities(): Promise<CliCapabilities> {
-    this.ensureConnected();
-    return this.controlProtocol!.getCapabilities();
   }
 
   /**

@@ -59,7 +59,7 @@ export class ConfigHandler {
             defaultBypassPermissions: config.get('defaultBypassPermissions', false),
             includePartialMessages: config.get('includePartialMessages', true),
             claude: {
-                defaultModelId: config.get('claude.defaultModelId', 'claude-opus-4-5-20251101'),
+                defaultModelId: config.get('claude.defaultModelId', 'claude-opus-4-6'),
                 defaultThinkingLevel: config.get('claude.defaultThinkingLevel', 'HIGH'),
                 defaultThinkingTokens: config.get('claude.defaultThinkingTokens', 8192),
                 defaultAutoCleanupContexts: config.get('claude.defaultAutoCleanupContexts', true),

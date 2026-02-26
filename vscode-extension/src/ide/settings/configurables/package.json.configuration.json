@@ -22,7 +22,7 @@
   },
   "claudeCodePlus.claude.defaultModelId": {
     "type": "string",
-    "default": "claude-opus-4-5-20251101",
+    "default": "claude-opus-4-6",
     "description": "Default Claude model ID"
   },
   "claudeCodePlus.claude.customModels": {
@@ -32,7 +32,7 @@
       "type": "object",
       "properties": {
         "displayName": { "type": "string", "description": "Display name for the model" },
-        "modelId": { "type": "string", "description": "Model ID (e.g., claude-sonnet-4-5-20250929)" }
+        "modelId": { "type": "string", "description": "Model ID (e.g., claude-sonnet-4-6)" }
       },
       "required": ["displayName", "modelId"]
     },

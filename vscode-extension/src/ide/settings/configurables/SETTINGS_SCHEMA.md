@@ -30,7 +30,7 @@ Settings are organized into the following categories:
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `claudeCodePlus.claude.nodePath` | `string` | `""` | Path to Node.js executable (empty = auto-detect) |
-| `claudeCodePlus.claude.defaultModelId` | `string` | `"claude-opus-4-5-20251101"` | Default Claude model ID |
+| `claudeCodePlus.claude.defaultModelId` | `string` | `"claude-opus-4-6"` | Default Claude model ID |
 | `claudeCodePlus.claude.customModels` | `array` | `[]` | Custom model definitions |
 
 ### 2.2 Thinking Configuration
@@ -212,7 +212,7 @@ Add the following to `contributes.configuration.properties` in `package.json`:
   },
   "claudeCodePlus.claude.defaultModelId": {
     "type": "string",
-    "default": "claude-opus-4-5-20251101",
+    "default": "claude-opus-4-6",
     "description": "Default Claude model ID"
   },
   "claudeCodePlus.claude.customModels": {

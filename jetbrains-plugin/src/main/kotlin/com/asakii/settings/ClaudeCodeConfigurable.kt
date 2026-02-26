@@ -550,7 +550,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         val dialogPanel = panel {
             row("Display Name:") { cell(nameField).align(AlignX.FILL) }
             row("Model ID:") { cell(idField).align(AlignX.FILL) }
-            row { comment("Model ID examples: claude-sonnet-4-5-20250929") }
+            row { comment("Model ID examples: claude-sonnet-4-6") }
         }
 
         val result = JOptionPane.showConfirmDialog(mainPanel, dialogPanel,
@@ -644,7 +644,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
 
         val selectedModel = defaultModelCombo?.selectedItem as? ModelInfo
         settings.defaultModel = selectedModel?.modelId ?: settings.getAllAvailableModels().firstOrNull { it.isBuiltIn }?.modelId
-            ?: "claude-opus-4-5-20251101"
+            ?: "claude-opus-4-6"
 
         val existing = settings.getCustomModels().associateBy { it.modelId }
         val custom = getCustomModelsFromTable().map { m ->

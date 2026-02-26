@@ -21,22 +21,22 @@ vi.mock('@/services/backendCapabilities', () => ({
     if (type === 'claude') {
       return [
         {
-          modelId: 'claude-opus-4-5-20251101',
-          displayName: 'Claude Opus 4.5',
+          modelId: 'claude-opus-4-6',
+          displayName: 'Claude Opus 4.6',
           description: 'Most capable model',
           supportsThinking: true,
           isDefault: false,
         },
         {
-          modelId: 'claude-sonnet-4-5-20250929',
-          displayName: 'Claude Sonnet 4.5',
+          modelId: 'claude-sonnet-4-6',
+          displayName: 'Claude Sonnet 4.6',
           description: 'Balanced performance',
           supportsThinking: true,
           isDefault: true,
         },
         {
           modelId: 'claude-haiku-4-5-20251001',
-          displayName: 'Claude Haiku 4.5',
+          displayName: 'Claude Haiku 4.6',
           description: 'Fast and efficient',
           supportsThinking: true,
           isDefault: false,
@@ -64,9 +64,9 @@ vi.mock('@/services/backendCapabilities', () => ({
   getModelByModelId: (type: BackendType, id: string) => {
     const models = type === 'claude'
       ? [
-          { modelId: 'claude-opus-4-5-20251101', displayName: 'Claude Opus 4.5', supportsThinking: true },
-          { modelId: 'claude-sonnet-4-5-20250929', displayName: 'Claude Sonnet 4.5', supportsThinking: true, isDefault: true },
-          { modelId: 'claude-haiku-4-5-20251001', displayName: 'Claude Haiku 4.5', supportsThinking: true },
+          { modelId: 'claude-opus-4-6', displayName: 'Claude Opus 4.6', supportsThinking: true },
+          { modelId: 'claude-sonnet-4-6', displayName: 'Claude Sonnet 4.6', supportsThinking: true, isDefault: true },
+          { modelId: 'claude-haiku-4-5-20251001', displayName: 'Claude Haiku 4.6', supportsThinking: true },
         ]
       : [
           { modelId: 'gpt-5.2-codex', displayName: 'gpt-5.2-codex', supportsThinking: true, isDefault: true },
@@ -79,7 +79,7 @@ vi.mock('@/services/backendCapabilities', () => ({
   },
   isValidModel: (type: BackendType, modelId: string) => {
     const models = type === 'claude'
-      ? ['claude-opus-4-5-20251101', 'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001']
+      ? ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001']
       : ['gpt-5.2-codex', 'gpt-5.2']
     return models.includes(modelId)
   },
@@ -99,7 +99,7 @@ describe('ModelSelector', () => {
     it('should render with Claude backend', () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
           backendType: 'claude',
         },
       })
@@ -124,7 +124,7 @@ describe('ModelSelector', () => {
     it('should show disabled state', () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
           backendType: 'claude',
           disabled: true,
         },
@@ -139,7 +139,7 @@ describe('ModelSelector', () => {
     it('should only show Claude models for Claude backend', () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
           backendType: 'claude',
         },
       })
@@ -167,22 +167,22 @@ describe('ModelSelector', () => {
     it('should emit update:modelValue on selection', async () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
           backendType: 'claude',
         },
       })
 
       const select = wrapper.find('.model-select')
-      await select.setValue('claude-opus-4-5-20251101')
+      await select.setValue('claude-opus-4-6')
 
       expect(wrapper.emitted('update:modelValue')).toBeTruthy()
-      expect(wrapper.emitted('update:modelValue')![0]).toEqual(['claude-opus-4-5-20251101'])
+      expect(wrapper.emitted('update:modelValue')![0]).toEqual(['claude-opus-4-6'])
     })
 
     it('should emit backend-mismatch when selecting wrong backend model', async () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
           backendType: 'claude',
         },
       })
@@ -200,7 +200,7 @@ describe('ModelSelector', () => {
     it('should auto-switch to default model when backend changes', async () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
           backendType: 'claude',
         },
       })
@@ -239,7 +239,7 @@ describe('ModelSelector', () => {
     it('should show model details when showDetails is true', () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
           backendType: 'claude',
           showDetails: true,
         },
@@ -251,7 +251,7 @@ describe('ModelSelector', () => {
     it('should hide model details when showDetails is false', () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
           backendType: 'claude',
           showDetails: false,
         },
@@ -263,7 +263,7 @@ describe('ModelSelector', () => {
     it('should show info icon tooltip', () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
           backendType: 'claude',
         },
       })
@@ -289,7 +289,7 @@ describe('ModelSelector', () => {
     it('should not show warning when model matches backend', () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
           backendType: 'claude',
         },
       })
@@ -302,7 +302,7 @@ describe('ModelSelector', () => {
     it('should show other backend models when allowCrossBackend is true', () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
           backendType: 'claude',
           allowCrossBackend: true,
         },
@@ -315,7 +315,7 @@ describe('ModelSelector', () => {
     it('should mark cross-backend models as disabled', () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
           backendType: 'claude',
           allowCrossBackend: true,
         },
@@ -330,7 +330,7 @@ describe('ModelSelector', () => {
     it('should handle missing backendType', () => {
       wrapper = mount(ModelSelector, {
         props: {
-          modelValue: 'claude-sonnet-4-5-20250929',
+          modelValue: 'claude-sonnet-4-6',
         },
       })
 

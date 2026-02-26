@@ -15,8 +15,6 @@ import com.asakii.ai.agent.sdk.model.UiError
 import com.asakii.ai.agent.sdk.model.UiStreamEvent
 import com.asakii.ai.agent.sdk.model.UnifiedContentBlock
 import com.asakii.claude.agent.sdk.ClaudeCodeSdkClient
-import com.asakii.claude.agent.sdk.protocol.BashBackgroundResult
-import com.asakii.claude.agent.sdk.protocol.UnifiedBackgroundResult
 import com.asakii.claude.agent.sdk.types.ImageInput
 import com.asakii.claude.agent.sdk.types.TextInput
 import com.asakii.claude.agent.sdk.types.UserInputContent
@@ -188,28 +186,6 @@ class ClaudeAgentClientImpl(
         client?.interrupt()
     }
 
-    override suspend fun runInBackground() {
-        checkCapability(getCapabilities().canRunInBackground, "runInBackground")
-        client?.runInBackground()
-    }
-
-    override suspend fun bashRunToBackground(taskId: String): BashBackgroundResult {
-        val activeClient = client ?: return BashBackgroundResult(
-            success = false,
-            taskId = null,
-            command = null
-        )
-        return activeClient.bashRunToBackground(taskId)
-    }
-
-    override suspend fun runToBackground(taskId: String?): UnifiedBackgroundResult {
-        val activeClient = client ?: return UnifiedBackgroundResult(
-            success = false,
-            error = "Client not connected"
-        )
-        return activeClient.runToBackground(taskId)
-    }
-
     override suspend fun disconnect() {
         client?.disconnect()
         context = null
@@ -253,18 +229,6 @@ class ClaudeAgentClientImpl(
     override suspend fun getMcpStatus() = client?.getMcpStatus() ?: emptyList()
 
     /**
-     * 获取 Chrome 扩展状态
-     */
-    override suspend fun getChromeStatus() = client?.getChromeStatus()
-        ?: com.asakii.claude.agent.sdk.types.ChromeStatus(
-            installed = false,
-            enabled = false,
-            connected = false,
-            mcpServerStatus = null,
-            extensionVersion = null
-        )
-
-    /**
      * 重连指定的 MCP 服务器
      */
     override suspend fun reconnectMcp(serverName: String) = client?.reconnectMcp(serverName)
@@ -274,16 +238,6 @@ class ClaudeAgentClientImpl(
             status = null,
             toolsCount = 0,
             error = "Client not connected"
-        )
-
-    /**
-     * 获取指定 MCP 服务器的工具列表
-     */
-    override suspend fun getMcpTools(serverName: String?) = client?.getMcpTools(serverName)
-        ?: com.asakii.claude.agent.sdk.types.McpToolsResponse(
-            serverName = serverName,
-            tools = emptyList(),
-            count = 0
         )
 
     private fun checkCapability(supported: Boolean, method: String) {

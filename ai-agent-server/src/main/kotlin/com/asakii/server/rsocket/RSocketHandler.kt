@@ -107,9 +107,6 @@ class RSocketHandler(
                 val response = when (route) {
                     "agent.connect" -> handleConnect(dataBytes, rpcService)
                     "agent.interrupt" -> handleInterrupt(rpcService)
-                    "agent.runInBackground" -> handleRunInBackground(rpcService)
-                    "agent.bashRunToBackground" -> handleBashRunToBackground(dataBytes, rpcService)
-                    "agent.runToBackground" -> handleRunToBackground(dataBytes, rpcService)
                     "agent.setMaxThinkingTokens" -> handleSetMaxThinkingTokens(dataBytes, rpcService)
                     "agent.disconnect" -> handleDisconnect(rpcService)
                     "agent.setModel" -> handleSetModel(dataBytes, rpcService)
@@ -120,7 +117,6 @@ class RSocketHandler(
                     "agent.hasIdeEnvironment" -> handleHasIdeEnvironment()
                     "agent.getMcpStatus" -> handleGetMcpStatus(rpcService)
                     "agent.reconnectMcp" -> handleReconnectMcp(dataBytes, rpcService)
-                    "agent.getMcpTools" -> handleGetMcpTools(dataBytes, rpcService)
                     "agent.disposeSession" -> handleDisposeSession(rpcService)
                     else -> throw IllegalArgumentException("Unknown route: $route")
                 }
@@ -193,35 +189,6 @@ class RSocketHandler(
         wsLog.info { "📥 [RSocket] interrupt request" }
         val result = rpcService.interrupt()
         wsLog.info { "📤 [RSocket] interrupt result: status=${result.status}" }
-        return buildPayload { data(result.toProto().toByteArray()) }
-    }
-
-    private suspend fun handleRunInBackground(rpcService: AiAgentRpcService): Payload {
-        wsLog.info { "📥 [RSocket] runInBackground request" }
-        val result = rpcService.runInBackground()
-        wsLog.info { "📤 [RSocket] runInBackground result: status=${result.status}" }
-        return buildPayload { data(result.toProto().toByteArray()) }
-    }
-
-    private suspend fun handleBashRunToBackground(dataBytes: ByteArray, rpcService: AiAgentRpcService): Payload {
-        val req = BashRunToBackgroundRequest.parseFrom(dataBytes)
-        wsLog.info { "📥 [RSocket] bashRunToBackground request: taskId=${req.taskId}" }
-        val result = rpcService.bashRunToBackground(req.taskId)
-        wsLog.info { "📤 [RSocket] bashRunToBackground result: success=${result.success}, taskId=${result.taskId}" }
-        return buildPayload { data(result.toProto().toByteArray()) }
-    }
-
-    private suspend fun handleRunToBackground(dataBytes: ByteArray, rpcService: AiAgentRpcService): Payload {
-        val req = RunToBackgroundRequest.parseFrom(dataBytes)
-        val taskId = if (req.hasTaskId()) req.taskId else null
-        wsLog.info { "📥 [RSocket] runToBackground request: taskId=${taskId ?: "all"}" }
-        val result = rpcService.runToBackground(taskId)
-        if (taskId != null) {
-            val typeInfo = if (result.isBash == true) "Bash" else "Agent"
-            wsLog.info { "📤 [RSocket] runToBackground result: $typeInfo success=${result.success}, taskId=${result.taskId}" }
-        } else {
-            wsLog.info { "📤 [RSocket] runToBackground batch result: success=${result.success}, bash=${result.bashCount}, agent=${result.agentCount}" }
-        }
         return buildPayload { data(result.toProto().toByteArray()) }
     }
 
@@ -325,26 +292,6 @@ class RSocketHandler(
             result.status?.let { status = it }
             toolsCount = result.toolsCount
             result.error?.let { error = it }
-        }.build()
-        return buildPayload { data(response.toByteArray()) }
-    }
-
-    private suspend fun handleGetMcpTools(dataBytes: ByteArray, rpcService: AiAgentRpcService): Payload {
-        val req = GetMcpToolsRequest.parseFrom(dataBytes)
-        val serverName = if (req.hasServerName()) req.serverName else null
-        wsLog.info("🔧 [RSocket] getMcpTools request: serverName=$serverName")
-        val result = rpcService.getMcpTools(serverName)
-        wsLog.info("📤 [RSocket] getMcpTools result: ${result.count} tools")
-        val response = GetMcpToolsResult.newBuilder().apply {
-            result.serverName?.let { this.serverName = it }
-            result.tools.forEach { tool ->
-                addTools(McpToolInfo.newBuilder().apply {
-                    name = tool.name
-                    description = tool.description
-                    tool.inputSchema?.let { inputSchema = it.toString() }
-                }.build())
-            }
-            count = result.count
         }.build()
         return buildPayload { data(response.toByteArray()) }
     }

@@ -157,7 +157,7 @@ claude.cmd --verbose \
   --output-format stream-json \
   --include-partial-messages \
   --input-format stream-json \
-  --model claude-opus-4-5-20251101 \
+  --model claude-opus-4-6 \
   --permission-mode default \
   --permission-prompt-tool stdio \
   --mcp-config "{\"mcpServers\":{\"user_interaction\":{\"type\":\"sdk\"}}}" \
@@ -333,7 +333,7 @@ WebSocket 消息使用 JSON-RPC 风格封装：
   "method": "connect",
   "params": {
     "provider": "claude",
-    "model": "claude-opus-4-5-20251101"
+    "model": "claude-opus-4-6"
   }
 }
 ```

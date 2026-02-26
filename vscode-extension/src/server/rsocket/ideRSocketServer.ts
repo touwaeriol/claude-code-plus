@@ -915,7 +915,7 @@ function buildIdeSettings(context: vscode.ExtensionContext) {
   const defaultBypassPermissions = Boolean(cfg.get('defaultBypassPermissions') ?? false)
   const includePartialMessages = Boolean(cfg.get('includePartialMessages') ?? true)
 
-  const claudeDefaultModelId = String(cfg.get('claude.defaultModelId') ?? 'claude-opus-4-5-20251101')
+  const claudeDefaultModelId = String(cfg.get('claude.defaultModelId') ?? 'claude-opus-4-6')
   const claudeDefaultThinkingTokens = toNumberOrDefault(cfg.get('claude.defaultThinkingTokens'), 8192)
   const claudeDefaultAutoCleanupContexts = Boolean(cfg.get('claude.defaultAutoCleanupContexts') ?? true)
 
@@ -999,10 +999,6 @@ function resolveThinkingLevelId(tokens: number): string {
 
 function lookupClaudeModelName(modelId: string): string {
   switch (modelId) {
-    case 'claude-opus-4-5-20251101':
-      return 'Claude Opus 4.5'
-    case 'claude-sonnet-4-5-20250929':
-      return 'Claude Sonnet 4.5'
     case 'claude-haiku-4-5-20251001':
       return 'Claude Haiku 4.5'
     case 'claude-opus-4-6':

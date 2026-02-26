@@ -156,7 +156,9 @@ class HttpApiServer(
 
             // 路由配置
             routing {
-                val serverPort = configuredPort
+                // 注意: 不能使用 configuredPort（可能为 0），
+                // 而是从请求中动态获取实际端口 call.request.local.serverPort
+                val serverPort = configuredPort  // 仅用于 health 等非关键端点
 
                 // RSocket RPC 路由 (Protobuf over RSocket)
                 // 重要：每个连接创建完全独立的 handler，绝不共享任何状态！
@@ -578,16 +580,6 @@ class HttpApiServer(
                                     // 内置模型列表
                                     val builtInClaudeModels = listOf(
                                         mapOf(
-                                            "displayName" to JsonPrimitive("Opus 4.5"),
-                                            "modelId" to JsonPrimitive("claude-opus-4-5-20251101"),
-                                            "isBuiltIn" to JsonPrimitive(true)
-                                        ),
-                                        mapOf(
-                                            "displayName" to JsonPrimitive("Sonnet 4.5"),
-                                            "modelId" to JsonPrimitive("claude-sonnet-4-5-20250929"),
-                                            "isBuiltIn" to JsonPrimitive(true)
-                                        ),
-                                        mapOf(
                                             "displayName" to JsonPrimitive("Haiku 4.5"),
                                             "modelId" to JsonPrimitive("claude-haiku-4-5-20251001"),
                                             "isBuiltIn" to JsonPrimitive(true)
@@ -775,7 +767,7 @@ class HttpApiServer(
                     route("/config") {
                         get {
                             // TODO: 实现配置获取
-                            call.respond(mapOf("model" to "claude-sonnet-4-5-20250929"))
+                            call.respond(mapOf("model" to "claude-sonnet-4-6"))
                         }
 
                         put {
@@ -1429,10 +1421,13 @@ class HttpApiServer(
                             if (isIdeMode) {
                                 // IDE 插件模式：注入 __IDE_MODE__ 和 __serverUrl
                                 // 前端 serverUrl.ts 要求 IDE 模式下必须有 window.__serverUrl
+                                // 注意：必须使用 call.request.local.serverPort 获取实际端口
+                                // 因为 configuredPort 可能是 0（由 OS 自动分配）
+                                val actualPort = call.request.local.serverPort
                                 val injection = """
                                     <script>
                                         window.__IDE_MODE__ = true;
-                                        window.__serverUrl = 'http://127.0.0.1:$serverPort';
+                                        window.__serverUrl = 'http://127.0.0.1:$actualPort';
                                         console.log('✅ Environment: IDEA Plugin Mode');
                                     </script>
                                 """.trimIndent()
@@ -1459,6 +1454,7 @@ class HttpApiServer(
                 } else {
                     // 开发模式：返回提示信息
                     get("/") {
+                        val devPort = call.request.local.serverPort
                         call.respondText(
                             """
                             <!DOCTYPE html>
@@ -1468,11 +1464,11 @@ class HttpApiServer(
                             </head>
                             <body>
                                 <h1>🔧 Development Mode</h1>
-                                <p>Backend server is running on port $serverPort</p>
+                                <p>Backend server is running on port $devPort</p>
                                 <p>Please start the frontend development server separately:</p>
                                 <pre>cd frontend && npm run dev</pre>
-                                <p>WebSocket endpoint: ws://localhost:$serverPort/ws</p>
-                                <p>API endpoint: http://localhost:$serverPort/api/</p>
+                                <p>WebSocket endpoint: ws://localhost:$devPort/ws</p>
+                                <p>API endpoint: http://localhost:$devPort/api/</p>
                             </body>
                             </html>
                             """.trimIndent(),

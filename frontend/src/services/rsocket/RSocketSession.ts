@@ -38,14 +38,6 @@ export type AgentStreamEvent = RpcStreamEvent
 /** 内容块（向后兼容别名） */
 export type ContentBlock = RpcContentBlock
 
-export type BashRunToBackgroundResult = ReturnType<typeof ProtoCodec.decodeBashBackgroundResult>
-export type RunToBackgroundResult = ReturnType<typeof ProtoCodec.decodeUnifiedBackgroundResult>
-
-export function createRunToBackgroundError(error: string): RunToBackgroundResult {
-    const emptyResult = ProtoCodec.decodeUnifiedBackgroundResult(new Uint8Array())
-    return {...emptyResult, error}
-}
-
 type RpcCapabilityKey =
     | 'canInterrupt'
     | 'canSwitchModel'
@@ -55,7 +47,6 @@ type RpcCapabilityKey =
     | 'canSendRichContent'
     | 'canThink'
     | 'canResumeSession'
-    | 'canRunInBackground'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type MessageHandler = (message: any) => void
@@ -254,94 +245,6 @@ export class RSocketSession {
             // handleConnectionLost 会通知上层，由 useSessionTab 的 onSessionDisconnect 处理自动重连
             const error = err instanceof Error ? err : new Error(String(err))
             this.handleConnectionLost(error)
-        }
-    }
-
-    /**
-     * 将当前执行的任务切换到后台运行
-     *
-     * 这个功能允许用户继续其他操作，而当前任务在后台继续执行。
-     * 仅在有活跃任务正在执行时有效。
-     */
-    async runInBackground(): Promise<void> {
-        if (!this._isConnected || !this.client) {
-            throw new Error('Session not connected')
-        }
-
-        this.checkCapability('canRunInBackground', 'runInBackground')
-
-        log.info('[RSocketSession] 后台运行请求')
-
-        try {
-            const responseData = await this.client.requestResponse('agent.runInBackground')
-            const result = ProtoCodec.decodeStatusResult(responseData)
-            log.info(`[RSocketSession] 后台运行请求已确认: ${result.status}`)
-        } catch (err) {
-            log.warn('[RSocketSession] Run in background request failed:', err)
-            throw err
-        }
-    }
-
-    /**
-     * 将指定的 Bash 命令切换到后台运行
-     *
-     * 类似于官方 CLI 的 Ctrl+B 功能，但针对单个 Bash 命令。
-     * 需要 CLI 应用 007-bash-background.js 补丁。
-     *
-     * @param taskId Bash 命令的 tool_use_id
-     * @returns 后台运行结果
-     */
-    async bashRunToBackground(taskId: string): Promise<BashRunToBackgroundResult> {
-        if (!this._isConnected || !this.client) {
-            throw new Error('Session not connected')
-        }
-
-        log.info(`[RSocketSession] Bash 后台运行请求: taskId=${taskId}`)
-
-        try {
-            const data = ProtoCodec.encodeBashRunToBackgroundRequest(taskId)
-            const responseData = await this.client.requestResponse('agent.bashRunToBackground', data)
-            const result = ProtoCodec.decodeBashBackgroundResult(responseData)
-            log.info(`[RSocketSession] Bash 后台运行结果: success=${result.success}, taskId=${result.taskId}`)
-            return result
-        } catch (err) {
-            log.warn('[RSocketSession] Bash run to background request failed:', err)
-            throw err
-        }
-    }
-
-    /**
-     * 统一的后台运行方法
-     *
-     * 自动检测任务类型（Bash 或 Agent）并执行后台化。
-     * 这是推荐的后台化方法，模拟 CLI 的 Ctrl+B 行为。
-     *
-     * @param taskId 可选的任务 ID：
-     *   - 传入 taskId: 后台化指定任务（自动检测类型）
-     *   - 不传 taskId: 后台化所有前台任务（Bash + Agent）
-     * @returns 统一后台运行结果
-     */
-    async runToBackground(taskId?: string): Promise<RunToBackgroundResult> {
-        if (!this._isConnected || !this.client) {
-            throw new Error('Session not connected')
-        }
-
-        log.info(`[RSocketSession] 统一后台运行请求: taskId=${taskId || 'all'}`)
-
-        try {
-            const data = ProtoCodec.encodeRunToBackgroundRequest(taskId)
-            const responseData = await this.client.requestResponse('agent.runToBackground', data)
-            const result = ProtoCodec.decodeUnifiedBackgroundResult(responseData)
-            if (taskId) {
-                const typeInfo = result.isBash ? 'Bash' : 'Agent'
-                log.info(`[RSocketSession] 后台运行结果: ${typeInfo} success=${result.success}, taskId=${result.taskId}`)
-            } else {
-                log.info(`[RSocketSession] 批量后台运行结果: success=${result.success}, bash=${result.bashCount}, agent=${result.agentCount}`)
-            }
-            return result
-        } catch (err) {
-            log.warn('[RSocketSession] Run to background request failed:', err)
-            throw err
         }
     }
 
@@ -668,28 +571,6 @@ export class RSocketSession {
         const requestData = ProtoCodec.encodeReconnectMcpRequest(serverName)
         const responseData = await this.client.requestResponse('agent.reconnectMcp', requestData)
         const result = ProtoCodec.decodeReconnectMcpResult(responseData)
-        return result
-    }
-
-    /**
-     * 获取指定 MCP 服务器的工具列表
-     */
-    async getMcpTools(serverName?: string): Promise<{
-        serverName?: string
-        tools: Array<{
-            name: string
-            description: string
-            inputSchema?: string
-        }>
-        count: number
-    }> {
-        if (!this._isConnected || !this.client) {
-            throw new Error('Session not connected')
-        }
-
-        const requestData = ProtoCodec.encodeGetMcpToolsRequest(serverName)
-        const responseData = await this.client.requestResponse('agent.getMcpTools', requestData)
-        const result = ProtoCodec.decodeGetMcpToolsResult(responseData)
         return result
     }
 

@@ -9,7 +9,7 @@ import kotlinx.coroutines.runBlocking
  * 测试通过 /model 斜杠命令切换模型
  *
  * 验证：
- * 1. 使用 Sonnet 4.5 启动
+ * 1. 使用 Sonnet 4.6 启动
  * 2. 通过 /model 命令切换回 Sonnet 4
  * 3. 对比 System Init 消息确认切换
  */
@@ -17,7 +17,7 @@ fun main() = runBlocking {
     println("=== 测试 /model 斜杠命令切换模型 ===\n")
 
     val options = ClaudeAgentOptions(
-        model = "claude-sonnet-4-5-20250929",
+        model = "claude-sonnet-4-6",
         permissionMode = PermissionMode.DEFAULT,
         allowedTools = listOf("Read"),
         maxTurns = 3,
@@ -34,10 +34,10 @@ fun main() = runBlocking {
 
         // ========== 第一阶段：确认初始模型 ==========
         println("=" * 60)
-        println("第一阶段：确认初始模型 (Sonnet 4.5)")
+        println("第一阶段：确认初始模型 (Sonnet 4.6)")
         println("=" * 60)
 
-        println("\n🤖 初始配置: claude-sonnet-4-5-20250929")
+        println("\n🤖 初始配置: claude-sonnet-4-6")
         println("❓ 询问：你是什么模型？\n")
 
         client.query("请简单告诉我你是什么 Claude 模型，只要模型名称。")
@@ -193,8 +193,8 @@ fun main() = runBlocking {
         println("   回答: \"$finalAnswer\"")
 
         println("\n📊 切换分析:")
-        if (initialModel.contains("4-5") && finalModel.contains("4-20")) {
-            println("   ✅ 成功！从 Sonnet 4.5 切换到 Sonnet 4")
+        if (initialModel.contains("4-6") && finalModel.contains("4-20")) {
+            println("   ✅ 成功！从 Sonnet 4.6 切换到 Sonnet 4")
             println("   ✅ /model 命令正常工作！")
         } else if (initialModel == finalModel) {
             println("   ⚠️  模型未改变: $initialModel")

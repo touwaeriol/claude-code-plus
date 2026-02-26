@@ -61,35 +61,6 @@ interface AiAgentRpcService {
     suspend fun interrupt(): RpcStatusResult
 
     /**
-     * 将当前任务移到后台运行（Agent/Task）
-     */
-    suspend fun runInBackground(): RpcStatusResult
-
-    /**
-     * 将指定的 Bash 命令移到后台运行
-     *
-     * 类似于官方 CLI 的 Ctrl+B 功能，但针对单个 Bash 命令。
-     * 需要 CLI 应用 007-bash-background.js 补丁。
-     *
-     * @param taskId Bash 命令的 tool_use_id
-     * @return 后台运行结果
-     */
-    suspend fun bashRunToBackground(taskId: String): RpcBashBackgroundResult
-
-    /**
-     * 统一的后台运行方法
-     *
-     * 自动检测任务类型（Bash 或 Agent）并执行后台化。
-     * 这是推荐的后台化方法，模拟 CLI 的 Ctrl+B 行为。
-     *
-     * @param taskId 可选的任务 ID：
-     *   - 传入 taskId: 后台化指定任务（自动检测类型）
-     *   - 不传 taskId: 后台化所有前台任务（Bash + Agent）
-     * @return 统一后台运行结果
-     */
-    suspend fun runToBackground(taskId: String? = null): RpcUnifiedBackgroundResult
-
-    /**
      * 动态设置思考 token 上限（无需重连）
      *
      * @param maxThinkingTokens 思考 token 上限：
@@ -230,17 +201,6 @@ interface AiAgentRpcService {
      * @return 重连结果
      */
     suspend fun reconnectMcp(serverName: String): RpcReconnectMcpResult
-
-    /**
-     * 获取指定 MCP 服务器的工具列表
-     *
-     * 从 CLI 内部工具注册表读取指定服务器的工具信息，
-     * 包括工具名称、描述和输入参数 Schema。
-     *
-     * @param serverName 服务器名称，null 表示获取所有服务器的工具
-     * @return 工具列表和数量
-     */
-    suspend fun getMcpTools(serverName: String? = null): RpcMcpToolsResult
 
     /**
      * 获取可用模型列表

@@ -374,7 +374,7 @@ export function isCodex(type: BackendType): type is 'codex' {
  */
 export const DEFAULT_CLAUDE_CONFIG: ClaudeBackendConfig = {
   type: 'claude',
-  modelId: 'claude-opus-4-5-20251101',
+  modelId: 'claude-opus-4-6',
   permissionMode: 'default',
   skipPermissions: false,
   maxTurns: 10,

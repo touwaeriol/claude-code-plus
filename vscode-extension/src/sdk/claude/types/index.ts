@@ -21,7 +21,6 @@ export type {
   ClaudeAgentOptions,
   ControlRequest,
   InterruptRequest,
-  RunInBackgroundRequest,
   PermissionRequest,
   InitializeRequest,
   SetPermissionModeRequest,
@@ -37,9 +36,7 @@ export type {
   McpSetServersResponse,
   McpReconnectResponse,
   McpToolInfo,
-  McpToolsResponse,
   McpDisableEnableResponse,
-  ChromeStatus,
 } from './options';
 
 // Message types

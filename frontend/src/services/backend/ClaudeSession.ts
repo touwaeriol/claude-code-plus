@@ -48,24 +48,24 @@ const CLAUDE_CAPABILITIES: BackendCapabilities = {
   supportedTools: ['read', 'write', 'edit', 'bash', 'mcp'],
   availableModels: [
     {
-      modelId: 'claude-sonnet-4-5-20250929',
-      displayName: 'Claude Sonnet 4.5',
-      isDefault: false,
+      modelId: 'claude-haiku-4-5-20251001',
+      displayName: 'Claude Haiku 4.5',
       supportsThinking: true,
-      description: 'Claude Sonnet with extended thinking',
+      description: 'Fast and efficient for simple tasks',
     },
     {
-      modelId: 'claude-opus-4-5-20251101',
-      displayName: 'Claude Opus 4.5',
+      modelId: 'claude-opus-4-6',
+      displayName: 'Claude Opus 4.6',
       isDefault: true,
       supportsThinking: true,
-      description: 'Most capable Claude model',
+      description: 'Next-gen most powerful model',
     },
     {
-      modelId: 'claude-3-5-sonnet-20241022',
-      displayName: 'Claude 3.5 Sonnet',
-      supportsThinking: false,
-      description: 'Previous generation Claude',
+      modelId: 'claude-sonnet-4-6',
+      displayName: 'Claude Sonnet 4.6',
+      isDefault: false,
+      supportsThinking: true,
+      description: 'Next-gen balanced performance',
     },
   ],
 }
@@ -180,53 +180,6 @@ export class ClaudeSession extends BaseBackendSession implements BackendSession 
 
     await this.rsocket.interrupt()
     this.setGenerating(false)
-  }
-
-  async runInBackground(): Promise<void> {
-    if (!this.rsocket?.isConnected) {
-      throw new Error('Not connected to Claude backend')
-    }
-
-    await this.rsocket.runInBackground()
-    this.setGenerating(false)
-  }
-
-  async bashRunToBackground(taskId: string): Promise<{
-    success: boolean
-    taskId?: string
-    command?: string
-    error?: string
-  }> {
-    if (!this.rsocket?.isConnected) {
-      return { success: false, error: 'Not connected to Claude backend' }
-    }
-
-    return await this.rsocket.bashRunToBackground(taskId)
-  }
-
-  async runToBackground(taskId?: string): Promise<{
-    success: boolean
-    isBash?: boolean
-    taskId?: string
-    command?: string
-    bashCount: number
-    agentCount: number
-    backgroundedBashIds: string[]
-    backgroundedAgentIds: string[]
-    error?: string
-  }> {
-    if (!this.rsocket?.isConnected) {
-      return {
-        success: false,
-        bashCount: 0,
-        agentCount: 0,
-        backgroundedBashIds: [],
-        backgroundedAgentIds: [],
-        error: 'Not connected to Claude backend'
-      }
-    }
-
-    return await this.rsocket.runToBackground(taskId)
   }
 
   // ==========================================================================

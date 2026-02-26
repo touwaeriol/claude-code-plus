@@ -691,7 +691,7 @@ data class RpcMcpToolsResult(
 @Serializable
 data class RpcModelInfo(
     val displayName: String,  // 显示名称
-    val modelId: String,      // 实际模型 ID（如 "claude-opus-4-5-20250929"）
+    val modelId: String,      // 实际模型 ID（如 "claude-opus-4-6"）
     val isBuiltIn: Boolean    // 是否为内置模型
 )
 
@@ -704,48 +704,3 @@ data class RpcAvailableModelsResult(
     val defaultModelId: String  // 当前默认模型的 id
 )
 
-// ============================================================================
-// Bash 后台运行相关
-// ============================================================================
-
-/**
- * Bash 后台运行结果
- *
- * 当用户请求将正在运行的 Bash 命令移到后台时返回此结果。
- * 类似于官方 CLI 的 Ctrl+B 功能。
- */
-data class RpcBashBackgroundResult(
-    val success: Boolean,           // 操作是否成功
-    val taskId: String? = null,     // 后台任务 ID（用于后续查询）
-    val command: String? = null,    // 被后台化的命令
-    val error: String? = null       // 错误信息（如果失败）
-)
-
-/**
- * 统一后台运行结果
- *
- * 当用户请求将任务移到后台时返回此结果。
- * 自动检测任务类型（Bash 或 Agent），支持单任务或批量模式。
- *
- * 单任务模式（传入 taskId）：
- * - isBash: 是否为 Bash 命令
- * - taskId: 任务 ID
- * - command: Bash 命令（仅 Bash 任务）
- *
- * 批量模式（不传 taskId）：
- * - bashCount: 后台化的 Bash 数量
- * - agentCount: 后台化的 Agent 数量
- * - backgroundedBashIds: 后台化的 Bash ID 列表
- * - backgroundedAgentIds: 后台化的 Agent ID 列表
- */
-data class RpcUnifiedBackgroundResult(
-    val success: Boolean,                               // 操作是否成功
-    val isBash: Boolean? = null,                        // 单任务：是否为 Bash
-    val taskId: String? = null,                         // 单任务：任务 ID
-    val command: String? = null,                        // 单 Bash 任务：命令
-    val bashCount: Int = 0,                             // 批量：Bash 数量
-    val agentCount: Int = 0,                            // 批量：Agent 数量
-    val backgroundedBashIds: List<String> = emptyList(), // 批量：Bash ID 列表
-    val backgroundedAgentIds: List<String> = emptyList(),// 批量：Agent ID 列表
-    val error: String? = null                           // 错误信息
-)

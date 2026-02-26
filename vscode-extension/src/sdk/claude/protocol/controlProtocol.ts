@@ -1,33 +1,30 @@
 /**
  * Control Protocol Handler for Claude CLI
- * 
+ *
  * This module provides bidirectional communication with Claude CLI through
  * stdin/stdout using JSON-RPC style control messages.
- * 
- * Control commands (from cli-patches):
- * - run_to_background: Unified background operation (007 patch)
- * - agent_run_to_background: Agent background operation
- * - mcp_reconnect, mcp_disable, mcp_enable: MCP control (004 patch)
- * - mcp_tools: Get MCP tool list (005 patch)
- * - get_capabilities: Get CLI capabilities (008 patch)
- * - get_chrome_status: Chrome extension status (002 patch)
+ *
+ * Control commands:
+ * - interrupt: Interrupt the current operation
+ * - initialize: Initialize the control protocol
+ * - set_model: Set the model for the session
+ * - set_permission_mode: Set the permission mode
+ * - set_max_thinking_tokens: Set max thinking tokens
+ * - mcp_status: Get MCP server status
+ * - mcp_reconnect: Reconnect MCP server
+ * - mcp_disable/mcp_enable: Disable/enable MCP server
+ * - mcp_set_servers: Dynamically set MCP servers
  */
 
 import { EventEmitter } from 'events';
 import type { ChildProcess } from 'child_process';
 import type {
   ControlResponse,
-  UnifiedBackgroundResult,
-  AgentsBackgroundResult,
-  BashBackgroundResult,
-  CliCapabilities,
   McpServerStatusInfo,
   McpReconnectResponse,
-  McpToolsResponse,
   McpDisableEnableResponse,
   McpSetServersResponse,
   McpStdioServerDto,
-  ChromeStatus,
   Message,
   HookEvent,
   HookMatcher,
@@ -540,174 +537,6 @@ export class ControlProtocol extends EventEmitter {
   }
 
   /**
-   * Unified run_to_background request to CLI.
-   * 
-   * This method calls the CLI's internal functions directly:
-   * - iV1: Background all tasks (Bash + Agent)
-   * - Me5: Background single Bash task
-   * - R42: Background single Agent task
-   * 
-   * The CLI automatically detects task type (Bash/Agent) and calls the appropriate function.
-   * 
-   * @param taskId Optional task ID to background a specific task
-   * @returns UnifiedBackgroundResult with details of what was backgrounded
-   */
-  async runToBackground(taskId?: string): Promise<UnifiedBackgroundResult> {
-    const request: Record<string, unknown> = { subtype: 'run_to_background' };
-    if (taskId) {
-      request.task_id = taskId;
-    }
-
-    console.log(`[ControlProtocol] Sending run_to_background: task_id=${taskId || 'batch mode'}`);
-
-    const response = await this.sendControlRequestInternal(request);
-
-    if (response.subtype === 'error') {
-      return {
-        success: false,
-        error: response.error || 'Unknown error',
-      };
-    }
-
-    const responseData = response.response as Record<string, unknown> | undefined;
-    const mode = responseData?.mode as string | undefined;
-    const type = responseData?.type as string | undefined;
-    const returnedTaskId = responseData?.task_id as string | undefined;
-
-    // Handle batch mode (mode == "all")
-    if (mode === 'all') {
-      console.log('[ControlProtocol] Batch background completed (iV1 called)');
-      return { success: true };
-    }
-
-    // Handle single task mode
-    if (taskId) {
-      if (type === 'bash') {
-        console.log(`[ControlProtocol] Bash backgrounded: task_id=${returnedTaskId}`);
-        return {
-          success: true,
-          isBash: true,
-          taskId: returnedTaskId,
-          bashCount: 1,
-          backgroundedBashIds: returnedTaskId ? [returnedTaskId] : [],
-        };
-      } else if (type === 'agent') {
-        console.log(`[ControlProtocol] Agent backgrounded: task_id=${returnedTaskId}`);
-        return {
-          success: true,
-          isBash: false,
-          taskId: returnedTaskId,
-          agentCount: 1,
-          backgroundedAgentIds: returnedTaskId ? [returnedTaskId] : [],
-        };
-      } else {
-        const error = responseData?.error as string | undefined;
-        console.warn(`[ControlProtocol] Unknown task type: type=${type}, error=${error}`);
-        return {
-          success: false,
-          taskId,
-          error: error || 'Unknown task type',
-        };
-      }
-    }
-
-    // Default success case
-    return {
-      success: (responseData?.success as boolean) ?? true,
-    };
-  }
-
-  /**
-   * Send agent_run_to_background request to CLI.
-   * 
-   * @param targetId Optional target ID for a specific agent
-   */
-  async agentRunToBackground(targetId?: string): Promise<void> {
-    const request: Record<string, unknown> = { subtype: 'run_to_background' };
-    if (targetId) {
-      request.task_id = targetId;
-    }
-
-    const response = await this.sendControlRequestInternal(request);
-
-    if (response.subtype === 'error') {
-      throw new ControlProtocolException(`Run to background failed: ${response.error}`);
-    }
-
-    console.log(`[ControlProtocol] Task moved to background: ${targetId || 'all'}`);
-  }
-
-  /**
-   * Send run_to_background request in batch mode.
-   * 
-   * @returns AgentsBackgroundResult containing count and list of backgrounded agent IDs
-   */
-  async agentsRunAllToBackground(): Promise<AgentsBackgroundResult> {
-    const request = { subtype: 'run_to_background' };
-
-    const response = await this.sendControlRequestInternal(request);
-
-    if (response.subtype === 'error') {
-      throw new ControlProtocolException(`Run all to background failed: ${response.error}`);
-    }
-
-    console.log('[ControlProtocol] Batch background completed');
-    return { count: 0, backgroundedIds: [] };
-  }
-
-  /**
-   * Send run_to_background request for a specific Bash task.
-   * 
-   * @param taskId The tool_use_id of the Bash command to background
-   * @returns BashBackgroundResult containing success status and taskId
-   */
-  async bashRunToBackground(taskId: string): Promise<BashBackgroundResult> {
-    const request = {
-      subtype: 'run_to_background',
-      task_id: taskId,
-    };
-
-    const response = await this.sendControlRequestInternal(request);
-
-    if (response.subtype === 'error') {
-      throw new ControlProtocolException(`Run to background failed: ${response.error}`);
-    }
-
-    const responseData = response.response as Record<string, unknown> | undefined;
-    const backgroundTaskId = responseData?.task_id as string | undefined;
-
-    console.log(`[ControlProtocol] Bash moved to background: task_id=${backgroundTaskId}`);
-
-    return {
-      success: true,
-      taskId: backgroundTaskId,
-    };
-  }
-
-  /**
-   * Query CLI capabilities.
-   * 
-   * @returns CliCapabilities containing feature flags
-   */
-  async getCapabilities(): Promise<CliCapabilities> {
-    const request = { subtype: 'get_capabilities' };
-
-    const response = await this.sendControlRequestInternal(request);
-
-    if (response.subtype === 'error') {
-      throw new ControlProtocolException(`Get capabilities failed: ${response.error}`);
-    }
-
-    const responseData = response.response as Record<string, unknown> | undefined;
-    const capabilities = responseData?.capabilities as Record<string, unknown> | undefined;
-    const backgroundTasksEnabled = (capabilities?.background_tasks_enabled as boolean) ?? true;
-
-    console.log(`[ControlProtocol] Capabilities: backgroundTasksEnabled=${backgroundTasksEnabled}`);
-
-    return { backgroundTasksEnabled };
-  }
-
-  /**
    * Set max thinking tokens for the current session.
    * 
    * @param maxThinkingTokens The maximum thinking tokens to set
@@ -799,34 +628,6 @@ export class ControlProtocol extends EventEmitter {
   }
 
   /**
-   * Get Chrome extension status.
-   * 
-   * @returns ChromeStatus with installed, enabled, connected states
-   */
-  async getChromeStatus(): Promise<ChromeStatus> {
-    const request = { subtype: 'get_chrome_status' };
-
-    const response = await this.sendControlRequestInternal(request);
-
-    if (response.subtype === 'error') {
-      throw new ControlProtocolException(`get_chrome_status failed: ${response.error}`);
-    }
-
-    const responseObj = response.response as Record<string, unknown> | undefined;
-    if (!responseObj) {
-      throw new ControlProtocolException('get_chrome_status returned empty response');
-    }
-
-    return {
-      installed: (responseObj.installed as boolean) ?? false,
-      enabled: (responseObj.enabled as boolean) ?? false,
-      connected: (responseObj.connected as boolean) ?? false,
-      mcpServerStatus: responseObj.mcpServerStatus as string | undefined,
-      extensionVersion: responseObj.extensionVersion as string | undefined,
-    };
-  }
-
-  /**
    * Reconnect a specific MCP server.
    * 
    * @param serverName The name of the MCP server to reconnect
@@ -860,62 +661,6 @@ export class ControlProtocol extends EventEmitter {
       status: responseObj.status as string | undefined,
       toolsCount: (responseObj.tools_count as number) ?? 0,
       error: responseObj.error as string | undefined,
-    };
-  }
-
-  /**
-   * Get the list of tools for a specific MCP server or all servers.
-   * 
-   * @param serverName Optional server name to filter tools
-   * @returns Response with tool list and count
-   */
-  async getMcpTools(serverName?: string): Promise<McpToolsResponse> {
-    const request: Record<string, unknown> = { subtype: 'mcp_tools' };
-    if (serverName) {
-      request.server_name = serverName;
-    }
-
-    const response = await this.sendControlRequestInternal(request);
-
-    if (response.subtype === 'error') {
-      throw new ControlProtocolException(`Get MCP tools failed: ${response.error}`);
-    }
-
-    const responseObj = response.response as Record<string, unknown> | undefined;
-    if (!responseObj) {
-      return {
-        serverName,
-        tools: [],
-        count: 0,
-      };
-    }
-
-    const toolsArray = responseObj.tools as unknown[] | undefined;
-    if (!toolsArray) {
-      return {
-        serverName,
-        tools: [],
-        count: 0,
-      };
-    }
-
-    const tools = toolsArray
-      .map((element) => {
-        const toolObj = element as Record<string, unknown>;
-        const name = toolObj.name as string | undefined;
-        if (!name) return null;
-        return {
-          name,
-          description: (toolObj.description as string) ?? '',
-          inputSchema: toolObj.inputSchema,
-        };
-      })
-      .filter((t): t is NonNullable<typeof t> => t !== null);
-
-    return {
-      serverName: responseObj.server_name as string | undefined,
-      tools,
-      count: (responseObj.count as number) ?? tools.length,
     };
   }
 

@@ -256,7 +256,7 @@ export const useSettingsStore = defineStore('settings', () => {
     permissionMode: 'default',
     includePartialMessages: true,
     nodePath: '',
-    defaultModelId: 'claude-opus-4-5-20251101',
+    defaultModelId: 'claude-opus-4-6',
     defaultThinkingLevel: 'ultra',
     thinkTokens: 2048,
     ultraTokens: 8096,

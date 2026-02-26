@@ -68,7 +68,7 @@ class BackendSettingsService(private val project: Project) : PersistentStateComp
 
         // Claude 配置
         var claudeEnabled: Boolean = true,
-        var claudeModelId: String = "claude-sonnet-4-5-20250929",
+        var claudeModelId: String = "claude-sonnet-4-6",
         var claudeThinkingEnabled: Boolean = true,
         var claudeThinkingTokenBudget: Int = 8096,
         var claudeIncludePartialMessages: Boolean = true,

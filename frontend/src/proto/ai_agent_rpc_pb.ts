@@ -2525,14 +2525,14 @@ export const ThemeChangedNotifySchema: GenMessage<ThemeChangedNotify> = /*@__PUR
  */
 export type IdeSettings = Message<"aiagent.rpc.IdeSettings"> & {
   /**
-   * 默认模型 ID（如 "claude-opus-4-5-20251101"）
+   * 默认模型 ID（如 "claude-opus-4-6"）
    *
    * @generated from field: string default_model_id = 1;
    */
   defaultModelId: string;
 
   /**
-   * 默认模型显示名称（如 "Opus 4.5"）
+   * 默认模型显示名称（如 "Opus 4.6"）
    *
    * @generated from field: string default_model_name = 2;
    */

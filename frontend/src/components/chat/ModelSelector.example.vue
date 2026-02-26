@@ -182,11 +182,11 @@ import type { BackendType } from '@/types/backend'
 
 // Example 1: 基础用法
 const example1Backend = ref<BackendType>('claude')
-const example1Model = ref('claude-sonnet-4-5-20251101')
+const example1Model = ref('claude-sonnet-4-6')
 
 // Example 2: 显示详细信息
 const example2Backend = ref<BackendType>('claude')
-const example2Model = ref('claude-sonnet-4-5-20251101')
+const example2Model = ref('claude-sonnet-4-6')
 
 function toggleBackend2() {
   example2Backend.value = example2Backend.value === 'claude' ? 'codex' : 'claude'
@@ -194,12 +194,12 @@ function toggleBackend2() {
 
 // Example 3: 禁用状态
 const example3Backend = ref<BackendType>('claude')
-const example3Model = ref('claude-sonnet-4-5-20251101')
+const example3Model = ref('claude-sonnet-4-6')
 const example3Disabled = ref(false)
 
 // Example 4: 跨后端支持
 const example4Backend = ref<BackendType>('claude')
-const example4Model = ref('claude-sonnet-4-5-20251101')
+const example4Model = ref('claude-sonnet-4-6')
 const lastMismatch = ref<{ modelId: string; expectedBackend: BackendType } | null>(null)
 
 function handleBackendMismatch(modelId: string, expectedBackend: BackendType) {
@@ -209,7 +209,7 @@ function handleBackendMismatch(modelId: string, expectedBackend: BackendType) {
 
 // Example 5: 在设置面板中使用
 const example5Backend = ref<BackendType>('claude')
-const example5Model = ref('claude-sonnet-4-5-20251101')
+const example5Model = ref('claude-sonnet-4-6')
 const example5ThinkingEnabled = ref(true)
 const example5TokenBudget = ref(8096)
 const example5ReasoningEffort = ref('medium')
@@ -228,7 +228,7 @@ function saveSettings() {
 
 // Example 6: 自动切换测试
 const example6Backend = ref<BackendType>('claude')
-const example6Model = ref('claude-sonnet-4-5-20251101')
+const example6Model = ref('claude-sonnet-4-6')
 const testLogs = ref<string[]>([])
 
 async function autoSwitchTest() {

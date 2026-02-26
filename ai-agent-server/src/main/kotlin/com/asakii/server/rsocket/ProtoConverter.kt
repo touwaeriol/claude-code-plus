@@ -518,29 +518,6 @@ object ProtoConverter {
         this@toProtoUsage.raw?.let { rawJson = ByteString.copyFromUtf8(json.encodeToString(it)) }
     }
 
-    // ==================== BashBackgroundResult ====================
-
-    fun com.asakii.rpc.api.RpcBashBackgroundResult.toProto(): BashBackgroundResult = bashBackgroundResult {
-        success = this@toProto.success
-        this@toProto.taskId?.let { taskId = it }
-        this@toProto.command?.let { command = it }
-        this@toProto.error?.let { error = it }
-    }
-
-    // ==================== UnifiedBackgroundResult ====================
-
-    fun com.asakii.rpc.api.RpcUnifiedBackgroundResult.toProto(): UnifiedBackgroundResult = unifiedBackgroundResult {
-        success = this@toProto.success
-        this@toProto.isBash?.let { isBash = it }
-        this@toProto.taskId?.let { taskId = it }
-        this@toProto.command?.let { command = it }
-        bashCount = this@toProto.bashCount
-        agentCount = this@toProto.agentCount
-        backgroundedBashIds.addAll(this@toProto.backgroundedBashIds)
-        backgroundedAgentIds.addAll(this@toProto.backgroundedAgentIds)
-        this@toProto.error?.let { error = it }
-    }
-
     // ==================== Helper ====================
 
     private fun parseJsonElement(bytes: ByteString): JsonElement? {

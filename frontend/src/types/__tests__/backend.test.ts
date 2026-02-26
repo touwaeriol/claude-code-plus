@@ -28,7 +28,7 @@ describe('Type Guards', () => {
     it('should return true for Claude config', () => {
       const config: ClaudeBackendConfig = {
         type: 'claude',
-        modelId: 'claude-sonnet-4-5-20250929',
+        modelId: 'claude-sonnet-4-6',
         permissionMode: 'default',
         skipPermissions: false,
         maxTurns: 10,
@@ -74,7 +74,7 @@ describe('Type Guards', () => {
     it('should return false for Claude config', () => {
       const config: ClaudeBackendConfig = {
         type: 'claude',
-        modelId: 'claude-sonnet-4-5-20250929',
+        modelId: 'claude-sonnet-4-6',
         permissionMode: 'default',
         skipPermissions: false,
         maxTurns: 10,
