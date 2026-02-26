@@ -1,4 +1,6 @@
 import * as crypto from 'crypto'
+import * as fs from 'fs'
+import * as path from 'path'
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import * as readline from 'readline'
 import * as vscode from 'vscode'
@@ -164,11 +166,11 @@ class ClaudeCliSession implements vscode.Disposable {
     })
 
     const args = buildClaudeArgs(this.config)
-    this.log?.(`[claude] spawn: claude ${args.join(' ')}`)
+    const cliJsPath = findBundledCliJs()
+    this.log?.(`[claude] spawn: ${process.execPath} ${cliJsPath} ${args.join(' ')}`)
 
-    this.proc = spawn('claude', args, {
+    this.proc = spawn(process.execPath, [cliJsPath, ...args], {
       cwd: this.config.cwd || undefined,
-      shell: true, // Windows installs claude as a shim; `shell` makes it resolvable
       windowsHide: true,
       env: {
         ...process.env,
@@ -962,9 +964,22 @@ function buildClaudeArgs(config: ClaudeCliSessionConfig): string[] {
 function sanitizeCliArg(value: string, name: string): string {
   const v = String(value || '').trim()
   if (!v) throw new Error(`Invalid Claude CLI arg: ${name} is empty`)
-  // Keep this conservative since we spawn with `shell: true` on Windows.
   if (!/^[A-Za-z0-9._:-]+$/.test(v)) {
     throw new Error(`Invalid Claude CLI arg: ${name} contains unsupported characters`)
   }
   return v
+}
+
+function findBundledCliJs(): string {
+  const candidates = [
+    path.join(__dirname, '../../../../resources/bundled/claude-cli.mjs'),  // dev
+    path.join(__dirname, '../../../resources/bundled/claude-cli.mjs'),     // packaged
+    path.join(process.cwd(), 'resources/bundled/claude-cli.mjs'),         // fallback
+  ]
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p
+  }
+  throw new Error(
+    `Bundled Claude CLI not found. Searched:\n${candidates.map(c => `  - ${c}`).join('\n')}`
+  )
 }

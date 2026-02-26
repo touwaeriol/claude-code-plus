@@ -41,8 +41,7 @@ Claude Code Plus 是一个 IntelliJ IDEA 插件，集成了 Claude AI 助手，�
                          │
                          ▼
 ┌────────────────────────────────────┐
-│   Official Claude CLI (Patched)    │
-│   cli-patches/patches/*.js         │
+│       Official Claude CLI          │
 └────────────────────────────────────┘
 ```
 
@@ -52,62 +51,32 @@ Claude Code Plus 是一个 IntelliJ IDEA 插件，集成了 Claude AI 助手，�
 |------|------|------|
 | **frontend** | `frontend/` | Vue 3 前端，聊天界面、工具展示 |
 | **ai-agent-server** | `ai-agent-server/` | HTTP/RSocket 服务器，连接前端与 SDK |
-| **claude-agent-sdk** | `claude-agent-sdk/` | Claude CLI 封装，包含 AST 补丁系统 |
+| **claude-agent-sdk** | `claude-agent-sdk/` | Claude CLI 封装，官方 CLI 集成 |
 | **jetbrains-plugin** | `jetbrains-plugin/` | IDEA 插件，IDE 集成功能 |
 | **ai-agent-proto** | `ai-agent-proto/` | Protobuf 定义，RSocket 通信协议 |
 
 ---
 
-## 🔧 CLI 补丁系统
+## 🔧 CLI 版本管理
 
-通过 AST 补丁为官方 Claude CLI 添加控制端点：
+CLI 版本由 `claude-agent-sdk/cli-version.properties` 统一管理：
 
-| 补丁文件 | 控制命令 | 功能 |
-|----------|----------|------|
-| `001-run-in-background.js` | `agent_run_to_background`<br>`agents_run_all_to_background` | Agent 后台化 |
-| `002-chrome-status.js` | `get_chrome_status` | Chrome 扩展状态查询 |
-| `003-parent-uuid.js` | - | **[DISABLED]** CLI 2.1.50 原生支持 parentUuid |
-| `004-mcp-server-control.js` | ~~`mcp_reconnect`<br>`mcp_disable`<br>`mcp_enable`~~ | **[DISABLED]** 官方 2.1.19 已内置 |
-| `005-mcp-tools.js` | `mcp_tools` | 查询 MCP 工具列表 |
-| `007-run-to-background.js` | `run_to_background` | **统一后台化** (Bash + Agent) |
-| `008-get-capabilities.js` | `get_capabilities` | CLI 功能状态查询 |
-| `009-skill-parent-tool-use-id.js` | - | Skill 消息 parent_tool_use_id 支持 |
-
-### 007 补丁详解（统一后台化）
-
-直接调用官方 CLI 内部函数：
-- `iV1(getState, setState)`: 批量后台化所有任务
-- `Me5(taskId, getState, setState)`: 后台化单个 Bash
-- `R42(taskId, getState, setState)`: 后台化单个 Agent
-- `wt(task)`: 判断是否是 Bash
-- `Jr(task)`: 判断是否是 Agent
-
-```javascript
-// 控制请求格式
-{ "subtype": "run_to_background" }                    // 批量模式
-{ "subtype": "run_to_background", "task_id": "xxx" }  // 单任务模式（自动判断类型）
+```properties
+cli.version=2.1.56
+npm.version=0.2.56
 ```
 
-### 008 补丁详解（功能状态查询）
+**构建流程**：
+- `downloadCli` Gradle 任务从 npm 下载官方 CLI 到 `claude-agent-sdk/src/main/resources/bundled/claude-cli-{version}.mjs`
+- `copyToVsCodeExtension` 任务自动复制到 `vscode-extension/resources/bundled/claude-cli.mjs`（固定文件名）
+- JetBrains 插件通过 Kotlin SDK 从 JAR 中提取 CLI
+- VS Code 扩展直接使用 bundled CLI JS 文件
 
-查询 CLI 运行时能力状态，用于 SDK 预检查：
-
-```javascript
-// 请求格式
-{ "subtype": "get_capabilities" }
-
-// 响应格式
-{
-  "capabilities": {
-    "background_tasks_enabled": true  // 后台任务是否启用
-  }
-}
-```
-
-**实现逻辑**:
-- 读取 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` 环境变量
-- 解析布尔值 (`"1"`, `"true"`, `"yes"`, `"on"` 视为禁用)
-- 返回 `background_tasks_enabled: !disabled`
+**升级 CLI**：
+1. 修改 `cli-version.properties` 中的版本号
+2. 运行 `./gradlew :claude-agent-sdk:downloadCli`
+3. 删除旧版本文件
+4. 提交变更
 
 ---
 
@@ -888,9 +857,8 @@ RSocketHandler.handleRunToBackground()
     ↓
 ControlProtocol.runToBackground()
     ↓ JSON-RPC control_request
-Official CLI (Patched: 007-run-to-background.js)
-    ↓ 调用内部函数
-iV1() / Me5() / R42()
+Official CLI
+    ↓ 内置后台化支持
 ```
 
 ### Terminal MCP 后台化
@@ -950,139 +918,4 @@ async function runToBackground(taskId?: string, toolType?: string) {
 - [?????????](docs/MESSAGE_RENDERING_SPEC.md)????????????????????
 
 
----
 
-## 📊 AST 分析方法
-
-对于混砆的 CLI 代码，使用 AST 分析比直接索引这类更可靠。
-### 工具选择
-
-- **@babel/parser**: 解析 JS 代码为 AST
-- **@babel/traverse**: 遍历 AST 节点
-
-- **@babel/generator**: 从 AST 生成代砂
-### 分析脚本
-
-```bash
-# 安装依赖
-cd claude-agent-sdk/cli-patches
-npm install @babel/parser @babel/traverse @babel/generator
-
-# 运行分析脚本
-node ast-analyzer.mjs        # 分析 CLI 源码 node ast-verify-enhanced.mjs   # 验证增强产物
-```
-
-### 示例：查找 Ls5 函数
-
-```javascript
-import { parse } from '@babel/parser';
-import traverse from '@babel/traverse';
-
-const ast = parse(code, { sourceType: 'module', errorRecovery: true });
-
-traverse(ast, {
-  FunctionDeclaration(path) {
-    if (path.node.generator && path.node.id?.name === 'Ls5') {
-      console.log('Found Ls5 at line', path.node.loc?.start.line);
-    }
-  }
-});
-```
-
-### 典型分析任务
-
-1. **查找变量定义**: `VariableDeclarator` 遍历
-2. **日找函数调用**: `CallExpression` 遍历
-3. **代码模式匹配**: 结合多个 visitor 检查特征
-4. **验证补丁结果**: 解析本件并检查目标代码模式
-
-### CLI 2.1.27 说明
-
-> **当前版本**: CLI 2.1.50
-> - 官方已内置 `mcp_reconnect`、`mcp_toggle` 和 `parentUuid` 功能
-> - 补丁 `003-parent-uuid.js` 和 `004-mcp-server-control.js` 已禁用
-> - 详细变量映射见 `docs/CLI_PATCH_SYSTEM.md`
-
-### CLI 2.1.17 关键变量映射 (历史参考)
-
-| 功能 | 变量名 | 发现特征 |
-|------|--------|----------|
-| Task 工具 | `gq` | `gq="Task"` @ line 198 |
-| Skill 工具 | `NZ` | `NZ="Skill"` @ line 2468 |
-| Ts5 输出函数 | `z92` | generator, switch(A.type), parent_tool_use_id |
-| id2 消息追踪 | `xp7` | Skill 内部 sourceToolUseID 添加 |
-| sourceToolUseID 访问 | - | `if(A.sourceToolUseID)return` @ line 3612 |
-
-
----
-
-## Claude Agent SDK 增强要求
-
-### CLI 升级流程
-
-当需要升级官方 Claude CLI 版本时，**必须遵循以下流程**：
-
-#### 1. 升级前检查
-
-```bash
-cd claude-agent-sdk/cli-patches
-
-# 下载或复制新版本 CLI
-cp <new-cli-path> claude-cli-<new-version>.js
-
-# 运行 AST 分析
-node ast-analyzer.mjs
-node ast-verify-enhanced.mjs
-```
-
-#### 2. 检查官方是否已修复补丁问题
-
-对每个补丁，使用 AST 工具检查官方是否已内置相关功能：
-- 如已修复：移除补丁，更新 index.js
-- 如未修复：保留补丁
-
-#### 3. 应用补丁并验证
-
-```bash
-# 应用补丁
-node patch-cli.js claude-cli-<version>.js ../src/main/resources/bundled/claude-cli-<version>-enhanced.mjs
-
-# 验证增强产物
-node ast-verify-enhanced.mjs
-```
-
-#### 4. 更新文档
-
-- 更新 docs/CLI_PATCH_SYSTEM.md 变更历史
-- 记录移除或新增的补丁
-
-
-
-#### 5. 语法验证（重要）
-
-增强后的 CLI **必须通过语法验证**，防止补丁引入错误：
-
-```bash
-# 运行语法验证器
-node syntax-validator.mjs ../src/main/resources/bundled/claude-cli-<version>-enhanced.mjs
-```
-
-验证内容：
-- **Babel 严格模式解析**: 检测语法错误
-- **危险模式检测**: 未定义变量访问等
-- **补丁完整性**: 所有控制命令是否存在
-- **AST 验证**: 注入代码是否正确
-
-**重要**: 之前曾因硬编码变量名导致 "y is not defined" 运行时错误，语法验证可提前发现此类问题。
-
-### 补丁开发规范
-
-1. **使用动态变量发现**: 不要硬编码混淆后的变量名
-2. **通过 context 共享**: 使用 `context.foundVariables` 在补丁间共享
-3. **AST 验证**: 新补丁必须配套验证脚本
-4. **优先级管理**: 合理设置 `priority` 字段
-
-### 相关文档
-
-- 详细补丁系统说明: docs/CLI_PATCH_SYSTEM.md
-- AST 分析工具: claude-agent-sdk/cli-patches/ast-*.mjs
