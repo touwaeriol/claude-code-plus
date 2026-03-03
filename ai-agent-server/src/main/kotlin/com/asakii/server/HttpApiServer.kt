@@ -512,6 +512,16 @@ class HttpApiServer(
                                     // 内置模型列表
                                     val builtInClaudeModels = listOf(
                                         mapOf(
+                                            "displayName" to JsonPrimitive("Opus 4.6"),
+                                            "modelId" to JsonPrimitive("claude-opus-4-6"),
+                                            "isBuiltIn" to JsonPrimitive(true)
+                                        ),
+                                        mapOf(
+                                            "displayName" to JsonPrimitive("Sonnet 4.6"),
+                                            "modelId" to JsonPrimitive("claude-sonnet-4-6"),
+                                            "isBuiltIn" to JsonPrimitive(true)
+                                        ),
+                                        mapOf(
                                             "displayName" to JsonPrimitive("Opus 4.5"),
                                             "modelId" to JsonPrimitive("claude-opus-4-5-20251101"),
                                             "isBuiltIn" to JsonPrimitive(true)

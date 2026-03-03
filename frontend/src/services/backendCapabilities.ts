@@ -30,11 +30,25 @@ import {
  */
 export const CLAUDE_MODELS: BackendModelInfo[] = [
   {
+    modelId: 'claude-opus-4-6',
+    displayName: 'Claude Opus 4.6',
+    description: 'Most capable model for complex tasks',
+    supportsThinking: true,
+    isDefault: true,
+  },
+  {
+    modelId: 'claude-sonnet-4-6',
+    displayName: 'Claude Sonnet 4.6',
+    description: 'Balanced performance and cost',
+    supportsThinking: true,
+    isDefault: false,
+  },
+  {
     modelId: 'claude-opus-4-5-20251101',
     displayName: 'Claude Opus 4.5',
     description: 'Most capable model for complex tasks',
     supportsThinking: true,
-    isDefault: true,
+    isDefault: false,
   },
   {
     modelId: 'claude-sonnet-4-5-20250929',

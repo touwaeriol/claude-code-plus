@@ -46,7 +46,7 @@ const DEFAULT_SETTINGS: Settings = {
   },
 
   // Claude 设置（向后兼容，实际值从后端获取）
-  claudeModel: 'claude-opus-4-5-20251101',
+  claudeModel: 'claude-opus-4-6',
   claudeThinkingEnabled: null,   // 从后端获取
   claudeThinkingTokens: null,    // 从后端获取
 

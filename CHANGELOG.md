@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 2026-03-03
+
+### Added
+- Add Claude 4.6 models support (Opus 4.6, Sonnet 4.6)
+- Set claude-opus-4.6 as default model
+
 ## [2.0.4] - 2026-01-26
 
 ### Fixed

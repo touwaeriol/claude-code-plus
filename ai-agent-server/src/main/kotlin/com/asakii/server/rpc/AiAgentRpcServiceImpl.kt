@@ -1923,6 +1923,16 @@ class AiAgentRpcServiceImpl(
         // 内置模型
         val builtInModels = listOf(
             RpcModelInfo(
+                displayName = "Opus 4.6",
+                modelId = "claude-opus-4-6",
+                isBuiltIn = true
+            ),
+            RpcModelInfo(
+                displayName = "Sonnet 4.6",
+                modelId = "claude-sonnet-4-6",
+                isBuiltIn = true
+            ),
+            RpcModelInfo(
                 displayName = "Opus 4.5",
                 modelId = "claude-opus-4-5-20251101",
                 isBuiltIn = true
