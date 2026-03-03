@@ -122,7 +122,7 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var codexCustomModels: String = "[]",
 
         // 默认模型（使用实际 modelId 存储）
-        var defaultModel: String = "claude-opus-4-5-20251101",
+        var defaultModel: String = "claude-opus-4-6",
 
         // 默认思考等级 ID（如 "off", "think", "ultra", "custom_xxx"）
         var defaultThinkingLevelId: String = "ultra",
@@ -150,6 +150,16 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     private var state = State()
 
     private val builtInClaudeModels = listOf(
+        ModelInfo(
+            modelId = "claude-opus-4-6",
+            displayName = "Opus 4.6",
+            isBuiltIn = true
+        ),
+        ModelInfo(
+            modelId = "claude-sonnet-4-6",
+            displayName = "Sonnet 4.6",
+            isBuiltIn = true
+        ),
         ModelInfo(
             modelId = "claude-opus-4-5-20251101",
             displayName = "Opus 4.5",

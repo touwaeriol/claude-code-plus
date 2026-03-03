@@ -216,7 +216,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
                 }
                 row { comment("Path to Node.js executable. Leave empty to auto-detect from system PATH.") }
                 row("Default model:") { cell(defaultModelCombo!!).columns(COLUMNS_MEDIUM) }
-                row { comment("Opus 4.5 = Most capable | Sonnet 4.5 = Balanced | Haiku 4.5 = Fastest") }
+                row { comment("Opus 4.6 = Most capable | Sonnet 4.6 = Balanced | Haiku 4.5 = Fastest") }
             }
 
             collapsibleGroup("Custom Models") {
@@ -644,7 +644,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
 
         val selectedModel = defaultModelCombo?.selectedItem as? ModelInfo
         settings.defaultModel = selectedModel?.modelId ?: settings.getAllAvailableModels().firstOrNull { it.isBuiltIn }?.modelId
-            ?: "claude-opus-4-5-20251101"
+            ?: "claude-opus-4-6"
 
         val existing = settings.getCustomModels().associateBy { it.modelId }
         val custom = getCustomModelsFromTable().map { m ->

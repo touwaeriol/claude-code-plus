@@ -44,6 +44,20 @@ export interface ModelCapability {
  * 内置模型能力映射（以 modelId 作为唯一键）
  */
 const MODEL_CAPABILITIES: Record<string, ModelCapability> = {
+  'claude-opus-4-6': {
+    modelId: 'claude-opus-4-6',
+    displayName: 'Opus 4.6',
+    thinkingMode: 'optional',
+    defaultThinkingEnabled: true,
+    description: 'Most powerful model for complex tasks',
+  },
+  'claude-sonnet-4-6': {
+    modelId: 'claude-sonnet-4-6',
+    displayName: 'Sonnet 4.6',
+    thinkingMode: 'optional',
+    defaultThinkingEnabled: true,
+    description: 'Balanced performance and cost',
+  },
   'claude-opus-4-5-20251101': {
     modelId: 'claude-opus-4-5-20251101',
     displayName: 'Opus 4.5',
@@ -74,6 +88,8 @@ const MODEL_CAPABILITIES: Record<string, ModelCapability> = {
  * 通过 updateAllModels() 从后端刷新
  */
 const _allModels = ref<ModelInfo[]>([
+  { modelId: 'claude-opus-4-6', displayName: 'Opus 4.6', isBuiltIn: true },
+  { modelId: 'claude-sonnet-4-6', displayName: 'Sonnet 4.6', isBuiltIn: true },
   { modelId: 'claude-opus-4-5-20251101', displayName: 'Opus 4.5', isBuiltIn: true },
   { modelId: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5', isBuiltIn: true },
   { modelId: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5', isBuiltIn: true },
@@ -82,7 +98,7 @@ const _allModels = ref<ModelInfo[]>([
 /**
  * 当前默认模型 ID
  */
-const _defaultModelId = ref<string>('claude-opus-4-5-20251101')
+const _defaultModelId = ref<string>('claude-opus-4-6')
 
 /**
  * 模型列表变化回调列表
