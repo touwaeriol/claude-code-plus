@@ -422,47 +422,6 @@ val copyCliVersionProps = tasks.register<Copy>("copyCliVersionProps") {
 // 注意: clean 任务不再自动清理 CLI 文件
 // 如需清理 CLI 文件（如升级 CLI 版本时），请手动运行: ./gradlew cleanCli
 
-// 复制官方 CLI 到 VS Code 扩展目录
-val copyToVsCodeExtension = tasks.register("copyToVsCodeExtension") {
-    group = "build"
-    description = "复制官方 CLI 到 VS Code 扩展的 resources 目录"
-    dependsOn(downloadCli)
-
-    // 将路径捕获到局部变量
-    val propsFilePath = file("cli-version.properties").absolutePath
-    val bundledDirPath = file("src/main/resources/bundled").absolutePath
-    val vscodeBundledPath = rootProject.file("vscode-extension/resources/bundled").absolutePath
-
-    doLast {
-        val propsFile = File(propsFilePath)
-        val bundledDir = File(bundledDirPath)
-        val vscodeBundledDir = File(vscodeBundledPath)
-
-        // 确保目标目录存在
-        vscodeBundledDir.mkdirs()
-
-        val props = Properties()
-        propsFile.inputStream().use { props.load(it) }
-        val cliVer = props.getProperty("cli.version") ?: error("cli.version missing")
-
-        val cliFile = bundledDir.resolve("claude-cli-$cliVer.mjs")
-        val targetFile = vscodeBundledDir.resolve("claude-cli.mjs")
-
-        if (cliFile.exists()) {
-            cliFile.copyTo(targetFile, overwrite = true)
-            println("✅ 已复制官方 CLI 到: ${targetFile.absolutePath}")
-            println("   大小: ${targetFile.length() / 1024 / 1024} MB")
-        } else {
-            println("⚠️ CLI 不存在: ${cliFile.absolutePath}")
-        }
-    }
-}
-
-// downloadCli 完成后自动复制到 VS Code 扩展
-downloadCli.configure {
-    finalizedBy(copyToVsCodeExtension)
-}
-
 // 修改 processResources 依赖
 tasks.named("processResources") {
     dependsOn(downloadCli, copyCliVersionProps)

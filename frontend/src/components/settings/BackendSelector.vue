@@ -86,7 +86,7 @@ function getBackendDescription(type: BackendType): string {
 .selector-label {
   font-size: 13px;
   font-weight: 500;
-  color: var(--vscode-foreground);
+  color: var(--theme-foreground);
   margin-bottom: 4px;
 }
 
@@ -100,9 +100,9 @@ function getBackendDescription(type: BackendType): string {
   padding: 8px 32px 8px 12px;
   font-size: 13px;
   font-family: inherit;
-  color: var(--vscode-foreground);
-  background-color: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border, #3c3c3c);
+  color: var(--theme-foreground);
+  background-color: var(--theme-text-field-background);
+  border: 1px solid var(--theme-border, #3c3c3c);
   border-radius: 4px;
   cursor: pointer;
   outline: none;
@@ -110,12 +110,12 @@ function getBackendDescription(type: BackendType): string {
 }
 
 .backend-select:hover:not(:disabled) {
-  border-color: var(--vscode-focusBorder);
+  border-color: var(--theme-accent);
 }
 
 .backend-select:focus {
-  border-color: var(--vscode-focusBorder);
-  box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 1px var(--theme-accent);
 }
 
 .backend-select:disabled {
@@ -125,8 +125,8 @@ function getBackendDescription(type: BackendType): string {
 
 .backend-select option {
   padding: 8px;
-  background-color: var(--vscode-dropdown-background);
-  color: var(--vscode-dropdown-foreground);
+  background-color: var(--theme-text-field-background);
+  color: var(--theme-foreground);
 }
 
 .backend-info {
@@ -134,8 +134,8 @@ function getBackendDescription(type: BackendType): string {
   align-items: flex-start;
   gap: 12px;
   padding: 12px;
-  background-color: var(--vscode-editor-background);
-  border: 1px solid var(--vscode-input-border, #3c3c3c);
+  background-color: var(--theme-background);
+  border: 1px solid var(--theme-border, #3c3c3c);
   border-radius: 4px;
 }
 
@@ -152,24 +152,24 @@ function getBackendDescription(type: BackendType): string {
 .backend-name {
   font-size: 14px;
   font-weight: 600;
-  color: var(--vscode-foreground);
+  color: var(--theme-foreground);
   margin-bottom: 4px;
 }
 
 .backend-description {
   font-size: 12px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--theme-secondary-foreground);
   line-height: 1.4;
 }
 
 /* Dark theme adjustments */
 @media (prefers-color-scheme: dark) {
   .backend-select {
-    background-color: var(--vscode-input-background, #3c3c3c);
+    background-color: var(--theme-text-field-background, #3c3c3c);
   }
 
   .backend-info {
-    background-color: var(--vscode-editor-background, #1e1e1e);
+    background-color: var(--theme-background, #1e1e1e);
   }
 }
 </style>

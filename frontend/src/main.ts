@@ -94,7 +94,7 @@ async function initApp() {
   // 初始化滚动增强（根据 URL 参数 scrollMultiplier）
   initScrollBoost()
 
-  // IDE integration init is handled by App.vue. Don't block mount here (VS Code webview could go blank).
+  // IDE integration init is handled by App.vue. Don't block mount here.
   const ideIntegrationEnabled = false
 
   const app = createApp(App)

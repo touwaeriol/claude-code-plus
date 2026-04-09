@@ -496,7 +496,7 @@ class HttpApiServer(
                                 // 参见 JetBrainsRSocketHandler.handleGetFileHistoryContent
                                 "settings.get" -> {
                                     // 统一 settings.get 结构（用于浏览器/HTTP 模式的设置加载）
-                                    // VS Code 版会从宿主配置读取；JB 版这里基于 serviceConfigProvider() 生成最小可用 Settings。
+                                    // 基于 serviceConfigProvider() 生成最小可用 Settings。
                                     val config = serviceConfigProvider()
 
                                     val defaultBackendType = config.defaultProvider.name.lowercase()

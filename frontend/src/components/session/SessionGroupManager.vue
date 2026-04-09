@@ -494,8 +494,8 @@ function getTagSessionCount(tagId: string): number {
 }
 
 .dialog {
-  background: var(--vscode-editor-background);
-  border: 1px solid var(--vscode-panel-border);
+  background: var(--theme-background);
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   padding: 20px;
   min-width: 400px;
@@ -507,7 +507,7 @@ function getTagSessionCount(tagId: string): number {
 .dialog h3 {
   margin: 0 0 16px 0;
   font-size: 16px;
-  color: var(--vscode-foreground);
+  color: var(--theme-foreground);
 }
 
 .form-group {
@@ -519,16 +519,16 @@ function getTagSessionCount(tagId: string): number {
   margin-bottom: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--vscode-foreground);
+  color: var(--theme-foreground);
 }
 
 .form-group input,
 .form-group textarea {
   width: 100%;
   padding: 8px;
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border);
+  background: var(--theme-text-field-background);
+  color: var(--theme-foreground);
+  border: 1px solid var(--theme-border);
   border-radius: 3px;
   font-size: 13px;
   font-family: inherit;
@@ -555,8 +555,8 @@ function getTagSessionCount(tagId: string): number {
 }
 
 .color-option.selected {
-  border-color: var(--vscode-focusBorder);
-  box-shadow: 0 0 0 2px var(--vscode-editor-background);
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 2px var(--theme-background);
 }
 
 .icon-option {
@@ -572,8 +572,8 @@ function getTagSessionCount(tagId: string): number {
 }
 
 .icon-option.selected {
-  border-color: var(--vscode-focusBorder);
-  background: var(--vscode-list-activeSelectionBackground);
+  border-color: var(--theme-accent);
+  background: var(--theme-selection-background);
 }
 
 .dialog-actions {
@@ -593,21 +593,21 @@ function getTagSessionCount(tagId: string): number {
 }
 
 .cancel-btn {
-  background: var(--vscode-button-secondaryBackground);
-  color: var(--vscode-button-secondaryForeground);
+  background: var(--theme-panel-background);
+  color: var(--theme-foreground);
 }
 
 .cancel-btn:hover {
-  background: var(--vscode-button-secondaryHoverBackground);
+  background: var(--theme-hover-background);
 }
 
 .save-btn {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
+  background: var(--theme-accent);
+  color: var(--theme-selection-foreground);
 }
 
 .save-btn:hover {
-  background: var(--vscode-button-hoverBackground);
+  background: var(--theme-accent);
 }
 </style>
 

@@ -75,7 +75,7 @@ class IdeaBridgeService {
     if (typeof window === 'undefined') {
       return 'browser' // 构建时默认值
     }
-    // 检测 IDE 宿主环境：__IDE_MODE__ - 由宿主注入的标记（IDEA / VS Code）
+    // 检测 IDE 宿主环境：__IDE_MODE__ - 由宿主注入的标记
     const anyWindow = window as any
     return anyWindow.__IDE_MODE__ ? 'ide' : 'browser'
   }

@@ -237,7 +237,7 @@ export class AiAgentService {
     /**
      * 检测是否在 IDE 环境中运行
      * 
-     * 通过后端 API 检测是否有 IDE 集成功能（如 JetBrains 插件或 VS Code 扩展）。
+     * 通过后端 API 检测是否有 IDE 集成功能（如 JetBrains 插件）。
      * 
      * @returns 是否在 IDE 环境中
      */

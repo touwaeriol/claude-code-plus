@@ -69,7 +69,7 @@ export interface ShowEditFullDiffRequest {
 
 /**
  * 检测是否在 IDE 环境中运行
- * IDE 环境特征：window.__IDE_MODE__ = true（由宿主注入：IDEA / VS Code）
+ * IDE 环境特征：window.__IDE_MODE__ = true（由 IDEA 宿主注入）
  */
 export function isIdeEnvironment(): boolean {
   if (typeof window === 'undefined') return false

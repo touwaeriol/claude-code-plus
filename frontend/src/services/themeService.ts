@@ -99,9 +99,6 @@ export class ThemeService {
       return
     }
 
-    // VS Code Webview：监听扩展侧推送的主题/字体变化
-    this.bindVsCodeThemeBridge()
-
     // 🚀 优先从 URL 参数读取初始主题
     const initialTheme = this.getInitialThemeFromUrl()
     if (initialTheme) {
@@ -155,32 +152,6 @@ export class ThemeService {
     } catch (error) {
       console.warn('🎨 [URL] Failed to parse initial theme:', error)
       return null
-    }
-  }
-
-  /**
-   * VS Code Webview 主题桥接
-   *
-   * VS Code 扩展侧会通过 webview.postMessage 推送：
-   * `{ type: 'ccp-theme', theme: ThemeColors }`
-   */
-  private bindVsCodeThemeBridge() {
-    try {
-      window.addEventListener('message', (event: MessageEvent) => {
-        const payload = event?.data as any
-        if (!payload || typeof payload !== 'object') return
-        if (payload.type !== 'ccp-theme') return
-
-        const theme = payload.theme as ThemeColors | undefined
-        if (!theme || typeof theme !== 'object') return
-
-        this.hasIdeBridge = true
-        this.setTheme(theme)
-        // 字体可能随主题一起更新（例如 editor.fontFamily/fontSize）
-        void this.loadFontsFromBackend(theme)
-      })
-    } catch (error) {
-      console.warn('🎨 [VS Code] Failed to bind theme bridge:', error)
     }
   }
 
@@ -357,7 +328,7 @@ export class ThemeService {
 
       console.log(`🔤 [Font] Downloading IDEA builtin font: ${fontUrl}`)
 
-      // VS Code 版后端要求携带 token（X-Claude-Code-Plus-Token）；JetBrains 版不强制，但带上也无害。
+      // 携带 token（X-Claude-Code-Plus-Token）以便后端认证。
       const response = await fetch(fontUrl, { headers: withServerToken() })
 
       if (!response.ok) {

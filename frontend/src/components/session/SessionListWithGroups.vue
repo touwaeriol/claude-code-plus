@@ -315,14 +315,14 @@ function formatTime(timestamp: number): string {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--vscode-sideBar-background);
+  background: var(--theme-panel-background);
   border-left: 3px solid transparent;
   cursor: pointer;
   user-select: none;
 }
 
 .group-header:hover {
-  background: var(--vscode-list-hoverBackground);
+  background: var(--theme-hover-background);
 }
 
 .group-icon {
@@ -333,17 +333,17 @@ function formatTime(timestamp: number): string {
   flex: 1;
   font-weight: 500;
   font-size: 13px;
-  color: var(--vscode-foreground);
+  color: var(--theme-foreground);
 }
 
 .session-count {
   font-size: 12px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--theme-secondary-foreground);
 }
 
 .collapse-icon {
   font-size: 10px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--theme-secondary-foreground);
 }
 
 .sessions {
@@ -359,12 +359,12 @@ function formatTime(timestamp: number): string {
 }
 
 .session-item:hover {
-  background: var(--vscode-list-hoverBackground);
+  background: var(--theme-hover-background);
 }
 
 .session-item.active {
-  background: var(--vscode-list-activeSelectionBackground);
-  border-left-color: var(--vscode-focusBorder);
+  background: var(--theme-selection-background);
+  border-left-color: var(--theme-accent);
 }
 
 .session-info {
@@ -376,7 +376,7 @@ function formatTime(timestamp: number): string {
 
 .session-name {
   font-size: 13px;
-  color: var(--vscode-foreground);
+  color: var(--theme-foreground);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -385,7 +385,7 @@ function formatTime(timestamp: number): string {
 
 .session-time {
   font-size: 11px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--theme-secondary-foreground);
   white-space: nowrap;
   margin-left: 8px;
 }
@@ -407,8 +407,8 @@ function formatTime(timestamp: number): string {
 /* 右键菜单 */
 .context-menu {
   position: fixed;
-  background: var(--vscode-menu-background);
-  border: 1px solid var(--vscode-menu-border);
+  background: var(--theme-panel-background);
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   z-index: 1000;
@@ -423,12 +423,12 @@ function formatTime(timestamp: number): string {
   padding: 6px 12px;
   cursor: pointer;
   font-size: 13px;
-  color: var(--vscode-menu-foreground);
+  color: var(--theme-foreground);
 }
 
 .menu-item:hover {
-  background: var(--vscode-menu-selectionBackground);
-  color: var(--vscode-menu-selectionForeground);
+  background: var(--theme-selection-background);
+  color: var(--theme-selection-foreground);
 }
 
 .menu-icon {
@@ -437,7 +437,7 @@ function formatTime(timestamp: number): string {
 
 .menu-divider {
   height: 1px;
-  background: var(--vscode-menu-separatorBackground);
+  background: var(--theme-separator);
   margin: 4px 0;
 }
 
@@ -456,8 +456,8 @@ function formatTime(timestamp: number): string {
 }
 
 .dialog {
-  background: var(--vscode-editor-background);
-  border: 1px solid var(--vscode-panel-border);
+  background: var(--theme-background);
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   padding: 20px;
   min-width: 300px;
@@ -469,7 +469,7 @@ function formatTime(timestamp: number): string {
 .dialog h3 {
   margin: 0 0 16px 0;
   font-size: 15px;
-  color: var(--vscode-foreground);
+  color: var(--theme-foreground);
 }
 
 .group-list,
@@ -493,11 +493,11 @@ function formatTime(timestamp: number): string {
 
 .group-option:hover,
 .tag-option:hover {
-  background: var(--vscode-list-hoverBackground);
+  background: var(--theme-hover-background);
 }
 
 .tag-option.selected {
-  background: var(--vscode-list-activeSelectionBackground);
+  background: var(--theme-selection-background);
 }
 
 .tag-color {
@@ -522,21 +522,21 @@ function formatTime(timestamp: number): string {
 }
 
 .cancel-btn {
-  background: var(--vscode-button-secondaryBackground);
-  color: var(--vscode-button-secondaryForeground);
+  background: var(--theme-panel-background);
+  color: var(--theme-foreground);
 }
 
 .cancel-btn:hover {
-  background: var(--vscode-button-secondaryHoverBackground);
+  background: var(--theme-hover-background);
 }
 
 .save-btn {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
+  background: var(--theme-accent);
+  color: var(--theme-selection-foreground);
 }
 
 .save-btn:hover {
-  background: var(--vscode-button-hoverBackground);
+  background: var(--theme-accent);
 }
 </style>
 

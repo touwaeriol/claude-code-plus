@@ -68,9 +68,7 @@ npm.version=0.2.56
 
 **构建流程**：
 - `downloadCli` Gradle 任务从 npm 下载官方 CLI 到 `claude-agent-sdk/src/main/resources/bundled/claude-cli-{version}.mjs`
-- `copyToVsCodeExtension` 任务自动复制到 `vscode-extension/resources/bundled/claude-cli.mjs`（固定文件名）
 - JetBrains 插件通过 Kotlin SDK 从 JAR 中提取 CLI
-- VS Code 扩展直接使用 bundled CLI JS 文件
 
 **升级 CLI**：
 1. 修改 `cli-version.properties` 中的版本号

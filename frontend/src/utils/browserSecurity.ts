@@ -360,8 +360,8 @@ function createContextMenuElement(): HTMLElement {
   menu.id = 'browser-security-context-menu'
   menu.style.cssText = `
     position: fixed; z-index: 99999;
-    background: var(--vscode-menu-background, #252526);
-    border: 1px solid var(--vscode-menu-border, #454545);
+    background: #252526;
+    border: 1px solid #454545;
     border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     padding: 4px 0; min-width: 160px; display: none;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -379,7 +379,7 @@ function createMenuItem(item: ContextMenuItem): HTMLElement {
     display: flex; align-items: center; justify-content: space-between;
     padding: 6px 12px; white-space: nowrap;
     cursor: ${enabled ? 'pointer' : 'default'};
-    color: ${enabled ? 'var(--vscode-menu-foreground, #ccc)' : 'var(--vscode-disabledForeground, #6e6e6e)'};
+    color: ${enabled ? '#ccc' : '#6e6e6e'};
   `
 
   const left = document.createElement('span')
@@ -389,13 +389,13 @@ function createMenuItem(item: ContextMenuItem): HTMLElement {
 
   if (item.shortcut) {
     const shortcut = document.createElement('span')
-    shortcut.style.cssText = 'color: var(--vscode-descriptionForeground, #8a8a8a); margin-left: 20px; font-size: 12px;'
+    shortcut.style.cssText = 'color: #8a8a8a; margin-left: 20px; font-size: 12px;'
     shortcut.textContent = item.shortcut
     el.appendChild(shortcut)
   }
 
   if (enabled) {
-    el.addEventListener('mouseenter', () => el.style.backgroundColor = 'var(--vscode-menu-selectionBackground, #094771)')
+    el.addEventListener('mouseenter', () => el.style.backgroundColor = '#094771')
     el.addEventListener('mouseleave', () => el.style.backgroundColor = 'transparent')
     el.addEventListener('click', (e) => { e.stopPropagation(); item.action(); hideContextMenu() })
   }

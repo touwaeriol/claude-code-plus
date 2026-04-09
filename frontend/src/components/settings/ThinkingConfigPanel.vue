@@ -349,8 +349,8 @@ watch(
 <style scoped>
 .thinking-config-panel {
   padding: 16px;
-  background: var(--vscode-editor-background, #1e1e1e);
-  color: var(--vscode-editor-foreground, #d4d4d4);
+  background: var(--theme-background, #1e1e1e);
+  color: var(--theme-foreground, #d4d4d4);
   border-radius: 4px;
 }
 
@@ -366,7 +366,7 @@ watch(
   flex-direction: column;
   gap: 12px;
   padding-left: 16px;
-  border-left: 2px solid var(--vscode-panel-border, #3c3c3c);
+  border-left: 2px solid var(--theme-border, #3c3c3c);
 }
 
 .config-row {
@@ -396,9 +396,9 @@ watch(
 
 .config-select {
   padding: 6px 8px;
-  background: var(--vscode-input-background, #3c3c3c);
-  color: var(--vscode-input-foreground, #d4d4d4);
-  border: 1px solid var(--vscode-input-border, #3c3c3c);
+  background: var(--theme-text-field-background, #3c3c3c);
+  color: var(--theme-foreground, #d4d4d4);
+  border: 1px solid var(--theme-border, #3c3c3c);
   border-radius: 4px;
   font-size: 13px;
   cursor: pointer;
@@ -406,18 +406,18 @@ watch(
 }
 
 .config-select:hover {
-  background: var(--vscode-input-hoverBackground, #4c4c4c);
+  background: var(--theme-hover-background, #4c4c4c);
 }
 
 .config-select:focus {
-  outline: 1px solid var(--vscode-focusBorder, #007acc);
+  outline: 1px solid var(--theme-accent, #007acc);
   outline-offset: -1px;
 }
 
 .token-slider {
   width: 100%;
   height: 4px;
-  background: var(--vscode-input-background, #3c3c3c);
+  background: var(--theme-text-field-background, #3c3c3c);
   border-radius: 2px;
   outline: none;
   cursor: pointer;
@@ -427,59 +427,59 @@ watch(
   appearance: none;
   width: 16px;
   height: 16px;
-  background: var(--vscode-button-background, #0e639c);
+  background: var(--theme-accent, #0e639c);
   border-radius: 50%;
   cursor: pointer;
 }
 
 .token-slider::-webkit-slider-thumb:hover {
-  background: var(--vscode-button-hoverBackground, #1177bb);
+  background: var(--theme-accent, #1177bb);
 }
 
 .token-slider::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  background: var(--vscode-button-background, #0e639c);
+  background: var(--theme-accent, #0e639c);
   border-radius: 50%;
   cursor: pointer;
   border: none;
 }
 
 .token-slider::-moz-range-thumb:hover {
-  background: var(--vscode-button-hoverBackground, #1177bb);
+  background: var(--theme-accent, #1177bb);
 }
 
 .token-input {
   padding: 6px 8px;
-  background: var(--vscode-input-background, #3c3c3c);
-  color: var(--vscode-input-foreground, #d4d4d4);
-  border: 1px solid var(--vscode-input-border, #3c3c3c);
+  background: var(--theme-text-field-background, #3c3c3c);
+  color: var(--theme-foreground, #d4d4d4);
+  border: 1px solid var(--theme-border, #3c3c3c);
   border-radius: 4px;
   font-size: 13px;
   min-width: 120px;
 }
 
 .token-input:hover {
-  background: var(--vscode-input-hoverBackground, #4c4c4c);
+  background: var(--theme-hover-background, #4c4c4c);
 }
 
 .token-input:focus {
-  outline: 1px solid var(--vscode-focusBorder, #007acc);
+  outline: 1px solid var(--theme-accent, #007acc);
   outline-offset: -1px;
 }
 
 .config-description {
   font-size: 12px;
-  color: var(--vscode-descriptionForeground, #858585);
+  color: var(--theme-secondary-foreground, #858585);
   padding-left: 4px;
   font-style: italic;
 }
 
 .validation-error {
   padding: 8px 12px;
-  background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
-  color: var(--vscode-inputValidation-errorForeground, #f48771);
-  border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+  background: color-mix(in srgb, var(--theme-error, #be1100) 20%, var(--theme-background, #1e1e1e));
+  color: var(--theme-error, #f48771);
+  border: 1px solid var(--theme-error, #be1100);
   border-radius: 4px;
   font-size: 12px;
 }
