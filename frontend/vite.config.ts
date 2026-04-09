@@ -77,7 +77,9 @@ export default defineConfig(({ mode }) => {
     alias: {
       '@': resolve(__dirname, 'src'),
       '@proto': resolve(__dirname, '../ai-agent-proto/ts')
-    }
+    },
+    // 确保 ai-agent-proto/ts 中的 proto 文件能解析 frontend/node_modules 中的 @bufbuild/protobuf
+    dedupe: ['@bufbuild/protobuf']
   },
   server: {
     host: 'localhost',
