@@ -111,11 +111,13 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var codexDefaultAutoCleanupContexts: Boolean = true,
         var defaultBackendType: String = MCP_BACKEND_CLAUDE,
 
-        // Node.js 可执行文件路径，空字符串表示使用系统 PATH
+        // Claude CLI 可执行文件路径，空字符串表示使用系统 PATH
+        var claudePath: String = "",
+        // Node.js 可执行文件路径，空字符串表示使用系统 PATH（用于 Codex 等）
         var nodePath: String = "",
         var codexPath: String = "",
         var codexWebSearchEnabled: Boolean = false,
-        var codexDefaultModelId: String = "gpt-5.2-codex",
+        var codexDefaultModelId: String = "gpt-5.4",
         var codexDefaultReasoningEffort: String = "xhigh",
         var codexDefaultReasoningSummary: String = "auto",
         var codexDefaultSandboxMode: String = "workspace-write",
@@ -142,6 +144,9 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
 
         // Agent 配置（JSON 序列化）
         var customAgents: String = "{}",
+
+        // Agent Teams 模式：default（不传环境变量）、enable（启用）、disable（禁用）
+        var agentTeamsMode: String = "default",
 
         // 自定义模型列表（JSON 序列化）
         var customModels: String = "[]"
@@ -1354,6 +1359,10 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         get() = state.codexDefaultAutoCleanupContexts
         set(value) { state.codexDefaultAutoCleanupContexts = value }
 
+    var claudePath: String
+        get() = state.claudePath
+        set(value) { state.claudePath = value }
+
     var nodePath: String
         get() = state.nodePath
         set(value) { state.nodePath = value }
@@ -1393,6 +1402,10 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     var includePartialMessages: Boolean
         get() = state.includePartialMessages
         set(value) { state.includePartialMessages = value }
+
+    var agentTeamsMode: String
+        get() = state.agentTeamsMode
+        set(value) { state.agentTeamsMode = value }
 
     var customModelsJson: String
         get() = state.customModels
@@ -1526,28 +1539,13 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
     fun getCodexBuiltInModels(): List<ModelInfo> {
         return listOf(
             ModelInfo(
-                modelId = "gpt-5.1-codex-max",
-                displayName = "GPT-5.1-Codex-Max",
-                isBuiltIn = true
-            ),
-            ModelInfo(
-                modelId = "gpt-5.2-codex",
-                displayName = "GPT-5.2-Codex",
-                isBuiltIn = true
-            ),
-            ModelInfo(
-                modelId = "gpt-5.2",
-                displayName = "GPT-5.2",
+                modelId = "gpt-5.4",
+                displayName = "GPT-5.4",
                 isBuiltIn = true
             ),
             ModelInfo(
                 modelId = "gpt-5.3-codex",
                 displayName = "GPT-5.3-Codex",
-                isBuiltIn = true
-            ),
-            ModelInfo(
-                modelId = "gpt-5.3-codex-spark",
-                displayName = "GPT-5.3-Codex-Spark",
                 isBuiltIn = true
             )
         )
@@ -1782,6 +1780,8 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         fun getInstance(): AgentSettingsService = service()
 
         // 委托给 EnvironmentDetection 对象
+        fun detectClaudeInfo(): ClaudeCliInfo? = EnvironmentDetection.detectClaudeInfo()
+        fun detectClaudePath(): String = EnvironmentDetection.detectClaudePath()
         fun detectNodeInfo(): NodeInfo? = EnvironmentDetection.detectNodeInfo()
         fun detectCodexInfo(): CodexInfo? = EnvironmentDetection.detectCodexInfo()
         fun detectNodePath(): String = EnvironmentDetection.detectNodePath()

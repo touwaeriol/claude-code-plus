@@ -228,7 +228,8 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                 val defaultModelInfo = settings.getModelById(settings.defaultModel)
                 val defaultModelLabel = defaultModelInfo?.displayName ?: settings.defaultModel
                 logger.info(
-                    "📦 Loading agent settings: nodePath=${settings.nodePath.ifBlank { "(system PATH)" }}, " +
+                    "📦 Loading agent settings: claudePath=${settings.claudePath.ifBlank { "(system PATH)" }}, " +
+                        "nodePath=${settings.nodePath.ifBlank { "(system PATH)" }}, " +
                         "model=$defaultModelLabel, thinkingLevel=$thinkingLevelName, defaultBackend=${defaultProvider.name.lowercase()} " +
                         "(${settings.defaultThinkingTokens} tokens), permissionMode=${settings.permissionMode}, " +
                         "codexPath=${codexPath ?: "(auto)"}, codexPathSource=$codexPathSource, codexPathExists=$codexPathExists, " +
@@ -250,6 +251,7 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                     defaultProvider = defaultProvider,
                     defaultModel = settings.defaultModel,  // 使用模型 ID（内置或自定义）
                     claude = ClaudeDefaults(
+                        claudePath = settings.claudePath.takeIf { it.isNotBlank() },
                         nodePath = settings.nodePath.takeIf { it.isNotBlank() },
                         permissionMode = settings.permissionMode.takeIf { it.isNotBlank() && it != "default" },
                         includePartialMessages = settings.includePartialMessages,
@@ -274,6 +276,7 @@ class HttpServerProjectService(private val project: Project) : Disposable {
                         defaultAutoCleanupContexts = settings.claudeDefaultAutoCleanupContexts,
                         defaultThinkingLevel = settings.defaultThinkingLevel,
                         defaultThinkingTokens = settings.defaultThinkingTokens,
+                        agentTeamsMode = settings.agentTeamsMode,
                         ideaFileSyncHooks = fileSyncHooks
                     ),
                     codex = CodexDefaults(

@@ -388,7 +388,7 @@ export const DEFAULT_CLAUDE_CONFIG: ClaudeBackendConfig = {
  */
 export const DEFAULT_CODEX_CONFIG: CodexBackendConfig = {
   type: 'codex',
-  modelId: 'gpt-5.2-codex',
+  modelId: 'gpt-5.4',
   modelProvider: 'openai',
   permissionMode: 'default',
   skipPermissions: false,

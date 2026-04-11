@@ -15,9 +15,8 @@ export interface CodexModelInfo {
 }
 
 export const CODEX_MODELS: CodexModelInfo[] = [
-  { modelId: 'gpt-5.1-codex-max', displayName: 'GPT-5.1-Codex-Max', supportsReasoning: true },
-  { modelId: 'gpt-5.2-codex', displayName: 'GPT-5.2-Codex', supportsReasoning: true },
-  { modelId: 'gpt-5.2', displayName: 'GPT-5.2', supportsReasoning: true },
+  { modelId: 'gpt-5.4', displayName: 'GPT-5.4', supportsReasoning: true },
+  { modelId: 'gpt-5.3-codex', displayName: 'GPT-5.3-Codex', supportsReasoning: true },
 ]
 
 export interface CodexSessionConfig {

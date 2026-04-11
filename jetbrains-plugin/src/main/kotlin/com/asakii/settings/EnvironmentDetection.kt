@@ -4,6 +4,14 @@ import java.io.File
 import java.nio.file.Paths
 
 /**
+ * Claude CLI 检测结果
+ */
+data class ClaudeCliInfo(
+    val path: String,
+    val version: String? = null
+)
+
+/**
  * Node.js 检测结果
  */
 data class NodeInfo(
@@ -22,9 +30,108 @@ data class CodexInfo(
 /**
  * 环境检测工具类
  *
- * 用于检测系统中的 Node.js 和 Codex 安装路径及版本
+ * 用于检测系统中的 Claude CLI、Node.js 和 Codex 安装路径及版本
  */
 object EnvironmentDetection {
+
+    /**
+     * 检测 Claude CLI 路径和版本
+     * @return ClaudeCliInfo 包含路径和版本，未找到返回 null
+     */
+    fun detectClaudeInfo(): ClaudeCliInfo? {
+        val path = detectClaudePath()
+        if (path.isEmpty()) return null
+
+        val version = detectClaudeVersion(path)
+        return ClaudeCliInfo(path, version)
+    }
+
+    /**
+     * 自动检测系统中的 Claude CLI 路径
+     * @return Claude CLI 可执行文件路径，未找到返回空字符串
+     */
+    fun detectClaudePath(): String {
+        val isWindows = System.getProperty("os.name").lowercase().contains("win")
+
+        // 1. 通过 login shell 查找
+        try {
+            val command = if (isWindows) {
+                // Windows: 查找 claude.cmd（npm 安装的可执行包装脚本）
+                arrayOf("cmd", "/c", "where", "claude.cmd")
+            } else {
+                val defaultShell = System.getenv("SHELL") ?: "/bin/bash"
+                arrayOf(defaultShell, "-l", "-c", "which claude")
+            }
+
+            val process = ProcessBuilder(*command)
+                .redirectErrorStream(true)
+                .start()
+
+            val result = process.inputStream.bufferedReader().readLine()?.trim()
+            val exitCode = process.waitFor()
+
+            if (exitCode == 0 && !result.isNullOrBlank()) {
+                return result
+            }
+        } catch (_: Exception) {
+            // 忽略错误，继续尝试常见路径
+        }
+
+        // 2. 检查常见安装路径
+        val commonPaths = if (isWindows) {
+            listOf(
+                System.getenv("APPDATA")?.let { "$it\\npm\\claude.cmd" },
+                System.getenv("LOCALAPPDATA")?.let { "$it\\npm\\claude.cmd" },
+                System.getenv("USERPROFILE")?.let { "$it\\.npm-global\\claude.cmd" },
+                "C:\\Program Files\\nodejs\\claude.cmd"
+            )
+        } else {
+            listOf(
+                "/usr/local/bin/claude",
+                "/usr/bin/claude",
+                "/opt/homebrew/bin/claude",
+                System.getenv("HOME")?.let { "$it/.npm-global/bin/claude" },
+                System.getenv("HOME")?.let { "$it/.local/bin/claude" }
+            )
+        }
+
+        for (path in commonPaths) {
+            if (path != null && File(path).exists()) {
+                return path
+            }
+        }
+
+        return ""
+    }
+
+    /**
+     * 检测 Claude CLI 版本
+     */
+    private fun detectClaudeVersion(claudePath: String): String? {
+        try {
+            // Windows 上 .cmd 文件需要通过 cmd /c 启动；Unix 直接执行
+            val command = if (claudePath.lowercase().endsWith(".cmd")) {
+                arrayOf("cmd", "/c", claudePath, "--version")
+            } else {
+                arrayOf(claudePath, "--version")
+            }
+
+            val process = ProcessBuilder(*command)
+                .redirectErrorStream(true)
+                .start()
+
+            val result = process.inputStream.bufferedReader().readLine()?.trim()
+            val exitCode = process.waitFor()
+
+            if (exitCode == 0 && !result.isNullOrBlank()) {
+                return result
+            }
+        } catch (_: Exception) {
+            // 忽略错误
+        }
+
+        return null
+    }
 
     /**
      * 检测 Node.js 路径和版本

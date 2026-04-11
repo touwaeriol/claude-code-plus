@@ -51,7 +51,7 @@ const DEFAULT_SETTINGS: Settings = {
   claudeThinkingTokens: null,    // 从后端获取
 
   // Codex 设置（向后兼容，实际值从后端获取）
-  codexModel: 'gpt-5.2-codex',
+  codexModel: 'gpt-5.4',
   codexReasoningEffort: null,  // 从后端获取
   codexReasoningSummary: 'auto',
   codexSandboxMode: 'workspace-write',

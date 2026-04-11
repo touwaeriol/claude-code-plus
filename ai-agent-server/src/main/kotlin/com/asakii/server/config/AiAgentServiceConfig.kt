@@ -41,7 +41,9 @@ data class ClaudeDefaults(
     val allowDangerouslySkipPermissions: Boolean = true,
     val includePartialMessages: Boolean = true,
     val permissionMode: String? = null,
-    // Node.js 可执行文件路径，null 时使用系统 PATH 中的 "node"
+    // Claude CLI 可执行文件路径，null 时自动检测系统 PATH
+    val claudePath: String? = null,
+    // Node.js 可执行文件路径，null 时使用系统 PATH 中的 "node"（用于 Codex 等）
     val nodePath: String? = null,
     // Claude CLI settings.json 路径，null 时不指定（CLI 会自动查找 ~/.claude/settings.json）
     val settings: String? = null,
@@ -69,6 +71,8 @@ data class ClaudeDefaults(
     // 思考配置
     val defaultThinkingLevel: String = "HIGH",  // 默认思考等级：OFF, LOW, MEDIUM, HIGH, VERY_HIGH, CUSTOM
     val defaultThinkingTokens: Int = 8192,      // 默认思考 token 数量
+    // Agent Teams 模式: "default"(不传环境变量), "enable"(启用), "disable"(禁用)
+    val agentTeamsMode: String = "default",
     // IDEA 文件同步 hooks（由 jetbrains-plugin 提供）
     // PRE_TOOL_USE: 保存 IDEA 中的文件到磁盘
     // POST_TOOL_USE: 重新加载文件到 IDEA
@@ -110,7 +114,7 @@ data class CodexDefaults(
     val defaultReasoningEffort: String? = null,
     val defaultReasoningSummary: String? = null,
     val webSearchEnabled: Boolean? = null,
-    val defaultModelId: String? = "gpt-5.2-codex",
+    val defaultModelId: String? = "gpt-5.4",
     val defaultAutoCleanupContexts: Boolean = true
 )
 

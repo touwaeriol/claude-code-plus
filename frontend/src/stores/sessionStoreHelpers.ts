@@ -26,7 +26,7 @@ export function getConnectOptionsForBackend(
   } else {
     // Codex 后端
     return {
-      model: globalSettings.codexModel || 'gpt-5.2-codex',
+      model: globalSettings.codexModel || 'gpt-5.4',
       thinkingLevel: undefined, // Codex 使用 effort level，不是 token budget
       reasoningEffort: globalSettings.codexReasoningEffort ?? undefined,
       permissionMode: globalSettings.permissionMode as RpcPermissionMode,

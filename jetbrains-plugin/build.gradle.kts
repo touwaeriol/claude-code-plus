@@ -576,8 +576,6 @@ tasks {
     }
 
     runIde {
-        // 确保运行前下载了 CLI（来自 claude-agent-sdk 模块）
-        dependsOn(":claude-agent-sdk:downloadCli")
         // 确保运行前构建了前端（开发模式，无压缩，更快）
         dependsOn(buildFrontendDev)
 
@@ -607,9 +605,8 @@ tasks {
         enabled = false
     }
 
-    // 构建插件前先下载 CLI 并构建前端
+    // 构建插件前先构建前端
     buildPlugin {
-        dependsOn(":claude-agent-sdk:downloadCli")
         dependsOn(buildFrontend)
         // 设置输出文件名
         archiveBaseName.set("claude-code-plus-jetbrains-plugin")
@@ -625,9 +622,8 @@ val buildAllVersions by tasks.registering {
     group = "build"
     description = "Build plugin for all supported platform versions (242, 243, 251, 252, 253, 261)"
 
-    // 先构建前端和下载 CLI（只执行一次）
+    // 先构建前端（只执行一次）
     dependsOn(buildFrontend)
-    dependsOn(":claude-agent-sdk:downloadCli")
 
     // 将需要的值在配置阶段捕获，避免配置缓存问题
     val buildDir = layout.buildDirectory

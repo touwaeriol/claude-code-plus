@@ -80,7 +80,7 @@ class CodexConfigurable : SearchableConfigurable {
             group("Model Settings") {
                 row("Default model:") {
                     cell(defaultModelCombo!!)
-                        .comment("gpt-5.2-codex = Codex optimized | gpt-5.2 = Base model")
+                        .comment("gpt-5.4 = Latest | gpt-5.3-codex = Codex optimized")
                 }
             }
 
@@ -405,7 +405,7 @@ class CodexConfigurable : SearchableConfigurable {
 
         val modelIdField = JBTextField(30).apply {
             text = currentModelId ?: ""
-            toolTipText = "Codex model ID (e.g., 'gpt-5.2-codex')"
+            toolTipText = "Codex model ID (e.g., 'gpt-5.4')"
         }
         gbc.gridx = 1
         gbc.fill = GridBagConstraints.HORIZONTAL
@@ -416,7 +416,7 @@ class CodexConfigurable : SearchableConfigurable {
         gbc.gridy = 2
         gbc.gridwidth = 2
         gbc.fill = GridBagConstraints.HORIZONTAL
-        dialogPanel.add(JBLabel("<html><font color='gray' size='-1'>Model ID examples: gpt-5.2-codex, gpt-5.2</font></html>"), gbc)
+        dialogPanel.add(JBLabel("<html><font color='gray' size='-1'>Model ID examples: gpt-5.4, gpt-5.2</font></html>"), gbc)
 
         val result = JOptionPane.showConfirmDialog(
             mainPanel,

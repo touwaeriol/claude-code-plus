@@ -92,13 +92,14 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
     // General Tab 组件
     private var defaultBypassPermissionsCheckbox: JBCheckBox? = null
     private var defaultAutoCleanupContextsCheckbox: JBCheckBox? = null
-    private var nodePathField: TextFieldWithBrowseButton? = null
+    private var claudePathField: TextFieldWithBrowseButton? = null
     private var defaultModelCombo: ComboBox<ModelInfo>? = null
     private var defaultThinkingLevelCombo: ComboBox<ThinkingLevelConfig>? = null
     private var thinkTokensSpinner: JSpinner? = null
     private var ultraTokensSpinner: JSpinner? = null
     private var permissionModeCombo: ComboBox<String>? = null
     private var includePartialMessagesCheckbox: JBCheckBox? = null
+    private var agentTeamsModeCombo: ComboBox<String>? = null
 
     // Custom Models 组件
     private var customModelsTable: JBTable? = null
@@ -145,24 +146,24 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
             isEnabled = false
         }
         permissionModeCombo = ComboBox(arrayOf("default", "acceptEdits", "plan", "bypassPermissions"))
+        agentTeamsModeCombo = ComboBox(arrayOf("default", "enable", "disable"))
 
         val descriptor = FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor()
-        nodePathField = TextFieldWithBrowseButton().apply {
-            BrowseButtonCompat.addBrowseFolderListener(this, "Select Node.js Executable",
-                "Choose the path to node executable", null, descriptor)
+        claudePathField = TextFieldWithBrowseButton().apply {
+            BrowseButtonCompat.addBrowseFolderListener(this, "Select Claude CLI Executable",
+                "Choose the path to claude executable", null, descriptor)
             (textField as? JBTextField)?.let { tf ->
-                tf.emptyText.text = "Detecting Node.js..."
+                tf.emptyText.text = "Detecting Claude CLI..."
                 com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
-                    val nodeInfo = AgentSettingsService.detectNodeInfo()
+                    val claudeInfo = AgentSettingsService.detectClaudeInfo()
                     com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
-                        tf.emptyText.text = nodeInfo?.let {
+                        tf.emptyText.text = claudeInfo?.let {
                             if (it.version != null) "${it.path} (${it.version})" else it.path
                         } ?: "Auto-detect from system PATH"
                     }
                 }
             }
         }
-
         defaultModelCombo = ComboBox<ModelInfo>().apply { renderer = ModelInfoRenderer() }
         refreshModelCombo()
 
@@ -211,12 +212,14 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
             }
 
             group("Runtime Settings") {
-                row("Node.js path:") {
-                    cell(nodePathField!!).align(AlignX.FILL).resizableColumn()
+                row("Claude CLI path:") {
+                    cell(claudePathField!!).align(AlignX.FILL).resizableColumn()
                 }
-                row { comment("Path to Node.js executable. Leave empty to auto-detect from system PATH.") }
+                row { comment("Path to Claude CLI executable. Leave empty to auto-detect from system PATH.") }
                 row("Default model:") { cell(defaultModelCombo!!).columns(COLUMNS_MEDIUM) }
                 row { comment("Opus 4.5 = Most capable | Sonnet 4.5 = Balanced | Haiku 4.5 = Fastest") }
+                row("Agent Teams:") { cell(agentTeamsModeCombo!!).columns(COLUMNS_MEDIUM) }
+                row { comment("default = No env var | enable = CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 | disable = 0") }
             }
 
             collapsibleGroup("Custom Models") {
@@ -585,13 +588,14 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         val tableModels = getCustomModelsFromTable().map { it.displayName to it.modelId }
         val savedModels = settings.getCustomModels().map { it.displayName to it.modelId }
 
-        val generalModified = nodePathField?.text != settings.nodePath ||
+        val generalModified = claudePathField?.text != settings.claudePath ||
             selectedModel?.modelId != settings.defaultModel ||
             tableModels != savedModels ||
             (defaultThinkingLevelCombo?.selectedItem as? ThinkingLevelConfig)?.id != settings.defaultThinkingLevelId ||
             (thinkTokensSpinner?.value as? Int ?: 2048) != settings.thinkTokens ||
             (ultraTokensSpinner?.value as? Int ?: 8096) != settings.ultraTokens ||
             permissionModeCombo?.selectedItem != settings.permissionMode ||
+            agentTeamsModeCombo?.selectedItem != settings.agentTeamsMode ||
             defaultBypassPermissionsCheckbox?.isSelected != settings.defaultBypassPermissions ||
             defaultAutoCleanupContextsCheckbox?.isSelected != settings.claudeDefaultAutoCleanupContexts
 
@@ -640,7 +644,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
 
     override fun apply() {
         val settings = AgentSettingsService.getInstance()
-        settings.nodePath = nodePathField?.text ?: ""
+        settings.claudePath = claudePathField?.text ?: ""
 
         val selectedModel = defaultModelCombo?.selectedItem as? ModelInfo
         settings.defaultModel = selectedModel?.modelId ?: settings.getAllAvailableModels().firstOrNull { it.isBuiltIn }?.modelId
@@ -657,6 +661,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         settings.thinkTokens = thinkTokensSpinner?.value as? Int ?: 2048
         settings.ultraTokens = ultraTokensSpinner?.value as? Int ?: 8096
         settings.permissionMode = permissionModeCombo?.selectedItem as? String ?: "default"
+        settings.agentTeamsMode = agentTeamsModeCombo?.selectedItem as? String ?: "default"
         settings.includePartialMessages = true
         settings.defaultBypassPermissions = defaultBypassPermissionsCheckbox?.isSelected ?: false
         settings.claudeDefaultAutoCleanupContexts = defaultAutoCleanupContextsCheckbox?.isSelected ?: false
@@ -692,7 +697,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
 
     override fun reset() {
         val settings = AgentSettingsService.getInstance()
-        nodePathField?.text = settings.nodePath
+        claudePathField?.text = settings.claudePath
 
         customModelsTableModel?.rowCount = 0
         settings.getCustomModels().forEach { customModelsTableModel?.addRow(arrayOf(it.displayName, it.modelId)) }
@@ -708,6 +713,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
         defaultThinkingLevelCombo?.selectedItem = buildAllThinkingLevels().find { it.id == settings.defaultThinkingLevelId }
             ?: buildAllThinkingLevels().find { it.id == "ultra" }
         permissionModeCombo?.selectedItem = settings.permissionMode
+        agentTeamsModeCombo?.selectedItem = settings.agentTeamsMode
         includePartialMessagesCheckbox?.isSelected = true
         defaultBypassPermissionsCheckbox?.isSelected = settings.defaultBypassPermissions
         defaultAutoCleanupContextsCheckbox?.isSelected = settings.claudeDefaultAutoCleanupContexts
@@ -759,7 +765,7 @@ class ClaudeCodeConfigurable : SearchableConfigurable {
     }
 
     override fun disposeUIResources() {
-        nodePathField = null
+        claudePathField = null
         defaultModelCombo = null
         defaultThinkingLevelCombo = null
         thinkTokensSpinner = null

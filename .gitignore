@@ -191,5 +191,8 @@ runide.log
 
 .playwright-mcp/
 
+# Local Gradle daemon
+.gradle-local/
+
 # Local app artifacts
 .claude-code-plus/codex-images/

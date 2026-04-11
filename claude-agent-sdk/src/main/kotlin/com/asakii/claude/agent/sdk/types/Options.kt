@@ -146,10 +146,10 @@ data class ClaudeAgentOptions(
     val env: Map<String, String> = emptyMap(),
     val user: String? = null,
 
-    // CLI path - NEW: Specify custom Claude CLI binary path
+    // Claude CLI executable path. If not set, auto-detects from system PATH.
     val cliPath: Path? = null,
 
-    // Node.js path - Specify custom Node.js executable path
+    // Node.js path - used by Codex and other Node.js-based features
     // If not set, uses "node" from system PATH
     val nodePath: String? = null,
 

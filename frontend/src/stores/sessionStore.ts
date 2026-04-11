@@ -833,7 +833,7 @@ export const useSessionStore = defineStore('session', () => {
       const modelExists = models.some(m => m.modelId === currentModelId)
       if (!modelExists) {
         // 模型已被删除，切换到默认模型
-        const fallbackModelId = defaultModelId || (models.length > 0 ? models[0].modelId : 'gpt-5.2-codex')
+        const fallbackModelId = defaultModelId || (models.length > 0 ? models[0].modelId : 'gpt-5.4')
         const fallbackModel = models.find(m => m.modelId === fallbackModelId) || { modelId: fallbackModelId, displayName: fallbackModelId }
         log.warn(`[CodexModelListChange] Tab "${tab.tabId}" 的模型 "${currentModelId}" 已不可用，切换到 "${fallbackModel.displayName}"`)
 

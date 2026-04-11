@@ -1092,6 +1092,14 @@ class AiAgentRpcServiceImpl(
             } // end else (non-AskUserQuestion tools)
         }
 
+        // 根据 agentTeamsMode 设置构造环境变量
+        val env = mutableMapOf<String, String>()
+        when (defaults.agentTeamsMode) {
+            "enable" -> env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "1"
+            "disable" -> env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "0"
+            // "default" -> 不传环境变量
+        }
+
         val claudeOptions = ClaudeAgentOptions(
             model = model,
             cwd = cwd,
@@ -1119,12 +1127,15 @@ class AiAgentRpcServiceImpl(
             mcpServers = mcpServers,
             // 自定义子代理定义（如 JetBrains 专用的代码探索代理）
             agents = agents.ifEmpty { null },
-            // Node.js 可执行文件路径（用户配置 > 环境变量 > 默认 "node"）
+            // Claude CLI 可执行文件路径（用户配置 > 自动检测 > 默认 "claude"）
+            cliPath = defaults.claudePath?.let { java.nio.file.Path.of(it) },
+            // Node.js 可执行文件路径（用于 Codex 等，用户配置 > 环境变量 > 默认 "node"）
             nodePath = defaults.nodePath,
             // Claude CLI settings.json 路径（用于加载环境变量等配置）
             settings = defaults.settings,
             // IDEA 文件同步 hooks（由 jetbrains-plugin 提供）
-            hooks = defaults.ideaFileSyncHooks
+            hooks = defaults.ideaFileSyncHooks,
+            env = env
         )
 
         return ClaudeOverrides(options = claudeOptions)

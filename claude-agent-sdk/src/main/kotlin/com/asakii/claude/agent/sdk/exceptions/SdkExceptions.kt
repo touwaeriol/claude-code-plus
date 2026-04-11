@@ -33,27 +33,15 @@ class CLINotFoundException(
     cause = cause
 ) {
     companion object {
-        fun withInstallInstructions(nodeInstalled: Boolean = true): CLINotFoundException {
-            val message = if (!nodeInstalled) {
-                """
-                Claude Code requires Node.js, which is not installed.
-                
-                Install Node.js from: https://nodejs.org/
-                
-                After installing Node.js, install Claude Code:
+        fun withInstallInstructions(): CLINotFoundException {
+            val message = """
+                Claude CLI not found.
+
+                Please install Claude CLI:
                   npm install -g @anthropic-ai/claude-code
-                """.trimIndent()
-            } else {
-                """
-                Claude Code not found. Install with:
-                  npm install -g @anthropic-ai/claude-code
-                
-                If already installed locally, try:
-                  export PATH="${"$"}HOME/node_modules/.bin:${"$"}PATH"
-                
-                Or specify the path when creating transport.
-                """.trimIndent()
-            }
+
+                Or specify the path in Settings > Claude Code > Claude CLI path.
+            """.trimIndent()
             return CLINotFoundException(message)
         }
     }

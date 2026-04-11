@@ -94,37 +94,16 @@ export const CLAUDE_CAPABILITIES: BackendCapabilities = {
  */
 export const CODEX_MODELS: BackendModelInfo[] = [
   {
-    modelId: 'gpt-5.1-codex-max',
-    displayName: 'GPT-5.1-Codex-Max',
-    description: 'Best coding model',
-    supportsThinking: true,
-    isDefault: false,
-  },
-  {
-    modelId: 'gpt-5.2-codex',
-    displayName: 'GPT-5.2-Codex',
-    description: 'Default Codex model',
+    modelId: 'gpt-5.4',
+    displayName: 'GPT-5.4',
+    description: 'Latest GPT model',
     supportsThinking: true,
     isDefault: true,
   },
   {
-    modelId: 'gpt-5.2',
-    displayName: 'GPT-5.2',
-    description: 'General Codex model',
-    supportsThinking: true,
-    isDefault: false,
-  },
-  {
     modelId: 'gpt-5.3-codex',
     displayName: 'GPT-5.3-Codex',
-    description: 'Next-gen Codex model',
-    supportsThinking: true,
-    isDefault: false,
-  },
-  {
-    modelId: 'gpt-5.3-codex-spark',
-    displayName: 'GPT-5.3-Codex-Spark',
-    description: 'Lightweight next-gen Codex model',
+    description: 'Codex optimized model',
     supportsThinking: true,
     isDefault: false,
   },
