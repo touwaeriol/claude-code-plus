@@ -127,6 +127,42 @@ signing {
     isRequired = !version.toString().endsWith("SNAPSHOT")
     sign(publishing.publications)
 }
+
+// ==================== Download Claude Agent SDK CLI ====================
+
+tasks.register("downloadSdkCli") {
+    group = "build setup"
+    description = "Download cli.js from @anthropic-ai/claude-agent-sdk npm package"
+
+    val outputFile = layout.projectDirectory.file("src/main/resources/bundled/cli.js")
+    outputs.file(outputFile)
+
+    doLast {
+        val ver = "0.2.104"
+        val isWin = System.getProperty("os.name").lowercase().contains("win")
+        val npm = if (isWin) "npm.cmd" else "npm"
+        val tempDir = temporaryDir
+        ProcessBuilder(npm, "pack", "@anthropic-ai/claude-agent-sdk@$ver", "--pack-destination", tempDir.absolutePath)
+            .directory(tempDir).redirectErrorStream(true).start()
+            .also { it.inputStream.readBytes(); check(it.waitFor() == 0) { "npm pack failed" } }
+
+        val tarball = tempDir.listFiles()?.firstOrNull { it.name.endsWith(".tgz") }
+            ?: error("Failed to download tarball")
+
+        ProcessBuilder("tar", "xzf", tarball.absolutePath, "package/cli.js")
+            .directory(tempDir).redirectErrorStream(true).start()
+            .also { it.inputStream.readBytes(); check(it.waitFor() == 0) { "tar extract failed" } }
+
+        val cliJs = File(tempDir, "package/cli.js")
+        if (!cliJs.exists()) error("cli.js not found in tarball")
+
+        val dest = outputFile.asFile
+        dest.parentFile.mkdirs()
+        cliJs.copyTo(dest, overwrite = true)
+        println("✅ Downloaded cli.js (v$ver) -> ${dest.absolutePath} (${dest.length() / 1024}KB)")
+    }
+}
+
 // 运行示例的任务
 tasks.register<JavaExec>("runModelTest") {
     group = "verification"

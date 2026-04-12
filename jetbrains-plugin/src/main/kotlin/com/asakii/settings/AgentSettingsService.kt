@@ -35,7 +35,7 @@ class AgentSettingsService : PersistentStateComponent<AgentSettingsService.State
         var terminalDisableInteractive: Boolean = true, // 是否禁用交互式终端（TERM=dumb）
         var enableGitMcp: Boolean = false,             // Git MCP（VCS 集成，默认禁用）
         // JetBrains File MCP 禁用内置工具配置
-        var jetbrainsFileDisableBuiltinTools: Boolean = true, // 启用 JetBrains File MCP 时禁用内置工具
+        var jetbrainsFileDisableBuiltinTools: Boolean = false, // 启用 JetBrains File MCP 时禁用内置工具
         var jetbrainsFileDisabledTools: String = "Read,Write,Edit", // 禁用的内置工具列表（逗号分隔）
         // JetBrains File MCP 外部文件配置
         var jetbrainsFileAllowExternal: Boolean = true, // 是否允许访问项目外部文件（默认开启）

@@ -193,6 +193,10 @@ class SubprocessTransport(
             var currentLine: String? = null
             while (isConnected() && reader?.readLine().also { currentLine = it } != null) {
                 currentLine?.let { line ->
+                    // 对 control_request 特别标记，便于排查权限问题
+                    if (line.contains("control_request") || line.contains("can_use_tool")) {
+                        System.err.println("🔴 [SubprocessTransport] 读到 control 消息: ${line.take(300)}")
+                    }
                     logger.info { "📥 从 CLI 读取到原始行: $line" }
                     jsonBuffer.append(line)
 
@@ -452,6 +456,7 @@ class SubprocessTransport(
         }
 
         // Dangerously skip permissions
+        System.err.println("🔴 [buildCommand] dangerouslySkipPermissions=${options.dangerouslySkipPermissions}, allowDangerously=${options.allowDangerouslySkipPermissions}, canUseTool=${options.canUseTool != null}, permissionMode=${options.permissionMode}, permissionPromptToolName=${options.permissionPromptToolName}")
         if (options.dangerouslySkipPermissions == true) {
             command.add("--dangerously-skip-permissions")
         }
@@ -619,16 +624,21 @@ class SubprocessTransport(
      * Find the Claude executable in the system.
      * 优先级：
      * 1. 用户指定路径 (options.cliPath)
-     * 2. 系统 claude 命令（通过 PATH 检测）
+     * 2. 打包的 cli.js（从 @anthropic-ai/claude-agent-sdk 提取，通过 Node.js 运行）
+     * 3. 用户目录下提取的 cli.js (~/.claude-code-plus/cli/)
+     * 4. 系统 claude 命令（回退方案）
      */
     private fun findClaudeExecutable(): List<String> {
         val isWindows = isWindows()
+        val nodePath = options.nodePath ?: "node"
 
         // 1. 用户指定路径（最高优先级）
         options.cliPath?.let { customPath ->
             val path = customPath.toString()
             logger.info { "✅ 使用用户指定的 CLI: $path" }
-            // Windows 上 .cmd/.bat 文件需要通过 cmd /c 启动（ProcessBuilder 无法直接执行）
+            if (path.endsWith(".mjs") || path.endsWith(".js")) {
+                return listOf(nodePath, path)
+            }
             return if (isWindows && (path.lowercase().endsWith(".cmd") || path.lowercase().endsWith(".bat"))) {
                 listOf("cmd", "/c", path)
             } else {
@@ -636,14 +646,23 @@ class SubprocessTransport(
             }
         }
 
-        // 2. 系统 claude 命令
-        // Windows: 使用 cmd /c claude，让 cmd.exe 通过 PATHEXT 自动解析 .cmd/.exe
-        //   参考: https://github.com/anthropics/claude-agent-sdk-python/issues/252
-        //   npm 安装的 claude 在 Windows 上有 claude（bash脚本）、claude.cmd、claude.ps1 三种形式
-        //   ProcessBuilder 无法直接执行 bash 脚本和 .cmd，但 cmd /c 会通过 PATHEXT 正确解析
-        // macOS/Linux: 先通过 login shell 检测路径，确保用户环境变量（PATH 等）被正确加载
+        // 2. 打包到 JAR 中的 cli.js（从 resources/bundled/ 提取）
+        val extractedSdkMjs = extractBundledSdkMjs()
+        if (extractedSdkMjs != null) {
+            logger.info { "✅ 使用打包的 SDK CLI: $extractedSdkMjs (via $nodePath)" }
+            return listOf(nodePath, extractedSdkMjs)
+        }
+
+        // 3. 用户目录下已安装的 cli.js
+        val userSdkMjs = findUserSdkMjs()
+        if (userSdkMjs != null) {
+            logger.info { "✅ 使用用户目录的 SDK CLI: $userSdkMjs (via $nodePath)" }
+            return listOf(nodePath, userSdkMjs)
+        }
+
+        // 4. 系统 claude 命令（回退方案，注意：SDK 类型 MCP 不工作）
+        logger.warn { "⚠️ 未找到 cli.js，回退到系统 claude 命令（SDK MCP 将不可用）" }
         if (isWindows) {
-            // 验证 claude 命令是否存在
             if (isClaudeAvailableOnWindows()) {
                 logger.info { "✅ 使用系统 Claude CLI (via cmd /c claude)" }
                 return listOf("cmd", "/c", "claude")
@@ -658,6 +677,50 @@ class SubprocessTransport(
 
         // 未找到 Claude CLI
         throw CLINotFoundException.withInstallInstructions()
+    }
+
+    /**
+     * 从 JAR resources 中提取打包的 cli.js 到用户目录
+     * @return 提取后的文件路径，未找到返回 null
+     */
+    private fun extractBundledSdkMjs(): String? {
+        try {
+            val resourceStream = javaClass.classLoader.getResourceAsStream("bundled/cli.js")
+                ?: return null
+
+            val destDir = Path.of(System.getProperty("user.home"), ".claude-code-plus", "cli")
+            Files.createDirectories(destDir)
+            val destFile = destDir.resolve("cli.js")
+
+            // 只有文件不存在或大小不同时才重新提取
+            val resourceBytes = resourceStream.use { it.readBytes() }
+            if (Files.exists(destFile) && Files.size(destFile) == resourceBytes.size.toLong()) {
+                return destFile.toAbsolutePath().toString()
+            }
+
+            Files.write(destFile, resourceBytes)
+            logger.info { "📦 提取 cli.js 到: $destFile (${resourceBytes.size} bytes)" }
+            return destFile.toAbsolutePath().toString()
+        } catch (e: Exception) {
+            logger.warn { "⚠️ 提取打包的 cli.js 失败: ${e.message}" }
+            return null
+        }
+    }
+
+    /**
+     * 在用户目录下查找已存在的 cli.js
+     * @return cli.js 路径，未找到返回 null
+     */
+    private fun findUserSdkMjs(): String? {
+        val candidates = listOf(
+            Path.of(System.getProperty("user.home"), ".claude-code-plus", "cli", "cli.js")
+        )
+        for (path in candidates) {
+            if (Files.exists(path) && Files.size(path) > 0) {
+                return path.toAbsolutePath().toString()
+            }
+        }
+        return null
     }
 
     /**

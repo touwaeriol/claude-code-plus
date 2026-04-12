@@ -59,13 +59,18 @@ class ControlProtocol(
      */
     fun startMessageProcessing(scope: CoroutineScope) {
         logger.info { "🚀 [ControlProtocol] 开始消息处理任务" }
+        System.err.println("🚀 [ControlProtocol] 开始消息处理任务, canUseTool=${options.canUseTool != null}")
         messageProcessingJob = scope.launch {
             var messageCount = 0
             try {
                 transport.readMessages().collect { jsonElement ->
                     messageCount++
+                    val type = try { jsonElement.jsonObject["type"]?.jsonPrimitive?.content } catch (_: Exception) { "?" }
+                    if (type == "control_request" || type == "control_response") {
+                        System.err.println("🔴 [ControlProtocol] 收到控制消息 #$messageCount: type=$type, json=${jsonElement.toString().take(200)}")
+                    }
                     try {
-                        logger.info { "📥 [ControlProtocol] 从 Transport 收到原始消息 #$messageCount" }
+                        logger.info { "📥 [ControlProtocol] 从 Transport 收到原始消息 #$messageCount (type=$type)" }
                         routeMessage(jsonElement)
                     } catch (e: Exception) {
                         logger.error { "❌ [ControlProtocol] 处理消息失败: ${e.message}" }
@@ -262,8 +267,11 @@ class ControlProtocol(
                 }
             }
             "control_request" -> {
-                logger.info { "🎮 [ControlProtocol] 控制请求消息" }
+                val subtype = try { jsonObject["request"]?.jsonObject?.get("subtype")?.jsonPrimitive?.content } catch (_: Exception) { "?" }
+                System.err.println("🔴 [ControlProtocol] control_request 路由: subtype=$subtype")
+                logger.info { "🎮 [ControlProtocol] 控制请求消息, subtype=$subtype" }
                 val (requestId, request) = messageParser.parseControlRequest(jsonElement)
+                System.err.println("🔴 [ControlProtocol] 解析完成: requestId=$requestId, request=${request::class.simpleName}")
                 handleControlRequest(requestId, request)
             }
             "control_response" -> {
@@ -415,6 +423,7 @@ class ControlProtocol(
      * Handle incoming control requests from CLI.
      */
     private suspend fun handleControlRequest(requestId: String, request: ControlRequest) {
+        System.err.println("🔴 [handleControlRequest] requestId=$requestId, subtype=${request.subtype}, type=${request::class.simpleName}")
         logger.info { "🎯 [handleControlRequest] 收到控制请求: requestId=$requestId, subtype=${request.subtype}, type=${request::class.simpleName}" }
         try {
             val response = when (request) {
@@ -456,6 +465,7 @@ class ControlProtocol(
      * Handle tool permission requests.
      */
     private suspend fun handlePermissionRequest(request: PermissionRequest): JsonElement {
+        System.err.println("🔴 [handlePermissionRequest] 收到权限请求: toolName=${request.toolName}, toolUseId=${request.toolUseId}")
         logger.info { "🔐 [handlePermissionRequest] ==========================================" }
         logger.info { "🔐 [handlePermissionRequest] 收到权限请求: toolName=${request.toolName}, toolUseId=${request.toolUseId}" }
         logger.info { "🔐 [handlePermissionRequest] input keys: ${(request.input as? JsonObject)?.keys}" }
