@@ -658,7 +658,8 @@ export class RSocketSession {
 
     private checkCapability(cap: RpcCapabilityKey, method: string): void {
         if (!this._capabilities) {
-            throw new Error(`${method}: 能力信息未加载，请先调用 connect()`)
+            // 能力信息未加载时跳过客户端检查，由服务端兜底验证
+            return
         }
         if (!this._capabilities[cap]) {
             throw new Error(`${method}: 当前 provider 不支持此操作`)
